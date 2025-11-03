@@ -6,9 +6,10 @@ from datetime import datetime
 from sqlalchemy import text
 from sqlmodel import Session
 
-from app.database import engine
-from app.models import SQLModel
-from backend.scripts.db_utils.loaders import DataLoader
+from backend.app.database import engine
+from backend.app.models import SQLModel
+
+from backend.scripts.db_utils.loaders_optimized import DataLoader
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 logger = logging.getLogger(__name__)
@@ -55,7 +56,8 @@ def clear_database() -> None:
 def import_all_data(data_dir: Path | None = None) -> None:
     """Import all tables in correct order"""
     if data_dir is None:
-        data_dir = Path(__file__).parent.parent / "data"
+        # Go up to repo root: dbcli.py -> db_utils -> scripts -> backend -> repo root
+        data_dir = Path(__file__).parent.parent.parent.parent / "data"
 
     start_time = datetime.now()
 
@@ -108,8 +110,7 @@ def import_all_data(data_dir: Path | None = None) -> None:
         logger.info("✓ IMPORT COMPLETE!")
         logger.info("=" * 70)
 
-    logger.info(f"\nTotal time: {elapsed}")
-    logger.info()
+    logger.info(f"\nTotal time: {elapsed}\n")
 
 
 def main():
@@ -140,7 +141,13 @@ def main():
         parser.error("Must specify at least one of --clear or --import")
 
     if args.clear:
-        clear_database()
+        confirm = input('[WARNING] This will drop and recreate the entire database\n' \
+        'Please type "CONFIRM" if you want to proceed: ')
+        if confirm == "CONFIRM":
+            clear_database()
+        else:
+            logger.error("\nAborting!")
+            exit
 
     if args.do_import:
         import_all_data(args.data_dir)

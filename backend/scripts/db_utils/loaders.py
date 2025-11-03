@@ -3,9 +3,10 @@ from pathlib import Path
 
 import pandas as pd
 from sqlmodel import Session, select, func
+from tqdm import tqdm
 
-from backend.database import engine
-from backend.models import (
+from backend.app.database import engine
+from backend.app.models import (
     Area,
     TransactionGroup,
     TransactionProcedure,
@@ -32,6 +33,9 @@ from backend.scripts.db_utils.utils import (
 )
 
 logger = logging.getLogger(__name__)
+
+# Default batch size for chunked loading operations
+DEFAULT_BATCH_SIZE = 10000
 
 
 class DataLoader:
@@ -82,7 +86,7 @@ class DataLoader:
                 name=clean_value(row.get("name_en")),
                 municipality_number=clean_value(row.get("municipality_number")),
             )
-            for _, row in df.iterrows()
+            for row in df.to_dict('records')
         ]
 
         with Session(self.engine) as session:
@@ -115,7 +119,7 @@ class DataLoader:
             .dropna()
         )
         group_records = []
-        for _, row in groups.iterrows():
+        for row in groups.to_dict('records'):
             group_records.append(
                 TransactionGroup(
                     group_id=parse_int(row["trans_group_id"]),
@@ -131,7 +135,7 @@ class DataLoader:
 
         seen_procedures = set()
         procedure_records = []
-        for _, row in proc_df.iterrows():
+        for row in proc_df.to_dict('records'):
             proc_id = parse_int(row["procedure_id"])
             if proc_id and proc_id not in seen_procedures:
                 procedure_records.append(
@@ -272,7 +276,7 @@ class DataLoader:
         df = rename_columns(df)
 
         records = []
-        for _, row in df.iterrows():
+        for row in df.to_dict('records'):
             records.append(
                 Developer(
                     developer_id=parse_int(row["developer_id"]),
@@ -320,7 +324,7 @@ class DataLoader:
         df = rename_columns(df)
 
         records = []
-        for _, row in df.iterrows():
+        for row in df.to_dict('records'):
             records.append(
                 Project(
                     project_id=parse_int(row["project_id"]),
@@ -367,7 +371,7 @@ class DataLoader:
 
         logger.info(f"  ✓ Loaded {len(records):,} projects\n")
 
-    def load_land_registry(self, batch_size: int = 50000) -> None:
+    def load_land_registry(self, batch_size: int = DEFAULT_BATCH_SIZE) -> None:
         """Load land registry from Land_Registry.csv"""
         csv_total = self.get_csv_row_count("Land_Registry.csv")
         skip, existing, _ = self.skip_if_loaded(LandRegistry, csv_total)
@@ -399,66 +403,68 @@ class DataLoader:
         total_inserted = 0
         batch_num = 0
 
-        for chunk in df:
-            batch_num += 1
-            chunk = rename_columns(chunk)
+        # Calculate total chunks for progress bar
+        total_chunks = (csv_total + batch_size - 1) // batch_size
+        
+        with tqdm(total=total_chunks, desc="  Processing batches", unit="batch") as pbar:
+            for chunk in df:
+                batch_num += 1
+                chunk = rename_columns(chunk)
 
-            records = []
-            for row_idx, row in chunk.iterrows():
-                property_id = parse_int(row.get("property_id"))
+                records = []
+                for row_idx, row in enumerate(chunk.to_dict('records')):
+                    property_id = parse_int(row.get("property_id"))
 
-                if property_id is None:
-                    property_id = -int(row_idx)
+                    if property_id is None:
+                        property_id = -int(row_idx)
 
-                if property_id in existing_ids:
-                    continue
+                    if property_id in existing_ids:
+                        continue
 
-                records.append(
-                    LandRegistry(
-                        property_id=property_id,
-                        area_id=parse_int(row.get("area_id")),
-                        zone_id=parse_int(row.get("zone_id")),
-                        land_number=parse_str_from_numeric(row.get("land_number")),
-                        land_sub_number=parse_str_from_numeric(
-                            row.get("land_sub_number")
-                        ),
-                        actual_area=parse_decimal(row.get("actual_area")),
-                        property_type_id=parse_int(row.get("property_type_id")),
-                        property_sub_type_id=parse_int(row.get("property_sub_type_id")),
-                        parcel_id=parse_str_from_numeric(row.get("parcel_id")),
-                        munc_zip_code=parse_str_from_numeric(row.get("munc_zip_code")),
-                        munc_number=parse_str_from_numeric(row.get("munc_number")),
-                        is_free_hold=parse_bool(row.get("is_free_hold")),
-                        is_registered=parse_bool(row.get("is_registered")),
-                        pre_registration_number=clean_value(
-                            row.get("pre_registration_number")
-                        ),
-                        separated_from=parse_int(row.get("separated_from")),
-                        separated_reference=parse_int(row.get("separated_reference")),
-                        project_id=parse_int(row.get("project_id")),
-                        master_project_id=parse_int(row.get("master_project_id")),
-                        land_type_id=parse_int(row.get("land_type_id")),
-                        land_type_ar=clean_value(row.get("land_type_ar")),
-                        land_type=clean_value(row.get("land_type")),
+                    records.append(
+                        LandRegistry(
+                            property_id=property_id,
+                            area_id=parse_int(row.get("area_id")),
+                            zone_id=parse_int(row.get("zone_id")),
+                            land_number=parse_str_from_numeric(row.get("land_number")),
+                            land_sub_number=parse_str_from_numeric(
+                                row.get("land_sub_number")
+                            ),
+                            actual_area=parse_decimal(row.get("actual_area")),
+                            property_type_id=parse_int(row.get("property_type_id")),
+                            property_sub_type_id=parse_int(row.get("property_sub_type_id")),
+                            parcel_id=parse_str_from_numeric(row.get("parcel_id")),
+                            munc_zip_code=parse_str_from_numeric(row.get("munc_zip_code")),
+                            munc_number=parse_str_from_numeric(row.get("munc_number")),
+                            is_free_hold=parse_bool(row.get("is_free_hold")),
+                            is_registered=parse_bool(row.get("is_registered")),
+                            pre_registration_number=clean_value(
+                                row.get("pre_registration_number")
+                            ),
+                            separated_from=parse_int(row.get("separated_from")),
+                            separated_reference=parse_int(row.get("separated_reference")),
+                            project_id=parse_int(row.get("project_id")),
+                            master_project_id=parse_int(row.get("master_project_id")),
+                            land_type_id=parse_int(row.get("land_type_id")),
+                            land_type_ar=clean_value(row.get("land_type_ar")),
+                            land_type=clean_value(row.get("land_type")),
+                        )
                     )
-                )
-                existing_ids.add(property_id)
+                    existing_ids.add(property_id)
 
-            if records:
-                with Session(self.engine) as session:
-                    session.add_all(records)
-                    session.commit()
-                total_inserted += len(records)
+                if records:
+                    with Session(self.engine) as session:
+                        session.add_all(records)
+                        session.commit()
+                    total_inserted += len(records)
 
-                if batch_num % 5 == 0:
-                    logger.info(
-                        f"  Batch {batch_num}: {existing + total_inserted:,} total loaded"
-                    )
+                pbar.update(1)
+                pbar.set_postfix({"total_loaded": f"{existing + total_inserted:,}"})
 
         final_count = self.get_table_count(LandRegistry)
         logger.info(f"  ✓ Loaded {final_count:,} land parcels total\n")
 
-    def load_buildings(self, batch_size: int = 50000) -> None:
+    def load_buildings(self, batch_size: int = DEFAULT_BATCH_SIZE) -> None:
         """Load buildings from Buildings.csv"""
         csv_total = self.get_csv_row_count("Buildings.csv")
         skip, existing, _ = self.skip_if_loaded(Building, csv_total)
@@ -490,80 +496,81 @@ class DataLoader:
         total_inserted = 0
         batch_num = 0
 
-        for chunk in df:
-            batch_num += 1
-            chunk = rename_columns(chunk)
+        total_chunks = (csv_total + batch_size - 1) // batch_size
+        
+        with tqdm(total=total_chunks, desc="  Processing batches", unit="batch") as pbar:
+            for chunk in df:
+                batch_num += 1
+                chunk = rename_columns(chunk)
 
-            records = []
-            for row_idx, row in chunk.iterrows():
-                property_id = parse_int(row.get("property_id"))
+                records = []
+                for row_idx, row in enumerate(chunk.to_dict('records')):
+                    property_id = parse_int(row.get("property_id"))
 
-                if property_id is None:
-                    property_id = -int(row_idx)
+                    if property_id is None:
+                        property_id = -int(row_idx)
 
-                if property_id in existing_ids:
-                    continue
+                    if property_id in existing_ids:
+                        continue
 
-                records.append(
-                    Building(
-                        property_id=property_id,
-                        area_id=parse_int(row.get("area_id")),
-                        zone_id=parse_int(row.get("zone_id")),
-                        land_number=parse_str_from_numeric(row.get("land_number")),
-                        land_sub_number=parse_str_from_numeric(
-                            row.get("land_sub_number")
-                        ),
-                        building_number=clean_value(row.get("building_number")),
-                        floors=parse_int(row.get("floors")),
-                        bld_levels=parse_int(row.get("bld_levels")),
-                        rooms=parse_int(row.get("rooms")),
-                        rooms_ar=clean_value(row.get("rooms_ar")),
-                        rooms_description=clean_value(row.get("rooms_en")),
-                        car_parks=parse_int(row.get("car_parks")),
-                        common_area=parse_decimal(row.get("common_area")),
-                        actual_common_area=parse_decimal(row.get("actual_common_area")),
-                        built_up_area=parse_decimal(row.get("built_up_area")),
-                        actual_area=parse_decimal(row.get("actual_area")),
-                        shops=parse_int(row.get("shops")),
-                        flats=parse_int(row.get("flats")),
-                        offices=parse_int(row.get("offices")),
-                        swimming_pools=parse_int(row.get("swimming_pools")),
-                        elevators=parse_int(row.get("elevators")),
-                        property_type_id=parse_int(row.get("property_type_id")),
-                        property_sub_type_id=parse_int(row.get("property_sub_type_id")),
-                        parent_property_id=parse_int(row.get("parent_property_id")),
-                        creation_date=parse_date(row.get("creation_date")),
-                        parcel_id=parse_str_from_numeric(row.get("parcel_id")),
-                        is_free_hold=parse_bool(row.get("is_free_hold")),
-                        is_lease_hold=parse_bool(row.get("is_lease_hold")),
-                        is_registered=parse_bool(row.get("is_registered")),
-                        pre_registration_number=clean_value(
-                            row.get("pre_registration_number")
-                        ),
-                        project_id=parse_int(row.get("project_id")),
-                        master_project_id=parse_int(row.get("master_project_id")),
-                        land_type_id=parse_int(row.get("land_type_id")),
-                        land_type_ar=clean_value(row.get("land_type_ar")),
-                        land_type=clean_value(row.get("land_type")),
+                    records.append(
+                        Building(
+                            property_id=property_id,
+                            area_id=parse_int(row.get("area_id")),
+                            zone_id=parse_int(row.get("zone_id")),
+                            land_number=parse_str_from_numeric(row.get("land_number")),
+                            land_sub_number=parse_str_from_numeric(
+                                row.get("land_sub_number")
+                            ),
+                            building_number=clean_value(row.get("building_number")),
+                            floors=parse_int(row.get("floors")),
+                            bld_levels=parse_int(row.get("bld_levels")),
+                            rooms=parse_int(row.get("rooms")),
+                            rooms_ar=clean_value(row.get("rooms_ar")),
+                            rooms_description=clean_value(row.get("rooms_en")),
+                            car_parks=parse_int(row.get("car_parks")),
+                            common_area=parse_decimal(row.get("common_area")),
+                            actual_common_area=parse_decimal(row.get("actual_common_area")),
+                            built_up_area=parse_decimal(row.get("built_up_area")),
+                            actual_area=parse_decimal(row.get("actual_area")),
+                            shops=parse_int(row.get("shops")),
+                            flats=parse_int(row.get("flats")),
+                            offices=parse_int(row.get("offices")),
+                            swimming_pools=parse_int(row.get("swimming_pools")),
+                            elevators=parse_int(row.get("elevators")),
+                            property_type_id=parse_int(row.get("property_type_id")),
+                            property_sub_type_id=parse_int(row.get("property_sub_type_id")),
+                            parent_property_id=parse_int(row.get("parent_property_id")),
+                            creation_date=parse_date(row.get("creation_date")),
+                            parcel_id=parse_str_from_numeric(row.get("parcel_id")),
+                            is_free_hold=parse_bool(row.get("is_free_hold")),
+                            is_lease_hold=parse_bool(row.get("is_lease_hold")),
+                            is_registered=parse_bool(row.get("is_registered")),
+                            pre_registration_number=clean_value(
+                                row.get("pre_registration_number")
+                            ),
+                            project_id=parse_int(row.get("project_id")),
+                            master_project_id=parse_int(row.get("master_project_id")),
+                            land_type_id=parse_int(row.get("land_type_id")),
+                            land_type_ar=clean_value(row.get("land_type_ar")),
+                            land_type=clean_value(row.get("land_type")),
+                        )
                     )
-                )
-                existing_ids.add(property_id)
+                    existing_ids.add(property_id)
 
-            if records:
-                with Session(self.engine) as session:
-                    session.add_all(records)
-                    session.commit()
-                total_inserted += len(records)
+                if records:
+                    with Session(self.engine) as session:
+                        session.add_all(records)
+                        session.commit()
+                    total_inserted += len(records)
 
-                if batch_num % 5 == 0:
-                    logger.info(
-                        f"  Batch {batch_num}: {existing + total_inserted:,} total loaded"
-                    )
+                pbar.update(1)
+                pbar.set_postfix({"total_loaded": f"{existing + total_inserted:,}"})
 
         final_count = self.get_table_count(Building)
         logger.info(f"  ✓ Loaded {final_count:,} buildings total\n")
 
-    def load_units(self, batch_size: int = 50000) -> None:
+    def load_units(self, batch_size: int = DEFAULT_BATCH_SIZE) -> None:
         """Load units from Units.csv"""
         csv_total = self.get_csv_row_count("Units.csv")
         skip, existing, _ = self.skip_if_loaded(Unit, csv_total)
@@ -591,31 +598,34 @@ class DataLoader:
         total_inserted = 0
         batch_num = 0
 
-        for chunk in df:
-            batch_num += 1
-            chunk = rename_columns(chunk)
+        total_chunks = (csv_total + batch_size - 1) // batch_size
+        
+        with tqdm(total=total_chunks, desc="  Processing batches", unit="batch") as pbar:
+            for chunk in df:
+                batch_num += 1
+                chunk = rename_columns(chunk)
 
-            records = []
-            for row_idx, row in chunk.iterrows():
-                property_id = parse_int(row.get("property_id"))
+                records = []
+                for row_idx, row in enumerate(chunk.to_dict('records')):
+                    property_id = parse_int(row.get("property_id"))
 
-                if property_id is None:
-                    property_id = -int(row_idx)
+                    if property_id is None:
+                        property_id = -int(row_idx)
 
-                if property_id in existing_ids:
-                    continue
+                    if property_id in existing_ids:
+                        continue
 
-                records.append(
-                    Unit(
-                        property_id=property_id,
-                        area_id=parse_int(row.get("area_id")),
-                        zone_id=parse_int(row.get("zone_id")),
-                        land_number=parse_str_from_numeric(row.get("land_number")),
-                        land_sub_number=parse_str_from_numeric(
-                            row.get("land_sub_number")
-                        ),
-                        building_number=clean_value(row.get("building_number")),
-                        unit_number=clean_value(row.get("unit_number")),
+                    records.append(
+                        Unit(
+                            property_id=property_id,
+                            area_id=parse_int(row.get("area_id")),
+                            zone_id=parse_int(row.get("zone_id")),
+                            land_number=parse_str_from_numeric(row.get("land_number")),
+                            land_sub_number=parse_str_from_numeric(
+                                row.get("land_sub_number")
+                            ),
+                            building_number=clean_value(row.get("building_number")),
+                            unit_number=clean_value(row.get("unit_number")),
                         floor=clean_value(row.get("floor")),
                         rooms=parse_int(row.get("rooms")),
                         rooms_ar=clean_value(row.get("rooms_ar")),
@@ -657,23 +667,21 @@ class DataLoader:
                         land_type=clean_value(row.get("land_type")),
                     )
                 )
-                existing_ids.add(property_id)
+                    existing_ids.add(property_id)
 
-            if records:
-                with Session(self.engine) as session:
-                    session.add_all(records)
-                    session.commit()
-                total_inserted += len(records)
+                if records:
+                    with Session(self.engine) as session:
+                        session.add_all(records)
+                        session.commit()
+                    total_inserted += len(records)
 
-                if batch_num % 5 == 0:
-                    logger.info(
-                        f"  Batch {batch_num}: {existing + total_inserted:,} total loaded"
-                    )
+                pbar.update(1)
+                pbar.set_postfix({"total_loaded": f"{existing + total_inserted:,}"})
 
         final_count = self.get_table_count(Unit)
         logger.info(f"  ✓ Loaded {final_count:,} units total\n")
 
-    def load_transactions(self, batch_size: int = 50000) -> None:
+    def load_transactions(self, batch_size: int = DEFAULT_BATCH_SIZE) -> None:
         """Load transactions from Transactions.csv"""
         csv_total = self.get_csv_row_count("Transactions.csv")
         skip, existing, _ = self.skip_if_loaded(Transaction, csv_total)
@@ -684,10 +692,9 @@ class DataLoader:
             )
             return
         elif existing > 0:
-            logger.warning(
-                f"⚠ Transactions partially loaded ({existing:,}/{csv_total:,}). Delete data to restart fresh."
+            logger.info(
+                f"⊙ Transactions resuming from {existing:,}/{csv_total:,} records..."
             )
-            return
         else:
             logger.info("Loading Transactions...")
 
@@ -698,33 +705,37 @@ class DataLoader:
             dtype=str,
         )
         total_inserted = 0
+        skipped = 0
         batch_num = 0
+        
+        total_chunks = (csv_total + batch_size - 1) // batch_size
+        
+        with tqdm(total=total_chunks, desc="  Processing batches", unit="batch") as pbar:
+            for chunk in df:
+                batch_num += 1
+                chunk = rename_columns(chunk)
 
-        for chunk in df:
-            batch_num += 1
-            chunk = rename_columns(chunk)
+                records = []
+                for row_idx, row in enumerate(chunk.to_dict('records')):
+                    transaction_id = clean_value(row.get("transaction_id"))
 
-            records = []
-            for row_idx, row in chunk.iterrows():
-                transaction_id = clean_value(row.get("transaction_id"))
+                    if transaction_id is None:
+                        transaction_id = f"MISSING_{row_idx}"
 
-                if transaction_id is None:
-                    transaction_id = f"MISSING_{row_idx}"
-
-                records.append(
-                    Transaction(
-                        transaction_id=transaction_id,
-                        procedure_id=parse_int(row.get("procedure_id")),
-                        trans_group_id=parse_int(row.get("trans_group_id")),
-                        trans_group_ar=clean_value(row.get("trans_group_ar")),
-                        trans_group=clean_value(row.get("trans_group_en")),
-                        procedure_name_ar=clean_value(row.get("procedure_name_ar")),
-                        procedure_name=clean_value(row.get("procedure_name_en")),
-                        instance_date=parse_date(row.get("instance_date")),
-                        property_type_id=parse_int(row.get("property_type_id")),
-                        property_type_ar=clean_value(row.get("property_type_ar")),
-                        property_type=clean_value(row.get("property_type_en")),
-                        property_sub_type_id=parse_int(row.get("property_sub_type_id")),
+                    records.append(
+                        Transaction(
+                            transaction_id=transaction_id,
+                            procedure_id=parse_int(row.get("procedure_id")),
+                            trans_group_id=parse_int(row.get("trans_group_id")),
+                            trans_group_ar=clean_value(row.get("trans_group_ar")),
+                            trans_group=clean_value(row.get("trans_group_en")),
+                            procedure_name_ar=clean_value(row.get("procedure_name_ar")),
+                            procedure_name=clean_value(row.get("procedure_name_en")),
+                            instance_date=parse_date(row.get("instance_date")),
+                            property_type_id=parse_int(row.get("property_type_id")),
+                            property_type_ar=clean_value(row.get("property_type_ar")),
+                            property_type=clean_value(row.get("property_type_en")),
+                            property_sub_type_id=parse_int(row.get("property_sub_type_id")),
                         property_sub_type_ar=clean_value(
                             row.get("property_sub_type_ar")
                         ),
@@ -764,21 +775,30 @@ class DataLoader:
                     )
                 )
 
-            if records:
-                with Session(self.engine) as session:
-                    session.add_all(records)
-                    session.commit()
-                total_inserted += len(records)
-
-                if batch_num % 5 == 0:
-                    logger.info(
-                        f"  Batch {batch_num}: {existing + total_inserted:,} total loaded"
-                    )
+                if records:
+                    with Session(self.engine) as session:
+                        try:
+                            session.add_all(records)
+                            session.commit()
+                            total_inserted += len(records)
+                        except Exception as e:
+                            session.rollback()
+                            skipped += len(records)
+                
+                pbar.update(1)
+                pbar.set_postfix({
+                    "inserted": f"{total_inserted:,}",
+                    "skipped": f"{skipped:,}",
+                    "total": f"{existing + total_inserted:,}"
+                })
 
         final_count = self.get_table_count(Transaction)
-        logger.info(f"  ✓ Loaded {final_count:,} transactions total\n")
+        if skipped > 0:
+            logger.info(f"  ✓ Loaded {final_count:,} transactions total ({skipped:,} duplicates skipped)\n")
+        else:
+            logger.info(f"  ✓ Loaded {final_count:,} transactions total\n")
 
-    def load_rent_contracts(self, batch_size: int = 50000) -> None:
+    def load_rent_contracts(self, batch_size: int = DEFAULT_BATCH_SIZE) -> None:
         """Load rental contracts with composite key (contract_id, line_number)"""
         csv_total = self.get_csv_row_count("Rent_Contracts.csv")
         skip, existing, _ = self.skip_if_loaded(RentContract, csv_total)
@@ -789,10 +809,9 @@ class DataLoader:
             )
             return
         elif existing > 0:
-            logger.warning(
-                f"⚠ Rent Contracts partially loaded ({existing:,}/{csv_total:,}). Delete data to restart fresh."
+            logger.info(
+                f"⊙ Rent Contracts resuming from {existing:,}/{csv_total:,} records..."
             )
-            return
         else:
             logger.info("Loading Rent Contracts...")
 
@@ -803,37 +822,40 @@ class DataLoader:
             dtype=str,
         )
         total_inserted = 0
+        skipped = 0
         batch_num = 0
+        
+        total_chunks = (csv_total + batch_size - 1) // batch_size
+        
+        with tqdm(total=total_chunks, desc="  Processing batches", unit="batch") as pbar:
+            for chunk in df:
+                batch_num += 1
+                chunk = rename_columns(chunk)
 
-        for chunk in df:
-            batch_num += 1
-            chunk = rename_columns(chunk)
+                records = []
+                for row_idx, row in enumerate(chunk.to_dict('records')):
+                    contract_id = clean_value(row.get("contract_id"))
+                    line_number = parse_int(row.get("line_number"))
 
-            records = []
-            for row_idx, row in chunk.iterrows():
-                contract_id = clean_value(row.get("contract_id"))
-                line_number = parse_int(row.get("line_number"))
+                    if contract_id is None:
+                        contract_id = f"MISSING_C_{row_idx}"
+                    if line_number is None:
+                        line_number = -1
 
-                # Handle missing composite primary key components
-                if contract_id is None:
-                    contract_id = f"MISSING_C_{row_idx}"
-                if line_number is None:
-                    line_number = -1
-
-                records.append(
-                    RentContract(
-                        contract_id=contract_id,
-                        line_number=line_number,
-                        contract_reg_type_id=parse_int(row.get("contract_reg_type_id")),
-                        contract_reg_type_ar=clean_value(
-                            row.get("contract_reg_type_ar")
-                        ),
-                        contract_reg_type=clean_value(row.get("contract_reg_type_en")),
-                        contract_start_date=parse_date(row.get("contract_start_date")),
-                        contract_end_date=parse_date(row.get("contract_end_date")),
-                        contract_amount=parse_decimal(row.get("contract_amount")),
-                        annual_amount=parse_decimal(row.get("annual_amount")),
-                        no_of_prop=parse_int(row.get("no_of_prop")),
+                    records.append(
+                        RentContract(
+                            contract_id=contract_id,
+                            line_number=line_number,
+                            contract_reg_type_id=parse_int(row.get("contract_reg_type_id")),
+                            contract_reg_type_ar=clean_value(
+                                row.get("contract_reg_type_ar")
+                            ),
+                            contract_reg_type=clean_value(row.get("contract_reg_type_en")),
+                            contract_start_date=parse_date(row.get("contract_start_date")),
+                            contract_end_date=parse_date(row.get("contract_end_date")),
+                            contract_amount=parse_decimal(row.get("contract_amount")),
+                            annual_amount=parse_decimal(row.get("annual_amount")),
+                            no_of_prop=parse_int(row.get("no_of_prop")),
                         is_free_hold=parse_bool(row.get("is_free_hold")),
                         ejari_bus_property_type_id=parse_int(
                             row.get("ejari_bus_property_type_id")
@@ -885,16 +907,25 @@ class DataLoader:
                     )
                 )
 
-            if records:
-                with Session(self.engine) as session:
-                    session.add_all(records)
-                    session.commit()
-                total_inserted += len(records)
-
-                if batch_num % 5 == 0:
-                    logger.info(
-                        f"  Batch {batch_num}: {existing + total_inserted:,} total loaded"
-                    )
+                if records:
+                    with Session(self.engine) as session:
+                        try:
+                            session.add_all(records)
+                            session.commit()
+                            total_inserted += len(records)
+                        except Exception as e:
+                            session.rollback()
+                            skipped += len(records)
+                
+                pbar.update(1)
+                pbar.set_postfix({
+                    "inserted": f"{total_inserted:,}",
+                    "skipped": f"{skipped:,}",
+                    "total": f"{existing + total_inserted:,}"
+                })
 
         final_count = self.get_table_count(RentContract)
-        logger.info(f"  ✓ Loaded {final_count:,} rent contracts total\n")
+        if skipped > 0:
+            logger.info(f"  ✓ Loaded {final_count:,} rent contracts total ({skipped:,} duplicates skipped)\n")
+        else:
+            logger.info(f"  ✓ Loaded {final_count:,} rent contracts total\n")
