@@ -6,8 +6,8 @@ from datetime import datetime
 from sqlalchemy import text
 from sqlmodel import Session
 
-from backend.database import engine
-from backend.models import SQLModel
+from app.database import engine
+from app.models import SQLModel
 from backend.scripts.db_utils.loaders import DataLoader
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")
