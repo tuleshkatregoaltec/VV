@@ -1,4 +1,3 @@
-import sys
 import argparse
 import logging
 from pathlib import Path
@@ -6,8 +5,6 @@ from datetime import datetime
 
 from sqlalchemy import text
 from sqlmodel import Session
-
-sys.path.append(str(Path(__file__).parent.parent))
 
 from backend.database import engine
 from backend.models import SQLModel

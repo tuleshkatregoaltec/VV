@@ -1,11 +1,8 @@
-import sys
 import logging
 from pathlib import Path
 
 import pandas as pd
 from sqlmodel import Session, select, func
-
-sys.path.append(str(Path(__file__).parent.parent))
 
 from backend.database import engine
 from backend.models import (
@@ -23,7 +20,7 @@ from backend.models import (
     Transaction,
     RentContract,
 )
-from scripts.db_utils.utils import (
+from backend.scripts.db_utils.utils import (
     clean_value,
     parse_date,
     parse_bool,

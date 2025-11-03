@@ -17,3 +17,10 @@ dependencies = [
     "sqlmodel>=0.0.27",
     "uvicorn>=0.38.0",
 ]
+
+[project.scripts]
+dbcli = "backend.scripts.db_utils.dbcli:main"
+
+[tool.setuptools.packages.find]
+include = ["backend*"]
+exclude = ["data*", "scripts*"]
