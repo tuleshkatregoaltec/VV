@@ -1,0 +1,47 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=swap');
+body {
+	font-family: var(--font-sans);
+}
+@import 'tailwindcss';
+@config "../tailwind.config.ts";
+
+@theme {
+	/* Primary Colors */
+	--color-primary: #181818;
+	--color-primary-light: #232323;
+	--color-primary-dark: #000000;
+	--color-primary-pale: #444444;
+
+	/* Black Palette */
+	--color-black: #000000;
+	--color-black-light: #232323;
+	--color-black-dark: #181818;
+	--color-black-pale: #444444;
+
+	/* Background Colors */
+	--color-background: #fcfbf6;
+	--color-background-surface: #f7f6ef;
+	--color-background-gray: #edeadd;
+
+	/* Success Colors */
+	--color-success-light: #4caf50;
+	--color-success-dark: #1b5e20;
+
+	/* Warning Colors */
+	--color-warning: #ed6c02;
+	--color-warning-light: #ff9800;
+	--color-warning-dark: #e65100;
+
+	/* Error Colors */
+	--color-error: #d32f2f;
+	--color-error-light: #f44336;
+	--color-error-dark: #c62828;
+
+	/* Accent Color */
+	--color-accent: #c7c35b;
+
+	/* Font */
+	--font-sans:
+		'Inter', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+		'Helvetica Neue', Arial, 'Noto Sans', sans-serif;
+}
