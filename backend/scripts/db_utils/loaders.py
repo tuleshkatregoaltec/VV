@@ -34,7 +34,6 @@ from backend.scripts.db_utils.utils import (
 
 logger = logging.getLogger(__name__)
 
-# Default batch size for chunked loading operations
 DEFAULT_BATCH_SIZE = 10000
 
 
@@ -86,7 +85,7 @@ class DataLoader:
                 name=clean_value(row.get("name_en")),
                 municipality_number=clean_value(row.get("municipality_number")),
             )
-            for row in df.to_dict('records')
+            for row in df.to_dict("records")
         ]
 
         with Session(self.engine) as session:
@@ -119,7 +118,7 @@ class DataLoader:
             .dropna()
         )
         group_records = []
-        for row in groups.to_dict('records'):
+        for row in groups.to_dict("records"):
             group_records.append(
                 TransactionGroup(
                     group_id=parse_int(row["trans_group_id"]),
@@ -135,7 +134,7 @@ class DataLoader:
 
         seen_procedures = set()
         procedure_records = []
-        for row in proc_df.to_dict('records'):
+        for row in proc_df.to_dict("records"):
             proc_id = parse_int(row["procedure_id"])
             if proc_id and proc_id not in seen_procedures:
                 procedure_records.append(
@@ -276,7 +275,7 @@ class DataLoader:
         df = rename_columns(df)
 
         records = []
-        for row in df.to_dict('records'):
+        for row in df.to_dict("records"):
             records.append(
                 Developer(
                     developer_id=parse_int(row["developer_id"]),
@@ -324,7 +323,7 @@ class DataLoader:
         df = rename_columns(df)
 
         records = []
-        for row in df.to_dict('records'):
+        for row in df.to_dict("records"):
             records.append(
                 Project(
                     project_id=parse_int(row["project_id"]),
@@ -405,14 +404,16 @@ class DataLoader:
 
         # Calculate total chunks for progress bar
         total_chunks = (csv_total + batch_size - 1) // batch_size
-        
-        with tqdm(total=total_chunks, desc="  Processing batches", unit="batch") as pbar:
+
+        with tqdm(
+            total=total_chunks, desc="  Processing batches", unit="batch"
+        ) as pbar:
             for chunk in df:
                 batch_num += 1
                 chunk = rename_columns(chunk)
 
                 records = []
-                for row_idx, row in enumerate(chunk.to_dict('records')):
+                for row_idx, row in enumerate(chunk.to_dict("records")):
                     property_id = parse_int(row.get("property_id"))
 
                     if property_id is None:
@@ -432,9 +433,13 @@ class DataLoader:
                             ),
                             actual_area=parse_decimal(row.get("actual_area")),
                             property_type_id=parse_int(row.get("property_type_id")),
-                            property_sub_type_id=parse_int(row.get("property_sub_type_id")),
+                            property_sub_type_id=parse_int(
+                                row.get("property_sub_type_id")
+                            ),
                             parcel_id=parse_str_from_numeric(row.get("parcel_id")),
-                            munc_zip_code=parse_str_from_numeric(row.get("munc_zip_code")),
+                            munc_zip_code=parse_str_from_numeric(
+                                row.get("munc_zip_code")
+                            ),
                             munc_number=parse_str_from_numeric(row.get("munc_number")),
                             is_free_hold=parse_bool(row.get("is_free_hold")),
                             is_registered=parse_bool(row.get("is_registered")),
@@ -442,7 +447,9 @@ class DataLoader:
                                 row.get("pre_registration_number")
                             ),
                             separated_from=parse_int(row.get("separated_from")),
-                            separated_reference=parse_int(row.get("separated_reference")),
+                            separated_reference=parse_int(
+                                row.get("separated_reference")
+                            ),
                             project_id=parse_int(row.get("project_id")),
                             master_project_id=parse_int(row.get("master_project_id")),
                             land_type_id=parse_int(row.get("land_type_id")),
@@ -497,14 +504,16 @@ class DataLoader:
         batch_num = 0
 
         total_chunks = (csv_total + batch_size - 1) // batch_size
-        
-        with tqdm(total=total_chunks, desc="  Processing batches", unit="batch") as pbar:
+
+        with tqdm(
+            total=total_chunks, desc="  Processing batches", unit="batch"
+        ) as pbar:
             for chunk in df:
                 batch_num += 1
                 chunk = rename_columns(chunk)
 
                 records = []
-                for row_idx, row in enumerate(chunk.to_dict('records')):
+                for row_idx, row in enumerate(chunk.to_dict("records")):
                     property_id = parse_int(row.get("property_id"))
 
                     if property_id is None:
@@ -530,7 +539,9 @@ class DataLoader:
                             rooms_description=clean_value(row.get("rooms_en")),
                             car_parks=parse_int(row.get("car_parks")),
                             common_area=parse_decimal(row.get("common_area")),
-                            actual_common_area=parse_decimal(row.get("actual_common_area")),
+                            actual_common_area=parse_decimal(
+                                row.get("actual_common_area")
+                            ),
                             built_up_area=parse_decimal(row.get("built_up_area")),
                             actual_area=parse_decimal(row.get("actual_area")),
                             shops=parse_int(row.get("shops")),
@@ -539,7 +550,9 @@ class DataLoader:
                             swimming_pools=parse_int(row.get("swimming_pools")),
                             elevators=parse_int(row.get("elevators")),
                             property_type_id=parse_int(row.get("property_type_id")),
-                            property_sub_type_id=parse_int(row.get("property_sub_type_id")),
+                            property_sub_type_id=parse_int(
+                                row.get("property_sub_type_id")
+                            ),
                             parent_property_id=parse_int(row.get("parent_property_id")),
                             creation_date=parse_date(row.get("creation_date")),
                             parcel_id=parse_str_from_numeric(row.get("parcel_id")),
@@ -599,14 +612,16 @@ class DataLoader:
         batch_num = 0
 
         total_chunks = (csv_total + batch_size - 1) // batch_size
-        
-        with tqdm(total=total_chunks, desc="  Processing batches", unit="batch") as pbar:
+
+        with tqdm(
+            total=total_chunks, desc="  Processing batches", unit="batch"
+        ) as pbar:
             for chunk in df:
                 batch_num += 1
                 chunk = rename_columns(chunk)
 
                 records = []
-                for row_idx, row in enumerate(chunk.to_dict('records')):
+                for row_idx, row in enumerate(chunk.to_dict("records")):
                     property_id = parse_int(row.get("property_id"))
 
                     if property_id is None:
@@ -626,47 +641,57 @@ class DataLoader:
                             ),
                             building_number=clean_value(row.get("building_number")),
                             unit_number=clean_value(row.get("unit_number")),
-                        floor=clean_value(row.get("floor")),
-                        rooms=parse_int(row.get("rooms")),
-                        rooms_ar=clean_value(row.get("rooms_ar")),
-                        rooms_description=clean_value(row.get("rooms_en")),
-                        unit_balcony_area=parse_decimal(row.get("unit_balcony_area")),
-                        common_area=parse_decimal(row.get("common_area")),
-                        actual_common_area=parse_decimal(row.get("actual_common_area")),
-                        actual_area=parse_decimal(row.get("actual_area")),
-                        unit_parking_number=clean_value(row.get("unit_parking_number")),
-                        parking_allocation_type=clean_value(
-                            row.get("parking_allocation_type")
-                        ),
-                        parking_allocation_type_ar=clean_value(
-                            row.get("parking_allocation_type_ar")
-                        ),
-                        parking_allocation_type_description=clean_value(
-                            row.get("parking_allocation_type_en")
-                        ),
-                        property_type_id=parse_int(row.get("property_type_id")),
-                        property_sub_type_id=parse_int(row.get("property_sub_type_id")),
-                        parent_property_id=parse_int(row.get("parent_property_id")),
-                        grandparent_property_id=parse_int(
-                            row.get("grandparent_property_id")
-                        ),
-                        creation_date=parse_date(row.get("creation_date")),
-                        munc_zip_code=parse_str_from_numeric(row.get("munc_zip_code")),
-                        munc_number=parse_str_from_numeric(row.get("munc_number")),
-                        parcel_id=parse_str_from_numeric(row.get("parcel_id")),
-                        is_free_hold=parse_bool(row.get("is_free_hold")),
-                        is_lease_hold=parse_bool(row.get("is_lease_hold")),
-                        is_registered=parse_bool(row.get("is_registered")),
-                        pre_registration_number=clean_value(
-                            row.get("pre_registration_number")
-                        ),
-                        project_id=parse_int(row.get("project_id")),
-                        master_project_id=parse_int(row.get("master_project_id")),
-                        land_type_id=parse_int(row.get("land_type_id")),
-                        land_type_ar=clean_value(row.get("land_type_ar")),
-                        land_type=clean_value(row.get("land_type")),
+                            floor=clean_value(row.get("floor")),
+                            rooms=parse_int(row.get("rooms")),
+                            rooms_ar=clean_value(row.get("rooms_ar")),
+                            rooms_description=clean_value(row.get("rooms_en")),
+                            unit_balcony_area=parse_decimal(
+                                row.get("unit_balcony_area")
+                            ),
+                            common_area=parse_decimal(row.get("common_area")),
+                            actual_common_area=parse_decimal(
+                                row.get("actual_common_area")
+                            ),
+                            actual_area=parse_decimal(row.get("actual_area")),
+                            unit_parking_number=clean_value(
+                                row.get("unit_parking_number")
+                            ),
+                            parking_allocation_type=clean_value(
+                                row.get("parking_allocation_type")
+                            ),
+                            parking_allocation_type_ar=clean_value(
+                                row.get("parking_allocation_type_ar")
+                            ),
+                            parking_allocation_type_description=clean_value(
+                                row.get("parking_allocation_type_en")
+                            ),
+                            property_type_id=parse_int(row.get("property_type_id")),
+                            property_sub_type_id=parse_int(
+                                row.get("property_sub_type_id")
+                            ),
+                            parent_property_id=parse_int(row.get("parent_property_id")),
+                            grandparent_property_id=parse_int(
+                                row.get("grandparent_property_id")
+                            ),
+                            creation_date=parse_date(row.get("creation_date")),
+                            munc_zip_code=parse_str_from_numeric(
+                                row.get("munc_zip_code")
+                            ),
+                            munc_number=parse_str_from_numeric(row.get("munc_number")),
+                            parcel_id=parse_str_from_numeric(row.get("parcel_id")),
+                            is_free_hold=parse_bool(row.get("is_free_hold")),
+                            is_lease_hold=parse_bool(row.get("is_lease_hold")),
+                            is_registered=parse_bool(row.get("is_registered")),
+                            pre_registration_number=clean_value(
+                                row.get("pre_registration_number")
+                            ),
+                            project_id=parse_int(row.get("project_id")),
+                            master_project_id=parse_int(row.get("master_project_id")),
+                            land_type_id=parse_int(row.get("land_type_id")),
+                            land_type_ar=clean_value(row.get("land_type_ar")),
+                            land_type=clean_value(row.get("land_type")),
+                        )
                     )
-                )
                     existing_ids.add(property_id)
 
                 if records:
@@ -707,16 +732,18 @@ class DataLoader:
         total_inserted = 0
         skipped = 0
         batch_num = 0
-        
+
         total_chunks = (csv_total + batch_size - 1) // batch_size
-        
-        with tqdm(total=total_chunks, desc="  Processing batches", unit="batch") as pbar:
+
+        with tqdm(
+            total=total_chunks, desc="  Processing batches", unit="batch"
+        ) as pbar:
             for chunk in df:
                 batch_num += 1
                 chunk = rename_columns(chunk)
 
                 records = []
-                for row_idx, row in enumerate(chunk.to_dict('records')):
+                for row_idx, row in enumerate(chunk.to_dict("records")):
                     transaction_id = clean_value(row.get("transaction_id"))
 
                     if transaction_id is None:
@@ -735,45 +762,59 @@ class DataLoader:
                             property_type_id=parse_int(row.get("property_type_id")),
                             property_type_ar=clean_value(row.get("property_type_ar")),
                             property_type=clean_value(row.get("property_type_en")),
-                            property_sub_type_id=parse_int(row.get("property_sub_type_id")),
-                        property_sub_type_ar=clean_value(
-                            row.get("property_sub_type_ar")
-                        ),
-                        property_sub_type=clean_value(row.get("property_sub_type_en")),
-                        property_usage_ar=clean_value(row.get("property_usage_ar")),
-                        property_usage=clean_value(row.get("property_usage_en")),
-                        reg_type_id=parse_int(row.get("reg_type_id")),
-                        reg_type_ar=clean_value(row.get("reg_type_ar")),
-                        reg_type=clean_value(row.get("reg_type_en")),
-                        area_id=parse_int(row.get("area_id")),
-                        area_name_ar=clean_value(row.get("area_name_ar")),
-                        area_name=clean_value(row.get("area_name_en")),
-                        building_name_ar=clean_value(row.get("building_name_ar")),
-                        building_name=clean_value(row.get("building_name_en")),
-                        project_number=clean_value(row.get("project_number")),
-                        project_name_ar=clean_value(row.get("project_name_ar")),
-                        project_name=clean_value(row.get("project_name_en")),
-                        master_project_ar=clean_value(row.get("master_project_ar")),
-                        master_project=clean_value(row.get("master_project_en")),
-                        nearest_landmark_ar=clean_value(row.get("nearest_landmark_ar")),
-                        nearest_landmark=clean_value(row.get("nearest_landmark_en")),
-                        nearest_metro_ar=clean_value(row.get("nearest_metro_ar")),
-                        nearest_metro=clean_value(row.get("nearest_metro_en")),
-                        nearest_mall_ar=clean_value(row.get("nearest_mall_ar")),
-                        nearest_mall=clean_value(row.get("nearest_mall_en")),
-                        rooms_ar=clean_value(row.get("rooms_ar")),
-                        rooms_description=clean_value(row.get("rooms_en")),
-                        has_parking=parse_bool(row.get("has_parking")),
-                        procedure_area=parse_decimal(row.get("procedure_area")),
-                        actual_worth=parse_decimal(row.get("actual_worth")),
-                        meter_sale_price=parse_decimal(row.get("meter_sale_price")),
-                        rent_value=parse_decimal(row.get("rent_value")),
-                        meter_rent_price=parse_decimal(row.get("meter_rent_price")),
-                        no_of_parties_role_1=parse_int(row.get("no_of_parties_role_1")),
-                        no_of_parties_role_2=parse_int(row.get("no_of_parties_role_2")),
-                        no_of_parties_role_3=parse_int(row.get("no_of_parties_role_3")),
+                            property_sub_type_id=parse_int(
+                                row.get("property_sub_type_id")
+                            ),
+                            property_sub_type_ar=clean_value(
+                                row.get("property_sub_type_ar")
+                            ),
+                            property_sub_type=clean_value(
+                                row.get("property_sub_type_en")
+                            ),
+                            property_usage_ar=clean_value(row.get("property_usage_ar")),
+                            property_usage=clean_value(row.get("property_usage_en")),
+                            reg_type_id=parse_int(row.get("reg_type_id")),
+                            reg_type_ar=clean_value(row.get("reg_type_ar")),
+                            reg_type=clean_value(row.get("reg_type_en")),
+                            area_id=parse_int(row.get("area_id")),
+                            area_name_ar=clean_value(row.get("area_name_ar")),
+                            area_name=clean_value(row.get("area_name_en")),
+                            building_name_ar=clean_value(row.get("building_name_ar")),
+                            building_name=clean_value(row.get("building_name_en")),
+                            project_number=clean_value(row.get("project_number")),
+                            project_name_ar=clean_value(row.get("project_name_ar")),
+                            project_name=clean_value(row.get("project_name_en")),
+                            master_project_ar=clean_value(row.get("master_project_ar")),
+                            master_project=clean_value(row.get("master_project_en")),
+                            nearest_landmark_ar=clean_value(
+                                row.get("nearest_landmark_ar")
+                            ),
+                            nearest_landmark=clean_value(
+                                row.get("nearest_landmark_en")
+                            ),
+                            nearest_metro_ar=clean_value(row.get("nearest_metro_ar")),
+                            nearest_metro=clean_value(row.get("nearest_metro_en")),
+                            nearest_mall_ar=clean_value(row.get("nearest_mall_ar")),
+                            nearest_mall=clean_value(row.get("nearest_mall_en")),
+                            rooms_ar=clean_value(row.get("rooms_ar")),
+                            rooms_description=clean_value(row.get("rooms_en")),
+                            has_parking=parse_bool(row.get("has_parking")),
+                            procedure_area=parse_decimal(row.get("procedure_area")),
+                            actual_worth=parse_decimal(row.get("actual_worth")),
+                            meter_sale_price=parse_decimal(row.get("meter_sale_price")),
+                            rent_value=parse_decimal(row.get("rent_value")),
+                            meter_rent_price=parse_decimal(row.get("meter_rent_price")),
+                            no_of_parties_role_1=parse_int(
+                                row.get("no_of_parties_role_1")
+                            ),
+                            no_of_parties_role_2=parse_int(
+                                row.get("no_of_parties_role_2")
+                            ),
+                            no_of_parties_role_3=parse_int(
+                                row.get("no_of_parties_role_3")
+                            ),
+                        )
                     )
-                )
 
                 if records:
                     with Session(self.engine) as session:
@@ -784,17 +825,21 @@ class DataLoader:
                         except Exception as e:
                             session.rollback()
                             skipped += len(records)
-                
+
                 pbar.update(1)
-                pbar.set_postfix({
-                    "inserted": f"{total_inserted:,}",
-                    "skipped": f"{skipped:,}",
-                    "total": f"{existing + total_inserted:,}"
-                })
+                pbar.set_postfix(
+                    {
+                        "inserted": f"{total_inserted:,}",
+                        "skipped": f"{skipped:,}",
+                        "total": f"{existing + total_inserted:,}",
+                    }
+                )
 
         final_count = self.get_table_count(Transaction)
         if skipped > 0:
-            logger.info(f"  ✓ Loaded {final_count:,} transactions total ({skipped:,} duplicates skipped)\n")
+            logger.info(
+                f"  ✓ Loaded {final_count:,} transactions total ({skipped:,} duplicates skipped)\n"
+            )
         else:
             logger.info(f"  ✓ Loaded {final_count:,} transactions total\n")
 
@@ -824,16 +869,18 @@ class DataLoader:
         total_inserted = 0
         skipped = 0
         batch_num = 0
-        
+
         total_chunks = (csv_total + batch_size - 1) // batch_size
-        
-        with tqdm(total=total_chunks, desc="  Processing batches", unit="batch") as pbar:
+
+        with tqdm(
+            total=total_chunks, desc="  Processing batches", unit="batch"
+        ) as pbar:
             for chunk in df:
                 batch_num += 1
                 chunk = rename_columns(chunk)
 
                 records = []
-                for row_idx, row in enumerate(chunk.to_dict('records')):
+                for row_idx, row in enumerate(chunk.to_dict("records")):
                     contract_id = clean_value(row.get("contract_id"))
                     line_number = parse_int(row.get("line_number"))
 
@@ -846,66 +893,76 @@ class DataLoader:
                         RentContract(
                             contract_id=contract_id,
                             line_number=line_number,
-                            contract_reg_type_id=parse_int(row.get("contract_reg_type_id")),
+                            contract_reg_type_id=parse_int(
+                                row.get("contract_reg_type_id")
+                            ),
                             contract_reg_type_ar=clean_value(
                                 row.get("contract_reg_type_ar")
                             ),
-                            contract_reg_type=clean_value(row.get("contract_reg_type_en")),
-                            contract_start_date=parse_date(row.get("contract_start_date")),
+                            contract_reg_type=clean_value(
+                                row.get("contract_reg_type_en")
+                            ),
+                            contract_start_date=parse_date(
+                                row.get("contract_start_date")
+                            ),
                             contract_end_date=parse_date(row.get("contract_end_date")),
                             contract_amount=parse_decimal(row.get("contract_amount")),
                             annual_amount=parse_decimal(row.get("annual_amount")),
                             no_of_prop=parse_int(row.get("no_of_prop")),
-                        is_free_hold=parse_bool(row.get("is_free_hold")),
-                        ejari_bus_property_type_id=parse_int(
-                            row.get("ejari_bus_property_type_id")
-                        ),
-                        ejari_bus_property_type_ar=clean_value(
-                            row.get("ejari_bus_property_type_ar")
-                        ),
-                        ejari_bus_property_type=clean_value(
-                            row.get("ejari_bus_property_type_en")
-                        ),
-                        ejari_property_type_id=parse_int(
-                            row.get("ejari_property_type_id")
-                        ),
-                        ejari_property_type=clean_value(
-                            row.get("ejari_property_type_en")
-                        ),
-                        ejari_property_type_ar=clean_value(
-                            row.get("ejari_property_type_ar")
-                        ),
-                        ejari_property_sub_type_id=parse_int(
-                            row.get("ejari_property_sub_type_id")
-                        ),
-                        ejari_property_sub_type=clean_value(
-                            row.get("ejari_property_sub_type_en")
-                        ),
-                        ejari_property_sub_type_ar=clean_value(
-                            row.get("ejari_property_sub_type_ar")
-                        ),
-                        property_usage=clean_value(row.get("property_usage_en")),
-                        property_usage_ar=clean_value(row.get("property_usage_ar")),
-                        project_number=clean_value(row.get("project_number")),
-                        project_name_ar=clean_value(row.get("project_name_ar")),
-                        project_name=clean_value(row.get("project_name_en")),
-                        master_project_ar=clean_value(row.get("master_project_ar")),
-                        master_project=clean_value(row.get("master_project_en")),
-                        area_id=parse_int(row.get("area_id")),
-                        area_name_ar=clean_value(row.get("area_name_ar")),
-                        area_name=clean_value(row.get("area_name_en")),
-                        actual_area=parse_decimal(row.get("actual_area")),
-                        nearest_landmark_ar=clean_value(row.get("nearest_landmark_ar")),
-                        nearest_landmark=clean_value(row.get("nearest_landmark_en")),
-                        nearest_metro_ar=clean_value(row.get("nearest_metro_ar")),
-                        nearest_metro=clean_value(row.get("nearest_metro_en")),
-                        nearest_mall_ar=clean_value(row.get("nearest_mall_ar")),
-                        nearest_mall=clean_value(row.get("nearest_mall_en")),
-                        tenant_type_id=parse_int(row.get("tenant_type_id")),
-                        tenant_type_ar=clean_value(row.get("tenant_type_ar")),
-                        tenant_type=clean_value(row.get("tenant_type_en")),
+                            is_free_hold=parse_bool(row.get("is_free_hold")),
+                            ejari_bus_property_type_id=parse_int(
+                                row.get("ejari_bus_property_type_id")
+                            ),
+                            ejari_bus_property_type_ar=clean_value(
+                                row.get("ejari_bus_property_type_ar")
+                            ),
+                            ejari_bus_property_type=clean_value(
+                                row.get("ejari_bus_property_type_en")
+                            ),
+                            ejari_property_type_id=parse_int(
+                                row.get("ejari_property_type_id")
+                            ),
+                            ejari_property_type=clean_value(
+                                row.get("ejari_property_type_en")
+                            ),
+                            ejari_property_type_ar=clean_value(
+                                row.get("ejari_property_type_ar")
+                            ),
+                            ejari_property_sub_type_id=parse_int(
+                                row.get("ejari_property_sub_type_id")
+                            ),
+                            ejari_property_sub_type=clean_value(
+                                row.get("ejari_property_sub_type_en")
+                            ),
+                            ejari_property_sub_type_ar=clean_value(
+                                row.get("ejari_property_sub_type_ar")
+                            ),
+                            property_usage=clean_value(row.get("property_usage_en")),
+                            property_usage_ar=clean_value(row.get("property_usage_ar")),
+                            project_number=clean_value(row.get("project_number")),
+                            project_name_ar=clean_value(row.get("project_name_ar")),
+                            project_name=clean_value(row.get("project_name_en")),
+                            master_project_ar=clean_value(row.get("master_project_ar")),
+                            master_project=clean_value(row.get("master_project_en")),
+                            area_id=parse_int(row.get("area_id")),
+                            area_name_ar=clean_value(row.get("area_name_ar")),
+                            area_name=clean_value(row.get("area_name_en")),
+                            actual_area=parse_decimal(row.get("actual_area")),
+                            nearest_landmark_ar=clean_value(
+                                row.get("nearest_landmark_ar")
+                            ),
+                            nearest_landmark=clean_value(
+                                row.get("nearest_landmark_en")
+                            ),
+                            nearest_metro_ar=clean_value(row.get("nearest_metro_ar")),
+                            nearest_metro=clean_value(row.get("nearest_metro_en")),
+                            nearest_mall_ar=clean_value(row.get("nearest_mall_ar")),
+                            nearest_mall=clean_value(row.get("nearest_mall_en")),
+                            tenant_type_id=parse_int(row.get("tenant_type_id")),
+                            tenant_type_ar=clean_value(row.get("tenant_type_ar")),
+                            tenant_type=clean_value(row.get("tenant_type_en")),
+                        )
                     )
-                )
 
                 if records:
                     with Session(self.engine) as session:
@@ -916,16 +973,20 @@ class DataLoader:
                         except Exception as e:
                             session.rollback()
                             skipped += len(records)
-                
+
                 pbar.update(1)
-                pbar.set_postfix({
-                    "inserted": f"{total_inserted:,}",
-                    "skipped": f"{skipped:,}",
-                    "total": f"{existing + total_inserted:,}"
-                })
+                pbar.set_postfix(
+                    {
+                        "inserted": f"{total_inserted:,}",
+                        "skipped": f"{skipped:,}",
+                        "total": f"{existing + total_inserted:,}",
+                    }
+                )
 
         final_count = self.get_table_count(RentContract)
         if skipped > 0:
-            logger.info(f"  ✓ Loaded {final_count:,} rent contracts total ({skipped:,} duplicates skipped)\n")
+            logger.info(
+                f"  ✓ Loaded {final_count:,} rent contracts total ({skipped:,} duplicates skipped)\n"
+            )
         else:
             logger.info(f"  ✓ Loaded {final_count:,} rent contracts total\n")

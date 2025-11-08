@@ -89,7 +89,7 @@ def extract_lookup_from_files(
         df = pd.read_csv(data_dir / file, usecols=columns, low_memory=False)
         df = rename_columns(df)
 
-        unique_rows = df[columns].drop_duplicates().dropna()
+        unique_rows = df[columns].drop_duplicates()
 
         for _, row in unique_rows.iterrows():
             row_id = parse_int(row[id_column])
@@ -97,7 +97,6 @@ def extract_lookup_from_files(
                 values = tuple(
                     clean_value(row[col]) for col in columns if col != id_column
                 )
-                if all(values):
-                    lookup_dict[row_id] = values
+                lookup_dict[row_id] = values
 
     return lookup_dict

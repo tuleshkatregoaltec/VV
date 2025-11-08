@@ -7,16 +7,33 @@ from sqlalchemy import text
 from sqlmodel import Session
 
 from backend.app.database import engine
-from backend.app.models import SQLModel
+from backend.app.models import (
+    SQLModel,
+    Area,
+    TransactionGroup,
+    TransactionProcedure,
+    PropertyType,
+    PropertySubType,
+    MasterProject,
+    Developer,
+    Project,
+    LandRegistry,
+    Building,
+    Unit,
+    Transaction,
+    RentContract,
+)
 
 from backend.scripts.db_utils.loaders_optimized import DataLoader
+from backend.scripts.db_utils.schema import migrate_schema, clear_database as clear_db
+from backend.scripts.db_utils.verification import verify_import
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 logger = logging.getLogger(__name__)
 
 
 def disable_fk_constraints() -> None:
-    """Disable foreign key constraints during import"""
+    """Disable foreign key constraints during import."""
     with Session(engine) as session:
         session.exec(text("SET session_replication_role = 'replica';"))
         session.commit()
@@ -24,39 +41,74 @@ def disable_fk_constraints() -> None:
 
 
 def enable_fk_constraints() -> None:
-    """Re-enable foreign key constraints after import"""
+    """Re-enable foreign key constraints after import."""
     with Session(engine) as session:
         session.exec(text("SET session_replication_role = 'origin';"))
         session.commit()
         logger.info("[dbcli] Foreign key constraints enabled")
 
 
-def clear_database() -> None:
-    """Clear all tables (Drop and recreate)"""
+def migrate_schema_cmd() -> None:
+    """Update database schema to match current models without losing data."""
+    logger.info("=" * 70)
+    logger.info("SCHEMA MIGRATION")
+    logger.info("=" * 70 + "\n")
+
+    try:
+        changes_made = migrate_schema()
+
+        if changes_made:
+            logger.info("\n✓ Schema migration completed successfully\n")
+        else:
+            logger.info("✓ Schema is already up to date\n")
+
+    except Exception as e:
+        logger.error(f"\n✗ Error during schema migration: {e}\n")
+        raise
+
+
+def clear_db() -> None:
+    """Clear all tables (Drop and recreate)."""
     logger.info("=" * 70)
     logger.info("DATABASE CLEAR OPERATION")
     logger.info("=" * 70 + "\n")
     logger.info("[dbcli] Dropping and recreating all tables...")
 
     try:
-        disable_fk_constraints()
-        SQLModel.metadata.drop_all(engine)
-        logger.info("  ✓ Dropped all tables")
-
-        SQLModel.metadata.create_all(engine)
-        logger.info("  ✓ Created all tables")
-        enable_fk_constraints()
-
+        clear_db(disable_fk_constraints, enable_fk_constraints)
         logger.info("\n✓ Database cleared successfully\n")
     except Exception as e:
         logger.error(f"\n✗ Error clearing database: {e}\n")
         raise
 
 
-def import_all_data(data_dir: Path | None = None) -> None:
-    """Import all tables in correct order"""
+def verify_data(data_dir: Path | None = None) -> bool:
+    """Verify imported data against CSV sources."""
     if data_dir is None:
-        # Go up to repo root: dbcli.py -> db_utils -> scripts -> backend -> repo root
+        data_dir = Path(__file__).parent.parent.parent.parent / "data"
+
+    models = {
+        "Area": Area,
+        "TransactionGroup": TransactionGroup,
+        "TransactionProcedure": TransactionProcedure,
+        "PropertyType": PropertyType,
+        "PropertySubType": PropertySubType,
+        "MasterProject": MasterProject,
+        "Developer": Developer,
+        "Project": Project,
+        "LandRegistry": LandRegistry,
+        "Building": Building,
+        "Unit": Unit,
+        "Transaction": Transaction,
+        "RentContract": RentContract,
+    }
+
+    return verify_import(data_dir, models)
+
+
+def import_all_data(data_dir: Path | None = None) -> None:
+    """Import all tables in correct order."""
+    if data_dir is None:
         data_dir = Path(__file__).parent.parent.parent.parent / "data"
 
     start_time = datetime.now()
@@ -113,8 +165,38 @@ def import_all_data(data_dir: Path | None = None) -> None:
     logger.info(f"\nTotal time: {elapsed}\n")
 
 
+def reload_master_projects(data_dir: Path | None = None) -> None:
+    """Reload master projects table with fixed logic."""
+    if data_dir is None:
+        data_dir = Path(__file__).parent.parent.parent.parent / "data"
+
+    logger.info("=" * 70)
+    logger.info("Reloading Master Projects")
+    logger.info("=" * 70 + "\n")
+
+    disable_fk_constraints()
+
+    try:
+        with Session(engine) as session:
+            result = session.exec(text("DELETE FROM master_projects"))
+            deleted = result.rowcount
+            session.commit()
+            logger.info(f"✓ Deleted {deleted} existing master projects\n")
+
+        loader = DataLoader(data_dir)
+        loader.load_master_projects()
+
+        logger.info("\n✓ Master projects reloaded successfully\n")
+
+    except Exception as e:
+        logger.error(f"\n✗ Error reloading master projects: {e}\n")
+        raise
+    finally:
+        enable_fk_constraints()
+
+
 def main():
-    """Main CLI entry point"""
+    """Main CLI entry point."""
     parser = argparse.ArgumentParser(
         description="ViteVue Data Import Pipeline",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -126,10 +208,25 @@ def main():
         help="Clear all tables (drop and recreate)",
     )
     parser.add_argument(
+        "--migrate-schema",
+        action="store_true",
+        help="Update database schema to match models.py without losing data",
+    )
+    parser.add_argument(
         "--import",
         dest="do_import",
         action="store_true",
         help="Import all data (skips already loaded tables)",
+    )
+    parser.add_argument(
+        "--verify",
+        action="store_true",
+        help="Verify imported data against CSV sources",
+    )
+    parser.add_argument(
+        "--reload-master-projects",
+        action="store_true",
+        help="Reload master projects table with fixed logic",
     )
     parser.add_argument(
         "--data-dir", type=Path, help="Path to data directory (default: ./data)"
@@ -137,20 +234,43 @@ def main():
 
     args = parser.parse_args()
 
-    if not args.clear and not args.do_import:
-        parser.error("Must specify at least one of --clear or --import")
+    if not any(
+        [
+            args.clear,
+            args.migrate_schema,
+            args.do_import,
+            args.verify,
+            args.reload_master_projects,
+        ]
+    ):
+        parser.error(
+            "Must specify at least one of --clear, --migrate-schema, --import, --verify, or --reload-master-projects"
+        )
 
     if args.clear:
-        confirm = input('[WARNING] This will drop and recreate the entire database\n' \
-        'Please type "CONFIRM" if you want to proceed: ')
+        confirm = input(
+            "[WARNING] This will drop and recreate the entire database\n"
+            'Please type "CONFIRM" if you want to proceed: '
+        )
         if confirm == "CONFIRM":
-            clear_database()
+            clear_db()
         else:
             logger.error("\nAborting!")
             exit
 
+    if args.migrate_schema:
+        migrate_schema_cmd()
+
+    if args.reload_master_projects:
+        reload_master_projects(args.data_dir)
+
     if args.do_import:
         import_all_data(args.data_dir)
+
+    if args.verify:
+        success = verify_data(args.data_dir)
+        if not success:
+            exit(1)
 
 
 if __name__ == "__main__":
