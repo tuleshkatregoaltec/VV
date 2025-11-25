@@ -2,13 +2,12 @@
 
 import logging
 from sqlalchemy import inspect, text
-from sqlmodel import Session
+from sqlmodel import SQLModel
 
-from backend.app.database import engine
-from backend.app.models import SQLModel
+from backend.app.db.session import engine, get_db_session
+from backend.app.db import models  # Import models to register them
 
 logger = logging.getLogger(__name__)
-
 
 def migrate_schema() -> bool:
     """Update database schema to match current models without losing data."""
@@ -41,7 +40,8 @@ def migrate_schema() -> bool:
                     if hasattr(col.default, "arg"):
                         default = f" DEFAULT {col.default.arg}"
 
-                with Session(engine) as session:
+                # Use context manager properly
+                with next(get_db_session()) as session:
                     session.exec(
                         text(
                             f"ALTER TABLE {table_name} ADD COLUMN {col_name} {col_type} {nullable}{default}"
@@ -60,7 +60,7 @@ def migrate_schema() -> bool:
                         f"  Updating {table_name}.{col_name} to {'nullable' if col.nullable else 'non-nullable'}"
                     )
 
-                    with Session(engine) as session:
+                    with next(get_db_session()) as session:
                         session.exec(
                             text(
                                 f"ALTER TABLE {table_name} ALTER COLUMN {col_name} {action}"
@@ -71,15 +71,24 @@ def migrate_schema() -> bool:
 
     return changes_made
 
-
-def clear_database(disable_fk_fn, enable_fk_fn) -> None:
+def clear_database(disable_fk_fn=None, enable_fk_fn=None) -> None:
     """Drop and recreate all database tables."""
     metadata = SQLModel.metadata
 
-    disable_fk_fn()
+    if disable_fk_fn:
+        disable_fk_fn()
+    
     metadata.drop_all(engine)
     logger.info("  ✓ Dropped all tables")
 
     metadata.create_all(engine)
     logger.info("  ✓ Created all tables")
-    enable_fk_fn()
+    
+    if enable_fk_fn:
+        enable_fk_fn()
+
+def create_all_tables():
+    """Simple helper to create all tables - useful for fresh setup"""
+    logger.info("Creating all tables...")
+    SQLModel.metadata.create_all(engine)
+    logger.info("✓ All tables created successfully")

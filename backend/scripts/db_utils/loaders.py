@@ -5,8 +5,8 @@ import pandas as pd
 from sqlmodel import Session, select, func
 from tqdm import tqdm
 
-from backend.app.database import engine
-from backend.app.models import (
+from backend.app.db.session import engine
+from backend.app.db.models import (
     Area,
     TransactionGroup,
     TransactionProcedure,

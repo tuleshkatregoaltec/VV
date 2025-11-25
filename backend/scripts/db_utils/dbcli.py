@@ -6,8 +6,8 @@ from datetime import datetime
 from sqlalchemy import text
 from sqlmodel import Session
 
-from backend.app.database import engine
-from backend.app.models import (
+from backend.app.db.session import engine
+from backend.app.db.models import (
     SQLModel,
     Area,
     TransactionGroup,

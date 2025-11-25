@@ -1,19 +1,17 @@
-from typing import Optional, List
-from datetime import date
+from typing import Optional, List, LiteralString
+from datetime import date, datetime
 from decimal import Decimal
 
 from sqlmodel import SQLModel, Field, Relationship
 
 
-# ============================================================================
-# LOOKUP & REFERENCE TABLES
-# ============================================================================
+# Lookup Tables
 
 
 class TransactionGroup(SQLModel, table=True):
     """Transaction type groups (Sales, Mortgages, Gifts, etc.)"""
 
-    __tablename__ = "transaction_groups"
+    __tablename__: LiteralString = "transaction_groups"
 
     # Primary key
     group_id: int = Field(primary_key=True)
@@ -27,7 +25,7 @@ class TransactionGroup(SQLModel, table=True):
 class TransactionProcedure(SQLModel, table=True):
     """Specific transaction procedures (Registration, Transfer, Initial Sale, etc.)"""
 
-    __tablename__ = "transaction_procedures"
+    __tablename__: LiteralString = "transaction_procedures"
 
     # Primary key
     procedure_id: int = Field(primary_key=True)
@@ -44,7 +42,7 @@ class TransactionProcedure(SQLModel, table=True):
 class Area(SQLModel, table=True):
     """Geographic areas and districts (Dubai Marina, Downtown Dubai, Jumeirah, etc.)"""
 
-    __tablename__ = "areas"
+    __tablename__: LiteralString = "areas"
 
     # Primary key
     area_id: int = Field(primary_key=True)
@@ -65,7 +63,7 @@ class Area(SQLModel, table=True):
 class PropertyType(SQLModel, table=True):
     """Property type classifications (Land, Building, Unit, Villa, etc.)"""
 
-    __tablename__ = "property_types"
+    __tablename__: LiteralString = "property_types"
 
     # Primary key
     property_type_id: int = Field(primary_key=True)
@@ -79,7 +77,7 @@ class PropertyType(SQLModel, table=True):
 class PropertySubType(SQLModel, table=True):
     """Detailed property classifications (Apartment, Office, Retail, Warehouse, etc.)"""
 
-    __tablename__ = "property_sub_types"
+    __tablename__: LiteralString = "property_sub_types"
 
     # Primary key
     property_sub_type_id: int = Field(primary_key=True)
@@ -94,7 +92,7 @@ class PropertySubType(SQLModel, table=True):
 class MasterProject(SQLModel, table=True):
     """Large development complexes (Dubai Marina, Business Bay, DAMAC Hills, etc.)"""
 
-    __tablename__ = "master_projects"
+    __tablename__: LiteralString = "master_projects"
 
     # Primary key
     master_project_id: int = Field(primary_key=True)
@@ -109,15 +107,13 @@ class MasterProject(SQLModel, table=True):
     units: List["Unit"] = Relationship(back_populates="master_project")
 
 
-# ============================================================================
-# CORE ENTITY TABLES
-# ============================================================================
+# Entity Tables
 
 
 class Developer(SQLModel, table=True):
     """Real estate developers and companies (Emaar, DAMAC, Nakheel, etc.)"""
 
-    __tablename__ = "developers"
+    __tablename__: LiteralString = "developers"
 
     # Primary key
     developer_id: int = Field(primary_key=True)
@@ -163,7 +159,7 @@ class Developer(SQLModel, table=True):
 class Project(SQLModel, table=True):
     """Real estate development projects (specific buildings and communities)"""
 
-    __tablename__ = "projects"
+    __tablename__: LiteralString = "projects"
 
     # Primary key
     project_id: int = Field(primary_key=True)
@@ -229,15 +225,13 @@ class Project(SQLModel, table=True):
     units: List["Unit"] = Relationship(back_populates="project")
 
 
-# ============================================================================
-# PROPERTY HIERARCHY
-# ============================================================================
+# Property Hierarchy Tables
 
 
 class LandRegistry(SQLModel, table=True):
     """Land parcels - base level of property hierarchy"""
 
-    __tablename__ = "land_registry"
+    __tablename__: LiteralString = "land_registry"
 
     # Primary key
     property_id: int = Field(primary_key=True)
@@ -309,7 +303,7 @@ class LandRegistry(SQLModel, table=True):
 class Building(SQLModel, table=True):
     """Buildings and villas - mid-level of property hierarchy"""
 
-    __tablename__ = "buildings"
+    __tablename__: LiteralString = "buildings"
 
     # Primary key
     property_id: int = Field(primary_key=True)
@@ -391,7 +385,7 @@ class Building(SQLModel, table=True):
 class Unit(SQLModel, table=True):
     """Individual units (apartments, offices, hotel rooms, etc.) - detail level of property hierarchy"""
 
-    __tablename__ = "units"
+    __tablename__: LiteralString = "units"
 
     # Primary key
     property_id: int = Field(primary_key=True)
@@ -475,15 +469,13 @@ class Unit(SQLModel, table=True):
     master_project: Optional[MasterProject] = Relationship(back_populates="units")
 
 
-# ============================================================================
-# TRANSACTION DATA
-# ============================================================================
+# Transaction Tables
 
 
 class Transaction(SQLModel, table=True):
     """Market transaction records - independent analytics data"""
 
-    __tablename__ = "transactions"
+    __tablename__: LiteralString = "transactions"
 
     # Primary key
     transaction_id: str = Field(primary_key=True, max_length=50)
@@ -575,7 +567,7 @@ class RentContract(SQLModel, table=True):
     The composite primary key (contract_id, line_number) ensures uniqueness.
     """
 
-    __tablename__ = "rent_contracts"
+    __tablename__: LiteralString = "rent_contracts"
 
     # Primary key (composite key)
     contract_id: str = Field(primary_key=True, max_length=50)
@@ -642,3 +634,41 @@ class RentContract(SQLModel, table=True):
 
     # Relationships
     area: Optional[Area] = Relationship(back_populates="rent_contracts")
+
+
+# User and Organisation Tables
+
+class Organisation(SQLModel, table=True):
+    __tablename__: LiteralString = "organisations"
+
+    # Primary key    
+    id: str = Field(primary_key=True)
+    
+    # Organisation details
+    name: str = Field(index=True)
+    email_domain: str = Field(unique=True, index=True)
+    max_users: int = Field(default=5)
+    is_active: bool = Field(default=True)
+    created_at: datetime = Field(default_factory=datetime.now)
+    
+    # Relationships
+    users: List["User"] = Relationship(back_populates="organisation")
+
+
+class User(SQLModel, table=True):
+    __tablename__: LiteralString = "users"
+
+    # Primary key
+    id: str = Field(primary_key=True)
+
+    # User details
+    email: str = Field(unique=True, index=True)
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    organisation_id: Optional[str] = Field(default=None, foreign_key="organisations.id")
+    is_active: bool = Field(default=True)
+    created_at: datetime = Field(default_factory=datetime.now)
+    last_login: datetime = Field(default_factory=datetime.now)
+    
+    # Relationships
+    organisation: Optional[Organisation] = Relationship(back_populates="users")
