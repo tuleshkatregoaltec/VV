@@ -10,9 +10,9 @@
 		LinearScale,
 		PointElement
 	} from 'chart.js';
-	import ChatBox from '$lib/components/ChatBox.svelte';
-	import DashboardCard from '$lib/components/DashboardCard.svelte';
-	import PageHeader from '$lib/components/PageHeader.svelte';
+	import ChatBox from '$lib/components/dashboard/ChatBox.svelte';
+	import DashboardCard from '$lib/components/dashboard/DashboardCard.svelte';
+	import PageHeader from '$lib/components/dashboard/PageHeader.svelte';
 	import PageContainer from '$lib/components/layout/PageContainer.svelte';
 	import Grid from '$lib/components/layout/Grid.svelte';
 

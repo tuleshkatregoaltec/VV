@@ -18,6 +18,11 @@ dependencies = [
     "uvicorn>=0.38.0",
     "requests>=2.32.5",
     "tqdm>=4.66.0",
+    "redis>=7.0.1",
+    "workos>=5.33.0",
+    "pydantic-settings>=2.12.0",
+    "starlette>=0.49.1",
+    "itsdangerous>=2.2.0",
 ]
 
 [project.scripts]
