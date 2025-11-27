@@ -9,6 +9,7 @@ from backend.app.db import models  # Import models to register them
 
 logger = logging.getLogger(__name__)
 
+
 def migrate_schema() -> bool:
     """Update database schema to match current models without losing data."""
     logger.info("[migrate] Comparing database schema with models...\n")
@@ -71,21 +72,23 @@ def migrate_schema() -> bool:
 
     return changes_made
 
+
 def clear_database(disable_fk_fn=None, enable_fk_fn=None) -> None:
     """Drop and recreate all database tables."""
     metadata = SQLModel.metadata
 
     if disable_fk_fn:
         disable_fk_fn()
-    
+
     metadata.drop_all(engine)
     logger.info("  ✓ Dropped all tables")
 
     metadata.create_all(engine)
     logger.info("  ✓ Created all tables")
-    
+
     if enable_fk_fn:
         enable_fk_fn()
+
 
 def create_all_tables():
     """Simple helper to create all tables - useful for fresh setup"""

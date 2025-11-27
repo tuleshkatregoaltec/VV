@@ -56,9 +56,7 @@
     pricePerSqFtRange: { min: '', max: '' }
   });
 
-  // ========================================
-  // Derived Values
-  // ========================================
+
   let columns = $derived(
     propertyType.current === PROPERTY_USAGE.RESIDENTIAL ? RESIDENTIAL_COLUMNS : COMMERCIAL_COLUMNS
   );

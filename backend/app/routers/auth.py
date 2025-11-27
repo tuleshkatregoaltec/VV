@@ -16,7 +16,11 @@ async def login():
 
 
 @router.get("/auth/callback")
-async def auth_callback(request: Request, code: str | None = None, session: Session = Depends(get_db_session)):
+async def auth_callback(
+    request: Request,
+    code: str | None = None,
+    session: Session = Depends(get_db_session),
+):
     """Handle OAuth callback from WorkOS"""
     if not code:
         raise HTTPException(status_code=400, detail="Missing authorization code")
