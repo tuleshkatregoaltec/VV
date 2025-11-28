@@ -1,78 +1,96 @@
 from sqlmodel import Session, select, func
 from typing import Optional
+from datetime import datetime, timezone
+from workos import WorkOSClient
 from backend.app.db.models import Organisation, User
+from backend.app.config import settings
 
 
-class OrganisationError(Exception):
-    pass
+workos = WorkOSClient(
+    api_key=settings.WORKOS_API_KEY, client_id=settings.WORKOS_CLIENT_ID
+)
 
 
-def extract_domain(email: str) -> str:
-    return email.split("@")[1].lower()
+def get_organisation_by_id(session: Session, org_id: str) -> Optional[Organisation]:
+    """Get organisation by ID"""
+    return session.get(Organisation, org_id)
 
 
-def get_organisation_by_domain(session: Session, email: str) -> Optional[Organisation]:
+def get_organisation_by_domain(session: Session, domain: str) -> Optional[Organisation]:
     """Get organisation by email domain"""
-    domain = extract_domain(email)
-    statement = select(Organisation).where(Organisation.email_domain == domain)
-    return session.exec(statement).first()
+    return session.exec(
+        select(Organisation).where(Organisation.email_domain == domain)
+    ).first()
 
 
-def validate_organisation_access(session: Session, email: str) -> Organisation:
-    """
-    Validate that user can join organisation.
-    Raises OrganisationError if:
-    - organisation doesn't exist
-    - organisation is inactive
-    - user limit reached
-    """
-    organisation = get_organisation_by_domain(session, email)
-
-    if not organisation:
-        domain = extract_domain(email)
-        raise OrganisationError(
-            f"No organisation found for domain '{domain}'. "
-            "Please contact support to set up your organisation."
-        )
-
-    if not organisation.is_active:
-        raise OrganisationError(
-            "Your organisation account is inactive. Please contact support."
-        )
-
-    # Count active users in organisation
-    statement = (
+def get_active_user_count(session: Session, org_id: str) -> int:
+    """Count active users in an organisation"""
+    return session.exec(
         select(func.count())
         .select_from(User)
-        .where(User.organisation_id == organisation.id, User.is_active == True)
+        .where(User.organisation_id == org_id, User.is_active == True)
+    ).one()
+
+
+def create_organisation(
+    session: Session, name: str, domains: list[str], max_users: int = 5
+) -> Organisation:
+    """Create organisation in WorkOS and local DB"""
+    # Create in WorkOS
+    workos_org = workos.organizations.create_organization(
+        name=name,
+        domain_data=[{"domain": domain, "state": "pending"} for domain in domains],
     )
-    current_user_count = session.exec(statement).one()
 
-    if current_user_count >= organisation.max_users:
-        raise OrganisationError(
-            f"User limit reached for your organisation ({organisation.max_users} users). "
-            "Please contact support to increase your user limit."
-        )
-
+    # Create locally
+    organisation = Organisation(
+        id=workos_org.id,
+        name=workos_org.name,
+        email_domain=domains[0],
+        max_users=max_users,
+        is_active=True,
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
+    )
+    session.add(organisation)
+    session.commit()
+    session.refresh(organisation)
     return organisation
 
 
-def get_organisation_user_count(session: Session, organisation_id: int) -> dict:
-    """Get user count statistics for an organisation"""
-    statement = (
-        select(func.count())
-        .select_from(User)
-        .where(User.organisation_id == organisation_id, User.is_active == True)
-    )
-    active_count = session.exec(statement).one()
+def list_organisations(session: Session) -> list[Organisation]:
+    """List all organisations"""
+    return list(session.exec(select(Organisation)).all())
 
-    organisation: Organisation | None = session.get(Organisation, organisation_id)
 
+def update_organisation(
+    session: Session, org_id: str, max_users: int, is_active: bool
+) -> Optional[Organisation]:
+    """Update organisation settings"""
+    organisation = session.get(Organisation, org_id)
     if not organisation:
-        raise OrganisationError(f"Organisation does not exist")
+        return None
 
-    return {
-        "active_users": active_count,
-        "max_users": organisation.max_users,
-        "available_slots": organisation.max_users - active_count,
-    }
+    organisation.max_users = max_users
+    organisation.is_active = is_active
+    organisation.updated_at = datetime.now(timezone.utc)
+
+    session.add(organisation)
+    session.commit()
+    session.refresh(organisation)
+    return organisation
+
+
+def delete_organisation(session: Session, org_id: str) -> bool:
+    """Delete organisation from WorkOS and local DB"""
+    organisation = session.get(Organisation, org_id)
+    if not organisation:
+        return False
+
+    # Delete from WorkOS
+    workos.organizations.delete_organization(org_id)
+
+    # Delete locally
+    session.delete(organisation)
+    session.commit()
+    return True

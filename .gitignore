@@ -247,3 +247,5 @@ __marimo__/
 
 data/
 llm-slop/
+alembic/
+alembic.ini

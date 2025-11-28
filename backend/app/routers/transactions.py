@@ -16,7 +16,7 @@ from backend.app.schemas.transactions import (
 from backend.app.routers.dependencies import require_auth
 
 cache = RedisCache()
-router = APIRouter()
+router = APIRouter(prefix="/transactions", tags=["transactions"])
 
 
 def apply_filters(base_where, **filters):
@@ -97,7 +97,7 @@ def get_numeric_range(session, column, base_where):
 
 
 # --- SALES ENDPOINTS ---
-@router.get("/transactions/sales", response_model=TransactionListResponse)
+@router.get("/sales", response_model=TransactionListResponse)
 async def get_sales_transactions(
     limit: int = Query(default=50, ge=1, le=1000),
     offset: int = Query(default=0, ge=0),
@@ -167,7 +167,7 @@ async def get_sales_transactions(
     return resp
 
 
-@router.get("/transactions/sales/filter-options", response_model=FilterOptionsResponse)
+@router.get("/sales/filter-options", response_model=FilterOptionsResponse)
 async def get_sales_filter_options(
     trans_group: str = Query(default=None),
     property_usage: str = Query(default=None),
@@ -236,7 +236,7 @@ async def get_sales_filter_options(
 
 
 # --- RENTALS ENDPOINTS ---
-@router.get("/transactions/rentals", response_model=RentalContractListResponse)
+@router.get("/rentals", response_model=RentalContractListResponse)
 async def get_rental_contracts(
     limit: int = Query(default=50, ge=1, le=1000),
     offset: int = Query(default=0, ge=0),
@@ -298,7 +298,7 @@ async def get_rental_contracts(
 
 
 @router.get(
-    "/transactions/rentals/filter-options", response_model=FilterOptionsResponse
+    "/rentals/filter-options", response_model=FilterOptionsResponse
 )
 async def get_rental_filter_options(
     master_project: str = Query(default=None),

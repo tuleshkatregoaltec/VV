@@ -2,14 +2,14 @@ from fastapi import Request, HTTPException
 from fastapi.responses import RedirectResponse
 from workos import WorkOSClient
 from typing import Dict, Optional
-from sqlmodel import Session, func, select
+from sqlmodel import Session
 from datetime import datetime, timezone
 
 from backend.app.services.organisation_service import (
-    validate_organisation_access,
-    OrganisationError,
+    get_organisation_by_id,
+    get_active_user_count,
 )
-from backend.app.db.models import User, Organisation
+from backend.app.db.models import User
 from backend.app.config import settings
 
 workos = WorkOSClient(
@@ -28,27 +28,52 @@ async def get_authorization_url() -> str:
 async def handle_callback(
     request: Request, code: str, session: Session
 ) -> RedirectResponse:
+    """Handle OAuth callback from WorkOS AuthKit"""
     try:
+        # Step 1: Authenticate with WorkOS and get user profile
         auth_response = workos.user_management.authenticate_with_code(code=code)
-        user = auth_response.user
+        workos_user = auth_response.user
 
-        try:
-            organisation = validate_organisation_access(session, user.email)
-        except OrganisationError as e:
-            print(f"Organisation validation error: {e}")
+        # Step 2: Get user's active organization memberships
+        memberships_response = workos.user_management.list_organization_memberships(
+            user_id=workos_user.id, statuses=["active"]
+        )
+        memberships = memberships_response.data
+
+        if not memberships:
+            # User has no active org memberships
             return RedirectResponse(url=f"{settings.FRONTEND_URL}/auth/no-org")
 
-        existing_user = session.get(User, user.id)
-        if existing_user:
-            if not existing_user.is_active:
-                return RedirectResponse(url=f"{settings.FRONTEND_URL}/auth/deactivated")
+        # Step 3: Get primary organization (first active membership)
+        primary_membership = memberships[0]
+        workos_org_id = primary_membership.organization_id
 
+        # Step 4: Check if organization exists locally
+        organisation = get_organisation_by_id(session, workos_org_id)
+        if not organisation:
+            # Organization not onboarded in our system
+            return RedirectResponse(url=f"{settings.FRONTEND_URL}/auth/no-org")
+
+        # Step 5: Check if organisation is active
+        if not organisation.is_active:
+            return RedirectResponse(url=f"{settings.FRONTEND_URL}/auth/deactivated")
+
+        # Step 6: Check if user exists in local DB
+        existing_user = session.get(User, workos_user.id)
+
+        if existing_user:
+            # EXISTING USER - update and check status
             existing_user.last_login = datetime.now(timezone.utc)
-            if existing_user.organisation_id != organisation.id:
-                existing_user.organisation_id = organisation.id
+            existing_user.updated_at = datetime.now(timezone.utc)
+            session.add(existing_user)
             session.commit()
             session.refresh(existing_user)
 
+            # Check if user is active
+            if not existing_user.is_active:
+                return RedirectResponse(url=f"{settings.FRONTEND_URL}/auth/deactivated")
+
+            # Set session and redirect to dashboard
             request.session["user"] = {
                 "id": existing_user.id,
                 "email": existing_user.email,
@@ -62,33 +87,33 @@ async def handle_callback(
 
             return RedirectResponse(url=f"{settings.FRONTEND_URL}/dashboard")
 
-        active_user_count = session.exec(
-            select(func.count())
-            .select_from(User)
-            .where(
-                User.organisation_id == organisation.id,
-                User.is_active == True,
-            )
-        ).one()
+        # Step 7: NEW USER - check user limit and create
+        active_user_count = get_active_user_count(session, organisation.id)
+
+        # Determine if user should be active based on org limit
         is_active = active_user_count < organisation.max_users
 
+        # Create new user
         new_user = User(
-            id=user.id,
-            email=user.email,
-            first_name=user.first_name,
-            last_name=user.last_name,
+            id=workos_user.id,
+            email=workos_user.email,
+            first_name=workos_user.first_name,
+            last_name=workos_user.last_name,
             organisation_id=organisation.id,
             is_active=is_active,
             created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc),
             last_login=datetime.now(timezone.utc),
         )
         session.add(new_user)
         session.commit()
         session.refresh(new_user)
 
+        # If user is not active (over limit), redirect to deactivated
         if not is_active:
             return RedirectResponse(url=f"{settings.FRONTEND_URL}/auth/deactivated")
 
+        # Set session for new active user
         request.session["user"] = {
             "id": new_user.id,
             "email": new_user.email,
@@ -103,7 +128,7 @@ async def handle_callback(
         return RedirectResponse(url=f"{settings.FRONTEND_URL}/dashboard")
 
     except Exception as e:
-        print(f"Auth error: {e}")
+        print(f"Authentication error: {str(e)}")
         raise HTTPException(status_code=400, detail="Authentication failed")
 
 

@@ -5,17 +5,16 @@ from sqlmodel import Session
 from backend.app.services import auth_service
 from backend.app.db.session import get_db_session
 
-router = APIRouter()
+router = APIRouter(prefix="/auth", tags=["auth"])
 
-
-@router.get("/auth/login")
+@router.get("/login")
 async def login():
     """Redirect to WorkOS login page"""
     authorization_url = await auth_service.get_authorization_url()
     return RedirectResponse(url=authorization_url)
 
 
-@router.get("/auth/callback")
+@router.get("/callback")
 async def auth_callback(
     request: Request,
     code: str | None = None,
@@ -28,13 +27,13 @@ async def auth_callback(
     return await auth_service.handle_callback(request, code, session)
 
 
-@router.get("/auth/logout")
+@router.get("/logout")
 async def logout(request: Request):
     """Logout user and clear session"""
     return await auth_service.logout_user(request)
 
 
-@router.get("/api/auth/session")
+@router.get("/session")
 async def get_session(request: Request):
     """Get current session info"""
     session_info = await auth_service.get_session_info(request)
@@ -47,7 +46,7 @@ async def get_session(request: Request):
     return JSONResponse(content=session_info)
 
 
-@router.get("/api/user")
+@router.get("/me")
 async def get_user(request: Request):
     """Get current authenticated user (protected endpoint)"""
     user = await auth_service.get_current_user(request)
