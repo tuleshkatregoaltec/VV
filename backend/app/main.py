@@ -2,11 +2,17 @@ import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
+from honeybadger import contrib, honeybadger
+
 
 from .config import settings
 from .routers import auth, admin, transactions
 
 app = FastAPI(title="Real Estate API", version="1.0.0")
+
+honeybadger.configure(
+    api_key=settings.HONEYBADGER_API_KEY,
+)
 
 # Middleware
 app.add_middleware(SessionMiddleware, secret_key=settings.SESSION_SECRET)
@@ -17,6 +23,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.add_middleware(contrib.ASGIHoneybadger) # type: ignore
+
 
 # Include routers
 app.include_router(auth.router, tags=["auth"])
