@@ -1,6 +1,7 @@
 <script lang="ts">
     import { fly, fade } from 'svelte/transition';
     import { quintOut } from 'svelte/easing';
+    import { authStore } from '$lib/stores/auth.svelte';
 
     let {
         initials = 'KS'
@@ -26,6 +27,11 @@
             showDropdown = false;
         }, 200);
     }
+
+    function handleLogout() {
+        showDropdown = false;
+        authStore.logout();
+    }
 </script>
 
 <div 
@@ -45,7 +51,7 @@
     
     {#if showDropdown}
         <div 
-            class="absolute right-0 mt-1 w-44 bg-white rounded-lg shadow-lg border border-gray-200 py-1"
+            class="absolute right-0 mt-1 w-44 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50"
             in:fly={{ y: -10, duration: 200, easing: quintOut }}
             out:fade={{ duration: 150 }}
         >
@@ -56,9 +62,12 @@
                 Settings
             </a>
             <div class="my-1 h-px bg-gray-200"></div>
-            <a href="/logout" class="block px-3 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors">
+            <button 
+                onclick={handleLogout}
+                class="block w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
+            >
                 Sign Out
-            </a>
+            </button>
         </div>
     {/if}
 </div>
