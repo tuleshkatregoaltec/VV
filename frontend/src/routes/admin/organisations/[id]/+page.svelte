@@ -27,6 +27,8 @@
   let loading = true;
   let error = '';
   let saving = false;
+  let deleting = false;
+  let showDeleteConfirm = false;
 
   // Editable fields
   let max_users: number;
@@ -88,6 +90,59 @@
     }
   }
 
+  async function toggleUserActive(user: User) {
+    try {
+      const res = await fetch(`http://localhost:8000/api/admin/users/${user.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          is_active: !user.is_active
+        })
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.detail || 'Failed to update user');
+      }
+
+      // Update local state
+      user.is_active = !user.is_active;
+      users = [...users]; // Trigger reactivity
+
+      // Refetch to update active user count
+      await fetchOrganisation();
+    } catch (e: any) {
+      alert(`Error updating user: ${e.message}`);
+    }
+  }
+
+  async function deleteOrganisation() {
+    if (!organisation) return;
+
+    deleting = true;
+    error = '';
+
+    try {
+      const res = await fetch(`http://localhost:8000/api/admin/organisations/${organisation.id}`, {
+        method: 'DELETE',
+        credentials: 'include'
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.detail || 'Failed to delete organization');
+      }
+
+      // Redirect to organizations list
+      goto('/admin/organisations');
+    } catch (e: any) {
+      error = e.message;
+      deleting = false;
+      showDeleteConfirm = false;
+    }
+  }
+
   function formatDate(dateStr: string | null) {
     if (!dateStr) return 'Never';
     return new Date(dateStr).toLocaleDateString();
@@ -117,15 +172,24 @@
       </button>
     </div>
   {:else if organisation}
-    <div class="mb-6">
+    <div class="mb-6 flex justify-between items-start">
+      <div>
+        <button
+          on:click={() => goto('/admin/organisations')}
+          class="text-blue-600 hover:text-blue-800 mb-4"
+        >
+          ← Back to Organizations
+        </button>
+        <h1 class="text-3xl font-bold">{organisation.name}</h1>
+        <p class="text-gray-600 mt-2">Domain: {organisation.email_domain}</p>
+      </div>
+      
       <button
-        on:click={() => goto('/admin/organisations')}
-        class="text-blue-600 hover:text-blue-800 mb-4"
+        on:click={() => (showDeleteConfirm = true)}
+        class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded"
       >
-        ← Back to Organizations
+        Delete Organization
       </button>
-      <h1 class="text-3xl font-bold">{organisation.name}</h1>
-      <p class="text-gray-600 mt-2">Domain: {organisation.email_domain}</p>
     </div>
 
     <div class="bg-white shadow-md rounded-lg p-6 mb-6">
@@ -199,6 +263,9 @@
               <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Last Login
               </th>
+              <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Actions
+              </th>
             </tr>
           </thead>
           <tbody class="bg-white divide-y divide-gray-200">
@@ -218,6 +285,14 @@
                 <td class="px-6 py-4 whitespace-nowrap text-right text-sm text-gray-500">
                   {formatDate(user.last_login)}
                 </td>
+                <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                  <button
+                    on:click={() => toggleUserActive(user)}
+                    class="text-blue-600 hover:text-blue-900"
+                  >
+                    {user.is_active ? 'Deactivate' : 'Activate'}
+                  </button>
+                </td>
               </tr>
             {/each}
           </tbody>
@@ -226,3 +301,31 @@
     </div>
   {/if}
 </div>
+
+<!-- Delete Confirmation Modal -->
+{#if showDeleteConfirm}
+  <div class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full flex items-center justify-center z-50">
+    <div class="bg-white rounded-lg shadow-xl p-6 max-w-md mx-4">
+      <h3 class="text-lg font-bold mb-4">Confirm Delete</h3>
+      <p class="text-gray-700 mb-6">
+        Are you sure you want to delete <strong>{organisation?.name}</strong>? This action cannot be undone and will delete all associated users.
+      </p>
+      <div class="flex justify-end gap-3">
+        <button
+          on:click={() => (showDeleteConfirm = false)}
+          disabled={deleting}
+          class="px-4 py-2 bg-gray-300 hover:bg-gray-400 rounded disabled:opacity-50"
+        >
+          Cancel
+        </button>
+        <button
+          on:click={deleteOrganisation}
+          disabled={deleting}
+          class="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded disabled:opacity-50"
+        >
+          {deleting ? 'Deleting...' : 'Delete'}
+        </button>
+      </div>
+    </div>
+  </div>
+{/if}
