@@ -3,6 +3,8 @@ interface User {
   email: string;
   first_name: string;
   last_name: string;
+  organisation_id: string;
+  organisation_name: string;
 }
 
 class AuthStore {
@@ -14,27 +16,34 @@ class AuthStore {
   get loading() { return this.#loading; }
   get authenticated() { return this.#authenticated; }
 
-  async checkSession() {
+  async checkAuth() {
     this.#loading = true;
     try {
-      const res = await fetch('http://localhost:8000/api/auth/session', {
+      const res = await fetch('http://localhost:8000/auth/me', {
         credentials: 'include'
       });
       
       if (res.ok) {
-        const data = await res.json();
-        this.#user = data.user;
+        this.#user = await res.json();
         this.#authenticated = true;
+        return true;
       } else {
         this.#user = null;
         this.#authenticated = false;
+        return false;
       }
     } catch (error) {
-      console.error('Session check failed:', error);
+      console.error('Auth check failed:', error);
+      this.#user = null;
       this.#authenticated = false;
+      return false;
     } finally {
       this.#loading = false;
     }
+  }
+
+  setLoading(loading: boolean) {
+    this.#loading = loading;
   }
 
   login() {
@@ -42,7 +51,17 @@ class AuthStore {
   }
 
   async logout() {
-    window.location.href = 'http://localhost:8000/auth/logout';
+    try {
+      await fetch('http://localhost:8000/auth/logout', {
+        method: 'POST',
+        credentials: 'include'
+      });
+    } catch (e) {
+      console.error('Logout error:', e);
+    }
+    this.#user = null;
+    this.#authenticated = false;
+    window.location.href = '/';
   }
 }
 
