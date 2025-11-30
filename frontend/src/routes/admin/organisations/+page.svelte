@@ -36,7 +36,7 @@
 
 <div class="max-w-7xl mx-auto px-4 py-8">
   <div class="flex justify-between items-center mb-6">
-    <h1 class="text-3xl font-bold">Organizations</h1>
+    <h1 class="text-3xl font-bold">Organsations</h1>
     <button
       onclick={() => goto('/admin/organisations/new')}
       class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"

@@ -13,7 +13,7 @@
 	import ChatBox from '$lib/components/dashboard/ChatBox.svelte';
 	import DashboardCard from '$lib/components/dashboard/DashboardCard.svelte';
 	import PageHeader from '$lib/components/dashboard/PageHeader.svelte';
-	import PageContainer from '$lib/components/layout/PageContainer.svelte';
+	import AppShell from '$lib/components/layout/AppShell.svelte';
 	import Grid from '$lib/components/layout/Grid.svelte';
 
 	let Line: any;
@@ -79,7 +79,9 @@
 	};
 </script>
 
-<PageContainer>
+<AppShell showFilters={false}>
+    <div class="max-w-7xl mx-auto px-4 py-8">
+
 	<PageHeader title="Welcome, {username}!" subtitle="Your property dashboard" />
 
 	<!-- Input Box -->
@@ -129,4 +131,5 @@
 				</svg>
 			</DashboardCard>
 	</Grid>
-</PageContainer>
+	</div>
+</AppShell>
