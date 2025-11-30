@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlmodel import Session, select, func
+from sqlmodel import select
+from sqlmodel.ext.asyncio.session import AsyncSession
 from typing import List
 from datetime import datetime, timezone
 from workos import WorkOSClient
@@ -40,7 +41,7 @@ workos = WorkOSClient(
 )
 async def create_organisation_endpoint(
     organisation_in: OrganisationCreateRequest,
-    session: Session = Depends(get_db_session),
+    session: AsyncSession = Depends(get_db_session),
 ):
     """Create a new organisation"""
     if not organisation_in.domains:
@@ -70,7 +71,7 @@ async def create_organisation_endpoint(
 
 
 @router.get("/organisations", response_model=List[OrganisationResponse])
-async def list_organisation(session: Session = Depends(get_db_session)):
+async def list_organisation(session: AsyncSession = Depends(get_db_session)):
     """List all organisations with user counts"""
     organisations = list_organisations_service(session)
 
@@ -95,7 +96,7 @@ async def list_organisation(session: Session = Depends(get_db_session)):
 
 @router.get("/organisations/{org_id}", response_model=OrganisationDetailResponse)
 async def get_organisation(
-    org_id: str, session: Session = Depends(get_db_session)
+    org_id: str, session: AsyncSession = Depends(get_db_session)
 ):
     """Get organisation details with user list"""
     organisation = get_organisation_by_id(session, org_id)
@@ -138,7 +139,7 @@ async def get_organisation(
 async def update_organisation(
     org_id: str,
     organisation_update: OrganisationUpdateRequest,
-    session: Session = Depends(get_db_session),
+    session: AsyncSession = Depends(get_db_session),
 ):
     """Update organisation settings"""
     organisation = update_organisation_service(
@@ -167,7 +168,7 @@ async def update_organisation(
 
 @router.delete("/organisations/{org_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_organisation(
-    org_id: str, session: Session = Depends(get_db_session)
+    org_id: str, session: AsyncSession = Depends(get_db_session)
 ):
     """Delete organisation"""
     success = delete_organisation_service(session, org_id)
@@ -180,7 +181,7 @@ async def delete_organisation(
 async def update_user(
     user_id: str,
     user_update: UserUpdateRequest,
-    session: Session = Depends(get_db_session)
+    session: AsyncSession = Depends(get_db_session)
 ):
     """Update user is_active status"""
     from backend.app.db.models import User
@@ -192,9 +193,9 @@ async def update_user(
     user.is_active = user_update.is_active
     user.updated_at = datetime.now(timezone.utc)
     
-    session.add(user)
-    session.commit()
-    session.refresh(user)
+    await session.add(user)
+    await session.commit()
+    await session.refresh(user)
     
     return {
         "id": user.id,
