@@ -3,10 +3,14 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 from honeybadger import contrib, honeybadger
+import logging.config
 
+from backend.app.config import settings
+from backend.app.routers import auth, admin, transactions, supply
+from backend.app.core.logging_config import LOGGING_CONFIG
 
-from .config import settings
-from .routers import auth, admin, transactions
+# Add logging
+logging.config.dictConfig(LOGGING_CONFIG)
 
 app = FastAPI(title="Real Estate API", version="1.0.0")
 
@@ -30,6 +34,7 @@ app.add_middleware(contrib.ASGIHoneybadger) # type: ignore
 app.include_router(auth.router, tags=["auth"])
 app.include_router(admin.router, tags=["admin"])
 app.include_router(transactions.router, tags=["transactions"])
+app.include_router(supply.router, tags=["supply"])
 
 
 @app.get("/")
