@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Query, Depends
-from sqlmodel import Session
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 from backend.app.db.session import get_db_session
 from backend.app.routers.dependencies import require_auth
@@ -40,9 +40,9 @@ async def get_sales_transactions(
     registration_type: str = Query(default=None),
     # Deps
     current_user: dict = Depends(require_auth),
-    session: Session = Depends(get_db_session),
+    session: AsyncSession = Depends(get_db_session),
 ):
-    return fetch_sales_transactions(
+    return await fetch_sales_transactions(
         session=session,
         limit=limit,
         offset=offset,
@@ -72,9 +72,9 @@ async def get_sales_filter_options(
     property_sub_type: str = Query(default=None),
     registration_type: str = Query(default=None),
     current_user: dict = Depends(require_auth),
-    session: Session = Depends(get_db_session),
+    session: AsyncSession = Depends(get_db_session),
 ):
-    return fetch_sales_filter_options(
+    return await fetch_sales_filter_options(
         session=session,
         trans_group=trans_group,
         property_usage=property_usage,
@@ -103,9 +103,9 @@ async def get_rental_contracts(
     tenant_type: str = Query(default=None),
     contract_reg_type: str = Query(default=None),
     current_user: dict = Depends(require_auth),
-    session: Session = Depends(get_db_session),
+    session: AsyncSession = Depends(get_db_session),
 ):
-    return fetch_rental_contracts(
+    return await fetch_rental_contracts(
         session=session,
         limit=limit,
         offset=offset,
@@ -129,9 +129,9 @@ async def get_rental_filter_options(
     tenant_type: str = Query(default=None),
     contract_reg_type: str = Query(default=None),
     current_user: dict = Depends(require_auth),
-    session: Session = Depends(get_db_session),
+    session: AsyncSession = Depends(get_db_session),
 ):
-    return fetch_rental_filter_options(
+    return await fetch_rental_filter_options(
         session=session,
         master_project=master_project,
         timeframe_days=timeframe_days,

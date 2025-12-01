@@ -1,6 +1,9 @@
-from sqlmodel import Session, select, func
-from typing import Optional
+from sqlmodel import select, func
+from sqlmodel.ext.asyncio.session import AsyncSession
+from typing import Sequence
 from datetime import datetime, timezone
+import asyncio
+
 from workos import WorkOSClient
 from backend.app.db.models import Organisation, User
 from backend.app.config import settings
@@ -11,63 +14,68 @@ workos = WorkOSClient(
 )
 
 
-def get_organisation_by_id(session: Session, org_id: str) -> Optional[Organisation]:
+async def get_organisation_by_id(session: AsyncSession, org_id: str) -> Organisation | None:
     """Get organisation by ID"""
-    return session.get(Organisation, org_id)
+    return await session.get(Organisation, org_id)
 
 
-def get_organisation_by_domain(session: Session, domain: str) -> Optional[Organisation]:
+async def get_organisation_by_domain(session: AsyncSession, domain: str) -> Organisation | None:
     """Get organisation by email domain"""
-    return session.exec(
+    result = await session.exec(
         select(Organisation).where(Organisation.email_domain == domain)
-    ).first()
+    )
+    return result.first()
 
 
-def get_active_user_count(session: Session, org_id: str) -> int:
+async def get_active_user_count(session: AsyncSession, org_id: str) -> int:
     """Count active users in an organisation"""
-    return session.exec(
+    result = await session.exec(
         select(func.count())
         .select_from(User)
         .where(User.organisation_id == org_id, User.is_active == True)
-    ).one()
+    )
+    return result.one()
 
 
-def create_organisation(
-    session: Session, name: str, domains: list[str], max_users: int = 5
+async def create_organisation(
+    session: AsyncSession, name: str, domain: str, max_users: int
 ) -> Organisation:
     """Create organisation in WorkOS and local DB"""
-    # Create in WorkOS
-    workos_org = workos.organizations.create_organization(
+
+    workos_org = await asyncio.to_thread(
+        workos.organizations.create_organization,
         name=name,
-        domain_data=[{"domain": domain, "state": "pending"} for domain in domains],
+        domain_data=[{"domain": domain, "state": "pending"}],
     )
 
-    # Create locally
     organisation = Organisation(
         id=workos_org.id,
         name=workos_org.name,
-        email_domain=domains[0],
+        email_domain=domain,
         max_users=max_users,
         is_active=True,
         created_at=datetime.now(timezone.utc),
         updated_at=datetime.now(timezone.utc),
     )
+
     session.add(organisation)
-    session.commit()
-    session.refresh(organisation)
+    await session.commit()
+    await session.refresh(organisation)
     return organisation
 
 
-def list_organisations(session: Session) -> list[Organisation]:
+async def list_organisations(session: AsyncSession) -> Sequence[Organisation]:
     """List all organisations"""
-    return list(session.exec(select(Organisation)).all())
+    organisations = await session.exec(select(Organisation))
+    return organisations.all()
 
 
-def update_organisation(
-    session: Session, org_id: str, max_users: int, is_active: bool
-) -> Optional[Organisation]:
+async def update_organisation(
+    session: AsyncSession, org_id: str, max_users: int, is_active: bool
+) -> Organisation | None:
     """Update organisation settings"""
-    organisation = session.get(Organisation, org_id)
+    organisation = await session.get(Organisation, org_id)
+    
     if not organisation:
         return None
 
@@ -76,21 +84,23 @@ def update_organisation(
     organisation.updated_at = datetime.now(timezone.utc)
 
     session.add(organisation)
-    session.commit()
-    session.refresh(organisation)
+    await session.commit()
+    await session.refresh(organisation)
+    
     return organisation
 
 
-def delete_organisation(session: Session, org_id: str) -> bool:
+async def delete_organisation(session: AsyncSession, org_id: str) -> bool:
     """Delete organisation from WorkOS and local DB"""
-    organisation = session.get(Organisation, org_id)
+    organisation = await session.get(Organisation, org_id)
+    
     if not organisation:
         return False
 
-    # Delete from WorkOS
-    workos.organizations.delete_organization(org_id)
+    await asyncio.to_thread(workos.organizations.delete_organization, org_id)
 
     # Delete locally
-    session.delete(organisation)
-    session.commit()
+    await session.delete(organisation)
+    await session.commit()
+    
     return True

@@ -2,8 +2,10 @@ from fastapi import Request, HTTPException
 from fastapi.responses import RedirectResponse
 from workos import WorkOSClient
 from typing import Dict, Optional
-from sqlmodel import Session
+from sqlmodel.ext.asyncio.session import AsyncSession
 from datetime import datetime, timezone
+import asyncio
+import logging
 
 from backend.app.services.organisation_service import (
     get_organisation_by_id,
@@ -11,6 +13,8 @@ from backend.app.services.organisation_service import (
 )
 from backend.app.db.models import User
 from backend.app.config import settings
+
+logger = logging.getLogger(__name__)
 
 workos = WorkOSClient(
     api_key=settings.WORKOS_API_KEY, client_id=settings.WORKOS_CLIENT_ID
@@ -26,17 +30,21 @@ async def get_authorization_url() -> str:
 
 
 async def handle_callback(
-    request: Request, code: str, session: Session
+    request: Request, code: str, session: AsyncSession
 ) -> RedirectResponse:
     """Handle OAuth callback from WorkOS AuthKit"""
     try:
-        # Step 1: Authenticate with WorkOS and get user profile
-        auth_response = workos.user_management.authenticate_with_code(code=code)
+        # Step 1: Authenticate with WorkOS and get user profile (sync SDK call)
+        auth_response = await asyncio.to_thread(
+            workos.user_management.authenticate_with_code, code=code
+        )
         workos_user = auth_response.user
 
-        # Step 2: Get user's active organization memberships
-        memberships_response = workos.user_management.list_organization_memberships(
-            user_id=workos_user.id, statuses=["active"]
+        # Step 2: Get user's active organization memberships (sync SDK call)
+        memberships_response = await asyncio.to_thread(
+            workos.user_management.list_organization_memberships,
+            user_id=workos_user.id, 
+            statuses=["active"]
         )
         memberships = memberships_response.data
 
@@ -49,7 +57,7 @@ async def handle_callback(
         workos_org_id = primary_membership.organization_id
 
         # Step 4: Check if organization exists locally
-        organisation = get_organisation_by_id(session, workos_org_id)
+        organisation = await get_organisation_by_id(session, workos_org_id)
         if not organisation:
             # Organization not onboarded in our system
             return RedirectResponse(url=f"{settings.FRONTEND_URL}/auth/no-org")
@@ -59,15 +67,15 @@ async def handle_callback(
             return RedirectResponse(url=f"{settings.FRONTEND_URL}/auth/deactivated")
 
         # Step 6: Check if user exists in local DB
-        existing_user = session.get(User, workos_user.id)
+        existing_user = await session.get(User, workos_user.id)
 
         if existing_user:
             # EXISTING USER - update and check status
             existing_user.last_login = datetime.now(timezone.utc)
             existing_user.updated_at = datetime.now(timezone.utc)
             session.add(existing_user)
-            session.commit()
-            session.refresh(existing_user)
+            await session.commit()
+            await session.refresh(existing_user)
 
             # Check if user is active
             if not existing_user.is_active:
@@ -88,7 +96,7 @@ async def handle_callback(
             return RedirectResponse(url=f"{settings.FRONTEND_URL}/dashboard")
 
         # Step 7: NEW USER - check user limit and create
-        active_user_count = get_active_user_count(session, organisation.id)
+        active_user_count = await get_active_user_count(session, organisation.id)
 
         # Determine if user should be active based on org limit
         is_active = active_user_count < organisation.max_users
@@ -106,8 +114,8 @@ async def handle_callback(
             last_login=datetime.now(timezone.utc),
         )
         session.add(new_user)
-        session.commit()
-        session.refresh(new_user)
+        await session.commit()
+        await session.refresh(new_user)
 
         # If user is not active (over limit), redirect to deactivated
         if not is_active:
@@ -128,7 +136,7 @@ async def handle_callback(
         return RedirectResponse(url=f"{settings.FRONTEND_URL}/dashboard")
 
     except Exception as e:
-        print(f"Authentication error: {str(e)}")
+        logger.exception("Authentication error")
         raise HTTPException(status_code=400, detail="Authentication failed")
 
 

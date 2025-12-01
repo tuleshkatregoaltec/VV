@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Request, HTTPException, Depends
 from fastapi.responses import RedirectResponse, JSONResponse
-from sqlmodel import Session
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 from backend.app.services import auth_service
 from backend.app.db.session import get_db_session
@@ -18,7 +18,7 @@ async def login():
 async def auth_callback(
     request: Request,
     code: str | None = None,
-    session: Session = Depends(get_db_session),
+    session: AsyncSession = Depends(get_db_session),
 ):
     """Handle OAuth callback from WorkOS"""
     if not code:

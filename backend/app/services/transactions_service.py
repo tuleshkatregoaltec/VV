@@ -1,4 +1,5 @@
-from sqlmodel import Session, select, func, col
+from sqlmodel import select, func, col
+from sqlmodel.ext.asyncio.session import AsyncSession
 from datetime import datetime, timedelta
 from typing import List, Any
 
@@ -58,24 +59,27 @@ def apply_rental_filters(base_where: List[Any], **filters) -> List[Any]:
 
 # --- Helper: Aggregations ---
 
-def get_distinct_values(session: Session, column, base_where: List[Any]) -> List[str]:
+async def get_distinct_values(session: AsyncSession, column, base_where: List[Any]) -> List[str]:
     stmt = (
         select(column)
         .where(*base_where, column != None, column != "")
         .distinct()
         .order_by(column)
     )
-    return [row for row in session.exec(stmt).all() if row]
+    result = await session.exec(stmt)
+    return [row for row in result.all() if row]
 
-def get_numeric_range(session: Session, column, base_where: List[Any]) -> NumericRange:
-    min_val = session.exec(select(func.min(column)).where(*base_where)).one()
-    max_val = session.exec(select(func.max(column)).where(*base_where)).one()
+async def get_numeric_range(session: AsyncSession, column, base_where: List[Any]) -> NumericRange:
+    min_result = await session.exec(select(func.min(column)).where(*base_where))
+    min_val = min_result.one()
+    max_result = await session.exec(select(func.max(column)).where(*base_where))
+    max_val = max_result.one()
     return NumericRange(min=min_val, max=max_val)
 
 # --- Main Service Functions: Sales ---
 
-def fetch_sales_transactions(
-    session: Session, 
+async def fetch_sales_transactions(
+    session: AsyncSession, 
     limit: int, 
     offset: int, 
     **filters
@@ -91,12 +95,14 @@ def fetch_sales_transactions(
         .limit(limit)
         .offset(offset)
     )
-    transactions = session.exec(statement).all()
+    result = await session.exec(statement)
+    transactions = result.all()
     
     # Fetch Count
-    total = session.exec(
+    count_result = await session.exec(
         select(func.count()).select_from(Transaction).where(*base_where)
-    ).one()
+    )
+    total = count_result.one()
     
     return TransactionListResponse(
         transactions=[TransactionResponse.model_validate(t) for t in transactions],
@@ -105,25 +111,25 @@ def fetch_sales_transactions(
         offset=offset,
     )
 
-def fetch_sales_filter_options(session: Session, **filters) -> FilterOptionsResponse:
+async def fetch_sales_filter_options(session: AsyncSession, **filters) -> FilterOptionsResponse:
     base_where = apply_sales_filters([], **filters)
     
     return FilterOptionsResponse(
-        projects=get_distinct_values(session, Transaction.project_name, base_where),
-        buildings=get_distinct_values(session, Transaction.building_name, base_where),
-        property_types=get_distinct_values(session, Transaction.property_type, base_where),
-        property_sub_types=get_distinct_values(session, Transaction.property_sub_type, base_where),
-        rooms=get_distinct_values(session, Transaction.rooms_description, base_where),
-        registration_types=get_distinct_values(session, Transaction.reg_type, base_where),
-        area_range=get_numeric_range(session, Transaction.procedure_area, base_where),
-        price_range=get_numeric_range(session, Transaction.actual_worth, base_where),
-        price_per_sqft_range=get_numeric_range(session, Transaction.meter_sale_price, base_where),
+        projects=await get_distinct_values(session, Transaction.project_name, base_where),
+        buildings=await get_distinct_values(session, Transaction.building_name, base_where),
+        property_types=await get_distinct_values(session, Transaction.property_type, base_where),
+        property_sub_types=await get_distinct_values(session, Transaction.property_sub_type, base_where),
+        rooms=await get_distinct_values(session, Transaction.rooms_description, base_where),
+        registration_types=await get_distinct_values(session, Transaction.reg_type, base_where),
+        area_range=await get_numeric_range(session, Transaction.procedure_area, base_where),
+        price_range=await get_numeric_range(session, Transaction.actual_worth, base_where),
+        price_per_sqft_range=await get_numeric_range(session, Transaction.meter_sale_price, base_where),
     )
 
 # --- Main Service Functions: Rentals ---
 
-def fetch_rental_contracts(
-    session: Session, 
+async def fetch_rental_contracts(
+    session: AsyncSession, 
     limit: int, 
     offset: int, 
     **filters
@@ -138,11 +144,13 @@ def fetch_rental_contracts(
         .limit(limit)
         .offset(offset)
     )
-    contracts = session.exec(statement).all()
+    result = await session.exec(statement)
+    contracts = result.all()
     
-    total = session.exec(
+    count_result = await session.exec(
         select(func.count()).select_from(RentContract).where(*base_where)
-    ).one()
+    )
+    total = count_result.one()
     
     return RentalContractListResponse(
         contracts=[RentalContractResponse.model_validate(c) for c in contracts],
@@ -151,15 +159,15 @@ def fetch_rental_contracts(
         offset=offset,
     )
 
-def fetch_rental_filter_options(session: Session, **filters) -> FilterOptionsResponse:
+async def fetch_rental_filter_options(session: AsyncSession, **filters) -> FilterOptionsResponse:
     base_where = apply_rental_filters([], **filters)
     
     return FilterOptionsResponse(
-        projects=get_distinct_values(session, RentContract.project_name, base_where),
-        property_types=get_distinct_values(session, RentContract.ejari_property_type, base_where),
-        property_sub_types=get_distinct_values(session, RentContract.ejari_property_sub_type, base_where),
-        tenant_types=get_distinct_values(session, RentContract.tenant_type, base_where),
-        contract_reg_types=get_distinct_values(session, RentContract.contract_reg_type, base_where),
-        area_range=get_numeric_range(session, RentContract.actual_area, base_where),
-        annual_rent_range=get_numeric_range(session, RentContract.annual_amount, base_where),
+        projects=await get_distinct_values(session, RentContract.project_name, base_where),
+        property_types=await get_distinct_values(session, RentContract.ejari_property_type, base_where),
+        property_sub_types=await get_distinct_values(session, RentContract.ejari_property_sub_type, base_where),
+        tenant_types=await get_distinct_values(session, RentContract.tenant_type, base_where),
+        contract_reg_types=await get_distinct_values(session, RentContract.contract_reg_type, base_where),
+        area_range=await get_numeric_range(session, RentContract.actual_area, base_where),
+        annual_rent_range=await get_numeric_range(session, RentContract.annual_amount, base_where),
     )
