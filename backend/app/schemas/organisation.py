@@ -1,11 +1,11 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field
 from typing import List, Optional
 from datetime import datetime
 
 
 class OrganisationCreateRequest(BaseModel):
     name: str
-    domains: List[str]
+    domain: str
     max_users: int = 5
 
 
@@ -15,9 +15,11 @@ class OrganisationUpdateRequest(BaseModel):
 
 
 class OrganisationResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+    
     id: str
     name: str
-    email_domain: str
+    domain: str = Field(validation_alias="email_domain")
     max_users: int
     is_active: bool
     active_user_count: Optional[int] = 0
