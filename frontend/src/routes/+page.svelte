@@ -2,7 +2,7 @@
   import Footer from '$lib/components/layout/Footer.svelte';
 </script>
 
-<div class="h-full bg-background flex flex-col relative">
+<div class="h-screen bg-background flex flex-col relative">
   <main class="flex-1 flex flex-col items-center justify-center max-w-5xl mx-auto w-full px-4 relative z-10">
     <h1
       class="text-4xl sm:text-5xl md:text-6xl lg:text-7xl xl:text-8xl font-black leading-[1.2] mb-6 tracking-tight text-gray-900 text-left transition-opacity duration-300 whitespace-nowrap block"
