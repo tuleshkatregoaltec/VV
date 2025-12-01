@@ -1,9 +1,14 @@
 from functools import wraps
-from typing import Callable, Any, List
-from backend.app.core.cache import RedisCache # Assumes your RedisCache class is here
+from typing import Callable, Any
+import logging
+
+from backend.app.core.cache import RedisCache
+from backend.app.config import settings
+
+logger = logging.getLogger(__name__)
 
 # Instantiate cache once to be used by decorators
-cache = RedisCache()
+cache = RedisCache(settings.REDIS_URL)
 
 def serialize_result(result: Any) -> Any:
     """
@@ -47,7 +52,7 @@ def cached_endpoint(prefix: str, expire: int = 600):
                 serialized_data = serialize_result(result)
                 await cache.set(cache_key, serialized_data, expire=expire)
             except Exception as e:
-                print(f"Cache set error for {cache_key}: {e}")
+                logger.error("Cache set error for %s: %s", cache_key, e)
 
             return result
         return wrapper
