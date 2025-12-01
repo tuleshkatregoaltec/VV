@@ -8,7 +8,7 @@ import logging
 logger = logging.getLogger("RedisCache")
 
 class RedisCache:
-    def __init__(self, redis_url: str = "redis://localhost", default_expire: int = 600):
+    def __init__(self, redis_url: str, default_expire: int = 600):
         self.redis_url = redis_url
         self.default_expire = default_expire
         self.redis = None
