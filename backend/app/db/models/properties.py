@@ -107,15 +107,15 @@ class Project(SQLModel, table=True):
     no_of_units: Optional[int] = None
 
     # Relationships
-    developer: Optional[Developer] = Relationship(
+    developer: Optional["Developer"] = Relationship(
         back_populates="projects_developed",
         sa_relationship_kwargs={"foreign_keys": "Project.developer_id"},
     )
-    master_developer: Optional[Developer] = Relationship(
+    master_developer: Optional["Developer"] = Relationship(
         back_populates="projects_master",
         sa_relationship_kwargs={"foreign_keys": "Project.master_developer_id"},
     )
-    area: Optional[Area] = Relationship(back_populates="projects")
+    area: Optional["Area"] = Relationship(back_populates="projects")
     land_registries: List["LandRegistry"] = Relationship(back_populates="project")
     buildings: List["Building"] = Relationship(back_populates="project")
     units: List["Unit"] = Relationship(back_populates="project")
@@ -271,10 +271,10 @@ class Building(SQLModel, table=True):
     land_type: Optional[str] = Field(default=None, max_length=255)
 
     # Relationships
-    area: Optional[Area] = Relationship(back_populates="buildings")
-    parent_land: Optional[LandRegistry] = Relationship(back_populates="buildings")
-    project: Optional[Project] = Relationship(back_populates="buildings")
-    master_project: Optional[MasterProject] = Relationship(back_populates="buildings")
+    area: Optional["Area"] = Relationship(back_populates="buildings")
+    parent_land: Optional["LandRegistry"] = Relationship(back_populates="buildings")
+    project: Optional["Project"] = Relationship(back_populates="buildings")
+    master_project: Optional["MasterProject"] = Relationship(back_populates="buildings")
     units: List["Unit"] = Relationship(back_populates="parent_building")
 
 
@@ -358,8 +358,8 @@ class Unit(SQLModel, table=True):
     land_type: Optional[str] = Field(default=None, max_length=255)
 
     # Relationships
-    area: Optional[Area] = Relationship(back_populates="units")
-    parent_building: Optional[Building] = Relationship(back_populates="units")
-    grandparent_land: Optional[LandRegistry] = Relationship(back_populates="units")
-    project: Optional[Project] = Relationship(back_populates="units")
-    master_project: Optional[MasterProject] = Relationship(back_populates="units")
+    area: Optional["Area"] = Relationship(back_populates="units")
+    parent_building: Optional["Building"] = Relationship(back_populates="units")
+    grandparent_land: Optional["LandRegistry"] = Relationship(back_populates="units")
+    project: Optional["Project"] = Relationship(back_populates="units")
+    master_project: Optional["MasterProject"] = Relationship(back_populates="units")

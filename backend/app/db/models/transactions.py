@@ -1,6 +1,6 @@
 from typing import Optional, LiteralString, List, TYPE_CHECKING
 from decimal import Decimal
-from sqlmodel import SQLModel, Field, Relationship
+from sqlmodel import SQLModel, Field, Relationship, Index, text
 from datetime import date
 
 if TYPE_CHECKING:
@@ -10,6 +10,14 @@ class Transaction(SQLModel, table=True):
     """Market transaction records - independent analytics data"""
 
     __tablename__: LiteralString = "transactions"
+
+    __table_args__ = (
+        Index(
+            "idx_transactions_date_usage",
+            "property_usage",
+            text("instance_date DESC")
+        ),
+    )
 
     # Primary key
     transaction_id: str = Field(primary_key=True, max_length=50)
@@ -89,9 +97,7 @@ class Transaction(SQLModel, table=True):
 
     # Relationships
     area: Optional["Area"] = Relationship(back_populates="transactions")
-    procedure: Optional["TransactionProcedure"] = Relationship(
-        back_populates="transactions"
-    )
+    procedure: Optional["TransactionProcedure"] = Relationship(back_populates="transactions")
 
 
 class RentContract(SQLModel, table=True):
@@ -102,6 +108,14 @@ class RentContract(SQLModel, table=True):
     """
 
     __tablename__: LiteralString = "rent_contracts"
+
+    __table_args__ = (
+        Index(
+            "idx_rent_contracts_date_usage",
+            "property_usage",
+            text("contract_start_date DESC")
+        ),
+    )
 
     # Primary key (composite key)
     contract_id: str = Field(primary_key=True, max_length=50)
@@ -197,5 +211,5 @@ class TransactionProcedure(SQLModel, table=True):
     procedure_name: str = Field(max_length=255)
 
     # Relationships
-    group: TransactionGroup = Relationship(back_populates="procedures")
+    group: "TransactionGroup" = Relationship(back_populates="procedures")
     transactions: List["Transaction"] = Relationship(back_populates="procedure")
