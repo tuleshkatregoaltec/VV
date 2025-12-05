@@ -4,7 +4,7 @@
     import { authStore } from '$lib/stores/auth.svelte';
 
     let {
-        initials = 'KS'
+        initials = authStore.user?.initials
     }: {
         initials?: string;
     } = $props();

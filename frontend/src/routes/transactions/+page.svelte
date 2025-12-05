@@ -89,15 +89,15 @@
     }
   ];
 
-  let filteredData = allData;
+  let filteredData = $state(allData);
   
   // Filter values
-  let selectedProject = 'All Projects';
-  let selectedBedrooms = 'All';
-  let priceRange = { min: '', max: '' };
+  let selectedProject = $state('All Projects');
+  let selectedBedrooms = $state('All');
+  let priceRange = $state({ min: '', max: '' });
 
   // Apply filters whenever any filter changes
-  $: {
+  $effect(() => {
     filteredData = allData.filter(row => {
       if (selectedProject !== 'All Projects' && row.project !== selectedProject) return false;
       if (selectedBedrooms !== 'All' && row.bedrooms !== selectedBedrooms) return false;
@@ -105,7 +105,7 @@
       if (priceRange.max && row.price > parseFloat(priceRange.max)) return false;
       return true;
     });
-  }
+  });
 
   // Handle row click
   function handleRowClick(event: CustomEvent) {
@@ -123,19 +123,19 @@
       <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
         <StandardDropdown 
           id="project"
-          label="Project"
+          ariaLabel="Project"
           options={projectOptions}
           bind:value={selectedProject}
         />
         <StandardDropdown 
           id="bedrooms"
-          label="Bedrooms"
+          ariaLabel="Bedrooms"
           options={bedroomOptions}
           bind:value={selectedBedrooms}
         />
         <PriceRangeDropdown 
           id="price"
-          label="Price (AED)"
+          ariaLabel="Price (AED)"
           bind:value={priceRange}
           placeholderMin="0"
           placeholderMax="10,000,000"
@@ -151,6 +151,6 @@
     </div>
 
     <!-- Data Table -->
-    <DataPanel columns={columns} data={filteredData} on:rowClick={handleRowClick} />
+    <DataPanel columns={columns} data={filteredData} onrowclick={handleRowClick} />
   </div>
 </div>

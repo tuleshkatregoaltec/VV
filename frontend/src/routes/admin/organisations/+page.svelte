@@ -1,15 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
-
-  interface Organisation {
-    id: string;
-    name: string;
-    email_domain: string;
-    max_users: number;
-    active_user_count: number;
-    is_active: boolean;
-  }
+  import { admin, ApiError, type Organisation } from '$lib/api';
 
   let organisations: Organisation[] = [];
   let loading = true;
@@ -19,13 +11,9 @@
     loading = true;
     error = '';
     try {
-      const res = await fetch('http://localhost:8000/api/admin/organisations', {
-        credentials: 'include'
-      });
-      if (!res.ok) throw new Error('Failed to fetch organizations');
-      organisations = await res.json();
-    } catch (e: any) {
-      error = e.message;
+      organisations = await admin.organisations.list();
+    } catch (e) {
+      error = e instanceof ApiError ? e.message : 'Failed to fetch organizations';
     } finally {
       loading = false;
     }
@@ -36,7 +24,7 @@
 
 <div class="max-w-7xl mx-auto px-4 py-8">
   <div class="flex justify-between items-center mb-6">
-    <h1 class="text-3xl font-bold">Organsations</h1>
+    <h1 class="text-3xl font-bold">Organisations</h1>
     <button
       onclick={() => goto('/admin/organisations/new')}
       class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"

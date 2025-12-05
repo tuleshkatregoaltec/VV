@@ -8,7 +8,6 @@ from sqlmodel import Session
 
 from backend.app.db.session import engine
 from backend.app.db.models import (
-    SQLModel,
     Area,
     TransactionGroup,
     TransactionProcedure,

@@ -1,20 +1,19 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
+  import { admin, ApiError } from '$lib/api';
 
   let name = '';
-  let domains = '';
+  let domain = '';
   let max_users = 5;
   let submitting = false;
   let error = '';
 
-  async function handleSubmit() {
+  async function handleSubmit(event: SubmitEvent) {
+    event.preventDefault();
     submitting = true;
     error = '';
 
-    const domainList = domains
-      .split(',')
-      .map((d) => d.trim())
-      .filter(Boolean);
+    const trimmedDomain = domain.trim();
 
     if (!name) {
       error = 'Organization name is required';
@@ -22,33 +21,22 @@
       return;
     }
 
-    if (domainList.length === 0) {
-      error = 'At least one domain is required';
+    if (!trimmedDomain) {
+      error = 'Domain is required';
       submitting = false;
       return;
     }
 
     try {
-      const res = await fetch('http://localhost:8000/api/admin/organisations', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({
-          name,
-          domains: domainList,
-          max_users
-        })
+      const org = await admin.organisations.create({
+        name,
+        domain: trimmedDomain,
+        max_users
       });
 
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.detail || 'Failed to create organization');
-      }
-
-      const org = await res.json();
       goto(`/admin/organisations/${org.id}`);
-    } catch (e: any) {
-      error = e.message;
+    } catch (e) {
+      error = e instanceof ApiError ? e.message : 'Failed to create organization';
     } finally {
       submitting = false;
     }
@@ -58,7 +46,7 @@
 <div class="max-w-2xl mx-auto px-4 py-8">
   <h1 class="text-3xl font-bold mb-6">Create New Organization</h1>
 
-  <form on:submit|preventDefault={handleSubmit} class="bg-white shadow-md rounded px-8 pt-6 pb-8">
+  <form onsubmit={handleSubmit} class="bg-white shadow-md rounded px-8 pt-6 pb-8">
     <div class="mb-4">
       <label class="block text-gray-700 text-sm font-bold mb-2" for="name">
         Organization Name
@@ -74,18 +62,18 @@
     </div>
 
     <div class="mb-4">
-      <label class="block text-gray-700 text-sm font-bold mb-2" for="domains">
-        Domains (comma separated)
+      <label class="block text-gray-700 text-sm font-bold mb-2" for="domain">
+        Domain
       </label>
       <input
-        id="domains"
+        id="domain"
         type="text"
-        bind:value={domains}
+        bind:value={domain}
         class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-        placeholder="acme.com, example.com"
+        placeholder="acme.com"
         required
       />
-      <p class="text-gray-600 text-xs mt-1">Enter one or more domains separated by commas</p>
+      <p class="text-gray-600 text-xs mt-1">The email domain for this organization</p>
     </div>
 
     <div class="mb-6">
@@ -111,7 +99,7 @@
     <div class="flex items-center justify-between">
       <button
         type="button"
-        on:click={() => goto('/admin/organisations')}
+        onclick={() => goto('/admin/organisations')}
         class="bg-gray-500 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
       >
         Cancel

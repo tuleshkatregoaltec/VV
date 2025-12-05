@@ -14,8 +14,9 @@
 	} = $props();
 
 	// Generate page numbers for pagination UI
+	// Returns array of page numbers and '...' ellipsis markers
 	const pageNumbers = $derived((() => {
-		const pages = [];
+		const pages: (number | '...')[] = [];
 
 		if (totalPages <= MAX_VISIBLE_PAGES) {
 			// Show all pages if total is small
@@ -92,7 +93,7 @@
 			<!-- Page Numbers -->
 			<div class="flex gap-1">
 				{#each pageNumbers as page}
-					{#if page === '...'}
+					{#if typeof page === 'string'}
 						<span class="px-4 py-2 text-gray-500">...</span>
 					{:else}
 						<button

@@ -7,6 +7,7 @@ from backend.app.db.session import get_db_session
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
+
 @router.get("/login")
 async def login():
     """Redirect to WorkOS login page"""

@@ -25,7 +25,6 @@
             <div class="w-1.5 h-1.5 rounded-full bg-primary"></div>
         </a>
 
-        <!-- Desktop Nav - Left aligned after logo -->
         <div class="hidden md:flex items-center gap-2 ml-8 flex-1">
             <NavLink href="/dashboard" label="Dashboard" />
             <NavDropdown label="Transactions" items={transactionItems} />
@@ -33,10 +32,9 @@
             <NavLink href="/supply" label="Supply" />
         </div>
 
-        <!-- Profile / Mobile Button -->
         <div class="flex items-center flex-shrink-0">
             <div class="hidden md:block">
-                <ProfileDropdown initials="KS" />
+                <ProfileDropdown />
             </div>
             
             <button

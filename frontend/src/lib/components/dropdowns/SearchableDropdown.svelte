@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onDestroy } from 'svelte';
   import BaseDropdown from './BaseDropdown.svelte';
 
   let {
@@ -18,6 +19,14 @@
   let searchQuery = $state('');
   let visibleCount = $state(50); // Start with 50 items
   let loadingHandle: number | null = null;
+
+  // Cleanup on component destroy to prevent memory leaks
+  onDestroy(() => {
+    if (loadingHandle) {
+      cancelIdleCallback(loadingHandle);
+      loadingHandle = null;
+    }
+  });
 
   function onOpen() {
     visibleCount = 50;

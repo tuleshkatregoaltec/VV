@@ -254,7 +254,7 @@ def create_indexes(tables=None, phase=None):
 
                     conn.execute(text(idx["sql"]))
 
-                    print(f"    ✓ Success\n")
+                    print("    ✓ Success\n")
                     total_created += 1
 
                 except Exception as e:
@@ -266,7 +266,7 @@ def create_indexes(tables=None, phase=None):
     elapsed = datetime.now() - start_time
 
     print("=" * 70)
-    print(f"✓ Index creation complete!")
+    print("✓ Index creation complete!")
     print("=" * 70)
     print(f"  Created: {total_created}")
     print(f"  Failed: {total_failed}")

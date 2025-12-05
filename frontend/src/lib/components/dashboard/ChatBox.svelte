@@ -2,15 +2,21 @@
 	import { fly, fade } from 'svelte/transition';
 	import { quintOut } from 'svelte/easing';
 
-	let inputValue = '';
-	let showDropdown = false;
+	let {
+		placeholder = 'Search properties, areas, or ask anything...',
+		onSubmit = () => {},
+		options = ['Custom deliverables', 'Valuation']
+	}: {
+		placeholder?: string;
+		onSubmit?: (value: string) => void;
+		options?: string[];
+	} = $props();
+
+	let inputValue = $state('');
+	let showDropdown = $state(false);
 	let dropdownOpenTimeout: number | undefined;
 	let dropdownCloseTimeout: number | undefined;
 	let textareaRef: HTMLTextAreaElement;
-
-	export let placeholder = 'Search properties, areas, or ask anything...';
-	export let onSubmit: (value: string) => void = () => {};
-	export let options: string[] = ['Custom deliverables', 'Valuation'];
 
 	function handleMouseEnterDropdown() {
 		clearTimeout(dropdownCloseTimeout);
@@ -56,7 +62,7 @@
 		<textarea
 			bind:this={textareaRef}
 			bind:value={inputValue}
-			on:input={autoResizeTextarea}
+			oninput={autoResizeTextarea}
 			{placeholder}
 			aria-label={placeholder}
 			class="w-full bg-transparent outline-none text-gray-800 placeholder-gray-400 text-base font-medium resize-none min-h-[36px] max-h-[200px] leading-relaxed scrollbar-thin scrollbar-track-gray-100"
@@ -66,8 +72,8 @@
 			<!-- Plus Dropdown -->
 			<div
 				class="relative dropdown-container -ml-2"
-				on:mouseenter={handleMouseEnterDropdown}
-				on:mouseleave={handleMouseLeaveDropdown}
+				onmouseenter={handleMouseEnterDropdown}
+				onmouseleave={handleMouseLeaveDropdown}
 				role="button"
 				tabindex="0"
 				aria-haspopup="menu"
@@ -94,8 +100,8 @@
 				{#if showDropdown}
 					<div
 						class="absolute left-0 mt-3 w-48 bg-white rounded-lg shadow-xl py-2 border border-primary-pale z-50"
-						on:mouseenter={handleMouseEnterDropdown}
-						on:mouseleave={handleMouseLeaveDropdown}
+						onmouseenter={handleMouseEnterDropdown}
+						onmouseleave={handleMouseLeaveDropdown}
 						in:fly={{ y: -10, duration: 250, easing: quintOut }}
 						out:fade={{ duration: 150 }}
 						role="menu"
@@ -106,7 +112,7 @@
 							<button
 								type="button"
 								role="menuitem"
-								on:click={() => selectOption(option)}
+								onclick={() => selectOption(option)}
 								class="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-primary-pale/40 hover:text-primary transition-colors duration-250"
 							>
 								{option}
@@ -120,7 +126,7 @@
 				type="button"
 				aria-label="Send message"
 				title="Send message"
-				on:click={handleSubmit}
+				onclick={handleSubmit}
 				disabled={!inputValue.trim()}
 				class="flex-shrink-0 p-2 rounded-lg -mr-2 transition-all duration-200
           text-primary bg-primary-pale/40 hover:bg-primary-pale/60

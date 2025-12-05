@@ -9,6 +9,9 @@
     import { authStore } from '$lib/stores/auth.svelte';
 
     let { children, data }: { children: Snippet; data: LayoutData } = $props();
+    
+    // Prevent concurrent auth checks
+    let isCheckingAuth = $state(false);
 
     const PUBLIC_PATHS = ['/', '/login', '/auth/login', '/auth/callback', '/auth/no-org', '/auth/deactivated'];
 
@@ -18,12 +21,17 @@
     );
 
     onMount(async () => {
-        if (!isPublicPath) {
-            const authenticated = await authStore.checkAuth();
-            if (!authenticated) {
-                goto('/');
+        if (!isPublicPath && !isCheckingAuth) {
+            isCheckingAuth = true;
+            try {
+                const authenticated = await authStore.checkAuth();
+                if (!authenticated) {
+                    goto('/');
+                }
+            } finally {
+                isCheckingAuth = false;
             }
-        } else {
+        } else if (isPublicPath) {
             authStore.setLoading(false);
         }
     });

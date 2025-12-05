@@ -217,17 +217,6 @@
   });
 </script>
 
-<div class="mb-4 p-4 bg-gray-100 border rounded font-mono text-xs text-gray-900">
-  <strong>Debug Panel:</strong><br>
-  Filtered displayData count: {displayData.length}<br>
-  Cache size: {transformedCache.length}<br>
-  Backend totalCount: {totalRecords}<br>
-  Pagination totalPages: {totalPages}<br>
-  Paginated table length: {paginatedData.length}<br>
-  Query Status: {transactionsQuery.status}<br>
-  Is Fetching: {transactionsQuery.isFetching ? 'YES' : 'NO'}
-</div>
-
 <div class="min-h-screen bg-background">
   <div class="max-w-7xl mx-auto px-0 sm:px-1 lg:px-1 py-8">
     {#if transactionsQuery.isPending}

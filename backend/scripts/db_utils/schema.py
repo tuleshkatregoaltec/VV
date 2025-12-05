@@ -5,7 +5,6 @@ from sqlalchemy import inspect, text
 from sqlmodel import SQLModel
 
 from backend.app.db.session import engine, get_db_session
-from backend.app.db import models  # Import models to register them
 
 logger = logging.getLogger(__name__)
 

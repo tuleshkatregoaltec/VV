@@ -3,20 +3,20 @@ from typing import List, Optional
 from datetime import datetime
 
 
-class OrganisationCreateRequest(BaseModel):
+class OrganizationCreateRequest(BaseModel):
     name: str
     domain: str
     max_users: int = 5
 
 
-class OrganisationUpdateRequest(BaseModel):
+class OrganizationUpdateRequest(BaseModel):
     max_users: int
     is_active: bool
 
 
-class OrganisationResponse(BaseModel):
+class OrganizationResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
-    
+
     id: str
     name: str
     domain: str = Field(validation_alias="email_domain")
@@ -27,6 +27,6 @@ class OrganisationResponse(BaseModel):
     updated_at: Optional[datetime] = None
 
 
-class OrganisationDetailResponse(BaseModel):
-    organisation: OrganisationResponse
+class OrganizationDetailResponse(BaseModel):
+    organization: OrganizationResponse
     users: List[dict]

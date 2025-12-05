@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { setContext, onMount } from 'svelte';
+  import { setContext, onMount, onDestroy } from 'svelte';
   import DataPanel from '$lib/components/transactions/DataPanel.svelte';
   import FilterPanel from '$lib/components/filters/FilterPanel.svelte';
   import TransactionPagination from '$lib/components/transactions/TransactionPagination.svelte';
@@ -233,6 +233,13 @@
   onMount(async () => {
     await loadData();
     isInitialized = true;
+  });
+
+  onDestroy(() => {
+    if (backfillTimer) {
+      clearTimeout(backfillTimer);
+      backfillTimer = null;
+    }
   });
 
   $effect(() => {

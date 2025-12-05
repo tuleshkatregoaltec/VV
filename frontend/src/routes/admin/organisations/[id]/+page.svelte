@@ -2,57 +2,39 @@
   import { page } from '$app/state';
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
+  import { admin, ApiError, type Organisation, type OrganisationUser } from '$lib/api';
 
-  interface User {
-    id: string;
-    email: string;
-    first_name: string;
-    last_name: string;
-    is_active: boolean;
-    created_at: string;
-    last_login: string | null;
-  }
+  let organisation = $state<Organisation | null>(null);
+  let users = $state<OrganisationUser[]>([]);
+  let loading = $state(true);
+  let error = $state('');
+  let saving = $state(false);
+  let deleting = $state(false);
+  let showDeleteConfirm = $state(false);
 
-  interface Organisation {
-    id: string;
-    name: string;
-    email_domain: string;
-    max_users: number;
-    is_active: boolean;
-    active_user_count: number;
-  }
-
-  let organisation: Organisation | null = null;
-  let users: User[] = [];
-  let loading = true;
-  let error = '';
-  let saving = false;
-  let deleting = false;
-  let showDeleteConfirm = false;
-
-  // Editable fields
-  let max_users: number;
-  let is_active: boolean;
+  // Editable fields - initialized with defaults, updated after fetch
+  let max_users = $state(0);
+  let is_active = $state(false);
 
   async function fetchOrganisation() {
     loading = true;
     error = '';
     const orgId = page.params.id;
 
+    if (!orgId) {
+      error = 'Organization ID is required';
+      loading = false;
+      return;
+    }
+
     try {
-      const res = await fetch(`http://localhost:8000/api/admin/organisations/${orgId}`, {
-        credentials: 'include'
-      });
-
-      if (!res.ok) throw new Error('Failed to fetch organization');
-
-      const data = await res.json();
+      const data = await admin.organisations.get(orgId);
       organisation = data.organisation;
       users = data.users;
       max_users = organisation.max_users;
       is_active = organisation.is_active;
-    } catch (e: any) {
-      error = e.message;
+    } catch (e) {
+      error = e instanceof ApiError ? e.message : 'Failed to fetch organization';
     } finally {
       loading = false;
     }
@@ -65,46 +47,24 @@
     error = '';
 
     try {
-      const res = await fetch(`http://localhost:8000/api/admin/organisations/${organisation.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({
-          max_users,
-          is_active
-        })
+      const updated = await admin.organisations.update(organisation.id, {
+        max_users,
+        is_active
       });
-
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.detail || 'Failed to update organization');
-      }
-
-      const updated = await res.json();
       organisation = updated;
       alert('Organization updated successfully!');
-    } catch (e: any) {
-      error = e.message;
+    } catch (e) {
+      error = e instanceof ApiError ? e.message : 'Failed to update organization';
     } finally {
       saving = false;
     }
   }
 
-  async function toggleUserActive(user: User) {
+  async function toggleUserActive(user: OrganisationUser) {
     try {
-      const res = await fetch(`http://localhost:8000/api/admin/users/${user.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({
-          is_active: !user.is_active
-        })
+      await admin.users.update(user.id, {
+        is_active: !user.is_active
       });
-
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.detail || 'Failed to update user');
-      }
 
       // Update local state
       user.is_active = !user.is_active;
@@ -112,8 +72,9 @@
 
       // Refetch to update active user count
       await fetchOrganisation();
-    } catch (e: any) {
-      alert(`Error updating user: ${e.message}`);
+    } catch (e) {
+      const message = e instanceof ApiError ? e.message : 'Failed to update user';
+      alert(`Error updating user: ${message}`);
     }
   }
 
@@ -124,20 +85,11 @@
     error = '';
 
     try {
-      const res = await fetch(`http://localhost:8000/api/admin/organisations/${organisation.id}`, {
-        method: 'DELETE',
-        credentials: 'include'
-      });
-
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.detail || 'Failed to delete organization');
-      }
-
+      await admin.organisations.delete(organisation.id);
       // Redirect to organizations list
       goto('/admin/organisations');
-    } catch (e: any) {
-      error = e.message;
+    } catch (e) {
+      error = e instanceof ApiError ? e.message : 'Failed to delete organization';
       deleting = false;
       showDeleteConfirm = false;
     }
@@ -148,7 +100,7 @@
     return new Date(dateStr).toLocaleDateString();
   }
 
-  function fullName(user: User) {
+  function fullName(user: OrganisationUser) {
     const name = `${user.first_name || ''} ${user.last_name || ''}`.trim();
     return name || user.email;
   }
@@ -165,7 +117,7 @@
     <div class="bg-red-50 border border-red-200 rounded p-4">
       <p class="text-red-600">{error}</p>
       <button
-        on:click={() => goto('/admin/organisations')}
+        onclick={() => goto('/admin/organisations')}
         class="mt-4 text-blue-600 hover:text-blue-800"
       >
         ← Back to Organizations
@@ -175,7 +127,7 @@
     <div class="mb-6 flex justify-between items-start">
       <div>
         <button
-          on:click={() => goto('/admin/organisations')}
+          onclick={() => goto('/admin/organisations')}
           class="text-blue-600 hover:text-blue-800 mb-4"
         >
           ← Back to Organizations
@@ -185,7 +137,7 @@
       </div>
       
       <button
-        on:click={() => (showDeleteConfirm = true)}
+        onclick={() => (showDeleteConfirm = true)}
         class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded"
       >
         Delete Organization
@@ -197,10 +149,11 @@
 
       <div class="grid grid-cols-2 gap-4 mb-4">
         <div>
-          <label class="block text-sm font-medium text-gray-700 mb-2">
+          <label for="max-users-input" class="block text-sm font-medium text-gray-700 mb-2">
             Max Users
           </label>
           <input
+            id="max-users-input"
             type="number"
             bind:value={max_users}
             min="1"
@@ -209,9 +162,9 @@
         </div>
 
         <div>
-          <label class="block text-sm font-medium text-gray-700 mb-2">
+          <span class="block text-sm font-medium text-gray-700 mb-2">
             Active Users
-          </label>
+          </span>
           <p class="py-2 px-3 text-gray-900">{organisation.active_user_count} / {organisation.max_users}</p>
         </div>
       </div>
@@ -230,7 +183,7 @@
       {/if}
 
       <button
-        on:click={saveChanges}
+        onclick={saveChanges}
         disabled={saving}
         class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded disabled:opacity-50"
       >
@@ -287,7 +240,7 @@
                 </td>
                 <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                   <button
-                    on:click={() => toggleUserActive(user)}
+                    onclick={() => toggleUserActive(user)}
                     class="text-blue-600 hover:text-blue-900"
                   >
                     {user.is_active ? 'Deactivate' : 'Activate'}
@@ -312,14 +265,14 @@
       </p>
       <div class="flex justify-end gap-3">
         <button
-          on:click={() => (showDeleteConfirm = false)}
+          onclick={() => (showDeleteConfirm = false)}
           disabled={deleting}
           class="px-4 py-2 bg-gray-300 hover:bg-gray-400 rounded disabled:opacity-50"
         >
           Cancel
         </button>
         <button
-          on:click={deleteOrganisation}
+          onclick={deleteOrganisation}
           disabled={deleting}
           class="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded disabled:opacity-50"
         >

@@ -12,7 +12,7 @@ LOGGING_CONFIG: Dict[str, Any] = {
             "datefmt": "%Y-%m-%d %H:%M:%S",
         },
         "console_colored": {
-            "format": "%(levelname)s %(message)s", 
+            "format": "%(levelname)s %(message)s",
             "use_colors": True,
         },
     },
@@ -51,20 +51,20 @@ LOGGING_CONFIG: Dict[str, Any] = {
         # Application Logs (Your code)
         "backend": {
             "handlers": ["console", "file_debug"],
-            "level": "DEBUG", # Allows debug logs in file, but console handler filters to INFO
+            "level": "DEBUG",  # Allows debug logs in file, but console handler filters to INFO
             "propagate": False,
         },
         # SQLAlchemy Engine (The SQL Queries)
         "sqlalchemy.engine": {
-            "handlers": ["file_sql"], # <--- ONLY to file, not console
+            "handlers": ["file_sql"],  # <--- ONLY to file, not console
             "level": "INFO",
-            "propagate": False, # Stop it from bubbling up to console
+            "propagate": False,  # Stop it from bubbling up to console
         },
         # Redis Cache (Your custom logger)
         "RedisCache": {
             "handlers": ["console", "file_debug"],
             "level": "INFO",
             "propagate": False,
-        }
+        },
     },
 }

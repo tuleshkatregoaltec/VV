@@ -5,6 +5,7 @@ if TYPE_CHECKING:
     from .properties import LandRegistry, Building, Unit, Project
     from .transactions import Transaction, RentContract
 
+
 class MasterProject(SQLModel, table=True):
     """Large development complexes (Dubai Marina, Business Bay, DAMAC Hills, etc.)"""
 
@@ -12,8 +13,8 @@ class MasterProject(SQLModel, table=True):
 
     # Primary key
     master_project_id: int = Field(primary_key=True)
-    master_project_name_ar: Optional[str] = Field(default=None, max_length=255)
-    master_project_name: Optional[str] = Field(default=None, max_length=255)
+    master_project_ar: Optional[str] = Field(default=None, max_length=255)
+    master_project_en: Optional[str] = Field(default=None, max_length=255)
 
     # Relationships
     land_registries: List["LandRegistry"] = Relationship(
@@ -30,8 +31,8 @@ class Area(SQLModel, table=True):
 
     # Primary key
     area_id: int = Field(primary_key=True)
-    name_ar: str = Field(max_length=255)
-    name: str = Field(max_length=255)
+    name_ar: Optional[str] = Field(default=None, max_length=255)
+    name_en: Optional[str] = Field(default=None, max_length=255)
     municipality_number: Optional[str] = Field(default=None, max_length=50)
     zone_id: Optional[int] = None
 

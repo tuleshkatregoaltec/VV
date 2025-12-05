@@ -7,23 +7,26 @@ import logging
 
 logger = logging.getLogger("RedisCache")
 
+
 class RedisCache:
     def __init__(self, redis_url: str, default_expire: int = 600):
         self.redis_url = redis_url
         self.default_expire = default_expire
         self.redis = None
-        
+
         try:
             # Create the Redis client
             self.redis = redis.from_url(self.redis_url)
             logger.info("Redis client initialized at %s", self.redis_url)
         except Exception as e:
-            logger.error("Failed to initialize Redis client at %s: %s", self.redis_url, str(e))
+            logger.error(
+                "Failed to initialize Redis client at %s: %s", self.redis_url, str(e)
+            )
 
     async def get(self, key: str) -> Optional[Any]:
         if not self.redis:
             return None
-            
+
         try:
             value = await self.redis.get(key)
             if value is not None:
@@ -34,7 +37,7 @@ class RedisCache:
                 except Exception:
                     logger.warning("Failed to deserialize cache value for key: %s", key)
                     return value
-            
+
             # DEBUG level
             logger.debug("Cache miss for key: %s", key)
         except Exception as e:
@@ -58,7 +61,7 @@ class RedisCache:
         try:
             if not isinstance(value, str):
                 value = json.dumps(value, default=default)
-            
+
             await self.redis.set(key, value, ex=expire or self.default_expire)
             logger.debug("Cache set for key: %s", key)
         except Exception as e:
@@ -67,7 +70,7 @@ class RedisCache:
     async def delete(self, key: str):
         if not self.redis:
             return
-            
+
         try:
             await self.redis.delete(key)
             logger.debug("Cache deleted for key: %s", key)
@@ -82,8 +85,14 @@ class RedisCache:
             keys = await self.redis.keys(pattern)
             if keys:
                 await self.redis.delete(*keys)
-                logger.info("Cache cleared for pattern: %s (%d keys removed)", pattern, len(keys))
+                logger.info(
+                    "Cache cleared for pattern: %s (%d keys removed)",
+                    pattern,
+                    len(keys),
+                )
             else:
-                logger.debug("Cache clear called for pattern %s but no keys found", pattern)
+                logger.debug(
+                    "Cache clear called for pattern %s but no keys found", pattern
+                )
         except Exception as e:
             logger.error("Failed to clear cache for pattern %s: %s", pattern, str(e))

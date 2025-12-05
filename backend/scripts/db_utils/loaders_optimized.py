@@ -1,12 +1,10 @@
-from pathlib import Path
 import logging
 
 import pandas as pd
 import numpy as np
-from sqlmodel import Session, select, func
+from sqlmodel import Session, select
 from tqdm import tqdm
 
-from backend.app.db.session import engine
 from backend.app.db.models import (
     Unit,
     Transaction,

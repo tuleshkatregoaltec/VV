@@ -25,6 +25,7 @@ export interface FilterOptions {
     buildings: string[];
     property_types: string[];
     property_sub_types: string[];
+    master_projects: string[];
     rooms: string[];
     registration_types: string[];
 }

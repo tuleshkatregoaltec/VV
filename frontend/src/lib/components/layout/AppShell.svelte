@@ -12,7 +12,7 @@
     } = $props();
 </script>
 
-<div class="h-screen flex flex-col">
+<div class="h-screen flex flex-col bg-background">
     <Navbar />
     {#if showFilters}
         <FilterBar />

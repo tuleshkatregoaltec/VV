@@ -1,9 +1,15 @@
 <script lang="ts">
+    import { authStore } from '$lib/stores/auth.svelte';
+
     let {
         show
     }: {
         show: boolean;
     } = $props();
+
+    function handleLogout() {
+        authStore.logout();
+    }
 </script>
 
 {#if show}
@@ -44,8 +50,11 @@
         <a href="/settings" class="block px-4 py-2.5 rounded-lg text-base font-medium text-gray-700 hover:text-primary hover:bg-primary-pale/30 transition-all duration-300">
             Settings
         </a>
-        <a href="/logout" class="block px-4 py-2.5 rounded-lg text-base font-medium text-red-600 hover:bg-red-50 transition-all duration-300">
+        <button 
+            onclick={handleLogout}
+            class="block w-full text-left px-4 py-2.5 rounded-lg text-base font-medium text-red-600 hover:bg-red-50 transition-all duration-300"
+        >
             Sign Out
-        </a>
+        </button>
     </div>
 {/if}

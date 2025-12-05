@@ -6,7 +6,6 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from sqlmodel import SQLModel
 from backend.app.db.session import engine
-from backend.app.db.models import Organisation, User  # Import to register tables
 
 
 def create_auth_tables():
@@ -18,7 +17,7 @@ def create_auth_tables():
 
     print("✓ Authentication tables created successfully!")
     print("\nTables created:")
-    print("  - organisations")
+    print("  - organizations")
     print("  - users")
 
 

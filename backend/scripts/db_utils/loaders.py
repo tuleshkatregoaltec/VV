@@ -822,7 +822,7 @@ class DataLoader:
                             session.add_all(records)
                             session.commit()
                             total_inserted += len(records)
-                        except Exception as e:
+                        except Exception:
                             session.rollback()
                             skipped += len(records)
 
@@ -970,7 +970,7 @@ class DataLoader:
                             session.add_all(records)
                             session.commit()
                             total_inserted += len(records)
-                        except Exception as e:
+                        except Exception:
                             session.rollback()
                             skipped += len(records)
 

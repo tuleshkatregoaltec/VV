@@ -1,9 +1,9 @@
 <script lang="ts">
     import { onMount } from 'svelte';
+    import { auth } from '$lib/api';
 
     onMount(() => {
-        // Redirect to backend auth endpoint
-        window.location.href = 'http://localhost:8000/auth/login';
+        auth.login();
     });
 </script>
 

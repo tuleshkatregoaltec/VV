@@ -11,7 +11,7 @@ function createPersisted<T>(key: string, initial: T) {
             try {
                 state = JSON.parse(stored);
             } catch (e) {
-                console.error(`Failed t|o parse ${key}:`, e);
+                console.error(`Failed to parse ${key}:`, e);
             }
         }
     }

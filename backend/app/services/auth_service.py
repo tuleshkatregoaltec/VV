@@ -7,8 +7,9 @@ from datetime import datetime, timezone
 import asyncio
 import logging
 
-from backend.app.services.organisation_service import (
-    get_organisation_by_id,
+from backend.app.services.organization_service import (
+    get_organization_by_id,
+    get_organization_by_domain,
     get_active_user_count,
 )
 from backend.app.db.models import User
@@ -43,34 +44,58 @@ async def handle_callback(
         # Step 2: Get user's active organization memberships (sync SDK call)
         memberships_response = await asyncio.to_thread(
             workos.user_management.list_organization_memberships,
-            user_id=workos_user.id, 
-            statuses=["active"]
+            user_id=workos_user.id,
+            statuses=["active"],
         )
         memberships = memberships_response.data
 
-        if not memberships:
-            # User has no active org memberships
-            return RedirectResponse(url=f"{settings.FRONTEND_URL}/auth/no-org")
+        organization = None
+        has_workos_membership = False
 
-        # Step 3: Get primary organization (first active membership)
-        primary_membership = memberships[0]
-        workos_org_id = primary_membership.organization_id
+        if memberships:
+            # User has org memberships - use primary organization
+            primary_membership = memberships[0]
+            workos_org_id = primary_membership.organization_id
+            organization = await get_organization_by_id(session, workos_org_id)
+            if organization:
+                has_workos_membership = True
 
-        # Step 4: Check if organization exists locally
-        organisation = await get_organisation_by_id(session, workos_org_id)
-        if not organisation:
-            # Organization not onboarded in our system
-            return RedirectResponse(url=f"{settings.FRONTEND_URL}/auth/no-org")
+        # Fallback: match by email domain if no membership or org not found locally
+        if not organization:
+            email_domain = workos_user.email.split("@")[1].lower()
+            organization = await get_organization_by_domain(session, email_domain)
 
-        # Step 5: Check if organisation is active
-        if not organisation.is_active:
+            if not organization:
+                # No org found by membership or domain
+                return RedirectResponse(url=f"{settings.FRONTEND_URL}/auth/no-org")
+
+        # If user matched by domain but has no WorkOS membership, create one
+        if not has_workos_membership:
+            try:
+                await asyncio.to_thread(
+                    workos.user_management.create_organization_membership,
+                    user_id=workos_user.id,
+                    organization_id=organization.id,
+                )
+            except Exception as e:
+                # Log but don't fail - user can still proceed with domain-based auth
+                logger.warning(
+                    f"Failed to create WorkOS org membership for user {workos_user.id}: {e}"
+                )
+
+        # Step 5: Check if organization is active
+        if not organization.is_active:
             return RedirectResponse(url=f"{settings.FRONTEND_URL}/auth/deactivated")
 
         # Step 6: Check if user exists in local DB
         existing_user = await session.get(User, workos_user.id)
 
         if existing_user:
-            # EXISTING USER - update and check status
+            # EXISTING USER - update org if needed and check status
+            if existing_user.organization_id != organization.id:
+                # User's org has changed or was previously unassigned
+                existing_user.organization_id = organization.id
+
             existing_user.last_login = datetime.now(timezone.utc)
             existing_user.updated_at = datetime.now(timezone.utc)
             session.add(existing_user)
@@ -87,8 +112,8 @@ async def handle_callback(
                 "email": existing_user.email,
                 "first_name": existing_user.first_name,
                 "last_name": existing_user.last_name,
-                "organisation_id": existing_user.organisation_id,
-                "organisation_name": organisation.name,
+                "organization_id": existing_user.organization_id,
+                "organization_name": organization.name,
             }
             request.session["access_token"] = auth_response.access_token
             request.session["refresh_token"] = auth_response.refresh_token
@@ -96,10 +121,10 @@ async def handle_callback(
             return RedirectResponse(url=f"{settings.FRONTEND_URL}/dashboard")
 
         # Step 7: NEW USER - check user limit and create
-        active_user_count = await get_active_user_count(session, organisation.id)
+        active_user_count = await get_active_user_count(session, organization.id)
 
         # Determine if user should be active based on org limit
-        is_active = active_user_count < organisation.max_users
+        is_active = active_user_count < organization.max_users
 
         # Create new user
         new_user = User(
@@ -107,7 +132,7 @@ async def handle_callback(
             email=workos_user.email,
             first_name=workos_user.first_name,
             last_name=workos_user.last_name,
-            organisation_id=organisation.id,
+            organization_id=organization.id,
             is_active=is_active,
             created_at=datetime.now(timezone.utc),
             updated_at=datetime.now(timezone.utc),
@@ -127,15 +152,15 @@ async def handle_callback(
             "email": new_user.email,
             "first_name": new_user.first_name,
             "last_name": new_user.last_name,
-            "organisation_id": organisation.id,
-            "organisation_name": organisation.name,
+            "organization_id": organization.id,
+            "organization_name": organization.name,
         }
         request.session["access_token"] = auth_response.access_token
         request.session["refresh_token"] = auth_response.refresh_token
 
         return RedirectResponse(url=f"{settings.FRONTEND_URL}/dashboard")
 
-    except Exception as e:
+    except Exception:
         logger.exception("Authentication error")
         raise HTTPException(status_code=400, detail="Authentication failed")
 

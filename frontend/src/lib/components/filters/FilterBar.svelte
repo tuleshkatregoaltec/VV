@@ -3,26 +3,16 @@
     import SearchableDropdown from '../dropdowns/SearchableDropdown.svelte';
     import StandardDropdown from '../dropdowns/StandardDropdown.svelte';
     import { propertyType, masterProject, timeframe } from './globalFilters.svelte';
-    import { PUBLIC_API_BASE_URL } from '$env/static/public';
+    import { filters } from '$lib/api';
     import { onMount } from 'svelte';
 
-    let masterProjects: string[] = ['All'];
+    let masterProjects = $state<string[]>(['All']);
     const timeframes = ['Last Week', 'Last Month', 'Last 3 Months', 'Last 6 Months', 'Last Year'];
     
     async function fetchMasterProjects() {
         try {
-            const response = await fetch(`${PUBLIC_API_BASE_URL}/transactions/sales/filter-options`);
-            
-            if (!response.ok) {
-                throw new Error(`HTTP ${response.status}`);
-            }
-            
-            const data = await response.json();
-            
-            if (data.master_projects && Array.isArray(data.master_projects)) {
-                const projects = data.master_projects.filter((p: any) => p && String(p).trim());
-                masterProjects = ['All', ...projects];
-            }
+            const projects = await filters.masterProjects();
+            masterProjects = ['All', ...projects];
         } catch (error) {
             console.error('Failed to fetch master projects:', error);
         }

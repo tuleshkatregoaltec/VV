@@ -7,20 +7,18 @@ from backend.app.core.decorators import cached_endpoint
 from backend.app.schemas.transactions import (
     TransactionListResponse,
     RentalContractListResponse,
-    FilterOptionsResponse,
 )
 
 # Import from the new service file
 from backend.app.services.transactions_service import (
     fetch_sales_transactions,
-    fetch_sales_filter_options,
     fetch_rental_contracts,
-    fetch_rental_filter_options
 )
 
 router = APIRouter(prefix="/transactions", tags=["transactions"])
 
 # --- SALES ENDPOINTS ---
+
 
 @router.get("/sales", response_model=TransactionListResponse)
 @cached_endpoint(prefix="sales", expire=600)
@@ -58,37 +56,9 @@ async def get_sales_transactions(
         registration_type=registration_type,
     )
 
-@router.get("/sales/filter-options", response_model=FilterOptionsResponse)
-@cached_endpoint(prefix="sales:filter-options", expire=3600)
-async def get_sales_filter_options(
-    trans_group: str = Query(default=None),
-    property_usage: str = Query(default=None),
-    master_project: str = Query(default=None),
-    timeframe_days: int = Query(default=None),
-    project: str = Query(default=None),
-    building: str = Query(default=None),
-    property_type: str = Query(default=None),
-    rooms: str = Query(default=None),
-    property_sub_type: str = Query(default=None),
-    registration_type: str = Query(default=None),
-    current_user: dict = Depends(require_auth),
-    session: AsyncSession = Depends(get_db_session),
-):
-    return await fetch_sales_filter_options(
-        session=session,
-        trans_group=trans_group,
-        property_usage=property_usage,
-        master_project=master_project,
-        timeframe_days=timeframe_days,
-        project=project,
-        building=building,
-        property_type=property_type,
-        rooms=rooms,
-        property_sub_type=property_sub_type,
-        registration_type=registration_type,
-    )
 
 # --- RENTALS ENDPOINTS ---
+
 
 @router.get("/rentals", response_model=RentalContractListResponse)
 @cached_endpoint(prefix="rentals", expire=600)
@@ -109,30 +79,6 @@ async def get_rental_contracts(
         session=session,
         limit=limit,
         offset=offset,
-        master_project=master_project,
-        timeframe_days=timeframe_days,
-        project=project,
-        property_type=property_type,
-        property_sub_type=property_sub_type,
-        tenant_type=tenant_type,
-        contract_reg_type=contract_reg_type,
-    )
-
-@router.get("/rentals/filter-options", response_model=FilterOptionsResponse)
-@cached_endpoint(prefix="rentals:filter-options", expire=3600)
-async def get_rental_filter_options(
-    master_project: str = Query(default=None),
-    timeframe_days: int = Query(default=None),
-    project: str = Query(default=None),
-    property_type: str = Query(default=None),
-    property_sub_type: str = Query(default=None),
-    tenant_type: str = Query(default=None),
-    contract_reg_type: str = Query(default=None),
-    current_user: dict = Depends(require_auth),
-    session: AsyncSession = Depends(get_db_session),
-):
-    return await fetch_rental_filter_options(
-        session=session,
         master_project=master_project,
         timeframe_days=timeframe_days,
         project=project,

@@ -1,16 +1,12 @@
-interface User {
-  id: string;
-  email: string;
-  first_name: string;
-  last_name: string;
-  organisation_id: string;
-  organisation_name: string;
-}
+import posthog from 'posthog-js';
+import { browser } from '$app/environment';
+import { auth, ApiError, type User, type UserWithInitials } from '$lib/api';
 
 class AuthStore {
-  #user = $state<User | null>(null);
+  #user = $state<UserWithInitials | null>(null);
   #loading = $state(true);
   #authenticated = $state(false);
+  #identified = false;
 
   get user() { return this.#user; }
   get loading() { return this.#loading; }
@@ -19,21 +15,28 @@ class AuthStore {
   async checkAuth() {
     this.#loading = true;
     try {
-      const res = await fetch('http://localhost:8000/auth/me', {
-        credentials: 'include'
-      });
+      const userData = await auth.me();
+      const initials = `${userData.first_name?.[0] ?? ''}${userData.last_name?.[0] ?? ''}`.toUpperCase();
+      this.#user = { ...userData, initials };
+      this.#authenticated = true;
       
-      if (res.ok) {
-        this.#user = await res.json();
-        this.#authenticated = true;
-        return true;
-      } else {
-        this.#user = null;
-        this.#authenticated = false;
-        return false;
+      if (browser && this.#user && !this.#identified) {
+        posthog.identify(this.#user.id, {
+          email: this.#user.email,
+          first_name: this.#user.first_name,
+          last_name: this.#user.last_name,
+          organisation_id: this.#user.organisation_id,
+          organisation_name: this.#user.organisation_name,
+        });
+        this.#identified = true;
       }
+      
+      return true;
     } catch (error) {
-      console.error('Auth check failed:', error);
+      // 401 is expected when not authenticated
+      if (!(error instanceof ApiError && error.status === 401)) {
+        console.error('Auth check failed:', error);
+      }
       this.#user = null;
       this.#authenticated = false;
       return false;
@@ -47,20 +50,23 @@ class AuthStore {
   }
 
   login() {
-    window.location.href = 'http://localhost:8000/auth/login';
+    auth.login();
   }
 
   async logout() {
     try {
-      await fetch('http://localhost:8000/auth/logout', {
-        method: 'POST',
-        credentials: 'include'
-      });
+      await auth.logout();
     } catch (e) {
       console.error('Logout error:', e);
     }
+    
+    if (browser) {
+      posthog.reset();
+    }
+    
     this.#user = null;
     this.#authenticated = false;
+    this.#identified = false;
     window.location.href = '/';
   }
 }

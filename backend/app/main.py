@@ -6,7 +6,7 @@ from honeybadger import contrib, honeybadger
 import logging.config
 
 from backend.app.config import settings
-from backend.app.routers import auth, admin, transactions, supply
+from backend.app.routers import auth, admin, transactions, supply, analytics, filters
 from backend.app.core.logging_config import LOGGING_CONFIG
 
 # Add logging
@@ -27,7 +27,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-app.add_middleware(contrib.ASGIHoneybadger) # type: ignore
+app.add_middleware(contrib.ASGIHoneybadger)  # type: ignore
 
 
 # Include routers
@@ -35,6 +35,8 @@ app.include_router(auth.router, tags=["auth"])
 app.include_router(admin.router, tags=["admin"])
 app.include_router(transactions.router, tags=["transactions"])
 app.include_router(supply.router, tags=["supply"])
+app.include_router(analytics.router, tags=["analytics"])
+app.include_router(filters.router, tags=["filters"])
 
 
 @app.get("/")

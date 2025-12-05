@@ -22,7 +22,7 @@ def add_organization(name: str, domain: str, max_users: int = 5):
         session.commit()
         session.refresh(org)
 
-        print(f"✅ Organization created successfully!")
+        print("✅ Organization created successfully!")
         print(f"   Name: {org.name}")
         print(f"   Domain: {org.email_domain}")
         print(f"   Max Users: {org.max_users}")

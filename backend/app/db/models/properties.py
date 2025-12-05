@@ -6,6 +6,7 @@ from datetime import date
 if TYPE_CHECKING:
     from .geography import Area, MasterProject
 
+
 class Developer(SQLModel, table=True):
     """Real estate developers and companies (Emaar, DAMAC, Nakheel, etc.)"""
 
@@ -14,18 +15,18 @@ class Developer(SQLModel, table=True):
     # Primary key
     developer_id: int = Field(primary_key=True)
     participant_id: Optional[int] = None
-    developer_number: int = Field(unique=True)
-    developer_name_ar: str = Field(max_length=255)
-    developer_name: str = Field(max_length=255)
+    developer_number: Optional[int] = Field(default=None, unique=True)
+    developer_name_ar: Optional[str] = Field(default=None, max_length=255)
+    developer_name_en: Optional[str] = Field(default=None, max_length=255)
     registration_date: Optional[date] = None
 
     # License information
     license_source_id: Optional[int] = None
     license_source_ar: Optional[str] = Field(default=None, max_length=255)
-    license_source: Optional[str] = Field(default=None, max_length=255)
+    license_source_en: Optional[str] = Field(default=None, max_length=255)
     license_type_id: Optional[int] = None
     license_type_ar: Optional[str] = Field(default=None, max_length=255)
-    license_type: Optional[str] = Field(default=None, max_length=255)
+    license_type_en: Optional[str] = Field(default=None, max_length=255)
     license_number: Optional[str] = Field(default=None, max_length=50)
     license_issue_date: Optional[date] = None
     license_expiry_date: Optional[date] = None
@@ -34,7 +35,7 @@ class Developer(SQLModel, table=True):
     chamber_of_commerce_no: Optional[str] = Field(default=None, max_length=50)
     legal_status: Optional[str] = Field(default=None, max_length=10)
     legal_status_ar: Optional[str] = Field(default=None, max_length=255)
-    legal_status_description: Optional[str] = Field(default=None, max_length=255)
+    legal_status_en: Optional[str] = Field(default=None, max_length=255)
 
     # Contact information
     webpage: Optional[str] = Field(default=None, max_length=255)
@@ -60,11 +61,11 @@ class Project(SQLModel, table=True):
     # Primary key
     project_id: int = Field(primary_key=True)
     project_number: Optional[int] = Field(default=None, unique=True)
-    project_name: str = Field(max_length=255)
+    project_name: Optional[str] = Field(default=None, max_length=255)
 
     # Developer relationships
     developer_id: Optional[int] = Field(
-        default=None, foreign_key="developers.developer_id"
+        default=None, foreign_key="developers.developer_id", index=True
     )
     master_developer_id: Optional[int] = Field(
         default=None, foreign_key="developers.developer_id"
@@ -94,11 +95,11 @@ class Project(SQLModel, table=True):
     area_id: Optional[int] = Field(default=None, foreign_key="areas.area_id")
     zoning_authority_id: Optional[int] = None
     zoning_authority_ar: Optional[str] = Field(default=None, max_length=255)
-    zoning_authority: Optional[str] = Field(default=None, max_length=255)
+    zoning_authority_en: Optional[str] = Field(default=None, max_length=255)
 
     # Descriptions
     project_description_ar: Optional[str] = None
-    project_description: Optional[str] = None
+    project_description_en: Optional[str] = None
 
     # Counts
     no_of_lands: Optional[int] = None
@@ -172,7 +173,7 @@ class LandRegistry(SQLModel, table=True):
     )
     land_type_id: Optional[int] = None
     land_type_ar: Optional[str] = Field(default=None, max_length=255)
-    land_type: Optional[str] = Field(default=None, max_length=255)
+    land_type_en: Optional[str] = Field(default=None, max_length=255)
 
     # Relationships
     area: Optional["Area"] = Relationship(back_populates="land_registries")
@@ -205,7 +206,9 @@ class Building(SQLModel, table=True):
     property_id: int = Field(primary_key=True)
 
     # Location
-    area_id: Optional[int] = Field(default=None, foreign_key="areas.area_id")
+    area_id: Optional[int] = Field(
+        default=None, foreign_key="areas.area_id", index=True
+    )
     zone_id: Optional[int] = None
     land_number: Optional[str] = Field(default=None, max_length=50)
     land_sub_number: Optional[str] = Field(default=None, max_length=50)
@@ -216,7 +219,7 @@ class Building(SQLModel, table=True):
     bld_levels: Optional[int] = None
     rooms: Optional[int] = None
     rooms_ar: Optional[str] = Field(default=None, max_length=100)
-    rooms_description: Optional[str] = Field(default=None, max_length=100)
+    rooms_en: Optional[str] = Field(default=None, max_length=100)
     car_parks: Optional[int] = None
 
     # Area measurements
@@ -262,13 +265,15 @@ class Building(SQLModel, table=True):
     pre_registration_number: Optional[str] = Field(default=None, max_length=50)
 
     # Project relationships
-    project_id: Optional[int] = Field(default=None, foreign_key="projects.project_id")
+    project_id: Optional[int] = Field(
+        default=None, foreign_key="projects.project_id", index=True
+    )
     master_project_id: Optional[int] = Field(
         default=None, foreign_key="master_projects.master_project_id"
     )
     land_type_id: Optional[int] = None
     land_type_ar: Optional[str] = Field(default=None, max_length=255)
-    land_type: Optional[str] = Field(default=None, max_length=255)
+    land_type_en: Optional[str] = Field(default=None, max_length=255)
 
     # Relationships
     area: Optional["Area"] = Relationship(back_populates="buildings")
@@ -287,7 +292,9 @@ class Unit(SQLModel, table=True):
     property_id: int = Field(primary_key=True)
 
     # Location
-    area_id: Optional[int] = Field(default=None, foreign_key="areas.area_id")
+    area_id: Optional[int] = Field(
+        default=None, foreign_key="areas.area_id", index=True
+    )
     zone_id: Optional[int] = None
     land_number: Optional[str] = Field(default=None, max_length=100)
     land_sub_number: Optional[str] = Field(default=None, max_length=100)
@@ -298,7 +305,7 @@ class Unit(SQLModel, table=True):
     # Unit characteristics
     rooms: Optional[int] = None
     rooms_ar: Optional[str] = Field(default=None, max_length=100)
-    rooms_description: Optional[str] = Field(default=None, max_length=100)
+    rooms_en: Optional[str] = Field(default=None, max_length=100)
 
     # Area measurements
     unit_balcony_area: Optional[Decimal] = Field(
@@ -318,9 +325,7 @@ class Unit(SQLModel, table=True):
     unit_parking_number: Optional[str] = Field(default=None, max_length=1000)
     parking_allocation_type: Optional[str] = Field(default=None, max_length=200)
     parking_allocation_type_ar: Optional[str] = Field(default=None, max_length=200)
-    parking_allocation_type_description: Optional[str] = Field(
-        default=None, max_length=255
-    )
+    parking_allocation_type_en: Optional[str] = Field(default=None, max_length=255)
 
     # Property classification
     property_type_id: Optional[int] = Field(
@@ -349,13 +354,15 @@ class Unit(SQLModel, table=True):
     pre_registration_number: Optional[str] = Field(default=None, max_length=100)
 
     # Project relationships
-    project_id: Optional[int] = Field(default=None, foreign_key="projects.project_id")
+    project_id: Optional[int] = Field(
+        default=None, foreign_key="projects.project_id", index=True
+    )
     master_project_id: Optional[int] = Field(
         default=None, foreign_key="master_projects.master_project_id"
     )
     land_type_id: Optional[int] = None
     land_type_ar: Optional[str] = Field(default=None, max_length=255)
-    land_type: Optional[str] = Field(default=None, max_length=255)
+    land_type_en: Optional[str] = Field(default=None, max_length=255)
 
     # Relationships
     area: Optional["Area"] = Relationship(back_populates="units")

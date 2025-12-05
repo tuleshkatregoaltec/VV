@@ -15,6 +15,7 @@
 	import PageHeader from '$lib/components/dashboard/PageHeader.svelte';
 	import AppShell from '$lib/components/layout/AppShell.svelte';
 	import Grid from '$lib/components/layout/Grid.svelte';
+	import { authStore } from '$lib/stores/auth.svelte';
 
 	let Line: any;
 	let chartReady = false;
@@ -26,7 +27,7 @@
 		chartReady = true;
 	});
 
-	let username = 'Kian';
+	let username = authStore.user?.first_name;
 
 	function handleChatSubmit(value: string) {
 		console.log('Submitted:', value);
@@ -80,7 +81,7 @@
 </script>
 
 <AppShell showFilters={false}>
-    <div class="max-w-7xl mx-auto px-4 py-8">
+    <div class="max-w-7xl mx-auto px-4 py-8 bg-background">
 
 	<PageHeader title="Welcome, {username}!" subtitle="Your property dashboard" />
 
