@@ -2,7 +2,7 @@ import { api } from './client';
 
 export interface Developer {
     developer_id: number;
-    developer_name: string;
+    developer_name_en: string | null;
     phone?: string;
     webpage?: string;
     total: number;
@@ -24,14 +24,14 @@ export interface DeveloperCountResponse {
 
 export interface Project {
     project_id: number;
-    project_name: string;
+    project_name: string | null;
     project_status?: string;
     percent_completed?: number;
     project_start_date?: string;
     project_end_date?: string;
     completion_date?: string;
     cancellation_date?: string;
-    project_description?: string;
+    project_description_en?: string;
     area_name?: string;
     no_of_buildings?: number;
     no_of_units?: number;
