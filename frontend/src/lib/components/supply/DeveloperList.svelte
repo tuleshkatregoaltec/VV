@@ -175,7 +175,7 @@
                             onclick={() => selectedId = dev.developer_id}
                         >
                             <div class="flex items-center justify-between">
-                                <span class="font-medium text-gray-900 truncate pr-2">{dev.developer_name}</span>
+                                <span class="font-medium text-gray-900 truncate pr-2">{dev.developer_name_en ?? 'Unknown'}</span>
                                 {#if dev.active > 0}
                                     <span class="flex-shrink-0 px-2 py-0.5 text-xs rounded-full bg-blue-100 text-blue-700">
                                         {dev.active} active

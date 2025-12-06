@@ -5,6 +5,7 @@
 		columns = [],
 		data = [],
 		emptyMessage = 'No data available',
+		loading = false,
 		onrowclick
 	}: {
 		columns?: Array<{
@@ -18,6 +19,7 @@
 		}>;
 		data?: Array<Record<string, any>>;
 		emptyMessage?: string;
+		loading?: boolean;
 		onrowclick?: (row: any) => void;
 	} = $props();
 
@@ -71,7 +73,16 @@
         </tr>
       </thead>
       <tbody class="divide-y divide-gray-200">
-        {#if data.length === 0}
+        {#if loading}
+          <tr>
+            <td colspan={visibleColumns.length} class="px-6 py-16 text-center">
+              <div class="flex flex-col items-center gap-3">
+                <div class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                <span class="text-gray-500 text-sm">Loading...</span>
+              </div>
+            </td>
+          </tr>
+        {:else if data.length === 0}
           <tr>
             <td colspan={visibleColumns.length} class="px-6 py-12 text-center text-gray-500">
               {emptyMessage}

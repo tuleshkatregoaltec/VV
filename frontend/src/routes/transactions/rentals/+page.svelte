@@ -3,283 +3,270 @@
   import { createQuery } from '@tanstack/svelte-query';
   import DataPanel from '$lib/components/transactions/DataPanel.svelte';
   import FilterPanel from '$lib/components/filters/FilterPanel.svelte';
-  import TransactionPagination from '$lib/components/transactions/TransactionPagination.svelte';
+  import Pagination from '$lib/components/ui/Pagination.svelte';
   import { transactions as api, filters } from '$lib/api';
-  import type { Transaction, FilterOptions } from '$lib/api/types';
-  import { propertyType, masterProject, timeframe } from '$lib/components/filters/globalFilters.svelte';
+  import type { RentalContract } from '$lib/api/types';
+  import { masterProject, timeframe } from '$lib/components/filters/globalFilters.svelte';
   import {
-    PROPERTY_USAGE,
-    RESIDENTIAL_COLUMNS,
-    COMMERCIAL_COLUMNS,
     TIMEFRAME_MAPPING,
     DEFAULT_ITEMS_PER_PAGE
   } from '$lib/constants/transactions';
   import type { FilterDefinition } from '$lib/types/filters';
 
-  interface TransformedTransaction {
+  interface TransformedRental {
     date: string;
     project: string;
-    building: string;
     propertyType: string;
     propertySubType: string;
-    bedrooms: string;
+    tenantType: string;
     area: number;
-    price: number;
-    pricePerSqFt: number;
+    annualRent: number;
     registration: string;
     area_name: string;
   }
 
+  // Column configuration for rentals
+  const RENTAL_COLUMNS = [
+    { id: 'date', label: 'Start Date', align: 'left' as const },
+    { id: 'area_name', label: 'Area', align: 'left' as const },
+    { id: 'project', label: 'Project', align: 'left' as const },
+    { id: 'propertyType', label: 'Property Type', align: 'left' as const },
+    { id: 'propertySubType', label: 'Sub Type', align: 'left' as const },
+    { id: 'tenantType', label: 'Tenant Type', align: 'left' as const, badge: true },
+    { id: 'area', label: 'Area (sq.ft)', align: 'right' as const, format: (val: number) => val.toLocaleString() },
+    { id: 'annualRent', label: 'Annual Rent (AED)', align: 'right' as const, highlighted: true, format: (val: number) => val.toLocaleString() },
+    { id: 'registration', label: 'Reg Type', align: 'left' as const }
+  ];
+
+  // Dropdown context for filter panel
   let openDropdownId = $state<string | null>(null);
   setContext('openDropdownId', {
     get value() { return openDropdownId; },
     set value(v: string | null) { openDropdownId = v; }
   });
 
-  const CACHE_SIZE = 250;
+  // State
   let currentPage = $state(1);
 
   let localFilters = $state({
     selectedProject: 'All',
-    selectedBuilding: 'All',
     selectedPropertyType: 'All',
-    selectedBedroomsOrSubType: 'All',
+    selectedPropertySubType: 'All',
+    selectedTenantType: 'All',
     selectedRegistration: 'All',
     areaRange: { min: '', max: '' },
-    priceRange: { min: '', max: '' },
-    pricePerSqFtRange: { min: '', max: '' }
+    rentRange: { min: '', max: '' }
   });
 
   // ========================================
-  // TanStack Query Setup
+  // Build API Filters
   // ========================================
-  
-  // Helper to build filters for API
-  function buildAllFilters() {
-    const allFilters: Record<string, any> = {
-      property_usage: propertyType.current,
+  function buildApiFilters() {
+    const apiFilters: Record<string, any> = {
       timeframe_days: TIMEFRAME_MAPPING[timeframe.current],
-      limit: CACHE_SIZE,
-      offset: 0
+      limit: DEFAULT_ITEMS_PER_PAGE,
+      offset: (currentPage - 1) * DEFAULT_ITEMS_PER_PAGE
     };
     
+    // Global filters
     if (masterProject.current !== 'All') {
-      allFilters.master_project = masterProject.current;
+      apiFilters.master_project = masterProject.current;
     }
     
-    // Local filters
+    // Local dropdown filters
     if (localFilters.selectedProject !== 'All') {
-      allFilters.project = localFilters.selectedProject;
-    }
-    if (localFilters.selectedBuilding !== 'All') {
-      allFilters.building = localFilters.selectedBuilding;
+      apiFilters.project = localFilters.selectedProject;
     }
     if (localFilters.selectedPropertyType !== 'All') {
-      allFilters.property_type = localFilters.selectedPropertyType;
+      apiFilters.property_type = localFilters.selectedPropertyType;
     }
-    if (localFilters.selectedBedroomsOrSubType !== 'All') {
-      allFilters.rooms = localFilters.selectedBedroomsOrSubType;
+    if (localFilters.selectedPropertySubType !== 'All') {
+      apiFilters.property_sub_type = localFilters.selectedPropertySubType;
+    }
+    if (localFilters.selectedTenantType !== 'All') {
+      apiFilters.tenant_type = localFilters.selectedTenantType;
     }
     if (localFilters.selectedRegistration !== 'All') {
-      allFilters.registration_type = localFilters.selectedRegistration;
+      apiFilters.contract_reg_type = localFilters.selectedRegistration;
     }
     
-    return allFilters;
+    // Range filters
+    if (localFilters.areaRange.min) {
+      apiFilters.area_min = parseFloat(localFilters.areaRange.min);
+    }
+    if (localFilters.areaRange.max) {
+      apiFilters.area_max = parseFloat(localFilters.areaRange.max);
+    }
+    if (localFilters.rentRange.min) {
+      apiFilters.rent_min = parseFloat(localFilters.rentRange.min);
+    }
+    if (localFilters.rentRange.max) {
+      apiFilters.rent_max = parseFloat(localFilters.rentRange.max);
+    }
+    
+    return apiFilters;
   }
 
-  // Main transactions query - AUTOMATICALLY refetches when queryKey changes!
-  const transactionsQuery = createQuery(() => ({
+  // ========================================
+  // TanStack Query
+  // ========================================
+  
+  // Main rentals query - refetches when any filter or page changes
+  const rentalsQuery = createQuery(() => ({
     queryKey: [
-      'transactions',
-      propertyType.current,
+      'rental-contracts',
       masterProject.current,
       timeframe.current,
+      currentPage,
       localFilters.selectedProject,
-      localFilters.selectedBuilding,
       localFilters.selectedPropertyType,
-      localFilters.selectedBedroomsOrSubType,
+      localFilters.selectedPropertySubType,
+      localFilters.selectedTenantType,
       localFilters.selectedRegistration,
+      localFilters.areaRange.min,
+      localFilters.areaRange.max,
+      localFilters.rentRange.min,
+      localFilters.rentRange.max,
     ],
-    queryFn: async () => {
-      const response = await api.sales(buildAllFilters());
-      return response;
-    },
+    queryFn: () => api.rentals(buildApiFilters()),
   }));
 
-  // Filter options query (cached separately)
+  // Filter options query - context-aware
   const filterOptionsQuery = createQuery(() => ({
-    queryKey: ['filterOptions', 'sales'],
-    queryFn: () => filters.sales(),
-    staleTime: 24 * 60 * 60 * 1000, // 24 hours
+    queryKey: ['filterOptions', 'rentals', masterProject.current, timeframe.current],
+    queryFn: () => filters.rentals({
+      master_project: masterProject.current !== 'All' ? masterProject.current : undefined,
+      timeframe_days: TIMEFRAME_MAPPING[timeframe.current]
+    }),
+    staleTime: 5 * 60 * 1000, // 5 minutes
   }));
 
   // ========================================
   // Derived Values
   // ========================================
   
-  let columns = $derived(
-    propertyType.current === PROPERTY_USAGE.RESIDENTIAL ? RESIDENTIAL_COLUMNS : COMMERCIAL_COLUMNS
-  );
+  // Filter definitions - show immediately, options load async
+  const opts = $derived(filterOptionsQuery.data);
+  let filterDefinitions = $derived<FilterDefinition[]>(filterOptionsQuery.data ? [
+    { id: 'selectedProject', label: 'Project', type: 'searchable', options: ['All', ...(opts?.projects ?? [])] },
+    { id: 'selectedPropertyType', label: 'Property Type', type: 'standard', options: ['All', ...(opts?.property_types ?? [])] },
+    { id: 'selectedPropertySubType', label: 'Sub Type', type: 'standard', options: ['All', ...(opts?.property_sub_types ?? [])] },
+    { id: 'selectedTenantType', label: 'Tenant Type', type: 'standard', options: ['All', ...(opts?.tenant_types ?? [])] },
+    { id: 'selectedRegistration', label: 'Reg Type', type: 'standard', options: ['All', ...(opts?.contract_reg_types ?? [])] },
+    { id: 'areaRange', label: 'Area (sq.ft)', type: 'price-range', placeholderMin: 'Min', placeholderMax: 'Max' },
+    { id: 'rentRange', label: 'Annual Rent (AED)', type: 'price-range', placeholderMin: 'Min', placeholderMax: 'Max' }
+  ] : []);
 
-  let filterDefinitions = $derived<FilterDefinition[]>(
-    filterOptionsQuery.data ? [
-      { id: 'selectedProject', label: 'Project', type: 'searchable', options: ['All', ...filterOptionsQuery.data.projects] },
-      { id: 'selectedBuilding', label: 'Building', type: 'searchable', options: ['All', ...filterOptionsQuery.data.buildings] },
-      { id: 'selectedPropertyType', label: 'Property Type', type: 'standard', options: ['All', ...filterOptionsQuery.data.property_types] },
-      { 
-        id: 'selectedBedroomsOrSubType', 
-        label: propertyType.current === PROPERTY_USAGE.RESIDENTIAL ? 'Bedrooms' : 'Property Sub Type', 
-        type: 'standard', 
-        options: ['All', ...(propertyType.current === PROPERTY_USAGE.RESIDENTIAL ? filterOptionsQuery.data.rooms : filterOptionsQuery.data.property_sub_types)]
-      },
-      { id: 'selectedRegistration', label: 'Registration', type: 'standard', options: ['All', ...filterOptionsQuery.data.registration_types] },
-      { id: 'areaRange', label: 'Area (sq.ft)', type: 'price-range', placeholderMin: 'Min', placeholderMax: 'Max' },
-      { id: 'priceRange', label: 'Price (AED)', type: 'price-range', placeholderMin: 'Min', placeholderMax: 'Max' },
-      { id: 'pricePerSqFtRange', label: 'Price/sq.ft (AED)', type: 'price-range', placeholderMin: 'Min', placeholderMax: 'Max' }
-    ] : []
-  );
-
-  function transformTransaction(t: Transaction): TransformedTransaction {
+  function transformRental(r: RentalContract): TransformedRental {
     return {
-      date: t.instance_date ?? '-',
-      area_name: t.area_name ?? '-',
-      project: t.project_name ?? '-',
-      building: t.building_name ?? '-',
-      propertyType: t.property_type ?? '-',
-      propertySubType: t.property_sub_type ?? '-',
-      bedrooms: t.rooms_description ?? '-',
-      area: t.procedure_area ?? 0,
-      price: t.actual_worth ?? 0,
-      pricePerSqFt: t.meter_sale_price ?? 0,
-      registration: t.reg_type ?? '-',
+      date: r.contract_start_date ?? '-',
+      area_name: r.area_name_en ?? '-',
+      project: r.project_name_en ?? '-',
+      propertyType: r.ejari_property_type_en ?? '-',
+      propertySubType: r.ejari_property_sub_type_en ?? '-',
+      tenantType: r.tenant_type_en ?? '-',
+      area: r.actual_area ?? 0,
+      annualRent: r.annual_amount ?? 0,
+      registration: r.contract_reg_type_en ?? '-',
     };
   }
 
-  // Transform and filter data client-side for instant UX
-  let transformedCache = $derived(
-    transactionsQuery.data?.transactions.map(transformTransaction) ?? []
+  let displayData = $derived(
+    rentalsQuery.data?.contracts.map(transformRental) ?? []
   );
 
-  let displayData = $derived.by(() => {
-    return transformedCache.filter((t) => {
-      // Client-side range filters only (server handles dropdowns)
-      if (localFilters.areaRange.min && t.area < parseFloat(localFilters.areaRange.min)) return false;
-      if (localFilters.areaRange.max && t.area > parseFloat(localFilters.areaRange.max)) return false;
-      if (localFilters.priceRange.min && t.price < parseFloat(localFilters.priceRange.min)) return false;
-      if (localFilters.priceRange.max && t.price > parseFloat(localFilters.priceRange.max)) return false;
-      if (localFilters.pricePerSqFtRange.min && t.pricePerSqFt < parseFloat(localFilters.pricePerSqFtRange.min)) return false;
-      if (localFilters.pricePerSqFtRange.max && t.pricePerSqFt > parseFloat(localFilters.pricePerSqFtRange.max)) return false;
-      
-      return true;
-    });
-  });
-
-  let totalRecords = $derived(transactionsQuery.data?.total ?? 0);
+  let totalRecords = $derived(rentalsQuery.data?.total ?? 0);
   let totalPages = $derived(Math.ceil(totalRecords / DEFAULT_ITEMS_PER_PAGE));
-  
-  let paginatedData = $derived(
-    displayData.slice((currentPage - 1) * DEFAULT_ITEMS_PER_PAGE, currentPage * DEFAULT_ITEMS_PER_PAGE)
-  );
 
   // ========================================
-  // Helper Functions
+  // Actions
   // ========================================
   
   function resetFilters() {
     localFilters = {
       selectedProject: 'All',
-      selectedBuilding: 'All',
       selectedPropertyType: 'All',
-      selectedBedroomsOrSubType: 'All',
+      selectedPropertySubType: 'All',
+      selectedTenantType: 'All',
       selectedRegistration: 'All',
       areaRange: { min: '', max: '' },
-      priceRange: { min: '', max: '' },
-      pricePerSqFtRange: { min: '', max: '' }
+      rentRange: { min: '', max: '' }
     };
     currentPage = 1;
-    // TanStack Query automatically refetches when queryKey changes!
   }
 
-  function handleRowClick(row: TransformedTransaction) {
-    console.log('Transaction clicked:', row);
+  function handleRowClick(row: TransformedRental) {
+    console.log('Contract clicked:', row);
   }
 
-  // Reset page when filters change
+  // Create a derived string for filter comparison
+  let filterKey = $derived(JSON.stringify(localFilters));
+  
+  // Track previous filter key
+  let lastFilterKey = '';
+  
+  // Reset to page 1 when filters change
   $effect(() => {
-    const _ = [
-      localFilters.selectedProject,
-      localFilters.selectedBuilding,
-      localFilters.selectedPropertyType,
-      localFilters.selectedBedroomsOrSubType,
-      localFilters.selectedRegistration,
-    ];
+    if (filterKey !== lastFilterKey) {
+      if (lastFilterKey !== '') {
+        // Only reset page after initial load
+        currentPage = 1;
+      }
+      lastFilterKey = filterKey;
+    }
+  });
+
+  // Reset page on global filter changes
+  $effect(() => {
+    const _ = [masterProject.current, timeframe.current];
     currentPage = 1;
+    resetFilters();
   });
 </script>
 
 <div class="min-h-screen bg-background">
   <div class="max-w-7xl mx-auto px-0 sm:px-1 lg:px-1 py-8">
-    {#if transactionsQuery.isPending}
-      <div class="flex items-center justify-center py-20">
-        <div class="text-center">
-          <div class="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
-          <p class="mt-4 text-gray-600">Loading transactions...</p>
-          <p class="mt-2 text-sm text-gray-500">Fetching {CACHE_SIZE} records...</p>
-        </div>
-      </div>
-    {:else if transactionsQuery.isError}
-      <div class="bg-red-50 border border-red-200 rounded-lg p-6 text-center">
+    {#if rentalsQuery.isError}
+      <div class="bg-red-50 border border-red-200 rounded-lg p-6 text-center mb-6">
         <p class="text-red-800 font-semibold">Error loading data</p>
-        <p class="text-red-600 mt-2">{transactionsQuery.error.message}</p>
+        <p class="text-red-600 mt-2">{rentalsQuery.error.message}</p>
         <button
-          onclick={() => transactionsQuery.refetch()}
+          onclick={() => rentalsQuery.refetch()}
           class="mt-4 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
         >
           Retry
         </button>
       </div>
-    {:else}
-      <div class="mb-4 flex justify-between items-center">
-        <span class="text-sm text-gray-600">
-          Showing {displayData.length.toLocaleString()} of {transformedCache.length.toLocaleString()} cached
-          <span class="text-gray-400">({totalRecords.toLocaleString()} total in DB)</span>
-        </span>
-        
-        <div class="flex items-center gap-3">
-          {#if transactionsQuery.isFetching}
-            <span class="text-xs text-blue-600 animate-pulse">• Refetching...</span>
-          {/if}
-          
-          <button
-            onclick={() => transactionsQuery.refetch()}
-            disabled={transactionsQuery.isFetching}
-            class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 text-sm"
-          >
-            {transactionsQuery.isFetching ? 'Loading...' : 'Refresh Data'}
-          </button>
-        </div>
-      </div>
+    {/if}
 
+    {#if filterOptionsQuery.isPending}
+      <div class="flex items-center justify-center py-12">
+        <div class="inline-block animate-spin rounded-full h-10 w-10 border-b-2 border-primary"></div>
+        <span class="ml-4 text-gray-500">Loading filters...</span>
+      </div>
+    {:else}
       <FilterPanel
         {filterDefinitions}
         bind:filters={localFilters}
         onReset={resetFilters}
       />
-
-      <DataPanel 
-        {columns} 
-        data={paginatedData} 
-        onrowclick={handleRowClick} 
-      />
-
-      <div class="mt-6">
-        <TransactionPagination
-          bind:currentPage
-          {totalPages}
-          {totalRecords}
-          itemsPerPage={DEFAULT_ITEMS_PER_PAGE}
-        />
-      </div>
     {/if}
+
+    <DataPanel 
+      columns={RENTAL_COLUMNS} 
+      data={displayData} 
+      onrowclick={handleRowClick}
+      loading={rentalsQuery.isPending || rentalsQuery.isFetching}
+    />
+
+    <div class="mt-6">
+      <Pagination
+        bind:currentPage
+        {totalPages}
+        totalItems={totalRecords}
+        itemsPerPage={DEFAULT_ITEMS_PER_PAGE}
+        itemLabel="contracts"
+      />
+    </div>
   </div>
 </div>

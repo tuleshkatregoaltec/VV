@@ -30,11 +30,24 @@ def apply_sales_filters(base_where: List[Any], **filters) -> List[Any]:
         "property_sub_type": Transaction.property_sub_type_en,
         "registration_type": Transaction.reg_type_en,
     }
+    
+    # Range filter mappings
+    range_filters = {
+        "area_min": lambda v: Transaction.procedure_area >= v,
+        "area_max": lambda v: Transaction.procedure_area <= v,
+        "price_min": lambda v: Transaction.actual_worth >= v,
+        "price_max": lambda v: Transaction.actual_worth <= v,
+        "price_sqft_min": lambda v: Transaction.meter_sale_price >= v,
+        "price_sqft_max": lambda v: Transaction.meter_sale_price <= v,
+    }
+    
     for key, value in filters.items():
         if value is not None:
             if key == "timeframe_days":
                 base_where.append(filter_mapping[key](value))
-            else:
+            elif key in range_filters:
+                base_where.append(range_filters[key](value))
+            elif key in filter_mapping:
                 base_where.append(filter_mapping[key] == value)
     return base_where
 
@@ -51,11 +64,22 @@ def apply_rental_filters(base_where: List[Any], **filters) -> List[Any]:
         "tenant_type": RentContract.tenant_type_en,
         "contract_reg_type": RentContract.contract_reg_type_en,
     }
+    
+    # Range filter mappings for rentals
+    range_filters = {
+        "area_min": lambda v: RentContract.actual_area >= v,
+        "area_max": lambda v: RentContract.actual_area <= v,
+        "rent_min": lambda v: RentContract.annual_amount >= v,
+        "rent_max": lambda v: RentContract.annual_amount <= v,
+    }
+    
     for key, value in filters.items():
         if value is not None:
             if key == "timeframe_days":
                 base_where.append(filter_mapping[key](value))
-            else:
+            elif key in range_filters:
+                base_where.append(range_filters[key](value))
+            elif key in filter_mapping:
                 base_where.append(filter_mapping[key] == value)
     return base_where
 

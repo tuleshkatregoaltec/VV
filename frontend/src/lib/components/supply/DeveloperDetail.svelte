@@ -45,7 +45,7 @@
         </div>
     {:else}
         <div class="px-6 py-4 border-b border-gray-200 bg-gray-50">
-            <h2 class="text-lg font-semibold text-gray-900">{developer.developer_name}</h2>
+            <h2 class="text-lg font-semibold text-gray-900">{developer.developer_name_en ?? 'Unknown'}</h2>
             {#if developer.phone}<p class="text-sm text-gray-500">{developer.phone}</p>{/if}
             {#if developer.webpage}
                 <a href={developer.webpage} target="_blank" class="text-sm text-primary hover:underline">{developer.webpage}</a>

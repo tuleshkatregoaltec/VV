@@ -40,6 +40,13 @@ async def get_sales_transactions(
     rooms: str = Query(default=None),
     property_sub_type: str = Query(default=None),
     registration_type: str = Query(default=None),
+    # Range filters
+    area_min: float = Query(default=None),
+    area_max: float = Query(default=None),
+    price_min: float = Query(default=None),
+    price_max: float = Query(default=None),
+    price_sqft_min: float = Query(default=None),
+    price_sqft_max: float = Query(default=None),
     session: AsyncSession = Depends(get_db_session),
 ):
     return await fetch_sales_transactions(
@@ -56,6 +63,12 @@ async def get_sales_transactions(
         rooms=rooms,
         property_sub_type=property_sub_type,
         registration_type=registration_type,
+        area_min=area_min,
+        area_max=area_max,
+        price_min=price_min,
+        price_max=price_max,
+        price_sqft_min=price_sqft_min,
+        price_sqft_max=price_sqft_max,
     )
 
 
@@ -74,6 +87,11 @@ async def get_rental_contracts(
     property_sub_type: str = Query(default=None),
     tenant_type: str = Query(default=None),
     contract_reg_type: str = Query(default=None),
+    # Range filters
+    area_min: float = Query(default=None),
+    area_max: float = Query(default=None),
+    rent_min: float = Query(default=None),
+    rent_max: float = Query(default=None),
     session: AsyncSession = Depends(get_db_session),
 ):
     return await fetch_rental_contracts(
@@ -87,4 +105,8 @@ async def get_rental_contracts(
         property_sub_type=property_sub_type,
         tenant_type=tenant_type,
         contract_reg_type=contract_reg_type,
+        area_min=area_min,
+        area_max=area_max,
+        rent_min=rent_min,
+        rent_max=rent_max,
     )

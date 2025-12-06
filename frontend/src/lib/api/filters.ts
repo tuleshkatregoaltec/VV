@@ -1,7 +1,6 @@
 import { api } from './client';
 import type { FilterOptions } from './types';
 
-const CACHE_KEY = 'filters';
 const MASTER_PROJECTS_KEY = 'master_projects';
 const HOURS = 24;
 
@@ -27,6 +26,17 @@ const cache = {
     }
 };
 
+function buildQuery(filters: Record<string, any>): string {
+    const params = new URLSearchParams();
+    Object.entries(filters).forEach(([k, v]) => {
+        if (v !== undefined && v !== null && v !== 'All') {
+            params.append(k, String(v));
+        }
+    });
+    const qs = params.toString();
+    return qs ? `?${qs}` : '';
+}
+
 export const filters = {
     async masterProjects(): Promise<string[]> {
         const cached = cache.get(MASTER_PROJECTS_KEY) as string[] | null;
@@ -37,26 +47,19 @@ export const filters = {
         return data;
     },
     
-    async sales(query = ''): Promise<FilterOptions> {
-        const cached = cache.get(CACHE_KEY) as FilterOptions | null;
-        if (cached) return cached;
-        
-        const data = await api<FilterOptions>(`/api/v1/filters/sales${query}`);
-        cache.set(CACHE_KEY, data);
-        return data;
+    async sales(filterParams: Record<string, any> = {}): Promise<FilterOptions> {
+        // No caching for dynamic filter options - they depend on current filters
+        const query = buildQuery(filterParams);
+        return api<FilterOptions>(`/api/v1/filters/sales${query}`);
     },
     
-    async rentals(query = ''): Promise<FilterOptions> {
-        const cached = cache.get(CACHE_KEY) as FilterOptions | null;
-        if (cached) return cached;
-        
-        const data = await api<FilterOptions>(`/api/v1/filters/rentals${query}`);
-        cache.set(CACHE_KEY, data);
-        return data;
+    async rentals(filterParams: Record<string, any> = {}): Promise<FilterOptions> {
+        // No caching for dynamic filter options - they depend on current filters
+        const query = buildQuery(filterParams);
+        return api<FilterOptions>(`/api/v1/filters/rentals${query}`);
     },
     
     clearCache: () => {
-        cache.clear(CACHE_KEY);
         cache.clear(MASTER_PROJECTS_KEY);
     }
 };
