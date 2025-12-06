@@ -67,7 +67,7 @@ async def compute_sales_summary(session: AsyncSession) -> int:
             )
             SELECT
                 {timeframe} as timeframe_days,
-                property_usage,
+                property_usage_en,
                 NULL as dimension,
                 NULL as dimension_value,
                 COUNT(*) as transaction_count,
@@ -85,9 +85,9 @@ async def compute_sales_summary(session: AsyncSession) -> int:
             FROM transactions
             WHERE instance_date >= CURRENT_DATE - INTERVAL '{timeframe} days'
               AND instance_date < CURRENT_DATE
-              AND property_usage IS NOT NULL
-              AND trans_group = 'Sales'
-            GROUP BY property_usage
+              AND property_usage_en IS NOT NULL
+              AND trans_group_en = 'Sales'
+            GROUP BY property_usage_en
         """)
         result = await session.execute(base_query)
         rows_inserted += result.rowcount
@@ -100,28 +100,28 @@ async def compute_sales_summary(session: AsyncSession) -> int:
                 prev_total_volume = sub.vol
             FROM (
                 SELECT
-                    property_usage,
+                    property_usage_en,
                     COUNT(*) as cnt,
                     COALESCE(SUM(actual_worth), 0) as vol
                 FROM transactions
                 WHERE instance_date >= CURRENT_DATE - INTERVAL '{timeframe * 2} days'
                   AND instance_date < CURRENT_DATE - INTERVAL '{timeframe} days'
-                  AND property_usage IS NOT NULL
-                  AND trans_group = 'Sales'
-                GROUP BY property_usage
+                  AND property_usage_en IS NOT NULL
+                  AND trans_group_en = 'Sales'
+                GROUP BY property_usage_en
             ) sub
             WHERE s.timeframe_days = {timeframe}
               AND s.dimension IS NULL
-              AND s.property_usage = sub.property_usage
+              AND s.property_usage = sub.property_usage_en
         """)
         await session.execute(prev_update)
 
         # Dimension breakdowns
         dimensions = [
-            ("property_type", "property_type"),
-            ("rooms", "rooms_description"),
-            ("reg_type", "reg_type"),
-            ("master_project", "master_project"),
+            ("property_type", "property_type_en"),
+            ("rooms", "rooms_en"),
+            ("reg_type", "reg_type_en"),
+            ("master_project", "master_project_en"),
         ]
 
         for dim_name, dim_column in dimensions:
@@ -133,7 +133,7 @@ async def compute_sales_summary(session: AsyncSession) -> int:
                 )
                 SELECT
                     {timeframe} as timeframe_days,
-                    property_usage,
+                    property_usage_en,
                     '{dim_name}' as dimension,
                     {dim_column} as dimension_value,
                     COUNT(*) as transaction_count,
@@ -151,11 +151,11 @@ async def compute_sales_summary(session: AsyncSession) -> int:
                 FROM transactions
                 WHERE instance_date >= CURRENT_DATE - INTERVAL '{timeframe} days'
                   AND instance_date < CURRENT_DATE
-                  AND property_usage IS NOT NULL
+                  AND property_usage_en IS NOT NULL
                   AND {dim_column} IS NOT NULL
                   AND {dim_column} != ''
-                  AND trans_group = 'Sales'
-                GROUP BY property_usage, {dim_column}
+                  AND trans_group_en = 'Sales'
+                GROUP BY property_usage_en, {dim_column}
             """)
             result = await session.execute(dim_query)
             rows_inserted += result.rowcount
@@ -182,7 +182,7 @@ async def compute_sales_trends(session: AsyncSession) -> int:
         )
         SELECT
             instance_date as trend_date,
-            property_usage,
+            property_usage_en,
             'sales' as trend_type,
             COUNT(*) as count,
             COALESCE(SUM(actual_worth), 0) as total_value,
@@ -194,9 +194,9 @@ async def compute_sales_trends(session: AsyncSession) -> int:
         FROM transactions
         WHERE instance_date >= CURRENT_DATE - INTERVAL '365 days'
           AND instance_date < CURRENT_DATE
-          AND property_usage IS NOT NULL
-          AND trans_group = 'Sales'
-        GROUP BY instance_date, property_usage
+          AND property_usage_en IS NOT NULL
+          AND trans_group_en = 'Sales'
+        GROUP BY instance_date, property_usage_en
         ORDER BY instance_date
     """)
 
@@ -232,7 +232,7 @@ async def compute_rentals_summary(session: AsyncSession) -> int:
             )
             SELECT
                 {timeframe} as timeframe_days,
-                property_usage,
+                property_usage_en,
                 NULL as dimension,
                 NULL as dimension_value,
                 COUNT(*) as contract_count,
@@ -250,8 +250,8 @@ async def compute_rentals_summary(session: AsyncSession) -> int:
             FROM rent_contracts
             WHERE contract_start_date >= CURRENT_DATE - INTERVAL '{timeframe} days'
               AND contract_start_date < CURRENT_DATE
-              AND property_usage IS NOT NULL
-            GROUP BY property_usage
+              AND property_usage_en IS NOT NULL
+            GROUP BY property_usage_en
         """)
         result = await session.execute(base_query)
         rows_inserted += result.rowcount
@@ -264,25 +264,25 @@ async def compute_rentals_summary(session: AsyncSession) -> int:
                 prev_total_annual_value = sub.vol
             FROM (
                 SELECT
-                    property_usage,
+                    property_usage_en,
                     COUNT(*) as cnt,
                     COALESCE(SUM(annual_amount), 0) as vol
                 FROM rent_contracts
                 WHERE contract_start_date >= CURRENT_DATE - INTERVAL '{timeframe * 2} days'
                   AND contract_start_date < CURRENT_DATE - INTERVAL '{timeframe} days'
-                  AND property_usage IS NOT NULL
-                GROUP BY property_usage
+                  AND property_usage_en IS NOT NULL
+                GROUP BY property_usage_en
             ) sub
             WHERE s.timeframe_days = {timeframe}
               AND s.dimension IS NULL
-              AND s.property_usage = sub.property_usage
+              AND s.property_usage = sub.property_usage_en
         """)
         await session.execute(prev_update)
 
         # Dimension breakdowns
         dimensions = [
-            ("property_type", "ejari_property_type"),
-            ("master_project", "master_project"),
+            ("property_type", "ejari_property_type_en"),
+            ("master_project", "master_project_en"),
         ]
 
         for dim_name, dim_column in dimensions:
@@ -294,7 +294,7 @@ async def compute_rentals_summary(session: AsyncSession) -> int:
                 )
                 SELECT
                     {timeframe} as timeframe_days,
-                    property_usage,
+                    property_usage_en,
                     '{dim_name}' as dimension,
                     {dim_column} as dimension_value,
                     COUNT(*) as contract_count,
@@ -312,10 +312,10 @@ async def compute_rentals_summary(session: AsyncSession) -> int:
                 FROM rent_contracts
                 WHERE contract_start_date >= CURRENT_DATE - INTERVAL '{timeframe} days'
                   AND contract_start_date < CURRENT_DATE
-                  AND property_usage IS NOT NULL
+                  AND property_usage_en IS NOT NULL
                   AND {dim_column} IS NOT NULL
                   AND {dim_column} != ''
-                GROUP BY property_usage, {dim_column}
+                GROUP BY property_usage_en, {dim_column}
             """)
             result = await session.execute(dim_query)
             rows_inserted += result.rowcount
@@ -342,7 +342,7 @@ async def compute_rentals_trends(session: AsyncSession) -> int:
         )
         SELECT
             contract_start_date as trend_date,
-            property_usage,
+            property_usage_en,
             'rentals' as trend_type,
             COUNT(*) as count,
             COALESCE(SUM(annual_amount), 0) as total_value,
@@ -354,8 +354,8 @@ async def compute_rentals_trends(session: AsyncSession) -> int:
         FROM rent_contracts
         WHERE contract_start_date >= CURRENT_DATE - INTERVAL '365 days'
           AND contract_start_date < CURRENT_DATE
-          AND property_usage IS NOT NULL
-        GROUP BY contract_start_date, property_usage
+          AND property_usage_en IS NOT NULL
+        GROUP BY contract_start_date, property_usage_en
         ORDER BY contract_start_date
     """)
 
