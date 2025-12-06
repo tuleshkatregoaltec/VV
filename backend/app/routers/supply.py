@@ -3,8 +3,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from typing import List, Literal
 
 from backend.app.db.session import get_db_session
-from backend.app.services.auth_service import get_current_user
-from backend.app.db.models import User
+from backend.app.routers.dependencies import require_auth
 from backend.app.core.decorators import cached_endpoint
 from backend.app.schemas.supply import (
     DeveloperResponse,
@@ -21,14 +20,17 @@ from backend.app.services.supply_service import (
     get_project_by_id,
 )
 
-router = APIRouter(prefix="/supply", tags=["supply"])
+router = APIRouter(
+    prefix="/api/v1/supply",
+    tags=["supply"],
+    dependencies=[Depends(require_auth)],
+)
 
 
 @router.get("/developers/count", response_model=DeveloperCountResponse)
 @cached_endpoint(prefix="developers_count", expire=300)
 async def count_developers(
     session: AsyncSession = Depends(get_db_session),
-    current_user: User = Depends(get_current_user),
 ):
     """Get total count of developers."""
     total = await get_developer_count(session)
@@ -41,7 +43,6 @@ async def list_developers(
     limit: int = Query(default=50, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
     session: AsyncSession = Depends(get_db_session),
-    current_user: User = Depends(get_current_user),
 ):
     """Get developers with pagination, sorted by specified criteria.
 
@@ -82,7 +83,6 @@ async def list_developers(
 async def list_developer_projects(
     developer_id: int,
     session: AsyncSession = Depends(get_db_session),
-    current_user: User = Depends(get_current_user),
 ):
     """Get projects for a developer, active first."""
     projects = await get_projects_by_developer(session, developer_id)
@@ -94,7 +94,6 @@ async def list_developer_projects(
 async def get_project(
     project_id: int,
     session: AsyncSession = Depends(get_db_session),
-    current_user: User = Depends(get_current_user),
 ):
     project = await get_project_by_id(session, project_id)
     if not project:

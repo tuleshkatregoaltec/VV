@@ -5,7 +5,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from backend.app.db.session import get_db_session
 from backend.app.db.models.transactions import Transaction
-from backend.app.routers.dependencies import get_current_user
+from backend.app.routers.dependencies import require_auth
 from backend.app.core.decorators import cached_endpoint
 from backend.app.schemas.transactions import FilterOptionsResponse
 from backend.app.services.transactions_service import (
@@ -14,7 +14,11 @@ from backend.app.services.transactions_service import (
     get_distinct_values,
 )
 
-router = APIRouter(prefix="/filters", dependencies=[Depends(get_current_user)])
+router = APIRouter(
+    prefix="/api/v1/filters",
+    tags=["filters"],
+    dependencies=[Depends(require_auth)],
+)
 
 
 @router.get("/master-projects")

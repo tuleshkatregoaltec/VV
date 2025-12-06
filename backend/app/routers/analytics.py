@@ -27,7 +27,11 @@ from backend.app.services.analytics_service import (
     fetch_rentals_by_area,
 )
 
-router = APIRouter(prefix="/analytics", tags=["analytics"])
+router = APIRouter(
+    prefix="/api/v1/analytics",
+    tags=["analytics"],
+    dependencies=[Depends(require_auth)],
+)
 
 
 # =============================================================================
@@ -40,7 +44,6 @@ async def get_sales_analytics(
     property_usage: str = Query(default="Residential"),
     timeframe_days: int = Query(default=30),
     master_project: str = Query(default=None),
-    current_user: dict = Depends(require_auth),
     session: AsyncSession = Depends(get_db_session),
 ):
     """Get complete sales analytics for dashboard.
@@ -61,7 +64,6 @@ async def get_sales_analytics(
 async def get_rental_analytics(
     property_usage: str = Query(default="Residential"),
     timeframe_days: int = Query(default=30),
-    current_user: dict = Depends(require_auth),
     session: AsyncSession = Depends(get_db_session),
 ):
     """Get complete rental analytics for dashboard.
@@ -86,7 +88,6 @@ async def get_rental_analytics(
 async def get_sales_summary(
     property_usage: str = Query(default="Residential"),
     timeframe_days: int = Query(default=30, ge=7, le=365),
-    current_user: dict = Depends(require_auth),
     session: AsyncSession = Depends(get_db_session),
 ):
     """Get summary KPI statistics for sales analytics."""
@@ -101,7 +102,6 @@ async def get_sales_summary(
 async def get_sales_trends(
     property_usage: str = Query(default="Residential"),
     timeframe_days: int = Query(default=30, ge=7, le=365),
-    current_user: dict = Depends(require_auth),
     session: AsyncSession = Depends(get_db_session),
 ):
     """Get daily trend data for sales analytics charts."""
@@ -117,7 +117,6 @@ async def get_sales_by_area(
     property_usage: str = Query(default="Residential"),
     timeframe_days: int = Query(default=30, ge=7, le=365),
     limit: int = Query(default=10, ge=1, le=50),
-    current_user: dict = Depends(require_auth),
     session: AsyncSession = Depends(get_db_session),
 ):
     """Get sales breakdown by master project (area)."""
@@ -133,7 +132,6 @@ async def get_sales_by_area(
 async def get_rentals_summary(
     property_usage: str = Query(default="Residential"),
     timeframe_days: int = Query(default=30, ge=7, le=365),
-    current_user: dict = Depends(require_auth),
     session: AsyncSession = Depends(get_db_session),
 ):
     """Get summary KPI statistics for rental analytics."""
@@ -148,7 +146,6 @@ async def get_rentals_summary(
 async def get_rentals_trends(
     property_usage: str = Query(default="Residential"),
     timeframe_days: int = Query(default=30, ge=7, le=365),
-    current_user: dict = Depends(require_auth),
     session: AsyncSession = Depends(get_db_session),
 ):
     """Get daily trend data for rental analytics charts."""
@@ -164,7 +161,6 @@ async def get_rentals_by_area(
     property_usage: str = Query(default="Residential"),
     timeframe_days: int = Query(default=30, ge=7, le=365),
     limit: int = Query(default=10, ge=1, le=50),
-    current_user: dict = Depends(require_auth),
     session: AsyncSession = Depends(get_db_session),
 ):
     """Get rental breakdown by master project (area)."""

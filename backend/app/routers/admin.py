@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 
 from backend.app.db.session import get_db_session
 from backend.app.db.models import User
-from backend.app.routers.dependencies import require_auth
+from backend.app.routers.dependencies import require_admin
 
 # Import your service functions
 from backend.app.services.organization_service import (
@@ -26,7 +26,7 @@ from backend.app.schemas.organization import (
 from backend.app.schemas.user import UserUpdateRequest
 
 router = APIRouter(
-    prefix="/api/admin", tags=["admin"], dependencies=[Depends(require_auth)]
+    prefix="/api/v1/admin", tags=["admin"], dependencies=[Depends(require_admin)]
 )
 
 

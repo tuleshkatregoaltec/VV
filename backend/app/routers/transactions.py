@@ -15,7 +15,11 @@ from backend.app.services.transactions_service import (
     fetch_rental_contracts,
 )
 
-router = APIRouter(prefix="/transactions", tags=["transactions"])
+router = APIRouter(
+    prefix="/api/v1/transactions",
+    tags=["transactions"],
+    dependencies=[Depends(require_auth)],
+)
 
 # --- SALES ENDPOINTS ---
 
@@ -36,8 +40,6 @@ async def get_sales_transactions(
     rooms: str = Query(default=None),
     property_sub_type: str = Query(default=None),
     registration_type: str = Query(default=None),
-    # Deps
-    current_user: dict = Depends(require_auth),
     session: AsyncSession = Depends(get_db_session),
 ):
     return await fetch_sales_transactions(
@@ -72,7 +74,6 @@ async def get_rental_contracts(
     property_sub_type: str = Query(default=None),
     tenant_type: str = Query(default=None),
     contract_reg_type: str = Query(default=None),
-    current_user: dict = Depends(require_auth),
     session: AsyncSession = Depends(get_db_session),
 ):
     return await fetch_rental_contracts(

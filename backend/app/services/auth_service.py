@@ -114,6 +114,7 @@ async def handle_callback(
                 "last_name": existing_user.last_name,
                 "organization_id": existing_user.organization_id,
                 "organization_name": organization.name,
+                "role": existing_user.role,
             }
             request.session["access_token"] = auth_response.access_token
             request.session["refresh_token"] = auth_response.refresh_token
@@ -154,6 +155,7 @@ async def handle_callback(
             "last_name": new_user.last_name,
             "organization_id": organization.id,
             "organization_name": organization.name,
+            "role": new_user.role,
         }
         request.session["access_token"] = auth_response.access_token
         request.session["refresh_token"] = auth_response.refresh_token
