@@ -1,17 +1,17 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
-  import { admin, ApiError, type Organisation } from '$lib/api';
+  import { admin, ApiError, type Organization } from '$lib/api';
 
-  let organisations: Organisation[] = [];
+  let organizations: Organization[] = [];
   let loading = true;
   let error = '';
 
-  async function fetchOrganisations() {
+  async function fetchOrganizations() {
     loading = true;
     error = '';
     try {
-      organisations = await admin.organisations.list();
+      organizations = await admin.organizations.list();
     } catch (e) {
       error = e instanceof ApiError ? e.message : 'Failed to fetch organizations';
     } finally {
@@ -19,14 +19,14 @@
     }
   }
 
-  onMount(fetchOrganisations);
+  onMount(fetchOrganizations);
 </script>
 
 <div class="max-w-7xl mx-auto px-4 py-8">
   <div class="flex justify-between items-center mb-6">
-    <h1 class="text-3xl font-bold">Organisations</h1>
+    <h1 class="text-3xl font-bold">Organizations</h1>
     <button
-      onclick={() => goto('/admin/organisations/new')}
+      onclick={() => goto('/admin/organizations/new')}
       class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
     >
       New Organization
@@ -41,7 +41,7 @@
     <div class="bg-red-50 border border-red-200 rounded p-4">
       <p class="text-red-600">{error}</p>
     </div>
-  {:else if organisations.length === 0}
+  {:else if organizations.length === 0}
     <div class="text-center py-12">
       <p class="text-gray-600">No organizations found. Create your first one!</p>
     </div>
@@ -68,7 +68,7 @@
           </tr>
         </thead>
         <tbody class="bg-white divide-y divide-gray-200">
-          {#each organisations as org}
+          {#each organizations as org}
             <tr class="hover:bg-gray-50">
               <td class="px-6 py-4 whitespace-nowrap">
                 <div class="text-sm font-medium text-gray-900">{org.name}</div>
@@ -88,7 +88,7 @@
               </td>
               <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                 <button
-                  onclick={() => goto(`/admin/organisations/${org.id}`)}
+                  onclick={() => goto(`/admin/organizations/${org.id}`)}
                   class="text-blue-600 hover:text-blue-900"
                 >
                   View

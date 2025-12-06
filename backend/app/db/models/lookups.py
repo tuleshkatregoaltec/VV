@@ -23,7 +23,9 @@ class PropertySubType(SQLModel, table=True):
 
     # Primary key
     property_sub_type_id: int = Field(primary_key=True)
-    property_type_id: Optional[int] = Field(default=None, foreign_key="property_types.property_type_id")
+    property_type_id: Optional[int] = Field(
+        default=None, foreign_key="property_types.property_type_id"
+    )
     property_sub_type_ar: Optional[str] = Field(default=None, max_length=255)
     property_sub_type_en: Optional[str] = Field(default=None, max_length=255)
 

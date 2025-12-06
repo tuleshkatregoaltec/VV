@@ -4,7 +4,7 @@ import { http } from './client';
 // Types
 // ============================================================================
 
-export interface Organisation {
+export interface Organization {
     id: string;
     name: string;
     email_domain: string;
@@ -13,7 +13,7 @@ export interface Organisation {
     active_user_count: number;
 }
 
-export interface OrganisationUser {
+export interface OrganizationUser {
     id: string;
     email: string;
     first_name: string;
@@ -23,18 +23,18 @@ export interface OrganisationUser {
     last_login: string | null;
 }
 
-export interface OrganisationDetail {
-    organisation: Organisation;
-    users: OrganisationUser[];
+export interface OrganizationDetail {
+    organization: Organization;
+    users: OrganizationUser[];
 }
 
-export interface CreateOrganisationRequest {
+export interface CreateOrganizationRequest {
     name: string;
     domain: string;
     max_users: number;
 }
 
-export interface UpdateOrganisationRequest {
+export interface UpdateOrganizationRequest {
     max_users?: number;
     is_active?: boolean;
 }
@@ -48,33 +48,33 @@ export interface UpdateUserRequest {
 // ============================================================================
 
 export const admin = {
-    organisations: {
+    organizations: {
         /**
-         * List all organisations
+         * List all organizations
          */
-        list: () => http.get<Organisation[]>('/api/admin/organisations'),
+        list: () => http.get<Organization[]>('/api/admin/organizations'),
 
         /**
-         * Get a single organisation with its users
+         * Get a single organization with its users
          */
-        get: (id: string) => http.get<OrganisationDetail>(`/api/admin/organisations/${id}`),
+        get: (id: string) => http.get<OrganizationDetail>(`/api/admin/organizations/${id}`),
 
         /**
-         * Create a new organisation
+         * Create a new organization
          */
-        create: (data: CreateOrganisationRequest) =>
-            http.post<Organisation>('/api/admin/organisations', data),
+        create: (data: CreateOrganizationRequest) =>
+            http.post<Organization>('/api/admin/organizations', data),
 
         /**
-         * Update an organisation
+         * Update an organization
          */
-        update: (id: string, data: UpdateOrganisationRequest) =>
-            http.put<Organisation>(`/api/admin/organisations/${id}`, data),
+        update: (id: string, data: UpdateOrganizationRequest) =>
+            http.put<Organization>(`/api/admin/organizations/${id}`, data),
 
         /**
-         * Delete an organisation
+         * Delete an organization
          */
-        delete: (id: string) => http.delete<void>(`/api/admin/organisations/${id}`),
+        delete: (id: string) => http.delete<void>(`/api/admin/organizations/${id}`),
     },
 
     users: {
@@ -82,6 +82,6 @@ export const admin = {
          * Update a user's status
          */
         update: (id: string, data: UpdateUserRequest) =>
-            http.put<OrganisationUser>(`/api/admin/users/${id}`, data),
+            http.put<OrganizationUser>(`/api/admin/users/${id}`, data),
     },
 };

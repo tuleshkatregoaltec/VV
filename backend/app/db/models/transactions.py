@@ -208,7 +208,9 @@ class TransactionProcedure(SQLModel, table=True):
 
     # Primary key
     procedure_id: int = Field(primary_key=True)
-    group_id: Optional[int] = Field(default=None, foreign_key="transaction_groups.group_id")
+    group_id: Optional[int] = Field(
+        default=None, foreign_key="transaction_groups.group_id"
+    )
     is_pre_registration: Optional[bool] = Field(default=None)
     name_ar: Optional[str] = Field(default=None, max_length=255)
     name_en: Optional[str] = Field(default=None, max_length=255)

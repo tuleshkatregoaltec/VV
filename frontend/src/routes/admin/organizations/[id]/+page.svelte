@@ -2,10 +2,10 @@
   import { page } from '$app/state';
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
-  import { admin, ApiError, type Organisation, type OrganisationUser } from '$lib/api';
+  import { admin, ApiError, type Organization, type OrganizationUser } from '$lib/api';
 
-  let organisation = $state<Organisation | null>(null);
-  let users = $state<OrganisationUser[]>([]);
+  let organization = $state<Organization | null>(null);
+  let users = $state<OrganizationUser[]>([]);
   let loading = $state(true);
   let error = $state('');
   let saving = $state(false);
@@ -16,7 +16,7 @@
   let max_users = $state(0);
   let is_active = $state(false);
 
-  async function fetchOrganisation() {
+  async function fetchOrganization() {
     loading = true;
     error = '';
     const orgId = page.params.id;
@@ -28,11 +28,11 @@
     }
 
     try {
-      const data = await admin.organisations.get(orgId);
-      organisation = data.organisation;
+      const data = await admin.organizations.get(orgId);
+      organization = data.organization;
       users = data.users;
-      max_users = organisation.max_users;
-      is_active = organisation.is_active;
+      max_users = organization.max_users;
+      is_active = organization.is_active;
     } catch (e) {
       error = e instanceof ApiError ? e.message : 'Failed to fetch organization';
     } finally {
@@ -41,17 +41,17 @@
   }
 
   async function saveChanges() {
-    if (!organisation) return;
+    if (!organization) return;
 
     saving = true;
     error = '';
 
     try {
-      const updated = await admin.organisations.update(organisation.id, {
+      const updated = await admin.organizations.update(organization.id, {
         max_users,
         is_active
       });
-      organisation = updated;
+      organization = updated;
       alert('Organization updated successfully!');
     } catch (e) {
       error = e instanceof ApiError ? e.message : 'Failed to update organization';
@@ -60,7 +60,7 @@
     }
   }
 
-  async function toggleUserActive(user: OrganisationUser) {
+  async function toggleUserActive(user: OrganizationUser) {
     try {
       await admin.users.update(user.id, {
         is_active: !user.is_active
@@ -71,23 +71,23 @@
       users = [...users]; // Trigger reactivity
 
       // Refetch to update active user count
-      await fetchOrganisation();
+      await fetchOrganization();
     } catch (e) {
       const message = e instanceof ApiError ? e.message : 'Failed to update user';
       alert(`Error updating user: ${message}`);
     }
   }
 
-  async function deleteOrganisation() {
-    if (!organisation) return;
+  async function deleteOrganization() {
+    if (!organization) return;
 
     deleting = true;
     error = '';
 
     try {
-      await admin.organisations.delete(organisation.id);
+      await admin.organizations.delete(organization.id);
       // Redirect to organizations list
-      goto('/admin/organisations');
+      goto('/admin/organizations');
     } catch (e) {
       error = e instanceof ApiError ? e.message : 'Failed to delete organization';
       deleting = false;
@@ -100,12 +100,12 @@
     return new Date(dateStr).toLocaleDateString();
   }
 
-  function fullName(user: OrganisationUser) {
+  function fullName(user: OrganizationUser) {
     const name = `${user.first_name || ''} ${user.last_name || ''}`.trim();
     return name || user.email;
   }
 
-  onMount(fetchOrganisation);
+  onMount(fetchOrganization);
 </script>
 
 <div class="max-w-7xl mx-auto px-4 py-8">
@@ -113,27 +113,27 @@
     <div class="text-center py-12">
       <p class="text-gray-600">Loading organization...</p>
     </div>
-  {:else if error && !organisation}
+  {:else if error && !organization}
     <div class="bg-red-50 border border-red-200 rounded p-4">
       <p class="text-red-600">{error}</p>
       <button
-        onclick={() => goto('/admin/organisations')}
+        onclick={() => goto('/admin/organizations')}
         class="mt-4 text-blue-600 hover:text-blue-800"
       >
         ← Back to Organizations
       </button>
     </div>
-  {:else if organisation}
+  {:else if organization}
     <div class="mb-6 flex justify-between items-start">
       <div>
         <button
-          onclick={() => goto('/admin/organisations')}
+          onclick={() => goto('/admin/organizations')}
           class="text-blue-600 hover:text-blue-800 mb-4"
         >
           ← Back to Organizations
         </button>
-        <h1 class="text-3xl font-bold">{organisation.name}</h1>
-        <p class="text-gray-600 mt-2">Domain: {organisation.email_domain}</p>
+        <h1 class="text-3xl font-bold">{organization.name}</h1>
+        <p class="text-gray-600 mt-2">Domain: {organization.email_domain}</p>
       </div>
       
       <button
@@ -165,7 +165,7 @@
           <span class="block text-sm font-medium text-gray-700 mb-2">
             Active Users
           </span>
-          <p class="py-2 px-3 text-gray-900">{organisation.active_user_count} / {organisation.max_users}</p>
+          <p class="py-2 px-3 text-gray-900">{organization.active_user_count} / {organization.max_users}</p>
         </div>
       </div>
 
@@ -261,7 +261,7 @@
     <div class="bg-white rounded-lg shadow-xl p-6 max-w-md mx-4">
       <h3 class="text-lg font-bold mb-4">Confirm Delete</h3>
       <p class="text-gray-700 mb-6">
-        Are you sure you want to delete <strong>{organisation?.name}</strong>? This action cannot be undone and will delete all associated users.
+        Are you sure you want to delete <strong>{organization?.name}</strong>? This action cannot be undone and will delete all associated users.
       </p>
       <div class="flex justify-end gap-3">
         <button
@@ -272,7 +272,7 @@
           Cancel
         </button>
         <button
-          onclick={deleteOrganisation}
+          onclick={deleteOrganization}
           disabled={deleting}
           class="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded disabled:opacity-50"
         >

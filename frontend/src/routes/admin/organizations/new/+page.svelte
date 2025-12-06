@@ -28,13 +28,13 @@
     }
 
     try {
-      const org = await admin.organisations.create({
+      const org = await admin.organizations.create({
         name,
         domain: trimmedDomain,
         max_users
       });
 
-      goto(`/admin/organisations/${org.id}`);
+      goto(`/admin/organizations/${org.id}`);
     } catch (e) {
       error = e instanceof ApiError ? e.message : 'Failed to create organization';
     } finally {
@@ -99,7 +99,7 @@
     <div class="flex items-center justify-between">
       <button
         type="button"
-        onclick={() => goto('/admin/organisations')}
+        onclick={() => goto('/admin/organizations')}
         class="bg-gray-500 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
       >
         Cancel

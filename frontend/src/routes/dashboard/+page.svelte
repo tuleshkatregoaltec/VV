@@ -1,15 +1,4 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
-	import {
-		Chart,
-		Title,
-		Tooltip,
-		Legend,
-		LineElement,
-		CategoryScale,
-		LinearScale,
-		PointElement
-	} from 'chart.js';
 	import ChatBox from '$lib/components/dashboard/ChatBox.svelte';
 	import DashboardCard from '$lib/components/dashboard/DashboardCard.svelte';
 	import PageHeader from '$lib/components/dashboard/PageHeader.svelte';
@@ -17,67 +6,11 @@
 	import Grid from '$lib/components/layout/Grid.svelte';
 	import { authStore } from '$lib/stores/auth.svelte';
 
-	let Line: any;
-	let chartReady = false;
-
-	onMount(async () => {
-		const module = await import('svelte-chartjs');
-		Line = module.Line;
-		Chart.register(Title, Tooltip, Legend, LineElement, CategoryScale, LinearScale, PointElement);
-		chartReady = true;
-	});
-
 	let username = authStore.user?.first_name;
 
 	function handleChatSubmit(value: string) {
 		console.log('Submitted:', value);
 	}
-
-	const marketTrendData = {
-		labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'],
-		datasets: [
-			{
-				label: 'Market Trend',
-				data: [65, 59, 80, 81, 56, 55],
-				fill: true,
-				backgroundColor: 'rgba(24, 24, 24, 0.08)', // --color-primary: #181818
-				borderColor: '#181818',
-				tension: 0.4,
-				pointBackgroundColor: '#181818',
-				pointBorderColor: '#fff',
-				pointHoverBackgroundColor: '#fff',
-				pointHoverBorderColor: '#181818'
-			}
-		]
-	};
-
-	const chartOptions = {
-		responsive: true,
-		maintainAspectRatio: false,
-		scales: {
-			x: {
-				grid: {
-					display: false
-				},
-				ticks: {
-					color: '#232323'
-				}
-			},
-			y: {
-				grid: {
-					color: '#edeadd' // match new bg-gray
-				},
-				ticks: {
-					color: '#232323'
-				}
-			}
-		},
-		plugins: {
-			legend: {
-				display: false
-			}
-		}
-	};
 </script>
 
 <AppShell showFilters={false}>
@@ -115,10 +48,8 @@
 				<svg slot="icon" xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
 					<path stroke-linecap="round" stroke-linejoin="round" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
 				</svg>
-				<div class="h-32 -mx-5 -mb-5 mt-4">
-					{#if chartReady}
-						<Line data={marketTrendData} options={chartOptions} />
-					{/if}
+				<div class="h-32 -mx-5 -mb-5 mt-4 flex items-center justify-center text-gray-400">
+					<span>Chart coming soon</span>
 				</div>
 			</DashboardCard>
 		<!-- Avg Price/sq.ft Card -->

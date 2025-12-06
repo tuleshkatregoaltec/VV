@@ -6,8 +6,8 @@ export interface User {
     email: string;
     first_name: string;
     last_name: string;
-    organisation_id: string;
-    organisation_name: string;
+    organization_id: string;
+    organization_name: string;
 }
 
 export interface UserWithInitials extends User {

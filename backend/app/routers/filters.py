@@ -23,7 +23,7 @@ async def get_master_projects(
     session: AsyncSession = Depends(get_db_session),
 ) -> list[str]:
     """Get distinct master project names for filter dropdowns."""
-    return await get_distinct_values(session, Transaction.master_project, [])
+    return await get_distinct_values(session, Transaction.master_project_en, [])
 
 
 @router.get("/sales", response_model=FilterOptionsResponse)

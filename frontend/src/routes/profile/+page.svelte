@@ -21,8 +21,8 @@
                     <span class="text-gray-900">{user.email}</span>
                 </div>
                 <div class="flex justify-between py-3 border-b border-gray-100">
-                    <span class="text-gray-500">Organisation</span>
-                    <span class="text-gray-900">{user.organisation_name}</span>
+                    <span class="text-gray-500">Organization</span>
+                    <span class="text-gray-900">{user.organization_name}</span>
                 </div>
             </div>
 

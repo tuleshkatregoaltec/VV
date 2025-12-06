@@ -143,30 +143,32 @@ def fill_null_pks_with_hash(df: pl.DataFrame, pk_cols: list[str]) -> pl.DataFram
 
 def drop_empty_rows(df: pl.DataFrame, pk_cols: list[str]) -> pl.DataFrame:
     """Drop rows where all non-PK fields are null/empty.
-    
+
     In a data warehouse we preserve rows with partial data, but rows that have
     no meaningful data (only PKs, everything else null) should be dropped.
     """
     if df.is_empty():
         return df
-    
+
     pk_cols_lower = [c.lower().replace(" ", "_") for c in pk_cols]
     non_pk_cols = [c for c in df.columns if c not in pk_cols_lower]
-    
+
     if not non_pk_cols:
         return df
-    
+
     # Build expression: at least one non-PK column is not null/empty
     has_data_expr = pl.lit(False)
     for col in non_pk_cols:
         col_type = df[col].dtype
         if col_type == pl.Utf8:
             # For strings: not null AND not empty string
-            has_data_expr = has_data_expr | (pl.col(col).is_not_null() & (pl.col(col) != ""))
+            has_data_expr = has_data_expr | (
+                pl.col(col).is_not_null() & (pl.col(col) != "")
+            )
         else:
             # For other types: just not null
             has_data_expr = has_data_expr | pl.col(col).is_not_null()
-    
+
     return df.filter(has_data_expr)
 
 

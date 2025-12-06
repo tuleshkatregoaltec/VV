@@ -25,8 +25,8 @@ class AuthStore {
           email: this.#user.email,
           first_name: this.#user.first_name,
           last_name: this.#user.last_name,
-          organisation_id: this.#user.organisation_id,
-          organisation_name: this.#user.organisation_name,
+          organization_id: this.#user.organization_id,
+          organization_name: this.#user.organization_name,
         });
         this.#identified = true;
       }

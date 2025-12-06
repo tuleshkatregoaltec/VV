@@ -12,7 +12,13 @@ from urllib.parse import urlparse
 
 import polars as pl
 import psycopg2
+from dotenv import load_dotenv
+from sqlmodel import SQLModel
 
+# Load .env file from backend directory
+load_dotenv(Path(__file__).parent.parent.parent / ".env")
+
+from backend.app.db.models import *  # noqa: F401, F403 - Import all models to register metadata
 from .config import PROCESSING_ORDER, TableConfig, get_data_paths, get_table_configs
 from .differ import CSVDiffer, LookupExtractor, drop_empty_rows, fill_null_pks_with_hash
 from .transformers import transform_dataframe
@@ -67,6 +73,36 @@ def get_connection(disable_fk: bool = True):
             cur.execute("SET session_replication_role = 'replica'")
         conn.commit()
     return conn
+
+
+def recreate_schema(logger) -> bool:
+    """Drop all tables and recreate from ORM metadata."""
+    from sqlalchemy import create_engine
+
+    logger.info("\n🔄 Recreating database schema...")
+
+    # Build sync database URL from connection params
+    params = get_connection_params()
+    db_url = f"postgresql://{params['user']}:{params['password']}@{params['host']}:{params['port']}/{params['dbname']}"
+
+    try:
+        engine = create_engine(db_url)
+
+        # Drop all tables
+        logger.info("  Dropping all existing tables...")
+        SQLModel.metadata.drop_all(engine)
+        logger.info("  ✓ All tables dropped")
+
+        # Create all tables from ORM metadata
+        logger.info("  Creating tables from ORM models...")
+        SQLModel.metadata.create_all(engine)
+        logger.info("  ✓ All tables created")
+
+        engine.dispose()
+        return True
+    except Exception as e:
+        logger.error(f"  ✗ Schema recreation failed: {e}")
+        return False
 
 
 class CopyUpserter:
@@ -309,6 +345,11 @@ def run_etl(
     all_configs = get_table_configs()
     tables_to_process = [t for t in PROCESSING_ORDER if not tables or t in tables]
     logger.info(f"Tables: {', '.join(tables_to_process)}")
+
+    # Recreate schema on full refresh
+    if full_refresh:
+        if not recreate_schema(logger):
+            return {"success": False, "error": "Schema recreation failed"}
 
     logger.info("\nConnecting to database...")
     try:
