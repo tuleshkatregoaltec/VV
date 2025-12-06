@@ -11,6 +11,7 @@ class AuthStore {
   get user() { return this.#user; }
   get loading() { return this.#loading; }
   get authenticated() { return this.#authenticated; }
+  get isAdmin() { return this.#user?.role === 'admin'; }
 
   async checkAuth() {
     this.#loading = true;
@@ -47,6 +48,14 @@ class AuthStore {
 
   setLoading(loading: boolean) {
     this.#loading = loading;
+  }
+
+  setUser(userData: User) {
+    const initials = `${userData.first_name?.[0] ?? ''}${userData.last_name?.[0] ?? ''}`.toUpperCase();
+    this.#user = { ...userData, initials };
+    this.#authenticated = true;
+    this.#loading = false;
+    this.#identified = true; // Already identified in load function
   }
 
   login() {

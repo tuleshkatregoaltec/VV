@@ -41,9 +41,9 @@ export type SortOption = 'projects' | 'transactions' | 'avg_price';
 
 export const supply = {
     getDeveloperCount: () => 
-        api<DeveloperCountResponse>('/supply/developers/count'),
+        api<DeveloperCountResponse>('/api/v1/supply/developers/count'),
     getDevelopers: (sortBy: SortOption = 'projects', limit: number = 50, offset: number = 0) => 
-        api<DeveloperListResponse>(`/supply/developers?sort_by=${sortBy}&limit=${limit}&offset=${offset}`),
-    getDeveloperProjects: (id: number) => api<Project[]>(`/supply/developers/${id}/projects`),
-    getProject: (id: number) => api<Project>(`/supply/projects/${id}`)
+        api<DeveloperListResponse>(`/api/v1/supply/developers?sort_by=${sortBy}&limit=${limit}&offset=${offset}`),
+    getDeveloperProjects: (id: number) => api<Project[]>(`/api/v1/supply/developers/${id}/projects`),
+    getProject: (id: number) => api<Project>(`/api/v1/supply/projects/${id}`)
 };

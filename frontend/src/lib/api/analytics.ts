@@ -85,8 +85,8 @@ function buildQuery(params: AnalyticsParams): string {
 
 export const analytics = {
     sales: (params: AnalyticsParams = {}) =>
-        api<SalesAnalyticsResponse>(`/analytics/sales?${buildQuery(params)}`),
+        api<SalesAnalyticsResponse>(`/api/v1/analytics/sales?${buildQuery(params)}`),
 
     rentals: (params: AnalyticsParams = {}) =>
-        api<RentalAnalyticsResponse>(`/analytics/rentals?${buildQuery(params)}`),
+        api<RentalAnalyticsResponse>(`/api/v1/analytics/rentals?${buildQuery(params)}`),
 };

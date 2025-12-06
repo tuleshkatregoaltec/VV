@@ -52,29 +52,29 @@ export const admin = {
         /**
          * List all organizations
          */
-        list: () => http.get<Organization[]>('/api/admin/organizations'),
+        list: () => http.get<Organization[]>('/api/v1/admin/organizations'),
 
         /**
          * Get a single organization with its users
          */
-        get: (id: string) => http.get<OrganizationDetail>(`/api/admin/organizations/${id}`),
+        get: (id: string) => http.get<OrganizationDetail>(`/api/v1/admin/organizations/${id}`),
 
         /**
          * Create a new organization
          */
         create: (data: CreateOrganizationRequest) =>
-            http.post<Organization>('/api/admin/organizations', data),
+            http.post<Organization>('/api/v1/admin/organizations', data),
 
         /**
          * Update an organization
          */
         update: (id: string, data: UpdateOrganizationRequest) =>
-            http.put<Organization>(`/api/admin/organizations/${id}`, data),
+            http.put<Organization>(`/api/v1/admin/organizations/${id}`, data),
 
         /**
          * Delete an organization
          */
-        delete: (id: string) => http.delete<void>(`/api/admin/organizations/${id}`),
+        delete: (id: string) => http.delete<void>(`/api/v1/admin/organizations/${id}`),
     },
 
     users: {
@@ -82,6 +82,6 @@ export const admin = {
          * Update a user's status
          */
         update: (id: string, data: UpdateUserRequest) =>
-            http.put<OrganizationUser>(`/api/admin/users/${id}`, data),
+            http.put<OrganizationUser>(`/api/v1/admin/users/${id}`, data),
     },
 };

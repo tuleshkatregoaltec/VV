@@ -8,6 +8,7 @@ export interface User {
     last_name: string;
     organization_id: string;
     organization_name: string;
+    role: 'user' | 'admin';
 }
 
 export interface UserWithInitials extends User {

@@ -6,7 +6,7 @@
 	import Grid from '$lib/components/layout/Grid.svelte';
 	import { authStore } from '$lib/stores/auth.svelte';
 
-	let username = authStore.user?.first_name;
+	let username = $derived(authStore.user?.first_name ?? '');
 
 	function handleChatSubmit(value: string) {
 		console.log('Submitted:', value);

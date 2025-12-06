@@ -3,11 +3,7 @@
     import { quintOut } from 'svelte/easing';
     import { authStore } from '$lib/stores/auth.svelte';
 
-    let {
-        initials = authStore.user?.initials
-    }: {
-        initials?: string;
-    } = $props();
+    let initials = $derived(authStore.user?.initials ?? '');
 
     let showDropdown = $state(false);
     let timeout: number | undefined;

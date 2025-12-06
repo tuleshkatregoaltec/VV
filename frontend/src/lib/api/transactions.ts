@@ -12,8 +12,8 @@ function buildQuery(filters: Record<string, any>): string {
 
 export const transactions = {
     sales: (filters: Record<string, any>) => 
-        api<TransactionListResponse>(`/transactions/sales?${buildQuery(filters)}`),
+        api<TransactionListResponse>(`/api/v1/transactions/sales?${buildQuery(filters)}`),
     
     rentals: (filters: Record<string, any>) => 
-        api<TransactionListResponse>(`/transactions/rentals?${buildQuery(filters)}`),
+        api<TransactionListResponse>(`/api/v1/transactions/rentals?${buildQuery(filters)}`),
 };

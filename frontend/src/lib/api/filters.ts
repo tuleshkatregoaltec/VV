@@ -32,7 +32,7 @@ export const filters = {
         const cached = cache.get(MASTER_PROJECTS_KEY) as string[] | null;
         if (cached) return cached;
         
-        const data = await api<string[]>('/filters/master-projects');
+        const data = await api<string[]>('/api/v1/filters/master-projects');
         cache.set(MASTER_PROJECTS_KEY, data);
         return data;
     },
@@ -41,7 +41,7 @@ export const filters = {
         const cached = cache.get(CACHE_KEY) as FilterOptions | null;
         if (cached) return cached;
         
-        const data = await api<FilterOptions>(`/filters/sales${query}`);
+        const data = await api<FilterOptions>(`/api/v1/filters/sales${query}`);
         cache.set(CACHE_KEY, data);
         return data;
     },
@@ -50,7 +50,7 @@ export const filters = {
         const cached = cache.get(CACHE_KEY) as FilterOptions | null;
         if (cached) return cached;
         
-        const data = await api<FilterOptions>(`/filters/rentals${query}`);
+        const data = await api<FilterOptions>(`/api/v1/filters/rentals${query}`);
         cache.set(CACHE_KEY, data);
         return data;
     },
