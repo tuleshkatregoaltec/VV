@@ -4,23 +4,17 @@
     import StandardDropdown from '../dropdowns/StandardDropdown.svelte';
     import { propertyType, masterProject, timeframe } from './globalFilters.svelte';
     import { filters } from '$lib/api';
-    import { onMount } from 'svelte';
+    import { createQuery } from '@tanstack/svelte-query';
 
-    let masterProjects = $state<string[]>(['All']);
+    // Use TanStack Query to fetch and cache master projects
+    const masterProjectsQuery = createQuery(() => ({
+        queryKey: ['master-projects'],
+        queryFn: () => filters.masterProjects(),
+        staleTime: 24 * 60 * 60 * 1000, // 24 hours
+    }));
     const timeframes = ['Last Week', 'Last Month', 'Last 3 Months', 'Last 6 Months', 'Last Year'];
     
-    async function fetchMasterProjects() {
-        try {
-            const projects = await filters.masterProjects();
-            masterProjects = ['All', ...projects];
-        } catch (error) {
-            console.error('Failed to fetch master projects:', error);
-        }
-    }
-
-    onMount(() => {
-        fetchMasterProjects();
-    });
+    // masterProjects are read from the query's data in the template
 </script>
 
 <div
@@ -38,7 +32,7 @@
             <SearchableDropdown
                 id="filterbar-master-project"
                 ariaLabel="Master Project"
-                options={masterProjects}
+                options={['All', ...(masterProjectsQuery.data ?? [])]}
                 bind:value={masterProject.current}
             />
         </div>
