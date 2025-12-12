@@ -27,7 +27,7 @@ def get_model_schema(model_class: Any) -> dict[str, pl.DataType]:
     return schema
 
 
-def infer_type(col: str) -> pl.DataType:
+def infer_type(col: str) -> type[pl.DataType]:
     """Infer column type from naming conventions."""
     c = col.lower()
     if c.endswith("_id") or c == "id":
