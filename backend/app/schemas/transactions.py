@@ -4,11 +4,6 @@ from decimal import Decimal
 from datetime import date
 
 
-class NumericRange(BaseModel):
-    min: Optional[Decimal] = None
-    max: Optional[Decimal] = None
-
-
 class TransactionResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
@@ -54,22 +49,3 @@ class RentalContractListResponse(BaseModel):
     total: int
     limit: int
     offset: int
-
-
-class FilterOptionsResponse(BaseModel):
-    projects: List[str]
-    buildings: Optional[List[str]] = None
-    property_types: List[str]
-    property_sub_types: List[str]
-    master_projects: Optional[List[str]] = None
-    # for sales
-    rooms: Optional[List[str]] = None
-    registration_types: Optional[List[str]] = None
-    price_range: Optional[NumericRange] = None
-    price_per_sqft_range: Optional[NumericRange] = None
-    # for rentals
-    tenant_types: Optional[List[str]] = None
-    contract_reg_types: Optional[List[str]] = None
-    annual_rent_range: Optional[NumericRange] = None
-    # shared
-    area_range: NumericRange

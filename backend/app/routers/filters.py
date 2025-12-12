@@ -7,8 +7,8 @@ from backend.app.db.session import get_db_session
 from backend.app.db.models.transactions import Transaction
 from backend.app.routers.dependencies import require_auth
 from backend.app.core.decorators import cached_endpoint
-from backend.app.schemas.transactions import FilterOptionsResponse
-from backend.app.services.transactions_service import (
+from backend.app.schemas.filters import FilterOptionsResponse
+from backend.app.services.filters_service import (
     fetch_sales_filter_options,
     fetch_rental_filter_options,
     get_distinct_values,
@@ -43,6 +43,10 @@ async def get_sales_filter_options(
     rooms: str = Query(default=None),
     property_sub_type: str = Query(default=None),
     registration_type: str = Query(default=None),
+    area_min: float = Query(default=None),
+    area_max: float = Query(default=None),
+    price_min: float = Query(default=None),
+    price_max: float = Query(default=None),
     session: AsyncSession = Depends(get_db_session),
 ):
     """Get filter options for sales transactions."""
@@ -58,12 +62,16 @@ async def get_sales_filter_options(
         rooms=rooms,
         property_sub_type=property_sub_type,
         registration_type=registration_type,
+        area_min=area_min,
+        area_max=area_max,
+        price_min=price_min,
+        price_max=price_max,
     )
-
 
 @router.get("/rentals", response_model=FilterOptionsResponse)
 @cached_endpoint(prefix="filters:rentals", expire=3600)
 async def get_rental_filter_options(
+    property_usage: str = Query(default=None),  # ← ADD THIS
     master_project: str = Query(default=None),
     timeframe_days: int = Query(default=None),
     project: str = Query(default=None),
@@ -71,11 +79,16 @@ async def get_rental_filter_options(
     property_sub_type: str = Query(default=None),
     tenant_type: str = Query(default=None),
     contract_reg_type: str = Query(default=None),
+    area_min: float = Query(default=None),
+    area_max: float = Query(default=None),
+    rent_min: float = Query(default=None),
+    rent_max: float = Query(default=None),
     session: AsyncSession = Depends(get_db_session),
 ):
     """Get filter options for rental contracts."""
     return await fetch_rental_filter_options(
         session=session,
+        property_usage=property_usage,  # ← ADD THIS
         master_project=master_project,
         timeframe_days=timeframe_days,
         project=project,
@@ -83,4 +96,8 @@ async def get_rental_filter_options(
         property_sub_type=property_sub_type,
         tenant_type=tenant_type,
         contract_reg_type=contract_reg_type,
+        area_min=area_min,
+        area_max=area_max,
+        rent_min=rent_min,
+        rent_max=rent_max,
     )

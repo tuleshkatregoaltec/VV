@@ -39,7 +39,7 @@ class User(SQLModel, table=True):
     first_name: Optional[str] = None
     last_name: Optional[str] = None
     organization_id: Optional[str] = Field(default=None, foreign_key="organizations.id")
-    role: str = Field(default="user") 
+    role: str = Field(default="user")
     is_active: bool = Field(default=True)
     created_at: datetime = Field(
         sa_column=Column(DateTime(timezone=True), nullable=False),

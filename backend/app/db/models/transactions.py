@@ -13,13 +13,39 @@ class Transaction(SQLModel, table=True):
     __tablename__: LiteralString = "transactions"
 
     __table_args__ = (
+        # Existing master index
         Index(
             "idx_transactions_date_usage",
             "property_usage_en",
             text("instance_date DESC"),
         ),
+        
+        # HIGH CARDINALITY: Composite indexes for filter dropdowns
+        Index(
+            "idx_transactions_project_distinct",
+            "project_name_en",
+            "property_usage_en",
+            "master_project_en",
+            "instance_date",
+            postgresql_where=text("project_name_en IS NOT NULL AND project_name_en != ''")
+        ),
+        Index(
+            "idx_transactions_building_distinct",
+            "building_name_en",
+            "property_usage_en",
+            "master_project_en",
+            "project_name_en",
+            "instance_date",
+            postgresql_where=text("building_name_en IS NOT NULL AND building_name_en != ''")
+        ),
+        Index(
+            "idx_transactions_master_project_distinct",
+            "master_project_en",
+            "property_usage_en",
+            "instance_date",
+            postgresql_where=text("master_project_en IS NOT NULL AND master_project_en != ''")
+        ),
     )
-
     # Primary key
     transaction_id: str = Field(primary_key=True, max_length=50)
 
@@ -40,7 +66,9 @@ class Transaction(SQLModel, table=True):
     property_type_en: Optional[str] = Field(default=None, max_length=255)
     property_sub_type_id: Optional[int] = None
     property_sub_type_ar: Optional[str] = Field(default=None, max_length=255)
-    property_sub_type_en: Optional[str] = Field(default=None, max_length=255)
+    property_sub_type_en: Optional[str] = Field(
+        default=None, max_length=255
+    )
     property_usage_ar: Optional[str] = Field(default=None, max_length=255)
     property_usage_en: Optional[str] = Field(default=None, max_length=255)
 
@@ -57,7 +85,7 @@ class Transaction(SQLModel, table=True):
     building_name_en: Optional[str] = Field(default=None, max_length=255)
 
     # Project details
-    project_number: Optional[str] = Field(default=None, max_length=50, index=True)
+    project_number: Optional[str] = Field(default=None, max_length=50)
     project_name_ar: Optional[str] = Field(default=None, max_length=255)
     project_name_en: Optional[str] = Field(default=None, max_length=255)
     master_project_ar: Optional[str] = Field(default=None, max_length=255)
@@ -76,15 +104,15 @@ class Transaction(SQLModel, table=True):
     rooms_en: Optional[str] = Field(default=None, max_length=100)
     has_parking: Optional[bool] = None
     procedure_area: Optional[Decimal] = Field(
-        default=None, max_digits=12, decimal_places=2
+        default=None, max_digits=12, decimal_places=2, index=True
     )
 
     # Financial details
     actual_worth: Optional[Decimal] = Field(
-        default=None, max_digits=15, decimal_places=2
+        default=None, max_digits=15, decimal_places=2, index=True
     )
     meter_sale_price: Optional[Decimal] = Field(
-        default=None, max_digits=12, decimal_places=2
+        default=None, max_digits=12, decimal_places=2, index=True
     )
     rent_value: Optional[Decimal] = Field(default=None, max_digits=15, decimal_places=2)
     meter_rent_price: Optional[Decimal] = Field(
@@ -113,10 +141,28 @@ class RentContract(SQLModel, table=True):
     __tablename__: LiteralString = "rent_contracts"
 
     __table_args__ = (
+        # Existing master index
         Index(
             "idx_rent_contracts_date_usage",
             "property_usage_en",
             text("contract_start_date DESC"),
+        ),
+        
+        # HIGH CARDINALITY: Project index (rentals have no buildings)
+        Index(
+            "idx_rent_contracts_project_distinct",
+            "project_name_en",
+            "property_usage_en",
+            "master_project_en",
+            "contract_start_date",
+            postgresql_where=text("project_name_en IS NOT NULL AND project_name_en != ''")
+        ),
+        Index(
+            "idx_rent_contracts_master_project_distinct",
+            "master_project_en",
+            "property_usage_en",
+            "contract_start_date",
+            postgresql_where=text("master_project_en IS NOT NULL AND master_project_en != ''")
         ),
     )
 
@@ -127,14 +173,16 @@ class RentContract(SQLModel, table=True):
     # Contract details
     contract_reg_type_id: Optional[int] = None
     contract_reg_type_ar: Optional[str] = Field(default=None, max_length=100)
-    contract_reg_type_en: Optional[str] = Field(default=None, max_length=100)
+    contract_reg_type_en: Optional[str] = Field(
+        default=None, max_length=100
+    )
     contract_start_date: Optional[date] = None
     contract_end_date: Optional[date] = None
     contract_amount: Optional[Decimal] = Field(
         default=None, max_digits=15, decimal_places=2
     )
     annual_amount: Optional[Decimal] = Field(
-        default=None, max_digits=15, decimal_places=2
+        default=None, max_digits=15, decimal_places=2, index=True
     )
     no_of_prop: Optional[int] = None
     is_free_hold: Optional[bool] = None
@@ -145,11 +193,15 @@ class RentContract(SQLModel, table=True):
     ejari_bus_property_type_en: Optional[str] = Field(default=None, max_length=100)
 
     ejari_property_type_id: Optional[int] = None
-    ejari_property_type_en: Optional[str] = Field(default=None, max_length=100)
+    ejari_property_type_en: Optional[str] = Field(
+        default=None, max_length=100
+    )
     ejari_property_type_ar: Optional[str] = Field(default=None, max_length=100)
 
     ejari_property_sub_type_id: Optional[int] = None
-    ejari_property_sub_type_en: Optional[str] = Field(default=None, max_length=100)
+    ejari_property_sub_type_en: Optional[str] = Field(
+        default=None, max_length=100
+    )
     ejari_property_sub_type_ar: Optional[str] = Field(default=None, max_length=100)
 
     property_usage_en: Optional[str] = Field(default=None, max_length=100)
@@ -167,7 +219,7 @@ class RentContract(SQLModel, table=True):
     area_name_ar: Optional[str] = Field(default=None, max_length=255)
     area_name_en: Optional[str] = Field(default=None, max_length=255)
     actual_area: Optional[Decimal] = Field(
-        default=None, max_digits=15, decimal_places=2
+        default=None, max_digits=15, decimal_places=2, index=True
     )
 
     # Nearby amenities
