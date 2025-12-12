@@ -36,10 +36,18 @@ class TableConfig:
     extract_columns: list[str] | None = None
 
 
-def get_data_paths(data_dir: Path | None = None) -> tuple[Path, Path]:
-    """Get current and previous data directories."""
+def get_data_paths(data_dir: Path | None = None) -> tuple[Path, Path, Path, Path]:
+    """Return current, previous, current_pks, and previous_pks data directories."""
     base = data_dir or Path(__file__).parent.parent.parent.parent / "data"
-    return base / "current", base / "previous"
+    current_dir = base / "current"
+    previous_dir = base / "previous"
+    current_pks_dir = current_dir / "pks"
+    previous_pks_dir = previous_dir / "pks"
+    current_dir.mkdir(parents=True, exist_ok=True)
+    previous_dir.mkdir(parents=True, exist_ok=True)
+    current_pks_dir.mkdir(parents=True, exist_ok=True)
+    previous_pks_dir.mkdir(parents=True, exist_ok=True)
+    return current_dir, previous_dir, current_pks_dir, previous_pks_dir
 
 
 def get_table_configs() -> dict[str, TableConfig]:
@@ -58,7 +66,12 @@ def get_table_configs() -> dict[str, TableConfig]:
         csv_file="Lkp_PropertyTypes.csv",  # Generated
         primary_keys=["property_type_id"],
         is_lookup=True,
-        extract_from_files=["Land_Registry.csv", "Units.csv", "Buildings.csv", "Transactions.csv"],
+        extract_from_files=[
+            "Land_Registry.csv",
+            "Units.csv",
+            "Buildings.csv",
+            "Transactions.csv",
+        ],
         extract_columns=["property_type_id", "property_type_ar", "property_type_en"],
     )
 
@@ -70,7 +83,12 @@ def get_table_configs() -> dict[str, TableConfig]:
         csv_file="Lkp_PropertySubTypes.csv",  # Generated
         primary_keys=["property_sub_type_id"],
         is_lookup=True,
-        extract_from_files=["Land_Registry.csv", "Units.csv", "Buildings.csv", "Transactions.csv"],
+        extract_from_files=[
+            "Land_Registry.csv",
+            "Units.csv",
+            "Buildings.csv",
+            "Transactions.csv",
+        ],
         extract_columns=[
             "property_sub_type_id",
             "property_type_id",

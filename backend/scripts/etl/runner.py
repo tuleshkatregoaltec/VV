@@ -81,7 +81,6 @@ def recreate_schema(logger) -> bool:
 
     logger.info("\n🔄 Recreating database schema...")
 
-    # Build sync database URL from connection params
     params = get_connection_params()
     db_url = f"postgresql://{params['user']}:{params['password']}@{params['host']}:{params['port']}/{params['dbname']}"
 
@@ -106,7 +105,7 @@ def recreate_schema(logger) -> bool:
 
 
 class CopyUpserter:
-    """High-performance upserter using COPY + temp table + ON CONFLICT."""
+    """Fast upserter using COPY + temp table + ON CONFLICT."""
 
     def __init__(self, conn, model_class, primary_keys: list[str]):
         self.conn = conn
@@ -205,6 +204,7 @@ def process_lookup_table(
     previous_dir: Path,
     logger,
     full_refresh: bool = False,
+    dry_run: bool = False,
 ) -> dict:
     """Process a lookup table extracted from source files."""
     logger.info(f"\n{'─' * 60}\n📋 {config.name} (lookup)\n{'─' * 60}")
@@ -233,11 +233,19 @@ def process_lookup_table(
                 ),
                 config.primary_keys,
             )
-            stats["inserted"] = upserter.insert_batch(new_df)
+            if dry_run:
+                logger.info(f"  [DRY RUN] Would insert {len(new_df)} new rows")
+                stats["inserted"] = len(new_df)
+            else:
+                stats["inserted"] = upserter.insert_batch(new_df)
 
         if not updated_df.is_empty():
             updated_df = transform_dataframe(updated_df, config.model_class)
-            stats["updated"] = upserter.upsert_batch(updated_df)
+            if dry_run:
+                logger.info(f"  [DRY RUN] Would upsert {len(updated_df)} updated rows")
+                stats["updated"] = len(updated_df)
+            else:
+                stats["updated"] = upserter.upsert_batch(updated_df)
 
         stats["errors"] = upserter.errors
         logger.info(
@@ -255,8 +263,11 @@ def process_csv_table(
     config: TableConfig,
     current_dir: Path,
     previous_dir: Path,
+    current_pks_dir: Path,
+    previous_pks_dir: Path,
     logger,
     full_refresh: bool = False,
+    dry_run: bool = False,
 ) -> dict:
     """Process a table from CSV file."""
     logger.info(f"\n{'─' * 60}\n📄 {config.name}\n{'─' * 60}")
@@ -267,7 +278,11 @@ def process_csv_table(
 
     try:
         differ = CSVDiffer(
-            current_dir, Path("/nonexistent") if full_refresh else previous_dir, config
+            current_dir,
+            Path("/nonexistent") if full_refresh else previous_dir,
+            current_pks_dir,
+            previous_pks_dir,
+            config,
         )
         if full_refresh:
             differ.is_initial_load = True
@@ -299,16 +314,22 @@ def process_csv_table(
             if new_df.is_empty():
                 continue
 
-            inserted = upserter.insert_batch(new_df)
-            stats["inserted"] += inserted
-
-            logger.info(
-                f"  Batch {chunk_num}: {total_scanned:,} scanned, {len(new_df)} new → {inserted} inserted"
-            )
+            if dry_run:
+                logger.info(
+                    f"  [DRY RUN] Batch {chunk_num}: {total_scanned:,} scanned, {len(new_df)} new → Would insert {len(new_df)}"
+                )
+                stats["inserted"] += len(new_df)
+            else:
+                inserted = upserter.insert_batch(new_df)
+                stats["inserted"] += inserted
+                logger.info(
+                    f"  Batch {chunk_num}: {total_scanned:,} scanned, {len(new_df)} new → {inserted} inserted"
+                )
             del new_df, existing_df
             gc.collect()
 
-        differ.save_pk_file()
+        if not dry_run:
+            differ.save_pk_file()
         stats["errors"] = upserter.errors
         elapsed = time.time() - start
         logger.info(
@@ -328,18 +349,21 @@ def run_etl(
     tables: list[str] | None = None,
     full_refresh: bool = False,
     data_dir: Path | None = None,
+    dry_run: bool = False,
 ) -> dict:
     """Run the ETL pipeline."""
     logger = setup_logging()
-    logger.info("=" * 70 + "\nViteVue ETL Pipeline\n" + "=" * 70)
+    logger.info("=" * 70 + "\nVitevue ETL Pipeline\n" + "=" * 70)
 
-    current_dir, previous_dir = get_data_paths(data_dir)
+    current_dir, previous_dir, current_pks_dir, previous_pks_dir = get_data_paths(
+        data_dir
+    )
     if not current_dir.exists():
         logger.error(f"Data directory not found: {current_dir}")
         return {"success": False, "error": "Data directory not found"}
 
     logger.info(
-        f"Current:  {current_dir}\nPrevious: {previous_dir}\nFull refresh: {full_refresh}"
+        f"Current:  {current_dir}\nPrevious: {previous_dir}\nCurrent PKS: {current_pks_dir}\nPrevious PKS: {previous_pks_dir}\nFull refresh: {full_refresh}\nDry run: {dry_run}"
     )
 
     all_configs = get_table_configs()
@@ -368,13 +392,27 @@ def run_etl(
             if config.is_lookup:
                 results.append(
                     process_lookup_table(
-                        conn, config, current_dir, previous_dir, logger, full_refresh
+                        conn,
+                        config,
+                        current_dir,
+                        previous_dir,
+                        logger,
+                        full_refresh,
+                        dry_run,
                     )
                 )
             else:
                 results.append(
                     process_csv_table(
-                        conn, config, current_dir, previous_dir, logger, full_refresh
+                        conn,
+                        config,
+                        current_dir,
+                        previous_dir,
+                        current_pks_dir,
+                        previous_pks_dir,
+                        logger,
+                        full_refresh,
+                        dry_run,
                     )
                 )
     finally:
@@ -382,17 +420,19 @@ def run_etl(
 
     elapsed = time.time() - start
     total_inserted = sum(r.get("inserted", 0) for r in results)
+    total_updated = sum(r.get("updated", 0) for r in results)
     total_errors = sum(len(r.get("errors", [])) for r in results)
 
     logger.info(f"\n{'=' * 70}\nETL Complete\n{'=' * 70}")
     logger.info(
-        f"  Inserted: {total_inserted:,}\n  Errors: {total_errors}\n  Time: {elapsed:.1f}s"
+        f"  Inserted: {total_inserted:,}\n  Updated: {total_updated:,}\n  Errors: {total_errors}\n  Time: {elapsed:.1f}s"
     )
 
     return {
         "success": total_errors == 0,
         "elapsed": elapsed,
         "total_inserted": total_inserted,
+        "total_updated": total_updated,
         "total_errors": total_errors,
         "tables": results,
     }
@@ -410,10 +450,16 @@ def main():
         "--full-refresh", "-f", action="store_true", help="Ignore previous data"
     )
     parser.add_argument("--data-dir", "-d", type=Path, help="Data directory")
+    parser.add_argument(
+        "--dry-run", action="store_true", help="Simulate ETL without writing to DB"
+    )
     args = parser.parse_args()
 
     result = run_etl(
-        tables=args.tables, full_refresh=args.full_refresh, data_dir=args.data_dir
+        tables=args.tables,
+        full_refresh=args.full_refresh,
+        data_dir=args.data_dir,
+        dry_run=args.dry_run,
     )
     sys.exit(0 if result["success"] else 1)
 

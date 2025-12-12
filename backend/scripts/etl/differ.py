@@ -175,13 +175,22 @@ def drop_empty_rows(df: pl.DataFrame, pk_cols: list[str]) -> pl.DataFrame:
 class CSVDiffer:
     """Fast CSV differ using PK-only comparison."""
 
-    def __init__(self, current_dir: Path, previous_dir: Path, config: TableConfig):
+    def __init__(
+        self,
+        current_dir: Path,
+        previous_dir: Path,
+        current_pks_dir: Path,
+        previous_pks_dir: Path,
+        config: TableConfig,
+    ):
         self.current_dir = current_dir
         self.previous_dir = previous_dir
+        self.current_pks_dir = current_pks_dir
+        self.previous_pks_dir = previous_pks_dir
         self.config = config
         self.current_file = current_dir / config.csv_file
         self.previous_file = previous_dir / config.csv_file
-        self.pk_file = get_pk_file_path(self.previous_file)
+        self.pk_file = previous_pks_dir / (Path(config.csv_file).stem + ".pks")
         self.current_hash: str | None = None
         self.previous_hash: str | None = None
         self.is_initial_load = False
