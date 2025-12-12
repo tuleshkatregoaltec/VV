@@ -5,7 +5,7 @@
   import FilterPanel from '$lib/components/filters/FilterPanel.svelte';
   import Pagination from '$lib/components/ui/Pagination.svelte';
   import { transactions as api, filters } from '$lib/api';
-  import type { Transaction, FilterOptions } from '$lib/api/types';
+  import type { Transaction } from '$lib/api/types';
   import { propertyType, masterProject, timeframe } from '$lib/components/filters/globalFilters.svelte';
   import {
     PROPERTY_USAGE,
@@ -15,6 +15,10 @@
     DEFAULT_ITEMS_PER_PAGE
   } from '$lib/constants/transactions';
   import type { FilterDefinition } from '$lib/types/filters';
+
+  const AREA_OPTIONS = ["All", "<500", "500-1000", "1000-2000", "2000-5000", ">5000"];
+  const PRICE_OPTIONS = ["All", "<500k", "500k-1M", "1M-2M", "2M-5M", ">5M"];
+  const PRICE_SQFT_OPTIONS = ["All", "<1000", "1000-1500", "1500-2000", ">2000"];
 
   interface TransformedTransaction {
     date: string;
@@ -30,14 +34,18 @@
     area_name: string;
   }
 
-  // Dropdown context for filter panel
+  // ========================================
+  // Dropdown Context
+  // ========================================
   let openDropdownId = $state<string | null>(null);
   setContext('openDropdownId', {
     get value() { return openDropdownId; },
     set value(v: string | null) { openDropdownId = v; }
   });
 
-  // State
+  // ========================================
+  // Local State
+  // ========================================
   let currentPage = $state(1);
 
   let localFilters = $state({
@@ -46,9 +54,9 @@
     selectedPropertyType: 'All',
     selectedBedroomsOrSubType: 'All',
     selectedRegistration: 'All',
-    areaRange: { min: '', max: '' },
-    priceRange: { min: '', max: '' },
-    pricePerSqFtRange: { min: '', max: '' }
+    areaRange: 'All',        // ✅ String, not object
+    priceRange: 'All',       // ✅ String, not object
+    pricePerSqFtRange: 'All' // ✅ String, not object
   });
 
   // ========================================
@@ -88,34 +96,26 @@
       apiFilters.registration_type = localFilters.selectedRegistration;
     }
     
-    // Range filters
-    if (localFilters.areaRange.min) {
-      apiFilters.area_min = parseFloat(localFilters.areaRange.min);
+    // Range filters are now strings - let the API client handle conversion
+    // The transactions.ts client converts these via rangeMap
+    if (localFilters.areaRange !== 'All') {
+      apiFilters.area = localFilters.areaRange;
     }
-    if (localFilters.areaRange.max) {
-      apiFilters.area_max = parseFloat(localFilters.areaRange.max);
+    if (localFilters.priceRange !== 'All') {
+      apiFilters.price = localFilters.priceRange;
     }
-    if (localFilters.priceRange.min) {
-      apiFilters.price_min = parseFloat(localFilters.priceRange.min);
-    }
-    if (localFilters.priceRange.max) {
-      apiFilters.price_max = parseFloat(localFilters.priceRange.max);
-    }
-    if (localFilters.pricePerSqFtRange.min) {
-      apiFilters.price_sqft_min = parseFloat(localFilters.pricePerSqFtRange.min);
-    }
-    if (localFilters.pricePerSqFtRange.max) {
-      apiFilters.price_sqft_max = parseFloat(localFilters.pricePerSqFtRange.max);
+    if (localFilters.pricePerSqFtRange !== 'All') {
+      apiFilters.pricePerSqFt = localFilters.pricePerSqFtRange;
     }
     
     return apiFilters;
   }
 
   // ========================================
-  // TanStack Query
+  // TanStack Queries
   // ========================================
   
-  // Main transactions query - refetches when any filter or page changes
+  // Main transactions query
   const transactionsQuery = createQuery(() => ({
     queryKey: [
       'sales-transactions',
@@ -128,24 +128,59 @@
       localFilters.selectedPropertyType,
       localFilters.selectedBedroomsOrSubType,
       localFilters.selectedRegistration,
-      localFilters.areaRange.min,
-      localFilters.areaRange.max,
-      localFilters.priceRange.min,
-      localFilters.priceRange.max,
-      localFilters.pricePerSqFtRange.min,
-      localFilters.pricePerSqFtRange.max,
+      localFilters.areaRange,
+      localFilters.priceRange,
+      localFilters.pricePerSqFtRange,
     ],
     queryFn: () => api.sales(buildApiFilters()),
   }));
 
-  // Filter options query - context-aware
+  // Filter options query - ALWAYS includes property_usage and timeframe_days
   const filterOptionsQuery = createQuery(() => ({
-    queryKey: ['filterOptions', 'sales', propertyType.current, masterProject.current, timeframe.current],
-    queryFn: () => filters.sales({
-      property_usage: propertyType.current,
-      master_project: masterProject.current !== 'All' ? masterProject.current : undefined,
-      timeframe_days: TIMEFRAME_MAPPING[timeframe.current]
-    }),
+    queryKey: [
+      'filterOptions', 
+      'sales', 
+      propertyType.current, 
+      masterProject.current, 
+      timeframe.current,
+      localFilters.selectedProject,
+      localFilters.selectedBuilding,
+      localFilters.selectedPropertyType,
+      localFilters.selectedBedroomsOrSubType,
+      localFilters.selectedRegistration,
+    ],
+    queryFn: () => {
+      const filterParams: Record<string, any> = {
+        property_usage: propertyType.current,
+        timeframe_days: TIMEFRAME_MAPPING[timeframe.current]
+      };
+      
+      // Add active filters for context-aware options
+      if (masterProject.current !== 'All') {
+        filterParams.master_project = masterProject.current;
+      }
+      if (localFilters.selectedProject !== 'All') {
+        filterParams.project = localFilters.selectedProject;
+      }
+      if (localFilters.selectedBuilding !== 'All') {
+        filterParams.building = localFilters.selectedBuilding;
+      }
+      if (localFilters.selectedPropertyType !== 'All') {
+        filterParams.property_type = localFilters.selectedPropertyType;
+      }
+      if (localFilters.selectedBedroomsOrSubType !== 'All') {
+        if (propertyType.current === PROPERTY_USAGE.RESIDENTIAL) {
+          filterParams.rooms = localFilters.selectedBedroomsOrSubType;
+        } else {
+          filterParams.property_sub_type = localFilters.selectedBedroomsOrSubType;
+        }
+      }
+      if (localFilters.selectedRegistration !== 'All') {
+        filterParams.registration_type = localFilters.selectedRegistration;
+      }
+      
+      return filters.sales(filterParams);
+    },
     staleTime: 5 * 60 * 1000, // 5 minutes
   }));
 
@@ -157,23 +192,64 @@
     propertyType.current === PROPERTY_USAGE.RESIDENTIAL ? RESIDENTIAL_COLUMNS : COMMERCIAL_COLUMNS
   );
 
-  // Filter definitions - show immediately, options load async
   const opts = $derived(filterOptionsQuery.data);
-  let filterDefinitions = $derived<FilterDefinition[]>(filterOptionsQuery.data ? [
-    { id: 'selectedProject', label: 'Project', type: 'searchable', options: ['All', ...(opts?.projects ?? [])] },
-    { id: 'selectedBuilding', label: 'Building', type: 'searchable', options: ['All', ...(opts?.buildings ?? [])] },
-    { id: 'selectedPropertyType', label: 'Property Type', type: 'standard', options: ['All', ...(opts?.property_types ?? [])] },
-    { 
-      id: 'selectedBedroomsOrSubType', 
-      label: propertyType.current === PROPERTY_USAGE.RESIDENTIAL ? 'Bedrooms' : 'Property Sub Type', 
-      type: 'standard', 
-      options: ['All', ...(propertyType.current === PROPERTY_USAGE.RESIDENTIAL ? (opts?.rooms ?? []) : (opts?.property_sub_types ?? []))]
-    },
-    { id: 'selectedRegistration', label: 'Registration', type: 'standard', options: ['All', ...(opts?.registration_types ?? [])] },
-    { id: 'areaRange', label: 'Area (sq.ft)', type: 'price-range', placeholderMin: 'Min', placeholderMax: 'Max' },
-    { id: 'priceRange', label: 'Price (AED)', type: 'price-range', placeholderMin: 'Min', placeholderMax: 'Max' },
-    { id: 'pricePerSqFtRange', label: 'Price/sq.ft (AED)', type: 'price-range', placeholderMin: 'Min', placeholderMax: 'Max' }
-  ] : []);
+  
+  let filterDefinitions = $derived<FilterDefinition[]>(
+    opts ? [
+      { 
+        id: 'selectedProject', 
+        label: 'Project', 
+        type: 'searchable', 
+        options: ['All', ...(opts.projects ?? [])] 
+      },
+      { 
+        id: 'selectedBuilding', 
+        label: 'Building', 
+        type: 'searchable', 
+        options: ['All', ...(opts.buildings ?? [])] 
+      },
+      { 
+        id: 'selectedPropertyType', 
+        label: 'Property Type', 
+        type: 'standard', 
+        options: ['All', ...(opts.property_types ?? [])] 
+      },
+      { 
+        id: 'selectedBedroomsOrSubType', 
+        label: propertyType.current === PROPERTY_USAGE.RESIDENTIAL ? 'Bedrooms' : 'Sub Type', 
+        type: 'standard', 
+        options: ['All', ...(
+          propertyType.current === PROPERTY_USAGE.RESIDENTIAL 
+            ? (opts.rooms ?? []) 
+            : (opts.property_sub_types ?? [])
+        )]
+      },
+      { 
+        id: 'selectedRegistration', 
+        label: 'Registration', 
+        type: 'standard', 
+        options: ['All', ...(opts.registration_types ?? [])] 
+      },
+      { 
+        id: 'areaRange', 
+        label: 'Area (sq.ft)', 
+        type: 'standard',
+        options: AREA_OPTIONS
+      },
+      { 
+        id: 'priceRange', 
+        label: 'Price (AED)', 
+        type: 'standard',
+        options: PRICE_OPTIONS
+      },
+      { 
+        id: 'pricePerSqFtRange', 
+        label: 'Price/sq.ft (AED)', 
+        type: 'standard',
+        options: PRICE_SQFT_OPTIONS
+      }
+    ] : []
+  );
 
   function transformTransaction(t: Transaction): TransformedTransaction {
     return {
@@ -209,9 +285,9 @@
       selectedPropertyType: 'All',
       selectedBedroomsOrSubType: 'All',
       selectedRegistration: 'All',
-      areaRange: { min: '', max: '' },
-      priceRange: { min: '', max: '' },
-      pricePerSqFtRange: { min: '', max: '' }
+      areaRange: 'All',
+      priceRange: 'All',
+      pricePerSqFtRange: 'All'
     };
     currentPage = 1;
   }
@@ -220,37 +296,105 @@
     console.log('Transaction clicked:', row);
   }
 
-  // Create a derived string for filter comparison
-  let filterKey = $derived(JSON.stringify(localFilters));
+  // ========================================
+  // Effects
+  // ========================================
   
-  // Track previous filter key
+  // Track filter changes to reset page
+  let filterKey = $derived(JSON.stringify({
+    project: localFilters.selectedProject,
+    building: localFilters.selectedBuilding,
+    propertyType: localFilters.selectedPropertyType,
+    bedroomsOrSubType: localFilters.selectedBedroomsOrSubType,
+    registration: localFilters.selectedRegistration,
+    areaRange: localFilters.areaRange,
+    priceRange: localFilters.priceRange,
+    pricePerSqFtRange: localFilters.pricePerSqFtRange
+  }));
+  
   let lastFilterKey = '';
   
-  // Reset to page 1 when filters change (not when page changes)
+  // Reset to page 1 when filters change
   $effect(() => {
     if (filterKey !== lastFilterKey) {
       if (lastFilterKey !== '') {
-        // Only reset page after initial load
         currentPage = 1;
       }
       lastFilterKey = filterKey;
     }
   });
 
-  // Reset page on global filter changes
+  // Reset page and filters on global filter changes
   $effect(() => {
     const _ = [propertyType.current, masterProject.current, timeframe.current];
     currentPage = 1;
     resetFilters();
   });
+
+  let isExporting = $state(false);
+  
+  async function handleExport() {
+    isExporting = true;
+    try {
+      const filters = buildApiFilters();
+      
+      // Use the API client's export method
+      const blob = await api.exportSales(filters);
+      
+      // Download the file
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `sales_export_${Date.now()}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (error) {
+      console.error('Export failed:', error);
+      alert(`Failed to export data: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      isExporting = false;
+    }
+  }
 </script>
 
 <div class="min-h-screen bg-background">
+
+  <!-- Add button in your page -->
+<div class="flex items-center justify-between mb-4">
+  <div class="text-sm text-gray-600">
+    {#if transactionsQuery.isFetching}
+      <span class="inline-flex items-center gap-2">
+        <div class="w-4 h-4 border-2 border-gray-300 border-t-primary rounded-full animate-spin"></div>
+        Updating results...
+      </span>
+    {:else}
+      Found <span class="font-semibold text-gray-900">{totalRecords.toLocaleString()}</span> transactions
+    {/if}
+  </div>
+  
+  <button
+    onclick={handleExport}
+    disabled={isExporting || transactionsQuery.isPending}
+    class="inline-flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+  >
+    {#if isExporting}
+      <div class="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+      Exporting...
+    {:else}
+      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+      </svg>
+      Export to Excel
+    {/if}
+  </button>
+</div>
   <div class="max-w-7xl mx-auto px-0 sm:px-1 lg:px-1 py-8">
     {#if transactionsQuery.isError}
       <div class="bg-red-50 border border-red-200 rounded-lg p-6 text-center mb-6">
         <p class="text-red-800 font-semibold">Error loading data</p>
-        <p class="text-red-600 mt-2">{transactionsQuery.error.message}</p>
+        <p class="text-red-600 mt-2">{transactionsQuery.error?.message ?? 'Unknown error'}</p>
         <button
           onclick={() => transactionsQuery.refetch()}
           class="mt-4 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
@@ -260,18 +404,11 @@
       </div>
     {/if}
 
-    {#if filterOptionsQuery.isPending}
-      <div class="flex items-center justify-center py-12">
-        <div class="inline-block animate-spin rounded-full h-10 w-10 border-b-2 border-primary"></div>
-        <span class="ml-4 text-gray-500">Loading filters...</span>
-      </div>
-    {:else}
-      <FilterPanel
-        {filterDefinitions}
-        bind:filters={localFilters}
-        onReset={resetFilters}
-      />
-    {/if}
+    <FilterPanel
+      {filterDefinitions}
+      bind:filters={localFilters}
+      onReset={resetFilters}
+    />
 
     <DataPanel 
       {columns} 

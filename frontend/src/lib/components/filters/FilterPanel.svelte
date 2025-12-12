@@ -1,9 +1,15 @@
 <script lang="ts">
   import StandardDropdown from '$lib/components/dropdowns/StandardDropdown.svelte';
   import SearchableDropdown from '$lib/components/dropdowns/SearchableDropdown.svelte';
-  import PriceRangeDropdown from '$lib/components/dropdowns/PriceRangeDropdown.svelte';
   import CheckboxDropdown from '$lib/components/dropdowns/CheckboxDropdown.svelte';
   import type { FilterDefinition } from '$lib/types/filters';
+
+
+  // Hardcoded range options
+  const AREA_OPTIONS = ["All", "<500", "500-1000", "1000-2000", "2000-5000", ">5000"];
+  const PRICE_OPTIONS = ["All", "<500k", "500k-1M", "1M-2M", "2M-5M", ">5M"];
+  const PRICE_SQFT_OPTIONS = ["All", "<1000", "1000-1500", "1500-2000", ">2000"];
+  const ANNUAL_RENT_OPTIONS = ["All", "<50k", "50k-100k", "100k-200k", ">200k"];
 
   let {
     filterDefinitions = [],
@@ -49,19 +55,39 @@
             options={filter.options || []}
             bind:value={filters[filter.id]}
           />
-        {:else if filter.type === 'standard'}
+        {:else if filter.id === 'area'}
+          <StandardDropdown
+            id="{filter.id}-input"
+            ariaLabel={filter.label}
+            options={AREA_OPTIONS}
+            bind:value={filters[filter.id]}
+          />
+        {:else if filter.id === 'price'}
+          <StandardDropdown
+            id="{filter.id}-input"
+            ariaLabel={filter.label}
+            options={PRICE_OPTIONS}
+            bind:value={filters[filter.id]}
+          />
+        {:else if filter.id === 'pricePerSqFt'}
+          <StandardDropdown
+            id="{filter.id}-input"
+            ariaLabel={filter.label}
+            options={PRICE_SQFT_OPTIONS}
+            bind:value={filters[filter.id]}
+          />
+        {:else if filter.id === 'annualRent'}
+          <StandardDropdown
+            id="{filter.id}-input"
+            ariaLabel={filter.label}
+            options={ANNUAL_RENT_OPTIONS}
+            bind:value={filters[filter.id]}
+          />
+        {:else if filter.type === 'standard' || filter.type === 'price-range' || filter.type === 'range'}
           <StandardDropdown
             id="{filter.id}-input"
             ariaLabel={filter.label}
             options={filter.options || []}
-            bind:value={filters[filter.id]}
-          />
-        {:else if filter.type === 'price-range'}
-          <PriceRangeDropdown
-            id="{filter.id}-input"
-            ariaLabel={filter.label}
-            placeholderMin={filter.placeholderMin}
-            placeholderMax={filter.placeholderMax}
             bind:value={filters[filter.id]}
           />
         {:else if filter.type === 'checkbox'}

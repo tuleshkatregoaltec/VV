@@ -6,12 +6,15 @@
   import Pagination from '$lib/components/ui/Pagination.svelte';
   import { transactions as api, filters } from '$lib/api';
   import type { RentalContract } from '$lib/api/types';
-  import { masterProject, timeframe } from '$lib/components/filters/globalFilters.svelte';
+  import { propertyType, masterProject, timeframe } from '$lib/components/filters/globalFilters.svelte';
   import {
     TIMEFRAME_MAPPING,
     DEFAULT_ITEMS_PER_PAGE
   } from '$lib/constants/transactions';
   import type { FilterDefinition } from '$lib/types/filters';
+
+  const AREA_OPTIONS = ["All", "<500", "500-1000", "1000-2000", "2000-5000", ">5000"];
+  const ANNUAL_RENT_OPTIONS = ["All", "<50k", "50k-100k", "100k-200k", ">200k"];
 
   interface TransformedRental {
     date: string;
@@ -38,14 +41,18 @@
     { id: 'registration', label: 'Reg Type', align: 'left' as const }
   ];
 
-  // Dropdown context for filter panel
+  // ========================================
+  // Dropdown Context
+  // ========================================
   let openDropdownId = $state<string | null>(null);
   setContext('openDropdownId', {
     get value() { return openDropdownId; },
     set value(v: string | null) { openDropdownId = v; }
   });
 
-  // State
+  // ========================================
+  // Local State
+  // ========================================
   let currentPage = $state(1);
 
   let localFilters = $state({
@@ -54,8 +61,8 @@
     selectedPropertySubType: 'All',
     selectedTenantType: 'All',
     selectedRegistration: 'All',
-    areaRange: { min: '', max: '' },
-    rentRange: { min: '', max: '' }
+    areaRange: 'All',      // ✅ String, not object
+    rentRange: 'All'       // ✅ String, not object
   });
 
   // ========================================
@@ -63,6 +70,7 @@
   // ========================================
   function buildApiFilters() {
     const apiFilters: Record<string, any> = {
+      property_usage: propertyType.current,
       timeframe_days: TIMEFRAME_MAPPING[timeframe.current],
       limit: DEFAULT_ITEMS_PER_PAGE,
       offset: (currentPage - 1) * DEFAULT_ITEMS_PER_PAGE
@@ -90,31 +98,27 @@
       apiFilters.contract_reg_type = localFilters.selectedRegistration;
     }
     
-    // Range filters
-    if (localFilters.areaRange.min) {
-      apiFilters.area_min = parseFloat(localFilters.areaRange.min);
+    // Range filters are now strings - let the API client handle conversion
+    // The transactions.ts client converts these via rangeMap
+    if (localFilters.areaRange !== 'All') {
+      apiFilters.area = localFilters.areaRange;
     }
-    if (localFilters.areaRange.max) {
-      apiFilters.area_max = parseFloat(localFilters.areaRange.max);
-    }
-    if (localFilters.rentRange.min) {
-      apiFilters.rent_min = parseFloat(localFilters.rentRange.min);
-    }
-    if (localFilters.rentRange.max) {
-      apiFilters.rent_max = parseFloat(localFilters.rentRange.max);
+    if (localFilters.rentRange !== 'All') {
+      apiFilters.annualRent = localFilters.rentRange;
     }
     
     return apiFilters;
   }
 
   // ========================================
-  // TanStack Query
+  // TanStack Queries
   // ========================================
   
-  // Main rentals query - refetches when any filter or page changes
+  // Main rentals query
   const rentalsQuery = createQuery(() => ({
     queryKey: [
       'rental-contracts',
+      propertyType.current,
       masterProject.current,
       timeframe.current,
       currentPage,
@@ -123,21 +127,54 @@
       localFilters.selectedPropertySubType,
       localFilters.selectedTenantType,
       localFilters.selectedRegistration,
-      localFilters.areaRange.min,
-      localFilters.areaRange.max,
-      localFilters.rentRange.min,
-      localFilters.rentRange.max,
+      localFilters.areaRange,
+      localFilters.rentRange,
     ],
     queryFn: () => api.rentals(buildApiFilters()),
   }));
 
-  // Filter options query - context-aware
+  // Filter options query - ALWAYS includes property_usage and timeframe_days
   const filterOptionsQuery = createQuery(() => ({
-    queryKey: ['filterOptions', 'rentals', masterProject.current, timeframe.current],
-    queryFn: () => filters.rentals({
-      master_project: masterProject.current !== 'All' ? masterProject.current : undefined,
-      timeframe_days: TIMEFRAME_MAPPING[timeframe.current]
-    }),
+    queryKey: [
+      'filterOptions',
+      'rentals',
+      propertyType.current,
+      masterProject.current,
+      timeframe.current,
+      localFilters.selectedProject,
+      localFilters.selectedPropertyType,
+      localFilters.selectedPropertySubType,
+      localFilters.selectedTenantType,
+      localFilters.selectedRegistration,
+    ],
+    queryFn: () => {
+      const filterParams: Record<string, any> = {
+        property_usage: propertyType.current,
+        timeframe_days: TIMEFRAME_MAPPING[timeframe.current]
+      };
+      
+      // Add active filters for context-aware options
+      if (masterProject.current !== 'All') {
+        filterParams.master_project = masterProject.current;
+      }
+      if (localFilters.selectedProject !== 'All') {
+        filterParams.project = localFilters.selectedProject;
+      }
+      if (localFilters.selectedPropertyType !== 'All') {
+        filterParams.property_type = localFilters.selectedPropertyType;
+      }
+      if (localFilters.selectedPropertySubType !== 'All') {
+        filterParams.property_sub_type = localFilters.selectedPropertySubType;
+      }
+      if (localFilters.selectedTenantType !== 'All') {
+        filterParams.tenant_type = localFilters.selectedTenantType;
+      }
+      if (localFilters.selectedRegistration !== 'All') {
+        filterParams.contract_reg_type = localFilters.selectedRegistration;
+      }
+      
+      return filters.rentals(filterParams);
+    },
     staleTime: 5 * 60 * 1000, // 5 minutes
   }));
 
@@ -145,17 +182,54 @@
   // Derived Values
   // ========================================
   
-  // Filter definitions - show immediately, options load async
   const opts = $derived(filterOptionsQuery.data);
-  let filterDefinitions = $derived<FilterDefinition[]>(filterOptionsQuery.data ? [
-    { id: 'selectedProject', label: 'Project', type: 'searchable', options: ['All', ...(opts?.projects ?? [])] },
-    { id: 'selectedPropertyType', label: 'Property Type', type: 'standard', options: ['All', ...(opts?.property_types ?? [])] },
-    { id: 'selectedPropertySubType', label: 'Sub Type', type: 'standard', options: ['All', ...(opts?.property_sub_types ?? [])] },
-    { id: 'selectedTenantType', label: 'Tenant Type', type: 'standard', options: ['All', ...(opts?.tenant_types ?? [])] },
-    { id: 'selectedRegistration', label: 'Reg Type', type: 'standard', options: ['All', ...(opts?.contract_reg_types ?? [])] },
-    { id: 'areaRange', label: 'Area (sq.ft)', type: 'price-range', placeholderMin: 'Min', placeholderMax: 'Max' },
-    { id: 'rentRange', label: 'Annual Rent (AED)', type: 'price-range', placeholderMin: 'Min', placeholderMax: 'Max' }
-  ] : []);
+  
+  let filterDefinitions = $derived<FilterDefinition[]>(
+    opts ? [
+      { 
+        id: 'selectedProject', 
+        label: 'Project', 
+        type: 'searchable', 
+        options: ['All', ...(opts.projects ?? [])] 
+      },
+      { 
+        id: 'selectedPropertyType', 
+        label: 'Property Type', 
+        type: 'standard', 
+        options: ['All', ...(opts.property_types ?? [])] 
+      },
+      { 
+        id: 'selectedPropertySubType', 
+        label: 'Sub Type', 
+        type: 'standard', 
+        options: ['All', ...(opts.property_sub_types ?? [])] 
+      },
+      { 
+        id: 'selectedTenantType', 
+        label: 'Tenant Type', 
+        type: 'standard', 
+        options: ['All', ...(opts.tenant_types ?? [])] 
+      },
+      { 
+        id: 'selectedRegistration', 
+        label: 'Reg Type', 
+        type: 'standard', 
+        options: ['All', ...(opts.contract_reg_types ?? [])] 
+      },
+      { 
+        id: 'areaRange', 
+        label: 'Area (sq.ft)', 
+        type: 'standard',
+        options: AREA_OPTIONS
+      },
+      { 
+        id: 'rentRange', 
+        label: 'Annual Rent (AED)', 
+        type: 'standard',
+        options: ANNUAL_RENT_OPTIONS
+      }
+    ] : []
+  );
 
   function transformRental(r: RentalContract): TransformedRental {
     return {
@@ -189,8 +263,8 @@
       selectedPropertySubType: 'All',
       selectedTenantType: 'All',
       selectedRegistration: 'All',
-      areaRange: { min: '', max: '' },
-      rentRange: { min: '', max: '' }
+      areaRange: 'All',   // ✅ String
+      rentRange: 'All'    // ✅ String
     };
     currentPage = 1;
   }
@@ -199,26 +273,36 @@
     console.log('Contract clicked:', row);
   }
 
-  // Create a derived string for filter comparison
-  let filterKey = $derived(JSON.stringify(localFilters));
+  // ========================================
+  // Effects
+  // ========================================
   
-  // Track previous filter key
+  // Track filter changes to reset page
+  let filterKey = $derived(JSON.stringify({
+    project: localFilters.selectedProject,
+    propertyType: localFilters.selectedPropertyType,
+    propertySubType: localFilters.selectedPropertySubType,
+    tenantType: localFilters.selectedTenantType,
+    registration: localFilters.selectedRegistration,
+    areaRange: localFilters.areaRange,
+    rentRange: localFilters.rentRange
+  }));
+  
   let lastFilterKey = '';
   
   // Reset to page 1 when filters change
   $effect(() => {
     if (filterKey !== lastFilterKey) {
       if (lastFilterKey !== '') {
-        // Only reset page after initial load
         currentPage = 1;
       }
       lastFilterKey = filterKey;
     }
   });
 
-  // Reset page on global filter changes
+  // Reset page and filters on global filter changes
   $effect(() => {
-    const _ = [masterProject.current, timeframe.current];
+    const _ = [propertyType.current, masterProject.current, timeframe.current];
     currentPage = 1;
     resetFilters();
   });
@@ -229,7 +313,7 @@
     {#if rentalsQuery.isError}
       <div class="bg-red-50 border border-red-200 rounded-lg p-6 text-center mb-6">
         <p class="text-red-800 font-semibold">Error loading data</p>
-        <p class="text-red-600 mt-2">{rentalsQuery.error.message}</p>
+        <p class="text-red-600 mt-2">{rentalsQuery.error?.message ?? 'Unknown error'}</p>
         <button
           onclick={() => rentalsQuery.refetch()}
           class="mt-4 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
@@ -239,18 +323,11 @@
       </div>
     {/if}
 
-    {#if filterOptionsQuery.isPending}
-      <div class="flex items-center justify-center py-12">
-        <div class="inline-block animate-spin rounded-full h-10 w-10 border-b-2 border-primary"></div>
-        <span class="ml-4 text-gray-500">Loading filters...</span>
-      </div>
-    {:else}
-      <FilterPanel
-        {filterDefinitions}
-        bind:filters={localFilters}
-        onReset={resetFilters}
-      />
-    {/if}
+    <FilterPanel
+      {filterDefinitions}
+      bind:filters={localFilters}
+      onReset={resetFilters}
+    />
 
     <DataPanel 
       columns={RENTAL_COLUMNS} 

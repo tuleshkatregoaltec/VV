@@ -94,15 +94,20 @@
   // Filter values
   let selectedProject = $state('All Projects');
   let selectedBedrooms = $state('All');
-  let priceRange = $state({ min: '', max: '' });
+  let priceRange = $state('All');
 
   // Apply filters whenever any filter changes
   $effect(() => {
     filteredData = allData.filter(row => {
       if (selectedProject !== 'All Projects' && row.project !== selectedProject) return false;
       if (selectedBedrooms !== 'All' && row.bedrooms !== selectedBedrooms) return false;
-      if (priceRange.min && row.price < parseFloat(priceRange.min)) return false;
-      if (priceRange.max && row.price > parseFloat(priceRange.max)) return false;
+      if (priceRange !== 'All') {
+        if (priceRange === '0-500k' && row.price > 500000) return false;
+        if (priceRange === '500k-1M' && (row.price < 500000 || row.price > 1000000)) return false;
+        if (priceRange === '1M-2M' && (row.price < 1000000 || row.price > 2000000)) return false;
+        if (priceRange === '2M-5M' && (row.price < 2000000 || row.price > 5000000)) return false;
+        if (priceRange === '5M+' && row.price < 5000000) return false;
+      }
       return true;
     });
   });
@@ -133,12 +138,11 @@
           options={bedroomOptions}
           bind:value={selectedBedrooms}
         />
-        <PriceRangeDropdown 
+        <StandardDropdown
           id="price"
           ariaLabel="Price (AED)"
+          options={["All", "0-500k", "500k-1M", "1M-2M", "2M-5M", "5M+"]}
           bind:value={priceRange}
-          placeholderMin="0"
-          placeholderMax="10,000,000"
         />
       </div>
     </div>
