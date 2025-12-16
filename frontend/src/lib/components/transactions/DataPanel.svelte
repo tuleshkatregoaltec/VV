@@ -23,7 +23,6 @@
 		onrowclick?: (row: any) => void;
 	} = $props();
 
-	// Track which optional columns are shown
 	let shownOptional: Record<string, boolean> = $state({});
 
 	let optionalColumns = $derived(
@@ -32,7 +31,6 @@
 
 	let visibleColumns = $derived(columns.filter((c) => !c.optional || shownOptional[c.id]));
 
-	// Initialize all optional columns as hidden by default
 	$effect(() => {
 		columns.forEach((col) => {
 			if (col.optional && !(col.id in shownOptional)) {
@@ -47,7 +45,6 @@
 </script>
 
 <div class="bg-white rounded-xl shadow-md border border-gray-200 overflow-hidden">
-  <!-- Header with column toggle -->
   {#if optionalColumns.length > 0}
     <div class="flex items-center justify-end px-6 py-3 bg-gray-50 border-b border-gray-200">
       <CheckboxDropdown 

@@ -1,7 +1,8 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
-  import { admin, ApiError, type Organization } from '$lib/api';
+  import { admin, type Organization } from '$lib/api/admin';
+  import { ApiError } from '$lib/api/client';
 
   let organizations: Organization[] = [];
   let loading = true;

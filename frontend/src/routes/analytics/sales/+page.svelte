@@ -2,7 +2,7 @@
     import { untrack } from 'svelte';
     import PageHeader from '$lib/components/dashboard/PageHeader.svelte';
     import DashboardCard from '$lib/components/dashboard/DashboardCard.svelte';
-    import { analytics, type SalesAnalyticsResponse } from '$lib/api';
+    import { analytics, type SalesAnalyticsResponse } from '$lib/api/analytics';
     import { propertyType, timeframe, masterProject } from '$lib/components/filters/globalFilters.svelte';
     import { TIMEFRAME_MAPPING } from '$lib/constants/transactions';
 

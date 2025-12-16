@@ -4,7 +4,8 @@
   import DataPanel from '$lib/components/transactions/DataPanel.svelte';
   import FilterPanel from '$lib/components/filters/FilterPanel.svelte';
   import Pagination from '$lib/components/ui/Pagination.svelte';
-  import { transactions as api, filters } from '$lib/api';
+  import { transactions as api } from '$lib/api/transactions';
+  import { filters } from '$lib/api/filters';
   import type { Transaction } from '$lib/api/types';
   import { propertyType, masterProject, timeframe } from '$lib/components/filters/globalFilters.svelte';
   import {
@@ -34,18 +35,8 @@
     area_name: string;
   }
 
-  // ========================================
-  // Dropdown Context
-  // ========================================
-  let openDropdownId = $state<string | null>(null);
-  setContext('openDropdownId', {
-    get value() { return openDropdownId; },
-    set value(v: string | null) { openDropdownId = v; }
-  });
+  // Dropdown context is provided by transactions/+layout.svelte
 
-  // ========================================
-  // Local State
-  // ========================================
   let currentPage = $state(1);
 
   let localFilters = $state({
@@ -54,14 +45,12 @@
     selectedPropertyType: 'All',
     selectedBedroomsOrSubType: 'All',
     selectedRegistration: 'All',
-    areaRange: 'All',        // ✅ String, not object
-    priceRange: 'All',       // ✅ String, not object
-    pricePerSqFtRange: 'All' // ✅ String, not object
+    areaRange: 'All',
+    priceRange: 'All',
+    pricePerSqFtRange: 'All'
   });
 
-  // ========================================
-  // Build API Filters
-  // ========================================
+
   function buildApiFilters() {
     const apiFilters: Record<string, any> = {
       property_usage: propertyType.current,
@@ -96,8 +85,6 @@
       apiFilters.registration_type = localFilters.selectedRegistration;
     }
     
-    // Range filters are now strings - let the API client handle conversion
-    // The transactions.ts client converts these via rangeMap
     if (localFilters.areaRange !== 'All') {
       apiFilters.area = localFilters.areaRange;
     }
@@ -110,10 +97,6 @@
     
     return apiFilters;
   }
-
-  // ========================================
-  // TanStack Queries
-  // ========================================
   
   // Main transactions query
   const transactionsQuery = createQuery(() => ({
@@ -135,7 +118,6 @@
     queryFn: () => api.sales(buildApiFilters()),
   }));
 
-  // Filter options query - ALWAYS includes property_usage and timeframe_days
   const filterOptionsQuery = createQuery(() => ({
     queryKey: [
       'filterOptions', 
@@ -155,7 +137,6 @@
         timeframe_days: TIMEFRAME_MAPPING[timeframe.current]
       };
       
-      // Add active filters for context-aware options
       if (masterProject.current !== 'All') {
         filterParams.master_project = masterProject.current;
       }
@@ -184,10 +165,7 @@
     staleTime: 5 * 60 * 1000, // 5 minutes
   }));
 
-  // ========================================
-  // Derived Values
-  // ========================================
-  
+
   let columns = $derived(
     propertyType.current === PROPERTY_USAGE.RESIDENTIAL ? RESIDENTIAL_COLUMNS : COMMERCIAL_COLUMNS
   );
@@ -274,10 +252,7 @@
   let totalRecords = $derived(transactionsQuery.data?.total ?? 0);
   let totalPages = $derived(Math.ceil(totalRecords / DEFAULT_ITEMS_PER_PAGE));
 
-  // ========================================
-  // Actions
-  // ========================================
-  
+
   function resetFilters() {
     localFilters = {
       selectedProject: 'All',
@@ -296,10 +271,6 @@
     console.log('Transaction clicked:', row);
   }
 
-  // ========================================
-  // Effects
-  // ========================================
-  
   // Track filter changes to reset page
   let filterKey = $derived(JSON.stringify({
     project: localFilters.selectedProject,
@@ -338,10 +309,8 @@
     try {
       const filters = buildApiFilters();
       
-      // Use the API client's export method
       const blob = await api.exportSales(filters);
       
-      // Download the file
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -359,72 +328,39 @@
   }
 </script>
 
-<div class="min-h-screen bg-background">
-
-  <!-- Add button in your page -->
-<div class="flex items-center justify-between mb-4">
-  <div class="text-sm text-gray-600">
-    {#if transactionsQuery.isFetching}
-      <span class="inline-flex items-center gap-2">
-        <div class="w-4 h-4 border-2 border-gray-300 border-t-primary rounded-full animate-spin"></div>
-        Updating results...
-      </span>
-    {:else}
-      Found <span class="font-semibold text-gray-900">{totalRecords.toLocaleString()}</span> transactions
-    {/if}
+{#if transactionsQuery.isError}
+  <div class="bg-red-50 border border-red-200 rounded-lg p-6 text-center mb-6">
+    <p class="text-red-800 font-semibold">Error loading data</p>
+    <p class="text-red-600 mt-2">{transactionsQuery.error?.message ?? 'Unknown error'}</p>
+    <button
+      onclick={() => transactionsQuery.refetch()}
+      class="mt-4 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+    >
+      Retry
+    </button>
   </div>
-  
-  <button
-    onclick={handleExport}
-    disabled={isExporting || transactionsQuery.isPending}
-    class="inline-flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-  >
-    {#if isExporting}
-      <div class="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-      Exporting...
-    {:else}
-      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
-      </svg>
-      Export to Excel
-    {/if}
-  </button>
-</div>
-  <div class="max-w-7xl mx-auto px-0 sm:px-1 lg:px-1 py-8">
-    {#if transactionsQuery.isError}
-      <div class="bg-red-50 border border-red-200 rounded-lg p-6 text-center mb-6">
-        <p class="text-red-800 font-semibold">Error loading data</p>
-        <p class="text-red-600 mt-2">{transactionsQuery.error?.message ?? 'Unknown error'}</p>
-        <button
-          onclick={() => transactionsQuery.refetch()}
-          class="mt-4 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
-        >
-          Retry
-        </button>
-      </div>
-    {/if}
+{/if}
 
-    <FilterPanel
-      {filterDefinitions}
-      bind:filters={localFilters}
-      onReset={resetFilters}
-    />
+<FilterPanel
+  {filterDefinitions}
+  bind:filters={localFilters}
+  onReset={resetFilters}
+  onExport={handleExport}
+/> 
 
-    <DataPanel 
-      {columns} 
-      data={displayData} 
-      onrowclick={handleRowClick}
-      loading={transactionsQuery.isPending || transactionsQuery.isFetching}
-    />
+<DataPanel 
+  {columns} 
+  data={displayData} 
+  onrowclick={handleRowClick}
+  loading={transactionsQuery.isPending || transactionsQuery.isFetching}
+/> 
 
-    <div class="mt-6">
-      <Pagination
-        bind:currentPage
-        {totalPages}
-        totalItems={totalRecords}
-        itemsPerPage={DEFAULT_ITEMS_PER_PAGE}
-        itemLabel="transactions"
-      />
-    </div>
-  </div>
+<div class="mt-6">
+  <Pagination
+    bind:currentPage
+    {totalPages}
+    totalItems={totalRecords}
+    itemsPerPage={DEFAULT_ITEMS_PER_PAGE}
+    itemLabel="transactions"
+  />
 </div>

@@ -2,7 +2,8 @@
   import { page } from '$app/state';
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
-  import { admin, ApiError, type Organization, type OrganizationUser } from '$lib/api';
+  import { admin, type Organization, type OrganizationUser } from '$lib/api/admin';
+  import { ApiError } from '$lib/api/client';
 
   let organization = $state<Organization | null>(null);
   let users = $state<OrganizationUser[]>([]);

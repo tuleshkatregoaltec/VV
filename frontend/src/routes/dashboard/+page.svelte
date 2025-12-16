@@ -18,7 +18,6 @@
 
 	<PageHeader title="Welcome, {username}!" subtitle="Your property dashboard" />
 
-	<!-- Input Box -->
 	<div class="flex justify-center mb-16">
 		<ChatBox
 			placeholder="Search properties, areas, or ask anything..."
@@ -27,9 +26,7 @@
 		/>
 	</div>
 
-	<!-- Dashboard Cards Grid -->
 	<Grid cols={1} mdCols={2} lgCols={3} gap={4} className="sm:gap-5">
-		<!-- Transactions Card -->
 		<DashboardCard
 			title="Transactions"
 			value={204}
@@ -39,7 +36,6 @@
 		<path stroke-linecap="round" stroke-linejoin="round" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5l-3 3-3-3" />
 	  </svg>
 		</DashboardCard>
-			<!-- Market Trend Card -->
 			<DashboardCard
 				title="Market Trend"
 				value=""
@@ -52,7 +48,6 @@
 					<span>Chart coming soon</span>
 				</div>
 			</DashboardCard>
-		<!-- Avg Price/sq.ft Card -->
 		<DashboardCard
 			title="Avg price/sq.ft"
 			value="2300 AED"

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
-  import { admin, ApiError } from '$lib/api';
+  import { admin } from '$lib/api/admin';
+  import { ApiError } from '$lib/api/client';
 
   let name = '';
   let domain = '';

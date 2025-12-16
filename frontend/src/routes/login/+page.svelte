@@ -1,6 +1,6 @@
 <script lang="ts">
     import { onMount } from 'svelte';
-    import { auth } from '$lib/api';
+    import { auth } from '$lib/api/auth';
 
     onMount(() => {
         auth.login();

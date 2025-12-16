@@ -1,6 +1,7 @@
 import posthog from 'posthog-js';
 import { browser } from '$app/environment';
-import { auth, ApiError, type User, type UserWithInitials } from '$lib/api';
+import { auth, type User, type UserWithInitials } from '$lib/api/auth';
+import { ApiError } from '$lib/api/client';
 
 class AuthStore {
   #user = $state<UserWithInitials | null>(null);
