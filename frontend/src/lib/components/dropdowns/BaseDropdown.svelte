@@ -28,7 +28,6 @@
     onClose?: () => void;
   } = $props();
 
-  // Get context with fallback
   let localState = $state<string | null>(null);
   let openDropdownIdContext = getContext<{ value: string | null }>('openDropdownId') ?? {
     get value() {
@@ -41,7 +40,6 @@
 
   let isOpen = $derived(openDropdownIdContext.value === id);
 
-  // Track previous state to avoid double-calling callbacks
   let wasOpen = $state(false);
 
   $effect(() => {
@@ -85,7 +83,6 @@
     {#if button}
       {@render button({ toggle, isOpen })}
     {:else}
-      <!-- Default button if no custom button provided -->
       <button
         id="{id}-button"
         type="button"
