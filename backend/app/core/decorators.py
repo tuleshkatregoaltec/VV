@@ -26,12 +26,6 @@ def serialize_result(result: Any) -> Any:
 
 
 def cached_endpoint(prefix: str, expire: int = 600):
-    """
-    Decorator to cache FastAPI endpoint responses.
-    - prefix: The Redis key prefix (e.g., 'developers')
-    - expire: Time in seconds (default 10 mins)
-    """
-
     def decorator(func: Callable):
         @wraps(func)
         async def wrapper(*args, **kwargs):

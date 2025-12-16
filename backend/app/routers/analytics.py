@@ -28,12 +28,6 @@ async def get_sales_analytics(
     master_project: str = Query(default=None),
     session: AsyncSession = Depends(get_db_session),
 ):
-    """Get complete sales analytics for dashboard.
-
-    Returns summary KPIs, trends, and breakdowns by property_type, rooms, reg_type, and master_project.
-
-    Timeframes: 7 (week), 30 (month), 90 (3 months), 180 (6 months), 365 (year)
-    """
     return await fetch_sales_analytics(
         session=session,
         property_usage=property_usage,
@@ -48,12 +42,6 @@ async def get_rental_analytics(
     timeframe_days: int = Query(default=30),
     session: AsyncSession = Depends(get_db_session),
 ):
-    """Get complete rental analytics for dashboard.
-
-    Returns summary KPIs, trends, and breakdowns by property_type and master_project.
-
-    Timeframes: 7 (week), 30 (month), 90 (3 months), 180 (6 months), 365 (year)
-    """
     return await fetch_rental_analytics(
         session=session,
         property_usage=property_usage,

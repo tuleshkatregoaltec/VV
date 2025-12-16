@@ -5,7 +5,7 @@ function buildQuery(filters: Record<string, any>): string {
     const params = new URLSearchParams();
     Object.entries(filters).forEach(([k, v]) => {
         if (v !== undefined && v !== null && v !== 'All') {
-            params.append(k, String(v));
+            params.append(k, String(v));  // Just pass as-is, no normalization
         }
     });
     const qs = params.toString();

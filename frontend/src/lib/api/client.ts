@@ -17,10 +17,6 @@ export interface RequestOptions {
     headers?: Record<string, string>;
 }
 
-/**
- * Base API client for making HTTP requests to the backend.
- * All endpoints are relative to PUBLIC_API_BASE_URL.
- */
 export async function api<T>(endpoint: string, options: RequestOptions = {}): Promise<T> {
     const { method = 'GET', body, headers = {} } = options;
 
@@ -39,6 +35,7 @@ export async function api<T>(endpoint: string, options: RequestOptions = {}): Pr
         };
         config.body = JSON.stringify(body);
     }
+    // @ts-ignore - Using window.fetch in CSR-only mode
 
     const res = await fetch(`${PUBLIC_API_BASE_URL}${endpoint}`, config);
 

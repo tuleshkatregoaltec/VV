@@ -2,7 +2,7 @@
 
 from datetime import datetime, timedelta
 from typing import List, Any, Optional
-from sqlmodel import Column
+from sqlmodel import Column, col
 
 from backend.app.db.models import Transaction, RentContract
 
@@ -39,11 +39,10 @@ class FilterBuilder:
     ) -> List[Any]:
         """Build WHERE clauses for sales transaction filters."""
 
-        # Exact match filters
+        # Exact match filters (excluding master_project)
         exact_filters = {
             trans_group: Transaction.trans_group_en,
             property_usage: Transaction.property_usage_en,
-            master_project: Transaction.master_project_en,
             project: Transaction.project_name_en,
             building: Transaction.building_name_en,
             property_type: Transaction.property_type_en,
@@ -54,7 +53,13 @@ class FilterBuilder:
 
         for value, column in exact_filters.items():
             if value is not None:
-                base_where.append(column == value)
+                base_where.append(column == value)  # type: ignore[arg-type]
+
+        # Master project filter - uses ILIKE for flexible matching
+        if master_project is not None:
+            base_where.append(
+                col(Transaction.master_project_en).ilike(f"%{master_project}%")  # type: ignore[arg-type]
+            )
 
         # Timeframe filter
         if timeframe_days is not None:
@@ -95,10 +100,9 @@ class FilterBuilder:
     ) -> List[Any]:
         """Build WHERE clauses for rental contract filters."""
 
-        # Exact match filters
+        # Exact match filters (excluding master_project)
         exact_filters = {
             property_usage: RentContract.property_usage_en,
-            master_project: RentContract.master_project_en,
             project: RentContract.project_name_en,
             property_type: RentContract.ejari_property_type_en,
             property_sub_type: RentContract.ejari_property_sub_type_en,
@@ -108,7 +112,13 @@ class FilterBuilder:
 
         for value, column in exact_filters.items():
             if value is not None:
-                base_where.append(column == value)
+                base_where.append(column == value)  # type: ignore[arg-type]
+
+        # Master project filter - uses ILIKE for flexible matching
+        if master_project is not None:
+            base_where.append(
+                col(RentContract.master_project_en).ilike(f"%{master_project}%")  # type: ignore[arg-type]
+            )
 
         # Timeframe filter
         if timeframe_days is not None:
