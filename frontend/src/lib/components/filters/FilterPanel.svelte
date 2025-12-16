@@ -15,10 +15,12 @@
     filterDefinitions = [],
     filters = $bindable({}),
     onReset
+    , onExport
   }: {
     filterDefinitions?: FilterDefinition[];
     filters?: Record<string, any>;
     onReset?: () => void;
+    onExport?: () => void;
   } = $props();
 
   function resetFilters() {
@@ -30,12 +32,24 @@
 <div class="bg-white rounded-xl shadow-md border border-gray-200 p-6 mb-6">
   <div class="flex items-center justify-between mb-6">
     <h2 class="text-xl font-bold text-gray-900">Filters</h2>
-    <button
-      onclick={resetFilters}
-      class="text-sm px-3 py-1 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 transition-colors"
-    >
-      Reset
-    </button>
+    <div class="flex items-center gap-2">
+      <button
+        onclick={resetFilters}
+        class="text-sm px-3 py-1 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 transition-colors"
+      >
+        Reset
+      </button>
+
+      <button
+        onclick={() => onExport?.()}
+        class="inline-flex items-center gap-2 text-sm px-3 py-1 rounded-lg bg-green-600 text-white hover:bg-green-700 transition-colors"
+      >
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+        </svg>
+        Export
+      </button>
+    </div>
   </div>
 
   <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
