@@ -1,31 +1,44 @@
+<script module lang="ts">
+    let nextId = 0;
+</script>
+
 <script lang="ts">
     import { fly, fade } from 'svelte/transition';
     import { quintOut } from 'svelte/easing';
     import { authStore } from '$lib/stores/auth.svelte';
+    import { getContext } from 'svelte';
 
     let initials = $derived(authStore.user?.initials ?? '');
 
-    let showDropdown = $state(false);
-    let timeout: number | undefined;
-
     const HOVER_DELAY = 150;
+
+    // Use shared openDropdownId context so profile dropdown doesn't overlap with others
+    let localState = $state<string | null>(null);
+    let openDropdownIdContext = getContext<{ value: string | null }>('openDropdownId') ?? {
+        get value() { return localState; },
+        set value(v: string | null) { localState = v; }
+    };
+
+    const id = `profile-dropdown-${nextId++}`;
+    let timeout: number | undefined;
+    let isOpen = $derived(openDropdownIdContext.value === id);
 
     function handleEnter() {
         clearTimeout(timeout);
         timeout = window.setTimeout(() => {
-            showDropdown = true;
+            openDropdownIdContext.value = id;
         }, HOVER_DELAY);
     }
 
     function handleLeave() {
         clearTimeout(timeout);
         timeout = window.setTimeout(() => {
-            showDropdown = false;
+            if (openDropdownIdContext.value === id) openDropdownIdContext.value = null;
         }, 200);
     }
 
     function handleLogout() {
-        showDropdown = false;
+        openDropdownIdContext.value = null;
         authStore.logout();
     }
 </script>
@@ -40,12 +53,12 @@
         class="w-8 h-8 rounded-lg bg-primary flex items-center justify-center text-white font-semibold text-sm hover:bg-primary/90 transition-colors"
         aria-label="Profile menu"
         aria-haspopup="true"
-        aria-expanded={showDropdown}
+        aria-expanded={isOpen}
     >
         {initials}
     </button>
     
-    {#if showDropdown}
+    {#if isOpen}
         <div 
             class="absolute right-0 mt-1 w-44 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50"
             in:fly={{ y: -10, duration: 200, easing: quintOut }}

@@ -4,7 +4,8 @@
   import DataPanel from '$lib/components/transactions/DataPanel.svelte';
   import FilterPanel from '$lib/components/filters/FilterPanel.svelte';
   import Pagination from '$lib/components/ui/Pagination.svelte';
-  import { transactions as api, filters } from '$lib/api';
+  import { transactions as api } from '$lib/api/transactions';
+  import { filters } from '$lib/api/filters';
   import type { RentalContract } from '$lib/api/types';
   import { propertyType, masterProject, timeframe } from '$lib/components/filters/globalFilters.svelte';
   import {
@@ -41,14 +42,7 @@
     { id: 'registration', label: 'Reg Type', align: 'left' as const }
   ];
 
-  // ========================================
-  // Dropdown Context
-  // ========================================
-  let openDropdownId = $state<string | null>(null);
-  setContext('openDropdownId', {
-    get value() { return openDropdownId; },
-    set value(v: string | null) { openDropdownId = v; }
-  });
+  // Dropdown context is provided by transactions/+layout.svelte
 
   // ========================================
   // Local State
@@ -306,44 +300,66 @@
     currentPage = 1;
     resetFilters();
   });
+
+  // Export support (same logic as sales page)
+  let isExporting = $state(false);
+
+  async function handleExport() {
+    isExporting = true;
+    try {
+      const filters = buildApiFilters();
+      const blob = await api.exportRentals(filters);
+
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `rentals_export_${Date.now()}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (error) {
+      console.error('Export failed:', error);
+      alert(`Failed to export data: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      isExporting = false;
+    }
+  }
 </script>
 
-<div class="min-h-screen bg-background">
-  <div class="max-w-7xl mx-auto px-0 sm:px-1 lg:px-1 py-8">
-    {#if rentalsQuery.isError}
-      <div class="bg-red-50 border border-red-200 rounded-lg p-6 text-center mb-6">
-        <p class="text-red-800 font-semibold">Error loading data</p>
-        <p class="text-red-600 mt-2">{rentalsQuery.error?.message ?? 'Unknown error'}</p>
-        <button
-          onclick={() => rentalsQuery.refetch()}
-          class="mt-4 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
-        >
-          Retry
-        </button>
-      </div>
-    {/if}
-
-    <FilterPanel
-      {filterDefinitions}
-      bind:filters={localFilters}
-      onReset={resetFilters}
-    />
-
-    <DataPanel 
-      columns={RENTAL_COLUMNS} 
-      data={displayData} 
-      onrowclick={handleRowClick}
-      loading={rentalsQuery.isPending || rentalsQuery.isFetching}
-    />
-
-    <div class="mt-6">
-      <Pagination
-        bind:currentPage
-        {totalPages}
-        totalItems={totalRecords}
-        itemsPerPage={DEFAULT_ITEMS_PER_PAGE}
-        itemLabel="contracts"
-      />
-    </div>
+{#if rentalsQuery.isError}
+  <div class="bg-red-50 border border-red-200 rounded-lg p-6 text-center mb-6">
+    <p class="text-red-800 font-semibold">Error loading data</p>
+    <p class="text-red-600 mt-2">{rentalsQuery.error?.message ?? 'Unknown error'}</p>
+    <button
+      onclick={() => rentalsQuery.refetch()}
+      class="mt-4 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+    >
+      Retry
+    </button>
   </div>
+{/if}
+
+<FilterPanel
+  {filterDefinitions}
+  bind:filters={localFilters}
+  onReset={resetFilters}
+  onExport={handleExport}
+/> 
+
+<DataPanel 
+  columns={RENTAL_COLUMNS} 
+  data={displayData} 
+  onrowclick={handleRowClick}
+  loading={rentalsQuery.isPending || rentalsQuery.isFetching}
+/> 
+
+<div class="mt-6">
+  <Pagination
+    bind:currentPage
+    {totalPages}
+    totalItems={totalRecords}
+    itemsPerPage={DEFAULT_ITEMS_PER_PAGE}
+    itemLabel="contracts"
+  />
 </div>

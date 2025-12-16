@@ -1,6 +1,11 @@
+<script module lang="ts">
+    let nextId = 0;
+</script>
+
 <script lang="ts">
     import { fly, fade } from 'svelte/transition';
     import { quintOut } from 'svelte/easing';
+    import { getContext } from 'svelte';
 
     type Item = { href: string; label: string };
     
@@ -12,22 +17,30 @@
         items: Item[];
     } = $props();
 
-    let showDropdown = $state(false);
-    let timeout: number | undefined;
-
     const HOVER_DELAY = 150;
+
+    // Use shared openDropdownId context so only one dropdown is open at a time
+    let localState = $state<string | null>(null);
+    let openDropdownIdContext = getContext<{ value: string | null }>('openDropdownId') ?? {
+        get value() { return localState; },
+        set value(v: string | null) { localState = v; }
+    };
+
+    const id = `nav-dropdown-${nextId++}`;
+    let timeout: number | undefined;
+    let isOpen = $derived(openDropdownIdContext.value === id);
 
     function handleEnter() {
         clearTimeout(timeout);
         timeout = window.setTimeout(() => {
-            showDropdown = true;
+            openDropdownIdContext.value = id;
         }, HOVER_DELAY);
     }
 
     function handleLeave() {
         clearTimeout(timeout);
         timeout = window.setTimeout(() => {
-            showDropdown = false;
+            if (openDropdownIdContext.value === id) openDropdownIdContext.value = null;
         }, 200);
     }
 </script>
@@ -41,7 +54,7 @@
     <button
         class="px-3 py-2 text-base font-medium text-gray-700 hover:text-primary rounded-lg hover:bg-gray-50 transition-colors flex items-center gap-1"
         aria-haspopup="true"
-        aria-expanded={showDropdown}
+        aria-expanded={isOpen}
     >
         {label}
         <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -49,7 +62,7 @@
         </svg>
     </button>
     
-    {#if showDropdown}
+    {#if isOpen}
         <div 
             class="absolute left-0 mt-1 w-44 bg-white rounded-lg shadow-lg border border-gray-200 py-1"
             in:fly={{ y: -10, duration: 200, easing: quintOut }}
