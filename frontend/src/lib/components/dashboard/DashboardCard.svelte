@@ -6,7 +6,7 @@
 </script>
 
 <div
-			class="bg-white/80 backdrop-blur-xl rounded-xl shadow-lg shadow-primary-pale/20 border border-primary-pale hover:shadow-xl hover:border-primary-pale/50 transition-all duration-300 p-5 flex flex-col items-center justify-center text-center group w-full sm:w-auto {colSpan}"
+			class="bg-white/80 backdrop-blur-xl rounded-xl shadow-lg shadow-primary-pale/20 border border-primary-pale hover:shadow-xl hover:border-primary-pale/50 transition-all duration-300 p-5 flex flex-col items-center justify-start text-center group w-full sm:w-auto {colSpan}"
 >
 	<div class="flex flex-col items-center w-full">
 		<div class="flex items-start justify-between mb-4 w-full">
