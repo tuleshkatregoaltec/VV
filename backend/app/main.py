@@ -6,7 +6,7 @@ from honeybadger import contrib, honeybadger
 import logging.config
 
 from backend.app.config import settings
-from backend.app.routers import auth, admin, transactions, supply, analytics, filters
+from backend.app.routers import auth, admin, transactions, supply, analytics, filters, chat
 from backend.app.core.logging_config import LOGGING_CONFIG
 
 # Add logging
@@ -37,6 +37,7 @@ app.include_router(transactions.router, tags=["transactions"])
 app.include_router(supply.router, tags=["supply"])
 app.include_router(analytics.router, tags=["analytics"])
 app.include_router(filters.router, tags=["filters"])
+app.include_router(chat.router, tags=["chat"])
 
 
 @app.get("/")
