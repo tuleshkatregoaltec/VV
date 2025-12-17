@@ -23,6 +23,9 @@ class Settings(BaseSettings):
     # Honeybadger
     HONEYBADGER_API_KEY: str
 
+    # OpenRouter
+    OPENROUTER_API_KEY: str
+
     class Config:
         env_file = ".env"
 
