@@ -45,7 +45,17 @@
 					<path stroke-linecap="round" stroke-linejoin="round" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
 				</svg>
 				<div class="h-32 -mx-5 -mb-5 mt-4 flex items-center justify-center text-gray-400">
-					<span>Chart coming soon</span>
+					<svg class="w-full h-full" viewBox="0 0 200 64" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
+						<defs>
+							<linearGradient id="g1" x1="0" x2="0" y1="0" y2="1">
+								<stop offset="0%" stop-color="#60a5fa" stop-opacity="0.45" />
+								<stop offset="100%" stop-color="#60a5fa" stop-opacity="0.05" />
+							</linearGradient>
+						</defs>
+						<!-- Smooth trendline and matching filled area (no plotted points) -->
+						<path d="M0 44 C40 36, 70 28, 100 30 C130 32, 160 22, 200 12 L200 64 L0 64 Z" fill="url(#g1)" />
+						<path d="M0 44 C40 36, 70 28, 100 30 C130 32, 160 22, 200 12" fill="none" stroke="#2563eb" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" opacity="0.95" />
+					</svg>
 				</div>
 			</DashboardCard>
 		<DashboardCard
