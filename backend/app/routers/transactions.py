@@ -203,7 +203,6 @@ async def export_rental_contracts(
         rent_max=rent_max,
     )
     
-    # Generate filename with timestamp
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     filename = f"rental_contracts_{timestamp}.xlsx"
     
