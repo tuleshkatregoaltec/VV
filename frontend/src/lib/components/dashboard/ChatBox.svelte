@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { fly, fade } from 'svelte/transition';
 	import { quintOut } from 'svelte/easing';
+	import { chat } from '$lib/api/chat';
 
 	let {
 		placeholder = 'Search properties, areas, or ask anything...',
@@ -12,7 +13,10 @@
 		options?: string[];
 	} = $props();
 
+	// UI state
 	let inputValue = $state('');
+	let messages: string[] = $state([]);
+	let streamController: { close: () => void } | null = $state(null);
 	let showDropdown = $state(false);
 	let dropdownOpenTimeout: number | undefined;
 	let dropdownCloseTimeout: number | undefined;
@@ -34,7 +38,6 @@
 	}
 
 	function selectOption(option: string) {
-		console.log('Selected:', option);
 		showDropdown = false;
 	}
 
@@ -46,12 +49,61 @@
 		}
 	}
 
+	function stop() {
+		console.log('chat: stopping stream');
+		streamController?.close();
+		streamController = null;
+	}
+
 	function handleSubmit() {
-		if (inputValue.trim()) {
-			onSubmit(inputValue);
-			inputValue = '';
-			if (textareaRef) textareaRef.style.height = 'auto';
-		}
+		const text = inputValue.trim();
+		if (!text) return;
+
+		// Cancel previous stream if any
+		if (streamController) stop();
+
+		// Emit user message (reassign to trigger Svelte reactivity)
+		console.log('chat: send', text);
+		messages = [...messages, `You: ${text}`];
+		onSubmit(text);
+		inputValue = '';
+		if (textareaRef) textareaRef.style.height = 'auto';
+
+		// Start streaming response
+		streamController = chat.sendPrompt(text, (rawChunk) => {
+			console.log('chat: chunk', rawChunk);
+			let chunk = String(rawChunk || '');
+			// Remove SDK object repr like "ResponseOutputText(... )"
+			chunk = chunk.replace(/^ResponseOutputText\([^)]*\)/, '');
+			if (!chunk) return;
+
+			const lastIndex = messages.length - 1;
+			const hasAi = lastIndex >= 0 && messages[lastIndex].startsWith('AI:');
+			const currentAi = hasAi ? messages[lastIndex].slice(4) : '';
+
+			// Robust delta detection:
+			// - If the chunk contains repeated full-snapshots (e.g. the entire
+			//   message several times), take the suffix after the *last*
+			//   occurrence of the current AI text and append only that suffix.
+			// - If the current AI text isn't present, append the whole chunk.
+			let newPart = chunk;
+			if (currentAi) {
+				const lastOcc = chunk.lastIndexOf(currentAi);
+				if (lastOcc !== -1) {
+					newPart = chunk.slice(lastOcc + currentAi.length);
+				}
+			}
+
+			if (!newPart) return;
+
+			if (!hasAi) {
+				messages = [...messages, 'AI: ' + newPart];
+			} else {
+				messages = messages.map((m, i) => i === lastIndex ? m + newPart : m);
+			}
+			console.log('chat: messages', messages);
+		});
+		console.log('chat: streamController', streamController);
 	}
 </script>
 
@@ -59,19 +111,26 @@
 	<div
 		class="bg-white/80 backdrop-blur-xl rounded-2xl shadow-lg shadow-primary-pale/20 border border-primary-pale hover:shadow-xl hover:border-primary-pale/50 transition-all duration-300 overflow-visible px-5 py-4 flex flex-col"
 	>
+		{#if messages.length}
+			<div class="mb-3 space-y-2 max-h-48 overflow-auto">
+				{#each messages as m}
+					<div class="px-3 py-2 rounded-lg bg-gray-50 text-sm">{m}</div>
+				{/each}
+			</div>
+		{/if}
 		<textarea
 			bind:this={textareaRef}
 			bind:value={inputValue}
 			oninput={autoResizeTextarea}
+			onkeydown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSubmit(); } }}
 			{placeholder}
 			aria-label={placeholder}
 			class="w-full bg-transparent outline-none text-gray-800 placeholder-gray-400 text-base font-medium resize-none min-h-[36px] max-h-[200px] leading-relaxed scrollbar-thin scrollbar-track-gray-100"
 			rows="1"
 		></textarea>
 		<div class="flex items-center justify-between mt-0">
-			<!-- Plus Dropdown -->
 			<div
-				class="relative dropdown-container -ml-2"
+				class="relative dropdown-container -ml-2 z=100"
 				onmouseenter={handleMouseEnterDropdown}
 				onmouseleave={handleMouseLeaveDropdown}
 				role="button"
@@ -121,22 +180,27 @@
 					</div>
 				{/if}
 			</div>
-			<!-- Send Button -->
 			<button
 				type="button"
-				aria-label="Send message"
-				title="Send message"
-				onclick={handleSubmit}
-				disabled={!inputValue.trim()}
+				aria-label={streamController ? 'Stop streaming' : 'Send message'}
+				title={streamController ? 'Stop' : 'Send message'}
+				onclick={streamController ? stop : handleSubmit}
+				disabled={!inputValue.trim() && !streamController}
 				class="flex-shrink-0 p-2 rounded-lg -mr-2 transition-all duration-200
-          text-primary bg-primary-pale/40 hover:bg-primary-pale/60
-          disabled:bg-primary-pale/20 disabled:text-gray-400 disabled:cursor-not-allowed"
+		  text-primary bg-primary-pale/40 hover:bg-primary-pale/60
+		  disabled:bg-primary-pale/20 disabled:text-gray-400 disabled:cursor-not-allowed"
 			>
-				<svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-					<path
-						d="M16.6915026,12.4744748 L3.50612381,13.2599618 C3.19218622,13.2599618 3.03521743,13.4170592 3.03521743,13.5741566 L1.15159189,20.0151496 C0.8376543,20.8006365 0.99,21.89 1.77946707,22.52 C2.41,22.99 3.50612381,23.1 4.13399899,22.8429026 L21.714504,14.0454487 C22.6563168,13.5741566 23.1272231,12.6315722 22.9702544,11.6889879 C22.9702544,11.6889879 22.9702544,11.5318905 22.9702544,11.4748031 L22.9702544,11.3177057 C22.9702544,10.3751214 22.6563168,9.43253706 21.714504,8.96126502 L4.13399899,0.163821323 C3.34915502,0.0567539539 2.40734225,0.163821323 1.77946707,0.637394323 C0.994623095,1.27108255 0.837654326,2.36036823 1.15159189,3.14585511 L3.03521743,9.58684815 C3.03521743,9.74394555 3.19218622,9.90104294 3.50612381,9.90104294 L16.6915026,10.6865299 C16.6915026,10.6865299 17.1624089,10.6865299 17.1624089,10.3751214 L17.1624089,12.6315722 C17.1624089,12.6315722 17.1624089,12.4744748 16.6915026,12.4744748 Z"
-					/>
-				</svg>
+				{#if streamController}
+					<svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+						<rect x="6" y="6" width="12" height="12" rx="2" />
+					</svg>
+				{:else}
+					<svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+						<path
+							d="M16.6915026,12.4744748 L3.50612381,13.2599618 C3.19218622,13.2599618 3.03521743,13.4170592 3.03521743,13.5741566 L1.15159189,20.0151496 C0.8376543,20.8006365 0.99,21.89 1.77946707,22.52 C2.41,22.99 3.50612381,23.1 4.13399899,22.8429026 L21.714504,14.0454487 C22.6563168,13.5741566 23.1272231,12.6315722 22.9702544,11.6889879 C22.9702544,11.6889879 22.9702544,11.5318905 22.9702544,11.4748031 L22.9702544,11.3177057 C22.9702544,10.3751214 22.6563168,9.43253706 21.714504,8.96126502 L4.13399899,0.163821323 C3.34915502,0.0567539539 2.40734225,0.163821323 1.77946707,0.637394323 C0.994623095,1.27108255 0.837654326,2.36036823 1.15159189,3.14585511 L3.03521743,9.58684815 C3.03521743,9.74394555 3.19218622,9.90104294 3.50612381,9.90104294 L16.6915026,10.6865299 C16.6915026,10.6865299 17.1624089,10.6865299 17.1624089,10.3751214 L17.1624089,12.6315722 C17.1624089,12.6315722 17.1624089,12.4744748 16.6915026,12.4744748 Z"
+						/>
+					</svg>
+				{/if}
 			</button>
 		</div>
 	</div>
