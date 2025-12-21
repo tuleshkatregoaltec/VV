@@ -1,97 +1,113 @@
-from fastapi import APIRouter, Query, Depends
-from fastapi.responses import StreamingResponse
-import logging
-from sqlmodel.ext.asyncio.session import AsyncSession
-import json
-from openai import AsyncOpenAI
+"""Chat API Router - Endpoints for conversation management and streaming chat."""
 
+import json
+import logging
+from typing import List
+
+from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import StreamingResponse
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 from backend.app.db.session import get_db_session
 from backend.app.routers.dependencies import require_auth
-from backend.app.schemas.chat import ChatMessageResponse
-from backend.app.services.chat_service import *
-from backend.app.config import settings
+from backend.app.schemas.chat import (
+    ConversationListResponse,
+    ConversationResponse,
+    CreateConversationRequest,
+    MessageResponse,
+)
+from backend.app.services.chat_service import chat_service
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(
     prefix="/api/v1/chat",
     tags=["chat"],
+    dependencies=[Depends(require_auth)],
 )
 
-logger = logging.getLogger(__name__)
 
-# We'll create an async client per-request so streaming works cleanly
-OPENROUTER_BASE = "https://openrouter.ai/api/v1"
+@router.post("/conversations", response_model=ConversationResponse)
+async def create_conversation(
+    request: CreateConversationRequest,
+    db: AsyncSession = Depends(get_db_session),
+    current_user: dict = Depends(require_auth),
+):
+    """Create a new conversation"""
+    conversation = await chat_service.create_conversation(
+        db=db, user_id=current_user["id"], title=request.title
+    )
+    return ConversationResponse.model_validate(conversation)
 
-@router.get("/response")
-async def chat_response(prompt: str = Query(default="What is your name?")):
-  """Stream a model response as SSE (`text/event-stream`)."""
 
-  async def event_stream():
-    yield "data: [connected]\n\n"
-    logger.info("SSE connection opened for prompt=%s", prompt)
+@router.get("/conversations", response_model=ConversationListResponse)
+async def list_conversations(
+    limit: int = Query(default=50, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+    db: AsyncSession = Depends(get_db_session),
+    current_user: dict = Depends(require_auth),
+):
+    """Get all conversations for current user"""
+    conversations = await chat_service.get_user_conversations(
+        db=db, user_id=current_user["id"], limit=limit, offset=offset
+    )
+    return ConversationListResponse(
+        conversations=[ConversationResponse.model_validate(c) for c in conversations],
+        total=len(conversations),
+    )
 
-    async def _sse_yield_text(text: str):
-      if text is None:
-        return
-      for line in str(text).splitlines() or [""]:
-        yield f"data: {line}\n"
-      yield "\n"
 
-    def _get(obj, key):
-      try:
-        return obj.get(key)
-      except Exception:
-        return getattr(obj, key, None)
+@router.get(
+    "/conversations/{conversation_id}/messages", response_model=List[MessageResponse]
+)
+async def get_conversation_messages(
+    conversation_id: int,
+    limit: int = Query(default=100, ge=1, le=500),
+    db: AsyncSession = Depends(get_db_session),
+    current_user: dict = Depends(require_auth),
+):
+    """Get messages for a conversation"""
+    # Verify ownership
+    conversation = await chat_service.get_conversation(
+        db, conversation_id, current_user["id"]
+    )
+    if not conversation:
+        raise HTTPException(status_code=404, detail="Conversation not found")
 
-    def _extract_text_event(event) -> str | None:
-      etype = _get(event, "type")
-      if not etype:
-        return None
+    messages = await chat_service.get_conversation_messages(
+        db=db, conversation_id=conversation_id, limit=limit
+    )
+    return [MessageResponse.model_validate(m) for m in messages]
 
-      if etype in ("response.output_text.delta", "response.output_text", "response.output_text.done"):
-        return _get(event, "delta") or _get(event, "text") or _get(event, "snapshot")
 
-      if etype in ("response.content_part.done", "response.content_part.added"):
-        part = _get(event, "part")
-        if part is None:
-          return None
+@router.get("/conversations/{conversation_id}/messages/stream")
+async def send_message(
+    conversation_id: int,
+    message: str = Query(..., min_length=1),
+    db: AsyncSession = Depends(get_db_session),
+    current_user: dict = Depends(require_auth),
+):
+    """Send a message and stream AI response via SSE"""
+
+    async def event_stream():
         try:
-          return part.get("text")
+            async for chunk in chat_service.stream_chat_response(
+                db=db,
+                conversation_id=conversation_id,
+                user_message=message,
+                user_id=current_user["id"],
+            ):
+                yield chunk
         except Exception:
-          return getattr(part, "text", None) or str(part)
+            logger.exception("Error in send_message endpoint")
+            yield f"data: {json.dumps({'type': 'error', 'error': 'Internal server error'})}\n\n"
 
-      return None
-
-    async def _iter_stream(it):
-      if hasattr(it, "__aenter__"):
-        async with it as stream:
-          async for ev in stream:
-            yield ev
-      else:
-        async for ev in it:
-          yield ev
-
-    try:
-      async with AsyncOpenAI(base_url=OPENROUTER_BASE, api_key=settings.OPENROUTER_API_KEY) as async_client:
-        stream_func = getattr(async_client.responses, "stream", None)
-        if stream_func:
-          stream_iter = stream_func(model="amazon/nova-2-lite-v1:free", input=prompt)
-        else:
-          stream_iter = async_client.responses.create(model="amazon/nova-2-lite-v1:free", input=prompt, stream=True)
-
-        async for event in _iter_stream(stream_iter):
-          logger.debug("stream event: %s", repr(event))
-          text = _extract_text_event(event)
-          if not text:
-            continue
-          async for s in _sse_yield_text(text):
-            yield s
-
-    except Exception as exc:
-      logger.exception("Error while streaming model response")
-      for line in str(exc).splitlines() or [""]:
-        yield f"event: error\ndata: {line}\n"
-      yield "\n"
-
-  headers = {"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
-  return StreamingResponse(event_stream(), media_type="text/event-stream", headers=headers)
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive",
+        },
+    )

@@ -25,6 +25,8 @@ class Settings(BaseSettings):
 
     # OpenRouter
     OPENROUTER_API_KEY: str
+    OPENROUTER_BASE_URL: str = "https://openrouter.ai/api/v1"
+    CHAT_MODEL: str = "anthropic/claude-3-haiku"
 
     class Config:
         env_file = ".env"
