@@ -36,7 +36,6 @@ export async function api<T>(endpoint: string, options: RequestOptions = {}): Pr
         config.body = JSON.stringify(body);
     }
     // @ts-ignore - Using window.fetch in CSR-only mode
-
     const res = await fetch(`${PUBLIC_API_BASE_URL}${endpoint}`, config);
 
     if (!res.ok) {
@@ -46,7 +45,6 @@ export async function api<T>(endpoint: string, options: RequestOptions = {}): Pr
         try {
             const data = await res.json();
             details = data;
-            // Handle FastAPI validation errors
             if (Array.isArray(data.detail)) {
                 message = data.detail.map((e: { msg: string }) => e.msg).join(', ');
             } else if (typeof data.detail === 'string') {
@@ -61,7 +59,6 @@ export async function api<T>(endpoint: string, options: RequestOptions = {}): Pr
         throw new ApiError(message, res.status, details);
     }
 
-    // Handle 204 No Content
     if (res.status === 204) {
         return undefined as T;
     }
@@ -71,72 +68,46 @@ export async function api<T>(endpoint: string, options: RequestOptions = {}): Pr
 
 export type StreamCallback = (chunk: string) => void;
 
-// Stream text/event-stream (SSE-like) responses from the backend.
-// - `endpoint` is appended to `PUBLIC_API_BASE_URL` internally.
-// - `onChunk` is called for each assembled message (joined `data:` lines per event).
-// Returns an object with `close()` to cancel the request.
-export function stream(endpoint: string, onChunk: StreamCallback, options: RequestOptions = {}) {
-    const { method = 'GET', body, headers = {} } = options;
+/**
+ * Stream SSE responses using native EventSource.
+ * Note: EventSource only supports GET requests.
+ */
+export function stream(endpoint: string, onChunk: StreamCallback) {
+    const eventSource = new EventSource(`${PUBLIC_API_BASE_URL}${endpoint}`, {
+        withCredentials: true
+    });
 
-    const controller = new AbortController();
-    const config: RequestInit = {
-        method,
-        credentials: 'include',
-        headers: {
-            ...headers,
-        },
-        signal: controller.signal,
+    let streamComplete = false;
+
+    eventSource.onmessage = (event) => {
+        const data = event.data;
+
+        // Check if stream is complete
+        try {
+            const parsed = JSON.parse(data);
+            if (parsed.type === 'done') {
+                streamComplete = true;
+            }
+        } catch {
+            // Not JSON, ignore
+        }
+
+        onChunk(data);
     };
 
-    if (body !== undefined) {
-        config.headers = {
-            'Content-Type': 'application/json',
-            ...config.headers,
-        };
-        config.body = JSON.stringify(body);
-    }
+    eventSource.onerror = (error) => {
+        console.error('EventSource error:', error);
+        eventSource.close();
 
-    (async () => {
-        try {
-            const res = await fetch(`${PUBLIC_API_BASE_URL}${endpoint}`, config);
-            if (!res.ok) {
-                let txt = res.statusText;
-                try { txt = await res.text(); } catch {}
-                onChunk(`(error) ${txt || `HTTP ${res.status}`}`);
-                return;
-            }
-
-            const reader = res.body?.getReader();
-            if (!reader) return;
-            const decoder = new TextDecoder();
-            let buf = '';
-
-            const flushParts = () => {
-                const parts = buf.split('\n\n');
-                buf = parts.pop() || '';
-                for (const part of parts) {
-                    const lines = part.split(/\r?\n/).map(l => l.replace(/^data:\s?/, ''));
-                    const text = lines.join('\n');
-                    if (text === '[connected]') continue;
-                    onChunk(text);
-                }
-            };
-
-            while (true) {
-                const { done, value } = await reader.read();
-                if (done) break;
-                buf += decoder.decode(value, { stream: true });
-                flushParts();
-            }
-
-            if (buf.trim()) flushParts();
-        } catch (err) {
-            console.error('stream error', err);
-            onChunk(`(error) ${err instanceof Error ? err.message : String(err)}`);
+        // Only send error if stream wasn't completed normally
+        if (!streamComplete) {
+            onChunk(JSON.stringify({type: 'error', error: 'Stream connection failed'}));
         }
-    })();
+    };
 
-    return { close: () => controller.abort() };
+    return {
+        close: () => eventSource.close()
+    };
 }
 
 /**

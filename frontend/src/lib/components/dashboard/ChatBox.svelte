@@ -1,207 +1,229 @@
 <script lang="ts">
-	import { fly, fade } from 'svelte/transition';
-	import { quintOut } from 'svelte/easing';
-	import { chat } from '$lib/api/chat';
+  import { chat, type Message } from '$lib/api/chat';
 
-	let {
-		placeholder = 'Search properties, areas, or ask anything...',
-		onSubmit = () => {},
-		options = ['Custom deliverables', 'Valuation']
-	}: {
-		placeholder?: string;
-		onSubmit?: (value: string) => void;
-		options?: string[];
-	} = $props();
+  let {
+    conversationId = $bindable(null)
+  }: {
+    conversationId: number | null;
+  } = $props();
 
-	// UI state
-	let inputValue = $state('');
-	let messages: string[] = $state([]);
-	let streamController: { close: () => void } | null = $state(null);
-	let showDropdown = $state(false);
-	let dropdownOpenTimeout: number | undefined;
-	let dropdownCloseTimeout: number | undefined;
-	let textareaRef: HTMLTextAreaElement;
+  interface DisplayMessage {
+    role: string;
+    content: string;
+    toolCalls?: string[];
+  }
 
-	function handleMouseEnterDropdown() {
-		clearTimeout(dropdownCloseTimeout);
-		clearTimeout(dropdownOpenTimeout);
-		dropdownOpenTimeout = window.setTimeout(() => {
-			showDropdown = true;
-		}, 300);
-	}
+  let inputValue = $state('');
+  let messages = $state<DisplayMessage[]>([]);
+  let streamController: { close: () => void } | null = $state(null);
+  let loading = $state(false);
+  let error = $state<string | null>(null);
+  let textareaRef = $state<HTMLTextAreaElement>();
+  let messagesEndRef = $state<HTMLDivElement>();
 
-	function handleMouseLeaveDropdown() {
-		clearTimeout(dropdownOpenTimeout);
-		dropdownCloseTimeout = window.setTimeout(() => {
-			showDropdown = false;
-		}, 300);
-	}
+  // Load messages when conversation changes
+  $effect(() => {
+    if (conversationId) {
+      loadMessages();
+    } else {
+      messages = [];
+    }
+  });
 
-	function selectOption(option: string) {
-		showDropdown = false;
-	}
+  // Auto-scroll to bottom when messages change
+  $effect(() => {
+    if (messages.length > 0 && messagesEndRef) {
+      setTimeout(() => {
+        messagesEndRef?.scrollIntoView({ behavior: 'smooth' });
+      }, 100);
+    }
+  });
 
-	function autoResizeTextarea() {
-		if (textareaRef) {
-			textareaRef.style.height = 'auto';
-			const newHeight = Math.min(textareaRef.scrollHeight, 200);
-			textareaRef.style.height = newHeight + 'px';
-		}
-	}
+  async function loadMessages() {
+    if (!conversationId) return;
+    loading = true;
+    error = null;
+    try {
+      const msgs = await chat.getMessages(conversationId);
+      messages = msgs.map((m: Message) => ({
+        role: m.role,
+        content: m.content,
+        toolCalls: m.tool_call_ids?.map((id) => `Tool call ${id}`) || []
+      }));
+    } catch (err) {
+      console.error('Failed to load messages:', err);
+      error = 'Failed to load messages';
+    } finally {
+      loading = false;
+    }
+  }
 
-	function stop() {
-		console.log('chat: stopping stream');
-		streamController?.close();
-		streamController = null;
-	}
+  function handleSubmit() {
+    const text = inputValue.trim();
+    if (!text || !conversationId) return;
 
-	function handleSubmit() {
-		const text = inputValue.trim();
-		if (!text) return;
+    if (streamController) streamController.close();
 
-		// Cancel previous stream if any
-		if (streamController) stop();
+    // Add user message
+    messages = [...messages, { role: 'user', content: text }];
+    inputValue = '';
+    if (textareaRef) textareaRef.style.height = 'auto';
 
-		// Emit user message (reassign to trigger Svelte reactivity)
-		console.log('chat: send', text);
-		messages = [...messages, `You: ${text}`];
-		onSubmit(text);
-		inputValue = '';
-		if (textareaRef) textareaRef.style.height = 'auto';
+    // Start streaming
+    let currentAssistantMessage = '';
+    let currentToolCalls: string[] = [];
 
-		// Start streaming response
-		streamController = chat.sendPrompt(text, (rawChunk) => {
-			console.log('chat: chunk', rawChunk);
-			let chunk = String(rawChunk || '');
-			// Remove SDK object repr like "ResponseOutputText(... )"
-			chunk = chunk.replace(/^ResponseOutputText\([^)]*\)/, '');
-			if (!chunk) return;
+    streamController = chat.sendMessage(conversationId, text, (rawChunk) => {
+      try {
+        // Parse SSE data
+        const data = JSON.parse(rawChunk);
 
-			const lastIndex = messages.length - 1;
-			const hasAi = lastIndex >= 0 && messages[lastIndex].startsWith('AI:');
-			const currentAi = hasAi ? messages[lastIndex].slice(4) : '';
+        if (data.type === 'content') {
+          currentAssistantMessage += data.content;
+          updateLastMessage('assistant', currentAssistantMessage, currentToolCalls);
+        } else if (data.type === 'tool_call_start') {
+          currentToolCalls.push(`Calling ${data.tool}...`);
+          updateLastMessage('assistant', currentAssistantMessage, currentToolCalls);
+        } else if (data.type === 'tool_call_result') {
+          const cached = data.cached ? ' (cached)' : '';
+          currentToolCalls[currentToolCalls.length - 1] = `✓ ${data.tool}${cached}`;
+          updateLastMessage('assistant', currentAssistantMessage, currentToolCalls);
+        } else if (data.type === 'done') {
+          streamController = null;
+        } else if (data.type === 'error') {
+          console.error('Stream error:', data.error);
+          error = `Error: ${data.error}`;
+          streamController = null;
+        }
+      } catch (e) {
+        console.error('Failed to parse chunk:', rawChunk, e);
+      }
+    });
+  }
 
-			// Robust delta detection:
-			// - If the chunk contains repeated full-snapshots (e.g. the entire
-			//   message several times), take the suffix after the *last*
-			//   occurrence of the current AI text and append only that suffix.
-			// - If the current AI text isn't present, append the whole chunk.
-			let newPart = chunk;
-			if (currentAi) {
-				const lastOcc = chunk.lastIndexOf(currentAi);
-				if (lastOcc !== -1) {
-					newPart = chunk.slice(lastOcc + currentAi.length);
-				}
-			}
+  function updateLastMessage(role: string, content: string, toolCalls: string[]) {
+    const lastMsg = messages[messages.length - 1];
+    if (lastMsg?.role === role) {
+      messages[messages.length - 1] = { role, content, toolCalls: toolCalls.length > 0 ? [...toolCalls] : undefined };
+      messages = [...messages];
+    } else {
+      messages = [...messages, { role, content, toolCalls: toolCalls.length > 0 ? [...toolCalls] : undefined }];
+    }
+  }
 
-			if (!newPart) return;
+  function autoResizeTextarea() {
+    if (textareaRef) {
+      textareaRef.style.height = 'auto';
+      const newHeight = Math.min(textareaRef.scrollHeight, 200);
+      textareaRef.style.height = newHeight + 'px';
+    }
+  }
 
-			if (!hasAi) {
-				messages = [...messages, 'AI: ' + newPart];
-			} else {
-				messages = messages.map((m, i) => i === lastIndex ? m + newPart : m);
-			}
-			console.log('chat: messages', messages);
-		});
-		console.log('chat: streamController', streamController);
-	}
+  function stopStreaming() {
+    streamController?.close();
+    streamController = null;
+  }
 </script>
 
-<div class="w-full max-w-2xl">
-	<div
-		class="bg-white/80 backdrop-blur-xl rounded-2xl shadow-lg shadow-primary-pale/20 border border-primary-pale hover:shadow-xl hover:border-primary-pale/50 transition-all duration-300 overflow-visible px-5 py-4 flex flex-col"
-	>
-		{#if messages.length}
-			<div class="mb-3 space-y-2 max-h-48 overflow-auto">
-				{#each messages as m}
-					<div class="px-3 py-2 rounded-lg bg-gray-50 text-sm">{m}</div>
-				{/each}
-			</div>
-		{/if}
-		<textarea
-			bind:this={textareaRef}
-			bind:value={inputValue}
-			oninput={autoResizeTextarea}
-			onkeydown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSubmit(); } }}
-			{placeholder}
-			aria-label={placeholder}
-			class="w-full bg-transparent outline-none text-gray-800 placeholder-gray-400 text-base font-medium resize-none min-h-[36px] max-h-[200px] leading-relaxed scrollbar-thin scrollbar-track-gray-100"
-			rows="1"
-		></textarea>
-		<div class="flex items-center justify-between mt-0">
-			<div
-				class="relative dropdown-container -ml-2 z=100"
-				onmouseenter={handleMouseEnterDropdown}
-				onmouseleave={handleMouseLeaveDropdown}
-				role="button"
-				tabindex="0"
-				aria-haspopup="menu"
-				aria-expanded={showDropdown}
-				aria-label="Open additional options"
-			>
-				<button
-					type="button"
-					class="p-2 rounded-lg text-gray-400 hover:text-primary hover:bg-primary-pale/30 transition-all duration-300"
-					aria-label="Open additional options"
-					title="Open additional options"
-				>
-					<svg
-						class="w-5 h-5"
-						fill="none"
-						stroke="currentColor"
-						stroke-width="2"
-						viewBox="0 0 24 24"
-					>
-						<path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
-					</svg>
-				</button>
+<div class="flex flex-col h-full bg-gray-50">
+  <!-- Messages -->
+  <div class="flex-1 overflow-y-auto p-4 space-y-4">
+    {#if loading}
+      <div class="text-center text-gray-500">
+        <div class="animate-pulse">Loading messages...</div>
+      </div>
+    {:else if error && messages.length === 0}
+      <div class="text-center">
+        <p class="text-red-500 text-sm mb-2">{error}</p>
+        <button onclick={loadMessages} class="text-primary text-sm hover:underline">
+          Try again
+        </button>
+      </div>
+    {:else if messages.length === 0 && conversationId}
+      <div class="text-center text-gray-400 mt-8">
+        <p class="text-lg mb-2">Welcome to ViteVue AI Assistant!</p>
+        <p class="text-sm">Ask me anything about Dubai real estate data</p>
+      </div>
+    {:else if !conversationId}
+      <div class="text-center text-gray-400 mt-8">
+        <p class="text-sm">Select or create a conversation to start chatting</p>
+      </div>
+    {:else}
+      {#each messages as msg}
+        <div class="flex {msg.role === 'user' ? 'justify-end' : 'justify-start'}">
+          <div
+            class="max-w-[80%] rounded-lg p-3 {msg.role === 'user'
+              ? 'bg-primary text-white'
+              : 'bg-white text-gray-800 shadow-sm border border-gray-200'}"
+          >
+            <div class="whitespace-pre-wrap">{msg.content}</div>
+            {#if msg.toolCalls && msg.toolCalls.length > 0}
+              <div
+                class="mt-2 pt-2 border-t {msg.role === 'user' ? 'border-primary-dark' : 'border-gray-300'} text-xs space-y-1"
+              >
+                {#each msg.toolCalls as toolCall}
+                  <div class="flex items-center gap-1">
+                    <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                      <path
+                        d="M11 3a1 1 0 100 2h2.586l-6.293 6.293a1 1 0 101.414 1.414L15 6.414V9a1 1 0 102 0V4a1 1 0 00-1-1h-5z"
+                      />
+                      <path
+                        d="M5 5a2 2 0 00-2 2v8a2 2 0 002 2h8a2 2 0 002-2v-3a1 1 0 10-2 0v3H5V7h3a1 1 0 000-2H5z"
+                      />
+                    </svg>
+                    <span>{toolCall}</span>
+                  </div>
+                {/each}
+              </div>
+            {/if}
+          </div>
+        </div>
+      {/each}
+      <div bind:this={messagesEndRef}></div>
+    {/if}
+  </div>
 
-				{#if showDropdown}
-					<div
-						class="absolute left-0 mt-3 w-48 bg-white rounded-lg shadow-xl py-2 border border-primary-pale z-50"
-						onmouseenter={handleMouseEnterDropdown}
-						onmouseleave={handleMouseLeaveDropdown}
-						in:fly={{ y: -10, duration: 250, easing: quintOut }}
-						out:fade={{ duration: 150 }}
-						role="menu"
-						tabindex="0"
-						aria-label="Additional options"
-					>
-						{#each options as option (option)}
-							<button
-								type="button"
-								role="menuitem"
-								onclick={() => selectOption(option)}
-								class="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-primary-pale/40 hover:text-primary transition-colors duration-250"
-							>
-								{option}
-							</button>
-						{/each}
-					</div>
-				{/if}
-			</div>
-			<button
-				type="button"
-				aria-label={streamController ? 'Stop streaming' : 'Send message'}
-				title={streamController ? 'Stop' : 'Send message'}
-				onclick={streamController ? stop : handleSubmit}
-				disabled={!inputValue.trim() && !streamController}
-				class="flex-shrink-0 p-2 rounded-lg -mr-2 transition-all duration-200
-		  text-primary bg-primary-pale/40 hover:bg-primary-pale/60
-		  disabled:bg-primary-pale/20 disabled:text-gray-400 disabled:cursor-not-allowed"
-			>
-				{#if streamController}
-					<svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-						<rect x="6" y="6" width="12" height="12" rx="2" />
-					</svg>
-				{:else}
-					<svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-						<path
-							d="M16.6915026,12.4744748 L3.50612381,13.2599618 C3.19218622,13.2599618 3.03521743,13.4170592 3.03521743,13.5741566 L1.15159189,20.0151496 C0.8376543,20.8006365 0.99,21.89 1.77946707,22.52 C2.41,22.99 3.50612381,23.1 4.13399899,22.8429026 L21.714504,14.0454487 C22.6563168,13.5741566 23.1272231,12.6315722 22.9702544,11.6889879 C22.9702544,11.6889879 22.9702544,11.5318905 22.9702544,11.4748031 L22.9702544,11.3177057 C22.9702544,10.3751214 22.6563168,9.43253706 21.714504,8.96126502 L4.13399899,0.163821323 C3.34915502,0.0567539539 2.40734225,0.163821323 1.77946707,0.637394323 C0.994623095,1.27108255 0.837654326,2.36036823 1.15159189,3.14585511 L3.03521743,9.58684815 C3.03521743,9.74394555 3.19218622,9.90104294 3.50612381,9.90104294 L16.6915026,10.6865299 C16.6915026,10.6865299 17.1624089,10.6865299 17.1624089,10.3751214 L17.1624089,12.6315722 C17.1624089,12.6315722 17.1624089,12.4744748 16.6915026,12.4744748 Z"
-						/>
-					</svg>
-				{/if}
-			</button>
-		</div>
-	</div>
+  <!-- Input -->
+  <div class="border-t p-4 bg-white">
+    {#if error && messages.length > 0}
+      <div class="mb-2 p-2 bg-red-50 border border-red-200 rounded text-red-600 text-sm">
+        {error}
+      </div>
+    {/if}
+    <div class="flex gap-2">
+      <textarea
+        bind:this={textareaRef}
+        bind:value={inputValue}
+        oninput={autoResizeTextarea}
+        onkeydown={(e) => {
+          if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            handleSubmit();
+          }
+        }}
+        placeholder={conversationId
+          ? 'Ask about sales, rentals, developers, projects...'
+          : 'Select or create a conversation first'}
+        class="flex-1 p-3 border rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-primary"
+        rows="1"
+        disabled={!conversationId || streamController !== null}
+      ></textarea>
+      {#if streamController}
+        <button
+          onclick={stopStreaming}
+          class="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition"
+        >
+          Stop
+        </button>
+      {:else}
+        <button
+          onclick={handleSubmit}
+          disabled={!inputValue.trim() || !conversationId}
+          class="px-4 py-2 bg-primary text-white rounded-lg disabled:bg-gray-300 disabled:cursor-not-allowed hover:bg-primary-dark transition"
+        >
+          Send
+        </button>
+      {/if}
+    </div>
+  </div>
 </div>
