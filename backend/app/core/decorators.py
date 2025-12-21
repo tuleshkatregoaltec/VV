@@ -7,14 +7,11 @@ from backend.app.config import settings
 
 logger = logging.getLogger(__name__)
 
-# Instantiate cache once to be used by decorators
 cache = RedisCache(settings.REDIS_URL)
 
 
 def serialize_result(result: Any) -> Any:
-    """
-    Helper to convert SQLModel/Pydantic objects to dicts for caching.
-    """
+    """Helper to convert SQLModel/Pydantic objects to dicts for caching"""
     if isinstance(result, list):
         return [
             item.model_dump() if hasattr(item, "model_dump") else item
@@ -26,6 +23,8 @@ def serialize_result(result: Any) -> Any:
 
 
 def cached_endpoint(prefix: str, expire: int = 600):
+    """Decorator to cache endpoint responses in Redis with configurable expiration"""
+
     def decorator(func: Callable):
         @wraps(func)
         async def wrapper(*args, **kwargs):

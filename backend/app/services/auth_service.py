@@ -1,19 +1,20 @@
-from fastapi import Request, HTTPException
-from fastapi.responses import RedirectResponse
-from workos import WorkOSClient
-from typing import Dict, Optional
-from sqlmodel.ext.asyncio.session import AsyncSession
-from datetime import datetime, timezone
 import asyncio
 import logging
+from datetime import datetime, timezone
+from typing import Dict, Optional
 
-from backend.app.services.organization_service import (
-    get_organization_by_id,
-    get_organization_by_domain,
-    get_active_user_count,
-)
-from backend.app.db.models import User
+from fastapi import HTTPException, Request
+from fastapi.responses import RedirectResponse
+from sqlmodel.ext.asyncio.session import AsyncSession
+from workos import WorkOSClient
+
 from backend.app.config import settings
+from backend.app.db.models import User
+from backend.app.services.organization_service import (
+    get_active_user_count,
+    get_organization_by_domain,
+    get_organization_by_id,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +24,7 @@ workos = WorkOSClient(
 
 
 async def get_authorization_url() -> str:
+    """Generate WorkOS AuthKit authorization URL for OAuth login"""
     authorization_url = workos.user_management.get_authorization_url(
         provider="authkit",
         redirect_uri=settings.WORKOS_REDIRECT_URI,
@@ -31,7 +33,7 @@ async def get_authorization_url() -> str:
 
 
 async def handle_callback(
-    request: Request, code: str, session: AsyncSession
+    request: Request, code: str, db: AsyncSession
 ) -> RedirectResponse:
     """Handle OAuth callback from WorkOS AuthKit"""
     try:
@@ -56,14 +58,14 @@ async def handle_callback(
             # User has org memberships - use primary organization
             primary_membership = memberships[0]
             workos_org_id = primary_membership.organization_id
-            organization = await get_organization_by_id(session, workos_org_id)
+            organization = await get_organization_by_id(db, workos_org_id)
             if organization:
                 has_workos_membership = True
 
         # Fallback: match by email domain if no membership or org not found locally
         if not organization:
             email_domain = workos_user.email.split("@")[1].lower()
-            organization = await get_organization_by_domain(session, email_domain)
+            organization = await get_organization_by_domain(db, email_domain)
 
             if not organization:
                 # No org found by membership or domain
@@ -88,7 +90,7 @@ async def handle_callback(
             return RedirectResponse(url=f"{settings.FRONTEND_URL}/auth/deactivated")
 
         # Step 6: Check if user exists in local DB
-        existing_user = await session.get(User, workos_user.id)
+        existing_user = await db.get(User, workos_user.id)
 
         if existing_user:
             # EXISTING USER - update org if needed and check status
@@ -98,9 +100,9 @@ async def handle_callback(
 
             existing_user.last_login = datetime.now(timezone.utc)
             existing_user.updated_at = datetime.now(timezone.utc)
-            session.add(existing_user)
-            await session.commit()
-            await session.refresh(existing_user)
+            db.add(existing_user)
+            await db.commit()
+            await db.refresh(existing_user)
 
             # Check if user is active
             if not existing_user.is_active:
@@ -122,7 +124,7 @@ async def handle_callback(
             return RedirectResponse(url=f"{settings.FRONTEND_URL}/dashboard")
 
         # Step 7: NEW USER - check user limit and create
-        active_user_count = await get_active_user_count(session, organization.id)
+        active_user_count = await get_active_user_count(db, organization.id)
 
         # Determine if user should be active based on org limit
         is_active = active_user_count < organization.max_users
@@ -139,9 +141,9 @@ async def handle_callback(
             updated_at=datetime.now(timezone.utc),
             last_login=datetime.now(timezone.utc),
         )
-        session.add(new_user)
-        await session.commit()
-        await session.refresh(new_user)
+        db.add(new_user)
+        await db.commit()
+        await db.refresh(new_user)
 
         # If user is not active (over limit), redirect to deactivated
         if not is_active:
@@ -174,6 +176,7 @@ async def logout_user(request: Request) -> RedirectResponse:
 
 
 async def get_current_user(request: Request) -> Dict:
+    """Get current authenticated user from session or raise 401"""
     user = request.session.get("user")
     if not user:
         raise HTTPException(status_code=401, detail="Not authenticated")
@@ -181,6 +184,7 @@ async def get_current_user(request: Request) -> Dict:
 
 
 async def get_session_info(request: Request) -> Optional[Dict]:
+    """Get session info including user and token, returns None if unauthenticated"""
     user = request.session.get("user")
     access_token = request.session.get("access_token")
 

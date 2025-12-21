@@ -3,14 +3,14 @@
 from fastapi import APIRouter, Depends, Query
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from backend.app.db.session import get_db_session
-from backend.app.db.models.transactions import Transaction
-from backend.app.routers.dependencies import require_auth
 from backend.app.core.decorators import cached_endpoint
+from backend.app.db.models.transactions import Transaction
+from backend.app.db.session import get_db_session
+from backend.app.routers.dependencies import require_auth
 from backend.app.schemas.filters import FilterOptionsResponse
 from backend.app.services.filters_service import (
-    fetch_sales_filter_options,
     fetch_rental_filter_options,
+    fetch_sales_filter_options,
     get_distinct_values,
 )
 
@@ -24,10 +24,10 @@ router = APIRouter(
 @router.get("/master-projects")
 @cached_endpoint(prefix="filters:master-projects", expire=3600)
 async def get_master_projects(
-    session: AsyncSession = Depends(get_db_session),
+    db: AsyncSession = Depends(get_db_session),
 ) -> list[str]:
     """Get distinct master project names for filter dropdowns."""
-    return await get_distinct_values(session, Transaction.master_project_en, [])
+    return await get_distinct_values(db, Transaction.master_project_en, [])
 
 
 @router.get("/sales", response_model=FilterOptionsResponse)
@@ -47,11 +47,11 @@ async def get_sales_filter_options(
     area_max: float = Query(default=None),
     price_min: float = Query(default=None),
     price_max: float = Query(default=None),
-    session: AsyncSession = Depends(get_db_session),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """Get filter options for sales transactions."""
     return await fetch_sales_filter_options(
-        session=session,
+        db=db,
         trans_group=trans_group,
         property_usage=property_usage,
         master_project=master_project,
@@ -68,10 +68,11 @@ async def get_sales_filter_options(
         price_max=price_max,
     )
 
+
 @router.get("/rentals", response_model=FilterOptionsResponse)
 @cached_endpoint(prefix="filters:rentals", expire=3600)
 async def get_rental_filter_options(
-    property_usage: str = Query(default=None),  # ← ADD THIS
+    property_usage: str = Query(default=None),
     master_project: str = Query(default=None),
     timeframe_days: int = Query(default=None),
     project: str = Query(default=None),
@@ -83,12 +84,12 @@ async def get_rental_filter_options(
     area_max: float = Query(default=None),
     rent_min: float = Query(default=None),
     rent_max: float = Query(default=None),
-    session: AsyncSession = Depends(get_db_session),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """Get filter options for rental contracts."""
     return await fetch_rental_filter_options(
-        session=session,
-        property_usage=property_usage,  # ← ADD THIS
+        db=db,
+        property_usage=property_usage,
         master_project=master_project,
         timeframe_days=timeframe_days,
         project=project,

@@ -1,6 +1,6 @@
 """Analytics API endpoints for pre-computed analytics data."""
 
-from fastapi import APIRouter, Query, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from backend.app.db.session import get_db_session
@@ -10,8 +10,8 @@ from backend.app.schemas.analytics import (
     RentalAnalyticsResponse,
 )
 from backend.app.services.analytics_service import (
-    fetch_sales_analytics,
     fetch_rental_analytics,
+    fetch_sales_analytics,
 )
 
 router = APIRouter(
@@ -26,10 +26,10 @@ async def get_sales_analytics(
     property_usage: str = Query(default="Residential"),
     timeframe_days: int = Query(default=30),
     master_project: str = Query(default=None),
-    session: AsyncSession = Depends(get_db_session),
+    db: AsyncSession = Depends(get_db_session),
 ):
     return await fetch_sales_analytics(
-        session=session,
+        db=db,
         property_usage=property_usage,
         timeframe_days=timeframe_days,
         master_project=master_project,
@@ -40,10 +40,10 @@ async def get_sales_analytics(
 async def get_rental_analytics(
     property_usage: str = Query(default="Residential"),
     timeframe_days: int = Query(default=30),
-    session: AsyncSession = Depends(get_db_session),
+    db: AsyncSession = Depends(get_db_session),
 ):
     return await fetch_rental_analytics(
-        session=session,
+        db=db,
         property_usage=property_usage,
         timeframe_days=timeframe_days,
     )

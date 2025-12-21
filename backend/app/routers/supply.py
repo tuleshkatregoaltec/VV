@@ -1,23 +1,23 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlmodel.ext.asyncio.session import AsyncSession
 from typing import List, Literal
 
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlmodel.ext.asyncio.session import AsyncSession
+
+from backend.app.core.decorators import cached_endpoint
 from backend.app.db.session import get_db_session
 from backend.app.routers.dependencies import require_auth
-from backend.app.core.decorators import cached_endpoint
 from backend.app.schemas.supply import (
-    DeveloperResponse,
-    DeveloperListResponse,
     DeveloperCountResponse,
+    DeveloperListResponse,
+    DeveloperResponse,
     ProjectResponse,
 )
-
 from backend.app.services.supply_service import (
     get_all_developers,
     get_developer_count,
     get_developer_stats_bulk,
-    get_projects_by_developer,
     get_project_by_id,
+    get_projects_by_developer,
 )
 
 router = APIRouter(
@@ -30,10 +30,10 @@ router = APIRouter(
 @router.get("/developers/count", response_model=DeveloperCountResponse)
 @cached_endpoint(prefix="developers_count", expire=300)
 async def count_developers(
-    session: AsyncSession = Depends(get_db_session),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """Get total count of developers."""
-    total = await get_developer_count(session)
+    total = await get_developer_count(db)
     return DeveloperCountResponse(total=total)
 
 
@@ -42,21 +42,21 @@ async def list_developers(
     sort_by: Literal["projects", "transactions", "avg_price"] = Query("projects"),
     limit: int = Query(default=50, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
-    session: AsyncSession = Depends(get_db_session),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """Get developers with pagination, sorted by specified criteria.
 
     Uses bulk stats fetching to avoid N+1 query problem.
     """
     # Fetch total count and paginated developers
-    total = await get_developer_count(session)
+    total = await get_developer_count(db)
     developers = await get_all_developers(
-        session, sort_by=sort_by, limit=limit, offset=offset
+        db, sort_by=sort_by, limit=limit, offset=offset
     )
 
     # Extract developer IDs and fetch all stats in one query
     dev_ids = [dev.developer_id for dev in developers]
-    stats_map = await get_developer_stats_bulk(session, dev_ids)
+    stats_map = await get_developer_stats_bulk(db, dev_ids)
 
     # Merge developer data with stats (CPU-bound, fast)
     result = []
@@ -82,10 +82,10 @@ async def list_developers(
 @cached_endpoint(prefix="developer_projects", expire=1800)
 async def list_developer_projects(
     developer_id: int,
-    session: AsyncSession = Depends(get_db_session),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """Get projects for a developer, active first."""
-    projects = await get_projects_by_developer(session, developer_id)
+    projects = await get_projects_by_developer(db, developer_id)
     return [ProjectResponse.model_validate(p) for p in projects]
 
 
@@ -93,9 +93,10 @@ async def list_developer_projects(
 @cached_endpoint(prefix="project", expire=3600)
 async def get_project(
     project_id: int,
-    session: AsyncSession = Depends(get_db_session),
+    db: AsyncSession = Depends(get_db_session),
 ):
-    project = await get_project_by_id(session, project_id)
+    """Get project by ID with caching."""
+    project = await get_project_by_id(db, project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     return ProjectResponse.model_validate(project)

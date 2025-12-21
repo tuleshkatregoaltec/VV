@@ -1,12 +1,13 @@
-from sqlmodel import select, func
-from sqlmodel.ext.asyncio.session import AsyncSession
-from typing import Sequence
-from datetime import datetime, timezone
 import asyncio
+from datetime import datetime, timezone
+from typing import Sequence
 
+from sqlmodel import func, select
+from sqlmodel.ext.asyncio.session import AsyncSession
 from workos import WorkOSClient
-from backend.app.db.models import Organization, User
+
 from backend.app.config import settings
+from backend.app.db.models import Organization, User
 
 
 workos = WorkOSClient(
@@ -14,26 +15,24 @@ workos = WorkOSClient(
 )
 
 
-async def get_organization_by_id(
-    session: AsyncSession, org_id: str
-) -> Organization | None:
+async def get_organization_by_id(db: AsyncSession, org_id: str) -> Organization | None:
     """Get organization by ID"""
-    return await session.get(Organization, org_id)
+    return await db.get(Organization, org_id)
 
 
 async def get_organization_by_domain(
-    session: AsyncSession, domain: str
+    db: AsyncSession, domain: str
 ) -> Organization | None:
     """Get organization by email domain"""
-    result = await session.exec(
+    result = await db.exec(
         select(Organization).where(Organization.email_domain == domain)
     )
     return result.first()
 
 
-async def get_active_user_count(session: AsyncSession, org_id: str) -> int:
+async def get_active_user_count(db: AsyncSession, org_id: str) -> int:
     """Count active users in an organization"""
-    result = await session.exec(
+    result = await db.exec(
         select(func.count())
         .select_from(User)
         .where(User.organization_id == org_id, User.is_active)
@@ -42,7 +41,7 @@ async def get_active_user_count(session: AsyncSession, org_id: str) -> int:
 
 
 async def create_organization(
-    session: AsyncSession, name: str, domain: str, max_users: int
+    db: AsyncSession, name: str, domain: str, max_users: int
 ) -> Organization:
     """Create organization in WorkOS and local DB"""
 
@@ -62,23 +61,23 @@ async def create_organization(
         updated_at=datetime.now(timezone.utc),
     )
 
-    session.add(organization)
-    await session.commit()
-    await session.refresh(organization)
+    db.add(organization)
+    await db.commit()
+    await db.refresh(organization)
     return organization
 
 
-async def list_organizations(session: AsyncSession) -> Sequence[Organization]:
+async def list_organizations(db: AsyncSession) -> Sequence[Organization]:
     """List all organizations"""
-    organizations = await session.exec(select(Organization))
+    organizations = await db.exec(select(Organization))
     return organizations.all()
 
 
 async def update_organization(
-    session: AsyncSession, org_id: str, max_users: int, is_active: bool
+    db: AsyncSession, org_id: str, max_users: int, is_active: bool
 ) -> Organization | None:
     """Update organization settings"""
-    organization = await session.get(Organization, org_id)
+    organization = await db.get(Organization, org_id)
 
     if not organization:
         return None
@@ -87,16 +86,16 @@ async def update_organization(
     organization.is_active = is_active
     organization.updated_at = datetime.now(timezone.utc)
 
-    session.add(organization)
-    await session.commit()
-    await session.refresh(organization)
+    db.add(organization)
+    await db.commit()
+    await db.refresh(organization)
 
     return organization
 
 
-async def delete_organization(session: AsyncSession, org_id: str) -> bool:
+async def delete_organization(db: AsyncSession, org_id: str) -> bool:
     """Delete organization from WorkOS and local DB"""
-    organization = await session.get(Organization, org_id)
+    organization = await db.get(Organization, org_id)
 
     if not organization:
         return False
@@ -104,7 +103,7 @@ async def delete_organization(session: AsyncSession, org_id: str) -> bool:
     await asyncio.to_thread(workos.organizations.delete_organization, org_id)
 
     # Delete locally
-    await session.delete(organization)
-    await session.commit()
+    await db.delete(organization)
+    await db.commit()
 
     return True

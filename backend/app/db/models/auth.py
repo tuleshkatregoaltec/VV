@@ -5,6 +5,8 @@ from sqlalchemy import Column, DateTime
 
 
 class Organization(SQLModel, table=True):
+    """Organization model for multi-tenancy with WorkOS integration"""
+
     __tablename__: LiteralString = "organizations"
 
     # Primary key
@@ -29,6 +31,8 @@ class Organization(SQLModel, table=True):
 
 
 class User(SQLModel, table=True):
+    """User model linked to Organization with WorkOS authentication"""
+
     __tablename__: LiteralString = "users"
 
     # Primary key

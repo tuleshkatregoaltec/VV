@@ -1,21 +1,23 @@
-import redis.asyncio as redis
-import json
-from typing import Any, Optional
-from decimal import Decimal
 import datetime
+import json
 import logging
+from decimal import Decimal
+from typing import Any, Optional
+
+import redis.asyncio as redis
 
 logger = logging.getLogger("RedisCache")
 
 
 class RedisCache:
+    """Redis-backed cache with JSON serialization and automatic expiration"""
+
     def __init__(self, redis_url: str, default_expire: int = 600):
         self.redis_url = redis_url
         self.default_expire = default_expire
         self.redis = None
 
         try:
-            # Create the Redis client
             self.redis = redis.from_url(self.redis_url)
             logger.info("Redis client initialized at %s", self.redis_url)
         except Exception as e:
@@ -24,6 +26,7 @@ class RedisCache:
             )
 
     async def get(self, key: str) -> Optional[Any]:
+        """Get value from cache by key, returns None if not found or Redis unavailable"""
         if not self.redis:
             return None
 
@@ -31,21 +34,19 @@ class RedisCache:
             value = await self.redis.get(key)
             if value is not None:
                 try:
-                    # DEBUG level: Won't show in console, will show in debug.log
                     logger.debug("Cache hit for key: %s", key)
                     return json.loads(value)
                 except Exception:
                     logger.warning("Failed to deserialize cache value for key: %s", key)
                     return value
 
-            # DEBUG level
             logger.debug("Cache miss for key: %s", key)
         except Exception as e:
-            # ERROR level: Always show this
             logger.error("Failed to get cache for key %s: %s", key, str(e))
         return None
 
     async def set(self, key: str, value: Any, expire: Optional[int] = None):
+        """Set value in cache with optional expiration time in seconds"""
         if not self.redis:
             return
 
@@ -68,6 +69,7 @@ class RedisCache:
             logger.error("Failed to set cache for key %s: %s", key, str(e))
 
     async def delete(self, key: str):
+        """Delete value from cache by key"""
         if not self.redis:
             return
 
@@ -78,6 +80,7 @@ class RedisCache:
             logger.error("Failed to delete cache for key %s: %s", key, str(e))
 
     async def clear(self, pattern: str = "*"):
+        """Clear all keys matching pattern from cache"""
         if not self.redis:
             return
 

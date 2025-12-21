@@ -1,10 +1,11 @@
 # pyright: reportArgumentType=false, reportCallIssue=false, reportAttributeAccessIssue=false, reportOptionalMemberAccess=false
-from typing import Optional, List, Literal, Dict
 from datetime import date
+from typing import Dict, List, Literal, Optional
 
-from sqlmodel import select, func, desc, cast, String, case, or_, and_, col
-from sqlmodel.ext.asyncio.session import AsyncSession
 from sqlalchemy.orm import selectinload
+from sqlmodel import String, and_, case, cast, col, desc, func, or_, select
+from sqlmodel.ext.asyncio.session import AsyncSession
+
 from backend.app.db.models import Developer, Project
 from backend.app.db.models.transactions import Transaction
 
@@ -16,14 +17,14 @@ COMPLETED_STATUSES = {"COMPLETED", "FINISHED"}
 SortOption = Literal["projects", "transactions", "avg_price"]
 
 
-async def get_developer_count(session: AsyncSession) -> int:
+async def get_developer_count(db: AsyncSession) -> int:
     """Get total count of developers."""
-    result = await session.exec(select(func.count()).select_from(Developer))
+    result = await db.exec(select(func.count()).select_from(Developer))
     return result.one()
 
 
 async def get_all_developers(
-    session: AsyncSession,
+    db: AsyncSession,
     sort_by: SortOption = "projects",
     limit: int | None = None,
     offset: int = 0,
@@ -43,7 +44,7 @@ async def get_all_developers(
             .group_by(Project.developer_id)
             .subquery()
         )
-        statement = (
+        stmt = (
             select(Developer)
             .outerjoin(tx_count, Developer.developer_id == tx_count.c.developer_id)
             .order_by(
@@ -64,7 +65,7 @@ async def get_all_developers(
             .group_by(Project.developer_id)
             .subquery()
         )
-        statement = (
+        stmt = (
             select(Developer)
             .outerjoin(avg_price, Developer.developer_id == avg_price.c.developer_id)
             .order_by(
@@ -78,7 +79,7 @@ async def get_all_developers(
             .group_by(Project.developer_id)
             .subquery()
         )
-        statement = (
+        stmt = (
             select(Developer)
             .outerjoin(
                 total_count, Developer.developer_id == total_count.c.developer_id
@@ -89,20 +90,21 @@ async def get_all_developers(
         )
 
     if limit is not None:
-        statement = statement.offset(offset).limit(limit)
+        stmt = stmt.offset(offset).limit(limit)
 
-    result = await session.exec(statement)
+    result = await db.exec(stmt)
     return list(result.all())
 
 
 async def get_developer_by_id(
-    session: AsyncSession, developer_id: int
+    db: AsyncSession, developer_id: int
 ) -> Optional[Developer]:
-    return await session.get(Developer, developer_id)
+    """Get developer by ID"""
+    return await db.get(Developer, developer_id)
 
 
 async def get_developer_stats_bulk(
-    session: AsyncSession, developer_ids: List[int]
+    db: AsyncSession, developer_ids: List[int]
 ) -> Dict[int, dict]:
     """Get project stats for multiple developers in one query."""
     if not developer_ids:
@@ -147,7 +149,7 @@ async def get_developer_stats_bulk(
         .group_by(Project.developer_id)
     )
 
-    result = await session.exec(stmt)
+    result = await db.exec(stmt)
     rows = result.all()
 
     # Initialize with zeros, then populate from query results
@@ -167,10 +169,10 @@ async def get_developer_stats_bulk(
 
 
 async def get_projects_by_developer(
-    session: AsyncSession, developer_id: int
+    db: AsyncSession, developer_id: int
 ) -> List[Project]:
     """Get projects for a developer, active first, then by completion %."""
-    statement = (
+    stmt = (
         select(Project)
         .options(selectinload(Project.area))
         .where(Project.developer_id == developer_id)
@@ -180,18 +182,16 @@ async def get_projects_by_developer(
             Project.project_name,
         )
     )
-    result = await session.exec(statement)
+    result = await db.exec(stmt)
     return list(result.all())
 
 
-async def get_project_by_id(
-    session: AsyncSession, project_id: int
-) -> Optional[Project]:
+async def get_project_by_id(db: AsyncSession, project_id: int) -> Optional[Project]:
     """Get project with area."""
-    statement = (
+    stmt = (
         select(Project)
         .options(selectinload(Project.area))
         .where(Project.project_id == project_id)
     )
-    result = await session.exec(statement)
+    result = await db.exec(stmt)
     return result.first()

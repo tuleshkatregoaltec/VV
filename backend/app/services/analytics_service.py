@@ -2,9 +2,10 @@
 
 from sqlmodel import select, col
 from sqlmodel.ext.asyncio.session import AsyncSession
-from datetime import timedelta
+from datetime import date, datetime, timedelta
 from typing import List, Optional
 from decimal import Decimal
+
 
 from backend.app.db.models.analytics import (
     AnalyticsSalesSummary,
@@ -23,9 +24,9 @@ from backend.app.schemas.analytics import (
 )
 
 
-def _safe_float(val: Optional[Decimal]) -> float:
+def _safe_float(decimal_value: Optional[Decimal]) -> float:
     """Convert Decimal to float, handling None."""
-    return float(val) if val else 0.0
+    return float(decimal_value) if decimal_value else 0.0
 
 
 def _calc_change_pct(current: float, previous: float) -> Optional[float]:
@@ -49,7 +50,7 @@ def _validate_timeframe(timeframe_days: int) -> int:
 
 
 async def fetch_sales_analytics(
-    session: AsyncSession,
+    db: AsyncSession,
     property_usage: str = "Residential",
     timeframe_days: int = 30,
     master_project: Optional[str] = None,
@@ -73,7 +74,7 @@ async def fetch_sales_analytics(
             AnalyticsSalesSummary.timeframe_days == timeframe_days,
             AnalyticsSalesSummary.dimension == None,  # noqa: E711
         )
-    result = await session.exec(summary_stmt)
+    result = await db.exec(summary_stmt)
     summary_row = result.first()
 
     if summary_row:
@@ -104,7 +105,7 @@ async def fetch_sales_analytics(
         )
 
     # Fetch trends
-    trends = await _fetch_sales_trends(session, property_usage, timeframe_days)
+    trends = await _fetch_sales_trends(db, property_usage, timeframe_days)
 
     # Fetch dimension breakdowns
     # Note: When filtering by master_project, we can't break down further by property_type etc.
@@ -114,7 +115,7 @@ async def fetch_sales_analytics(
         by_rooms = []
         by_reg_type = []
         by_master_project = await _fetch_sales_breakdown(
-            session,
+            db,
             property_usage,
             timeframe_days,
             "master_project",
@@ -122,16 +123,16 @@ async def fetch_sales_analytics(
         )
     else:
         by_property_type = await _fetch_sales_breakdown(
-            session, property_usage, timeframe_days, "property_type"
+            db, property_usage, timeframe_days, "property_type"
         )
         by_rooms = await _fetch_sales_breakdown(
-            session, property_usage, timeframe_days, "rooms"
+            db, property_usage, timeframe_days, "rooms"
         )
         by_reg_type = await _fetch_sales_breakdown(
-            session, property_usage, timeframe_days, "reg_type"
+            db, property_usage, timeframe_days, "reg_type"
         )
         by_master_project = await _fetch_sales_breakdown(
-            session, property_usage, timeframe_days, "master_project"
+            db, property_usage, timeframe_days, "master_project"
         )
 
     return AnalyticsResponse(
@@ -147,12 +148,11 @@ async def fetch_sales_analytics(
 
 
 async def _fetch_sales_trends(
-    session: AsyncSession,
+    db: AsyncSession,
     property_usage: str,
     timeframe_days: int,
 ) -> List[TrendPoint]:
     """Fetch daily trend data for sales."""
-    from datetime import date, datetime
 
     end_date = date.today()
     start_date = end_date - timedelta(days=timeframe_days)
@@ -169,7 +169,7 @@ async def _fetch_sales_trends(
         .order_by(AnalyticsTrend.trend_date)
     )
 
-    result = await session.exec(stmt)
+    result = await db.exec(stmt)
     rows = result.all()
 
     return [
@@ -187,7 +187,7 @@ async def _fetch_sales_trends(
 
 
 async def _fetch_sales_breakdown(
-    session: AsyncSession,
+    db: AsyncSession,
     property_usage: str,
     timeframe_days: int,
     dimension: str,
@@ -207,7 +207,7 @@ async def _fetch_sales_breakdown(
 
     stmt = stmt.order_by(col(AnalyticsSalesSummary.total_volume).desc()).limit(limit)
 
-    result = await session.exec(stmt)
+    result = await db.exec(stmt)
     rows = result.all()
 
     # Calculate total for percentage
@@ -234,7 +234,7 @@ async def _fetch_sales_breakdown(
 
 
 async def fetch_rental_analytics(
-    session: AsyncSession,
+    db: AsyncSession,
     property_usage: str = "Residential",
     timeframe_days: int = 30,
 ) -> RentalAnalyticsResponse:
@@ -248,7 +248,7 @@ async def fetch_rental_analytics(
         AnalyticsRentalsSummary.timeframe_days == timeframe_days,
         AnalyticsRentalsSummary.dimension == None,  # noqa: E711
     )
-    result = await session.exec(summary_stmt)
+    result = await db.exec(summary_stmt)
     summary_row = result.first()
 
     if summary_row:
@@ -279,14 +279,14 @@ async def fetch_rental_analytics(
         )
 
     # Fetch trends
-    trends = await _fetch_rental_trends(session, property_usage, timeframe_days)
+    trends = await _fetch_rental_trends(db, property_usage, timeframe_days)
 
     # Fetch dimension breakdowns
     by_property_type = await _fetch_rental_breakdown(
-        session, property_usage, timeframe_days, "property_type"
+        db, property_usage, timeframe_days, "property_type"
     )
     by_master_project = await _fetch_rental_breakdown(
-        session, property_usage, timeframe_days, "master_project"
+        db, property_usage, timeframe_days, "master_project"
     )
 
     return RentalAnalyticsResponse(
@@ -300,7 +300,7 @@ async def fetch_rental_analytics(
 
 
 async def _fetch_rental_trends(
-    session: AsyncSession,
+    db: AsyncSession,
     property_usage: str,
     timeframe_days: int,
 ) -> List[TrendPoint]:
@@ -322,7 +322,7 @@ async def _fetch_rental_trends(
         .order_by(AnalyticsTrend.trend_date)
     )
 
-    result = await session.exec(stmt)
+    result = await db.exec(stmt)
     rows = result.all()
 
     return [
@@ -340,7 +340,7 @@ async def _fetch_rental_trends(
 
 
 async def _fetch_rental_breakdown(
-    session: AsyncSession,
+    db: AsyncSession,
     property_usage: str,
     timeframe_days: int,
     dimension: str,
@@ -359,7 +359,7 @@ async def _fetch_rental_breakdown(
         .limit(limit)
     )
 
-    result = await session.exec(stmt)
+    result = await db.exec(stmt)
     rows = result.all()
 
     total_value = sum(_safe_float(row.total_annual_value) for row in rows)

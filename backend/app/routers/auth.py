@@ -1,9 +1,9 @@
-from fastapi import APIRouter, Request, HTTPException, Depends
-from fastapi.responses import RedirectResponse, JSONResponse
+from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import JSONResponse, RedirectResponse
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from backend.app.services import auth_service
 from backend.app.db.session import get_db_session
+from backend.app.services import auth_service
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -19,13 +19,13 @@ async def login():
 async def auth_callback(
     request: Request,
     code: str | None = None,
-    session: AsyncSession = Depends(get_db_session),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """Handle OAuth callback from WorkOS"""
     if not code:
         raise HTTPException(status_code=400, detail="Missing authorization code")
 
-    return await auth_service.handle_callback(request, code, session)
+    return await auth_service.handle_callback(request, code, db)
 
 
 @router.get("/logout")

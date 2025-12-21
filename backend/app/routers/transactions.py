@@ -1,21 +1,21 @@
-from fastapi import APIRouter, Query, Depends
-from sqlmodel.ext.asyncio.session import AsyncSession
 from datetime import datetime
-from fastapi.responses import StreamingResponse
 
+from fastapi import APIRouter, Depends, Query
+from fastapi.responses import StreamingResponse
+from sqlmodel.ext.asyncio.session import AsyncSession
+
+from backend.app.core.decorators import cached_endpoint
 from backend.app.db.session import get_db_session
 from backend.app.routers.dependencies import require_auth
-from backend.app.core.decorators import cached_endpoint
 from backend.app.schemas.transactions import (
-    TransactionListResponse,
     RentalContractListResponse,
+    TransactionListResponse,
 )
-
 from backend.app.services.transactions_service import (
-    fetch_sales_transactions,
-    fetch_rental_contracts,
     export_rental_contracts as export_rental_contracts_service,
-    export_sales_transactions as export_sales_transactions_service
+    export_sales_transactions as export_sales_transactions_service,
+    fetch_rental_contracts,
+    fetch_sales_transactions,
 )
 
 router = APIRouter(
@@ -48,10 +48,10 @@ async def get_sales_transactions(
     price_max: float = Query(default=None),
     price_sqft_min: float = Query(default=None),
     price_sqft_max: float = Query(default=None),
-    session: AsyncSession = Depends(get_db_session),
+    db: AsyncSession = Depends(get_db_session),
 ):
     return await fetch_sales_transactions(
-        session=session,
+        db=db,
         limit=limit,
         offset=offset,
         trans_group=trans_group,
@@ -71,6 +71,7 @@ async def get_sales_transactions(
         price_sqft_min=price_sqft_min,
         price_sqft_max=price_sqft_max,
     )
+
 
 @router.get("/rentals", response_model=RentalContractListResponse)
 @cached_endpoint(prefix="rentals", expire=600)
@@ -89,10 +90,10 @@ async def get_rental_contracts(
     area_max: float = Query(default=None),
     rent_min: float = Query(default=None),
     rent_max: float = Query(default=None),
-    session: AsyncSession = Depends(get_db_session),
+    db: AsyncSession = Depends(get_db_session),
 ):
     return await fetch_rental_contracts(
-        session=session,
+        db=db,
         limit=limit,
         offset=offset,
         master_project=master_project,
@@ -108,9 +109,12 @@ async def get_rental_contracts(
         rent_max=rent_max,
     )
 
+
 @router.get("/sales/export")
 async def export_sales_transactions(
-    max_rows: int = Query(default=10000, ge=1, le=50000, description="Maximum rows to export"),
+    max_rows: int = Query(
+        default=10000, ge=1, le=50000, description="Maximum rows to export"
+    ),
     # Filters
     trans_group: str = Query(default=None),
     property_usage: str = Query(default=None),
@@ -129,12 +133,12 @@ async def export_sales_transactions(
     price_max: float = Query(default=None),
     price_sqft_min: float = Query(default=None),
     price_sqft_max: float = Query(default=None),
-    session: AsyncSession = Depends(get_db_session),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """Export sales transactions to Excel with applied filters."""
-    
+
     stream = await export_sales_transactions_service(
-        session=session,
+        db=db,
         max_rows=max_rows,
         trans_group=trans_group,
         property_usage=property_usage,
@@ -153,24 +157,26 @@ async def export_sales_transactions(
         price_sqft_min=price_sqft_min,
         price_sqft_max=price_sqft_max,
     )
-    
+
     # Generate filename with timestamp
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     filename = f"sales_transactions_{timestamp}.xlsx"
-    
+
     return StreamingResponse(
         iter([stream.getvalue()]),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={
             "Content-Disposition": f"attachment; filename={filename}",
-            "Access-Control-Expose-Headers": "Content-Disposition"
-        }
+            "Access-Control-Expose-Headers": "Content-Disposition",
+        },
     )
 
 
 @router.get("/rentals/export")
 async def export_rental_contracts(
-    max_rows: int = Query(default=10000, ge=1, le=50000, description="Maximum rows to export"),
+    max_rows: int = Query(
+        default=10000, ge=1, le=50000, description="Maximum rows to export"
+    ),
     master_project: str = Query(default=None),
     timeframe_days: int = Query(default=None),
     project: str = Query(default=None),
@@ -183,12 +189,12 @@ async def export_rental_contracts(
     area_max: float = Query(default=None),
     rent_min: float = Query(default=None),
     rent_max: float = Query(default=None),
-    session: AsyncSession = Depends(get_db_session),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """Export rental contracts to Excel with applied filters."""
-    
+
     stream = await export_rental_contracts_service(
-        session=session,
+        db=db,
         max_rows=max_rows,
         master_project=master_project,
         timeframe_days=timeframe_days,
@@ -202,15 +208,15 @@ async def export_rental_contracts(
         rent_min=rent_min,
         rent_max=rent_max,
     )
-    
+
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     filename = f"rental_contracts_{timestamp}.xlsx"
-    
+
     return StreamingResponse(
         iter([stream.getvalue()]),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={
             "Content-Disposition": f"attachment; filename={filename}",
-            "Access-Control-Expose-Headers": "Content-Disposition"
-        }
+            "Access-Control-Expose-Headers": "Content-Disposition",
+        },
     )

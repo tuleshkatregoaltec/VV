@@ -19,7 +19,6 @@ class Transaction(SQLModel, table=True):
             "property_usage_en",
             text("instance_date DESC"),
         ),
-        
         # HIGH CARDINALITY: Composite indexes for filter dropdowns
         Index(
             "idx_transactions_project_distinct",
@@ -27,7 +26,9 @@ class Transaction(SQLModel, table=True):
             "property_usage_en",
             "master_project_en",
             "instance_date",
-            postgresql_where=text("project_name_en IS NOT NULL AND project_name_en != ''")
+            postgresql_where=text(
+                "project_name_en IS NOT NULL AND project_name_en != ''"
+            ),
         ),
         Index(
             "idx_transactions_building_distinct",
@@ -36,14 +37,18 @@ class Transaction(SQLModel, table=True):
             "master_project_en",
             "project_name_en",
             "instance_date",
-            postgresql_where=text("building_name_en IS NOT NULL AND building_name_en != ''")
+            postgresql_where=text(
+                "building_name_en IS NOT NULL AND building_name_en != ''"
+            ),
         ),
         Index(
             "idx_transactions_master_project_distinct",
             "master_project_en",
             "property_usage_en",
             "instance_date",
-            postgresql_where=text("master_project_en IS NOT NULL AND master_project_en != ''")
+            postgresql_where=text(
+                "master_project_en IS NOT NULL AND master_project_en != ''"
+            ),
         ),
     )
     # Primary key
@@ -66,9 +71,7 @@ class Transaction(SQLModel, table=True):
     property_type_en: Optional[str] = Field(default=None, max_length=255)
     property_sub_type_id: Optional[int] = None
     property_sub_type_ar: Optional[str] = Field(default=None, max_length=255)
-    property_sub_type_en: Optional[str] = Field(
-        default=None, max_length=255
-    )
+    property_sub_type_en: Optional[str] = Field(default=None, max_length=255)
     property_usage_ar: Optional[str] = Field(default=None, max_length=255)
     property_usage_en: Optional[str] = Field(default=None, max_length=255)
 
@@ -147,7 +150,6 @@ class RentContract(SQLModel, table=True):
             "property_usage_en",
             text("contract_start_date DESC"),
         ),
-        
         # HIGH CARDINALITY: Project index (rentals have no buildings)
         Index(
             "idx_rent_contracts_project_distinct",
@@ -155,14 +157,18 @@ class RentContract(SQLModel, table=True):
             "property_usage_en",
             "master_project_en",
             "contract_start_date",
-            postgresql_where=text("project_name_en IS NOT NULL AND project_name_en != ''")
+            postgresql_where=text(
+                "project_name_en IS NOT NULL AND project_name_en != ''"
+            ),
         ),
         Index(
             "idx_rent_contracts_master_project_distinct",
             "master_project_en",
             "property_usage_en",
             "contract_start_date",
-            postgresql_where=text("master_project_en IS NOT NULL AND master_project_en != ''")
+            postgresql_where=text(
+                "master_project_en IS NOT NULL AND master_project_en != ''"
+            ),
         ),
     )
 
@@ -173,9 +179,7 @@ class RentContract(SQLModel, table=True):
     # Contract details
     contract_reg_type_id: Optional[int] = None
     contract_reg_type_ar: Optional[str] = Field(default=None, max_length=100)
-    contract_reg_type_en: Optional[str] = Field(
-        default=None, max_length=100
-    )
+    contract_reg_type_en: Optional[str] = Field(default=None, max_length=100)
     contract_start_date: Optional[date] = None
     contract_end_date: Optional[date] = None
     contract_amount: Optional[Decimal] = Field(
@@ -193,15 +197,11 @@ class RentContract(SQLModel, table=True):
     ejari_bus_property_type_en: Optional[str] = Field(default=None, max_length=100)
 
     ejari_property_type_id: Optional[int] = None
-    ejari_property_type_en: Optional[str] = Field(
-        default=None, max_length=100
-    )
+    ejari_property_type_en: Optional[str] = Field(default=None, max_length=100)
     ejari_property_type_ar: Optional[str] = Field(default=None, max_length=100)
 
     ejari_property_sub_type_id: Optional[int] = None
-    ejari_property_sub_type_en: Optional[str] = Field(
-        default=None, max_length=100
-    )
+    ejari_property_sub_type_en: Optional[str] = Field(default=None, max_length=100)
     ejari_property_sub_type_ar: Optional[str] = Field(default=None, max_length=100)
 
     property_usage_en: Optional[str] = Field(default=None, max_length=100)
