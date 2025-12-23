@@ -72,14 +72,63 @@ export interface RentalAnalyticsResponse {
 export interface AnalyticsParams {
     property_usage?: string;
     timeframe_days?: TimeframeDays;
+    start_date?: string;
+    end_date?: string;
     master_project?: string;
+    property_type?: string;
+    rooms?: string;
+    reg_type?: string;
+    price_bucket?: string;
+    area_bucket?: string;
 }
 
-function buildQuery(params: AnalyticsParams): string {
+export interface RentalAnalyticsParams {
+    property_usage?: string;
+    timeframe_days?: TimeframeDays;
+    start_date?: string;
+    end_date?: string;
+    master_project?: string;
+    property_type?: string;
+    rent_bucket?: string;
+    area_bucket?: string;
+}
+
+function buildQuery(params: AnalyticsParams | RentalAnalyticsParams): string {
     const query = new URLSearchParams();
+
+    // Basic filters
     if (params.property_usage) query.append('property_usage', params.property_usage);
-    if (params.timeframe_days) query.append('timeframe_days', String(params.timeframe_days));
-    if (params.master_project && params.master_project !== 'All') query.append('master_project', params.master_project);
+
+    // Date range filters (prefer explicit dates over timeframe_days)
+    if (params.start_date) query.append('start_date', params.start_date);
+    if (params.end_date) query.append('end_date', params.end_date);
+    if (params.timeframe_days && !params.start_date) {
+        query.append('timeframe_days', String(params.timeframe_days));
+    }
+
+    // Dimension filters
+    if (params.master_project && params.master_project !== 'All') {
+        query.append('master_project', params.master_project);
+    }
+    if (params.property_type) query.append('property_type', params.property_type);
+    if (params.area_bucket) query.append('area_bucket', params.area_bucket);
+
+    // Sales-specific filters
+    if ('rooms' in params && params.rooms) {
+        query.append('rooms', params.rooms);
+    }
+    if ('reg_type' in params && params.reg_type) {
+        query.append('reg_type', params.reg_type);
+    }
+    if ('price_bucket' in params && params.price_bucket) {
+        query.append('price_bucket', params.price_bucket);
+    }
+
+    // Rental-specific filters
+    if ('rent_bucket' in params && params.rent_bucket) {
+        query.append('rent_bucket', params.rent_bucket);
+    }
+
     return query.toString();
 }
 
@@ -87,6 +136,6 @@ export const analytics = {
     sales: (params: AnalyticsParams = {}) =>
         api<SalesAnalyticsResponse>(`/api/v1/analytics/sales?${buildQuery(params)}`),
 
-    rentals: (params: AnalyticsParams = {}) =>
+    rentals: (params: RentalAnalyticsParams = {}) =>
         api<RentalAnalyticsResponse>(`/api/v1/analytics/rentals?${buildQuery(params)}`),
 };
