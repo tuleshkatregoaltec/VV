@@ -9,12 +9,9 @@ from .transactions import (
     TransactionProcedure,
 )
 from .analytics import (
-    AnalyticsSalesSummary,
-    AnalyticsRentalsSummary,
+    AnalyticsDailySalesAgg,
+    AnalyticsDailyRentalsAgg,
     AnalyticsTrend,
-    AnalyticsDailySales,
-    AnalyticsDailyRentals,
-    ANALYTICS_TIMEFRAMES,
 )
 from .etl import ETLMetadata, ETLRunLog, ETLState
 
@@ -34,12 +31,9 @@ __all__ = [
     "RentContract",
     "TransactionGroup",
     "TransactionProcedure",
-    "AnalyticsSalesSummary",
-    "AnalyticsRentalsSummary",
+    "AnalyticsDailySalesAgg",
+    "AnalyticsDailyRentalsAgg",
     "AnalyticsTrend",
-    "AnalyticsDailySales",
-    "AnalyticsDailyRentals",
-    "ANALYTICS_TIMEFRAMES",
     "ETLMetadata",
     "ETLRunLog",
     "ETLState",

@@ -1,6 +1,6 @@
-"""Analytics service functions for pre-computed analytics queries."""
+"""Analytics service functions for query-time aggregation from daily aggregates."""
 
-from sqlmodel import select, col
+from sqlmodel import select, func, and_, col
 from sqlmodel.ext.asyncio.session import AsyncSession
 from datetime import date, datetime, timedelta
 from typing import List, Optional
@@ -8,10 +8,8 @@ from decimal import Decimal
 
 
 from backend.app.db.models.analytics import (
-    AnalyticsSalesSummary,
-    AnalyticsRentalsSummary,
-    AnalyticsTrend,
-    ANALYTICS_TIMEFRAMES,
+    AnalyticsDailySalesAgg,
+    AnalyticsDailyRentalsAgg,
 )
 from backend.app.schemas.analytics import (
     AnalyticsSummary,
@@ -36,14 +34,6 @@ def _calc_change_pct(current: float, previous: float) -> Optional[float]:
     return None
 
 
-def _validate_timeframe(timeframe_days: int) -> int:
-    """Validate and normalize timeframe to allowed values."""
-    if timeframe_days not in ANALYTICS_TIMEFRAMES:
-        # Find closest valid timeframe
-        return min(ANALYTICS_TIMEFRAMES, key=lambda x: abs(x - timeframe_days))
-    return timeframe_days
-
-
 # =============================================================================
 # SALES ANALYTICS
 # =============================================================================
@@ -52,48 +42,116 @@ def _validate_timeframe(timeframe_days: int) -> int:
 async def fetch_sales_analytics(
     db: AsyncSession,
     property_usage: str = "Residential",
-    timeframe_days: int = 30,
+    timeframe_days: Optional[int] = None,
+    start_date: Optional[date] = None,
+    end_date: Optional[date] = None,
     master_project: Optional[str] = None,
+    property_type: Optional[str] = None,
+    rooms: Optional[str] = None,
+    reg_type: Optional[str] = None,
+    price_bucket: Optional[str] = None,
+    area_bucket: Optional[str] = None,
 ) -> AnalyticsResponse:
-    """Fetch complete sales analytics for dashboard."""
+    """Fetch complete sales analytics with flexible filtering from daily aggregates.
 
-    timeframe_days = _validate_timeframe(timeframe_days)
+    Args:
+        db: Database session
+        property_usage: Residential or Commercial
+        timeframe_days: Number of days to look back (if provided, overrides start_date)
+        start_date: Explicit start date
+        end_date: Explicit end date (defaults to today)
+        master_project: Filter by master project
+        property_type: Filter by property type
+        rooms: Filter by room count
+        reg_type: Filter by registration type
+        price_bucket: Filter by price bucket
+        area_bucket: Filter by area bucket
 
-    # If filtering by master_project, fetch from dimension breakdown
-    if master_project:
-        summary_stmt = select(AnalyticsSalesSummary).where(
-            AnalyticsSalesSummary.property_usage == property_usage,
-            AnalyticsSalesSummary.timeframe_days == timeframe_days,
-            AnalyticsSalesSummary.dimension == "master_project",
-            AnalyticsSalesSummary.dimension_value == master_project,
-        )
+    Returns:
+        Complete analytics response with summary, trends, and breakdowns
+    """
+    # Determine date range
+    if not end_date:
+        end_date = date.today()
+    if timeframe_days:
+        start_date = end_date - timedelta(days=timeframe_days)
+    elif not start_date:
+        # Default to 30 days if no date parameters provided
+        timeframe_days = 30
+        start_date = end_date - timedelta(days=30)
     else:
-        # Fetch summary (base aggregation where dimension is NULL)
-        summary_stmt = select(AnalyticsSalesSummary).where(
-            AnalyticsSalesSummary.property_usage == property_usage,
-            AnalyticsSalesSummary.timeframe_days == timeframe_days,
-            AnalyticsSalesSummary.dimension == None,  # noqa: E711
-        )
-    result = await db.exec(summary_stmt)
-    summary_row = result.first()
+        # Calculate timeframe from provided dates
+        timeframe_days = (end_date - start_date).days
 
-    if summary_row:
-        summary = AnalyticsSummary(
-            transaction_count=summary_row.transaction_count,
-            total_volume=_safe_float(summary_row.total_volume),
-            avg_price=_safe_float(summary_row.avg_price),
-            avg_price_sqft=_safe_float(summary_row.avg_price_sqft),
-            min_price=_safe_float(summary_row.min_price),
-            max_price=_safe_float(summary_row.max_price),
-            volume_change_pct=_calc_change_pct(
-                _safe_float(summary_row.total_volume),
-                _safe_float(summary_row.prev_total_volume),
-            ),
-            count_change_pct=_calc_change_pct(
-                summary_row.transaction_count,
-                summary_row.prev_transaction_count,
-            ),
+    # Build base filter
+    filters = [
+        AnalyticsDailySalesAgg.agg_date >= start_date,
+        AnalyticsDailySalesAgg.agg_date < end_date,
+        AnalyticsDailySalesAgg.property_usage == property_usage,
+    ]
+
+    # Add optional filters for multi-dimensional filtering
+    if master_project:
+        filters.append(AnalyticsDailySalesAgg.master_project == master_project)
+    if property_type:
+        filters.append(AnalyticsDailySalesAgg.property_type == property_type)
+    if rooms:
+        filters.append(AnalyticsDailySalesAgg.rooms == rooms)
+    if reg_type:
+        filters.append(AnalyticsDailySalesAgg.reg_type == reg_type)
+    if price_bucket:
+        filters.append(AnalyticsDailySalesAgg.price_bucket == price_bucket)
+    if area_bucket:
+        filters.append(AnalyticsDailySalesAgg.area_bucket == area_bucket)
+
+    # Aggregate across filtered daily rows
+    summary_query = select(
+        func.sum(AnalyticsDailySalesAgg.transaction_count).label('transaction_count'),
+        func.sum(AnalyticsDailySalesAgg.total_volume).label('total_volume'),
+        func.sum(AnalyticsDailySalesAgg.sum_price).label('sum_price'),
+        func.sum(AnalyticsDailySalesAgg.sum_area).label('sum_area'),
+        func.sum(AnalyticsDailySalesAgg.sum_price_x_area).label('sum_price_x_area'),
+        func.min(AnalyticsDailySalesAgg.min_price).label('min_price'),
+        func.max(AnalyticsDailySalesAgg.max_price).label('max_price'),
+    ).where(and_(*filters))
+
+    result = await db.exec(summary_query)
+    row = result.first()
+
+    if row and row.transaction_count:
+        # Calculate weighted average price per sqft
+        avg_price_sqft = (
+            _safe_float(row.sum_price_x_area) / _safe_float(row.sum_area)
+            if row.sum_area and _safe_float(row.sum_area) > 0
+            else 0
         )
+
+        summary = AnalyticsSummary(
+            transaction_count=row.transaction_count,
+            total_volume=_safe_float(row.total_volume),
+            avg_price=_safe_float(row.sum_price) / row.transaction_count if row.transaction_count > 0 else 0,
+            avg_price_sqft=avg_price_sqft,
+            min_price=_safe_float(row.min_price),
+            max_price=_safe_float(row.max_price),
+        )
+
+        # Calculate period-over-period change
+        prev_start = start_date - timedelta(days=(end_date - start_date).days)
+        prev_end = start_date
+        prev_summary = await _fetch_period_summary(
+            db, filters, prev_start, prev_end
+        )
+
+        if prev_summary['total_volume'] > 0:
+            summary.volume_change_pct = _calc_change_pct(
+                summary.total_volume,
+                prev_summary['total_volume']
+            )
+        if prev_summary['transaction_count'] > 0:
+            summary.count_change_pct = _calc_change_pct(
+                summary.transaction_count,
+                prev_summary['transaction_count']
+            )
     else:
         summary = AnalyticsSummary(
             transaction_count=0,
@@ -105,35 +163,22 @@ async def fetch_sales_analytics(
         )
 
     # Fetch trends
-    trends = await _fetch_sales_trends(db, property_usage, timeframe_days)
+    trends = await _fetch_sales_trends(db, filters, start_date, end_date)
 
     # Fetch dimension breakdowns
-    # Note: When filtering by master_project, we can't break down further by property_type etc.
-    # since we don't have cross-dimensional data. We return empty lists.
-    if master_project:
-        by_property_type = []
-        by_rooms = []
-        by_reg_type = []
-        by_master_project = await _fetch_sales_breakdown(
-            db,
-            property_usage,
-            timeframe_days,
-            "master_project",
-            filter_value=master_project,
-        )
-    else:
-        by_property_type = await _fetch_sales_breakdown(
-            db, property_usage, timeframe_days, "property_type"
-        )
-        by_rooms = await _fetch_sales_breakdown(
-            db, property_usage, timeframe_days, "rooms"
-        )
-        by_reg_type = await _fetch_sales_breakdown(
-            db, property_usage, timeframe_days, "reg_type"
-        )
-        by_master_project = await _fetch_sales_breakdown(
-            db, property_usage, timeframe_days, "master_project"
-        )
+    # Only fetch breakdowns for dimensions not currently being filtered
+    by_property_type = [] if property_type else await _fetch_sales_breakdown(
+        db, filters, start_date, end_date, 'property_type'
+    )
+    by_rooms = [] if rooms else await _fetch_sales_breakdown(
+        db, filters, start_date, end_date, 'rooms'
+    )
+    by_reg_type = [] if reg_type else await _fetch_sales_breakdown(
+        db, filters, start_date, end_date, 'reg_type'
+    )
+    by_master_project = [] if master_project else await _fetch_sales_breakdown(
+        db, filters, start_date, end_date, 'master_project', limit=20
+    )
 
     return AnalyticsResponse(
         timeframe_days=timeframe_days,
@@ -147,85 +192,164 @@ async def fetch_sales_analytics(
     )
 
 
+async def _fetch_period_summary(
+    db: AsyncSession,
+    base_filters: list,
+    start_date: date,
+    end_date: date,
+) -> dict:
+    """Fetch summary for a previous period for comparison.
+
+    Args:
+        db: Database session
+        base_filters: Base filters to apply (excluding date filters)
+        start_date: Period start date
+        end_date: Period end date
+
+    Returns:
+        Dictionary with transaction_count and total_volume
+    """
+    # Replace date filter in base_filters
+    period_filters = [
+        f for f in base_filters
+        if not (hasattr(f, 'left') and hasattr(f.left, 'key') and f.left.key == 'agg_date')
+    ]
+    period_filters.extend([
+        AnalyticsDailySalesAgg.agg_date >= start_date,
+        AnalyticsDailySalesAgg.agg_date < end_date,
+    ])
+
+    query = select(
+        func.sum(AnalyticsDailySalesAgg.transaction_count).label('transaction_count'),
+        func.sum(AnalyticsDailySalesAgg.total_volume).label('total_volume'),
+    ).where(and_(*period_filters))
+
+    result = await db.exec(query)
+    row = result.first()
+
+    return {
+        'transaction_count': row.transaction_count or 0 if row else 0,
+        'total_volume': _safe_float(row.total_volume) if row else 0,
+    }
+
+
 async def _fetch_sales_trends(
     db: AsyncSession,
-    property_usage: str,
-    timeframe_days: int,
+    base_filters: list,
+    start_date: date,
+    end_date: date,
 ) -> List[TrendPoint]:
-    """Fetch daily trend data for sales."""
+    """Fetch daily trend data from daily aggregates.
 
-    end_date = date.today()
-    start_date = end_date - timedelta(days=timeframe_days)
+    Args:
+        db: Database session
+        base_filters: Base filters to apply
+        start_date: Start date
+        end_date: End date
 
-    stmt = (
-        select(AnalyticsTrend)
-        .where(
-            AnalyticsTrend.property_usage == property_usage,
-            AnalyticsTrend.trend_type == "sales",
-            AnalyticsTrend.trend_date
-            >= datetime.combine(start_date, datetime.min.time()),
-            AnalyticsTrend.trend_date < datetime.combine(end_date, datetime.min.time()),
-        )
-        .order_by(AnalyticsTrend.trend_date)
+    Returns:
+        List of trend points with daily metrics
+    """
+    query = select(
+        AnalyticsDailySalesAgg.agg_date,
+        func.sum(AnalyticsDailySalesAgg.transaction_count).label('count'),
+        func.sum(AnalyticsDailySalesAgg.total_volume).label('total_value'),
+        func.sum(AnalyticsDailySalesAgg.sum_price).label('sum_price'),
+        func.sum(AnalyticsDailySalesAgg.sum_price_x_area).label('sum_price_x_area'),
+        func.sum(AnalyticsDailySalesAgg.sum_area).label('sum_area'),
+    ).where(
+        and_(*base_filters)
+    ).group_by(
+        AnalyticsDailySalesAgg.agg_date
+    ).order_by(
+        AnalyticsDailySalesAgg.agg_date
     )
 
-    result = await db.exec(stmt)
+    result = await db.exec(query)
     rows = result.all()
 
-    return [
-        TrendPoint(
-            date=row.trend_date.date()
-            if hasattr(row.trend_date, "date")
-            else row.trend_date,
+    trends = []
+    for row in rows:
+        avg_value = _safe_float(row.sum_price) / row.count if row.count > 0 else 0
+        avg_sqft = (
+            _safe_float(row.sum_price_x_area) / _safe_float(row.sum_area)
+            if row.sum_area and _safe_float(row.sum_area) > 0
+            else 0
+        )
+
+        trends.append(TrendPoint(
+            date=row.agg_date,
             count=row.count,
             total_value=_safe_float(row.total_value),
-            avg_value=_safe_float(row.avg_value),
-            avg_sqft=_safe_float(row.avg_sqft),
-        )
-        for row in rows
-    ]
+            avg_value=avg_value,
+            avg_sqft=avg_sqft,
+        ))
+
+    return trends
 
 
 async def _fetch_sales_breakdown(
     db: AsyncSession,
-    property_usage: str,
-    timeframe_days: int,
+    base_filters: list,
+    start_date: date,
+    end_date: date,
     dimension: str,
     limit: int = 10,
-    filter_value: Optional[str] = None,
 ) -> List[DimensionBreakdown]:
-    """Fetch breakdown by a specific dimension."""
+    """Fetch breakdown by a specific dimension from daily aggregates.
 
-    stmt = select(AnalyticsSalesSummary).where(
-        AnalyticsSalesSummary.property_usage == property_usage,
-        AnalyticsSalesSummary.timeframe_days == timeframe_days,
-        AnalyticsSalesSummary.dimension == dimension,
-    )
+    Args:
+        db: Database session
+        base_filters: Base filters to apply
+        start_date: Start date
+        end_date: End date
+        dimension: Dimension column to group by (property_type, rooms, etc.)
+        limit: Maximum number of results
 
-    if filter_value:
-        stmt = stmt.where(AnalyticsSalesSummary.dimension_value == filter_value)
+    Returns:
+        List of dimension breakdowns
+    """
+    dim_column = getattr(AnalyticsDailySalesAgg, dimension)
 
-    stmt = stmt.order_by(col(AnalyticsSalesSummary.total_volume).desc()).limit(limit)
+    # Aggregate by dimension
+    query = select(
+        dim_column.label('dimension_value'),
+        func.sum(AnalyticsDailySalesAgg.transaction_count).label('transaction_count'),
+        func.sum(AnalyticsDailySalesAgg.total_volume).label('total_volume'),
+        func.sum(AnalyticsDailySalesAgg.sum_price_x_area).label('sum_price_x_area'),
+        func.sum(AnalyticsDailySalesAgg.sum_area).label('sum_area'),
+    ).where(
+        and_(*base_filters),
+        dim_column.is_not(None),
+    ).group_by(
+        dim_column
+    ).order_by(
+        func.sum(AnalyticsDailySalesAgg.total_volume).desc()
+    ).limit(limit)
 
-    result = await db.exec(stmt)
+    result = await db.exec(query)
     rows = result.all()
 
-    # Calculate total for percentage
-    total_volume = sum(_safe_float(row.total_volume) for row in rows)
+    # Calculate total for percentages
+    total_volume = sum(_safe_float(r.total_volume) for r in rows)
 
-    return [
-        DimensionBreakdown(
+    breakdowns = []
+    for row in rows:
+        avg_price_sqft = (
+            _safe_float(row.sum_price_x_area) / _safe_float(row.sum_area)
+            if row.sum_area and _safe_float(row.sum_area) > 0
+            else 0
+        )
+
+        breakdowns.append(DimensionBreakdown(
             dimension_value=row.dimension_value or "",
             transaction_count=row.transaction_count,
             total_volume=_safe_float(row.total_volume),
-            avg_price_sqft=_safe_float(row.avg_price_sqft),
-            pct_of_total=round((_safe_float(row.total_volume) / total_volume) * 100, 1)
-            if total_volume > 0
-            else None,
-        )
-        for row in rows
-        if row.dimension_value
-    ]
+            avg_price_sqft=avg_price_sqft,
+            pct_of_total=round((_safe_float(row.total_volume) / total_volume) * 100, 1) if total_volume > 0 else None,
+        ))
+
+    return breakdowns
 
 
 # =============================================================================
@@ -236,38 +360,107 @@ async def _fetch_sales_breakdown(
 async def fetch_rental_analytics(
     db: AsyncSession,
     property_usage: str = "Residential",
-    timeframe_days: int = 30,
+    timeframe_days: Optional[int] = None,
+    start_date: Optional[date] = None,
+    end_date: Optional[date] = None,
+    master_project: Optional[str] = None,
+    property_type: Optional[str] = None,
+    rent_bucket: Optional[str] = None,
+    area_bucket: Optional[str] = None,
 ) -> RentalAnalyticsResponse:
-    """Fetch complete rental analytics for dashboard."""
+    """Fetch complete rental analytics with flexible filtering from daily aggregates.
 
-    timeframe_days = _validate_timeframe(timeframe_days)
+    Args:
+        db: Database session
+        property_usage: Residential or Commercial
+        timeframe_days: Number of days to look back (if provided, overrides start_date)
+        start_date: Explicit start date
+        end_date: Explicit end date (defaults to today)
+        master_project: Filter by master project
+        property_type: Filter by property type
+        rent_bucket: Filter by rent bucket
+        area_bucket: Filter by area bucket
 
-    # Fetch summary
-    summary_stmt = select(AnalyticsRentalsSummary).where(
-        AnalyticsRentalsSummary.property_usage == property_usage,
-        AnalyticsRentalsSummary.timeframe_days == timeframe_days,
-        AnalyticsRentalsSummary.dimension == None,  # noqa: E711
-    )
-    result = await db.exec(summary_stmt)
-    summary_row = result.first()
+    Returns:
+        Complete rental analytics response
+    """
+    # Determine date range
+    if not end_date:
+        end_date = date.today()
+    if timeframe_days:
+        start_date = end_date - timedelta(days=timeframe_days)
+    elif not start_date:
+        # Default to 30 days
+        timeframe_days = 30
+        start_date = end_date - timedelta(days=30)
+    else:
+        timeframe_days = (end_date - start_date).days
 
-    if summary_row:
-        summary = RentalSummary(
-            contract_count=summary_row.contract_count,
-            total_annual_value=_safe_float(summary_row.total_annual_value),
-            avg_annual_rent=_safe_float(summary_row.avg_annual_rent),
-            avg_rent_sqft=_safe_float(summary_row.avg_rent_sqft),
-            min_annual_rent=_safe_float(summary_row.min_annual_rent),
-            max_annual_rent=_safe_float(summary_row.max_annual_rent),
-            value_change_pct=_calc_change_pct(
-                _safe_float(summary_row.total_annual_value),
-                _safe_float(summary_row.prev_total_annual_value),
-            ),
-            count_change_pct=_calc_change_pct(
-                summary_row.contract_count,
-                summary_row.prev_contract_count,
-            ),
+    # Build base filter
+    filters = [
+        AnalyticsDailyRentalsAgg.agg_date >= start_date,
+        AnalyticsDailyRentalsAgg.agg_date < end_date,
+        AnalyticsDailyRentalsAgg.property_usage == property_usage,
+    ]
+
+    # Add optional filters
+    if master_project:
+        filters.append(AnalyticsDailyRentalsAgg.master_project == master_project)
+    if property_type:
+        filters.append(AnalyticsDailyRentalsAgg.property_type == property_type)
+    if rent_bucket:
+        filters.append(AnalyticsDailyRentalsAgg.rent_bucket == rent_bucket)
+    if area_bucket:
+        filters.append(AnalyticsDailyRentalsAgg.area_bucket == area_bucket)
+
+    # Aggregate across filtered daily rows
+    summary_query = select(
+        func.sum(AnalyticsDailyRentalsAgg.contract_count).label('contract_count'),
+        func.sum(AnalyticsDailyRentalsAgg.total_annual_value).label('total_annual_value'),
+        func.sum(AnalyticsDailyRentalsAgg.sum_rent).label('sum_rent'),
+        func.sum(AnalyticsDailyRentalsAgg.sum_area).label('sum_area'),
+        func.sum(AnalyticsDailyRentalsAgg.sum_rent_x_area).label('sum_rent_x_area'),
+        func.min(AnalyticsDailyRentalsAgg.min_annual_rent).label('min_annual_rent'),
+        func.max(AnalyticsDailyRentalsAgg.max_annual_rent).label('max_annual_rent'),
+    ).where(and_(*filters))
+
+    result = await db.exec(summary_query)
+    row = result.first()
+
+    if row and row.contract_count:
+        # Calculate weighted average rent per sqft
+        avg_rent_sqft = (
+            _safe_float(row.sum_rent_x_area) / _safe_float(row.sum_area)
+            if row.sum_area and _safe_float(row.sum_area) > 0
+            else 0
         )
+
+        summary = RentalSummary(
+            contract_count=row.contract_count,
+            total_annual_value=_safe_float(row.total_annual_value),
+            avg_annual_rent=_safe_float(row.sum_rent) / row.contract_count if row.contract_count > 0 else 0,
+            avg_rent_sqft=avg_rent_sqft,
+            min_annual_rent=_safe_float(row.min_annual_rent),
+            max_annual_rent=_safe_float(row.max_annual_rent),
+        )
+
+        # Calculate period-over-period change
+        prev_start = start_date - timedelta(days=(end_date - start_date).days)
+        prev_end = start_date
+        prev_summary = await _fetch_rental_period_summary(
+            db, filters, prev_start, prev_end
+        )
+
+        if prev_summary['total_annual_value'] > 0:
+            summary.value_change_pct = _calc_change_pct(
+                summary.total_annual_value,
+                prev_summary['total_annual_value']
+            )
+        if prev_summary['contract_count'] > 0:
+            summary.count_change_pct = _calc_change_pct(
+                summary.contract_count,
+                prev_summary['contract_count']
+            )
     else:
         summary = RentalSummary(
             contract_count=0,
@@ -279,14 +472,14 @@ async def fetch_rental_analytics(
         )
 
     # Fetch trends
-    trends = await _fetch_rental_trends(db, property_usage, timeframe_days)
+    trends = await _fetch_rental_trends(db, filters, start_date, end_date)
 
-    # Fetch dimension breakdowns
-    by_property_type = await _fetch_rental_breakdown(
-        db, property_usage, timeframe_days, "property_type"
+    # Fetch dimension breakdowns (only for dimensions not being filtered)
+    by_property_type = [] if property_type else await _fetch_rental_breakdown(
+        db, filters, start_date, end_date, 'property_type'
     )
-    by_master_project = await _fetch_rental_breakdown(
-        db, property_usage, timeframe_days, "master_project"
+    by_master_project = [] if master_project else await _fetch_rental_breakdown(
+        db, filters, start_date, end_date, 'master_project', limit=20
     )
 
     return RentalAnalyticsResponse(
@@ -299,83 +492,129 @@ async def fetch_rental_analytics(
     )
 
 
+async def _fetch_rental_period_summary(
+    db: AsyncSession,
+    base_filters: list,
+    start_date: date,
+    end_date: date,
+) -> dict:
+    """Fetch rental summary for a previous period for comparison."""
+    # Replace date filter in base_filters
+    period_filters = [
+        f for f in base_filters
+        if not (hasattr(f, 'left') and hasattr(f.left, 'key') and f.left.key == 'agg_date')
+    ]
+    period_filters.extend([
+        AnalyticsDailyRentalsAgg.agg_date >= start_date,
+        AnalyticsDailyRentalsAgg.agg_date < end_date,
+    ])
+
+    query = select(
+        func.sum(AnalyticsDailyRentalsAgg.contract_count).label('contract_count'),
+        func.sum(AnalyticsDailyRentalsAgg.total_annual_value).label('total_annual_value'),
+    ).where(and_(*period_filters))
+
+    result = await db.exec(query)
+    row = result.first()
+
+    return {
+        'contract_count': row.contract_count or 0 if row else 0,
+        'total_annual_value': _safe_float(row.total_annual_value) if row else 0,
+    }
+
+
 async def _fetch_rental_trends(
     db: AsyncSession,
-    property_usage: str,
-    timeframe_days: int,
+    base_filters: list,
+    start_date: date,
+    end_date: date,
 ) -> List[TrendPoint]:
-    """Fetch daily trend data for rentals."""
-    from datetime import date, datetime
-
-    end_date = date.today()
-    start_date = end_date - timedelta(days=timeframe_days)
-
-    stmt = (
-        select(AnalyticsTrend)
-        .where(
-            AnalyticsTrend.property_usage == property_usage,
-            AnalyticsTrend.trend_type == "rentals",
-            AnalyticsTrend.trend_date
-            >= datetime.combine(start_date, datetime.min.time()),
-            AnalyticsTrend.trend_date < datetime.combine(end_date, datetime.min.time()),
-        )
-        .order_by(AnalyticsTrend.trend_date)
+    """Fetch daily rental trend data from daily aggregates."""
+    query = select(
+        AnalyticsDailyRentalsAgg.agg_date,
+        func.sum(AnalyticsDailyRentalsAgg.contract_count).label('count'),
+        func.sum(AnalyticsDailyRentalsAgg.total_annual_value).label('total_value'),
+        func.sum(AnalyticsDailyRentalsAgg.sum_rent).label('sum_rent'),
+        func.sum(AnalyticsDailyRentalsAgg.sum_rent_x_area).label('sum_rent_x_area'),
+        func.sum(AnalyticsDailyRentalsAgg.sum_area).label('sum_area'),
+    ).where(
+        and_(*base_filters)
+    ).group_by(
+        AnalyticsDailyRentalsAgg.agg_date
+    ).order_by(
+        AnalyticsDailyRentalsAgg.agg_date
     )
 
-    result = await db.exec(stmt)
+    result = await db.exec(query)
     rows = result.all()
 
-    return [
-        TrendPoint(
-            date=row.trend_date.date()
-            if hasattr(row.trend_date, "date")
-            else row.trend_date,
+    trends = []
+    for row in rows:
+        avg_value = _safe_float(row.sum_rent) / row.count if row.count > 0 else 0
+        avg_sqft = (
+            _safe_float(row.sum_rent_x_area) / _safe_float(row.sum_area)
+            if row.sum_area and _safe_float(row.sum_area) > 0
+            else 0
+        )
+
+        trends.append(TrendPoint(
+            date=row.agg_date,
             count=row.count,
             total_value=_safe_float(row.total_value),
-            avg_value=_safe_float(row.avg_value),
-            avg_sqft=_safe_float(row.avg_sqft),
-        )
-        for row in rows
-    ]
+            avg_value=avg_value,
+            avg_sqft=avg_sqft,
+        ))
+
+    return trends
 
 
 async def _fetch_rental_breakdown(
     db: AsyncSession,
-    property_usage: str,
-    timeframe_days: int,
+    base_filters: list,
+    start_date: date,
+    end_date: date,
     dimension: str,
     limit: int = 10,
 ) -> List[RentalDimensionBreakdown]:
-    """Fetch breakdown by a specific dimension."""
+    """Fetch rental breakdown by a specific dimension from daily aggregates."""
+    dim_column = getattr(AnalyticsDailyRentalsAgg, dimension)
 
-    stmt = (
-        select(AnalyticsRentalsSummary)
-        .where(
-            AnalyticsRentalsSummary.property_usage == property_usage,
-            AnalyticsRentalsSummary.timeframe_days == timeframe_days,
-            AnalyticsRentalsSummary.dimension == dimension,
-        )
-        .order_by(col(AnalyticsRentalsSummary.total_annual_value).desc())
-        .limit(limit)
-    )
+    # Aggregate by dimension
+    query = select(
+        dim_column.label('dimension_value'),
+        func.sum(AnalyticsDailyRentalsAgg.contract_count).label('contract_count'),
+        func.sum(AnalyticsDailyRentalsAgg.total_annual_value).label('total_annual_value'),
+        func.sum(AnalyticsDailyRentalsAgg.sum_rent_x_area).label('sum_rent_x_area'),
+        func.sum(AnalyticsDailyRentalsAgg.sum_area).label('sum_area'),
+    ).where(
+        and_(*base_filters),
+        dim_column.is_not(None),
+    ).group_by(
+        dim_column
+    ).order_by(
+        func.sum(AnalyticsDailyRentalsAgg.total_annual_value).desc()
+    ).limit(limit)
 
-    result = await db.exec(stmt)
+    result = await db.exec(query)
     rows = result.all()
 
-    total_value = sum(_safe_float(row.total_annual_value) for row in rows)
+    # Calculate total for percentages
+    total_value = sum(_safe_float(r.total_annual_value) for r in rows)
 
-    return [
-        RentalDimensionBreakdown(
+    breakdowns = []
+    for row in rows:
+        avg_rent_sqft = (
+            _safe_float(row.sum_rent_x_area) / _safe_float(row.sum_area)
+            if row.sum_area and _safe_float(row.sum_area) > 0
+            else 0
+        )
+
+        breakdowns.append(RentalDimensionBreakdown(
             dimension_value=row.dimension_value or "",
             contract_count=row.contract_count,
             total_annual_value=_safe_float(row.total_annual_value),
-            avg_rent_sqft=_safe_float(row.avg_rent_sqft),
-            pct_of_total=round(
-                (_safe_float(row.total_annual_value) / total_value) * 100, 1
-            )
-            if total_value > 0
-            else None,
-        )
-        for row in rows
-        if row.dimension_value
-    ]
+            avg_rent_sqft=avg_rent_sqft,
+            pct_of_total=round((_safe_float(row.total_annual_value) / total_value) * 100, 1) if total_value > 0 else None,
+        ))
+
+    return breakdowns
