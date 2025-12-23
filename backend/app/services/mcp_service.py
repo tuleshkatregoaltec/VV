@@ -22,46 +22,125 @@ class MCPToolRegistry:
         @self.mcp.tool()
         async def get_sales_analytics(
             property_usage: str = "Residential",
-            timeframe_days: int = 30,
+            timeframe_days: Optional[int] = None,
+            start_date: Optional[str] = None,
+            end_date: Optional[str] = None,
             master_project: Optional[str] = None,
+            property_type: Optional[str] = None,
+            rooms: Optional[str] = None,
+            reg_type: Optional[str] = None,
+            price_bucket: Optional[str] = None,
+            area_bucket: Optional[str] = None,
         ) -> Dict[str, Any]:
-            """Get sales analytics with trends, KPIs, and breakdowns by property type, rooms, and master project.
+            """Get comprehensive sales analytics with trends, KPIs, and dimensional breakdowns.
+
+            Returns detailed market insights including:
+            - Summary metrics (total volume, transaction count, average prices, price/sqft)
+            - Period-over-period change percentages
+            - Daily trend data for time series analysis
+            - Breakdowns by property type, rooms, registration type, and master project
+
+            Use custom date ranges for specific periods, or timeframe_days for recent data.
+            Apply filters to drill down into specific market segments.
 
             Args:
-                property_usage: Type of property (Residential/Commercial)
-                timeframe_days: Days to look back (7, 30, 90, 180, 365)
-                master_project: Optional master project name to filter by
+                property_usage: Type of property - "Residential" or "Commercial" (default: "Residential")
+                timeframe_days: Days to look back (7, 30, 90, 180, 365). Ignored if start_date/end_date provided.
+                start_date: Custom start date in YYYY-MM-DD format (e.g., "2024-01-01")
+                end_date: Custom end date in YYYY-MM-DD format (e.g., "2024-12-31")
+                master_project: Filter by master project name (e.g., "Dubai Marina", "Downtown Dubai")
+                property_type: Filter by property type (e.g., "Unit", "Villa", "Building", "Land")
+                rooms: Filter by room count (e.g., "Studio", "1 B/R", "2 B/R", "3 B/R", "4 B/R", "5 B/R", "6 B/R+")
+                reg_type: Filter by registration type - "Ready" or "Offplan"
+                price_bucket: Filter by price range (e.g., "<500K", "500K-1M", "1M-2M", "2M-5M", "5M-10M", "10M-25M", ">25M")
+                area_bucket: Filter by area range in sqft (e.g., "<500", "500-1K", "1K-2K", "2K-3K", "3K-5K", ">5K")
             """
             from backend.app.services.analytics_service import fetch_sales_analytics
             from backend.app.db.session import async_session
+            from datetime import datetime
 
             async with async_session() as session:
+                # Convert date strings to date objects if provided
+                parsed_start_date = None
+                parsed_end_date = None
+                if start_date:
+                    parsed_start_date = datetime.strptime(start_date, "%Y-%m-%d").date()
+                if end_date:
+                    parsed_end_date = datetime.strptime(end_date, "%Y-%m-%d").date()
+
                 result = await fetch_sales_analytics(
-                    session=session,
+                    db=session,
                     property_usage=property_usage,
                     timeframe_days=timeframe_days,
+                    start_date=parsed_start_date,
+                    end_date=parsed_end_date,
                     master_project=master_project,
+                    property_type=property_type,
+                    rooms=rooms,
+                    reg_type=reg_type,
+                    price_bucket=price_bucket,
+                    area_bucket=area_bucket,
                 )
                 return result.model_dump()
 
         @self.mcp.tool()
         async def get_rental_analytics(
-            property_usage: str = "Residential", timeframe_days: int = 30
+            property_usage: str = "Residential",
+            timeframe_days: Optional[int] = None,
+            start_date: Optional[str] = None,
+            end_date: Optional[str] = None,
+            master_project: Optional[str] = None,
+            property_type: Optional[str] = None,
+            rent_bucket: Optional[str] = None,
+            area_bucket: Optional[str] = None,
         ) -> Dict[str, Any]:
-            """Get rental analytics with trends, KPIs, and breakdowns by property type.
+            """Get comprehensive rental analytics with trends, KPIs, and dimensional breakdowns.
+
+            Returns detailed rental market insights including:
+            - Summary metrics (total annual value, contract count, average rent, rent/sqft)
+            - Period-over-period change percentages
+            - Daily trend data for time series analysis
+            - Breakdowns by property type and master project
+
+            IMPORTANT: This aggregated analytics does NOT include bedroom-specific breakdowns. For bedroom-specific
+            rental data, use search_rental_contracts with property_sub_type filter (e.g., "2 bed rooms+hall").
+
+            Use custom date ranges for specific periods, or timeframe_days for recent data.
+            Apply filters to drill down into specific rental market segments.
 
             Args:
-                property_usage: Type of property (Residential/Commercial)
-                timeframe_days: Days to look back (7, 30, 90, 180, 365)
+                property_usage: Type of property - "Residential" or "Commercial" (default: "Residential")
+                timeframe_days: Days to look back (7, 30, 90, 180, 365). Ignored if start_date/end_date provided.
+                start_date: Custom start date in YYYY-MM-DD format (e.g., "2024-01-01")
+                end_date: Custom end date in YYYY-MM-DD format (e.g., "2024-12-31")
+                master_project: Filter by master project name (e.g., "Dubai Marina", "Downtown Dubai", "Mulberry")
+                property_type: Filter by general property type (e.g., "Flat", "Villa", "Building")
+                rent_bucket: Filter by annual rent range (e.g., "<50K", "50K-100K", "100K-200K", "200K-500K", "500K-1M", ">1M")
+                area_bucket: Filter by area range in sqft (e.g., "<500", "500-1K", "1K-2K", "2K-3K", "3K-5K", ">5K")
             """
             from backend.app.services.analytics_service import fetch_rental_analytics
             from backend.app.db.session import async_session
+            from datetime import datetime
 
             async with async_session() as session:
+                # Convert date strings to date objects if provided
+                parsed_start_date = None
+                parsed_end_date = None
+                if start_date:
+                    parsed_start_date = datetime.strptime(start_date, "%Y-%m-%d").date()
+                if end_date:
+                    parsed_end_date = datetime.strptime(end_date, "%Y-%m-%d").date()
+
                 result = await fetch_rental_analytics(
-                    session=session,
+                    db=session,
                     property_usage=property_usage,
                     timeframe_days=timeframe_days,
+                    start_date=parsed_start_date,
+                    end_date=parsed_end_date,
+                    master_project=master_project,
+                    property_type=property_type,
+                    rent_bucket=rent_bucket,
+                    area_bucket=area_bucket,
                 )
                 return result.model_dump()
 
@@ -98,7 +177,7 @@ class MCPToolRegistry:
 
             async with async_session() as session:
                 result = await fetch_sales_transactions(
-                    session=session,
+                    db=session,
                     limit=limit,
                     offset=offset,
                     master_project=master_project,
@@ -117,18 +196,26 @@ class MCPToolRegistry:
             offset: int = 0,
             master_project: Optional[str] = None,
             property_type: Optional[str] = None,
+            property_sub_type: Optional[str] = None,
             area_min: Optional[float] = None,
             area_max: Optional[float] = None,
             rent_min: Optional[float] = None,
             rent_max: Optional[float] = None,
         ) -> Dict[str, Any]:
-            """Search rental contracts with filters. Returns paginated list of rental contracts with details like project, rent amount, area, etc.
+            """Search rental contracts with filters. Returns paginated list of rental contracts with details like project, rent amount, area, bedroom count, etc.
+
+            Rental bedroom data is stored in the property_sub_type field with formats like:
+            - "1bed room+Hall", "2 bed rooms+hall", "3 bed rooms+hall", "4 bed rooms+hall", etc.
+            - "Studio" for studio apartments
+
+            Use property_sub_type to filter by specific bedroom counts (e.g., "2 bed rooms+hall" for 2BR units).
 
             Args:
                 limit: Number of results to return (max 500)
                 offset: Pagination offset
-                master_project: Filter by master project name
-                property_type: Filter by property type
+                master_project: Filter by master project name (e.g., "Mulberry", "Dubai Marina")
+                property_type: Filter by general property type (e.g., "Flat", "Villa")
+                property_sub_type: Filter by bedroom count (e.g., "2 bed rooms+hall", "3 bed rooms+hall", "Studio")
                 area_min: Minimum property area in sqft
                 area_max: Maximum property area in sqft
                 rent_min: Minimum annual rent in AED
@@ -139,11 +226,12 @@ class MCPToolRegistry:
 
             async with async_session() as session:
                 result = await fetch_rental_contracts(
-                    session=session,
+                    db=session,
                     limit=limit,
                     offset=offset,
                     master_project=master_project,
                     property_type=property_type,
+                    property_sub_type=property_sub_type,
                     area_min=area_min,
                     area_max=area_max,
                     rent_min=rent_min,
