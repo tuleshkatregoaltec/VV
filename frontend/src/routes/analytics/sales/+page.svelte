@@ -1,40 +1,108 @@
 <script lang="ts">
-    import { untrack } from 'svelte';
+    import { createQuery } from '@tanstack/svelte-query';
     import PageHeader from '$lib/components/dashboard/PageHeader.svelte';
     import DashboardCard from '$lib/components/dashboard/DashboardCard.svelte';
-    import { analytics, type SalesAnalyticsResponse } from '$lib/api/analytics';
-    import { propertyType, timeframe, masterProject } from '$lib/components/filters/globalFilters.svelte';
+    import FilterPanel from '$lib/components/filters/FilterPanel.svelte';
+    import TrendChart from '$lib/components/charts/TrendChart.svelte';
+    import BreakdownChart from '$lib/components/charts/BreakdownChart.svelte';
+    import { analytics } from '$lib/api/analytics';
+    import { propertyType, masterProject, timeframe } from '$lib/components/filters/globalFilters.svelte';
     import { TIMEFRAME_MAPPING } from '$lib/constants/transactions';
+    import type { FilterDefinition } from '$lib/types/filters';
 
-    let data: SalesAnalyticsResponse | null = $state(null);
-    let loading = $state(true);
-    let error: string | null = $state(null);
+    // Local filter state
+    let localFilters = $state({
+        propertyType: 'All',
+        rooms: 'All',
+        regType: 'All',
+        priceRange: 'All',
+        areaRange: 'All'
+    });
 
-    async function fetchData() {
-        loading = true;
-        error = null;
-        try {
-            const timeframeDays = TIMEFRAME_MAPPING[timeframe.current] ?? 30;
-            data = await analytics.sales({ 
-                property_usage: propertyType.current, 
-                timeframe_days: timeframeDays as 7 | 30 | 90 | 180 | 365,
-                master_project: masterProject.current
-            });
-        } catch (e) {
-            error = e instanceof Error ? e.message : 'Failed to load analytics';
-        } finally {
-            loading = false;
+    // Filter definitions for FilterPanel
+    const PRICE_BUCKET_OPTIONS = ['All', '<500K', '500K-1M', '1M-2M', '2M-5M', '5M-10M', '10M-25M', '>25M'];
+    const AREA_BUCKET_OPTIONS = ['All', '<500', '500-1K', '1K-2K', '2K-3K', '3K-5K', '>5K'];
+    const PROPERTY_TYPE_OPTIONS = ['All', 'Unit', 'Villa', 'Building', 'Land'];
+    const ROOMS_OPTIONS = ['All', 'Studio', '1 B/R', '2 B/R', '3 B/R', '4 B/R', '5 B/R', '6 B/R+'];
+    const REG_TYPE_OPTIONS = ['All', 'Ready', 'Offplan'];
+
+    let filterDefinitions = $derived<FilterDefinition[]>([
+        {
+            id: 'propertyType',
+            label: 'Property Type',
+            type: 'standard',
+            options: PROPERTY_TYPE_OPTIONS
+        },
+        {
+            id: 'rooms',
+            label: 'Rooms',
+            type: 'standard',
+            options: ROOMS_OPTIONS
+        },
+        {
+            id: 'regType',
+            label: 'Registration',
+            type: 'standard',
+            options: REG_TYPE_OPTIONS
+        },
+        {
+            id: 'priceRange',
+            label: 'Price Range',
+            type: 'standard',
+            options: PRICE_BUCKET_OPTIONS
+        },
+        {
+            id: 'areaRange',
+            label: 'Area (sq.ft)',
+            type: 'standard',
+            options: AREA_BUCKET_OPTIONS
         }
+    ]);
+
+    // Build API parameters from filters
+    function buildApiParams() {
+        return {
+            property_usage: propertyType.current,
+            timeframe_days: TIMEFRAME_MAPPING[timeframe.current] ?? 30,
+            master_project: masterProject.current !== 'All' ? masterProject.current : undefined,
+            property_type: localFilters.propertyType !== 'All' ? localFilters.propertyType : undefined,
+            rooms: localFilters.rooms !== 'All' ? localFilters.rooms : undefined,
+            reg_type: localFilters.regType !== 'All' ? localFilters.regType : undefined,
+            price_bucket: localFilters.priceRange !== 'All' ? localFilters.priceRange : undefined,
+            area_bucket: localFilters.areaRange !== 'All' ? localFilters.areaRange : undefined
+        };
     }
 
-    // Fetch when filters change (runs on mount too)
+    // Analytics query using @tanstack/svelte-query
+    const analyticsQuery = createQuery(() => ({
+        queryKey: [
+            'sales-analytics',
+            propertyType.current,
+            masterProject.current,
+            timeframe.current,
+            localFilters.propertyType,
+            localFilters.rooms,
+            localFilters.regType,
+            localFilters.priceRange,
+            localFilters.areaRange
+        ],
+        queryFn: () => analytics.sales(buildApiParams())
+    }));
+
+    function resetLocalFilters() {
+        localFilters = {
+            propertyType: 'All',
+            rooms: 'All',
+            regType: 'All',
+            priceRange: 'All',
+            areaRange: 'All'
+        };
+    }
+
+    // Reset local filters when global filters change
     $effect(() => {
-        // Track dependencies
-        const _pt = propertyType.current;
-        const _tf = timeframe.current;
-        const _mp = masterProject.current;
-        // Fetch without tracking the async call
-        untrack(() => { fetchData(); });
+        const _ = [propertyType.current, masterProject.current, timeframe.current];
+        resetLocalFilters();
     });
 
     function formatCurrency(value: number): string {
@@ -58,94 +126,104 @@
 </script>
 
 <div class="max-w-7xl mx-auto px-4 py-8">
-    <PageHeader 
-        title="Sales Analytics" 
+    <PageHeader
+        title="Sales Analytics"
         subtitle="Market insights and trends for property sales"
     />
 
-    {#if loading}
-        <div class="mt-8 flex justify-center">
-            <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+    <FilterPanel
+        {filterDefinitions}
+        bind:filters={localFilters}
+        onReset={resetLocalFilters}
+    />
+
+    {#if analyticsQuery.isError}
+        <div class="bg-red-50 border border-red-200 rounded-lg p-6 text-center mb-6">
+            <p class="text-red-800 font-semibold">Error loading analytics</p>
+            <p class="text-red-600 mt-2">{analyticsQuery.error?.message ?? 'Unknown error'}</p>
+            <button
+                onclick={() => analyticsQuery.refetch()}
+                class="mt-4 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+            >
+                Retry
+            </button>
         </div>
-    {:else if error}
-        <div class="mt-8 bg-red-50 border border-red-200 rounded-lg p-4 text-red-700">
-            {error}
+    {/if}
+
+    {#if analyticsQuery.isPending || analyticsQuery.isFetching}
+        <div class="flex justify-center py-12">
+            <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
         </div>
-    {:else if data}
+    {:else if analyticsQuery.data}
         <!-- KPI Cards -->
-        <div class="mt-8 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
             <DashboardCard
                 title="Total Volume"
-                value={formatCurrency(data.summary.total_volume)}
-                trend={getTrend(data.summary.volume_change_pct)}
+                value={formatCurrency(analyticsQuery.data.summary.total_volume)}
+                trend={getTrend(analyticsQuery.data.summary.volume_change_pct)}
             />
             <DashboardCard
                 title="Transactions"
-                value={formatNumber(data.summary.transaction_count)}
-                trend={getTrend(data.summary.count_change_pct)}
+                value={formatNumber(analyticsQuery.data.summary.transaction_count)}
+                trend={getTrend(analyticsQuery.data.summary.count_change_pct)}
             />
             <DashboardCard
                 title="Avg. Price"
-                value={formatCurrency(data.summary.avg_price)}
+                value={formatCurrency(analyticsQuery.data.summary.avg_price)}
             />
             <DashboardCard
                 title="Avg. Price/sq.ft"
-                value={formatCurrency(data.summary.avg_price_sqft)}
+                value={formatCurrency(analyticsQuery.data.summary.avg_price_sqft)}
             />
         </div>
 
-        <!-- Top Projects -->
-        <div class="mt-8 bg-white rounded-xl shadow-md border border-gray-200 p-6">
-            <h3 class="text-lg font-semibold text-gray-900 mb-4">Top Projects by Volume</h3>
-            {#if data.by_master_project.length > 0}
-                <div class="overflow-x-auto">
-                    <table class="min-w-full divide-y divide-gray-200">
-                        <thead>
-                            <tr>
-                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Project</th>
-                                <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Transactions</th>
-                                <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Volume</th>
-                                <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Avg/sq.ft</th>
-                                <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">% of Total</th>
-                            </tr>
-                        </thead>
-                        <tbody class="divide-y divide-gray-200">
-                            {#each data.by_master_project as project}
-                                <tr class="hover:bg-gray-50">
-                                    <td class="px-4 py-3 text-sm font-medium text-gray-900">{project.dimension_value}</td>
-                                    <td class="px-4 py-3 text-sm text-gray-600 text-right">{formatNumber(project.transaction_count)}</td>
-                                    <td class="px-4 py-3 text-sm text-gray-600 text-right">{formatCurrency(project.total_volume)}</td>
-                                    <td class="px-4 py-3 text-sm text-gray-600 text-right">{formatCurrency(project.avg_price_sqft)}</td>
-                                    <td class="px-4 py-3 text-sm text-gray-600 text-right">{project.pct_of_total?.toFixed(1) ?? '-'}%</td>
-                                </tr>
-                            {/each}
-                        </tbody>
-                    </table>
-                </div>
-            {:else}
-                <p class="text-gray-500 text-center py-4">No data available for this period</p>
-            {/if}
+        <!-- Trend Chart -->
+        <div class="mb-6">
+            <TrendChart
+                data={analyticsQuery.data.trends}
+                title="Sales Trend Over Time"
+                metric="volume"
+                height={350}
+            />
         </div>
 
-        <!-- Property Type Breakdown -->
-        <div class="mt-8 bg-white rounded-xl shadow-md border border-gray-200 p-6">
-            <h3 class="text-lg font-semibold text-gray-900 mb-4">By Property Type</h3>
-            {#if data.by_property_type.length > 0}
-                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {#each data.by_property_type as item}
-                        <div class="bg-gray-50 rounded-lg p-4">
-                            <h4 class="font-medium text-gray-900">{item.dimension_value}</h4>
-                            <div class="mt-2 space-y-1 text-sm text-gray-600">
-                                <p>{formatNumber(item.transaction_count)} transactions</p>
-                                <p>{formatCurrency(item.total_volume)} volume</p>
-                                <p>{formatCurrency(item.avg_price_sqft)}/sq.ft</p>
-                            </div>
-                        </div>
-                    {/each}
-                </div>
-            {:else}
-                <p class="text-gray-500 text-center py-4">No data available</p>
-            {/if}
+        <!-- Charts Grid -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <!-- By Property Type -->
+            <BreakdownChart
+                data={analyticsQuery.data.by_property_type}
+                title="By Property Type"
+                metric="volume"
+                height={400}
+                maxItems={10}
+            />
+
+            <!-- By Rooms -->
+            <BreakdownChart
+                data={analyticsQuery.data.by_rooms}
+                title="By Rooms"
+                metric="volume"
+                height={400}
+                maxItems={10}
+            />
+
+            <!-- By Registration Type -->
+            <BreakdownChart
+                data={analyticsQuery.data.by_reg_type}
+                title="By Registration Type"
+                metric="volume"
+                height={300}
+                maxItems={5}
+            />
+
+            <!-- By Master Project -->
+            <BreakdownChart
+                data={analyticsQuery.data.by_master_project}
+                title="Top Projects by Volume"
+                metric="volume"
+                height={400}
+                maxItems={15}
+            />
         </div>
     {/if}
 </div>

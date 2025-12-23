@@ -2,9 +2,15 @@
   import { chat, type Message } from '$lib/api/chat';
 
   let {
-    conversationId = $bindable(null)
+    conversationId = $bindable(null),
+    initialMessage = null,
+    autoSend = false,
+    onMessageSent = () => {}
   }: {
     conversationId: number | null;
+    initialMessage?: string | null;
+    autoSend?: boolean;
+    onMessageSent?: () => void;
   } = $props();
 
   interface DisplayMessage {
@@ -36,6 +42,20 @@
       setTimeout(() => {
         messagesEndRef?.scrollIntoView({ behavior: 'smooth' });
       }, 100);
+    }
+  });
+
+  // Auto-send initial message when navigating from dashboard
+  $effect(() => {
+    if (autoSend && initialMessage && conversationId && !loading && !streamController) {
+      // Set the input value to the initial message
+      inputValue = initialMessage;
+
+      // Trigger send after a brief delay for smooth UX
+      setTimeout(() => {
+        handleSubmit();
+        onMessageSent();
+      }, 300);
     }
   });
 

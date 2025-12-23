@@ -1,15 +1,34 @@
 <script lang="ts">
-	import ChatBox from '$lib/components/dashboard/ChatBox.svelte';
+	import CompactChatInput from '$lib/components/dashboard/CompactChatInput.svelte';
 	import DashboardCard from '$lib/components/dashboard/DashboardCard.svelte';
 	import PageHeader from '$lib/components/dashboard/PageHeader.svelte';
 	import AppShell from '$lib/components/layout/AppShell.svelte';
 	import Grid from '$lib/components/layout/Grid.svelte';
 	import { authStore } from '$lib/stores/auth.svelte';
+	import { goto } from '$app/navigation';
+	import { chat } from '$lib/api/chat';
 
 	let username = $derived(authStore.user?.first_name ?? '');
 
-	function handleChatSubmit(value: string) {
-		console.log('Submitted:', value);
+	async function handleChatSubmit(message: string) {
+		try {
+			// Create new conversation with title from first message
+			const conversation = await chat.createConversation({
+				title: message.slice(0, 50)
+			});
+
+			// Navigate to chat route with conversation and initial message
+			goto('/dashboard/chat', {
+				state: {
+					conversationId: conversation.id,
+					initialMessage: message
+				}
+			});
+		} catch (error) {
+			console.error('Failed to create conversation:', error);
+			// Re-throw to let CompactChatInput handle the error display
+			throw error;
+		}
 	}
 </script>
 
@@ -18,11 +37,10 @@
 
 	<PageHeader title="Welcome, {username}!" subtitle="Your property dashboard" />
 
-	<div class="flex justify-center mb-16">
-		<ChatBox
-			placeholder="Search properties, areas, or ask anything..."
+	<div class="mb-16">
+		<CompactChatInput
+			placeholder="Ask me anything about Dubai real estate..."
 			onSubmit={handleChatSubmit}
-			options={['Custom deliverables', 'Valuation']}
 		/>
 	</div>
 
