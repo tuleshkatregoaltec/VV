@@ -5,6 +5,8 @@
   import { admin, type Organization, type OrganizationUser } from '$lib/api/admin';
   import { ApiError } from '$lib/api/client';
 
+  export const prerender = false;
+
   let organization = $state<Organization | null>(null);
   let users = $state<OrganizationUser[]>([]);
   let loading = $state(true);

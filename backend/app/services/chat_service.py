@@ -128,11 +128,18 @@ class ChatService:
                     "Always cite specific numbers and trends when using tool results.\n\n"
                     "IMPORTANT DATA STRUCTURE NOTES:\n"
                     "- Sales transactions: Bedroom data in 'rooms' field (Studio, 1 B/R, 2 B/R, 3 B/R, etc.)\n"
-                    "- Rental contracts: Bedroom data in 'property_sub_type' field (\"2 bed rooms+hall\", \"3 bed rooms+hall\", \"Studio\", etc.)\n"
+                    '- Rental contracts: Bedroom data in \'property_sub_type\' field ("2 bed rooms+hall", "3 bed rooms+hall", "Studio", etc.)\n'
                     "- get_sales_analytics: Supports bedroom filtering via 'rooms' parameter\n"
                     "- get_rental_analytics: Does NOT support bedroom filtering (use search_rental_contracts instead)\n"
                     "- search_rental_contracts: Use 'property_sub_type' parameter for bedroom-specific rentals (e.g., \"2 bed rooms+hall\")\n"
-                    "- Both sales and rentals support: property_type, master_project, area ranges, and price/rent buckets"
+                    "- Both sales and rentals support: property_type, master_project, area ranges, and price/rent buckets\n\n"
+                    "SUPPLY/PROJECT TOOLS:\n"
+                    "- search_active_projects: Search active projects with flexible filters\n"
+                    "  * Use 'timeframe' parameter for date-based queries (upcoming, overdue, 3m, 6m, 12m, all)\n"
+                    "  * Use 'developer_name' or 'area_name' for location/developer filtering (partial case-insensitive match)\n"
+                    "  * Use 'min_progress' and 'max_progress' for completion percentage filtering (0-100)\n"
+                    "  * Combine multiple filters for complex queries (e.g., developer_name='Emaar', timeframe='6m', min_progress=50)\n"
+                    "  * Returns project details including name, developer, area, progress, dates, buildings, and units"
                 ),
             }
         )

@@ -53,11 +53,13 @@ def _build_bucket_case(column: str, buckets: list) -> str:
     """
     cases = []
     for min_val, max_val, label in buckets[:-1]:  # All except last
-        if max_val == float('inf'):
+        if max_val == float("inf"):
             # Last bucket
             cases.append(f"WHEN {column} >= {min_val} THEN '{label}'")
         else:
-            cases.append(f"WHEN {column} >= {min_val} AND {column} < {max_val} THEN '{label}'")
+            cases.append(
+                f"WHEN {column} >= {min_val} AND {column} < {max_val} THEN '{label}'"
+            )
 
     # Last bucket (should handle infinity)
     last_min, _, last_label = buckets[-1]
@@ -67,9 +69,7 @@ def _build_bucket_case(column: str, buckets: list) -> str:
 
 
 async def compute_daily_sales_aggregates(
-    session: AsyncSession,
-    start_date: date,
-    end_date: date
+    session: AsyncSession, start_date: date, end_date: date
 ) -> int:
     """Compute daily sales aggregates for a date range.
 
@@ -87,7 +87,7 @@ async def compute_daily_sales_aggregates(
     await session.execute(
         delete(AnalyticsDailySalesAgg).where(
             AnalyticsDailySalesAgg.agg_date >= start_date,
-            AnalyticsDailySalesAgg.agg_date <= end_date
+            AnalyticsDailySalesAgg.agg_date <= end_date,
         )
     )
     await session.commit()
@@ -122,8 +122,8 @@ async def compute_daily_sales_aggregates(
             COALESCE(SUM(actual_worth), 0) as total_volume,
             COALESCE(SUM(procedure_area), 0) as total_area,
             COALESCE(SUM(actual_worth), 0) as sum_price,
-            COALESCE(SUM(procedure_area), 0) as sum_area,
-            COALESCE(SUM(actual_worth * COALESCE(procedure_area, 0)), 0) as sum_price_x_area,
+            COALESCE(SUM(procedure_area * 10.764), 0) as sum_area,
+            COALESCE(SUM(actual_worth), 0) as sum_price_x_area,
             MIN(actual_worth) as min_price,
             MAX(actual_worth) as max_price,
             MIN(procedure_area) as min_area,
@@ -148,8 +148,7 @@ async def compute_daily_sales_aggregates(
     """)
 
     result = await session.execute(
-        agg_query,
-        {"start_date": start_date, "end_date": end_date}
+        agg_query, {"start_date": start_date, "end_date": end_date}
     )
     await session.commit()
 
@@ -159,9 +158,7 @@ async def compute_daily_sales_aggregates(
 
 
 async def compute_daily_rentals_aggregates(
-    session: AsyncSession,
-    start_date: date,
-    end_date: date
+    session: AsyncSession, start_date: date, end_date: date
 ) -> int:
     """Compute daily rentals aggregates for a date range.
 
@@ -179,7 +176,7 @@ async def compute_daily_rentals_aggregates(
     await session.execute(
         delete(AnalyticsDailyRentalsAgg).where(
             AnalyticsDailyRentalsAgg.agg_date >= start_date,
-            AnalyticsDailyRentalsAgg.agg_date <= end_date
+            AnalyticsDailyRentalsAgg.agg_date <= end_date,
         )
     )
     await session.commit()
@@ -190,7 +187,7 @@ async def compute_daily_rentals_aggregates(
     # For rent per sqft, we need to calculate it first
     rent_sqft_bucket_case = _build_bucket_case(
         "CASE WHEN actual_area > 0 THEN annual_amount / actual_area ELSE NULL END",
-        RENT_SQFT_BUCKETS
+        RENT_SQFT_BUCKETS,
     )
 
     agg_query = text(f"""
@@ -217,8 +214,8 @@ async def compute_daily_rentals_aggregates(
             COALESCE(SUM(annual_amount), 0) as total_annual_value,
             COALESCE(SUM(actual_area), 0) as total_area,
             COALESCE(SUM(annual_amount), 0) as sum_rent,
-            COALESCE(SUM(actual_area), 0) as sum_area,
-            COALESCE(SUM(annual_amount * COALESCE(actual_area, 0)), 0) as sum_rent_x_area,
+            COALESCE(SUM(actual_area * 10.764), 0) as sum_area,
+            COALESCE(SUM(annual_amount), 0) as sum_rent_x_area,
             MIN(annual_amount) as min_annual_rent,
             MAX(annual_amount) as max_annual_rent,
             MIN(actual_area) as min_area,
@@ -242,8 +239,7 @@ async def compute_daily_rentals_aggregates(
     """)
 
     result = await session.execute(
-        agg_query,
-        {"start_date": start_date, "end_date": end_date}
+        agg_query, {"start_date": start_date, "end_date": end_date}
     )
     await session.commit()
 
@@ -258,33 +254,21 @@ async def main():
     parser.add_argument(
         "--full-rebuild",
         action="store_true",
-        help="Rebuild all historical data (warning: slow)"
+        help="Rebuild all historical data (warning: slow)",
     )
-    parser.add_argument(
-        "--start-date",
-        type=str,
-        help="Start date (YYYY-MM-DD)"
-    )
-    parser.add_argument(
-        "--end-date",
-        type=str,
-        help="End date (YYYY-MM-DD)"
-    )
+    parser.add_argument("--start-date", type=str, help="Start date (YYYY-MM-DD)")
+    parser.add_argument("--end-date", type=str, help="End date (YYYY-MM-DD)")
     parser.add_argument(
         "--lookback-days",
         type=int,
         default=7,
-        help="Number of days to look back for incremental update (default: 7)"
+        help="Number of days to look back for incremental update (default: 7)",
     )
     parser.add_argument(
-        "--sales-only",
-        action="store_true",
-        help="Compute only sales aggregates"
+        "--sales-only", action="store_true", help="Compute only sales aggregates"
     )
     parser.add_argument(
-        "--rentals-only",
-        action="store_true",
-        help="Compute only rentals aggregates"
+        "--rentals-only", action="store_true", help="Compute only rentals aggregates"
     )
 
     args = parser.parse_args()
@@ -292,7 +276,7 @@ async def main():
     # Determine date range
     if args.full_rebuild:
         # Rebuild last 5 years (covers vast majority of data as per user feedback)
-        start_date = date.today() - timedelta(days=5*365)
+        start_date = date.today() - timedelta(days=5 * 365)
         end_date = date.today()
         print("Full rebuild mode - computing last 5 years of data")
         print("WARNING: This may take 1-2 hours!")
@@ -318,12 +302,16 @@ async def main():
 
             # Compute sales unless rentals-only flag is set
             if not args.rentals_only:
-                sales_rows = await compute_daily_sales_aggregates(session, start_date, end_date)
+                sales_rows = await compute_daily_sales_aggregates(
+                    session, start_date, end_date
+                )
                 total_rows += sales_rows
 
             # Compute rentals unless sales-only flag is set
             if not args.sales_only:
-                rentals_rows = await compute_daily_rentals_aggregates(session, start_date, end_date)
+                rentals_rows = await compute_daily_rentals_aggregates(
+                    session, start_date, end_date
+                )
                 total_rows += rentals_rows
 
             elapsed = datetime.now(timezone.utc) - start_time

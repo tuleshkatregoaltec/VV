@@ -241,56 +241,141 @@ class MCPToolRegistry:
 
         # Supply Tools
         @self.mcp.tool()
-        async def get_developers(
-            sort_by: str = "projects", limit: int = 50, offset: int = 0
+        async def search_active_projects(
+            developer_name: Optional[str] = None,
+            area_name: Optional[str] = None,
+            min_progress: Optional[int] = None,
+            max_progress: Optional[int] = None,
+            timeframe: Optional[str] = None,
+            sort_by: str = "project_end_date",
+            sort_order: str = "asc",
+            limit: int = 50,
+            offset: int = 0,
         ) -> Dict[str, Any]:
-            """Get list of developers with their projects and statistics.
+            """Search and filter active real estate projects in Dubai.
+
+            Active projects are those that have started but not yet completed or been cancelled.
+            Returns projects with developer info, area, progress, and timeline details.
+
+            Timeframe options:
+            - "all": All active projects (default)
+            - "upcoming": Projects with future completion dates
+            - "overdue": Projects past their expected completion date
+            - "3m", "6m", "12m": Projects completing in next 3, 6, or 12 months
+
+            Examples:
+            - Find overdue projects: timeframe="overdue"
+            - Find Emaar projects: developer_name="Emaar"
+            - Find nearly complete projects: min_progress=80
+            - Find projects in Downtown: area_name="Downtown"
 
             Args:
-                sort_by: Sort by 'projects', 'transactions', or 'avg_price'
-                limit: Number of results to return
-                offset: Pagination offset
+                developer_name: Filter by developer (partial case-insensitive match)
+                area_name: Filter by area (partial case-insensitive match)
+                min_progress: Minimum completion percentage (0-100)
+                max_progress: Maximum completion percentage (0-100)
+                timeframe: Filter by completion timeframe ("all", "upcoming", "overdue", "3m", "6m", "12m")
+                sort_by: Field to sort by (default: "project_end_date")
+                sort_order: Sort direction - "asc" or "desc" (default: "asc")
+                limit: Maximum results to return (1-500, default: 50)
+                offset: Pagination offset (default: 0)
             """
-            from backend.app.services.supply_service import (
-                get_all_developers,
-                get_developer_stats_bulk,
-            )
+            from backend.app.services.supply_service import get_upcoming_projects
             from backend.app.db.session import async_session
+            from datetime import datetime, timedelta
 
             async with async_session() as session:
-                developers = await get_all_developers(session, sort_by, limit, offset)
-                dev_ids = [d.developer_id for d in developers]
-                stats_map = await get_developer_stats_bulk(session, dev_ids)
+                # Get all active projects
+                projects = await get_upcoming_projects(db=session)
 
-                result = []
-                for dev in developers:
-                    stats = stats_map.get(dev.developer_id, {})
-                    result.append(
-                        {
-                            "developer_id": dev.developer_id,
-                            "developer_name": dev.developer_name_en,
-                            "phone": dev.phone,
-                            "webpage": dev.webpage,
-                            **stats,
-                        }
+                # Apply filters
+                filtered = []
+                now = datetime.now().date()
+
+                for project in projects:
+                    # Developer filter (case-insensitive partial match)
+                    if developer_name and developer_name.lower() not in (
+                        project.developer.developer_name_en or ""
+                    ).lower():
+                        continue
+
+                    # Area filter (case-insensitive partial match)
+                    if area_name and area_name.lower() not in (
+                        project.area.name_en or ""
+                    ).lower():
+                        continue
+
+                    # Progress filters
+                    progress = project.percent_completed or 0
+                    if min_progress is not None and progress < min_progress:
+                        continue
+                    if max_progress is not None and progress > max_progress:
+                        continue
+
+                    # Timeframe filter
+                    if timeframe and timeframe != "all":
+                        end_date = project.project_end_date
+
+                        if timeframe == "upcoming":
+                            # Future completion dates only
+                            if not end_date or end_date < now:
+                                continue
+
+                        elif timeframe == "overdue":
+                            # Past completion dates only
+                            if not end_date or end_date >= now:
+                                continue
+
+                        elif timeframe in ["3m", "6m", "12m"]:
+                            # Specific timeframes
+                            months = {"3m": 3, "6m": 6, "12m": 12}[timeframe]
+                            future_date = now + timedelta(days=months * 30)
+
+                            if not end_date or end_date < now or end_date > future_date:
+                                continue
+
+                    # Build result object
+                    end_date = project.project_end_date
+                    is_overdue = bool(end_date and end_date < now) if end_date else False
+                    months_until = None
+                    if end_date:
+                        days_diff = (end_date - now).days
+                        months_until = round(days_diff / 30, 1)
+
+                    filtered.append({
+                        "project_id": project.project_id,
+                        "project_name": project.project_name,
+                        "developer_name": project.developer.developer_name_en if project.developer else "Unknown",
+                        "developer_id": project.developer_id,
+                        "area_name": project.area.name_en if project.area else "Unknown",
+                        "project_start_date": str(project.project_start_date) if project.project_start_date else None,
+                        "project_end_date": str(project.project_end_date) if project.project_end_date else None,
+                        "percent_completed": project.percent_completed or 0,
+                        "no_of_buildings": project.no_of_buildings,
+                        "no_of_units": project.no_of_units,
+                        "is_overdue": is_overdue,
+                        "months_until_completion": months_until,
+                    })
+
+                # Sort
+                reverse = sort_order == "desc"
+                if filtered and sort_by in filtered[0]:
+                    filtered.sort(
+                        key=lambda x: (x[sort_by] is None, x[sort_by]),
+                        reverse=reverse
                     )
-                return {"developers": result, "total": len(result)}
 
-        @self.mcp.tool()
-        async def get_project_details(project_id: int) -> Dict[str, Any]:
-            """Get detailed information about a specific real estate project.
+                # Paginate
+                total_filtered = len(filtered)
+                paginated = filtered[offset:offset + limit]
 
-            Args:
-                project_id: The project ID to look up
-            """
-            from backend.app.services.supply_service import get_project_by_id
-            from backend.app.db.session import async_session
-
-            async with async_session() as session:
-                project = await get_project_by_id(session, project_id)
-                if not project:
-                    return {"error": "Project not found"}
-                return project.model_dump()
+                return {
+                    "total": len(projects),
+                    "filtered_count": total_filtered,
+                    "limit": limit,
+                    "offset": offset,
+                    "projects": paginated,
+                }
 
         # Filter Tools
         @self.mcp.tool()

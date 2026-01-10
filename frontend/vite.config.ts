@@ -8,8 +8,9 @@ export default defineConfig({
 	build: {
 		rollupOptions: {
 			output: {
-				manualChunks: {
-					'vendor-posthog': ['posthog-js']
+				manualChunks(id) {
+					if (id.includes('node_modules/posthog-js')) return 'vendor-posthog';
+					if (id.includes('node_modules')) return 'vendor';
 				}
 			}
 		}

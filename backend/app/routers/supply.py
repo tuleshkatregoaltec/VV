@@ -1,24 +1,14 @@
-from typing import List, Literal
-
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from backend.app.core.decorators import cached_endpoint
 from backend.app.db.session import get_db_session
 from backend.app.routers.dependencies import require_auth
 from backend.app.schemas.supply import (
-    DeveloperCountResponse,
-    DeveloperListResponse,
-    DeveloperResponse,
-    ProjectResponse,
+    UpcomingProjectResponse,
+    UpcomingProjectsResponse,
 )
-from backend.app.services.supply_service import (
-    get_all_developers,
-    get_developer_count,
-    get_developer_stats_bulk,
-    get_project_by_id,
-    get_projects_by_developer,
-)
+from backend.app.services.supply_service import get_upcoming_projects
 
 router = APIRouter(
     prefix="/api/v1/supply",
@@ -27,76 +17,29 @@ router = APIRouter(
 )
 
 
-@router.get("/developers/count", response_model=DeveloperCountResponse)
-@cached_endpoint(prefix="developers_count", expire=300)
-async def count_developers(
+@router.get("/upcoming-projects", response_model=UpcomingProjectsResponse)
+@cached_endpoint(prefix="upcoming_projects", expire=3600)
+async def list_upcoming_projects(
     db: AsyncSession = Depends(get_db_session),
 ):
-    """Get total count of developers."""
-    total = await get_developer_count(db)
-    return DeveloperCountResponse(total=total)
+    """Get all upcoming/active projects for catalogue view."""
+    projects = await get_upcoming_projects(db)
 
-
-@router.get("/developers", response_model=DeveloperListResponse)
-async def list_developers(
-    sort_by: Literal["projects", "transactions", "avg_price"] = Query("projects"),
-    limit: int = Query(default=50, ge=1, le=500),
-    offset: int = Query(default=0, ge=0),
-    db: AsyncSession = Depends(get_db_session),
-):
-    """Get developers with pagination, sorted by specified criteria.
-
-    Uses bulk stats fetching to avoid N+1 query problem.
-    """
-    # Fetch total count and paginated developers
-    total = await get_developer_count(db)
-    developers = await get_all_developers(
-        db, sort_by=sort_by, limit=limit, offset=offset
-    )
-
-    # Extract developer IDs and fetch all stats in one query
-    dev_ids = [dev.developer_id for dev in developers]
-    stats_map = await get_developer_stats_bulk(db, dev_ids)
-
-    # Merge developer data with stats (CPU-bound, fast)
+    # Build response
     result = []
-    for dev in developers:
-        stats = stats_map.get(
-            dev.developer_id, {"total": 0, "active": 0, "completed": 0, "cancelled": 0}
-        )
-        dev_data = {
-            "developer_id": dev.developer_id,
-            "developer_name_en": dev.developer_name_en,
-            "phone": dev.phone,
-            "webpage": dev.webpage,
-            **stats,
+    for project in projects:
+        project_data = {
+            "project_id": project.project_id,
+            "project_name": project.project_name,
+            "developer_name": project.developer.developer_name_en if project.developer else "Unknown",
+            "developer_id": project.developer_id,
+            "area_name": project.area.name_en if project.area else "Unknown",
+            "project_start_date": project.project_start_date,
+            "project_end_date": project.project_end_date,
+            "percent_completed": project.percent_completed or 0,
+            "no_of_buildings": project.no_of_buildings,
+            "no_of_units": project.no_of_units,
         }
-        result.append(DeveloperResponse.model_validate(dev_data))
+        result.append(UpcomingProjectResponse.model_validate(project_data))
 
-    return DeveloperListResponse(
-        developers=result, total=total, limit=limit, offset=offset
-    )
-
-
-@router.get("/developers/{developer_id}/projects", response_model=List[ProjectResponse])
-@cached_endpoint(prefix="developer_projects", expire=1800)
-async def list_developer_projects(
-    developer_id: int,
-    db: AsyncSession = Depends(get_db_session),
-):
-    """Get projects for a developer, active first."""
-    projects = await get_projects_by_developer(db, developer_id)
-    return [ProjectResponse.model_validate(p) for p in projects]
-
-
-@router.get("/projects/{project_id}", response_model=ProjectResponse)
-@cached_endpoint(prefix="project", expire=3600)
-async def get_project(
-    project_id: int,
-    db: AsyncSession = Depends(get_db_session),
-):
-    """Get project by ID with caching."""
-    project = await get_project_by_id(db, project_id)
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
-    return ProjectResponse.model_validate(project)
+    return UpcomingProjectsResponse(projects=result, total=len(result))

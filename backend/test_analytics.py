@@ -15,7 +15,9 @@ async def test_analytics():
 
     # Create database session (using sqlmodel's AsyncSession like the app does)
     engine = create_async_engine(settings.DATABASE_URL, echo=False)
-    async_session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    async_session = async_sessionmaker(
+        engine, class_=AsyncSession, expire_on_commit=False
+    )
 
     async with async_session() as session:
         print("=" * 80)
@@ -26,9 +28,7 @@ async def test_analytics():
         print("\n📊 Test 1: Basic 30-day sales query")
         print("-" * 80)
         result1 = await fetch_sales_analytics(
-            db=session,
-            property_usage="Residential",
-            timeframe_days=30
+            db=session, property_usage="Residential", timeframe_days=30
         )
         print(f"✅ Timeframe: {result1.timeframe_days} days")
         print(f"✅ Property Usage: {result1.property_usage}")
@@ -48,7 +48,7 @@ async def test_analytics():
             db=session,
             property_usage="Residential",
             start_date=date(2024, 11, 21),
-            end_date=date(2024, 12, 21)
+            end_date=date(2024, 12, 21),
         )
         print(f"✅ Transaction Count: {result2.summary.transaction_count:,}")
         print(f"✅ Total Volume: AED {result2.summary.total_volume:,.2f}")
@@ -60,7 +60,7 @@ async def test_analytics():
             db=session,
             property_usage="Residential",
             timeframe_days=30,
-            price_bucket="1M-2M"
+            price_bucket="1M-2M",
         )
         print(f"✅ Filtered Transaction Count: {result3.summary.transaction_count:,}")
         print(f"✅ Total Volume (1M-2M only): AED {result3.summary.total_volume:,.2f}")
@@ -70,9 +70,7 @@ async def test_analytics():
         print("\n📊 Test 4: Rental analytics (30 days)")
         print("-" * 80)
         result4 = await fetch_rental_analytics(
-            db=session,
-            property_usage="Residential",
-            timeframe_days=30
+            db=session, property_usage="Residential", timeframe_days=30
         )
         print(f"✅ Contract Count: {result4.summary.contract_count:,}")
         print(f"✅ Total Annual Value: AED {result4.summary.total_annual_value:,.2f}")
@@ -84,8 +82,10 @@ async def test_analytics():
             print("\n📊 Test 5: Property Type Breakdown (Top 5)")
             print("-" * 80)
             for i, pt in enumerate(result1.by_property_type[:5], 1):
-                print(f"{i}. {pt.dimension_value}: {pt.transaction_count:,} transactions, "
-                      f"AED {pt.total_volume:,.0f} ({pt.pct_of_total}%)")
+                print(
+                    f"{i}. {pt.dimension_value}: {pt.transaction_count:,} transactions, "
+                    f"AED {pt.total_volume:,.0f} ({pt.pct_of_total}%)"
+                )
 
         print("\n" + "=" * 80)
         print("✅ ALL TESTS PASSED! The new analytics system is working perfectly!")

@@ -25,16 +25,35 @@ router = APIRouter(
 
 @router.get("/sales", response_model=AnalyticsResponse)
 async def get_sales_analytics(
-    property_usage: str = Query(default="Residential", description="Residential or Commercial"),
-    timeframe_days: Optional[int] = Query(default=None, description="Number of days to look back (overrides start_date if provided)"),
-    start_date: Optional[date] = Query(default=None, description="Explicit start date (YYYY-MM-DD)"),
-    end_date: Optional[date] = Query(default=None, description="Explicit end date (YYYY-MM-DD), defaults to today"),
-    master_project: Optional[str] = Query(default=None, description="Filter by master project name"),
-    property_type: Optional[str] = Query(default=None, description="Filter by property type"),
+    property_usage: str = Query(
+        default="Residential", description="Residential or Commercial"
+    ),
+    timeframe_days: Optional[int] = Query(
+        default=None,
+        description="Number of days to look back (overrides start_date if provided)",
+    ),
+    start_date: Optional[date] = Query(
+        default=None, description="Explicit start date (YYYY-MM-DD)"
+    ),
+    end_date: Optional[date] = Query(
+        default=None, description="Explicit end date (YYYY-MM-DD), defaults to today"
+    ),
+    master_project: Optional[str] = Query(
+        default=None, description="Filter by master project name"
+    ),
+    property_type: Optional[str] = Query(
+        default=None, description="Filter by property type"
+    ),
     rooms: Optional[str] = Query(default=None, description="Filter by room count"),
-    reg_type: Optional[str] = Query(default=None, description="Filter by registration type"),
-    price_bucket: Optional[str] = Query(default=None, description="Filter by price bucket (e.g., '1M-2M')"),
-    area_bucket: Optional[str] = Query(default=None, description="Filter by area bucket (e.g., '1K-2K')"),
+    reg_type: Optional[str] = Query(
+        default=None, description="Filter by registration type"
+    ),
+    price_bucket: Optional[str] = Query(
+        default=None, description="Filter by price bucket (e.g., '1M-2M')"
+    ),
+    area_bucket: Optional[str] = Query(
+        default=None, description="Filter by area bucket (e.g., '1K-2K')"
+    ),
     db: AsyncSession = Depends(get_db_session),
 ):
     """Get sales analytics with flexible filtering and custom date ranges.
@@ -66,14 +85,31 @@ async def get_sales_analytics(
 
 @router.get("/rentals", response_model=RentalAnalyticsResponse)
 async def get_rental_analytics(
-    property_usage: str = Query(default="Residential", description="Residential or Commercial"),
-    timeframe_days: Optional[int] = Query(default=None, description="Number of days to look back (overrides start_date if provided)"),
-    start_date: Optional[date] = Query(default=None, description="Explicit start date (YYYY-MM-DD)"),
-    end_date: Optional[date] = Query(default=None, description="Explicit end date (YYYY-MM-DD), defaults to today"),
-    master_project: Optional[str] = Query(default=None, description="Filter by master project name"),
-    property_type: Optional[str] = Query(default=None, description="Filter by property type"),
-    rent_bucket: Optional[str] = Query(default=None, description="Filter by rent bucket (e.g., '100K-200K')"),
-    area_bucket: Optional[str] = Query(default=None, description="Filter by area bucket (e.g., '1K-2K')"),
+    property_usage: str = Query(
+        default="Residential", description="Residential or Commercial"
+    ),
+    timeframe_days: Optional[int] = Query(
+        default=None,
+        description="Number of days to look back (overrides start_date if provided)",
+    ),
+    start_date: Optional[date] = Query(
+        default=None, description="Explicit start date (YYYY-MM-DD)"
+    ),
+    end_date: Optional[date] = Query(
+        default=None, description="Explicit end date (YYYY-MM-DD), defaults to today"
+    ),
+    master_project: Optional[str] = Query(
+        default=None, description="Filter by master project name"
+    ),
+    property_type: Optional[str] = Query(
+        default=None, description="Filter by property type"
+    ),
+    rent_bucket: Optional[str] = Query(
+        default=None, description="Filter by rent bucket (e.g., '100K-200K')"
+    ),
+    area_bucket: Optional[str] = Query(
+        default=None, description="Filter by area bucket (e.g., '1K-2K')"
+    ),
     db: AsyncSession = Depends(get_db_session),
 ):
     """Get rental analytics with flexible filtering and custom date ranges.

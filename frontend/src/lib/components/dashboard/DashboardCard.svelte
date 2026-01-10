@@ -2,27 +2,27 @@
   export let title: string;
   export let value: string | number;
   export let trend: { value: string; direction: 'up' | 'down' } | null = null;
-  export let colSpan: string = '';
 </script>
 
 <div
-			class="bg-white/80 backdrop-blur-xl rounded-xl shadow-lg shadow-primary-pale/20 border border-primary-pale hover:shadow-xl hover:border-primary-pale/50 transition-all duration-300 p-5 flex flex-col items-center justify-start text-center group w-full sm:w-auto {colSpan}"
+	class="bg-white/80 backdrop-blur-xl rounded-xl shadow-lg shadow-primary-pale/20 border border-primary-pale hover:shadow-xl hover:border-primary-pale/50 transition-all duration-300 p-5 sm:p-6 flex flex-col group"
 >
-	<div class="flex flex-col items-center w-full">
-		<div class="flex items-start justify-between mb-4 w-full">
-			<h2 class="text-base font-semibold text-gray-700 text-center w-full">{title}</h2>
-						<div
-							class="h-6 w-6 text-primary opacity-80 group-hover:opacity-100 transition-opacity duration-300 ml-auto"
-						>
-							<slot name="icon" />
-						</div>
+	<!-- Header with icon and title -->
+	<div class="flex items-center justify-between mb-3">
+		<h2 class="text-base font-semibold text-gray-700">{title}</h2>
+		<div class="h-6 w-6 text-primary opacity-70 group-hover:opacity-100 transition-opacity duration-300">
+			<slot name="icon" />
 		</div>
-		<p class="text-3xl sm:text-4xl font-bold text-gray-900">{value}</p>
 	</div>
+
+	<!-- Value -->
+	{#if value}
+		<p class="text-3xl sm:text-4xl font-bold text-gray-900 mb-auto">{value}</p>
+	{/if}
+	<!-- Trend indicator -->
 	{#if trend}
 		<div
-			class="mt-4 text-sm font-medium flex items-center justify-center w-full {trend.direction ===
-			'up'
+			class="mt-4 text-sm font-medium flex items-center {trend.direction === 'up'
 				? 'text-green-600'
 				: 'text-red-600'}"
 		>
@@ -49,5 +49,7 @@
 			<span>{trend.value}</span>
 		</div>
 	{/if}
+
+	<!-- Additional content (charts, etc.) -->
 	<slot />
 </div>

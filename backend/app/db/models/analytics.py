@@ -15,49 +15,49 @@ from sqlalchemy import Column, DateTime, text
 # Format: (min_value, max_value, label)
 
 SALES_PRICE_BUCKETS = [
-    (0, 500000, '<500K'),
-    (500000, 1000000, '500K-1M'),
-    (1000000, 2000000, '1M-2M'),
-    (2000000, 5000000, '2M-5M'),
-    (5000000, 10000000, '5M-10M'),
-    (10000000, 25000000, '10M-25M'),
-    (25000000, float('inf'), '>25M')
+    (0, 500000, "<500K"),
+    (500000, 1000000, "500K-1M"),
+    (1000000, 2000000, "1M-2M"),
+    (2000000, 5000000, "2M-5M"),
+    (5000000, 10000000, "5M-10M"),
+    (10000000, 25000000, "10M-25M"),
+    (25000000, float("inf"), ">25M"),
 ]
 
 RENTAL_PRICE_BUCKETS = [
-    (0, 50000, '<50K'),
-    (50000, 100000, '50K-100K'),
-    (100000, 200000, '100K-200K'),
-    (200000, 500000, '200K-500K'),
-    (500000, 1000000, '500K-1M'),
-    (1000000, float('inf'), '>1M')
+    (0, 50000, "<50K"),
+    (50000, 100000, "50K-100K"),
+    (100000, 200000, "100K-200K"),
+    (200000, 500000, "200K-500K"),
+    (500000, 1000000, "500K-1M"),
+    (1000000, float("inf"), ">1M"),
 ]
 
 AREA_BUCKETS = [
-    (0, 500, '<500'),
-    (500, 1000, '500-1K'),
-    (1000, 2000, '1K-2K'),
-    (2000, 3000, '2K-3K'),
-    (3000, 5000, '3K-5K'),
-    (5000, float('inf'), '>5K')
+    (0, 500, "<500"),
+    (500, 1000, "500-1K"),
+    (1000, 2000, "1K-2K"),
+    (2000, 3000, "2K-3K"),
+    (3000, 5000, "3K-5K"),
+    (5000, float("inf"), ">5K"),
 ]
 
 PRICE_SQFT_BUCKETS = [
-    (0, 500, '<500'),
-    (500, 1000, '500-1K'),
-    (1000, 1500, '1K-1.5K'),
-    (1500, 2000, '1.5K-2K'),
-    (2000, 3000, '2K-3K'),
-    (3000, float('inf'), '>3K')
+    (0, 500, "<500"),
+    (500, 1000, "500-1K"),
+    (1000, 1500, "1K-1.5K"),
+    (1500, 2000, "1.5K-2K"),
+    (2000, 3000, "2K-3K"),
+    (3000, float("inf"), ">3K"),
 ]
 
 RENT_SQFT_BUCKETS = [
-    (0, 50, '<50'),
-    (50, 100, '50-100'),
-    (100, 150, '100-150'),
-    (150, 200, '150-200'),
-    (200, 300, '200-300'),
-    (300, float('inf'), '>300')
+    (0, 50, "<50"),
+    (50, 100, "50-100"),
+    (100, 150, "100-150"),
+    (150, 200, "150-200"),
+    (200, 300, "200-300"),
+    (300, float("inf"), ">300"),
 ]
 
 
@@ -104,14 +104,14 @@ class AnalyticsDailySalesAgg(SQLModel, table=True):
             "idx_daily_sales_agg_date_usage",
             "agg_date",
             "property_usage",
-            postgresql_ops={'agg_date': 'DESC'}
+            postgresql_ops={"agg_date": "DESC"},
         ),
         Index(
             "idx_daily_sales_agg_master_project",
             "master_project",
             "agg_date",
             postgresql_where=text("master_project IS NOT NULL"),
-            postgresql_ops={'agg_date': 'DESC'}
+            postgresql_ops={"agg_date": "DESC"},
         ),
         Index(
             "idx_daily_sales_agg_property_type",
@@ -119,7 +119,7 @@ class AnalyticsDailySalesAgg(SQLModel, table=True):
             "property_usage",
             "agg_date",
             postgresql_where=text("property_type IS NOT NULL"),
-            postgresql_ops={'agg_date': 'DESC'}
+            postgresql_ops={"agg_date": "DESC"},
         ),
         Index(
             "idx_daily_sales_agg_rooms",
@@ -127,7 +127,7 @@ class AnalyticsDailySalesAgg(SQLModel, table=True):
             "property_usage",
             "agg_date",
             postgresql_where=text("rooms IS NOT NULL"),
-            postgresql_ops={'agg_date': 'DESC'}
+            postgresql_ops={"agg_date": "DESC"},
         ),
         Index(
             "idx_daily_sales_agg_price_bucket",
@@ -135,7 +135,7 @@ class AnalyticsDailySalesAgg(SQLModel, table=True):
             "property_usage",
             "agg_date",
             postgresql_where=text("price_bucket IS NOT NULL"),
-            postgresql_ops={'agg_date': 'DESC'}
+            postgresql_ops={"agg_date": "DESC"},
         ),
         Index(
             "idx_daily_sales_agg_area_bucket",
@@ -143,7 +143,7 @@ class AnalyticsDailySalesAgg(SQLModel, table=True):
             "property_usage",
             "agg_date",
             postgresql_where=text("area_bucket IS NOT NULL"),
-            postgresql_ops={'agg_date': 'DESC'}
+            postgresql_ops={"agg_date": "DESC"},
         ),
     )
 
@@ -202,14 +202,14 @@ class AnalyticsDailyRentalsAgg(SQLModel, table=True):
             "idx_daily_rentals_agg_date_usage",
             "agg_date",
             "property_usage",
-            postgresql_ops={'agg_date': 'DESC'}
+            postgresql_ops={"agg_date": "DESC"},
         ),
         Index(
             "idx_daily_rentals_agg_master_project",
             "master_project",
             "agg_date",
             postgresql_where=text("master_project IS NOT NULL"),
-            postgresql_ops={'agg_date': 'DESC'}
+            postgresql_ops={"agg_date": "DESC"},
         ),
         Index(
             "idx_daily_rentals_agg_property_type",
@@ -217,7 +217,7 @@ class AnalyticsDailyRentalsAgg(SQLModel, table=True):
             "property_usage",
             "agg_date",
             postgresql_where=text("property_type IS NOT NULL"),
-            postgresql_ops={'agg_date': 'DESC'}
+            postgresql_ops={"agg_date": "DESC"},
         ),
         Index(
             "idx_daily_rentals_agg_rent_bucket",
@@ -225,7 +225,7 @@ class AnalyticsDailyRentalsAgg(SQLModel, table=True):
             "property_usage",
             "agg_date",
             postgresql_where=text("rent_bucket IS NOT NULL"),
-            postgresql_ops={'agg_date': 'DESC'}
+            postgresql_ops={"agg_date": "DESC"},
         ),
     )
 
@@ -258,8 +258,12 @@ class AnalyticsDailyRentalsAgg(SQLModel, table=True):
     sum_rent_x_area: Decimal = Field(default=0, max_digits=25, decimal_places=2)
 
     # Min/Max
-    min_annual_rent: Optional[Decimal] = Field(default=None, max_digits=15, decimal_places=2)
-    max_annual_rent: Optional[Decimal] = Field(default=None, max_digits=15, decimal_places=2)
+    min_annual_rent: Optional[Decimal] = Field(
+        default=None, max_digits=15, decimal_places=2
+    )
+    max_annual_rent: Optional[Decimal] = Field(
+        default=None, max_digits=15, decimal_places=2
+    )
     min_area: Optional[Decimal] = Field(default=None, max_digits=12, decimal_places=2)
     max_area: Optional[Decimal] = Field(default=None, max_digits=12, decimal_places=2)
 
@@ -268,5 +272,3 @@ class AnalyticsDailyRentalsAgg(SQLModel, table=True):
         default_factory=lambda: datetime.now(timezone.utc),
         sa_column=Column(DateTime(timezone=True), nullable=False),
     )
-
-
