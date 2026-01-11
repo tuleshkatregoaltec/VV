@@ -53,7 +53,7 @@ dist/
 downloads/
 eggs/
 .eggs/
-
+analytics_backend.egg-info/
 lib64/
 parts/
 sdist/
