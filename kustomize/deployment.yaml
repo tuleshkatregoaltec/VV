@@ -61,6 +61,8 @@ spec:
         volumeMounts:
           - name: logs
             mountPath: /app/logs
+      imagePullSecrets:
+      - name: ghcr-credentials
       volumes:
         - name: logs
           emptyDir: {}
