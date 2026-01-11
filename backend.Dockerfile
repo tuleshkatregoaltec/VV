@@ -12,6 +12,6 @@ ENV UV_NO_DEV=1
 
 # Sync the project into a new environment, asserting the lockfile is up to date
 WORKDIR /app
-RUN uv sync --locked
+RUN uv sync --locked && apt-get update && apt-get install curl -y
 
 CMD ["uv", "run", "-m", "backend.app.main"]

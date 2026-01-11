@@ -1,0 +1,66 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vitevue-platform
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      com.vitevue.k8s.service: vitevue-platform
+  template:
+    metadata:
+      labels:
+        com.vitevue.k8s.service: vitevue-platform
+    spec:
+      containers:
+      - name: backend
+        image: ghcr.io/vitevue/platform-backend:main
+        imagePullPolicy: IfNotPresent
+        ports:
+        - name: http
+          containerPort: 8000
+          protocol: TCP
+        env:
+        - name: DATABASE_URL
+          value: ""
+        - name: REDIS_URL
+          value: ""
+        - name: WORKOS_API_KEY
+          value: ""
+        - name: WORKOS_CLIENT_ID
+          value: ""
+        - name: WORKOS_REDIRECT_URI
+          value: ""
+        - name: FRONTEND_URL
+          value: ""
+        - name: SESSION_SECRET
+          value: ""
+        - name: ALLOWED_ORIGINS
+          value: ""
+        - name: HONEYBADGER_API_KEY
+          value: ""
+        - name: OPENROUTER_API_KEY
+          value: ""
+        # below needs modifying
+        livenessProbe:
+          exec:
+            command:
+            - curl 
+            - --silent 
+            - --fail
+            - http://localhost:8000/api/v1/health
+          initialDelaySeconds: 5
+          timeoutSeconds: 5
+        resources:
+          limits:
+            cpu: 2000m
+            memory: 512Mi
+          requests:
+            cpu: 100m
+            memory: 64Mi
+        volumeMounts:
+          - name: logs
+            mountPath: /app/logs
+      volumes:
+        - name: logs
+          emptyDir: {}
