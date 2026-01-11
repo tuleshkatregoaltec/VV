@@ -1,4 +1,4 @@
-import { PUBLIC_API_BASE_URL } from '$env/static/public';
+import { env } from '$env/dynamic/public';
 
 export class ApiError extends Error {
     constructor(
@@ -36,7 +36,7 @@ export async function api<T>(endpoint: string, options: RequestOptions = {}): Pr
         config.body = JSON.stringify(body);
     }
     // @ts-ignore - Using window.fetch in CSR-only mode
-    const res = await fetch(`${PUBLIC_API_BASE_URL}${endpoint}`, config);
+    const res = await fetch(`${env.PUBLIC_API_BASE_URL}${endpoint}`, config);
 
     if (!res.ok) {
         let details: unknown;
@@ -73,7 +73,7 @@ export type StreamCallback = (chunk: string) => void;
  * Note: EventSource only supports GET requests.
  */
 export function stream(endpoint: string, onChunk: StreamCallback) {
-    const eventSource = new EventSource(`${PUBLIC_API_BASE_URL}${endpoint}`, {
+    const eventSource = new EventSource(`${env.PUBLIC_API_BASE_URL}${endpoint}`, {
         withCredentials: true
     });
 

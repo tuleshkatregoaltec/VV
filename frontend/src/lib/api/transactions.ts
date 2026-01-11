@@ -1,6 +1,6 @@
 import { api } from './client';
 import type { TransactionListResponse, RentalContractListResponse } from './types';
-import { PUBLIC_API_BASE_URL } from '$env/static/public';
+import { env } from '$env/dynamic/public';
 
 function buildQuery(filters: Record<string, any>): string {
     const params = new URLSearchParams();
@@ -58,7 +58,7 @@ export const transactions = {
     // Export functions - return blob URLs for download
     exportSales: async (filters: Record<string, any>): Promise<Blob> => {
         const response = await fetch(
-            `${PUBLIC_API_BASE_URL}/api/v1/transactions/sales/export?${buildQuery(filters)}`,
+            `${env.PUBLIC_API_BASE_URL}/api/v1/transactions/sales/export?${buildQuery(filters)}`,
             { credentials: 'include' }
         );
         
@@ -72,7 +72,7 @@ export const transactions = {
     
     exportRentals: async (filters: Record<string, any>): Promise<Blob> => {
         const response = await fetch(
-            `${PUBLIC_API_BASE_URL}/api/v1/transactions/rentals/export?${buildQuery(filters)}`,
+            `${env.PUBLIC_API_BASE_URL}/api/v1/transactions/rentals/export?${buildQuery(filters)}`,
             { credentials: 'include' }
         );
         

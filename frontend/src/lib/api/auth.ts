@@ -1,4 +1,4 @@
-import { PUBLIC_API_BASE_URL } from '$env/static/public';
+import { env } from '$env/dynamic/public';
 import { http } from './client';
 
 export interface User {
@@ -24,7 +24,7 @@ export const auth = {
     /**
      * Get the login URL for redirect
      */
-    getLoginUrl: () => `${PUBLIC_API_BASE_URL}/auth/login`,
+    getLoginUrl: () => `${env.PUBLIC_API_BASE_URL}/auth/login`,
 
     /**
      * Redirect to the login page

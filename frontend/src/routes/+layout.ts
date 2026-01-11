@@ -3,13 +3,13 @@ import { redirect } from '@sveltejs/kit';
 import { QueryClient } from '@tanstack/svelte-query';
 import posthog from 'posthog-js'
 import type { LayoutLoad } from './$types';
-import { PUBLIC_POSTHOG_KEY, PUBLIC_POSTHOG_HOST } from '$env/static/public';
+import { env } from '$env/dynamic/public';
 import { auth } from '$lib/api/auth';
 
 export const prerender = true;
 export const ssr = false;
 
-const PUBLIC_PATHS = ['/', '/login', '/auth/login', '/auth/callback', '/auth/no-org', '/auth/deactivated'];
+const PUBLIC_PATHS = ['/', '/landing-new', '/login', '/auth/login', '/auth/callback', '/auth/no-org', '/auth/deactivated'];
 
 function isPublicPath(pathname: string): boolean {
   return pathname === '/' || PUBLIC_PATHS.slice(1).some((p) => pathname.startsWith(p));
@@ -28,9 +28,9 @@ export const load: LayoutLoad = async ({ url }) => {
 
   if (browser) {
     posthog.init(
-      PUBLIC_POSTHOG_KEY,
+      env.PUBLIC_POSTHOG_KEY,
       {
-        api_host: PUBLIC_POSTHOG_HOST,
+        api_host: env.PUBLIC_POSTHOG_HOST,
         defaults: '2025-05-24',
         person_profiles: 'identified_only',
       }
