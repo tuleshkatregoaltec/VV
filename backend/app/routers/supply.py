@@ -31,7 +31,9 @@ async def list_upcoming_projects(
         project_data = {
             "project_id": project.project_id,
             "project_name": project.project_name,
-            "developer_name": project.developer.developer_name_en if project.developer else "Unknown",
+            "developer_name": project.developer.developer_name_en
+            if project.developer
+            else "Unknown",
             "developer_id": project.developer_id,
             "area_name": project.area.name_en if project.area else "Unknown",
             "project_start_date": project.project_start_date,

@@ -15,18 +15,14 @@ async def get_upcoming_projects(db: AsyncSession) -> List[Project]:
     """
     stmt = (
         select(Project)
-        .options(
-            selectinload(Project.developer),
-            selectinload(Project.area)
-        )
+        .options(selectinload(Project.developer), selectinload(Project.area))
         .where(
             Project.project_start_date.isnot(None),
             Project.completion_date.is_(None),
             Project.cancellation_date.is_(None),
         )
         .order_by(
-            Project.project_end_date.asc().nulls_last(),
-            Project.project_name.asc()
+            Project.project_end_date.asc().nulls_last(), Project.project_name.asc()
         )
     )
     result = await db.exec(stmt)

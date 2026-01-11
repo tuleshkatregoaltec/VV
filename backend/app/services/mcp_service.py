@@ -294,15 +294,19 @@ class MCPToolRegistry:
 
                 for project in projects:
                     # Developer filter (case-insensitive partial match)
-                    if developer_name and developer_name.lower() not in (
-                        project.developer.developer_name_en or ""
-                    ).lower():
+                    if (
+                        developer_name
+                        and developer_name.lower()
+                        not in (project.developer.developer_name_en or "").lower()
+                    ):
                         continue
 
                     # Area filter (case-insensitive partial match)
-                    if area_name and area_name.lower() not in (
-                        project.area.name_en or ""
-                    ).lower():
+                    if (
+                        area_name
+                        and area_name.lower()
+                        not in (project.area.name_en or "").lower()
+                    ):
                         continue
 
                     # Progress filters
@@ -336,38 +340,49 @@ class MCPToolRegistry:
 
                     # Build result object
                     end_date = project.project_end_date
-                    is_overdue = bool(end_date and end_date < now) if end_date else False
+                    is_overdue = (
+                        bool(end_date and end_date < now) if end_date else False
+                    )
                     months_until = None
                     if end_date:
                         days_diff = (end_date - now).days
                         months_until = round(days_diff / 30, 1)
 
-                    filtered.append({
-                        "project_id": project.project_id,
-                        "project_name": project.project_name,
-                        "developer_name": project.developer.developer_name_en if project.developer else "Unknown",
-                        "developer_id": project.developer_id,
-                        "area_name": project.area.name_en if project.area else "Unknown",
-                        "project_start_date": str(project.project_start_date) if project.project_start_date else None,
-                        "project_end_date": str(project.project_end_date) if project.project_end_date else None,
-                        "percent_completed": project.percent_completed or 0,
-                        "no_of_buildings": project.no_of_buildings,
-                        "no_of_units": project.no_of_units,
-                        "is_overdue": is_overdue,
-                        "months_until_completion": months_until,
-                    })
+                    filtered.append(
+                        {
+                            "project_id": project.project_id,
+                            "project_name": project.project_name,
+                            "developer_name": project.developer.developer_name_en
+                            if project.developer
+                            else "Unknown",
+                            "developer_id": project.developer_id,
+                            "area_name": project.area.name_en
+                            if project.area
+                            else "Unknown",
+                            "project_start_date": str(project.project_start_date)
+                            if project.project_start_date
+                            else None,
+                            "project_end_date": str(project.project_end_date)
+                            if project.project_end_date
+                            else None,
+                            "percent_completed": project.percent_completed or 0,
+                            "no_of_buildings": project.no_of_buildings,
+                            "no_of_units": project.no_of_units,
+                            "is_overdue": is_overdue,
+                            "months_until_completion": months_until,
+                        }
+                    )
 
                 # Sort
                 reverse = sort_order == "desc"
                 if filtered and sort_by in filtered[0]:
                     filtered.sort(
-                        key=lambda x: (x[sort_by] is None, x[sort_by]),
-                        reverse=reverse
+                        key=lambda x: (x[sort_by] is None, x[sort_by]), reverse=reverse
                     )
 
                 # Paginate
                 total_filtered = len(filtered)
-                paginated = filtered[offset:offset + limit]
+                paginated = filtered[offset : offset + limit]
 
                 return {
                     "total": len(projects),
