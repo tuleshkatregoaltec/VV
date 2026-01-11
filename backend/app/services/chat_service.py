@@ -12,7 +12,6 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from backend.app.config import settings
 from backend.app.core.cache import RedisCache
 from backend.app.db.models.chat import Conversation, Message, ToolCallResult
-from backend.app.services.compression_service import compressor
 from backend.app.services.mcp_service import mcp_registry
 
 logger = logging.getLogger(__name__)
@@ -108,7 +107,7 @@ class ChatService:
     async def _build_context(
         self, db: AsyncSession, conversation_id: int, new_user_message: str
     ) -> List[Dict[str, str]]:
-        """Build conversation context with compression if needed"""
+        """Build conversation context"""
 
         # Get conversation history
         messages = await self.get_conversation_messages(db, conversation_id)
@@ -147,16 +146,6 @@ class ChatService:
         # Historical messages
         for msg in messages:
             context.append({"role": msg.role, "content": msg.content})
-
-        # Check if compression is needed (exclude system prompt from check)
-        if compressor.should_compress(context[1:], threshold=3000):
-            logger.info(f"Compressing conversation {conversation_id}")
-            compressed, ratio = compressor.compress_conversation_history(
-                context[1:],  # Exclude system prompt
-                target_token=1000,
-            )
-            # Replace history with compressed version, keep system prompt
-            context = [context[0]] + compressed
 
         # Add new user message
         context.append({"role": "user", "content": new_user_message})
