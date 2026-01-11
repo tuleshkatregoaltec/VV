@@ -45,7 +45,7 @@ app.include_router(filters.router, tags=["filters"])
 app.include_router(chat.router, tags=["chat"])
 
 
-@app.get("/")
+@app.get("/api/vi/health")
 def health_check():
     return {"status": "healthy"}
 
