@@ -5,13 +5,15 @@ import { env } from '$env/dynamic/public';
 function buildQuery(filters: Record<string, any>): string {
     const params = new URLSearchParams();
     // Map dropdown string values to numeric ranges for API
+    // Note: Database stores area in sq.m and price per sq.m
     const rangeMap: Record<string, Record<string, [number?, number?]>> = {
         area: {
-            '<500': [0, 500],
-            '500-1000': [500, 1000],
-            '1000-2000': [1000, 2000],
-            '2000-5000': [2000, 5000],
-            '>5000': [5000, 10000000],
+            // Area ranges in sq.m (database stores sqm)
+            '<50': [0, 50],
+            '50-100': [50, 100],
+            '100-200': [100, 200],
+            '200-500': [200, 500],
+            '>500': [500, 10000000],
         },
         price: {
             '<500k': [0, 500000],
@@ -20,11 +22,19 @@ function buildQuery(filters: Record<string, any>): string {
             '2M-5M': [2000000, 5000000],
             '>5M': [5000000, 9999999999],
         },
+        pricePerSqM: {
+            // Price per sq.m ranges (database stores price/sqm, typical 15000-35000 AED/sqm)
+            '<10000': [0, 10000],
+            '10000-20000': [10000, 20000],
+            '20000-30000': [20000, 30000],
+            '>30000': [30000, 9999999],
+        },
+        // Legacy support for pricePerSqFt (maps to pricePerSqM on backend)
         pricePerSqFt: {
-            '<1000': [0, 1000],
-            '1000-1500': [1000, 1500],
-            '1500-2000': [1500, 2000],
-            '>2000': [2000, 9999999],
+            '<10000': [0, 10000],
+            '10000-20000': [10000, 20000],
+            '20000-30000': [20000, 30000],
+            '>30000': [30000, 9999999],
         },
         annualRent: {
             '<50k': [0, 50000],
@@ -36,7 +46,10 @@ function buildQuery(filters: Record<string, any>): string {
 
     Object.entries(filters).forEach(([k, v]) => {
         if (v !== undefined && v !== null && v !== 'All') {
-            if (rangeMap[k] && typeof v === 'string' && rangeMap[k][v]) {
+            // Special handling for transaction_ids and contract_ids - pass through as-is
+            if (k === 'transaction_ids' || k === 'contract_ids') {
+                params.append(k, String(v));
+            } else if (rangeMap[k] && typeof v === 'string' && rangeMap[k][v]) {
                 const [min, max] = rangeMap[k][v];
                 if (min !== undefined) params.append(`${k}_min`, String(min));
                 if (max !== undefined) params.append(`${k}_max`, String(max));

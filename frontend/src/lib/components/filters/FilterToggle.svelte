@@ -1,7 +1,7 @@
 <script lang="ts">
     let {
         options = ['Residential', 'Commercial'],
-        selected = $bindable(options[0]),
+        selected = $bindable('Residential'),
         onchange
     }: {
         options?: string[];
