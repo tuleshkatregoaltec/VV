@@ -9,10 +9,10 @@ from openai import AsyncOpenAI
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from backend.app.config import settings
-from backend.app.core.cache import RedisCache
-from backend.app.db.models.chat import Conversation, Message, ToolCallResult
-from backend.app.services.mcp_service import mcp_registry
+from app.config import settings
+from app.core.cache import RedisCache
+from app.db.models.chat import Conversation, Message, ToolCallResult
+from app.services.mcp_service import mcp_registry
 
 logger = logging.getLogger(__name__)
 cache = RedisCache(settings.REDIS_URL)

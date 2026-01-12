@@ -6,14 +6,14 @@ import pandas as pd
 from sqlmodel import col, func, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from backend.app.db.models import RentContract, Transaction
-from backend.app.schemas.transactions import (
+from app.db.models import RentContract, Transaction
+from app.schemas.transactions import (
     RentalContractListResponse,
     RentalContractResponse,
     TransactionListResponse,
     TransactionResponse,
 )
-from backend.app.services.filter_builder import FilterBuilder
+from app.services.filter_builder import FilterBuilder
 
 
 async def fetch_sales_transactions(
@@ -77,18 +77,40 @@ async def fetch_rental_contracts(
 
 
 async def export_sales_transactions(
-    db: AsyncSession, max_rows: int = 10000, **filters
+    db: AsyncSession, max_rows: int = 10000, transaction_ids: str = None, **filters
 ) -> BytesIO:
-    """Export sales transactions to Excel format with applied filters."""
+    """Export sales transactions to Excel format with applied filters or specific IDs.
 
-    base_where = FilterBuilder.build_sales_filters([], **filters)
+    Args:
+        db: Database session
+        max_rows: Maximum rows to export (default 10000, but will be limited to 100 when no IDs provided)
+        transaction_ids: Comma-separated transaction IDs to export (overrides filters and limits)
+        **filters: Filter parameters for querying transactions
+    """
 
-    stmt = (
-        select(Transaction)
-        .where(*base_where)
-        .order_by(col(Transaction.instance_date).desc())
-        .limit(max_rows)
-    )
+    if transaction_ids:
+        # Export specific transactions by ID (ignore filters and limits)
+        id_list = [id.strip() for id in transaction_ids.split(',') if id.strip()]
+
+        stmt = (
+            select(Transaction)
+            .where(col(Transaction.transaction_id).in_(id_list))
+            .order_by(col(Transaction.instance_date).desc())
+        )
+    else:
+        # Export filtered transactions with 100-row default limit
+        base_where = FilterBuilder.build_sales_filters([], **filters)
+
+        # Apply 100-row limit when using default max_rows
+        export_limit = 100 if max_rows == 10000 else max_rows
+
+        stmt = (
+            select(Transaction)
+            .where(*base_where)
+            .order_by(col(Transaction.instance_date).desc())
+            .limit(export_limit)
+        )
+
     result = await db.exec(stmt)
     transactions = result.all()
 
@@ -126,18 +148,40 @@ async def export_sales_transactions(
 
 
 async def export_rental_contracts(
-    db: AsyncSession, max_rows: int = 10000, **filters
+    db: AsyncSession, max_rows: int = 10000, contract_ids: str = None, **filters
 ) -> BytesIO:
-    """Export rental contracts to Excel format with applied filters."""
+    """Export rental contracts to Excel format with applied filters or specific IDs.
 
-    base_where = FilterBuilder.build_rental_filters([], **filters)
+    Args:
+        db: Database session
+        max_rows: Maximum rows to export (default 10000, but will be limited to 100 when no IDs provided)
+        contract_ids: Comma-separated contract IDs to export (overrides filters and limits)
+        **filters: Filter parameters for querying rental contracts
+    """
 
-    stmt = (
-        select(RentContract)
-        .where(*base_where)
-        .order_by(col(RentContract.contract_start_date).desc())
-        .limit(max_rows)
-    )
+    if contract_ids:
+        # Export specific contracts by ID (ignore filters and limits)
+        id_list = [id.strip() for id in contract_ids.split(',') if id.strip()]
+
+        stmt = (
+            select(RentContract)
+            .where(col(RentContract.contract_id).in_(id_list))
+            .order_by(col(RentContract.contract_start_date).desc())
+        )
+    else:
+        # Export filtered contracts with 100-row default limit
+        base_where = FilterBuilder.build_rental_filters([], **filters)
+
+        # Apply 100-row limit when using default max_rows
+        export_limit = 100 if max_rows == 10000 else max_rows
+
+        stmt = (
+            select(RentContract)
+            .where(*base_where)
+            .order_by(col(RentContract.contract_start_date).desc())
+            .limit(export_limit)
+        )
+
     result = await db.exec(stmt)
     contracts = result.all()
 

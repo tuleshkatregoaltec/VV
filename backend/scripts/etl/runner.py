@@ -18,7 +18,7 @@ from sqlmodel import SQLModel
 # Load .env file from backend directory
 load_dotenv(Path(__file__).parent.parent.parent / ".env")
 
-from backend.app.db.models import *  # noqa: F401, F403 - Import all models to register metadata
+from app.db.models import *  # noqa: F401, F403 - Import all models to register metadata
 from .config import PROCESSING_ORDER, TableConfig, get_data_paths, get_table_configs
 from .differ import CSVDiffer, LookupExtractor, drop_empty_rows, fill_null_pks_with_hash
 from .transformers import transform_dataframe

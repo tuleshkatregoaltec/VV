@@ -29,8 +29,8 @@ from sqlalchemy import text, delete
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
 
-from backend.app.config import settings
-from backend.app.db.models.analytics import (
+from app.config import settings
+from app.db.models.analytics import (
     AnalyticsDailySalesAgg,
     AnalyticsDailyRentalsAgg,
     SALES_PRICE_BUCKETS,

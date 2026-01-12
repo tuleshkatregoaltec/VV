@@ -4,14 +4,14 @@ from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from backend.app.core.decorators import cached_endpoint
-from backend.app.db.session import get_db_session
-from backend.app.routers.dependencies import require_auth
-from backend.app.schemas.transactions import (
+from app.core.decorators import cached_endpoint
+from app.db.session import get_db_session
+from app.routers.dependencies import require_auth
+from app.schemas.transactions import (
     RentalContractListResponse,
     TransactionListResponse,
 )
-from backend.app.services.transactions_service import (
+from app.services.transactions_service import (
     export_rental_contracts as export_rental_contracts_service,
     export_sales_transactions as export_sales_transactions_service,
     fetch_rental_contracts,
@@ -115,6 +115,10 @@ async def export_sales_transactions(
     max_rows: int = Query(
         default=10000, ge=1, le=50000, description="Maximum rows to export"
     ),
+    transaction_ids: str = Query(
+        default=None,
+        description="Comma-separated transaction IDs to export (overrides filters and max_rows)"
+    ),
     # Filters
     trans_group: str = Query(default=None),
     property_usage: str = Query(default=None),
@@ -135,11 +139,12 @@ async def export_sales_transactions(
     price_sqft_max: float = Query(default=None),
     db: AsyncSession = Depends(get_db_session),
 ):
-    """Export sales transactions to Excel with applied filters."""
+    """Export sales transactions to Excel with applied filters or specific IDs."""
 
     stream = await export_sales_transactions_service(
         db=db,
         max_rows=max_rows,
+        transaction_ids=transaction_ids,
         trans_group=trans_group,
         property_usage=property_usage,
         master_project=master_project,
@@ -177,6 +182,10 @@ async def export_rental_contracts(
     max_rows: int = Query(
         default=10000, ge=1, le=50000, description="Maximum rows to export"
     ),
+    contract_ids: str = Query(
+        default=None,
+        description="Comma-separated contract IDs to export (overrides filters and max_rows)"
+    ),
     master_project: str = Query(default=None),
     timeframe_days: int = Query(default=None),
     project: str = Query(default=None),
@@ -191,11 +200,12 @@ async def export_rental_contracts(
     rent_max: float = Query(default=None),
     db: AsyncSession = Depends(get_db_session),
 ):
-    """Export rental contracts to Excel with applied filters."""
+    """Export rental contracts to Excel with applied filters or specific IDs."""
 
     stream = await export_rental_contracts_service(
         db=db,
         max_rows=max_rows,
+        contract_ids=contract_ids,
         master_project=master_project,
         timeframe_days=timeframe_days,
         project=project,

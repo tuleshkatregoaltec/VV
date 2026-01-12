@@ -3,12 +3,12 @@
 from fastapi import APIRouter, Depends, Query
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from backend.app.core.decorators import cached_endpoint
-from backend.app.db.models.transactions import Transaction
-from backend.app.db.session import get_db_session
-from backend.app.routers.dependencies import require_auth
-from backend.app.schemas.filters import FilterOptionsResponse
-from backend.app.services.filters_service import (
+from app.core.decorators import cached_endpoint
+from app.db.models.transactions import Transaction
+from app.db.session import get_db_session
+from app.routers.dependencies import require_auth
+from app.schemas.filters import FilterOptionsResponse
+from app.services.filters_service import (
     fetch_rental_filter_options,
     fetch_sales_filter_options,
     get_distinct_values,

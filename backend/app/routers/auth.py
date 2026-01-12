@@ -2,8 +2,8 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from backend.app.db.session import get_db_session
-from backend.app.services import auth_service
+from app.db.session import get_db_session
+from app.services import auth_service
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 

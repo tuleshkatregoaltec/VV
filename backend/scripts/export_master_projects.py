@@ -1,8 +1,8 @@
 import asyncio
 import pandas as pd
 from sqlmodel import select
-from backend.app.db.session import async_session
-from backend.app.db.models import Transaction, RentContract
+from app.db.session import async_session
+from app.db.models import Transaction, RentContract
 
 
 async def export_master_projects():

@@ -8,15 +8,15 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from backend.app.db.session import get_db_session
-from backend.app.routers.dependencies import require_auth
-from backend.app.schemas.chat import (
+from app.db.session import get_db_session
+from app.routers.dependencies import require_auth
+from app.schemas.chat import (
     ConversationListResponse,
     ConversationResponse,
     CreateConversationRequest,
     MessageResponse,
 )
-from backend.app.services.chat_service import chat_service
+from app.services.chat_service import chat_service
 
 logger = logging.getLogger(__name__)
 

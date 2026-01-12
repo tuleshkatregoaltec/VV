@@ -5,8 +5,8 @@ from starlette.middleware.sessions import SessionMiddleware
 from honeybadger import contrib, honeybadger
 import logging.config
 
-from backend.app.config import settings
-from backend.app.routers import (
+from app.config import settings
+from app.routers import (
     auth,
     admin,
     transactions,
@@ -15,7 +15,7 @@ from backend.app.routers import (
     filters,
     chat,
 )
-from backend.app.core.logging_config import LOGGING_CONFIG
+from app.core.logging_config import LOGGING_CONFIG
 
 logging.config.dictConfig(LOGGING_CONFIG)
 

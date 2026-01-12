@@ -39,15 +39,12 @@ dependencies = [
     "fastmcp>=2.14.1",
 ]
 
-[project.scripts]
-dbcli = "backend.scripts.db_utils.dbcli:main"
-
 [tool.uv]
 package = true
 
 [tool.setuptools.packages.find]
-include = ["backend*"]
-exclude = ["data*", "scripts*"]
+where = ["."]
+include = ["app*", "scripts*"]
 
 [project.optional-dependencies]
 dev = [

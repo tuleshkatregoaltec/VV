@@ -7,11 +7,11 @@ from typing import List, Optional
 from decimal import Decimal
 
 
-from backend.app.db.models.analytics import (
+from app.db.models.analytics import (
     AnalyticsDailySalesAgg,
     AnalyticsDailyRentalsAgg,
 )
-from backend.app.schemas.analytics import (
+from app.schemas.analytics import (
     AnalyticsSummary,
     RentalSummary,
     DimensionBreakdown,

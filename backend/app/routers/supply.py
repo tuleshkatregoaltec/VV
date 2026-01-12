@@ -1,14 +1,14 @@
 from fastapi import APIRouter, Depends
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from backend.app.core.decorators import cached_endpoint
-from backend.app.db.session import get_db_session
-from backend.app.routers.dependencies import require_auth
-from backend.app.schemas.supply import (
+from app.core.decorators import cached_endpoint
+from app.db.session import get_db_session
+from app.routers.dependencies import require_auth
+from app.schemas.supply import (
     UpcomingProjectResponse,
     UpcomingProjectsResponse,
 )
-from backend.app.services.supply_service import get_upcoming_projects
+from app.services.supply_service import get_upcoming_projects
 
 router = APIRouter(
     prefix="/api/v1/supply",

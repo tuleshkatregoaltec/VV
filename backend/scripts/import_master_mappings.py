@@ -1,8 +1,8 @@
 import asyncio
 import pandas as pd
 from sqlalchemy import text
-from backend.app.db.session import async_session
-from backend.app.db.models.master_project_mapping import MasterProjectMapping
+from app.db.session import async_session
+from app.db.models.master_project_mapping import MasterProjectMapping
 
 
 async def import_master_projects():

@@ -5,13 +5,13 @@ from typing import Optional
 from fastapi import APIRouter, Depends, Query
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from backend.app.db.session import get_db_session
-from backend.app.routers.dependencies import require_auth
-from backend.app.schemas.analytics import (
+from app.db.session import get_db_session
+from app.routers.dependencies import require_auth
+from app.schemas.analytics import (
     AnalyticsResponse,
     RentalAnalyticsResponse,
 )
-from backend.app.services.analytics_service import (
+from app.services.analytics_service import (
     fetch_rental_analytics,
     fetch_sales_analytics,
 )

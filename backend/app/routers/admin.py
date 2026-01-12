@@ -6,17 +6,17 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from backend.app.db.models import User
-from backend.app.db.session import get_db_session
-from backend.app.routers.dependencies import require_admin
-from backend.app.schemas.organization import (
+from app.db.models import User
+from app.db.session import get_db_session
+from app.routers.dependencies import require_admin
+from app.schemas.organization import (
     OrganizationCreateRequest,
     OrganizationDetailResponse,
     OrganizationResponse,
     OrganizationUpdateRequest,
 )
-from backend.app.schemas.user import UserUpdateRequest
-from backend.app.services.organization_service import (
+from app.schemas.user import UserUpdateRequest
+from app.services.organization_service import (
     create_organization as create_organization_service,
     delete_organization as delete_organization_service,
     get_active_user_count,

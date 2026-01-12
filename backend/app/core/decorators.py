@@ -2,8 +2,8 @@ from functools import wraps
 from typing import Callable, Any
 import logging
 
-from backend.app.core.cache import RedisCache
-from backend.app.config import settings
+from app.core.cache import RedisCache
+from app.config import settings
 
 logger = logging.getLogger(__name__)
 

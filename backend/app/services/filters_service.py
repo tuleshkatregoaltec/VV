@@ -7,10 +7,10 @@ import asyncio
 import logging
 import time
 
-from backend.app.db.session import async_session
-from backend.app.db.models import Transaction, RentContract
-from backend.app.schemas.filters import FilterOptionsResponse
-from backend.app.services.filter_builder import FilterBuilder
+from app.db.session import async_session
+from app.db.models import Transaction, RentContract
+from app.schemas.filters import FilterOptionsResponse
+from app.services.filter_builder import FilterBuilder
 
 logger = logging.getLogger(__name__)
 

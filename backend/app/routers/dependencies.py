@@ -1,7 +1,7 @@
 from fastapi import Request, HTTPException
 from typing import Dict
 
-from backend.app.services.auth_service import get_current_user
+from app.services.auth_service import get_current_user
 
 
 async def require_auth(request: Request) -> Dict:

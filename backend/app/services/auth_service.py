@@ -8,9 +8,9 @@ from fastapi.responses import RedirectResponse
 from sqlmodel.ext.asyncio.session import AsyncSession
 from workos import WorkOSClient
 
-from backend.app.config import settings
-from backend.app.db.models import User
-from backend.app.services.organization_service import (
+from app.config import settings
+from app.db.models import User
+from app.services.organization_service import (
     get_active_user_count,
     get_organization_by_domain,
     get_organization_by_id,

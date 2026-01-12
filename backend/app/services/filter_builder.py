@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 from typing import List, Any, Optional
 from sqlmodel import Column, col
 
-from backend.app.db.models import Transaction, RentContract
+from app.db.models import Transaction, RentContract
 
 
 class FilterBuilder:

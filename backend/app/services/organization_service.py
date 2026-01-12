@@ -6,8 +6,8 @@ from sqlmodel import func, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 from workos import WorkOSClient
 
-from backend.app.config import settings
-from backend.app.db.models import Organization, User
+from app.config import settings
+from app.db.models import Organization, User
 
 
 workos = WorkOSClient(

@@ -14,8 +14,8 @@ from dotenv import load_dotenv
 # Load .env file from backend directory
 load_dotenv(Path(__file__).parent.parent.parent / ".env")
 
-from backend.app.db.models import *  # noqa: F401, F403
-from backend.scripts.etl.config import (
+from app.db.models import *  # noqa: F401, F403
+from scripts.etl.config import (
     PROCESSING_ORDER,
     get_data_paths,
     get_table_configs,
