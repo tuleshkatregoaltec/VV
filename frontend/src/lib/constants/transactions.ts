@@ -16,18 +16,18 @@ const baseColumns = [
 export const RESIDENTIAL_COLUMNS = [
 	...baseColumns,
 	{ id: 'bedrooms', label: 'Bedrooms', align: 'left' as const, badge: true },
-	{ id: 'area', label: 'Area (sq.ft)', align: 'right' as const, format: (val: number) => val.toLocaleString() },
+	{ id: 'area', label: 'Area (sq.m)', align: 'right' as const, format: (val: number) => val.toLocaleString() },
 	{ id: 'price', label: 'Price (AED)', align: 'right' as const, format: (val: number) => val.toLocaleString() },
-	{ id: 'pricePerSqFt', label: 'Price/sq.ft', align: 'right' as const, highlighted: true, format: (val: number) => val.toLocaleString() },
+	{ id: 'pricePerSqM', label: 'Price/sq.m', align: 'right' as const, highlighted: true, format: (val: number) => val.toLocaleString() },
 	{ id: 'registration', label: 'Registration', align: 'left' as const }
 ];
 
 export const COMMERCIAL_COLUMNS = [
 	...baseColumns,
 	{ id: 'propertySubType', label: 'Sub Type', align: 'left' as const },
-	{ id: 'area', label: 'Area (sq.ft)', align: 'right' as const, format: (val: number) => val.toLocaleString() },
+	{ id: 'area', label: 'Area (sq.m)', align: 'right' as const, format: (val: number) => val.toLocaleString() },
 	{ id: 'price', label: 'Price (AED)', align: 'right' as const, format: (val: number) => val.toLocaleString() },
-	{ id: 'pricePerSqFt', label: 'Price/sq.ft', align: 'right' as const, highlighted: true, format: (val: number) => val.toLocaleString() },
+	{ id: 'pricePerSqM', label: 'Price/sq.m', align: 'right' as const, highlighted: true, format: (val: number) => val.toLocaleString() },
 	{ id: 'registration', label: 'Registration', align: 'left' as const }
 ];
 

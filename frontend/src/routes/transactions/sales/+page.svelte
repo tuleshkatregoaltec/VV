@@ -17,11 +17,14 @@
   } from '$lib/constants/transactions';
   import type { FilterDefinition } from '$lib/types/filters';
 
-  const AREA_OPTIONS = ["All", "<500", "500-1000", "1000-2000", "2000-5000", ">5000"];
+  // Area in sq.m (database stores in sqm)
+  const AREA_OPTIONS = ["All", "<50", "50-100", "100-200", "200-500", ">500"];
   const PRICE_OPTIONS = ["All", "<500k", "500k-1M", "1M-2M", "2M-5M", ">5M"];
-  const PRICE_SQFT_OPTIONS = ["All", "<1000", "1000-1500", "1500-2000", ">2000"];
+  // Price per sq.m (database stores price/sqm, typical range 15000-35000 AED/sqm)
+  const PRICE_SQM_OPTIONS = ["All", "<10000", "10000-20000", "20000-30000", ">30000"];
 
   interface TransformedTransaction {
+    transaction_id: string;
     date: string;
     project: string;
     building: string;
@@ -30,7 +33,7 @@
     bedrooms: string;
     area: number;
     price: number;
-    pricePerSqFt: number;
+    pricePerSqM: number;
     registration: string;
     area_name: string;
   }
@@ -38,6 +41,7 @@
   // Dropdown context is provided by transactions/+layout.svelte
 
   let currentPage = $state(1);
+  let selectedTransactionIds = $state(new Set<string>());
 
   let localFilters = $state({
     selectedProject: 'All',
@@ -47,7 +51,7 @@
     selectedRegistration: 'All',
     areaRange: 'All',
     priceRange: 'All',
-    pricePerSqFtRange: 'All'
+    pricePerSqMRange: 'All'
   });
 
 
@@ -91,8 +95,8 @@
     if (localFilters.priceRange !== 'All') {
       apiFilters.price = localFilters.priceRange;
     }
-    if (localFilters.pricePerSqFtRange !== 'All') {
-      apiFilters.pricePerSqFt = localFilters.pricePerSqFtRange;
+    if (localFilters.pricePerSqMRange !== 'All') {
+      apiFilters.pricePerSqM = localFilters.pricePerSqMRange;
     }
     
     return apiFilters;
@@ -113,7 +117,7 @@
       localFilters.selectedRegistration,
       localFilters.areaRange,
       localFilters.priceRange,
-      localFilters.pricePerSqFtRange,
+      localFilters.pricePerSqMRange,
     ],
     queryFn: () => api.sales(buildApiFilters()),
   }));
@@ -210,7 +214,7 @@
       },
       { 
         id: 'areaRange', 
-        label: 'Area (sq.ft)', 
+        label: 'Area (sq.m)', 
         type: 'standard',
         options: AREA_OPTIONS
       },
@@ -221,16 +225,17 @@
         options: PRICE_OPTIONS
       },
       { 
-        id: 'pricePerSqFtRange', 
-        label: 'Price/sq.ft (AED)', 
+        id: 'pricePerSqMRange', 
+        label: 'Price/sq.m (AED)', 
         type: 'standard',
-        options: PRICE_SQFT_OPTIONS
+        options: PRICE_SQM_OPTIONS
       }
     ] : []
   );
 
   function transformTransaction(t: Transaction): TransformedTransaction {
     return {
+      transaction_id: t.transaction_id,
       date: t.instance_date ?? '-',
       area_name: t.area_name_en ?? '-',
       project: t.project_name_en ?? '-',
@@ -240,9 +245,13 @@
       bedrooms: t.rooms_en ?? '-',
       area: t.procedure_area ?? 0,
       price: t.actual_worth ?? 0,
-      pricePerSqFt: t.meter_sale_price ?? 0,
+      pricePerSqM: t.meter_sale_price ?? 0,
       registration: t.reg_type_en ?? '-',
     };
+  }
+
+  function getRowId(row: TransformedTransaction): string {
+    return row.transaction_id;
   }
 
   let displayData = $derived(
@@ -262,7 +271,7 @@
       selectedRegistration: 'All',
       areaRange: 'All',
       priceRange: 'All',
-      pricePerSqFtRange: 'All'
+      pricePerSqMRange: 'All'
     };
     currentPage = 1;
   }
@@ -280,7 +289,7 @@
     registration: localFilters.selectedRegistration,
     areaRange: localFilters.areaRange,
     priceRange: localFilters.priceRange,
-    pricePerSqFtRange: localFilters.pricePerSqFtRange
+    pricePerSqMRange: localFilters.pricePerSqMRange
   }));
   
   let lastFilterKey = '';
@@ -290,6 +299,7 @@
     if (filterKey !== lastFilterKey) {
       if (lastFilterKey !== '') {
         currentPage = 1;
+        selectedTransactionIds = new Set(); // Clear selection on filter change
       }
       lastFilterKey = filterKey;
     }
@@ -300,6 +310,7 @@
     const _ = [propertyType.current, masterProject.current, timeframe.current];
     currentPage = 1;
     resetFilters();
+    selectedTransactionIds = new Set(); // Clear selection on global filter change
   });
 
   let isExporting = $state(false);
@@ -308,9 +319,14 @@
     isExporting = true;
     try {
       const filters = buildApiFilters();
-      
+
+      // Add selected transaction IDs if any are selected
+      if (selectedTransactionIds.size > 0) {
+        filters.transaction_ids = Array.from(selectedTransactionIds).join(',');
+      }
+
       const blob = await api.exportSales(filters);
-      
+
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -346,13 +362,18 @@
   bind:filters={localFilters}
   onReset={resetFilters}
   onExport={handleExport}
-/> 
+  selectedCount={selectedTransactionIds.size}
+  onClearSelection={() => selectedTransactionIds = new Set()}
+/>
 
-<DataPanel 
-  {columns} 
-  data={displayData} 
+<DataPanel
+  {columns}
+  data={displayData}
   onrowclick={handleRowClick}
   loading={transactionsQuery.isPending || transactionsQuery.isFetching}
+  selectable={true}
+  bind:selectedIds={selectedTransactionIds}
+  {getRowId}
 /> 
 
 <div class="mt-6">

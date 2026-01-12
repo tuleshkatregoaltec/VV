@@ -1,16 +1,8 @@
 <script lang="ts">
     import type { Snippet } from 'svelte';
     import AppShell from '$lib/components/layout/AppShell.svelte';
-    import { setContext } from 'svelte';
 
     let { children }: { children: Snippet } = $props();
-
-    // Shared dropdown open-id context for transactions pages
-    let openDropdownId = $state<string | null>(null);
-    setContext('openDropdownId', {
-        get value() { return openDropdownId; },
-        set value(v: string | null) { openDropdownId = v; }
-    });
 </script>
 
 <AppShell showFilters={true}>

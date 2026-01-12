@@ -37,7 +37,7 @@
         },
         {
             id: 'areaRange',
-            label: 'Area (sq.ft)',
+            label: 'Area (sq.m)',
             type: 'standard',
             options: AREA_BUCKET_OPTIONS
         }
@@ -150,7 +150,7 @@
                 value={formatCurrency(analyticsQuery.data.summary.avg_annual_rent)}
             />
             <DashboardCard
-                title="Avg. Rent/sq.ft"
+                title="Avg. Rent/sq.m"
                 value={formatCurrency(analyticsQuery.data.summary.avg_rent_sqft)}
             />
         </div>

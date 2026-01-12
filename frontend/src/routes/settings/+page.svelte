@@ -1,5 +1,7 @@
 <script lang="ts">
     import { authStore } from '$lib/stores/auth.svelte';
+    import { areaUnit } from '$lib/stores/preferences.svelte';
+    import { getAreaUnitLabel } from '$lib/utils/units';
 
     const user = $derived(authStore.user);
 </script>
@@ -33,11 +35,32 @@
                     <span class="text-gray-900 font-medium">AED</span>
                 </div>
                 <div class="flex items-center justify-between">
-                    <span class="text-gray-700">Area unit</span>
-                    <span class="text-gray-900 font-medium">sq.ft</span>
+                    <div>
+                        <span class="text-gray-700">Area unit</span>
+                        <p class="text-xs text-gray-500">Display areas in square meters or square feet</p>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <button
+                            type="button"
+                            onclick={() => areaUnit.current = 'sqm'}
+                            class="px-3 py-1.5 text-sm font-medium rounded-lg transition-colors {areaUnit.current === 'sqm' 
+                                ? 'bg-primary text-white' 
+                                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}"
+                        >
+                            sq.m
+                        </button>
+                        <button
+                            type="button"
+                            onclick={() => areaUnit.current = 'sqft'}
+                            class="px-3 py-1.5 text-sm font-medium rounded-lg transition-colors {areaUnit.current === 'sqft' 
+                                ? 'bg-primary text-white' 
+                                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}"
+                        >
+                            sq.ft
+                        </button>
+                    </div>
                 </div>
             </div>
-            <p class="text-sm text-gray-500 mt-4">Preference customization coming soon.</p>
         </div>
 
         <!-- Account Section -->

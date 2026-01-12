@@ -131,12 +131,12 @@
 							d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"
 						/>
 					</svg>
-					<TrendChart trends={analyticsData.trends} />
+				<TrendChart trends={analyticsData.trends} />
 				</DashboardCard>
 
-				<!-- Avg Price/sqft Card -->
+				<!-- Avg Price/sq.m Card -->
 				<DashboardCard
-					title="Avg Price/sqft"
+					title="Avg Price/sq.m"
 					value="{formatNumber(analyticsData.summary.avg_price_sqft)} AED"
 					trend={analyticsData.summary.volume_change_pct !== null
 						? {

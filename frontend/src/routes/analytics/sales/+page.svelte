@@ -53,7 +53,7 @@
         },
         {
             id: 'areaRange',
-            label: 'Area (sq.ft)',
+            label: 'Area (sq.m)',
             type: 'standard',
             options: AREA_BUCKET_OPTIONS
         }
@@ -172,7 +172,7 @@
                 value={formatCurrency(analyticsQuery.data.summary.avg_price)}
             />
             <DashboardCard
-                title="Avg. Price/sq.ft"
+                title="Avg. Price/sq.m"
                 value={formatCurrency(analyticsQuery.data.summary.avg_price_sqft)}
             />
         </div>

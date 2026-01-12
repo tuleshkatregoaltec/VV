@@ -14,10 +14,12 @@
   } from '$lib/constants/transactions';
   import type { FilterDefinition } from '$lib/types/filters';
 
-  const AREA_OPTIONS = ["All", "<500", "500-1000", "1000-2000", "2000-5000", ">5000"];
+  // Area in sq.m (database stores in sqm)
+  const AREA_OPTIONS = ["All", "<50", "50-100", "100-200", "200-500", ">500"];
   const ANNUAL_RENT_OPTIONS = ["All", "<50k", "50k-100k", "100k-200k", ">200k"];
 
   interface TransformedRental {
+    contract_id: string;
     date: string;
     project: string;
     propertyType: string;
@@ -37,7 +39,7 @@
     { id: 'propertyType', label: 'Property Type', align: 'left' as const },
     { id: 'propertySubType', label: 'Sub Type', align: 'left' as const },
     { id: 'tenantType', label: 'Tenant Type', align: 'left' as const, badge: true },
-    { id: 'area', label: 'Area (sq.ft)', align: 'right' as const, format: (val: number) => val.toLocaleString() },
+    { id: 'area', label: 'Area (sq.m)', align: 'right' as const, format: (val: number) => val.toLocaleString() },
     { id: 'annualRent', label: 'Annual Rent (AED)', align: 'right' as const, highlighted: true, format: (val: number) => val.toLocaleString() },
     { id: 'registration', label: 'Reg Type', align: 'left' as const }
   ];
@@ -48,6 +50,7 @@
   // Local State
   // ========================================
   let currentPage = $state(1);
+  let selectedContractIds = $state(new Set<string>());
 
   let localFilters = $state({
     selectedProject: 'All',
@@ -212,7 +215,7 @@
       },
       { 
         id: 'areaRange', 
-        label: 'Area (sq.ft)', 
+        label: 'Area (sq.m)', 
         type: 'standard',
         options: AREA_OPTIONS
       },
@@ -227,6 +230,7 @@
 
   function transformRental(r: RentalContract): TransformedRental {
     return {
+      contract_id: r.contract_id,
       date: r.contract_start_date ?? '-',
       area_name: r.area_name_en ?? '-',
       project: r.project_name_en ?? '-',
@@ -237,6 +241,10 @@
       annualRent: r.annual_amount ?? 0,
       registration: r.contract_reg_type_en ?? '-',
     };
+  }
+
+  function getRowId(row: TransformedRental): string {
+    return row.contract_id;
   }
 
   let displayData = $derived(
@@ -289,6 +297,7 @@
     if (filterKey !== lastFilterKey) {
       if (lastFilterKey !== '') {
         currentPage = 1;
+        selectedContractIds = new Set(); // Clear selection on filter change
       }
       lastFilterKey = filterKey;
     }
@@ -299,6 +308,7 @@
     const _ = [propertyType.current, masterProject.current, timeframe.current];
     currentPage = 1;
     resetFilters();
+    selectedContractIds = new Set(); // Clear selection on global filter change
   });
 
   // Export support (same logic as sales page)
@@ -308,6 +318,12 @@
     isExporting = true;
     try {
       const filters = buildApiFilters();
+
+      // Add selected contract IDs if any are selected
+      if (selectedContractIds.size > 0) {
+        filters.contract_ids = Array.from(selectedContractIds).join(',');
+      }
+
       const blob = await api.exportRentals(filters);
 
       const url = window.URL.createObjectURL(blob);
@@ -345,13 +361,18 @@
   bind:filters={localFilters}
   onReset={resetFilters}
   onExport={handleExport}
-/> 
+  selectedCount={selectedContractIds.size}
+  onClearSelection={() => selectedContractIds = new Set()}
+/>
 
-<DataPanel 
-  columns={RENTAL_COLUMNS} 
-  data={displayData} 
+<DataPanel
+  columns={RENTAL_COLUMNS}
+  data={displayData}
   onrowclick={handleRowClick}
   loading={rentalsQuery.isPending || rentalsQuery.isFetching}
+  selectable={true}
+  bind:selectedIds={selectedContractIds}
+  {getRowId}
 /> 
 
 <div class="mt-6">
