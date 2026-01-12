@@ -5,18 +5,22 @@
     id,
     ariaLabel,
     options = [],
-    selected = $bindable({})
+    selected = $bindable({}),
+    onchange
   }: {
     id: string;
     ariaLabel: string;
     options?: Array<{ id: string; label: string }>;
     selected?: Record<string, boolean>;
+    onchange?: (selected: Record<string, boolean>) => void;
   } = $props();
 
   let selectedCount = $derived(Object.values(selected).filter(Boolean).length);
 
   function toggleOption(optionId: string) {
-    selected = { ...selected, [optionId]: !selected[optionId] };
+    const newSelected = { ...selected, [optionId]: !selected[optionId] };
+    selected = newSelected;
+    onchange?.(newSelected);
   }
 </script>
 

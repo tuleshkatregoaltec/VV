@@ -31,6 +31,16 @@
     filters = {};
     onReset();
   }
+
+  // Helper to get filter value with fallback
+  function getFilterValue(id: string): string {
+    return filters[id] ?? 'All';
+  }
+
+  // Helper to update filter value (supports both string and checkbox object values)
+  function setFilterValue(id: string, value: any) {
+    filters = { ...filters, [id]: value };
+  }
 </script>
 
 <div class="bg-white rounded-xl shadow-md border border-gray-200 p-6 mb-6">
@@ -90,49 +100,56 @@
             id="{filter.id}-input"
             ariaLabel={filter.label}
             options={filter.options || []}
-            bind:value={filters[filter.id]}
+            value={getFilterValue(filter.id)}
+            onchange={(v) => setFilterValue(filter.id, v)}
           />
         {:else if filter.id === 'area'}
           <StandardDropdown
             id="{filter.id}-input"
             ariaLabel={filter.label}
             options={AREA_OPTIONS}
-            bind:value={filters[filter.id]}
+            value={getFilterValue(filter.id)}
+            onchange={(v) => setFilterValue(filter.id, v)}
           />
         {:else if filter.id === 'price'}
           <StandardDropdown
             id="{filter.id}-input"
             ariaLabel={filter.label}
             options={PRICE_OPTIONS}
-            bind:value={filters[filter.id]}
+            value={getFilterValue(filter.id)}
+            onchange={(v) => setFilterValue(filter.id, v)}
           />
         {:else if filter.id === 'pricePerSqFt'}
           <StandardDropdown
             id="{filter.id}-input"
             ariaLabel={filter.label}
             options={PRICE_SQFT_OPTIONS}
-            bind:value={filters[filter.id]}
+            value={getFilterValue(filter.id)}
+            onchange={(v) => setFilterValue(filter.id, v)}
           />
         {:else if filter.id === 'annualRent'}
           <StandardDropdown
             id="{filter.id}-input"
             ariaLabel={filter.label}
             options={ANNUAL_RENT_OPTIONS}
-            bind:value={filters[filter.id]}
+            value={getFilterValue(filter.id)}
+            onchange={(v) => setFilterValue(filter.id, v)}
           />
         {:else if filter.type === 'standard' || filter.type === 'price-range' || filter.type === 'range'}
           <StandardDropdown
             id="{filter.id}-input"
             ariaLabel={filter.label}
             options={filter.options || []}
-            bind:value={filters[filter.id]}
+            value={getFilterValue(filter.id)}
+            onchange={(v) => setFilterValue(filter.id, v)}
           />
         {:else if filter.type === 'checkbox'}
           <CheckboxDropdown
             id="{filter.id}-input"
             ariaLabel={filter.label}
             options={(filter.options || []).map(o => ({ id: o, label: o }))}
-            bind:selected={filters[filter.id]}
+            selected={filters[filter.id] ?? {}}
+            onchange={(selected) => setFilterValue(filter.id, selected)}
           />
         {/if}
       </div>
