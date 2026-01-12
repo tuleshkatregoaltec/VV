@@ -6,7 +6,7 @@ import type { LayoutLoad } from './$types';
 import { env } from '$env/dynamic/public';
 import { auth } from '$lib/api/auth';
 
-export const prerender = true;
+export const prerender = false;
 export const ssr = false;
 
 const PUBLIC_PATHS = ['/', '/landing-new', '/login', '/auth/login', '/auth/callback', '/auth/no-org', '/auth/deactivated'];
@@ -27,14 +27,28 @@ export const load: LayoutLoad = async ({ url }) => {
   });
 
   if (browser) {
-    posthog.init(
-      env.PUBLIC_POSTHOG_KEY,
-      {
-        api_host: env.PUBLIC_POSTHOG_HOST,
-        defaults: '2025-05-24',
-        person_profiles: 'identified_only',
+    // Debug: Check if env vars are loaded
+    console.log('Environment variables:', {
+      posthogHost: env.PUBLIC_POSTHOG_HOST,
+      posthogKey: env.PUBLIC_POSTHOG_KEY ? 'SET' : 'MISSING',
+      apiBaseUrl: env.PUBLIC_API_BASE_URL
+    });
+
+    // Initialize PostHog if credentials are available
+    if (env.PUBLIC_POSTHOG_KEY && env.PUBLIC_POSTHOG_HOST) {
+      try {
+        posthog.init(
+          env.PUBLIC_POSTHOG_KEY,
+          {
+            api_host: env.PUBLIC_POSTHOG_HOST,
+            defaults: '2025-05-24',
+            person_profiles: 'identified_only',
+          }
+        );
+      } catch (error) {
+        console.warn('Failed to initialize PostHog:', error);
       }
-    );
+    }
 
     // Check auth for protected paths
     if (!isPublicPath(url.pathname)) {
