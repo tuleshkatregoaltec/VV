@@ -19,6 +19,11 @@
 
 <svelte:head>
     <link rel="icon" href="/favicon.svg" />
+    <meta name="author" content="Vitevue" />
+    <meta name="theme-color" content="#000000" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Vitevue" />
+    <meta name="twitter:card" content="summary_large_image" />
 </svelte:head>
 
 <QueryClientProvider client={data.queryClient}>
