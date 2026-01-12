@@ -27,15 +27,6 @@ export const load: LayoutLoad = async ({ url }) => {
   });
 
   if (browser) {
-    // Debug: Check if env vars are loaded
-    console.log('Full env object:', env);
-    console.log('All env keys:', Object.keys(env));
-    console.log('Environment variables:', {
-      posthogHost: env.PUBLIC_POSTHOG_HOST,
-      posthogKey: env.PUBLIC_POSTHOG_KEY ? 'SET' : 'MISSING',
-      apiBaseUrl: env.PUBLIC_API_BASE_URL
-    });
-
     // Initialize PostHog if credentials are available
     if (env.PUBLIC_POSTHOG_KEY && env.PUBLIC_POSTHOG_HOST) {
       try {
