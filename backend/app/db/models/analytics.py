@@ -33,31 +33,35 @@ RENTAL_PRICE_BUCKETS = [
     (1000000, float("inf"), ">1M"),
 ]
 
+# Area buckets in sq.m (database stores area in sqm)
 AREA_BUCKETS = [
-    (0, 500, "<500"),
+    (0, 50, "<50"),
+    (50, 100, "50-100"),
+    (100, 200, "100-200"),
+    (200, 500, "200-500"),
     (500, 1000, "500-1K"),
-    (1000, 2000, "1K-2K"),
-    (2000, 3000, "2K-3K"),
-    (3000, 5000, "3K-5K"),
-    (5000, float("inf"), ">5K"),
+    (1000, float("inf"), ">1K"),
 ]
 
+# Price per sq.m buckets (database stores meter_sale_price in AED/sqm)
+# Typical Dubai residential: 15,000-35,000 AED/sqm
 PRICE_SQFT_BUCKETS = [
+    (0, 10000, "<10K"),
+    (10000, 15000, "10K-15K"),
+    (15000, 20000, "15K-20K"),
+    (20000, 25000, "20K-25K"),
+    (25000, 30000, "25K-30K"),
+    (30000, float("inf"), ">30K"),
+]
+
+# Rent per sq.m buckets (database stores rent per sqm)
+RENT_SQFT_BUCKETS = [
     (0, 500, "<500"),
     (500, 1000, "500-1K"),
     (1000, 1500, "1K-1.5K"),
     (1500, 2000, "1.5K-2K"),
     (2000, 3000, "2K-3K"),
     (3000, float("inf"), ">3K"),
-]
-
-RENT_SQFT_BUCKETS = [
-    (0, 50, "<50"),
-    (50, 100, "50-100"),
-    (100, 150, "100-150"),
-    (150, 200, "150-200"),
-    (200, 300, "200-300"),
-    (300, float("inf"), ">300"),
 ]
 
 

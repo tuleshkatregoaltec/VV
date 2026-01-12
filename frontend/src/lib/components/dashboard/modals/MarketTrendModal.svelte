@@ -26,17 +26,17 @@
 		<div class="bg-blue-50 rounded-xl p-4">
 			<p class="text-sm text-gray-600 mb-1">Average</p>
 			<p class="text-2xl font-bold text-gray-900">{formatCurrency(avgPrice)}</p>
-			<p class="text-xs text-gray-500 mt-1">per sq.ft</p>
+			<p class="text-xs text-gray-500 mt-1">per sq.m</p>
 		</div>
 		<div class="bg-green-50 rounded-xl p-4">
 			<p class="text-sm text-gray-600 mb-1">Highest</p>
 			<p class="text-2xl font-bold text-gray-900">{formatCurrency(maxPrice)}</p>
-			<p class="text-xs text-gray-500 mt-1">per sq.ft</p>
+			<p class="text-xs text-gray-500 mt-1">per sq.m</p>
 		</div>
 		<div class="bg-orange-50 rounded-xl p-4">
 			<p class="text-sm text-gray-600 mb-1">Lowest</p>
 			<p class="text-2xl font-bold text-gray-900">{formatCurrency(minPrice)}</p>
-			<p class="text-xs text-gray-500 mt-1">per sq.ft</p>
+			<p class="text-xs text-gray-500 mt-1">per sq.m</p>
 		</div>
 	</div>
 

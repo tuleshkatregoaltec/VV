@@ -98,6 +98,8 @@ async def compute_daily_sales_aggregates(
     price_sqft_bucket_case = _build_bucket_case("meter_sale_price", PRICE_SQFT_BUCKETS)
 
     # Aggregate query with all dimensions
+    # Note: Database stores procedure_area in sq.m and meter_sale_price as price/sq.m
+    # sum_price_x_area is used for weighted average calculation: sum(price * area) / sum(area)
     agg_query = text(f"""
         INSERT INTO analytics_daily_sales_agg (
             agg_date, property_usage, property_type, rooms, reg_type,
@@ -122,8 +124,8 @@ async def compute_daily_sales_aggregates(
             COALESCE(SUM(actual_worth), 0) as total_volume,
             COALESCE(SUM(procedure_area), 0) as total_area,
             COALESCE(SUM(actual_worth), 0) as sum_price,
-            COALESCE(SUM(procedure_area * 10.764), 0) as sum_area,
-            COALESCE(SUM(actual_worth), 0) as sum_price_x_area,
+            COALESCE(SUM(procedure_area), 0) as sum_area,
+            COALESCE(SUM(actual_worth * procedure_area), 0) as sum_price_x_area,
             MIN(actual_worth) as min_price,
             MAX(actual_worth) as max_price,
             MIN(procedure_area) as min_area,
@@ -214,8 +216,8 @@ async def compute_daily_rentals_aggregates(
             COALESCE(SUM(annual_amount), 0) as total_annual_value,
             COALESCE(SUM(actual_area), 0) as total_area,
             COALESCE(SUM(annual_amount), 0) as sum_rent,
-            COALESCE(SUM(actual_area * 10.764), 0) as sum_area,
-            COALESCE(SUM(annual_amount), 0) as sum_rent_x_area,
+            COALESCE(SUM(actual_area), 0) as sum_area,
+            COALESCE(SUM(annual_amount * actual_area), 0) as sum_rent_x_area,
             MIN(annual_amount) as min_annual_rent,
             MAX(annual_amount) as max_annual_rent,
             MIN(actual_area) as min_area,
