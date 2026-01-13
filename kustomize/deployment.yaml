@@ -28,7 +28,7 @@ spec:
         - name: WORKOS_REDIRECT_URI
           value: "https://api.vitevue.com/auth/callback"
         - name: FRONTEND_URL
-          value: '["https://api.vitevue.com"]'
+          value: "https://vitevue.com"
         - name: DATABASE_URL
           valueFrom:
             secretKeyRef:
