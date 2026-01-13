@@ -59,6 +59,11 @@ spec:
             secretKeyRef:
               name: vitevue-backend-creds
               key: openrouter_key
+        - name: SERVICE_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: vitevue-backend-creds
+              key: service_api_key
         # below needs modifying
         livenessProbe:
           exec:
