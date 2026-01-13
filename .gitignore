@@ -250,3 +250,4 @@ llm-slop/
 alembic/
 alembic.ini
 tests/
+CLAUDE.md
