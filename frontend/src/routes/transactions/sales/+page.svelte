@@ -4,9 +4,10 @@
   import DataPanel from '$lib/components/transactions/DataPanel.svelte';
   import FilterPanel from '$lib/components/filters/FilterPanel.svelte';
   import Pagination from '$lib/components/ui/Pagination.svelte';
+  import TransactionDetailsModal from '$lib/components/transactions/TransactionDetailsModal.svelte';
   import { transactions as api } from '$lib/api/transactions';
   import { filters } from '$lib/api/filters';
-  import type { Transaction } from '$lib/api/types';
+  import type { Transaction } from '$lib/api/transactions';
   import { propertyType, masterProject, timeframe } from '$lib/components/filters/globalFilters.svelte';
   import {
     PROPERTY_USAGE,
@@ -42,6 +43,7 @@
 
   let currentPage = $state(1);
   let selectedTransactionIds = $state(new Set<string>());
+  let selectedTransaction = $state<TransformedTransaction | null>(null);
 
   let localFilters = $state({
     selectedProject: 'All',
@@ -277,7 +279,7 @@
   }
 
   function handleRowClick(row: TransformedTransaction) {
-    console.log('Transaction clicked:', row);
+    selectedTransaction = row;
   }
 
   // Track filter changes to reset page
@@ -385,3 +387,8 @@
     itemLabel="transactions"
   />
 </div>
+
+<TransactionDetailsModal
+  transaction={selectedTransaction}
+  onClose={() => selectedTransaction = null}
+/>
