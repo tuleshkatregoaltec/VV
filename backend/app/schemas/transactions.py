@@ -41,6 +41,7 @@ class RentalContractResponse(BaseModel):
     annual_amount: Optional[Decimal] = None
     contract_reg_type_en: Optional[str] = None
     contract_start_date: Optional[date] = None
+    contract_end_date: Optional[date] = None
     area_name_en: Optional[str] = None
 
 

@@ -33,6 +33,7 @@ export interface RentalContract {
 	annual_amount: number | null;
 	contract_reg_type_en: string | null;
 	contract_start_date: string | null;
+	contract_end_date: string | null;
 	area_name_en: string | null;
 }
 
