@@ -10,5 +10,6 @@ class NewsArticle(SQLModel, table=True):
 
     url: str = Field(max_length=255)
     headline: str = Field(max_length=255)
-    thumbnail_url: str = Field(max_length=255)
+    thumbnail_url: Optional[str] = Field(default=None, max_length=255)
+    thumbnail_base64: Optional[str] = Field(default=None)
     publish_date: Optional[date] = None
