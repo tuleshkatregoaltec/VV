@@ -22,7 +22,7 @@ spec:
           protocol: TCP
         env:
         - name: ALLOWED_ORIGINS
-          value: '["https://api.vitevue.com"]'
+          value: '["https://vitevue.com"]'
         - name: REDIS_URL
           value: "redis://vitevue-db-redis-master"
         - name: WORKOS_REDIRECT_URI
