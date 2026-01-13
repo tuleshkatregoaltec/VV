@@ -1,4 +1,5 @@
 from pydantic_settings import BaseSettings
+from pydantic import field_validator
 
 
 class Settings(BaseSettings):
@@ -16,6 +17,7 @@ class Settings(BaseSettings):
 
     # Security
     SESSION_SECRET: str
+    SERVICE_API_KEY: str
 
     # CORS
     ALLOWED_ORIGINS: list[str]
@@ -27,6 +29,13 @@ class Settings(BaseSettings):
     OPENROUTER_API_KEY: str
     OPENROUTER_BASE_URL: str = "https://openrouter.ai/api/v1"
     CHAT_MODEL: str = "anthropic/claude-3-haiku"
+
+    @field_validator("SERVICE_API_KEY")
+    @classmethod
+    def validate_service_api_key(cls, v: str) -> str:
+        if len(v) < 32:
+            raise ValueError("SERVICE_API_KEY must be at least 32 characters")
+        return v
 
     class Config:
         env_file = ".env"
