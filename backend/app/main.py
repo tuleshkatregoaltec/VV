@@ -52,7 +52,7 @@ app.include_router(upload.health_router, tags=["upload-health"])
 app.include_router(news.router, tags=["news"])
 
 
-@app.get("/api/vi/health")
+@app.get("/api/v1/health")
 def health_check():
     return {"status": "healthy"}
 
