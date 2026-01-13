@@ -117,7 +117,7 @@ async def export_sales_transactions(
     ),
     transaction_ids: str = Query(
         default=None,
-        description="Comma-separated transaction IDs to export (overrides filters and max_rows)"
+        description="Comma-separated transaction IDs to export (overrides filters and max_rows)",
     ),
     # Filters
     trans_group: str = Query(default=None),
@@ -184,7 +184,7 @@ async def export_rental_contracts(
     ),
     contract_ids: str = Query(
         default=None,
-        description="Comma-separated contract IDs to export (overrides filters and max_rows)"
+        description="Comma-separated contract IDs to export (overrides filters and max_rows)",
     ),
     master_project: str = Query(default=None),
     timeframe_days: int = Query(default=None),

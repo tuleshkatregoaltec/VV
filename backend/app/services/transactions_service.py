@@ -90,7 +90,7 @@ async def export_sales_transactions(
 
     if transaction_ids:
         # Export specific transactions by ID (ignore filters and limits)
-        id_list = [id.strip() for id in transaction_ids.split(',') if id.strip()]
+        id_list = [id.strip() for id in transaction_ids.split(",") if id.strip()]
 
         stmt = (
             select(Transaction)
@@ -161,7 +161,7 @@ async def export_rental_contracts(
 
     if contract_ids:
         # Export specific contracts by ID (ignore filters and limits)
-        id_list = [id.strip() for id in contract_ids.split(',') if id.strip()]
+        id_list = [id.strip() for id in contract_ids.split(",") if id.strip()]
 
         stmt = (
             select(RentContract)

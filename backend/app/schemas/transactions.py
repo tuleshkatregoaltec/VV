@@ -49,3 +49,61 @@ class RentalContractListResponse(BaseModel):
     total: int
     limit: int
     offset: int
+
+
+# Transaction matching schemas
+class MatchedUnit(BaseModel):
+    """A single matched unit with confidence score"""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    unit_id: int
+    unit_number: str
+    building_number: str
+    floor: Optional[str] = None
+    actual_area: Decimal
+    rooms: Optional[str] = None
+    confidence: float  # 0.0 to 1.0
+    reasoning: str  # LLM's explanation of why this unit matches
+
+
+class MatchedUnitsResponse(BaseModel):
+    """Response from transaction matching endpoint"""
+
+    transaction_id: str
+    transaction_details: TransactionResponse
+    matched: bool
+    matches: List[MatchedUnit]
+    total_candidates: int
+    processing_time_seconds: float
+
+
+class UnitDetails(BaseModel):
+    """Basic unit information"""
+
+    unit_number: str
+    building_number: str
+    actual_area: Decimal
+    rooms: Optional[str] = None
+
+
+class ComparableTransactionItem(BaseModel):
+    """Single comparable transaction"""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    transaction_id: str
+    instance_date: Optional[date] = None
+    actual_worth: Optional[Decimal] = None
+    meter_sale_price: Optional[Decimal] = None
+    building_name_en: Optional[str] = None
+    procedure_area: Optional[Decimal] = None
+
+
+class ComparableTransactionsResponse(BaseModel):
+    """Comparable transactions for a specific unit"""
+
+    unit_id: int
+    unit_details: UnitDetails
+    transactions: List[ComparableTransactionItem]
+    total_transactions: int

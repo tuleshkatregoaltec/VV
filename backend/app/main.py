@@ -10,6 +10,7 @@ from app.routers import (
     auth,
     admin,
     transactions,
+    transaction_matching,
     supply,
     analytics,
     filters,
@@ -39,6 +40,7 @@ app.add_middleware(contrib.ASGIHoneybadger)  # type: ignore
 app.include_router(auth.router, tags=["auth"])
 app.include_router(admin.router, tags=["admin"])
 app.include_router(transactions.router, tags=["transactions"])
+app.include_router(transaction_matching.router, tags=["transaction-matching"])
 app.include_router(supply.router, tags=["supply"])
 app.include_router(analytics.router, tags=["analytics"])
 app.include_router(filters.router, tags=["filters"])
