@@ -16,25 +16,14 @@ export interface UserWithInitials extends User {
 }
 
 export const auth = {
-    /**
-     * Get the current authenticated user
-     */
-    me: () => http.get<User>('/auth/me'),
+	me: () => http.get<User>('/auth/me'),
 
-    /**
-     * Get the login URL for redirect
-     */
-    getLoginUrl: () => `${env.PUBLIC_API_BASE_URL}/auth/login`,
+	getLoginUrl: () => `${env.PUBLIC_API_BASE_URL}/auth/login`,
 
-    /**
-     * Redirect to the login page
-     */
-    login: () => {
-        window.location.href = auth.getLoginUrl();
-    },
+	/** Triggers full page navigation to OAuth provider */
+	login: () => {
+		window.location.href = auth.getLoginUrl();
+	},
 
-    /**
-     * Logout the current user
-     */
-    logout: () => http.post<void>('/auth/logout'),
+	logout: () => http.post<void>('/auth/logout')
 };

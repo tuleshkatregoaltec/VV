@@ -41,28 +41,18 @@ export interface UpdateUserRequest {
 
 
 export const admin = {
-    organizations: {
+	organizations: {
+		list: () => http.get<Organization[]>('/api/v1/admin/organizations'),
+		get: (id: string) => http.get<OrganizationDetail>(`/api/v1/admin/organizations/${id}`),
+		create: (data: CreateOrganizationRequest) =>
+			http.post<Organization>('/api/v1/admin/organizations', data),
+		update: (id: string, data: UpdateOrganizationRequest) =>
+			http.put<Organization>(`/api/v1/admin/organizations/${id}`, data),
+		delete: (id: string) => http.delete<void>(`/api/v1/admin/organizations/${id}`)
+	},
 
-        list: () => http.get<Organization[]>('/api/v1/admin/organizations'),
-
-
-        get: (id: string) => http.get<OrganizationDetail>(`/api/v1/admin/organizations/${id}`),
-
-
-        create: (data: CreateOrganizationRequest) =>
-            http.post<Organization>('/api/v1/admin/organizations', data),
-
-
-        update: (id: string, data: UpdateOrganizationRequest) =>
-            http.put<Organization>(`/api/v1/admin/organizations/${id}`, data),
-
-
-        delete: (id: string) => http.delete<void>(`/api/v1/admin/organizations/${id}`),
-    },
-
-    users: {
-
-        update: (id: string, data: UpdateUserRequest) =>
-            http.put<OrganizationUser>(`/api/v1/admin/users/${id}`, data),
-    },
+	users: {
+		update: (id: string, data: UpdateUserRequest) =>
+			http.put<OrganizationUser>(`/api/v1/admin/users/${id}`, data)
+	}
 };

@@ -23,20 +23,19 @@ export interface CreateConversationRequest {
 }
 
 export const chat = {
-  // Conversations
-  createConversation: (data: CreateConversationRequest = {}) =>
-    http.post<Conversation>('/api/v1/chat/conversations', data),
+	createConversation: (data: CreateConversationRequest = {}) =>
+		http.post<Conversation>('/api/v1/chat/conversations', data),
 
-  getConversations: () =>
-    http.get<{ conversations: Conversation[]; total: number }>('/api/v1/chat/conversations'),
+	getConversations: () =>
+		http.get<{ conversations: Conversation[]; total: number }>('/api/v1/chat/conversations'),
 
-  getMessages: (conversationId: number) =>
-    http.get<Message[]>(`/api/v1/chat/conversations/${conversationId}/messages`),
+	getMessages: (conversationId: number) =>
+		http.get<Message[]>(`/api/v1/chat/conversations/${conversationId}/messages`),
 
-  // Streaming
-  sendMessage: (conversationId: number, message: string, onChunk: StreamCallback) =>
-    stream(
-      `/api/v1/chat/conversations/${conversationId}/messages/stream?message=${encodeURIComponent(message)}`,
-      onChunk
-    ),
+	/** Streams AI response chunks via Server-Sent Events */
+	sendMessage: (conversationId: number, message: string, onChunk: StreamCallback) =>
+		stream(
+			`/api/v1/chat/conversations/${conversationId}/messages/stream?message=${encodeURIComponent(message)}`,
+			onChunk
+		)
 };

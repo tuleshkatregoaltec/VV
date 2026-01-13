@@ -6,7 +6,7 @@
   import Pagination from '$lib/components/ui/Pagination.svelte';
   import { transactions as api } from '$lib/api/transactions';
   import { filters } from '$lib/api/filters';
-  import type { RentalContract } from '$lib/api/types';
+  import type { RentalContract } from '$lib/api/transactions';
   import { propertyType, masterProject, timeframe } from '$lib/components/filters/globalFilters.svelte';
   import {
     TIMEFRAME_MAPPING,
