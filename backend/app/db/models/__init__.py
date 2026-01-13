@@ -15,6 +15,7 @@ from .analytics import (
 )
 from .etl import ETLMetadata, ETLRunLog, ETLState
 from .news import NewsArticle
+from .chat import Conversation, Message, ToolCallResult
 
 __all__ = [
     "User",
@@ -38,5 +39,9 @@ __all__ = [
     "ETLMetadata",
     "ETLRunLog",
     "ETLState",
+    "Conversation"
     "NewsArticle",
+    "Conversation",
+    "Message",
+    "ToolCallResult",
 ]

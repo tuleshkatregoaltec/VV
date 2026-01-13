@@ -1,13 +1,13 @@
 from sqlmodel import SQLModel, Field, Relationship, Column, JSON
 from sqlalchemy import Text, DateTime
 from datetime import datetime, timezone
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, LiteralString
 
 
 class Conversation(SQLModel, table=True):
     """Chat conversation belonging to a user"""
 
-    __tablename__ = "conversations"
+    __tablename__: LiteralString = "conversations"
 
     id: Optional[int] = Field(default=None, primary_key=True)
     user_id: str = Field(foreign_key="users.id", index=True)  # WorkOS uses string IDs
@@ -33,7 +33,7 @@ class Conversation(SQLModel, table=True):
 class Message(SQLModel, table=True):
     """Individual message in a conversation with optional compression"""
 
-    __tablename__ = "messages"
+    __tablename__: LiteralString = "messages"
 
     id: Optional[int] = Field(default=None, primary_key=True)
     conversation_id: int = Field(foreign_key="conversations.id", index=True)
@@ -58,7 +58,7 @@ class Message(SQLModel, table=True):
 class ToolCallResult(SQLModel, table=True):
     """Stores LLM tool call execution results with caching metadata"""
 
-    __tablename__ = "tool_call_results"
+    __tablename__: LiteralString = "tool_call_results"
 
     id: Optional[int] = Field(default=None, primary_key=True)
     conversation_id: int = Field(foreign_key="conversations.id", index=True)
