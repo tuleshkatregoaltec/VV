@@ -14,6 +14,7 @@ from .analytics import (
     AnalyticsTrend,
 )
 from .etl import ETLMetadata, ETLRunLog, ETLState
+from .news import NewsArticle
 
 __all__ = [
     "User",
@@ -37,4 +38,5 @@ __all__ = [
     "ETLMetadata",
     "ETLRunLog",
     "ETLState",
+    "NewsArticle",
 ]
