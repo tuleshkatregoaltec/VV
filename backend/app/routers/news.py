@@ -7,7 +7,7 @@ from app.services.news_service import fetch_news_articles
 from app.schemas.news import NewsListResponse
 
 router = APIRouter(
-    prefix="api/v1/news", tags=["news"], dependencies=[Depends(require_auth)]
+    prefix="/api/v1/news", tags=["news"], dependencies=[Depends(require_auth)]
 )
 
 
