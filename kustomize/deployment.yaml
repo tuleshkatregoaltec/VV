@@ -22,13 +22,13 @@ spec:
           protocol: TCP
         env:
         - name: ALLOWED_ORIGINS
-          value: ""
+          value: '["http://localhost:5173"]'
         - name: REDIS_URL
-          value: ""
+          value: "redis://vitevue-db-redis-master"
         - name: WORKOS_REDIRECT_URI
-          value: ""
+          value: "https://api.vitevue.com/auth/callback"
         - name: FRONTEND_URL
-          value: ""
+          value: '["http://localhost:5173"]'
         - name: DATABASE_URL
           valueFrom:
             secretKeyRef:
