@@ -14,33 +14,51 @@ spec:
     spec:
       containers:
       - name: backend
-        image: ghcr.io/vitevue/platform-backend:main
+        image: ghcr.io/vitevue/platform-backend:production
         imagePullPolicy: IfNotPresent
         ports:
         - name: http
           containerPort: 8000
           protocol: TCP
         env:
-        - name: DATABASE_URL
+        - name: ALLOWED_ORIGINS
           value: ""
         - name: REDIS_URL
-          value: ""
-        - name: WORKOS_API_KEY
-          value: ""
-        - name: WORKOS_CLIENT_ID
           value: ""
         - name: WORKOS_REDIRECT_URI
           value: ""
         - name: FRONTEND_URL
           value: ""
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: vitevue-backend-creds
+              key: database_url
+        - name: WORKOS_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: vitevue-backend-creds
+              key: workos_api_key
+        - name: WORKOS_CLIENT_ID
+          valueFrom:
+            secretKeyRef:
+              name: vitevue-backend-creds
+              key: workos_client_id
         - name: SESSION_SECRET
-          value: ""
-        - name: ALLOWED_ORIGINS
-          value: ""
+          valueFrom:
+            secretKeyRef:
+              name: vitevue-backend-creds
+              key: session_secret
         - name: HONEYBADGER_API_KEY
-          value: ""
+          valueFrom:
+            secretKeyRef:
+              name: vitevue-backend-creds
+              key: honeybadger_key
         - name: OPENROUTER_API_KEY
-          value: ""
+          valueFrom:
+            secretKeyRef:
+              name: vitevue-backend-creds
+              key: openrouter_key
         # below needs modifying
         livenessProbe:
           exec:
