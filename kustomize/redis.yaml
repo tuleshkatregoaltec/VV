@@ -1,0 +1,31 @@
+apiVersion: source.toolkit.fluxcd.io/v1beta2
+kind: OCIRepository
+metadata:
+  name: redis
+  namespace: flux-system
+spec:
+  interval: 10m
+  url: oci://registry-1.docker.io/bitnamicharts/redis
+  ref:
+    semver: ">=19.0.0"
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: redis
+  namespace: default
+spec:
+  interval: 5m
+  targetNamespace: cache
+  chartRef:
+    kind: OCIRepository
+    name: redis
+  values:
+    architecture: standalone
+    master:
+      persistence:
+        enabled: true
+        storageClass: "efs-postgres"
+        size: 8Gi
+    metrics:
+      enabled: true

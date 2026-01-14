@@ -1,0 +1,38 @@
+apiVersion: source.toolkit.fluxcd.io/v1beta2
+kind: OCIRepository
+metadata:
+  name: postgresql
+  namespace: flux-system
+spec:
+  interval: 10m
+  url: oci://registry-1.docker.io/bitnamicharts/postgresql
+  ref:
+    semver: ">=16.0.0"
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: vitevue-db-postgresql
+spec:
+  interval: 5m
+  chartRef:
+    kind: OCIRepository
+    name: postgresql
+  targetNamespace: db
+  values:
+    global:
+      defaultStorageClass: "efs-postgres"
+      postgresql:
+        auth:
+          username: "vitevue"
+          database: "vitevue"
+          existingSecret: "vitevue-backend-creds"
+          secretKeys:
+            adminPasswordKey: "postgres_admin_pass"
+            userPasswordKey: "postgres_pass"
+    primary:
+      persistence:
+        enabled: true
+        size: 128Gi
+    metrics:
+      enabled: true
