@@ -25,7 +25,7 @@ spec:
     master:
       persistence:
         enabled: true
-        storageClass: "efs-postgres"
+        storageClass: "efs-sc"
         size: 8Gi
     metrics:
       enabled: true
