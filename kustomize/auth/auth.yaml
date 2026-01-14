@@ -26,7 +26,7 @@ spec:
         - name: GOTRUE_EXTERNAL_PHONE_ENABLED
           value: 'false'
         - name: GOTRUE_PASSWORD_MIN_LENGTH
-          value: 10
+          value: '10'
         - name: GOTRUE_SECURITY_REFRESH_TOKEN_ROTATION_ENABLED
           value: 'true'
         # bind on all v4 interfaces
@@ -54,7 +54,7 @@ spec:
         - name: GOTRUE_SMTP_HOST
           value: email-smtp.eu-central-1.amazonaws.com
         - name: GOTRUE_SMTP_PORT
-          value: 587
+          value: '587'
         - name: GOTRUE_SMTP_USER
           valueFrom:
             secretKeyRef:
