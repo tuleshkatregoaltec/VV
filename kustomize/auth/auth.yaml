@@ -30,9 +30,9 @@ spec:
         - name: GOTRUE_SECURITY_REFRESH_TOKEN_ROTATION_ENABLED
           value: 'true'
         # bind on all v4 interfaces
-        - name: GOTRUE_API_HOST
+        - name: API_HOST
           value: 0.0.0.0
-        - name: GOTRUE_API_EXTERNAL_URL
+        - name: API_EXTERNAL_URL
           value: https://auth.vitevue.com
         - name: DATABASE_URL
           valueFrom:
