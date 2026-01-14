@@ -1,0 +1,91 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vitevue-platform-auth
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      com.vitevue.k8s.service: vitevue-platform-auth
+  template:
+    metadata:
+      labels:
+        com.vitevue.k8s.service: vitevue-platform-auth
+    spec:
+      containers:
+      - name: auth
+        image: ghcr.io/supabase/auth:v2.185.0
+        imagePullPolicy: Always
+        ports:
+        - name: http
+          containerPort: 8081
+          protocol: TCP
+        env:
+        - name: GOTRUE_SITE_URL
+          value: https://api.vitevue.com/
+        - name: GOTRUE_EXTERNAL_PHONE_ENABLED
+          value: 'false'
+        - name: GOTRUE_PASSWORD_MIN_LENGTH
+          value: 10
+        - name: GOTRUE_SECURITY_REFRESH_TOKEN_ROTATION_ENABLED
+          value: 'true'
+        # bind on all v4 interfaces
+        - name: GOTRUE_API_HOST
+          value: 0.0.0.0
+        - name: GOTRUE_API_EXTERNAL_URL
+          value: https://auth.vitevue.com
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: vitevue-backend-creds
+              key: database_url
+        - name: GOAUTH_DB_NAMESPACE
+          value: goauth
+        - name: GOTRUE_JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: vitevue-backend-creds
+              key: goauth_jwt_secret
+        - name: GOTRUE_JWT_ADMIN_GROUP_NAME
+          value: admin
+        - name: GOTRUE_JWT_DEFAULT_GROUP_NAME
+          value: user
+        #region SMTP (Amazon SES Frankfurt - eu-central-1)
+        - name: GOTRUE_SMTP_HOST
+          value: email-smtp.eu-central-1.amazonaws.com
+        - name: GOTRUE_SMTP_PORT
+          value: 587
+        - name: GOTRUE_SMTP_USER
+          valueFrom:
+            secretKeyRef:
+              name: vitevue-backend-creds
+              key: ses_username
+        - name: GOTRUE_SMTP_PASS
+          valueFrom:
+            secretKeyRef:
+              name: vitevue-backend-creds
+              key: ses_password
+        - name: GOTRUE_SMTP_ADMIN_EMAIL
+          value: no-reply@vitevue.com
+        - name: GOTRUE_SMTP_SENDER_NAME
+          value: vitevue
+        - name: GOTRUE_MAILER_SUBJECTS_INVITE
+          value: Vitevue - Account creation invitation
+        - name: GOTRUE_MAILER_SUBJECTS_CONFIRMATION
+          value: Vitevue - Sign up confirmation
+        - name: GOTRUE_MAILER_SUBJECTS_RECOVERY
+          value: Vitevue - Reset your password
+        - name: GOTRUE_MAILER_SUBJECTS_MAGIC_LINK
+          value: Vitevue - Magic Link
+        - name: GOTRUE_MAILER_SUBJECTS_EMAIL_CHANGE
+          value: Vitevue - Email change confirmation
+        - name: GOTRUE_MAILER_SUBJECTS_PASSWORD_CHANGED_NOTIFICATION
+          value: Vitevue - Your password has been changed
+        - name: GOTRUE_MAILER_SUBJECTS_EMAIL_CHANGED_NOTIFICATION
+          value: Vitevue - Your email has been changed
+        - name: GOTRUE_MAILER_SUBJECTS_MFA_FACTOR_ENROLLED_NOTIFICATION
+          value: Vitevue - Multi-factor authentication enrollment notification.
+        - name: GOTRUE_MAILER_SUBJECTS_MFA_FACTOR_UNENROLLED_NOTIFICATION
+          value: Vitevue - Multi-factor authentication removal notification.
+        # TODO: theme email properly 
+        #endregion
