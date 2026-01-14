@@ -13,13 +13,12 @@ apiVersion: helm.toolkit.fluxcd.io/v2
 kind: HelmRelease
 metadata:
   name: vitevue-db-postgresql
-  namespace: vitevue-platform-backend
 spec:
   interval: 5m
   chartRef:
     kind: OCIRepository
     name: postgresql
-  targetNamespace: db
+  targetNamespace: vitevue-platform-backend
   values:
     global:
       defaultStorageClass: "efs-postgres"
