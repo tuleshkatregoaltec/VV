@@ -5,7 +5,8 @@ import logging
 from datetime import datetime, timezone
 from typing import Any, AsyncGenerator, Dict, List, Optional, Tuple
 
-from openai import AsyncOpenAI
+from posthog.ai.openai import AsyncOpenAI
+from posthog import Posthog
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -16,6 +17,12 @@ from app.services.mcp_service import mcp_registry
 
 logger = logging.getLogger(__name__)
 cache = RedisCache(settings.REDIS_URL)
+
+# Initialize PostHog client
+posthog_client = Posthog(
+    project_api_key=settings.POSTHOG_API_KEY,
+    host=settings.POSTHOG_HOST
+)
 
 
 class ChatService:
@@ -211,7 +218,13 @@ class ChatService:
         return result, False
 
     async def stream_chat_response(
-        self, db: AsyncSession, conversation_id: int, user_message: str, user_id: str
+        self,
+        db: AsyncSession,
+        conversation_id: int,
+        user_message: str,
+        user_id: str,
+        organization_id: Optional[str] = None,
+        organization_name: Optional[str] = None,
     ) -> AsyncGenerator[str, None]:
         """Stream chat response with tool calling support via SSE"""
 
@@ -227,9 +240,11 @@ class ChatService:
         # Build context
         context = await self._build_context(db, conversation_id, user_message)
 
-        # Start streaming from OpenRouter
+        # Start streaming from OpenRouter with PostHog instrumentation
         async with AsyncOpenAI(
-            base_url=settings.OPENROUTER_BASE_URL, api_key=settings.OPENROUTER_API_KEY
+            base_url=settings.OPENROUTER_BASE_URL,
+            api_key=settings.OPENROUTER_API_KEY,
+            posthog_client=posthog_client,
         ) as client:
             # Track assistant response and tool calls
             assistant_message = ""
@@ -241,12 +256,26 @@ class ChatService:
 
                 # Loop to handle tool calls and continuations
                 while True:
-                    # Make LLM call
+                    # Make LLM call with PostHog tracking
+                    posthog_params = {
+                        "posthog_distinct_id": user_id,
+                        "posthog_properties": {
+                            "conversation_id": conversation_id,
+                        },
+                    }
+
+                    # Add organization tracking if available
+                    if organization_id:
+                        posthog_params["posthog_groups"] = {"organization": organization_id}
+                        if organization_name:
+                            posthog_params["posthog_properties"]["organization_name"] = organization_name
+
                     stream = await client.chat.completions.create(
                         model=settings.CHAT_MODEL,
                         messages=context,
                         tools=tools if tools else None,
                         stream=True,
+                        **posthog_params,
                     )
 
                     tool_call_id = None

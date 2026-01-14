@@ -30,6 +30,10 @@ class Settings(BaseSettings):
     OPENROUTER_BASE_URL: str = "https://openrouter.ai/api/v1"
     CHAT_MODEL: str = "anthropic/claude-3-haiku"
 
+    # PostHog
+    POSTHOG_API_KEY: str
+    POSTHOG_HOST: str = "https://us.i.posthog.com"
+
     @field_validator("SERVICE_API_KEY")
     @classmethod
     def validate_service_api_key(cls, v: str) -> str:

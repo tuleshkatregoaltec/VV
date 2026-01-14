@@ -128,6 +128,8 @@ async def send_message(
                 conversation_id=conversation_id,
                 user_message=request.message,
                 user_id=current_user["id"],
+                organization_id=current_user.get("organization_id"),
+                organization_name=current_user.get("organization_name"),
             ):
                 yield chunk
         except Exception:
