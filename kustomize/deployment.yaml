@@ -24,7 +24,7 @@ spec:
         - name: ALLOWED_ORIGINS
           value: '["https://vitevue.com"]'
         - name: REDIS_URL
-          value: "redis://vitevue-db-redis-master"
+          value: "redis://vitevue-platform-backend-redis-headless"
         - name: WORKOS_REDIRECT_URI
           value: "https://api.vitevue.com/auth/callback"
         - name: FRONTEND_URL
