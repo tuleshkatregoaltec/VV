@@ -27,8 +27,8 @@ export const load: LayoutLoad = async ({ url }) => {
   });
 
   if (browser) {
-    // Initialize PostHog if credentials are available
-    if (env.PUBLIC_POSTHOG_KEY && env.PUBLIC_POSTHOG_HOST) {
+    // Initialize PostHog if credentials are available and not already initialized
+    if (env.PUBLIC_POSTHOG_KEY && env.PUBLIC_POSTHOG_HOST && !posthog.__loaded) {
       try {
         posthog.init(
           env.PUBLIC_POSTHOG_KEY,
