@@ -39,8 +39,7 @@ __all__ = [
     "ETLMetadata",
     "ETLRunLog",
     "ETLState",
-    "Conversation"
-    "NewsArticle",
+    "ConversationNewsArticle",
     "Conversation",
     "Message",
     "ToolCallResult",

@@ -8,8 +8,12 @@ from typing import Annotated
 import aiofiles
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, status
 from fastapi.responses import JSONResponse
+from sqlmodel.ext.asyncio.session import AsyncSession
 
+from app.db.session import get_db_session
 from app.routers.dependencies import require_api_key
+from app.schemas.news import NewsUploadRequest, NewsUploadResponse
+from app.services.upload_service import bulk_create_news_articles
 
 UPLOAD_DIR = Path("/data/uploads")
 CHUNK_DIR = Path("/data/uploads/chunks")
@@ -30,7 +34,6 @@ health_router = APIRouter(
 
 
 def sanitize_filename(filename: str) -> str:
-
     safe = "".join(c for c in filename if c.isalnum() or c in "._-")
     if not safe or ".." in safe:
         raise HTTPException(status_code=400, detail="Invalid filename")
@@ -57,7 +60,6 @@ async def upload_chunked(
     total_file_size: Annotated[int, Query()],
     chunk_size: Annotated[int, Query()],
 ):
-
     if not 1 <= chunk_index <= total_chunks:
         raise HTTPException(400, f"Invalid chunk_index: {chunk_index}")
 
@@ -83,9 +85,11 @@ async def upload_chunked(
             },
         )
 
-
-    missing = [i for i in range(1, total_chunks + 1)
-               if not (session_dir / f"chunk_{i:04d}").exists()]
+    missing = [
+        i
+        for i in range(1, total_chunks + 1)
+        if not (session_dir / f"chunk_{i:04d}").exists()
+    ]
     if missing:
         raise HTTPException(400, f"Missing chunks: {missing}")
 
@@ -98,20 +102,26 @@ async def upload_chunked(
     try:
         async with aiofiles.open(temp_path, "wb") as out:
             for i in range(1, total_chunks + 1):
-                async with aiofiles.open(session_dir / f"chunk_{i:04d}", "rb") as chunk_file:
+                async with aiofiles.open(
+                    session_dir / f"chunk_{i:04d}", "rb"
+                ) as chunk_file:
                     while data := await chunk_file.read(CHUNK_SIZE):
                         await out.write(data)
 
         actual_size = temp_path.stat().st_size
         if actual_size != total_file_size:
             temp_path.unlink()
-            raise HTTPException(500, f"Size mismatch: expected {total_file_size}, got {actual_size}")
+            raise HTTPException(
+                500, f"Size mismatch: expected {total_file_size}, got {actual_size}"
+            )
 
         file_hash = await calculate_hash(temp_path)
         shutil.move(str(temp_path), str(final_path))
         shutil.rmtree(session_dir, ignore_errors=True)
 
-        logger.info(f"Assembled {safe_filename} ({actual_size:,} bytes) from {total_chunks} chunks")
+        logger.info(
+            f"Assembled {safe_filename} ({actual_size:,} bytes) from {total_chunks} chunks"
+        )
 
         return JSONResponse(
             status_code=status.HTTP_201_CREATED,
@@ -134,9 +144,20 @@ async def upload_chunked(
         raise HTTPException(500, f"Assembly failed: {e}")
 
 
+@router.post("/news", response_model=NewsUploadResponse)
+async def upload_news_articles(
+    request: NewsUploadRequest,
+    db: AsyncSession = Depends(get_db_session),
+) -> NewsUploadResponse:
+    try:
+        return await bulk_create_news_articles(db, request.articles)
+    except Exception as e:
+        logger.exception("Failed to upload news articles")
+        raise HTTPException(500, f"Failed to upload news articles: {e}")
+
+
 @health_router.get("/health")
 async def health():
-
     try:
         UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
         test = UPLOAD_DIR / ".health"
