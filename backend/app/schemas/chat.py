@@ -11,6 +11,12 @@ class CreateConversationRequest(BaseModel):
     title: Optional[str] = None
 
 
+class SendMessageRequest(BaseModel):
+    """Request model for sending a message in a conversation"""
+
+    message: str
+
+
 class ConversationResponse(BaseModel):
     """Response model for conversation data"""
 

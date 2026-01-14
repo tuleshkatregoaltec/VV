@@ -69,44 +69,104 @@ export async function api<T>(endpoint: string, options: RequestOptions = {}): Pr
 export type StreamCallback = (chunk: string) => void;
 
 /**
- * Stream SSE responses using native EventSource.
- * Note: EventSource only supports GET requests.
+ * Stream SSE responses using fetch with ReadableStream.
+ * Supports POST requests with request bodies.
  */
-export function stream(endpoint: string, onChunk: StreamCallback) {
-    const eventSource = new EventSource(`${env.PUBLIC_API_BASE_URL}${endpoint}`, {
-        withCredentials: true
-    });
+export function stream(
+    endpoint: string,
+    onChunk: StreamCallback,
+    options: { method?: 'GET' | 'POST', body?: unknown } = {}
+) {
+    const { method = 'GET', body } = options;
 
+    let abortController = new AbortController();
     let streamComplete = false;
 
-    eventSource.onmessage = (event) => {
-        const data = event.data;
+    const config: RequestInit = {
+        method,
+        credentials: 'include',
+        signal: abortController.signal,
+        headers: {},
+    };
 
-        // Check if stream is complete
-        try {
-            const parsed = JSON.parse(data);
-            if (parsed.type === 'done') {
-                streamComplete = true;
+    if (body !== undefined) {
+        config.headers = {
+            'Content-Type': 'application/json',
+        };
+        config.body = JSON.stringify(body);
+    }
+
+    // Start streaming
+    // @ts-ignore - Using window.fetch in CSR-only mode
+    fetch(`${env.PUBLIC_API_BASE_URL}${endpoint}`, config)
+        .then(async (response) => {
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
             }
-        } catch {
-            // Not JSON, ignore
-        }
 
-        onChunk(data);
-    };
+            const reader = response.body?.pipeThrough(new TextDecoderStream()).getReader();
+            if (!reader) {
+                throw new Error('Response body is not readable');
+            }
 
-    eventSource.onerror = (error) => {
-        console.error('EventSource error:', error);
-        eventSource.close();
+            let buffer = '';
 
-        // Only send error if stream wasn't completed normally
-        if (!streamComplete) {
-            onChunk(JSON.stringify({type: 'error', error: 'Stream connection failed'}));
-        }
-    };
+            while (true) {
+                const { value, done } = await reader.read();
+                if (done) break;
+
+                // Add new data to buffer
+                buffer += value;
+
+                // Process complete SSE messages (separated by \n\n)
+                const messages = buffer.split('\n\n');
+
+                // Keep the last incomplete message in buffer
+                buffer = messages.pop() || '';
+
+                // Process complete messages
+                for (const message of messages) {
+                    if (!message.trim()) continue;
+
+                    // Extract data from SSE format (data: {...})
+                    const lines = message.split('\n');
+                    for (const line of lines) {
+                        if (line.startsWith('data: ')) {
+                            const data = line.slice(6); // Remove 'data: ' prefix
+
+                            // Check if stream is complete
+                            try {
+                                const parsed = JSON.parse(data);
+                                if (parsed.type === 'done') {
+                                    streamComplete = true;
+                                }
+                            } catch {
+                                // Not JSON, ignore
+                            }
+
+                            onChunk(data);
+                        }
+                    }
+                }
+            }
+        })
+        .catch((error) => {
+            if (error.name === 'AbortError') {
+                return; // Stream was intentionally closed
+            }
+
+            console.error('Stream error:', error);
+
+            // Only send error if stream wasn't completed normally
+            if (!streamComplete) {
+                onChunk(JSON.stringify({ type: 'error', error: 'Stream connection failed' }));
+            }
+        });
 
     return {
-        close: () => eventSource.close()
+        close: () => {
+            abortController.abort();
+        }
     };
 }
 

@@ -15,6 +15,7 @@ from app.schemas.chat import (
     ConversationResponse,
     CreateConversationRequest,
     MessageResponse,
+    SendMessageRequest,
 )
 from app.services.chat_service import chat_service
 
@@ -80,10 +81,10 @@ async def get_conversation_messages(
     return [MessageResponse.model_validate(m) for m in messages]
 
 
-@router.get("/conversations/{conversation_id}/messages/stream")
+@router.post("/conversations/{conversation_id}/messages/stream")
 async def send_message(
     conversation_id: int,
-    message: str = Query(..., min_length=1),
+    request: SendMessageRequest,
     db: AsyncSession = Depends(get_db_session),
     current_user: dict = Depends(require_auth),
 ):
@@ -94,7 +95,7 @@ async def send_message(
             async for chunk in chat_service.stream_chat_response(
                 db=db,
                 conversation_id=conversation_id,
-                user_message=message,
+                user_message=request.message,
                 user_id=current_user["id"],
             ):
                 yield chunk

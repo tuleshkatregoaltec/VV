@@ -35,7 +35,8 @@ export const chat = {
 	/** Streams AI response chunks via Server-Sent Events */
 	sendMessage: (conversationId: number, message: string, onChunk: StreamCallback) =>
 		stream(
-			`/api/v1/chat/conversations/${conversationId}/messages/stream?message=${encodeURIComponent(message)}`,
-			onChunk
+			`/api/v1/chat/conversations/${conversationId}/messages/stream`,
+			onChunk,
+			{ method: 'POST', body: { message } }
 		)
 };
