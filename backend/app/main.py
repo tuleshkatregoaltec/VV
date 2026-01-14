@@ -48,7 +48,7 @@ app.include_router(analytics.router, tags=["analytics"])
 app.include_router(filters.router, tags=["filters"])
 app.include_router(chat.router, tags=["chat"])
 app.include_router(upload.router, tags=["upload"])
-app.include_router(upload.health_router, tags=["upload-health"])
+app.include_router(upload.health_router, tags=["upload"])
 app.include_router(news.router, tags=["news"])
 
 
