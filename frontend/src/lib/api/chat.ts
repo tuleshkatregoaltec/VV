@@ -29,6 +29,12 @@ export const chat = {
 	getConversations: () =>
 		http.get<{ conversations: Conversation[]; total: number }>('/api/v1/chat/conversations'),
 
+	updateConversation: (conversationId: number, title: string) =>
+		http.patch<Conversation>(`/api/v1/chat/conversations/${conversationId}`, { title }),
+
+	deleteConversation: (conversationId: number) =>
+		http.delete(`/api/v1/chat/conversations/${conversationId}`),
+
 	getMessages: (conversationId: number) =>
 		http.get<Message[]>(`/api/v1/chat/conversations/${conversationId}/messages`),
 

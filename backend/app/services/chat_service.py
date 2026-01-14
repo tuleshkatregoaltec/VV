@@ -63,6 +63,33 @@ class ChatService:
         result = await db.exec(stmt)
         return result.first()
 
+    async def update_conversation(
+        self, db: AsyncSession, conversation_id: int, user_id: str, title: str
+    ) -> Optional[Conversation]:
+        """Update a conversation's title"""
+        conversation = await self.get_conversation(db, conversation_id, user_id)
+        if not conversation:
+            return None
+
+        conversation.title = title
+        conversation.updated_at = datetime.now(timezone.utc)
+        db.add(conversation)
+        await db.commit()
+        await db.refresh(conversation)
+        return conversation
+
+    async def delete_conversation(
+        self, db: AsyncSession, conversation_id: int, user_id: str
+    ) -> bool:
+        """Delete a conversation and all its messages"""
+        conversation = await self.get_conversation(db, conversation_id, user_id)
+        if not conversation:
+            return False
+
+        await db.delete(conversation)
+        await db.commit()
+        return True
+
     async def get_conversation_messages(
         self, db: AsyncSession, conversation_id: int, limit: int = 100
     ) -> List[Message]:

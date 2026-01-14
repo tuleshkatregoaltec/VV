@@ -17,6 +17,12 @@ class SendMessageRequest(BaseModel):
     message: str
 
 
+class UpdateConversationRequest(BaseModel):
+    """Request model for updating a conversation"""
+
+    title: str
+
+
 class ConversationResponse(BaseModel):
     """Response model for conversation data"""
 
