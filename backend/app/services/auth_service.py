@@ -6,7 +6,9 @@ from typing import Dict, Optional
 from fastapi import HTTPException, Request
 from fastapi.responses import RedirectResponse
 from sqlmodel.ext.asyncio.session import AsyncSession
-from workos import WorkOSClient
+
+from supabase_auth import AsyncGoTrueClient, User as AuthUser
+from supabase_auth.errors import AuthApiError
 
 from app.config import settings
 from app.db.models import User
@@ -16,179 +18,26 @@ from app.services.organization_service import (
     get_organization_by_id,
 )
 
+from app.providers.auth.platform_user import PlatformUser
+
 logger = logging.getLogger(__name__)
 
-workos = WorkOSClient(
-    api_key=settings.WORKOS_API_KEY, client_id=settings.WORKOS_CLIENT_ID
-)
+auth_client = AsyncGoTrueClient(url="https://auth.vitevue.com")
 
-
-async def get_authorization_url() -> str:
-    """Generate WorkOS AuthKit authorization URL for OAuth login"""
-    authorization_url = workos.user_management.get_authorization_url(
-        provider="authkit",
-        redirect_uri=settings.WORKOS_REDIRECT_URI,
-    )
-    return authorization_url
-
-
-async def handle_callback(
-    request: Request, code: str, db: AsyncSession
-) -> RedirectResponse:
-    """Handle OAuth callback from WorkOS AuthKit"""
+async def get_auth_user(jwt: str) -> Optional[AuthUser]:
+    """
+    Get the supabase auth user object for the given jwt, if valid.
+    """
     try:
-        # Step 1: Authenticate with WorkOS and get user profile (sync SDK call)
-        auth_response = await asyncio.to_thread(
-            workos.user_management.authenticate_with_code, code=code
-        )
-        workos_user = auth_response.user
-
-        # Step 2: Get user's active organization memberships (sync SDK call)
-        memberships_response = await asyncio.to_thread(
-            workos.user_management.list_organization_memberships,
-            user_id=workos_user.id,
-            statuses=["active"],
-        )
-        memberships = memberships_response.data
-
-        organization = None
-        has_workos_membership = False
-
-        if memberships:
-            # User has org memberships - use primary organization
-            primary_membership = memberships[0]
-            workos_org_id = primary_membership.organization_id
-            organization = await get_organization_by_id(db, workos_org_id)
-            if organization:
-                has_workos_membership = True
-
-        # Fallback: match by email domain if no membership or org not found locally
-        if not organization:
-            email_domain = workos_user.email.split("@")[1].lower()
-            organization = await get_organization_by_domain(db, email_domain)
-
-            if not organization:
-                # No org found by membership or domain
-                return RedirectResponse(url=f"{settings.FRONTEND_URL}/auth/no-org")
-
-        # If user matched by domain but has no WorkOS membership, create one
-        if not has_workos_membership:
-            try:
-                await asyncio.to_thread(
-                    workos.user_management.create_organization_membership,
-                    user_id=workos_user.id,
-                    organization_id=organization.id,
-                )
-            except Exception as e:
-                # Log but don't fail - user can still proceed with domain-based auth
-                logger.warning(
-                    f"Failed to create WorkOS org membership for user {workos_user.id}: {e}"
-                )
-
-        # Step 5: Check if organization is active
-        if not organization.is_active:
-            return RedirectResponse(url=f"{settings.FRONTEND_URL}/auth/deactivated")
-
-        # Step 6: Check if user exists in local DB
-        existing_user = await db.get(User, workos_user.id)
-
-        if existing_user:
-            # EXISTING USER - update org if needed and check status
-            if existing_user.organization_id != organization.id:
-                # User's org has changed or was previously unassigned
-                existing_user.organization_id = organization.id
-
-            existing_user.last_login = datetime.now(timezone.utc)
-            existing_user.updated_at = datetime.now(timezone.utc)
-            db.add(existing_user)
-            await db.commit()
-            await db.refresh(existing_user)
-
-            # Check if user is active
-            if not existing_user.is_active:
-                return RedirectResponse(url=f"{settings.FRONTEND_URL}/auth/deactivated")
-
-            # Set session and redirect to dashboard
-            request.session["user"] = {
-                "id": existing_user.id,
-                "email": existing_user.email,
-                "first_name": existing_user.first_name,
-                "last_name": existing_user.last_name,
-                "organization_id": existing_user.organization_id,
-                "organization_name": organization.name,
-                "role": existing_user.role,
-            }
-            request.session["access_token"] = auth_response.access_token
-            request.session["refresh_token"] = auth_response.refresh_token
-
-            return RedirectResponse(url=f"{settings.FRONTEND_URL}/dashboard")
-
-        # Step 7: NEW USER - check user limit and create
-        active_user_count = await get_active_user_count(db, organization.id)
-
-        # Determine if user should be active based on org limit
-        is_active = active_user_count < organization.max_users
-
-        # Create new user
-        new_user = User(
-            id=workos_user.id,
-            email=workos_user.email,
-            first_name=workos_user.first_name,
-            last_name=workos_user.last_name,
-            organization_id=organization.id,
-            is_active=is_active,
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
-            last_login=datetime.now(timezone.utc),
-        )
-        db.add(new_user)
-        await db.commit()
-        await db.refresh(new_user)
-
-        # If user is not active (over limit), redirect to deactivated
-        if not is_active:
-            return RedirectResponse(url=f"{settings.FRONTEND_URL}/auth/deactivated")
-
-        # Set session for new active user
-        request.session["user"] = {
-            "id": new_user.id,
-            "email": new_user.email,
-            "first_name": new_user.first_name,
-            "last_name": new_user.last_name,
-            "organization_id": organization.id,
-            "organization_name": organization.name,
-            "role": new_user.role,
-        }
-        request.session["access_token"] = auth_response.access_token
-        request.session["refresh_token"] = auth_response.refresh_token
-
-        return RedirectResponse(url=f"{settings.FRONTEND_URL}/dashboard")
-
-    except Exception:
-        logger.exception("Authentication error")
-        raise HTTPException(status_code=400, detail="Authentication failed")
-
-
-async def logout_user(request: Request) -> RedirectResponse:
-    """Clear user session"""
-    request.session.clear()
-    return RedirectResponse(url=settings.FRONTEND_URL)
-
-
-async def get_current_user(request: Request) -> Dict:
-    """Get current authenticated user from session or raise 401"""
-    user = request.session.get("user")
-    if not user:
-        raise HTTPException(status_code=401, detail="Not authenticated")
-    return user
-
-
-async def get_session_info(request: Request) -> Optional[Dict]:
-    """Get session info including user and token, returns None if unauthenticated"""
-    user = request.session.get("user")
-    access_token = request.session.get("access_token")
-
-    if not user:
+        user_response = await auth_client.get_user(jwt=jwt)
+    except AuthApiError:
+        # invalid token, token not valid
         return None
+    
+    return user_response.user
 
-    return {"user": user, "access_token": access_token, "authenticated": True}
+
+async def logout_user(user: PlatformUser):
+    await auth_client.admin.sign_out(user.token)
+
+    return RedirectResponse(url=settings.FRONTEND_URL)

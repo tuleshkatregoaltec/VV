@@ -2,21 +2,26 @@ import secrets
 from fastapi import Request, HTTPException, Header
 from typing import Dict
 
-from app.services.auth_service import get_current_user
 from app.config import settings
 
+from app.providers.auth.scopes import AuthScopes
+from app.providers.auth.platform_user import PlatformUser
 
-async def require_auth(request: Request) -> Dict:
+async def require_auth(request: Request) -> PlatformUser:
     """Dependency to require authentication on routes"""
-    return await get_current_user(request)
+    if (not request.user.is_authenticated):
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    return request.user
 
 
-async def require_admin(request: Request) -> Dict:
+async def require_admin(request: Request) -> PlatformUser:
     """Dependency to require admin role on routes"""
-    user = await get_current_user(request)
-    if user.get("role") != "admin":
+    # note that scopes will be empty if user is not authenticated
+    if AuthScopes.GLOBAL_ADMIN.value not in request.auth.scopes:
         raise HTTPException(status_code=403, detail="Admin access required")
-    return user
+    
+    return request.user
 
 
 async def require_api_key(x_api_key: str = Header(...)) -> None:

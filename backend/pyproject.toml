@@ -39,6 +39,7 @@ dependencies = [
     "fastmcp>=2.14.1",
     "aiofiles>=25.1.0",
     "pyjwt>=2.10.1",
+    "supabase-auth>=2.27.2",
 ]
 
 [tool.uv]

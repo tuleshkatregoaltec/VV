@@ -2,6 +2,7 @@ import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
+from starlette.middleware.authentication import AuthenticationMiddleware
 from honeybadger import contrib, honeybadger
 import logging.config
 
@@ -18,6 +19,9 @@ from app.routers import (
     upload,
     news,
 )
+
+from app.providers.auth.auth_backend import AuthBackend
+
 from app.core.logging_config import LOGGING_CONFIG
 
 logging.config.dictConfig(LOGGING_CONFIG)
@@ -28,6 +32,7 @@ honeybadger.configure(
     api_key=settings.HONEYBADGER_API_KEY,
 )
 
+app.add_middleware(AuthenticationMiddleware, backend=AuthBackend())
 app.add_middleware(SessionMiddleware, secret_key=settings.SESSION_SECRET)
 app.add_middleware(
     CORSMiddleware,
@@ -36,6 +41,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
 app.add_middleware(contrib.ASGIHoneybadger)  # type: ignore
 
 
