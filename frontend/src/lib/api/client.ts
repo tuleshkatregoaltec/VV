@@ -101,6 +101,11 @@ export function stream(
     fetch(`${env.PUBLIC_API_BASE_URL}${endpoint}`, config)
         .then(async (response) => {
             if (!response.ok) {
+                if (response.status === 429) {
+                    // Token limit exceeded
+                    const errorData = await response.text().catch(() => 'Daily token limit exceeded');
+                    throw new Error(`TOKEN_LIMIT_EXCEEDED: ${errorData}`);
+                }
                 throw new Error(`HTTP ${response.status}: ${response.statusText}`);
             }
 
@@ -159,7 +164,11 @@ export function stream(
 
             // Only send error if stream wasn't completed normally
             if (!streamComplete) {
-                onChunk(JSON.stringify({ type: 'error', error: 'Stream connection failed' }));
+                if (error.message.startsWith('TOKEN_LIMIT_EXCEEDED:')) {
+                    onChunk(JSON.stringify({ type: 'error', error: 'token_limit_exceeded', details: error.message }));
+                } else {
+                    onChunk(JSON.stringify({ type: 'error', error: 'Stream connection failed' }));
+                }
             }
         });
 

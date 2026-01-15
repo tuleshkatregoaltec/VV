@@ -41,6 +41,7 @@ export interface UpdateOrganizationRequest {
 
 export interface UpdateUserRequest {
     is_active?: boolean;
+    daily_token_limit?: number;
 }
 
 export interface UserTokenStats {
@@ -49,10 +50,6 @@ export interface UserTokenStats {
     daily_limit: number;
     usage_percentage: number;
     remaining_tokens: number;
-}
-
-export interface UpdateUserTokenLimitRequest {
-    daily_token_limit: number;
 }
 
 
@@ -74,7 +71,7 @@ export const admin = {
 		getTokenUsage: (id: string) =>
 			http.get<UserTokenStats>(`/api/v1/admin/users/${id}/token-usage`),
 
-		updateTokenLimit: (id: string, data: UpdateUserTokenLimitRequest) =>
-			http.put(`/api/v1/admin/users/${id}/token-limit`, data)
+		updateTokenLimit: (id: string, dailyTokenLimit: number) =>
+			http.put<OrganizationUser>(`/api/v1/admin/users/${id}`, { daily_token_limit: dailyTokenLimit })
 	}
 };

@@ -133,8 +133,8 @@ async def send_message(
                 organization_name=current_user.get("organization_name"),
             ):
                 yield chunk
-        except Exception:
-            logger.exception("Error in send_message endpoint")
+        except Exception as e:
+            logger.exception(f"Error in send_message endpoint: {e}")
             yield f"data: {json.dumps({'type': 'error', 'error': 'Internal server error'})}\n\n"
 
     return StreamingResponse(

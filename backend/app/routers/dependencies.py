@@ -44,7 +44,7 @@ async def require_token_quota(
 ) -> None:
     """Dependency to check user has token quota remaining"""
     user = await get_current_user(request)
-    user_id = user.get("user_id")
+    user_id = user.get("id")
 
     # Get today's usage
     usage = await token_usage_service.get_today_usage(db, user_id)

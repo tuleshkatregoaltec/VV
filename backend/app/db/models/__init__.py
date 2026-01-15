@@ -1,4 +1,4 @@
-from .auth import User, Organization
+from .auth import User, Organization, UserTokenUsage
 from .lookups import PropertyType, PropertySubType
 from .geography import Area, MasterProject
 from .properties import Developer, Project, LandRegistry, Building, Unit
@@ -20,6 +20,7 @@ from .chat import Conversation, Message, ToolCallResult
 __all__ = [
     "User",
     "Organization",
+    "UserTokenUsage",
     "PropertyType",
     "PropertySubType",
     "Area",
@@ -39,7 +40,7 @@ __all__ = [
     "ETLMetadata",
     "ETLRunLog",
     "ETLState",
-    "ConversationNewsArticle",
+    "NewsArticle",
     "Conversation",
     "Message",
     "ToolCallResult",
