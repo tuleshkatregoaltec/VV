@@ -36,11 +36,11 @@ spec:
           value: https://auth.vitevue.com
         - name: GOTRUE_DB_DRIVER
           value: postgres
-        - name: GOTRUE_DB_DATABASE_URL
+        - name: DATABASE_URL
           valueFrom:
             secretKeyRef:
               name: vitevue-backend-creds
-              key: database_url_auth
+              key: database_url
         - name: GOAUTH_DB_NAMESPACE
           value: goauth
         - name: GOTRUE_JWT_SECRET
