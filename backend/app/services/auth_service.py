@@ -8,12 +8,13 @@ from supabase_auth.errors import AuthApiError
 
 from app.config import settings
 from app.providers.auth.platform_user import PlatformUser
+from app.config import settings
 
 from app.services.admin_auth_service import AdminAuth
 
 logger = logging.getLogger(__name__)
 
-auth_client = AsyncGoTrueClient(url="https://auth.vitevue.com")
+auth_client = AsyncGoTrueClient(url=settings.AUTH_URL)
 
 admin_auth = AdminAuth()
 
