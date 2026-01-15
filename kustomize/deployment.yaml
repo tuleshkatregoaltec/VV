@@ -29,6 +29,8 @@ spec:
           value: "https://api.vitevue.com/auth/callback"
         - name: FRONTEND_URL
           value: "https://vitevue.com"
+        - name: AUTH_URL
+          value: "https://auth.vitevue.com"
         - name: DATABASE_URL
           valueFrom:
             secretKeyRef:
