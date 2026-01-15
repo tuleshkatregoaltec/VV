@@ -1,5 +1,6 @@
 from typing import Optional, List, LiteralString
-from datetime import datetime, timezone, date
+from datetime import datetime, timezone
+import datetime as dt
 from sqlmodel import SQLModel, Field, Relationship
 from sqlalchemy import Column, DateTime
 
@@ -75,7 +76,7 @@ class UserTokenUsage(SQLModel, table=True):
     user_id: str = Field(foreign_key="users.id", index=True)
 
     # Usage tracking
-    date: date = Field(index=True)  # UTC date
+    date: dt.date = Field(index=True)  # UTC date
     prompt_tokens: int = Field(default=0)
     completion_tokens: int = Field(default=0)
     total_tokens: int = Field(default=0)
