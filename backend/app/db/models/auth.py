@@ -1,5 +1,5 @@
 from typing import Optional, List, LiteralString
-from datetime import datetime, timezone
+from datetime import datetime, timezone, date
 from sqlmodel import SQLModel, Field, Relationship
 from sqlalchemy import Column, DateTime
 
@@ -45,6 +45,7 @@ class User(SQLModel, table=True):
     organization_id: Optional[str] = Field(default=None, foreign_key="organizations.id")
     role: str = Field(default="user")
     is_active: bool = Field(default=True)
+    daily_token_limit: int = Field(default=100000)
     created_at: datetime = Field(
         sa_column=Column(DateTime(timezone=True), nullable=False),
         default_factory=lambda: datetime.now(timezone.utc),
@@ -60,3 +61,31 @@ class User(SQLModel, table=True):
 
     # Relationships
     organization: Optional["Organization"] = Relationship(back_populates="users")
+
+
+class UserTokenUsage(SQLModel, table=True):
+    """Daily token usage tracking per user"""
+
+    __tablename__: LiteralString = "user_token_usage"
+
+    # Primary key
+    id: Optional[int] = Field(default=None, primary_key=True)
+
+    # Foreign key to user
+    user_id: str = Field(foreign_key="users.id", index=True)
+
+    # Usage tracking
+    date: date = Field(index=True)  # UTC date
+    prompt_tokens: int = Field(default=0)
+    completion_tokens: int = Field(default=0)
+    total_tokens: int = Field(default=0)
+
+    # Timestamps
+    created_at: datetime = Field(
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+        default_factory=lambda: datetime.now(timezone.utc),
+    )
+    updated_at: datetime = Field(
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+        default_factory=lambda: datetime.now(timezone.utc),
+    )

@@ -9,7 +9,7 @@ from fastapi.responses import StreamingResponse
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.db.session import get_db_session
-from app.routers.dependencies import require_auth
+from app.routers.dependencies import require_auth, require_token_quota
 from app.schemas.chat import (
     ConversationListResponse,
     ConversationResponse,
@@ -118,6 +118,7 @@ async def send_message(
     request: SendMessageRequest,
     db: AsyncSession = Depends(get_db_session),
     current_user: dict = Depends(require_auth),
+    _: None = Depends(require_token_quota),
 ):
     """Send a message and stream AI response via SSE"""
 

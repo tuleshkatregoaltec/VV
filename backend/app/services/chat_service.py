@@ -14,6 +14,7 @@ from app.config import settings
 from app.core.cache import RedisCache
 from app.db.models.chat import Conversation, Message, ToolCallResult
 from app.services.mcp_service import mcp_registry
+from app.services.token_usage_service import token_usage_service
 
 logger = logging.getLogger(__name__)
 cache = RedisCache(settings.REDIS_URL)
@@ -275,6 +276,7 @@ class ChatService:
                         messages=context,
                         tools=tools if tools else None,
                         stream=True,
+                        stream_options={"include_usage": True},
                         **posthog_params,
                     )
 
@@ -290,6 +292,22 @@ class ChatService:
 
                         delta = chunk.choices[0].delta
                         finish_reason = chunk.choices[0].finish_reason
+
+                        if hasattr(chunk, "usage") and chunk.usage:
+                            usage = chunk.usage
+                            logger.info(
+                                f"Token usage: prompt={usage.prompt_tokens}, "
+                                f"completion={usage.completion_tokens}, "
+                                f"total={usage.total_tokens}"
+                            )
+
+                            await token_usage_service.record_usage(
+                                db=db,
+                                user_id=user_id,
+                                prompt_tokens=usage.prompt_tokens,
+                                completion_tokens=usage.completion_tokens,
+                                total_tokens=usage.total_tokens,
+                            )
 
                         # Handle content streaming
                         if delta.content:
