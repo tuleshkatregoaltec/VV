@@ -6,7 +6,7 @@ from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.db.models.auth import UserTokenUsage
-from app.services.auth_service import get_user_by_id, update_user_metadata
+from app.services.auth_service import get_user_by_id, update_app_metadata
 from app.providers.auth.platform_user import PlatformUser
 
 logger = logging.getLogger(__name__)
@@ -96,7 +96,7 @@ class TokenUsageService:
 
         user.metadata.daily_token_limit = new_limit
 
-        update_user_metadata(user)
+        update_app_metadata(user)
         # updated by auth: user.updated_at = datetime.now(timezone.utc)
 
         return user

@@ -37,8 +37,8 @@ class PlatformUser(BaseUser):
         self.__auth_user: User = user
 
 
-        if hasattr(self.auth_user, "user_metadata"):
-            self.__metadata = UserMetadata.parse_dict(self.auth_user.user_metadata)
+        if hasattr(self.auth_user, "app_metadata"):
+            self.__metadata = UserMetadata.parse_dict(self.auth_user.app_metadata)
         else:
             self.__metadata = UserMetadata()
 

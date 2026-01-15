@@ -26,7 +26,7 @@ from app.services.organization_service import (
 )
 from app.services.token_usage_service import token_usage_service
 
-from app.services.auth_service import get_user_by_id, update_user_metadata
+from app.services.auth_service import get_user_by_id, update_app_metadata
 
 logger = logging.getLogger(__name__)
 
@@ -172,7 +172,7 @@ async def update_user(
         user.metadata.daily_token_limit = user_update.daily_token_limit
     # (updated by goauth) user.updated_at = datetime.now(timezone.utc)
 
-    update_user_metadata(user)
+    update_app_metadata(user)
 
     return {
         "id": user.id,

@@ -37,10 +37,10 @@ async def logout_user(user: PlatformUser):
 
 
 @admin_auth.with_admin_client()
-async def update_user_metadata(user: PlatformUser, **kwargs):
+async def update_app_metadata(user: PlatformUser, **kwargs):
     client: AsyncGoTrueClient = kwargs["client"]
     update_request = AdminUserAttributes()
-    update_request["user_metadata"] = user.metadata
+    update_request["app_metadata"] = user.metadata
     try:
         await client.admin.update_user_by_id(user.id, update_request)
     except (ValueError, AuthApiError):  # invalid uuid, user not found
