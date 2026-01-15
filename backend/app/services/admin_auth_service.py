@@ -12,15 +12,17 @@ from supabase_auth.errors import AuthApiError, AuthSessionMissingError
 
 from app.config import settings
 from app.providers.auth.platform_user import PlatformUser
+from app.config import settings
 
 from copy import copy
 
 logger = logging.getLogger(__name__)
 
 
+
 class AdminAuth:
     def __init__(self):
-        self.__client = AsyncGoTrueClient(url="https://auth.vitevue.com")
+        self.__client = AsyncGoTrueClient(url=settings.AUTH_URL)
 
         self.__user: PlatformUser = None
         self.__session: Session = None
