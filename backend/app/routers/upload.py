@@ -1,23 +1,19 @@
-import hashlib
 import logging
-import shutil
-from datetime import datetime
 from pathlib import Path
 from typing import Annotated
 
-import aiofiles
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, status
 from fastapi.responses import JSONResponse
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.db.session import get_db_session
 from app.routers.dependencies import require_api_key
-from app.schemas.news import NewsUploadRequest, NewsUploadResponse
-from app.services.upload_service import bulk_create_news_articles
-
-UPLOAD_DIR = Path("/data/uploads")
-CHUNK_DIR = Path("/data/uploads/chunks")
-CHUNK_SIZE = 1024 * 1024
+from app.schemas.upload import (
+    NewsArticleUploadRequest,
+    NewsArticleUploadResponse,
+    ChunkedUploadResponse,
+)
+from app.services.upload_service import create_news_article, process_chunked_upload
 
 logger = logging.getLogger(__name__)
 
@@ -33,23 +29,7 @@ health_router = APIRouter(
 )
 
 
-def sanitize_filename(filename: str) -> str:
-    safe = "".join(c for c in filename if c.isalnum() or c in "._-")
-    if not safe or ".." in safe:
-        raise HTTPException(status_code=400, detail="Invalid filename")
-    return safe
-
-
-async def calculate_hash(filepath: Path) -> str:
-    """Calculate SHA256 hash of file."""
-    sha256 = hashlib.sha256()
-    async with aiofiles.open(filepath, "rb") as f:
-        while chunk := await f.read(8192):
-            sha256.update(chunk)
-    return sha256.hexdigest()
-
-
-@router.post("/chunked")
+@router.post("/chunked", response_model=ChunkedUploadResponse)
 async def upload_chunked(
     chunk: UploadFile,
     source_url: Annotated[str, Query()],
@@ -59,116 +39,63 @@ async def upload_chunked(
     original_filename: Annotated[str, Query()],
     total_file_size: Annotated[int, Query()],
     chunk_size: Annotated[int, Query()],
-):
-    if not 1 <= chunk_index <= total_chunks:
-        raise HTTPException(400, f"Invalid chunk_index: {chunk_index}")
-
-    safe_filename = sanitize_filename(original_filename)
-    session_dir = CHUNK_DIR / sanitize_filename(upload_session_id)
-    session_dir.mkdir(parents=True, exist_ok=True)
-
-    chunk_path = session_dir / f"chunk_{chunk_index:04d}"
-
-    async with aiofiles.open(chunk_path, "wb") as f:
-        while data := await chunk.read(CHUNK_SIZE):
-            await f.write(data)
-
-    logger.info(f"Chunk {chunk_index}/{total_chunks} received for {safe_filename}")
-
-    if chunk_index != total_chunks:
-        return JSONResponse(
-            status_code=status.HTTP_200_OK,
-            content={
-                "status": "chunk_received",
-                "chunk_index": chunk_index,
-                "total_chunks": total_chunks,
-            },
-        )
-
-    missing = [
-        i
-        for i in range(1, total_chunks + 1)
-        if not (session_dir / f"chunk_{i:04d}").exists()
-    ]
-    if missing:
-        raise HTTPException(400, f"Missing chunks: {missing}")
-
-    date_dir = UPLOAD_DIR / datetime.now().strftime("%Y-%m-%d")
-    date_dir.mkdir(parents=True, exist_ok=True)
-
-    final_path = date_dir / safe_filename
-    temp_path = final_path.with_suffix(final_path.suffix + ".tmp")
-
+) -> ChunkedUploadResponse:
+    """
+    Upload file chunks. Assembles final file when all chunks are received.
+    """
     try:
-        async with aiofiles.open(temp_path, "wb") as out:
-            for i in range(1, total_chunks + 1):
-                async with aiofiles.open(
-                    session_dir / f"chunk_{i:04d}", "rb"
-                ) as chunk_file:
-                    while data := await chunk_file.read(CHUNK_SIZE):
-                        await out.write(data)
-
-        actual_size = temp_path.stat().st_size
-        if actual_size != total_file_size:
-            temp_path.unlink()
-            raise HTTPException(
-                500, f"Size mismatch: expected {total_file_size}, got {actual_size}"
-            )
-
-        file_hash = await calculate_hash(temp_path)
-        shutil.move(str(temp_path), str(final_path))
-        shutil.rmtree(session_dir, ignore_errors=True)
-
-        logger.info(
-            f"Assembled {safe_filename} ({actual_size:,} bytes) from {total_chunks} chunks"
+        return await process_chunked_upload(
+            chunk=chunk,
+            source_url=source_url,
+            upload_session_id=upload_session_id,
+            chunk_index=chunk_index,
+            total_chunks=total_chunks,
+            original_filename=original_filename,
+            total_file_size=total_file_size,
+            chunk_size=chunk_size,
         )
-
-        return JSONResponse(
-            status_code=status.HTTP_201_CREATED,
-            content={
-                "status": "completed",
-                "filename": safe_filename,
-                "size": actual_size,
-                "hash": file_hash,
-                "path": str(final_path.relative_to(UPLOAD_DIR)),
-                "source_url": source_url,
-                "uploaded_at": datetime.now().isoformat(),
-            },
-        )
-
-    except HTTPException:
-        raise
     except Exception as e:
-        temp_path.unlink(missing_ok=True)
-        logger.exception(f"Failed to assemble {safe_filename}")
-        raise HTTPException(500, f"Assembly failed: {e}")
+        logger.exception("Failed to process chunked upload")
+        raise HTTPException(500, f"Failed to process chunked upload: {e}")
 
 
-@router.post("/news", response_model=NewsUploadResponse)
-async def upload_news_articles(
-    request: NewsUploadRequest,
+@router.post("/news/article", response_model=NewsArticleUploadResponse)
+async def upload_news_article(
+    request: NewsArticleUploadRequest,
     db: AsyncSession = Depends(get_db_session),
-) -> NewsUploadResponse:
+) -> NewsArticleUploadResponse:
+
     try:
-        return await bulk_create_news_articles(db, request.articles)
+        return await create_news_article(db, request.article)
     except Exception as e:
-        logger.exception("Failed to upload news articles")
-        raise HTTPException(500, f"Failed to upload news articles: {e}")
+        logger.exception("Failed to upload news article")
+        raise HTTPException(500, f"Failed to upload news article: {e}")
 
 
 @health_router.get("/health")
 async def health():
+    from app.services.upload_service import s3_client, cache
+
     try:
-        UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-        test = UPLOAD_DIR / ".health"
-        test.touch()
-        test.unlink()
+        # Test S3 connection by uploading and deleting a test file
+        test_key = ".health_check"
+        test_data = b"health_check"
+        await s3_client.upload(test_key, test_data)
+        await s3_client.delete_many([test_key])
+
+        # Test Redis connection
+        redis_ok = False
+        if cache.redis:
+            await cache.redis.ping()
+            redis_ok = True
+
         return JSONResponse(
             status_code=status.HTTP_200_OK,
-            content={"status": "healthy", "writable": True},
+            content={"status": "healthy", "s3": True, "redis": redis_ok},
         )
-    except Exception:
+    except Exception as e:
+        logger.exception("Health check failed")
         return JSONResponse(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            content={"status": "degraded", "writable": False},
+            content={"status": "degraded", "error": str(e)},
         )

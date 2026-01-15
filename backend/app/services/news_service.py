@@ -1,5 +1,6 @@
 from sqlmodel import select, func
 from sqlmodel.ext.asyncio.session import AsyncSession
+
 from app.db.models.news import NewsArticle
 from app.schemas.news import NewsListResponse, NewsArticleResponse
 
