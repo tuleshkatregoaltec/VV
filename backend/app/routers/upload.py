@@ -64,7 +64,6 @@ async def upload_news_article(
     request: NewsArticleUploadRequest,
     db: AsyncSession = Depends(get_db_session),
 ) -> NewsArticleUploadResponse:
-
     try:
         return await create_news_article(db, request.article)
     except Exception as e:

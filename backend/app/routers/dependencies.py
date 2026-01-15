@@ -22,11 +22,12 @@ posthog_client = Posthog(
 from app.providers.auth.scopes import AuthScopes
 from app.providers.auth.platform_user import PlatformUser
 
+
 async def require_auth(request: Request) -> PlatformUser:
     """Dependency to require authentication on routes"""
-    if (not request.user.is_authenticated):
+    if not request.user.is_authenticated:
         raise HTTPException(status_code=401, detail="Not authenticated")
-    
+
     return request.user
 
 
@@ -35,7 +36,7 @@ async def require_admin(request: Request) -> PlatformUser:
     # note that scopes will be empty if user is not authenticated
     if AuthScopes.GLOBAL_ADMIN.value not in request.auth.scopes:
         raise HTTPException(status_code=403, detail="Admin access required")
-    
+
     return request.user
 
 
@@ -46,7 +47,8 @@ async def require_api_key(x_api_key: str = Header(...)) -> None:
 
 
 async def require_token_quota(
-    request: Request, db: AsyncSession = Depends(get_db_session),
+    request: Request,
+    db: AsyncSession = Depends(get_db_session),
     current_user: PlatformUser = Depends(require_auth),
 ) -> None:
     """Dependency to check user has token quota remaining"""
@@ -74,13 +76,15 @@ async def require_token_quota(
             # Add organization info if available
 
             organization = await get_organization_for_user(db, current_user.id)
-            if (organization):
+            if organization:
                 event_properties["organization_id"] = organization.id
                 event_properties["organization_name"] = organization.name
 
             # Capture the rate limit event
             posthog_client.capture(
-                distinct_id=current_user.id, event="rate_limit_exceeded", properties=event_properties
+                distinct_id=current_user.id,
+                event="rate_limit_exceeded",
+                properties=event_properties,
             )
         except Exception as e:
             # Don't block the request if PostHog capture fails

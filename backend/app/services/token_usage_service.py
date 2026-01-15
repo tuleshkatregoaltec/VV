@@ -13,11 +13,9 @@ logger = logging.getLogger(__name__)
 
 
 class TokenUsageService:
-
     async def get_today_usage(
         self, db: AsyncSession, user_id: str
     ) -> Optional[UserTokenUsage]:
-
         today = date.today()
         stmt = select(UserTokenUsage).where(
             UserTokenUsage.user_id == user_id, UserTokenUsage.date == today
@@ -33,7 +31,6 @@ class TokenUsageService:
         completion_tokens: int,
         total_tokens: int,
     ) -> UserTokenUsage:
-
         today = date.today()
         now = datetime.now(timezone.utc)
 
@@ -60,7 +57,6 @@ class TokenUsageService:
         completion_tokens: int,
         total_tokens: int,
     ) -> UserTokenUsage:
-
         usage_record.prompt_tokens += prompt_tokens
         usage_record.completion_tokens += completion_tokens
         usage_record.total_tokens += total_tokens
@@ -79,7 +75,6 @@ class TokenUsageService:
         completion_tokens: int,
         total_tokens: int,
     ) -> UserTokenUsage:
-
         existing = await self.get_today_usage(db, user_id)
 
         if existing:
@@ -93,10 +88,7 @@ class TokenUsageService:
                 db, user_id, prompt_tokens, completion_tokens, total_tokens
             )
 
-    async def update_user_limit(
-        self, user_id: str, new_limit: int
-    ) -> PlatformUser:
-        
+    async def update_user_limit(self, user_id: str, new_limit: int) -> PlatformUser:
         user = await get_user_by_id(user_id)
 
         if not user:
@@ -105,7 +97,7 @@ class TokenUsageService:
         user.metadata.daily_token_limit = new_limit
 
         update_user_metadata(user)
-        #updated by auth: user.updated_at = datetime.now(timezone.utc)
+        # updated by auth: user.updated_at = datetime.now(timezone.utc)
 
         return user
 

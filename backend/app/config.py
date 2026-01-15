@@ -33,7 +33,7 @@ class Settings(BaseSettings):
     # Auth
     AUTH_ADMIN_EMAIL: str
     AUTH_ADMIN_PASSWORD: str
-    
+
     # PostHog
     POSTHOG_API_KEY: str
     POSTHOG_HOST: str

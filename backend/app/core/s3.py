@@ -50,4 +50,6 @@ class S3Client:
             return
         async with self.client() as s3:
             objects = [{"Key": key} for key in keys]
-            await s3.delete_objects(Bucket=self.bucket_name, Delete={"Objects": objects})
+            await s3.delete_objects(
+                Bucket=self.bucket_name, Delete={"Objects": objects}
+            )

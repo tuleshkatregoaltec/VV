@@ -17,6 +17,7 @@ auth_client = AsyncGoTrueClient(url="https://auth.vitevue.com")
 
 admin_auth = AdminAuth()
 
+
 async def get_auth_user(jwt: str) -> Optional[AuthUser]:
     """
     Get the supabase auth user object for the given jwt, if valid.
@@ -26,13 +27,14 @@ async def get_auth_user(jwt: str) -> Optional[AuthUser]:
     except AuthApiError:
         # invalid token, token not valid
         return None
-    
+
     return user_response.user
 
 
 async def logout_user(user: PlatformUser):
     await auth_client.admin.sign_out(user.token)
     return RedirectResponse(url=settings.FRONTEND_URL)
+
 
 @admin_auth.with_admin_client()
 async def update_user_metadata(user: PlatformUser, **kwargs):
@@ -41,7 +43,7 @@ async def update_user_metadata(user: PlatformUser, **kwargs):
     update_request["user_metadata"] = user.metadata
     try:
         await client.admin.update_user_by_id(user.id, update_request)
-    except (ValueError, AuthApiError): # invalid uuid, user not found
+    except (ValueError, AuthApiError):  # invalid uuid, user not found
         logger.error(f"Failed to update metadata for user {user.id}")
 
 
@@ -53,6 +55,5 @@ async def get_user_by_id(id: str, **kwargs):
         user_response = await client.admin.get_user_by_id(id)
 
         return PlatformUser(None, user_response.user)
-    except (ValueError, AuthApiError): # invalid uuid, user not found
+    except (ValueError, AuthApiError):  # invalid uuid, user not found
         return None
-

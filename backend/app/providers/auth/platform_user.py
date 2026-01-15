@@ -2,11 +2,12 @@ from starlette.authentication import BaseUser, AuthCredentials
 
 
 from supabase_auth import User
+import dataclasses
 
 from app.providers.auth.scopes import AuthScopes
 
 import dataclasses
-
+from pydantic import Field
 
 @dataclasses.dataclass
 class UserRoles:
@@ -122,11 +123,8 @@ class PlatformUser(BaseUser):
         return {
             "id": self.auth_user.id,
             "email": self.auth_user.email,
-            # TODO: populate below
-            "first_name": "First", # TODO: require first name
-            "last_name": "Last", # TODO: see above
-            "organization_id": "ORG_ID",
-            "organization_name": "ORG_NAME",
+            "first_name": self.metadata.first_name,
+            "last_name": self.metadata.last_name,
             "role": role
         }
     

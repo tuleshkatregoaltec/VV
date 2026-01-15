@@ -166,7 +166,6 @@ async def update_user(
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-
     if user_update.is_active is not None:
         user.metadata.is_active = user_update.is_active
     if user_update.daily_token_limit is not None:

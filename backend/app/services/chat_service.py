@@ -21,8 +21,7 @@ cache = RedisCache(settings.REDIS_URL)
 
 # Initialize PostHog client
 posthog_client = Posthog(
-    project_api_key=settings.POSTHOG_API_KEY,
-    host=settings.POSTHOG_HOST
+    project_api_key=settings.POSTHOG_API_KEY, host=settings.POSTHOG_HOST
 )
 
 
@@ -267,9 +266,13 @@ class ChatService:
 
                     # Add organization tracking if available
                     if organization_id:
-                        posthog_params["posthog_groups"] = {"organization": organization_id}
+                        posthog_params["posthog_groups"] = {
+                            "organization": organization_id
+                        }
                         if organization_name:
-                            posthog_params["posthog_properties"]["organization_name"] = organization_name
+                            posthog_params["posthog_properties"][
+                                "organization_name"
+                            ] = organization_name
 
                     stream = await client.chat.completions.create(
                         model=settings.CHAT_MODEL,

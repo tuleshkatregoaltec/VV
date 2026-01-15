@@ -34,7 +34,6 @@ cache = RedisCache(settings.REDIS_URL)
 
 
 def sanitize_filename(filename: str) -> str:
-
     safe = "".join(c for c in filename if c.isalnum() or c in "._-")
     if not safe or ".." in safe:
         raise HTTPException(status_code=400, detail="Invalid filename")
@@ -49,7 +48,6 @@ async def create_news_article(
     db: AsyncSession,
     article_data: NewsArticleCreate,
 ) -> NewsArticleUploadResponse:
-
     stmt = select(NewsArticle).where(NewsArticle.url == article_data.url)
     result = await db.exec(stmt)
     existing_article = result.first()
@@ -97,7 +95,6 @@ async def process_chunked_upload(
     total_file_size: int,
     chunk_size: int,
 ) -> ChunkedUploadResponse:
-
     if not 1 <= chunk_index <= total_chunks:
         raise HTTPException(400, f"Invalid chunk_index: {chunk_index}")
 
@@ -115,7 +112,9 @@ async def process_chunked_upload(
     await cache.redis.sadd(redis_key, chunk_index)  # type: ignore
     await cache.redis.expire(redis_key, 3600)  # type: ignore
 
-    logger.info(f"Chunk {chunk_index}/{total_chunks} uploaded to S3 for {safe_filename}")
+    logger.info(
+        f"Chunk {chunk_index}/{total_chunks} uploaded to S3 for {safe_filename}"
+    )
 
     received_count = await cache.redis.scard(redis_key)  # type: ignore
 
@@ -151,7 +150,10 @@ async def process_chunked_upload(
         final_key = f"files/{date_prefix}/{safe_filename}"
         await s3_client.upload(final_key, final_data)
 
-        chunk_keys = [f"uploads/{upload_session_id}/chunk_{i:04d}" for i in range(1, total_chunks + 1)]
+        chunk_keys = [
+            f"uploads/{upload_session_id}/chunk_{i:04d}"
+            for i in range(1, total_chunks + 1)
+        ]
         await s3_client.delete_many(chunk_keys)
 
         await cache.delete(redis_key)

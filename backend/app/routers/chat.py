@@ -71,7 +71,10 @@ async def update_conversation(
 ):
     """Update a conversation's title"""
     conversation = await chat_service.update_conversation(
-        db=db, conversation_id=conversation_id, user_id=current_user.id, title=request.title
+        db=db,
+        conversation_id=conversation_id,
+        user_id=current_user.id,
+        title=request.title,
     )
     if not conversation:
         raise HTTPException(status_code=404, detail="Conversation not found")

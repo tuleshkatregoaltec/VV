@@ -30,6 +30,7 @@ class Organization(SQLModel, table=True):
     # Relationships
     users: List[str] = Relationship(back_populates="organization")
 
+
 class UserTokenUsage(SQLModel, table=True):
     """Daily token usage tracking per user"""
 

@@ -15,28 +15,32 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 # TODO: add /sync endpoint called from frontend when signed in
 
-#@router.get("/callback")
-#async def auth_callback(
+# @router.get("/callback")
+# async def auth_callback(
 #    request: Request,
 #    code: str | None = None,
 #    db: AsyncSession = Depends(get_db_session),
-#):
+# ):
 #    """Handle OAuth callback from WorkOS"""
 #    if not code:
- #       raise HTTPException(status_code=400, detail="Missing authorization code")
+#       raise HTTPException(status_code=400, detail="Missing authorization code")
 #    return await auth_service.handle_callback(request, code, db)
 
 
 @router.get("/logout")
-async def logout(request: Request,
-                 current_user: PlatformUser = Depends(require_auth),):
+async def logout(
+    request: Request,
+    current_user: PlatformUser = Depends(require_auth),
+):
     """Logout user and clear session"""
     return await auth_service.logout_user(current_user)
 
 
 @router.get("/me")
-async def get_user(request: Request,
-                   current_user: PlatformUser = Depends(require_auth),):
+async def get_user(
+    request: Request,
+    current_user: PlatformUser = Depends(require_auth),
+):
     """Get current authenticated user (protected endpoint)"""
 
     return JSONResponse(content=current_user.get_user_info())

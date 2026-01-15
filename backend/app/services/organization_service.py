@@ -23,7 +23,6 @@ async def get_free_org_id(db: AsyncSession):
     return uuid_str
 
 
-
 async def get_organization_by_id(db: AsyncSession, org_id: str) -> Organization | None:
     """Get organization by ID"""
     return await db.get(Organization, org_id)
@@ -38,13 +37,12 @@ async def get_organization_by_domain(
     )
     return result.first()
 
+
 async def get_organization_for_user(
     db: AsyncSession, user_id: str
 ) -> Organization | None:
     """Get organization by email domain"""
-    result = await db.exec(
-        select(Organization).where(user_id in Organization.users)
-    )
+    result = await db.exec(select(Organization).where(user_id in Organization.users))
     return result.first()
 
 
@@ -53,7 +51,9 @@ async def get_active_user_count(db: AsyncSession, org_id: str) -> int:
     # get list of users
 
     result = await db.exec(
-        select(Organization.users).select_from(Organization).where(Organization.id == org_id)
+        select(Organization.users)
+        .select_from(Organization)
+        .where(Organization.id == org_id)
     )
 
     count = 0
@@ -61,9 +61,9 @@ async def get_active_user_count(db: AsyncSession, org_id: str) -> int:
     for user_id in result:
         user = await get_user_by_id(user_id)
 
-        if (user is not None):
+        if user is not None:
             # user exists
-            if (user.metadata.is_active):
+            if user.metadata.is_active:
                 count += 1
 
     return count
@@ -122,7 +122,7 @@ async def delete_organization(db: AsyncSession, org_id: str) -> bool:
 
     if not organization:
         return False
-    
+
     # Delete locally
     await db.delete(organization)
     await db.commit()
