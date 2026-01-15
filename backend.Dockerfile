@@ -11,4 +11,4 @@ ENV UV_NO_DEV=1
 WORKDIR /app/backend
 RUN uv sync --locked && apt-get update && apt-get install curl -y
 
-CMD ["uv", "run", "gunicorn", "app.main:app", "-w", "4", "-k", "uvicorn.workers.UvicornWorker"]
+CMD ["uv", "run", "gunicorn", "app.main:app", "-w", "4", "-k", "uvicorn.workers.UvicornWorker", "--bind", "0.0.0.0:8000"]
