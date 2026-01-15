@@ -38,6 +38,15 @@ async def get_organization_by_domain(
     )
     return result.first()
 
+async def get_organization_for_user(
+    db: AsyncSession, user_id: str
+) -> Organization | None:
+    """Get organization by email domain"""
+    result = await db.exec(
+        select(Organization).where(user_id in Organization.users)
+    )
+    return result.first()
+
 
 async def get_active_user_count(db: AsyncSession, org_id: str) -> int:
     """Count active users in an organization"""

@@ -18,6 +18,7 @@ class UserMetadata:
     last_name: str =  dataclasses.field(default_factory=str)
     role: str = dataclasses.field(default_factory=UserRoles)
     is_active: bool = dataclasses.field(default_factory=False)
+    daily_token_limit: int = dataclasses.field(default_factory=500000)
 
 
     @classmethod

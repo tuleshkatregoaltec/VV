@@ -11,7 +11,7 @@ router = APIRouter(
 )
 
 
-@router.get("articles", response_model=NewsListResponse)
+@router.get("/articles", response_model=NewsListResponse)
 @cached_endpoint(prefix="news", expire=600)
 async def get_news(
     limit: int = Query(default=20, ge=1, le=100),

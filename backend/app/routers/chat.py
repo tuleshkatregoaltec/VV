@@ -9,7 +9,7 @@ from fastapi.responses import StreamingResponse
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.db.session import get_db_session
-from app.routers.dependencies import require_auth
+from app.routers.dependencies import require_auth, require_token_quota
 from app.schemas.chat import (
     ConversationListResponse,
     ConversationResponse,
@@ -118,6 +118,7 @@ async def send_message(
     request: SendMessageRequest,
     db: AsyncSession = Depends(get_db_session),
     current_user: dict = Depends(require_auth),
+    _: None = Depends(require_token_quota),
 ):
     """Send a message and stream AI response via SSE"""
 
@@ -128,10 +129,12 @@ async def send_message(
                 conversation_id=conversation_id,
                 user_message=request.message,
                 user_id=current_user["id"],
+                organization_id=current_user.get("organization_id"),
+                organization_name=current_user.get("organization_name"),
             ):
                 yield chunk
-        except Exception:
-            logger.exception("Error in send_message endpoint")
+        except Exception as e:
+            logger.exception(f"Error in send_message endpoint: {e}")
             yield f"data: {json.dumps({'type': 'error', 'error': 'Internal server error'})}\n\n"
 
     return StreamingResponse(

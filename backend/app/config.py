@@ -33,6 +33,17 @@ class Settings(BaseSettings):
     # Auth
     AUTH_ADMIN_EMAIL: str
     AUTH_ADMIN_PASSWORD: str
+    
+    # PostHog
+    POSTHOG_API_KEY: str
+    POSTHOG_HOST: str
+
+    # Cloudflare R2 / S3
+    R2_ENDPOINT_URL: str
+    R2_ACCESS_KEY_ID: str
+    R2_SECRET_ACCESS_KEY: str
+    R2_BUCKET_NAME: str
+    R2_REGION: str = "auto"
 
     @field_validator("SERVICE_API_KEY")
     @classmethod

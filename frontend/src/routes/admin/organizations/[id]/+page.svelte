@@ -4,6 +4,7 @@
   import { goto } from '$app/navigation';
   import { admin, type Organization, type OrganizationUser } from '$lib/api/admin';
   import { ApiError } from '$lib/api/client';
+  import UserDetailsModal from '$lib/components/admin/UserDetailsModal.svelte';
 
   export const prerender = false;
 
@@ -18,6 +19,10 @@
   // Editable fields - initialized with defaults, updated after fetch
   let max_users = $state(0);
   let is_active = $state(false);
+
+  // Modal state
+  let selectedUser = $state<OrganizationUser | null>(null);
+  let showUserModal = $state(false);
 
   async function fetchOrganization() {
     loading = true;
@@ -106,6 +111,32 @@
   function fullName(user: OrganizationUser) {
     const name = `${user.first_name || ''} ${user.last_name || ''}`.trim();
     return name || user.email;
+  }
+
+  function openUserModal(user: OrganizationUser) {
+    selectedUser = user;
+    showUserModal = true;
+  }
+
+  function closeUserModal() {
+    showUserModal = false;
+    selectedUser = null;
+  }
+
+  async function handleUserUpdated() {
+    await fetchOrganization();
+  }
+
+  function getUsageColor(percentage: number): string {
+    if (percentage >= 90) return 'bg-red-500';
+    if (percentage >= 70) return 'bg-yellow-500';
+    return 'bg-green-500';
+  }
+
+  function getUsageTextColor(percentage: number): string {
+    if (percentage >= 90) return 'text-red-700';
+    if (percentage >= 70) return 'text-yellow-700';
+    return 'text-green-700';
   }
 
   onMount(fetchOrganization);
@@ -214,6 +245,9 @@
                 Email
               </th>
               <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Token Usage
+              </th>
+              <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Status
               </th>
               <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -226,12 +260,26 @@
           </thead>
           <tbody class="bg-white divide-y divide-gray-200">
             {#each users as user}
-              <tr class="hover:bg-gray-50">
+              <tr class="hover:bg-gray-50 cursor-pointer" onclick={() => openUserModal(user)}>
                 <td class="px-6 py-4 whitespace-nowrap">
                   <div class="text-sm font-medium text-gray-900">{fullName(user)}</div>
                 </td>
                 <td class="px-6 py-4 whitespace-nowrap">
                   <div class="text-sm text-gray-500">{user.email}</div>
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap">
+                  <!-- Token Usage Indicator -->
+                  <div class="flex flex-col items-center">
+                    <span class="text-xs font-medium mb-1 {getUsageTextColor(user.usage_percentage)}">
+                      {user.usage_percentage.toFixed(0)}%
+                    </span>
+                    <div class="w-full max-w-[80px] bg-gray-200 rounded-full h-2 overflow-hidden">
+                      <div
+                        class="h-full {getUsageColor(user.usage_percentage)}"
+                        style="width: {Math.min(user.usage_percentage, 100)}%"
+                      ></div>
+                    </div>
+                  </div>
                 </td>
                 <td class="px-6 py-4 whitespace-nowrap text-center">
                   <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full {user.is_active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}">
@@ -243,7 +291,10 @@
                 </td>
                 <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                   <button
-                    onclick={() => toggleUserActive(user)}
+                    onclick={(e) => {
+                      e.stopPropagation();
+                      toggleUserActive(user);
+                    }}
                     class="text-blue-600 hover:text-blue-900"
                   >
                     {user.is_active ? 'Deactivate' : 'Activate'}
@@ -285,3 +336,11 @@
     </div>
   </div>
 {/if}
+
+<!-- User Details Modal -->
+<UserDetailsModal
+  open={showUserModal}
+  user={selectedUser}
+  onClose={closeUserModal}
+  onUpdated={handleUserUpdated}
+/>

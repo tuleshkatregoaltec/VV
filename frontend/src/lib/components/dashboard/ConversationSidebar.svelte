@@ -147,13 +147,13 @@
   }
 </script>
 
-<div class="flex flex-col h-full bg-white border-r border-gray-200">
-  <div class="p-4 border-b">
+<div class="flex flex-col h-full bg-white border-r border-slate-200">
+  <div class="p-4 border-b border-slate-200">
     <button
       onclick={createNew}
-      class="w-full px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary-dark transition flex items-center justify-center gap-2"
+      class="group w-full px-4 py-3 bg-slate-900 text-white font-medium rounded-xl hover:bg-slate-800 transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2"
     >
-      <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+      <svg class="w-5 h-5 group-hover:rotate-90 transition-transform duration-300" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
       </svg>
       New Chat
@@ -162,30 +162,41 @@
 
   <div class="flex-1 overflow-y-auto">
     {#if loading}
-      <div class="p-4 text-center text-gray-500">
-        <div class="animate-pulse">Loading...</div>
+      <div class="p-6 text-center">
+        <div class="inline-block w-8 h-8 border-3 border-slate-200 border-t-slate-900 rounded-full animate-spin mb-3"></div>
+        <p class="text-slate-600 text-sm font-medium">Loading...</p>
       </div>
     {:else if error}
-      <div class="p-4 text-center">
-        <p class="text-red-500 text-sm mb-2">{error}</p>
+      <div class="p-6 text-center">
+        <div class="w-12 h-12 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-3">
+          <svg class="w-6 h-6 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+        </div>
+        <p class="text-red-600 text-sm mb-3">{error}</p>
         <button
           onclick={loadConversations}
-          class="text-primary text-sm hover:underline"
+          class="px-3 py-2 bg-red-500 text-white text-sm rounded-lg hover:bg-red-600 transition-all"
         >
           Try again
         </button>
       </div>
     {:else if conversations.length === 0}
-      <div class="p-4 text-center text-gray-500">
-        <p class="text-sm">No conversations yet</p>
-        <p class="text-xs mt-1">Click "New Chat" to start</p>
+      <div class="p-6 text-center">
+        <div class="w-16 h-16 bg-slate-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
+          <svg class="w-8 h-8 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+          </svg>
+        </div>
+        <p class="text-slate-700 font-medium text-sm mb-1">No conversations yet</p>
+        <p class="text-slate-500 text-xs">Click "New Chat" to start</p>
       </div>
     {:else}
       {#each conversations as conv (conv.id)}
         <div
-          class="relative w-full border-b transition {selectedId === conv.id
-            ? 'bg-primary-pale border-l-4 border-l-primary'
-            : ''}"
+          class="relative w-full border-b border-slate-100 transition-all {selectedId === conv.id
+            ? 'bg-slate-100 border-l-4 border-l-slate-900'
+            : 'hover:bg-slate-50'}"
         >
           {#if renamingId === conv.id}
             <div class="p-4">
@@ -196,18 +207,18 @@
                   if (e.key === 'Enter') saveRename(conv.id);
                   if (e.key === 'Escape') cancelRename();
                 }}
-                class="w-full px-2 py-1 text-sm border border-primary rounded focus:outline-none focus:ring-2 focus:ring-primary"
+                class="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-900/20 focus:border-slate-900 transition-all"
               />
-              <div class="flex gap-2 mt-2">
+              <div class="flex gap-2 mt-3">
                 <button
                   onclick={() => saveRename(conv.id)}
-                  class="px-3 py-1 text-xs bg-primary text-white rounded hover:bg-primary-dark"
+                  class="flex-1 px-3 py-2 text-xs font-medium bg-slate-900 text-white rounded-lg hover:bg-slate-800 transition-all"
                 >
                   Save
                 </button>
                 <button
                   onclick={cancelRename}
-                  class="px-3 py-1 text-xs bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
+                  class="flex-1 px-3 py-2 text-xs font-medium bg-slate-200 text-slate-700 rounded-lg hover:bg-slate-300 transition-all"
                 >
                   Cancel
                 </button>
@@ -219,12 +230,15 @@
                 selectedId = conv.id;
                 onSelect(conv.id);
               }}
-              class="w-full p-4 pr-12 text-left hover:bg-gray-50 transition"
+              class="w-full p-4 pr-12 text-left transition-all group"
             >
-              <div class="font-medium text-sm truncate">
+              <div class="font-semibold text-sm truncate text-slate-900 group-hover:text-slate-700">
                 {conv.title || 'New Conversation'}
               </div>
-              <div class="text-xs text-gray-500 mt-1">
+              <div class="text-xs text-slate-500 mt-1 flex items-center gap-1.5">
+                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
                 {formatDate(conv.updated_at)}
               </div>
             </button>
@@ -232,34 +246,35 @@
             <!-- Three-dot menu button -->
             <button
               onclick={(e) => toggleMenu(conv.id, e)}
-              class="absolute top-4 right-4 p-1 hover:bg-gray-200 rounded transition"
+              class="absolute top-4 right-4 p-1.5 hover:bg-slate-200 rounded-lg transition-all {selectedId === conv.id ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}"
               aria-label="Conversation options"
             >
-              <svg class="w-5 h-5 text-gray-600" fill="currentColor" viewBox="0 0 20 20">
+              <svg class="w-4 h-4 text-slate-600" fill="currentColor" viewBox="0 0 20 20">
                 <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" />
               </svg>
             </button>
 
             <!-- Dropdown menu -->
             {#if openMenuId === conv.id}
-              <div class="absolute right-4 top-12 bg-white border border-gray-200 rounded-lg shadow-lg z-10 min-w-[150px]">
+              <div class="absolute right-4 top-12 bg-white border border-slate-200 rounded-xl shadow-xl z-10 min-w-[160px] overflow-hidden">
                 <button
                   onclick={() => startRename(conv)}
-                  class="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2"
+                  class="w-full px-4 py-2.5 text-left text-sm hover:bg-slate-50 flex items-center gap-2 transition-colors text-slate-700"
                 >
                   <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                   </svg>
-                  Rename
+                  <span class="font-medium">Rename</span>
                 </button>
+                <div class="h-px bg-slate-100"></div>
                 <button
                   onclick={() => showDeleteConfirm(conv.id)}
-                  class="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 flex items-center gap-2"
+                  class="w-full px-4 py-2.5 text-left text-sm text-red-600 hover:bg-red-50 flex items-center gap-2 transition-colors"
                 >
                   <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                   </svg>
-                  Delete
+                  <span class="font-medium">Delete</span>
                 </button>
               </div>
             {/if}

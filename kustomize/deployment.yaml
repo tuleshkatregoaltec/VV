@@ -64,6 +64,41 @@ spec:
             secretKeyRef:
               name: vitevue-backend-creds
               key: service_api_key
+        - name: POSTHOG_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: vitevue-backend-creds
+              key: posthog_api_key
+        - name: POSTHOG_HOST
+          valueFrom:
+            secretKeyRef:
+              name: vitevue-backend-creds
+              key: posthog_host
+        - name: R2_ENDPOINT_URL
+          valueFrom:
+            secretKeyRef:
+              name: vitevue-backend-creds
+              key: r2_endpoint_url
+        - name: R2_ACCESS_KEY_ID
+          valueFrom:
+            secretKeyRef:
+              name: vitevue-backend-creds
+              key: r2_access_key_id
+        - name: R2_SECRET_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: vitevue-backend-creds
+              key: r2_secret_access_key
+        - name: R2_BUCKET_NAME
+          valueFrom:
+            secretKeyRef:
+              name: vitevue-backend-creds
+              key: r2_bucket_name
+        - name: R2_REGION
+          valueFrom:
+            secretKeyRef:
+              name: vitevue-backend-creds
+              key: r2_region
         # below needs modifying
         livenessProbe:
           exec:
