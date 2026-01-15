@@ -1,5 +1,7 @@
 import { env } from '$env/dynamic/public';
 
+import { get_access_token } from './auth_state';
+
 export class ApiError extends Error {
     constructor(
         message: string,
@@ -19,6 +21,12 @@ export interface RequestOptions {
 
 export async function api<T>(endpoint: string, options: RequestOptions = {}): Promise<T> {
     const { method = 'GET', body, headers = {} } = options;
+
+    // if access token available, add auth header. 
+    const access_token = await get_access_token();
+    if (access_token) {
+        headers["Authorization"] = `Bearer ${access_token}`
+    }
 
     const config: RequestInit = {
         method,
