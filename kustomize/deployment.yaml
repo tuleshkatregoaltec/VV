@@ -99,6 +99,16 @@ spec:
             secretKeyRef:
               name: vitevue-backend-creds
               key: r2_region
+        - name: AUTH_ADMIN_EMAIL
+          valueFrom:
+            secretKeyRef:
+              name: vitevue-backend-creds
+              key: auth_admin_email
+        - name: AUTH_ADMIN_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: vitevue-backend-creds
+              key: auth_admin_password
         # below needs modifying
         livenessProbe:
           exec:
