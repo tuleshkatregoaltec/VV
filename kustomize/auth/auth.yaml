@@ -52,19 +52,23 @@ spec:
           value: user
         #region SMTP (Amazon SES Frankfurt - eu-central-1)
         - name: GOTRUE_SMTP_HOST
-          value: email-smtp.eu-central-1.amazonaws.com
+          value: smtp.sendgrid.net
+        #- name: GOTRUE_SMTP_HOST
+        #  value: email-smtp.eu-central-1.amazonaws.com
         - name: GOTRUE_SMTP_PORT
           value: '587'
         - name: GOTRUE_SMTP_USER
           valueFrom:
             secretKeyRef:
               name: vitevue-backend-creds
-              key: ses_username
+              key: sendgrid_username
+              #key: ses_username
         - name: GOTRUE_SMTP_PASS
           valueFrom:
             secretKeyRef:
               name: vitevue-backend-creds
-              key: ses_password
+              key: sendgrid_password
+              #key: ses_password
         - name: GOTRUE_SMTP_ADMIN_EMAIL
           value: no-reply@vitevue.com
         - name: GOTRUE_SMTP_SENDER_NAME
