@@ -42,6 +42,7 @@ dependencies = [
     "posthog>=7.5.1",
     "aioboto3>=13.3.0",
     "supabase-auth>=2.27.2",
+    "gunicorn>=23.0.0",
 ]
 
 [tool.uv]
