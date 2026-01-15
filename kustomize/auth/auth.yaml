@@ -2,6 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: vitevue-platform-auth
+  namespace: vitevue-platform-backend
 spec:
   replicas: 1
   selector:
@@ -12,6 +13,54 @@ spec:
       labels:
         com.vitevue.k8s.service: vitevue-platform-auth
     spec:
+      initContainers:
+      - name: create-auth-db-user
+        image: postgres:18-alpine
+        env:
+        - name: DB_HOST
+          value: vitevue-platform-backend-postgresql-hl
+        - name: DB_PORT
+          value: '5432'
+        - name: DB_NAME
+          value: vitevue
+        - name: ADMIN_USER
+          value: postgres
+        - name: ADMIN_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: vitevue-backend-creds
+              key: postgres_admin_pass
+        - name: AUTH_USER
+          value: supabase_auth_admin
+        - name: AUTH_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: vitevue-backend-creds
+              key: database_pass_auth
+        command: ["sh","-lc"]
+        args:
+        - |
+          set -euo pipefail
+          export PGPASSWORD="$ADMIN_PASSWORD"
+
+          psql -h "$DB_HOST" -p "$DB_PORT" -U "$ADMIN_USER" -d "$DB_NAME" -v ON_ERROR_STOP=1 \
+            -v auth_user="$AUTH_USER" \
+            -v auth_pass="$AUTH_PASSWORD" \
+            <<'SQL'
+          -- Create role only if missing
+          SELECT format(
+            'create role %I login noinherit createrole noreplication password %L',
+            :'auth_user',
+            :'auth_pass'
+          )
+          WHERE NOT EXISTS (
+            SELECT 1 FROM pg_roles WHERE rolname = :'auth_user'
+          )\gexec
+
+          -- Ensure schema + search_path
+          create schema if not exists auth authorization :"auth_user";
+          alter role :"auth_user" set search_path = 'auth';
+          SQL
       containers:
       - name: auth
         image: ghcr.io/supabase/auth:v2.185.0
@@ -36,13 +85,13 @@ spec:
           value: https://auth.vitevue.com
         - name: GOTRUE_DB_DRIVER
           value: postgres
-        - name: DATABASE_URL
+        - name: DB_NAMESPACE
+          value: "auth"
+        - name: GOTRUE_DB_DATABASE_URL
           valueFrom:
             secretKeyRef:
               name: vitevue-backend-creds
-              key: database_url
-        - name: GOAUTH_DB_NAMESPACE
-          value: goauth
+              key: database_url_auth
         - name: GOTRUE_JWT_SECRET
           valueFrom:
             secretKeyRef:
