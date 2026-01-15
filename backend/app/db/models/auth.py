@@ -27,36 +27,4 @@ class Organization(SQLModel, table=True):
     )
 
     # Relationships
-    users: List["User"] = Relationship(back_populates="organization")
-
-
-class User(SQLModel, table=True):
-    """User model linked to Organization with WorkOS authentication"""
-
-    __tablename__: LiteralString = "users"
-
-    # Primary key
-    id: str = Field(primary_key=True)
-
-    # User details
-    email: str = Field(unique=True, index=True)
-    first_name: Optional[str] = None
-    last_name: Optional[str] = None
-    organization_id: Optional[str] = Field(default=None, foreign_key="organizations.id")
-    role: str = Field(default="user")
-    is_active: bool = Field(default=True)
-    created_at: datetime = Field(
-        sa_column=Column(DateTime(timezone=True), nullable=False),
-        default_factory=lambda: datetime.now(timezone.utc),
-    )
-    updated_at: datetime = Field(
-        sa_column=Column(DateTime(timezone=True), nullable=False),
-        default_factory=lambda: datetime.now(timezone.utc),
-    )
-    last_login: datetime = Field(
-        sa_column=Column(DateTime(timezone=True)),
-        default_factory=lambda: datetime.now(timezone.utc),
-    )
-
-    # Relationships
-    organization: Optional["Organization"] = Relationship(back_populates="users")
+    users: List[str] = Relationship(back_populates="organization")

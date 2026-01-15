@@ -6,7 +6,6 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.db.models import User
 from app.db.session import get_db_session
 from app.routers.dependencies import require_admin
 from app.schemas.organization import (
@@ -24,6 +23,8 @@ from app.services.organization_service import (
     list_organizations as list_organizations_service,
     update_organization as update_organization_service,
 )
+
+from app.services.auth_service import get_user_by_id, update_user_metadata
 
 logger = logging.getLogger(__name__)
 
@@ -150,20 +151,18 @@ async def update_user(
 ) -> dict:
     """Update user is_active status"""
 
-    user = await db.get(User, user_id)
+    user = await get_user_by_id(user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    user.is_active = user_update.is_active
-    user.updated_at = datetime.now(timezone.utc)
+    user.metadata.is_active = user_update.is_active
+    # (updated by goauth) user.updated_at = datetime.now(timezone.utc)
 
-    db.add(user)
-    await db.commit()
-    await db.refresh(user)
+    update_user_metadata(user)
 
     return {
         "id": user.id,
         "email": user.email,
-        "is_active": user.is_active,
-        "updated_at": user.updated_at,
+        "is_active": user.metadata.is_active,
+        "updated_at": user.auth_user.updated_at,
     }

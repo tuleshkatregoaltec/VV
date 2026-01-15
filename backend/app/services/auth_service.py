@@ -1,28 +1,21 @@
-import asyncio
 import logging
-from datetime import datetime, timezone
-from typing import Dict, Optional
+from typing import Optional
 
-from fastapi import HTTPException, Request
 from fastapi.responses import RedirectResponse
-from sqlmodel.ext.asyncio.session import AsyncSession
 
-from supabase_auth import AsyncGoTrueClient, User as AuthUser
+from supabase_auth import AdminUserAttributes, AsyncGoTrueClient, User as AuthUser
 from supabase_auth.errors import AuthApiError
 
 from app.config import settings
-from app.db.models import User
-from app.services.organization_service import (
-    get_active_user_count,
-    get_organization_by_domain,
-    get_organization_by_id,
-)
-
 from app.providers.auth.platform_user import PlatformUser
+
+from app.services.admin_auth_service import AdminAuth
 
 logger = logging.getLogger(__name__)
 
 auth_client = AsyncGoTrueClient(url="https://auth.vitevue.com")
+
+admin_auth = AdminAuth()
 
 async def get_auth_user(jwt: str) -> Optional[AuthUser]:
     """
@@ -39,5 +32,27 @@ async def get_auth_user(jwt: str) -> Optional[AuthUser]:
 
 async def logout_user(user: PlatformUser):
     await auth_client.admin.sign_out(user.token)
-
     return RedirectResponse(url=settings.FRONTEND_URL)
+
+@admin_auth.with_admin_client()
+async def update_user_metadata(user: PlatformUser, **kwargs):
+    client: AsyncGoTrueClient = kwargs["client"]
+    update_request = AdminUserAttributes()
+    update_request["user_metadata"] = user.metadata
+    try:
+        await client.admin.update_user_by_id(user.id, update_request)
+    except (ValueError, AuthApiError): # invalid uuid, user not found
+        logger.error(f"Failed to update metadata for user {user.id}")
+
+
+@admin_auth.with_admin_client()
+async def get_user_by_id(id: str, **kwargs):
+    client: AsyncGoTrueClient = kwargs["client"]
+
+    try:
+        user_response = await client.admin.get_user_by_id(id)
+
+        return PlatformUser(None, user_response.user)
+    except (ValueError, AuthApiError): # invalid uuid, user not found
+        return None
+

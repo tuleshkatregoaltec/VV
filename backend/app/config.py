@@ -30,6 +30,10 @@ class Settings(BaseSettings):
     OPENROUTER_BASE_URL: str = "https://openrouter.ai/api/v1"
     CHAT_MODEL: str = "anthropic/claude-3-haiku"
 
+    # Auth
+    AUTH_ADMIN_EMAIL: str
+    AUTH_ADMIN_PASSWORD: str
+
     @field_validator("SERVICE_API_KEY")
     @classmethod
     def validate_service_api_key(cls, v: str) -> str:

@@ -1,8 +1,31 @@
 from starlette.authentication import BaseUser, AuthCredentials
 
+
 from supabase_auth import User
 
 from app.providers.auth.scopes import AuthScopes
+
+import dataclasses
+
+
+@dataclasses.dataclass
+class UserRoles:
+    roles: list[str] = dataclasses.field(default_factory=[])
+
+@dataclasses.dataclass
+class UserMetadata:
+    first_name: str =  dataclasses.field(default_factory=str)
+    last_name: str =  dataclasses.field(default_factory=str)
+    role: str = dataclasses.field(default_factory=UserRoles)
+    is_active: bool = dataclasses.field(default_factory=False)
+
+
+    @classmethod
+    def parse_dict(cls, data: dict):
+        return cls(**data)
+    
+    def to_dict(self) -> dict:
+        return dataclasses.asdict(self)
 
 
 class PlatformUser(BaseUser):
@@ -10,6 +33,12 @@ class PlatformUser(BaseUser):
         # JWT needed to be able to sign out specific users, this class only has a lifecycle of the current request.
         self.__jwt: str = jwt
         self.__auth_user: User = user
+
+
+        if hasattr(self.auth_user, "user_metadata"):
+            self.__metadata = UserMetadata.parse_dict(self.auth_user.user_metadata)
+        else:
+            self.__metadata = UserMetadata()
 
     @property
     # TODO: check if *still* authed?
@@ -37,6 +66,19 @@ class PlatformUser(BaseUser):
         JWT token used this request to create this object
         """
         return self.__jwt
+
+    @property
+    def id(self) -> str:
+        return self.__auth_user.id
+    
+    @property
+    def email(self) -> str:
+        return self.__auth_user.email
+    
+    @property
+    def first_name(self) -> str:
+        return self.__auth_user
+    
     
     #@property.setter
     #def auth_user(self, value: User):
@@ -46,18 +88,15 @@ class PlatformUser(BaseUser):
 
     #def display_name(self) -> str:
     #    return self.username
-    
-    def get_user_metadata(self, query: str):
-        if hasattr(self.auth_user, "user_metadata"):
-            if query in self.auth_user.user_metadata:
-                return self.auth_user.user_metadata[query]
-        
 
+
+    
+    @property
+    def metadata(self):
+        return self.__metadata
+        
     def is_admin(self):
-        role = self.get_user_metadata("role")
-        if role is not None:
-            return role == "admin"
-        return False
+        return "admin" in self.metadata.role
     
     async def get_scopes(self) -> AuthCredentials:
         scopes = AuthCredentials()
@@ -89,3 +128,4 @@ class PlatformUser(BaseUser):
             "organization_name": "ORG_NAME",
             "role": role
         }
+    

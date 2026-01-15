@@ -1,4 +1,5 @@
 import asyncio
+from uuid import uuid4
 from datetime import datetime, timezone
 from typing import Sequence
 
@@ -7,12 +8,20 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from workos import WorkOSClient
 
 from app.config import settings
-from app.db.models import Organization, User
+from app.db.models import Organization
+
+from app.services.auth_service import get_user_by_id
 
 
-workos = WorkOSClient(
-    api_key=settings.WORKOS_API_KEY, client_id=settings.WORKOS_CLIENT_ID
-)
+async def get_free_org_id(db: AsyncSession):
+    done = False
+    while not done:
+        uuid = uuid4()
+        uuid_str = str(uuid)
+
+        done = await get_organization_by_id(db, uuid_str) is None
+    return uuid_str
+
 
 
 async def get_organization_by_id(db: AsyncSession, org_id: str) -> Organization | None:
@@ -32,12 +41,23 @@ async def get_organization_by_domain(
 
 async def get_active_user_count(db: AsyncSession, org_id: str) -> int:
     """Count active users in an organization"""
+    # get list of users
+
     result = await db.exec(
-        select(func.count())
-        .select_from(User)
-        .where(User.organization_id == org_id, User.is_active)
+        select(Organization.users).select_from(Organization).where(Organization.id == org_id)
     )
-    return result.one()
+
+    count = 0
+
+    for user_id in result:
+        user = await get_user_by_id(user_id)
+
+        if (user is not None):
+            # user exists
+            if (user.metadata.is_active):
+                count += 1
+
+    return count
 
 
 async def create_organization(
@@ -45,15 +65,9 @@ async def create_organization(
 ) -> Organization:
     """Create organization in WorkOS and local DB"""
 
-    workos_org = await asyncio.to_thread(
-        workos.organizations.create_organization,
-        name=name,
-        domain_data=[{"domain": domain, "state": "pending"}],
-    )
-
     organization = Organization(
-        id=workos_org.id,
-        name=workos_org.name,
+        id=await get_free_org_id(),
+        name=name,
         email_domain=domain,
         max_users=max_users,
         is_active=True,
@@ -99,9 +113,7 @@ async def delete_organization(db: AsyncSession, org_id: str) -> bool:
 
     if not organization:
         return False
-
-    await asyncio.to_thread(workos.organizations.delete_organization, org_id)
-
+    
     # Delete locally
     await db.delete(organization)
     await db.commit()

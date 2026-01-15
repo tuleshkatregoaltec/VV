@@ -1,4 +1,4 @@
-from .auth import User, Organization
+from .auth import Organization
 from .lookups import PropertyType, PropertySubType
 from .geography import Area, MasterProject
 from .properties import Developer, Project, LandRegistry, Building, Unit
@@ -18,7 +18,6 @@ from .news import NewsArticle
 from .chat import Conversation, Message, ToolCallResult
 
 __all__ = [
-    "User",
     "Organization",
     "PropertyType",
     "PropertySubType",
