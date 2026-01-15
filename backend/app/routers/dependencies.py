@@ -10,7 +10,6 @@ from app.services.auth_service import get_user_by_id
 from app.services.organization_service import get_organization_for_user
 from app.config import settings
 from app.db.session import get_db_session
-from app.db.models.auth import User
 from app.services.token_usage_service import token_usage_service
 
 logger = logging.getLogger(__name__)
@@ -48,14 +47,13 @@ async def require_api_key(x_api_key: str = Header(...)) -> None:
 
 async def require_token_quota(
     request: Request, db: AsyncSession = Depends(get_db_session),
-    current_user: dict = Depends(require_auth),
+    current_user: PlatformUser = Depends(require_auth),
 ) -> None:
     """Dependency to check user has token quota remaining"""
-    user_id = current_user.id
 
     # Get today's usage
-    usage = await token_usage_service.get_today_usage(db, user_id)
-    user_obj = await get_user_by_id(user_id)
+    usage = await token_usage_service.get_today_usage(db, current_user.id)
+    user_obj = await get_user_by_id(current_user.id)
 
     if not user_obj:
         raise HTTPException(status_code=404, detail="User not found")
@@ -66,7 +64,7 @@ async def require_token_quota(
         # Capture PostHog event for rate limit breach
         try:
             event_properties = {
-                "user_id": user_id,
+                "user_id": current_user.id,
                 "tokens_used": tokens_used,
                 "daily_limit": user_obj.metadata.daily_token_limit,
                 "quota_type": "daily_tokens",
@@ -75,14 +73,14 @@ async def require_token_quota(
 
             # Add organization info if available
 
-            organization = await get_organization_for_user(db, user_id)
+            organization = await get_organization_for_user(db, current_user.id)
             if (organization):
                 event_properties["organization_id"] = organization.id
                 event_properties["organization_name"] = organization.name
 
             # Capture the rate limit event
             posthog_client.capture(
-                distinct_id=user_id, event="rate_limit_exceeded", properties=event_properties
+                distinct_id=current_user.id, event="rate_limit_exceeded", properties=event_properties
             )
         except Exception as e:
             # Don't block the request if PostHog capture fails

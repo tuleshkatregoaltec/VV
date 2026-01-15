@@ -19,6 +19,9 @@ from app.schemas.chat import (
     UpdateConversationRequest,
 )
 from app.services.chat_service import chat_service
+from app.services.organization_service import get_organization_for_user
+
+from app.providers.auth.platform_user import PlatformUser
 
 logger = logging.getLogger(__name__)
 
@@ -33,11 +36,11 @@ router = APIRouter(
 async def create_conversation(
     request: CreateConversationRequest,
     db: AsyncSession = Depends(get_db_session),
-    current_user: dict = Depends(require_auth),
+    current_user: PlatformUser = Depends(require_auth),
 ):
     """Create a new conversation"""
     conversation = await chat_service.create_conversation(
-        db=db, user_id=current_user["id"], title=request.title
+        db=db, user_id=current_user.id, title=request.title
     )
     return ConversationResponse.model_validate(conversation)
 
@@ -47,11 +50,11 @@ async def list_conversations(
     limit: int = Query(default=50, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
     db: AsyncSession = Depends(get_db_session),
-    current_user: dict = Depends(require_auth),
+    current_user: PlatformUser = Depends(require_auth),
 ):
     """Get all conversations for current user"""
     conversations = await chat_service.get_user_conversations(
-        db=db, user_id=current_user["id"], limit=limit, offset=offset
+        db=db, user_id=current_user.id, limit=limit, offset=offset
     )
     return ConversationListResponse(
         conversations=[ConversationResponse.model_validate(c) for c in conversations],
@@ -64,11 +67,11 @@ async def update_conversation(
     conversation_id: int,
     request: UpdateConversationRequest,
     db: AsyncSession = Depends(get_db_session),
-    current_user: dict = Depends(require_auth),
+    current_user: PlatformUser = Depends(require_auth),
 ):
     """Update a conversation's title"""
     conversation = await chat_service.update_conversation(
-        db=db, conversation_id=conversation_id, user_id=current_user["id"], title=request.title
+        db=db, conversation_id=conversation_id, user_id=current_user.id, title=request.title
     )
     if not conversation:
         raise HTTPException(status_code=404, detail="Conversation not found")
@@ -79,11 +82,11 @@ async def update_conversation(
 async def delete_conversation(
     conversation_id: int,
     db: AsyncSession = Depends(get_db_session),
-    current_user: dict = Depends(require_auth),
+    current_user: PlatformUser = Depends(require_auth),
 ):
     """Delete a conversation"""
     success = await chat_service.delete_conversation(
-        db=db, conversation_id=conversation_id, user_id=current_user["id"]
+        db=db, conversation_id=conversation_id, user_id=current_user.id
     )
     if not success:
         raise HTTPException(status_code=404, detail="Conversation not found")
@@ -96,12 +99,12 @@ async def get_conversation_messages(
     conversation_id: int,
     limit: int = Query(default=100, ge=1, le=500),
     db: AsyncSession = Depends(get_db_session),
-    current_user: dict = Depends(require_auth),
+    current_user: PlatformUser = Depends(require_auth),
 ):
     """Get messages for a conversation"""
     # Verify ownership
     conversation = await chat_service.get_conversation(
-        db, conversation_id, current_user["id"]
+        db, conversation_id, current_user.id
     )
     if not conversation:
         raise HTTPException(status_code=404, detail="Conversation not found")
@@ -117,20 +120,28 @@ async def send_message(
     conversation_id: int,
     request: SendMessageRequest,
     db: AsyncSession = Depends(get_db_session),
-    current_user: dict = Depends(require_auth),
+    current_user: PlatformUser = Depends(require_auth),
     _: None = Depends(require_token_quota),
 ):
     """Send a message and stream AI response via SSE"""
 
     async def event_stream():
         try:
+            organization = await get_organization_for_user(current_user.id)
+
+            organization_id = None
+            organization_name = None
+            if organization:
+                organization_id = organization.id
+                organization_name = organization.name
+
             async for chunk in chat_service.stream_chat_response(
                 db=db,
                 conversation_id=conversation_id,
                 user_message=request.message,
-                user_id=current_user["id"],
-                organization_id=current_user.get("organization_id"),
-                organization_name=current_user.get("organization_name"),
+                user_id=current_user.id,
+                organization_id=organization_id,
+                organization_name=organization_name,
             ):
                 yield chunk
         except Exception as e:
