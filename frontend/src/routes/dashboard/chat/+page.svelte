@@ -28,15 +28,15 @@
 </svelte:head>
 
 <AppShell showFilters={false}>
-  <div class="flex h-[calc(100vh-64px)]">
-    <div class="w-64 flex-shrink-0">
+  <div class="flex h-[calc(100vh-64px)] bg-background">
+    <div class="w-64 flex-shrink-0 shadow-sm">
       <ConversationSidebar
         bind:selectedId={selectedConversationId}
         onSelect={(id) => (selectedConversationId = id)}
       />
     </div>
 
-    <div class="flex-1">
+    <div class="flex-1 shadow-inner">
       <ChatBox
         bind:conversationId={selectedConversationId}
         initialMessage={initialMessage}
