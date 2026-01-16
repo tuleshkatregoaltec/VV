@@ -16,7 +16,7 @@ class UserRoles(BaseModel):
 
 class UserMetadata(BaseModel):
     provider: str = Field(default="")
-    providers: str = Field(default="")
+    providers: List[str] = Field(default=lambda: list[str])
 
     first_name: str = Field(default="")
     last_name: str = Field(default="")
