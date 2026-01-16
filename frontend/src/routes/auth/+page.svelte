@@ -17,17 +17,14 @@
 		me
 	} from '$lib/api/auth';
 
-	type Tab = 'signin' | 'signup';
-	type Method = 'password' | 'magic';
-	type View = 'form' | 'verify-otp' | 'magic-sent' | 'forgot-password' | 'reset-sent';
+	type View = 'login' | 'signup' | 'verify-otp' | 'magic-sent' | 'forgot-password' | 'reset-sent';
+	type SignupMethod = 'password' | 'magic';
+	type LoginMethod = 'password' | 'magic';
 
-	let activeTab = $state<Tab>('signin');
-	let authMethod = $state<Method>('password');
-	let currentView = $state<View>('form');
-
+	let currentView = $state<View>('login');
+	let email = $state('');
 	let firstName = $state('');
 	let lastName = $state('');
-	let email = $state('');
 	let password = $state('');
 	let confirmPassword = $state('');
 	let otpCode = $state('');
@@ -35,11 +32,13 @@
 	let loading = $state(false);
 	let error = $state('');
 	let resendCountdown = $state(0);
+	let signupMethod = $state<SignupMethod>('password');
+	let loginMethod = $state<LoginMethod>('password');
 
 	let fieldErrors = $state({
+		email: '',
 		firstName: '',
 		lastName: '',
-		email: '',
 		password: '',
 		confirmPassword: ''
 	});
@@ -67,70 +66,74 @@
 		return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 	}
 
-	function validateForm(): boolean {
-		fieldErrors = {
-			firstName: '',
-			lastName: '',
-			email: '',
-			password: '',
-			confirmPassword: ''
-		};
-
-		let isValid = true;
-
-		if (activeTab === 'signup') {
-			if (!firstName.trim()) {
-				fieldErrors.firstName = 'First name is required';
-				isValid = false;
-			}
-			if (!lastName.trim()) {
-				fieldErrors.lastName = 'Last name is required';
-				isValid = false;
-			}
+	function goBack() {
+		currentView = 'login';
+		error = '';
+		password = '';
+		confirmPassword = '';
+		otpCode = '';
+		firstName = '';
+		lastName = '';
+		signupMethod = 'password';
+		if (countdownInterval) {
+			clearInterval(countdownInterval);
 		}
-
-		if (!email.trim()) {
-			fieldErrors.email = 'Email is required';
-			isValid = false;
-		} else if (!validateEmail(email)) {
-			fieldErrors.email = 'Invalid email address';
-			isValid = false;
-		}
-
-		if (authMethod === 'password') {
-			if (!password) {
-				fieldErrors.password = 'Password is required';
-				isValid = false;
-			} else if (activeTab === 'signup' && password.length < 8) {
-				fieldErrors.password = 'Password must be at least 8 characters';
-				isValid = false;
-			}
-
-			if (activeTab === 'signup') {
-				if (!confirmPassword) {
-					fieldErrors.confirmPassword = 'Please confirm your password';
-					isValid = false;
-				} else if (password !== confirmPassword) {
-					fieldErrors.confirmPassword = 'Passwords do not match';
-					isValid = false;
-				}
-			}
-		}
-
-		return isValid;
 	}
 
-	async function handleSignIn() {
-		if (!validateForm()) return;
+	async function handleEmailSubmit() {
+		fieldErrors.email = '';
+		if (!email.trim()) {
+			fieldErrors.email = 'Email is required';
+			return;
+		}
+		if (!validateEmail(email)) {
+			fieldErrors.email = 'Invalid email address';
+			return;
+		}
 
 		loading = true;
 		error = '';
 
 		try {
-			if (authMethod === 'password') {
+			// Check if email exists via backend endpoint
+			const result = await check_email_exists(email);
+			
+			if (result.success && result.data?.exists) {
+				// Email exists, go to login
+				emailExists = true;
+				// For now, default to password if available, else magic link
+				loginMethod = 'password';
+				currentView = 'login';
+			} else {
+				// Email doesn't exist, go to signup
+				emailExists = false;
+				currentView = 'signup';
+			}
+		} catch (err) {
+			// On error, assume signup (new user)
+			emailExists = false;
+			currentView = 'signup';
+		} finally {
+			loading = false;
+		}
+	}
+
+	async function handleLogin() {
+		fieldErrors.password = '';
+		if (loginMethod === 'password') {
+			if (!password) {
+				fieldErrors.password = 'Password is required';
+				return;
+			}
+		}
+
+		loading = true;
+		error = '';
+
+		try {
+			if (loginMethod === 'password') {
 				const result = await login_with_email_pass(email, password);
 				if (result.success) {
-					// Identify user on successful login
 					const user = await me();
 					identifyUser(user);
 					goto('/dashboard');
@@ -150,14 +153,45 @@
 		}
 	}
 
-	async function handleSignUp() {
-		if (!validateForm()) return;
+	async function handleSignup() {
+		fieldErrors.firstName = '';
+		fieldErrors.lastName = '';
+		fieldErrors.password = '';
+		fieldErrors.confirmPassword = '';
+
+		if (!firstName.trim()) {
+			fieldErrors.firstName = 'First name is required';
+			return;
+		}
+		if (!lastName.trim()) {
+			fieldErrors.lastName = 'Last name is required';
+			return;
+		}
+
+		if (signupMethod === 'password') {
+			if (!password) {
+				fieldErrors.password = 'Password is required';
+				return;
+			}
+			if (password.length < 8) {
+				fieldErrors.password = 'Password must be at least 8 characters';
+				return;
+			}
+			if (!confirmPassword) {
+				fieldErrors.confirmPassword = 'Please confirm your password';
+				return;
+			}
+			if (password !== confirmPassword) {
+				fieldErrors.confirmPassword = 'Passwords do not match';
+				return;
+			}
+		}
 
 		loading = true;
 		error = '';
 
 		try {
-			if (authMethod === 'password') {
+			if (signupMethod === 'password') {
 				const result = await sign_up_with_password(email, password, firstName, lastName);
 				if (result.success) {
 					currentView = 'verify-otp';
@@ -190,7 +224,6 @@
 		try {
 			const result = await verify_otp(email, otpCode, 'signup');
 			if (result.success) {
-				// Identify user on successful login
 				const user = await me();
 				identifyUser(user);
 				goto('/dashboard');
@@ -220,12 +253,9 @@
 	}
 
 	async function handleForgotPassword() {
+		fieldErrors.email = '';
 		if (!email.trim()) {
 			fieldErrors.email = 'Email is required';
-			return;
-		}
-		if (!validateEmail(email)) {
-			fieldErrors.email = 'Invalid email address';
 			return;
 		}
 
@@ -243,90 +273,23 @@
 			loading = false;
 		}
 	}
-
-	function switchTab(tab: Tab) {
-		activeTab = tab;
-		error = '';
-		fieldErrors = {
-			firstName: '',
-			lastName: '',
-			email: '',
-			password: '',
-			confirmPassword: ''
-		};
-	}
-
-	function switchMethod(method: Method) {
-		authMethod = method;
-		error = '';
-		password = '';
-		confirmPassword = '';
-	}
-
-	function goBackToForm() {
-		currentView = 'form';
-		error = '';
-		otpCode = '';
-		if (countdownInterval) {
-			clearInterval(countdownInterval);
-		}
-	}
 </script>
 
-<div class="min-h-screen bg-gradient-to-br from-primary-pale via-white to-accent-pale flex items-center justify-center p-4">
+<div class="min-h-screen bg-background flex items-center justify-center p-4">
 	<div class="w-full max-w-md">
-		<div class="bg-white/80 backdrop-blur-xl rounded-xl shadow-lg border border-primary-pale p-8">
-			{#if currentView === 'form'}
-				<div class="mb-8">
-					<h1 class="text-3xl font-bold text-primary mb-2">
-						{activeTab === 'signin' ? 'Welcome Back' : 'Create Account'}
-					</h1>
-					<p class="text-gray-600">
-						{activeTab === 'signin'
-							? 'Sign in to access your dashboard'
-							: 'Sign up to get started'}
-					</p>
-				</div>
-
-				<div class="flex gap-2 mb-6 bg-gray-100 p-1 rounded-lg">
+		<div class="bg-white rounded-xl shadow-lg p-8">
+			{#if currentView === 'login'}
+				<div class="mb-8 flex items-start justify-between">
+					<div>
+						<h1 class="text-3xl font-bold text-primary mb-2">Sign In</h1>
+						<p class="text-gray-600">Welcome back to your account</p>
+					</div>
 					<button
-						onclick={() => switchTab('signin')}
-						class="flex-1 py-2 px-4 rounded-md text-sm font-medium transition-all
-                               {activeTab === 'signin'
-							? 'bg-white text-primary shadow-sm'
-							: 'text-gray-600 hover:text-primary'}"
+						type="button"
+						onclick={() => (currentView = 'signup')}
+						class="text-sm text-primary hover:text-primary-dark transition-colors whitespace-nowrap ml-4"
 					>
-						Sign In
-					</button>
-					<button
-						onclick={() => switchTab('signup')}
-						class="flex-1 py-2 px-4 rounded-md text-sm font-medium transition-all
-                               {activeTab === 'signup'
-							? 'bg-white text-primary shadow-sm'
-							: 'text-gray-600 hover:text-primary'}"
-					>
-						Sign Up
-					</button>
-				</div>
-
-				<div class="flex gap-2 mb-6">
-					<button
-						onclick={() => switchMethod('password')}
-						class="flex-1 py-2 px-4 border rounded-lg text-sm font-medium transition-all
-                               {authMethod === 'password'
-							? 'border-primary bg-primary/5 text-primary'
-							: 'border-gray-200 text-gray-600 hover:border-primary/50'}"
-					>
-						Password
-					</button>
-					<button
-						onclick={() => switchMethod('magic')}
-						class="flex-1 py-2 px-4 border rounded-lg text-sm font-medium transition-all
-                               {authMethod === 'magic'
-							? 'border-primary bg-primary/5 text-primary'
-							: 'border-gray-200 text-gray-600 hover:border-primary/50'}"
-					>
-						Magic Link
+						Sign up
 					</button>
 				</div>
 
@@ -336,32 +299,36 @@
 					</div>
 				{/if}
 
+				<div class="flex gap-2 mb-6">
+					<button
+						type="button"
+						onclick={() => (loginMethod = 'password')}
+						class="flex-1 py-2 px-4 border rounded-lg text-sm font-medium transition-all
+                               {loginMethod === 'password'
+							? 'border-primary bg-primary/5 text-primary'
+							: 'border-gray-200 text-gray-600 hover:border-primary/50'}"
+					>
+						Password
+					</button>
+					<button
+						type="button"
+						onclick={() => (loginMethod = 'magic')}
+						class="flex-1 py-2 px-4 border rounded-lg text-sm font-medium transition-all
+                               {loginMethod === 'magic'
+							? 'border-primary bg-primary/5 text-primary'
+							: 'border-gray-200 text-gray-600 hover:border-primary/50'}"
+					>
+						Magic Link
+					</button>
+				</div>
+
 				<form
 					onsubmit={(e) => {
 						e.preventDefault();
-						activeTab === 'signin' ? handleSignIn() : handleSignUp();
+						handleLogin();
 					}}
 					class="space-y-4"
 				>
-					{#if activeTab === 'signup'}
-						<TextInput
-							label="First Name"
-							bind:value={firstName}
-							placeholder="John"
-							error={fieldErrors.firstName}
-							required
-							autocomplete="given-name"
-						/>
-						<TextInput
-							label="Last Name"
-							bind:value={lastName}
-							placeholder="Doe"
-							error={fieldErrors.lastName}
-							required
-							autocomplete="family-name"
-						/>
-					{/if}
-
 					<TextInput
 						label="Email"
 						type="email"
@@ -371,40 +338,25 @@
 						required
 						autocomplete="email"
 					/>
-
-					{#if authMethod === 'password'}
+					{#if loginMethod === 'password'}
 						<PasswordInput
 							label="Password"
 							bind:value={password}
 							placeholder="Enter your password"
 							error={fieldErrors.password}
 							required
-							autocomplete={activeTab === 'signin' ? 'current-password' : 'new-password'}
-							showStrength={activeTab === 'signup'}
+							autocomplete="current-password"
 						/>
 
-						{#if activeTab === 'signup'}
-							<PasswordInput
-								label="Confirm Password"
-								bind:value={confirmPassword}
-								placeholder="Confirm your password"
-								error={fieldErrors.confirmPassword}
-								required
-								autocomplete="new-password"
-							/>
-						{/if}
-
-						{#if activeTab === 'signin'}
-							<div class="text-right">
-								<button
-									type="button"
-									onclick={() => (currentView = 'forgot-password')}
-									class="text-sm text-primary hover:text-primary-dark transition-colors"
-								>
-									Forgot password?
-								</button>
-							</div>
-						{/if}
+						<div class="text-right">
+							<button
+								type="button"
+								onclick={() => (currentView = 'forgot-password')}
+								class="text-sm text-primary hover:text-primary-dark transition-colors"
+							>
+								Forgot password?
+							</button>
+						</div>
 					{/if}
 
 					<button
@@ -415,17 +367,129 @@
 					>
 						{#if loading}
 							Processing...
-						{:else if activeTab === 'signin'}
-							{authMethod === 'password' ? 'Sign In' : 'Send Magic Link'}
+						{:else if loginMethod === 'password'}
+							Sign In
 						{:else}
-							{authMethod === 'password' ? 'Create Account' : 'Send Magic Link'}
+							Send Magic Link
+						{/if}
+					</button>
+				</form>
+			{:else if currentView === 'signup'}
+				<div class="mb-8 flex items-start justify-between">
+					<div>
+						<h1 class="text-3xl font-bold text-primary mb-2">Create Account</h1>
+						<p class="text-gray-600">Sign up to get started</p>
+					</div>
+					<button
+						type="button"
+						onclick={() => (currentView = 'login')}
+						class="text-sm text-primary hover:text-primary-dark transition-colors whitespace-nowrap ml-4"
+					>
+						Sign in
+					</button>
+				</div>
+
+				{#if error}
+					<div class="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-600">
+						{error}
+					</div>
+				{/if}
+
+				<div class="flex gap-2 mb-6">
+					<button
+						type="button"
+						onclick={() => (signupMethod = 'password')}
+						class="flex-1 py-2 px-4 border rounded-lg text-sm font-medium transition-all
+                               {signupMethod === 'password'
+							? 'border-primary bg-primary/5 text-primary'
+							: 'border-gray-200 text-gray-600 hover:border-primary/50'}"
+					>
+						Password
+					</button>
+					<button
+						type="button"
+						onclick={() => (signupMethod = 'magic')}
+						class="flex-1 py-2 px-4 border rounded-lg text-sm font-medium transition-all
+                               {signupMethod === 'magic'
+							? 'border-primary bg-primary/5 text-primary'
+							: 'border-gray-200 text-gray-600 hover:border-primary/50'}"
+					>
+						Magic Link
+					</button>
+				</div>
+
+				<form
+					onsubmit={(e) => {
+						e.preventDefault();
+						handleSignup();
+					}}
+					class="space-y-4"
+				>
+					<TextInput
+						label="First Name"
+						bind:value={firstName}
+						placeholder="John"
+						error={fieldErrors.firstName}
+						required
+						autocomplete="given-name"
+					/>
+					<TextInput
+						label="Last Name"
+						bind:value={lastName}
+						placeholder="Doe"
+						error={fieldErrors.lastName}
+						required
+						autocomplete="family-name"
+					/>
+
+					<TextInput
+						label="Email"
+						type="email"
+						bind:value={email}
+						placeholder="you@example.com"
+						disabled
+					/>
+
+					{#if signupMethod === 'password'}
+						<PasswordInput
+							label="Password"
+							bind:value={password}
+							placeholder="Create a strong password"
+							error={fieldErrors.password}
+							required
+							autocomplete="new-password"
+							showStrength
+						/>
+
+						<PasswordInput
+							label="Confirm Password"
+							bind:value={confirmPassword}
+							placeholder="Confirm your password"
+							error={fieldErrors.confirmPassword}
+							required
+							autocomplete="new-password"
+						/>
+					{/if}
+
+					<button
+						type="submit"
+						disabled={loading}
+						class="w-full bg-primary hover:bg-primary-dark text-white rounded-lg px-4 py-3
+                               transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+					>
+						{#if loading}
+							Creating...
+						{:else if signupMethod === 'password'}
+							Create Account
+						{:else}
+							Send Magic Link
 						{/if}
 					</button>
 				</form>
 			{:else if currentView === 'verify-otp'}
 				<div class="mb-8">
 					<button
-						onclick={goBackToForm}
+						onclick={goBack}
 						class="text-sm text-primary hover:text-primary-dark transition-colors mb-4 flex items-center gap-1"
 					>
 						<svg
@@ -464,6 +528,7 @@
 					/>
 
 					<button
+						type="button"
 						onclick={handleVerifyOTP}
 						disabled={loading || otpCode.length !== 6}
 						class="w-full bg-primary hover:bg-primary-dark text-white rounded-lg px-4 py-3
@@ -477,6 +542,7 @@
 							<p class="text-sm text-gray-600">Resend code in {resendCountdown}s</p>
 						{:else}
 							<button
+								type="button"
 								onclick={handleResendOTP}
 								disabled={loading}
 								class="text-sm text-primary hover:text-primary-dark transition-colors disabled:opacity-50"
@@ -510,7 +576,8 @@
 						the email to sign in.
 					</p>
 					<button
-						onclick={goBackToForm}
+						type="button"
+						onclick={goBack}
 						class="text-primary hover:text-primary-dark transition-colors"
 					>
 						Back to sign in
@@ -519,7 +586,7 @@
 			{:else if currentView === 'forgot-password'}
 				<div class="mb-8">
 					<button
-						onclick={goBackToForm}
+						onclick={() => (currentView = 'login')}
 						class="text-sm text-primary hover:text-primary-dark transition-colors mb-4 flex items-center gap-1"
 					>
 						<svg
@@ -598,7 +665,8 @@
 						the link in the email to reset your password.
 					</p>
 					<button
-						onclick={goBackToForm}
+						type="button"
+						onclick={goBack}
 						class="text-primary hover:text-primary-dark transition-colors"
 					>
 						Back to sign in

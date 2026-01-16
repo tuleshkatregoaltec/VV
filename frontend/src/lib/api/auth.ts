@@ -39,6 +39,21 @@ const client = new AuthClient({
 
 });
 
+const authSearchParams = [
+    'code',
+    'state',
+    'provider_token',
+    'provider_refresh_token',
+    'error'
+]
+
+client.onAuthStateChange((event: AuthChangeEvent, session: Session | null) => {
+    if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+        const url = new URL(window.location.href);
+        authSearchParams.forEach(p => url.searchParams.delete(p));
+    }
+})
+
 export type AuthResult = {
     success: boolean;
     error?: string;

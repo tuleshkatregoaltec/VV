@@ -1,4 +1,7 @@
 <script lang="ts">
+	import { zxcvbn, zxcvbnOptions } from '@zxcvbn-ts/core';
+	import { onMount } from 'svelte';
+
 	interface Props {
 		label: string;
 		value: string;
@@ -37,15 +40,13 @@
 	function calculatePasswordStrength(password: string): number {
 		if (!password) return 0;
 
-		let strength = 0;
-
-		if (password.length >= 8) strength++;
-		if (password.length >= 12) strength++;
-		if (/[a-z]/.test(password) && /[A-Z]/.test(password)) strength++;
-		if (/\d/.test(password)) strength++;
-		if (/[^a-zA-Z0-9]/.test(password)) strength++;
-
-		return Math.min(strength, 5);
+		try {
+			const result = zxcvbn(password);
+			// zxcvbn returns score 0-4, we want 1-5 for display
+			return (result.score + 1) as 1 | 2 | 3 | 4 | 5;
+		} catch {
+			return 0;
+		}
 	}
 
 	let strength = $derived(showStrength ? calculatePasswordStrength(value) : 0);

@@ -77,9 +77,9 @@
 	}
 </script>
 
-<div class="min-h-screen bg-gradient-to-br from-primary-pale via-white to-accent-pale flex items-center justify-center p-4">
+<div class="min-h-screen bg-background flex items-center justify-center p-4">
 	<div class="w-full max-w-md">
-		<div class="bg-white/80 backdrop-blur-xl rounded-xl shadow-lg border border-primary-pale p-8">
+		<div class="bg-white rounded-xl shadow-lg p-8">
 			{#if success}
 				<div class="text-center">
 					<div class="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
