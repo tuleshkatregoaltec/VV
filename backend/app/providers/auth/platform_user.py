@@ -1,38 +1,28 @@
 from typing import List
 from starlette.authentication import BaseUser, AuthCredentials
-
+from typing import List
 
 from supabase_auth import User
-import dataclasses
+from pydantic import BaseModel, Field
 
 from app.providers.auth.scopes import AuthScopes
 
-import dataclasses
+from pydantic import Field, BaseModel
 
-@dataclasses.dataclass(kw_only=True)
+
 class UserRoles:
-    roles: List[str] = dataclasses.field(default_factory=list[str])
-
-@dataclasses.dataclass(kw_only=True)
-class UserMetadata:
-    # GoTrue Fields
-    provider: str = dataclasses.field(default_factory=str)
-    providers: List[str] = dataclasses.field(default_factory=list[str])
-
-    # Vitevue Platform Fields
-    first_name: str =  dataclasses.field(default_factory=str)
-    last_name: str =  dataclasses.field(default_factory=str)
-    role: UserRoles = dataclasses.field(default_factory=lambda: UserRoles())
-    is_active: bool = dataclasses.field(default_factory=lambda: False)
-    daily_token_limit: int = dataclasses.field(default_factory=lambda: 500000)
+    roles: List[str] = Field(default_factory=list[str])
 
 
-    @classmethod
-    def parse_dict(cls, data: dict):
-        return cls(**data)
-    
-    def to_dict(self) -> dict:
-        return dataclasses.asdict(self)
+class UserMetadata(BaseModel):
+    provider: str = Field(default="")
+    providers: str = Field(default="")
+
+    first_name: str = Field(default="")
+    last_name: str = Field(default="")
+    role: UserRoles = Field(default_factory=lambda: UserRoles())
+    is_active: bool = Field(default=False)
+    daily_token_limit: int = Field(default=500000)
 
 
 class PlatformUser(BaseUser):
@@ -41,9 +31,10 @@ class PlatformUser(BaseUser):
         self.__jwt: str = jwt
         self.__auth_user: User = user
 
-
-        if hasattr(self.auth_user, "app_metadata"):
-            self.__metadata = UserMetadata.parse_dict(self.auth_user.app_metadata)
+        if hasattr(self.auth_user, "app_metadata") and isinstance(
+            self.auth_user.app_metadata, dict
+        ):
+            self.__metadata = UserMetadata.model_validate(self.auth_user.app_metadata)
         else:
             self.__metadata = UserMetadata()
 
@@ -55,9 +46,7 @@ class PlatformUser(BaseUser):
         """
         return True
 
-    
-
-    #region Supabase Auth User
+    # region Supabase Auth User
 
     @property
     def auth_user(self) -> User:
@@ -65,10 +54,9 @@ class PlatformUser(BaseUser):
         Authentication provider user object.
         """
         return self.__auth_user
-    
 
     @property
-    def token(self) -> User:
+    def token(self) -> str:
         """
         JWT token used this request to create this object
         """
@@ -77,52 +65,48 @@ class PlatformUser(BaseUser):
     @property
     def id(self) -> str:
         return self.__auth_user.id
-    
+
     @property
     def email(self) -> str:
-        return self.__auth_user.email
-    
+        return self.__auth_user.email or ""
+
     @property
     def first_name(self) -> str:
-        return self.__auth_user
-    
-    
-    #@property.setter
-    #def auth_user(self, value: User):
+        return self.metadata.first_name
+
+    # @property.setter
+    # def auth_user(self, value: User):
     #    self.__auth_user = value
 
-    #endregion
+    # endregion
 
-    #def display_name(self) -> str:
+    # def display_name(self) -> str:
     #    return self.username
 
-
-    
     @property
     def metadata(self):
         return self.__metadata
-        
+
     def is_admin(self):
         return "admin" in self.metadata.role.roles
-    
+
     async def get_scopes(self) -> AuthCredentials:
         scopes = AuthCredentials()
 
-        if (self.is_admin()):
+        if self.is_admin():
             scopes.scopes.append(AuthScopes.GLOBAL_ADMIN.value)
 
         return scopes
-
 
     async def get_user_info(self) -> dict:
         """
         Construct a user info dict that the frontend expects.
         """
-        #return {"user": user, "access_token": access_token, "authenticated": True}
+        # return {"user": user, "access_token": access_token, "authenticated": True}
 
         role = "user"
 
-        if (self.is_admin()):
+        if self.is_admin():
             role = "admin"
 
         return {
@@ -130,6 +114,5 @@ class PlatformUser(BaseUser):
             "email": self.auth_user.email,
             "first_name": self.metadata.first_name,
             "last_name": self.metadata.last_name,
-            "role": role
+            "role": role,
         }
-    
