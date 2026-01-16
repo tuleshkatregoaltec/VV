@@ -3,7 +3,7 @@ from uuid import uuid4
 from datetime import datetime, timezone
 from typing import Sequence
 
-from sqlmodel import func, select
+from sqlmodel import func, select, any_
 from sqlmodel.ext.asyncio.session import AsyncSession
 from workos import WorkOSClient
 
@@ -41,8 +41,8 @@ async def get_organization_by_domain(
 async def get_organization_for_user(
     db: AsyncSession, user_id: str
 ) -> Organization | None:
-    """Get organization by email domain"""
-    result = await db.exec(select(Organization).where(user_id in Organization.users))
+    """Get organization by user id"""
+    result = await db.exec(select(Organization).where(any_(Organization.users).contains(user_id)))
     return result.first()
 
 

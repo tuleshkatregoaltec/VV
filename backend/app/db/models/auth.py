@@ -1,7 +1,7 @@
 from typing import Optional, List, LiteralString
 from datetime import datetime, timezone
 import datetime as dt
-from sqlmodel import SQLModel, Field, Relationship
+from sqlmodel import SQLModel, Field, Relationship, JSON
 from sqlalchemy import Column, DateTime
 
 
@@ -28,7 +28,7 @@ class Organization(SQLModel, table=True):
     )
 
     # Relationships
-    users: List[str] = Relationship(back_populates="organization")
+    users: list[str] = Field(default=[], sa_column=Column(JSON))
 
 
 class UserTokenUsage(SQLModel, table=True):
