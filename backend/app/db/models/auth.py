@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 import datetime as dt
 from sqlmodel import SQLModel, Field, Relationship, JSON
 from sqlalchemy import Column, DateTime
+from sqlalchemy.dialects.postgresql import JSONB
 
 
 class Organization(SQLModel, table=True):
@@ -28,7 +29,7 @@ class Organization(SQLModel, table=True):
     )
 
     # Relationships
-    users: list[str] = Field(default=[], sa_column=Column(JSON))
+    users: list[str] = Field(default=[], sa_column=Column(JSONB))
 
 
 class UserTokenUsage(SQLModel, table=True):
