@@ -45,7 +45,7 @@ class AdminAuth:
 
         # succeeded
 
-        self.__user = auth_response.user #type: ignore
+        self.__user = auth_response.user  # type: ignore
         self.__session = auth_response.session
 
     async def ensure_valid_refresh(self) -> bool:
@@ -59,7 +59,7 @@ class AdminAuth:
             return False
 
         # check if we need to refresh
-        dt_expires_at = datetime.fromtimestamp(self.__session.expires_at) #type: ignore
+        dt_expires_at = datetime.fromtimestamp(self.__session.expires_at)  # type: ignore
 
         # run 30s earlier than we need to in case it expires mid-operation
         dt_expires_at -= timedelta(seconds=30)

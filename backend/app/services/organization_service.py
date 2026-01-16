@@ -42,7 +42,9 @@ async def get_organization_for_user(
     db: AsyncSession, user_id: str
 ) -> Organization | None:
     """Get organization by user id"""
-    result = await db.exec(select(Organization).where(any_(Organization.users).contains(user_id)))
+    result = await db.exec(
+        select(Organization).where(any_(Organization.users).contains(user_id))
+    )
     return result.first()
 
 

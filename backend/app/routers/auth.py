@@ -24,31 +24,35 @@ async def sync_callback(
     """
     Sync orgs and activity state
     """
-    
-    organization = await organization_service.get_organization_for_user(db, current_user.id)
+
+    organization = await organization_service.get_organization_for_user(
+        db, current_user.id
+    )
 
     if not organization:
         # no org, try to match on email
 
         email_domain = current_user.email.split("@")[1].lower()
 
-        organization = await organization_service.get_organization_by_domain(db, email_domain)
+        organization = await organization_service.get_organization_by_domain(
+            db, email_domain
+        )
 
         if not organization:
             # No org found by membership or domain
             return RedirectResponse(url=f"{settings.FRONTEND_URL}/auth/no-org")
-        
-    
+
     # user has (one) org (get_org_for_user returned first OR matched by domain)
 
     # check if org is active
     if not organization.is_active:
         return RedirectResponse(url=f"{settings.FRONTEND_URL}/auth/deactivated")
 
-
     # check if user is active
     if not current_user.metadata.is_active:
-        active_user_count = await organization_service.get_active_user_count(db, organization.id)
+        active_user_count = await organization_service.get_active_user_count(
+            db, organization.id
+        )
         # Determine if user should be active based on org limit
         is_active = active_user_count < organization.max_users
 
@@ -59,12 +63,9 @@ async def sync_callback(
         else:
             # user not active and no free slots
             return RedirectResponse(url=f"{settings.FRONTEND_URL}/auth/deactivated")
-    
+
     # user is active, return success
     return JSONResponse(content={"success": True})
-
-
-
 
 
 @router.get("/logout")
