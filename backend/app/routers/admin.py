@@ -87,30 +87,33 @@ async def get_organization(org_id: str, db: AsyncSession = Depends(get_db_sessio
 
     active_count = await get_active_user_count(db, org_id)
 
-    result = await db.exec(select(User).where(User.organization_id == org_id))
-    users = result.all()
 
     user_list = []
-    for user in users:
-        usage = await token_usage_service.get_today_usage(db, user.id)
-        tokens_used = usage.total_tokens if usage else 0
-        daily_limit = user.daily_token_limit
-        usage_percentage = (tokens_used / daily_limit * 100) if daily_limit > 0 else 0
 
-        user_list.append(
-            {
-                "id": user.id,
-                "email": user.email,
-                "first_name": user.first_name,
-                "last_name": user.last_name,
-                "is_active": user.is_active,
-                "created_at": user.created_at,
-                "last_login": user.last_login,
-                "daily_token_limit": daily_limit,
-                "tokens_used_today": tokens_used,
-                "usage_percentage": usage_percentage,
-            }
-        )
+    for user_id in organization.users:
+        user = await get_user_by_id(user_id)
+
+        if user is not None:
+
+            usage = await token_usage_service.get_today_usage(db, user.id)
+            tokens_used = usage.total_tokens if usage else 0
+            daily_limit = user.metadata.daily_token_limit
+            usage_percentage = (tokens_used / daily_limit * 100) if daily_limit > 0 else 0
+
+            user_list.append(
+                {
+                    "id": user.id,
+                    "email": user.email,
+                    "first_name": user.first_name,
+                    "last_name": user.metadata.first_name,
+                    "is_active": user.metadata.last_name,
+                    "created_at": user.auth_user.created_at,
+                    "last_login": user.auth_user.last_sign_in_at,
+                    "daily_token_limit": daily_limit,
+                    "tokens_used_today": tokens_used,
+                    "usage_percentage": usage_percentage,
+                }
+            )
 
     org_response = OrganizationResponse.model_validate(organization)
     org_response.active_user_count = active_count
@@ -180,29 +183,3 @@ async def update_user(
         "is_active": user.metadata.is_active,
         "updated_at": user.auth_user.updated_at,
     }
-
-
-@router.get("/users/{user_id}/token-usage", response_model=UserTokenStatsResponse)
-async def get_user_token_usage(
-    user_id: str,
-    db: AsyncSession = Depends(get_db_session),
-):
-    """Get user's current daily token usage"""
-    usage = await token_usage_service.get_today_usage(db, user_id)
-    user = await get_user_by_id(user_id)
-
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-
-    tokens_used = usage.total_tokens if usage else 0
-    daily_limit = user.metadata.daily_token_limit
-    usage_percentage = (tokens_used / daily_limit * 100) if daily_limit > 0 else 0
-    remaining = max(0, daily_limit - tokens_used)
-
-    return UserTokenStatsResponse(
-        user_id=user_id,
-        tokens_used_today=tokens_used,
-        daily_limit=daily_limit,
-        usage_percentage=usage_percentage,
-        remaining_tokens=remaining,
-    )

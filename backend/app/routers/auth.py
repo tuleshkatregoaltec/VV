@@ -43,4 +43,4 @@ async def get_user(
 ):
     """Get current authenticated user (protected endpoint)"""
 
-    return JSONResponse(content=current_user.get_user_info())
+    return JSONResponse(content=await current_user.get_user_info())

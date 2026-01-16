@@ -1,3 +1,4 @@
+from typing import List
 from starlette.authentication import BaseUser, AuthCredentials
 
 
@@ -7,19 +8,23 @@ import dataclasses
 from app.providers.auth.scopes import AuthScopes
 
 import dataclasses
-from pydantic import Field
 
-@dataclasses.dataclass
+@dataclasses.dataclass(kw_only=True)
 class UserRoles:
-    roles: list[str] = dataclasses.field(default_factory=[])
+    roles: List[str] = dataclasses.field(default_factory=list[str])
 
-@dataclasses.dataclass
+@dataclasses.dataclass(kw_only=True)
 class UserMetadata:
+    # GoTrue Fields
+    provider: str = dataclasses.field(default_factory=str)
+    providers: List[str] = dataclasses.field(default_factory=list[str])
+
+    # Vitevue Platform Fields
     first_name: str =  dataclasses.field(default_factory=str)
     last_name: str =  dataclasses.field(default_factory=str)
-    role: str = dataclasses.field(default_factory=UserRoles)
-    is_active: bool = dataclasses.field(default_factory=False)
-    daily_token_limit: int = dataclasses.field(default_factory=500000)
+    role: UserRoles = dataclasses.field(default_factory=lambda: UserRoles())
+    is_active: bool = dataclasses.field(default_factory=lambda: False)
+    daily_token_limit: int = dataclasses.field(default_factory=lambda: 500000)
 
 
     @classmethod
@@ -98,7 +103,7 @@ class PlatformUser(BaseUser):
         return self.__metadata
         
     def is_admin(self):
-        return "admin" in self.metadata.role
+        return "admin" in self.metadata.role.roles
     
     async def get_scopes(self) -> AuthCredentials:
         scopes = AuthCredentials()
