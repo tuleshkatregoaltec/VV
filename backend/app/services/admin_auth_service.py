@@ -19,13 +19,12 @@ from copy import copy
 logger = logging.getLogger(__name__)
 
 
-
 class AdminAuth:
     def __init__(self):
         self.__client = AsyncGoTrueClient(url=settings.AUTH_URL)
 
-        self.__user: PlatformUser = None
-        self.__session: Session = None
+        self.__user: PlatformUser | None = None
+        self.__session: Session | None = None
 
     async def login_username_pass(self) -> bool:
         """
@@ -46,7 +45,7 @@ class AdminAuth:
 
         # succeeded
 
-        self.__user = auth_response.user
+        self.__user = auth_response.user #type: ignore
         self.__session = auth_response.session
 
     async def ensure_valid_refresh(self) -> bool:
@@ -60,7 +59,7 @@ class AdminAuth:
             return False
 
         # check if we need to refresh
-        dt_expires_at = datetime.fromtimestamp(self.__session.expires_at)
+        dt_expires_at = datetime.fromtimestamp(self.__session.expires_at) #type: ignore
 
         # run 30s earlier than we need to in case it expires mid-operation
         dt_expires_at -= timedelta(seconds=30)

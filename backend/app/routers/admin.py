@@ -87,18 +87,18 @@ async def get_organization(org_id: str, db: AsyncSession = Depends(get_db_sessio
 
     active_count = await get_active_user_count(db, org_id)
 
-
     user_list = []
 
     for user_id in organization.users:
         user = await get_user_by_id(user_id)
 
         if user is not None:
-
             usage = await token_usage_service.get_today_usage(db, user.id)
             tokens_used = usage.total_tokens if usage else 0
             daily_limit = user.metadata.daily_token_limit
-            usage_percentage = (tokens_used / daily_limit * 100) if daily_limit > 0 else 0
+            usage_percentage = (
+                (tokens_used / daily_limit * 100) if daily_limit > 0 else 0
+            )
 
             user_list.append(
                 {
