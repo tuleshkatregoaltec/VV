@@ -12,6 +12,17 @@ spec:
       labels:
         com.vitevue.k8s.service: vitevue-platform
     spec:
+      initContainers:
+      - name: migrate
+        image: ghcr.io/vitevue/platform-backend:production
+        imagePullPolicy: Always
+        command: ["uv", "run", "alembic", "upgrade", "head"]
+        env:
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: vitevue-backend-creds
+              key: database_url
       containers:
       - name: backend
         image: ghcr.io/vitevue/platform-backend:production

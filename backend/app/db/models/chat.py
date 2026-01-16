@@ -10,7 +10,7 @@ class Conversation(SQLModel, table=True):
     __tablename__: LiteralString = "conversations"
 
     id: Optional[int] = Field(default=None, primary_key=True)
-    user_id: str = Field(foreign_key="users.id", index=True)  # WorkOS uses string IDs
+    user_id: str = Field(index=True)  # WorkOS uses string IDs
     title: Optional[str] = None  # Auto-generated from first message
     created_at: datetime = Field(
         sa_column=Column(DateTime(timezone=True), nullable=False),
