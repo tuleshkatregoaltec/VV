@@ -10,3 +10,7 @@ resources:
   - deployment.yaml
   - service.yaml
   - ingress.yaml
+images:
+- name: platform-backend
+  newName: ghcr.io/vitevue/platform-backend # {"$imagepolicy": "flux-system:flux-system:platform-backend-production:name"}
+  newTag: production                        # {"$imagepolicy": "flux-system:flux-system:platform-backend-production:tag"}

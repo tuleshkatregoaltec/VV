@@ -21,7 +21,7 @@ spec:
                 operator: DoesNotExist
       initContainers:
       - name: migrate
-        image: ghcr.io/vitevue/platform-backend:production
+        image: ghcr.io/vitevue/platform-backend:production  # {"$imagepolicy": "flux-system:platform-backend-production"}
         imagePullPolicy: Always
         command: ["uv", "run", "alembic", "upgrade", "head"]
         env:
@@ -32,7 +32,7 @@ spec:
               key: database_url
       containers:
       - name: backend
-        image: ghcr.io/vitevue/platform-backend:production
+        image: ghcr.io/vitevue/platform-backend:production  # {"$imagepolicy": "flux-system:platform-backend-production"}
         imagePullPolicy: Always
         ports:
         - name: http
