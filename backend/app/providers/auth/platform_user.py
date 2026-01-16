@@ -10,7 +10,7 @@ from app.providers.auth.scopes import AuthScopes
 from pydantic import Field, BaseModel
 
 
-class UserRoles:
+class UserRoles(BaseModel):
     roles: List[str] = Field(default_factory=list[str])
 
 
