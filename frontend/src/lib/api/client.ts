@@ -1,6 +1,6 @@
 import { env } from '$env/dynamic/public';
 
-import { get_access_token } from './auth_state';
+import { get_access_token } from './auth';
 
 export class ApiError extends Error {
     constructor(

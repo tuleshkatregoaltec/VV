@@ -1,9 +1,10 @@
 <script lang="ts">
-    import { authStore } from '$lib/stores/auth.svelte';
+    import { page } from '$app/state';
+    import { logout } from '$lib/api/auth';
     import { areaUnit } from '$lib/stores/preferences.svelte';
     import { getAreaUnitLabel } from '$lib/utils/units';
 
-    const user = $derived(authStore.user);
+    const user = $derived(page.data.user);
 </script>
 
 <div class="max-w-3xl mx-auto px-4 py-8">
@@ -81,7 +82,7 @@
             <div class="mt-6 pt-4 border-t border-gray-200">
                 <button
                     type="button"
-                    onclick={() => authStore.logout()}
+                    onclick={() => logout()}
                     class="text-red-600 hover:text-red-700 font-medium text-sm"
                 >
                     Sign out of your account

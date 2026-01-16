@@ -4,12 +4,12 @@ import { QueryClient } from '@tanstack/svelte-query';
 import posthog from 'posthog-js'
 import type { LayoutLoad } from './$types';
 import { env } from '$env/dynamic/public';
-import { auth } from '$lib/api/auth';
+import { me, type BackendUser, get_session } from '$lib/api/auth';
 
 export const prerender = false;
 export const ssr = false;
 
-const PUBLIC_PATHS = ['/', '/landing-new', '/login', '/auth/login', '/auth/callback', '/auth/no-org', '/auth/deactivated'];
+const PUBLIC_PATHS = ['/', '/landing-new', '/auth', '/auth/reset-password', '/auth/no-org', '/auth/deactivated'];
 
 function isPublicPath(pathname: string): boolean {
   return pathname === '/' || PUBLIC_PATHS.slice(1).some((p) => pathname.startsWith(p));
@@ -34,10 +34,28 @@ export const load: LayoutLoad = async ({ url }) => {
           env.PUBLIC_POSTHOG_KEY,
           {
             api_host: env.PUBLIC_POSTHOG_HOST,
-            defaults: '2025-05-24',
-            person_profiles: 'identified_only',
+            defaults: '2025-11-30',
           }
         );
+        
+        // Identify user on first app load if authenticated
+        if (!isPublicPath(url.pathname)) {
+          const session = await get_session();
+          if (session) {
+            try {
+              const user = await me();
+              posthog.identify(user.id, {
+                email: user.email,
+                first_name: user.first_name,
+                last_name: user.last_name,
+                organization_id: user.organization_id,
+                organization_name: user.organization_name,
+              });
+            } catch {
+              // User not authenticated, will be handled below
+            }
+          }
+        }
       } catch (error) {
         console.warn('Failed to initialize PostHog:', error);
       }
@@ -45,21 +63,21 @@ export const load: LayoutLoad = async ({ url }) => {
 
     // Check auth for protected paths
     if (!isPublicPath(url.pathname)) {
-      try {
-        const user = await auth.me();
-        // Identify user in PostHog
-        posthog.identify(user.id, {
-          email: user.email,
-          first_name: user.first_name,
-          last_name: user.last_name,
-          organization_id: user.organization_id,
-          organization_name: user.organization_name,
-        });
+      // Check Supabase session first - this is synchronous from localStorage
+      const session = await get_session();
 
+      if (!session) {
+        // No session, redirect immediately before loading anything
+        redirect(302, '/auth');
+      }
+
+      // Have session, verify with backend
+      try {
+        const user = await me();
         return { queryClient, user };
       } catch {
-        // Not authenticated, redirect to home
-        redirect(302, '/');
+        // Backend auth failed, redirect to auth page
+        redirect(302, '/auth');
       }
     }
   }

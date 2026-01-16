@@ -4,12 +4,12 @@
 	import TrendChart from '$lib/components/dashboard/TrendChart.svelte';
 	import PageHeader from '$lib/components/dashboard/PageHeader.svelte';
 	import AppShell from '$lib/components/layout/AppShell.svelte';
-	import { authStore } from '$lib/stores/auth.svelte';
+	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
 	import { chat } from '$lib/api/chat';
 	import { analytics, type SalesAnalyticsResponse } from '$lib/api/analytics';
 
-	let username = $derived(authStore.user?.first_name ?? '');
+	let username = $derived(page.data.user?.first_name ?? '');
 	let analyticsData = $state<SalesAnalyticsResponse | null>(null);
 	let isLoading = $state(true);
 

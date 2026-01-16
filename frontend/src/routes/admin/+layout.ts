@@ -1,13 +1,13 @@
 import { error } from '@sveltejs/kit';
 import { browser } from '$app/environment';
-import { auth } from '$lib/api/auth';
+import { me } from '$lib/api/auth';
 import type { LayoutLoad } from './$types';
 
 export const load: LayoutLoad = async () => {
     if (!browser) return {};
 
     try {
-        const user = await auth.me();
+        const user = await me();
         if (user.role !== 'admin') {
             error(403, 'Admin access required');
         }

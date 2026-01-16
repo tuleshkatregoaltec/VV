@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { authStore } from '$lib/stores/auth.svelte';
+    import { logout } from '$lib/api/auth';
 
     let {
         show
@@ -8,7 +8,7 @@
     } = $props();
 
     function handleLogout() {
-        authStore.logout();
+        logout();
     }
 </script>
 

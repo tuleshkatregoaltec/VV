@@ -5,10 +5,14 @@
 <script lang="ts">
     import { fly, fade } from 'svelte/transition';
     import { quintOut } from 'svelte/easing';
-    import { authStore } from '$lib/stores/auth.svelte';
+    import { page } from '$app/state';
+    import { logout } from '$lib/api/auth';
     import { getContext } from 'svelte';
 
-    let initials = $derived(authStore.user?.initials ?? '');
+    let initials = $derived((() => {
+        const user = page.data.user;
+        return user ? `${user.first_name?.[0] ?? ''}${user.last_name?.[0] ?? ''}`.toUpperCase() : '';
+    })());
 
     const HOVER_DELAY = 150;
 
@@ -39,7 +43,7 @@
 
     function handleLogout() {
         openDropdownIdContext.value = null;
-        authStore.logout();
+        logout();
     }
 </script>
 
