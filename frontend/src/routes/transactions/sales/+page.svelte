@@ -103,46 +103,51 @@
     
     return apiFilters;
   }
-  
+
+  // Derive query keys explicitly to ensure proper reactivity tracking
+  let salesQueryKey = $derived([
+    'sales-transactions',
+    propertyType.current,
+    masterProject.current,
+    timeframe.current,
+    currentPage,
+    localFilters.selectedProject,
+    localFilters.selectedBuilding,
+    localFilters.selectedPropertyType,
+    localFilters.selectedBedroomsOrSubType,
+    localFilters.selectedRegistration,
+    localFilters.areaRange,
+    localFilters.priceRange,
+    localFilters.pricePerSqMRange,
+  ]);
+
+  let salesFilterOptionsQueryKey = $derived([
+    'filterOptions',
+    'sales',
+    propertyType.current,
+    masterProject.current,
+    timeframe.current,
+    localFilters.selectedProject,
+    localFilters.selectedBuilding,
+    localFilters.selectedPropertyType,
+    localFilters.selectedBedroomsOrSubType,
+    localFilters.selectedRegistration,
+  ]);
+
   // Main transactions query
   const transactionsQuery = createQuery(() => ({
-    queryKey: [
-      'sales-transactions',
-      propertyType.current,
-      masterProject.current,
-      timeframe.current,
-      currentPage,
-      localFilters.selectedProject,
-      localFilters.selectedBuilding,
-      localFilters.selectedPropertyType,
-      localFilters.selectedBedroomsOrSubType,
-      localFilters.selectedRegistration,
-      localFilters.areaRange,
-      localFilters.priceRange,
-      localFilters.pricePerSqMRange,
-    ],
+    queryKey: salesQueryKey,
     queryFn: () => api.sales(buildApiFilters()),
   }));
 
   const filterOptionsQuery = createQuery(() => ({
-    queryKey: [
-      'filterOptions', 
-      'sales', 
-      propertyType.current, 
-      masterProject.current, 
-      timeframe.current,
-      localFilters.selectedProject,
-      localFilters.selectedBuilding,
-      localFilters.selectedPropertyType,
-      localFilters.selectedBedroomsOrSubType,
-      localFilters.selectedRegistration,
-    ],
+    queryKey: salesFilterOptionsQueryKey,
     queryFn: () => {
       const filterParams: Record<string, any> = {
         property_usage: propertyType.current,
         timeframe_days: TIMEFRAME_MAPPING[timeframe.current]
       };
-      
+
       if (masterProject.current !== 'All') {
         filterParams.master_project = masterProject.current;
       }
@@ -165,7 +170,7 @@
       if (localFilters.selectedRegistration !== 'All') {
         filterParams.registration_type = localFilters.selectedRegistration;
       }
-      
+
       return filters.sales(filterParams);
     },
     staleTime: 5 * 60 * 1000, // 5 minutes
@@ -184,19 +189,19 @@
         id: 'selectedProject', 
         label: 'Project', 
         type: 'searchable', 
-        options: ['All', ...(opts.projects ?? [])] 
+        options: ['All', ...filterOptions.projects] 
       },
       { 
         id: 'selectedBuilding', 
         label: 'Building', 
         type: 'searchable', 
-        options: ['All', ...(opts.buildings ?? [])] 
+        options: ['All', ...filterOptions.buildings] 
       },
       { 
         id: 'selectedPropertyType', 
         label: 'Property Type', 
         type: 'standard', 
-        options: ['All', ...(opts.property_types ?? [])] 
+        options: ['All', ...filterOptions.property_types] 
       },
       { 
         id: 'selectedBedroomsOrSubType', 
@@ -204,33 +209,36 @@
         type: 'standard', 
         options: ['All', ...(
           propertyType.current === PROPERTY_USAGE.RESIDENTIAL 
-            ? (opts.rooms ?? []) 
-            : (opts.property_sub_types ?? [])
+            ? filterOptions.rooms 
+            : filterOptions.property_sub_types
         )]
       },
       { 
         id: 'selectedRegistration', 
         label: 'Registration', 
         type: 'standard', 
-        options: ['All', ...(opts.registration_types ?? [])] 
+        options: ['All', ...filterOptions.registration_types] 
       },
       { 
         id: 'areaRange', 
         label: 'Area (sq.m)', 
-        type: 'standard',
-        options: AREA_OPTIONS
+        type: 'price-range', 
+        placeholderMin: 'Min', 
+        placeholderMax: 'Max' 
       },
       { 
         id: 'priceRange', 
         label: 'Price (AED)', 
-        type: 'standard',
-        options: PRICE_OPTIONS
+        type: 'price-range', 
+        placeholderMin: 'Min', 
+        placeholderMax: 'Max' 
       },
       { 
         id: 'pricePerSqMRange', 
         label: 'Price/sq.m (AED)', 
-        type: 'standard',
-        options: PRICE_SQM_OPTIONS
+        type: 'price-range', 
+        placeholderMin: 'Min', 
+        placeholderMax: 'Max' 
       }
     ] : []
   );
@@ -262,7 +270,6 @@
 
   let totalRecords = $derived(transactionsQuery.data?.total ?? 0);
   let totalPages = $derived(Math.ceil(totalRecords / DEFAULT_ITEMS_PER_PAGE));
-
 
   function resetFilters() {
     localFilters = {

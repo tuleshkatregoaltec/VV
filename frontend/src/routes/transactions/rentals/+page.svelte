@@ -20,7 +20,8 @@
 
   interface TransformedRental {
     contract_id: string;
-    date: string;
+    startDate: string;
+    endDate: string;
     project: string;
     propertyType: string;
     propertySubType: string;
@@ -33,15 +34,16 @@
 
   // Column configuration for rentals
   const RENTAL_COLUMNS = [
-    { id: 'date', label: 'Start Date', align: 'left' as const },
-    { id: 'area_name', label: 'Area', align: 'left' as const },
-    { id: 'project', label: 'Project', align: 'left' as const },
-    { id: 'propertyType', label: 'Property Type', align: 'left' as const },
-    { id: 'propertySubType', label: 'Sub Type', align: 'left' as const },
-    { id: 'tenantType', label: 'Tenant Type', align: 'left' as const, badge: true },
-    { id: 'area', label: 'Area (sq.m)', align: 'right' as const, format: (val: number) => val.toLocaleString() },
-    { id: 'annualRent', label: 'Annual Rent (AED)', align: 'right' as const, highlighted: true, format: (val: number) => val.toLocaleString() },
-    { id: 'registration', label: 'Reg Type', align: 'left' as const }
+    { id: 'startDate', label: 'Start Date', align: 'left' as const, defaultVisible: true },
+    { id: 'endDate', label: 'End Date', align: 'left' as const, defaultVisible: true },
+    { id: 'area_name', label: 'Area', align: 'left' as const, defaultVisible: false },
+    { id: 'project', label: 'Project', align: 'left' as const, defaultVisible: true },
+    { id: 'propertyType', label: 'Property Type', align: 'left' as const, defaultVisible: true },
+    { id: 'propertySubType', label: 'Sub Type', align: 'left' as const, defaultVisible: true },
+    { id: 'tenantType', label: 'Tenant Type', align: 'left' as const, badge: true, defaultVisible: true },
+    { id: 'area', label: 'Area (sq.m)', align: 'right' as const, format: (val: number) => val.toLocaleString(), defaultVisible: true },
+    { id: 'annualRent', label: 'Annual Rent (AED)', align: 'right' as const, highlighted: true, format: (val: number) => val.toLocaleString(), defaultVisible: true },
+    { id: 'registration', label: 'Reg Type', align: 'left' as const, defaultVisible: false }
   ];
 
   // Dropdown context is provided by transactions/+layout.svelte
@@ -58,8 +60,8 @@
     selectedPropertySubType: 'All',
     selectedTenantType: 'All',
     selectedRegistration: 'All',
-    areaRange: 'All',      // ✅ String, not object
-    rentRange: 'All'       // ✅ String, not object
+    areaRange: 'All',
+    rentRange: 'All'
   });
 
   // ========================================
@@ -95,8 +97,7 @@
       apiFilters.contract_reg_type = localFilters.selectedRegistration;
     }
     
-    // Range filters are now strings - let the API client handle conversion
-    // The transactions.ts client converts these via rangeMap
+    // Range filters
     if (localFilters.areaRange !== 'All') {
       apiFilters.area = localFilters.areaRange;
     }
@@ -110,46 +111,52 @@
   // ========================================
   // TanStack Queries
   // ========================================
-  
+
+  // Derive query key explicitly to ensure proper reactivity tracking
+  let rentalsQueryKey = $derived([
+    'rental-contracts',
+    propertyType.current,
+    masterProject.current,
+    timeframe.current,
+    currentPage,
+    localFilters.selectedProject,
+    localFilters.selectedPropertyType,
+    localFilters.selectedPropertySubType,
+    localFilters.selectedTenantType,
+    localFilters.selectedRegistration,
+    localFilters.areaRange,
+    localFilters.rentRange,
+  ]);
+
   // Main rentals query
   const rentalsQuery = createQuery(() => ({
-    queryKey: [
-      'rental-contracts',
-      propertyType.current,
-      masterProject.current,
-      timeframe.current,
-      currentPage,
-      localFilters.selectedProject,
-      localFilters.selectedPropertyType,
-      localFilters.selectedPropertySubType,
-      localFilters.selectedTenantType,
-      localFilters.selectedRegistration,
-      localFilters.areaRange,
-      localFilters.rentRange,
-    ],
+    queryKey: rentalsQueryKey,
     queryFn: () => api.rentals(buildApiFilters()),
   }));
 
-  // Filter options query - ALWAYS includes property_usage and timeframe_days
+  // Derive filter options query key explicitly
+  let filterOptionsQueryKey = $derived([
+    'filterOptions',
+    'rentals',
+    propertyType.current,
+    masterProject.current,
+    timeframe.current,
+    localFilters.selectedProject,
+    localFilters.selectedPropertyType,
+    localFilters.selectedPropertySubType,
+    localFilters.selectedTenantType,
+    localFilters.selectedRegistration,
+  ]);
+
+  // Filter options query
   const filterOptionsQuery = createQuery(() => ({
-    queryKey: [
-      'filterOptions',
-      'rentals',
-      propertyType.current,
-      masterProject.current,
-      timeframe.current,
-      localFilters.selectedProject,
-      localFilters.selectedPropertyType,
-      localFilters.selectedPropertySubType,
-      localFilters.selectedTenantType,
-      localFilters.selectedRegistration,
-    ],
+    queryKey: filterOptionsQueryKey,
     queryFn: () => {
       const filterParams: Record<string, any> = {
         property_usage: propertyType.current,
         timeframe_days: TIMEFRAME_MAPPING[timeframe.current]
       };
-      
+
       // Add active filters for context-aware options
       if (masterProject.current !== 'All') {
         filterParams.master_project = masterProject.current;
@@ -169,7 +176,7 @@
       if (localFilters.selectedRegistration !== 'All') {
         filterParams.contract_reg_type = localFilters.selectedRegistration;
       }
-      
+
       return filters.rentals(filterParams);
     },
     staleTime: 5 * 60 * 1000, // 5 minutes
@@ -231,7 +238,8 @@
   function transformRental(r: RentalContract): TransformedRental {
     return {
       contract_id: r.contract_id,
-      date: r.contract_start_date ?? '-',
+      startDate: r.contract_start_date ?? '-',
+      endDate: r.contract_end_date ?? '-',
       area_name: r.area_name_en ?? '-',
       project: r.project_name_en ?? '-',
       propertyType: r.ejari_property_type_en ?? '-',
@@ -253,6 +261,10 @@
 
   let totalRecords = $derived(rentalsQuery.data?.total ?? 0);
   let totalPages = $derived(Math.ceil(totalRecords / DEFAULT_ITEMS_PER_PAGE));
+
+  // Make columns reactive to propertyType changes (ensures proper re-rendering)
+  // We access propertyType.current here to ensure reactivity tracking
+  let columns = $derived(propertyType.current ? RENTAL_COLUMNS : RENTAL_COLUMNS);
 
   // ========================================
   // Actions
@@ -366,7 +378,7 @@
 />
 
 <DataPanel
-  columns={RENTAL_COLUMNS}
+  {columns}
   data={displayData}
   onrowclick={handleRowClick}
   loading={rentalsQuery.isPending || rentalsQuery.isFetching}
