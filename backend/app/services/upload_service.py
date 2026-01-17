@@ -67,6 +67,9 @@ async def create_news_article(
         )
 
     news_article = NewsArticle(**article_data.model_dump())
+    
+    news_article.publish_date = news_article.publish_date.replace(tzinfo=timezone.utc)
+
     db.add(news_article)
     await db.commit()
     await db.refresh(news_article)
