@@ -85,7 +85,6 @@ async def health():
         # Test Redis connection
         redis_ok = False
         if cache.redis:
-            await cache.ensure_auth()
             await cache.redis.ping()
             redis_ok = True
 
