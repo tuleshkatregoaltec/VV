@@ -30,7 +30,7 @@ s3_client = S3Client(
 )
 
 
-cache = RedisCache(settings.REDIS_URL)
+cache = RedisCache(settings.REDIS_URL, settings.REDIS_PASSWORD)
 
 
 def sanitize_filename(filename: str) -> str:

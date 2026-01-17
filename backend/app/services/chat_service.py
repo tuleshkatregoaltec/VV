@@ -17,7 +17,7 @@ from app.services.mcp_service import mcp_registry
 from app.services.token_usage_service import token_usage_service
 
 logger = logging.getLogger(__name__)
-cache = RedisCache(settings.REDIS_URL)
+cache = RedisCache(settings.REDIS_URL, settings.REDIS_PASSWORD)
 
 # Initialize PostHog client
 posthog_client = Posthog(

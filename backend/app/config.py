@@ -8,6 +8,7 @@ class Settings(BaseSettings):
 
     # Redis
     REDIS_URL: str
+    REDIS_PASSWORD: str
 
     # WorkOS
     WORKOS_API_KEY: str

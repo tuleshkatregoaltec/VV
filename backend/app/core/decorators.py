@@ -7,7 +7,7 @@ from app.config import settings
 
 logger = logging.getLogger(__name__)
 
-cache = RedisCache(settings.REDIS_URL)
+cache = RedisCache(settings.REDIS_URL, settings.REDIS_PASSWORD)
 
 
 def serialize_result(result: Any) -> Any:

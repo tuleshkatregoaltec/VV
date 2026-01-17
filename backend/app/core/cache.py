@@ -5,6 +5,7 @@ from decimal import Decimal
 from typing import Any, Optional
 
 import redis.asyncio as redis
+from app.config import settings
 
 logger = logging.getLogger("RedisCache")
 
@@ -12,13 +13,15 @@ logger = logging.getLogger("RedisCache")
 class RedisCache:
     """Redis-backed cache with JSON serialization and automatic expiration"""
 
-    def __init__(self, redis_url: str, default_expire: int = 600):
+    def __init__(self, redis_url: str, redis_password: str, default_expire: int = 600):
         self.redis_url = redis_url
+        self.redis_password = redis_password
         self.default_expire = default_expire
         self.redis = None
 
         try:
             self.redis = redis.from_url(self.redis_url)
+            self.redis.auth(self.redis_password)
             logger.info("Redis client initialized at %s", self.redis_url)
         except Exception as e:
             logger.error(
