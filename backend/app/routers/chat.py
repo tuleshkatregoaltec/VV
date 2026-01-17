@@ -130,7 +130,7 @@ async def send_message(
 
     async def event_stream():
         try:
-            organization = await get_organization_for_user(current_user.id)
+            organization = await get_organization_for_user(db, current_user.id)
 
             organization_id = None
             organization_name = None
