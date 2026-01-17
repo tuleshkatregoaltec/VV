@@ -109,6 +109,7 @@ async def process_chunked_upload(
         raise HTTPException(503, "Redis unavailable")
 
     redis_key = f"upload:{upload_session_id}"
+    await cache.ensure_auth()
     await cache.redis.sadd(redis_key, chunk_index)  # type: ignore
     await cache.redis.expire(redis_key, 3600)  # type: ignore
 
