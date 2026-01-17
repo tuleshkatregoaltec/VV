@@ -34,6 +34,7 @@ honeybadger.configure(
 
 app.add_middleware(AuthenticationMiddleware, backend=AuthBackend())
 app.add_middleware(SessionMiddleware, secret_key=settings.SESSION_SECRET)
+app.add_middleware(contrib.ASGIHoneybadger)  # type: ignore
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.ALLOWED_ORIGINS,
@@ -41,10 +42,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-
-app.add_middleware(contrib.ASGIHoneybadger)  # type: ignore
-
 
 app.include_router(auth.router, tags=["auth"])
 app.include_router(admin.router, tags=["admin"])

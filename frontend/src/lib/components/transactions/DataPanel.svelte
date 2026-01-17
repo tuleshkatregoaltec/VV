@@ -1,5 +1,5 @@
 <script lang="ts">
-	import CheckboxDropdown from '$lib/components/dropdowns/CheckboxDropdown.svelte';
+	import ColumnSettingsDropdown from '$lib/components/dropdowns/ColumnSettingsDropdown.svelte';
 
 	let {
 		columns = [],
@@ -19,7 +19,7 @@
 			format?: (value: any, row: any) => string;
 			badge?: boolean;
 			highlighted?: boolean;
-			optional?: boolean;
+			defaultVisible?: boolean;
 		}>;
 		data?: Array<Record<string, any>>;
 		emptyMessage?: string;
@@ -31,14 +31,38 @@
 		getRowId?: (row: any) => string;
 	} = $props();
 
-	let shownOptional: Record<string, boolean> = $state({});
+	// Track which columns are visible (using column id as key)
+	let columnVisibility: Record<string, boolean> = $state({});
 	let hoveredRowId: string | null = $state(null);
+	let lastColumnsKey = '';
 
-	let optionalColumns = $derived(
-		columns.filter((c) => c.optional).map((c) => ({ id: c.id, label: c.label }))
+	// Initialize column visibility from defaultVisible property when columns change
+	$effect(() => {
+		// Create a key based on column IDs to detect when columns have changed
+		const columnsKey = columns.map(c => c.id).join(',');
+		
+		if (columnsKey !== lastColumnsKey) {
+			// Columns have changed - reinitialize visibility
+			const newVisibility: Record<string, boolean> = {};
+			for (const col of columns) {
+				// Preserve existing visibility preference if column still exists
+				if (col.id in columnVisibility) {
+					newVisibility[col.id] = columnVisibility[col.id];
+				} else {
+					newVisibility[col.id] = col.defaultVisible !== false;
+				}
+			}
+			columnVisibility = newVisibility;
+			lastColumnsKey = columnsKey;
+		}
+	});
+
+	// All columns are available for toggling
+	let allColumnOptions = $derived(
+		columns.map((c) => ({ id: c.id, label: c.label }))
 	);
 
-	let visibleColumns = $derived(columns.filter((c) => !c.optional || shownOptional[c.id]));
+	let visibleColumns = $derived(columns.filter((c) => columnVisibility[c.id]));
 
 	// Selection mode is active when any items are selected
 	let inSelectionMode = $derived(selectable && selectedIds.size > 0);
@@ -58,14 +82,6 @@
 		allRowIds.some(id => selectedIds.has(id)) &&
 		!allSelected
 	);
-
-	$effect(() => {
-		columns.forEach((col) => {
-			if (col.optional && !(col.id in shownOptional)) {
-				shownOptional[col.id] = false;
-			}
-		});
-	});
 
 	function handleRowClick(row: any) {
 		onrowclick?.(row);
@@ -109,16 +125,15 @@
 </script>
 
 <div class="bg-white rounded-xl shadow-md border border-gray-200 overflow-hidden">
-  {#if optionalColumns.length > 0}
-    <div class="flex items-center justify-end px-6 py-3 bg-gray-50 border-b border-gray-200">
-      <CheckboxDropdown 
-        id="column-visibility"
-		ariaLabel="Toggle Columns"
-        options={optionalColumns}
-        bind:selected={shownOptional}
-      />
-    </div>
-  {/if}
+  <!-- Column settings dropdown in upper right -->
+  <div class="flex items-center justify-end px-4 py-2 bg-gray-50 border-b border-gray-200">
+    <ColumnSettingsDropdown 
+      id="column-visibility"
+      ariaLabel="Column Settings"
+      options={allColumnOptions}
+      bind:selected={columnVisibility}
+    />
+  </div>
   
   <div class="overflow-x-auto">
     <table class="w-full">

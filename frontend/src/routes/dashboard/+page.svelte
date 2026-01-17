@@ -4,6 +4,7 @@
 	import TrendChart from '$lib/components/dashboard/TrendChart.svelte';
 	import PageHeader from '$lib/components/dashboard/PageHeader.svelte';
 	import AppShell from '$lib/components/layout/AppShell.svelte';
+	import NewsFeed from '$lib/components/news/NewsFeed.svelte';
 	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
 	import { chat } from '$lib/api/chat';
@@ -168,5 +169,11 @@
 				<p class="text-gray-500">Failed to load dashboard data. Please refresh the page.</p>
 			</div>
 		{/if}
+
+		<!-- News Feed -->
+		<section class="mt-12 pt-8 border-t border-gray-200">
+			<h2 class="text-2xl font-semibold mb-6">Latest News</h2>
+			<NewsFeed />
+		</section>
 	</div>
 </AppShell>

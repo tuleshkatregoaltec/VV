@@ -4,31 +4,42 @@ export const PROPERTY_USAGE = {
 	COMMERCIAL: 'Commercial'
 } as const;
 
-// Column definitions for transactions table
-const baseColumns = [
-	{ id: 'date', label: 'Date', align: 'left' as const },
-	{ id: 'area_name', label: 'Area', align: 'left' as const},
-	{ id: 'project', label: 'Project', align: 'left' as const },
-	{ id: 'building', label: 'Building', align: 'left' as const },
-	{ id: 'propertyType', label: 'Property Type', align: 'left' as const },
+// Column type definition
+export type ColumnDefinition = {
+	id: string;
+	label: string;
+	align?: 'left' | 'center' | 'right';
+	format?: (value: any, row?: any) => string;
+	badge?: boolean;
+	highlighted?: boolean;
+	defaultVisible?: boolean; // If false, column is hidden by default but can be toggled on
+};
+
+// Column definitions for sales transactions table
+export const RESIDENTIAL_COLUMNS: ColumnDefinition[] = [
+	{ id: 'date', label: 'Date', align: 'left', defaultVisible: true },
+	{ id: 'area_name', label: 'Area', align: 'left', defaultVisible: false },
+	{ id: 'project', label: 'Project', align: 'left', defaultVisible: true },
+	{ id: 'building', label: 'Building', align: 'left', defaultVisible: true },
+	{ id: 'propertyType', label: 'Property Type', align: 'left', defaultVisible: true },
+	{ id: 'bedrooms', label: 'Bedrooms', align: 'left', badge: true, defaultVisible: true },
+	{ id: 'area', label: 'Area (sq.m)', align: 'right', format: (val: number) => val.toLocaleString(), defaultVisible: true },
+	{ id: 'price', label: 'Price (AED)', align: 'right', format: (val: number) => val.toLocaleString(), defaultVisible: true },
+	{ id: 'pricePerSqM', label: 'Price/sq.m', align: 'right', highlighted: true, format: (val: number) => val.toLocaleString(), defaultVisible: true },
+	{ id: 'registration', label: 'Registration', align: 'left', defaultVisible: false }
 ];
 
-export const RESIDENTIAL_COLUMNS = [
-	...baseColumns,
-	{ id: 'bedrooms', label: 'Bedrooms', align: 'left' as const, badge: true },
-	{ id: 'area', label: 'Area (sq.m)', align: 'right' as const, format: (val: number) => val.toLocaleString() },
-	{ id: 'price', label: 'Price (AED)', align: 'right' as const, format: (val: number) => val.toLocaleString() },
-	{ id: 'pricePerSqM', label: 'Price/sq.m', align: 'right' as const, highlighted: true, format: (val: number) => val.toLocaleString() },
-	{ id: 'registration', label: 'Registration', align: 'left' as const }
-];
-
-export const COMMERCIAL_COLUMNS = [
-	...baseColumns,
-	{ id: 'propertySubType', label: 'Sub Type', align: 'left' as const },
-	{ id: 'area', label: 'Area (sq.m)', align: 'right' as const, format: (val: number) => val.toLocaleString() },
-	{ id: 'price', label: 'Price (AED)', align: 'right' as const, format: (val: number) => val.toLocaleString() },
-	{ id: 'pricePerSqM', label: 'Price/sq.m', align: 'right' as const, highlighted: true, format: (val: number) => val.toLocaleString() },
-	{ id: 'registration', label: 'Registration', align: 'left' as const }
+export const COMMERCIAL_COLUMNS: ColumnDefinition[] = [
+	{ id: 'date', label: 'Date', align: 'left', defaultVisible: true },
+	{ id: 'area_name', label: 'Area', align: 'left', defaultVisible: false },
+	{ id: 'project', label: 'Project', align: 'left', defaultVisible: true },
+	{ id: 'building', label: 'Building', align: 'left', defaultVisible: true },
+	{ id: 'propertyType', label: 'Property Type', align: 'left', defaultVisible: true },
+	{ id: 'propertySubType', label: 'Sub Type', align: 'left', defaultVisible: true },
+	{ id: 'area', label: 'Area (sq.m)', align: 'right', format: (val: number) => val.toLocaleString(), defaultVisible: true },
+	{ id: 'price', label: 'Price (AED)', align: 'right', format: (val: number) => val.toLocaleString(), defaultVisible: true },
+	{ id: 'pricePerSqM', label: 'Price/sq.m', align: 'right', highlighted: true, format: (val: number) => val.toLocaleString(), defaultVisible: true },
+	{ id: 'registration', label: 'Registration', align: 'left', defaultVisible: false }
 ];
 
 // Timeframe to days conversion
