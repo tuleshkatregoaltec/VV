@@ -27,7 +27,7 @@ class RedisCache:
             logger.error(
                 "Failed to initialize Redis client at %s: %s", self.redis_url, str(e)
             )
-    
+
     async def get(self, key: str) -> Optional[Any]:
         """Get value from cache by key, returns None if not found or Redis unavailable"""
         if not self.redis:
@@ -52,7 +52,7 @@ class RedisCache:
         """Set value in cache with optional expiration time in seconds"""
         if not self.redis:
             return
-        
+
         def default(obj):
             if isinstance(obj, Decimal):
                 return float(obj)
@@ -75,7 +75,7 @@ class RedisCache:
         """Delete value from cache by key"""
         if not self.redis:
             return
-        
+
         try:
             await self.redis.delete(key)
             logger.debug("Cache deleted for key: %s", key)
@@ -86,7 +86,7 @@ class RedisCache:
         """Clear all keys matching pattern from cache"""
         if not self.redis:
             return
-        
+
         try:
             keys = await self.redis.keys(pattern)
             if keys:
