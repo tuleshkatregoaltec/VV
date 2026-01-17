@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from datetime import date
+from datetime import datetime
 from app.schemas.news import NewsArticleResponse
 
 
@@ -8,7 +8,7 @@ class NewsArticleCreate(BaseModel):
     headline: str
     thumbnail_url: str | None = None
     thumbnail_base64: str | None = None
-    publish_date: date | None = None
+    publish_date: datetime | None = None
 
 
 class NewsArticleUploadResponse(BaseModel):
