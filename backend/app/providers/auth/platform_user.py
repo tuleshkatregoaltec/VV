@@ -11,12 +11,12 @@ from pydantic import Field, BaseModel
 
 
 class UserRoles(BaseModel):
-    roles: List[str] = Field(default_factory=list[str])
+    roles: List[str] = Field(default_factory=list)
 
 
 class UserMetadata(BaseModel):
     provider: str = Field(default="")
-    providers: List[str] = Field(default=lambda: list[str])
+    providers: List[str] = Field(default=[])
 
     first_name: str = Field(default="")
     last_name: str = Field(default="")
