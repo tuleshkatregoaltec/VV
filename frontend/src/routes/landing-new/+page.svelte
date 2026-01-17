@@ -23,9 +23,9 @@
 
 <div class="min-h-screen bg-background">
 	<HeroSection />
+	<PreviewSection />
 	<BenefitsSection />
 	<PersonasSection />
-	<PreviewSection />
 	<WhyVitevueSection />
 	<FinalCTA />
 	<Footer />

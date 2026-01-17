@@ -9,46 +9,79 @@
 	});
 </script>
 
-<section class="py-32 bg-gradient-to-b from-background-surface to-background relative overflow-hidden">
-	<!-- Background elements -->
-	<div class="absolute inset-0">
-		<div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-gradient-to-br from-[#009999]/20 via-purple-500/10 to-transparent rounded-full blur-3xl animate-pulse-slow"></div>
-	</div>
+<section class="py-24 bg-slate-50 relative overflow-hidden">
+	<!-- Subtle gradient overlay -->
+	<div class="absolute inset-0 bg-gradient-to-br from-slate-100/50 via-white/30 to-slate-100/50"></div>
 
-	<div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 text-center relative z-10">
+	<!-- Floating decorative elements -->
+	<div class="absolute top-1/4 right-10 w-32 h-32 bg-teal-100 rounded-full blur-3xl opacity-30 animate-float-slow"></div>
+	<div class="absolute bottom-1/4 left-10 w-40 h-40 bg-cyan-100 rounded-full blur-3xl opacity-30 animate-float-delayed"></div>
+
+	<div class="max-w-4xl mx-auto px-6 lg:px-8 text-center relative">
 		{#if isVisible}
-		<div in:fly={{ y: 40, duration: 800, easing: cubicOut }} class="bg-white/60 backdrop-blur-xl rounded-3xl p-12 sm:p-16 shadow-2xl border border-gray-200">
-			<h2 class="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-black text-gray-900 mb-6 leading-tight">
-				Ready to gain<br />
-				<span class="bg-gradient-to-r from-[#009999] via-blue-600 to-purple-600 bg-clip-text text-transparent">
-					your edge?
+		<div in:fly={{ y: 20, duration: 600, easing: cubicOut }}>
+			<!-- Icon badge -->
+			<div class="inline-flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-full mb-8 shadow-sm hover:scale-105 hover:shadow-md transition-all duration-300">
+				<svg class="w-4 h-4 text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 8h2a2 2 0 012 2v6a2 2 0 01-2 2h-2v4l-4-4H9a1.994 1.994 0 01-1.414-.586m0 0L11 14h4a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2v4l.586-.586z"></path>
+				</svg>
+				<span class="text-sm font-semibold text-slate-700">Get Started</span>
+			</div>
+
+			<h2 class="text-4xl sm:text-5xl font-bold text-slate-900 mb-6 leading-tight hover:scale-[1.02] transition-transform duration-500">
+				Ready to
+				<span class="bg-gradient-to-r from-teal-600 to-cyan-600 bg-clip-text text-transparent">
+					transform
 				</span>
+				your workflow?
 			</h2>
-			<p class="text-xl sm:text-2xl text-gray-600 mb-12 max-w-2xl mx-auto leading-relaxed">
-				Join the professionals making faster, smarter decisions with AI-powered intelligence.
+			<p class="text-xl text-slate-600 mb-10 max-w-2xl mx-auto leading-relaxed">
+				Join Dubai's leading real estate professionals in making faster, data-driven decisions
 			</p>
-			<div class="flex flex-col sm:flex-row gap-4 justify-center mb-8">
+
+			<div class="flex flex-col sm:flex-row gap-4 justify-center mb-10">
 				<a
 					href="mailto:contact@vitevue.com"
-					class="group px-12 py-6 bg-gradient-to-r from-[#009999] to-[#007788] text-white font-bold rounded-xl hover:shadow-2xl transition-all duration-300 shadow-xl text-xl"
+					class="group inline-flex items-center justify-center gap-2 px-8 py-4 bg-slate-900 text-white font-semibold rounded-lg hover:bg-slate-800 hover:scale-105 transition-all shadow-sm hover:shadow-lg text-base"
 				>
-					<span class="flex items-center justify-center gap-2">
-						Contact Sales
-						<svg class="w-6 h-6 group-hover:translate-x-1 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"></path>
-						</svg>
-					</span>
+					Contact Sales
+					<svg class="w-4 h-4 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"></path>
+					</svg>
 				</a>
 				<a
 					href="/dashboard"
-					class="px-12 py-6 bg-white text-gray-900 font-bold rounded-xl hover:shadow-2xl transition-all duration-300 shadow-lg border-2 border-gray-300 hover:border-[#009999]/50 text-xl"
+					class="group inline-flex items-center justify-center gap-2 px-8 py-4 bg-white text-slate-900 font-semibold rounded-lg hover:bg-slate-50 hover:scale-105 transition-all border border-slate-200 hover:border-slate-300 hover:shadow-md text-base"
 				>
 					View Dashboard
+					<svg class="w-4 h-4 group-hover:scale-110 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
+					</svg>
 				</a>
 			</div>
-			<p class="text-sm text-gray-500">
-				Enterprise-grade platform • Verified data • AI-powered insights
-			</p>
+
+			<!-- Visual feature badges -->
+			<div class="flex flex-wrap justify-center gap-4 text-sm">
+				<div class="group flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-lg shadow-sm hover:scale-105 hover:shadow-md hover:border-slate-300 transition-all duration-300">
+					<svg class="w-4 h-4 text-teal-600 group-hover:scale-110 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path>
+					</svg>
+					<span class="font-medium text-slate-700">Enterprise security</span>
+				</div>
+				<div class="group flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-lg shadow-sm hover:scale-105 hover:shadow-md hover:border-slate-300 transition-all duration-300">
+					<svg class="w-4 h-4 text-teal-600 group-hover:scale-110 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+					</svg>
+					<span class="font-medium text-slate-700">Real-time updates</span>
+				</div>
+				<div class="group flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-lg shadow-sm hover:scale-105 hover:shadow-md hover:border-slate-300 transition-all duration-300">
+					<svg class="w-4 h-4 text-teal-600 group-hover:scale-110 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 5.636l-3.536 3.536m0 5.656l3.536 3.536M9.172 9.172L5.636 5.636m3.536 9.192l-3.536 3.536M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-5 0a4 4 0 11-8 0 4 4 0 018 0z"></path>
+					</svg>
+					<span class="font-medium text-slate-700">Expert support</span>
+				</div>
+			</div>
 		</div>
 		{/if}
 	</div>

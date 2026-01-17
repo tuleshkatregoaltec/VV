@@ -7,10 +7,10 @@
 		accentColor?: string;
 	}
 
-	let { icon, title, description, gradient = 'from-gray-50 to-gray-100', accentColor = 'text-[#009999]' }: Props = $props();
+	let { icon, title, description, gradient = 'from-gray-50 to-gray-100', accentColor = 'text-teal-600' }: Props = $props();
 </script>
 
-<div class="group relative bg-white rounded-2xl p-8 shadow-lg border border-gray-200 hover:shadow-2xl hover:border-[#009999]/30 transition-all duration-300 h-full">
+<div class="group relative bg-white rounded-2xl p-8 shadow-lg border border-gray-200 hover:shadow-2xl hover:border-teal-600/30 transition-all duration-300 h-full">
 	<div class="absolute inset-0 bg-gradient-to-br {gradient} rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
 
 	<div class="relative z-10">
