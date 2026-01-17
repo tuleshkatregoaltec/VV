@@ -80,44 +80,6 @@
 		}
 	}
 
-	async function handleEmailSubmit() {
-		fieldErrors.email = '';
-		if (!email.trim()) {
-			fieldErrors.email = 'Email is required';
-			return;
-		}
-		if (!validateEmail(email)) {
-			fieldErrors.email = 'Invalid email address';
-			return;
-		}
-
-		loading = true;
-		error = '';
-
-		try {
-			// Check if email exists via backend endpoint
-			const result = await check_email_exists(email);
-			
-			if (result.success && result.data?.exists) {
-				// Email exists, go to login
-				emailExists = true;
-				// For now, default to password if available, else magic link
-				loginMethod = 'password';
-				currentView = 'login';
-			} else {
-				// Email doesn't exist, go to signup
-				emailExists = false;
-				currentView = 'signup';
-			}
-		} catch (err) {
-			// On error, assume signup (new user)
-			emailExists = false;
-			currentView = 'signup';
-		} finally {
-			loading = false;
-		}
-	}
-
 	async function handleLogin() {
 		fieldErrors.password = '';
 		if (loginMethod === 'password') {
