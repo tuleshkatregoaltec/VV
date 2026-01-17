@@ -80,7 +80,7 @@ export type StreamCallback = (chunk: string) => void;
  * Stream SSE responses using fetch with ReadableStream.
  * Supports POST requests with request bodies.
  */
-export function stream(
+export async function stream(
     endpoint: string,
     onChunk: StreamCallback,
     options: { method?: 'GET' | 'POST', body?: unknown } = {}
@@ -90,16 +90,26 @@ export function stream(
     let abortController = new AbortController();
     let streamComplete = false;
 
+    // if access token available, add auth header. 
+    const access_token = await get_access_token();
+    const headers: Record<string, string> = {};
+    if (access_token) {
+        headers["Authorization"] = `Bearer ${access_token}`;
+    }
+
     const config: RequestInit = {
         method,
         credentials: 'include',
         signal: abortController.signal,
-        headers: {},
+        headers: {
+            ...headers,
+        },
     };
 
     if (body !== undefined) {
         config.headers = {
             'Content-Type': 'application/json',
+            ...config.headers,
         };
         config.body = JSON.stringify(body);
     }
