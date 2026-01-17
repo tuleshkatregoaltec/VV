@@ -21,6 +21,6 @@ export const news = {
 		const query = new URLSearchParams();
 		if (params.limit) query.append('limit', params.limit.toString());
 		if (params.offset) query.append('offset', params.offset.toString());
-		return api<NewsListResponse>(`/api/v1/news?${query}`);
+		return api<NewsListResponse>(`/api/v1/news/articles?${query}`);
 	}
 };
