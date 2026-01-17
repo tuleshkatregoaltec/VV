@@ -18,20 +18,27 @@ class RedisCache:
         self.redis_password = redis_password
         self.default_expire = default_expire
         self.redis = None
+        self.is_authed = False
 
         try:
             self.redis = redis.from_url(self.redis_url)
-            self.redis.auth(self.redis_password)
             logger.info("Redis client initialized at %s", self.redis_url)
         except Exception as e:
             logger.error(
                 "Failed to initialize Redis client at %s: %s", self.redis_url, str(e)
             )
+    
+    async def ensure_auth(self):
+            if not self.is_authed:
+                await self.redis.auth(self.redis_password)
+                self.is_authed = True
 
     async def get(self, key: str) -> Optional[Any]:
         """Get value from cache by key, returns None if not found or Redis unavailable"""
         if not self.redis:
             return None
+
+        await self.ensure_auth()
 
         try:
             value = await self.redis.get(key)
@@ -52,6 +59,8 @@ class RedisCache:
         """Set value in cache with optional expiration time in seconds"""
         if not self.redis:
             return
+        
+        await self.ensure_auth()
 
         def default(obj):
             if isinstance(obj, Decimal):
@@ -75,6 +84,8 @@ class RedisCache:
         """Delete value from cache by key"""
         if not self.redis:
             return
+        
+        await self.ensure_auth()
 
         try:
             await self.redis.delete(key)
@@ -86,6 +97,8 @@ class RedisCache:
         """Clear all keys matching pattern from cache"""
         if not self.redis:
             return
+        
+        await self.ensure_auth()
 
         try:
             keys = await self.redis.keys(pattern)
