@@ -13,6 +13,7 @@
 	let username = $derived(page.data.user?.first_name ?? '');
 	let analyticsData = $state<SalesAnalyticsResponse | null>(null);
 	let isLoading = $state(true);
+	let newsSection: HTMLElement;
 
 	// Fetch analytics data on mount
 	$effect(() => {
@@ -61,7 +62,8 @@
 </script>
 
 <AppShell showFilters={false}>
-	<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 bg-background">
+	<!-- Main Dashboard Section -->
+	<div class="min-h-screen flex flex-col max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 bg-background relative">
 		<PageHeader title="Welcome, {username}!" subtitle="Your Dubai property dashboard" />
 
 		<div class="mb-12 sm:mb-16">
@@ -170,10 +172,26 @@
 			</div>
 		{/if}
 
-		<!-- News Feed -->
-		<section class="mt-12 pt-8 border-t border-gray-200">
-			<h2 class="text-2xl font-semibold mb-6">Latest News</h2>
-			<NewsFeed />
-		</section>
+		<!-- Scroll Indicator -->
+		<div class="absolute bottom-16 left-1/2 -translate-x-1/2 animate-hover">
+			<svg
+				xmlns="http://www.w3.org/2000/svg"
+				class="h-8 w-8 text-primary"
+				fill="none"
+				viewBox="0 0 24 24"
+				stroke="currentColor"
+				stroke-width="2"
+			>
+				<path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
+			</svg>
+		</div>
 	</div>
+
+	<!-- News Feed Section -->
+	<section bind:this={newsSection} class="min-h-screen bg-gradient-to-b from-background to-gray-50 pt-2 pb-16">
+		<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+			<h2 class="text-3xl sm:text-4xl font-bold text-center mb-12">Latest News</h2>
+			<NewsFeed />
+		</div>
+	</section>
 </AppShell>
