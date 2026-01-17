@@ -24,7 +24,7 @@ async def fetch_news_articles(
     total = count_result.one()
 
     return NewsListResponse(
-        articles=[NewsArticleResponse.model_validate(a) for a in articles],
+        articles=[NewsArticleResponse(**a.model_dump()) for a in articles],
         total=total,
         limit=limit,
         offset=offset,

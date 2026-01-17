@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, AwareDatetime
 from datetime import datetime
 
 
@@ -8,7 +8,7 @@ class NewsArticleResponse(BaseModel):
     headline: str
     thumbnail_url: str
     thumbnail_base64: str | None
-    publish_date: datetime | None
+    publish_date: AwareDatetime | None
 
 
 class NewsListResponse(BaseModel):
