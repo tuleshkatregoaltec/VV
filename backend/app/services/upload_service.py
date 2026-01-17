@@ -1,6 +1,6 @@
 import hashlib
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from io import BytesIO
 
 from fastapi import HTTPException, UploadFile
@@ -61,7 +61,7 @@ async def create_news_article(
                 headline=existing_article.headline,
                 thumbnail_url=existing_article.thumbnail_url or "",
                 thumbnail_base64=existing_article.thumbnail_base64,
-                publish_date=existing_article.publish_date,
+                publish_date=existing_article.publish_date.replace(tzinfo=timezone.utc),
             ),
             message="Article already exists in database",
         )
@@ -79,7 +79,7 @@ async def create_news_article(
             headline=news_article.headline,
             thumbnail_url=news_article.thumbnail_url or "",
             thumbnail_base64=news_article.thumbnail_base64,
-            publish_date=news_article.publish_date,
+            publish_date=news_article.publish_date.replace(tzinfo=timezone.utc),
         ),
         message="Article created successfully",
     )
