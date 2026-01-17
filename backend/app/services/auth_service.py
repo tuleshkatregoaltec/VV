@@ -31,12 +31,6 @@ async def get_auth_user(jwt: str) -> Optional[AuthUser]:
 
     return user_response.user
 
-
-async def logout_user(user: PlatformUser):
-    await auth_client.admin.sign_out(user.token)
-    return RedirectResponse(url=settings.FRONTEND_URL)
-
-
 @admin_auth.with_admin_client()
 async def update_app_metadata(user: PlatformUser, **kwargs):
     client: AsyncGoTrueClient = kwargs["client"]

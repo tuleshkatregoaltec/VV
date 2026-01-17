@@ -68,15 +68,6 @@ async def sync_callback(
     return JSONResponse(content={"success": True})
 
 
-@router.get("/logout")
-async def logout(
-    request: Request,
-    current_user: PlatformUser = Depends(require_auth),
-):
-    """Logout user and clear session"""
-    return await auth_service.logout_user(current_user)
-
-
 @router.get("/me")
 async def get_user(
     request: Request,
