@@ -1,6 +1,7 @@
 <script lang="ts">
 	import CompactChatInput from '$lib/components/dashboard/CompactChatInput.svelte';
 	import FullWidthMarketChart from '$lib/components/dashboard/FullWidthMarketChart.svelte';
+	import CompleteProfileModal from '$lib/components/dashboard/CompleteProfileModal.svelte';
 	import AppShell from '$lib/components/layout/AppShell.svelte';
 	import NewsFeed from '$lib/components/news/NewsFeed.svelte';
 	import NewsCard from '$lib/components/news/NewsCard.svelte';
@@ -220,4 +221,9 @@
 			</div>
 		</section>
 	</div>
+
+	<!-- Complete Profile Modal - show if user is missing first or last name -->
+	{#if currentUser.data && (!currentUser.data.first_name || !currentUser.data.last_name)}
+		<CompleteProfileModal />
+	{/if}
 </AppShell>

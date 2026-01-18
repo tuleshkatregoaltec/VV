@@ -17,9 +17,7 @@
 		me
 	} from '$lib/api/auth';
 
-	type View = 'login' | 'signup' | 'verify-otp' | 'magic-sent' | 'forgot-password' | 'reset-sent';
-	type SignupMethod = 'password' | 'magic';
-	type LoginMethod = 'password' | 'magic';
+	type View = 'login' | 'signup' | 'verify-otp' | 'email-auth' | 'email-auth-otp' | 'forgot-password' | 'forgot-password-otp';
 
 	let currentView = $state<View>('login');
 	let email = $state('');
@@ -32,8 +30,6 @@
 	let loading = $state(false);
 	let error = $state('');
 	let resendCountdown = $state(0);
-	let signupMethod = $state<SignupMethod>('password');
-	let loginMethod = $state<LoginMethod>('password');
 
 	let fieldErrors = $state({
 		email: '',
@@ -74,7 +70,6 @@
 		otpCode = '';
 		firstName = '';
 		lastName = '';
-		signupMethod = 'password';
 		if (countdownInterval) {
 			clearInterval(countdownInterval);
 		}
@@ -82,33 +77,22 @@
 
 	async function handleLogin() {
 		fieldErrors.password = '';
-		if (loginMethod === 'password') {
-			if (!password) {
-				fieldErrors.password = 'Password is required';
-				return;
-			}
+		if (!password) {
+			fieldErrors.password = 'Password is required';
+			return;
 		}
 
 		loading = true;
 		error = '';
 
 		try {
-			if (loginMethod === 'password') {
-				const result = await login_with_email_pass(email, password);
-				if (result.success) {
-					const user = await me();
-					identifyUser(user);
-					goto('/dashboard');
-				} else {
-					error = result.error || 'Invalid email or password';
-				}
+			const result = await login_with_email_pass(email, password);
+			if (result.success) {
+				const user = await me();
+				identifyUser(user);
+				goto('/dashboard');
 			} else {
-				const result = await sign_in_with_magic_link(email);
-				if (result.success) {
-					currentView = 'magic-sent';
-				} else {
-					error = result.error || 'Failed to send magic link';
-				}
+				error = result.error || 'Invalid email or password';
 			}
 		} finally {
 			loading = false;
@@ -129,45 +113,33 @@
 			fieldErrors.lastName = 'Last name is required';
 			return;
 		}
-
-		if (signupMethod === 'password') {
-			if (!password) {
-				fieldErrors.password = 'Password is required';
-				return;
-			}
-			if (password.length < 8) {
-				fieldErrors.password = 'Password must be at least 8 characters';
-				return;
-			}
-			if (!confirmPassword) {
-				fieldErrors.confirmPassword = 'Please confirm your password';
-				return;
-			}
-			if (password !== confirmPassword) {
-				fieldErrors.confirmPassword = 'Passwords do not match';
-				return;
-			}
+		if (!password) {
+			fieldErrors.password = 'Password is required';
+			return;
+		}
+		if (password.length < 8) {
+			fieldErrors.password = 'Password must be at least 8 characters';
+			return;
+		}
+		if (!confirmPassword) {
+			fieldErrors.confirmPassword = 'Please confirm your password';
+			return;
+		}
+		if (password !== confirmPassword) {
+			fieldErrors.confirmPassword = 'Passwords do not match';
+			return;
 		}
 
 		loading = true;
 		error = '';
 
 		try {
-			if (signupMethod === 'password') {
-				const result = await sign_up_with_password(email, password, firstName, lastName);
-				if (result.success) {
-					currentView = 'verify-otp';
-					startResendCountdown();
-				} else {
-					error = result.error || 'Sign up failed';
-				}
+			const result = await sign_up_with_password(email, password, firstName, lastName);
+			if (result.success) {
+				currentView = 'verify-otp';
+				startResendCountdown();
 			} else {
-				const result = await sign_up_with_magic_link(email, firstName, lastName);
-				if (result.success) {
-					currentView = 'magic-sent';
-				} else {
-					error = result.error || 'Failed to send magic link';
-				}
+				error = result.error || 'Sign up failed';
 			}
 		} finally {
 			loading = false;
@@ -214,6 +186,69 @@
 		}
 	}
 
+	async function handleEmailAuth() {
+		fieldErrors.email = '';
+		if (!email.trim()) {
+			fieldErrors.email = 'Email is required';
+			return;
+		}
+
+		loading = true;
+		error = '';
+
+		try {
+			const result = await sign_in_with_magic_link(email);
+			if (result.success) {
+				currentView = 'email-auth-otp';
+				startResendCountdown();
+			} else {
+				error = result.error || 'Failed to send verification code';
+			}
+		} finally {
+			loading = false;
+		}
+	}
+
+	async function handleEmailAuthOTP() {
+		if (otpCode.length !== 6) {
+			error = 'Please enter the complete 6-digit code';
+			return;
+		}
+
+		loading = true;
+		error = '';
+
+		try {
+			const result = await verify_otp(email, otpCode, 'magiclink');
+			if (result.success) {
+				const user = await me();
+				identifyUser(user);
+				goto('/dashboard');
+			} else {
+				error = result.error || 'Invalid verification code';
+			}
+		} finally {
+			loading = false;
+		}
+	}
+
+	async function handleResendEmailAuthOTP() {
+		loading = true;
+		error = '';
+
+		try {
+			const result = await sign_in_with_magic_link(email);
+			if (result.success) {
+				startResendCountdown();
+				error = '';
+			} else {
+				error = result.error || 'Failed to resend code';
+			}
+		} finally {
+			loading = false;
+		}
+	}
+
 	async function handleForgotPassword() {
 		fieldErrors.email = '';
 		if (!email.trim()) {
@@ -227,10 +262,57 @@
 		try {
 			const result = await request_password_reset(email);
 			if (result.success) {
-				currentView = 'reset-sent';
+				currentView = 'forgot-password-otp';
+				startResendCountdown();
 			} else {
 				error = result.error || 'Failed to send reset email';
 			}
+		} catch (e) {
+			error = 'Failed to send reset email. Please try again.';
+		} finally {
+			loading = false;
+		}
+	}
+
+	async function handleForgotPasswordOTP() {
+		if (otpCode.length !== 6) {
+			error = 'Please enter the complete 6-digit code';
+			return;
+		}
+
+		loading = true;
+		error = '';
+
+		try {
+			const result = await verify_otp(email, otpCode, 'recovery');
+			if (result.success) {
+				// After successful OTP verification for password reset,
+				// user can set new password (handled by backend redirect or next step)
+				const user = await me();
+				identifyUser(user);
+				goto('/dashboard');
+			} else {
+				error = result.error || 'Invalid verification code';
+			}
+		} finally {
+			loading = false;
+		}
+	}
+
+	async function handleResendForgotPasswordOTP() {
+		loading = true;
+		error = '';
+
+		try {
+			const result = await request_password_reset(email);
+			if (result.success) {
+				startResendCountdown();
+				error = '';
+			} else {
+				error = result.error || 'Failed to resend code';
+			}
+		} catch (e) {
+			error = 'Failed to resend code. Please try again.';
 		} finally {
 			loading = false;
 		}
@@ -261,29 +343,6 @@
 					</div>
 				{/if}
 
-				<div class="flex gap-2 mb-6">
-					<button
-						type="button"
-						onclick={() => (loginMethod = 'password')}
-						class="flex-1 py-2 px-4 border rounded-lg text-sm font-medium transition-all
-                               {loginMethod === 'password'
-							? 'border-primary bg-primary/5 text-primary'
-							: 'border-gray-200 text-gray-600 hover:border-primary/50'}"
-					>
-						Password
-					</button>
-					<button
-						type="button"
-						onclick={() => (loginMethod = 'magic')}
-						class="flex-1 py-2 px-4 border rounded-lg text-sm font-medium transition-all
-                               {loginMethod === 'magic'
-							? 'border-primary bg-primary/5 text-primary'
-							: 'border-gray-200 text-gray-600 hover:border-primary/50'}"
-					>
-						Magic Link
-					</button>
-				</div>
-
 				<form
 					onsubmit={(e) => {
 						e.preventDefault();
@@ -300,26 +359,24 @@
 						required
 						autocomplete="email"
 					/>
-					{#if loginMethod === 'password'}
-						<PasswordInput
-							label="Password"
-							bind:value={password}
-							placeholder="Enter your password"
-							error={fieldErrors.password}
-							required
-							autocomplete="current-password"
-						/>
+					<PasswordInput
+						label="Password"
+						bind:value={password}
+						placeholder="Enter your password"
+						error={fieldErrors.password}
+						required
+						autocomplete="current-password"
+					/>
 
-						<div class="text-right">
-							<button
-								type="button"
-								onclick={() => (currentView = 'forgot-password')}
-								class="text-sm text-primary hover:text-primary-dark transition-colors"
-							>
-								Forgot password?
-							</button>
-						</div>
-					{/if}
+					<div class="text-right">
+						<button
+							type="button"
+							onclick={() => (currentView = 'forgot-password')}
+							class="text-sm text-primary hover:text-primary-dark transition-colors"
+						>
+							Forgot password?
+						</button>
+					</div>
 
 					<button
 						type="submit"
@@ -327,13 +384,25 @@
 						class="w-full bg-primary hover:bg-primary-dark text-white rounded-lg px-4 py-3
                                transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium"
 					>
-						{#if loading}
-							Processing...
-						{:else if loginMethod === 'password'}
-							Sign In
-						{:else}
-							Send Magic Link
-						{/if}
+						{loading ? 'Processing...' : 'Sign In'}
+					</button>
+
+					<div class="relative my-6">
+						<div class="absolute inset-0 flex items-center">
+							<div class="w-full border-t border-gray-200"></div>
+						</div>
+						<div class="relative flex justify-center text-sm">
+							<span class="px-2 bg-white text-gray-500">Or</span>
+						</div>
+					</div>
+
+					<button
+						type="button"
+						onclick={() => (currentView = 'email-auth')}
+						class="w-full border border-gray-200 hover:border-primary text-slate-700 hover:text-primary rounded-lg px-4 py-3
+                               transition-colors font-medium"
+					>
+						Sign in with Email
 					</button>
 				</form>
 			{:else if currentView === 'signup'}
@@ -356,29 +425,6 @@
 						{error}
 					</div>
 				{/if}
-
-				<div class="flex gap-2 mb-6">
-					<button
-						type="button"
-						onclick={() => (signupMethod = 'password')}
-						class="flex-1 py-2 px-4 border rounded-lg text-sm font-medium transition-all
-                               {signupMethod === 'password'
-							? 'border-primary bg-primary/5 text-primary'
-							: 'border-gray-200 text-gray-600 hover:border-primary/50'}"
-					>
-						Password
-					</button>
-					<button
-						type="button"
-						onclick={() => (signupMethod = 'magic')}
-						class="flex-1 py-2 px-4 border rounded-lg text-sm font-medium transition-all
-                               {signupMethod === 'magic'
-							? 'border-primary bg-primary/5 text-primary'
-							: 'border-gray-200 text-gray-600 hover:border-primary/50'}"
-					>
-						Magic Link
-					</button>
-				</div>
 
 				<form
 					onsubmit={(e) => {
@@ -409,29 +455,29 @@
 						type="email"
 						bind:value={email}
 						placeholder="you@example.com"
-						disabled
+						error={fieldErrors.email}
+						required
+						autocomplete="email"
 					/>
 
-					{#if signupMethod === 'password'}
-						<PasswordInput
-							label="Password"
-							bind:value={password}
-							placeholder="Create a strong password"
-							error={fieldErrors.password}
-							required
-							autocomplete="new-password"
-							showStrength
-						/>
+					<PasswordInput
+						label="Password"
+						bind:value={password}
+						placeholder="Create a strong password"
+						error={fieldErrors.password}
+						required
+						autocomplete="new-password"
+						showStrength
+					/>
 
-						<PasswordInput
-							label="Confirm Password"
-							bind:value={confirmPassword}
-							placeholder="Confirm your password"
-							error={fieldErrors.confirmPassword}
-							required
-							autocomplete="new-password"
-						/>
-					{/if}
+					<PasswordInput
+						label="Confirm Password"
+						bind:value={confirmPassword}
+						placeholder="Confirm your password"
+						error={fieldErrors.confirmPassword}
+						required
+						autocomplete="new-password"
+					/>
 
 					<button
 						type="submit"
@@ -439,13 +485,7 @@
 						class="w-full bg-primary hover:bg-primary-dark text-white rounded-lg px-4 py-3
                                transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium"
 					>
-						{#if loading}
-							Creating...
-						{:else if signupMethod === 'password'}
-							Create Account
-						{:else}
-							Send Magic Link
-						{/if}
+						{loading ? 'Creating...' : 'Create Account'}
 					</button>
 				</form>
 			{:else if currentView === 'verify-otp'}
@@ -514,12 +554,15 @@
 						{/if}
 					</div>
 				</div>
-			{:else if currentView === 'magic-sent'}
-				<div class="text-center">
-					<div class="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+			{:else if currentView === 'email-auth'}
+				<div class="mb-8">
+					<button
+						onclick={goBack}
+						class="text-sm text-primary hover:text-primary-dark transition-colors mb-4 flex items-center gap-1"
+					>
 						<svg
 							xmlns="http://www.w3.org/2000/svg"
-							class="h-8 w-8 text-green-600"
+							class="h-4 w-4"
 							fill="none"
 							viewBox="0 0 24 24"
 							stroke="currentColor"
@@ -528,22 +571,113 @@
 								stroke-linecap="round"
 								stroke-linejoin="round"
 								stroke-width="2"
-								d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
+								d="M15 19l-7-7 7-7"
 							/>
 						</svg>
+						Back
+					</button>
+					<h1 class="text-3xl font-bold text-black mb-2">Sign in with Email</h1>
+					<p class="text-gray-600">Enter your email to receive a verification code</p>
+				</div>
+
+				{#if error}
+					<div class="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-600">
+						{error}
 					</div>
+				{/if}
+
+				<form
+					onsubmit={(e) => {
+						e.preventDefault();
+						handleEmailAuth();
+					}}
+					class="space-y-4"
+				>
+					<TextInput
+						label="Email"
+						type="email"
+						bind:value={email}
+						placeholder="you@example.com"
+						error={fieldErrors.email}
+						required
+						autocomplete="email"
+					/>
+
+					<button
+						type="submit"
+						disabled={loading}
+						class="w-full bg-primary hover:bg-primary-dark text-white rounded-lg px-4 py-3
+                               transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+					>
+						{loading ? 'Sending...' : 'Continue with Email'}
+					</button>
+				</form>
+			{:else if currentView === 'email-auth-otp'}
+				<div class="mb-8">
+					<button
+						onclick={goBack}
+						class="text-sm text-primary hover:text-primary-dark transition-colors mb-4 flex items-center gap-1"
+					>
+						<svg
+							xmlns="http://www.w3.org/2000/svg"
+							class="h-4 w-4"
+							fill="none"
+							viewBox="0 0 24 24"
+							stroke="currentColor"
+						>
+							<path
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								stroke-width="2"
+								d="M15 19l-7-7 7-7"
+							/>
+						</svg>
+						Back
+					</button>
 					<h1 class="text-3xl font-bold text-black mb-2">Check Your Email</h1>
-					<p class="text-gray-600 mb-6">
-						We've sent a magic link to <span class="font-medium">{email}</span>. Click the link in
-						the email to sign in.
+					<p class="text-gray-600">
+						We've sent a verification code to <span class="font-medium">{email}</span>. Enter the
+						6-digit code below or click the link in the email.
 					</p>
+				</div>
+
+				{#if error}
+					<div class="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-600">
+						{error}
+					</div>
+				{/if}
+
+				<div class="space-y-6">
+					<OTPInput
+						bind:value={otpCode}
+						onComplete={handleEmailAuthOTP}
+						error={error && otpCode.length === 6 ? error : ''}
+					/>
+
 					<button
 						type="button"
-						onclick={goBack}
-						class="text-primary hover:text-primary-dark transition-colors"
+						onclick={handleEmailAuthOTP}
+						disabled={loading || otpCode.length !== 6}
+						class="w-full bg-primary hover:bg-primary-dark text-white rounded-lg px-4 py-3
+                               transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium"
 					>
-						Back to sign in
+						{loading ? 'Verifying...' : 'Verify Code'}
 					</button>
+
+					<div class="text-center">
+						{#if resendCountdown > 0}
+							<p class="text-sm text-gray-600">Resend code in {resendCountdown}s</p>
+						{:else}
+							<button
+								type="button"
+								onclick={handleResendEmailAuthOTP}
+								disabled={loading}
+								class="text-sm text-primary hover:text-primary-dark transition-colors disabled:opacity-50"
+							>
+								Resend code
+							</button>
+						{/if}
+					</div>
 				</div>
 			{:else if currentView === 'forgot-password'}
 				<div class="mb-8">
@@ -603,12 +737,15 @@
 						{loading ? 'Sending...' : 'Send Reset Link'}
 					</button>
 				</form>
-			{:else if currentView === 'reset-sent'}
-				<div class="text-center">
-					<div class="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+			{:else if currentView === 'forgot-password-otp'}
+				<div class="mb-8">
+					<button
+						onclick={() => (currentView = 'forgot-password')}
+						class="text-sm text-primary hover:text-primary-dark transition-colors mb-4 flex items-center gap-1"
+					>
 						<svg
 							xmlns="http://www.w3.org/2000/svg"
-							class="h-8 w-8 text-green-600"
+							class="h-4 w-4"
 							fill="none"
 							viewBox="0 0 24 24"
 							stroke="currentColor"
@@ -617,22 +754,55 @@
 								stroke-linecap="round"
 								stroke-linejoin="round"
 								stroke-width="2"
-								d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
+								d="M15 19l-7-7 7-7"
 							/>
 						</svg>
-					</div>
+						Back
+					</button>
 					<h1 class="text-3xl font-bold text-black mb-2">Check Your Email</h1>
-					<p class="text-gray-600 mb-6">
-						We've sent a password reset link to <span class="font-medium">{email}</span>. Click
-						the link in the email to reset your password.
+					<p class="text-gray-600">
+						We've sent a password reset code to <span class="font-medium">{email}</span>. Enter the
+						6-digit code below or click the link in the email.
 					</p>
+				</div>
+
+				{#if error}
+					<div class="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-600">
+						{error}
+					</div>
+				{/if}
+
+				<div class="space-y-6">
+					<OTPInput
+						bind:value={otpCode}
+						onComplete={handleForgotPasswordOTP}
+						error={error && otpCode.length === 6 ? error : ''}
+					/>
+
 					<button
 						type="button"
-						onclick={goBack}
-						class="text-primary hover:text-primary-dark transition-colors"
+						onclick={handleForgotPasswordOTP}
+						disabled={loading || otpCode.length !== 6}
+						class="w-full bg-primary hover:bg-primary-dark text-white rounded-lg px-4 py-3
+                               transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium"
 					>
-						Back to sign in
+						{loading ? 'Verifying...' : 'Verify Code'}
 					</button>
+
+					<div class="text-center">
+						{#if resendCountdown > 0}
+							<p class="text-sm text-gray-600">Resend code in {resendCountdown}s</p>
+						{:else}
+							<button
+								type="button"
+								onclick={handleResendForgotPasswordOTP}
+								disabled={loading}
+								class="text-sm text-primary hover:text-primary-dark transition-colors disabled:opacity-50"
+							>
+								Resend code
+							</button>
+						{/if}
+					</div>
 				</div>
 			{/if}
 		</div>
