@@ -58,8 +58,8 @@ async def create_organization(
         response = OrganizationResponse.model_validate(organization)
         response.active_user_count = 0
         return response
-    except Exception:
-        logger.exception("Failed to create organization")
+    except Exception as e:
+        logger.exception(f"Failed to create organization: {e}")
         raise HTTPException(status_code=400, detail="Failed to create organization")
 
 
