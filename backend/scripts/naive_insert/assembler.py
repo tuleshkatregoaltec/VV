@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class AssemblyResult:
     """Result of chunk assembly."""
+
     local_path: Path
     filename: str
     computed_hash: str

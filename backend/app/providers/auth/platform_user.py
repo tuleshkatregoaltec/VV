@@ -37,15 +37,18 @@ class PlatformUser(BaseUser):
         if hasattr(self.auth_user, "app_metadata") and isinstance(
             self.auth_user.app_metadata, dict
         ):
-            self.__app_metadata = UserAppMetadata.model_validate(self.auth_user.app_metadata)
+            self.__app_metadata = UserAppMetadata.model_validate(
+                self.auth_user.app_metadata
+            )
         else:
             self.__app_metadata = UserAppMetadata()
 
-        
         if hasattr(self.auth_user, "user_metadata") and isinstance(
             self.auth_user.user_metadata, dict
         ):
-            self.__user_metadata = UserMetadata.model_validate(self.auth_user.user_metadata)
+            self.__user_metadata = UserMetadata.model_validate(
+                self.auth_user.user_metadata
+            )
         else:
             self.__user_metadata = UserMetadata()
 

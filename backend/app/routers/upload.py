@@ -43,7 +43,7 @@ async def upload_chunked(
 ) -> ChunkedUploadResponse:
     """
     Upload file chunks. Stores chunks to S3 for ETL node assembly.
-    
+
     When all chunks are received, saves metadata.json with upload info.
     The ETL node is responsible for downloading, assembling, and verifying.
     """

@@ -16,6 +16,7 @@ from app.db.models.transactions import (
 @dataclass
 class TableConfig:
     """Configuration for a single table's ETL processing."""
+
     name: str
     model_class: type
     csv_file: str
@@ -38,7 +39,12 @@ def get_table_configs() -> dict[str, TableConfig]:
         csv_file="Lkp_PropertyTypes.csv",
         primary_keys=["property_type_id"],
         is_lookup=True,
-        extract_from_files=["Land_Registry.csv", "Units.csv", "Buildings.csv", "Transactions.csv"],
+        extract_from_files=[
+            "Land_Registry.csv",
+            "Units.csv",
+            "Buildings.csv",
+            "Transactions.csv",
+        ],
         extract_columns=["property_type_id", "property_type_ar", "property_type_en"],
     )
 
@@ -48,8 +54,18 @@ def get_table_configs() -> dict[str, TableConfig]:
         csv_file="Lkp_PropertySubTypes.csv",
         primary_keys=["property_sub_type_id"],
         is_lookup=True,
-        extract_from_files=["Land_Registry.csv", "Units.csv", "Buildings.csv", "Transactions.csv"],
-        extract_columns=["property_sub_type_id", "property_type_id", "property_sub_type_ar", "property_sub_type_en"],
+        extract_from_files=[
+            "Land_Registry.csv",
+            "Units.csv",
+            "Buildings.csv",
+            "Transactions.csv",
+        ],
+        extract_columns=[
+            "property_sub_type_id",
+            "property_type_id",
+            "property_sub_type_ar",
+            "property_sub_type_en",
+        ],
     )
 
     configs["transaction_groups"] = TableConfig(

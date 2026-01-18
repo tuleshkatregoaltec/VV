@@ -23,6 +23,7 @@ def generate_run_id() -> str:
 @dataclass
 class Manifest:
     """Current manifest state."""
+
     current_run_id: str
     updated_at: str
     previous_run_id: str | None = None

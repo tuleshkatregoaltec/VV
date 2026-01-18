@@ -45,7 +45,9 @@ def setup_logging(log_dir: Path | None = None) -> logging.Logger:
     logger.setLevel(logging.DEBUG)
     logger.handlers.clear()
 
-    fh = logging.FileHandler(log_dir / f"etl_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log")
+    fh = logging.FileHandler(
+        log_dir / f"etl_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
+    )
     fh.setLevel(logging.DEBUG)
     fh.setFormatter(logging.Formatter("%(asctime)s | %(levelname)-8s | %(message)s"))
 
@@ -58,7 +60,9 @@ def setup_logging(log_dir: Path | None = None) -> logging.Logger:
     return logger
 
 
-def discover_new_sessions(s3: S3Client, since_timestamp: str | None = None) -> list[str]:
+def discover_new_sessions(
+    s3: S3Client, since_timestamp: str | None = None
+) -> list[str]:
     """Discover new upload sessions in S3.
 
     Args:
@@ -91,6 +95,7 @@ def discover_new_sessions(s3: S3Client, since_timestamp: str | None = None) -> l
     # Filter by timestamp if provided
     if since_timestamp:
         from datetime import datetime
+
         cutoff = datetime.fromisoformat(since_timestamp.replace("Z", "+00:00"))
         new_sessions = []
 
@@ -98,11 +103,15 @@ def discover_new_sessions(s3: S3Client, since_timestamp: str | None = None) -> l
             try:
                 metadata_key = f"etl/uploads/{session_id}/metadata.json"
                 metadata = json.loads(s3.download_bytes(metadata_key).decode("utf-8"))
-                uploaded_at = datetime.fromisoformat(metadata["uploaded_at"].replace("Z", "+00:00"))
+                uploaded_at = datetime.fromisoformat(
+                    metadata["uploaded_at"].replace("Z", "+00:00")
+                )
 
                 if uploaded_at > cutoff:
                     new_sessions.append(session_id)
-                    logger.info(f"  ✓ New: {session_id} (uploaded {metadata['uploaded_at']})")
+                    logger.info(
+                        f"  ✓ New: {session_id} (uploaded {metadata['uploaded_at']})"
+                    )
                 else:
                     logger.debug(f"  ⊘ Skip: {session_id} (already processed)")
             except Exception as e:
@@ -116,7 +125,9 @@ def discover_new_sessions(s3: S3Client, since_timestamp: str | None = None) -> l
         return list(session_ids)
 
 
-def load_previous_pks(s3: S3Client, prev_run_id: str | None, table_name: str) -> set[str]:
+def load_previous_pks(
+    s3: S3Client, prev_run_id: str | None, table_name: str
+) -> set[str]:
     """Load PK cache from previous run."""
     if prev_run_id is None:
         return set()
@@ -201,7 +212,9 @@ def process_lookup_table(
 
         upserter = CopyUpserter(conn, config.model_class, config.primary_keys)
         new_df = drop_empty_rows(
-            fill_null_pks_with_hash(transform_dataframe(new_df, config.model_class), config.primary_keys),
+            fill_null_pks_with_hash(
+                transform_dataframe(new_df, config.model_class), config.primary_keys
+            ),
             config.primary_keys,
         )
 
@@ -267,7 +280,9 @@ def process_csv_table(
         for i in range(0, len(new_df), batch_size):
             batch = new_df.slice(i, batch_size)
             batch = drop_empty_rows(
-                fill_null_pks_with_hash(transform_dataframe(batch, config.model_class), config.primary_keys),
+                fill_null_pks_with_hash(
+                    transform_dataframe(batch, config.model_class), config.primary_keys
+                ),
                 config.primary_keys,
             )
             if batch.is_empty():
@@ -291,6 +306,7 @@ def process_csv_table(
     except Exception as e:
         logger.error(f"  ✗ Error: {e}")
         import traceback
+
         traceback.print_exc()
         stats["errors"].append(str(e))
         return stats, prev_pks
@@ -337,8 +353,11 @@ def run_etl(
         # Auto-discover new sessions if none provided
         if not session_ids:
             from .manifest import load_manifest
+
             manifest = load_manifest(s3)
-            since_timestamp = manifest.updated_at if manifest and not full_refresh else None
+            since_timestamp = (
+                manifest.updated_at if manifest and not full_refresh else None
+            )
             session_ids = discover_new_sessions(s3, since_timestamp)
 
             if not session_ids:
@@ -351,10 +370,12 @@ def run_etl(
                     "total_updated": 0,
                     "total_errors": 0,
                     "tables": [],
-                    "message": "No new upload sessions found"
+                    "message": "No new upload sessions found",
                 }
 
-        logger.info(f"\nProcessing {len(session_ids)} session(s): {', '.join(session_ids[:5])}{f' and {len(session_ids)-5} more...' if len(session_ids) > 5 else ''}")
+        logger.info(
+            f"\nProcessing {len(session_ids)} session(s): {', '.join(session_ids[:5])}{f' and {len(session_ids) - 5} more...' if len(session_ids) > 5 else ''}"
+        )
 
         # Create temp directory for assembled files
         temp_dir = Path(tempfile.mkdtemp(prefix="etl_"))
@@ -404,7 +425,13 @@ def run_etl(
                 continue
 
             # Load previous PKs
-            prev_pks = set() if full_refresh else load_previous_pks(s3, prev_run_id, table_name) if s3 else set()
+            prev_pks = (
+                set()
+                if full_refresh
+                else load_previous_pks(s3, prev_run_id, table_name)
+                if s3
+                else set()
+            )
 
             # Determine transform hook for projects
             transform_hook = None
@@ -413,9 +440,13 @@ def run_etl(
 
             # Process table
             if config.is_lookup:
-                stats, current_pks = process_lookup_table(conn, config, data_dir, prev_pks, logger, dry_run)
+                stats, current_pks = process_lookup_table(
+                    conn, config, data_dir, prev_pks, logger, dry_run
+                )
             else:
-                stats, current_pks = process_csv_table(conn, config, data_dir, prev_pks, logger, dry_run, transform_hook)
+                stats, current_pks = process_csv_table(
+                    conn, config, data_dir, prev_pks, logger, dry_run, transform_hook
+                )
 
             results.append(stats)
 
@@ -482,33 +513,31 @@ Examples:
   # Dry run (don't write to DB)
   python -m scripts.naive_insert --dry-run
         """,
-        formatter_class=argparse.RawDescriptionHelpFormatter
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument(
         "session_ids",
         nargs="*",
-        help="Upload session IDs to process (auto-discovers new sessions if omitted)"
+        help="Upload session IDs to process (auto-discovers new sessions if omitted)",
     )
     parser.add_argument(
-        "--table", "-t",
+        "--table",
+        "-t",
         action="append",
         dest="tables",
-        help="Specific table(s) to process (can be used multiple times)"
+        help="Specific table(s) to process (can be used multiple times)",
     )
     parser.add_argument(
-        "--full-refresh", "-f",
+        "--full-refresh",
+        "-f",
         action="store_true",
-        help="Ignore previous PK caches and insert all rows"
+        help="Ignore previous PK caches and insert all rows",
     )
     parser.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="Simulate ETL without writing to DB"
+        "--dry-run", action="store_true", help="Simulate ETL without writing to DB"
     )
     parser.add_argument(
-        "--local", "-l",
-        type=Path,
-        help="Use local data directory instead of S3"
+        "--local", "-l", type=Path, help="Use local data directory instead of S3"
     )
     args = parser.parse_args()
 

@@ -35,9 +35,18 @@ def infer_type(col: str) -> type[pl.DataType]:
     if (
         c.startswith("no_of_")
         or c.startswith("num_")
-        or c in (
-            "floors", "rooms", "car_parks", "shops", "flats", "offices",
-            "swimming_pools", "elevators", "bld_levels", "percent_completed",
+        or c
+        in (
+            "floors",
+            "rooms",
+            "car_parks",
+            "shops",
+            "flats",
+            "offices",
+            "swimming_pools",
+            "elevators",
+            "bld_levels",
+            "percent_completed",
         )
     ):
         return pl.Int64

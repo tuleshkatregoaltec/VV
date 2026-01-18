@@ -19,10 +19,12 @@ def build_project_name_cache(data_dir: Path) -> dict[int, str]:
         try:
             df = (
                 pl.scan_csv(csv_path, infer_schema_length=0)
-                .select([
-                    pl.col("project_id").cast(pl.Int64),
-                    pl.col("project_name_en").cast(pl.Utf8),
-                ])
+                .select(
+                    [
+                        pl.col("project_id").cast(pl.Int64),
+                        pl.col("project_name_en").cast(pl.Utf8),
+                    ]
+                )
                 .filter(
                     pl.col("project_name_en").is_not_null()
                     & (pl.col("project_name_en").str.strip_chars() != "")

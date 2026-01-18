@@ -30,7 +30,9 @@ class Organization(SQLModel, table=True):
     )
 
     # Relationships
-    users: list[str] = Field(default=[], sa_column=Column(MutableList.as_mutable(JSONB)))
+    users: list[str] = Field(
+        default=[], sa_column=Column(MutableList.as_mutable(JSONB))
+    )
 
 
 class UserTokenUsage(SQLModel, table=True):

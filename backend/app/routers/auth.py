@@ -39,13 +39,11 @@ async def sync_callback(
             current_user.app_metadata.is_active = False
             await auth_service.update_app_metadata(current_user)
 
-
         email_domain = current_user.email.split("@")[1].lower()
 
         organization = await organization_service.get_organization_by_domain(
             db, email_domain
         )
-
 
         if not organization:
             # No org found by membership or domain
@@ -74,10 +72,12 @@ async def sync_callback(
         else:
             # user not active and no free slots
             return RedirectResponse(url=f"{settings.FRONTEND_URL}/auth/deactivated")
-    
+
     if should_commit:
         # sync
-        await organization_service.add_user_to_organization(db, organization.id, current_user.id)
+        await organization_service.add_user_to_organization(
+            db, organization.id, current_user.id
+        )
 
     # user is active, return success
     return JSONResponse(content={"success": True})

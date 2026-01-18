@@ -101,7 +101,7 @@ async def process_chunked_upload(
 ) -> ChunkedUploadResponse:
     """
     Store chunk to S3. Assembly is handled by the ETL node, not here.
-    
+
     When all chunks are received, saves metadata.json with upload info
     for the ETL node to use during assembly.
     """
@@ -137,11 +137,13 @@ async def process_chunked_upload(
         )
 
     # All chunks received - save metadata for ETL node (no assembly here)
-    logger.info(f"All {total_chunks} chunks received for {safe_filename}, saving metadata")
+    logger.info(
+        f"All {total_chunks} chunks received for {safe_filename}, saving metadata"
+    )
 
     try:
         import json
-        
+
         metadata = {
             "session_id": upload_session_id,
             "filename": safe_filename,
@@ -153,7 +155,7 @@ async def process_chunked_upload(
             "uploaded_at": datetime.now().isoformat(),
             "status": "pending",
         }
-        
+
         metadata_key = f"etl/uploads/{upload_session_id}/metadata.json"
         await s3_client.upload(metadata_key, json.dumps(metadata).encode())
 

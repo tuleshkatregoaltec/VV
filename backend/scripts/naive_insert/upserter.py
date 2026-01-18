@@ -16,7 +16,9 @@ logger = logging.getLogger(__name__)
 
 def get_connection_params() -> dict:
     """Parse DATABASE_URL into connection params."""
-    url = os.environ.get("DATABASE_URL", "").replace("postgresql+asyncpg://", "postgresql://")
+    url = os.environ.get("DATABASE_URL", "").replace(
+        "postgresql+asyncpg://", "postgresql://"
+    )
     parsed = urlparse(url)
     return {
         "host": parsed.hostname or "localhost",
@@ -57,7 +59,9 @@ class CopyUpserter:
     def _to_buffer(self, df: pl.DataFrame, cols: list[str]) -> io.BytesIO:
         """Convert DataFrame to tab-separated CSV buffer."""
         buf = io.BytesIO()
-        df.select(cols).write_csv(buf, include_header=False, separator="\t", null_value="\\N")
+        df.select(cols).write_csv(
+            buf, include_header=False, separator="\t", null_value="\\N"
+        )
         buf.seek(0)
         return buf
 
