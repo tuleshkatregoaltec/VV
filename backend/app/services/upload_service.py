@@ -166,7 +166,7 @@ async def process_chunked_upload(
         )
 
         return ChunkedUploadResponse(
-            status="ready_for_etl",
+            status="completed",
             filename=safe_filename,
             size=total_file_size,
             hash=expected_hash,
