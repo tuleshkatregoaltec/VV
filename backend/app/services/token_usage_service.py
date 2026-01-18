@@ -94,7 +94,7 @@ class TokenUsageService:
         if not user:
             raise ValueError(f"User {user_id} not found")
 
-        user.metadata.daily_token_limit = new_limit
+        user.app_metadata.daily_token_limit = new_limit
 
         update_app_metadata(user)
         # updated by auth: user.updated_at = datetime.now(timezone.utc)

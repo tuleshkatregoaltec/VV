@@ -14,15 +14,18 @@ class UserRoles(BaseModel):
     roles: List[str] = Field(default_factory=list)
 
 
-class UserMetadata(BaseModel):
+class UserAppMetadata(BaseModel):
     provider: str = Field(default="")
     providers: List[str] = Field(default=[])
 
-    first_name: str = Field(default="")
-    last_name: str = Field(default="")
     role: UserRoles = Field(default_factory=lambda: UserRoles())
     is_active: bool = Field(default=False)
     daily_token_limit: int = Field(default=500000)
+
+
+class UserMetadata(BaseModel):
+    first_name: str = Field(default="")
+    last_name: str = Field(default="")
 
 
 class PlatformUser(BaseUser):
@@ -34,9 +37,17 @@ class PlatformUser(BaseUser):
         if hasattr(self.auth_user, "app_metadata") and isinstance(
             self.auth_user.app_metadata, dict
         ):
-            self.__metadata = UserMetadata.model_validate(self.auth_user.app_metadata)
+            self.__app_metadata = UserAppMetadata.model_validate(self.auth_user.app_metadata)
         else:
-            self.__metadata = UserMetadata()
+            self.__app_metadata = UserAppMetadata()
+
+        
+        if hasattr(self.auth_user, "user_metadata") and isinstance(
+            self.auth_user.user_metadata, dict
+        ):
+            self.__user_metadata = UserMetadata.model_validate(self.auth_user.user_metadata)
+        else:
+            self.__user_metadata = UserMetadata()
 
     @property
     # TODO: check if *still* authed?
@@ -70,10 +81,6 @@ class PlatformUser(BaseUser):
     def email(self) -> str:
         return self.__auth_user.email or ""
 
-    @property
-    def first_name(self) -> str:
-        return self.metadata.first_name
-
     # @property.setter
     # def auth_user(self, value: User):
     #    self.__auth_user = value
@@ -84,11 +91,15 @@ class PlatformUser(BaseUser):
     #    return self.username
 
     @property
-    def metadata(self):
-        return self.__metadata
+    def app_metadata(self):
+        return self.__app_metadata
+
+    @property
+    def user_metadata(self):
+        return self.__user_metadata
 
     def is_admin(self):
-        return "admin" in self.metadata.role.roles
+        return "admin" in self.app_metadata.role.roles
 
     async def get_scopes(self) -> AuthCredentials:
         scopes = AuthCredentials()
@@ -112,7 +123,7 @@ class PlatformUser(BaseUser):
         return {
             "id": self.auth_user.id,
             "email": self.auth_user.email,
-            "first_name": self.metadata.first_name,
-            "last_name": self.metadata.last_name,
+            "first_name": self.user_metadata.first_name,
+            "last_name": self.user_metadata.last_name,
             "role": role,
         }

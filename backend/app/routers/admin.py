@@ -95,7 +95,7 @@ async def get_organization(org_id: str, db: AsyncSession = Depends(get_db_sessio
         if user is not None:
             usage = await token_usage_service.get_today_usage(db, user.id)
             tokens_used = usage.total_tokens if usage else 0
-            daily_limit = user.metadata.daily_token_limit
+            daily_limit = user.app_metadata.daily_token_limit
             usage_percentage = (
                 (tokens_used / daily_limit * 100) if daily_limit > 0 else 0
             )
@@ -104,9 +104,9 @@ async def get_organization(org_id: str, db: AsyncSession = Depends(get_db_sessio
                 {
                     "id": user.id,
                     "email": user.email,
-                    "first_name": user.first_name,
-                    "last_name": user.metadata.first_name,
-                    "is_active": user.metadata.last_name,
+                    "first_name": user.user_metadata.first_name,
+                    "last_name": user.user_metadata.first_name,
+                    "is_active": user.app_metadata.is_active,
                     "created_at": user.auth_user.created_at,
                     "last_login": user.auth_user.last_sign_in_at,
                     "daily_token_limit": daily_limit,
@@ -170,9 +170,9 @@ async def update_user(
         raise HTTPException(status_code=404, detail="User not found")
 
     if user_update.is_active is not None:
-        user.metadata.is_active = user_update.is_active
+        user.app_metadata.is_active = user_update.is_active
     if user_update.daily_token_limit is not None:
-        user.metadata.daily_token_limit = user_update.daily_token_limit
+        user.app_metadata.daily_token_limit = user_update.daily_token_limit
     # (updated by goauth) user.updated_at = datetime.now(timezone.utc)
 
     update_app_metadata(user)
@@ -180,6 +180,6 @@ async def update_user(
     return {
         "id": user.id,
         "email": user.email,
-        "is_active": user.metadata.is_active,
+        "is_active": user.app_metadata.is_active,
         "updated_at": user.auth_user.updated_at,
     }

@@ -65,7 +65,7 @@ async def get_active_user_count(db: AsyncSession, org_id: str) -> int:
 
         if user is not None:
             # user exists
-            if user.metadata.is_active:
+            if user.app_metadata.is_active:
                 count += 1
 
     return count

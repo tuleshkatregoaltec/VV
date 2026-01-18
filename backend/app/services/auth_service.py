@@ -35,7 +35,7 @@ async def get_auth_user(jwt: str) -> Optional[AuthUser]:
 async def update_app_metadata(user: PlatformUser, **kwargs):
     client: AsyncGoTrueClient = kwargs["client"]
     update_request = AdminUserAttributes()
-    update_request["app_metadata"] = user.metadata.model_dump()
+    update_request["app_metadata"] = user.app_metadata.model_dump()
     try:
         await client.admin.update_user_by_id(user.id, update_request)
     except (ValueError, AuthApiError):  # invalid uuid, user not found

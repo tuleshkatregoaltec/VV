@@ -49,7 +49,7 @@ async def sync_callback(
         return RedirectResponse(url=f"{settings.FRONTEND_URL}/auth/deactivated")
 
     # check if user is active
-    if not current_user.metadata.is_active:
+    if not current_user.app_metadata.is_active:
         active_user_count = await organization_service.get_active_user_count(
             db, organization.id
         )
@@ -58,7 +58,7 @@ async def sync_callback(
 
         if is_active:
             # set user as active
-            current_user.metadata.is_active = True
+            current_user.app_metadata.is_active = True
             await auth_service.update_app_metadata(current_user)
         else:
             # user not active and no free slots
