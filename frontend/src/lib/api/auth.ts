@@ -292,7 +292,7 @@ export function on_auth_state_change(
  * Get current user info from backend
  */
 export async function me(): Promise<BackendUser> {
-    return api<BackendUser>('/auth/me');
+    return api<BackendUser>('/api/v1/auth/me');
 }
 
 /**
