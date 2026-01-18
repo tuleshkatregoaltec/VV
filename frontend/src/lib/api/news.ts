@@ -7,6 +7,7 @@ export interface NewsArticle {
 	thumbnail_url: string;
 	thumbnail_base64: string | null;
 	publish_date: string | null;
+	source?: string;
 }
 
 export interface NewsListResponse {

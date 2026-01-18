@@ -66,7 +66,7 @@
     <div class="relative transition-all duration-300 ease-in-out">
       <div
         class="relative bg-white border rounded-2xl transition-all duration-300 {isFocused
-          ? 'border-primary/40 shadow-lg'
+          ? 'border-teal-600/40 shadow-lg'
           : 'border-gray-300 shadow-sm hover:shadow-md hover:border-gray-400'}"
       >
         <textarea
