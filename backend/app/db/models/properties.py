@@ -61,7 +61,8 @@ class Project(SQLModel, table=True):
     # Primary key
     project_id: int = Field(primary_key=True)
     project_number: Optional[int] = Field(default=None, unique=True)
-    project_name: Optional[str] = Field(default=None, max_length=255)
+    project_name_ar: Optional[str] = Field(default=None, max_length=255)
+    project_name_en: Optional[str] = Field(default=None, max_length=255)
 
     # Developer relationships
     developer_id: Optional[int] = Field(

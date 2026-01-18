@@ -30,7 +30,7 @@ async def list_upcoming_projects(
     for project in projects:
         project_data = {
             "project_id": project.project_id,
-            "project_name": project.project_name,
+            "project_name": project.project_name_en or project.project_name_ar,
             "developer_name": project.developer.developer_name_en
             if project.developer
             else "Unknown",

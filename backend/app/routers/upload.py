@@ -39,9 +39,13 @@ async def upload_chunked(
     original_filename: Annotated[str, Query()],
     total_file_size: Annotated[int, Query()],
     chunk_size: Annotated[int, Query()],
+    expected_hash: Annotated[str | None, Query()] = None,
 ) -> ChunkedUploadResponse:
     """
-    Upload file chunks. Assembles final file when all chunks are received.
+    Upload file chunks. Stores chunks to S3 for ETL node assembly.
+    
+    When all chunks are received, saves metadata.json with upload info.
+    The ETL node is responsible for downloading, assembling, and verifying.
     """
     try:
         return await process_chunked_upload(
@@ -53,6 +57,7 @@ async def upload_chunked(
             original_filename=original_filename,
             total_file_size=total_file_size,
             chunk_size=chunk_size,
+            expected_hash=expected_hash,
         )
     except Exception as e:
         logger.exception("Failed to process chunked upload")

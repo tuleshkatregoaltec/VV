@@ -97,7 +97,14 @@ async def process_chunked_upload(
     original_filename: str,
     total_file_size: int,
     chunk_size: int,
+    expected_hash: str | None = None,
 ) -> ChunkedUploadResponse:
+    """
+    Store chunk to S3. Assembly is handled by the ETL node, not here.
+    
+    When all chunks are received, saves metadata.json with upload info
+    for the ETL node to use during assembly.
+    """
     if not 1 <= chunk_index <= total_chunks:
         raise HTTPException(400, f"Invalid chunk_index: {chunk_index}")
 
@@ -105,7 +112,8 @@ async def process_chunked_upload(
 
     chunk_data = await chunk.read()
 
-    s3_key = f"uploads/{upload_session_id}/chunk_{chunk_index:04d}"
+    # Store chunk in etl/uploads/ path for ETL node to access
+    s3_key = f"etl/uploads/{upload_session_id}/chunk_{chunk_index:04d}"
     await s3_client.upload(s3_key, chunk_data)
 
     if not cache.redis:
@@ -128,55 +136,45 @@ async def process_chunked_upload(
             total_chunks=total_chunks,
         )
 
-    logger.info(f"All {total_chunks} chunks received, assembling {safe_filename}")
+    # All chunks received - save metadata for ETL node (no assembly here)
+    logger.info(f"All {total_chunks} chunks received for {safe_filename}, saving metadata")
 
     try:
-        assembled_data = BytesIO()
-        for i in range(1, total_chunks + 1):
-            chunk_key = f"uploads/{upload_session_id}/chunk_{i:04d}"
-            chunk_bytes = await s3_client.download(chunk_key)
-            if chunk_bytes is None:
-                raise HTTPException(500, f"Missing chunk {i} from S3")
-            assembled_data.write(chunk_bytes)
-
-        final_data = assembled_data.getvalue()
-        actual_size = len(final_data)
-
-        if actual_size != total_file_size:
-            raise HTTPException(
-                500, f"Size mismatch: expected {total_file_size}, got {actual_size}"
-            )
-
-        file_hash = calculate_hash(final_data)
-
-        date_prefix = datetime.now().strftime("%Y-%m-%d")
-        final_key = f"files/{date_prefix}/{safe_filename}"
-        await s3_client.upload(final_key, final_data)
-
-        chunk_keys = [
-            f"uploads/{upload_session_id}/chunk_{i:04d}"
-            for i in range(1, total_chunks + 1)
-        ]
-        await s3_client.delete_many(chunk_keys)
+        import json
+        
+        metadata = {
+            "session_id": upload_session_id,
+            "filename": safe_filename,
+            "source_url": source_url,
+            "total_chunks": total_chunks,
+            "total_size": total_file_size,
+            "chunk_size": chunk_size,
+            "expected_hash": expected_hash,
+            "uploaded_at": datetime.now().isoformat(),
+            "status": "pending",
+        }
+        
+        metadata_key = f"etl/uploads/{upload_session_id}/metadata.json"
+        await s3_client.upload(metadata_key, json.dumps(metadata).encode())
 
         await cache.delete(redis_key)
 
         logger.info(
-            f"Assembled {safe_filename} ({actual_size:,} bytes) from {total_chunks} chunks"
+            f"Metadata saved for {safe_filename} ({total_file_size:,} bytes, {total_chunks} chunks)"
         )
 
         return ChunkedUploadResponse(
-            status="completed",
+            status="ready_for_etl",
             filename=safe_filename,
-            size=actual_size,
-            hash=file_hash,
-            path=f"{date_prefix}/{safe_filename}",
+            size=total_file_size,
+            hash=expected_hash,
             source_url=source_url,
             uploaded_at=datetime.now().isoformat(),
+            session_id=upload_session_id,
         )
 
     except HTTPException:
         raise
     except Exception as e:
-        logger.exception(f"Failed to assemble {safe_filename}")
-        raise HTTPException(500, f"Assembly failed: {e}")
+        logger.exception(f"Failed to save metadata for {safe_filename}")
+        raise HTTPException(500, f"Metadata save failed: {e}")

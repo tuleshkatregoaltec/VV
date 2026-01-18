@@ -22,7 +22,7 @@ async def get_upcoming_projects(db: AsyncSession) -> List[Project]:
             Project.cancellation_date.is_(None),
         )
         .order_by(
-            Project.project_end_date.asc().nulls_last(), Project.project_name.asc()
+            Project.project_end_date.asc().nulls_last(), Project.project_name_en.asc()
         )
     )
     result = await db.exec(stmt)
