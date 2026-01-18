@@ -4,7 +4,7 @@ import { QueryClient } from '@tanstack/svelte-query';
 import posthog from 'posthog-js'
 import type { LayoutLoad } from './$types';
 import { env } from '$env/dynamic/public';
-import { me, type BackendUser, get_session } from '$lib/api/auth';
+import { me, type BackendUser, get_session, identifyUser } from '$lib/api/auth';
 
 export const prerender = false;
 export const ssr = false;
@@ -37,46 +37,26 @@ export const load: LayoutLoad = async ({ url }) => {
             defaults: '2025-11-30',
           }
         );
-        
-        // Identify user on first app load if authenticated
-        if (!isPublicPath(url.pathname)) {
-          const session = await get_session();
-          if (session) {
-            try {
-              const user = await me();
-              posthog.identify(user.id, {
-                email: user.email,
-                first_name: user.first_name,
-                last_name: user.last_name,
-                organization_id: user.organization_id,
-                organization_name: user.organization_name,
-              });
-            } catch {
-              // User not authenticated, will be handled below
-            }
-          }
-        }
       } catch (error) {
         console.warn('Failed to initialize PostHog:', error);
       }
     }
 
-    // Check auth for protected paths
     if (!isPublicPath(url.pathname)) {
-      // Check Supabase session first - this is synchronous from localStorage
       const session = await get_session();
 
       if (!session) {
-        // No session, redirect immediately before loading anything
         redirect(302, '/auth');
       }
 
-      // Have session, verify with backend
+      // Have session, verify with backend and identify user for PostHog
       try {
         const user = await me();
+        
+        identifyUser(user);
+        
         return { queryClient, user };
       } catch {
-        // Backend auth failed, redirect to auth page
         redirect(302, '/auth');
       }
     }
