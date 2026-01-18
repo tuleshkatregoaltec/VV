@@ -175,7 +175,7 @@ async def update_user(
         user.app_metadata.daily_token_limit = user_update.daily_token_limit
     # (updated by goauth) user.updated_at = datetime.now(timezone.utc)
 
-    update_app_metadata(user)
+    await update_app_metadata(user)
 
     return {
         "id": user.id,
