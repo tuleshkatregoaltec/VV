@@ -10,7 +10,7 @@
     import { currentUser } from '$lib/stores/user.svelte';
 
     let initials = $derived((() => {
-        const user = currentUser;
+        const user = currentUser.data;
         return user ? `${user.first_name?.[0] ?? ''}${user.last_name?.[0] ?? ''}`.toUpperCase() : '';
     })());
 

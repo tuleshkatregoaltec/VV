@@ -11,7 +11,7 @@
 	import { onMount } from 'svelte';
 	import { currentUser } from '$lib/stores/user.svelte';
 
-	let username = $derived(currentUser?.first_name ?? '');
+	let username = $derived(currentUser.data?.first_name ?? '');
 	let newsSection = $state<HTMLElement>();
 	let newsSectionVisible = $state(false);
 	let sentinel = $state<HTMLDivElement>();

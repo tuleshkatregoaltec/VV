@@ -1,7 +1,8 @@
 import { browser } from '$app/environment';
 import { me, identifyUser, get_session, type BackendUser } from '$lib/api/auth';
 
-let currentUser = $state<BackendUser | null>(null);
+// Wrap state in an object so we mutate properties instead of reassigning
+const userState = $state<{ data: BackendUser | null }>({ data: null });
 
 let loadInitiated = false;
 
@@ -16,22 +17,22 @@ async function loadUser() {
 	try {
 		const session = await get_session();
 		if (!session) {
-			currentUser = null;
+			userState.data = null;
 			return;
 		}
 
 		const user = await me();
-		currentUser = user;
+		userState.data = user;
 		
 		identifyUser(user);
 	} catch (error) {
 		console.error('Failed to load user:', error);
-		currentUser = null;
+		userState.data = null;
 	}
 }
 
 function clearUser() {
-	currentUser = null;
+	userState.data = null;
 	loadInitiated = false;
 }
 
@@ -40,4 +41,9 @@ if (browser) {
 	loadUser();
 }
 
-export { currentUser, loadUser, clearUser };
+/**
+ * Current user - access via currentUser.data
+ */
+export const currentUser = userState;
+
+export { loadUser, clearUser };

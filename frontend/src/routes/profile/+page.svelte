@@ -6,22 +6,22 @@
 <div class="max-w-7xl mx-auto px-4 py-8">
     <h1 class="text-3xl font-bold mb-8">Profile</h1>
 
-    {#if currentUser}
+    {#if currentUser.data}
         <div class="bg-white shadow-md rounded-lg p-6">
             <h2 class="text-lg font-semibold mb-4">Account Details</h2>
             
             <div class="space-y-4">
                 <div class="flex justify-between py-3 border-b border-gray-100">
                     <span class="text-gray-500">Full Name</span>
-                    <span class="text-gray-900">{currentUser.first_name} {currentUser.last_name}</span>
+                    <span class="text-gray-900">{currentUser.data.first_name} {currentUser.data.last_name}</span>
                 </div>
                 <div class="flex justify-between py-3 border-b border-gray-100">
                     <span class="text-gray-500">Email</span>
-                    <span class="text-gray-900">{currentUser.email}</span>
+                    <span class="text-gray-900">{currentUser.data.email}</span>
                 </div>
                 <div class="flex justify-between py-3 border-b border-gray-100">
                     <span class="text-gray-500">Organization</span>
-                    <span class="text-gray-900">{currentUser.organization_name}</span>
+                    <span class="text-gray-900">{currentUser.data.organization_name}</span>
                 </div>
             </div>
 
