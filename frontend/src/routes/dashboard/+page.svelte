@@ -1,46 +1,35 @@
 <script lang="ts">
 	import CompactChatInput from '$lib/components/dashboard/CompactChatInput.svelte';
-	import DashboardCard from '$lib/components/dashboard/DashboardCard.svelte';
-	import TrendChart from '$lib/components/dashboard/TrendChart.svelte';
-	import PageHeader from '$lib/components/dashboard/PageHeader.svelte';
+	import FullWidthMarketChart from '$lib/components/dashboard/FullWidthMarketChart.svelte';
 	import AppShell from '$lib/components/layout/AppShell.svelte';
 	import NewsFeed from '$lib/components/news/NewsFeed.svelte';
-	import { page } from '$app/state';
+	import NewsCard from '$lib/components/news/NewsCard.svelte';
 	import { goto } from '$app/navigation';
 	import { chat } from '$lib/api/chat';
-	import { analytics, type SalesAnalyticsResponse } from '$lib/api/analytics';
+	import { news } from '$lib/api/news';
+	import { createInfiniteQuery } from '@tanstack/svelte-query';
+	import { onMount } from 'svelte';
+	import { currentUser } from '$lib/stores/user.svelte';
 
-	let username = $derived(page.data.user?.first_name ?? '');
-	let analyticsData = $state<SalesAnalyticsResponse | null>(null);
-	let isLoading = $state(true);
-	let newsSection: HTMLElement;
+	let username = $derived(currentUser.data?.first_name ?? '');
+	let newsSection = $state<HTMLElement>();
+	let newsSectionVisible = $state(false);
+	let sentinel = $state<HTMLDivElement>();
 
-	// Fetch analytics data on mount
-	$effect(() => {
-		async function loadAnalytics() {
-			try {
-				const data = await analytics.sales({ timeframe_days: 30 });
-				analyticsData = data;
-			} catch (error) {
-				console.error('Failed to load analytics:', error);
-			} finally {
-				isLoading = false;
-			}
-		}
-		loadAnalytics();
-	});
+	const LIMIT = 2;
 
-	// Format number with commas
-	function formatNumber(num: number): string {
-		return new Intl.NumberFormat('en-US').format(Math.round(num));
-	}
+	// Fetch news articles with infinite scrolling
+	const newsQuery = createInfiniteQuery(() => ({
+		queryKey: ['news', 'dashboard'],
+		queryFn: ({ pageParam = 0 }) => news.list({ limit: LIMIT, offset: pageParam }),
+		getNextPageParam: (lastPage) => {
+			const nextOffset = lastPage.offset + lastPage.articles.length;
+			return nextOffset < lastPage.total ? nextOffset : undefined;
+		},
+		initialPageParam: 0
+	}));
 
-	// Format percentage with sign
-	function formatPercent(pct: number | null): string | null {
-		if (pct === null) return null;
-		const sign = pct >= 0 ? '+' : '';
-		return `${sign}${pct.toFixed(1)}% from last month`;
-	}
+	const newsArticles = $derived(newsQuery.data?.pages.flatMap((page) => page.articles) ?? []);
 
 	async function handleChatSubmit(message: string) {
 		try {
@@ -59,139 +48,176 @@
 			throw error;
 		}
 	}
+
+	// Intersection observer to detect when news section is visible
+	$effect(() => {
+		if (!newsSection) return;
+
+		const observer = new IntersectionObserver(
+			(entries) => {
+				entries.forEach((entry) => {
+					if (entry.isIntersecting) {
+						newsSectionVisible = true;
+					}
+				});
+			},
+			{ threshold: 0.1 }
+		);
+
+		observer.observe(newsSection);
+
+		return () => observer.disconnect();
+	});
+
+	// Infinite scroll observer
+	onMount(() => {
+		const observer = new IntersectionObserver((entries) => {
+			if (
+				entries[0].isIntersecting &&
+				newsQuery.hasNextPage &&
+				!newsQuery.isFetchingNextPage
+			) {
+				newsQuery.fetchNextPage();
+			}
+		});
+
+		if (sentinel) observer.observe(sentinel);
+		return () => observer.disconnect();
+	});
+
+	// Mock stats data - 3 KPIs in one row
+	const stats = [
+		{
+			label: 'Avg. Price/sqft',
+			value: 'AED 1,284',
+			change: '+2.4%',
+			positive: true,
+			icon: 'chart'
+		},
+		{
+			label: 'Total Transactions',
+			value: '142,340',
+			change: '+8.1%',
+			positive: true,
+			icon: 'transactions'
+		},
+		{
+			label: 'Market Growth',
+			value: '12.3%',
+			change: 'YoY',
+			positive: true,
+			icon: 'growth'
+		}
+	];
 </script>
 
 <AppShell showFilters={false}>
-	<!-- Main Dashboard Section -->
-	<div class="min-h-screen flex flex-col max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 bg-background relative">
-		<PageHeader title="Welcome, {username}!" subtitle="Your Dubai property dashboard" />
-
-		<div class="mb-12 sm:mb-16">
-			<CompactChatInput
-				placeholder="Ask me anything about Dubai real estate..."
-				onSubmit={handleChatSubmit}
-			/>
-		</div>
-
-		{#if isLoading}
-			<!-- Loading skeleton -->
-			<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
-				{#each [1, 2, 3] as _}
-					<div
-						class="bg-white/80 backdrop-blur-xl rounded-xl shadow-lg border border-primary-pale p-5 animate-pulse"
-					>
-						<div class="h-6 bg-gray-200 rounded w-1/2 mb-4"></div>
-						<div class="h-10 bg-gray-200 rounded w-3/4 mb-4"></div>
-						<div class="h-4 bg-gray-200 rounded w-1/2"></div>
+	<!-- Unified offwhite background -->
+	<div class="min-h-screen bg-slate-50">
+		<!-- Hero Section -->
+		<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-12 pb-8">
+			<!-- Hero + Chat on Left, KPIs on Right -->
+			<div class="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-12 lg:items-center">
+				<!-- Left: Hero + Chat (2 columns) -->
+				<div class="lg:col-span-2 space-y-8">
+					<!-- Hero Text -->
+					<div class="text-center">
+						<h1 class="text-5xl sm:text-6xl font-bold text-slate-900 mb-4">
+							Welcome, <span class="bg-gradient-to-r from-teal-600 to-cyan-600 bg-clip-text text-transparent">{username}</span>
+						</h1>
+						<p class="text-xl text-slate-600">Your Dubai real-estate dashboard</p>
 					</div>
-				{/each}
-			</div>
-		{:else if analyticsData}
-			<!-- Cards with real data -->
-			<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
-				<!-- Transaction Volume Card -->
-				<DashboardCard
-					title="Transaction Volume"
-					value={formatNumber(analyticsData.summary.transaction_count)}
-					trend={analyticsData.summary.count_change_pct !== null
-						? {
-								value: formatPercent(analyticsData.summary.count_change_pct) ?? '',
-								direction: analyticsData.summary.count_change_pct >= 0 ? 'up' : 'down'
-							}
-						: null}
-				>
-					<svg
-						slot="icon"
-						xmlns="http://www.w3.org/2000/svg"
-						class="h-6 w-6"
-						fill="none"
-						viewBox="0 0 24 24"
-						stroke="currentColor"
-						stroke-width="2"
-					>
-						<path
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
-						/>
-					</svg>
-				</DashboardCard>
 
-				<!-- Market Trend Card with Chart -->
-				<DashboardCard title="Dubai Market Trend" value="">
-					<svg
-						slot="icon"
-						xmlns="http://www.w3.org/2000/svg"
-						class="h-6 w-6"
-						fill="none"
-						viewBox="0 0 24 24"
-						stroke="currentColor"
-						stroke-width="2"
-					>
-						<path
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"
-						/>
-					</svg>
-				<TrendChart trends={analyticsData.trends} />
-				</DashboardCard>
+					<!-- Chat Input -->
+					<CompactChatInput
+						placeholder="Ask me anything about Dubai real estate..."
+						onSubmit={handleChatSubmit}
+					/>
+				</div>
 
-				<!-- Avg Price/sq.m Card -->
-				<DashboardCard
-					title="Avg Price/sq.m"
-					value="{formatNumber(analyticsData.summary.avg_price_sqft)} AED"
-					trend={analyticsData.summary.volume_change_pct !== null
-						? {
-								value: formatPercent(analyticsData.summary.volume_change_pct) ?? '',
-								direction: analyticsData.summary.volume_change_pct >= 0 ? 'up' : 'down'
-							}
-						: null}
-				>
-					<svg
-						slot="icon"
-						xmlns="http://www.w3.org/2000/svg"
-						class="h-6 w-6"
-						fill="none"
-						viewBox="0 0 24 24"
-						stroke="currentColor"
-						stroke-width="2"
-					>
-						<path
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-						/>
-					</svg>
-				</DashboardCard>
+				<!-- Right: KPI Cards (1 column) -->
+				<div class="lg:col-span-1 flex flex-col gap-4">
+					{#each stats as stat}
+						<div class="bg-white/80 backdrop-blur-sm rounded-xl p-4 border border-teal-100 shadow-sm hover:shadow-md transition-all duration-300">
+							<div class="flex items-center gap-3 mb-3">
+								<div class="p-2.5 bg-gradient-to-br from-teal-600 to-cyan-600 rounded-lg flex-shrink-0">
+									{#if stat.icon === 'chart'}
+										<svg class="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z" />
+										</svg>
+									{:else if stat.icon === 'transactions'}
+										<svg class="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+										</svg>
+									{:else if stat.icon === 'growth'}
+										<svg class="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+										</svg>
+									{/if}
+								</div>
+								<div class="flex items-center gap-1 px-2.5 py-1 bg-teal-50 text-teal-700 rounded-full text-xs font-semibold">
+									{#if stat.positive}
+										<svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+											<path fill-rule="evenodd" d="M5.293 9.707a1 1 0 010-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 01-1.414 1.414L11 7.414V15a1 1 0 11-2 0V7.414L6.707 9.707a1 1 0 01-1.414 0z" clip-rule="evenodd" />
+										</svg>
+									{/if}
+									{stat.change}
+								</div>
+							</div>
+							<h3 class="text-sm font-medium text-slate-600 mb-1">{stat.label}</h3>
+							<p class="text-2xl font-bold text-slate-900">{stat.value}</p>
+						</div>
+					{/each}
+				</div>
 			</div>
-		{:else}
-			<!-- Error state -->
-			<div class="text-center py-12">
-				<p class="text-gray-500">Failed to load dashboard data. Please refresh the page.</p>
-			</div>
-		{/if}
 
-		<!-- Scroll Indicator -->
-		<div class="absolute bottom-16 left-1/2 -translate-x-1/2 animate-hover">
-			<svg
-				xmlns="http://www.w3.org/2000/svg"
-				class="h-8 w-8 text-primary"
-				fill="none"
-				viewBox="0 0 24 24"
-				stroke="currentColor"
-				stroke-width="2"
-			>
-				<path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
-			</svg>
+			<!-- Market Chart -->
+			<div class="mb-12">
+				<h2 class="text-2xl font-bold text-slate-900 mb-6">Market Trends</h2>
+				<div class="bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg border border-teal-100 p-8 hover:shadow-xl transition-shadow duration-300">
+					<FullWidthMarketChart />
+				</div>
+			</div>
+
+			<!-- News Section Header -->
+			<div class="text-center mb-12">
+				<div class="inline-block px-4 py-2 bg-teal-100 text-teal-700 rounded-full text-sm font-semibold mb-4">
+					Stay Informed
+				</div>
+				<h2 class="text-4xl sm:text-5xl font-bold text-slate-900 mb-4">Latest News</h2>
+				<p class="text-lg text-slate-600">Stay updated with the latest Dubai real estate news</p>
+			</div>
 		</div>
+
+		<!-- News Feed Section with Fade Transition -->
+		<section
+			bind:this={newsSection}
+			class="pb-16 bg-slate-50 transition-opacity duration-1000 {newsSectionVisible
+				? 'opacity-100'
+				: 'opacity-0'}"
+		>
+			<div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+				<div class="space-y-4">
+					{#if newsQuery.isPending}
+						<div class="text-center text-slate-500 py-8">Loading news...</div>
+					{:else if newsQuery.isError}
+						<div class="text-center text-red-500 py-8">Error loading news</div>
+					{:else if newsArticles.length === 0}
+						<div class="text-center text-slate-500 py-8">No news articles available</div>
+					{:else}
+						{#each newsArticles as article (article.id)}
+							<NewsCard {article} />
+						{/each}
+
+						<!-- Infinite scroll sentinel -->
+						<div bind:this={sentinel} class="h-4"></div>
+
+						{#if newsQuery.isFetchingNextPage}
+							<div class="text-center text-slate-500 py-4">Loading more...</div>
+						{/if}
+					{/if}
+				</div>
+			</div>
+		</section>
 	</div>
-
-	<!-- News Feed Section -->
-	<section bind:this={newsSection} class="min-h-screen bg-gradient-to-b from-background to-gray-50 pt-2 pb-16">
-		<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-			<h2 class="text-3xl sm:text-4xl font-bold text-center mb-12">Latest News</h2>
-			<NewsFeed />
-		</div>
-	</section>
 </AppShell>

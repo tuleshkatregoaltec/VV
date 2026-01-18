@@ -356,12 +356,12 @@
 </script>
 
 {#if rentalsQuery.isError}
-  <div class="bg-red-50 border border-red-200 rounded-lg p-6 text-center mb-6">
+  <div class="bg-red-50 border border-red-200 rounded-lg p-6 text-center mb-6 shadow-sm">
     <p class="text-red-800 font-semibold">Error loading data</p>
     <p class="text-red-600 mt-2">{rentalsQuery.error?.message ?? 'Unknown error'}</p>
     <button
       onclick={() => rentalsQuery.refetch()}
-      class="mt-4 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+      class="mt-4 px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary-dark transition-colors shadow-sm"
     >
       Retry
     </button>

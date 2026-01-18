@@ -66,8 +66,8 @@
     <div class="relative transition-all duration-300 ease-in-out">
       <div
         class="relative bg-white border rounded-2xl transition-all duration-300 {isFocused
-          ? 'border-primary/40 shadow-lg'
-          : 'border-gray-300 shadow-sm hover:shadow-md hover:border-gray-400'}"
+          ? 'border-teal-600/40 shadow-lg'
+          : 'border-slate-300 shadow-sm hover:shadow-md hover:border-slate-400'}"
       >
         <textarea
           bind:this={textareaRef}
@@ -79,7 +79,7 @@
           {placeholder}
           disabled={disabled || isSubmitting}
           rows="1"
-          class="w-full px-5 py-3.5 bg-transparent resize-none outline-none text-gray-800 placeholder-gray-400 rounded-2xl pr-14 flex items-center"
+          class="w-full px-5 py-3.5 bg-transparent resize-none outline-none text-slate-800 placeholder-slate-400 rounded-2xl pr-14 flex items-center"
           style="min-height: 52px; max-height: 200px; line-height: 1.5;"
         ></textarea>
 
@@ -91,7 +91,7 @@
           !disabled &&
           !isSubmitting
             ? 'bg-primary text-white hover:bg-primary-dark shadow-md opacity-100'
-            : 'bg-gray-200 text-gray-400 opacity-50 cursor-not-allowed'}"
+            : 'bg-slate-200 text-slate-400 opacity-50 cursor-not-allowed'}"
           aria-label="Send message"
         >
           {#if isSubmitting}

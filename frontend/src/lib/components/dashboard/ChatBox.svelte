@@ -186,7 +186,7 @@
   }
 </script>
 
-<div class="flex flex-col h-full bg-background">
+<div class="flex flex-col h-full bg-slate-50">
   <!-- Messages -->
   <div class="flex-1 overflow-y-auto p-6 space-y-6">
     {#if loading}

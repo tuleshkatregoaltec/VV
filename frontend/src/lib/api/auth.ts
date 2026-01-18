@@ -16,18 +16,26 @@ export interface BackendUser {
     role: 'user' | 'admin';
 }
 
+// Track if we've already identified the current user to avoid redundant calls
+let identifiedUserId: string | null = null;
+
 /**
- * Identify user with PostHog (call after successful login)
+ * Identify user with PostHog (call after successful login or on initial page load)
+ * Uses a guard to prevent redundant identify calls for the same user in a single session
  */
 export function identifyUser(user: BackendUser) {
     if (browser && posthog.__loaded) {
-        posthog.identify(user.id, {
-            email: user.email,
-            first_name: user.first_name,
-            last_name: user.last_name,
-            organization_id: user.organization_id,
-            organization_name: user.organization_name,
-        });
+        // Only identify if this is a different user than we've already identified
+        if (identifiedUserId !== user.id) {
+            posthog.identify(user.id, {
+                email: user.email,
+                first_name: user.first_name,
+                last_name: user.last_name,
+                organization_id: user.organization_id,
+                organization_name: user.organization_name,
+            });
+            identifiedUserId = user.id;
+        }
     }
 }
 
@@ -267,15 +275,6 @@ export async function get_session(): Promise<Session | null> {
     return res.data?.session || null;
 }
 
-/**
- * Get current user.
- *
- * @returns Current user or null
- */
-export async function get_user(): Promise<User | null> {
-    const res = await client.getUser();
-    return res.data?.user || null;
-}
 
 /**
  * Listen to auth state changes.
@@ -309,9 +308,14 @@ export async function logout(): Promise<void> {
         console.error('Supabase logout error:', e);
     }
 
+    // Reset PostHog and our identify tracker
     if (browser && posthog.__loaded) {
         posthog.reset();
     }
+    identifiedUserId = null;
+
+    const { clearUser } = await import('$lib/stores/user.svelte');
+    clearUser();
 
     window.location.href = '/';
 }

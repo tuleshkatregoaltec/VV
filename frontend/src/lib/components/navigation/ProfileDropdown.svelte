@@ -5,12 +5,12 @@
 <script lang="ts">
     import { fly, fade } from 'svelte/transition';
     import { quintOut } from 'svelte/easing';
-    import { page } from '$app/state';
     import { logout } from '$lib/api/auth';
     import { getContext } from 'svelte';
+    import { currentUser } from '$lib/stores/user.svelte';
 
     let initials = $derived((() => {
-        const user = page.data.user;
+        const user = currentUser.data;
         return user ? `${user.first_name?.[0] ?? ''}${user.last_name?.[0] ?? ''}`.toUpperCase() : '';
     })());
 

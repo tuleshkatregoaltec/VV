@@ -98,7 +98,7 @@
 							/>
 						</svg>
 					</div>
-					<h1 class="text-3xl font-bold text-primary mb-2">Password Updated</h1>
+					<h1 class="text-3xl font-bold text-black mb-2">Password Updated</h1>
 					<p class="text-gray-600">Your password has been successfully updated. Redirecting to dashboard...</p>
 				</div>
 			{:else if !hasValidSession && error}
@@ -119,7 +119,7 @@
 							/>
 						</svg>
 					</div>
-					<h1 class="text-3xl font-bold text-primary mb-2">Invalid Link</h1>
+					<h1 class="text-3xl font-bold text-black mb-2">Invalid Link</h1>
 					<p class="text-gray-600 mb-6">{error}</p>
 					<a
 						href="/auth"
@@ -130,7 +130,7 @@
 				</div>
 			{:else}
 				<div class="mb-8">
-					<h1 class="text-3xl font-bold text-primary mb-2">Reset Password</h1>
+					<h1 class="text-3xl font-bold text-black mb-2">Reset Password</h1>
 					<p class="text-gray-600">Enter your new password below</p>
 				</div>
 

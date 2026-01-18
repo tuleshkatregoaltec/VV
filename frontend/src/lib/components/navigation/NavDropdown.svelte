@@ -6,6 +6,7 @@
     import { fly, fade } from 'svelte/transition';
     import { quintOut } from 'svelte/easing';
     import { getContext } from 'svelte';
+    import { page } from '$app/state';
 
     type Item = { href: string; label: string };
     
@@ -29,6 +30,11 @@
     const id = `nav-dropdown-${nextId++}`;
     let timeout: number | undefined;
     let isOpen = $derived(openDropdownIdContext.value === id);
+    
+    // Check if any dropdown item is active
+    const isActive = $derived(items.some(item => 
+        page.url.pathname === item.href || page.url.pathname.startsWith(item.href + '/')
+    ));
 
     function handleEnter() {
         clearTimeout(timeout);
@@ -52,7 +58,9 @@
     onmouseleave={handleLeave}
 >
     <button
-        class="px-3 py-2 text-base font-medium text-gray-700 hover:text-primary rounded-lg hover:bg-gray-50 transition-colors flex items-center gap-1"
+        class="px-3 py-2 text-base font-medium rounded-xl transition-all flex items-center gap-1 {isActive
+            ? 'bg-gradient-to-r from-teal-600/80 to-cyan-600/80 text-white shadow-sm'
+            : 'text-gray-700 hover:text-slate-900 hover:bg-slate-50'}"
         aria-haspopup="true"
         aria-expanded={isOpen}
     >
