@@ -60,7 +60,7 @@ async def get_active_user_count(db: AsyncSession, org_id: str) -> int:
 
     count = 0
 
-    for user_id in result:
+    for user_id in result.first():
         user = await get_user_by_id(user_id)
 
         if user is not None:
