@@ -243,7 +243,7 @@
 			{#if currentView === 'login'}
 				<div class="mb-8 flex items-start justify-between">
 					<div>
-						<h1 class="text-3xl font-bold text-primary mb-2">Sign In</h1>
+						<h1 class="text-3xl font-bold text-black mb-2">Sign In</h1>
 						<p class="text-gray-600">Welcome back to your account</p>
 					</div>
 					<button
@@ -339,7 +339,7 @@
 			{:else if currentView === 'signup'}
 				<div class="mb-8 flex items-start justify-between">
 					<div>
-						<h1 class="text-3xl font-bold text-primary mb-2">Create Account</h1>
+						<h1 class="text-3xl font-bold text-black mb-2">Create Account</h1>
 						<p class="text-gray-600">Sign up to get started</p>
 					</div>
 					<button
@@ -470,7 +470,7 @@
 						</svg>
 						Back
 					</button>
-					<h1 class="text-3xl font-bold text-primary mb-2">Verify Your Email</h1>
+					<h1 class="text-3xl font-bold text-black mb-2">Verify Your Email</h1>
 					<p class="text-gray-600">
 						We've sent a 6-digit code to <span class="font-medium">{email}</span>
 					</p>
@@ -532,7 +532,7 @@
 							/>
 						</svg>
 					</div>
-					<h1 class="text-3xl font-bold text-primary mb-2">Check Your Email</h1>
+					<h1 class="text-3xl font-bold text-black mb-2">Check Your Email</h1>
 					<p class="text-gray-600 mb-6">
 						We've sent a magic link to <span class="font-medium">{email}</span>. Click the link in
 						the email to sign in.
@@ -567,7 +567,7 @@
 						</svg>
 						Back
 					</button>
-					<h1 class="text-3xl font-bold text-primary mb-2">Reset Password</h1>
+					<h1 class="text-3xl font-bold text-black mb-2">Reset Password</h1>
 					<p class="text-gray-600">Enter your email to receive a password reset link</p>
 				</div>
 
@@ -621,7 +621,7 @@
 							/>
 						</svg>
 					</div>
-					<h1 class="text-3xl font-bold text-primary mb-2">Check Your Email</h1>
+					<h1 class="text-3xl font-bold text-black mb-2">Check Your Email</h1>
 					<p class="text-gray-600 mb-6">
 						We've sent a password reset link to <span class="font-medium">{email}</span>. Click
 						the link in the email to reset your password.

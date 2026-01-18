@@ -36,6 +36,7 @@ export const load: LayoutLoad = async ({ url }) => {
           env.PUBLIC_POSTHOG_KEY,
           {
             api_host: env.PUBLIC_POSTHOG_HOST,
+            ui_host: 'https://eu.posthog.com',
             defaults: '2025-11-30',
           }
         );

@@ -164,7 +164,7 @@
 			<div class="flex gap-2 bg-slate-100 p-1 rounded-lg">
 				<button
 					class="px-3 py-1.5 rounded-md text-xs font-medium transition-all {selectedMetric === 'price_sqft'
-						? 'bg-white text-primary shadow-sm'
+						? 'bg-white text-slate-900 shadow-sm'
 						: 'text-slate-600 hover:text-slate-900'}"
 					onclick={() => (selectedMetric = 'price_sqft')}
 				>
@@ -172,7 +172,7 @@
 				</button>
 				<button
 					class="px-3 py-1.5 rounded-md text-xs font-medium transition-all {selectedMetric === 'avg_price'
-						? 'bg-white text-primary shadow-sm'
+						? 'bg-white text-slate-900 shadow-sm'
 						: 'text-slate-600 hover:text-slate-900'}"
 					onclick={() => (selectedMetric = 'avg_price')}
 				>
@@ -186,7 +186,7 @@
 					<button
 						class="px-3 py-1.5 rounded-md text-xs font-medium transition-all {selectedRange ===
 						range.value
-							? 'bg-white text-primary shadow-sm'
+							? 'bg-white text-slate-900 shadow-sm'
 							: 'text-slate-600 hover:text-slate-900'}"
 						onclick={() => (selectedRange = range.value as TimeRange)}
 					>
