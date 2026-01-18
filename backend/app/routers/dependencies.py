@@ -62,13 +62,13 @@ async def require_token_quota(
 
     tokens_used = usage.total_tokens if usage else 0
 
-    if tokens_used >= user_obj.metadata.daily_token_limit:
+    if tokens_used >= user_obj.app_metadata.daily_token_limit:
         # Capture PostHog event for rate limit breach
         try:
             event_properties = {
                 "user_id": current_user.id,
                 "tokens_used": tokens_used,
-                "daily_limit": user_obj.metadata.daily_token_limit,
+                "daily_limit": user_obj.app_metadata.daily_token_limit,
                 "quota_type": "daily_tokens",
                 "user_email": user_obj.email,
             }
@@ -92,7 +92,7 @@ async def require_token_quota(
 
         raise HTTPException(
             status_code=429,
-            detail=f"Daily token limit exceeded ({tokens_used}/{user_obj.metadata.daily_token_limit} tokens used today)",
+            detail=f"Daily token limit exceeded ({tokens_used}/{user_obj.app_metadata.daily_token_limit} tokens used today)",
         )
 
     return None
