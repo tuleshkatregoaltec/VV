@@ -118,6 +118,25 @@ async def update_organization(
     return organization
 
 
+async def add_user_to_organization(
+        db: AsyncSession, org_id: str, user_id: str
+):
+    organization = await db.get(Organization, org_id)
+
+    if not organization:
+        return None
+    
+    if user_id not in organization.users:
+        organization.users.append(user_id)
+    
+        db.add(organization)
+        await db.commit()
+        await db.refresh(organization)
+    
+    return organization
+    
+
+
 async def delete_organization(db: AsyncSession, org_id: str) -> bool:
     """Delete organization from WorkOS and local DB"""
     organization = await db.get(Organization, org_id)
