@@ -77,7 +77,7 @@ async def create_organization(
     """Create organization in WorkOS and local DB"""
 
     organization = Organization(
-        id=await get_free_org_id(),
+        id=await get_free_org_id(db),
         name=name,
         email_domain=domain,
         max_users=max_users,
