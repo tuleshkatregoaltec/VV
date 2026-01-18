@@ -12,7 +12,7 @@ from app.services import auth_service
 from app.services import organization_service
 from app.config import settings
 
-router = APIRouter(prefix="/auth", tags=["auth"])
+router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 
 
 @router.get("/sync")
