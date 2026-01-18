@@ -125,35 +125,36 @@
     }
 </script>
 
-<div class="max-w-7xl mx-auto px-4 py-8">
-    <PageHeader
-        title="Sales Analytics"
-        subtitle="Market insights and trends for property sales"
-    />
+<div class="min-h-screen bg-slate-50">
+    <div class="max-w-7xl mx-auto px-4 py-8">
+        <PageHeader
+            title="Sales Analytics"
+            subtitle="Market insights and trends for property sales"
+        />
 
-    <FilterPanel
-        {filterDefinitions}
-        bind:filters={localFilters}
-        onReset={resetLocalFilters}
-    />
+        <FilterPanel
+            {filterDefinitions}
+            bind:filters={localFilters}
+            onReset={resetLocalFilters}
+        />
 
-    {#if analyticsQuery.isError}
-        <div class="bg-red-50 border border-red-200 rounded-lg p-6 text-center mb-6">
-            <p class="text-red-800 font-semibold">Error loading analytics</p>
-            <p class="text-red-600 mt-2">{analyticsQuery.error?.message ?? 'Unknown error'}</p>
-            <button
-                onclick={() => analyticsQuery.refetch()}
-                class="mt-4 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
-            >
-                Retry
-            </button>
-        </div>
-    {/if}
+        {#if analyticsQuery.isError}
+            <div class="bg-red-50 border border-red-200 rounded-lg p-6 text-center mb-6 shadow-sm">
+                <p class="text-red-800 font-semibold">Error loading analytics</p>
+                <p class="text-red-600 mt-2">{analyticsQuery.error?.message ?? 'Unknown error'}</p>
+                <button
+                    onclick={() => analyticsQuery.refetch()}
+                    class="mt-4 px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary-dark transition-colors shadow-sm"
+                >
+                    Retry
+                </button>
+            </div>
+        {/if}
 
-    {#if analyticsQuery.isPending || analyticsQuery.isFetching}
-        <div class="flex justify-center py-12">
-            <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-        </div>
+        {#if analyticsQuery.isPending || analyticsQuery.isFetching}
+            <div class="flex justify-center py-12">
+                <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+            </div>
     {:else if analyticsQuery.data}
         <!-- KPI Cards -->
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
@@ -226,4 +227,5 @@
             />
         </div>
     {/if}
+    </div>
 </div>

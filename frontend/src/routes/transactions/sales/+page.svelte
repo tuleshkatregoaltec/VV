@@ -189,19 +189,19 @@
         id: 'selectedProject', 
         label: 'Project', 
         type: 'searchable', 
-        options: ['All', ...filterOptions.projects] 
+        options: ['All', ...(opts.projects ?? [])] 
       },
       { 
         id: 'selectedBuilding', 
         label: 'Building', 
         type: 'searchable', 
-        options: ['All', ...filterOptions.buildings] 
+        options: ['All', ...(opts.buildings ?? [])] 
       },
       { 
         id: 'selectedPropertyType', 
         label: 'Property Type', 
         type: 'standard', 
-        options: ['All', ...filterOptions.property_types] 
+        options: ['All', ...(opts.property_types ?? [])] 
       },
       { 
         id: 'selectedBedroomsOrSubType', 
@@ -209,15 +209,15 @@
         type: 'standard', 
         options: ['All', ...(
           propertyType.current === PROPERTY_USAGE.RESIDENTIAL 
-            ? filterOptions.rooms 
-            : filterOptions.property_sub_types
+            ? (opts.rooms ?? []) 
+            : (opts.property_sub_types ?? [])
         )]
       },
       { 
         id: 'selectedRegistration', 
         label: 'Registration', 
         type: 'standard', 
-        options: ['All', ...filterOptions.registration_types] 
+        options: ['All', ...(opts.registration_types ?? [])] 
       },
       { 
         id: 'areaRange', 
@@ -354,12 +354,12 @@
 </script>
 
 {#if transactionsQuery.isError}
-  <div class="bg-red-50 border border-red-200 rounded-lg p-6 text-center mb-6">
+  <div class="bg-red-50 border border-red-200 rounded-lg p-6 text-center mb-6 shadow-sm">
     <p class="text-red-800 font-semibold">Error loading data</p>
     <p class="text-red-600 mt-2">{transactionsQuery.error?.message ?? 'Unknown error'}</p>
     <button
       onclick={() => transactionsQuery.refetch()}
-      class="mt-4 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+      class="mt-4 px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary-dark transition-colors shadow-sm"
     >
       Retry
     </button>

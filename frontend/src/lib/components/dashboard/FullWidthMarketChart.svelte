@@ -123,14 +123,14 @@
 	}
 </script>
 
-<div class="bg-white/80 backdrop-blur-xl rounded-2xl shadow-xl border border-primary-pale p-4 sm:p-6">
+<div class="bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg border border-teal-100 p-4 sm:p-6">
 	<!-- Header -->
 	<div class="flex flex-col sm:flex-row sm:items-start sm:justify-between mb-6 gap-4">
 		<div>
-			<h2 class="text-xl font-bold text-gray-900 mb-2">Dubai Market Trend</h2>
+			<h2 class="text-xl font-bold text-slate-900 mb-2">Dubai Market Trend</h2>
 			<div class="flex items-baseline gap-2">
-				<span class="text-3xl font-bold text-gray-900">{formatNumber(currentValue)}</span>
-				<span class="text-sm text-gray-500">{metricUnit}</span>
+				<span class="text-3xl font-bold text-slate-900">{formatNumber(currentValue)}</span>
+				<span class="text-sm text-slate-500">{metricUnit}</span>
 			</div>
 			<div
 				class="mt-2 inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold {isPositive
@@ -161,11 +161,11 @@
 		<!-- Controls -->
 		<div class="flex flex-col gap-2">
 			<!-- Metric Selector -->
-			<div class="flex gap-2 bg-gray-100 p-1 rounded-lg">
+			<div class="flex gap-2 bg-slate-100 p-1 rounded-lg">
 				<button
 					class="px-3 py-1.5 rounded-md text-xs font-medium transition-all {selectedMetric === 'price_sqft'
 						? 'bg-white text-primary shadow-sm'
-						: 'text-gray-600 hover:text-gray-900'}"
+						: 'text-slate-600 hover:text-slate-900'}"
 					onclick={() => (selectedMetric = 'price_sqft')}
 				>
 					Price/sq.ft
@@ -173,21 +173,21 @@
 				<button
 					class="px-3 py-1.5 rounded-md text-xs font-medium transition-all {selectedMetric === 'avg_price'
 						? 'bg-white text-primary shadow-sm'
-						: 'text-gray-600 hover:text-gray-900'}"
+						: 'text-slate-600 hover:text-slate-900'}"
 					onclick={() => (selectedMetric = 'avg_price')}
 				>
 					Avg Price
 				</button>
 			</div>
-			
+
 			<!-- Time Range Selector -->
-			<div class="flex gap-2 bg-gray-100 p-1 rounded-lg">
+			<div class="flex gap-2 bg-slate-100 p-1 rounded-lg">
 				{#each [{ label: '30D', value: '30d' }, { label: '90D', value: '90d' }, { label: '6M', value: '6mo' }, { label: '1Y', value: '1yr' }] as range}
 					<button
 						class="px-3 py-1.5 rounded-md text-xs font-medium transition-all {selectedRange ===
 						range.value
 							? 'bg-white text-primary shadow-sm'
-							: 'text-gray-600 hover:text-gray-900'}"
+							: 'text-slate-600 hover:text-slate-900'}"
 						onclick={() => (selectedRange = range.value as TimeRange)}
 					>
 						{range.label}
@@ -253,7 +253,7 @@
 					y={tick.y}
 					text-anchor="end"
 					dominant-baseline="middle"
-					class="text-xs fill-gray-500"
+					class="text-xs fill-slate-500"
 				>
 					{formatNumber(tick.value)}
 				</text>
@@ -265,7 +265,7 @@
 					x={tick.x}
 					y={chartHeight - 10}
 					text-anchor="middle"
-					class="text-xs fill-gray-500"
+					class="text-xs fill-slate-500"
 				>
 					{tick.label}
 				</text>
@@ -274,7 +274,7 @@
 	</div>
 
 	<!-- Legend/Info -->
-	<div class="mt-4 pt-3 border-t border-gray-200 flex flex-wrap gap-4 text-xs text-gray-600">
+	<div class="mt-4 pt-3 border-t border-slate-200 flex flex-wrap gap-4 text-xs text-slate-600">
 		<div class="flex items-center gap-2">
 			<div class="w-2.5 h-2.5 rounded-full bg-green-500"></div>
 			<span>{selectedMetric === 'price_sqft' ? 'Price per Square Foot' : 'Average Transaction Price'}</span>

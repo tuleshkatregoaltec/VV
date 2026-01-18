@@ -5,11 +5,11 @@
 </script>
 
 <div
-	class="bg-white/80 backdrop-blur-xl rounded-xl shadow-lg shadow-primary-pale/20 border border-primary-pale hover:shadow-xl hover:border-primary-pale/50 transition-all duration-300 p-5 sm:p-6 flex flex-col group"
+	class="bg-white/80 backdrop-blur-sm rounded-xl shadow-sm border border-slate-200 hover:shadow-md hover:border-teal-100 transition-all duration-300 p-5 sm:p-6 flex flex-col group"
 >
 	<!-- Header with icon and title -->
 	<div class="flex items-center justify-between mb-3">
-		<h2 class="text-base font-semibold text-gray-700">{title}</h2>
+		<h2 class="text-base font-semibold text-slate-700">{title}</h2>
 		<div class="h-6 w-6 text-primary opacity-70 group-hover:opacity-100 transition-opacity duration-300">
 			<slot name="icon" />
 		</div>
@@ -17,7 +17,7 @@
 
 	<!-- Value -->
 	{#if value}
-		<p class="text-3xl sm:text-4xl font-bold text-gray-900 mb-auto">{value}</p>
+		<p class="text-3xl sm:text-4xl font-bold text-slate-900 mb-auto">{value}</p>
 	{/if}
 	<!-- Trend indicator -->
 	{#if trend}

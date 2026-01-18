@@ -86,25 +86,25 @@
 	}
 </script>
 
-<div class="h-full flex flex-col bg-gray-50">
+<div class="h-full flex flex-col bg-slate-50">
 	<!-- Header -->
-	<div class="px-6 py-4 bg-white border-b border-gray-200">
-		<h1 class="text-2xl font-bold text-gray-900">Active Projects</h1>
-		<p class="text-sm text-gray-500">Track active development projects across Dubai</p>
+	<div class="px-6 py-4 bg-white/80 backdrop-blur-sm border-b border-slate-200">
+		<h1 class="text-2xl font-bold text-slate-900">Active Projects</h1>
+		<p class="text-sm text-slate-500">Track active development projects across Dubai</p>
 	</div>
 
 	<!-- Filters -->
-	<div class="px-6 py-4 bg-white border-b border-gray-200">
+	<div class="px-6 py-4 bg-white/80 backdrop-blur-sm border-b border-slate-200">
 		<div class="flex gap-4 items-center">
 			<input
 				type="text"
 				placeholder="Search projects or developers..."
 				bind:value={searchQuery}
-				class="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary"
+				class="flex-1 px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary"
 			/>
 			<select
 				bind:value={timeframeFilter}
-				class="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary"
+				class="px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary"
 			>
 				<option value="all">All Active</option>
 				<option value="upcoming">Upcoming Only</option>
@@ -113,7 +113,7 @@
 				<option value="12m">Next 12 Months</option>
 				<option value="overdue">Overdue</option>
 			</select>
-			<span class="text-sm text-gray-600 whitespace-nowrap"
+			<span class="text-sm text-slate-600 whitespace-nowrap"
 				>{filteredProjects.length} project{filteredProjects.length !== 1 ? 's' : ''}</span
 			>
 		</div>
@@ -129,15 +129,15 @@
 			<div class="flex items-center justify-center h-full">
 				<div class="text-center">
 					<p class="text-red-600 font-semibold">Error loading projects</p>
-					<p class="text-gray-500 text-sm mt-2">{projectsQuery.error.message}</p>
+					<p class="text-slate-500 text-sm mt-2">{projectsQuery.error.message}</p>
 				</div>
 			</div>
 		{:else}
 			<table class="w-full">
-				<thead class="bg-gray-100 sticky top-0 z-10">
-					<tr class="text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
+				<thead class="bg-slate-100 sticky top-0 z-10">
+					<tr class="text-left text-xs font-medium text-slate-700 uppercase tracking-wider">
 						<th
-							class="px-6 py-3 cursor-pointer hover:bg-gray-200"
+							class="px-6 py-3 cursor-pointer hover:bg-slate-200 transition-colors"
 							onclick={() => toggleSort('project_name')}
 						>
 							Project Name
@@ -146,7 +146,7 @@
 							{/if}
 						</th>
 						<th
-							class="px-6 py-3 cursor-pointer hover:bg-gray-200"
+							class="px-6 py-3 cursor-pointer hover:bg-slate-200 transition-colors"
 							onclick={() => toggleSort('developer_name')}
 						>
 							Developer
@@ -155,7 +155,7 @@
 							{/if}
 						</th>
 						<th
-							class="px-6 py-3 cursor-pointer hover:bg-gray-200"
+							class="px-6 py-3 cursor-pointer hover:bg-slate-200 transition-colors"
 							onclick={() => toggleSort('area_name')}
 						>
 							Area
@@ -164,7 +164,7 @@
 							{/if}
 						</th>
 						<th
-							class="px-6 py-3 cursor-pointer hover:bg-gray-200"
+							class="px-6 py-3 cursor-pointer hover:bg-slate-200 transition-colors"
 							onclick={() => toggleSort('percent_completed')}
 						>
 							Progress
@@ -173,7 +173,7 @@
 							{/if}
 						</th>
 						<th
-							class="px-6 py-3 cursor-pointer hover:bg-gray-200"
+							class="px-6 py-3 cursor-pointer hover:bg-slate-200 transition-colors"
 							onclick={() => toggleSort('project_start_date')}
 						>
 							Started
@@ -182,7 +182,7 @@
 							{/if}
 						</th>
 						<th
-							class="px-6 py-3 cursor-pointer hover:bg-gray-200"
+							class="px-6 py-3 cursor-pointer hover:bg-slate-200 transition-colors"
 							onclick={() => toggleSort('project_end_date')}
 						>
 							Expected Completion
@@ -192,30 +192,30 @@
 						</th>
 					</tr>
 				</thead>
-				<tbody class="bg-white divide-y divide-gray-200">
+				<tbody class="bg-white divide-y divide-slate-200">
 					{#each filteredProjects as project (project.project_id)}
 						<tr
-							class="hover:bg-gray-50 cursor-pointer transition-colors"
+							class="hover:bg-slate-50 cursor-pointer transition-colors"
 							onclick={() => (selectedProject = project)}
 						>
-							<td class="px-6 py-4 font-medium text-gray-900">{project.project_name}</td>
-							<td class="px-6 py-4 text-gray-600">{project.developer_name}</td>
-							<td class="px-6 py-4 text-gray-600">{project.area_name}</td>
+							<td class="px-6 py-4 font-medium text-slate-900">{project.project_name}</td>
+							<td class="px-6 py-4 text-slate-600">{project.developer_name}</td>
+							<td class="px-6 py-4 text-slate-600">{project.area_name}</td>
 							<td class="px-6 py-4">
 								<div class="flex items-center gap-2">
-									<div class="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden max-w-24">
+									<div class="flex-1 h-2 bg-slate-200 rounded-full overflow-hidden max-w-24">
 										<div
 											class="h-full bg-primary transition-all"
 											style="width: {project.percent_completed}%"
 										></div>
 									</div>
-									<span class="text-sm text-gray-600 w-12 text-right"
+									<span class="text-sm text-slate-600 w-12 text-right"
 										>{project.percent_completed}%</span
 									>
 								</div>
 							</td>
-							<td class="px-6 py-4 text-gray-600">{formatDate(project.project_start_date)}</td>
-							<td class="px-6 py-4 font-medium text-gray-900">
+							<td class="px-6 py-4 text-slate-600">{formatDate(project.project_start_date)}</td>
+							<td class="px-6 py-4 font-medium text-slate-900">
 								{formatDate(project.project_end_date)}
 							</td>
 						</tr>
@@ -224,7 +224,7 @@
 			</table>
 
 			{#if filteredProjects.length === 0}
-				<div class="text-center py-12 text-gray-500">
+				<div class="text-center py-12 text-slate-500">
 					{searchQuery ? 'No projects found matching your search' : 'No active projects'}
 				</div>
 			{/if}

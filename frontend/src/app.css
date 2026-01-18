@@ -6,22 +6,22 @@ body {
 @config "../tailwind.config.ts";
 
 @theme {
-	/* Primary Colors */
-	--color-primary: #181818;
-	--color-primary-light: #232323;
-	--color-primary-dark: #000000;
-	--color-primary-pale: #444444;
+	/* Primary Colors - Teal */
+	--color-primary: #0d9488; /* teal-600 - main primary */
+	--color-primary-light: #14b8a6; /* teal-500 - lighter variant */
+	--color-primary-dark: #0f766e; /* teal-700 - darker variant */
+	--color-primary-pale: #5eead4; /* teal-300 - pale backgrounds */
 
-	/* Black Palette */
+	/* Black Palette - kept for special cases */
 	--color-black: #000000;
 	--color-black-light: #232323;
 	--color-black-dark: #181818;
 	--color-black-pale: #444444;
 
-	/* Background Colors */
-	--color-background: #fcfbf6;
-	--color-background-surface: #f7f6ef;
-	--color-background-gray: #edeadd;
+	/* Background Colors - Cool Slate Tones */
+	--color-background: #f8fafc; /* slate-50 */
+	--color-background-surface: #f1f5f9; /* slate-100 */
+	--color-background-gray: #e2e8f0; /* slate-200 */
 
 	/* Success Colors */
 	--color-success-light: #4caf50;
@@ -37,8 +37,8 @@ body {
 	--color-error-light: #f44336;
 	--color-error-dark: #c62828;
 
-	/* Accent Color */
-	--color-accent: #009999;
+	/* Accent Color - Teal */
+	--color-accent: #14b8a6; /* teal-500 */
 
 	/* Font */
 	--font-sans:

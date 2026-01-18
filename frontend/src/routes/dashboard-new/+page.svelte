@@ -16,7 +16,7 @@
 	let newsSectionVisible = $state(false);
 	let sentinel = $state<HTMLDivElement>();
 
-	const LIMIT = 10;
+	const LIMIT = 2;
 
 	// Fetch news articles with infinite scrolling
 	const newsQuery = createInfiniteQuery(() => ({
