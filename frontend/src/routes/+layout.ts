@@ -4,7 +4,9 @@ import { QueryClient } from '@tanstack/svelte-query';
 import posthog from 'posthog-js'
 import type { LayoutLoad } from './$types';
 import { env } from '$env/dynamic/public';
-import { me, type BackendUser, get_session, identifyUser } from '$lib/api/auth';
+import { get_session } from '$lib/api/auth';
+// Import user store to trigger auto-initialization on every page load
+import '$lib/stores/user.svelte';
 
 export const prerender = false;
 export const ssr = false;
@@ -49,18 +51,10 @@ export const load: LayoutLoad = async ({ url }) => {
         redirect(302, '/auth');
       }
 
-      // Have session, verify with backend and identify user for PostHog
-      try {
-        const user = await me();
-        
-        identifyUser(user);
-        
-        return { queryClient, user };
-      } catch {
-        redirect(302, '/auth');
-      }
+      // Session exists, return immediately - user store will load in background
+      return { queryClient };
     }
   }
 
-  return { queryClient, user: null };
+  return { queryClient };
 };

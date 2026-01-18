@@ -4,17 +4,17 @@
 	import AppShell from '$lib/components/layout/AppShell.svelte';
 	import NewsFeed from '$lib/components/news/NewsFeed.svelte';
 	import NewsCard from '$lib/components/news/NewsCard.svelte';
-	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
 	import { chat } from '$lib/api/chat';
 	import { news } from '$lib/api/news';
 	import { createInfiniteQuery } from '@tanstack/svelte-query';
 	import { onMount } from 'svelte';
+	import { currentUser } from '$lib/stores/user.svelte';
 
-	let username = $derived(page.data.user?.first_name ?? '');
-	let newsSection: HTMLElement;
+	let username = $derived(currentUser?.first_name ?? '');
+	let newsSection = $state<HTMLElement>();
 	let newsSectionVisible = $state(false);
-	let sentinel: HTMLDivElement;
+	let sentinel = $state<HTMLDivElement>();
 
 	const LIMIT = 10;
 

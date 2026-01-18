@@ -314,5 +314,8 @@ export async function logout(): Promise<void> {
     }
     identifiedUserId = null;
 
+    const { clearUser } = await import('$lib/stores/user.svelte');
+    clearUser();
+
     window.location.href = '/';
 }

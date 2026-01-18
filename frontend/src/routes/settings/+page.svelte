@@ -1,10 +1,8 @@
 <script lang="ts">
-    import { page } from '$app/state';
     import { logout } from '$lib/api/auth';
     import { areaUnit } from '$lib/stores/preferences.svelte';
     import { getAreaUnitLabel } from '$lib/utils/units';
-
-    const user = $derived(page.data.user);
+    import { currentUser } from '$lib/stores/user.svelte';
 </script>
 
 <div class="max-w-3xl mx-auto px-4 py-8">
@@ -67,15 +65,15 @@
         <!-- Account Section -->
         <div class="bg-white shadow-md rounded-lg p-6">
             <h2 class="text-lg font-semibold mb-4">Account</h2>
-            {#if user}
+            {#if currentUser}
                 <div class="space-y-3 text-sm">
                     <div class="flex justify-between">
                         <span class="text-gray-500">Email</span>
-                        <span class="text-gray-900">{user.email}</span>
+                        <span class="text-gray-900">{currentUser.email}</span>
                     </div>
                     <div class="flex justify-between">
                         <span class="text-gray-500">Organization</span>
-                        <span class="text-gray-900">{user.organization_name}</span>
+                        <span class="text-gray-900">{currentUser.organization_name}</span>
                     </div>
                 </div>
             {/if}

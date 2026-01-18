@@ -1,29 +1,27 @@
 <script lang="ts">
-    import { page } from '$app/state';
     import { logout } from '$lib/api/auth';
-
-    const user = $derived(page.data.user);
+    import { currentUser } from '$lib/stores/user.svelte';
 </script>
 
 <div class="max-w-7xl mx-auto px-4 py-8">
     <h1 class="text-3xl font-bold mb-8">Profile</h1>
 
-    {#if user}
+    {#if currentUser}
         <div class="bg-white shadow-md rounded-lg p-6">
             <h2 class="text-lg font-semibold mb-4">Account Details</h2>
             
             <div class="space-y-4">
                 <div class="flex justify-between py-3 border-b border-gray-100">
                     <span class="text-gray-500">Full Name</span>
-                    <span class="text-gray-900">{user.first_name} {user.last_name}</span>
+                    <span class="text-gray-900">{currentUser.first_name} {currentUser.last_name}</span>
                 </div>
                 <div class="flex justify-between py-3 border-b border-gray-100">
                     <span class="text-gray-500">Email</span>
-                    <span class="text-gray-900">{user.email}</span>
+                    <span class="text-gray-900">{currentUser.email}</span>
                 </div>
                 <div class="flex justify-between py-3 border-b border-gray-100">
                     <span class="text-gray-500">Organization</span>
-                    <span class="text-gray-900">{user.organization_name}</span>
+                    <span class="text-gray-900">{currentUser.organization_name}</span>
                 </div>
             </div>
 

@@ -5,12 +5,12 @@
 	import PageHeader from '$lib/components/dashboard/PageHeader.svelte';
 	import AppShell from '$lib/components/layout/AppShell.svelte';
 	import NewsFeed from '$lib/components/news/NewsFeed.svelte';
-	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
 	import { chat } from '$lib/api/chat';
 	import { analytics, type SalesAnalyticsResponse } from '$lib/api/analytics';
+	import { currentUser } from '$lib/stores/user.svelte';
 
-	let username = $derived(page.data.user?.first_name ?? '');
+	let username = $derived(currentUser?.first_name ?? '');
 	let analyticsData = $state<SalesAnalyticsResponse | null>(null);
 	let isLoading = $state(true);
 	let newsSection: HTMLElement;
