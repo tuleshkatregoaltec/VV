@@ -33,10 +33,9 @@
 		// Initialize MapLibre
 		map = new maplibregl.Map({
 			container: mapContainer,
-			style: 'https://tiles.openstreetmap.fr/hot/style.json', // Better detailed OSM style
+			style: 'https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json', // Carto Voyager (accept font CORS warnings)
 			center: [55.2708, 25.2048], // Dubai [lng, lat]
-			zoom: 11,
-			preserveDrawingBuffer: true
+			zoom: 11
 		});
 
 		// Add navigation controls
