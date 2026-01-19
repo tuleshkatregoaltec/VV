@@ -17,7 +17,7 @@
 	let newsSectionVisible = $state(false);
 	let sentinel = $state<HTMLDivElement>();
 
-	const LIMIT = 2;
+	const LIMIT = 10; // Load 10 articles initially and per page
 
 	// Fetch news articles with infinite scrolling
 	const newsQuery = createInfiniteQuery(() => ({
@@ -70,19 +70,27 @@
 		return () => observer.disconnect();
 	});
 
-	// Infinite scroll observer
-	onMount(() => {
-		const observer = new IntersectionObserver((entries) => {
-			if (
-				entries[0].isIntersecting &&
-				newsQuery.hasNextPage &&
-				!newsQuery.isFetchingNextPage
-			) {
-				newsQuery.fetchNextPage();
-			}
-		});
+	// Infinite scroll observer - trigger when user is 3 articles away from bottom
+	$effect(() => {
+		if (!sentinel) return;
 
-		if (sentinel) observer.observe(sentinel);
+		const observer = new IntersectionObserver(
+			(entries) => {
+				if (entries[0].isIntersecting) {
+					if (newsQuery.hasNextPage && !newsQuery.isFetchingNextPage) {
+						console.log('Sentinel reached, loading next page...');
+						newsQuery.fetchNextPage();
+					}
+				}
+			},
+			{
+				threshold: 0.1,
+				rootMargin: '200px' // Start loading 200px before reaching sentinel
+			}
+		);
+
+		observer.observe(sentinel);
+
 		return () => observer.disconnect();
 	});
 
@@ -210,12 +218,12 @@
 							<NewsCard {article} />
 						{/each}
 
-						<!-- Infinite scroll sentinel -->
-						<div bind:this={sentinel} class="h-4"></div>
+					{#if newsQuery.isFetchingNextPage}
+						<div class="text-center text-slate-500 py-4">Loading more...</div>
+					{/if}
 
-						{#if newsQuery.isFetchingNextPage}
-							<div class="text-center text-slate-500 py-4">Loading more...</div>
-						{/if}
+					<!-- Infinite scroll sentinel - placed after articles for next page trigger -->
+					<div bind:this={sentinel} class="h-4"></div>
 					{/if}
 				</div>
 			</div>

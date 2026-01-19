@@ -51,9 +51,6 @@
         <a href="/profile" class="block px-4 py-2.5 rounded-lg text-base font-medium text-gray-700 hover:text-primary hover:bg-primary-pale/30 transition-all duration-300">
             My Profile
         </a>
-        <a href="/settings" class="block px-4 py-2.5 rounded-lg text-base font-medium text-gray-700 hover:text-primary hover:bg-primary-pale/30 transition-all duration-300">
-            Settings
-        </a>
         <button 
             onclick={handleLogout}
             class="block w-full text-left px-4 py-2.5 rounded-lg text-base font-medium text-red-600 hover:bg-red-50 transition-all duration-300"

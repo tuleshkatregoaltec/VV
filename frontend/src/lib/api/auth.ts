@@ -296,6 +296,31 @@ export async function me(): Promise<BackendUser> {
 }
 
 /**
+ * Update current user's profile (first_name, last_name) via Supabase Auth
+ * 
+ * @param firstName User's first name
+ * @param lastName User's last name
+ * @returns AuthResult with success status
+ */
+export async function update_user_profile(
+    firstName: string,
+    lastName: string
+): Promise<AuthResult> {
+    const res = await client.updateUser({
+        data: {
+            first_name: firstName,
+            last_name: lastName
+        }
+    });
+
+    if (!res.error && res.data) {
+        return { success: true, data: res.data };
+    }
+
+    return { success: false, error: res.error?.message || 'Failed to update profile' };
+}
+
+/**
  * Sign out the current user - Supabase + PostHog reset + redirect
  */
 export async function logout(): Promise<void> {

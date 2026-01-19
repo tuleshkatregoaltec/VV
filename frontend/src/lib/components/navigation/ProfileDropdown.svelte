@@ -71,9 +71,6 @@
             <a href="/profile" class="block px-3 py-2 text-sm text-gray-700 hover:text-primary hover:bg-gray-50 transition-colors">
                 My Profile
             </a>
-            <a href="/settings" class="block px-3 py-2 text-sm text-gray-700 hover:text-primary hover:bg-gray-50 transition-colors">
-                Settings
-            </a>
             <div class="my-1 h-px bg-gray-200"></div>
             <button 
                 onclick={handleLogout}
