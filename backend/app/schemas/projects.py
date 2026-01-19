@@ -3,12 +3,35 @@ from typing import Optional, List
 from datetime import date
 
 
+class GeoPoint(BaseModel):
+    """Geographic point with latitude and longitude"""
+    latitude: float
+    longitude: float
+
+
+class GeoPolygon(BaseModel):
+    """Geographic polygon (area boundaries)"""
+    coordinates: List[List[float]]  # List of [lng, lat] pairs
+
+
+class BuildingInfo(BaseModel):
+    """Building information with coordinates"""
+    property_id: int
+    building_number: Optional[str]
+    building_name: Optional[str]
+    floors: Optional[int]
+    latitude: float
+    longitude: float
+
+
 class ProjectSearchResult(BaseModel):
     """Minimal project info for search dropdown"""
     project_id: int
     project_name: str
     area_name: str
     developer_name: Optional[str]
+    latitude: float
+    longitude: float
 
 
 class UnitComposition(BaseModel):
@@ -29,6 +52,9 @@ class ProjectDetailResponse(BaseModel):
     # Location
     area_id: int
     area_name: str
+    latitude: float
+    longitude: float
+    area_polygon: Optional[GeoPolygon] = None
 
     # Developer
     developer_id: Optional[int]
@@ -51,3 +77,4 @@ class ProjectDetailResponse(BaseModel):
 
     # Derived data
     unit_composition: List[UnitComposition]
+    buildings: List[BuildingInfo] = []

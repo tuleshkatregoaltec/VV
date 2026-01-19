@@ -31,7 +31,18 @@
 
 		try {
 			projectDetails = await projectsAPI.getDetails(projectId);
-			// TODO: Fly map to project location when we have coordinates
+			// Fly map to project location with area polygon and building pins
+			if (mapComponent && projectDetails) {
+				mapComponent.flyToProject(
+					projectDetails.project_id,
+					projectDetails.project_name,
+					projectDetails.latitude,
+					projectDetails.longitude,
+					projectDetails.area_polygon,
+					projectDetails.buildings,
+					14
+				);
+			}
 		} catch (error) {
 			console.error('Failed to load project details:', error);
 		} finally {
