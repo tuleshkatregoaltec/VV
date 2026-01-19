@@ -74,22 +74,25 @@
 		<!-- Floating Left Overlay Panel -->
 		<div
 			class="absolute transition-all duration-300 ease-in-out z-10 {isMinimized
-				? 'left-4 top-4 bottom-4 w-16'
-				: 'left-4 right-4 top-4 bottom-4 sm:right-auto sm:w-96'}"
+				? 'left-4 top-4'
+				: 'left-4 right-4 top-4 bottom-4 sm:right-auto sm:w-96 bottom-4'}"
 		>
-			<div class="h-full bg-white/95 backdrop-blur-md shadow-2xl rounded-2xl border border-slate-200/50 overflow-hidden">
+			<div class="bg-white/95 backdrop-blur-md shadow-2xl rounded-2xl border border-slate-200/50 overflow-hidden {isMinimized ? '' : 'h-full'}">
 				{#if isMinimized}
 					<!-- Minimized State -->
-					<button
-						onclick={toggleMinimize}
-						class="w-full h-16 flex items-center justify-center hover:bg-slate-100 transition-colors rounded-2xl"
-						aria-label="Expand panel"
-					>
-						<svg class="w-6 h-6 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"
-							></path>
-						</svg>
-					</button>
+					<div class="flex items-center gap-2 px-4 py-3">
+						<span class="text-sm font-semibold text-slate-900 whitespace-nowrap">Projects</span>
+						<button
+							onclick={toggleMinimize}
+							class="p-1.5 hover:bg-slate-100 transition-colors rounded-lg flex-shrink-0"
+							aria-label="Expand panel"
+						>
+							<svg class="w-4 h-4 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"
+								></path>
+							</svg>
+						</button>
+					</div>
 				{:else}
 					<!-- Expanded State -->
 					<div class="h-full flex flex-col">
