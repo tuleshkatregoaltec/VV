@@ -17,9 +17,6 @@
 			return;
 		}
 
-		console.log('Initializing MapLibre GL map...');
-		console.log('Container dimensions:', mapContainer.offsetWidth, 'x', mapContainer.offsetHeight);
-
 		// Initialize MapLibre
 		map = new maplibregl.Map({
 			container: mapContainer,
@@ -30,11 +27,6 @@
 
 		// Add navigation controls
 		map.addControl(new maplibregl.NavigationControl(), 'top-right');
-
-		// Log when map is loaded
-		map.on('load', () => {
-			console.log('Map loaded successfully');
-		});
 
 		map.on('error', (e) => {
 			console.error('Map error:', e);

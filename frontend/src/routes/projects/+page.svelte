@@ -13,17 +13,15 @@
 	let isLoadingDetails = $state(false);
 	let mapComponent = $state<any>();
 
-	// Load all projects on mount for client-side search
+	// Load all projects in background for client-side search
 	let allProjects = $state<ProjectSearchResult[]>([]);
-	let isLoadingProjects = $state(true);
 
 	onMount(async () => {
+		// Load projects in background without blocking UI
 		try {
 			allProjects = await projectsAPI.list();
 		} catch (error) {
 			console.error('Failed to load projects:', error);
-		} finally {
-			isLoadingProjects = false;
 		}
 	});
 
@@ -47,24 +45,24 @@
 </script>
 
 <AppShell showFilters={false}>
-	<div class="relative h-[calc(100vh-64px)]">
+	<div class="relative h-[calc(100vh-64px)] overflow-hidden">
 		<!-- Map (full screen) -->
 		<div class="absolute inset-0">
 			<ProjectMap bind:this={mapComponent} onProjectSelect={handleProjectSelect} />
 		</div>
 
-		<!-- Left Overlay Panel -->
+		<!-- Floating Left Overlay Panel -->
 		<div
-			class="absolute left-0 top-0 bottom-0 transition-all duration-300 ease-in-out z-10 {isMinimized
-				? 'w-16'
-				: 'w-full sm:w-96'}"
+			class="absolute transition-all duration-300 ease-in-out z-10 {isMinimized
+				? 'left-4 top-4 bottom-4 w-16'
+				: 'left-4 right-4 top-4 bottom-4 sm:right-auto sm:w-96'}"
 		>
-			<div class="h-full bg-white/90 backdrop-blur-md shadow-2xl border-r border-slate-200">
+			<div class="h-full bg-white/95 backdrop-blur-md shadow-2xl rounded-2xl border border-slate-200/50 overflow-hidden">
 				{#if isMinimized}
 					<!-- Minimized State -->
 					<button
 						onclick={toggleMinimize}
-						class="w-full h-16 flex items-center justify-center hover:bg-slate-100 transition-colors"
+						class="w-full h-16 flex items-center justify-center hover:bg-slate-100 transition-colors rounded-2xl"
 						aria-label="Expand panel"
 					>
 						<svg class="w-6 h-6 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -76,7 +74,7 @@
 					<!-- Expanded State -->
 					<div class="h-full flex flex-col">
 						<!-- Header with Minimize Button -->
-						<div class="flex items-center justify-between p-4 border-b border-slate-200">
+						<div class="flex items-center justify-between p-4 border-b border-slate-200 flex-shrink-0">
 							<h1 class="text-xl font-bold text-slate-900">Projects</h1>
 							<button
 								onclick={toggleMinimize}
@@ -99,17 +97,13 @@
 							</button>
 						</div>
 
-						<!-- Search Input -->
-						<div class="p-4 border-b border-slate-200">
-							{#if isLoadingProjects}
-								<div class="text-center text-slate-500 py-4">Loading projects...</div>
-							{:else}
-								<ProjectSearchInput allProjects={allProjects} onProjectSelect={handleProjectSelect} />
-							{/if}
+						<!-- Search Input - Always visible for perceived speed -->
+						<div class="p-4 border-b border-slate-200 flex-shrink-0">
+							<ProjectSearchInput allProjects={allProjects} onProjectSelect={handleProjectSelect} />
 						</div>
 
-						<!-- Content Area (scrollable) -->
-						<div class="flex-1 overflow-y-auto">
+						<!-- Content Area (scrollable) - Only scrollbar here -->
+						<div class="flex-1 overflow-y-auto overflow-x-hidden">
 							{#if isLoadingDetails}
 								<div class="flex items-center justify-center h-full">
 									<div class="text-slate-600">Loading project details...</div>
