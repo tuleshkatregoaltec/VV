@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { logout, update_user_profile, me } from '$lib/api/auth';
+    import { logout, update_user_profile } from '$lib/api/auth';
     import { areaUnit } from '$lib/stores/preferences.svelte';
     import { getAreaUnitLabel } from '$lib/utils/units';
     import { currentUser } from '$lib/stores/user.svelte';
@@ -18,7 +18,7 @@
         }
     });
 
-    async function handleNameEdit() {
+    function handleNameEdit() {
         editError = '';
         editSuccess = '';
 
@@ -28,24 +28,32 @@
         }
 
         editLoading = true;
-        const result = await update_user_profile(firstName.trim(), lastName.trim());
+        const trimmedFirstName = firstName.trim();
+        const trimmedLastName = lastName.trim();
 
-        if (result.success) {
-            editSuccess = 'Profile updated successfully';
-            editingName = false;
-            
-            // Refresh user data
-            const updated = await me();
-            currentUser.setUser(updated);
-            
-            setTimeout(() => {
-                editSuccess = '';
-            }, 3000);
-        } else {
-            editError = result.error || 'Failed to update profile';
+        // Immediately update local user store
+        if (currentUser.data) {
+            currentUser.setUser({
+                ...currentUser.data,
+                first_name: trimmedFirstName,
+                last_name: trimmedLastName
+            });
         }
 
+        editSuccess = 'Profile updated successfully';
+        editingName = false;
         editLoading = false;
+
+        setTimeout(() => {
+            editSuccess = '';
+        }, 3000);
+
+        // Make the update request in the background
+        update_user_profile(trimmedFirstName, trimmedLastName).then(result => {
+            if (!result.success) {
+                editError = result.error || 'Failed to sync profile changes';
+            }
+        });
     }
 
     function handleCancel() {
@@ -166,10 +174,6 @@
             <div class="bg-white/80 backdrop-blur-sm shadow-sm rounded-lg p-6 border border-slate-200">
                 <h2 class="text-lg font-semibold text-slate-900 mb-4">Preferences</h2>
                 <div class="space-y-4">
-                    <div class="flex items-center justify-between">
-                        <span class="text-slate-700">Default currency</span>
-                        <span class="text-slate-900 font-medium">AED</span>
-                    </div>
                     <div class="flex items-center justify-between">
                         <div>
                             <span class="text-slate-700">Area unit</span>
