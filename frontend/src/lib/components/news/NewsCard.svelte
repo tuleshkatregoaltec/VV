@@ -3,11 +3,7 @@
 
 	let { article }: { article: NewsArticle } = $props();
 
-	const imageSrc = $derived(
-		article.thumbnail_base64
-			? `data:image/jpeg;base64,${article.thumbnail_base64}`
-			: article.thumbnail_url
-	);
+	const imageSrc = $derived(article.thumbnail_url);
 
 	function formatRelativeTime(dateString: string | null): string {
 		if (!dateString) return '';

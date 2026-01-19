@@ -5,7 +5,7 @@ export interface NewsArticle {
 	url: string;
 	headline: string;
 	thumbnail_url: string;
-	thumbnail_base64: string | null;
+	thumbnail_base64?: string;
 	publish_date: string | null;
 	source?: string;
 }
