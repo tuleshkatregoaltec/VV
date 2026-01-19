@@ -30,9 +30,16 @@
 		isLoadingDetails = true;
 
 		try {
+			console.log('Fetching details for project:', projectId);
 			projectDetails = await projectsAPI.getDetails(projectId);
+			
+			console.log('Project details received:', projectDetails);
+			console.log('Area polygon:', projectDetails.area_polygon);
+			console.log('Buildings:', projectDetails.buildings.length);
+
 			// Fly map to project location with area polygon and building pins
 			if (mapComponent && projectDetails) {
+				console.log('Calling mapComponent.flyToProject');
 				mapComponent.flyToProject(
 					projectDetails.project_id,
 					projectDetails.project_name,
@@ -42,6 +49,8 @@
 					projectDetails.buildings,
 					14
 				);
+			} else {
+				console.error('Map component not ready or project details missing');
 			}
 		} catch (error) {
 			console.error('Failed to load project details:', error);

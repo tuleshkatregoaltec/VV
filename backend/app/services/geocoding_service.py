@@ -67,6 +67,7 @@ async def search_location(
             
             headers = {"User-Agent": USER_AGENT}
             
+            logger.debug(f"Searching Nominatim for: {query}")
             response = await client.get(
                 f"{NOMINATIM_BASE_URL}/search",
                 params=params,
@@ -75,7 +76,7 @@ async def search_location(
             )
             
             if response.status_code != 200:
-                logger.error(f"Nominatim search failed: {response.status_code}")
+                logger.error(f"Nominatim search failed: {response.status_code} - {response.text}")
                 return None
             
             results = response.json()
@@ -84,10 +85,12 @@ async def search_location(
                 return None
             
             result = results[0]
-            return GeoPoint(
+            geo_point = GeoPoint(
                 latitude=float(result["lat"]),
                 longitude=float(result["lon"])
             )
+            logger.debug(f"Found location: {query} -> {geo_point.latitude}, {geo_point.longitude}")
+            return geo_point
     
     except Exception as e:
         logger.error(f"Error geocoding '{query}': {str(e)}")
@@ -122,6 +125,7 @@ async def search_location_with_polygon(
             
             headers = {"User-Agent": USER_AGENT}
             
+            logger.debug(f"Searching Nominatim for polygon: {query}")
             response = await client.get(
                 f"{NOMINATIM_BASE_URL}/search",
                 params=params,
@@ -130,12 +134,12 @@ async def search_location_with_polygon(
             )
             
             if response.status_code != 200:
-                logger.error(f"Nominatim search failed: {response.status_code}")
+                logger.error(f"Nominatim polygon search failed: {response.status_code} - {response.text}")
                 return None
             
             results = response.json()
             if not results:
-                logger.debug(f"No results found for: {query}")
+                logger.debug(f"No polygon results found for: {query}")
                 return None
             
             result = results[0]
@@ -149,10 +153,14 @@ async def search_location_with_polygon(
             if result.get("geojson") and result["geojson"].get("type") == "Polygon":
                 coords = result["geojson"]["coordinates"][0]
                 polygon = GeoPolygon(coordinates=coords)
+                logger.debug(f"Found Polygon with {len(coords)} points")
             elif result.get("geojson") and result["geojson"].get("type") == "MultiPolygon":
                 # For multipolygons, use the first polygon
                 coords = result["geojson"]["coordinates"][0][0]
                 polygon = GeoPolygon(coordinates=coords)
+                logger.debug(f"Found MultiPolygon, using first with {len(coords)} points")
+            else:
+                logger.debug(f"No polygon geometry found for {query}")
             
             return geo_point, polygon
     

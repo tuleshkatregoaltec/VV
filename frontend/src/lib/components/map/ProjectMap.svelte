@@ -33,9 +33,10 @@
 		// Initialize MapLibre
 		map = new maplibregl.Map({
 			container: mapContainer,
-			style: 'https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json', // Free OSM style
+			style: 'https://tiles.openstreetmap.fr/hot/style.json', // Better detailed OSM style
 			center: [55.2708, 25.2048], // Dubai [lng, lat]
-			zoom: 11
+			zoom: 11,
+			preserveDrawingBuffer: true
 		});
 
 		// Add navigation controls
@@ -45,6 +46,11 @@
 			console.error('Map error:', e);
 		});
 
+		// Wait for map to be fully loaded
+		map.on('load', () => {
+			console.log('Map fully loaded and ready');
+		});
+
 		return () => {
 			map?.remove();
 		};
@@ -52,54 +58,78 @@
 
 	// Draw area polygon on map
 	function drawAreaPolygon(polygon: GeoPolygon) {
-		if (!map) return;
-
-		// Remove existing polygon layer if present
-		if (areaPolygonLayer) {
-			map.removeLayer(areaPolygonLayer);
-			map.removeSource('area-polygon');
+		if (!map) {
+			console.error('Map not initialized');
+			return;
 		}
 
-		const sourceId = 'area-polygon';
-		const layerId = 'area-polygon-layer';
+		const drawPolygon = () => {
+			try {
+				// Remove existing polygon layer if present
+				if (areaPolygonLayer) {
+					try {
+						map!.removeLayer(areaPolygonLayer);
+						map!.removeLayer(`${areaPolygonLayer}-outline`);
+						map!.removeSource('area-polygon');
+					} catch (e) {
+						console.log('Polygon layers not found, skipping removal');
+					}
+				}
 
-		// Add source with polygon data
-		map.addSource(sourceId, {
-			type: 'geojson',
-			data: {
-				type: 'Feature',
-				geometry: {
-					type: 'Polygon',
-					coordinates: [polygon.coordinates]
-				},
-				properties: {}
+				const sourceId = 'area-polygon';
+				const layerId = 'area-polygon-layer';
+
+				console.log('Drawing polygon with coordinates:', polygon.coordinates.length, 'points');
+
+				// Add source with polygon data
+				map!.addSource(sourceId, {
+					type: 'geojson',
+					data: {
+						type: 'Feature',
+						geometry: {
+							type: 'Polygon',
+							coordinates: [polygon.coordinates]
+						},
+						properties: {}
+					}
+				});
+
+				// Add fill layer
+				map!.addLayer({
+					id: layerId,
+					type: 'fill',
+					source: sourceId,
+					paint: {
+						'fill-color': '#0d9488',
+						'fill-opacity': 0.2
+					}
+				});
+
+				// Add outline layer
+				map!.addLayer({
+					id: `${layerId}-outline`,
+					type: 'line',
+					source: sourceId,
+					paint: {
+						'line-color': '#0d9488',
+						'line-width': 3,
+						'line-opacity': 1
+					}
+				});
+
+				areaPolygonLayer = layerId;
+				console.log('Polygon drawn successfully');
+			} catch (error) {
+				console.error('Error drawing polygon:', error);
 			}
-		});
+		};
 
-		// Add fill layer
-		map.addLayer({
-			id: layerId,
-			type: 'fill',
-			source: sourceId,
-			paint: {
-				'fill-color': '#0d9488',
-				'fill-opacity': 0.15
-			}
-		});
-
-		// Add outline layer
-		map.addLayer({
-			id: `${layerId}-outline`,
-			type: 'line',
-			source: sourceId,
-			paint: {
-				'line-color': '#0d9488',
-				'line-width': 2,
-				'line-opacity': 0.8
-			}
-		});
-
-		areaPolygonLayer = layerId;
+		if (map.isStyleLoaded()) {
+			drawPolygon();
+		} else {
+			console.log('Map style not loaded yet, waiting...');
+			map.once('styledata', drawPolygon);
+		}
 	}
 
 	// Add building markers to map
@@ -209,17 +239,38 @@
 		buildings: BuildingInfo[] = [],
 		zoom: number = 14
 	) {
-		map?.flyTo({ center: [longitude, latitude], zoom });
+		if (!map) {
+			console.error('Map not initialized');
+			return;
+		}
+
+		console.log('Flying to project:', projectName, 'at', latitude, longitude);
+		console.log('Area polygon:', areaPolygon ? 'present' : 'missing');
+		console.log('Buildings:', buildings.length);
+
+		// Clear previous markers
+		clearMarkers();
+
+		// Fly to location
+		map.flyTo({ center: [longitude, latitude], zoom, duration: 2000 });
+
+		// Add main project marker
 		addProjectMarker(projectId, projectName, latitude, longitude);
 
 		// Draw area polygon if available
-		if (areaPolygon) {
+		if (areaPolygon && areaPolygon.coordinates && areaPolygon.coordinates.length > 0) {
+			console.log('Drawing area polygon');
 			drawAreaPolygon(areaPolygon);
+		} else {
+			console.log('No valid area polygon data');
 		}
 
 		// Add building markers if available
-		if (buildings.length > 0) {
+		if (buildings && buildings.length > 0) {
+			console.log('Adding', buildings.length, 'building markers');
 			addBuildingMarkers(buildings);
+		} else {
+			console.log('No buildings to display');
 		}
 	}
 

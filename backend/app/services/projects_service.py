@@ -43,6 +43,11 @@ async def list_all_projects(db: AsyncSession) -> List[ProjectSearchResult]:
         # Get coordinates from Nominatim
         geo_point = await search_location(f"{project_name}, Dubai")
         
+        if geo_point:
+            logger.debug(f"Found coordinates for {project_name}: {geo_point.latitude}, {geo_point.longitude}")
+        else:
+            logger.debug(f"Could not find coordinates for {project_name}, using defaults")
+        
         search_results.append(
             ProjectSearchResult(
                 project_id=p.project_id,
@@ -114,8 +119,20 @@ async def get_project_details(
     project_name = project.project_name_en or project.project_name_ar or f"Project {project_id}"
     area_name = project.area.name_en if project.area else "Unknown"
     
+    logger.info(f"Geocoding project: {project_name}, area: {area_name}")
+    
     project_geo = await search_location(f"{project_name}, Dubai")
     area_geo = await search_location_with_polygon(f"{area_name}, Dubai")
+    
+    if project_geo:
+        logger.info(f"Found project coordinates: {project_geo.latitude}, {project_geo.longitude}")
+    else:
+        logger.warning(f"Could not find coordinates for project {project_name}")
+    
+    if area_geo:
+        logger.info(f"Found area polygon with {len(area_geo[1].coordinates) if area_geo[1] else 0} points")
+    else:
+        logger.warning(f"Could not find area polygon for {area_name}")
     
     latitude = project_geo.latitude if project_geo else 25.2048
     longitude = project_geo.longitude if project_geo else 55.2708
@@ -131,6 +148,8 @@ async def get_project_details(
     buildings_result = await db.exec(buildings_stmt)
     buildings_data = buildings_result.all()
     
+    logger.info(f"Found {len(buildings_data)} buildings for project {project_id}")
+    
     # Geocode buildings
     buildings: List[BuildingInfo] = []
     for building in buildings_data:
@@ -138,6 +157,7 @@ async def get_project_details(
         building_geo = await search_location(f"{building_name}, {area_name}, Dubai")
         
         if building_geo:
+            logger.debug(f"Found building {building_name}: {building_geo.latitude}, {building_geo.longitude}")
             buildings.append(
                 BuildingInfo(
                     property_id=building.property_id,
@@ -148,6 +168,8 @@ async def get_project_details(
                     longitude=building_geo.longitude,
                 )
             )
+        else:
+            logger.debug(f"Could not find coordinates for building {building_name}")
 
     # Build response
     return ProjectDetailResponse(
