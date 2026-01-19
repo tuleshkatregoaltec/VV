@@ -132,31 +132,9 @@ export const transactions = {
 	rentals: (filters: TransactionFilters) =>
 		api<RentalContractListResponse>(`/api/v1/transactions/rentals?${buildQuery(filters)}`),
 
-	exportSales: async (filters: TransactionFilters): Promise<Blob> => {
-		const response = await fetch(
-			`${env.PUBLIC_API_BASE_URL}/api/v1/transactions/sales/export?${buildQuery(filters)}`,
-			{ credentials: 'include' }
-		);
+	exportSales: (filters: TransactionFilters): Promise<Blob> =>
+		api<Blob>(`/api/v1/transactions/sales/export?${buildQuery(filters)}`, { returnBlob: true }),
 
-		if (!response.ok) {
-			const text = await response.text();
-			throw new Error(`Export failed: ${response.status} - ${text}`);
-		}
-
-		return response.blob();
-	},
-
-	exportRentals: async (filters: TransactionFilters): Promise<Blob> => {
-		const response = await fetch(
-			`${env.PUBLIC_API_BASE_URL}/api/v1/transactions/rentals/export?${buildQuery(filters)}`,
-			{ credentials: 'include' }
-		);
-
-		if (!response.ok) {
-			const text = await response.text();
-			throw new Error(`Export failed: ${response.status} - ${text}`);
-		}
-
-		return response.blob();
-	}
+	exportRentals: (filters: TransactionFilters): Promise<Blob> =>
+		api<Blob>(`/api/v1/transactions/rentals/export?${buildQuery(filters)}`, { returnBlob: true })
 };

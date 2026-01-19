@@ -17,10 +17,11 @@ export interface RequestOptions {
     method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
     body?: unknown;
     headers?: Record<string, string>;
+    returnBlob?: boolean;
 }
 
 export async function api<T>(endpoint: string, options: RequestOptions = {}): Promise<T> {
-    const { method = 'GET', body, headers = {} } = options;
+    const { method = 'GET', body, headers = {}, returnBlob = false } = options;
 
     // if access token available, add auth header. 
     const access_token = await get_access_token();
@@ -69,6 +70,10 @@ export async function api<T>(endpoint: string, options: RequestOptions = {}): Pr
 
     if (res.status === 204) {
         return undefined as T;
+    }
+
+    if (returnBlob) {
+        return res.blob() as Promise<T>;
     }
 
     return res.json();
