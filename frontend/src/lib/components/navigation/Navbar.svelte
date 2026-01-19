@@ -30,6 +30,7 @@
             <NavDropdown label="Transactions" items={transactionItems} />
             <NavDropdown label="Analytics" items={analyticsItems} />
             <NavLink href="/supply" label="Supply" />
+            <NavLink href="/projects" label="Projects" />
         </div>
 
         <div class="flex items-center flex-shrink-0">

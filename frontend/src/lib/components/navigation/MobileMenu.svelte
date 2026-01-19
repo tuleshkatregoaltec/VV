@@ -42,6 +42,10 @@
             Supply
         </a>
 
+        <a href="/projects" class="block px-4 py-2.5 rounded-lg text-base font-medium text-gray-700 hover:text-primary hover:bg-primary-pale/30 transition-all duration-300">
+            Projects
+        </a>
+
         <hr class="my-2 border-gray-200" />
         
         <a href="/profile" class="block px-4 py-2.5 rounded-lg text-base font-medium text-gray-700 hover:text-primary hover:bg-primary-pale/30 transition-all duration-300">
