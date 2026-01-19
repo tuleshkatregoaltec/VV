@@ -18,6 +18,7 @@ from app.routers import (
     chat,
     upload,
     news,
+    projects,
 )
 
 from app.providers.auth.auth_backend import AuthBackend
@@ -54,6 +55,7 @@ app.include_router(chat.router, tags=["chat"])
 app.include_router(upload.router, tags=["upload"])
 app.include_router(upload.health_router, tags=["upload"])
 app.include_router(news.router, tags=["news"])
+app.include_router(projects.router, tags=["projects"])
 
 
 @app.get("/api/v1/health")
