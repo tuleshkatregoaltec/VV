@@ -20,11 +20,16 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+# Simple in-memory cache for geocoding results to avoid repeated API calls
+_geocoding_cache: dict[str, Optional[tuple[float, float]]] = {}
+_polygon_cache: dict[str, Optional[GeoPolygon]] = {}
+
 
 async def list_all_projects(db: AsyncSession) -> List[ProjectSearchResult]:
     """
     Get all projects with minimal data for client-side search.
     Returns ~1500 projects (~150-200KB uncompressed).
+    NOTE: Does NOT geocode - we only geocode when user selects a project detail
     """
     stmt = (
         select(Project)
@@ -35,31 +40,19 @@ async def list_all_projects(db: AsyncSession) -> List[ProjectSearchResult]:
     result = await db.exec(stmt)
     projects = result.all()
 
-    search_results = []
-    for p in projects:
-        project_name = p.project_name_en or p.project_name_ar or f"Project {p.project_id}"
-        area_name = p.area.name_en if p.area else "Unknown"
-        
-        # Get coordinates from Nominatim
-        geo_point = await search_location(f"{project_name}, Dubai")
-        
-        if geo_point:
-            logger.debug(f"Found coordinates for {project_name}: {geo_point.latitude}, {geo_point.longitude}")
-        else:
-            logger.debug(f"Could not find coordinates for {project_name}, using defaults")
-        
-        search_results.append(
-            ProjectSearchResult(
-                project_id=p.project_id,
-                project_name=project_name,
-                area_name=area_name,
-                developer_name=p.developer.developer_name_en if p.developer else None,
-                latitude=geo_point.latitude if geo_point else 25.2048,
-                longitude=geo_point.longitude if geo_point else 55.2708,
-            )
+    return [
+        ProjectSearchResult(
+            project_id=p.project_id,
+            project_name=p.project_name_en
+            or p.project_name_ar
+            or f"Project {p.project_id}",
+            area_name=p.area.name_en if p.area else "Unknown",
+            developer_name=p.developer.developer_name_en if p.developer else None,
+            latitude=25.2048,  # Default Dubai center - will be updated when user selects
+            longitude=55.2708,
         )
-    
-    return search_results
+        for p in projects
+    ]
 
 
 async def get_project_details(
@@ -121,22 +114,44 @@ async def get_project_details(
     
     logger.info(f"Geocoding project: {project_name}, area: {area_name}")
     
-    project_geo = await search_location(f"{project_name}, Dubai")
-    area_geo = await search_location_with_polygon(f"{area_name}, Dubai")
+    # Check caches
+    project_cache_key = f"project_{project_name}"
+    area_cache_key = f"area_{area_name}"
     
-    if project_geo:
-        logger.info(f"Found project coordinates: {project_geo.latitude}, {project_geo.longitude}")
+    # Get project coordinates
+    if project_cache_key in _geocoding_cache:
+        project_cached = _geocoding_cache[project_cache_key]
+        if project_cached:
+            latitude, longitude = project_cached
+            logger.info(f"Using cached project coordinates")
+        else:
+            latitude, longitude = 25.2048, 55.2708
     else:
-        logger.warning(f"Could not find coordinates for project {project_name}")
+        project_geo = await search_location(f"{project_name}, Dubai")
+        if project_geo:
+            logger.info(f"Found project coordinates: {project_geo.latitude}, {project_geo.longitude}")
+            latitude, longitude = project_geo.latitude, project_geo.longitude
+            _geocoding_cache[project_cache_key] = (latitude, longitude)
+        else:
+            logger.warning(f"Could not find coordinates for project {project_name}")
+            latitude, longitude = 25.2048, 55.2708
+            _geocoding_cache[project_cache_key] = None
     
-    if area_geo:
-        logger.info(f"Found area polygon with {len(area_geo[1].coordinates) if area_geo[1] else 0} points")
+    # Get area polygon
+    area_polygon = None
+    if area_cache_key in _polygon_cache:
+        area_polygon = _polygon_cache[area_cache_key]
+        if area_polygon:
+            logger.info(f"Using cached area polygon with {len(area_polygon.coordinates)} points")
     else:
-        logger.warning(f"Could not find area polygon for {area_name}")
-    
-    latitude = project_geo.latitude if project_geo else 25.2048
-    longitude = project_geo.longitude if project_geo else 55.2708
-    area_polygon = area_geo[1] if area_geo else None
+        area_geo = await search_location_with_polygon(f"{area_name}, Dubai")
+        if area_geo:
+            area_polygon = area_geo[1]
+            logger.info(f"Found area polygon with {len(area_polygon.coordinates) if area_polygon else 0} points")
+            _polygon_cache[area_cache_key] = area_polygon
+        else:
+            logger.warning(f"Could not find area polygon for {area_name}")
+            _polygon_cache[area_cache_key] = None
 
     # Get buildings in this project
     buildings_stmt = (
@@ -150,14 +165,36 @@ async def get_project_details(
     
     logger.info(f"Found {len(buildings_data)} buildings for project {project_id}")
     
-    # Geocode buildings
+    # Geocode buildings with caching to avoid spamming Nominatim
     buildings: List[BuildingInfo] = []
     for building in buildings_data:
         building_name = building.building_number or f"Building {building.property_id}"
+        cache_key = f"{building_name}_{area_name}"
+        
+        # Check cache first
+        if cache_key in _geocoding_cache:
+            cached_coords = _geocoding_cache[cache_key]
+            if cached_coords:
+                lat, lon = cached_coords
+                logger.debug(f"Using cached coordinates for {building_name}")
+                buildings.append(
+                    BuildingInfo(
+                        property_id=building.property_id,
+                        building_number=building.building_number,
+                        building_name=building_name,
+                        floors=building.floors,
+                        latitude=lat,
+                        longitude=lon,
+                    )
+                )
+            continue
+        
+        # Only geocode if not in cache
         building_geo = await search_location(f"{building_name}, {area_name}, Dubai")
         
         if building_geo:
             logger.debug(f"Found building {building_name}: {building_geo.latitude}, {building_geo.longitude}")
+            _geocoding_cache[cache_key] = (building_geo.latitude, building_geo.longitude)
             buildings.append(
                 BuildingInfo(
                     property_id=building.property_id,
@@ -170,6 +207,7 @@ async def get_project_details(
             )
         else:
             logger.debug(f"Could not find coordinates for building {building_name}")
+            _geocoding_cache[cache_key] = None
 
     # Build response
     return ProjectDetailResponse(
