@@ -1,13 +1,11 @@
 <script lang="ts">
     import { logout, update_user_profile } from '$lib/api/auth';
     import { areaUnit } from '$lib/stores/preferences.svelte';
-    import { getAreaUnitLabel } from '$lib/utils/units';
-    import { currentUser } from '$lib/stores/user.svelte';
+    import { currentUser, setUser } from '$lib/stores/user.svelte';
 
     let editingName = $state(false);
     let firstName = $state('');
     let lastName = $state('');
-    let editLoading = $state(false);
     let editError = $state('');
     let editSuccess = $state('');
 
@@ -27,13 +25,12 @@
             return;
         }
 
-        editLoading = true;
         const trimmedFirstName = firstName.trim();
         const trimmedLastName = lastName.trim();
 
         // Immediately update local user store
         if (currentUser.data) {
-            currentUser.setUser({
+            setUser({
                 ...currentUser.data,
                 first_name: trimmedFirstName,
                 last_name: trimmedLastName
@@ -42,7 +39,6 @@
 
         editSuccess = 'Profile updated successfully';
         editingName = false;
-        editLoading = false;
 
         setTimeout(() => {
             editSuccess = '';
@@ -113,16 +109,14 @@
                             <button
                                 type="button"
                                 onclick={handleNameEdit}
-                                disabled={editLoading}
-                                class="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm font-medium"
+                                class="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors text-sm font-medium"
                             >
-                                {editLoading ? 'Saving...' : 'Save'}
+                                Save
                             </button>
                             <button
                                 type="button"
                                 onclick={handleCancel}
-                                disabled={editLoading}
-                                class="px-4 py-2 bg-slate-200 text-slate-700 rounded-lg hover:bg-slate-300 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm font-medium"
+                                class="px-4 py-2 bg-slate-200 text-slate-700 rounded-lg hover:bg-slate-300 transition-colors text-sm font-medium"
                             >
                                 Cancel
                             </button>
