@@ -20,7 +20,7 @@
 		// Initialize MapLibre
 		map = new maplibregl.Map({
 			container: mapContainer,
-			style: 'https://demotiles.maplibre.org/style.json', // Free OSM style
+			style: 'https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json', // Free OSM style
 			center: [55.2708, 25.2048], // Dubai [lng, lat]
 			zoom: 11
 		});
