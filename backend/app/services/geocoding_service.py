@@ -7,6 +7,7 @@ import httpx
 import logging
 from typing import Optional, List, Dict, Any
 from pydantic import BaseModel
+from app.schemas.projects import GeoPoint, GeoPolygon
 
 logger = logging.getLogger(__name__)
 
@@ -14,26 +15,6 @@ logger = logging.getLogger(__name__)
 NOMINATIM_BASE_URL = "https://nominatim.openstreetmap.org"
 # User agent (required by Nominatim)
 USER_AGENT = "ViteVue-Platform/1.0"
-
-
-class GeoPoint(BaseModel):
-    """A geographic point"""
-    latitude: float
-    longitude: float
-
-
-class GeoPolygon(BaseModel):
-    """A geographic polygon (area)"""
-    coordinates: List[List[float]]  # List of [lng, lat] pairs
-
-
-class NominatimResult(BaseModel):
-    """Response from Nominatim API"""
-    lat: Optional[str] = None
-    lon: Optional[str] = None
-    boundingbox: Optional[List[str]] = None
-    geojson: Optional[Dict[str, Any]] = None
-    display_name: Optional[str] = None
 
 
 async def search_location(
