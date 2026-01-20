@@ -57,10 +57,10 @@
 
 			<div class="flex flex-col sm:flex-row gap-4 justify-center items-center mb-16">
 				<a
-					href="mailto:contact@vitevue.com"
+					href="/auth?view=signup"
 					class="group inline-flex items-center gap-2 px-8 py-4 bg-slate-900 text-white font-semibold rounded-lg hover:bg-slate-800 hover:scale-105 transition-all shadow-sm hover:shadow-lg text-base"
 				>
-					Contact Sales
+					Get Started
 					<svg class="w-4 h-4 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"></path>
 					</svg>

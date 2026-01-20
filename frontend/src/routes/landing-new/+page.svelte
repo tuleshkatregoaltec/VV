@@ -2,6 +2,7 @@
 	import HeroSection from '$lib/components/landing/HeroSection.svelte';
 	import BenefitsSection from '$lib/components/landing/BenefitsSection.svelte';
 	import PersonasSection from '$lib/components/landing/PersonasSection.svelte';
+	import PricingSection from '$lib/components/landing/PricingSection.svelte';
 	import PreviewSection from '$lib/components/landing/PreviewSection.svelte';
 	import WhyVitevueSection from '$lib/components/landing/WhyVitevueSection.svelte';
 	import FinalCTA from '$lib/components/landing/FinalCTA.svelte';
@@ -26,6 +27,7 @@
 	<PreviewSection />
 	<BenefitsSection />
 	<PersonasSection />
+	<PricingSection />
 	<WhyVitevueSection />
 	<FinalCTA />
 	<Footer />

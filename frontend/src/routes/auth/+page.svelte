@@ -16,6 +16,7 @@
 		identifyUser,
 		me
 	} from '$lib/api/auth';
+	import { syncUserAuth } from '$lib/api/onboarding';
 
 	type View = 'login' | 'signup' | 'verify-otp' | 'email-auth' | 'email-auth-otp' | 'forgot-password' | 'forgot-password-otp';
 
@@ -26,6 +27,7 @@
 	let password = $state('');
 	let confirmPassword = $state('');
 	let otpCode = $state('');
+	let termsAccepted = $state(false);
 
 	let loading = $state(false);
 	let error = $state('');
@@ -88,9 +90,22 @@
 		try {
 			const result = await login_with_email_pass(email, password);
 			if (result.success) {
-				const user = await me();
-				identifyUser(user);
-				goto('/dashboard');
+				// Sync user organization membership
+				try {
+					await syncUserAuth();
+					const user = await me();
+					identifyUser(user);
+					goto('/dashboard');
+				} catch (syncError: any) {
+					// Handle sync errors (user may not have org, org deactivated, etc.)
+					if (syncError.message?.includes('does not belong')) {
+						error = 'Your account is not associated with an organization. Please contact support.';
+					} else if (syncError.message?.includes('deactivated')) {
+						error = 'Your organization has been deactivated. Please contact your administrator.';
+					} else {
+						error = 'Unable to access your account. Please try again or contact support.';
+					}
+				}
 			} else {
 				error = result.error || 'Invalid email or password';
 			}
@@ -129,6 +144,10 @@
 			fieldErrors.confirmPassword = 'Passwords do not match';
 			return;
 		}
+		if (!termsAccepted) {
+			error = 'You must accept the Terms of Service and Privacy Policy';
+			return;
+		}
 
 		loading = true;
 		error = '';
@@ -158,9 +177,19 @@
 		try {
 			const result = await verify_otp(email, otpCode, 'signup');
 			if (result.success) {
-				const user = await me();
-				identifyUser(user);
-				goto('/dashboard');
+				// Sync user organization membership
+				try {
+					const syncResult = await syncUserAuth();
+					const user = await me();
+					identifyUser(user);
+
+					// If sync succeeded, user has organization and is active
+					goto('/dashboard');
+				} catch (syncError: any) {
+					// User verified but doesn't have organization yet
+					// Redirect to organization setup
+					goto('/onboarding/organization-setup');
+				}
 			} else {
 				error = result.error || 'Invalid verification code';
 			}
@@ -478,6 +507,25 @@
 						required
 						autocomplete="new-password"
 					/>
+
+					<div class="flex items-start gap-2">
+						<input
+							type="checkbox"
+							id="terms"
+							bind:checked={termsAccepted}
+							class="mt-1 h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+						/>
+						<label for="terms" class="text-sm text-gray-600">
+							I agree to the
+							<a href="/terms" target="_blank" class="text-primary hover:text-primary-dark">
+								Terms of Service
+							</a>
+							and
+							<a href="/privacy" target="_blank" class="text-primary hover:text-primary-dark">
+								Privacy Policy
+							</a>
+						</label>
+					</div>
 
 					<button
 						type="submit"

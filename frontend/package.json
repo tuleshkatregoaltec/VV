@@ -37,6 +37,7 @@
 		"vite": "^7.1.10"
 	},
 	"dependencies": {
+		"@stripe/stripe-js": "^8.6.3",
 		"@supabase/auth-js": "^2.90.1",
 		"@tanstack/svelte-query": "^6.0.8",
 		"@zxcvbn-ts/core": "^3.0.4",
