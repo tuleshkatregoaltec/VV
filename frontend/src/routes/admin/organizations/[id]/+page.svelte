@@ -6,8 +6,6 @@
   import { ApiError } from '$lib/api/client';
   import UserDetailsModal from '$lib/components/admin/UserDetailsModal.svelte';
 
-  export const prerender = false;
-
   let organization = $state<Organization | null>(null);
   let users = $state<OrganizationUser[]>([]);
   let loading = $state(true);

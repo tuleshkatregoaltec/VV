@@ -2,8 +2,6 @@
 	import { goto } from '$app/navigation';
 	import { onMount } from 'svelte';
 
-	export const prerender = false;
-
 	onMount(() => {
 		goto('/admin/organizations');
 	});
