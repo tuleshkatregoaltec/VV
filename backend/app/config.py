@@ -47,6 +47,20 @@ class Settings(BaseSettings):
     R2_BUCKET_NAME: str
     R2_REGION: str = "auto"
 
+    # Stripe
+    STRIPE_SECRET_KEY: str
+    STRIPE_PUBLISHABLE_KEY: str
+    STRIPE_WEBHOOK_SECRET: str
+    STRIPE_PRICE_ID_TIER1: str  # 990 AED/seat for 1-5 seats
+    STRIPE_PRICE_ID_TIER2: str  # 890 AED/seat for 6-10 seats
+
+    # Frontend URLs for Stripe redirects
+    FRONTEND_SUCCESS_URL: str
+    FRONTEND_CANCEL_URL: str
+
+    # Enterprise contact
+    ENTERPRISE_CONTACT_EMAIL: str = "contact@vitevue.com"
+
     @field_validator("SERVICE_API_KEY")
     @classmethod
     def validate_service_api_key(cls, v: str) -> str:

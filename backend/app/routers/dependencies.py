@@ -40,6 +40,20 @@ async def require_admin(request: Request) -> PlatformUser:
     return request.user
 
 
+async def require_organization_admin(request: Request) -> PlatformUser:
+    """Dependency to require organization admin role on routes"""
+    if not request.user.is_authenticated:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    # Check role from app_metadata in JWT token (not from request body)
+    if "organization_admin" not in request.user.app_metadata.role.roles:
+        raise HTTPException(
+            status_code=403, detail="Organization admin access required"
+        )
+
+    return request.user
+
+
 async def require_api_key(x_api_key: str = Header(...)) -> None:
     if not secrets.compare_digest(x_api_key, settings.SERVICE_API_KEY):
         raise HTTPException(status_code=401, detail="Invalid API key")

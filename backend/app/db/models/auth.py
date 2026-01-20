@@ -16,10 +16,22 @@ class Organization(SQLModel, table=True):
     id: str = Field(primary_key=True)
 
     # Organization details
-    name: str = Field(index=True)
-    email_domain: str = Field(unique=True, index=True)
+    name: str
     max_users: int = Field(default=5)
     is_active: bool = Field(default=True)
+    organization_admin_id: str  # User ID of org admin
+
+    # Payment and subscription tracking
+    status: str = Field(
+        default="active"
+    )  # "pending_payment", "active", "canceled"
+    stripe_checkout_session_id: Optional[str] = Field(
+        default=None, unique=True, index=True
+    )
+
+    # Stripe integration
+    subscription_id: Optional[str] = Field(default=None, foreign_key="subscriptions.id")
+    stripe_customer_id: Optional[str] = Field(default=None)
     created_at: datetime = Field(
         sa_column=Column(DateTime(timezone=True), nullable=False),
         default_factory=lambda: datetime.now(timezone.utc),

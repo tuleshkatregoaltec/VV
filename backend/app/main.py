@@ -19,6 +19,10 @@ from app.routers import (
     upload,
     news,
     projects,
+    onboarding,
+    webhooks,
+    organization,
+    stripe,
 )
 
 from app.providers.auth.auth_backend import AuthBackend
@@ -56,6 +60,10 @@ app.include_router(upload.router, tags=["upload"])
 app.include_router(upload.health_router, tags=["upload"])
 app.include_router(news.router, tags=["news"])
 app.include_router(projects.router, tags=["projects"])
+app.include_router(onboarding.router, tags=["onboarding"])
+app.include_router(webhooks.router, tags=["webhooks"])
+app.include_router(organization.router, tags=["organization"])
+app.include_router(stripe.router, tags=["stripe"])
 
 
 @app.get("/api/v1/health")
