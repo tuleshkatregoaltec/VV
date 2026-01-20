@@ -103,7 +103,9 @@ async def get_project_details(
 
     # Use Dubai center as default coordinates (geocoding removed for performance)
     # TODO: Add coordinates to database or implement async background geocoding
-    project_name = project.project_name_en or project.project_name_ar or f"Project {project_id}"
+    project_name = (
+        project.project_name_en or project.project_name_ar or f"Project {project_id}"
+    )
     area_name = project.area.name_en if project.area else "Unknown"
 
     latitude, longitude = 25.2048, 55.2708  # Dubai center
@@ -115,7 +117,7 @@ async def get_project_details(
         .where(Building.project_id == project_id)
         .options(selectinload(Building.area))
     )
-    
+
     buildings_result = await db.exec(buildings_stmt)
     buildings_data = buildings_result.all()
 
@@ -148,7 +150,9 @@ async def get_project_details(
         longitude=longitude,
         area_polygon=area_polygon,
         developer_id=project.developer_id,
-        developer_name=project.developer.developer_name_en if project.developer else None,
+        developer_name=project.developer.developer_name_en
+        if project.developer
+        else None,
         master_developer_id=project.master_developer_id,
         master_developer_name=project.master_developer.developer_name_en
         if project.master_developer
