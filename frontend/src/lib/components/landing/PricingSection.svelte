@@ -12,7 +12,6 @@
 		{
 			name: 'Starter',
 			price: '990',
-			seats: '1-5 users',
 			popular: false,
 			features: [
 				'Real-time transaction data',
@@ -26,7 +25,6 @@
 		{
 			name: 'Professional',
 			price: '890',
-			seats: '6-10 users',
 			popular: true,
 			savings: '100',
 			features: [
@@ -41,7 +39,6 @@
 		{
 			name: 'Enterprise',
 			price: 'Custom',
-			seats: '11+ users',
 			popular: false,
 			features: [
 				'Everything in Professional',
@@ -103,14 +100,12 @@
 							<h3 class="text-2xl font-bold text-slate-900 mb-2">{tier.name}</h3>
 							<div class="mb-6">
 								{#if tier.price === 'Custom'}
-									<div class="text-4xl font-bold text-slate-900">Custom Pricing</div>
 									<p class="text-sm text-slate-600 mt-1">{tier.seats}</p>
 								{:else}
 									<div class="flex items-baseline gap-2">
 										<span class="text-4xl font-bold text-slate-900">{tier.price}</span>
 										<span class="text-slate-600">AED/seat/month</span>
 									</div>
-									<p class="text-sm text-slate-600 mt-1">{tier.seats}</p>
 									{#if tier.savings}
 										<div class="inline-block mt-2 px-2 py-1 bg-green-100 text-green-800 text-xs font-semibold rounded">
 											Save {tier.savings} AED/seat
@@ -153,9 +148,5 @@
 				{/if}
 			{/each}
 		</div>
-
-		<p class="text-center text-slate-600 mt-12">
-			All plans include a 14-day free trial. No credit card required.
-		</p>
 	</div>
 </section>
