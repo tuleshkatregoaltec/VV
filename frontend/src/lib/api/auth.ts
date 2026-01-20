@@ -39,7 +39,7 @@ export function identifyUser(user: BackendUser) {
     }
 }
 
-const client = new AuthClient({
+export const client = new AuthClient({
     url: `${env.PUBLIC_AUTH_BASE_URL}`,
     storageKey: "authentication",
     detectSessionInUrl: true,
