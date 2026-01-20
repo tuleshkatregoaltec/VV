@@ -113,6 +113,28 @@
 		</div>
 	{/if}
 
+	<!-- Buildings List -->
+	{#if project.buildings && project.buildings.length > 0}
+		<div class="space-y-3">
+			<h3 class="font-semibold text-slate-900">Buildings ({project.buildings.length})</h3>
+			<div class="space-y-2">
+				{#each project.buildings as building}
+					<div class="bg-slate-50 rounded-lg p-3 flex justify-between items-center">
+						<div>
+							<div class="font-medium text-slate-900">
+								{building.building_name || building.building_number || 'Unnamed Building'}
+							</div>
+							{#if building.floors}
+								<div class="text-sm text-slate-600">{building.floors} floors</div>
+							{/if}
+						</div>
+						<div class="text-sm text-slate-500">ID: {building.property_id}</div>
+					</div>
+				{/each}
+			</div>
+		</div>
+	{/if}
+
 	<!-- Master Developer -->
 	{#if project.master_developer_name && project.master_developer_name !== project.developer_name}
 		<div class="text-sm">
