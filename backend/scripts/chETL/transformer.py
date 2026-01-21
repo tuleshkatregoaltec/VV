@@ -219,8 +219,6 @@ def transform_projects_row(row: Dict[str, Any]) -> Dict[str, Any]:
     transformed["developer_id"] = parse_int(row.get("developer_id"))
     transformed["master_developer_id"] = parse_int(row.get("master_developer_id"))
     transformed["area_id"] = parse_int(row.get("area_id"))
-    transformed["latitude"] = parse_float(row.get("latitude"))
-    transformed["longitude"] = parse_float(row.get("longitude"))
     transformed["is_free_hold"] = parse_boolean(row.get("is_free_hold"))
     transformed["percent_completed"] = parse_float(row.get("percent_completed"))
 
@@ -248,8 +246,6 @@ def transform_buildings_row(row: Dict[str, Any]) -> Dict[str, Any]:
     transformed["master_project_id"] = parse_int(row.get("master_project_id"))
     transformed["land_registry_id"] = parse_int(row.get("land_registry_id"))
     transformed["area_id"] = parse_int(row.get("area_id"))
-    transformed["latitude"] = parse_float(row.get("latitude"))
-    transformed["longitude"] = parse_float(row.get("longitude"))
     transformed["is_free_hold"] = parse_boolean(row.get("is_free_hold"))
 
     # Building specs

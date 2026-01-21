@@ -169,9 +169,6 @@ CREATE TABLE IF NOT EXISTS ch_projects (
     area_id Nullable(Int32),
     area_name_en LowCardinality(Nullable(String)),
 
-    latitude Nullable(Float64),
-    longitude Nullable(Float64),
-
     property_usage_en LowCardinality(Nullable(String)),
     is_free_hold Nullable(UInt8),
 
@@ -237,9 +234,6 @@ CREATE TABLE IF NOT EXISTS ch_buildings (
     shops Nullable(UInt16),
     elevators Nullable(UInt16),
     swimming_pools Nullable(UInt16),
-
-    latitude Nullable(Float64),
-    longitude Nullable(Float64),
 
     is_free_hold Nullable(UInt8),
 
