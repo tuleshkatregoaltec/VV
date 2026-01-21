@@ -47,6 +47,13 @@ class Settings(BaseSettings):
     R2_BUCKET_NAME: str
     R2_REGION: str = "auto"
 
+    # ClickHouse
+    CLICKHOUSE_HOST: str
+    CLICKHOUSE_PORT: int
+    CLICKHOUSE_USER: str
+    CLICKHOUSE_PASSWORD: str
+    CLICKHOUSE_DB: str
+
     # Stripe
     STRIPE_SECRET_KEY: str
     STRIPE_PUBLISHABLE_KEY: str
