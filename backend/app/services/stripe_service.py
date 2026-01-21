@@ -111,8 +111,12 @@ async def handle_checkout_completed(session_id: str, db: AsyncSession) -> str:
     customer = checkout_session.customer
 
     # Ensure we have valid Stripe objects
-    if not isinstance(subscription, stripe.Subscription) or not isinstance(customer, stripe.Customer):
-        raise ValueError("Invalid subscription or customer object from checkout session")
+    if not isinstance(subscription, stripe.Subscription) or not isinstance(
+        customer, stripe.Customer
+    ):
+        raise ValueError(
+            "Invalid subscription or customer object from checkout session"
+        )
 
     organization.status = "active"
     organization.is_active = True
@@ -124,7 +128,9 @@ async def handle_checkout_completed(session_id: str, db: AsyncSession) -> str:
         organization_id=organization.id,
         stripe_subscription_id=subscription.id,
         stripe_customer_id=customer.id,
-        stripe_price_id=checkout_session.metadata.get("tier", "tier1") if checkout_session.metadata else "tier1",
+        stripe_price_id=checkout_session.metadata.get("tier", "tier1")
+        if checkout_session.metadata
+        else "tier1",
         status="active",
         seats=organization.max_users,
         current_period_start=datetime.fromtimestamp(
@@ -202,9 +208,7 @@ async def handle_subscription_updated(
     return None
 
 
-async def cancel_subscription(
-    subscription_id: str, at_period_end: bool = True
-) -> None:
+async def cancel_subscription(subscription_id: str, at_period_end: bool = True) -> None:
     """Cancel subscription in Stripe."""
     if at_period_end:
         stripe.Subscription.modify(

@@ -22,9 +22,7 @@ class Organization(SQLModel, table=True):
     organization_admin_id: str  # User ID of org admin
 
     # Payment and subscription tracking
-    status: str = Field(
-        default="active"
-    )  # "pending_payment", "active", "canceled"
+    status: str = Field(default="active")  # "pending_payment", "active", "canceled"
     stripe_checkout_session_id: Optional[str] = Field(
         default=None, unique=True, index=True
     )

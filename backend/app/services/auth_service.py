@@ -31,6 +31,7 @@ async def get_auth_user(jwt: str) -> Optional[AuthUser]:
         # invalid token, token not valid
         return None
 
+
 @admin_auth.with_admin_client()
 async def update_app_metadata(user: PlatformUser, **kwargs):
     client: AsyncGoTrueClient = kwargs["client"]

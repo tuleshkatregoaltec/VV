@@ -53,17 +53,33 @@ async def get_organization_members(
     for user_id in organization.users:
         user = await get_user_by_id(user_id)
         if user:
-            is_active = user.app_metadata.get("is_active", False) if isinstance(user.app_metadata, dict) else False
-            role_data = user.app_metadata.get("role", {}) if isinstance(user.app_metadata, dict) else {}
-            role_list = role_data.get("roles", []) if isinstance(role_data, dict) else []
-            user_role = "organization_admin" if "organization_admin" in role_list else "user"
-            
+            is_active = (
+                user.app_metadata.get("is_active", False)
+                if isinstance(user.app_metadata, dict)
+                else False
+            )
+            role_data = (
+                user.app_metadata.get("role", {})
+                if isinstance(user.app_metadata, dict)
+                else {}
+            )
+            role_list = (
+                role_data.get("roles", []) if isinstance(role_data, dict) else []
+            )
+            user_role = (
+                "organization_admin" if "organization_admin" in role_list else "user"
+            )
+
             members.append(
                 OrganizationMemberResponse(
                     id=user.id,
                     email=user.email,
-                    first_name=user.user_metadata.get("first_name", "") if isinstance(user.user_metadata, dict) else "",
-                    last_name=user.user_metadata.get("last_name", "") if isinstance(user.user_metadata, dict) else "",
+                    first_name=user.user_metadata.get("first_name", "")
+                    if isinstance(user.user_metadata, dict)
+                    else "",
+                    last_name=user.user_metadata.get("last_name", "")
+                    if isinstance(user.user_metadata, dict)
+                    else "",
                     is_active=is_active,
                     role=user_role,
                 )
