@@ -67,7 +67,7 @@ CREATE TABLE IF NOT EXISTS ch_transactions (
 ) ENGINE = ReplacingMergeTree(etl_inserted_at)
 PARTITION BY toYYYYMM(instance_date)
 ORDER BY (property_usage_en, instance_date, transaction_id)
-SETTINGS index_granularity = 8192;
+SETTINGS index_granularity = 8192, deduplicate_merge_projection_mode = 'rebuild';
 
 
 -- Table 2: Rent Contracts
@@ -131,7 +131,7 @@ CREATE TABLE IF NOT EXISTS ch_rent_contracts (
 ) ENGINE = ReplacingMergeTree(etl_inserted_at)
 PARTITION BY toYYYYMM(contract_start_date)
 ORDER BY (property_usage_en, contract_start_date, contract_id, line_number)
-SETTINGS index_granularity = 8192;
+SETTINGS index_granularity = 8192, deduplicate_merge_projection_mode = 'rebuild';
 
 
 -- Table 3: Developers
@@ -149,7 +149,7 @@ CREATE TABLE IF NOT EXISTS ch_developers (
     is_deleted UInt8 DEFAULT 0
 
 ) ENGINE = ReplacingMergeTree(etl_inserted_at)
-ORDER BY developer_id;
+ORDER BY developer_id SETTINGS deduplicate_merge_projection_mode = 'rebuild';
 
 
 -- Table 4: Projects
@@ -200,7 +200,7 @@ CREATE TABLE IF NOT EXISTS ch_projects (
     )
 
 ) ENGINE = ReplacingMergeTree(etl_inserted_at)
-ORDER BY (project_number, project_id);
+ORDER BY (project_number, project_id) SETTINGS deduplicate_merge_projection_mode = 'rebuild';
 
 
 -- Table 5: Buildings
@@ -247,7 +247,8 @@ CREATE TABLE IF NOT EXISTS ch_buildings (
     )
 
 ) ENGINE = ReplacingMergeTree(etl_inserted_at)
-ORDER BY (project_number, building_id);
+ORDER BY (project_number, building_id)
+SETTINGS deduplicate_merge_projection_mode = 'rebuild', allow_nullable_key = 1;
 
 
 -- Table 6: Units
@@ -295,7 +296,7 @@ CREATE TABLE IF NOT EXISTS ch_units (
     )
 
 ) ENGINE = ReplacingMergeTree(etl_inserted_at)
-ORDER BY (project_number, building_id, unit_id);
+ORDER BY (project_number, building_id, unit_id) SETTINGS deduplicate_merge_projection_mode = 'rebuild', allow_nullable_key = 1;
 
 
 -- Table 7: Land Registry
@@ -324,7 +325,7 @@ CREATE TABLE IF NOT EXISTS ch_land_registry (
     is_deleted UInt8 DEFAULT 0
 
 ) ENGINE = ReplacingMergeTree(etl_inserted_at)
-ORDER BY land_registry_id;
+ORDER BY land_registry_id SETTINGS deduplicate_merge_projection_mode = 'rebuild';
 
 
 -- Table 8: Areas
@@ -339,4 +340,5 @@ CREATE TABLE IF NOT EXISTS ch_areas (
     is_deleted UInt8 DEFAULT 0
 
 ) ENGINE = ReplacingMergeTree(etl_inserted_at)
-ORDER BY area_id;
+ORDER BY area_id
+SETTINGS deduplicate_merge_projection_mode = 'rebuild';
