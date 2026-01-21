@@ -44,6 +44,9 @@ dependencies = [
     "supabase-auth>=2.27.2",
     "gunicorn>=23.0.0",
     "stripe>=14.2.0",
+    "pydantic-ai>=1.38.0",
+    "logfire>=4.19.0",
+    "clickhouse-connect>=0.10.0",
 ]
 
 [tool.uv]
