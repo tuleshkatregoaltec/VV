@@ -39,12 +39,12 @@ class ETLRunner:
     def __init__(
         self,
         ch_config: ClickHouseConfig,
-        session_id: str,
-        work_dir: Path,
+        session_id: str | None = None,
+        work_dir: Path | None = None,
         local_csv_dir: Path | None = None,
     ):
         self.session_id = session_id
-        self.work_dir = work_dir
+        self.work_dir = work_dir or Path("/tmp/chETL")
         self.run_id = str(uuid.uuid4())
         self.local_csv_dir = local_csv_dir
 
@@ -58,6 +58,24 @@ class ETLRunner:
         )
 
         self.s3_downloader = S3Downloader() if not local_csv_dir else None
+
+        # Auto-discover most recent session if not provided
+        if not self.session_id and not self.local_csv_dir and self.s3_downloader:
+            logger.info(
+                "No session_id provided, auto-discovering most recent upload..."
+            )
+            self.session_id = self.s3_downloader.get_most_recent_session()
+            if not self.session_id:
+                raise ValueError(
+                    "No upload sessions found in S3 and no session_id provided"
+                )
+            logger.info(f"Auto-discovered session_id: {self.session_id}")
+            self._was_auto_discovered = True
+
+        logger.info(f"Initialized ETL runner:")
+        logger.info(f"  Session ID: {self.session_id or 'N/A (local mode)'}")
+        logger.info(f"  Work dir: {self.work_dir}")
+        logger.info(f"  Mode: {'Local CSV' if self.local_csv_dir else 'S3 download'}")
         self.loader = ClickHouseLoader(self.ch_client)
 
         # Project name cache (built from Units/Buildings)
@@ -222,6 +240,8 @@ class ETLRunner:
 
     def run(self):
         """Run the full ETL pipeline."""
+        was_auto_discovered = hasattr(self, "_was_auto_discovered")
+
         logger.info(f"\n{'#' * 80}")
         logger.info(f"Starting ClickHouse ETL")
         logger.info(f"Session ID: {self.session_id}")
@@ -229,7 +249,8 @@ class ETLRunner:
         if self.local_csv_dir:
             logger.info(f"Mode: Local CSV directory ({self.local_csv_dir})")
         else:
-            logger.info(f"Mode: S3 download")
+            discovery_note = " (auto-discovered)" if was_auto_discovered else ""
+            logger.info(f"Mode: S3 download{discovery_note}")
         logger.info(f"{'#' * 80}\n")
 
         # Build project name cache first
@@ -250,7 +271,7 @@ class ETLRunner:
 
 
 def run_etl(
-    session_id: str,
+    session_id: str | None = None,
     work_dir: Path | None = None,
     ch_config: ClickHouseConfig | None = None,
     local_csv_dir: Path | None = None,
@@ -259,7 +280,7 @@ def run_etl(
     Main entry point for running the ETL pipeline.
 
     Args:
-        session_id: Upload session UUID
+        session_id: Upload session UUID (auto-discovers most recent if not provided)
         work_dir: Working directory for CSV downloads
         ch_config: ClickHouse configuration
         local_csv_dir: Local directory with CSV files (skips S3 download if provided)

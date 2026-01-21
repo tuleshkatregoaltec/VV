@@ -3,8 +3,9 @@
 import json
 import hashlib
 import logging
+from datetime import datetime
 from pathlib import Path
-from typing import Dict, Any
+from typing import Dict, Any, List, Optional
 import boto3
 from botocore.exceptions import ClientError
 
@@ -47,6 +48,92 @@ class S3Downloader:
         except ClientError as e:
             logger.error(f"Failed to fetch metadata for session {session_id}: {e}")
             raise
+
+    def list_all_sessions(self) -> List[str]:
+        """
+        List all upload session IDs from S3.
+
+        Returns:
+            List of session UUIDs
+        """
+        try:
+            prefix = "etl/uploads/"
+            paginator = self.s3_client.get_paginator("list_objects_v2")
+
+            session_ids = set()
+            for page in paginator.paginate(Bucket=self.bucket, Prefix=prefix):
+                if "Contents" not in page:
+                    continue
+
+                for obj in page["Contents"]:
+                    key = obj["Key"]
+                    if key.endswith("/metadata.json"):
+                        # Extract session_id from etl/uploads/{session_id}/metadata.json
+                        parts = key.split("/")
+                        if len(parts) >= 3:
+                            session_id = parts[2]
+                            session_ids.add(session_id)
+
+            return list(session_ids)
+
+        except ClientError as e:
+            logger.error(f"Failed to list upload sessions: {e}")
+            return []
+
+    def get_most_recent_session(self) -> Optional[str]:
+        """
+        Find the most recently uploaded session by checking metadata timestamps.
+
+        Returns:
+            Session ID of the most recent upload, or None if no sessions found
+        """
+        session_ids = self.list_all_sessions()
+
+        if not session_ids:
+            logger.warning("No upload sessions found in S3")
+            return None
+
+        logger.info(
+            f"Found {len(session_ids)} upload sessions, determining most recent..."
+        )
+
+        most_recent_session = None
+        most_recent_time = None
+
+        for session_id in session_ids:
+            try:
+                metadata = self.get_metadata(session_id)
+                uploaded_at_str = metadata.get("uploaded_at")
+
+                if not uploaded_at_str:
+                    logger.warning(
+                        f"No uploaded_at timestamp in session {session_id} metadata"
+                    )
+                    continue
+
+                # Parse ISO timestamp
+                uploaded_at = datetime.fromisoformat(
+                    uploaded_at_str.replace("Z", "+00:00")
+                )
+
+                if most_recent_time is None or uploaded_at > most_recent_time:
+                    most_recent_time = uploaded_at
+                    most_recent_session = session_id
+
+                logger.debug(f"Session {session_id}: uploaded {uploaded_at_str}")
+
+            except Exception as e:
+                logger.warning(f"Failed to read metadata for session {session_id}: {e}")
+                continue
+
+        if most_recent_session:
+            logger.info(
+                f"Most recent session: {most_recent_session} (uploaded {most_recent_time})"
+            )
+        else:
+            logger.warning("Could not determine most recent session")
+
+        return most_recent_session
 
     def download_and_assemble(
         self,

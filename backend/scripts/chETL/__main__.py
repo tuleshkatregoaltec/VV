@@ -30,7 +30,8 @@ def main():
 
     parser.add_argument(
         "session_id",
-        help="Upload session UUID (from chunked upload metadata)",
+        nargs="?",  # Make session_id optional
+        help="Upload session UUID (auto-discovers most recent if omitted)",
     )
 
     parser.add_argument(
