@@ -52,18 +52,3 @@ class MessageResponse(BaseModel):
     role: str
     content: str
     created_at: datetime
-    tool_call_ids: Optional[List[int]] = None
-
-
-class ToolCallResultResponse(BaseModel):
-    """Response model for tool call result data"""
-
-    model_config = ConfigDict(from_attributes=True)
-
-    id: int
-    tool_name: str
-    tool_args: dict
-    result: dict
-    cached: bool
-    execution_time_ms: Optional[int]
-    created_at: datetime

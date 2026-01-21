@@ -131,12 +131,7 @@ async def send_message(
     async def event_stream():
         try:
             organization = await get_organization_for_user(db, current_user.id)
-
-            organization_id = None
-            organization_name = None
-            if organization:
-                organization_id = organization.id
-                organization_name = organization.name
+            organization_id = organization.id if organization else None
 
             async for chunk in chat_service.stream_chat_response(
                 db=db,
@@ -144,7 +139,6 @@ async def send_message(
                 user_message=request.message,
                 user_id=current_user.id,
                 organization_id=organization_id,
-                organization_name=organization_name,
             ):
                 yield chunk
         except Exception as e:

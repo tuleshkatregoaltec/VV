@@ -3,26 +3,36 @@
 import json
 import logging
 from datetime import datetime, timezone
-from typing import Any, AsyncGenerator, Dict, List, Optional, Tuple
+from typing import Any, AsyncGenerator, List, Optional
 
-from posthog.ai.openai import AsyncOpenAI
+import clickhouse_connect
 from posthog import Posthog
+from pydantic_ai.messages import ModelMessage
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.config import settings
-from app.core.cache import RedisCache
-from app.db.models.chat import Conversation, Message, ToolCallResult
-from app.services.mcp_service import mcp_registry
+from app.core.agent import agent, AgentDeps
+from app.db.models.chat import Conversation, Message
 from app.services.token_usage_service import token_usage_service
 
 logger = logging.getLogger(__name__)
-cache = RedisCache(settings.REDIS_URL, settings.REDIS_PASSWORD)
 
 # Initialize PostHog client
 posthog_client = Posthog(
     project_api_key=settings.POSTHOG_API_KEY, host=settings.POSTHOG_HOST
 )
+
+
+def get_clickhouse_client() -> Any:
+    """Create ClickHouse client connection."""
+    return clickhouse_connect.get_client(
+        host=settings.CLICKHOUSE_HOST,
+        port=settings.CLICKHOUSE_PORT,
+        username=settings.CLICKHOUSE_USER,
+        password=settings.CLICKHOUSE_PASSWORD,
+        database=settings.CLICKHOUSE_DB,
+    )
 
 
 class ChatService:
@@ -110,16 +120,20 @@ class ChatService:
         result = await db.exec(stmt)
         return list(result.all())
 
-    # Message & Chat Logic
-
     async def add_message(
-        self, db: AsyncSession, conversation_id: int, role: str, content: str
+        self,
+        db: AsyncSession,
+        conversation_id: int,
+        role: str,
+        content: str,
+        meta_data: Optional[dict[str, Any]] = None,
     ) -> Message:
         """Add a message to a conversation"""
         message = Message(
             conversation_id=conversation_id,
             role=role,
             content=content,
+            meta_data=meta_data or {},
             created_at=datetime.now(timezone.utc),
         )
         db.add(message)
@@ -138,84 +152,21 @@ class ChatService:
         await db.refresh(message)
         return message
 
-    async def _build_context(
-        self, db: AsyncSession, conversation_id: int, new_user_message: str
-    ) -> List[Dict[str, str]]:
-        """Build conversation context"""
+    def _convert_to_pydantic_messages(
+        self, messages: List[Message]
+    ) -> List[ModelMessage]:
+        """Convert database messages to Pydantic AI message format"""
+        pydantic_messages: List[ModelMessage] = []
 
-        # Get conversation history
-        messages = await self.get_conversation_messages(db, conversation_id)
-
-        # Convert to OpenAI format
-        context = []
-
-        # System prompt
-        context.append(
-            {
-                "role": "system",
-                "content": (
-                    "You are a helpful AI assistant for Vitevue, a real estate analytics platform. "
-                    "You have access to comprehensive Dubai real estate data including sales transactions, "
-                    "rental contracts, developer information, and project details. "
-                    "Use the available tools to answer user questions with accurate, data-driven insights. "
-                    "Always cite specific numbers and trends when using tool results.\n\n"
-                    "IMPORTANT DATA STRUCTURE NOTES:\n"
-                    "- Sales transactions: Bedroom data in 'rooms' field (Studio, 1 B/R, 2 B/R, 3 B/R, etc.)\n"
-                    '- Rental contracts: Bedroom data in \'property_sub_type\' field ("2 bed rooms+hall", "3 bed rooms+hall", "Studio", etc.)\n'
-                    "- get_sales_analytics: Supports bedroom filtering via 'rooms' parameter\n"
-                    "- get_rental_analytics: Does NOT support bedroom filtering (use search_rental_contracts instead)\n"
-                    "- search_rental_contracts: Use 'property_sub_type' parameter for bedroom-specific rentals (e.g., \"2 bed rooms+hall\")\n"
-                    "- Both sales and rentals support: property_type, master_project, area ranges, and price/rent buckets\n\n"
-                    "SUPPLY/PROJECT TOOLS:\n"
-                    "- search_active_projects: Search active projects with flexible filters\n"
-                    "  * Use 'timeframe' parameter for date-based queries (upcoming, overdue, 3m, 6m, 12m, all)\n"
-                    "  * Use 'developer_name' or 'area_name' for location/developer filtering (partial case-insensitive match)\n"
-                    "  * Use 'min_progress' and 'max_progress' for completion percentage filtering (0-100)\n"
-                    "  * Combine multiple filters for complex queries (e.g., developer_name='Emaar', timeframe='6m', min_progress=50)\n"
-                    "  * Returns project details including name, developer, area, progress, dates, buildings, and units"
-                ),
-            }
-        )
-
-        # Historical messages
         for msg in messages:
-            context.append({"role": msg.role, "content": msg.content})
+            if msg.role == "user":
+                pydantic_messages.append(ModelMessage.user_message(content=msg.content))
+            elif msg.role == "assistant":
+                pydantic_messages.append(
+                    ModelMessage.assistant_message(content=msg.content)
+                )
 
-        # Add new user message
-        context.append({"role": "user", "content": new_user_message})
-
-        return context
-
-    async def _get_tool_call_cache_key(
-        self, conversation_id: int, tool_name: str, arguments: Dict[str, Any]
-    ) -> str:
-        """Generate cache key for tool call result"""
-        # Sort arguments for consistent cache keys
-        sorted_args = json.dumps(arguments, sort_keys=True)
-        return f"tool_call:{conversation_id}:{tool_name}:{sorted_args}"
-
-    async def _execute_tool_with_cache(
-        self, conversation_id: int, tool_name: str, arguments: Dict[str, Any]
-    ) -> Tuple[Dict[str, Any], bool]:
-        """Execute tool with per-conversation caching"""
-        cache_key = await self._get_tool_call_cache_key(
-            conversation_id, tool_name, arguments
-        )
-
-        # Check cache
-        cached_result = await cache.get(cache_key)
-        if cached_result:
-            logger.info(f"Tool call cache hit: {tool_name}")
-            return cached_result, True
-
-        # Execute tool
-        logger.info(f"Executing tool: {tool_name} with args: {arguments}")
-        result = await mcp_registry.execute_tool(tool_name, arguments)
-
-        # Cache for 10 minutes (per conversation)
-        await cache.set(cache_key, result, expire=600)
-
-        return result, False
+        return pydantic_messages
 
     async def stream_chat_response(
         self,
@@ -223,11 +174,9 @@ class ChatService:
         conversation_id: int,
         user_message: str,
         user_id: str,
-        organization_id: Optional[str] = None,
-        organization_name: Optional[str] = None,
+        organization_id: Optional[int] = None,
     ) -> AsyncGenerator[str, None]:
-        """Stream chat response with tool calling support via SSE"""
-
+        """Stream chat response using Pydantic AI agent via SSE"""
         # Verify conversation ownership
         conversation = await self.get_conversation(db, conversation_id, user_id)
         if not conversation:
@@ -237,192 +186,153 @@ class ChatService:
         # Save user message
         await self.add_message(db, conversation_id, "user", user_message)
 
-        # Build context
-        context = await self._build_context(db, conversation_id, user_message)
+        # Get conversation history
+        messages = await self.get_conversation_messages(db, conversation_id)
+        message_history = self._convert_to_pydantic_messages(
+            messages[:-1]
+        )  # Exclude the just-added message
 
-        # Start streaming from OpenRouter with PostHog instrumentation
-        async with AsyncOpenAI(
-            base_url=settings.OPENROUTER_BASE_URL,
-            api_key=settings.OPENROUTER_API_KEY,
-            posthog_client=posthog_client,
-        ) as client:
-            # Track assistant response and tool calls
-            assistant_message = ""
-            tool_calls_made = []
+        # Create ClickHouse client
+        ch_client = get_clickhouse_client()
 
-            try:
-                # Get available tools
-                tools = await mcp_registry.get_tools_for_llm()
+        # Create agent dependencies
+        deps = AgentDeps(ch_client=ch_client)
 
-                # Loop to handle tool calls and continuations
-                while True:
-                    # Make LLM call with PostHog tracking
-                    posthog_params = {
-                        "posthog_distinct_id": user_id,
-                        "posthog_properties": {
-                            "conversation_id": conversation_id,
-                        },
-                    }
+        assistant_message = ""
+        tools_used = []
+        total_tokens = 0
+        start_time = datetime.now(timezone.utc)
 
-                    # Add organization tracking if available
-                    if organization_id:
-                        posthog_params["posthog_groups"] = {
-                            "organization": organization_id
-                        }
-                        if organization_name:
-                            posthog_params["posthog_properties"][
-                                "organization_name"
-                            ] = organization_name
+        try:
+            # Track chat start event in PostHog
+            posthog_properties = {
+                "conversation_id": conversation_id,
+                "message_length": len(user_message),
+            }
+            if organization_id:
+                posthog_client.capture(
+                    distinct_id=user_id,
+                    event="chat_message_sent",
+                    properties=posthog_properties,
+                    groups={"organization": str(organization_id)},
+                )
+            else:
+                posthog_client.capture(
+                    distinct_id=user_id,
+                    event="chat_message_sent",
+                    properties=posthog_properties,
+                )
 
-                    stream = await client.chat.completions.create(
-                        model=settings.CHAT_MODEL,
-                        messages=context,
-                        tools=tools if tools else None,
-                        stream=True,
-                        stream_options={"include_usage": True},
-                        **posthog_params,
-                    )
+            # Stream agent response
+            async with agent.run_stream(
+                user_message,
+                message_history=message_history,
+                deps=deps,
+            ) as result:
+                # Stream text chunks
+                async for chunk_text in result.stream(debounce_by=0.01):
+                    assistant_message += chunk_text
+                    yield f"data: {json.dumps({'type': 'content', 'content': chunk_text})}\n\n"
 
-                    tool_call_id = None
-                    tool_name = None
-                    tool_args = ""
-                    current_tool_call_index = None
-                    made_tool_call = False
+                # Get final result with usage info
+                final_result = await result.get_data()
 
-                    async for chunk in stream:
-                        if not chunk.choices:
-                            continue
+                # Track tool usage
+                if result.all_messages():
+                    for msg in result.all_messages():
+                        if hasattr(msg, "parts"):
+                            for part in msg.parts:
+                                if hasattr(part, "tool_name"):
+                                    tools_used.append(part.tool_name)
 
-                        delta = chunk.choices[0].delta
-                        finish_reason = chunk.choices[0].finish_reason
+                # Track token usage (if available in result)
+                if hasattr(result, "usage") and result.usage():
+                    usage = result.usage()
+                    if usage:
+                        total_tokens = getattr(usage, "total_tokens", 0)
+                        prompt_tokens = getattr(usage, "request_tokens", 0)
+                        completion_tokens = getattr(usage, "response_tokens", 0)
 
-                        if hasattr(chunk, "usage") and chunk.usage:
-                            usage = chunk.usage
-                            logger.info(
-                                f"Token usage: prompt={usage.prompt_tokens}, "
-                                f"completion={usage.completion_tokens}, "
-                                f"total={usage.total_tokens}"
-                            )
+                        logger.info(
+                            f"Token usage: prompt={prompt_tokens}, "
+                            f"completion={completion_tokens}, "
+                            f"total={total_tokens}"
+                        )
 
-                            await token_usage_service.record_usage(
-                                db=db,
-                                user_id=user_id,
-                                prompt_tokens=usage.prompt_tokens,
-                                completion_tokens=usage.completion_tokens,
-                                total_tokens=usage.total_tokens,
-                            )
+                        await token_usage_service.record_usage(
+                            db=db,
+                            user_id=user_id,
+                            prompt_tokens=prompt_tokens,
+                            completion_tokens=completion_tokens,
+                            total_tokens=total_tokens,
+                        )
 
-                        # Handle content streaming
-                        if delta.content:
-                            assistant_message += delta.content
-                            yield f"data: {json.dumps({'type': 'content', 'content': delta.content})}\n\n"
+            # Save assistant message with metadata
+            if assistant_message:
+                meta_data = {}
+                if tools_used:
+                    meta_data["tools_used"] = list(set(tools_used))
+                if total_tokens:
+                    meta_data["total_tokens"] = total_tokens
 
-                        # Handle tool calls
-                        if delta.tool_calls:
-                            for tool_call in delta.tool_calls:
-                                if tool_call.index != current_tool_call_index:
-                                    current_tool_call_index = tool_call.index
+                await self.add_message(
+                    db, conversation_id, "assistant", assistant_message, meta_data
+                )
 
-                                if tool_call.function and tool_call.function.name:
-                                    tool_name = tool_call.function.name
-                                    tool_call_id = tool_call.id
-                                    tool_args = ""
-                                    yield f"data: {json.dumps({'type': 'tool_call_start', 'tool': tool_name})}\n\n"
+            # Track completion event in PostHog
+            response_time_ms = int(
+                (datetime.now(timezone.utc) - start_time).total_seconds() * 1000
+            )
+            completion_properties = {
+                "conversation_id": conversation_id,
+                "response_length": len(assistant_message),
+                "response_time_ms": response_time_ms,
+                "tools_used": list(set(tools_used)),
+                "total_tokens": total_tokens,
+            }
+            if organization_id:
+                posthog_client.capture(
+                    distinct_id=user_id,
+                    event="chat_response_completed",
+                    properties=completion_properties,
+                    groups={"organization": str(organization_id)},
+                )
+            else:
+                posthog_client.capture(
+                    distinct_id=user_id,
+                    event="chat_response_completed",
+                    properties=completion_properties,
+                )
 
-                                if tool_call.function and tool_call.function.arguments:
-                                    tool_args += tool_call.function.arguments
+            yield f"data: {json.dumps({'type': 'done'})}\n\n"
 
-                        # When tool call complete
-                        if finish_reason == "tool_calls" and tool_name and tool_args:
-                            # Parse arguments
-                            try:
-                                args = json.loads(tool_args)
-                            except json.JSONDecodeError:
-                                logger.error(
-                                    f"Failed to parse tool arguments: {tool_args}"
-                                )
-                                yield f"data: {json.dumps({'type': 'error', 'error': 'Failed to parse tool arguments'})}\n\n"
-                                continue
+        except Exception as e:
+            logger.exception("Error during chat streaming")
 
-                            # Execute tool with caching
-                            start_time = datetime.now(timezone.utc)
-                            result, cached = await self._execute_tool_with_cache(
-                                conversation_id, tool_name, args
-                            )
-                            execution_time = int(
-                                (
-                                    datetime.now(timezone.utc) - start_time
-                                ).total_seconds()
-                                * 1000
-                            )
+            # Track error in PostHog
+            error_properties = {
+                "conversation_id": conversation_id,
+                "error_message": str(e),
+            }
+            if organization_id:
+                posthog_client.capture(
+                    distinct_id=user_id,
+                    event="chat_error",
+                    properties=error_properties,
+                    groups={"organization": str(organization_id)},
+                )
+            else:
+                posthog_client.capture(
+                    distinct_id=user_id,
+                    event="chat_error",
+                    properties=error_properties,
+                )
 
-                            # Save tool call result
-                            tool_call_result = ToolCallResult(
-                                conversation_id=conversation_id,
-                                message_id=None,  # Will update after message save
-                                tool_name=tool_name,
-                                tool_args=args,
-                                result=result,
-                                execution_time_ms=execution_time,
-                                cached=cached,
-                                created_at=datetime.now(timezone.utc),
-                            )
-                            db.add(tool_call_result)
-                            await db.commit()
-                            await db.refresh(tool_call_result)
-
-                            tool_calls_made.append(tool_call_result.id)
-
-                            # Send tool result to user
-                            yield f"data: {json.dumps({'type': 'tool_call_result', 'tool': tool_name, 'cached': cached})}\n\n"
-
-                            # Continue conversation with tool result
-                            context.append(
-                                {
-                                    "role": "assistant",
-                                    "content": None,
-                                    "tool_calls": [
-                                        {
-                                            "id": tool_call_id or "call_0",
-                                            "type": "function",
-                                            "function": {
-                                                "name": tool_name,
-                                                "arguments": json.dumps(args),
-                                            },
-                                        }
-                                    ],
-                                }
-                            )
-                            context.append(
-                                {
-                                    "role": "tool",
-                                    "tool_call_id": tool_call_id or "call_0",
-                                    "content": json.dumps(result),
-                                }
-                            )
-
-                            made_tool_call = True
-
-                    # If no tool call was made, we're done
-                    if not made_tool_call:
-                        break
-
-                # Save assistant message
-                if assistant_message:
-                    assistant_msg = await self.add_message(
-                        db, conversation_id, "assistant", assistant_message
-                    )
-
-                    # Update tool call message IDs
-                    if tool_calls_made:
-                        assistant_msg.tool_call_ids = tool_calls_made
-                        await db.commit()
-
-                yield f"data: {json.dumps({'type': 'done'})}\n\n"
-
-            except Exception as e:
-                logger.exception("Error during chat streaming")
-                yield f"data: {json.dumps({'type': 'error', 'error': str(e)})}\n\n"
+            yield f"data: {json.dumps({'type': 'error', 'error': str(e)})}\n\n"
+        finally:
+            # Close ClickHouse client
+            if ch_client:
+                ch_client.close()
 
 
 # Global service instance
