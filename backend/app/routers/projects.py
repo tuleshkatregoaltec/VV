@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.db.session import get_db_session
+from app.postgres import get_db_session
 from app.services import projects_service
 from app.schemas.projects import ProjectSearchResult, ProjectDetailResponse
 from app.core.decorators import cached_endpoint

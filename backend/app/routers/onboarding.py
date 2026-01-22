@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel.ext.asyncio.session import AsyncSession
 from sqlmodel import select
 
-from app.db.session import get_db_session
+from app.postgres import get_db_session
 from app.routers.dependencies import require_auth
 from app.providers.auth.platform_user import PlatformUser
 from app.schemas.onboarding import (
@@ -12,7 +12,7 @@ from app.schemas.onboarding import (
     PaymentStatusResponse,
 )
 from app.services.stripe_service import create_checkout_session
-from app.db.models.auth import Organization
+from app.postgres.models.auth import Organization
 
 router = APIRouter(prefix="/api/v1/onboarding", tags=["onboarding"])
 

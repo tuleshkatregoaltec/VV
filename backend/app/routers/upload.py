@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, status
 from fastapi.responses import JSONResponse
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.db.session import get_db_session
+from app.postgres import get_db_session
 from app.routers.dependencies import require_api_key
 from app.schemas.upload import (
     NewsArticleUploadRequest,

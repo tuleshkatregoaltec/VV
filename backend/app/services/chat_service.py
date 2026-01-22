@@ -5,7 +5,6 @@ import logging
 from datetime import datetime, timezone
 from typing import Any, AsyncGenerator, List, Optional
 
-import clickhouse_connect
 from posthog import Posthog
 from pydantic_ai.messages import ModelMessage
 from sqlmodel import select
@@ -13,7 +12,8 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.config import settings
 from app.core.agent import agent, AgentDeps
-from app.db.models.chat import Conversation, Message
+from app.postgres.models.chat import Conversation, Message
+from app.services.clickhouse_service import get_clickhouse_client
 from app.services.token_usage_service import token_usage_service
 
 logger = logging.getLogger(__name__)
@@ -22,17 +22,6 @@ logger = logging.getLogger(__name__)
 posthog_client = Posthog(
     project_api_key=settings.POSTHOG_API_KEY, host=settings.POSTHOG_HOST
 )
-
-
-def get_clickhouse_client() -> Any:
-    """Create ClickHouse client connection."""
-    return clickhouse_connect.get_client(
-        host=settings.CLICKHOUSE_HOST,
-        port=settings.CLICKHOUSE_PORT,
-        username=settings.CLICKHOUSE_USER,
-        password=settings.CLICKHOUSE_PASSWORD,
-        database=settings.CLICKHOUSE_DB,
-    )
 
 
 class ChatService:

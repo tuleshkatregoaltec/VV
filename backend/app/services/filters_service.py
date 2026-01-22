@@ -7,8 +7,8 @@ import asyncio
 import logging
 import time
 
-from app.db.session import async_session
-from app.db.models import Transaction, RentContract
+from app.postgres import async_session
+from app.postgres.models import Transaction, RentContract
 from app.schemas.filters import FilterOptionsResponse
 from app.services.filter_builder import FilterBuilder
 

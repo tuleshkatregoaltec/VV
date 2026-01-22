@@ -5,7 +5,7 @@ from typing import Optional
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.db.models.auth import UserTokenUsage
+from app.postgres.models.auth import UserTokenUsage
 from app.services.auth_service import get_user_by_id, update_app_metadata
 from app.providers.auth.platform_user import PlatformUser
 

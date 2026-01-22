@@ -8,7 +8,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from workos import WorkOSClient
 
 from app.config import settings
-from app.db.models import Organization
+from app.postgres.models import Organization
 
 from app.services.auth_service import get_user_by_id
 

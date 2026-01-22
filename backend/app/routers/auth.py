@@ -4,7 +4,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from sqlmodel import select
 from datetime import datetime, timezone
 
-from app.db.session import get_db_session
+from app.postgres import get_db_session
 from app.routers.dependencies import require_auth
 
 from app.providers.auth.platform_user import PlatformUser
@@ -12,7 +12,7 @@ from app.providers.auth.platform_user import PlatformUser
 from app.services import auth_service
 from app.services import organization_service
 from app.schemas.onboarding import SyncUserResponse
-from app.db.models.subscriptions import Subscription
+from app.postgres.models.subscriptions import Subscription
 
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 

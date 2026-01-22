@@ -7,7 +7,7 @@ from typing import List, Optional
 from decimal import Decimal
 
 
-from app.db.models.analytics import (
+from app.postgres.models.analytics import (
     AnalyticsDailySalesAgg,
     AnalyticsDailyRentalsAgg,
 )

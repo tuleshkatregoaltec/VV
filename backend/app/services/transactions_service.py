@@ -6,7 +6,7 @@ import pandas as pd
 from sqlmodel import col, func, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.db.models import RentContract, Transaction
+from app.postgres.models import RentContract, Transaction
 from app.schemas.transactions import (
     RentalContractListResponse,
     RentalContractResponse,

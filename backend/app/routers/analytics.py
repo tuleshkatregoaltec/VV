@@ -5,7 +5,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, Query
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.db.session import get_db_session
+from app.postgres import get_db_session
 from app.routers.dependencies import require_auth
 from app.schemas.analytics import (
     AnalyticsResponse,

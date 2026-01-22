@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.decorators import cached_endpoint
-from app.db.session import get_db_session
+from app.postgres import get_db_session
 from app.routers.dependencies import require_auth
 from app.schemas.transactions import (
     MatchedUnitsResponse,
@@ -24,7 +24,7 @@ from app.services.transaction_matching_service import (
     TransactionMatchingService,
     MatchedUnitResult,
 )
-from app.db.models.properties import Unit
+from app.postgres.models.properties import Unit
 from sqlalchemy import select
 
 

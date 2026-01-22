@@ -10,7 +10,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from app.config import settings
 from app.core.cache import RedisCache
 from app.core.s3 import S3Client
-from app.db.models.news import NewsArticle
+from app.postgres.models.news import NewsArticle
 from app.schemas.news import NewsArticleResponse
 from app.schemas.upload import (
     NewsArticleCreate,

@@ -5,12 +5,12 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from sqlmodel import select
 
 from app.config import settings
-from app.db.session import get_db_session
+from app.postgres import get_db_session
 from app.services.stripe_service import (
     handle_checkout_completed,
     handle_subscription_updated,
 )
-from app.db.models.auth import Organization
+from app.postgres.models.auth import Organization
 
 router = APIRouter(prefix="/api/v1/webhooks", tags=["webhooks"])
 logger = logging.getLogger(__name__)
@@ -104,7 +104,7 @@ async def _handle_subscription_deleted(subscription: dict, db: AsyncSession):
     """Handle customer.subscription.deleted event"""
     try:
         # Find organization by stripe_subscription_id
-        from app.db.models.subscriptions import Subscription
+        from app.postgres.models.subscriptions import Subscription
 
         stmt = select(Subscription).where(
             Subscription.stripe_subscription_id == subscription["id"]

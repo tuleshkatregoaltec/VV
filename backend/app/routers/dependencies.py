@@ -9,7 +9,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from app.services.auth_service import get_user_by_id
 from app.services.organization_service import get_organization_for_user
 from app.config import settings
-from app.db.session import get_db_session
+from app.postgres import get_db_session
 from app.services.token_usage_service import token_usage_service
 
 logger = logging.getLogger(__name__)

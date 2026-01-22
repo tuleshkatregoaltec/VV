@@ -4,8 +4,8 @@ from fastapi import APIRouter, Depends, Query
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.decorators import cached_endpoint
-from app.db.models.transactions import Transaction
-from app.db.session import get_db_session
+from app.postgres.models.transactions import Transaction
+from app.postgres import get_db_session
 from app.routers.dependencies import require_auth
 from app.schemas.filters import FilterOptionsResponse
 from app.services.filters_service import (

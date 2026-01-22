@@ -18,8 +18,8 @@ from sqlalchemy import select, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
-from app.db.models.transactions import Transaction
-from app.db.models.properties import Unit, Project
+from app.postgres.models.transactions import Transaction
+from app.postgres.models.properties import Unit, Project
 
 
 # Configuration

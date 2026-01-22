@@ -6,8 +6,8 @@ from sqlmodel import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
-from app.db.models.subscriptions import Subscription
-from app.db.models.auth import Organization
+from app.postgres.models.subscriptions import Subscription
+from app.postgres.models.auth import Organization
 
 # Configure Stripe
 stripe.api_key = settings.STRIPE_SECRET_KEY

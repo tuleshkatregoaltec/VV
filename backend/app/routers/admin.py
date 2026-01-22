@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.db.session import get_db_session
+from app.postgres import get_db_session
 from app.routers.dependencies import require_admin
 from app.schemas.organization import (
     OrganizationCreateRequest,

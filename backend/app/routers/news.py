@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, Query
 from sqlmodel.ext.asyncio.session import AsyncSession
 from app.routers.dependencies import require_auth
-from app.db.session import get_db_session
+from app.postgres import get_db_session
 from app.core.decorators import cached_endpoint
 from app.services.news_service import fetch_news_articles
 from app.schemas.news import NewsListResponse

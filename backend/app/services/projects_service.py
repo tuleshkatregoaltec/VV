@@ -4,9 +4,9 @@ from sqlalchemy import func
 from sqlalchemy.orm import selectinload
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
-from app.db.models.properties import Project, Developer, Unit, Building
-from app.db.models.geography import Area
-from app.db.models.lookups import PropertySubType
+from app.postgres.models.properties import Project, Developer, Unit, Building
+from app.postgres.models.geography import Area
+from app.postgres.models.lookups import PropertySubType
 from app.schemas.projects import (
     ProjectSearchResult,
     ProjectDetailResponse,

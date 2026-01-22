@@ -5,7 +5,7 @@ from sqlalchemy.orm import selectinload
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.db.models import Project
+from app.postgres.models import Project
 
 
 async def get_upcoming_projects(db: AsyncSession) -> List[Project]:

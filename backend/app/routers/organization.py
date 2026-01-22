@@ -4,7 +4,7 @@ from sqlmodel import select
 from typing import List
 from datetime import datetime, timezone
 
-from app.db.session import get_db_session
+from app.postgres import get_db_session
 from app.routers.dependencies import require_organization_admin, require_auth
 from app.providers.auth.platform_user import PlatformUser
 from app.schemas.onboarding import InviteUserRequest
@@ -18,7 +18,7 @@ from app.services.stripe_service import (
     get_subscription_by_org,
     get_customer_portal_url,
 )
-from app.db.models.auth import Organization
+from app.postgres.models.auth import Organization
 from app.config import settings
 from pydantic import BaseModel
 
