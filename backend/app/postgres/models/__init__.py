@@ -16,10 +16,12 @@ from .analytics import (
 from .etl import ETLMetadata, ETLRunLog, ETLState
 from .news import NewsArticle
 from .chat import Conversation, Message
+from .subscriptions import Subscription
 
 __all__ = [
     "Organization",
     "UserTokenUsage",
+    "Subscription",
     "PropertyType",
     "PropertySubType",
     "Area",

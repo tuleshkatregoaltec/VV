@@ -34,7 +34,7 @@ if config.config_file_name is not None:
 # add your model's MetaData object here
 # for 'autogenerate' support
 from sqlmodel import SQLModel
-from app.db.models import *  # noqa: F401, F403 - Import all models for autogenerate
+from app.postgres.models import *  # noqa: F401, F403 - Import all models for autogenerate
 
 target_metadata = SQLModel.metadata
 
