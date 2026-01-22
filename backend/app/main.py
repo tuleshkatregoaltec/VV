@@ -5,8 +5,11 @@ from starlette.middleware.sessions import SessionMiddleware
 from starlette.middleware.authentication import AuthenticationMiddleware
 from honeybadger import contrib, honeybadger
 import logging.config
+from contextlib import asynccontextmanager
 
 from app.config import settings
+from app.clickhouse import close_clickhouse
+from app.postgres import close_postgres
 from app.routers import (
     auth,
     admin,
@@ -31,7 +34,16 @@ from app.core.logging_config import LOGGING_CONFIG
 
 logging.config.dictConfig(LOGGING_CONFIG)
 
-app = FastAPI(title="Real Estate API", version="1.0.0")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Manage application startup and shutdown."""
+    yield
+    await close_clickhouse()
+    await close_postgres()
+
+
+app = FastAPI(title="Real Estate API", version="1.0.0", lifespan=lifespan)
 
 honeybadger.configure(
     api_key=settings.HONEYBADGER_API_KEY,
