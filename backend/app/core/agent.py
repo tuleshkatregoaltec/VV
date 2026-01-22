@@ -2,7 +2,6 @@
 
 import logging
 import os
-from dataclasses import dataclass
 from typing import Any
 
 import logfire
@@ -10,19 +9,13 @@ from pydantic_ai import Agent, RunContext
 from pydantic_ai.models.openai import OpenAIChatModel
 
 from app.config import settings
+from app.clickhouse import query
 
 logger = logging.getLogger(__name__)
 
 # Configure Logfire for LLM observability
 logfire.configure()
 logfire.instrument_pydantic_ai()
-
-
-@dataclass
-class AgentDeps:
-    """Dependencies injected into agent tools."""
-
-    ch_client: Any  # clickhouse_connect.driver.httpclient.HttpClient
 
 
 # Set OpenRouter credentials via environment (Pydantic AI reads these)
@@ -38,7 +31,6 @@ model = OpenAIChatModel(
 # Define agent
 agent = Agent(
     model,
-    deps_type=AgentDeps,
     system_prompt=(
         "You are ViteVue AI, an expert Real Estate Analyst for Dubai real estate markets. "
         "You are SQL-literate and have direct access to a comprehensive ClickHouse database containing "
@@ -58,7 +50,7 @@ agent = Agent(
 
 @agent.tool
 async def get_market_pulse(
-    ctx: RunContext[AgentDeps], area: str, period_days: int = 90
+    ctx: RunContext[None], area: str, period_days: int = 90
 ) -> dict[str, Any]:
     """Get vital market statistics for a specific area.
 
@@ -66,14 +58,14 @@ async def get_market_pulse(
     and price trends for the specified area and time period.
 
     Args:
-        ctx: Runtime context with ClickHouse client
+        ctx: Runtime context (unused)
         area: Area name (e.g., "Dubai Marina", "Downtown Dubai")
         period_days: Analysis period in days (default: 90)
 
     Returns:
         Dictionary with price, yield, volume, and trend data
     """
-    query = """
+    sql = """
     SELECT
         count(*) as transaction_count,
         round(median(trans_value), 0) as median_price,
@@ -91,17 +83,15 @@ async def get_market_pulse(
     """
 
     try:
-        result = ctx.deps.ch_client.query(
-            query, parameters={"area": area, "period_days": period_days}
-        )
-
-        if not result.result_rows:
+        rows = await query(sql, {"area": area, "period_days": period_days})
+        
+        if not rows:
             return {
                 "success": False,
                 "error": f"No data found for area '{area}' in the last {period_days} days",
             }
 
-        row = result.result_rows[0]
+        row = rows[0]
         return {
             "success": True,
             "area": area,
@@ -121,7 +111,7 @@ async def get_market_pulse(
 
 @agent.tool
 async def rank_areas(
-    ctx: RunContext[AgentDeps],
+    ctx: RunContext[None],
     metric: str = "volume",
     limit: int = 5,
     period_days: int = 90,
@@ -129,7 +119,7 @@ async def rank_areas(
     """Rank top areas by a specific metric.
 
     Args:
-        ctx: Runtime context with ClickHouse client
+        ctx: Runtime context (unused)
         metric: Ranking metric - "volume" (transaction count), "price" (median price),
                 or "growth" (price change percentage)
         limit: Number of top areas to return (default: 5)
@@ -139,7 +129,7 @@ async def rank_areas(
         List of top areas with their respective metrics
     """
     if metric == "volume":
-        query = """
+        sql = """
         SELECT
             area_en as area,
             count(*) as transaction_count,
@@ -154,7 +144,7 @@ async def rank_areas(
         LIMIT {limit:Int32}
         """
     elif metric == "price":
-        query = """
+        sql = """
         SELECT
             area_en as area,
             round(median(trans_value), 0) as median_price,
@@ -171,7 +161,7 @@ async def rank_areas(
         """
     elif metric == "growth":
         # Compare current period vs previous period
-        query = """
+        sql = """
         WITH
             current_period AS (
                 SELECT
@@ -215,18 +205,18 @@ async def rank_areas(
         }
 
     try:
-        result = ctx.deps.ch_client.query(
-            query, parameters={"period_days": period_days, "limit": limit}
+        rows = await query(
+            sql, {"period_days": period_days, "limit": limit}
         )
 
-        if not result.result_rows:
+        if not rows:
             return {
                 "success": False,
                 "error": f"No data found for metric '{metric}' in the last {period_days} days",
             }
 
         areas = []
-        for row in result.result_rows:
+        for row in rows:
             if metric == "volume":
                 areas.append(
                     {
@@ -266,7 +256,7 @@ async def rank_areas(
 
 @agent.tool
 async def get_similar_projects(
-    ctx: RunContext[AgentDeps], project_name: str, limit: int = 5
+    ctx: RunContext[None], project_name: str, limit: int = 5
 ) -> dict[str, Any]:
     """Find similar projects based on attributes.
 
@@ -274,7 +264,7 @@ async def get_similar_projects(
     based on property characteristics, location, and developer.
 
     Args:
-        ctx: Runtime context with ClickHouse client
+        ctx: Runtime context (unused)
         project_name: Name of the reference project
         limit: Number of similar projects to return (default: 5)
 
@@ -282,7 +272,7 @@ async def get_similar_projects(
         List of similar projects with comparison metrics
     """
     # First, get the reference project details
-    ref_query = """
+    ref_sql = """
     SELECT
         master_project_en,
         area_en,
@@ -301,17 +291,17 @@ async def get_similar_projects(
     """
 
     try:
-        ref_result = ctx.deps.ch_client.query(
-            ref_query, parameters={"project_name": f"%{project_name}%"}
+        ref_rows = await query(
+            ref_sql, {"project_name": f"%{project_name}%"}
         )
 
-        if not ref_result.result_rows:
+        if not ref_rows:
             return {
                 "success": False,
                 "error": f"No data found for project '{project_name}'",
             }
 
-        ref_row = ref_result.result_rows[0]
+        ref_row = ref_rows[0]
         ref_project = ref_row[0]
         ref_area = ref_row[1]
         ref_type = ref_row[2]
@@ -319,7 +309,7 @@ async def get_similar_projects(
         ref_area_sqft = ref_row[4]
 
         # Find similar projects
-        similar_query = """
+        similar_sql = """
         SELECT
             master_project_en,
             area_en,
@@ -342,9 +332,9 @@ async def get_similar_projects(
         LIMIT {limit:Int32}
         """
 
-        similar_result = ctx.deps.ch_client.query(
-            similar_query,
-            parameters={
+        similar_rows = await query(
+            similar_sql,
+            {
                 "ref_price": ref_price,
                 "ref_project": ref_project,
                 "ref_type": ref_type,
@@ -353,7 +343,7 @@ async def get_similar_projects(
         )
 
         similar_projects = []
-        for row in similar_result.result_rows:
+        for row in similar_rows:
             similar_projects.append(
                 {
                     "project": row[0],
