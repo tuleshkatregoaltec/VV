@@ -1,47 +1,28 @@
+"""PostgreSQL models for application state (not analytics data)."""
+
 from .auth import Organization, UserTokenUsage
-from .lookups import PropertyType, PropertySubType
-from .geography import Area, MasterProject
-from .properties import Developer, Project, LandRegistry, Building, Unit
-from .transactions import (
-    Transaction,
-    RentContract,
-    TransactionGroup,
-    TransactionProcedure,
-)
-from .analytics import (
-    AnalyticsDailySalesAgg,
-    AnalyticsDailyRentalsAgg,
-    AnalyticsTrend,
-)
-from .etl import ETLMetadata, ETLRunLog, ETLState
+from .subscriptions import Subscription
 from .news import NewsArticle
 from .chat import Conversation, Message
-from .subscriptions import Subscription
+from .etl import ETLMetadata, ETLRunLog, ETLState
+from .lookups import PropertyType, PropertySubType
 
 __all__ = [
+    # Auth & User Management
     "Organization",
     "UserTokenUsage",
+    # Billing
     "Subscription",
-    "PropertyType",
-    "PropertySubType",
-    "Area",
-    "MasterProject",
-    "Developer",
-    "Project",
-    "LandRegistry",
-    "Building",
-    "Unit",
-    "Transaction",
-    "RentContract",
-    "TransactionGroup",
-    "TransactionProcedure",
-    "AnalyticsDailySalesAgg",
-    "AnalyticsDailyRentalsAgg",
-    "AnalyticsTrend",
+    # News
+    "NewsArticle",
+    # Chat
+    "Conversation",
+    "Message",
+    # ETL Tracking
     "ETLMetadata",
     "ETLRunLog",
     "ETLState",
-    "NewsArticle",
-    "Conversation",
-    "Message",
+    # Reference Data
+    "PropertyType",
+    "PropertySubType",
 ]
