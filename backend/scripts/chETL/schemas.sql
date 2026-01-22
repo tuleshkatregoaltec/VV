@@ -247,7 +247,7 @@ CREATE TABLE IF NOT EXISTS ch_buildings (
     )
 
 ) ENGINE = ReplacingMergeTree(etl_inserted_at)
-ORDER BY (project_number, building_id)
+ORDER BY building_id
 SETTINGS deduplicate_merge_projection_mode = 'rebuild', allow_nullable_key = 1;
 
 
@@ -296,7 +296,7 @@ CREATE TABLE IF NOT EXISTS ch_units (
     )
 
 ) ENGINE = ReplacingMergeTree(etl_inserted_at)
-ORDER BY (project_number, building_id, unit_id) SETTINGS deduplicate_merge_projection_mode = 'rebuild', allow_nullable_key = 1;
+ORDER BY unit_id SETTINGS deduplicate_merge_projection_mode = 'rebuild', allow_nullable_key = 1;
 
 
 -- Table 7: Land Registry
