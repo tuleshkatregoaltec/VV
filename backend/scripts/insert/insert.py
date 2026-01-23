@@ -389,7 +389,7 @@ def main():
     client = get_client()
 
     atomic_exchange_load(
-        client, "ch_transactions", prepared["Transaction.csv"], Q_TRANSACTIONS
+        client, "ch_transactions", prepared["Transactions.csv"], Q_TRANSACTIONS
     )
     atomic_exchange_load(
         client, "ch_rent_contracts", prepared["Rent_Contracts.csv"], Q_RENT
