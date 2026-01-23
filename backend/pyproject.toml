@@ -47,6 +47,7 @@ dependencies = [
     "pydantic-ai>=1.38.0",
     "logfire>=4.19.0",
     "clickhouse-connect>=0.10.0",
+    "clickhouse-driver>=0.2.10",
 ]
 
 [tool.uv]
