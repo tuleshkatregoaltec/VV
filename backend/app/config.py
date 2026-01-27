@@ -4,69 +4,60 @@ from pydantic import field_validator
 
 class Settings(BaseSettings):
     # Database
-    DATABASE_URL: str
+    DATABASE_URL: str  # configMap
 
     # Redis
-    REDIS_URL: str
-    REDIS_PASSWORD: str
+    REDIS_URL: str  # configMap
+    REDIS_PASSWORD: str  # Bitwarden Secrets
 
-    # WorkOS
-    WORKOS_API_KEY: str
-    WORKOS_CLIENT_ID: str
-    WORKOS_REDIRECT_URI: str
-    FRONTEND_URL: str
+    FRONTEND_URL: str  # configMap
 
     # Security
-    SESSION_SECRET: str
-    SERVICE_API_KEY: str
+    SESSION_SECRET: str  # Bitwarden Secrets
+    SERVICE_API_KEY: str  # Bitwarden Secrets
 
     # CORS
-    ALLOWED_ORIGINS: list[str]
+    ALLOWED_ORIGINS: list[str]  # configMap
 
     # Honeybadger
-    HONEYBADGER_API_KEY: str
+    HONEYBADGER_API_KEY: str  # Bitwarden Secrets
 
     # OpenRouter
-    OPENROUTER_API_KEY: str
-    OPENROUTER_BASE_URL: str = "https://openrouter.ai/api/v1"
-    CHAT_MODEL: str = "anthropic/claude-3-haiku"
+    OPENROUTER_API_KEY: str  # Bitwarden Secrets
+    DEFAULT_CHAT_MODEL: str  # configMap
 
     # Auth
-    AUTH_ADMIN_EMAIL: str
-    AUTH_ADMIN_PASSWORD: str
-    AUTH_URL: str
+    AUTH_ADMIN_EMAIL: str  # configMap
+    AUTH_ADMIN_PASSWORD: str  # Bitwarden Secrets
+    AUTH_URL: str  # configMap
 
     # PostHog
-    POSTHOG_API_KEY: str
-    POSTHOG_HOST: str
+    POSTHOG_API_KEY: str  # Bitwarden Secrets
+    POSTHOG_HOST: str  # configMap
 
-    # Cloudflare R2 / S3
-    R2_ENDPOINT_URL: str
-    R2_ACCESS_KEY_ID: str
-    R2_SECRET_ACCESS_KEY: str
-    R2_BUCKET_NAME: str
-    R2_REGION: str = "auto"
+    # S3
+    S3_ENDPOINT_URL: str  # configMap
+    S3_ACCESS_KEY_ID: str  # Bitwarden Secrets
+    S3_SECRET_ACCESS_KEY: str
+    S3_BUCKET_NAME: str  # configMap
+    S3_REGION: str  # configMap
 
     # ClickHouse
-    CLICKHOUSE_HOST: str
-    CLICKHOUSE_PORT: int
-    CLICKHOUSE_USER: str
-    CLICKHOUSE_PASSWORD: str
-    CLICKHOUSE_DB: str
+    CLICKHOUSE_HOST: str  # configMap
+    CLICKHOUSE_PORT: int  # configMap
+    CLICKHOUSE_USER: str  # configMap
+    CLICKHOUSE_PASSWORD: str  # Bitwarden Secrets
+    CLICKHOUSE_DB: str  # configMap
 
     # Stripe
-    STRIPE_SECRET_KEY: str
-    STRIPE_PUBLISHABLE_KEY: str
-    STRIPE_WEBHOOK_SECRET: str
-    STRIPE_PRICE_ID_TIER1: str  # 990 AED/seat for 1-5 seats
-    STRIPE_PRICE_ID_TIER2: str  # 890 AED/seat for 6-10 seats
+    STRIPE_SECRET_KEY: str  # Bitwarden Secrets
+    STRIPE_WEBHOOK_SECRET: str  # Bitwarden Secrets
+    STRIPE_PRICE_ID_TIER1: str  # configMap
+    STRIPE_PRICE_ID_TIER2: str  # configMap
 
     # Frontend URLs for Stripe redirects
-    FRONTEND_SUCCESS_URL: str
-    FRONTEND_CANCEL_URL: str
-
-    # Enterprise contact
-    ENTERPRISE_CONTACT_EMAIL: str = "contact@vitevue.com"
+    FRONTEND_SUCCESS_URL: str  # configMap
+    FRONTEND_CANCEL_URL: str  # configMap
 
     @field_validator("SERVICE_API_KEY")
     @classmethod
