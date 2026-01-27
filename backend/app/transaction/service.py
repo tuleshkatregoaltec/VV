@@ -1,0 +1,702 @@
+"""Transaction service - redesigned for ClickHouse from first principles."""
+
+import logging
+from io import BytesIO
+from typing import Optional
+
+from openpyxl import Workbook
+from openpyxl.styles import Font
+
+from app.clickhouse.client import query
+from app.transaction.models import (
+    RentalContractListResponse,
+    RentalContractResponse,
+    TransactionListResponse,
+    TransactionResponse,
+)
+
+logger = logging.getLogger(__name__)
+
+
+async def fetch_sales_transactions(
+    limit: int,
+    offset: int,
+    property_usage: Optional[str] = None,
+    property_type: Optional[str] = None,
+    property_sub_type: Optional[str] = None,
+    rooms: Optional[str] = None,
+    registration_type: Optional[str] = None,
+    area: Optional[str] = None,
+    project: Optional[str] = None,
+    building: Optional[str] = None,
+    timeframe_days: Optional[int] = None,
+    area_min: Optional[float] = None,
+    area_max: Optional[float] = None,
+    price_min: Optional[float] = None,
+    price_max: Optional[float] = None,
+    price_per_sqm_min: Optional[float] = None,
+    price_per_sqm_max: Optional[float] = None,
+) -> TransactionListResponse:
+    """
+    Fetch paginated sales transactions from ClickHouse.
+
+    Optimized query using sort key (property_usage_en, instance_date, transaction_id).
+    """
+    # Build WHERE clause
+    where_clauses = []
+    params = {}
+
+    if property_usage:
+        where_clauses.append("property_usage_en = {property_usage:String}")
+        params["property_usage"] = property_usage
+
+    if property_type:
+        where_clauses.append("property_type_en = {property_type:String}")
+        params["property_type"] = property_type
+
+    if property_sub_type:
+        where_clauses.append("property_sub_type_en = {property_sub_type:String}")
+        params["property_sub_type"] = property_sub_type
+
+    if rooms:
+        where_clauses.append("rooms_en = {rooms:String}")
+        params["rooms"] = rooms
+
+    if registration_type:
+        where_clauses.append("reg_type_en = {registration_type:String}")
+        params["registration_type"] = registration_type
+
+    if area:
+        where_clauses.append("area_name_en = {area:String}")
+        params["area"] = area
+
+    if project:
+        where_clauses.append("project_name_en = {project:String}")
+        params["project"] = project
+
+    if building:
+        where_clauses.append("building_name_en = {building:String}")
+        params["building"] = building
+
+    if timeframe_days:
+        where_clauses.append("instance_date >= today() - {timeframe_days:Int32}")
+        params["timeframe_days"] = timeframe_days
+
+    if area_min:
+        where_clauses.append("procedure_area >= {area_min:Decimal64(2)}")
+        params["area_min"] = area_min
+
+    if area_max:
+        where_clauses.append("procedure_area <= {area_max:Decimal64(2)}")
+        params["area_max"] = area_max
+
+    if price_min:
+        where_clauses.append("actual_worth >= {price_min:Decimal64(2)}")
+        params["price_min"] = price_min
+
+    if price_max:
+        where_clauses.append("actual_worth <= {price_max:Decimal64(2)}")
+        params["price_max"] = price_max
+
+    if price_per_sqm_min:
+        where_clauses.append("meter_sale_price >= {price_per_sqm_min:Decimal64(2)}")
+        params["price_per_sqm_min"] = price_per_sqm_min
+
+    if price_per_sqm_max:
+        where_clauses.append("meter_sale_price <= {price_per_sqm_max:Decimal64(2)}")
+        params["price_per_sqm_max"] = price_per_sqm_max
+
+    where_clause = " AND ".join(where_clauses) if where_clauses else "1=1"
+
+    # Count total matching transactions
+    count_sql = f"""
+        SELECT count() as total
+        FROM ch_transactions
+        WHERE {where_clause}
+    """
+    count_result = await query(count_sql, params)
+    total = count_result[0]["total"] if count_result else 0
+
+    # Fetch transactions
+    params["limit"] = limit
+    params["offset"] = offset
+
+    transactions_sql = f"""
+        SELECT
+            transaction_id,
+            instance_date,
+            property_usage_en,
+            trans_group_en,
+            procedure_name_en,
+            property_type_en,
+            property_sub_type_en,
+            rooms_en,
+            procedure_area,
+            actual_worth,
+            meter_sale_price,
+            reg_type_en,
+            area_name_en,
+            project_name_en,
+            building_name_en,
+            nearest_landmark_en,
+            nearest_metro_en,
+            nearest_mall_en
+        FROM ch_transactions
+        WHERE {where_clause}
+        ORDER BY instance_date DESC, transaction_id
+        LIMIT {{limit:Int32}}
+        OFFSET {{offset:Int32}}
+    """
+    transactions_result = await query(transactions_sql, params)
+
+    # Convert to response models
+    items = [
+        TransactionResponse(
+            transaction_id=row["transaction_id"],
+            instance_date=row["instance_date"],
+            property_usage=row["property_usage_en"],
+            trans_group=row["trans_group_en"],
+            procedure_name=row["procedure_name_en"],
+            property_type=row["property_type_en"],
+            property_sub_type=row["property_sub_type_en"],
+            rooms=row["rooms_en"],
+            area_sqm=float(row["procedure_area"]) if row["procedure_area"] else None,
+            price=float(row["actual_worth"]) if row["actual_worth"] else None,
+            price_per_sqm=(
+                float(row["meter_sale_price"]) if row["meter_sale_price"] else None
+            ),
+            registration_type=row["reg_type_en"],
+            area_name=row["area_name_en"],
+            project_name=row["project_name_en"],
+            building_name=row["building_name_en"],
+            nearest_landmark=row["nearest_landmark_en"],
+            nearest_metro=row["nearest_metro_en"],
+            nearest_mall=row["nearest_mall_en"],
+        )
+        for row in transactions_result
+    ]
+
+    return TransactionListResponse(items=items, total=total, limit=limit, offset=offset)
+
+
+async def fetch_rental_contracts(
+    limit: int,
+    offset: int,
+    property_usage: Optional[str] = None,
+    property_type: Optional[str] = None,
+    property_sub_type: Optional[str] = None,
+    tenant_type: Optional[str] = None,
+    contract_reg_type: Optional[str] = None,
+    area: Optional[str] = None,
+    project: Optional[str] = None,
+    timeframe_days: Optional[int] = None,
+    area_min: Optional[float] = None,
+    area_max: Optional[float] = None,
+    rent_min: Optional[float] = None,
+    rent_max: Optional[float] = None,
+) -> RentalContractListResponse:
+    """
+    Fetch paginated rental contracts from ClickHouse.
+
+    Optimized query using sort key (property_usage_en, contract_start_date, contract_id).
+    """
+    # Build WHERE clause
+    where_clauses = []
+    params = {}
+
+    if property_usage:
+        where_clauses.append("property_usage_en = {property_usage:String}")
+        params["property_usage"] = property_usage
+
+    if property_type:
+        where_clauses.append("ejari_property_type_en = {property_type:String}")
+        params["property_type"] = property_type
+
+    if property_sub_type:
+        where_clauses.append("ejari_property_sub_type_en = {property_sub_type:String}")
+        params["property_sub_type"] = property_sub_type
+
+    if tenant_type:
+        where_clauses.append("tenant_type_en = {tenant_type:String}")
+        params["tenant_type"] = tenant_type
+
+    if contract_reg_type:
+        where_clauses.append("contract_reg_type_en = {contract_reg_type:String}")
+        params["contract_reg_type"] = contract_reg_type
+
+    if area:
+        where_clauses.append("area_name_en = {area:String}")
+        params["area"] = area
+
+    if project:
+        where_clauses.append("project_name_en = {project:String}")
+        params["project"] = project
+
+    if timeframe_days:
+        where_clauses.append("contract_start_date >= today() - {timeframe_days:Int32}")
+        params["timeframe_days"] = timeframe_days
+
+    if area_min:
+        where_clauses.append("actual_area >= {area_min:Decimal64(2)}")
+        params["area_min"] = area_min
+
+    if area_max:
+        where_clauses.append("actual_area <= {area_max:Decimal64(2)}")
+        params["area_max"] = area_max
+
+    if rent_min:
+        where_clauses.append("annual_amount >= {rent_min:Decimal64(2)}")
+        params["rent_min"] = rent_min
+
+    if rent_max:
+        where_clauses.append("annual_amount <= {rent_max:Decimal64(2)}")
+        params["rent_max"] = rent_max
+
+    where_clause = " AND ".join(where_clauses) if where_clauses else "1=1"
+
+    # Count total matching contracts
+    count_sql = f"""
+        SELECT count() as total
+        FROM ch_rent_contracts
+        WHERE {where_clause}
+    """
+    count_result = await query(count_sql, params)
+    total = count_result[0]["total"] if count_result else 0
+
+    # Fetch rental contracts
+    params["limit"] = limit
+    params["offset"] = offset
+
+    contracts_sql = f"""
+        SELECT
+            contract_id,
+            contract_start_date,
+            contract_end_date,
+            property_usage_en,
+            contract_reg_type_en,
+            ejari_property_type_en,
+            ejari_property_sub_type_en,
+            tenant_type_en,
+            actual_area,
+            annual_amount,
+            contract_amount,
+            area_name_en,
+            project_name_en,
+            nearest_landmark_en,
+            nearest_metro_en,
+            nearest_mall_en,
+            no_of_prop,
+            is_free_hold
+        FROM ch_rent_contracts
+        WHERE {where_clause}
+        ORDER BY contract_start_date DESC, contract_id
+        LIMIT {{limit:Int32}}
+        OFFSET {{offset:Int32}}
+    """
+    contracts_result = await query(contracts_sql, params)
+
+    # Convert to response models
+    items = [
+        RentalContractResponse(
+            contract_id=row["contract_id"],
+            contract_start_date=row["contract_start_date"],
+            contract_end_date=row["contract_end_date"],
+            property_usage=row["property_usage_en"],
+            contract_reg_type=row["contract_reg_type_en"],
+            property_type=row["ejari_property_type_en"],
+            property_sub_type=row["ejari_property_sub_type_en"],
+            tenant_type=row["tenant_type_en"],
+            area_sqm=float(row["actual_area"]) if row["actual_area"] else None,
+            annual_rent=float(row["annual_amount"]) if row["annual_amount"] else None,
+            contract_amount=(
+                float(row["contract_amount"]) if row["contract_amount"] else None
+            ),
+            area_name=row["area_name_en"],
+            project_name=row["project_name_en"],
+            nearest_landmark=row["nearest_landmark_en"],
+            nearest_metro=row["nearest_metro_en"],
+            nearest_mall=row["nearest_mall_en"],
+            no_of_properties=row["no_of_prop"],
+            is_free_hold=bool(row["is_free_hold"]),
+        )
+        for row in contracts_result
+    ]
+
+    return RentalContractListResponse(
+        items=items, total=total, limit=limit, offset=offset
+    )
+
+
+async def export_sales_transactions(
+    transaction_ids: Optional[str] = None,
+    property_usage: Optional[str] = None,
+    property_type: Optional[str] = None,
+    property_sub_type: Optional[str] = None,
+    rooms: Optional[str] = None,
+    registration_type: Optional[str] = None,
+    area: Optional[str] = None,
+    project: Optional[str] = None,
+    building: Optional[str] = None,
+    timeframe_days: Optional[int] = None,
+    area_min: Optional[float] = None,
+    area_max: Optional[float] = None,
+    price_min: Optional[float] = None,
+    price_max: Optional[float] = None,
+    price_per_sqm_min: Optional[float] = None,
+    price_per_sqm_max: Optional[float] = None,
+) -> BytesIO:
+    """
+    Export sales transactions to Excel.
+
+    Limit: 100 rows max (or specific transaction_ids if provided).
+    """
+    params = {}
+
+    # If specific IDs provided, use them (no limit)
+    if transaction_ids:
+        ids_list = [tid.strip() for tid in transaction_ids.split(",")]
+        # Build IN clause with parameter binding
+        placeholders = ", ".join([f"{{id_{i}:String}}" for i in range(len(ids_list))])
+        where_clause = f"transaction_id IN ({placeholders})"
+        for i, tid in enumerate(ids_list):
+            params[f"id_{i}"] = tid
+    else:
+        # Build WHERE clause from filters
+        where_clauses = []
+
+        if property_usage:
+            where_clauses.append("property_usage_en = {property_usage:String}")
+            params["property_usage"] = property_usage
+
+        if property_type:
+            where_clauses.append("property_type_en = {property_type:String}")
+            params["property_type"] = property_type
+
+        if property_sub_type:
+            where_clauses.append("property_sub_type_en = {property_sub_type:String}")
+            params["property_sub_type"] = property_sub_type
+
+        if rooms:
+            where_clauses.append("rooms_en = {rooms:String}")
+            params["rooms"] = rooms
+
+        if registration_type:
+            where_clauses.append("reg_type_en = {registration_type:String}")
+            params["registration_type"] = registration_type
+
+        if area:
+            where_clauses.append("area_name_en = {area:String}")
+            params["area"] = area
+
+        if project:
+            where_clauses.append("project_name_en = {project:String}")
+            params["project"] = project
+
+        if building:
+            where_clauses.append("building_name_en = {building:String}")
+            params["building"] = building
+
+        if timeframe_days:
+            where_clauses.append("instance_date >= today() - {timeframe_days:Int32}")
+            params["timeframe_days"] = timeframe_days
+
+        if area_min:
+            where_clauses.append("procedure_area >= {area_min:Decimal64(2)}")
+            params["area_min"] = area_min
+
+        if area_max:
+            where_clauses.append("procedure_area <= {area_max:Decimal64(2)}")
+            params["area_max"] = area_max
+
+        if price_min:
+            where_clauses.append("actual_worth >= {price_min:Decimal64(2)}")
+            params["price_min"] = price_min
+
+        if price_max:
+            where_clauses.append("actual_worth <= {price_max:Decimal64(2)}")
+            params["price_max"] = price_max
+
+        if price_per_sqm_min:
+            where_clauses.append("meter_sale_price >= {price_per_sqm_min:Decimal64(2)}")
+            params["price_per_sqm_min"] = price_per_sqm_min
+
+        if price_per_sqm_max:
+            where_clauses.append("meter_sale_price <= {price_per_sqm_max:Decimal64(2)}")
+            params["price_per_sqm_max"] = price_per_sqm_max
+
+        where_clause = " AND ".join(where_clauses) if where_clauses else "1=1"
+
+    # Fetch transactions (limit 100 if using filters)
+    limit_clause = "" if transaction_ids else "LIMIT 100"
+
+    export_sql = f"""
+        SELECT
+            transaction_id,
+            instance_date,
+            property_usage_en,
+            trans_group_en,
+            procedure_name_en,
+            property_type_en,
+            property_sub_type_en,
+            rooms_en,
+            procedure_area,
+            actual_worth,
+            meter_sale_price,
+            reg_type_en,
+            area_name_en,
+            project_name_en,
+            building_name_en,
+            nearest_landmark_en,
+            nearest_metro_en,
+            nearest_mall_en
+        FROM ch_transactions
+        WHERE {where_clause}
+        ORDER BY instance_date DESC, transaction_id
+        {limit_clause}
+    """
+    results = await query(export_sql, params)
+
+    # Create Excel workbook
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Sales Transactions"
+
+    # Headers
+    headers = [
+        "Transaction ID",
+        "Date",
+        "Usage",
+        "Trans Group",
+        "Procedure",
+        "Type",
+        "Sub Type",
+        "Rooms",
+        "Area (sqm)",
+        "Price",
+        "Price/sqm",
+        "Registration Type",
+        "Area",
+        "Project",
+        "Building",
+        "Landmark",
+        "Metro",
+        "Mall",
+    ]
+    ws.append(headers)
+
+    # Style headers
+    for cell in ws[1]:
+        cell.font = Font(bold=True)
+
+    # Add data rows
+    for row in results:
+        ws.append(
+            [
+                row["transaction_id"],
+                row["instance_date"],
+                row["property_usage_en"],
+                row["trans_group_en"],
+                row["procedure_name_en"],
+                row["property_type_en"],
+                row["property_sub_type_en"],
+                row["rooms_en"],
+                float(row["procedure_area"]) if row["procedure_area"] else None,
+                float(row["actual_worth"]) if row["actual_worth"] else None,
+                float(row["meter_sale_price"]) if row["meter_sale_price"] else None,
+                row["reg_type_en"],
+                row["area_name_en"],
+                row["project_name_en"],
+                row["building_name_en"],
+                row["nearest_landmark_en"],
+                row["nearest_metro_en"],
+                row["nearest_mall_en"],
+            ]
+        )
+
+    # Save to BytesIO
+    output = BytesIO()
+    wb.save(output)
+    output.seek(0)
+    return output
+
+
+async def export_rental_contracts(
+    contract_ids: Optional[str] = None,
+    property_usage: Optional[str] = None,
+    property_type: Optional[str] = None,
+    property_sub_type: Optional[str] = None,
+    tenant_type: Optional[str] = None,
+    contract_reg_type: Optional[str] = None,
+    area: Optional[str] = None,
+    project: Optional[str] = None,
+    timeframe_days: Optional[int] = None,
+    area_min: Optional[float] = None,
+    area_max: Optional[float] = None,
+    rent_min: Optional[float] = None,
+    rent_max: Optional[float] = None,
+) -> BytesIO:
+    """
+    Export rental contracts to Excel.
+
+    Limit: 100 rows max (or specific contract_ids if provided).
+    """
+    params = {}
+
+    # If specific IDs provided, use them (no limit)
+    if contract_ids:
+        ids_list = [cid.strip() for cid in contract_ids.split(",")]
+        # Build IN clause with parameter binding
+        placeholders = ", ".join([f"{{id_{i}:String}}" for i in range(len(ids_list))])
+        where_clause = f"contract_id IN ({placeholders})"
+        for i, cid in enumerate(ids_list):
+            params[f"id_{i}"] = cid
+    else:
+        # Build WHERE clause from filters
+        where_clauses = []
+
+        if property_usage:
+            where_clauses.append("property_usage_en = {property_usage:String}")
+            params["property_usage"] = property_usage
+
+        if property_type:
+            where_clauses.append("ejari_property_type_en = {property_type:String}")
+            params["property_type"] = property_type
+
+        if property_sub_type:
+            where_clauses.append(
+                "ejari_property_sub_type_en = {property_sub_type:String}"
+            )
+            params["property_sub_type"] = property_sub_type
+
+        if tenant_type:
+            where_clauses.append("tenant_type_en = {tenant_type:String}")
+            params["tenant_type"] = tenant_type
+
+        if contract_reg_type:
+            where_clauses.append("contract_reg_type_en = {contract_reg_type:String}")
+            params["contract_reg_type"] = contract_reg_type
+
+        if area:
+            where_clauses.append("area_name_en = {area:String}")
+            params["area"] = area
+
+        if project:
+            where_clauses.append("project_name_en = {project:String}")
+            params["project"] = project
+
+        if timeframe_days:
+            where_clauses.append(
+                "contract_start_date >= today() - {timeframe_days:Int32}"
+            )
+            params["timeframe_days"] = timeframe_days
+
+        if area_min:
+            where_clauses.append("actual_area >= {area_min:Decimal64(2)}")
+            params["area_min"] = area_min
+
+        if area_max:
+            where_clauses.append("actual_area <= {area_max:Decimal64(2)}")
+            params["area_max"] = area_max
+
+        if rent_min:
+            where_clauses.append("annual_amount >= {rent_min:Decimal64(2)}")
+            params["rent_min"] = rent_min
+
+        if rent_max:
+            where_clauses.append("annual_amount <= {rent_max:Decimal64(2)}")
+            params["rent_max"] = rent_max
+
+        where_clause = " AND ".join(where_clauses) if where_clauses else "1=1"
+
+    # Fetch contracts (limit 100 if using filters)
+    limit_clause = "" if contract_ids else "LIMIT 100"
+
+    export_sql = f"""
+        SELECT
+            contract_id,
+            contract_start_date,
+            contract_end_date,
+            property_usage_en,
+            contract_reg_type_en,
+            ejari_property_type_en,
+            ejari_property_sub_type_en,
+            tenant_type_en,
+            actual_area,
+            annual_amount,
+            contract_amount,
+            area_name_en,
+            project_name_en,
+            nearest_landmark_en,
+            nearest_metro_en,
+            nearest_mall_en,
+            no_of_prop,
+            is_free_hold
+        FROM ch_rent_contracts
+        WHERE {where_clause}
+        ORDER BY contract_start_date DESC, contract_id
+        {limit_clause}
+    """
+    results = await query(export_sql, params)
+
+    # Create Excel workbook
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Rental Contracts"
+
+    # Headers
+    headers = [
+        "Contract ID",
+        "Start Date",
+        "End Date",
+        "Usage",
+        "Reg Type",
+        "Type",
+        "Sub Type",
+        "Tenant Type",
+        "Area (sqm)",
+        "Annual Rent",
+        "Contract Amount",
+        "Area",
+        "Project",
+        "Landmark",
+        "Metro",
+        "Mall",
+        "No. Properties",
+        "Freehold",
+    ]
+    ws.append(headers)
+
+    # Style headers
+    for cell in ws[1]:
+        cell.font = Font(bold=True)
+
+    # Add data rows
+    for row in results:
+        ws.append(
+            [
+                row["contract_id"],
+                row["contract_start_date"],
+                row["contract_end_date"],
+                row["property_usage_en"],
+                row["contract_reg_type_en"],
+                row["ejari_property_type_en"],
+                row["ejari_property_sub_type_en"],
+                row["tenant_type_en"],
+                float(row["actual_area"]) if row["actual_area"] else None,
+                float(row["annual_amount"]) if row["annual_amount"] else None,
+                float(row["contract_amount"]) if row["contract_amount"] else None,
+                row["area_name_en"],
+                row["project_name_en"],
+                row["nearest_landmark_en"],
+                row["nearest_metro_en"],
+                row["nearest_mall_en"],
+                row["no_of_prop"],
+                "Yes" if row["is_free_hold"] else "No",
+            ]
+        )
+
+    # Save to BytesIO
+    output = BytesIO()
+    wb.save(output)
+    output.seek(0)
+    return output

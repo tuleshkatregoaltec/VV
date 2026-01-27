@@ -1,0 +1,183 @@
+import asyncio
+from uuid import uuid4
+from datetime import datetime, timezone
+from typing import Sequence, Optional
+
+from sqlmodel import select, func
+from sqlmodel.ext.asyncio.session import AsyncSession
+from workos import WorkOSClient
+
+from app.config import settings
+from app.postgres.models import Organization
+from app.organization.models import OrganizationMembership
+
+from app.auth.service import get_user_by_id
+
+
+async def get_free_org_id(db: AsyncSession):
+    done = False
+    while not done:
+        uuid = uuid4()
+        uuid_str = str(uuid)
+
+        done = await get_organization_by_id(db, uuid_str) is None
+    return uuid_str
+
+
+async def get_organization_by_id(db: AsyncSession, org_id: str) -> Organization | None:
+    """Get organization by ID"""
+    return await db.get(Organization, org_id)
+
+
+# Domain matching removed - organizations now work via direct user invitations
+# async def get_organization_by_domain(
+#     db: AsyncSession, domain: str
+# ) -> Organization | None:
+#     """Get organization by email domain"""
+#     result = await db.exec(
+#         select(Organization).where(Organization.email_domain == domain)
+#     )
+#     return result.first()
+
+
+async def get_membership_for_user(
+    db: AsyncSession, user_id: str
+) -> Optional[OrganizationMembership]:
+    """
+    Get membership for user.
+
+    Invariant: Returns exactly zero or one membership (enforced by UNIQUE user_id).
+    Raises RuntimeError if constraint violated.
+    """
+    result = await db.exec(
+        select(OrganizationMembership)
+        .where(OrganizationMembership.user_id == user_id)
+    )
+    memberships = result.all()
+
+    if len(memberships) > 1:
+        raise RuntimeError(
+            f"Constraint violation: User {user_id} has {len(memberships)} memberships. "
+            "Expected at most one due to UNIQUE(user_id) constraint."
+        )
+
+    return memberships[0] if memberships else None
+
+
+async def get_organization_for_user(
+    db: AsyncSession, user_id: str
+) -> Organization | None:
+    """Get organization via membership (replaces JSONB lookup)"""
+    membership = await get_membership_for_user(db, user_id)
+    if not membership:
+        return None
+    return await db.get(Organization, membership.organization_id)
+
+
+async def get_member_count(db: AsyncSession, org_id: str) -> int:
+    """Count members (replaces JSONB counting)"""
+    result = await db.exec(
+        select(func.count(OrganizationMembership.id))
+        .where(OrganizationMembership.organization_id == org_id)
+    )
+    return result.first()
+
+
+async def get_active_user_count(db: AsyncSession, org_id: str) -> int:
+    """Count active users in an organization (alias for get_member_count)"""
+    return await get_member_count(db, org_id)
+
+
+async def create_organization(
+    db: AsyncSession, name: str, max_users: int, organization_admin_id: str
+) -> Organization:
+    organization = Organization(
+        id=await get_free_org_id(db),
+        name=name,
+        max_users=max_users,
+        organization_admin_id=organization_admin_id,
+        is_active=True,
+        users=[organization_admin_id],  # Admin is automatically added as first user
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
+    )
+
+    db.add(organization)
+    await db.commit()
+    await db.refresh(organization)
+    return organization
+
+
+async def list_organizations(db: AsyncSession) -> Sequence[Organization]:
+    """List all organizations"""
+    organizations = await db.exec(select(Organization))
+    return organizations.all()
+
+
+async def update_organization(
+    db: AsyncSession, org_id: str, max_users: int, is_active: bool
+) -> Organization | None:
+    """Update organization settings"""
+    organization = await db.get(Organization, org_id)
+
+    if not organization:
+        return None
+
+    organization.max_users = max_users
+    organization.is_active = is_active
+    organization.updated_at = datetime.now(timezone.utc)
+
+    db.add(organization)
+    await db.commit()
+    await db.refresh(organization)
+
+    return organization
+
+
+async def add_user_to_organization(
+    db: AsyncSession, org_id: str, user_id: str, role: str = "member"
+) -> OrganizationMembership:
+    """Create membership record"""
+    membership = OrganizationMembership(
+        organization_id=org_id,
+        user_id=user_id,
+        role=role,
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc)
+    )
+    db.add(membership)
+    await db.commit()
+    await db.refresh(membership)
+    return membership
+
+
+async def remove_user_from_organization(
+    db: AsyncSession, org_id: str, user_id: str
+) -> bool:
+    """Delete membership to free seat"""
+    result = await db.exec(
+        select(OrganizationMembership)
+        .where(OrganizationMembership.organization_id == org_id)
+        .where(OrganizationMembership.user_id == user_id)
+    )
+    membership = result.first()
+    if not membership:
+        return False
+
+    await db.delete(membership)
+    await db.commit()
+    return True
+
+
+async def delete_organization(db: AsyncSession, org_id: str) -> bool:
+    """Delete organization from WorkOS and local DB"""
+    organization = await db.get(Organization, org_id)
+
+    if not organization:
+        return False
+
+    # Delete locally
+    await db.delete(organization)
+    await db.commit()
+
+    return True
