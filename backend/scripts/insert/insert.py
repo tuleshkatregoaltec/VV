@@ -169,44 +169,47 @@ FROM __S3_SOURCE__
 Q_PROJECTS = """
 INSERT INTO ch_projects_staging
 SELECT
-    toInt32OrZero(project_id) AS project_id,
-    toString(project_number) AS project_number,
-    toString(project_name) AS project_name,
-    toInt32OrZero(developer_id) AS developer_id,
-    toString(developer_number) AS developer_number,
-    toString(developer_name) AS developer_name,
-    toInt32OrZero(master_developer_id) AS master_developer_id,
-    toString(master_developer_number) AS master_developer_number,
-    toString(master_developer_name) AS master_developer_name,
-    toDate(parseDateTimeBestEffortOrNull(project_start_date)) AS project_start_date,
-    toDate(parseDateTimeBestEffortOrNull(project_end_date)) AS project_end_date,
-    toInt32OrZero(project_type_id) AS project_type_id,
-    toString(project_type_ar) AS project_type_ar,
-    toInt32OrZero(project_classification_id) AS project_classification_id,
-    toString(project_classification_ar) AS project_classification_ar,
-    toInt32OrZero(escrow_agent_id) AS escrow_agent_id,
-    toString(escrow_agent_name) AS escrow_agent_name,
-    toString(project_status) AS project_status,
-    toString(project_status_ar) AS project_status_ar,
-    toFloat32OrZero(percent_completed) AS percent_completed,
-    toDate(parseDateTimeBestEffortOrNull(completion_date)) AS completion_date,
-    toDate(parseDateTimeBestEffortOrNull(cancellation_date)) AS cancellation_date,
-    toString(project_description_ar) AS project_description_ar,
-    toString(project_description_en) AS project_description_en,
-    toInt32OrNull(property_id) AS property_id,
-    toInt32OrZero(area_id) AS area_id,
-    toString(area_name_ar) AS area_name_ar,
-    toString(area_name_en) AS area_name_en,
-    toString(master_project_ar) AS master_project_ar,
-    toString(master_project_en) AS master_project_en,
-    toInt32OrZero(zoning_authority_id) AS zoning_authority_id,
-    toString(zoning_authority_ar) AS zoning_authority_ar,
-    toString(zoning_authority_en) AS zoning_authority_en,
-    toUInt32OrZero(no_of_lands) AS no_of_lands,
-    toUInt16OrZero(no_of_buildings) AS no_of_buildings,
-    toUInt16OrZero(no_of_villas) AS no_of_villas,
-    toUInt32OrZero(no_of_units) AS no_of_units
-FROM __S3_SOURCE__
+    toInt32OrZero(p.project_id) AS project_id,
+    toString(p.project_number) AS project_number,
+    toString(p.project_name) AS project_name_ar,
+    COALESCE(lookup.project_name_en, '') AS project_name_en,
+    toInt32OrZero(p.developer_id) AS developer_id,
+    toString(p.developer_number) AS developer_number,
+    toString(p.developer_name) AS developer_name,
+    toInt32OrZero(p.master_developer_id) AS master_developer_id,
+    toString(p.master_developer_number) AS master_developer_number,
+    toString(p.master_developer_name) AS master_developer_name,
+    toDate(parseDateTimeBestEffortOrNull(p.project_start_date)) AS project_start_date,
+    toDate(parseDateTimeBestEffortOrNull(p.project_end_date)) AS project_end_date,
+    toInt32OrZero(p.project_type_id) AS project_type_id,
+    toString(p.project_type_ar) AS project_type_ar,
+    toInt32OrZero(p.project_classification_id) AS project_classification_id,
+    toString(p.project_classification_ar) AS project_classification_ar,
+    toInt32OrZero(p.escrow_agent_id) AS escrow_agent_id,
+    toString(p.escrow_agent_name) AS escrow_agent_name,
+    toString(p.project_status) AS project_status,
+    toString(p.project_status_ar) AS project_status_ar,
+    toFloat32OrZero(p.percent_completed) AS percent_completed,
+    toDate(parseDateTimeBestEffortOrNull(p.completion_date)) AS completion_date,
+    toDate(parseDateTimeBestEffortOrNull(p.cancellation_date)) AS cancellation_date,
+    toString(p.project_description_ar) AS project_description_ar,
+    toString(p.project_description_en) AS project_description_en,
+    toInt32OrNull(p.property_id) AS property_id,
+    toInt32OrZero(p.area_id) AS area_id,
+    toString(p.area_name_ar) AS area_name_ar,
+    toString(p.area_name_en) AS area_name_en,
+    toString(p.master_project_ar) AS master_project_ar,
+    toString(p.master_project_en) AS master_project_en,
+    toInt32OrZero(p.zoning_authority_id) AS zoning_authority_id,
+    toString(p.zoning_authority_ar) AS zoning_authority_ar,
+    toString(p.zoning_authority_en) AS zoning_authority_en,
+    toUInt32OrZero(p.no_of_lands) AS no_of_lands,
+    toUInt16OrZero(p.no_of_buildings) AS no_of_buildings,
+    toUInt16OrZero(p.no_of_villas) AS no_of_villas,
+    toUInt32OrZero(p.no_of_units) AS no_of_units
+FROM __S3_SOURCE__ AS p
+LEFT JOIN ch_project_names_lookup AS lookup
+    ON p.project_number = lookup.project_number
 """
 
 Q_BUILDINGS = """
@@ -378,6 +381,73 @@ FROM __S3_SOURCE__
 """
 
 
+def build_project_name_lookup(client, prepared):
+    """
+    Build temporary lookup table for project English names from Units and Buildings CSVs.
+
+    Args:
+        client: ClickHouse client
+        prepared: Dict of prepared CSV S3 paths
+    """
+    print("Building project name lookup table...")
+
+    # Drop if exists
+    client.execute("DROP TABLE IF EXISTS ch_project_names_lookup")
+
+    # Create temporary table
+    client.execute("""
+        CREATE TABLE ch_project_names_lookup (
+            project_number String,
+            project_name_en String
+        ) ENGINE = Memory
+    """)
+
+    # Helper to build S3 URL
+    def get_s3_url(s3_path):
+        url = (
+            s3_path
+            if s3_path.startswith("http")
+            else f"{S3_BASE_URL}/{s3_path.lstrip('/')}"
+        )
+        return f"s3('{url}', '{S3_ACCESS_KEY}', '{S3_SECRET_KEY}', 'CSVWithNames')"
+
+    # Populate from Units.csv
+    units_s3 = get_s3_url(prepared["Units.csv"])
+    q_units = f"""
+        INSERT INTO ch_project_names_lookup
+        SELECT DISTINCT
+            toString(project_number) AS project_number,
+            toString(project_name_en) AS project_name_en
+        FROM {units_s3}
+        WHERE project_number != '' AND project_name_en != ''
+    """
+
+    print("Extracting project names from Units.csv...")
+    run_query(client, q_units, settings=SETTINGS)
+
+    # Populate from Buildings.csv (will add any missing ones)
+    buildings_s3 = get_s3_url(prepared["Buildings.csv"])
+    q_buildings = f"""
+        INSERT INTO ch_project_names_lookup
+        SELECT DISTINCT
+            toString(project_number) AS project_number,
+            toString(project_name_en) AS project_name_en
+        FROM {buildings_s3}
+        WHERE project_number != ''
+          AND project_name_en != ''
+          AND project_number NOT IN (
+              SELECT project_number FROM ch_project_names_lookup
+          )
+    """
+
+    print("Extracting project names from Buildings.csv...")
+    run_query(client, q_buildings, settings=SETTINGS)
+
+    # Log count
+    count = client.execute("SELECT count() FROM ch_project_names_lookup")[0][0]
+    print(f"Loaded {count:,} unique project name mappings")
+
+
 def main():
     prepared = prepare_latest_csvs(
         bucket=os.environ["S3_BUCKET"],
@@ -388,6 +458,9 @@ def main():
     )
 
     client = get_client()
+
+    # Build project name lookup table before loading projects
+    build_project_name_lookup(client, prepared)
 
     atomic_exchange_load(
         client, "ch_transactions", prepared["Transactions.csv"], Q_TRANSACTIONS
@@ -404,6 +477,9 @@ def main():
     atomic_exchange_load(
         client, "ch_developers", prepared["Developers.csv"], Q_DEVELOPERS
     )
+
+    # Clean up lookup table (Memory engine, but good practice)
+    client.execute("DROP TABLE IF EXISTS ch_project_names_lookup")
 
 
 if __name__ == "__main__":

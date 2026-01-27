@@ -101,7 +101,8 @@ ORDER BY (property_usage_en, contract_start_date, contract_id, line_number);
 CREATE TABLE IF NOT EXISTS ch_projects (
     project_id Int32,
     project_number String DEFAULT '',
-    project_name String DEFAULT '',
+    project_name_ar String DEFAULT '',
+    project_name_en LowCardinality(String) DEFAULT '',
     developer_id Int32 DEFAULT 0,
     developer_number String DEFAULT '',
     developer_name String DEFAULT '',
