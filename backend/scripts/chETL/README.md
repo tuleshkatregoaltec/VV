@@ -172,8 +172,11 @@ python -m backend.scripts.chETL abc-123-session-id
 ### Key Design Decisions
 
 **Golden Path Optimization**: ORDER BY optimized for most common query pattern:
-- Transactions: `(property_usage_en, instance_date, transaction_id)`
-- Rent Contracts: `(property_usage_en, contract_start_date, contract_id, line_number)`
+- Transactions: `(property_usage_en, instance_date, transaction_id)` - analytics queries by usage type + date range
+- Rent Contracts: `(property_usage_en, contract_start_date, contract_id, line_number)` - rental analytics by usage type + date range
+- Reference tables (Developers, Areas, Land Registry, Buildings, Units): Use primary key only to avoid nullable columns in sort key
+
+**Note on Nullable Columns**: ClickHouse requires `allow_nullable_key` setting to use nullable columns in ORDER BY. We avoid this by using only non-nullable primary keys in sort keys. Projections handle filtering on nullable foreign keys.
 
 **LowCardinality**: Applied to dropdown columns for instant `SELECT DISTINCT` queries:
 - `property_type_en`, `property_usage_en`, `master_project_en`, etc.
@@ -182,10 +185,10 @@ python -m backend.scripts.chETL abc-123-session-id
 - Keeps latest version of each primary key
 - Use `FINAL` in queries to get deduplicated view
 
-**Projections**: Optimize non-key column filtering:
+**Projections**: Optimize non-key column filtering (especially for nullable foreign keys):
 - Projects: `(developer_id, area_id, is_free_hold, project_id)`
-- Buildings: `(project_number, property_usage_en, building_id)`
-- Units: `(project_number, building_id, rooms_en, unit_id)`
+- Buildings: `(project_number, property_usage_en, building_id)` - allows fast filtering by project
+- Units: `(project_number, building_id, rooms_en, unit_id)` - allows fast filtering by project/building
 
 **Pre-computed Buckets**: Analytics UI buckets stored in DB:
 - `price_bucket`, `area_bucket`, `price_sqft_bucket`
