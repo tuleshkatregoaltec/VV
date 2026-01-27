@@ -1,5 +1,3 @@
-"""PostgreSQL async engine and session management."""
-
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncEngine
 from sqlmodel.ext.asyncio.session import AsyncSession
 from typing import Optional, AsyncGenerator
@@ -18,7 +16,9 @@ def get_postgres_engine() -> AsyncEngine:
     global _engine, _session_factory
 
     if _engine is None:
-        logger.info(f"Initializing PostgreSQL engine: {settings.DATABASE_URL.split('@')[1]}")
+        logger.info(
+            f"Initializing PostgreSQL engine: {settings.DATABASE_URL.split('@')[1]}"
+        )
 
         _engine = create_async_engine(
             settings.DATABASE_URL,
@@ -40,7 +40,6 @@ def get_postgres_engine() -> AsyncEngine:
 
 
 async def close_postgres() -> None:
-    """Dispose PostgreSQL engine and release connection pool."""
     global _engine, _session_factory
 
     if _engine is not None:
@@ -51,16 +50,9 @@ async def close_postgres() -> None:
 
 
 async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
-    """
-    FastAPI dependency that yields database sessions.
-
-    Usage:
-        @app.get("/items")
-        async def read_items(db: AsyncSession = Depends(get_db_session)):
-            result = await db.execute(select(Item))
-            return result.scalars().all()
-    """
     get_postgres_engine()
+    if _session_factory == None:
+        raise RuntimeError("Session Factory does not yet exist")
 
     async with _session_factory() as session:
         yield session
