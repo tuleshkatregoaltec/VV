@@ -1,22 +1,5 @@
-"""ClickHouse query layer for analytics and real estate data.
-
-Async client for FastAPI with parameter binding for security.
-
-Example usage:
-    from app.clickhouse import query, sales_summary, SalesSummary
-
-    sql = sales_summary(
-        property_usage="Residential",
-        start_date="2024-01-01",
-        end_date="2024-12-31"
-    )
-    results = await query(sql, {
-        "property_usage": "Residential",
-        "start_date": date(2024, 1, 1),
-        "end_date": date(2024, 12, 31)
-    })
-    summary = SalesSummary(**results[0])
-"""
+# Export the main query function for easy import
+from .client import query, query_df
 
 from app.clickhouse.client import get_client, query, query_df, close_clickhouse
 from app.clickhouse.queries import (
