@@ -19,7 +19,6 @@ class UserAppMetadata(BaseModel):
     providers: List[str] = Field(default=[])
 
     role: UserRoles = Field(default_factory=lambda: UserRoles())
-    is_active: bool = Field(default=False)
     daily_token_limit: int = Field(default=500000)
 
 
