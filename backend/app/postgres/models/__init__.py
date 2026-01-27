@@ -1,11 +1,15 @@
-"""PostgreSQL models for application state (not analytics data)."""
+"""PostgreSQL models for application state (not analytics data).
 
-from .auth import Organization, UserTokenUsage
-from .subscriptions import Subscription
-from .news import NewsArticle
-from .chat import Conversation, Message
-from .etl import ETLMetadata, ETLRunLog, ETLState
-from .lookups import PropertyType, PropertySubType
+This module re-exports SQLModel classes from their feature modules so Alembic
+and any code importing from `app.postgres.models` continue to work during the
+migration.
+"""
+
+from app.organization.models import Organization
+from app.token_usage.models import UserTokenUsage
+from app.billing.models import Subscription
+from app.news.models import NewsArticle
+from app.chat.models import Conversation, Message
 
 __all__ = [
     # Auth & User Management
@@ -18,11 +22,4 @@ __all__ = [
     # Chat
     "Conversation",
     "Message",
-    # ETL Tracking
-    "ETLMetadata",
-    "ETLRunLog",
-    "ETLState",
-    # Reference Data
-    "PropertyType",
-    "PropertySubType",
 ]
