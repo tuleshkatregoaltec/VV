@@ -8,9 +8,8 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.dependencies import require_admin
 from app.postgres import get_db_session
-from app.token_usage.models import UserTokenUsage
+from app.token_usage.models import UserTokenUsage, UserTokenStatsResponse
 from app.auth.service import get_user_by_id
-from app.schemas.token_usage import UserTokenStatsResponse
 
 logger = logging.getLogger(__name__)
 

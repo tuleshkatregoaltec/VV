@@ -21,8 +21,9 @@ from app.organization.models import (
     OrganizationDetailResponse,
     OrganizationResponse,
     OrganizationUpdateRequest,
+    UserUpdateRequest,
 )
-from app.schemas.subscriptions import SubscriptionResponse, CustomerPortalResponse
+from app.billing.models import SubscriptionResponse, CustomerPortalResponse
 from app.auth.service import (
     invite_user_by_email_admin,
     get_user_by_id,
@@ -49,7 +50,6 @@ from app.billing.service import (
 from app.postgres.models import Organization
 from app.config import settings
 from pydantic import BaseModel
-from app.schemas.user import UserUpdateRequest
 from app.token_usage.service import token_usage_service
 
 logger = logging.getLogger(__name__)

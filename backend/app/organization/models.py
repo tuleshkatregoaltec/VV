@@ -126,3 +126,9 @@ class MembershipResponse(BaseModel):
     user_id: str
     role: str
     created_at: datetime
+
+
+class UserUpdateRequest(BaseModel):
+    """Request to update user settings (admin only)"""
+
+    daily_token_limit: Optional[int] = None

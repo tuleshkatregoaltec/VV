@@ -7,11 +7,11 @@ from app.core.dependencies import require_auth
 from app.providers.auth.platform_user import PlatformUser
 from app.postgres.models import Organization
 from app.organization.models import OrganizationMembership
-from app.schemas.stripe import PaymentSyncResponse
 from app.billing.models import (
     CheckoutSessionRequest,
     CheckoutSessionResponse,
     PaymentStatusResponse,
+    PaymentSyncResponse,
 )
 from app.billing.service import create_checkout_session
 

@@ -2,6 +2,7 @@ from typing import Optional, LiteralString
 from datetime import datetime, timezone, date as dt_date
 from sqlmodel import SQLModel, Field
 from sqlalchemy import Column, DateTime
+from pydantic import BaseModel
 
 
 class UserTokenUsage(SQLModel, table=True):
@@ -30,3 +31,13 @@ class UserTokenUsage(SQLModel, table=True):
         sa_column=Column(DateTime(timezone=True), nullable=False),
         default_factory=lambda: datetime.now(timezone.utc),
     )
+
+
+class UserTokenStatsResponse(BaseModel):
+    """Token usage statistics for a user"""
+
+    user_id: str
+    tokens_used_today: int
+    daily_limit: int
+    usage_percentage: float
+    remaining_tokens: int
