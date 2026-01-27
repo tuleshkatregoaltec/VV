@@ -1,34 +1,257 @@
-"""ClickHouse SQL query templates.
-
-CRITICAL SECURITY: Never use f-strings to interpolate user input into SQL.
-Always use {param:Type} syntax for parameter binding.
-
-IMPORTANT: All queries on ReplacingMergeTree tables MUST use FINAL
-to get deduplicated view. Without FINAL, you'll get multiple versions
-of the same row with different etl_inserted_at values.
-
-Schema Reference (from chETL/schemas.sql):
-- ch_transactions: ReplacingMergeTree, partitioned by month, ORDER BY (property_usage_en, instance_date, transaction_id)
-- ch_rent_contracts: ReplacingMergeTree, partitioned by month, ORDER BY (property_usage_en, contract_start_date, contract_id, line_number)
-- ch_developers: ReplacingMergeTree, ORDER BY developer_id
-- ch_projects: ReplacingMergeTree, ORDER BY (project_number, project_id)
-- ch_buildings: ReplacingMergeTree, ORDER BY building_id
-- ch_units: ReplacingMergeTree, ORDER BY unit_id
-- ch_land_registry: ReplacingMergeTree, ORDER BY land_registry_id
-- ch_areas: ReplacingMergeTree, ORDER BY area_id
-
-LowCardinality Columns (instant DISTINCT queries, <10ms):
-- property_type_en, property_sub_type_en, property_usage_en
-- rooms_en, reg_type_en, master_project_en, area_name_en
-- ejari_property_type_en, ejari_property_sub_type_en, contract_reg_type_en
-
-Projections (fast filtering on non-key columns):
-- ch_projects: generic_attribute_search (developer_id, area_id, is_free_hold, project_id)
-- ch_buildings: generic_attribute_search (project_number, property_usage_en, building_id)
-- ch_units: generic_attribute_search (project_number, building_id, rooms_en, unit_id)
-"""
-
 from typing import List, Optional
+
+
+# =============================================================================
+# TRANSACTION AND RENTAL LISTING QUERIES
+# =============================================================================
+
+
+def list_sales_transactions(
+    limit: int = 50,
+    offset: int = 0,
+    property_usage: Optional[str] = None,
+    master_project: Optional[str] = None,
+    project_name: Optional[str] = None,
+    building_name: Optional[str] = None,
+    property_type: Optional[str] = None,
+    rooms: Optional[str] = None,
+    reg_type: Optional[str] = None,
+    area_min: Optional[float] = None,
+    area_max: Optional[float] = None,
+    price_min: Optional[float] = None,
+    price_max: Optional[float] = None,
+    days_back: Optional[int] = None,
+) -> str:
+    """
+    Get paginated list of sales transactions with filtering.
+
+    Optimized using sort key (property_usage_en, instance_date) for fast queries.
+    """
+    where_clauses = []
+
+    if property_usage is not None:
+        where_clauses.append("property_usage_en = {property_usage:String}")
+    if master_project is not None:
+        where_clauses.append("master_project_en = {master_project:String}")
+    if project_name is not None:
+        where_clauses.append("project_name_en = {project_name:String}")
+    if building_name is not None:
+        where_clauses.append("building_name_en = {building_name:String}")
+    if property_type is not None:
+        where_clauses.append("property_type_en = {property_type:String}")
+    if rooms is not None:
+        where_clauses.append("rooms_en = {rooms:String}")
+    if reg_type is not None:
+        where_clauses.append("reg_type_en = {reg_type:String}")
+    if area_min is not None:
+        where_clauses.append("procedure_area >= {area_min:Decimal64(2)}")
+    if area_max is not None:
+        where_clauses.append("procedure_area <= {area_max:Decimal64(2)}")
+    if price_min is not None:
+        where_clauses.append("actual_worth >= {price_min:Decimal64(2)}")
+    if price_max is not None:
+        where_clauses.append("actual_worth <= {price_max:Decimal64(2)}")
+    if days_back is not None:
+        where_clauses.append("instance_date >= today() - {days_back:Int32}")
+
+    where_clause = " AND ".join(where_clauses)
+
+    return f"""
+        SELECT
+            transaction_id,
+            project_name_en,
+            building_name_en,
+            property_type_en,
+            property_sub_type_en,
+            rooms_en,
+            procedure_area,
+            actual_worth,
+            meter_sale_price,
+            reg_type_en,
+            instance_date,
+            area_name_en,
+            trans_group_en,
+            property_usage_en,
+            master_project_en
+        FROM ch_transactions
+        WHERE {where_clause}
+        ORDER BY instance_date DESC
+        LIMIT {{limit:Int32}}
+        OFFSET {{offset:Int32}}
+    """
+
+
+def count_sales_transactions(
+    property_usage: Optional[str] = None,
+    master_project: Optional[str] = None,
+    project_name: Optional[str] = None,
+    building_name: Optional[str] = None,
+    property_type: Optional[str] = None,
+    rooms: Optional[str] = None,
+    reg_type: Optional[str] = None,
+    area_min: Optional[float] = None,
+    area_max: Optional[float] = None,
+    price_min: Optional[float] = None,
+    price_max: Optional[float] = None,
+    days_back: Optional[int] = None,
+) -> str:
+    """
+    Count sales transactions matching filters.
+    """
+    where_clauses = []
+
+    if property_usage is not None:
+        where_clauses.append("property_usage_en = {property_usage:String}")
+    if master_project is not None:
+        where_clauses.append("master_project_en = {master_project:String}")
+    if project_name is not None:
+        where_clauses.append("project_name_en = {project_name:String}")
+    if building_name is not None:
+        where_clauses.append("building_name_en = {building_name:String}")
+    if property_type is not None:
+        where_clauses.append("property_type_en = {property_type:String}")
+    if rooms is not None:
+        where_clauses.append("rooms_en = {rooms:String}")
+    if reg_type is not None:
+        where_clauses.append("reg_type_en = {reg_type:String}")
+    if area_min is not None:
+        where_clauses.append("procedure_area >= {area_min:Decimal64(2)}")
+    if area_max is not None:
+        where_clauses.append("procedure_area <= {area_max:Decimal64(2)}")
+    if price_min is not None:
+        where_clauses.append("actual_worth >= {price_min:Decimal64(2)}")
+    if price_max is not None:
+        where_clauses.append("actual_worth <= {price_max:Decimal64(2)}")
+    if days_back is not None:
+        where_clauses.append("instance_date >= today() - {days_back:Int32}")
+
+    where_clause = " AND ".join(where_clauses)
+
+    return f"""
+        SELECT count() as total
+        FROM ch_transactions
+        WHERE {where_clause}
+    """
+
+
+def list_rental_contracts(
+    limit: int = 50,
+    offset: int = 0,
+    property_usage: Optional[str] = None,
+    master_project: Optional[str] = None,
+    project_name: Optional[str] = None,
+    property_type: Optional[str] = None,
+    tenant_type: Optional[str] = None,
+    contract_reg_type: Optional[str] = None,
+    area_min: Optional[float] = None,
+    area_max: Optional[float] = None,
+    rent_min: Optional[float] = None,
+    rent_max: Optional[float] = None,
+    days_back: Optional[int] = None,
+) -> str:
+    """
+    Get paginated list of rental contracts with filtering.
+
+    Optimized using sort key (property_usage_en, contract_start_date).
+    """
+    where_clauses = []
+
+    if property_usage is not None:
+        where_clauses.append("property_usage_en = {property_usage:String}")
+    if master_project is not None:
+        where_clauses.append("master_project_en = {master_project:String}")
+    if project_name is not None:
+        where_clauses.append("project_name_en = {project_name:String}")
+    if property_type is not None:
+        where_clauses.append("ejari_property_type_en = {property_type:String}")
+    if tenant_type is not None:
+        where_clauses.append("tenant_type_en = {tenant_type:String}")
+    if contract_reg_type is not None:
+        where_clauses.append("contract_reg_type_en = {contract_reg_type:String}")
+    if area_min is not None:
+        where_clauses.append("actual_area >= {area_min:Decimal64(2)}")
+    if area_max is not None:
+        where_clauses.append("actual_area <= {area_max:Decimal64(2)}")
+    if rent_min is not None:
+        where_clauses.append("annual_amount >= {rent_min:Decimal64(2)}")
+    if rent_max is not None:
+        where_clauses.append("annual_amount <= {rent_max:Decimal64(2)}")
+    if days_back is not None:
+        where_clauses.append("contract_start_date >= today() - {days_back:Int32}")
+
+    where_clause = " AND ".join(where_clauses)
+
+    return f"""
+        SELECT
+            contract_id,
+            project_name_en,
+            ejari_property_type_en,
+            ejari_property_sub_type_en,
+            tenant_type_en,
+            actual_area,
+            annual_amount,
+            contract_reg_type_en,
+            contract_start_date,
+            contract_end_date,
+            area_name_en,
+            property_usage_en,
+            master_project_en
+        FROM ch_rent_contracts
+        WHERE {where_clause}
+        ORDER BY contract_start_date DESC
+        LIMIT {{limit:Int32}}
+        OFFSET {{offset:Int32}}
+    """
+
+
+def count_rental_contracts(
+    property_usage: Optional[str] = None,
+    master_project: Optional[str] = None,
+    project_name: Optional[str] = None,
+    property_type: Optional[str] = None,
+    tenant_type: Optional[str] = None,
+    contract_reg_type: Optional[str] = None,
+    area_min: Optional[float] = None,
+    area_max: Optional[float] = None,
+    rent_min: Optional[float] = None,
+    rent_max: Optional[float] = None,
+    days_back: Optional[int] = None,
+) -> str:
+    """
+    Count rental contracts matching filters.
+    """
+    where_clauses = []
+
+    if property_usage is not None:
+        where_clauses.append("property_usage_en = {property_usage:String}")
+    if master_project is not None:
+        where_clauses.append("master_project_en = {master_project:String}")
+    if project_name is not None:
+        where_clauses.append("project_name_en = {project_name:String}")
+    if property_type is not None:
+        where_clauses.append("ejari_property_type_en = {property_type:String}")
+    if tenant_type is not None:
+        where_clauses.append("tenant_type_en = {tenant_type:String}")
+    if contract_reg_type is not None:
+        where_clauses.append("contract_reg_type_en = {contract_reg_type:String}")
+    if area_min is not None:
+        where_clauses.append("actual_area >= {area_min:Decimal64(2)}")
+    if area_max is not None:
+        where_clauses.append("actual_area <= {area_max:Decimal64(2)}")
+    if rent_min is not None:
+        where_clauses.append("annual_amount >= {rent_min:Decimal64(2)}")
+    if rent_max is not None:
+        where_clauses.append("annual_amount <= {rent_max:Decimal64(2)}")
+    if days_back is not None:
+        where_clauses.append("contract_start_date >= today() - {days_back:Int32}")
+
+    where_clause = " AND ".join(where_clauses)
+
+    return f"""
+        SELECT count() as total
+        FROM ch_rent_contracts
+        WHERE {where_clause}
+    """
 
 
 # =============================================================================
@@ -61,7 +284,6 @@ def sales_summary(
     where_clauses = [
         "property_usage_en = {property_usage:String}",
         "instance_date BETWEEN {start_date:Date} AND {end_date:Date}",
-        "is_deleted = 0",
     ]
 
     if master_project is not None:
@@ -91,7 +313,7 @@ def sales_summary(
             round(sum(actual_worth), 2) as total_volume,
             round(median(meter_sale_price), 2) as median_price_per_sqm,
             round(median(procedure_area), 2) as median_area_sqm
-        FROM ch_transactions FINAL
+        FROM ch_transactions
         WHERE {where_clause}
     """
 
@@ -126,7 +348,6 @@ def price_trends(
     where_clauses = [
         "property_usage_en = {property_usage:String}",
         "instance_date BETWEEN {start_date:Date} AND {end_date:Date}",
-        "is_deleted = 0",
     ]
 
     if master_project is not None:
@@ -144,7 +365,7 @@ def price_trends(
             count() as transaction_count,
             round(median(actual_worth), 2) as median_price,
             round(avg(actual_worth), 2) as avg_price
-        FROM ch_transactions FINAL
+        FROM ch_transactions
         WHERE {where_clause}
         GROUP BY period
         ORDER BY period ASC
@@ -166,7 +387,6 @@ def sales_by_area(
     where_clauses = [
         "property_usage_en = {property_usage:String}",
         "instance_date BETWEEN {start_date:Date} AND {end_date:Date}",
-        "is_deleted = 0",
     ]
 
     if property_type is not None:
@@ -180,7 +400,7 @@ def sales_by_area(
             count() as transaction_count,
             round(median(actual_worth), 2) as median_price,
             round(sum(actual_worth), 2) as total_volume
-        FROM ch_transactions FINAL
+        FROM ch_transactions
         WHERE {where_clause}
         GROUP BY area_name_en
         ORDER BY transaction_count DESC
@@ -203,7 +423,6 @@ def sales_by_property_type(
     where_clauses = [
         "property_usage_en = {property_usage:String}",
         "instance_date BETWEEN {start_date:Date} AND {end_date:Date}",
-        "is_deleted = 0",
     ]
 
     if master_project is not None:
@@ -219,7 +438,7 @@ def sales_by_property_type(
             count() as transaction_count,
             round(median(actual_worth), 2) as median_price,
             round(sum(actual_worth), 2) as total_volume
-        FROM ch_transactions FINAL
+        FROM ch_transactions
         WHERE {where_clause}
         GROUP BY property_type_en
         ORDER BY transaction_count DESC
@@ -241,7 +460,6 @@ def sales_by_rooms(
     where_clauses = [
         "property_usage_en = {property_usage:String}",
         "instance_date BETWEEN {start_date:Date} AND {end_date:Date}",
-        "is_deleted = 0",
     ]
 
     if property_type is not None:
@@ -257,7 +475,7 @@ def sales_by_rooms(
             count() as transaction_count,
             round(median(actual_worth), 2) as median_price,
             round(avg(actual_worth), 2) as avg_price
-        FROM ch_transactions FINAL
+        FROM ch_transactions
         WHERE {where_clause}
         GROUP BY rooms_en
         ORDER BY transaction_count DESC
@@ -286,7 +504,6 @@ def rentals_summary(
     where_clauses = [
         "property_usage_en = {property_usage:String}",
         "contract_start_date BETWEEN {start_date:Date} AND {end_date:Date}",
-        "is_deleted = 0",
     ]
 
     if master_project is not None:
@@ -306,7 +523,7 @@ def rentals_summary(
             round(sum(annual_amount), 2) as total_annual_value,
             round(median(rent_per_sqm), 2) as median_rent_per_sqm,
             round(median(actual_area), 2) as median_area_sqm
-        FROM ch_rent_contracts FINAL
+        FROM ch_rent_contracts
         WHERE {where_clause}
     """
 
@@ -340,7 +557,7 @@ def distinct_property_types(
         "ejari_property_type_en" if table == "ch_rent_contracts" else "property_type_en"
     )
 
-    where_clauses = ["is_deleted = 0"]
+    where_clauses = []
     if property_usage is not None:
         where_clauses.append("property_usage_en = {property_usage:String}")
 
@@ -348,7 +565,7 @@ def distinct_property_types(
 
     return f"""
         SELECT DISTINCT {column}
-        FROM {table} FINAL
+        FROM {table}
         WHERE {where_clause} AND {column} IS NOT NULL
         ORDER BY {column}
     """
@@ -366,7 +583,7 @@ def distinct_areas(
     if table not in ("ch_transactions", "ch_rent_contracts"):
         raise ValueError("table must be 'ch_transactions' or 'ch_rent_contracts'")
 
-    where_clauses = ["is_deleted = 0"]
+    where_clauses = []
     if property_usage is not None:
         where_clauses.append("property_usage_en = {property_usage:String}")
 
@@ -374,7 +591,7 @@ def distinct_areas(
 
     return f"""
         SELECT DISTINCT area_name_en
-        FROM {table} FINAL
+        FROM {table}
         WHERE {where_clause} AND area_name_en IS NOT NULL
         ORDER BY area_name_en
     """
@@ -393,7 +610,7 @@ def distinct_master_projects(
     if table not in ("ch_transactions", "ch_rent_contracts"):
         raise ValueError("table must be 'ch_transactions' or 'ch_rent_contracts'")
 
-    where_clauses = ["is_deleted = 0"]
+    where_clauses = []
     if property_usage is not None:
         where_clauses.append("property_usage_en = {property_usage:String}")
     if area_name is not None:
@@ -403,7 +620,7 @@ def distinct_master_projects(
 
     return f"""
         SELECT DISTINCT master_project_en
-        FROM {table} FINAL
+        FROM {table}
         WHERE {where_clause} AND master_project_en IS NOT NULL
         ORDER BY master_project_en
     """
@@ -422,7 +639,7 @@ def distinct_rooms(
     if table not in ("ch_transactions", "ch_rent_contracts"):
         raise ValueError("table must be 'ch_transactions' or 'ch_rent_contracts'")
 
-    where_clauses = ["is_deleted = 0"]
+    where_clauses = []
     if property_usage is not None:
         where_clauses.append("property_usage_en = {property_usage:String}")
     if property_type is not None:
@@ -437,14 +654,163 @@ def distinct_rooms(
 
     return f"""
         SELECT DISTINCT rooms_en
-        FROM {table} FINAL
+        FROM {table}
         WHERE {where_clause} AND rooms_en IS NOT NULL
         ORDER BY rooms_en
     """
 
 
+def distinct_property_sub_types(
+    table: str = "ch_transactions",
+    property_usage: Optional[str] = None,
+    property_type: Optional[str] = None,
+) -> str:
+    """
+    Get distinct property sub types for filter dropdowns.
+
+    LowCardinality column = instant query.
+    """
+    if table not in ("ch_transactions", "ch_rent_contracts"):
+        raise ValueError("table must be 'ch_transactions' or 'ch_rent_contracts'")
+
+    # Use appropriate column name for each table
+    sub_type_column = (
+        "ejari_property_sub_type_en"
+        if table == "ch_rent_contracts"
+        else "property_sub_type_en"
+    )
+    type_column = (
+        "ejari_property_type_en" if table == "ch_rent_contracts" else "property_type_en"
+    )
+
+    where_clauses = []
+    if property_usage is not None:
+        where_clauses.append("property_usage_en = {property_usage:String}")
+    if property_type is not None:
+        where_clauses.append(f"{type_column} = {{property_type:String}}")
+
+    where_clause = " AND ".join(where_clauses)
+
+    return f"""
+        SELECT DISTINCT {sub_type_column}
+        FROM {table}
+        WHERE {where_clause} AND {sub_type_column} IS NOT NULL
+        ORDER BY {sub_type_column}
+    """
+
+
+def distinct_registration_types(
+    property_usage: Optional[str] = None,
+    property_type: Optional[str] = None,
+) -> str:
+    """
+    Get distinct registration types for sales filter dropdowns.
+
+    LowCardinality column = instant query.
+    """
+    where_clauses = []
+    if property_usage is not None:
+        where_clauses.append("property_usage_en = {property_usage:String}")
+    if property_type is not None:
+        where_clauses.append("property_type_en = {property_type:String}")
+
+    where_clause = " AND ".join(where_clauses)
+
+    return f"""
+        SELECT DISTINCT reg_type_en
+        FROM ch_transactions
+        WHERE {where_clause} AND reg_type_en IS NOT NULL
+        ORDER BY reg_type_en
+    """
+
+
+def distinct_tenant_types(
+    property_usage: Optional[str] = None,
+    property_type: Optional[str] = None,
+) -> str:
+    """
+    Get distinct tenant types for rental filter dropdowns.
+
+    LowCardinality column = instant query.
+    """
+    where_clauses = []
+    if property_usage is not None:
+        where_clauses.append("property_usage_en = {property_usage:String}")
+    if property_type is not None:
+        where_clauses.append("ejari_property_type_en = {property_type:String}")
+
+    where_clause = " AND ".join(where_clauses)
+
+    return f"""
+        SELECT DISTINCT tenant_type_en
+        FROM ch_rent_contracts
+        WHERE {where_clause} AND tenant_type_en IS NOT NULL
+        ORDER BY tenant_type_en
+    """
+
+
+def distinct_contract_reg_types(
+    property_usage: Optional[str] = None,
+    property_type: Optional[str] = None,
+) -> str:
+    """
+    Get distinct contract registration types for rental filter dropdowns.
+
+    LowCardinality column = instant query.
+    """
+    where_clauses = []
+    if property_usage is not None:
+        where_clauses.append("property_usage_en = {property_usage:String}")
+    if property_type is not None:
+        where_clauses.append("ejari_property_type_en = {property_type:String}")
+
+    where_clause = " AND ".join(where_clauses)
+
+    return f"""
+        SELECT DISTINCT contract_reg_type_en
+        FROM ch_rent_contracts
+        WHERE {where_clause} AND contract_reg_type_en IS NOT NULL
+        ORDER BY contract_reg_type_en
+    """
+
+
+def get_upcoming_projects(
+    limit: int = 100,
+    offset: int = 0,
+) -> str:
+    """
+    Get upcoming/active projects for supply catalog.
+
+    Active = has start_date AND no completion_date AND no cancellation_date
+    """
+    return """
+        SELECT
+            p.project_id,
+            p.project_name,
+            p.developer_id,
+            d.developer_name_en as developer_name,
+            p.area_name_en,
+            p.project_start_date,
+            p.project_end_date,
+            p.percent_completed,
+            p.no_of_buildings,
+            p.no_of_units
+        FROM ch_projects p
+        LEFT JOIN ch_developers d ON p.developer_id = d.developer_id
+        WHERE
+            p.project_start_date IS NOT NULL
+            AND p.completion_date IS NULL
+            AND p.cancellation_date IS NULL
+        ORDER BY
+            p.project_end_date ASC NULLS LAST,
+            p.project_name ASC
+        LIMIT {limit:Int32}
+        OFFSET {offset:Int32}
+    """
+
+
 # =============================================================================
-# PROJECTS QUERIES
+# PROJECTS QUERIES (DEPRECATED - Use direct queries in service layer instead)
 # =============================================================================
 
 
@@ -458,21 +824,16 @@ def list_projects(
     offset: int = 0,
 ) -> str:
     """
-    List projects with optional filters.
+    DEPRECATED: Use direct queries in app/project/service.py instead.
 
-    Uses generic_attribute_search projection for fast filtering
-    on developer_id, area_id, is_free_hold.
+    List projects with optional filters.
     """
-    where_clauses = ["is_deleted = 0"]
+    where_clauses = ["1=1"]
 
     if area_id is not None:
         where_clauses.append("area_id = {area_id:Int32}")
     if developer_id is not None:
         where_clauses.append("developer_id = {developer_id:Int32}")
-    if is_free_hold is not None:
-        where_clauses.append("is_free_hold = {is_free_hold:UInt8}")
-    if property_usage is not None:
-        where_clauses.append("property_usage_en = {property_usage:String}")
     if project_status is not None:
         where_clauses.append("project_status = {project_status:String}")
 
@@ -482,23 +843,19 @@ def list_projects(
         SELECT
             project_id,
             project_number,
-            project_name_en,
-            project_name_ar,
+            project_name,
             master_project_en,
-            master_project_id,
             developer_id,
             area_id,
             area_name_en,
-            property_usage_en,
-            is_free_hold,
             project_status,
-            total_units,
-            total_buildings,
-            total_villas,
+            no_of_units,
+            no_of_buildings,
+            no_of_villas,
             completion_date
-        FROM ch_projects FINAL
+        FROM ch_projects
         WHERE {where_clause}
-        ORDER BY project_name_en
+        ORDER BY project_name
         LIMIT {{limit:Int32}}
         OFFSET {{offset:Int32}}
     """
@@ -506,56 +863,50 @@ def list_projects(
 
 def get_project_details(project_id: int) -> str:
     """
-    Get full project details by ID.
+    DEPRECATED: Use direct queries in app/project/service.py instead.
 
-    Returns all columns from ch_projects.
+    Get full project details by ID.
     """
     return """
         SELECT
             project_id,
             project_number,
-            project_name_en,
-            project_name_ar,
+            project_name,
             master_project_en,
-            master_project_id,
             developer_id,
             master_developer_id,
             area_id,
             area_name_en,
-            property_usage_en,
-            is_free_hold,
             project_status,
             project_start_date,
             completion_date,
             project_end_date,
             cancellation_date,
             percent_completed,
-            total_units,
-            total_buildings,
-            total_villas,
+            no_of_units,
+            no_of_buildings,
+            no_of_villas,
             escrow_agent_name,
             zoning_authority_en
-        FROM ch_projects FINAL
+        FROM ch_projects
         WHERE project_id = {project_id:Int32}
-        AND is_deleted = 0
     """
 
 
 def list_developers(limit: int = 100, offset: int = 0) -> str:
     """
-    List all developers.
+    DEPRECATED: Use direct queries in service layer instead.
 
-    Returns: developer_id, developer_number, name_en, name_ar
+    List all developers.
     """
     return """
         SELECT
             developer_id,
             developer_number,
-            name_en,
-            name_ar
-        FROM ch_developers FINAL
-        WHERE is_deleted = 0
-        ORDER BY name_en
+            developer_name_en,
+            developer_name_ar
+        FROM ch_developers
+        ORDER BY developer_name_en
         LIMIT {limit:Int32}
         OFFSET {offset:Int32}
     """
@@ -565,23 +916,19 @@ def list_buildings_for_project(
     project_number: str, limit: int = 100, offset: int = 0
 ) -> str:
     """
-    List buildings for a specific project.
+    DEPRECATED: Use direct queries in service layer instead.
 
-    Uses generic_attribute_search projection for fast project_number filtering.
+    List buildings for a specific project.
     """
     return """
         SELECT
-            building_id,
+            property_id,
             building_number,
-            building_name_en,
-            building_name_ar,
             project_id,
             project_number,
             project_name_en,
-            property_usage_en,
             bld_levels,
             floors,
-            units,
             flats,
             offices,
             car_parks,
@@ -589,41 +936,34 @@ def list_buildings_for_project(
             elevators,
             swimming_pools,
             is_free_hold
-        FROM ch_buildings FINAL
+        FROM ch_buildings
         WHERE project_number = {project_number:String}
-        AND is_deleted = 0
-        ORDER BY building_name_en
+        ORDER BY building_number
         LIMIT {limit:Int32}
         OFFSET {offset:Int32}
     """
 
 
-def list_units_for_building(
-    building_id: int, limit: int = 100, offset: int = 0
-) -> str:
+def list_units_for_building(building_id: int, limit: int = 100, offset: int = 0) -> str:
     """
-    List units for a specific building.
+    DEPRECATED: Use direct queries in service layer instead.
 
-    Uses generic_attribute_search projection for fast building_id filtering.
+    List units for a specific building.
     """
     return """
         SELECT
-            unit_id,
+            property_id,
             unit_number,
-            unit_name_en,
-            building_id,
-            building_name_en,
+            parent_property_id,
             project_id,
             project_number,
             project_name_en,
             property_type_en,
-            property_usage_en,
             rooms_en,
             actual_area,
             floor
-        FROM ch_units FINAL
-        WHERE building_id = {building_id:Int32}
-        AND is_deleted = 0
+        FROM ch_units
+        WHERE parent_property_id = {building_id:Int32}
         ORDER BY unit_number
         LIMIT {limit:Int32}
         OFFSET {offset:Int32}
@@ -661,13 +1001,13 @@ def find_comparable_units(
             rooms_en,
             actual_area,
             floor
-        FROM ch_units FINAL
+        FROM ch_units
         WHERE
             project_number = {project_number:String}
             AND property_usage_en = {property_usage:String}
             AND rooms_en = {rooms:String}
             AND actual_area BETWEEN {area_min:Decimal64(2)} AND {area_max:Decimal64(2)}
-            AND is_deleted = 0
+           
         ORDER BY actual_area
         LIMIT {limit:Int32}
     """
@@ -691,7 +1031,6 @@ def recent_transactions_for_area(
         "property_usage_en = {property_usage:String}",
         "property_type_en = {property_type:String}",
         "instance_date >= today() - {days:Int32}",
-        "is_deleted = 0",
     ]
 
     if rooms is not None:
@@ -713,7 +1052,7 @@ def recent_transactions_for_area(
             area_name_en,
             nearest_metro_en,
             nearest_landmark_en
-        FROM ch_transactions FINAL
+        FROM ch_transactions
         WHERE {where_clause}
         ORDER BY instance_date DESC
         LIMIT {{limit:Int32}}
@@ -738,7 +1077,6 @@ def recent_rentals_for_area(
         "property_usage_en = {property_usage:String}",
         "ejari_property_type_en = {property_type:String}",
         "contract_start_date >= today() - {days:Int32}",
-        "is_deleted = 0",
     ]
 
     if rooms is not None:
@@ -759,7 +1097,7 @@ def recent_rentals_for_area(
             rent_per_sqm,
             master_project_en,
             area_name_en
-        FROM ch_rent_contracts FINAL
+        FROM ch_rent_contracts
         WHERE {where_clause}
         ORDER BY contract_start_date DESC
         LIMIT {{limit:Int32}}
