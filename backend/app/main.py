@@ -10,23 +10,21 @@ from contextlib import asynccontextmanager
 from app.config import settings
 from app.clickhouse import close_clickhouse
 from app.postgres import close_postgres
-from app.routers import (
-    auth,
-    admin,
-    transactions,
-    transaction_matching,
-    supply,
-    analytics,
-    filters,
-    chat,
-    upload,
-    news,
-    projects,
-    onboarding,
-    webhooks,
-    organization,
-    stripe,
-)
+
+from app.analytics.router import router as analytics_router
+from app.auth.router import router as auth_router
+from app.chat.router import router as chat_router
+from app.filters.router import router as filters_router
+from app.news.router import router as news_router
+from app.organization.router import router as organization_router
+from app.project.router import router as project_router
+from app.supply.router import router as supply_router
+from app.transaction.router import router as transaction_router
+from app.upload.router import router as upload_router
+from app.upload.router import health_router
+from app.billing.router import router as billing_router
+from app.billing import webhooks as billing_webhooks
+from app.admin.router import router as admin_router
 
 from app.providers.auth.auth_backend import AuthBackend
 
@@ -60,22 +58,20 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(auth.router, tags=["auth"])
-app.include_router(admin.router, tags=["admin"])
-app.include_router(transactions.router, tags=["transactions"])
-app.include_router(transaction_matching.router, tags=["transaction-matching"])
-app.include_router(supply.router, tags=["supply"])
-app.include_router(analytics.router, tags=["analytics"])
-app.include_router(filters.router, tags=["filters"])
-app.include_router(chat.router, tags=["chat"])
-app.include_router(upload.router, tags=["upload"])
-app.include_router(upload.health_router, tags=["upload"])
-app.include_router(news.router, tags=["news"])
-app.include_router(projects.router, tags=["projects"])
-app.include_router(onboarding.router, tags=["onboarding"])
-app.include_router(webhooks.router, tags=["webhooks"])
-app.include_router(organization.router, tags=["organization"])
-app.include_router(stripe.router, tags=["stripe"])
+app.include_router(auth_router, tags=["auth"])
+app.include_router(analytics_router, tags=["analytics"])
+app.include_router(chat_router, tags=["chat"])
+app.include_router(filters_router, tags=["filters"])
+app.include_router(news_router, tags=["news"])
+app.include_router(organization_router, tags=["organization"])
+app.include_router(project_router, tags=["projects"])
+app.include_router(supply_router, tags=["supply"])
+app.include_router(transaction_router, tags=["transactions"])
+app.include_router(upload_router, tags=["upload"])
+app.include_router(health_router, tags=["upload"])
+app.include_router(billing_router, tags=["billing"])
+app.include_router(billing_webhooks.router, tags=["webhooks"])
+app.include_router(admin_router, tags=["admin"])
 
 
 @app.get("/api/v1/health")
