@@ -1,11 +1,20 @@
 import { env } from '$env/dynamic/public';
+import { browser } from '$app/environment';
 
 import { get_access_token } from './auth';
+
+interface ErrorDetail {
+    code: string;
+    message: string;
+    action?: string;
+    redirect_url?: string;
+}
 
 export class ApiError extends Error {
     constructor(
         message: string,
         public status: number,
+        public code?: string,
         public details?: unknown
     ) {
         super(message);
@@ -50,11 +59,37 @@ export async function api<T>(endpoint: string, options: RequestOptions = {}): Pr
     if (!res.ok) {
         let details: unknown;
         let message = res.statusText;
+        let errorCode: string | undefined;
 
         try {
             const data = await res.json();
             details = data;
-            if (Array.isArray(data.detail)) {
+
+            // Check for structured error response
+            if (data.detail && typeof data.detail === 'object' && 'code' in data.detail) {
+                const errorDetail = data.detail as ErrorDetail;
+                errorCode = errorDetail.code;
+                message = errorDetail.message;
+
+                // Invalidate user store on auth/subscription errors
+                if (errorCode === 'NO_ORG_MEMBERSHIP' ||
+                    errorCode === 'SUBSCRIPTION_REQUIRED' ||
+                    errorCode === 'SUBSCRIPTION_PAST_DUE') {
+                    const { invalidateUser } = await import('$lib/stores/user.svelte');
+                    invalidateUser();
+                }
+
+                // Handle redirects based on error code
+                if (browser && errorDetail.action) {
+                    if (errorDetail.action === 'REDIRECT_ONBOARDING') {
+                        // No organization membership
+                        window.location.href = '/onboarding/organization-setup';
+                    } else if (errorDetail.action === 'REDIRECT_BILLING') {
+                        // Subscription required or past_due
+                        window.location.href = errorDetail.redirect_url || '/settings/organization';
+                    }
+                }
+            } else if (Array.isArray(data.detail)) {
                 message = data.detail.map((e: { msg: string }) => e.msg).join(', ');
             } else if (typeof data.detail === 'string') {
                 message = data.detail;
@@ -65,7 +100,7 @@ export async function api<T>(endpoint: string, options: RequestOptions = {}): Pr
             // Response wasn't JSON, use statusText
         }
 
-        throw new ApiError(message, res.status, details);
+        throw new ApiError(message, res.status, errorCode, details);
     }
 
     if (res.status === 204) {

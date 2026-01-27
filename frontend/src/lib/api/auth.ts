@@ -11,9 +11,9 @@ export interface BackendUser {
     email: string;
     first_name: string;
     last_name: string;
-    organization_id: string;
-    organization_name: string;
-    role: 'user' | 'admin';
+    organization_id: string | null;
+    organization_name: string | null;
+    role: 'user' | 'admin' | 'owner' | 'member';
 }
 
 // Track if we've already identified the current user to avoid redundant calls

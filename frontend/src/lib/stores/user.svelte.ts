@@ -58,6 +58,10 @@ function clearUser() {
 	}
 }
 
+function invalidateUser() {
+	clearUser();
+}
+
 function setUser(user: BackendUser | null) {
 	userState.data = user;
 	if (browser) {
@@ -79,4 +83,4 @@ if (browser) {
  */
 export const currentUser = userState;
 
-export { loadUser, clearUser, setUser };
+export { loadUser, clearUser, invalidateUser, setUser };
