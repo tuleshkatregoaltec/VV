@@ -14,6 +14,8 @@ export interface BackendUser {
     organization_id: string | null;
     organization_name: string | null;
     role: 'user' | 'admin' | 'owner' | 'member';
+    subscription_status: string | null;
+    subscription_is_active: boolean;
 }
 
 // Track if we've already identified the current user to avoid redundant calls
@@ -296,8 +298,8 @@ export async function me(): Promise<BackendUser> {
 }
 
 /**
- * Update current user's profile (first_name, last_name) via Supabase Auth
- * 
+ * Update current user's profile (first_name, last_name) via backend API
+ *
  * @param firstName User's first name
  * @param lastName User's last name
  * @returns AuthResult with success status
@@ -305,19 +307,14 @@ export async function me(): Promise<BackendUser> {
 export async function update_user_profile(
     firstName: string,
     lastName: string
-): Promise<AuthResult> {
-    const res = await client.updateUser({
-        data: {
-            first_name: firstName,
-            last_name: lastName
+): Promise<{ success: boolean; first_name: string; last_name: string }> {
+    return api<{ success: boolean; first_name: string; last_name: string }>(
+        '/api/v1/auth/update-profile',
+        {
+            method: 'POST',
+            body: { first_name: firstName, last_name: lastName }
         }
-    });
-
-    if (!res.error && res.data) {
-        return { success: true, data: res.data };
-    }
-
-    return { success: false, error: res.error?.message || 'Failed to update profile' };
+    );
 }
 
 /**

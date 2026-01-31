@@ -83,7 +83,7 @@ export async function api<T>(endpoint: string, options: RequestOptions = {}): Pr
                 if (browser && errorDetail.action) {
                     if (errorDetail.action === 'REDIRECT_ONBOARDING') {
                         // No organization membership
-                        window.location.href = '/onboarding/organization-setup';
+                        window.location.href = '/organization-setup';
                     } else if (errorDetail.action === 'REDIRECT_BILLING') {
                         // Subscription required or past_due
                         window.location.href = errorDetail.redirect_url || '/settings/organization';
