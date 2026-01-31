@@ -1,13 +1,10 @@
 from typing import List
 from starlette.authentication import BaseUser, AuthCredentials
-from typing import List
 
 from supabase_auth import User
 from pydantic import BaseModel, Field
 
 from app.providers.auth.scopes import AuthScopes
-
-from pydantic import Field, BaseModel
 
 
 class UserRoles(BaseModel):

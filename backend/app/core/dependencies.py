@@ -15,6 +15,8 @@ from app.postgres import get_db_session
 from app.token_usage.service import token_usage_service
 from app.core.exceptions import AuthError
 from app.billing.service import can_access_product, get_subscription_error
+from app.providers.auth.scopes import AuthScopes
+from app.providers.auth.platform_user import PlatformUser
 
 logger = logging.getLogger(__name__)
 
@@ -22,9 +24,6 @@ logger = logging.getLogger(__name__)
 posthog_client = Posthog(
     project_api_key=settings.POSTHOG_API_KEY, host=settings.POSTHOG_HOST
 )
-
-from app.providers.auth.scopes import AuthScopes
-from app.providers.auth.platform_user import PlatformUser
 
 
 async def require_auth(request: Request) -> PlatformUser:
@@ -36,10 +35,12 @@ async def require_auth(request: Request) -> PlatformUser:
 
 
 async def require_admin(request: Request) -> PlatformUser:
-    """Dependency to require admin role on routes"""
-    # note that scopes will be empty if user is not authenticated
-    if AuthScopes.GLOBAL_ADMIN.value not in request.auth.scopes:
-        raise HTTPException(status_code=403, detail="Admin access required")
+    """Dependency to require system admin (email match)"""
+    if not request.user.is_authenticated:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    if request.user.email != settings.SYSTEM_ADMIN_EMAIL:
+        raise HTTPException(status_code=403, detail="System admin access required")
 
     return request.user
 
@@ -119,6 +120,7 @@ async def require_token_quota(
 @dataclass
 class AuthContext:
     """Typed authentication context for protected routes"""
+
     user: PlatformUser
     organization: "Organization"
     membership: "OrganizationMembership"
@@ -127,7 +129,7 @@ class AuthContext:
 
 async def require_active_subscription(
     current_user: PlatformUser = Depends(require_auth),
-    db: AsyncSession = Depends(get_db_session)
+    db: AsyncSession = Depends(get_db_session),
 ) -> AuthContext:
     """
     Require user with active organization subscription.
@@ -141,7 +143,6 @@ async def require_active_subscription(
         402 SUBSCRIPTION_PAST_DUE: Payment failed
     """
     from app.postgres.models import Organization, Subscription
-    from app.organization.models import OrganizationMembership
 
     # Check membership (enforced single-org via UNIQUE user_id)
     membership = await get_membership_for_user(db, current_user.id)
@@ -173,13 +174,27 @@ async def require_active_subscription(
         user=current_user,
         organization=organization,
         membership=membership,
-        subscription=subscription
+        subscription=subscription,
     )
+
+
+async def require_membership(
+    current_user: PlatformUser = Depends(require_auth),
+    db: AsyncSession = Depends(get_db_session),
+) -> AuthContext:
+    """
+    Require any active organization membership (member or owner).
+
+    Raises:
+        403 MEMBERSHIP_REQUIRED: User has no organization membership
+        (plus all require_active_subscription errors)
+    """
+    return await require_active_subscription(current_user, db)
 
 
 async def require_organization_owner(
     current_user: PlatformUser = Depends(require_auth),
-    db: AsyncSession = Depends(get_db_session)
+    db: AsyncSession = Depends(get_db_session),
 ) -> AuthContext:
     """
     Require organization owner with active subscription.

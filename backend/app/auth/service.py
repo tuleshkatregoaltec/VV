@@ -1,15 +1,12 @@
 import logging
 from typing import Optional
 
-from fastapi.responses import RedirectResponse
 
 from supabase_auth import AdminUserAttributes, AsyncGoTrueClient, User as AuthUser
 from supabase_auth.errors import AuthApiError
 
 from app.config import settings
 from app.providers.auth.platform_user import PlatformUser
-from copy import copy
-import asyncio
 import functools
 from datetime import datetime, timedelta
 
@@ -165,14 +162,40 @@ async def get_auth_user(jwt: str) -> Optional[AuthUser]:
 
 
 @admin_auth.with_admin_client()
-async def update_app_metadata(user: PlatformUser, **kwargs):
+async def update_user_token_limit(user_id: str, daily_token_limit: int, **kwargs):
+    """Update user's daily token limit in app_metadata."""
+    client: AsyncGoTrueClient = kwargs["client"]
+
+    try:
+        user_response = await client.admin.get_user_by_id(user_id)
+        current_app_metadata = user_response.user.app_metadata or {}
+        current_app_metadata["daily_token_limit"] = daily_token_limit
+
+        update_request = AdminUserAttributes()
+        update_request["app_metadata"] = current_app_metadata
+
+        await client.admin.update_user_by_id(user_id, update_request)
+    except (ValueError, AuthApiError) as e:
+        logger.error(f"Failed to update token limit for user {user_id}: {e}")
+        raise
+
+
+@admin_auth.with_admin_client()
+async def update_user_profile_metadata(
+    user_id: str, first_name: str, last_name: str, **kwargs
+) -> None:
+    """Update user profile metadata (first_name, last_name) via admin."""
     client: AsyncGoTrueClient = kwargs["client"]
     update_request = AdminUserAttributes()
-    update_request["app_metadata"] = user.app_metadata.model_dump()
+    update_request["user_metadata"] = {
+        "first_name": first_name,
+        "last_name": last_name,
+    }
     try:
-        await client.admin.update_user_by_id(user.id, update_request)
-    except (ValueError, AuthApiError):  # invalid uuid, user not found
-        logger.error(f"Failed to update metadata for user {user.id}")
+        await client.admin.update_user_by_id(user_id, update_request)
+    except (ValueError, AuthApiError) as e:
+        logger.error(f"Failed to update profile for user {user_id}: {e}")
+        raise
 
 
 @admin_auth.with_admin_client()
@@ -183,26 +206,8 @@ async def get_user_by_id(id: str, **kwargs):
         user_response = await client.admin.get_user_by_id(id)
 
         return PlatformUser(None, user_response.user)
-    except (ValueError, AuthApiError):  # invalid uuid, user not found
+    except (ValueError, AuthApiError):
         return None
-
-
-@admin_auth.with_admin_client()
-async def sync_user_app_metadata(
-    user_id: str, is_active: bool, role: str, **kwargs
-) -> None:
-    """Update user app_metadata with is_active and role."""
-    client: AsyncGoTrueClient = kwargs["client"]
-    update_request = AdminUserAttributes()
-    update_request["app_metadata"] = {
-        "is_active": is_active,
-        "role": {"roles": [role]},
-    }
-    try:
-        await client.admin.update_user_by_id(user_id, update_request)
-    except (ValueError, AuthApiError) as e:
-        logger.error(f"Failed to update metadata for user {user_id}: {e}")
-        raise
 
 
 @admin_auth.with_admin_client()
