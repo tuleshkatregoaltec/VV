@@ -13,7 +13,6 @@ from app.filters.service import (
 router = APIRouter(
     prefix="/api/v1/filters",
     tags=["filters"],
-    
 )
 
 

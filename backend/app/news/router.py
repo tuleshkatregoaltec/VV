@@ -6,9 +6,7 @@ from app.core.decorators import cached_endpoint
 from app.news.service import fetch_news_articles
 from app.news.models import NewsListResponse
 
-router = APIRouter(
-    prefix="/api/v1/news", tags=["news"]
-)
+router = APIRouter(prefix="/api/v1/news", tags=["news"])
 
 
 @router.get("/articles", response_model=NewsListResponse)

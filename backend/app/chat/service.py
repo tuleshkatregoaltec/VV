@@ -4,7 +4,13 @@ from datetime import datetime, timezone
 from typing import Any, AsyncGenerator, List, Optional
 
 from posthog import Posthog
-from pydantic_ai.messages import ModelMessage, ModelRequest, ModelResponse, UserPromptPart, TextPart
+from pydantic_ai.messages import (
+    ModelMessage,
+    ModelRequest,
+    ModelResponse,
+    UserPromptPart,
+    TextPart,
+)
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -145,9 +151,13 @@ def _convert_to_pydantic_messages(messages: List[Message]) -> List[ModelMessage]
 
     for msg in messages:
         if msg.role == "user":
-            pydantic_messages.append(ModelRequest(parts=[UserPromptPart(content=msg.content)]))
+            pydantic_messages.append(
+                ModelRequest(parts=[UserPromptPart(content=msg.content)])
+            )
         elif msg.role == "assistant":
-            pydantic_messages.append(ModelResponse(parts=[TextPart(content=msg.content)]))
+            pydantic_messages.append(
+                ModelResponse(parts=[TextPart(content=msg.content)])
+            )
 
     return pydantic_messages
 

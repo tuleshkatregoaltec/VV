@@ -13,10 +13,6 @@ from app.analytics.models import (
 )
 from app.clickhouse.client import query
 from app.clickhouse.queries import sales_summary, rentals_summary
-from app.clickhouse.types import (
-    SalesSummary as CHSalesSummary,
-    RentalSummary as CHRentalSummary,
-)
 
 router = APIRouter(
     prefix="/api/v1/analytics",

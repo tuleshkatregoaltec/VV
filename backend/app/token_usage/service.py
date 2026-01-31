@@ -6,8 +6,7 @@ from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.token_usage.models import UserTokenUsage
-from app.auth.service import get_user_by_id, update_app_metadata
-from app.providers.auth.platform_user import PlatformUser
+from app.auth.service import update_user_token_limit
 
 logger = logging.getLogger(__name__)
 
@@ -88,18 +87,8 @@ class TokenUsageService:
                 db, user_id, prompt_tokens, completion_tokens, total_tokens
             )
 
-    async def update_user_limit(self, user_id: str, new_limit: int) -> PlatformUser:
-        user = await get_user_by_id(user_id)
-
-        if not user:
-            raise ValueError(f"User {user_id} not found")
-
-        user.app_metadata.daily_token_limit = new_limit
-
-        await update_app_metadata(user)
-        # updated by auth: user.updated_at = datetime.now(timezone.utc)
-
-        return user
+    async def update_user_limit(self, user_id: str, new_limit: int) -> None:
+        await update_user_token_limit(user_id, new_limit)
 
 
 token_usage_service = TokenUsageService()

@@ -11,14 +11,13 @@ from app.supply.service import get_upcoming_projects_ch
 router = APIRouter(
     prefix="/api/v1/supply",
     tags=["supply"],
-    
 )
 
 
 @router.get("/upcoming-projects", response_model=UpcomingProjectsResponse)
 @cached_endpoint(prefix="upcoming_projects", expire=3600)
 async def list_upcoming_projects(
-    context: AuthContext = Depends(require_active_subscription)
+    context: AuthContext = Depends(require_active_subscription),
 ):
     """Get all upcoming/active projects for catalogue view."""
     projects = await get_upcoming_projects_ch()

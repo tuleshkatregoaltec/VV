@@ -5,7 +5,6 @@ from decimal import Decimal
 from typing import Any, Optional
 
 import redis.asyncio as redis
-from app.config import settings
 
 logger = logging.getLogger("RedisCache")
 

@@ -78,10 +78,10 @@ agent = Agent(
         "## Response Format\n\n"
         "After completing your analysis, provide your final response to the user.\n\n"
         "Your response should be concise, professional, and data-focused. Structure it to include:\n\n"
-        "- **Specific numbers** from your analysis with clear units (e.g., \"Average sale price of AED 1.2M\", \"15% year-over-year increase\")\n"
-        "- **Context** for those numbers (e.g., \"based on 347 transactions in Q1 2024\", \"across Dubai Marina\")\n"
-        "- **Trends and patterns** with supporting data (e.g., \"Prices have been rising steadily since...\", \"Premium developments are concentrated in...\")\n"
-        "- **Data-driven recommendations** when appropriate (e.g., \"Based on rental yields of X%, consider areas like...\")\n\n"
+        '- **Specific numbers** from your analysis with clear units (e.g., "Average sale price of AED 1.2M", "15% year-over-year increase")\n'
+        '- **Context** for those numbers (e.g., "based on 347 transactions in Q1 2024", "across Dubai Marina")\n'
+        '- **Trends and patterns** with supporting data (e.g., "Prices have been rising steadily since...", "Premium developments are concentrated in...")\n'
+        '- **Data-driven recommendations** when appropriate (e.g., "Based on rental yields of X%, consider areas like...")\n\n'
         "Example response structure:\n\n"
         "Based on analysis of [X] transactions over [time period], the average price in [area] is [number] [currency] per square foot. "
         "This represents a [percentage] change compared to [comparison period].\n\n"
