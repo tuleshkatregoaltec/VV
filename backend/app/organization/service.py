@@ -1,17 +1,13 @@
-import asyncio
 from uuid import uuid4
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Sequence, Optional
+import secrets
 
 from sqlmodel import select, func
 from sqlmodel.ext.asyncio.session import AsyncSession
-from workos import WorkOSClient
 
-from app.config import settings
 from app.postgres.models import Organization
-from app.organization.models import OrganizationMembership
-
-from app.auth.service import get_user_by_id
+from app.organization.models import OrganizationMembership, OrganizationInvitation
 
 
 async def get_free_org_id(db: AsyncSession):
@@ -50,8 +46,7 @@ async def get_membership_for_user(
     Raises RuntimeError if constraint violated.
     """
     result = await db.exec(
-        select(OrganizationMembership)
-        .where(OrganizationMembership.user_id == user_id)
+        select(OrganizationMembership).where(OrganizationMembership.user_id == user_id)
     )
     memberships = result.all()
 
@@ -77,8 +72,9 @@ async def get_organization_for_user(
 async def get_member_count(db: AsyncSession, org_id: str) -> int:
     """Count members (replaces JSONB counting)"""
     result = await db.exec(
-        select(func.count(OrganizationMembership.id))
-        .where(OrganizationMembership.organization_id == org_id)
+        select(func.count(OrganizationMembership.id)).where(
+            OrganizationMembership.organization_id == org_id
+        )
     )
     return result.first()
 
@@ -89,15 +85,14 @@ async def get_active_user_count(db: AsyncSession, org_id: str) -> int:
 
 
 async def create_organization(
-    db: AsyncSession, name: str, max_users: int, organization_admin_id: str
+    db: AsyncSession, name: str, max_users: int, owner_user_id: str
 ) -> Organization:
     organization = Organization(
         id=await get_free_org_id(db),
         name=name,
         max_users=max_users,
-        organization_admin_id=organization_admin_id,
+        owner_user_id=owner_user_id,
         is_active=True,
-        users=[organization_admin_id],  # Admin is automatically added as first user
         created_at=datetime.now(timezone.utc),
         updated_at=datetime.now(timezone.utc),
     )
@@ -143,7 +138,7 @@ async def add_user_to_organization(
         user_id=user_id,
         role=role,
         created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc)
+        updated_at=datetime.now(timezone.utc),
     )
     db.add(membership)
     await db.commit()
@@ -181,3 +176,59 @@ async def delete_organization(db: AsyncSession, org_id: str) -> bool:
     await db.commit()
 
     return True
+
+
+def generate_invitation_token() -> str:
+    """Generate secure random token for invitation"""
+    return secrets.token_urlsafe(32)
+
+
+async def create_invitation(
+    db: AsyncSession,
+    organization_id: str,
+    email: str,
+    invited_by_user_id: str,
+    role: str = "member",
+    expires_in_days: int = 7,
+) -> OrganizationInvitation:
+    """Create organization invitation record"""
+    token = generate_invitation_token()
+    expires_at = datetime.now(timezone.utc) + timedelta(days=expires_in_days)
+
+    invitation = OrganizationInvitation(
+        organization_id=organization_id,
+        email=email,
+        role=role,
+        token=token,
+        status="pending",
+        invited_by_user_id=invited_by_user_id,
+        expires_at=expires_at,
+        created_at=datetime.now(timezone.utc),
+    )
+
+    db.add(invitation)
+    await db.commit()
+    await db.refresh(invitation)
+    return invitation
+
+
+async def get_invitation_by_token(
+    db: AsyncSession, token: str
+) -> Optional[OrganizationInvitation]:
+    """Get invitation by token"""
+    result = await db.exec(
+        select(OrganizationInvitation).where(OrganizationInvitation.token == token)
+    )
+    return result.first()
+
+
+async def mark_invitation_accepted(
+    db: AsyncSession, invitation: OrganizationInvitation
+) -> OrganizationInvitation:
+    """Mark invitation as accepted"""
+    invitation.status = "accepted"
+    invitation.accepted_at = datetime.now(timezone.utc)
+    db.add(invitation)
+    await db.commit()
+    await db.refresh(invitation)
+    return invitation

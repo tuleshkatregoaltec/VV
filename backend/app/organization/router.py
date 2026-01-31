@@ -7,7 +7,6 @@ from datetime import datetime, timezone
 
 from app.postgres import get_db_session
 from app.core.dependencies import (
-    require_organization_admin,
     require_auth,
     require_admin,
     require_organization_owner,
@@ -22,12 +21,16 @@ from app.organization.models import (
     OrganizationResponse,
     OrganizationUpdateRequest,
     UserUpdateRequest,
+    ValidateInviteTokenResponse,
+    AcceptInviteRequest,
+    AcceptInviteResponse,
+    InviteConflictResponse,
 )
 from app.billing.models import SubscriptionResponse, CustomerPortalResponse
 from app.auth.service import (
     invite_user_by_email_admin,
     get_user_by_id,
-    update_app_metadata,
+    update_user_token_limit,
 )
 from app.organization.service import (
     get_organization_for_user,
@@ -41,6 +44,9 @@ from app.organization.service import (
     get_member_count,
     get_membership_for_user,
     add_user_to_organization,
+    create_invitation,
+    get_invitation_by_token,
+    mark_invitation_accepted,
 )
 from app.organization.models import OrganizationMembership
 from app.billing.service import (
@@ -74,8 +80,9 @@ async def get_organization_members(
 ):
     """Get organization members (query from memberships table)"""
     result = await db.exec(
-        select(OrganizationMembership)
-        .where(OrganizationMembership.organization_id == context.organization.id)
+        select(OrganizationMembership).where(
+            OrganizationMembership.organization_id == context.organization.id
+        )
     )
     members = result.all()
 
@@ -83,13 +90,15 @@ async def get_organization_members(
     for member in members:
         user_obj = await get_user_by_id(member.user_id)
         if user_obj:
-            response.append(OrganizationMemberResponse(
-                id=member.user_id,
-                email=user_obj.email,
-                first_name=user_obj.user_metadata.first_name,
-                last_name=user_obj.user_metadata.last_name,
-                role=member.role,
-            ))
+            response.append(
+                OrganizationMemberResponse(
+                    id=member.user_id,
+                    email=user_obj.email,
+                    first_name=user_obj.user_metadata.first_name,
+                    last_name=user_obj.user_metadata.last_name,
+                    role=member.role,
+                )
+            )
 
     return response
 
@@ -102,7 +111,9 @@ async def remove_member(
 ):
     """Remove user from organization (delete membership to free seat)"""
     if user_id == context.user.id:
-        raise HTTPException(status_code=400, detail="Cannot remove yourself from organization")
+        raise HTTPException(
+            status_code=400, detail="Cannot remove yourself from organization"
+        )
 
     success = await remove_user_from_organization(db, context.organization.id, user_id)
 
@@ -114,35 +125,28 @@ async def remove_member(
 
 @router.get("/subscription", response_model=SubscriptionResponse)
 async def get_organization_subscription(
-    current_user: PlatformUser = Depends(require_organization_admin),
+    context: AuthContext = Depends(require_organization_owner),
     db: AsyncSession = Depends(get_db_session),
 ):
-    """Get organization subscription details (admin only)."""
+    """Get organization subscription details (owner only)."""
 
-    organization = await get_organization_for_user(db, current_user.id)
-
-    if not organization:
-        raise HTTPException(status_code=404, detail="Organization not found")
-
-    subscription = await get_subscription_by_org(organization.id, db)
-
-    if not subscription:
+    if not context.subscription:
         raise HTTPException(status_code=404, detail="No subscription found")
 
-    current_members = await get_member_count(db, organization.id)
-    available_seats = max(0, subscription.seats - current_members)
-    excess_users = max(0, current_members - subscription.seats)
+    current_members = await get_member_count(db, context.organization.id)
+    available_seats = max(0, context.subscription.seats - current_members)
+    excess_users = max(0, current_members - context.subscription.seats)
 
     now = datetime.now(timezone.utc)
-    within_paid_period = now < subscription.current_period_end
+    within_paid_period = now < context.subscription.current_period_end
 
     return SubscriptionResponse(
-        id=subscription.id,
-        organization_id=subscription.organization_id,
-        status=subscription.status,
-        seats=subscription.seats,
-        current_period_end=subscription.current_period_end,
-        cancel_at_period_end=subscription.cancel_at_period_end,
+        id=context.subscription.id,
+        organization_id=context.subscription.organization_id,
+        status=context.subscription.status,
+        seats=context.subscription.seats,
+        current_period_end=context.subscription.current_period_end,
+        cancel_at_period_end=context.subscription.cancel_at_period_end,
         current_members=current_members,
         available_seats=available_seats,
         excess_users=excess_users,
@@ -152,15 +156,12 @@ async def get_organization_subscription(
 
 @router.get("/customer-portal", response_model=CustomerPortalResponse)
 async def get_stripe_customer_portal(
-    current_user: PlatformUser = Depends(require_organization_admin),
+    context: AuthContext = Depends(require_organization_owner),
     db: AsyncSession = Depends(get_db_session),
 ):
     """Get Stripe Customer Portal URL (admin only)."""
 
-    organization = await get_organization_for_user(db, current_user.id)
-
-    if not organization:
-        raise HTTPException(status_code=404, detail="Organization not found")
+    organization = context.organization
 
     if not organization.stripe_customer_id:
         raise HTTPException(status_code=404, detail="No Stripe customer found")
@@ -176,15 +177,12 @@ async def get_stripe_customer_portal(
 @router.post("/invite-user")
 async def invite_user_to_organization(
     request: InviteUserRequest,
-    current_user: PlatformUser = Depends(require_organization_admin),
+    context: AuthContext = Depends(require_organization_owner),
     db: AsyncSession = Depends(get_db_session),
 ):
     """Invite user to organization (admin only)."""
 
-    organization = await get_organization_for_user(db, current_user.id)
-
-    if not organization:
-        raise HTTPException(status_code=404, detail="Organization not found")
+    organization = context.organization
 
     active_user_count = await get_member_count(db, organization.id)
     if active_user_count >= organization.max_users:
@@ -193,16 +191,140 @@ async def invite_user_to_organization(
             detail=f"Organization has reached maximum seat limit ({organization.max_users})",
         )
 
+    # Create invitation record
+    invitation = await create_invitation(
+        db=db,
+        organization_id=request.organization_id,
+        email=request.email,
+        invited_by_user_id=context.user.id,
+        role="member",
+    )
+
+    # Include token in redirect URL
+    redirect_url_with_token = f"{request.redirect_url}?token={invitation.token}"
+
     result = await invite_user_by_email_admin(
         email=request.email,
         organization_id=request.organization_id,
-        redirect_url=request.redirect_url,
+        redirect_url=redirect_url_with_token,
     )
 
     if not result["success"]:
         raise HTTPException(status_code=400, detail=result["error"])
 
     return result
+
+
+@router.get("/validate-invite-token", response_model=ValidateInviteTokenResponse)
+async def validate_invite_token(
+    token: str,
+    db: AsyncSession = Depends(get_db_session),
+):
+    """Validate invitation token and return organization details."""
+    invitation = await get_invitation_by_token(db, token)
+
+    if not invitation:
+        raise HTTPException(status_code=404, detail="Invitation not found")
+
+    # Check if expired
+    now = datetime.now(timezone.utc)
+    if invitation.expires_at < now:
+        raise HTTPException(status_code=400, detail="Invitation has expired")
+
+    # Check if already accepted
+    if invitation.status == "accepted":
+        raise HTTPException(status_code=400, detail="Invitation already accepted")
+
+    # Get organization details
+    organization = await get_organization_by_id(db, invitation.organization_id)
+    if not organization:
+        raise HTTPException(status_code=404, detail="Organization not found")
+
+    return ValidateInviteTokenResponse(
+        organization_name=organization.name,
+        organization_id=organization.id,
+        role=invitation.role,
+        email=invitation.email,
+        expires_at=invitation.expires_at,
+        status=invitation.status,
+    )
+
+
+@router.post("/accept-invite")
+async def accept_invite(
+    request: AcceptInviteRequest,
+    current_user: PlatformUser = Depends(require_auth),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """Accept organization invitation with conflict detection."""
+    invitation = await get_invitation_by_token(db, request.token)
+
+    if not invitation:
+        raise HTTPException(status_code=404, detail="Invitation not found")
+
+    # Check if expired
+    now = datetime.now(timezone.utc)
+    if invitation.expires_at < now:
+        raise HTTPException(status_code=400, detail="Invitation has expired")
+
+    # Check if already accepted
+    if invitation.status == "accepted":
+        raise HTTPException(status_code=400, detail="Invitation already accepted")
+
+    # Validate email matches
+    if invitation.email.lower() != current_user.email.lower():
+        raise HTTPException(
+            status_code=403, detail="Invitation email does not match your account"
+        )
+
+    # Check for existing membership (conflict detection)
+    existing_membership = await get_membership_for_user(db, current_user.id)
+
+    if existing_membership:
+        # User already has a membership - return conflict details
+        current_org = await get_organization_by_id(
+            db, existing_membership.organization_id
+        )
+        if not current_org:
+            raise HTTPException(
+                status_code=500, detail="Current organization not found"
+            )
+
+        member_count = await get_member_count(db, current_org.id)
+        is_single_seat = member_count == 1
+
+        conflict_response = InviteConflictResponse(
+            conflict=True,
+            current_org_id=current_org.id,
+            current_org_name=current_org.name,
+            current_role=existing_membership.role,
+            member_count=member_count,
+            is_single_seat=is_single_seat,
+        )
+        raise HTTPException(status_code=409, detail=conflict_response.model_dump())
+
+    # No conflict - create membership
+    await add_user_to_organization(
+        db=db,
+        org_id=invitation.organization_id,
+        user_id=current_user.id,
+        role=invitation.role,
+    )
+
+    # Mark invitation as accepted
+    await mark_invitation_accepted(db, invitation)
+
+    # Get organization details
+    organization = await get_organization_by_id(db, invitation.organization_id)
+    if not organization:
+        raise HTTPException(status_code=404, detail="Organization not found")
+
+    return AcceptInviteResponse(
+        success=True,
+        organization_id=organization.id,
+        organization_name=organization.name,
+        role=invitation.role,
+    )
 
 
 @router.post("/complete-profile")
@@ -224,7 +346,9 @@ async def complete_profile_setup(
 
     if not existing_membership:
         # Create membership with member role
-        await add_user_to_organization(db, organization.id, current_user.id, role="member")
+        await add_user_to_organization(
+            db, organization.id, current_user.id, role="member"
+        )
 
     return {"success": True}
 
@@ -278,7 +402,7 @@ async def list_organization(
 async def get_organization(
     org_id: str,
     db: AsyncSession = Depends(get_db_session),
-    current_user: PlatformUser = Depends(require_organization_admin),
+    context: AuthContext = Depends(require_organization_owner),
 ):
     """Get organization details with user list (organization admin)."""
     organization = await get_organization_by_id(db, org_id)
@@ -291,8 +415,9 @@ async def get_organization(
 
     # Get all memberships for this organization
     memberships_result = await db.exec(
-        select(OrganizationMembership)
-        .where(OrganizationMembership.organization_id == org_id)
+        select(OrganizationMembership).where(
+            OrganizationMembership.organization_id == org_id
+        )
     )
     memberships = memberships_result.all()
 
@@ -335,7 +460,7 @@ async def update_organization(
     org_id: str,
     organization_update: OrganizationUpdateRequest,
     db: AsyncSession = Depends(get_db_session),
-    current_user: PlatformUser = Depends(require_organization_admin),
+    context: AuthContext = Depends(require_organization_owner),
 ):
     """Update organization settings (organization admin)."""
     organization = await update_organization_service(
@@ -373,18 +498,18 @@ async def update_user(
     user_id: str,
     user_update: UserUpdateRequest,
     db: AsyncSession = Depends(get_db_session),
-    current_user: PlatformUser = Depends(require_organization_admin),
+    context: AuthContext = Depends(require_organization_owner),
 ) -> dict:
     """Update user daily token limit (organization admin)."""
+
+    if user_update.daily_token_limit is None:
+        raise HTTPException(status_code=400, detail="daily_token_limit is required")
+
+    await update_user_token_limit(user_id, user_update.daily_token_limit)
 
     user = await get_user_by_id(user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-
-    if user_update.daily_token_limit is not None:
-        user.app_metadata.daily_token_limit = user_update.daily_token_limit
-
-    await update_app_metadata(user)
 
     return {
         "id": user.id,
