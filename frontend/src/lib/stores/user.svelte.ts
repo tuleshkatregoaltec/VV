@@ -2,11 +2,14 @@ import { browser } from '$app/environment';
 import { me, identifyUser, get_session, type BackendUser } from '$lib/api/auth';
 
 const STORAGE_KEY = 'vitevue-user';
+const REFRESH_INTERVAL = 5 * 60 * 1000; // 5 minutes
 
 // Wrap state in an object so we mutate properties instead of reassigning
 const userState = $state<{ data: BackendUser | null }>({ data: null });
 
 let loadInitiated = false;
+let refreshInterval: number | null = null;
+let lastRefresh = 0;
 
 /**
  * Load user data from localStorage cache first, then sync with backend
@@ -73,9 +76,62 @@ function setUser(user: BackendUser | null) {
 	}
 }
 
+/**
+ * Refresh user data from backend (strategic refresh)
+ * Use after: payment, invite acceptance, or manual refresh
+ */
+async function refreshUser(): Promise<void> {
+	if (!browser) return;
+
+	try {
+		const session = await get_session();
+		if (!session) {
+			clearUser();
+			return;
+		}
+
+		const user = await me();
+		setUser(user);
+		identifyUser(user);
+		lastRefresh = Date.now();
+	} catch (error) {
+		console.error('Failed to refresh user:', error);
+	}
+}
+
+/**
+ * Setup automatic user refresh
+ * - Every 5 minutes
+ * - On visibility change (user returns to tab)
+ */
+function setupAutoRefresh() {
+	if (!browser) return;
+
+	// Periodic refresh (every 5 minutes)
+	if (refreshInterval) {
+		clearInterval(refreshInterval);
+	}
+	refreshInterval = window.setInterval(async () => {
+		await refreshUser();
+	}, REFRESH_INTERVAL);
+
+	// Refresh on visibility change (user returns to tab)
+	const handleVisibilityChange = async () => {
+		if (!document.hidden) {
+			// Only refresh if last refresh was more than 1 minute ago
+			if (Date.now() - lastRefresh > 60 * 1000) {
+				await refreshUser();
+			}
+		}
+	};
+
+	document.addEventListener('visibilitychange', handleVisibilityChange);
+}
+
 // Auto-initialize when store is first imported
 if (browser) {
 	loadUser();
+	setupAutoRefresh();
 }
 
 /**
@@ -83,4 +139,4 @@ if (browser) {
  */
 export const currentUser = userState;
 
-export { loadUser, clearUser, invalidateUser, setUser };
+export { loadUser, clearUser, invalidateUser, setUser, refreshUser };

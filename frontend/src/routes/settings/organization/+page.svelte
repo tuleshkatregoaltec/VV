@@ -6,9 +6,9 @@
 		getOrganizationMembers,
 		getOrganizationSubscription,
 		getCustomerPortalUrl,
-		deactivateUser
+		deactivateUser,
+		inviteUserByEmail
 	} from '$lib/api/organization';
-	import { inviteUserByEmail } from '$lib/api/onboarding';
 
 	let currentUser = $state<any>(null);
 	let isOrgAdmin = $state(false);
@@ -76,7 +76,7 @@
 	async function handleResendInvitation(email: string) {
 		resendingEmail = email;
 		try {
-			const redirectUrl = `${window.location.origin}/onboarding/profile-setup`;
+			const redirectUrl = `${window.location.origin}/profile-setup`;
 			await inviteUserByEmail(email, currentUser.organization_id, redirectUrl);
 			alert(`Invitation resent to ${email}`);
 		} catch (err: any) {
@@ -108,7 +108,7 @@
 		inviteLoading = true;
 
 		try {
-			const redirectUrl = `${window.location.origin}/onboarding/profile-setup`;
+			const redirectUrl = `${window.location.origin}/profile-setup`;
 			const result = await inviteUserByEmail(inviteEmail, currentUser.organization_id, redirectUrl);
 
 			if (result.success) {

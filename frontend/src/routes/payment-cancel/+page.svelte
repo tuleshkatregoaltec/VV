@@ -29,7 +29,7 @@
 
 			<div class="space-y-3">
 				<a
-					href="/onboarding/organization-setup"
+					href="/organization-setup"
 					class="block w-full bg-slate-900 hover:bg-slate-800 text-white font-semibold rounded-lg px-6 py-3 transition-colors"
 				>
 					Try Again

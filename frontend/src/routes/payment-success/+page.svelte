@@ -2,10 +2,11 @@
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
-	import { inviteUserByEmail, syncUserAuth } from '$lib/api/onboarding';
-	import { checkPaymentStatus } from '$lib/api/onboarding';
+	import { syncAfterCheckout } from '$lib/api/billing';
+	import { inviteUserByEmail } from '$lib/api/organization';
+	import { refreshUser } from '$lib/stores/user.svelte';
 
-	let status = $state<'checking' | 'processing' | 'completed' | 'failed'>('checking');
+	let status = $state<'syncing' | 'completed' | 'failed'>('syncing');
 	let organizationId = $state('');
 	let showInviteModal = $state(false);
 	let seats = $state(0);
@@ -13,7 +14,6 @@
 	let invitationErrors = $state<string[]>([]);
 	let sendingInvites = $state(false);
 	let error = $state('');
-	let processingMessage = $state('Confirming payment with Stripe...');
 
 	onMount(async () => {
 		const sessionId = $page.url.searchParams.get('session_id');
@@ -25,69 +25,29 @@
 		}
 
 		try {
-			status = 'processing';
-			processingMessage = 'Payment confirmed! Setting up your organization...';
+			// Eager sync - no polling, direct call
+			const result = await syncAfterCheckout(sessionId);
 
-			// Poll our backend /onboarding/check-payment-status endpoint
-			let attempts = 0;
-			const maxAttempts = 30; // 30 seconds max
+			if (result.status === 'active') {
+				organizationId = result.organization_id;
+				seats = result.seats;
+				status = 'completed';
 
-			const checkBackendProcessing = async (): Promise<boolean> => {
-				attempts++;
+				// Refresh user data to update subscription status
+				await refreshUser();
 
-				try {
-					const result = await checkPaymentStatus(sessionId);
-
-					if (result.status === 'completed' && result.organization_id) {
-						organizationId = result.organization_id;
-						status = 'completed';
-
-						// Sync user auth to update app_metadata
-						await syncUserAuth();
-
-						// Show invitation modal
-						setTimeout(() => {
-							showInviteModal = true;
-						}, 500);
-
-						return true;
-					} else if (result.status === 'pending') {
-						if (attempts >= maxAttempts) {
-							error = 'Payment confirmed, but organization setup is taking longer than expected. Please check your email or contact support.';
-							status = 'failed';
-							return true;
-						}
-						return false;
-					} else {
-						error = 'Payment setup failed. Please contact support.';
-						status = 'failed';
-						return true;
-					}
-				} catch (err: any) {
-					console.error('Error checking payment status:', err);
-
-					if (attempts >= maxAttempts) {
-						error = 'Payment confirmed, but organization setup verification timed out. Please contact support.';
-						status = 'failed';
-						return true;
-					}
-
-					return false;
-				}
-			};
-
-			const pollBackend = async () => {
-				const done = await checkBackendProcessing();
-				if (!done) {
-					setTimeout(pollBackend, 1000);
-				}
-			};
-
-			await pollBackend();
+				// Show invitation modal
+				setTimeout(() => {
+					showInviteModal = true;
+				}, 500);
+			} else {
+				status = 'failed';
+				error = `Subscription status: ${result.status}. Please contact support if this persists.`;
+			}
 		} catch (err: any) {
-			console.error('Payment verification error:', err);
+			console.error('Sync error:', err);
 			status = 'failed';
-			error = err.message || 'Failed to verify payment. Please contact support.';
+			error = err.message || 'Failed to sync subscription. Please contact support.';
 		}
 	});
 
@@ -124,7 +84,7 @@
 
 		sendingInvites = true;
 
-		const redirectUrl = `${window.location.origin}/onboarding/profile-setup?organization_id=${organizationId}`;
+		const redirectUrl = `${window.location.origin}/profile-setup?organization_id=${organizationId}`;
 
 		// Send invitations
 		const results = await Promise.all(
@@ -161,12 +121,12 @@
 
 <div class="min-h-screen bg-gradient-to-br from-slate-50 to-white flex items-center justify-center p-4">
 	<div class="w-full max-w-2xl">
-		{#if status === 'checking' || status === 'processing'}
+		{#if status === 'syncing'}
 			<div class="bg-white rounded-xl shadow-lg p-12 text-center">
 				<div class="mb-6">
 					<div class="inline-block animate-spin rounded-full h-16 w-16 border-4 border-slate-200 border-t-slate-900"></div>
 				</div>
-				<h1 class="text-2xl font-bold text-slate-900 mb-2">{processingMessage}</h1>
+				<h1 class="text-2xl font-bold text-slate-900 mb-2">Setting up your organization...</h1>
 				<p class="text-slate-600">This will only take a moment</p>
 			</div>
 		{:else if status === 'failed'}
@@ -179,7 +139,7 @@
 				<h1 class="text-2xl font-bold text-slate-900 mb-2">Payment Failed</h1>
 				<p class="text-slate-600 mb-6">{error || 'Something went wrong with your payment'}</p>
 				<a
-					href="/onboarding/organization-setup"
+					href="/organization-setup"
 					class="inline-flex items-center gap-2 px-6 py-3 bg-slate-900 text-white font-semibold rounded-lg hover:bg-slate-800 transition-colors"
 				>
 					Try Again

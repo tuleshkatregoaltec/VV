@@ -16,7 +16,6 @@
 		identifyUser,
 		me
 	} from '$lib/api/auth';
-	import { syncUserAuth } from '$lib/api/onboarding';
 
 	type View = 'login' | 'signup' | 'verify-otp' | 'email-auth' | 'email-auth-otp' | 'forgot-password' | 'forgot-password-otp';
 
@@ -45,6 +44,13 @@
 		const session = await get_session();
 		if (session) {
 			goto('/dashboard');
+		}
+
+		// Capture tier from URL parameter and store in localStorage
+		const urlParams = new URLSearchParams(window.location.search);
+		const tier = urlParams.get('tier');
+		if (tier === 'tier1' || tier === 'tier2') {
+			localStorage.setItem('selected_tier', tier);
 		}
 	});
 
@@ -90,21 +96,16 @@
 		try {
 			const result = await login_with_email_pass(email, password);
 			if (result.success) {
-				// Sync user organization membership
-				try {
-					await syncUserAuth();
-					const user = await me();
-					identifyUser(user);
+				const user = await me();
+				identifyUser(user);
+
+				// Check if user has completed profile
+				if (!user.first_name || !user.last_name) {
+					goto('/profile-setup');
+				} else if (user.organization_id) {
 					goto('/dashboard');
-				} catch (syncError: any) {
-					// Handle sync errors (user may not have org, org deactivated, etc.)
-					if (syncError.message?.includes('does not belong')) {
-						error = 'Your account is not associated with an organization. Please contact support.';
-					} else if (syncError.message?.includes('deactivated')) {
-						error = 'Your organization has been deactivated. Please contact your administrator.';
-					} else {
-						error = 'Unable to access your account. Please try again or contact support.';
-					}
+				} else {
+					goto('/profile-setup');
 				}
 			} else {
 				error = result.error || 'Invalid email or password';
@@ -115,19 +116,9 @@
 	}
 
 	async function handleSignup() {
-		fieldErrors.firstName = '';
-		fieldErrors.lastName = '';
 		fieldErrors.password = '';
 		fieldErrors.confirmPassword = '';
 
-		if (!firstName.trim()) {
-			fieldErrors.firstName = 'First name is required';
-			return;
-		}
-		if (!lastName.trim()) {
-			fieldErrors.lastName = 'Last name is required';
-			return;
-		}
 		if (!password) {
 			fieldErrors.password = 'Password is required';
 			return;
@@ -153,7 +144,7 @@
 		error = '';
 
 		try {
-			const result = await sign_up_with_password(email, password, firstName, lastName);
+			const result = await sign_up_with_password(email, password, '', '');
 			if (result.success) {
 				currentView = 'verify-otp';
 				startResendCountdown();
@@ -177,19 +168,11 @@
 		try {
 			const result = await verify_otp(email, otpCode, 'signup');
 			if (result.success) {
-				// Sync user organization membership
-				try {
-					const syncResult = await syncUserAuth();
-					const user = await me();
-					identifyUser(user);
+				const user = await me();
+				identifyUser(user);
 
-					// If sync succeeded, user has organization and is active
-					goto('/dashboard');
-				} catch (syncError: any) {
-					// User verified but doesn't have organization yet
-					// Redirect to organization setup
-					goto('/onboarding/organization-setup');
-				}
+				// Always redirect to profile setup after signup verification
+				goto('/profile-setup');
 			} else {
 				error = result.error || 'Invalid verification code';
 			}
@@ -252,7 +235,15 @@
 			if (result.success) {
 				const user = await me();
 				identifyUser(user);
-				goto('/dashboard');
+
+				// Check if user has completed profile
+				if (!user.first_name || !user.last_name) {
+					goto('/profile-setup');
+				} else if (user.organization_id) {
+					goto('/dashboard');
+				} else {
+					goto('/profile-setup');
+				}
 			} else {
 				error = result.error || 'Invalid verification code';
 			}
@@ -462,23 +453,6 @@
 					}}
 					class="space-y-4"
 				>
-					<TextInput
-						label="First Name"
-						bind:value={firstName}
-						placeholder="John"
-						error={fieldErrors.firstName}
-						required
-						autocomplete="given-name"
-					/>
-					<TextInput
-						label="Last Name"
-						bind:value={lastName}
-						placeholder="Doe"
-						error={fieldErrors.lastName}
-						required
-						autocomplete="family-name"
-					/>
-
 					<TextInput
 						label="Email"
 						type="email"
