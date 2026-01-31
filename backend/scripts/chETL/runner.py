@@ -4,7 +4,7 @@ import csv
 import logging
 import uuid
 from pathlib import Path
-from typing import Dict, Any
+from typing import Dict
 import clickhouse_connect
 
 from .config import (

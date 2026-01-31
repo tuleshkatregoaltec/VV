@@ -1,6 +1,3 @@
-# Export the main query function for easy import
-from .client import query, query_df
-
 from app.clickhouse.client import get_client, query, query_df, close_clickhouse
 from app.clickhouse.queries import (
     # Analytics - Sales

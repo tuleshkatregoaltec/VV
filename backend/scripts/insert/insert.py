@@ -18,7 +18,7 @@ SETTINGS = {
     "input_format_csv_empty_as_default": 1,
     "format_csv_null_representation": "null",
     "max_insert_threads": 8,
-    "max_partitions_per_insert_block": 0
+    "max_partitions_per_insert_block": 0,
 }
 
 
