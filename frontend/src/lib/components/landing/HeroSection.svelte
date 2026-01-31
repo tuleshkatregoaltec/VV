@@ -41,10 +41,10 @@
 				<svg class="w-4 h-4 text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
 				</svg>
-				<span class="text-sm font-semibold text-slate-700">Real-time market intelligence</span>
+				<span class="text-sm font-semibold text-slate-700">Operational market intelligence</span>
 			</div>
 
-			<h1 class="text-5xl sm:text-6xl md:text-7xl font-bold leading-[1.1] mb-8 tracking-tight text-slate-900 hover:scale-[1.02] transition-transform duration-500">
+			<h1 class="text-5xl sm:text-6xl md:text-7xl font-bold leading-[1.3] mb-8 tracking-tight text-slate-900 hover:scale-[1.02] transition-transform duration-500">
 				Redefining Dubai Real Estate<br />
 				<span class="bg-gradient-to-r from-teal-600 to-cyan-600 bg-clip-text text-transparent inline-block">
 					with AI-powered Insights
@@ -52,7 +52,7 @@
 			</h1>
 
 			<p class="text-xl sm:text-2xl text-slate-600 max-w-3xl mx-auto mb-12 leading-relaxed">
-				Automated deliverables and comprehensive analytics powered by data you can trust
+				Operate with an edge; shorter cycles, sharper pitches, more deals
 			</p>
 
 			<div class="flex flex-col sm:flex-row gap-4 justify-center items-center mb-16">
@@ -85,7 +85,7 @@
 						</svg>
 					</div>
 					<div class="text-left">
-						<div class="text-2xl font-bold text-slate-900 group-hover:text-teal-600 transition-colors">50K+</div>
+						<div class="text-2xl font-bold text-slate-900 group-hover:text-teal-600 transition-colors">10M+</div>
 						<div class="text-sm text-slate-600">Transactions</div>
 					</div>
 				</div>
@@ -96,7 +96,7 @@
 						</svg>
 					</div>
 					<div class="text-left">
-						<div class="text-2xl font-bold text-slate-900 group-hover:text-teal-600 transition-colors">200+</div>
+						<div class="text-2xl font-bold text-slate-900 group-hover:text-teal-600 transition-colors">3000+</div>
 						<div class="text-sm text-slate-600">Projects</div>
 					</div>
 				</div>

@@ -11,7 +11,7 @@
 	const tiers = [
 		{
 			name: 'Starter',
-			price: '990',
+			price: '199',
 			popular: false,
 			features: [
 				'Real-time transaction data',
@@ -24,15 +24,15 @@
 		},
 		{
 			name: 'Professional',
-			price: '890',
+			price: '499',
 			popular: true,
 			savings: '100',
 			features: [
 				'Everything in Starter',
-				'Priority support',
-				'Advanced export options',
-				'Custom reporting',
-				'Team collaboration tools'
+				'Automated deliverables',
+				'5x Vitevue AI usage',
+				'Industry-grade comparables',
+				''
 			],
 			href: '/auth?view=signup'
 		},
