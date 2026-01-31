@@ -1,5 +1,6 @@
-from typing import LiteralString, Optional
+from typing import LiteralString
 from datetime import datetime, timezone
+from pydantic import BaseModel
 from sqlmodel import SQLModel, Field
 from sqlalchemy import Column, DateTime
 
@@ -42,14 +43,14 @@ class Subscription(SQLModel, table=True):
     )
 
 
-from pydantic import BaseModel, Field
-
-
 class CheckoutSessionRequest(BaseModel):
     """Request to create a Stripe checkout session"""
 
+    first_name: str = Field(min_length=1, max_length=100)
+    last_name: str = Field(min_length=1, max_length=100)
     organization_name: str = Field(min_length=1, max_length=100)
-    seats: int = Field(ge=1, le=100)
+    seats: int = Field(ge=1)
+    price_tier: str = Field(pattern="^(tier1|tier2)$")  # User-selected tier
 
 
 class CheckoutSessionResponse(BaseModel):
@@ -57,6 +58,7 @@ class CheckoutSessionResponse(BaseModel):
 
     checkout_url: str
     session_id: str
+    organization_id: str
 
 
 class PaymentStatusResponse(BaseModel):
