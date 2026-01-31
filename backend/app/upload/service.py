@@ -1,7 +1,6 @@
 import hashlib
 import logging
 from datetime import datetime, timezone
-from io import BytesIO
 
 from fastapi import HTTPException, UploadFile
 from sqlmodel import select

@@ -1,5 +1,6 @@
 from typing import LiteralString, Optional
 from datetime import datetime
+from pydantic import BaseModel, AwareDatetime
 from sqlmodel import SQLModel, Field
 from sqlalchemy import Column, DateTime
 
@@ -16,9 +17,6 @@ class NewsArticle(SQLModel, table=True):
     publish_date: Optional[datetime] = Field(
         default=None, sa_column=Column(DateTime(timezone=True))
     )
-
-
-from pydantic import BaseModel, AwareDatetime
 
 
 class NewsArticleResponse(BaseModel):
