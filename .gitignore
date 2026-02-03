@@ -250,3 +250,9 @@ llm-slop/
 alembic/
 tests/
 CLAUDE.md
+
+# Docker volumes (all data stored here)
+.docker-volumes/
+
+# Local development env (contains secrets)
+.env.dev
