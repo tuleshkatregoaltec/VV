@@ -39,6 +39,7 @@
 	"dependencies": {
 		"@stripe/stripe-js": "^8.6.3",
 		"@supabase/auth-js": "^2.90.1",
+		"@sveltejs/adapter-auto": "^7.0.0",
 		"@tanstack/svelte-query": "^6.0.8",
 		"@zxcvbn-ts/core": "^3.0.4",
 		"bun": "^1.3.4",
