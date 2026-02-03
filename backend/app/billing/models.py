@@ -50,7 +50,7 @@ class CheckoutSessionRequest(BaseModel):
     last_name: str = Field(min_length=1, max_length=100)
     organization_name: str = Field(min_length=1, max_length=100)
     seats: int = Field(ge=1)
-    price_tier: str = Field(pattern="^(tier1|tier2)$")  # User-selected tier
+    price_tier: str = Field(regex="^(tier1|tier2)$")  # User-selected tier
 
 
 class CheckoutSessionResponse(BaseModel):
