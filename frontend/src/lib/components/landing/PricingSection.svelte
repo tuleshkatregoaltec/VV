@@ -8,11 +8,17 @@
 		isVisible = true;
 	});
 
+	function handleTierClick(tier: 'tier1' | 'tier2') {
+		// Store selected tier in localStorage
+		localStorage.setItem('selected_tier', tier);
+	}
+
 	const tiers = [
 		{
 			name: 'Starter',
 			price: '199',
 			popular: false,
+			tier: 'tier1' as const,
 			features: [
 				'Real-time transaction data',
 				'AI-powered market insights',
@@ -20,26 +26,27 @@
 				'Unlimited project tracking',
 				'Email support'
 			],
-			href: '/auth?view=signup'
+			href: '/auth?view=signup&tier=tier1'
 		},
 		{
 			name: 'Professional',
 			price: '499',
 			popular: true,
-			savings: '100',
+			tier: 'tier2' as const,
 			features: [
 				'Everything in Starter',
 				'Automated deliverables',
 				'5x Vitevue AI usage',
 				'Industry-grade comparables',
-				''
+				'Priority support'
 			],
-			href: '/auth?view=signup'
+			href: '/auth?view=signup&tier=tier2'
 		},
 		{
 			name: 'Enterprise',
 			price: 'Custom',
 			popular: false,
+			tier: null,
 			features: [
 				'Everything in Professional',
 				'Dedicated account manager',
@@ -106,11 +113,6 @@
 										<span class="text-4xl font-bold text-slate-900">{tier.price}</span>
 										<span class="text-slate-600">AED/seat/month</span>
 									</div>
-									{#if tier.savings}
-										<div class="inline-block mt-2 px-2 py-1 bg-green-100 text-green-800 text-xs font-semibold rounded">
-											Save {tier.savings} AED/seat
-										</div>
-									{/if}
 								{/if}
 							</div>
 
@@ -138,6 +140,7 @@
 
 						<a
 							href={tier.href}
+							onclick={() => tier.tier && handleTierClick(tier.tier)}
 							class="block w-full text-center px-6 py-3 rounded-lg font-semibold transition-all {tier.popular
 								? 'bg-slate-900 text-white hover:bg-slate-800'
 								: 'bg-slate-100 text-slate-900 hover:bg-slate-200'}"

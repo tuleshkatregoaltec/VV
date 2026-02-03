@@ -16,17 +16,16 @@
 	let userLoaded = $state(false);
 	let selectedTier = $state<'tier1' | 'tier2'>('tier1');
 
-	const commonSeatOptions = [1, 3, 5, 8, 10];
+	const commonSeatOptions = [1, 3, 5, 10, 20];
 
 	// Pricing tiers
-	const TIER1_PRICE = 990;
-	const TIER2_PRICE = 890;
-	const TIER1_NAME = 'Professional';
-	const TIER2_NAME = 'Enterprise';
+	const TIER1_PRICE = 199;
+	const TIER2_PRICE = 499;
+	const TIER1_NAME = 'Starter';
+	const TIER2_NAME = 'Professional';
 
 	// Computed values
-	const isValidSeatCount = $derived(seats >= 1 && seats <= 10);
-	const isEnterpriseRange = $derived(seats > 10);
+	const isValidSeatCount = $derived(seats >= 1);
 	const pricePerSeat = $derived(selectedTier === 'tier1' ? TIER1_PRICE : TIER2_PRICE);
 	const totalMonthly = $derived(seats * pricePerSeat);
 	const tierName = $derived(selectedTier === 'tier1' ? TIER1_NAME : TIER2_NAME);
@@ -87,11 +86,6 @@
 
 		if (!isValidSeatCount) {
 			error = 'Please select a valid number of seats';
-			return;
-		}
-
-		if (isEnterpriseRange) {
-			error = 'For 11+ seats, please contact sales at contact@vitevue.com';
 			return;
 		}
 
@@ -192,7 +186,7 @@
 						class="h-4 w-4 rounded border-gray-300 text-slate-900 focus:ring-slate-900"
 					/>
 					<label for="customSeats" class="text-sm text-slate-600">
-						Custom amount (1-10 seats)
+						Custom amount
 					</label>
 				</div>
 
@@ -203,7 +197,6 @@
 								bind:value={customSeats}
 								oninput={handleCustomSeatsChange}
 								min="1"
-								max="10"
 								placeholder="Enter number of seats"
 								class="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-900 focus:border-transparent"
 							/>
@@ -212,7 +205,7 @@
 				</div>
 
 				<!-- Pricing Display -->
-				{#if isValidSeatCount && !isEnterpriseRange}
+				{#if isValidSeatCount}
 					<div class="bg-slate-50 rounded-lg p-6 border border-slate-200">
 						<div class="flex items-center justify-between py-3">
 							<span class="text-slate-700">{seats} {seats === 1 ? 'seat' : 'seats'} × {pricePerSeat} AED</span>
@@ -223,26 +216,10 @@
 							Billed monthly. Cancel anytime.
 						</p>
 					</div>
-				{:else if isEnterpriseRange}
-					<div class="bg-blue-50 rounded-lg p-6 border border-blue-200">
-						<h3 class="text-lg font-semibold text-blue-900 mb-2">Enterprise Pricing</h3>
-						<p class="text-blue-800 mb-4">
-							For organizations with 11 or more seats, we offer custom enterprise plans with volume discounts and dedicated support.
-						</p>
-						<a
-							href="mailto:contact@vitevue.com"
-							class="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition-colors"
-						>
-							Contact Sales
-							<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"></path>
-							</svg>
-						</a>
-					</div>
 				{/if}
 
 				<!-- Submit Button -->
-				{#if isValidSeatCount && !isEnterpriseRange}
+				{#if isValidSeatCount}
 					<button
 						type="submit"
 						disabled={loading}
