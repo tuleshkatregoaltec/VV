@@ -251,8 +251,8 @@ alembic/
 tests/
 CLAUDE.md
 
-# Docker volumes (all data stored here)
+# Docker volumes
 .docker-volumes/
 
-# Local development env (contains secrets)
+# Local development env
 .env.dev
