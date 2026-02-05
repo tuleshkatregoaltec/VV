@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   postgres:
     image: postgres:16-alpine
@@ -116,7 +114,7 @@ services:
       INBUCKET_POP3_ADDR: 0.0.0.0:1100
 
   clickhouse:
-    image: clickhouse/clickhouse-server:24-alpine
+    image: clickhouse/clickhouse-server:latest-alpine
     container_name: vitevue-clickhouse
     environment:
       CLICKHOUSE_DB: vitevue
@@ -229,6 +227,9 @@ services:
         condition: service_healthy
       minio:
         condition: service_healthy
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
     command: uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
   frontend:
