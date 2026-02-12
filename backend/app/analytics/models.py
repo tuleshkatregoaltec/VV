@@ -87,3 +87,129 @@ class RentalAnalyticsResponse(BaseModel):
     trends: list[TrendPoint]
     by_property_type: list[RentalDimensionBreakdown]
     by_master_project: list[RentalDimensionBreakdown]
+
+
+class MarketTrendPoint(BaseModel):
+    """Single data point for the market trend chart"""
+
+    date: date
+    transaction_count: int
+    avg_price: float
+    avg_price_sqm: float
+
+
+class MarketTrendResponse(BaseModel):
+    """Response for the market trend chart endpoint"""
+
+    data: list[MarketTrendPoint]
+    total_transactions: int
+    avg_price_change_pct: Optional[float] = None
+    avg_price_sqm_change_pct: Optional[float] = None
+
+
+# =============================================================================
+# PROJECT ANALYTICS MODELS
+# =============================================================================
+
+
+class ProjectMeta(BaseModel):
+    """Metadata from ch_projects + ch_developers"""
+
+    project_name: str
+    area_name: Optional[str] = None
+    developer_name: Optional[str] = None
+    project_status: Optional[str] = None
+    completion_date: Optional[date] = None
+    percent_completed: Optional[float] = None
+    no_of_units: Optional[int] = None
+    no_of_buildings: Optional[int] = None
+
+
+class ProjectSalesSummary(BaseModel):
+    transaction_count: int
+    total_volume: float
+    avg_price: float
+    avg_price_sqm: float
+    median_price: float
+
+
+class ProjectRentalSummary(BaseModel):
+    contract_count: int
+    total_annual_value: float
+    avg_annual_rent: float
+    avg_rent_sqm: float
+
+
+class RoomAnalytics(BaseModel):
+    """Combined sales + rental + yield metrics per bedroom count"""
+
+    rooms: str
+    sale_count: int
+    avg_sale_price: float
+    avg_sale_price_sqm: float
+    rental_count: int
+    avg_annual_rent: float
+    avg_rent_sqm: float
+    gross_yield_pct: Optional[float] = None
+
+
+class PropertyTypeBreakdown(BaseModel):
+    property_type: str
+    count: int
+    avg_price: float
+    pct_of_total: float
+
+
+class RegTypeBreakdown(BaseModel):
+    reg_type: str
+    count: int
+    avg_price: float
+    pct_of_total: float
+
+
+class UnitComposition(BaseModel):
+    rooms: str
+    count: int
+    pct_of_total: float
+
+
+class ProjectAnalyticsResponse(BaseModel):
+    """Full analytics response for a single project"""
+
+    project: Optional[ProjectMeta] = None
+    sales: ProjectSalesSummary
+    rentals: ProjectRentalSummary
+    overall_gross_yield_pct: Optional[float] = None
+    by_rooms: list[RoomAnalytics]
+    by_property_type: list[PropertyTypeBreakdown]
+    by_reg_type: list[RegTypeBreakdown]
+    unit_composition: list[UnitComposition]
+
+
+class ProjectTrendPoint(BaseModel):
+    date: date
+    transaction_count: int
+    avg_price: float
+    avg_price_sqm: float
+
+
+class ProjectTrendsResponse(BaseModel):
+    data: list[ProjectTrendPoint]
+
+
+class ProjectSearchItem(BaseModel):
+    name: str
+    filter_type: str  # "master" | "virtual_master" | "project"
+
+
+class ProjectSearchResponse(BaseModel):
+    projects: list[ProjectSearchItem]
+
+
+class SubProjectItem(BaseModel):
+    name: str
+    transaction_count: int
+
+
+class SubProjectsResponse(BaseModel):
+    sub_projects: list[SubProjectItem]

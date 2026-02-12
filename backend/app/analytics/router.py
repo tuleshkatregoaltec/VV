@@ -1,6 +1,7 @@
 """Analytics API endpoints with flexible filtering from daily aggregates."""
 
-from datetime import date
+import asyncio
+from datetime import date, timedelta
 from typing import Optional
 from fastapi import APIRouter, Depends, Query
 
@@ -10,9 +11,21 @@ from app.analytics.models import (
     RentalAnalyticsResponse,
     AnalyticsSummary,
     RentalSummary,
+    MarketTrendPoint,
+    MarketTrendResponse,
+    ProjectAnalyticsResponse,
+    ProjectTrendsResponse,
+    ProjectSearchResponse,
+    SubProjectsResponse,
 )
 from app.clickhouse.client import query
-from app.clickhouse.queries import sales_summary, rentals_summary
+from app.clickhouse.queries import sales_summary, rentals_summary, price_trends
+from app.analytics.service import (
+    get_project_search,
+    get_sub_project_list,
+    get_project_summary,
+    get_project_trends,
+)
 
 router = APIRouter(
     prefix="/api/v1/analytics",
@@ -289,3 +302,152 @@ async def get_rental_analytics(
         by_property_type=[],  # TODO: Implement breakdowns
         by_master_project=[],
     )
+
+
+@router.get("/market-trend", response_model=MarketTrendResponse)
+async def get_market_trend(
+    context: AuthContext = Depends(require_active_subscription),
+    days: int = Query(
+        default=180, description="Number of days to look back (30, 90, 180, 365)"
+    ),
+    property_usage: str = Query(
+        default="Residential", description="Residential or Commercial"
+    ),
+):
+    """Get aggregated price trend data for the market trend chart.
+
+    Returns trend points plus period-over-period change vs the equivalent prior period.
+    """
+    end_date = date.today()
+    start_date = end_date - timedelta(days=days)
+    prev_end = start_date
+    prev_start = prev_end - timedelta(days=days)
+
+    if days <= 30:
+        interval = "day"
+    elif days <= 180:
+        interval = "week"
+    else:
+        interval = "month"
+
+    trend_sql = price_trends(
+        property_usage=property_usage,
+        start_date=start_date.isoformat(),
+        end_date=end_date.isoformat(),
+        interval=interval,
+    )
+    current_summary_sql = sales_summary(
+        property_usage=property_usage,
+        start_date=start_date.isoformat(),
+        end_date=end_date.isoformat(),
+    )
+    prev_summary_sql = sales_summary(
+        property_usage=property_usage,
+        start_date=prev_start.isoformat(),
+        end_date=prev_end.isoformat(),
+    )
+
+    try:
+        trend_result, current_result, prev_result = await asyncio.gather(
+            query(trend_sql, {"property_usage": property_usage, "start_date": start_date.isoformat(), "end_date": end_date.isoformat()}),
+            query(current_summary_sql, {"property_usage": property_usage, "start_date": start_date.isoformat(), "end_date": end_date.isoformat()}),
+            query(prev_summary_sql, {"property_usage": property_usage, "start_date": prev_start.isoformat(), "end_date": prev_end.isoformat()}),
+        )
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f"Error executing market trend query: {e}")
+        return MarketTrendResponse(data=[], total_transactions=0)
+
+    data = [
+        MarketTrendPoint(
+            date=row["period"],
+            transaction_count=int(row["transaction_count"]),
+            avg_price=float(row["avg_price"]),
+            avg_price_sqm=float(row["avg_price_sqm"]),
+        )
+        for row in trend_result
+    ]
+
+    def pct_change(current: float, previous: float) -> Optional[float]:
+        if not previous:
+            return None
+        return round((current - previous) / previous * 100, 1)
+
+    avg_price_change_pct = None
+    avg_price_sqm_change_pct = None
+    if current_result and prev_result:
+        curr = current_result[0]
+        prev = prev_result[0]
+        avg_price_change_pct = pct_change(float(curr["avg_price"]), float(prev["avg_price"]))
+        avg_price_sqm_change_pct = pct_change(
+            float(curr["median_price_per_sqm"]), float(prev["median_price_per_sqm"])
+        )
+
+    return MarketTrendResponse(
+        data=data,
+        total_transactions=sum(p.transaction_count for p in data),
+        avg_price_change_pct=avg_price_change_pct,
+        avg_price_sqm_change_pct=avg_price_sqm_change_pct,
+    )
+
+
+# =============================================================================
+# PROJECT ANALYTICS ENDPOINTS
+# =============================================================================
+
+
+@router.get("/projects", response_model=ProjectSearchResponse)
+async def search_projects_endpoint(
+    context: AuthContext = Depends(require_active_subscription),
+    search: str = Query(default="", description="Master project name search term"),
+    limit: int = Query(default=50, description="Max results to return"),
+):
+    """Search master project names for the selector dropdown."""
+    return await get_project_search(search=search, limit=limit)
+
+
+@router.get("/project/sub-projects", response_model=SubProjectsResponse)
+async def get_sub_projects_endpoint(
+    context: AuthContext = Depends(require_active_subscription),
+    master_project: str = Query(description="Master project name"),
+    filter_type: str = Query(default="master", description="Filter type: master or virtual_master"),
+):
+    """List sub-projects within a master or virtual master, sorted by transaction count."""
+    return await get_sub_project_list(master_project=master_project, filter_type=filter_type)
+
+
+@router.get("/project/summary", response_model=ProjectAnalyticsResponse)
+async def get_project_summary_endpoint(
+    context: AuthContext = Depends(require_active_subscription),
+    master_project: Optional[str] = Query(default=None, description="Master project name"),
+    project: Optional[str] = Query(default=None, description="Sub-project name (project_name_en)"),
+    filter_type: str = Query(default="project", description="Filter type: master, virtual_master, or project"),
+):
+    """
+    Full analytics for a master project, virtual master, or specific sub-project.
+    Pass master_project with filter_type=master/virtual_master to aggregate the whole development,
+    or project with filter_type=project for a specific sub-project.
+    """
+    from fastapi import HTTPException
+    if project:
+        return await get_project_summary(project_name=project, filter_type="project", master_project=master_project)
+    if master_project:
+        return await get_project_summary(project_name=master_project, filter_type=filter_type)
+    raise HTTPException(status_code=422, detail="Either master_project or project is required")
+
+
+@router.get("/project/trends", response_model=ProjectTrendsResponse)
+async def get_project_trends_endpoint(
+    context: AuthContext = Depends(require_active_subscription),
+    master_project: Optional[str] = Query(default=None, description="Master project name"),
+    project: Optional[str] = Query(default=None, description="Sub-project name (project_name_en)"),
+    filter_type: str = Query(default="project", description="Filter type: master, virtual_master, or project"),
+    days: int = Query(default=365, description="Number of days to look back"),
+):
+    """Sales price trend time series for a project, master, or virtual master."""
+    from fastapi import HTTPException
+    if project:
+        return await get_project_trends(project_name=project, days=days, filter_type="project")
+    if master_project:
+        return await get_project_trends(project_name=master_project, days=days, filter_type=filter_type)
+    raise HTTPException(status_code=422, detail="Either master_project or project is required")
