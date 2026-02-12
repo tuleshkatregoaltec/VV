@@ -21,21 +21,30 @@ async def create_checkout_session_endpoint(
     current_user: PlatformUser = Depends(require_auth),
     db: AsyncSession = Depends(get_db_session),
 ):
-    """Create Stripe checkout session for organization subscription."""
-    try:
-        await update_user_profile_metadata(
-            current_user.id,
-            request.first_name,
-            request.last_name,
+    """
+    Create Stripe checkout session for existing organization.
+
+    Organization must already exist (created via /organization/create).
+    User profile (first_name/last_name) must be set in auth metadata.
+    """
+    # Verify user has profile set
+    if (
+        not current_user.user_metadata.first_name
+        or not current_user.user_metadata.last_name
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="Profile incomplete. Please set first name and last name before checkout.",
         )
 
+    try:
         result = await create_checkout_session(
             user_id=current_user.id,
             email=current_user.email,
-            organization_name=request.organization_name,
+            organization_id=request.organization_id,
             seats=request.seats,
-            first_name=request.first_name,
-            last_name=request.last_name,
+            first_name=current_user.user_metadata.first_name,
+            last_name=current_user.user_metadata.last_name,
             price_tier=request.price_tier,
             db=db,
         )

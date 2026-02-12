@@ -43,6 +43,8 @@ class AdminAuth:
         self.__user = auth_response.user  # type: ignore
         self.__session = auth_response.session
 
+        return True
+
     async def ensure_valid_refresh(self) -> bool:
         """
         Ensure that we have a valid refresh token
@@ -157,7 +159,9 @@ async def get_auth_user(jwt: str) -> Optional[AuthUser]:
         if user_response and user_response.user:
             return user_response.user
     except AuthApiError:
-        # invalid token, token not valid
+        return None
+    except Exception:
+        logger.warning("Auth service unreachable")
         return None
 
 

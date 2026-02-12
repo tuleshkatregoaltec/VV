@@ -18,6 +18,7 @@ TRACKED_EVENTS = [
     "customer.subscription.deleted",
     "invoice.paid",
     "invoice.payment_failed",
+    "invoice_payment.paid",  # Newer Stripe event fired alongside invoice.paid
 ]
 
 
@@ -71,8 +72,8 @@ async def process_webhook_event(event: dict, db: AsyncSession):
         # Subscription object
         customer_id = event_object.get("customer")
 
-    elif event_type.startswith("invoice."):
-        # Invoice object
+    elif event_type.startswith("invoice.") or event_type.startswith("invoice_payment."):
+        # Invoice / InvoicePayment object
         customer_id = event_object.get("customer")
 
     if not customer_id:

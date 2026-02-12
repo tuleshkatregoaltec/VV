@@ -14,6 +14,8 @@ from pydantic_ai.messages import (
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from pydantic_ai.models.openrouter import OpenRouterModelSettings
+
 from app.config import settings
 from app.chat.agent import agent
 from app.chat.models import Conversation, Message
@@ -209,13 +211,16 @@ async def stream_chat_response(
                 properties=posthog_properties,
             )
 
-        # Stream agent response
+        # Stream agent response with native reasoning
         async with agent.run_stream(
             user_message,
             message_history=message_history,
+            model_settings=OpenRouterModelSettings(
+                openrouter_reasoning={"effort": "low"}
+            ),
         ) as result:
-            # Stream text chunks
-            async for chunk_text in result.stream_text(debounce_by=0.01):
+            yield f"data: {json.dumps({'type': 'thinking'})}\n\n"
+            async for chunk_text in result.stream_text(delta=True, debounce_by=0.01):
                 assistant_message += chunk_text
                 yield f"data: {json.dumps({'type': 'content', 'content': chunk_text})}\n\n"
 

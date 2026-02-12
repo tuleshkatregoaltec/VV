@@ -34,38 +34,37 @@ async def get_user(
     db: AsyncSession = Depends(get_db_session),
     current_user: PlatformUser = Depends(require_auth),
 ):
-    """Get current authenticated user with organization and subscription context."""
+    """
+    Get current authenticated user with organization and subscription context.
+
+    Returns first_name/last_name from Supabase auth user_metadata.
+    Returns subscription_status from organization.subscription_status (single source of truth).
+    """
 
     # Get organization via membership
     membership = await organization_service.get_membership_for_user(db, current_user.id)
 
     organization_id = None
     organization_name = None
-    role = membership.role if membership else "user"
+    role = "user"
+    is_owner = False
     subscription_status = None
     subscription_is_active = False
 
     if membership:
         from app.postgres.models import Organization
 
+        role = membership.role
+        is_owner = membership.role == "owner"
+
         org = await db.get(Organization, membership.organization_id)
         if org:
             organization_id = org.id
             organization_name = org.name
 
-            # Get subscription status for performance (avoid separate API call)
-            try:
-                subscription = await get_subscription_by_org(org.id, db)
-                if subscription:
-                    subscription_status = subscription.status
-                    subscription_is_active = subscription.status in [
-                        "active",
-                        "trialing",
-                    ]
-            except Exception:
-                # If subscription lookup fails, set to inactive
-                subscription_status = "none"
-                subscription_is_active = False
+            # Use org.subscription_status as single source of truth
+            subscription_status = org.subscription_status
+            subscription_is_active = org.subscription_status in ["active", "trialing"]
 
     return JSONResponse(
         content={
@@ -76,6 +75,7 @@ async def get_user(
             "organization_id": organization_id,
             "organization_name": organization_name,
             "role": role,
+            "is_owner": is_owner,
             "subscription_status": subscription_status,
             "subscription_is_active": subscription_is_active,
         }

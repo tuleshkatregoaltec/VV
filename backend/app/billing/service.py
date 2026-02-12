@@ -60,9 +60,11 @@ async def sync_stripe_to_postgres(stripe_customer_id: str, db: AsyncSession) -> 
             return {"status": "none", "organization_id": org.id}
 
         # Find seat item by matching either tier price ID
+        # Use dict-style access: Stripe SDK v14 StripeObject inherits from dict,
+        # so `stripe_sub.items` resolves to dict's built-in items() method.
         seat_item = None
-        for item in stripe_sub.items.data:
-            if item.price.id in [
+        for item in stripe_sub["items"]["data"]:
+            if item["price"]["id"] in [
                 settings.STRIPE_PRICE_ID_TIER1,
                 settings.STRIPE_PRICE_ID_TIER2,
             ]:
@@ -73,7 +75,7 @@ async def sync_stripe_to_postgres(stripe_customer_id: str, db: AsyncSession) -> 
             logger.error(f"No seat item found in subscription {stripe_sub.id}")
             raise ValueError(f"Subscription {stripe_sub.id} missing seat price item")
 
-        seats = seat_item.quantity
+        seats = seat_item["quantity"]
 
         org.subscription_status = stripe_sub.status
         org.is_active = stripe_sub.status in ["active", "trialing"]
@@ -85,34 +87,34 @@ async def sync_stripe_to_postgres(stripe_customer_id: str, db: AsyncSession) -> 
         result = await db.execute(stmt)
         subscription = result.scalar_one_or_none()
 
+        # Stripe API 2025+: current_period_start/end moved from subscription to items
+        period_start = datetime.fromtimestamp(
+            seat_item["current_period_start"], tz=timezone.utc
+        )
+        period_end = datetime.fromtimestamp(
+            seat_item["current_period_end"], tz=timezone.utc
+        )
+
         if not subscription:
             subscription = Subscription(
                 id=str(uuid4()),
                 organization_id=org.id,
                 stripe_subscription_id=stripe_sub.id,
                 stripe_customer_id=stripe_customer_id,
-                stripe_price_id=seat_item.price.id,
+                stripe_price_id=seat_item["price"]["id"],
                 status=stripe_sub.status,
                 seats=seats,
-                current_period_start=datetime.fromtimestamp(
-                    stripe_sub.current_period_start, tz=timezone.utc
-                ),
-                current_period_end=datetime.fromtimestamp(
-                    stripe_sub.current_period_end, tz=timezone.utc
-                ),
+                current_period_start=period_start,
+                current_period_end=period_end,
                 cancel_at_period_end=stripe_sub.cancel_at_period_end,
             )
             db.add(subscription)
         else:
             subscription.status = stripe_sub.status
             subscription.seats = seats
-            subscription.stripe_price_id = seat_item.price.id
-            subscription.current_period_start = datetime.fromtimestamp(
-                stripe_sub.current_period_start, tz=timezone.utc
-            )
-            subscription.current_period_end = datetime.fromtimestamp(
-                stripe_sub.current_period_end, tz=timezone.utc
-            )
+            subscription.stripe_price_id = seat_item["price"]["id"]
+            subscription.current_period_start = period_start
+            subscription.current_period_end = period_end
             subscription.cancel_at_period_end = stripe_sub.cancel_at_period_end
 
         await db.commit()
@@ -136,64 +138,53 @@ async def sync_stripe_to_postgres(stripe_customer_id: str, db: AsyncSession) -> 
 async def create_checkout_session(
     user_id: str,
     email: str,
-    organization_name: str,
+    organization_id: str,
     seats: int,
     first_name: str,
     last_name: str,
     price_tier: str,
     db: AsyncSession,
 ) -> dict[str, str]:
-    """Create org-first checkout session with idempotency."""
-    # Check for existing pending/failed org to reuse
+    """
+    Create Stripe checkout session for existing organization.
+
+    Organization must already exist (created via /organization/create).
+    This endpoint only handles Stripe customer + checkout session creation.
+    """
+    # Get existing organization
+    org = await db.get(Organization, organization_id)
+    if not org:
+        raise HTTPException(404, "Organization not found")
+
+    # Verify user is owner of this organization
     stmt = select(OrganizationMembership).where(
+        OrganizationMembership.organization_id == organization_id,
         OrganizationMembership.user_id == user_id,
         OrganizationMembership.role == "owner",
     )
     result = await db.execute(stmt)
-    existing_membership = result.scalar_one_or_none()
+    membership = result.scalar_one_or_none()
 
-    org = None
-    if existing_membership:
-        stmt = select(Organization).where(
-            Organization.id == existing_membership.organization_id
+    if not membership:
+        raise HTTPException(
+            403, "Not authorized: You must be the owner of this organization"
         )
-        result = await db.execute(stmt)
-        existing_org = result.scalar_one_or_none()
 
-        if existing_org and existing_org.subscription_status in ["pending", "failed"]:
-            logger.info(f"Reusing existing org {existing_org.id} for user {user_id}")
-            org = existing_org
-            org.name = organization_name
-            org.max_users = seats
-            org.subscription_status = "pending"
+    # Update seats if different from org max_users
+    if seats != org.max_users:
+        org.max_users = seats
 
-    if not org:
-        org_id = str(uuid4())
-        org = Organization(
-            id=org_id,
-            name=organization_name,
-            owner_user_id=user_id,
-            subscription_status="pending",
-            is_active=False,
-            max_users=seats,
-            stripe_customer_id=None,
-        )
-        db.add(org)
+    # Set subscription status to pending while checkout in progress
+    org.subscription_status = "pending"
 
-        membership = OrganizationMembership(
-            organization_id=org.id,
-            user_id=user_id,
-            role="owner",
-        )
-        db.add(membership)
-
+    # Commit org updates
     try:
         await db.commit()
         await db.refresh(org)
     except Exception as e:
         await db.rollback()
-        logger.error(f"Failed to create organization: {e}")
-        raise HTTPException(500, f"Failed to create organization: {str(e)}")
+        logger.error(f"Failed to update organization: {e}")
+        raise HTTPException(500, f"Failed to update organization: {str(e)}")
 
     customer_id = org.stripe_customer_id
 
@@ -205,7 +196,7 @@ async def create_checkout_session(
                 metadata={
                     "organization_id": org.id,
                     "owner_user_id": user_id,
-                    "organization_name": organization_name,
+                    "organization_name": org.name,
                 },
             )
             customer_id = customer.id
@@ -236,10 +227,22 @@ async def create_checkout_session(
         else settings.STRIPE_PRICE_ID_TIER2
     )
 
+    # Validate price ID format
+    if not price_id or not price_id.startswith("price_"):
+        logger.error(f"Invalid Stripe price ID: {price_id} for tier {price_tier}")
+        org.subscription_status = "failed"
+        await db.commit()
+        raise HTTPException(
+            500,
+            f"Invalid Stripe price configuration. Please contact support. (Tier: {price_tier})",
+        )
+
     try:
         idempotency_key = (
             f"checkout_{org.id}_{int(datetime.now(timezone.utc).timestamp())}"
         )
+
+        logger.info(f"Creating Stripe checkout for org {org.id} with price {price_id}")
 
         checkout_session = stripe.checkout.Session.create(
             customer=customer_id,
@@ -254,8 +257,12 @@ async def create_checkout_session(
             cancel_url=settings.FRONTEND_CANCEL_URL,
             idempotency_key=idempotency_key,
         )
+
+        logger.info(f"Checkout session created: {checkout_session.id}")
     except Exception as e:
         logger.error(f"Checkout session creation failed for org {org.id}: {e}")
+        org.subscription_status = "failed"
+        await db.commit()
         raise HTTPException(500, f"Failed to create checkout session: {str(e)}")
 
     return {
@@ -340,15 +347,14 @@ async def get_customer_portal_url(customer_id: str, return_url: str) -> str:
 
 
 def is_subscription_active(subscription: Subscription) -> bool:
-    """Check if subscription grants access (status=active and not expired)."""
+    """Check if subscription grants access (status in ['active', 'trialing'])."""
     now = datetime.now(timezone.utc)
 
-    if subscription.status == "past_due":
+    # Allow access for active and trialing subscriptions
+    if subscription.status not in ["active", "trialing"]:
         return False
 
-    if subscription.status != "active":
-        return False
-
+    # Check not expired
     return now < subscription.current_period_end
 
 
