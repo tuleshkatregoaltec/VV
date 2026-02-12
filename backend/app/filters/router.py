@@ -22,6 +22,7 @@ async def get_sales_filter_options(
     context: AuthContext = Depends(require_active_subscription),
     property_usage: str = Query(default=None, description="Residential or Commercial"),
     project: str = Query(default=None, description="Filter buildings by project"),
+    filter_type: str = Query(default="project", description="Project filter type: master, virtual_master, or project"),
     property_type: str = Query(default=None, description="Filter subtypes and rooms"),
     area: str = Query(default=None, description="Filter by area"),
 ):
@@ -34,6 +35,7 @@ async def get_sales_filter_options(
     return await get_sales_filters_service(
         property_usage=property_usage,
         project=project,
+        filter_type=filter_type,
         property_type=property_type,
         area=area,
     )
@@ -45,6 +47,7 @@ async def get_rental_filter_options(
     context: AuthContext = Depends(require_active_subscription),
     property_usage: str = Query(default=None, description="Residential or Commercial"),
     project: str = Query(default=None, description="Filter buildings by project"),
+    filter_type: str = Query(default="project", description="Project filter type: master, virtual_master, or project"),
     property_type: str = Query(default=None, description="Filter subtypes"),
     area: str = Query(default=None, description="Filter by area"),
 ):
@@ -56,6 +59,7 @@ async def get_rental_filter_options(
     return await get_rental_filters_service(
         property_usage=property_usage,
         project=project,
+        filter_type=filter_type,
         property_type=property_type,
         area=area,
     )

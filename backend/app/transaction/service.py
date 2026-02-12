@@ -8,6 +8,7 @@ from openpyxl import Workbook
 from openpyxl.styles import Font
 
 from app.clickhouse.client import query
+from app.clickhouse.queries import _project_filter
 from app.transaction.models import (
     RentalContractListResponse,
     RentalContractResponse,
@@ -28,6 +29,7 @@ async def fetch_sales_transactions(
     registration_type: Optional[str] = None,
     area: Optional[str] = None,
     project: Optional[str] = None,
+    filter_type: str = "project",
     building: Optional[str] = None,
     timeframe_days: Optional[int] = None,
     area_min: Optional[float] = None,
@@ -71,8 +73,8 @@ async def fetch_sales_transactions(
         params["area"] = area
 
     if project:
-        where_clauses.append("project_name_en = {project:String}")
-        params["project"] = project
+        where_clauses.append(_project_filter(filter_type))
+        params["project_name"] = project + " - %" if filter_type == "virtual_master" else project
 
     if building:
         where_clauses.append("building_name_en = {building:String}")
@@ -154,29 +156,32 @@ async def fetch_sales_transactions(
         TransactionResponse(
             transaction_id=row["transaction_id"],
             instance_date=row["instance_date"],
-            property_usage=row["property_usage_en"],
-            trans_group=row["trans_group_en"],
-            procedure_name=row["procedure_name_en"],
-            property_type=row["property_type_en"],
-            property_sub_type=row["property_sub_type_en"],
-            rooms=row["rooms_en"],
-            area_sqm=float(row["procedure_area"]) if row["procedure_area"] else None,
-            price=float(row["actual_worth"]) if row["actual_worth"] else None,
-            price_per_sqm=(
-                float(row["meter_sale_price"]) if row["meter_sale_price"] else None
-            ),
-            registration_type=row["reg_type_en"],
-            area_name=row["area_name_en"],
-            project_name=row["project_name_en"],
-            building_name=row["building_name_en"],
-            nearest_landmark=row["nearest_landmark_en"],
-            nearest_metro=row["nearest_metro_en"],
-            nearest_mall=row["nearest_mall_en"],
+            trans_group_en=row["trans_group_en"],
+            procedure_name_en=row["procedure_name_en"],
+            property_type_en=row["property_type_en"],
+            property_sub_type_en=row["property_sub_type_en"],
+            rooms_en=row["rooms_en"],
+            area_name_en=row["area_name_en"],
+            project_name_en=row["project_name_en"],
+            building_name_en=row["building_name_en"],
+            procedure_area=float(row["procedure_area"])
+            if row["procedure_area"]
+            else None,
+            actual_worth=float(row["actual_worth"]) if row["actual_worth"] else None,
+            meter_sale_price=float(row["meter_sale_price"])
+            if row["meter_sale_price"]
+            else None,
+            reg_type_en=row["reg_type_en"],
+            nearest_landmark_en=row["nearest_landmark_en"],
+            nearest_metro_en=row["nearest_metro_en"],
+            nearest_mall_en=row["nearest_mall_en"],
         )
         for row in transactions_result
     ]
 
-    return TransactionListResponse(items=items, total=total, limit=limit, offset=offset)
+    return TransactionListResponse(
+        transactions=items, total=total, limit=limit, offset=offset
+    )
 
 
 async def fetch_rental_contracts(
@@ -189,6 +194,7 @@ async def fetch_rental_contracts(
     contract_reg_type: Optional[str] = None,
     area: Optional[str] = None,
     project: Optional[str] = None,
+    filter_type: str = "project",
     timeframe_days: Optional[int] = None,
     area_min: Optional[float] = None,
     area_max: Optional[float] = None,
@@ -229,8 +235,8 @@ async def fetch_rental_contracts(
         params["area"] = area
 
     if project:
-        where_clauses.append("project_name_en = {project:String}")
-        params["project"] = project
+        where_clauses.append(_project_filter(filter_type))
+        params["project_name"] = project + " - %" if filter_type == "virtual_master" else project
 
     if timeframe_days:
         where_clauses.append("contract_start_date >= today() - {timeframe_days:Int32}")
@@ -301,29 +307,28 @@ async def fetch_rental_contracts(
             contract_id=row["contract_id"],
             contract_start_date=row["contract_start_date"],
             contract_end_date=row["contract_end_date"],
-            property_usage=row["property_usage_en"],
-            contract_reg_type=row["contract_reg_type_en"],
-            property_type=row["ejari_property_type_en"],
-            property_sub_type=row["ejari_property_sub_type_en"],
-            tenant_type=row["tenant_type_en"],
-            area_sqm=float(row["actual_area"]) if row["actual_area"] else None,
-            annual_rent=float(row["annual_amount"]) if row["annual_amount"] else None,
-            contract_amount=(
-                float(row["contract_amount"]) if row["contract_amount"] else None
-            ),
-            area_name=row["area_name_en"],
-            project_name=row["project_name_en"],
-            nearest_landmark=row["nearest_landmark_en"],
-            nearest_metro=row["nearest_metro_en"],
-            nearest_mall=row["nearest_mall_en"],
-            no_of_properties=row["no_of_prop"],
+            ejari_property_type_en=row["ejari_property_type_en"],
+            ejari_property_sub_type_en=row["ejari_property_sub_type_en"],
+            tenant_type_en=row["tenant_type_en"],
+            contract_reg_type_en=row["contract_reg_type_en"],
+            area_name_en=row["area_name_en"],
+            project_name_en=row["project_name_en"],
+            actual_area=float(row["actual_area"]) if row["actual_area"] else None,
+            annual_amount=float(row["annual_amount"]) if row["annual_amount"] else None,
+            contract_amount=float(row["contract_amount"])
+            if row["contract_amount"]
+            else None,
+            no_of_prop=row["no_of_prop"],
             is_free_hold=bool(row["is_free_hold"]),
+            nearest_landmark_en=row["nearest_landmark_en"],
+            nearest_metro_en=row["nearest_metro_en"],
+            nearest_mall_en=row["nearest_mall_en"],
         )
         for row in contracts_result
     ]
 
     return RentalContractListResponse(
-        items=items, total=total, limit=limit, offset=offset
+        contracts=items, total=total, limit=limit, offset=offset
     )
 
 
@@ -336,6 +341,7 @@ async def export_sales_transactions(
     registration_type: Optional[str] = None,
     area: Optional[str] = None,
     project: Optional[str] = None,
+    filter_type: str = "project",
     building: Optional[str] = None,
     timeframe_days: Optional[int] = None,
     area_min: Optional[float] = None,
@@ -389,8 +395,8 @@ async def export_sales_transactions(
             params["area"] = area
 
         if project:
-            where_clauses.append("project_name_en = {project:String}")
-            params["project"] = project
+            where_clauses.append(_project_filter(filter_type))
+            params["project_name"] = project + " - %" if filter_type == "virtual_master" else project
 
         if building:
             where_clauses.append("building_name_en = {building:String}")
@@ -529,6 +535,7 @@ async def export_rental_contracts(
     contract_reg_type: Optional[str] = None,
     area: Optional[str] = None,
     project: Optional[str] = None,
+    filter_type: str = "project",
     timeframe_days: Optional[int] = None,
     area_min: Optional[float] = None,
     area_max: Optional[float] = None,
@@ -581,8 +588,8 @@ async def export_rental_contracts(
             params["area"] = area
 
         if project:
-            where_clauses.append("project_name_en = {project:String}")
-            params["project"] = project
+            where_clauses.append(_project_filter(filter_type))
+            params["project_name"] = project + " - %" if filter_type == "virtual_master" else project
 
         if timeframe_days:
             where_clauses.append(

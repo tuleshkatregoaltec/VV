@@ -8,18 +8,22 @@ class TransactionResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
     transaction_id: str
-    project_name_en: Optional[str] = None
-    building_name_en: Optional[str] = None
+    instance_date: Optional[date] = None
+    trans_group_en: Optional[str] = None
+    procedure_name_en: Optional[str] = None
     property_type_en: Optional[str] = None
     property_sub_type_en: Optional[str] = None
     rooms_en: Optional[str] = None
+    area_name_en: Optional[str] = None
+    project_name_en: Optional[str] = None
+    building_name_en: Optional[str] = None
     procedure_area: Optional[Decimal] = None
     actual_worth: Optional[Decimal] = None
     meter_sale_price: Optional[Decimal] = None
     reg_type_en: Optional[str] = None
-    instance_date: Optional[date] = None
-
-    area_name_en: Optional[str] = None
+    nearest_landmark_en: Optional[str] = None
+    nearest_metro_en: Optional[str] = None
+    nearest_mall_en: Optional[str] = None
 
 
 class TransactionListResponse(BaseModel):
@@ -33,16 +37,22 @@ class RentalContractResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
     contract_id: str
-    project_name_en: Optional[str] = None
+    contract_start_date: Optional[date] = None
+    contract_end_date: Optional[date] = None
     ejari_property_type_en: Optional[str] = None
     ejari_property_sub_type_en: Optional[str] = None
     tenant_type_en: Optional[str] = None
+    contract_reg_type_en: Optional[str] = None
+    area_name_en: Optional[str] = None
+    project_name_en: Optional[str] = None
     actual_area: Optional[Decimal] = None
     annual_amount: Optional[Decimal] = None
-    contract_reg_type_en: Optional[str] = None
-    contract_start_date: Optional[date] = None
-    contract_end_date: Optional[date] = None
-    area_name_en: Optional[str] = None
+    contract_amount: Optional[Decimal] = None
+    no_of_prop: Optional[int] = None
+    is_free_hold: Optional[bool] = None
+    nearest_landmark_en: Optional[str] = None
+    nearest_metro_en: Optional[str] = None
+    nearest_mall_en: Optional[str] = None
 
 
 class RentalContractListResponse(BaseModel):

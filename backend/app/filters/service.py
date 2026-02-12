@@ -1,13 +1,26 @@
 """Filter options service - redesigned for ClickHouse from first principles."""
 
+import re
 from typing import Optional
 from app.clickhouse.client import query
+from app.clickhouse.queries import _project_filter
 from app.filters.models import FilterOptionsResponse
+
+
+def _rooms_sort_key(room: str) -> tuple:
+    """Studio first, then numeric bedroom counts in order, then anything else."""
+    if room.lower() == "studio":
+        return (0, 0)
+    m = re.match(r"^(\d+)", room)
+    if m:
+        return (1, int(m.group(1)))
+    return (2, 0)
 
 
 async def get_sales_filter_options(
     property_usage: Optional[str] = None,
     project: Optional[str] = None,
+    filter_type: str = "project",
     property_type: Optional[str] = None,
     area: Optional[str] = None,
 ) -> FilterOptionsResponse:
@@ -27,8 +40,8 @@ async def get_sales_filter_options(
         params["property_usage"] = property_usage
 
     if project:
-        where_clauses.append("project_name_en = {project:String}")
-        params["project"] = project
+        where_clauses.append(_project_filter(filter_type))
+        params["project_name"] = project + " - %" if filter_type == "virtual_master" else project
 
     if property_type:
         where_clauses.append("property_type_en = {property_type:String}")
@@ -62,15 +75,14 @@ async def get_sales_filter_options(
         row["property_sub_type_en"] for row in property_sub_types_result
     ]
 
-    # Get rooms (LowCardinality = instant)
+    # Get rooms (LowCardinality = instant) - sorted numerically, not alphabetically
     rooms_sql = f"""
         SELECT DISTINCT rooms_en
         FROM ch_transactions
         WHERE {where_clause} AND rooms_en != ''
-        ORDER BY rooms_en
     """
     rooms_result = await query(rooms_sql, params)
-    rooms = [row["rooms_en"] for row in rooms_result]
+    rooms = sorted([row["rooms_en"] for row in rooms_result], key=_rooms_sort_key)
 
     # Get registration types (LowCardinality = instant)
     reg_types_sql = f"""
@@ -127,6 +139,7 @@ async def get_sales_filter_options(
 async def get_rental_filter_options(
     property_usage: Optional[str] = None,
     project: Optional[str] = None,
+    filter_type: str = "project",
     property_type: Optional[str] = None,
     area: Optional[str] = None,
 ) -> FilterOptionsResponse:
@@ -145,8 +158,8 @@ async def get_rental_filter_options(
         params["property_usage"] = property_usage
 
     if project:
-        where_clauses.append("project_name_en = {project:String}")
-        params["project"] = project
+        where_clauses.append(_project_filter(filter_type))
+        params["project_name"] = project + " - %" if filter_type == "virtual_master" else project
 
     if property_type:
         where_clauses.append("ejari_property_type_en = {property_type:String}")

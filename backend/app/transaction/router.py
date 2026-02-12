@@ -38,6 +38,7 @@ async def get_sales_transactions(
     # Location filters
     area: str = Query(default=None, description="Area name"),
     project: str = Query(default=None, description="Project name"),
+    filter_type: str = Query(default="project", description="Project filter type: master, virtual_master, or project"),
     building: str = Query(default=None, description="Building name"),
     # Range filters
     timeframe_days: int = Query(default=None, description="Days back from today"),
@@ -63,6 +64,7 @@ async def get_sales_transactions(
         registration_type=registration_type,
         area=area,
         project=project,
+        filter_type=filter_type,
         building=building,
         timeframe_days=timeframe_days,
         area_min=area_min,
@@ -93,6 +95,7 @@ async def get_rental_contracts(
     # Location filters
     area: str = Query(default=None, description="Area name"),
     project: str = Query(default=None, description="Project name"),
+    filter_type: str = Query(default="project", description="Project filter type: master, virtual_master, or project"),
     # Range filters
     timeframe_days: int = Query(default=None, description="Days back from today"),
     area_min: float = Query(default=None, description="Minimum property area (sqm)"),
@@ -115,6 +118,7 @@ async def get_rental_contracts(
         contract_reg_type=contract_reg_type,
         area=area,
         project=project,
+        filter_type=filter_type,
         timeframe_days=timeframe_days,
         area_min=area_min,
         area_max=area_max,
@@ -139,6 +143,7 @@ async def export_sales_transactions_endpoint(
     # Location filters
     area: str = Query(default=None, description="Area name"),
     project: str = Query(default=None, description="Project name"),
+    filter_type: str = Query(default="project", description="Project filter type: master, virtual_master, or project"),
     building: str = Query(default=None, description="Building name"),
     # Range filters
     timeframe_days: int = Query(default=None, description="Days back from today"),
@@ -163,6 +168,7 @@ async def export_sales_transactions_endpoint(
         registration_type=registration_type,
         area=area,
         project=project,
+        filter_type=filter_type,
         building=building,
         timeframe_days=timeframe_days,
         area_min=area_min,
@@ -206,6 +212,7 @@ async def export_rental_contracts_endpoint(
     # Location filters
     area: str = Query(default=None, description="Area name"),
     project: str = Query(default=None, description="Project name"),
+    filter_type: str = Query(default="project", description="Project filter type: master, virtual_master, or project"),
     # Range filters
     timeframe_days: int = Query(default=None, description="Days back from today"),
     area_min: float = Query(default=None, description="Minimum property area (sqm)"),
@@ -227,6 +234,7 @@ async def export_rental_contracts_endpoint(
         contract_reg_type=contract_reg_type,
         area=area,
         project=project,
+        filter_type=filter_type,
         timeframe_days=timeframe_days,
         area_min=area_min,
         area_max=area_max,
