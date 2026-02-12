@@ -8,21 +8,15 @@
 		login_with_email_pass,
 		sign_up_with_password,
 		sign_in_with_magic_link,
-		sign_up_with_magic_link,
 		verify_otp,
 		resend_otp,
-		request_password_reset,
-		get_session,
-		identifyUser,
-		me
+		request_password_reset
 	} from '$lib/api/auth';
 
 	type View = 'login' | 'signup' | 'verify-otp' | 'email-auth' | 'email-auth-otp' | 'forgot-password' | 'forgot-password-otp';
 
 	let currentView = $state<View>('login');
 	let email = $state('');
-	let firstName = $state('');
-	let lastName = $state('');
 	let password = $state('');
 	let confirmPassword = $state('');
 	let otpCode = $state('');
@@ -34,19 +28,13 @@
 
 	let fieldErrors = $state({
 		email: '',
-		firstName: '',
-		lastName: '',
 		password: '',
 		confirmPassword: ''
 	});
 
-	onMount(async () => {
-		const session = await get_session();
-		if (session) {
-			goto('/dashboard');
-		}
-
-		// Capture tier from URL parameter and store in localStorage
+	// Layout handles redirect for authenticated users.
+	// Only capture tier param here.
+	onMount(() => {
 		const urlParams = new URLSearchParams(window.location.search);
 		const tier = urlParams.get('tier');
 		if (tier === 'tier1' || tier === 'tier2') {
@@ -66,21 +54,20 @@
 		}, 1000);
 	}
 
-	function validateEmail(email: string): boolean {
-		return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-	}
-
 	function goBack() {
 		currentView = 'login';
 		error = '';
 		password = '';
 		confirmPassword = '';
 		otpCode = '';
-		firstName = '';
-		lastName = '';
 		if (countdownInterval) {
 			clearInterval(countdownInterval);
 		}
+	}
+
+	/** After any successful auth, navigate to dashboard — layout will redirect to correct step */
+	function navigateAfterAuth() {
+		goto('/dashboard');
 	}
 
 	async function handleLogin() {
@@ -96,17 +83,7 @@
 		try {
 			const result = await login_with_email_pass(email, password);
 			if (result.success) {
-				const user = await me();
-				identifyUser(user);
-
-				// Check if user has completed profile
-				if (!user.first_name || !user.last_name) {
-					goto('/profile-setup');
-				} else if (user.organization_id) {
-					goto('/dashboard');
-				} else {
-					goto('/profile-setup');
-				}
+				navigateAfterAuth();
 			} else {
 				error = result.error || 'Invalid email or password';
 			}
@@ -146,11 +123,18 @@
 		try {
 			const result = await sign_up_with_password(email, password, '', '');
 			if (result.success) {
-				currentView = 'verify-otp';
-				startResendCountdown();
+				if (result.data?.session) {
+					navigateAfterAuth();
+				} else {
+					// Manual confirmation required
+					currentView = 'verify-otp';
+					startResendCountdown();
+				}
 			} else {
 				error = result.error || 'Sign up failed';
 			}
+		} catch {
+			error = 'An unexpected error occurred during sign up. Please try again.';
 		} finally {
 			loading = false;
 		}
@@ -168,11 +152,7 @@
 		try {
 			const result = await verify_otp(email, otpCode, 'signup');
 			if (result.success) {
-				const user = await me();
-				identifyUser(user);
-
-				// Always redirect to profile setup after signup verification
-				goto('/profile-setup');
+				navigateAfterAuth();
 			} else {
 				error = result.error || 'Invalid verification code';
 			}
@@ -233,17 +213,7 @@
 		try {
 			const result = await verify_otp(email, otpCode, 'magiclink');
 			if (result.success) {
-				const user = await me();
-				identifyUser(user);
-
-				// Check if user has completed profile
-				if (!user.first_name || !user.last_name) {
-					goto('/profile-setup');
-				} else if (user.organization_id) {
-					goto('/dashboard');
-				} else {
-					goto('/profile-setup');
-				}
+				navigateAfterAuth();
 			} else {
 				error = result.error || 'Invalid verification code';
 			}
@@ -287,7 +257,7 @@
 			} else {
 				error = result.error || 'Failed to send reset email';
 			}
-		} catch (e) {
+		} catch {
 			error = 'Failed to send reset email. Please try again.';
 		} finally {
 			loading = false;
@@ -306,11 +276,7 @@
 		try {
 			const result = await verify_otp(email, otpCode, 'recovery');
 			if (result.success) {
-				// After successful OTP verification for password reset,
-				// user can set new password (handled by backend redirect or next step)
-				const user = await me();
-				identifyUser(user);
-				goto('/dashboard');
+				navigateAfterAuth();
 			} else {
 				error = result.error || 'Invalid verification code';
 			}
@@ -331,7 +297,7 @@
 			} else {
 				error = result.error || 'Failed to resend code';
 			}
-		} catch (e) {
+		} catch {
 			error = 'Failed to resend code. Please try again.';
 		} finally {
 			loading = false;

@@ -1,17 +1,16 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
-	import { me } from '$lib/api/auth';
 	import { createCheckoutSession } from '$lib/api/billing';
+	import { createOrganization } from '$lib/api/organization';
+	import { currentUser } from '$lib/stores/user.svelte';
 
-	let firstName = $state('');
-	let lastName = $state('');
 	let organizationName = $state('');
 	let seats = $state(3);
 	let customSeats = $state('');
 	let useCustomSeats = $state(false);
 	let loading = $state(false);
+	let loadingStep = $state<'creating-org' | 'creating-checkout' | null>(null);
 	let error = $state('');
 	let userLoaded = $state(false);
 	let selectedTier = $state<'tier1' | 'tier2'>('tier1');
@@ -30,39 +29,25 @@
 	const totalMonthly = $derived(seats * pricePerSeat);
 	const tierName = $derived(selectedTier === 'tier1' ? TIER1_NAME : TIER2_NAME);
 
-	onMount(async () => {
-		try {
-			const user = await me();
-			firstName = user.first_name || '';
-			lastName = user.last_name || '';
+	// Layout ensures user is authenticated with complete profile before this page loads
+	onMount(() => {
+		const user = currentUser.data;
 
-			// Redirect to profile setup if name not set
-			if (!firstName || !lastName) {
-				goto('/profile-setup');
-				return;
-			}
-
-			// Get tier from URL parameter or localStorage
-			const tierParam = $page.url.searchParams.get('tier');
-			if (tierParam === 'tier1' || tierParam === 'tier2') {
-				selectedTier = tierParam;
-				// Clear from localStorage since we got it from URL
+		// Get tier from URL parameter or localStorage
+		const tierParam = $page.url.searchParams.get('tier');
+		if (tierParam === 'tier1' || tierParam === 'tier2') {
+			selectedTier = tierParam;
+			localStorage.removeItem('selected_tier');
+		} else {
+			const storedTier = localStorage.getItem('selected_tier');
+			if (storedTier === 'tier1' || storedTier === 'tier2') {
+				selectedTier = storedTier;
 				localStorage.removeItem('selected_tier');
-			} else {
-				// Fallback to localStorage if no URL param
-				const storedTier = localStorage.getItem('selected_tier');
-				if (storedTier === 'tier1' || storedTier === 'tier2') {
-					selectedTier = storedTier;
-					localStorage.removeItem('selected_tier');
-				}
 			}
-
-			organizationName = `${firstName}'s Organization`;
-			userLoaded = true;
-		} catch (err) {
-			// User not authenticated, redirect to auth
-			goto('/auth?view=signup');
 		}
+
+		organizationName = user ? `${user.first_name}'s Organization` : '';
+		userLoaded = true;
 	});
 
 	function handleSeatSelection(value: number) {
@@ -93,18 +78,41 @@
 		error = '';
 
 		try {
-			const result = await createCheckoutSession(
-				firstName.trim(),
-				lastName.trim(),
-				organizationName.trim(),
+			// Step 1: Create organization (idempotent - reuses existing if present)
+			loadingStep = 'creating-org';
+			const orgResult = await createOrganization(organizationName.trim(), seats);
+
+			console.log('Organization created/updated:', orgResult);
+
+			// Step 2: Create Stripe checkout session with org_id
+			loadingStep = 'creating-checkout';
+			const checkoutResult = await createCheckoutSession(
+				orgResult.organization_id,
 				seats,
 				selectedTier
 			);
-			// Redirect to Stripe Checkout
-			window.location.href = result.checkout_url;
+
+			console.log('Checkout session created:', checkoutResult);
+
+			// Step 3: Redirect to Stripe
+			if (!checkoutResult.checkout_url) {
+				throw new Error('No checkout URL returned from server');
+			}
+
+			window.location.href = checkoutResult.checkout_url;
 		} catch (err: any) {
-			error = err.message || 'Failed to create checkout session. Please try again.';
+			console.error('Payment setup failed:', err);
+			const step = loadingStep === 'creating-org' ? 'organization creation' : 'checkout session creation';
+
+			// Show detailed error message
+			if (err.message) {
+				error = `Failed during ${step}: ${err.message}`;
+			} else {
+				error = `Failed during ${step}. Please try again or contact support.`;
+			}
+
 			loading = false;
+			loadingStep = null;
 		}
 	}
 </script>
@@ -124,15 +132,26 @@
 				</p>
 			</div>
 
-			<!-- Selected Tier Display -->
-			<div class="mb-6 p-4 bg-slate-50 border border-slate-200 rounded-lg flex items-center justify-between">
-				<div>
-					<p class="text-sm text-slate-600">Selected Plan</p>
-					<p class="text-lg font-semibold text-slate-900">{tierName}</p>
-				</div>
-				<div class="text-right">
-					<p class="text-sm text-slate-600">Price per seat</p>
-					<p class="text-lg font-semibold text-slate-900">{pricePerSeat} AED/month</p>
+			<!-- Tier Selection -->
+			<div>
+				<p class="block text-sm font-medium text-slate-700 mb-3">Select Plan</p>
+				<div class="grid grid-cols-2 gap-3 mb-6">
+					<button
+						type="button"
+						onclick={() => selectedTier = 'tier1'}
+						class="p-4 rounded-lg border-2 text-left transition-all {selectedTier === 'tier1' ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'}"
+					>
+						<p class="font-semibold">{TIER1_NAME}</p>
+						<p class="text-2xl font-bold mt-1">{TIER1_PRICE} <span class="text-sm font-normal">AED/seat/mo</span></p>
+					</button>
+					<button
+						type="button"
+						onclick={() => selectedTier = 'tier2'}
+						class="p-4 rounded-lg border-2 text-left transition-all {selectedTier === 'tier2' ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'}"
+					>
+						<p class="font-semibold">{TIER2_NAME}</p>
+						<p class="text-2xl font-bold mt-1">{TIER2_PRICE} <span class="text-sm font-normal">AED/seat/mo</span></p>
+					</button>
 				</div>
 			</div>
 
@@ -225,7 +244,11 @@
 						disabled={loading}
 						class="w-full bg-slate-900 hover:bg-slate-800 text-white font-semibold rounded-lg px-6 py-4 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-lg"
 					>
-						{loading ? 'Processing...' : 'Continue to Payment'}
+						{#if loading}
+							{loadingStep === 'creating-org' ? 'Creating organization...' : loadingStep === 'creating-checkout' ? 'Setting up payment...' : 'Processing...'}
+						{:else}
+							Continue to Payment
+						{/if}
 					</button>
 				{/if}
 			</form>

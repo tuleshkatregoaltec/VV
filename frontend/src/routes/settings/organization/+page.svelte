@@ -1,7 +1,5 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
 	import { createQuery } from '@tanstack/svelte-query';
-	import { me } from '$lib/api/auth';
 	import {
 		getOrganizationMembers,
 		getOrganizationSubscription,
@@ -9,9 +7,11 @@
 		deactivateUser,
 		inviteUserByEmail
 	} from '$lib/api/organization';
+	import { currentUser as userStore } from '$lib/stores/user.svelte';
 
-	let currentUser = $state<any>(null);
-	let isOrgAdmin = $state(false);
+	let currentUser = $derived(userStore.data);
+	let isOwner = $derived(currentUser?.is_owner === true);
+
 	let showInviteModal = $state(false);
 	let inviteEmail = $state('');
 	let inviteLoading = $state(false);
@@ -19,37 +19,24 @@
 	let inviteSuccess = $state(false);
 	let resendingEmail = $state('');
 
-	let membersQuery = $state(null as any);
-	let subscriptionQuery = $state(null as any);
+	// Top-level createQuery calls (v6: pass a function returning options)
+	const membersQuery = createQuery(() => ({
+		queryKey: ['organization', 'members'] as const,
+		queryFn: () => getOrganizationMembers(),
+		enabled: isOwner
+	}));
 
-	onMount(async () => {
-		try {
-			currentUser = await me();
-			isOrgAdmin = currentUser?.role === 'organization_admin';
+	const subscriptionQuery = createQuery(() => ({
+		queryKey: ['organization', 'subscription'] as const,
+		queryFn: () => getOrganizationSubscription(),
+		enabled: isOwner
+	}));
 
-			if (isOrgAdmin) {
-				membersQuery = createQuery({
-					queryKey: ['organization', 'members'] as const,
-					queryFn: () => getOrganizationMembers()
-				} as any);
-
-				subscriptionQuery = createQuery({
-					queryKey: ['organization', 'subscription'] as const,
-					queryFn: () => getOrganizationSubscription()
-				} as any);
-			}
-		} catch (err) {
-			console.error('Failed to load user:', err);
-		}
-	});
-
-	const members = $derived(membersQuery?.data || []);
-	const subscription = $derived(subscriptionQuery?.data);
-	const activeMembers = $derived(members.filter((m: any) => m.is_active));
-	const inactiveMembers = $derived(members.filter((m: any) => !m.is_active));
-	const availableSeats = $derived(subscription?.available_seats || 0);
-	const hasExcessUsers = $derived((subscription?.excess_users || 0) > 0);
-	const withinPaidPeriod = $derived(subscription?.within_paid_period || false);
+	const members = $derived(membersQuery.data ?? []);
+	const subscription = $derived(subscriptionQuery.data);
+	const availableSeats = $derived(subscription?.available_seats ?? 0);
+	const hasExcessUsers = $derived((subscription?.excess_users ?? 0) > 0);
+	const withinPaidPeriod = $derived(subscription?.within_paid_period ?? false);
 
 	async function handleManageSubscription() {
 		try {
@@ -61,13 +48,10 @@
 	}
 
 	async function handleDeactivateUser(userId: string, userName: string) {
-		if (!confirm(`Are you sure you want to deactivate ${userName}?`)) {
-			return;
-		}
-
+		if (!confirm(`Are you sure you want to deactivate ${userName}?`)) return;
 		try {
 			await deactivateUser(userId);
-			membersQuery?.refetch();
+			membersQuery.refetch();
 		} catch (err: any) {
 			alert(err.message || 'Failed to deactivate user');
 		}
@@ -77,7 +61,7 @@
 		resendingEmail = email;
 		try {
 			const redirectUrl = `${window.location.origin}/profile-setup`;
-			await inviteUserByEmail(email, currentUser.organization_id, redirectUrl);
+			await inviteUserByEmail(email, currentUser!.organization_id!, redirectUrl);
 			alert(`Invitation resent to ${email}`);
 		} catch (err: any) {
 			alert(err.message || 'Failed to resend invitation');
@@ -100,7 +84,7 @@
 			return;
 		}
 
-		if (availableSeats <= 0) {
+		if (subscription && availableSeats <= 0) {
 			inviteError = 'No available seats. Please upgrade your subscription first.';
 			return;
 		}
@@ -109,7 +93,7 @@
 
 		try {
 			const redirectUrl = `${window.location.origin}/profile-setup`;
-			const result = await inviteUserByEmail(inviteEmail, currentUser.organization_id, redirectUrl);
+			const result = await inviteUserByEmail(inviteEmail, currentUser!.organization_id!, redirectUrl);
 
 			if (result.success) {
 				inviteSuccess = true;
@@ -141,15 +125,15 @@
 	<title>Organization Settings - Vitevue</title>
 </svelte:head>
 
-<div class="min-h-screen bg-slate-50 p-6">
-	<div class="max-w-6xl mx-auto">
+<div class="bg-slate-50 p-6 min-h-full">
+	<div class="max-w-2xl mx-auto">
 		<!-- Header -->
 		<div class="mb-8">
 			<h1 class="text-3xl font-bold text-slate-900 mb-2">Organization Settings</h1>
 			<p class="text-slate-600">Manage your organization members and subscription</p>
 		</div>
 
-		{#if !isOrgAdmin}
+		{#if !isOwner}
 			<div class="bg-white rounded-lg shadow p-8 text-center">
 				<svg class="w-16 h-16 text-slate-300 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path>
@@ -164,7 +148,7 @@
 					<h2 class="text-xl font-semibold text-slate-900">Subscription</h2>
 				</div>
 				<div class="p-6">
-					{#if subscriptionQuery?.isLoading}
+					{#if subscriptionQuery.isLoading}
 						<div class="animate-pulse space-y-3">
 							<div class="h-4 bg-slate-200 rounded w-1/3"></div>
 							<div class="h-4 bg-slate-200 rounded w-1/2"></div>
@@ -254,14 +238,14 @@
 					<h2 class="text-xl font-semibold text-slate-900">Team Members</h2>
 					<button
 						onclick={() => showInviteModal = true}
-						disabled={availableSeats <= 0}
+						disabled={subscription !== undefined && availableSeats <= 0}
 						class="px-4 py-2 bg-slate-900 text-white font-semibold rounded-lg hover:bg-slate-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
 					>
 						Invite Member
 					</button>
 				</div>
 				<div class="p-6">
-					{#if membersQuery?.isLoading}
+					{#if membersQuery.isLoading}
 						<div class="animate-pulse space-y-4">
 							{#each [1, 2, 3] as _}
 								<div class="h-16 bg-slate-200 rounded"></div>

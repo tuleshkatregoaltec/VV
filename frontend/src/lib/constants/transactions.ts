@@ -26,7 +26,12 @@ export const RESIDENTIAL_COLUMNS: ColumnDefinition[] = [
 	{ id: 'area', label: 'Area (sq.m)', align: 'right', format: (val: number) => val.toLocaleString(), defaultVisible: true },
 	{ id: 'price', label: 'Price (AED)', align: 'right', format: (val: number) => val.toLocaleString(), defaultVisible: true },
 	{ id: 'pricePerSqM', label: 'Price/sq.m', align: 'right', highlighted: true, format: (val: number) => val.toLocaleString(), defaultVisible: true },
-	{ id: 'registration', label: 'Registration', align: 'left', defaultVisible: false }
+	{ id: 'registration', label: 'Registration', align: 'left', defaultVisible: false },
+	{ id: 'trans_group', label: 'Group', align: 'left', defaultVisible: false },
+	{ id: 'procedure_name', label: 'Procedure', align: 'left', defaultVisible: false },
+	{ id: 'landmark', label: 'Landmark', align: 'left', defaultVisible: false },
+	{ id: 'metro', label: 'Nearest Metro', align: 'left', defaultVisible: false },
+	{ id: 'mall', label: 'Nearest Mall', align: 'left', defaultVisible: false }
 ];
 
 export const COMMERCIAL_COLUMNS: ColumnDefinition[] = [
@@ -39,7 +44,12 @@ export const COMMERCIAL_COLUMNS: ColumnDefinition[] = [
 	{ id: 'area', label: 'Area (sq.m)', align: 'right', format: (val: number) => val.toLocaleString(), defaultVisible: true },
 	{ id: 'price', label: 'Price (AED)', align: 'right', format: (val: number) => val.toLocaleString(), defaultVisible: true },
 	{ id: 'pricePerSqM', label: 'Price/sq.m', align: 'right', highlighted: true, format: (val: number) => val.toLocaleString(), defaultVisible: true },
-	{ id: 'registration', label: 'Registration', align: 'left', defaultVisible: false }
+	{ id: 'registration', label: 'Registration', align: 'left', defaultVisible: false },
+	{ id: 'trans_group', label: 'Group', align: 'left', defaultVisible: false },
+	{ id: 'procedure_name', label: 'Procedure', align: 'left', defaultVisible: false },
+	{ id: 'landmark', label: 'Landmark', align: 'left', defaultVisible: false },
+	{ id: 'metro', label: 'Nearest Metro', align: 'left', defaultVisible: false },
+	{ id: 'mall', label: 'Nearest Mall', align: 'left', defaultVisible: false }
 ];
 
 // Timeframe to days conversion

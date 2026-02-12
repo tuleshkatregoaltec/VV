@@ -31,5 +31,4 @@ function createPersisted<T>(key: string, initial: T) {
 
 // Global filters (used across app)
 export const propertyType = createPersisted('filter-propertyType', 'Residential');
-export const masterProject = createPersisted('filter-masterProject', 'All');
 export const timeframe = createPersisted('filter-timeframe', 'Last Month');

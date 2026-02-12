@@ -1,13 +1,15 @@
 <script lang="ts">
-  import { setContext } from 'svelte';
   import { createQuery } from '@tanstack/svelte-query';
   import DataPanel from '$lib/components/transactions/DataPanel.svelte';
   import FilterPanel from '$lib/components/filters/FilterPanel.svelte';
   import Pagination from '$lib/components/ui/Pagination.svelte';
+  import ProjectSelector from '$lib/components/analytics/ProjectSelector.svelte';
+  import SearchableDropdown from '$lib/components/dropdowns/SearchableDropdown.svelte';
   import { transactions as api } from '$lib/api/transactions';
   import { filters } from '$lib/api/filters';
+  import { analytics, type ProjectSearchItem } from '$lib/api/analytics';
   import type { RentalContract } from '$lib/api/transactions';
-  import { propertyType, masterProject, timeframe } from '$lib/components/filters/globalFilters.svelte';
+  import { propertyType, timeframe } from '$lib/components/filters/globalFilters.svelte';
   import {
     TIMEFRAME_MAPPING,
     DEFAULT_ITEMS_PER_PAGE
@@ -22,6 +24,7 @@
     contract_id: string;
     startDate: string;
     endDate: string;
+    area_name: string;
     project: string;
     propertyType: string;
     propertySubType: string;
@@ -29,7 +32,12 @@
     area: number;
     annualRent: number;
     registration: string;
-    area_name: string;
+    contractAmount: number | null;
+    numProperties: number | null;
+    freehold: string;
+    landmark: string;
+    metro: string;
+    mall: string;
   }
 
   // Column configuration for rentals
@@ -43,7 +51,13 @@
     { id: 'tenantType', label: 'Tenant Type', align: 'left' as const, badge: true, defaultVisible: true },
     { id: 'area', label: 'Area (sq.m)', align: 'right' as const, format: (val: number) => val.toLocaleString(), defaultVisible: true },
     { id: 'annualRent', label: 'Annual Rent (AED)', align: 'right' as const, highlighted: true, format: (val: number) => val.toLocaleString(), defaultVisible: true },
-    { id: 'registration', label: 'Reg Type', align: 'left' as const, defaultVisible: false }
+    { id: 'registration', label: 'Reg Type', align: 'left' as const, defaultVisible: false },
+    { id: 'contractAmount', label: 'Contract Amount (AED)', align: 'right' as const, format: (val: number) => val?.toLocaleString() ?? '-', defaultVisible: false },
+    { id: 'numProperties', label: '# Properties', align: 'right' as const, defaultVisible: false },
+    { id: 'freehold', label: 'Freehold', align: 'left' as const, defaultVisible: false },
+    { id: 'landmark', label: 'Landmark', align: 'left' as const, defaultVisible: false },
+    { id: 'metro', label: 'Nearest Metro', align: 'left' as const, defaultVisible: false },
+    { id: 'mall', label: 'Nearest Mall', align: 'left' as const, defaultVisible: false }
   ];
 
   // Dropdown context is provided by transactions/+layout.svelte
@@ -54,8 +68,11 @@
   let currentPage = $state(1);
   let selectedContractIds = $state(new Set<string>());
 
+  // Project selection (outside FilterPanel — uses canonical groupings)
+  let selectedProject = $state<ProjectSearchItem | null>(null);
+  let selectedSubProject = $state<string | null>(null);
+
   let localFilters = $state({
-    selectedProject: 'All',
     selectedPropertyType: 'All',
     selectedPropertySubType: 'All',
     selectedTenantType: 'All',
@@ -63,6 +80,18 @@
     areaRange: 'All',
     rentRange: 'All'
   });
+
+  // Sub-projects query — enabled when a master or virtual_master is selected
+  const subProjectsQuery = createQuery(() => ({
+    queryKey: ['sub-projects', selectedProject?.name, selectedProject?.filter_type],
+    queryFn: () => analytics.subProjects(selectedProject!.name, selectedProject!.filter_type),
+    enabled: !!selectedProject && selectedProject.filter_type !== 'project',
+    staleTime: Infinity,
+  }));
+
+  const subProjectOptions = $derived(
+    subProjectsQuery.data?.sub_projects.map(p => p.name) ?? []
+  );
 
   // ========================================
   // Build API Filters
@@ -74,16 +103,16 @@
       limit: DEFAULT_ITEMS_PER_PAGE,
       offset: (currentPage - 1) * DEFAULT_ITEMS_PER_PAGE
     };
-    
-    // Global filters
-    if (masterProject.current !== 'All') {
-      apiFilters.master_project = masterProject.current;
+
+    // Project filter — use sub-project if selected, otherwise canonical grouping
+    if (selectedSubProject) {
+      apiFilters.project = selectedSubProject;
+      apiFilters.filter_type = 'project';
+    } else if (selectedProject) {
+      apiFilters.project = selectedProject.name;
+      apiFilters.filter_type = selectedProject.filter_type;
     }
-    
-    // Local dropdown filters
-    if (localFilters.selectedProject !== 'All') {
-      apiFilters.project = localFilters.selectedProject;
-    }
+
     if (localFilters.selectedPropertyType !== 'All') {
       apiFilters.property_type = localFilters.selectedPropertyType;
     }
@@ -102,7 +131,7 @@
       apiFilters.area = localFilters.areaRange;
     }
     if (localFilters.rentRange !== 'All') {
-      apiFilters.annualRent = localFilters.rentRange;
+      apiFilters.rent = localFilters.rentRange;
     }
     
     return apiFilters;
@@ -116,10 +145,11 @@
   let rentalsQueryKey = $derived([
     'rental-contracts',
     propertyType.current,
-    masterProject.current,
     timeframe.current,
     currentPage,
-    localFilters.selectedProject,
+    selectedProject?.name,
+    selectedProject?.filter_type,
+    selectedSubProject,
     localFilters.selectedPropertyType,
     localFilters.selectedPropertySubType,
     localFilters.selectedTenantType,
@@ -139,13 +169,10 @@
     'filterOptions',
     'rentals',
     propertyType.current,
-    masterProject.current,
-    timeframe.current,
-    localFilters.selectedProject,
+    selectedProject?.name,
+    selectedProject?.filter_type,
+    selectedSubProject,
     localFilters.selectedPropertyType,
-    localFilters.selectedPropertySubType,
-    localFilters.selectedTenantType,
-    localFilters.selectedRegistration,
   ]);
 
   // Filter options query
@@ -154,27 +181,19 @@
     queryFn: () => {
       const filterParams: Record<string, any> = {
         property_usage: propertyType.current,
-        timeframe_days: TIMEFRAME_MAPPING[timeframe.current]
       };
 
-      // Add active filters for context-aware options
-      if (masterProject.current !== 'All') {
-        filterParams.master_project = masterProject.current;
+      // Narrow by project selection (same logic as main query)
+      if (selectedSubProject) {
+        filterParams.project = selectedSubProject;
+        filterParams.filter_type = 'project';
+      } else if (selectedProject) {
+        filterParams.project = selectedProject.name;
+        filterParams.filter_type = selectedProject.filter_type;
       }
-      if (localFilters.selectedProject !== 'All') {
-        filterParams.project = localFilters.selectedProject;
-      }
+
       if (localFilters.selectedPropertyType !== 'All') {
         filterParams.property_type = localFilters.selectedPropertyType;
-      }
-      if (localFilters.selectedPropertySubType !== 'All') {
-        filterParams.property_sub_type = localFilters.selectedPropertySubType;
-      }
-      if (localFilters.selectedTenantType !== 'All') {
-        filterParams.tenant_type = localFilters.selectedTenantType;
-      }
-      if (localFilters.selectedRegistration !== 'All') {
-        filterParams.contract_reg_type = localFilters.selectedRegistration;
       }
 
       return filters.rentals(filterParams);
@@ -188,52 +207,44 @@
   
   const opts = $derived(filterOptionsQuery.data);
   
-  let filterDefinitions = $derived<FilterDefinition[]>(
-    opts ? [
-      { 
-        id: 'selectedProject', 
-        label: 'Project', 
-        type: 'searchable', 
-        options: ['All', ...(opts.projects ?? [])] 
-      },
-      { 
-        id: 'selectedPropertyType', 
-        label: 'Property Type', 
-        type: 'standard', 
-        options: ['All', ...(opts.property_types ?? [])] 
-      },
-      { 
-        id: 'selectedPropertySubType', 
-        label: 'Sub Type', 
-        type: 'standard', 
-        options: ['All', ...(opts.property_sub_types ?? [])] 
-      },
-      { 
-        id: 'selectedTenantType', 
-        label: 'Tenant Type', 
-        type: 'standard', 
-        options: ['All', ...(opts.tenant_types ?? [])] 
-      },
-      { 
-        id: 'selectedRegistration', 
-        label: 'Reg Type', 
-        type: 'standard', 
-        options: ['All', ...(opts.contract_reg_types ?? [])] 
-      },
-      { 
-        id: 'areaRange', 
-        label: 'Area (sq.m)', 
-        type: 'standard',
-        options: AREA_OPTIONS
-      },
-      { 
-        id: 'rentRange', 
-        label: 'Annual Rent (AED)', 
-        type: 'standard',
-        options: ANNUAL_RENT_OPTIONS
-      }
-    ] : []
-  );
+  let filterDefinitions = $derived<FilterDefinition[]>([
+    {
+      id: 'selectedPropertyType',
+      label: 'Property Type',
+      type: 'standard',
+      options: ['All', ...(opts?.property_types ?? [])]
+    },
+    {
+      id: 'selectedPropertySubType',
+      label: 'Sub Type',
+      type: 'standard',
+      options: ['All', ...(opts?.property_sub_types ?? [])]
+    },
+    {
+      id: 'selectedTenantType',
+      label: 'Tenant Type',
+      type: 'standard',
+      options: ['All', ...(opts?.tenant_types ?? [])]
+    },
+    {
+      id: 'selectedRegistration',
+      label: 'Reg Type',
+      type: 'standard',
+      options: ['All', ...(opts?.contract_reg_types ?? [])]
+    },
+    {
+      id: 'areaRange',
+      label: 'Area (sq.m)',
+      type: 'standard',
+      options: AREA_OPTIONS
+    },
+    {
+      id: 'rentRange',
+      label: 'Annual Rent (AED)',
+      type: 'standard',
+      options: ANNUAL_RENT_OPTIONS
+    }
+  ]);
 
   function transformRental(r: RentalContract): TransformedRental {
     return {
@@ -248,6 +259,12 @@
       area: r.actual_area ?? 0,
       annualRent: r.annual_amount ?? 0,
       registration: r.contract_reg_type_en ?? '-',
+      contractAmount: r.contract_amount,
+      numProperties: r.no_of_prop,
+      freehold: r.is_free_hold === null ? '-' : r.is_free_hold ? 'Yes' : 'No',
+      landmark: r.nearest_landmark_en ?? '-',
+      metro: r.nearest_metro_en ?? '-',
+      mall: r.nearest_mall_en ?? '-',
     };
   }
 
@@ -262,23 +279,22 @@
   let totalRecords = $derived(rentalsQuery.data?.total ?? 0);
   let totalPages = $derived(Math.ceil(totalRecords / DEFAULT_ITEMS_PER_PAGE));
 
-  // Make columns reactive to propertyType changes (ensures proper re-rendering)
-  // We access propertyType.current here to ensure reactivity tracking
-  let columns = $derived(propertyType.current ? RENTAL_COLUMNS : RENTAL_COLUMNS);
+  const columns = RENTAL_COLUMNS;
 
   // ========================================
   // Actions
   // ========================================
   
   function resetFilters() {
+    selectedProject = null;
+    selectedSubProject = null;
     localFilters = {
-      selectedProject: 'All',
       selectedPropertyType: 'All',
       selectedPropertySubType: 'All',
       selectedTenantType: 'All',
       selectedRegistration: 'All',
-      areaRange: 'All',   // ✅ String
-      rentRange: 'All'    // ✅ String
+      areaRange: 'All',
+      rentRange: 'All'
     };
     currentPage = 1;
   }
@@ -293,7 +309,9 @@
   
   // Track filter changes to reset page
   let filterKey = $derived(JSON.stringify({
-    project: localFilters.selectedProject,
+    project: selectedProject?.name,
+    filterType: selectedProject?.filter_type,
+    subProject: selectedSubProject,
     propertyType: localFilters.selectedPropertyType,
     propertySubType: localFilters.selectedPropertySubType,
     tenantType: localFilters.selectedTenantType,
@@ -317,7 +335,7 @@
 
   // Reset page and filters on global filter changes
   $effect(() => {
-    const _ = [propertyType.current, masterProject.current, timeframe.current];
+    const _ = [propertyType.current, timeframe.current];
     currentPage = 1;
     resetFilters();
     selectedContractIds = new Set(); // Clear selection on global filter change
@@ -367,6 +385,31 @@
     </button>
   </div>
 {/if}
+
+<div class="relative z-20 bg-white/80 backdrop-blur-sm rounded-xl shadow-sm border border-slate-200 px-6 pt-6 pb-4 mb-2">
+  <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+    <div class="flex flex-col gap-2">
+      <label class="block text-sm text-slate-900">Project</label>
+      <ProjectSelector
+        bind:value={selectedProject}
+        placeholder="Search project..."
+        onSelect={() => { selectedSubProject = null; currentPage = 1; }}
+      />
+    </div>
+    {#if selectedProject && selectedProject.filter_type !== 'project'}
+      <div class="flex flex-col gap-2">
+        <label class="block text-sm text-slate-900">Sub-project</label>
+        <SearchableDropdown
+          id="rentals-sub-project"
+          ariaLabel="Sub-project"
+          options={['All', ...subProjectOptions]}
+          value={selectedSubProject ?? 'All'}
+          onchange={(v) => { selectedSubProject = v === 'All' ? null : v; currentPage = 1; }}
+        />
+      </div>
+    {/if}
+  </div>
+</div>
 
 <FilterPanel
   {filterDefinitions}

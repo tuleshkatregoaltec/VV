@@ -1,17 +1,8 @@
 <script lang="ts">
     import FilterToggle from './FilterToggle.svelte';
-    import SearchableDropdown from '../dropdowns/SearchableDropdown.svelte';
     import StandardDropdown from '../dropdowns/StandardDropdown.svelte';
-    import { propertyType, masterProject, timeframe } from './globalFilters.svelte';
-    import { filters } from '$lib/api/filters';
-    import { createQuery } from '@tanstack/svelte-query';
+    import { propertyType, timeframe } from './globalFilters.svelte';
 
-    const masterProjectsQuery = createQuery(() => ({
-        queryKey: ['master-projects'],
-        queryFn: () => filters.masterProjects(),
-        staleTime: 24 * 60 * 60 * 1000,
-    }));
-    
     const timeframes = ['Last Week', 'Last Month', 'Last 3 Months', 'Last 6 Months', 'Last Year'];
 </script>
 
@@ -25,14 +16,6 @@
         </div>
 
         <div class="flex flex-col sm:flex-row gap-4 ml-auto">
-            <div class="w-48">
-                <SearchableDropdown
-                    id="filterbar-master-project"
-                    ariaLabel="Master Project"
-                    options={['All', ...(masterProjectsQuery.data ?? [])]}
-                    bind:value={masterProject.current}
-                />
-            </div>
             <div class="w-48">
                 <StandardDropdown
                     id="filterbar-timeframe"

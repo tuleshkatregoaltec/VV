@@ -4,40 +4,60 @@ import { QueryClient } from '@tanstack/svelte-query';
 import posthog from 'posthog-js';
 import type { LayoutLoad } from './$types';
 import { env } from '$env/dynamic/public';
-import { get_session, me } from '$lib/api/auth';
-import { currentUser, setUser } from '$lib/stores/user.svelte';
+import { get_session, me, identifyUser } from '$lib/api/auth';
+import { currentUser, setUser, loadCached } from '$lib/stores/user.svelte';
 
 export const prerender = false;
 export const ssr = false;
 
-// Public paths that don't require authentication
-const PUBLIC_PATHS = [
-	'/',
-	'/landing-new',
-	'/landing-v2',
-	'/auth',
-	'/auth/reset-password',
-	'/auth/no-org',
-	'/auth/deactivated'
-];
+// Public paths — no auth check at all
+const PUBLIC_PATHS = ['/', '/landing-new', '/landing-v2', '/terms', '/privacy'];
 
-// Onboarding paths - require auth but special handling
-const ONBOARDING_PATHS = [
-	'/profile-setup',
-	'/organization-setup',
-	'/payment-success',
-	'/payment-cancel'
-];
+// Auth gate — redirect away if already authenticated
+const AUTH_PATHS = ['/auth'];
 
-// Protected paths - require auth + complete profile + active org subscription
-// All other paths are protected by default
+// Onboarding — require session, enforce step order, no subscription check
+const ONBOARDING_PATHS = ['/profile-setup', '/organization-setup', '/payment-success', '/payment-cancel'];
 
-function isPublicPath(pathname: string): boolean {
-	return PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(p));
+// Subscription recovery — require session + profile + org, but no subscription check
+const RECOVERY_PATHS = ['/renew'];
+
+// Everything else is protected — require session + profile + org + active subscription
+
+function matchesCategory(pathname: string, paths: string[]): boolean {
+	return paths.some((p) => pathname === p || pathname.startsWith(p + '/'));
 }
 
-function isOnboardingPath(pathname: string): boolean {
-	return ONBOARDING_PATHS.some((p) => pathname === p || pathname.startsWith(p));
+/** Get user from store cache or fetch from backend. Returns null if no session. */
+async function resolveUser() {
+	// Use cached store data if available (no network call)
+	if (currentUser.data) return currentUser.data;
+
+	// Try localStorage cache
+	const cached = loadCached();
+	if (cached) return cached;
+
+	// No cache — need to fetch from backend
+	const session = await get_session();
+	if (!session) return null;
+
+	const user = await me();
+	setUser(user);
+	return user;
+}
+
+/** Determine where a user should be based on their completion status */
+function getOnboardingRedirect(user: { first_name: string; last_name: string; organization_id: string | null; subscription_is_active: boolean; is_owner: boolean; subscription_status: string | null }): string {
+	if (!user.first_name || !user.last_name) return '/profile-setup';
+	if (!user.organization_id) return '/organization-setup';
+	if (!user.subscription_is_active) {
+		// Owner with no/failed subscription goes to org setup to retry payment
+		if (user.is_owner && (!user.subscription_status || user.subscription_status === 'failed' || user.subscription_status === 'pending')) {
+			return '/organization-setup';
+		}
+		return '/renew';
+	}
+	return '/dashboard';
 }
 
 export const load: LayoutLoad = async ({ url }) => {
@@ -51,92 +71,95 @@ export const load: LayoutLoad = async ({ url }) => {
 		}
 	});
 
-	if (browser) {
-		// Initialize PostHog
-		if (env.PUBLIC_POSTHOG_KEY && env.PUBLIC_POSTHOG_HOST && !posthog.__loaded) {
-			try {
-				posthog.init(env.PUBLIC_POSTHOG_KEY, {
-					api_host: env.PUBLIC_POSTHOG_HOST,
-					ui_host: 'https://eu.posthog.com',
-					defaults: '2025-11-30'
-				});
-			} catch (error) {
-				console.warn('Failed to initialize PostHog:', error);
-			}
+	if (!browser) return { queryClient };
+
+	// Initialize PostHog
+	if (env.PUBLIC_POSTHOG_KEY && env.PUBLIC_POSTHOG_HOST && !posthog.__loaded) {
+		try {
+			posthog.init(env.PUBLIC_POSTHOG_KEY, {
+				api_host: env.PUBLIC_POSTHOG_HOST,
+				ui_host: 'https://eu.posthog.com',
+				defaults: '2025-11-30'
+			});
+		} catch (error) {
+			console.warn('Failed to initialize PostHog:', error);
 		}
+	}
 
-		const pathname = url.pathname;
+	const pathname = url.pathname;
 
-		// Public paths - no auth required
-		if (isPublicPath(pathname)) {
-			return { queryClient };
-		}
+	// ── 1. Public paths — no auth needed ──
+	if (matchesCategory(pathname, PUBLIC_PATHS)) {
+		return { queryClient };
+	}
 
-		// Check authentication
+	// ── 2. Auth gate — redirect authenticated users to correct step ──
+	if (matchesCategory(pathname, AUTH_PATHS)) {
 		const session = await get_session();
-		if (!session) {
-			redirect(302, '/auth');
-		}
-
-		// Fetch user data
-		let user = currentUser.data;
-		if (!user) {
+		if (session) {
 			try {
-				user = await me();
+				const user = await me();
 				setUser(user);
-			} catch (err) {
-				redirect(302, '/auth');
+				identifyUser(user);
+				redirect(302, getOnboardingRedirect(user));
+			} catch {
+				// me() failed — let them stay on auth page (session may be invalid)
+				return { queryClient };
 			}
 		}
+		return { queryClient };
+	}
 
-		// Handle onboarding paths
-		if (isOnboardingPath(pathname)) {
-			// Profile setup: allow if user doesn't have first/last name
-			if (pathname.startsWith('/profile-setup')) {
-				// Allow access - this page handles both self-signup and invited users
-				return { queryClient };
-			}
+	// ── All remaining paths require authentication ──
+	let user;
+	try {
+		user = await resolveUser();
+	} catch {
+		user = null;
+	}
 
-			// Organization setup: only allow if user has profile but no org
-			if (pathname.startsWith('/organization-setup')) {
-				if (!user.first_name || !user.last_name) {
-					redirect(302, '/profile-setup');
-				}
-				if (user.organization_id) {
-					redirect(302, '/dashboard');
-				}
-				return { queryClient };
-			}
+	if (!user) {
+		redirect(302, '/auth');
+	}
 
-			// Payment success/cancel: only allow if coming from Stripe (has session_id)
-			if (pathname.startsWith('/payment-success') || pathname.startsWith('/payment-cancel')) {
-				if (!url.searchParams.get('session_id')) {
-					redirect(302, '/dashboard');
-				}
-				return { queryClient };
-			}
-
+	// ── 3. Onboarding paths — enforce step order ──
+	if (matchesCategory(pathname, ONBOARDING_PATHS)) {
+		if (pathname.startsWith('/profile-setup')) {
+			// Always allow — handles both self-signup and invite flows
 			return { queryClient };
 		}
 
-		// Protected routes - require complete profile + organization + active subscription
-
-		// Check if profile is complete
-		if (!user.first_name || !user.last_name) {
-			redirect(302, '/profile-setup');
+		if (pathname.startsWith('/organization-setup')) {
+			if (!user.first_name || !user.last_name) redirect(302, '/profile-setup');
+			if (user.organization_id && user.subscription_is_active) redirect(302, '/dashboard');
+			return { queryClient };
 		}
 
-		// Check if user has organization
-		if (!user.organization_id) {
-			redirect(302, '/organization-setup');
+		if (pathname.startsWith('/payment-success')) {
+			if (!url.searchParams.get('session_id')) redirect(302, '/dashboard');
+			return { queryClient };
 		}
 
-		// Check subscription status (cached from /auth/me response)
-		if (!user.subscription_is_active) {
-			redirect(302, '/auth/no-org');
+		if (pathname.startsWith('/payment-cancel')) {
+			return { queryClient };
 		}
 
 		return { queryClient };
+	}
+
+	// ── 4. Subscription recovery — require profile + org, skip subscription check ──
+	if (matchesCategory(pathname, RECOVERY_PATHS)) {
+		if (!user.first_name || !user.last_name) redirect(302, '/profile-setup');
+		if (!user.organization_id) redirect(302, '/organization-setup');
+		// If subscription is already active, go to dashboard
+		if (user.subscription_is_active) redirect(302, '/dashboard');
+		return { queryClient };
+	}
+
+	// ── 5. Protected paths — require everything ──
+	const target = getOnboardingRedirect(user);
+	if (target !== '/dashboard') {
+		redirect(302, target);
 	}
 
 	return { queryClient };

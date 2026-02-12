@@ -2,13 +2,10 @@
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
-	import { get_session } from '$lib/api/auth';
 	import { update_user_profile } from '$lib/api/auth';
 	import { validateInviteToken, acceptInvite } from '$lib/api/organization';
-	import { client } from '$lib/api/auth';
 	import type { ValidateInviteTokenResponse, InviteConflictResponse } from '$lib/api/organization';
 	import TextInput from '$lib/components/auth/TextInput.svelte';
-	import PasswordInput from '$lib/components/auth/PasswordInput.svelte';
 	import { refreshUser } from '$lib/stores/user.svelte';
 
 	let inviteToken = $state('');
@@ -16,8 +13,6 @@
 	let isInvited = $state(false);
 	let firstName = $state('');
 	let lastName = $state('');
-	let password = $state('');
-	let usePassword = $state(true);
 	let loading = $state(false);
 	let error = $state('');
 	let showConflictModal = $state(false);
@@ -25,32 +20,20 @@
 
 	let fieldErrors = $state({
 		firstName: '',
-		lastName: '',
-		password: ''
+		lastName: ''
 	});
 
+	// Layout ensures user is authenticated before this page loads
 	onMount(async () => {
-		// Check authentication
-		const session = await get_session();
-		if (!session) {
-			goto('/auth?view=signup');
-			return;
-		}
-
-		// Check for invitation token in URL
 		inviteToken = $page.url.searchParams.get('token') || '';
 
 		if (inviteToken) {
-			// Invited user flow - validate token
 			isInvited = true;
 			try {
 				inviteDetails = await validateInviteToken(inviteToken);
 			} catch (err: any) {
 				error = err.message || 'Invalid invitation link. Please contact your administrator.';
 			}
-		} else {
-			// Self-signup flow - no token
-			isInvited = false;
 		}
 	});
 
@@ -58,7 +41,6 @@
 		// Reset errors
 		fieldErrors.firstName = '';
 		fieldErrors.lastName = '';
-		fieldErrors.password = '';
 		error = '';
 
 		// Validate
@@ -72,30 +54,11 @@
 			return;
 		}
 
-		if (usePassword && !isInvited) {
-			if (!password) {
-				fieldErrors.password = 'Password is required';
-				return;
-			}
-			if (password.length < 8) {
-				fieldErrors.password = 'Password must be at least 8 characters';
-				return;
-			}
-		}
-
 		loading = true;
 
 		try {
 			// Update profile via backend
 			await update_user_profile(firstName.trim(), lastName.trim());
-
-			// Set password if chosen and not invited flow
-			if (usePassword && password && !isInvited) {
-				const { error: passwordError } = await client.updateUser({
-					password: password
-				});
-				if (passwordError) throw passwordError;
-			}
 
 			if (isInvited && inviteToken) {
 				// Invited user flow - accept invitation
@@ -116,9 +79,8 @@
 					// Redirect to dashboard
 					goto('/dashboard');
 				} catch (err: any) {
-					if (err.status === 409 && err.data) {
-						// Conflict response
-						conflictDetails = err.data;
+					if (err.status === 409 && err.details?.detail) {
+						conflictDetails = err.details.detail;
 						showConflictModal = true;
 						loading = false;
 						return;
@@ -126,13 +88,10 @@
 					throw err;
 				}
 			} else {
-				// Self-signup flow - redirect to organization setup with tier if available
+				// Self-signup flow - refresh store so layout sees updated names
+				await refreshUser();
 				const selectedTier = localStorage.getItem('selected_tier');
-				if (selectedTier) {
-					goto(`/organization-setup?tier=${selectedTier}`);
-				} else {
-					goto('/organization-setup');
-				}
+				goto(selectedTier ? `/organization-setup?tier=${selectedTier}` : '/organization-setup');
 			}
 		} catch (err: any) {
 			error = err.message || 'Failed to complete profile setup. Please try again.';
@@ -202,64 +161,6 @@
 					required
 					autocomplete="family-name"
 				/>
-
-				<!-- Auth Method Selection (only for non-invited users) -->
-				{#if !isInvited}
-					<div class="border-t border-slate-200 pt-5">
-						<div class="block text-sm font-medium text-slate-700 mb-3">
-							Choose Authentication Method
-						</div>
-
-						<div class="space-y-3">
-							<label
-								class="flex items-start gap-3 p-4 border-2 rounded-lg cursor-pointer transition-all {usePassword
-									? 'border-slate-900 bg-slate-50'
-									: 'border-slate-200 hover:border-slate-300'}"
-							>
-								<input
-									type="radio"
-									bind:group={usePassword}
-									value={true}
-									class="mt-1 h-4 w-4 text-slate-900 focus:ring-slate-900"
-								/>
-								<div class="flex-1">
-									<div class="font-medium text-slate-900">Set a Password</div>
-									<div class="text-sm text-slate-600">Create a password for your account</div>
-								</div>
-							</label>
-
-							<label
-								class="flex items-start gap-3 p-4 border-2 rounded-lg cursor-pointer transition-all {!usePassword
-									? 'border-slate-900 bg-slate-50'
-									: 'border-slate-200 hover:border-slate-300'}"
-							>
-								<input
-									type="radio"
-									bind:group={usePassword}
-									value={false}
-									class="mt-1 h-4 w-4 text-slate-900 focus:ring-slate-900"
-								/>
-								<div class="flex-1">
-									<div class="font-medium text-slate-900">Passwordless Login</div>
-									<div class="text-sm text-slate-600">Use magic links sent to your email</div>
-								</div>
-							</label>
-						</div>
-					</div>
-
-					<!-- Password Field (conditional) -->
-					{#if usePassword}
-						<PasswordInput
-							label="Password"
-							bind:value={password}
-							placeholder="Create a strong password"
-							error={fieldErrors.password}
-							required
-							autocomplete="new-password"
-							showStrength
-						/>
-					{/if}
-				{/if}
 
 				<!-- Submit Button -->
 				<button

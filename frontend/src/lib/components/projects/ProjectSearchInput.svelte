@@ -14,13 +14,9 @@
 	let showDropdown = $state(false);
 
 	// Client-side filtering - instant results!
-	let searchResults = $derived(() => {
+	let searchResults = $derived.by(() => {
 		const query = searchQuery.trim().toLowerCase();
-
-		if (query.length < 2) {
-			return [];
-		}
-
+		if (query.length < 2) return [];
 		return allProjects
 			.filter(
 				(p) =>
@@ -28,7 +24,7 @@
 					p.area_name.toLowerCase().includes(query) ||
 					(p.developer_name && p.developer_name.toLowerCase().includes(query))
 			)
-			.slice(0, 20); // Limit to 20 results for performance
+			.slice(0, 20);
 	});
 
 	function handleInput() {
@@ -44,26 +40,24 @@
 
 	function handleFocus() {
 		isFocused = true;
+		if (searchQuery.trim().length >= 2) showDropdown = true;
 	}
 
 	function handleBlur() {
-		// Delay to allow click on dropdown
+		// Delay to allow click on dropdown item to fire first
 		setTimeout(() => {
-			if (!searchQuery.trim()) {
-				isFocused = false;
-			}
 			showDropdown = false;
-		}, 200);
+			isFocused = false;
+		}, 150);
 	}
 </script>
 
-<div class="w-full px-4">
+<div class="w-full">
 	<div class="relative">
-		<!-- Search Input (styled like CompactChatInput) -->
 		<div
-			class="relative bg-white border rounded-2xl transition-all duration-300 {isFocused
-				? 'border-teal-600/40 shadow-lg'
-				: 'border-slate-300 shadow-sm hover:shadow-md hover:border-slate-400'}"
+			class="relative bg-white border rounded-2xl transition-all duration-200 {isFocused
+				? 'border-teal-500 shadow-md'
+				: 'border-slate-300 shadow-sm hover:border-slate-400'}"
 		>
 			<input
 				type="text"
@@ -71,40 +65,31 @@
 				oninput={handleInput}
 				onfocus={handleFocus}
 				onblur={handleBlur}
-				placeholder="Search projects..."
-				class="w-full px-5 py-3.5 bg-transparent outline-none text-slate-800 placeholder-slate-400 rounded-2xl pr-12"
-				style="min-height: 52px;"
+				placeholder="Search projects, areas, developers..."
+				class="w-full px-4 py-3 bg-transparent outline-none text-slate-800 placeholder-slate-400 rounded-2xl pr-10 text-sm"
 			/>
-
-			<!-- Search Icon -->
 			<div class="absolute right-3 top-1/2 -translate-y-1/2">
-				<svg class="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-					<path
-						stroke-linecap="round"
-						stroke-linejoin="round"
-						stroke-width="2"
-						d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-					></path>
+				<svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
 				</svg>
 			</div>
 		</div>
 
 		<!-- Dropdown Results -->
-		{#if showDropdown && searchResults().length > 0}
+		{#if showDropdown && searchResults.length > 0}
+			<!-- onmousedown prevents input blur firing before onclick -->
 			<div
-				class="absolute z-50 w-full mt-2 bg-white rounded-xl shadow-2xl border border-slate-200 max-h-96 overflow-y-auto"
+				onmousedown={(e) => e.preventDefault()}
+				class="absolute z-50 w-full mt-1 bg-white rounded-xl shadow-2xl border border-slate-200 max-h-80 overflow-y-auto"
 			>
-				{#each searchResults() as result}
+				{#each searchResults as result}
 					<button
 						onclick={() => selectProject(result.project_id)}
-						class="w-full text-left px-5 py-3 hover:bg-teal-50 transition-colors border-b border-slate-100 last:border-b-0"
+						class="w-full text-left px-4 py-2.5 hover:bg-teal-50 transition-colors border-b border-slate-100 last:border-b-0"
 					>
-						<div class="font-semibold text-slate-900">{result.project_name}</div>
-						<div class="text-sm text-slate-600 mt-1">
-							{result.area_name}
-							{#if result.developer_name}
-								• {result.developer_name}
-							{/if}
+						<div class="text-sm font-semibold text-slate-900 truncate">{result.project_name}</div>
+						<div class="text-xs text-slate-500 mt-0.5">
+							{result.area_name}{result.developer_name ? ` · ${result.developer_name}` : ''}
 						</div>
 					</button>
 				{/each}

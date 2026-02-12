@@ -4,13 +4,6 @@
   import CheckboxDropdown from '$lib/components/dropdowns/CheckboxDropdown.svelte';
   import type { FilterDefinition } from '$lib/types/filters';
 
-
-  // Hardcoded range options
-  const AREA_OPTIONS = ["All", "<500", "500-1000", "1000-2000", "2000-5000", ">5000"];
-  const PRICE_OPTIONS = ["All", "<500k", "500k-1M", "1M-2M", "2M-5M", ">5M"];
-  const PRICE_SQFT_OPTIONS = ["All", "<1000", "1000-1500", "1500-2000", ">2000"];
-  const ANNUAL_RENT_OPTIONS = ["All", "<50k", "50k-100k", "100k-200k", ">200k"];
-
   let {
     filterDefinitions = [],
     filters = $bindable({}),
@@ -43,7 +36,7 @@
   }
 </script>
 
-<div class="bg-white/80 backdrop-blur-sm rounded-xl shadow-sm border border-slate-200 p-6 mb-6">
+<div class="relative z-10 bg-white/80 backdrop-blur-sm rounded-xl shadow-sm border border-slate-200 p-6 mb-6">
   <div class="flex items-center justify-between mb-6">
     <div class="flex items-center gap-4">
       <h2 class="text-xl font-bold text-slate-900">Filters</h2>
@@ -103,39 +96,7 @@
             value={getFilterValue(filter.id)}
             onchange={(v) => setFilterValue(filter.id, v)}
           />
-        {:else if filter.id === 'area'}
-          <StandardDropdown
-            id="{filter.id}-input"
-            ariaLabel={filter.label}
-            options={AREA_OPTIONS}
-            value={getFilterValue(filter.id)}
-            onchange={(v) => setFilterValue(filter.id, v)}
-          />
-        {:else if filter.id === 'price'}
-          <StandardDropdown
-            id="{filter.id}-input"
-            ariaLabel={filter.label}
-            options={PRICE_OPTIONS}
-            value={getFilterValue(filter.id)}
-            onchange={(v) => setFilterValue(filter.id, v)}
-          />
-        {:else if filter.id === 'pricePerSqFt'}
-          <StandardDropdown
-            id="{filter.id}-input"
-            ariaLabel={filter.label}
-            options={PRICE_SQFT_OPTIONS}
-            value={getFilterValue(filter.id)}
-            onchange={(v) => setFilterValue(filter.id, v)}
-          />
-        {:else if filter.id === 'annualRent'}
-          <StandardDropdown
-            id="{filter.id}-input"
-            ariaLabel={filter.label}
-            options={ANNUAL_RENT_OPTIONS}
-            value={getFilterValue(filter.id)}
-            onchange={(v) => setFilterValue(filter.id, v)}
-          />
-        {:else if filter.type === 'standard' || filter.type === 'price-range' || filter.type === 'range'}
+        {:else if filter.type === 'standard'}
           <StandardDropdown
             id="{filter.id}-input"
             ariaLabel={filter.label}

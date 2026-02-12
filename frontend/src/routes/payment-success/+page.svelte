@@ -31,12 +31,17 @@
 			if (result.status === 'active') {
 				organizationId = result.organization_id;
 				seats = result.seats;
-				status = 'completed';
 
 				// Refresh user data to update subscription status
 				await refreshUser();
 
-				// Show invitation modal
+				// Skip invite modal for single-seat orgs
+				if (result.seats <= 1) {
+					goto('/dashboard');
+					return;
+				}
+
+				status = 'completed';
 				setTimeout(() => {
 					showInviteModal = true;
 				}, 500);

@@ -1,19 +1,14 @@
 import { error } from '@sveltejs/kit';
 import { browser } from '$app/environment';
-import { me } from '$lib/api/auth';
+import { currentUser } from '$lib/stores/user.svelte';
 import type { LayoutLoad } from './$types';
 
 export const load: LayoutLoad = async () => {
     if (!browser) return {};
 
-    try {
-        const user = await me();
-        if (user.role !== 'admin') {
-            error(403, 'Admin access required');
-        }
-        return { user };
-    } catch (e) {
-        // Not authenticated or API error
+    const user = currentUser.data;
+    if (!user || user.role !== 'admin') {
         error(403, 'Admin access required');
     }
+    return { user };
 };
