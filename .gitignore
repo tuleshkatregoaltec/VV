@@ -250,6 +250,8 @@ llm-slop/
 alembic/
 tests/
 CLAUDE.md
+flows.md
+project-search-logic.md
 
 # Docker volumes
 .docker-volumes/

@@ -134,12 +134,14 @@ async def require_active_subscription(
     """
     Require user with active organization subscription.
 
+    Uses organization.subscription_status as single source of truth.
+    Allows access when subscription_status in ['active', 'trialing'].
+
     Returns AuthContext with user, org, membership, subscription.
 
     Raises:
         403 NO_ORG_MEMBERSHIP: User not in any organization
-        403 ORG_DISABLED: Organization deactivated
-        402 SUBSCRIPTION_REQUIRED: No subscription or expired
+        402 SUBSCRIPTION_REQUIRED: No subscription, null, or inactive status
         402 SUBSCRIPTION_PAST_DUE: Payment failed
     """
     from app.postgres.models import Organization, Subscription
@@ -154,21 +156,21 @@ async def require_active_subscription(
     if not organization:
         raise HTTPException(status_code=500, detail="Organization not found")
 
-    # Check organization active
-    if not organization.is_active:
-        raise AuthError.org_disabled()
+    # Check subscription_status directly (single source of truth)
+    if organization.subscription_status == "past_due":
+        raise AuthError.subscription_past_due()
 
-    # Get subscription via organization_id (canonical link)
+    # Allow access for active and trialing subscriptions
+    if organization.subscription_status not in ["active", "trialing"]:
+        raise AuthError.subscription_required()
+
+    # Get subscription details (optional, for subscription info endpoints)
     result = await db.exec(
         select(Subscription)
         .where(Subscription.organization_id == organization.id)
         .order_by(Subscription.created_at.desc())
     )
     subscription = result.first()
-
-    # Apply access policy
-    if not can_access_product(subscription):
-        raise get_subscription_error(subscription)
 
     return AuthContext(
         user=current_user,

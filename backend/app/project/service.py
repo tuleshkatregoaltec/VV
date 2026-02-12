@@ -23,11 +23,11 @@ async def list_all_projects() -> List[ProjectSearchResult]:
     sql = """
         SELECT
             project_id,
-            project_name,
+            project_name_en,
             area_name_en,
             developer_name
         FROM ch_projects
-        ORDER BY project_name
+        ORDER BY project_name_en
         LIMIT 2000
     """
 
@@ -36,7 +36,7 @@ async def list_all_projects() -> List[ProjectSearchResult]:
     return [
         ProjectSearchResult(
             project_id=p["project_id"],
-            project_name=p["project_name"] or f"Project {p['project_id']}",
+            project_name=p["project_name_en"] or f"Project {p['project_id']}",
             area_name=p.get("area_name_en", "Unknown"),
             developer_name=p.get("developer_name"),
             latitude=25.2048,  # Default Dubai center
@@ -57,7 +57,7 @@ async def get_project_details(project_id: int) -> Optional[ProjectDetailResponse
         SELECT
             project_id,
             project_number,
-            project_name,
+            project_name_en,
             developer_id,
             developer_name,
             master_developer_id,
@@ -87,44 +87,34 @@ async def get_project_details(project_id: int) -> Optional[ProjectDetailResponse
 
     project = project_result[0]
 
-    # Get buildings for this project (if project_number exists)
+    # Get buildings for this project by project_id
     buildings: List[BuildingInfo] = []
-    if project.get("project_number"):
-        buildings_sql = """
-            SELECT
-                property_id,
-                building_number,
-                floors,
-                project_number,
-                project_name_en
-            FROM ch_buildings
-            WHERE project_number = {project_number:String}
-            ORDER BY building_number
-            LIMIT 100
-        """
+    buildings_sql = """
+        SELECT
+            property_id,
+            building_number,
+            floors
+        FROM ch_buildings
+        WHERE project_id = {project_id:Int32}
+        ORDER BY building_number
+        LIMIT 100
+    """
 
-        buildings_result = await query(
-            buildings_sql,
-            {"project_number": project["project_number"]},
+    buildings_result = await query(buildings_sql, {"project_id": project_id})
+    logger.info(f"Found {len(buildings_result)} buildings for project {project_id}")
+
+    for building in buildings_result:
+        building_name = building.get("building_number") or f"Building {building['property_id']}"
+        buildings.append(
+            BuildingInfo(
+                property_id=building["property_id"],
+                building_number=building.get("building_number"),
+                building_name=building_name,
+                floors=building.get("floors") or None,
+                latitude=25.2048,  # Default - overridden in frontend for demo
+                longitude=55.2708,
+            )
         )
-
-        logger.info(f"Found {len(buildings_result)} buildings for project {project_id}")
-
-        # Build building info list
-        for building in buildings_result:
-            building_name = (
-                building.get("building_number") or f"Building {building['property_id']}"
-            )
-            buildings.append(
-                BuildingInfo(
-                    property_id=building["property_id"],
-                    building_number=building.get("building_number"),
-                    building_name=building_name,
-                    floors=building.get("floors"),
-                    latitude=25.2048,  # Default - will be updated with actual coords later
-                    longitude=55.2708,
-                )
-            )
 
     # Get unit composition from ch_units (grouped by property_sub_type_en)
     unit_composition: List[UnitComposition] = []
@@ -164,7 +154,7 @@ async def get_project_details(project_id: int) -> Optional[ProjectDetailResponse
     # Build response
     return ProjectDetailResponse(
         project_id=project["project_id"],
-        project_name=project["project_name"] or f"Project {project['project_id']}",
+        project_name=project["project_name_en"] or f"Project {project['project_id']}",
         project_number=project.get("project_number"),
         area_id=project.get("area_id"),
         area_name=project.get("area_name_en", "Unknown"),

@@ -328,19 +328,20 @@ def price_trends(
     area_name: Optional[str] = None,
 ) -> str:
     """
-    Get price trends over time (grouped by week or month).
+    Get price trends over time (grouped by day, week, or month).
 
     Args:
-        interval: 'week' or 'month'
+        interval: 'day', 'week', or 'month'
 
-    Returns: period, transaction_count, median_price, avg_price
+    Returns: period, transaction_count, avg_price, avg_price_sqm
     """
     # SAFE: interval is controlled by application, not user input
-    # But we still validate it
-    if interval not in ("week", "month"):
-        raise ValueError("interval must be 'week' or 'month'")
+    if interval not in ("day", "week", "month"):
+        raise ValueError("interval must be 'day', 'week', or 'month'")
 
-    if interval == "week":
+    if interval == "day":
+        time_group = "instance_date"
+    elif interval == "week":
         time_group = "toStartOfWeek(instance_date)"
     else:
         time_group = "toStartOfMonth(instance_date)"
@@ -363,8 +364,8 @@ def price_trends(
         SELECT
             {time_group} as period,
             count() as transaction_count,
-            round(median(actual_worth), 2) as median_price,
-            round(avg(actual_worth), 2) as avg_price
+            round(avg(actual_worth), 2) as avg_price,
+            round(avg(meter_sale_price), 2) as avg_price_sqm
         FROM ch_transactions
         WHERE {where_clause}
         GROUP BY period
@@ -521,7 +522,7 @@ def rentals_summary(
             round(median(annual_amount), 2) as median_rent,
             round(avg(annual_amount), 2) as avg_rent,
             round(sum(annual_amount), 2) as total_annual_value,
-            round(median(rent_per_sqm), 2) as median_rent_per_sqm,
+            round(median(annual_amount / nullIf(actual_area, 0)), 2) as median_rent_per_sqm,
             round(median(actual_area), 2) as median_area_sqm
         FROM ch_rent_contracts
         WHERE {where_clause}
@@ -1101,4 +1102,282 @@ def recent_rentals_for_area(
         WHERE {where_clause}
         ORDER BY contract_start_date DESC
         LIMIT {{limit:Int32}}
+    """
+
+
+# =============================================================================
+# PROJECT ANALYTICS QUERIES
+# =============================================================================
+
+
+def search_projects() -> str:
+    """
+    Search projects for the selector dropdown. Returns three types:
+    - 'master': real master_project_en groupings
+    - 'virtual_master': derived groupings from ' - ' prefix on orphaned projects with >1 sub-project
+    - 'project': truly standalone projects not covered by any grouping
+    """
+    return """
+        WITH virtual_masters AS (
+            SELECT substring(project_name_en, 1, position(project_name_en, ' - ') - 1) AS prefix
+            FROM ch_transactions
+            WHERE (master_project_en = '' OR master_project_en IS NULL)
+              AND position(project_name_en, ' - ') > 0
+              AND project_name_en <> ''
+            GROUP BY prefix
+            HAVING count(DISTINCT project_name_en) > 1
+               AND lower(prefix) NOT IN (
+                   SELECT lower(master_project_en)
+                   FROM ch_transactions
+                   WHERE master_project_en <> ''
+               )
+        )
+        SELECT name, filter_type FROM (
+            SELECT DISTINCT master_project_en AS name, 'master' AS filter_type
+            FROM ch_transactions
+            WHERE master_project_en <> ''
+              AND lower(master_project_en) LIKE {search_pattern:String}
+
+            UNION ALL
+
+            SELECT prefix AS name, 'virtual_master' AS filter_type
+            FROM virtual_masters
+            WHERE lower(prefix) LIKE {search_pattern:String}
+
+            UNION ALL
+
+            SELECT DISTINCT project_name_en AS name, 'project' AS filter_type
+            FROM ch_transactions
+            WHERE (master_project_en = '' OR master_project_en IS NULL)
+              AND project_name_en <> ''
+              AND lower(project_name_en) LIKE {search_pattern:String}
+              AND project_name_en NOT IN (SELECT prefix FROM virtual_masters)
+              AND (
+                  position(project_name_en, ' - ') = 0
+                  OR substring(project_name_en, 1, position(project_name_en, ' - ') - 1)
+                     NOT IN (SELECT prefix FROM virtual_masters)
+              )
+              -- Exclude orphaned sub-projects whose prefix matches a real master (case-insensitive)
+              AND NOT (
+                  position(project_name_en, ' - ') > 0
+                  AND lower(substring(project_name_en, 1, position(project_name_en, ' - ') - 1))
+                      IN (SELECT lower(master_project_en) FROM ch_transactions WHERE master_project_en <> '')
+              )
+        )
+        ORDER BY name
+        LIMIT {limit:Int32}
+    """
+
+
+def search_sub_projects(filter_type: str = "master") -> str:
+    """Return sub-projects (project_name_en) for a master or virtual_master, sorted by activity."""
+    if filter_type == "virtual_master":
+        where = "project_name_en LIKE {master_project:String}"
+    else:
+        # Include both properly-linked sub-projects and orphaned ones with the prefix naming pattern
+        where = """(master_project_en = {master_project:String}
+            OR (lower(project_name_en) LIKE concat(lower({master_project:String}), ' - %')
+                AND (master_project_en = '' OR master_project_en IS NULL)))"""
+    return f"""
+        SELECT project_name_en, count() AS transaction_count
+        FROM ch_transactions
+        WHERE {where}
+          AND project_name_en IS NOT NULL
+          AND project_name_en <> ''
+        GROUP BY project_name_en
+        ORDER BY transaction_count DESC
+    """
+
+
+def _project_filter(filter_type: str) -> str:
+    """WHERE clause condition for a given filter type.
+
+    master: matches rows with master_project_en = X OR orphaned rows whose
+    project_name_en starts with X + ' - ' (absorbs inconsistently-linked sub-projects).
+    """
+    if filter_type == "master":
+        return """(master_project_en = {project_name:String}
+            OR (lower(project_name_en) LIKE concat(lower({project_name:String}), ' - %')
+                AND (master_project_en = '' OR master_project_en IS NULL)))"""
+    if filter_type == "virtual_master":
+        return "project_name_en LIKE {project_name:String}"
+    return "project_name_en = {project_name:String}"
+
+
+def project_sales_summary(filter_type: str = "project") -> str:
+    """Overall sales KPIs for a project, master project, or virtual master."""
+    return f"""
+        SELECT
+            count() as transaction_count,
+            round(coalesce(sum(actual_worth), 0), 2) as total_volume,
+            round(coalesce(avg(actual_worth), 0), 2) as avg_price,
+            round(coalesce(avg(meter_sale_price), 0), 2) as avg_price_sqm,
+            round(coalesce(median(actual_worth), 0), 2) as median_price
+        FROM ch_transactions
+        WHERE {_project_filter(filter_type)}
+          AND actual_worth > 0
+    """
+
+
+def project_sales_by_rooms(filter_type: str = "project") -> str:
+    """Sales breakdown by bedroom count for a project, master project, or virtual master."""
+    return f"""
+        SELECT
+            rooms_en,
+            count() as sale_count,
+            round(avg(actual_worth), 2) as avg_sale_price,
+            round(avg(meter_sale_price), 2) as avg_sale_price_sqm
+        FROM ch_transactions
+        WHERE {_project_filter(filter_type)}
+          AND rooms_en IS NOT NULL
+          AND actual_worth > 0
+        GROUP BY rooms_en
+        ORDER BY sale_count DESC
+    """
+
+
+def project_sales_by_property_type(filter_type: str = "project") -> str:
+    """Sales breakdown by property type for a project, master project, or virtual master."""
+    return f"""
+        SELECT
+            property_type_en,
+            count() as count,
+            round(avg(actual_worth), 2) as avg_price
+        FROM ch_transactions
+        WHERE {_project_filter(filter_type)}
+          AND property_type_en IS NOT NULL
+          AND actual_worth > 0
+        GROUP BY property_type_en
+        ORDER BY count DESC
+    """
+
+
+def project_sales_by_reg_type(filter_type: str = "project") -> str:
+    """Sales breakdown by registration type for a project, master project, or virtual master."""
+    return f"""
+        SELECT
+            reg_type_en,
+            count() as count,
+            round(avg(actual_worth), 2) as avg_price
+        FROM ch_transactions
+        WHERE {_project_filter(filter_type)}
+          AND reg_type_en IS NOT NULL
+        GROUP BY reg_type_en
+        ORDER BY count DESC
+    """
+
+
+def project_rentals_summary(filter_type: str = "project") -> str:
+    """Overall rental KPIs for a project, master project, or virtual master."""
+    return f"""
+        SELECT
+            count() as contract_count,
+            round(coalesce(sum(annual_amount), 0), 2) as total_annual_value,
+            round(coalesce(avg(annual_amount), 0), 2) as avg_annual_rent,
+            round(coalesce(avg(annual_amount / nullIf(actual_area, 0)), 0), 2) as avg_rent_sqm
+        FROM ch_rent_contracts
+        WHERE {_project_filter(filter_type)}
+          AND annual_amount > 0
+    """
+
+
+def project_units_composition(filter_type: str = "project") -> str:
+    """Unit supply composition by bedroom count from ch_units.
+
+    master → master_project_en = X OR orphaned rows with project_name_en LIKE 'X - %'
+    virtual_master → project_name_en LIKE {project_name} (LIKE suffix already in param)
+    project → master_project_en = X (receives master_project as project_name)
+    """
+    if filter_type == "virtual_master":
+        where = "project_name_en LIKE {project_name:String}"
+    elif filter_type == "master":
+        where = """(master_project_en = {project_name:String}
+            OR (lower(project_name_en) LIKE concat(lower({project_name:String}), ' - %')
+                AND (master_project_en = '' OR master_project_en IS NULL)))"""
+    else:
+        where = "master_project_en = {project_name:String}"
+    return f"""
+        SELECT
+            rooms_en,
+            count() as unit_count
+        FROM ch_units
+        WHERE {where}
+          AND rooms_en IS NOT NULL
+        GROUP BY rooms_en
+        ORDER BY unit_count DESC
+    """
+
+
+def project_meta_by_name() -> str:
+    """Sub-project metadata joined with developer name."""
+    return """
+        SELECT
+            p.project_name_en,
+            p.area_name_en,
+            d.developer_name_en,
+            p.project_status,
+            p.completion_date,
+            p.percent_completed,
+            p.no_of_units,
+            p.no_of_buildings
+        FROM ch_projects p
+        LEFT JOIN ch_developers d ON p.developer_id = d.developer_id
+        WHERE p.project_name_en = {project_name:String}
+        LIMIT 1
+    """
+
+
+def project_meta_by_master() -> str:
+    """Aggregated metadata for a master project, including orphaned sub-projects in ch_projects."""
+    return """
+        SELECT
+            any(p.area_name_en) as area_name_en,
+            any(d.developer_name_en) as developer_name_en,
+            toNullable(toInt64(sum(p.no_of_units))) as no_of_units,
+            toNullable(toInt64(sum(p.no_of_buildings))) as no_of_buildings
+        FROM ch_projects p
+        LEFT JOIN ch_developers d ON p.developer_id = d.developer_id
+        WHERE (p.master_project_en = {project_name:String}
+            OR lower(p.project_name_en) LIKE concat(lower({project_name:String}), ' - %'))
+    """
+
+
+def project_meta_by_virtual_master() -> str:
+    """Aggregated metadata for a virtual master (matched by project_name_en LIKE prefix)."""
+    return """
+        SELECT
+            any(p.area_name_en) as area_name_en,
+            any(d.developer_name_en) as developer_name_en,
+            toNullable(toInt64(sum(p.no_of_units))) as no_of_units,
+            toNullable(toInt64(sum(p.no_of_buildings))) as no_of_buildings
+        FROM ch_projects p
+        LEFT JOIN ch_developers d ON p.developer_id = d.developer_id
+        WHERE p.project_name_en LIKE {project_name:String}
+    """
+
+
+def project_price_trends(interval: str = "month", filter_type: str = "project") -> str:
+    """Monthly/weekly/daily sales price trend for a project, master, or virtual master."""
+    if interval not in ("day", "week", "month"):
+        raise ValueError("interval must be 'day', 'week', or 'month'")
+
+    if interval == "day":
+        time_group = "instance_date"
+    elif interval == "week":
+        time_group = "toStartOfWeek(instance_date)"
+    else:
+        time_group = "toStartOfMonth(instance_date)"
+
+    return f"""
+        SELECT
+            {time_group} as period,
+            count() as transaction_count,
+            round(avg(actual_worth), 2) as avg_price,
+            round(avg(meter_sale_price), 2) as avg_price_sqm
+        FROM ch_transactions
+        WHERE {_project_filter(filter_type)}
+          AND instance_date BETWEEN {{start_date:Date}} AND {{end_date:Date}}
+          AND actual_worth > 0
+        GROUP BY period
+        ORDER BY period ASC
     """

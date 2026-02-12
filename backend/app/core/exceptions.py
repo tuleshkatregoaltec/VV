@@ -16,30 +16,26 @@ class AuthError:
     """Standard auth error codes and responses."""
 
     @staticmethod
-    def subscription_required(
-        billing_url: str = "/settings/organization",
-    ) -> HTTPException:
+    def subscription_required() -> HTTPException:
         return HTTPException(
             status_code=402,
             detail=ErrorDetail(
                 code="SUBSCRIPTION_REQUIRED",
                 message="Active subscription required to access this resource.",
                 action="REDIRECT_BILLING",
-                redirect_url=billing_url,
+                redirect_url="/renew",
             ).model_dump(),
         )
 
     @staticmethod
-    def subscription_past_due(
-        billing_url: str = "/settings/organization",
-    ) -> HTTPException:
+    def subscription_past_due() -> HTTPException:
         return HTTPException(
             status_code=402,
             detail=ErrorDetail(
                 code="SUBSCRIPTION_PAST_DUE",
                 message="Payment method declined. Please update your billing information.",
                 action="REDIRECT_BILLING",
-                redirect_url=billing_url,
+                redirect_url="/renew",
             ).model_dump(),
         )
 
