@@ -108,7 +108,7 @@
 
     {#if isOpen}
       <div
-        class="absolute z-10 mt-2 bg-white border border-gray-200 rounded-lg shadow-lg {align === 'right' ? 'right-0' : 'left-0'}"
+        class="absolute z-50 mt-2 bg-white border border-gray-200 rounded-lg shadow-lg {align === 'right' ? 'right-0' : 'left-0'}"
         style={align === 'right' ? 'min-width: 200px;' : 'width: 100%;'}
         in:fly={{ y: -10, duration: 200, easing: quintOut }}
         out:fade={{ duration: 150 }}
