@@ -24,7 +24,7 @@
 <div class="h-screen flex flex-col bg-background">
     <Navbar />
 
-    <div class="flex-1 overflow-auto">
+    <div class="flex-1 overflow-auto pt-20">
         {#if showFilters}
             <FilterBar />
         {/if}
