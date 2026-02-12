@@ -5,6 +5,6 @@
     let { children }: { children: Snippet } = $props();
 </script>
 
-<AppShell showFilters={true}>
+<AppShell showFilters={false}>
     {@render children()}
 </AppShell>
