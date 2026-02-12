@@ -1,7 +1,7 @@
 <script lang="ts">
 	const features = [
 		{ text: 'Verified DLD transaction data' },
-		{ text: '200+ tracked projects and developments' },
+		{ text: '3000+ tracked projects and developments' },
 		{ text: 'Real-time rental and sales analytics' },
 		{ text: 'AI-powered market insights' },
 		{ text: 'Export-ready reports and analysis' },
@@ -9,7 +9,7 @@
 	];
 </script>
 
-<section class="py-24 bg-white relative overflow-hidden">
+<section id="why-vitevue" class="py-24 bg-white relative overflow-hidden">
 	<!-- Floating decorative element -->
 	<div class="absolute top-1/4 right-10 w-32 h-32 bg-teal-100 rounded-full blur-3xl opacity-30 animate-float-slow"></div>
 	<div class="absolute bottom-1/4 left-10 w-40 h-40 bg-cyan-100 rounded-full blur-3xl opacity-30 animate-float-delayed"></div>
@@ -54,21 +54,21 @@
 					<div class="grid grid-cols-1 sm:grid-cols-3 gap-6">
 						<div class="text-center p-6 bg-white rounded-xl border border-slate-200">
 							<div class="text-3xl font-bold text-slate-900 mb-2">
-								10,000+
+								10M+
 							</div>
-							<div class="text-sm text-slate-600">Daily transactions analyzed</div>
+							<div class="text-sm text-slate-600">Transactions analyzed</div>
 						</div>
 						<div class="text-center p-6 bg-white rounded-xl border border-slate-200">
 							<div class="text-3xl font-bold text-slate-900 mb-2">
-								200+
+								3000+
 							</div>
-							<div class="text-sm text-slate-600">Active projects tracked</div>
+							<div class="text-sm text-slate-600">Projects tracked</div>
 						</div>
 						<div class="text-center p-6 bg-white rounded-xl border border-slate-200">
 							<div class="text-3xl font-bold text-slate-900 mb-2">
-								24/7
+								Real-time
 							</div>
-							<div class="text-sm text-slate-600">Real-time updates</div>
+							<div class="text-sm text-slate-600">Data updates</div>
 						</div>
 					</div>
 				</div>

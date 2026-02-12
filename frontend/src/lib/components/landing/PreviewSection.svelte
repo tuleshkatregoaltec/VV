@@ -1,13 +1,8 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 
-	let isVisible = $state(false);
 	let featuresInView = $state<boolean[]>([false, false, false]);
 	let sectionElement: HTMLElement;
-
-	$effect(() => {
-		isVisible = true;
-	});
 
 	onMount(() => {
 		const observer = new IntersectionObserver(
@@ -77,8 +72,9 @@
 						</span>
 					</h3>
 					<p class="text-xl text-slate-600 mb-8 leading-relaxed">
-						"What's the average price per sqft in Dubai Marina for 2-bedroom units sold in the last 30 days?"
-						Just ask. Our AI understands context, analyzes data in real-time, and gives you the answer in seconds.
+
+						"What's the quarter-on-quarter change for Dubai Marina 2-bedroom net yields?"
+						Just ask. Every tool you can use, so can our AI. Capable of analyzing geospatial and semantical inputs, our LLM can provide any KPI, explain market sentiment, price units and identify opportunities better than any human being.
 					</p>
 					<ul class="space-y-4">
 						<li class="flex items-start gap-3">
@@ -87,7 +83,7 @@
 									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path>
 								</svg>
 							</div>
-							<span class="text-lg text-slate-700 font-medium">No time wasted manually finding and analyzing data</span>
+							<span class="text-lg text-slate-700 font-medium">Trained on over 10M transactions and decades of macro data</span>
 						</li>
 						<li class="flex items-start gap-3">
 							<div class="w-6 h-6 rounded-full bg-teal-600 flex items-center justify-center flex-shrink-0 mt-1">
@@ -95,7 +91,7 @@
 									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path>
 								</svg>
 							</div>
-							<span class="text-lg text-slate-700 font-medium">Accesses millions of transactions in real-time</span>
+							<span class="text-lg text-slate-700 font-medium">Live data, industry reports and news absorption</span>
 						</li>
 						<li class="flex items-start gap-3">
 							<div class="w-6 h-6 rounded-full bg-teal-600 flex items-center justify-center flex-shrink-0 mt-1">
@@ -103,7 +99,7 @@
 									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path>
 								</svg>
 							</div>
-							<span class="text-lg text-slate-700 font-medium">Conversational follow-ups for deeper insights</span>
+							<span class="text-lg text-slate-700 font-medium">Save time with automated analysis </span>
 						</li>
 					</ul>
 				</div>
@@ -179,7 +175,7 @@
 									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path>
 								</svg>
 							</div>
-							<span class="text-lg text-slate-700 font-medium">Track 200+ active developments</span>
+							<span class="text-lg text-slate-700 font-medium">Track 3000+ developments</span>
 						</li>
 						<li class="flex items-start gap-3">
 							<div class="w-6 h-6 rounded-full bg-teal-600 flex items-center justify-center flex-shrink-0 mt-1">

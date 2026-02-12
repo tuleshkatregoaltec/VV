@@ -1,11 +1,10 @@
 <script lang="ts">
-	import { fly, fade, scale } from 'svelte/transition';
+	import { fly } from 'svelte/transition';
 	import { cubicOut } from 'svelte/easing';
 	import { onMount } from 'svelte';
 
 	let isVisible = $state(false);
 	let scrollY = $state(0);
-	let heroElement: HTMLElement;
 
 	$effect(() => {
 		isVisible = true;
@@ -28,7 +27,7 @@
 	const translateY = $derived(scrollY * 0.5);
 </script>
 
-<section class="relative min-h-[95vh] bg-white flex items-center justify-center overflow-hidden">
+<section class="relative min-h-screen bg-white flex items-center justify-center overflow-hidden">
 	<!-- Subtle background -->
 	<div class="absolute inset-0 bg-gradient-to-b from-slate-50 via-white to-slate-50/50"></div>
 
@@ -41,7 +40,7 @@
 				<svg class="w-4 h-4 text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
 				</svg>
-				<span class="text-sm font-semibold text-slate-700">Operational market intelligence</span>
+				<span class="text-sm font-semibold text-slate-700">Superior market intelligence</span>
 			</div>
 
 			<h1 class="text-5xl sm:text-6xl md:text-7xl font-bold leading-[1.3] mb-8 tracking-tight text-slate-900 hover:scale-[1.02] transition-transform duration-500">

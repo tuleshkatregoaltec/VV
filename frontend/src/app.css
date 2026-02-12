@@ -1,62 +1,57 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=swap');
 @import 'maplibre-gl/dist/maplibre-gl.css';
 body {
-	font-family: var(--font-sans);
+    font-family: var(--font-sans);
 }
 @import 'tailwindcss';
 @config "../tailwind.config.ts";
 
 @theme {
-	/* Primary Colors - Teal */
-	--color-primary: #0d9488; /* teal-600 - main primary */
-	--color-primary-light: #14b8a6; /* teal-500 - lighter variant */
-	--color-primary-dark: #0f766e; /* teal-700 - darker variant */
-	--color-primary-pale: #5eead4; /* teal-300 - pale backgrounds */
+    /* Primary Colors - Updated to match V6 logo teal palette */
+    --color-primary: #3A8FAD; /* Mid teal from logo - main primary */
+    --color-primary-light: #5EEAD4; /* Bright teal from logo - accent/highlights */
+    --color-primary-dark: #2A5A78; /* Dark teal from logo - darker variant */
+    --color-primary-pale: #9DD9E8; /* Lighter tint for subtle backgrounds */
 
-	/* Black Palette - kept for special cases */
-	--color-black: #000000;
-	--color-black-light: #232323;
-	--color-black-dark: #181818;
-	--color-black-pale: #444444;
+    /* Black Palette - kept for special cases */
+    --color-black: #000000;
+    --color-black-light: #232323;
+    --color-black-dark: #181818;
+    --color-black-pale: #444444;
 
-	/* Background Colors - Cool Slate Tones */
-	--color-background: #f8fafc; /* slate-50 */
-	--color-background-surface: #f1f5f9; /* slate-100 */
-	--color-background-gray: #e2e8f0; /* slate-200 */
+    /* Background Colors - Cool Slate Tones */
+    --color-background: #f8fafc; /* slate-50 */
+    --color-background-surface: #f1f5f9; /* slate-100 */
+    --color-background-gray: #e2e8f0; /* slate-200 */
 
-	/* Success Colors */
-	--color-success-light: #4caf50;
-	--color-success-dark: #1b5e20;
+    /* Success Colors */
+    --color-success-light: #4caf50;
+    --color-success-dark: #1b5e20;
 
-	/* Warning Colors */
-	--color-warning: #ed6c02;
-	--color-warning-light: #ff9800;
-	--color-warning-dark: #e65100;
+    /* Warning Colors */
+    --color-warning: #ed6c02;
+    --color-warning-light: #ff9800;
+    --color-warning-dark: #e65100;
 
-	/* Error Colors */
-	--color-error: #d32f2f;
-	--color-error-light: #f44336;
-	--color-error-dark: #c62828;
+    /* Error Colors */
+    --color-error: #d32f2f;
+    --color-error-light: #f44336;
+    --color-error-dark: #c62828;
 
-	/* Accent Color - Teal */
-	--color-accent: #14b8a6; /* teal-500 */
-
-	/* Font */
-	--font-sans:
-		'Inter', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
-		'Helvetica Neue', Arial, 'Noto Sans', sans-serif;
+    /* Accent Color - Bright teal from logo */
+    --color-accent: #5EEAD4; /* Matches logo highlight */
 }
 
 /* Custom Animations */
 @keyframes hover {
-	0%, 100% {
-		transform: translateY(0);
-	}
-	50% {
-		transform: translateY(-8px);
-	}
+    0%, 100% {
+        transform: translateY(0);
+    }
+    50% {
+        transform: translateY(-8px);
+    }
 }
 
 .animate-hover {
-	animation: hover 3s ease-in-out infinite;
+    animation: hover 3s ease-in-out infinite;
 }

@@ -34,18 +34,18 @@
 	];
 </script>
 
-<section class="py-24 bg-white relative">
+<section id="personas" class="py-24 bg-white relative">
 	<!-- Subtle decorative background -->
 	<div class="absolute inset-0 bg-gradient-to-b from-white via-slate-50/30 to-white"></div>
 
 	<div class="max-w-6xl mx-auto px-6 lg:px-8 relative">
 		<div class="text-center mb-16">
 			<!-- Section badge -->
-			<div class="inline-flex items-center gap-2 px-4 py-2 bg-slate-50 border border-slate-200 rounded-full mb-6">
-				<svg class="w-4 h-4 text-slate-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+			<div class="inline-flex items-center gap-2 px-4 py-2 bg-slate-50 border border-slate-200 rounded-full mb-6 hover:scale-105 hover:shadow-md transition-all duration-300">
+				<svg class="w-4 h-4 text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"></path>
 				</svg>
-				<span class="text-sm font-semibold text-slate-700">Who We Serve</span>
+				<span class="text-sm font-semibold text-slate-700">Our partners</span>
 			</div>
 
 			<h2 class="text-4xl sm:text-5xl font-bold text-slate-900 mb-4">

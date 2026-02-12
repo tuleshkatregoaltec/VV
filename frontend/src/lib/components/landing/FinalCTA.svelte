@@ -9,7 +9,7 @@
 	});
 </script>
 
-<section class="py-24 bg-slate-50 relative overflow-hidden">
+<section id="get-started" class="py-24 bg-slate-50 relative overflow-hidden">
 	<!-- Subtle gradient overlay -->
 	<div class="absolute inset-0 bg-gradient-to-br from-slate-100/50 via-white/30 to-slate-100/50"></div>
 

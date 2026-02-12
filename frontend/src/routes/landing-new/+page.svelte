@@ -1,6 +1,6 @@
 <script lang="ts">
+	import FloatingNavbar from '$lib/components/landing/FloatingNavbar.svelte';
 	import HeroSection from '$lib/components/landing/HeroSection.svelte';
-	import BenefitsSection from '$lib/components/landing/BenefitsSection.svelte';
 	import PersonasSection from '$lib/components/landing/PersonasSection.svelte';
 	import PricingSection from '$lib/components/landing/PricingSection.svelte';
 	import PreviewSection from '$lib/components/landing/PreviewSection.svelte';
@@ -23,12 +23,11 @@
 </svelte:head>
 
 <div class="min-h-screen bg-background">
+	<FloatingNavbar />
 	<HeroSection />
 	<PreviewSection />
-	<BenefitsSection />
 	<PersonasSection />
 	<PricingSection />
-	<WhyVitevueSection />
 	<FinalCTA />
 	<Footer />
 </div>
