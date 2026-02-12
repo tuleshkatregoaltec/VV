@@ -1,6 +1,31 @@
 import { api } from './client';
 import { client } from './auth';
 
+export interface CreateOrganizationRequest {
+	name: string;
+	max_users: number;
+}
+
+export interface CreateOrganizationResponse {
+	organization_id: string;
+	name: string;
+	max_users: number;
+	is_new: boolean;
+}
+
+export async function createOrganization(
+	name: string,
+	maxUsers: number
+): Promise<CreateOrganizationResponse> {
+	return api<CreateOrganizationResponse>('/api/v1/organization/create', {
+		method: 'POST',
+		body: {
+			name,
+			max_users: maxUsers
+		}
+	});
+}
+
 export async function inviteUserByEmail(
 	email: string,
 	organizationId: string,

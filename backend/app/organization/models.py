@@ -102,6 +102,22 @@ class OrganizationCreateRequest(BaseModel):
     max_users: int = 5
 
 
+class OwnerOrganizationCreateRequest(BaseModel):
+    """Request for owner to create organization during self-signup"""
+
+    name: str = Field(min_length=1, max_length=100)
+    max_users: int = Field(ge=1, le=1000)
+
+
+class OwnerOrganizationCreateResponse(BaseModel):
+    """Response after creating organization"""
+
+    organization_id: str
+    name: str
+    max_users: int
+    is_new: bool  # True if newly created, False if updated existing
+
+
 class OrganizationUpdateRequest(BaseModel):
     max_users: int
     is_active: bool

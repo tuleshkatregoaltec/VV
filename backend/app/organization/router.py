@@ -25,6 +25,8 @@ from app.organization.models import (
     AcceptInviteRequest,
     AcceptInviteResponse,
     InviteConflictResponse,
+    OwnerOrganizationCreateRequest,
+    OwnerOrganizationCreateResponse,
 )
 from app.billing.models import SubscriptionResponse, CustomerPortalResponse
 from app.auth.service import (
@@ -61,6 +63,103 @@ from app.token_usage.service import token_usage_service
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/organization", tags=["organization"])
+
+
+@router.post("/create", response_model=OwnerOrganizationCreateResponse)
+async def create_owner_organization(
+    request: OwnerOrganizationCreateRequest,
+    current_user: PlatformUser = Depends(require_auth),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """
+    Create organization for owner during self-signup (before checkout).
+
+    Idempotent: If user already owns an organization, updates and returns existing org_id.
+    This allows users to retry checkout after abandoning payment.
+    """
+    from uuid import uuid4
+
+    # Check if user already owns an organization (idempotency)
+    result = await db.exec(
+        select(OrganizationMembership)
+        .where(OrganizationMembership.user_id == current_user.id)
+        .where(OrganizationMembership.role == "owner")
+    )
+    existing_membership = result.first()
+
+    if existing_membership:
+        # User already owns an org - update existing org (retry scenario)
+        org = await db.get(Organization, existing_membership.organization_id)
+        if not org:
+            raise HTTPException(
+                status_code=500,
+                detail="Organization membership exists but org not found",
+            )
+
+        # Update org details for retry
+        org.name = request.name
+        org.max_users = request.max_users
+        org.updated_at = datetime.now(timezone.utc)
+
+        db.add(org)
+        await db.commit()
+        await db.refresh(org)
+
+        logger.info(
+            f"Updated existing org {org.id} for user {current_user.id} (retry/abandon scenario)"
+        )
+
+        return OwnerOrganizationCreateResponse(
+            organization_id=org.id,
+            name=org.name,
+            max_users=org.max_users,
+            is_new=False,
+        )
+
+    # Create new organization
+    org_id = str(uuid4())
+    org = Organization(
+        id=org_id,
+        name=request.name,
+        owner_user_id=current_user.id,
+        max_users=request.max_users,
+        subscription_status=None,  # No subscription yet
+        is_active=False,  # Inactive until payment succeeds
+        stripe_customer_id=None,  # Created during checkout
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
+    )
+
+    db.add(org)
+
+    # Add owner membership
+    membership = OrganizationMembership(
+        organization_id=org.id,
+        user_id=current_user.id,
+        role="owner",
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
+    )
+    db.add(membership)
+
+    try:
+        await db.commit()
+        await db.refresh(org)
+    except Exception as e:
+        await db.rollback()
+        logger.error(f"Failed to create organization for user {current_user.id}: {e}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to create organization: {str(e)}"
+        )
+
+    logger.info(f"Created new organization {org.id} for user {current_user.id}")
+
+    return OwnerOrganizationCreateResponse(
+        organization_id=org.id,
+        name=org.name,
+        max_users=org.max_users,
+        is_new=True,
+    )
 
 
 class OrganizationMemberResponse(BaseModel):
