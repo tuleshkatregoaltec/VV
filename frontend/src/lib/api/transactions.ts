@@ -3,17 +3,22 @@ import { env } from '$env/dynamic/public';
 
 export interface Transaction {
 	transaction_id: string;
-	project_name_en: string | null;
-	building_name_en: string | null;
+	instance_date: string | null;
+	trans_group_en: string | null;
+	procedure_name_en: string | null;
 	property_type_en: string | null;
 	property_sub_type_en: string | null;
 	rooms_en: string | null;
+	area_name_en: string | null;
+	project_name_en: string | null;
+	building_name_en: string | null;
 	procedure_area: number | null;
 	actual_worth: number | null;
 	meter_sale_price: number | null;
 	reg_type_en: string | null;
-	instance_date: string | null;
-	area_name_en: string | null;
+	nearest_landmark_en: string | null;
+	nearest_metro_en: string | null;
+	nearest_mall_en: string | null;
 }
 
 export interface TransactionListResponse {
@@ -25,16 +30,22 @@ export interface TransactionListResponse {
 
 export interface RentalContract {
 	contract_id: string;
-	project_name_en: string | null;
+	contract_start_date: string | null;
+	contract_end_date: string | null;
 	ejari_property_type_en: string | null;
 	ejari_property_sub_type_en: string | null;
 	tenant_type_en: string | null;
+	contract_reg_type_en: string | null;
+	area_name_en: string | null;
+	project_name_en: string | null;
 	actual_area: number | null;
 	annual_amount: number | null;
-	contract_reg_type_en: string | null;
-	contract_start_date: string | null;
-	contract_end_date: string | null;
-	area_name_en: string | null;
+	contract_amount: number | null;
+	no_of_prop: number | null;
+	is_free_hold: boolean | null;
+	nearest_landmark_en: string | null;
+	nearest_metro_en: string | null;
+	nearest_mall_en: string | null;
 }
 
 export interface RentalContractListResponse {
@@ -47,9 +58,9 @@ export interface RentalContractListResponse {
 export interface TransactionFilters {
 	trans_group?: string;
 	property_usage?: string;
-	master_project?: string;
 	timeframe_days?: number;
 	project?: string;
+	filter_type?: string;
 	building?: string;
 	property_type?: string;
 	rooms?: string;
@@ -95,13 +106,7 @@ function buildQuery(filters: TransactionFilters): string {
 			'20000-30000': [20000, 30000],
 			'>30000': [30000, 9999999]
 		},
-		pricePerSqFt: {
-			'<10000': [0, 10000],
-			'10000-20000': [10000, 20000],
-			'20000-30000': [20000, 30000],
-			'>30000': [30000, 9999999]
-		},
-		annualRent: {
+		rent: {
 			'<50k': [0, 50000],
 			'50k-100k': [50000, 100000],
 			'100k-200k': [100000, 200000],

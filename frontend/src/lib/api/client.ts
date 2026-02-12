@@ -57,6 +57,14 @@ export async function api<T>(endpoint: string, options: RequestOptions = {}): Pr
     const res = await fetch(`${env.PUBLIC_API_BASE_URL}${endpoint}`, config);
 
     if (!res.ok) {
+        // 401 = expired/invalid JWT — clear session and redirect to auth
+        if (browser && res.status === 401) {
+            const { clearUser } = await import('$lib/stores/user.svelte');
+            clearUser();
+            window.location.href = '/auth';
+            throw new ApiError('Session expired', 401);
+        }
+
         let details: unknown;
         let message = res.statusText;
         let errorCode: string | undefined;
@@ -72,21 +80,18 @@ export async function api<T>(endpoint: string, options: RequestOptions = {}): Pr
                 message = errorDetail.message;
 
                 // Invalidate user store on auth/subscription errors
-                if (errorCode === 'NO_ORG_MEMBERSHIP' ||
+                if (browser && (
+                    errorCode === 'NO_ORG_MEMBERSHIP' ||
                     errorCode === 'SUBSCRIPTION_REQUIRED' ||
-                    errorCode === 'SUBSCRIPTION_PAST_DUE') {
-                    const { invalidateUser } = await import('$lib/stores/user.svelte');
-                    invalidateUser();
-                }
+                    errorCode === 'SUBSCRIPTION_PAST_DUE'
+                )) {
+                    const { clearUser } = await import('$lib/stores/user.svelte');
+                    clearUser();
 
-                // Handle redirects based on error code
-                if (browser && errorDetail.action) {
                     if (errorDetail.action === 'REDIRECT_ONBOARDING') {
-                        // No organization membership
                         window.location.href = '/organization-setup';
                     } else if (errorDetail.action === 'REDIRECT_BILLING') {
-                        // Subscription required or past_due
-                        window.location.href = errorDetail.redirect_url || '/settings/organization';
+                        window.location.href = errorDetail.redirect_url || '/renew';
                     }
                 }
             } else if (Array.isArray(data.detail)) {

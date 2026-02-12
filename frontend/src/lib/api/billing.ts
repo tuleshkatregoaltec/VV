@@ -13,18 +13,14 @@ export interface SyncResponse {
 }
 
 export async function createCheckoutSession(
-	firstName: string,
-	lastName: string,
-	organizationName: string,
+	organizationId: string,
 	seats: number,
 	priceTier: 'tier1' | 'tier2'
 ): Promise<CheckoutSession> {
 	return api<CheckoutSession>('/api/v1/billing/create-checkout', {
 		method: 'POST',
 		body: {
-			first_name: firstName,
-			last_name: lastName,
-			organization_name: organizationName,
+			organization_id: organizationId,
 			seats,
 			price_tier: priceTier
 		}

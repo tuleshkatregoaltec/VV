@@ -5,7 +5,6 @@ export interface FilterOptions {
 	buildings: string[];
 	property_types: string[];
 	property_sub_types: string[];
-	master_projects: string[];
 	rooms: string[];
 	registration_types: string[];
 	tenant_types?: string[];
@@ -14,13 +13,10 @@ export interface FilterOptions {
 
 export interface FilterParams {
 	property_usage?: string;
-	timeframe_days?: number;
-	master_project?: string;
 	project?: string;
-	building?: string;
+	filter_type?: string;
 	property_type?: string;
-	rooms?: string;
-	registration_type?: string;
+	area?: string;
 }
 
 function buildQuery(filters: FilterParams): string {
@@ -35,8 +31,6 @@ function buildQuery(filters: FilterParams): string {
 }
 
 export const filters = {
-	masterProjects: () => api<string[]>('/api/v1/filters/master-projects'),
-
 	sales: (filterParams: FilterParams = {}) => {
 		const query = buildQuery(filterParams);
 		return api<FilterOptions>(`/api/v1/filters/sales${query}`);

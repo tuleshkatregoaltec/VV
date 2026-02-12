@@ -30,6 +30,7 @@
   let inputValue = $state('');
   let messages = $state<DisplayMessage[]>([]);
   let streamController: { close: () => void } | null = $state(null);
+  let isThinking = $state(false);
   let loading = $state(false);
   let error = $state<string | null>(null);
   let textareaRef = $state<HTMLTextAreaElement>();
@@ -130,7 +131,13 @@
         // Parse SSE data
         const data = JSON.parse(rawChunk);
 
-        if (data.type === 'content') {
+        if (data.type === 'thinking') {
+          isThinking = true;
+          if (messages[messages.length - 1]?.role !== 'assistant') {
+            messages = [...messages, { role: 'assistant', content: '' }];
+          }
+        } else if (data.type === 'content') {
+          isThinking = false;
           currentAssistantMessage += data.content;
           updateLastMessage('assistant', currentAssistantMessage, currentToolCalls);
         } else if (data.type === 'tool_call_start') {
@@ -141,12 +148,13 @@
           currentToolCalls[currentToolCalls.length - 1] = `✓ ${data.tool}${cached}`;
           updateLastMessage('assistant', currentAssistantMessage, currentToolCalls);
         } else if (data.type === 'done') {
+          isThinking = false;
           streamController = null;
           activeStreamConversationId = null;
-          // Auto-focus the input box for continued conversation
           setTimeout(() => textareaRef?.focus(), 100);
         } else if (data.type === 'error') {
           console.error('Stream error:', data.error);
+          isThinking = false;
           if (data.error === 'token_limit_exceeded') {
             tokenLimitModalOpen = true;
           } else {
@@ -183,6 +191,7 @@
     streamController?.close();
     streamController = null;
     activeStreamConversationId = null;
+    isThinking = false;
   }
 </script>
 
@@ -289,7 +298,18 @@
               ? 'bg-slate-900 text-white shadow-lg'
               : 'bg-white text-slate-800 shadow-md border border-slate-200 hover:shadow-lg transition-shadow'}"
           >
-            <div class="whitespace-pre-wrap leading-relaxed">{msg.content}</div>
+            {#if isThinking && i === messages.length - 1 && msg.role === 'assistant' && !msg.content}
+              <div class="flex items-center gap-2 text-slate-400">
+                <div class="flex gap-1 items-center">
+                  <div class="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce" style="animation-delay: 0ms"></div>
+                  <div class="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce" style="animation-delay: 150ms"></div>
+                  <div class="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce" style="animation-delay: 300ms"></div>
+                </div>
+                <span class="text-sm">Thinking...</span>
+              </div>
+            {:else}
+              <div class="whitespace-pre-wrap leading-relaxed">{msg.content}</div>
+            {/if}
             {#if msg.toolCalls && msg.toolCalls.length > 0}
               <div
                 class="mt-3 pt-3 border-t {msg.role === 'user' ? 'border-slate-700' : 'border-slate-200'} text-xs space-y-2"

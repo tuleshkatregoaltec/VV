@@ -3,7 +3,7 @@ import { browser } from '$app/environment';
 import posthog from 'posthog-js';
 
 import { AuthClient } from '@supabase/auth-js';
-import type { AuthChangeEvent, Session, User } from '@supabase/auth-js';
+import type { AuthChangeEvent, Session } from '@supabase/auth-js';
 import { api } from './client';
 
 export interface BackendUser {
@@ -14,6 +14,7 @@ export interface BackendUser {
     organization_id: string | null;
     organization_name: string | null;
     role: 'user' | 'admin' | 'owner' | 'member';
+    is_owner: boolean;
     subscription_status: string | null;
     subscription_is_active: boolean;
 }
@@ -57,7 +58,7 @@ const authSearchParams = [
     'error'
 ]
 
-client.onAuthStateChange((event: AuthChangeEvent, session: Session | null) => {
+client.onAuthStateChange((event: AuthChangeEvent, _session: Session | null) => {
     if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
         const url = new URL(window.location.href);
         authSearchParams.forEach(p => url.searchParams.delete(p));
