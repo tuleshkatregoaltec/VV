@@ -67,6 +67,7 @@ services:
   auth:
     image: ghcr.io/supabase/auth:v2.185.0
     container_name: vitevue-auth
+    restart: on-failure
     depends_on:
       auth-db-init:
         condition: service_completed_successfully
@@ -196,7 +197,7 @@ services:
       # Override/set local service URLs
       DATABASE_URL: postgresql+asyncpg://vitevue:vitevue_dev@postgres:5432/vitevue
       CLICKHOUSE_HOST: clickhouse
-      CLICKHOUSE_PORT: 9000
+      CLICKHOUSE_PORT: 8123
       CLICKHOUSE_USER: vitevue
       CLICKHOUSE_PASSWORD: vitevue_dev
       CLICKHOUSE_DB: vitevue
@@ -251,5 +252,11 @@ services:
     depends_on:
       - backend
     command: bun run dev --host 0.0.0.0
+
+networks:
+  default:
+    driver: bridge
+    driver_opts:
+      com.docker.network.driver.mtu: "1280"
 
 # All data is now stored in .docker-volumes/ directory
