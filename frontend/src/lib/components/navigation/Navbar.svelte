@@ -30,7 +30,6 @@
                     <NavLink href="/dashboard" label="Dashboard" />
                     <NavDropdown label="Transactions" items={transactionItems} />
                     <NavLink href="/analytics" label="Analytics" />
-                    <NavLink href="/supply" label="Supply" />
                     <NavLink href="/projects" label="Projects" />
                 </div>
 

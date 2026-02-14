@@ -240,7 +240,7 @@
               </div>
             </div>
             <h3 class="text-2xl font-bold text-slate-900 mb-2" in:fly={{ y: 20, duration: 500, delay: 200, easing: cubicOut }}>
-              Welcome to ViteVue AI Assistant
+              Welcome to Vitevue AI
             </h3>
             <p class="text-slate-600 mb-6" in:fly={{ y: 20, duration: 500, delay: 300, easing: cubicOut }}>
               Ask me anything about Dubai real estate data, market trends, or property analytics

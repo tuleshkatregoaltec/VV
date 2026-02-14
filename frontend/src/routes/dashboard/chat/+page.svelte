@@ -43,7 +43,7 @@
 </script>
 
 <svelte:head>
-  <title>Chat - ViteVue</title>
+  <title>Chat - Vitevue</title>
 </svelte:head>
 
 <AppShell showFilters={false}>
