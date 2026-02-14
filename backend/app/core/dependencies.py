@@ -14,7 +14,6 @@ from app.config import settings
 from app.postgres import get_db_session
 from app.token_usage.service import token_usage_service
 from app.core.exceptions import AuthError
-from app.billing.service import can_access_product, get_subscription_error
 from app.providers.auth.scopes import AuthScopes
 from app.providers.auth.platform_user import PlatformUser
 

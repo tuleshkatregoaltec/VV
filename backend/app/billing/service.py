@@ -344,34 +344,3 @@ async def get_customer_portal_url(customer_id: str, return_url: str) -> str:
         return_url=return_url,
     )
     return portal_session.url
-
-
-def is_subscription_active(subscription: Subscription) -> bool:
-    """Check if subscription grants access (status in ['active', 'trialing'])."""
-    now = datetime.now(timezone.utc)
-
-    # Allow access for active and trialing subscriptions
-    if subscription.status not in ["active", "trialing"]:
-        return False
-
-    # Check not expired
-    return now < subscription.current_period_end
-
-
-def can_access_product(subscription: Optional[Subscription]) -> bool:
-    """Determine if user can access product features."""
-    if subscription is None:
-        return False
-    return is_subscription_active(subscription)
-
-
-def get_subscription_error(subscription: Optional[Subscription]) -> HTTPException:
-    """Return appropriate error for subscription state."""
-    if subscription is None:
-        return AuthError.subscription_required()
-
-    if subscription.status == "past_due":
-        return AuthError.subscription_past_due()
-
-    # Default to subscription required for all other inactive states
-    return AuthError.subscription_required()
