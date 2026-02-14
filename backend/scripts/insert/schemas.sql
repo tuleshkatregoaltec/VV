@@ -308,3 +308,18 @@ CREATE TABLE IF NOT EXISTS ch_developers (
 
 ) ENGINE = MergeTree()
 ORDER BY developer_id;
+
+
+-- =============================================================
+-- Silver tables — enriched / derived, populated by scripts
+-- =============================================================
+
+CREATE TABLE IF NOT EXISTS ch_geo_projects (
+    project_id   Int32,
+    centroid_lat Float64,
+    centroid_lng Float64,
+    polygon      Array(Array(Float64)),   -- [[lng, lat], ...] GeoJSON outer ring
+    importance   Float32,                 -- Nominatim importance score (0–1); review low values
+    geocoded_at  DateTime DEFAULT now()
+) ENGINE = MergeTree()
+ORDER BY project_id;
