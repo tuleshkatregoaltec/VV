@@ -19,7 +19,7 @@ from app.analytics.models import (
     SubProjectsResponse,
 )
 from app.clickhouse.client import query
-from app.clickhouse.queries import sales_summary, rentals_summary, price_trends
+from app.clickhouse.queries import sales_summary, rentals_summary, price_trends, MARKET_FILTERS
 from app.analytics.service import (
     get_project_search,
     get_sub_project_list,
@@ -36,8 +36,12 @@ router = APIRouter(
 @router.get("/sales", response_model=AnalyticsResponse)
 async def get_sales_analytics(
     context: AuthContext = Depends(require_active_subscription),
-    property_usage: str = Query(
-        default="Residential", description="Residential or Commercial"
+    market_type: Optional[str] = Query(
+        default=None,
+        description=f"Market type (overrides property_usage/property_type). One of: {', '.join(MARKET_FILTERS)}",
+    ),
+    property_usage: Optional[str] = Query(
+        default="Residential", description="Residential or Commercial (ignored if market_type set)"
     ),
     timeframe_days: Optional[int] = Query(
         default=None,
@@ -53,7 +57,7 @@ async def get_sales_analytics(
         default=None, description="Filter by master project name"
     ),
     property_type: Optional[str] = Query(
-        default=None, description="Filter by property type"
+        default=None, description="Filter by property type (ignored if market_type set)"
     ),
     rooms: Optional[str] = Query(default=None, description="Filter by room count"),
     reg_type: Optional[str] = Query(
@@ -70,14 +74,29 @@ async def get_sales_analytics(
 
     Supports:
     - Custom date ranges (use start_date/end_date or timeframe_days)
-    - Multi-dimensional filtering (combine property_type, rooms, location, price ranges)
-    - Bucketed filtering (price ranges, area ranges)
+    - market_type for taxonomy-correct filtering (recommended)
+    - Manual filtering via property_usage + property_type (legacy)
 
     Examples:
     - Last 30 days: ?timeframe_days=30
+    - By market: ?market_type=residential_units&timeframe_days=90
     - Custom range: ?start_date=2024-01-01&end_date=2024-12-31
-    - Filtered: ?timeframe_days=90&master_project=Dubai Marina&price_bucket=1M-2M
     """
+    from fastapi import HTTPException
+
+    # Resolve market_type into property_usage / property_type / property_usage_in
+    resolved_property_usage = property_usage
+    resolved_property_type = property_type
+    resolved_property_usage_in = None
+
+    if market_type is not None:
+        if market_type not in MARKET_FILTERS:
+            raise HTTPException(status_code=422, detail=f"Invalid market_type. Valid values: {list(MARKET_FILTERS)}")
+        mf = MARKET_FILTERS[market_type]
+        resolved_property_usage = mf.get("property_usage_en")
+        resolved_property_usage_in = mf.get("property_usage_en__in")
+        resolved_property_type = mf.get("property_type_en", property_type)
+
     # Calculate date range
     if timeframe_days:
         from datetime import timedelta
@@ -95,11 +114,12 @@ async def get_sales_analytics(
     # Execute ClickHouse query
     try:
         sql = sales_summary(
-            property_usage=property_usage,
+            property_usage=resolved_property_usage,
+            property_usage_in=resolved_property_usage_in,
             start_date=start_date.isoformat(),
             end_date=end_date.isoformat(),
             master_project=master_project,
-            property_type=property_type,
+            property_type=resolved_property_type,
             rooms=rooms,
             reg_type=reg_type,
             price_bucket=price_bucket,
@@ -107,16 +127,17 @@ async def get_sales_analytics(
         )
 
         parameters = {
-            "property_usage": property_usage,
             "start_date": start_date.isoformat(),
             "end_date": end_date.isoformat(),
         }
 
         # Add optional parameters
+        if resolved_property_usage is not None:
+            parameters["property_usage"] = resolved_property_usage
         if master_project:
             parameters["master_project"] = master_project
-        if property_type:
-            parameters["property_type"] = property_type
+        if resolved_property_type:
+            parameters["property_type"] = resolved_property_type
         if rooms:
             parameters["rooms"] = rooms
         if reg_type:
@@ -310,14 +331,33 @@ async def get_market_trend(
     days: int = Query(
         default=180, description="Number of days to look back (30, 90, 180, 365)"
     ),
-    property_usage: str = Query(
-        default="Residential", description="Residential or Commercial"
+    market_type: Optional[str] = Query(
+        default=None,
+        description=f"Market type (overrides property_usage). One of: {', '.join(MARKET_FILTERS)}",
+    ),
+    property_usage: Optional[str] = Query(
+        default="Residential", description="Residential or Commercial (ignored if market_type set)"
     ),
 ):
     """Get aggregated price trend data for the market trend chart.
 
     Returns trend points plus period-over-period change vs the equivalent prior period.
     """
+    from fastapi import HTTPException
+
+    # Resolve market_type
+    resolved_property_usage = property_usage
+    resolved_property_usage_in = None
+    resolved_property_type = None
+
+    if market_type is not None:
+        if market_type not in MARKET_FILTERS:
+            raise HTTPException(status_code=422, detail=f"Invalid market_type. Valid values: {list(MARKET_FILTERS)}")
+        mf = MARKET_FILTERS[market_type]
+        resolved_property_usage = mf.get("property_usage_en")
+        resolved_property_usage_in = mf.get("property_usage_en__in")
+        resolved_property_type = mf.get("property_type_en")
+
     end_date = date.today()
     start_date = end_date - timedelta(days=days)
     prev_end = start_date
@@ -331,27 +371,41 @@ async def get_market_trend(
         interval = "month"
 
     trend_sql = price_trends(
-        property_usage=property_usage,
+        property_usage=resolved_property_usage,
+        property_usage_in=resolved_property_usage_in,
+        property_type=resolved_property_type,
         start_date=start_date.isoformat(),
         end_date=end_date.isoformat(),
         interval=interval,
     )
     current_summary_sql = sales_summary(
-        property_usage=property_usage,
+        property_usage=resolved_property_usage,
+        property_usage_in=resolved_property_usage_in,
+        property_type=resolved_property_type,
         start_date=start_date.isoformat(),
         end_date=end_date.isoformat(),
     )
     prev_summary_sql = sales_summary(
-        property_usage=property_usage,
+        property_usage=resolved_property_usage,
+        property_usage_in=resolved_property_usage_in,
+        property_type=resolved_property_type,
         start_date=prev_start.isoformat(),
         end_date=prev_end.isoformat(),
     )
 
+    def _trend_params(s: str, e: str) -> dict:
+        p: dict = {"start_date": s, "end_date": e}
+        if resolved_property_usage is not None:
+            p["property_usage"] = resolved_property_usage
+        if resolved_property_type is not None:
+            p["property_type"] = resolved_property_type
+        return p
+
     try:
         trend_result, current_result, prev_result = await asyncio.gather(
-            query(trend_sql, {"property_usage": property_usage, "start_date": start_date.isoformat(), "end_date": end_date.isoformat()}),
-            query(current_summary_sql, {"property_usage": property_usage, "start_date": start_date.isoformat(), "end_date": end_date.isoformat()}),
-            query(prev_summary_sql, {"property_usage": property_usage, "start_date": prev_start.isoformat(), "end_date": prev_end.isoformat()}),
+            query(trend_sql, _trend_params(start_date.isoformat(), end_date.isoformat())),
+            query(current_summary_sql, _trend_params(start_date.isoformat(), end_date.isoformat())),
+            query(prev_summary_sql, _trend_params(prev_start.isoformat(), prev_end.isoformat())),
         )
     except Exception as e:
         import logging

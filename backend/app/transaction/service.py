@@ -44,9 +44,9 @@ async def fetch_sales_transactions(
 
     Optimized query using sort key (property_usage_en, instance_date, transaction_id).
     """
-    # Build WHERE clause
-    where_clauses = []
-    params = {}
+    # Build WHERE clause — always enforce Sales only (separate endpoint exists for mortgages/gifts)
+    where_clauses = ["trans_group_en = 'Sales'"]
+    params: dict = {}
 
     if property_usage:
         where_clauses.append("property_usage_en = {property_usage:String}")
@@ -108,7 +108,7 @@ async def fetch_sales_transactions(
         where_clauses.append("meter_sale_price <= {price_per_sqm_max:Decimal64(2)}")
         params["price_per_sqm_max"] = price_per_sqm_max
 
-    where_clause = " AND ".join(where_clauses) if where_clauses else "1=1"
+    where_clause = " AND ".join(where_clauses)
 
     # Count total matching transactions
     count_sql = f"""
@@ -367,8 +367,8 @@ async def export_sales_transactions(
         for i, tid in enumerate(ids_list):
             params[f"id_{i}"] = tid
     else:
-        # Build WHERE clause from filters
-        where_clauses = []
+        # Build WHERE clause from filters — always enforce Sales only
+        where_clauses = ["trans_group_en = 'Sales'"]
 
         if property_usage:
             where_clauses.append("property_usage_en = {property_usage:String}")
@@ -430,7 +430,7 @@ async def export_sales_transactions(
             where_clauses.append("meter_sale_price <= {price_per_sqm_max:Decimal64(2)}")
             params["price_per_sqm_max"] = price_per_sqm_max
 
-        where_clause = " AND ".join(where_clauses) if where_clauses else "1=1"
+        where_clause = " AND ".join(where_clauses)
 
     # Fetch transactions (limit 100 if using filters)
     limit_clause = "" if transaction_ids else "LIMIT 100"

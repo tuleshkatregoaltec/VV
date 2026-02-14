@@ -34,6 +34,7 @@ class ProjectSearchResult(BaseModel):
     project_name: str
     area_name: str
     developer_name: Optional[str]
+    master_project_en: Optional[str]
     latitude: float
     longitude: float
 
@@ -47,6 +48,28 @@ class UnitComposition(BaseModel):
     avg_area_sqm: Optional[float]
 
 
+class BuildingUnitType(BaseModel):
+    """Bedroom/type breakdown for a specific building"""
+
+    rooms_en: str  # "Studio", "1 B/R", "2 B/R", etc.
+    count: int
+    percentage: float
+    avg_area_sqm: Optional[float]
+
+
+class BuildingDetailResponse(BaseModel):
+    """Building-level details with unit composition"""
+
+    property_id: int
+    building_number: Optional[str]
+    floors: Optional[int]
+    project_id: int
+    project_name: str
+    area_name: str
+    total_units: int
+    unit_composition: List[BuildingUnitType]
+
+
 class ProjectDetailResponse(BaseModel):
     """Full project details for overlay"""
 
@@ -54,6 +77,7 @@ class ProjectDetailResponse(BaseModel):
     project_id: int
     project_name: str
     project_number: Optional[str]
+    master_project_en: Optional[str]
 
     # Location
     area_id: Optional[int]

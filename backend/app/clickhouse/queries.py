@@ -1,5 +1,34 @@
 from typing import Optional
 
+# Server-side market type filters — frontend passes market_type, never raw predicates.
+# See analytics_architecture.md for taxonomy rationale.
+MARKET_FILTERS: dict[str, dict] = {
+    "residential_units": {
+        "property_type_en": "Unit",
+        "property_usage_en": "Residential",
+        "trans_group_en": "Sales",
+    },
+    "villas": {
+        "property_type_en": "Villa",
+        "trans_group_en": "Sales",
+    },
+    "commercial_units": {
+        "property_type_en": "Unit",
+        "property_usage_en__in": ["Commercial", "Hospitality"],
+        "trans_group_en": "Sales",
+    },
+    "bulk_building": {
+        "property_type_en": "Building",
+        "trans_group_en": "Sales",
+    },
+    "land": {
+        "property_type_en": "Land",
+        "trans_group_en": "Sales",
+    },
+    "mortgages": {"trans_group_en": "Mortgages"},
+    "gifts": {"trans_group_en": "Gifts"},
+}
+
 
 # =============================================================================
 # TRANSACTION AND RENTAL LISTING QUERIES
@@ -260,7 +289,7 @@ def count_rental_contracts(
 
 
 def sales_summary(
-    property_usage: str,
+    property_usage: Optional[str],
     start_date: str,
     end_date: str,
     master_project: Optional[str] = None,
@@ -271,6 +300,7 @@ def sales_summary(
     reg_type: Optional[str] = None,
     price_bucket: Optional[str] = None,
     area_bucket: Optional[str] = None,
+    property_usage_in: Optional[list] = None,
 ) -> str:
     """
     Get sales analytics summary for a date range.
@@ -279,12 +309,18 @@ def sales_summary(
              median_price_per_sqm, median_area_sqm
 
     All filtering uses parameter binding - no SQL injection risk.
+    property_usage_in values must come from MARKET_FILTERS (trusted, not user input).
     """
     # Build WHERE clause with parameter placeholders
     where_clauses = [
-        "property_usage_en = {property_usage:String}",
+        "trans_group_en = 'Sales'",
         "instance_date BETWEEN {start_date:Date} AND {end_date:Date}",
     ]
+    if property_usage is not None:
+        where_clauses.append("property_usage_en = {property_usage:String}")
+    elif property_usage_in is not None:
+        vals = "', '".join(property_usage_in)
+        where_clauses.append(f"property_usage_en IN ('{vals}')")
 
     if master_project is not None:
         where_clauses.append("master_project_en = {master_project:String}")
@@ -319,13 +355,14 @@ def sales_summary(
 
 
 def price_trends(
-    property_usage: str,
+    property_usage: Optional[str],
     start_date: str,
     end_date: str,
     interval: str = "month",
     master_project: Optional[str] = None,
     property_type: Optional[str] = None,
     area_name: Optional[str] = None,
+    property_usage_in: Optional[list] = None,
 ) -> str:
     """
     Get price trends over time (grouped by day, week, or month).
@@ -334,6 +371,7 @@ def price_trends(
         interval: 'day', 'week', or 'month'
 
     Returns: period, transaction_count, avg_price, avg_price_sqm
+    property_usage_in values must come from MARKET_FILTERS (trusted, not user input).
     """
     # SAFE: interval is controlled by application, not user input
     if interval not in ("day", "week", "month"):
@@ -347,9 +385,14 @@ def price_trends(
         time_group = "toStartOfMonth(instance_date)"
 
     where_clauses = [
-        "property_usage_en = {property_usage:String}",
+        "trans_group_en = 'Sales'",
         "instance_date BETWEEN {start_date:Date} AND {end_date:Date}",
     ]
+    if property_usage is not None:
+        where_clauses.append("property_usage_en = {property_usage:String}")
+    elif property_usage_in is not None:
+        vals = "', '".join(property_usage_in)
+        where_clauses.append(f"property_usage_en IN ('{vals}')")
 
     if master_project is not None:
         where_clauses.append("master_project_en = {master_project:String}")
@@ -386,6 +429,7 @@ def sales_by_area(
     Returns: area_name_en, transaction_count, median_price, total_volume
     """
     where_clauses = [
+        "trans_group_en = 'Sales'",
         "property_usage_en = {property_usage:String}",
         "instance_date BETWEEN {start_date:Date} AND {end_date:Date}",
     ]
@@ -422,6 +466,7 @@ def sales_by_property_type(
     Returns: property_type_en, transaction_count, median_price, total_volume
     """
     where_clauses = [
+        "trans_group_en = 'Sales'",
         "property_usage_en = {property_usage:String}",
         "instance_date BETWEEN {start_date:Date} AND {end_date:Date}",
     ]
@@ -459,6 +504,8 @@ def sales_by_rooms(
     Returns: rooms_en, transaction_count, median_price, avg_price
     """
     where_clauses = [
+        "trans_group_en = 'Sales'",
+        "property_type_en IN ('Unit', 'Villa')",
         "property_usage_en = {property_usage:String}",
         "instance_date BETWEEN {start_date:Date} AND {end_date:Date}",
     ]
@@ -1204,8 +1251,13 @@ def _project_filter(filter_type: str) -> str:
     return "project_name_en = {project_name:String}"
 
 
-def project_sales_summary(filter_type: str = "project") -> str:
-    """Overall sales KPIs for a project, master project, or virtual master."""
+def project_sales_summary(filter_type: str = "project", reg_type: Optional[str] = None) -> str:
+    """Overall sales KPIs for a project, master project, or virtual master.
+
+    Filters to Sales transactions on Unit/Villa only to exclude mortgage/gift/building/land noise.
+    Pass reg_type='Existing Properties' to get existing-only avg_price for yield denominator.
+    """
+    reg_filter = "AND reg_type_en = {reg_type_en:String}" if reg_type else ""
     return f"""
         SELECT
             count() as transaction_count,
@@ -1215,29 +1267,46 @@ def project_sales_summary(filter_type: str = "project") -> str:
             round(coalesce(median(actual_worth), 0), 2) as median_price
         FROM ch_transactions
         WHERE {_project_filter(filter_type)}
+          AND trans_group_en = 'Sales'
+          AND property_type_en IN ('Unit', 'Villa')
+          AND property_usage_en = 'Residential'
           AND actual_worth > 0
+          {reg_filter}
     """
 
 
-def project_sales_by_rooms(filter_type: str = "project") -> str:
-    """Sales breakdown by bedroom count for a project, master project, or virtual master."""
+def project_sales_by_rooms(filter_type: str = "project", reg_type: Optional[str] = None) -> str:
+    """Sales breakdown by bedroom count for a project, master project, or virtual master.
+
+    Pass reg_type='Existing Properties' to get existing-only avg_sale_price for yield denominator.
+    """
+    reg_filter = "AND reg_type_en = {reg_type_en:String}" if reg_type else ""
     return f"""
         SELECT
             rooms_en,
             count() as sale_count,
             round(avg(actual_worth), 2) as avg_sale_price,
+            round(median(actual_worth), 2) as median_sale_price,
             round(avg(meter_sale_price), 2) as avg_sale_price_sqm
         FROM ch_transactions
         WHERE {_project_filter(filter_type)}
+          AND trans_group_en = 'Sales'
+          AND property_type_en IN ('Unit', 'Villa')
+          AND property_usage_en = 'Residential'
           AND rooms_en IS NOT NULL
           AND actual_worth > 0
+          {reg_filter}
         GROUP BY rooms_en
         ORDER BY sale_count DESC
     """
 
 
 def project_sales_by_property_type(filter_type: str = "project") -> str:
-    """Sales breakdown by property type for a project, master project, or virtual master."""
+    """Sales breakdown by property type for a project, master project, or virtual master.
+
+    Shows all property types (Unit, Villa, Building, Land) so breakdown is informational.
+    Excludes mortgages and gifts via trans_group_en filter.
+    """
     return f"""
         SELECT
             property_type_en,
@@ -1245,6 +1314,7 @@ def project_sales_by_property_type(filter_type: str = "project") -> str:
             round(avg(actual_worth), 2) as avg_price
         FROM ch_transactions
         WHERE {_project_filter(filter_type)}
+          AND trans_group_en = 'Sales'
           AND property_type_en IS NOT NULL
           AND actual_worth > 0
         GROUP BY property_type_en
@@ -1253,7 +1323,7 @@ def project_sales_by_property_type(filter_type: str = "project") -> str:
 
 
 def project_sales_by_reg_type(filter_type: str = "project") -> str:
-    """Sales breakdown by registration type for a project, master project, or virtual master."""
+    """Sales breakdown by registration type (Off-Plan vs Existing) for a project."""
     return f"""
         SELECT
             reg_type_en,
@@ -1261,6 +1331,9 @@ def project_sales_by_reg_type(filter_type: str = "project") -> str:
             round(avg(actual_worth), 2) as avg_price
         FROM ch_transactions
         WHERE {_project_filter(filter_type)}
+          AND trans_group_en = 'Sales'
+          AND property_type_en IN ('Unit', 'Villa')
+          AND property_usage_en = 'Residential'
           AND reg_type_en IS NOT NULL
         GROUP BY reg_type_en
         ORDER BY count DESC
@@ -1268,16 +1341,80 @@ def project_sales_by_reg_type(filter_type: str = "project") -> str:
 
 
 def project_rentals_summary(filter_type: str = "project") -> str:
-    """Overall rental KPIs for a project, master project, or virtual master."""
+    """Overall rental KPIs for a project, master project, or virtual master.
+
+    Uses median for rent figures — avg is severely skewed by outlier contracts
+    (multi-year totals, bulk leases) that inflate the mean by 5-10x.
+    """
     return f"""
         SELECT
             count() as contract_count,
             round(coalesce(sum(annual_amount), 0), 2) as total_annual_value,
-            round(coalesce(avg(annual_amount), 0), 2) as avg_annual_rent,
-            round(coalesce(avg(annual_amount / nullIf(actual_area, 0)), 0), 2) as avg_rent_sqm
+            round(coalesce(median(annual_amount), 0), 2) as median_annual_rent,
+            round(coalesce(median(annual_amount / nullIf(actual_area, 0)), 0), 2) as median_rent_sqm
         FROM ch_rent_contracts
         WHERE {_project_filter(filter_type)}
+          AND property_usage_en = 'Residential'
           AND annual_amount > 0
+    """
+
+
+def project_rentals_by_rooms(filter_type: str = "project") -> str:
+    """Per-room rental KPIs inferred from unit area distributions.
+
+    ch_rent_contracts has no rooms_en, so room type is assigned probabilistically:
+    - Compute IQR (p25/p75) area range per room type from ch_units (needs >= 3 units)
+    - Only includes standard residential types (B/R, Studio, PENTHOUSE)
+    - Join rent contracts to those ranges; keep only unambiguous matches
+      (actual_area falls in exactly one room type's IQR)
+    - Uses median for rent figures — avg is skewed by outlier contracts
+    - Coverage: ~50-70% of contracts per project (the rest are ambiguous or out-of-range)
+
+    All filter types use {project_name:String} for both the rent filter and units CTE.
+    """
+    # Unit area range filter — must scope to the same project
+    if filter_type == "virtual_master":
+        unit_filter = "project_name_en LIKE {project_name:String}"
+    elif filter_type == "master":
+        unit_filter = """(master_project_en = {project_name:String}
+            OR (lower(project_name_en) LIKE concat(lower({project_name:String}), ' - %')
+                AND (master_project_en = '' OR master_project_en IS NULL)))"""
+    else:  # project — ch_units has project_name_en populated per sub-project
+        unit_filter = "project_name_en = {project_name:String}"
+
+    rent_filter = _project_filter(filter_type)
+
+    return f"""
+        SELECT
+            rooms_en,
+            count() AS rental_count,
+            round(median(annual_amount), 2) AS median_annual_rent,
+            round(median(annual_amount / nullIf(actual_area, 0)), 2) AS median_rent_sqm
+        FROM (
+            SELECT any(ar.rooms_en) AS rooms_en, annual_amount, actual_area
+            FROM ch_rent_contracts
+            INNER JOIN (
+                SELECT
+                    rooms_en,
+                    quantile(0.25)(actual_area) AS lo,
+                    quantile(0.75)(actual_area) AS hi,
+                    count() AS n
+                FROM ch_units
+                WHERE {unit_filter}
+                  AND (rooms_en LIKE '% B/R' OR rooms_en = 'Studio' OR rooms_en LIKE '%ENTHOUSE')
+                  AND actual_area > 0
+                GROUP BY rooms_en
+                HAVING n >= 3
+            ) AS ar ON actual_area BETWEEN ar.lo AND ar.hi
+            WHERE {rent_filter}
+              AND property_usage_en = 'Residential'
+              AND annual_amount > 0
+              AND actual_area > 0
+            GROUP BY contract_id, line_number, annual_amount, actual_area
+            HAVING count(DISTINCT ar.rooms_en) = 1
+        )
+        GROUP BY rooms_en
+        ORDER BY rental_count DESC
     """
 
 
@@ -1376,6 +1513,9 @@ def project_price_trends(interval: str = "month", filter_type: str = "project") 
             round(avg(meter_sale_price), 2) as avg_price_sqm
         FROM ch_transactions
         WHERE {_project_filter(filter_type)}
+          AND trans_group_en = 'Sales'
+          AND property_type_en IN ('Unit', 'Villa')
+          AND property_usage_en = 'Residential'
           AND instance_date BETWEEN {{start_date:Date}} AND {{end_date:Date}}
           AND actual_worth > 0
         GROUP BY period

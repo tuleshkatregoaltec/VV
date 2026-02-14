@@ -13,6 +13,7 @@ from app.clickhouse.queries import (
     project_sales_by_property_type,
     project_sales_by_reg_type,
     project_rentals_summary,
+    project_rentals_by_rooms,
     project_units_composition,
     project_meta_by_name,
     project_meta_by_master,
@@ -87,7 +88,7 @@ async def get_project_summary(
     master_project: Optional[str] = None,
 ) -> ProjectAnalyticsResponse:
     """
-    Run 7 ClickHouse queries in parallel and merge into a single response.
+    Run 10 ClickHouse queries in parallel and merge into a single response.
     filter_type controls the WHERE clause: 'master', 'virtual_master', or 'project'.
     For virtual_master, project_name is used as a LIKE prefix (suffix ' - %' appended here).
     """
@@ -112,24 +113,34 @@ async def get_project_summary(
     # meta for master/virtual_master uses the like_name for virtual (LIKE) or plain name
     meta_params = {"project_name": like_name} if filter_type == "virtual_master" else {"project_name": project_name}
 
+    existing_params = {**params, "reg_type_en": "Existing Properties"}
+
+    # project_rentals_by_rooms uses {project_name} for both rent and units filters
+    rent_rooms_params = params
+
     (
         sales_sum_rows,
+        sales_sum_existing_rows,
         sales_rooms_rows,
+        sales_rooms_existing_rows,
         sales_type_rows,
         sales_reg_rows,
         rent_sum_rows,
+        rent_rooms_rows,
         units_rows,
         meta_rows,
     ) = await asyncio.gather(
         query(project_sales_summary(filter_type), params),
+        query(project_sales_summary(filter_type, reg_type="Existing Properties"), existing_params),
         query(project_sales_by_rooms(filter_type), params),
+        query(project_sales_by_rooms(filter_type, reg_type="Existing Properties"), existing_params),
         query(project_sales_by_property_type(filter_type), params),
         query(project_sales_by_reg_type(filter_type), params),
         query(project_rentals_summary(filter_type), params),
+        query(project_rentals_by_rooms(filter_type), rent_rooms_params),
         query(project_units_composition(filter_type), units_params),
         query(meta_fn(), meta_params),
     )
-    rent_rooms_rows: list = []  # ch_rent_contracts has no rooms_en column
 
     # --- Project metadata ---
     project: Optional[ProjectMeta] = None
@@ -173,37 +184,47 @@ async def get_project_summary(
     rentals = ProjectRentalSummary(
         contract_count=int(r.get("contract_count", 0)),
         total_annual_value=float(r.get("total_annual_value", 0) or 0),
-        avg_annual_rent=float(r.get("avg_annual_rent", 0) or 0),
-        avg_rent_sqm=float(r.get("avg_rent_sqm", 0) or 0),
+        median_annual_rent=float(r.get("median_annual_rent", 0) or 0),
+        median_rent_sqm=float(r.get("median_rent_sqm", 0) or 0),
     )
 
     # --- Overall gross yield ---
+    # Use existing-only median_price as denominator — off-plan launch prices are discounted
+    # and would produce artificially inflated yields (e.g. JVC showing ~25%).
+    # Median/median: both sides use the same central tendency measure for a consistent yield.
+    existing_median_price = float(
+        (sales_sum_existing_rows[0].get("median_price") or 0) if sales_sum_existing_rows else 0
+    )
     overall_yield: Optional[float] = None
-    if sales.avg_price > 0 and rentals.avg_annual_rent > 0:
-        overall_yield = round(rentals.avg_annual_rent / sales.avg_price * 100, 2)
+    if existing_median_price > 0 and rentals.median_annual_rent > 0:
+        overall_yield = round(rentals.median_annual_rent / existing_median_price * 100, 2)
 
     # --- By rooms (merge sales + rentals) ---
     sales_by_room = {row["rooms_en"]: row for row in sales_rooms_rows}
+    # Existing-only prices used as yield denominator — same rationale as overall_gross_yield_pct
+    sales_existing_by_room = {row["rooms_en"]: row for row in sales_rooms_existing_rows}
     rent_by_room = {row["rooms_en"]: row for row in rent_rooms_rows}
     all_rooms = set(sales_by_room) | set(rent_by_room)
 
     by_rooms: list[RoomAnalytics] = []
     for rooms in all_rooms:
         s_row = sales_by_room.get(rooms, {})
+        s_ex_row = sales_existing_by_room.get(rooms, {})
         r_row = rent_by_room.get(rooms, {})
         avg_sale = float(s_row.get("avg_sale_price", 0) or 0)
-        avg_rent = float(r_row.get("avg_annual_rent", 0) or 0)
+        existing_median_sale = float(s_ex_row.get("median_sale_price", 0) or 0)
+        median_rent = float(r_row.get("median_annual_rent", 0) or 0)
         yield_pct: Optional[float] = None
-        if avg_sale > 0 and avg_rent > 0:
-            yield_pct = round(avg_rent / avg_sale * 100, 2)
+        if existing_median_sale > 0 and median_rent > 0:
+            yield_pct = round(median_rent / existing_median_sale * 100, 2)
         by_rooms.append(RoomAnalytics(
             rooms=rooms,
             sale_count=int(s_row.get("sale_count", 0)),
             avg_sale_price=avg_sale,
             avg_sale_price_sqm=float(s_row.get("avg_sale_price_sqm", 0) or 0),
             rental_count=int(r_row.get("rental_count", 0)),
-            avg_annual_rent=avg_rent,
-            avg_rent_sqm=float(r_row.get("avg_rent_sqm", 0) or 0),
+            median_annual_rent=median_rent,
+            median_rent_sqm=float(r_row.get("median_rent_sqm", 0) or 0),
             gross_yield_pct=yield_pct,
         ))
     by_rooms.sort(key=lambda x: _room_sort_key(x.rooms))

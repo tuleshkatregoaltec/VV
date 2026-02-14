@@ -4,8 +4,11 @@ from typing import List, Optional
 from app.project.models import (
     ProjectSearchResult,
     ProjectDetailResponse,
+    GeoPolygon,
     BuildingInfo,
     UnitComposition,
+    BuildingDetailResponse,
+    BuildingUnitType,
 )
 from app.clickhouse.client import query
 import logging
@@ -14,21 +17,23 @@ logger = logging.getLogger(__name__)
 
 
 async def list_all_projects() -> List[ProjectSearchResult]:
-    """
-    Get all projects with minimal data for client-side search.
-
-    Returns ~1500 projects for frontend filtering.
-    Uses default Dubai center coordinates (will be updated when user selects project).
-    """
+    """Get all projects with minimal data for client-side search."""
     sql = """
         SELECT
-            project_id,
-            project_name_en,
-            area_name_en,
-            developer_name
-        FROM ch_projects
-        ORDER BY project_name_en
-        LIMIT 2000
+            p.project_id,
+            p.project_name_en,
+            p.area_name_en,
+            p.master_project_en,
+            COALESCE(NULLIF(d.developer_name_en, ''), p.developer_name) AS developer_name,
+            COALESCE(g.centroid_lat, 25.2048) AS latitude,
+            COALESCE(g.centroid_lng, 55.2708) AS longitude
+        FROM ch_projects p
+        LEFT JOIN ch_developers d ON p.developer_name = d.developer_name_ar
+        LEFT JOIN ch_geo_projects g ON p.project_id = g.project_id
+        WHERE p.project_name_en != ''
+          AND NOT match(p.project_name_en, '^Project [0-9]')
+        ORDER BY p.project_name_en
+        LIMIT 5000
     """
 
     result = await query(sql, {})
@@ -36,47 +41,48 @@ async def list_all_projects() -> List[ProjectSearchResult]:
     return [
         ProjectSearchResult(
             project_id=p["project_id"],
-            project_name=p["project_name_en"] or f"Project {p['project_id']}",
+            project_name=p["project_name_en"],
             area_name=p.get("area_name_en", "Unknown"),
-            developer_name=p.get("developer_name"),
-            latitude=25.2048,  # Default Dubai center
-            longitude=55.2708,
+            developer_name=p.get("developer_name") or None,
+            master_project_en=p.get("master_project_en") or None,
+            latitude=p["latitude"],
+            longitude=p["longitude"],
         )
         for p in result
     ]
 
 
 async def get_project_details(project_id: int) -> Optional[ProjectDetailResponse]:
-    """
-    Get full project details including buildings and unit composition.
-
-    Optimized using ORDER BY project_id for fast lookup.
-    """
-    # Fetch project details
+    """Get full project details including buildings and unit composition."""
     project_sql = """
         SELECT
-            project_id,
-            project_number,
-            project_name_en,
-            developer_id,
-            developer_name,
-            master_developer_id,
-            master_developer_name,
-            area_id,
-            area_name_en,
-            no_of_buildings,
-            no_of_units,
-            no_of_villas,
-            no_of_lands,
-            project_start_date,
-            project_end_date,
-            completion_date,
-            percent_completed,
-            project_status,
-            escrow_agent_name,
-            zoning_authority_en
-        FROM ch_projects
-        WHERE project_id = {project_id:Int32}
+            p.project_id,
+            p.project_number,
+            p.project_name_en,
+            p.master_project_en,
+            p.area_id,
+            p.area_name_en,
+            p.developer_id,
+            COALESCE(NULLIF(d1.developer_name_en, ''), p.developer_name) AS developer_name,
+            p.master_developer_id,
+            COALESCE(NULLIF(d2.developer_name_en, ''), p.master_developer_name) AS master_developer_name,
+            p.no_of_buildings,
+            p.no_of_units,
+            p.no_of_villas,
+            p.no_of_lands,
+            p.project_start_date,
+            p.project_end_date,
+            p.completion_date,
+            p.percent_completed,
+            p.project_status,
+            COALESCE(g.centroid_lat, 25.2048) AS latitude,
+            COALESCE(g.centroid_lng, 55.2708) AS longitude,
+            g.polygon AS area_polygon
+        FROM ch_projects p
+        LEFT JOIN ch_developers d1 ON p.developer_name = d1.developer_name_ar
+        LEFT JOIN ch_developers d2 ON p.master_developer_name = d2.developer_name_ar
+        LEFT JOIN ch_geo_projects g ON p.project_id = g.project_id
+        WHERE p.project_id = {project_id:Int32}
         LIMIT 1
     """
 
@@ -87,7 +93,7 @@ async def get_project_details(project_id: int) -> Optional[ProjectDetailResponse
 
     project = project_result[0]
 
-    # Get buildings for this project by project_id
+    # Get buildings for this project
     buildings: List[BuildingInfo] = []
     buildings_sql = """
         SELECT
@@ -111,7 +117,7 @@ async def get_project_details(project_id: int) -> Optional[ProjectDetailResponse
                 building_number=building.get("building_number"),
                 building_name=building_name,
                 floors=building.get("floors") or None,
-                latitude=25.2048,  # Default - overridden in frontend for demo
+                latitude=25.2048,
                 longitude=55.2708,
             )
         )
@@ -126,45 +132,43 @@ async def get_project_details(project_id: int) -> Optional[ProjectDetailResponse
                 round(avg(actual_area), 2) as avg_area_sqm
             FROM ch_units
             WHERE project_id = {project_id:Int32}
+              AND property_sub_type_en != ''
             GROUP BY property_sub_type_en
             ORDER BY count DESC
         """
 
-        composition_result = await query(
-            composition_sql,
-            {"project_id": project_id},
-        )
+        composition_result = await query(composition_sql, {"project_id": project_id})
 
-        # Calculate total for percentages
         total_units = sum(row["count"] for row in composition_result)
 
         if total_units > 0:
             for row in composition_result:
                 unit_composition.append(
                     UnitComposition(
-                        property_sub_type=row["property_sub_type_en"] or "Unknown",
+                        property_sub_type=row["property_sub_type_en"],
                         count=row["count"],
                         percentage=round((row["count"] / total_units) * 100, 2),
-                        avg_area_sqm=float(row["avg_area_sqm"])
-                        if row["avg_area_sqm"]
-                        else None,
+                        avg_area_sqm=float(row["avg_area_sqm"]) if row["avg_area_sqm"] else None,
                     )
                 )
 
-    # Build response
+    raw_polygon = project.get("area_polygon") or []
+    area_polygon = GeoPolygon(coordinates=raw_polygon) if raw_polygon else None
+
     return ProjectDetailResponse(
         project_id=project["project_id"],
         project_name=project["project_name_en"] or f"Project {project['project_id']}",
         project_number=project.get("project_number"),
+        master_project_en=project.get("master_project_en") or None,
         area_id=project.get("area_id"),
         area_name=project.get("area_name_en", "Unknown"),
-        latitude=25.2048,  # Default Dubai center - will be geocoded later
-        longitude=55.2708,
-        area_polygon=None,  # No polygon data in current schema
+        latitude=project["latitude"],
+        longitude=project["longitude"],
+        area_polygon=area_polygon,
         developer_id=project.get("developer_id"),
-        developer_name=project.get("developer_name"),
+        developer_name=project.get("developer_name") or None,
         master_developer_id=project.get("master_developer_id"),
-        master_developer_name=project.get("master_developer_name"),
+        master_developer_name=project.get("master_developer_name") or None,
         no_of_buildings=project.get("no_of_buildings"),
         no_of_units=project.get("no_of_units"),
         no_of_villas=project.get("no_of_villas"),
@@ -176,4 +180,60 @@ async def get_project_details(project_id: int) -> Optional[ProjectDetailResponse
         project_status=project.get("project_status"),
         unit_composition=unit_composition,
         buildings=buildings,
+    )
+
+
+async def get_building_details(property_id: int) -> Optional[BuildingDetailResponse]:
+    """Get building metadata and unit composition by bedroom type."""
+    building_sql = """
+        SELECT
+            property_id,
+            building_number,
+            floors,
+            project_id,
+            project_name_en,
+            area_name_en
+        FROM ch_buildings
+        WHERE property_id = {property_id:Int32}
+        LIMIT 1
+    """
+    building_result = await query(building_sql, {"property_id": property_id})
+    if not building_result:
+        return None
+
+    b = building_result[0]
+
+    units_sql = """
+        SELECT
+            rooms_en,
+            count() AS count,
+            round(avg(actual_area), 2) AS avg_area_sqm
+        FROM ch_units
+        WHERE parent_property_id = {property_id:Int32}
+          AND rooms_en != ''
+        GROUP BY rooms_en
+        ORDER BY count DESC
+    """
+    units_result = await query(units_sql, {"property_id": property_id})
+
+    total_units = sum(row["count"] for row in units_result)
+    unit_composition = [
+        BuildingUnitType(
+            rooms_en=row["rooms_en"],
+            count=row["count"],
+            percentage=round((row["count"] / total_units) * 100, 1) if total_units else 0,
+            avg_area_sqm=float(row["avg_area_sqm"]) if row["avg_area_sqm"] else None,
+        )
+        for row in units_result
+    ]
+
+    return BuildingDetailResponse(
+        property_id=b["property_id"],
+        building_number=b.get("building_number") or None,
+        floors=b.get("floors") or None,
+        project_id=b["project_id"],
+        project_name=b.get("project_name_en") or f"Project {b['project_id']}",
+        area_name=b.get("area_name_en") or "Unknown",
+        total_units=total_units,
+        unit_composition=unit_composition,
     )
