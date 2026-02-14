@@ -2,8 +2,7 @@
 	const navItems = [
 		{ label: 'Preview', href: '#preview' },
 		{ label: 'Our Partners', href: '#personas' },
-		{ label: 'Pricing', href: '#pricing' },
-		{ label: '', href: '#why-vitevue' }
+		{ label: 'Pricing', href: '#pricing' }
 	];
 </script>
 
@@ -21,23 +20,22 @@
 			</a>
 
 			<div class="flex items-center gap-6">
-				{#each navItems as item}
-					<a
-						href={item.href}
-						class="text-sm font-medium text-slate-700 hover:text-slate-900 transition-colors"
-					>
-						{item.label}
-					</a>
-				{/each}
-				<a
-					href="#get-started"
-					class="inline-flex items-center gap-1.5 px-4 py-1.5 bg-slate-900 text-white text-sm font-semibold rounded-lg hover:bg-slate-800 hover:scale-105 transition-all"
-				>
+				<div class="hidden sm:flex items-center gap-6">
+					{#each navItems as item}
+						<a
+							href={item.href}
+							class="text-sm font-medium text-slate-700 hover:text-slate-900 transition-colors"
+						>
+							{item.label}
+						</a>
+					{/each}
+				</div>
+				<button type="button" disabled class="inline-flex items-center gap-1.5 px-4 py-1.5 bg-slate-200 text-slate-400 text-sm font-semibold rounded-lg cursor-not-allowed">
 					Get Started
 					<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"></path>
 					</svg>
-				</a>
+				</button>
 			</div>
 		</div>
 	</div>

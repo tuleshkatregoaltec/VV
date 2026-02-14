@@ -25,7 +25,8 @@
 				'Advanced analytics dashboard',
 				'Unlimited project tracking',
 			],
-			href: '/auth?view=signup&tier=tier1'
+			href: '/auth?view=signup&tier=tier1',
+			comingSoon: true
 		},
 		{
 			name: 'Professional',
@@ -39,7 +40,8 @@
 				'Industry-grade comparables',
 				'Priority support'
 			],
-			href: '/auth?view=signup&tier=tier2'
+			href: '/auth?view=signup&tier=tier2',
+			comingSoon: true
 		},
 		{
 			name: 'Enterprise',
@@ -135,13 +137,19 @@
 							</ul>
 						</div>
 
-						<a
-							href={tier.href}
-							onclick={() => tier.tier && handleTierClick(tier.tier)}
-							class="block w-full text-center px-6 py-3 rounded-lg font-semibold transition-all bg-slate-900 text-white hover:bg-slate-800 hover:scale-105"
-						>
-							{tier.isContact ? 'Contact Sales' : 'Get Started'}
-						</a>
+						{#if tier.comingSoon}
+							<button type="button" disabled class="block w-full text-center px-6 py-3 rounded-lg font-semibold bg-slate-200 text-slate-400 cursor-not-allowed">
+								Get Started
+							</button>
+						{:else}
+							<a
+								href={tier.href}
+								onclick={() => tier.tier && handleTierClick(tier.tier)}
+								class="block w-full text-center px-6 py-3 rounded-lg font-semibold transition-all bg-slate-900 text-white hover:bg-slate-800 hover:scale-105"
+							>
+								{tier.isContact ? 'Contact Sales' : 'Get Started'}
+							</a>
+						{/if}
 					</div>
 				{/if}
 			{/each}

@@ -55,15 +55,12 @@
 			</p>
 
 			<div class="flex flex-col sm:flex-row gap-4 justify-center items-center mb-16">
-				<a
-					href="/auth?view=signup"
-					class="group inline-flex items-center gap-2 px-8 py-4 bg-slate-900 text-white font-semibold rounded-lg hover:bg-slate-800 hover:scale-105 transition-all shadow-sm hover:shadow-lg text-base"
-				>
+				<button type="button" disabled class="inline-flex items-center gap-2 px-8 py-4 bg-slate-200 text-slate-400 font-semibold rounded-lg cursor-not-allowed text-base">
 					Get Started
-					<svg class="w-4 h-4 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+					<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"></path>
 					</svg>
-				</a>
+				</button>
 				<button
 					onclick={scrollToPreview}
 					class="group inline-flex items-center gap-2 px-8 py-4 bg-white text-slate-900 font-semibold rounded-lg hover:bg-slate-50 hover:scale-105 transition-all border border-slate-200 hover:border-slate-300 text-base"
@@ -76,7 +73,7 @@
 			</div>
 
 			<!-- Enhanced stats with icons and hover -->
-			<div class="flex flex-wrap justify-center gap-12 pt-8 border-t border-slate-200">
+			<div class="flex flex-wrap justify-center gap-8 sm:gap-12 pt-8 border-t border-slate-200">
 				<div class="group flex items-center gap-3 cursor-default">
 					<div class="w-10 h-10 bg-slate-100 rounded-lg flex items-center justify-center group-hover:bg-teal-50 group-hover:scale-110 transition-all duration-300">
 						<svg class="w-5 h-5 text-slate-700 group-hover:text-teal-600 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">

@@ -25,7 +25,7 @@
 				<svg class="w-4 h-4 text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 8h2a2 2 0 012 2v6a2 2 0 01-2 2h-2v4l-4-4H9a1.994 1.994 0 01-1.414-.586m0 0L11 14h4a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2v4l.586-.586z"></path>
 				</svg>
-				<span class="text-sm font-semibold text-slate-700">Get Started</span>
+				<span class="text-sm font-semibold text-slate-700">Get started</span>
 			</div>
 
 			<h2 class="text-4xl sm:text-5xl font-bold text-slate-900 mb-6 leading-tight hover:scale-[1.02] transition-transform duration-500">
@@ -40,25 +40,19 @@
 			</p>
 
 			<div class="flex flex-col sm:flex-row gap-4 justify-center mb-10">
-				<a
-					href="/auth?view=signup"
-					class="group inline-flex items-center justify-center gap-2 px-8 py-4 bg-slate-900 text-white font-semibold rounded-lg hover:bg-slate-800 hover:scale-105 transition-all shadow-sm hover:shadow-lg text-base"
-				>
+				<button type="button" disabled class="inline-flex items-center justify-center gap-2 px-8 py-4 bg-slate-200 text-slate-400 font-semibold rounded-lg cursor-not-allowed text-base">
 					Get Started
-					<svg class="w-4 h-4 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+					<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"></path>
 					</svg>
-				</a>
-				<a
-					href="/dashboard"
-					class="group inline-flex items-center justify-center gap-2 px-8 py-4 bg-white text-slate-900 font-semibold rounded-lg hover:bg-slate-50 hover:scale-105 transition-all border border-slate-200 hover:border-slate-300 hover:shadow-md text-base"
-				>
-					View Dashboard
-					<svg class="w-4 h-4 group-hover:scale-110 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+				</button>
+				<button type="button" disabled class="inline-flex items-center justify-center gap-2 px-8 py-4 bg-slate-200 text-slate-400 font-semibold rounded-lg cursor-not-allowed text-base">
+					Your Dashboard
+					<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
 						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
 					</svg>
-				</a>
+				</button>
 			</div>
 
 			<!-- Visual feature badges -->
@@ -67,13 +61,13 @@
 					<svg class="w-4 h-4 text-teal-600 group-hover:scale-110 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path>
 					</svg>
-					<span class="font-medium text-slate-700">Enterprise security</span>
+					<span class="font-medium text-slate-700">Data first</span>
 				</div>
 				<div class="group flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-lg shadow-sm hover:scale-105 hover:shadow-md hover:border-slate-300 transition-all duration-300">
 					<svg class="w-4 h-4 text-teal-600 group-hover:scale-110 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
 					</svg>
-					<span class="font-medium text-slate-700">Real-time updates</span>
+					<span class="font-medium text-slate-700">Instant insights</span>
 				</div>
 				<div class="group flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-lg shadow-sm hover:scale-105 hover:shadow-md hover:border-slate-300 transition-all duration-300">
 					<svg class="w-4 h-4 text-teal-600 group-hover:scale-110 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">

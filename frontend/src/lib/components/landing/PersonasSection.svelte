@@ -49,7 +49,7 @@
 			</div>
 
 			<h2 class="text-4xl sm:text-5xl font-bold text-slate-900 mb-4">
-				Be the Tip of the Spear
+				Be the tip of the spear
 			</h2>
 			<p class="text-xl text-slate-600 max-w-2xl mx-auto">
 				Equipping Dubai's elite real estate professionals

@@ -37,7 +37,7 @@
 					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
 					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
 				</svg>
-				<span class="text-sm font-semibold text-slate-700">Platform Overview</span>
+				<span class="text-sm font-semibold text-slate-700">Platform overview</span>
 			</div>
 
 			<h2 class="text-4xl sm:text-5xl md:text-6xl font-bold text-slate-900 mb-4 hover:scale-[1.02] transition-transform duration-500">
@@ -108,7 +108,7 @@
 					<div class="relative group">
 						<div class="absolute -inset-4 bg-gradient-to-r from-teal-500/20 to-cyan-500/20 rounded-3xl blur-2xl group-hover:blur-3xl transition-all"></div>
 					<div class="relative bg-white rounded-2xl shadow-2xl border border-slate-200 p-3 transform hover:scale-105 hover:-translate-y-2 transition-all duration-300">
-							<img src="/chat.png" alt="Chat Interface" class="w-full h-auto rounded-lg border border-slate-200" />
+							<img src="/images/chat.png" alt="Chat" class="w-full h-auto rounded-lg border border-slate-200" />
 						</div>
 					</div>
 				</div>
@@ -124,24 +124,8 @@
 			<div class="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
 				<div class="relative group">
 					<div class="absolute -inset-4 bg-gradient-to-r from-teal-500/20 to-cyan-500/20 rounded-3xl blur-2xl group-hover:blur-3xl transition-all"></div>
-					<div class="relative bg-white rounded-2xl shadow-2xl border border-slate-200 p-6 transform hover:scale-105 hover:-translate-y-2 transition-all duration-300">
-						<div class="h-64 bg-gradient-to-br from-slate-50 to-slate-100 rounded-lg flex items-center justify-center text-slate-400 text-sm mb-4 border border-slate-200">
-							Dashboard Analytics Screenshot
-						</div>
-						<div class="grid grid-cols-3 gap-3">
-							<div class="bg-teal-50 rounded-lg p-3 border border-teal-200">
-								<div class="text-xs text-teal-700 font-semibold">Volume</div>
-								<div class="text-lg font-bold text-slate-900">1,234</div>
-							</div>
-							<div class="bg-cyan-50 rounded-lg p-3 border border-cyan-200">
-								<div class="text-xs text-cyan-700 font-semibold">Avg Price</div>
-								<div class="text-lg font-bold text-slate-900">2.3M</div>
-							</div>
-							<div class="bg-slate-50 rounded-lg p-3 border border-slate-200">
-								<div class="text-xs text-slate-700 font-semibold">Trend</div>
-								<div class="text-lg font-bold text-teal-700">+12%</div>
-							</div>
-						</div>
+					<div class="relative bg-white rounded-2xl shadow-2xl border border-slate-200 p-3 transform hover:scale-105 hover:-translate-y-2 transition-all duration-300">
+						<img src="/images/analytics.png" alt="Analytics" class="w-full h-auto rounded-lg border border-slate-200" />
 					</div>
 				</div>
 				<div>
@@ -149,16 +133,16 @@
 						<svg class="w-4 h-4 text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
 						</svg>
-						<span class="text-sm font-semibold text-slate-700">REAL-TIME DATA</span>
+						<span class="text-sm font-semibold text-slate-700">EXPORT-READY</span>
 					</div>
 					<h3 class="text-4xl md:text-5xl font-bold text-slate-900 mb-6 leading-tight">
-						Market intelligence<br />
+						Tactical comps,<br />
 						<span class="bg-gradient-to-r from-teal-600 to-cyan-600 bg-clip-text text-transparent">
-							that never sleeps
+							institutional outputs
 						</span>
 					</h3>
 					<p class="text-xl text-slate-600 mb-8 leading-relaxed">
-						Every transaction, every trend. See what's happening across Dubai's property market as it unfolds.
+						Compare any target project or area against a defensible comps set built manually or auto-matched via our proprietary comparables algorithm. Review everything in a matched KPI grid, then export as institutional-grade deliverables.
 					</p>
 					<ul class="space-y-4">
 						<li class="flex items-start gap-3">
@@ -167,7 +151,7 @@
 									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path>
 								</svg>
 							</div>
-							<span class="text-lg text-slate-700 font-medium">Live transaction data from DLD</span>
+							<span class="text-lg text-slate-700 font-medium">In-depth analytics in a matched KPI grid</span>
 						</li>
 						<li class="flex items-start gap-3">
 							<div class="w-6 h-6 rounded-full bg-teal-600 flex items-center justify-center flex-shrink-0 mt-1">
@@ -175,7 +159,7 @@
 									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path>
 								</svg>
 							</div>
-							<span class="text-lg text-slate-700 font-medium">Track 3000+ developments</span>
+							<span class="text-lg text-slate-700 font-medium">Toggleable comps sets</span>
 						</li>
 						<li class="flex items-start gap-3">
 							<div class="w-6 h-6 rounded-full bg-teal-600 flex items-center justify-center flex-shrink-0 mt-1">
@@ -183,7 +167,7 @@
 									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path>
 								</svg>
 							</div>
-							<span class="text-lg text-slate-700 font-medium">Spot trends before they become obvious</span>
+							<span class="text-lg text-slate-700 font-medium">Institutional-grade exports</span>
 						</li>
 					</ul>
 				</div>
@@ -202,16 +186,17 @@
 						<svg class="w-4 h-4 text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"></path>
 						</svg>
-						<span class="text-sm font-semibold text-slate-700">SMART SEARCH</span>
+						<span class="text-sm font-semibold text-slate-700">VISUAL DATA</span>
 					</div>
 					<h3 class="text-4xl md:text-5xl font-bold text-slate-900 mb-6 leading-tight">
-						Find exactly what<br />
+						Your premium<br />
 						<span class="bg-gradient-to-r from-teal-600 to-cyan-600 bg-clip-text text-transparent">
-							you're looking for
+							radar system
 						</span>
 					</h3>
 					<p class="text-xl text-slate-600 mb-8 leading-relaxed">
-						Advanced filtering that actually makes sense. Slice and dice data by area, property type, price range, bedrooms, and more.
+						Visualise Dubai data from a bird’s-eye view: demographics, yields, pricing and supply pipeline layers allow you to strike first and position with confidence. 
+
 					</p>
 					<ul class="space-y-4">
 						<li class="flex items-start gap-3">
@@ -220,7 +205,7 @@
 									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path>
 								</svg>
 							</div>
-							<span class="text-lg text-slate-700 font-medium">Multi-dimensional filtering in an instant</span>
+							<span class="text-lg text-slate-700 font-medium">Navigate and monitor your market</span>
 						</li>
 						<li class="flex items-start gap-3">
 							<div class="w-6 h-6 rounded-full bg-teal-600 flex items-center justify-center flex-shrink-0 mt-1">
@@ -228,7 +213,7 @@
 									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path>
 								</svg>
 							</div>
-							<span class="text-lg text-slate-700 font-medium">Export filtered results directly to Excel</span>
+							<span class="text-lg text-slate-700 font-medium">Inventory pressure tracking</span>
 						</li>
 						<li class="flex items-start gap-3">
 							<div class="w-6 h-6 rounded-full bg-teal-600 flex items-center justify-center flex-shrink-0 mt-1">
@@ -236,7 +221,7 @@
 									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path>
 								</svg>
 							</div>
-							<span class="text-lg text-slate-700 font-medium">Quickly browse both rental and sales data</span>
+							<span class="text-lg text-slate-700 font-medium">Geospatial dominance</span>
 						</li>
 					</ul>
 				</div>
@@ -244,7 +229,7 @@
 					<div class="relative group">
 						<div class="absolute -inset-4 bg-gradient-to-r from-teal-500/20 to-cyan-500/20 rounded-3xl blur-2xl group-hover:blur-3xl transition-all"></div>
 					<div class="relative bg-white rounded-2xl shadow-2xl border border-slate-200 p-3 transform hover:scale-105 hover:-translate-y-2 transition-all duration-300">
-						<img src="/transactions.png" alt="Transactions Table" class="w-full h-auto rounded-lg border border-slate-200" />
+						<img src="images/projects.png" alt="Projects" class="w-full h-auto rounded-lg border border-slate-200" />
 						</div>
 					</div>
 				</div>
