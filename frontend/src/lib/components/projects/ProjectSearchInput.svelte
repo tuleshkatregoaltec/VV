@@ -22,9 +22,10 @@
 				(p) =>
 					p.project_name.toLowerCase().includes(query) ||
 					p.area_name.toLowerCase().includes(query) ||
+					(p.master_project_en && p.master_project_en.toLowerCase().includes(query)) ||
 					(p.developer_name && p.developer_name.toLowerCase().includes(query))
 			)
-			.slice(0, 20);
+			.slice(0, 25);
 	});
 
 	function handleInput() {
@@ -87,9 +88,19 @@
 						onclick={() => selectProject(result.project_id)}
 						class="w-full text-left px-4 py-2.5 hover:bg-teal-50 transition-colors border-b border-slate-100 last:border-b-0"
 					>
-						<div class="text-sm font-semibold text-slate-900 truncate">{result.project_name}</div>
-						<div class="text-xs text-slate-500 mt-0.5">
-							{result.area_name}{result.developer_name ? ` · ${result.developer_name}` : ''}
+						<div class="flex items-start justify-between gap-2">
+							<div class="min-w-0">
+								<div class="text-sm font-semibold text-slate-900 truncate">{result.project_name}</div>
+								<div class="text-xs text-slate-500 mt-0.5 truncate">
+									{result.master_project_en || result.area_name}
+									{#if result.developer_name}
+										· {result.developer_name}
+									{/if}
+								</div>
+							</div>
+							<span class="flex-shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-teal-100 text-teal-700 mt-0.5">
+								Project
+							</span>
 						</div>
 					</button>
 				{/each}

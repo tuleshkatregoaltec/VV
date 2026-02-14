@@ -334,8 +334,8 @@
 				<p class="text-xs text-slate-400 mt-1">{fmt(d.sales.avg_price_sqm)}/sqm</p>
 			</div>
 			<div class="bg-white rounded-xl p-4 border border-slate-100">
-				<p class="text-xs font-medium text-slate-500 mb-1">Avg Annual Rent</p>
-				<p class="text-2xl font-bold text-slate-900">{fmt(d.rentals.avg_annual_rent)}</p>
+				<p class="text-xs font-medium text-slate-500 mb-1">Median Annual Rent</p>
+				<p class="text-2xl font-bold text-slate-900">{fmt(d.rentals.median_annual_rent)}</p>
 				<p class="text-xs text-slate-400 mt-1">{d.rentals.contract_count.toLocaleString()} contracts</p>
 			</div>
 			<div class="bg-white rounded-xl p-4 border border-teal-100 bg-teal-50/40">
@@ -343,7 +343,7 @@
 				<p class="text-2xl font-bold text-teal-700">
 					{d.overall_gross_yield_pct != null ? `${d.overall_gross_yield_pct.toFixed(1)}%` : '—'}
 				</p>
-				<p class="text-xs text-teal-500 mt-1">avg rent ÷ avg sale</p>
+				<p class="text-xs text-teal-500 mt-1">median rent ÷ median sale</p>
 			</div>
 		</div>
 
@@ -362,14 +362,27 @@
 								<th class="text-right px-4 py-2.5">Avg Sale Price</th>
 								<th class="text-right px-4 py-2.5">Price/sqm</th>
 								<th class="text-right px-4 py-2.5">
-									<span class="inline-flex items-center justify-end gap-1 text-teal-600">
-										Est. Gross Yield
+									<span class="inline-flex items-center justify-end gap-1">
+										Est. Annual Rent
 										<span class="group relative cursor-default">
 											<svg class="w-3.5 h-3.5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
 												<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
 											</svg>
-											<div class="pointer-events-none absolute top-full right-0 mt-2 z-50 w-64 rounded-lg bg-slate-800 px-3 py-2 text-xs font-normal text-slate-200 opacity-0 shadow-lg transition-opacity group-hover:opacity-100 normal-case tracking-normal">
-												Estimated using the project's overall average annual rent ({fmt(d.rentals.avg_annual_rent)}).
+											<div class="pointer-events-none absolute top-full right-0 mt-2 z-50 w-72 rounded-lg bg-slate-800 px-3 py-2 text-xs font-normal text-slate-200 opacity-0 shadow-lg transition-opacity group-hover:opacity-100 normal-case tracking-normal">
+												Median annual rent inferred from Ejari contracts matched by unit area. Shown only when enough rental data exists for this bedroom type.
+											</div>
+										</span>
+									</span>
+								</th>
+								<th class="text-right px-4 py-2.5">
+									<span class="inline-flex items-center justify-end gap-1 text-teal-600">
+										Gross Yield
+										<span class="group relative cursor-default">
+											<svg class="w-3.5 h-3.5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+												<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+											</svg>
+											<div class="pointer-events-none absolute top-full right-0 mt-2 z-50 w-72 rounded-lg bg-slate-800 px-3 py-2 text-xs font-normal text-slate-200 opacity-0 shadow-lg transition-opacity group-hover:opacity-100 normal-case tracking-normal">
+												Median annual rent ÷ median existing-market sale price. Off-plan prices excluded to avoid inflated yields.
 											</div>
 										</span>
 									</span>
@@ -378,16 +391,16 @@
 						</thead>
 						<tbody class="divide-y divide-slate-50">
 							{#each d.by_rooms as row}
-								{@const estYield = d.rentals.avg_annual_rent > 0 && row.avg_sale_price > 0
-									? (d.rentals.avg_annual_rent / row.avg_sale_price * 100)
-									: null}
 								<tr class="hover:bg-slate-50/50 transition-colors">
 									<td class="px-4 py-3 font-medium text-slate-800">{row.rooms}</td>
 									<td class="px-4 py-3 text-right text-slate-600">{row.sale_count.toLocaleString()}</td>
 									<td class="px-4 py-3 text-right text-slate-800 font-medium">{fmt(row.avg_sale_price)}</td>
 									<td class="px-4 py-3 text-right text-slate-500">{fmt(row.avg_sale_price_sqm)}</td>
-									<td class="px-4 py-3 text-right font-semibold {estYield != null ? 'text-teal-600' : 'text-slate-400'}">
-										{estYield != null ? `${estYield.toFixed(1)}%` : '—'}
+									<td class="px-4 py-3 text-right text-slate-700">
+										{row.median_annual_rent > 0 ? fmt(row.median_annual_rent) : '—'}
+									</td>
+									<td class="px-4 py-3 text-right font-semibold {row.gross_yield_pct != null ? 'text-teal-600' : 'text-slate-400'}">
+										{row.gross_yield_pct != null ? `${row.gross_yield_pct.toFixed(1)}%` : '—'}
 									</td>
 								</tr>
 							{/each}

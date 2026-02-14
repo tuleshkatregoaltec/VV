@@ -4,14 +4,16 @@
 	import ProjectMap from '$lib/components/map/ProjectMap.svelte';
 	import ProjectSearchInput from '$lib/components/projects/ProjectSearchInput.svelte';
 	import ProjectDetails from '$lib/components/projects/ProjectDetails.svelte';
+	import BuildingDetails from '$lib/components/projects/BuildingDetails.svelte';
 	import { projects as projectsAPI } from '$lib/api/projects';
-	import type { ProjectDetailResponse, ProjectSearchResult } from '$lib/api/projects';
+	import type { ProjectDetailResponse, BuildingDetailResponse, ProjectSearchResult } from '$lib/api/projects';
 
 	let isMinimized = $state(false);
-	let selectedProjectId = $state<number | null>(null);
 	let projectDetails = $state<ProjectDetailResponse | null>(null);
+	let buildingDetails = $state<BuildingDetailResponse | null>(null);
 	let projectAnalytics = $state<{ avg_price: number; gross_yield_pct: number | null } | null>(null);
-	let isLoadingDetails = $state(false);
+	let isLoading = $state(false);
+	let panelView = $state<'empty' | 'project' | 'building'>('empty');
 	let mapComponent = $state<any>();
 
 	// Load all projects in background for client-side search
@@ -64,21 +66,20 @@
 	}
 
 	async function handleProjectSelect(projectId: number) {
-		selectedProjectId = projectId;
-		isLoadingDetails = true;
+		isLoading = true;
+		buildingDetails = null;
 		projectAnalytics = null;
+		panelView = 'project';
 
 		try {
 			const details = await projectsAPI.getDetails(projectId);
 
 			if (isJVCProject(details.area_name, details.project_name)) {
-				// Inject hardcoded JVC coordinates for demo
 				details.latitude = 25.0565;
 				details.longitude = 55.2065;
 				details.area_polygon = { coordinates: JVC_POLYGON };
 				projectAnalytics = JVC_ANALYTICS;
 
-				// Spread buildings across JVC (use real building names from API if available)
 				if (details.buildings.length > 0) {
 					details.buildings = details.buildings.map((b, i) => ({
 						...b,
@@ -87,10 +88,9 @@
 						floors: b.floors ?? JVC_BUILDING_COORDS[i % JVC_BUILDING_COORDS.length].floors
 					}));
 				} else {
-					// Inject fake buildings if project has none
 					details.buildings = JVC_BUILDING_COORDS.map((c, i) => ({
 						property_id: i + 1,
-						building_number: `B${i + 1}`,
+						building_number: `${i + 1}`,
 						building_name: c.name,
 						floors: c.floors,
 						latitude: c.lat,
@@ -114,9 +114,33 @@
 			}
 		} catch (error) {
 			console.error('Failed to load project details:', error);
+			panelView = 'empty';
 		} finally {
-			isLoadingDetails = false;
+			isLoading = false;
 		}
+	}
+
+	async function handleBuildingSelect(propertyId: number, lng?: number, lat?: number) {
+		isLoading = true;
+		panelView = 'building';
+
+		if (lng && lat && mapComponent) {
+			mapComponent.flyToLocation(lng, lat, 17);
+		}
+
+		try {
+			buildingDetails = await projectsAPI.getBuilding(propertyId);
+		} catch (error) {
+			console.error('Failed to load building details:', error);
+			panelView = 'project';
+		} finally {
+			isLoading = false;
+		}
+	}
+
+	function handleBackToProject() {
+		buildingDetails = null;
+		panelView = 'project';
 	}
 
 	function toggleMinimize() {
@@ -128,7 +152,11 @@
 	<div class="relative h-[calc(100vh-64px)] overflow-hidden">
 		<!-- Map (full screen) -->
 		<div class="absolute inset-0">
-			<ProjectMap bind:this={mapComponent} onProjectSelect={handleProjectSelect} />
+			<ProjectMap
+				bind:this={mapComponent}
+				onProjectSelect={handleProjectSelect}
+				onBuildingSelect={handleBuildingSelect}
+			/>
 		</div>
 
 		<!-- Floating Left Overlay Panel -->
@@ -182,7 +210,7 @@
 
 						<!-- Content Area (scrollable) -->
 						<div class="flex-1 overflow-y-auto overflow-x-hidden">
-							{#if isLoadingDetails}
+							{#if isLoading}
 								<div class="flex items-center justify-center h-32">
 									<div class="flex items-center gap-2 text-slate-500 text-sm">
 										<svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
@@ -192,8 +220,14 @@
 										Loading...
 									</div>
 								</div>
-							{:else if projectDetails}
-								<ProjectDetails project={projectDetails} analytics={projectAnalytics} />
+							{:else if panelView === 'building' && buildingDetails}
+								<BuildingDetails building={buildingDetails} onBack={handleBackToProject} />
+							{:else if panelView === 'project' && projectDetails}
+								<ProjectDetails
+							project={projectDetails}
+							analytics={projectAnalytics}
+							onBuildingSelect={handleBuildingSelect}
+						/>
 							{:else}
 								<div class="flex flex-col items-center justify-center h-full px-6 py-12 text-center">
 									<div class="w-14 h-14 bg-slate-100 rounded-2xl flex items-center justify-center mb-4">

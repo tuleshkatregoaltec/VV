@@ -23,8 +23,27 @@ export interface ProjectSearchResult {
 	project_name: string;
 	area_name: string;
 	developer_name: string | null;
+	master_project_en: string | null;
 	latitude: number;
 	longitude: number;
+}
+
+export interface BuildingUnitType {
+	rooms_en: string;
+	count: number;
+	percentage: number;
+	avg_area_sqm: number | null;
+}
+
+export interface BuildingDetailResponse {
+	property_id: number;
+	building_number: string | null;
+	floors: number | null;
+	project_id: number;
+	project_name: string;
+	area_name: string;
+	total_units: number;
+	unit_composition: BuildingUnitType[];
 }
 
 export interface UnitComposition {
@@ -38,6 +57,7 @@ export interface ProjectDetailResponse {
 	project_id: number;
 	project_name: string;
 	project_number: number | null;
+	master_project_en: string | null;
 	area_id: number;
 	area_name: string;
 	developer_id: number | null;
@@ -62,6 +82,7 @@ export interface ProjectDetailResponse {
 
 export const projects = {
 	list: (): Promise<ProjectSearchResult[]> => http.get(`/api/v1/projects/list`),
-
-	getDetails: (id: number): Promise<ProjectDetailResponse> => http.get(`/api/v1/projects/${id}`)
+	getDetails: (id: number): Promise<ProjectDetailResponse> => http.get(`/api/v1/projects/${id}`),
+	getBuilding: (propertyId: number): Promise<BuildingDetailResponse> =>
+		http.get(`/api/v1/projects/building/${propertyId}`)
 };

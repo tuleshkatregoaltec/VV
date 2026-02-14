@@ -167,8 +167,8 @@ export interface ProjectSalesSummary {
 export interface ProjectRentalSummary {
     contract_count: number;
     total_annual_value: number;
-    avg_annual_rent: number;
-    avg_rent_sqm: number;
+    median_annual_rent: number;
+    median_rent_sqm: number;
 }
 
 export interface RoomAnalytics {
@@ -177,8 +177,8 @@ export interface RoomAnalytics {
     avg_sale_price: number;
     avg_sale_price_sqm: number;
     rental_count: number;
-    avg_annual_rent: number;
-    avg_rent_sqm: number;
+    median_annual_rent: number;
+    median_rent_sqm: number;
     gross_yield_pct: number | null;
 }
 

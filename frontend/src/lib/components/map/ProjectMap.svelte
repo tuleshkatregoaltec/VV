@@ -12,9 +12,11 @@
 	}
 
 	let {
-		onProjectSelect
+		onProjectSelect,
+		onBuildingSelect
 	}: {
 		onProjectSelect?: (projectId: number) => void;
+		onBuildingSelect?: (propertyId: number) => void;
 	} = $props();
 
 	let mapContainer = $state<HTMLDivElement>();
@@ -133,29 +135,23 @@
 
 	// Add building markers to map
 	function addBuildingMarkers(buildings: BuildingInfo[]) {
-		// Clear existing building markers
 		buildingMarkers.forEach((marker) => marker.remove());
 		buildingMarkers = [];
 
-		buildings.forEach((building) => {
+		buildings.forEach((building, i) => {
 			const markerEl = document.createElement('div');
-			markerEl.className = 'w-8 h-8 bg-amber-500 rounded-lg flex items-center justify-center shadow-md border border-amber-600 cursor-pointer hover:bg-amber-600 transition-colors text-xs font-bold text-white';
-			markerEl.textContent = (buildings.indexOf(building) + 1).toString();
+			markerEl.className =
+				'w-8 h-8 bg-amber-500 rounded-lg flex items-center justify-center shadow-md border border-amber-600 cursor-pointer hover:bg-amber-400 transition-colors text-xs font-bold text-white select-none';
+			markerEl.textContent = (i + 1).toString();
+
+			markerEl.addEventListener('click', () => {
+				onBuildingSelect?.(building.property_id);
+			});
 
 			const marker = new maplibregl.Marker({ element: markerEl })
 				.setLngLat([building.longitude, building.latitude])
 				.addTo(map!);
 
-			// Create popup with building info
-			const popup = new maplibregl.Popup({ offset: 15 })
-				.setHTML(`
-					<div class="text-sm">
-						<div class="font-semibold">${building.building_name || 'Building'}</div>
-						${building.floors ? `<div class="text-xs text-slate-600">${building.floors} Floors</div>` : ''}
-					</div>
-				`);
-
-			marker.setPopup(popup);
 			buildingMarkers.push(marker);
 		});
 	}
