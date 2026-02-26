@@ -25,6 +25,7 @@ from app.upload.router import health_router
 from app.billing.router import router as billing_router
 from app.billing import webhooks as billing_webhooks
 from app.admin.router import router as admin_router
+from app.feasibility.router import router as feasibility_router
 
 from app.providers.auth.auth_backend import AuthBackend
 
@@ -72,6 +73,7 @@ app.include_router(health_router, tags=["upload"])
 app.include_router(billing_router, tags=["billing"])
 app.include_router(billing_webhooks.router, tags=["webhooks"])
 app.include_router(admin_router, tags=["admin"])
+app.include_router(feasibility_router, tags=["feasibility"])
 
 
 @app.get("/api/v1/health")
