@@ -20,7 +20,7 @@ async def list_all_projects() -> List[ProjectSearchResult]:
     """Get all projects with minimal data for client-side search."""
     sql = """
         SELECT
-            p.project_id,
+            p.project_id AS project_id,
             p.project_name_en,
             p.area_name_en,
             p.master_project_en,
@@ -56,7 +56,7 @@ async def get_project_details(project_id: int) -> Optional[ProjectDetailResponse
     """Get full project details including buildings and unit composition."""
     project_sql = """
         SELECT
-            p.project_id,
+            p.project_id AS project_id,
             p.project_number,
             p.project_name_en,
             p.master_project_en,

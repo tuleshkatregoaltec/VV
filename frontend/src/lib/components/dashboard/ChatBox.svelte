@@ -3,6 +3,29 @@
   import { fly, fade } from 'svelte/transition';
   import { cubicOut } from 'svelte/easing';
   import ConfirmModal from '$lib/components/ui/ConfirmModal.svelte';
+  import { browser } from '$app/environment';
+  import { marked } from 'marked';
+  import DOMPurify from 'dompurify';
+
+  // Add target="_blank" rel="noopener noreferrer" to all links
+  marked.use({
+    renderer: {
+      link({ href, title, text }: any) {
+        const titleAttr = title ? ` title="${title}"` : '';
+        return `<a href="${href}"${titleAttr} target="_blank" rel="noopener noreferrer">${text}</a>`;
+      }
+    }
+  });
+
+  const SANITIZE_CONFIG = {
+    ALLOWED_TAGS: ['p', 'br', 'strong', 'em', 'a', 'ul', 'ol', 'li', 'blockquote', 'code', 'pre', 'span'],
+    ALLOWED_ATTR: ['href', 'title', 'target', 'rel'],
+  };
+
+  function renderMarkdown(content: string): string {
+    if (!browser) return content.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    return DOMPurify.sanitize(marked.parse(content) as string, SANITIZE_CONFIG);
+  }
 
   let {
     conversationId = $bindable(null),
@@ -307,6 +330,8 @@
                 </div>
                 <span class="text-sm">Thinking...</span>
               </div>
+            {:else if msg.role === 'assistant'}
+              <div class="leading-relaxed [&_p]:mb-2 [&_p:last-child]:mb-0 [&_strong]:font-semibold [&_em]:italic [&_a]:text-teal-600 [&_a]:underline [&_a:hover]:text-teal-700 [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:mb-2 [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:mb-2 [&_li]:mb-0.5 [&_blockquote]:border-l-4 [&_blockquote]:border-slate-300 [&_blockquote]:pl-3 [&_blockquote]:italic [&_blockquote]:text-slate-600 [&_blockquote]:my-2 [&_code]:bg-slate-100 [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded [&_code]:text-sm [&_code]:font-mono [&_pre]:bg-slate-100 [&_pre]:p-3 [&_pre]:rounded-lg [&_pre]:overflow-x-auto [&_pre]:my-2 [&_pre_code]:bg-transparent [&_pre_code]:p-0">{@html renderMarkdown(msg.content)}</div>
             {:else}
               <div class="whitespace-pre-wrap leading-relaxed">{msg.content}</div>
             {/if}
