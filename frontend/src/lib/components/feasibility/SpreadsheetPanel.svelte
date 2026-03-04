@@ -1,156 +1,88 @@
 <script lang="ts">
+	import RevenueSheet from './sheets/RevenueSheet.svelte';
+	import DevBudgetSheet from './sheets/DevBudgetSheet.svelte';
+	import ScheduleSheet from './sheets/ScheduleSheet.svelte';
+	import CashFlowSheet from './sheets/CashFlowSheet.svelte';
+	import ReturnsSheet from './sheets/ReturnsSheet.svelte';
+	import AssumptionsSheet from './sheets/AssumptionsSheet.svelte';
 	import { feasibilityStore } from '$lib/stores/feasibility.svelte';
+	import { exportFeasibility } from '$lib/utils/exportFeasibility';
 
-	let landCost = $state(0);
+	type Sheet = 'revenue' | 'devbudget' | 'schedule' | 'cashflow' | 'returns' | 'assumptions';
+	let activeSheet = $state<Sheet>('revenue');
 
-	const netProceeds = $derived(feasibilityStore.totalGDV - landCost);
-
-	function fmt(n: number) {
-		return n.toLocaleString('en-AE', { maximumFractionDigits: 0 });
+	function switchTab(id: Sheet) {
+		activeSheet = id;
+		feasibilityStore.clearAffectedTab(id);
 	}
 
-	function fmtM(n: number) {
-		if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(2)}M`;
-		if (n >= 1_000) return `${(n / 1_000).toFixed(0)}K`;
-		return fmt(n);
-	}
+	// Never show a dot on the currently visible tab
+	$effect(() => {
+		if (feasibilityStore.affectedTabs.has(activeSheet)) {
+			feasibilityStore.clearAffectedTab(activeSheet);
+		}
+	});
 
-	function exportCsv() {
-		const rows = feasibilityStore.spreadsheetRows;
-		const lines = [
-			['Unit Type', 'Count', 'Avg Size (sqm)', 'Price/sqm (AED)', 'Total Proceeds (AED)'].join(','),
-			...rows.map((r) => [r.type, r.count, r.avgSizeSqm.toFixed(1), r.pricePerSqm, r.totalProceeds].join(',')),
-			'',
-			`Total Units,${feasibilityStore.totalUnits}`,
-			`Total Sellable Area (sqm),${feasibilityStore.totalSellableAreaSqm.toFixed(0)}`,
-			`Total GDV (AED),${feasibilityStore.totalGDV}`,
-			`Land Cost (AED),${landCost}`,
-			`Net Proceeds (AED),${netProceeds}`,
-		];
-		const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
-		const url = URL.createObjectURL(blob);
-		const a = document.createElement('a');
-		a.href = url;
-		a.download = 'feasibility-study.csv';
-		a.click();
-		URL.revokeObjectURL(url);
-	}
+	const SHEETS: { id: Sheet; label: string }[] = [
+		{ id: 'revenue', label: 'Revenue' },
+		{ id: 'devbudget', label: 'Dev Budget' },
+		{ id: 'schedule', label: 'Schedule' },
+		{ id: 'cashflow', label: 'Cash Flow' },
+		{ id: 'returns', label: 'Returns' },
+		{ id: 'assumptions', label: 'Assumptions' },
+	];
 </script>
 
 <div class="h-full flex flex-col overflow-hidden bg-white border-r border-slate-200">
-	<!-- Header -->
-	<div class="flex items-center justify-between px-4 py-3 border-b border-slate-200 flex-shrink-0">
-		<h2 class="text-sm font-semibold text-slate-800">Feasibility Summary</h2>
+	<!-- Toolbar -->
+	<div class="flex items-center justify-between px-3 py-2 border-b border-slate-300 flex-shrink-0 bg-slate-50">
+		<span class="text-xs font-semibold text-slate-700">Feasibility Model</span>
 		<button
 			type="button"
-			class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-teal-600 text-white text-xs font-medium hover:bg-teal-700 transition-colors"
-			onclick={exportCsv}
-			title="Export to CSV"
+			class="flex items-center gap-1 px-2 py-0.5 rounded border border-slate-300 bg-white text-slate-600 text-[10px] font-medium hover:bg-slate-50 transition-colors"
+			onclick={() => exportFeasibility(feasibilityStore)}
 		>
-			<svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+			<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
 				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
 			</svg>
-			Export CSV
+			Export Excel
 		</button>
 	</div>
 
-	<div class="flex-1 overflow-y-auto px-4 py-4 space-y-6 text-xs">
-		<!-- Unit revenue -->
-		<section>
-			<h3 class="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Unit Revenue</h3>
-			<table class="w-full">
-				<thead>
-					<tr class="text-slate-400 border-b border-slate-100">
-						<th class="text-left pb-1.5 font-medium">Type</th>
-						<th class="text-right pb-1.5 font-medium">Qty</th>
-						<th class="text-right pb-1.5 font-medium">Avg sqm</th>
-						<th class="text-right pb-1.5 font-medium">AED/sqm</th>
-					</tr>
-				</thead>
-				<tbody>
-					{#each feasibilityStore.spreadsheetRows as row}
-						<tr class="border-b border-slate-50 hover:bg-slate-50 transition-colors">
-							<td class="py-1.5 font-medium text-slate-700">{row.type}</td>
-							<td class="py-1.5 text-right text-slate-600">{row.count}</td>
-							<td class="py-1.5 text-right text-slate-600">{row.avgSizeSqm.toFixed(0)}</td>
-							<td class="py-1.5 text-right">
-								<input
-									type="number"
-									class="w-20 text-right bg-transparent border-b border-transparent hover:border-slate-200 focus:border-teal-400 focus:outline-none text-slate-800"
-									value={row.pricePerSqm}
-									min="0"
-									step="100"
-									oninput={(e) => {
-										const v = parseFloat((e.target as HTMLInputElement).value);
-										if (!isNaN(v)) feasibilityStore.setPricePerSqm({ [row.type]: v });
-									}}
-								/>
-							</td>
-						</tr>
-					{/each}
-				</tbody>
-			</table>
-		</section>
+	<!-- Sheet content -->
+	<div class="flex-1 overflow-hidden flex flex-col min-h-0">
+		{#if activeSheet === 'revenue'}
+			<RevenueSheet />
+		{:else if activeSheet === 'devbudget'}
+			<DevBudgetSheet />
+		{:else if activeSheet === 'schedule'}
+			<ScheduleSheet />
+		{:else if activeSheet === 'cashflow'}
+			<CashFlowSheet />
+		{:else if activeSheet === 'returns'}
+			<ReturnsSheet />
+		{:else}
+			<AssumptionsSheet />
+		{/if}
+	</div>
 
-		<!-- Proceeds by type -->
-		<section>
-			<h3 class="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Proceeds by Type</h3>
-			{#each feasibilityStore.spreadsheetRows as row}
-				<div class="flex justify-between py-1 border-b border-slate-50">
-					<span class="text-slate-600">{row.type}</span>
-					<span class="font-medium text-slate-800">AED {fmtM(row.totalProceeds)}</span>
-				</div>
-			{/each}
-		</section>
-
-		<!-- Totals -->
-		<section>
-			<h3 class="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Project Totals</h3>
-			<div class="space-y-1">
-				<div class="flex justify-between py-1">
-					<span class="text-slate-600">Total Units</span>
-					<span class="font-medium text-slate-800">{fmt(feasibilityStore.totalUnits)}</span>
-				</div>
-				<div class="flex justify-between py-1">
-					<span class="text-slate-600">Sellable Area</span>
-					<span class="font-medium text-slate-800">{fmt(feasibilityStore.totalSellableAreaSqm)} sqm</span>
-				</div>
-				<div class="flex justify-between py-1 border-t border-slate-100 pt-2 mt-1">
-					<span class="font-semibold text-slate-700">Total GDV</span>
-					<span class="font-bold text-teal-700">AED {fmtM(feasibilityStore.totalGDV)}</span>
-				</div>
-			</div>
-		</section>
-
-		<!-- Land cost -->
-		<section>
-			<h3 class="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Land Cost</h3>
-			<div class="flex items-center gap-2">
-				<span class="text-slate-500 flex-shrink-0">AED</span>
-				<input
-					type="number"
-					class="flex-1 px-2 py-1.5 rounded-lg border border-slate-200 text-slate-800 focus:outline-none focus:ring-1 focus:ring-teal-400"
-					bind:value={landCost}
-					min="0"
-					step="100000"
-					placeholder="0"
-				/>
-			</div>
-		</section>
-
-		<!-- Net proceeds -->
-		<section class="rounded-xl p-3 {netProceeds >= 0 ? 'bg-emerald-50 border border-emerald-100' : 'bg-red-50 border border-red-100'}">
-			<div class="flex justify-between items-center">
-				<span class="font-semibold {netProceeds >= 0 ? 'text-emerald-700' : 'text-red-700'}">Net Proceeds</span>
-				<span class="font-bold text-sm {netProceeds >= 0 ? 'text-emerald-700' : 'text-red-600'}">
-					AED {fmtM(netProceeds)}
-				</span>
-			</div>
-			{#if feasibilityStore.totalGDV > 0}
-				<p class="text-xs mt-1 {netProceeds >= 0 ? 'text-emerald-600' : 'text-red-500'}">
-					{((netProceeds / feasibilityStore.totalGDV) * 100).toFixed(1)}% margin
-				</p>
-			{/if}
-		</section>
+	<!-- Sheet tabs (Excel-style at bottom) -->
+	<div class="flex-shrink-0 flex items-end gap-0.5 px-2 pt-1 border-t border-slate-300 bg-slate-200/60 overflow-x-auto">
+		{#each SHEETS as sheet}
+			{@const hasDot = feasibilityStore.affectedTabs.has(sheet.id)}
+			<button
+				type="button"
+				onclick={() => switchTab(sheet.id)}
+				class="relative px-3 py-1 text-[11px] font-medium rounded-t transition-colors select-none whitespace-nowrap
+					{activeSheet === sheet.id
+						? 'bg-white border border-b-0 border-slate-300 text-teal-700 border-t-2 border-t-teal-500 -mb-px'
+						: 'bg-slate-100 border border-slate-300 text-slate-500 hover:bg-slate-50 hover:text-slate-700'}"
+			>
+				{sheet.label}
+				{#if hasDot && activeSheet !== sheet.id}
+					<span class="absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full bg-teal-500 dot-appear"></span>
+				{/if}
+			</button>
+		{/each}
 	</div>
 </div>

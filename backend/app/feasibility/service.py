@@ -17,7 +17,9 @@ async def get_areas() -> list[str]:
     return [r["area_name_en"] for r in rows]
 
 
-async def get_land_plots(area: str, size_sqm: float, tolerance: float = 0.25) -> list[LandPlot]:
+async def get_land_plots(
+    area: str, size_sqm: float, tolerance: float = 0.25
+) -> list[LandPlot]:
     """Find land plots near a given size in the specified area."""
     sql = """
     SELECT
@@ -27,19 +29,23 @@ async def get_land_plots(area: str, size_sqm: float, tolerance: float = 0.25) ->
         actual_area,
         property_type_en,
         is_free_hold,
-        project_name_en
+        project_name_en,
+        land_type_en
     FROM ch_land_registry
     WHERE area_name_en = {area:String}
       AND actual_area BETWEEN {min_area:Float64} AND {max_area:Float64}
     ORDER BY abs(actual_area - {size_sqm:Float64})
     LIMIT 50
     """
-    rows = await query(sql, {
-        "area": area,
-        "min_area": size_sqm * (1 - tolerance),
-        "max_area": size_sqm * (1 + tolerance),
-        "size_sqm": size_sqm,
-    })
+    rows = await query(
+        sql,
+        {
+            "area": area,
+            "min_area": size_sqm * (1 - tolerance),
+            "max_area": size_sqm * (1 + tolerance),
+            "size_sqm": size_sqm,
+        },
+    )
     return [
         LandPlot(
             property_id=r["property_id"],
@@ -49,6 +55,44 @@ async def get_land_plots(area: str, size_sqm: float, tolerance: float = 0.25) ->
             property_type_en=r.get("property_type_en") or None,
             is_free_hold=r.get("is_free_hold"),
             project_name_en=r.get("project_name_en") or None,
+            land_type_en=r.get("land_type_en") or None,
+        )
+        for r in rows
+    ]
+
+
+async def search_land_plots(area: str, q: str, limit: int = 30) -> list[LandPlot]:
+    """Search land plots by land number or project name within an area."""
+    sql = """
+    SELECT
+        property_id,
+        land_number,
+        area_name_en,
+        actual_area,
+        property_type_en,
+        is_free_hold,
+        project_name_en,
+        land_type_en
+    FROM ch_land_registry
+    WHERE area_name_en = {area:String}
+      AND (
+          land_number ILIKE {q:String}
+          OR project_name_en ILIKE {q:String}
+      )
+    ORDER BY actual_area
+    LIMIT {limit:UInt32}
+    """
+    rows = await query(sql, {"area": area, "q": f"%{q}%", "limit": limit})
+    return [
+        LandPlot(
+            property_id=r["property_id"],
+            land_number=r.get("land_number") or None,
+            area_name_en=r["area_name_en"],
+            actual_area=float(r["actual_area"]),
+            property_type_en=r.get("property_type_en") or None,
+            is_free_hold=r.get("is_free_hold"),
+            project_name_en=r.get("project_name_en") or None,
+            land_type_en=r.get("land_type_en") or None,
         )
         for r in rows
     ]
@@ -80,7 +124,9 @@ async def get_comparable_data(project_ids: list[int]) -> ComparableData | None:
     WHERE project_id IN ({project_ids:Array(Int32)})
     """
     project_rows = await query(project_sql, {"project_ids": project_ids})
-    project_names = [r["project_name_en"] for r in project_rows if r.get("project_name_en")]
+    project_names = [
+        r["project_name_en"] for r in project_rows if r.get("project_name_en")
+    ]
     area_names = [r["area_name_en"] for r in project_rows if r.get("area_name_en")]
 
     # Get unit composition across all projects
@@ -111,7 +157,11 @@ async def get_comparable_data(project_ids: list[int]) -> ComparableData | None:
       AND instance_date >= today() - 730
     GROUP BY rooms_en
     """
-    price_rows = await query(price_sql, {"project_names": project_names}) if project_names else []
+    price_rows = (
+        await query(price_sql, {"project_names": project_names})
+        if project_names
+        else []
+    )
     price_by_type = {r["unit_type"]: float(r["median_price_sqm"]) for r in price_rows}
 
     unit_mix = [

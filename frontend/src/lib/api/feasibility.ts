@@ -8,6 +8,11 @@ export const feasibility = {
 		return api('/api/v1/feasibility/areas');
 	},
 
+	searchLandPlots(area: string, q: string): Promise<LandPlot[]> {
+		const params = new URLSearchParams({ area, q });
+		return api(`/api/v1/feasibility/land/search?${params}`);
+	},
+
 	getLandPlots(area: string, sizeSqm: number, tolerance = 0.25): Promise<LandPlot[]> {
 		const params = new URLSearchParams({
 			area,
@@ -24,11 +29,12 @@ export const feasibility = {
 	streamChat(
 		messages: Array<{ role: string; content: string }>,
 		context: object,
+		historyJson: string | null,
 		onChunk: (data: string) => void
 	) {
 		return stream('/api/v1/feasibility/chat/stream', onChunk, {
 			method: 'POST',
-			body: { messages, context },
+			body: { messages, context, history_json: historyJson },
 		});
 	},
 };

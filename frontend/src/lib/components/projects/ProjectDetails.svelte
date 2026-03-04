@@ -4,11 +4,13 @@
 	let {
 		project,
 		analytics = null,
-		onBuildingSelect
+		onBuildingSelect,
+		onGeoPinSelect
 	}: {
 		project: ProjectDetailResponse;
 		analytics?: { avg_price: number; gross_yield_pct: number | null } | null;
 		onBuildingSelect?: (propertyId: number, lng: number, lat: number) => void;
+		onGeoPinSelect?: (lat: number, lng: number) => void;
 	} = $props();
 
 	function formatCurrency(value: number): string {
@@ -22,21 +24,49 @@
 		return new Date(d).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' });
 	}
 
+	function statusLabel(status: string | null): string {
+		if (status === 'C') return 'Completed';
+		if (status === 'U') return 'Under Construction';
+		if (status === 'P') return 'Planned';
+		return status || '';
+	}
+
+	function statusColor(status: string | null): string {
+		if (status === 'C') return 'bg-emerald-100 text-emerald-700';
+		if (status === 'U') return 'bg-amber-100 text-amber-700';
+		if (status === 'P') return 'bg-blue-100 text-blue-700';
+		return 'bg-slate-100 text-slate-600';
+	}
+
 	const isCompleted = $derived(project.project_status === 'C');
-	const location = $derived(project.master_project_en || project.area_name);
+
+	function handleBuildingClick(pin: { latitude: number; longitude: number; property_id?: number }) {
+		if (pin.property_id) {
+			onBuildingSelect?.(pin.property_id, pin.longitude, pin.latitude);
+		} else {
+			onGeoPinSelect?.(pin.latitude, pin.longitude);
+		}
+	}
 </script>
 
 <div class="p-5 space-y-5">
 	<!-- Header -->
 	<div class="border-b border-slate-200 pb-4">
-		<h2 class="text-xl font-bold text-slate-900 leading-tight">{project.project_name}</h2>
+		<div class="flex items-start justify-between gap-2 mb-1">
+			<h2 class="text-xl font-bold text-slate-900 leading-tight">{project.project_name}</h2>
+			{#if project.project_status}
+				<span class="flex-shrink-0 text-[10px] font-medium px-2 py-0.5 rounded-full {statusColor(project.project_status)}">
+					{statusLabel(project.project_status)}
+				</span>
+			{/if}
+		</div>
 		<div class="flex flex-wrap items-center gap-x-2 gap-y-1 mt-2 text-sm text-slate-500">
 			<span class="flex items-center gap-1">
 				<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path>
 					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path>
 				</svg>
-				{location}
+				{project.master_project_en || project.area_name}
 			</span>
 			{#if project.developer_name}
 				<span class="text-slate-300">•</span>
@@ -114,30 +144,27 @@
 		</div>
 	{/if}
 
-	<!-- Buildings List -->
-	{#if project.buildings && project.buildings.length > 0}
+	<!-- Buildings list (from geocoded pins) -->
+	{#if project.geo_pins && project.geo_pins.length > 0}
 		<div class="space-y-2">
 			<h3 class="text-sm font-semibold text-slate-700 uppercase tracking-wide">
-				Buildings ({project.buildings.length})
+				Buildings ({project.geo_pins.length})
 			</h3>
 			<div class="space-y-1.5 max-h-48 overflow-y-auto">
-				{#each project.buildings as building, i}
+				{#each project.geo_pins as pin, i}
 					<button
-						onclick={() => onBuildingSelect?.(building.property_id, building.longitude, building.latitude)}
+						onclick={() => handleBuildingClick(pin)}
 						class="w-full flex items-center gap-3 bg-slate-50 rounded-lg px-3 py-2 border border-slate-100 hover:bg-teal-50 hover:border-teal-200 transition-colors text-left"
 					>
-						<span class="w-5 h-5 bg-amber-500 rounded flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0">
+						<span class="w-5 h-5 bg-teal-600 rounded-full flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0">
 							{i + 1}
 						</span>
 						<div class="min-w-0 flex-1">
 							<div class="text-sm font-medium text-slate-900 truncate">
-								{building.building_name || building.building_number || `Building ${i + 1}`}
+								{pin.building_name || pin.project_name}
 							</div>
-							{#if building.floors}
-								<div class="text-xs text-slate-500">{building.floors} floors</div>
-							{/if}
 						</div>
-						<svg class="w-4 h-4 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<svg class="w-4 h-4 {pin.property_id ? 'text-teal-500' : 'text-slate-300'} flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
 						</svg>
 					</button>
@@ -150,7 +177,6 @@
 	{#if project.project_start_date || project.project_end_date || project.completion_date || project.percent_completed != null}
 		<div class="border-t border-slate-100 pt-4 space-y-2 text-sm">
 			{#if isCompleted}
-				<!-- Completed: just show start and finish -->
 				{#if project.project_start_date}
 					<div class="flex justify-between">
 						<span class="text-slate-500">Started</span>
@@ -162,7 +188,6 @@
 					<span class="font-medium text-emerald-600">{formatDate(project.completion_date || project.project_end_date)}</span>
 				</div>
 			{:else}
-				<!-- In progress: show start, expected, and progress bar -->
 				{#if project.project_start_date}
 					<div class="flex justify-between">
 						<span class="text-slate-500">Started</span>

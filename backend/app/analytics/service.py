@@ -67,16 +67,22 @@ async def get_project_search(search: str, limit: int = 50) -> ProjectSearchRespo
     )
 
 
-async def get_sub_project_list(master_project: str, filter_type: str = "master") -> SubProjectsResponse:
+async def get_sub_project_list(
+    master_project: str, filter_type: str = "master"
+) -> SubProjectsResponse:
     """Return sub-projects for a given master/virtual_master, sorted by transaction volume."""
-    param = master_project + " - %" if filter_type == "virtual_master" else master_project
+    param = (
+        master_project + " - %" if filter_type == "virtual_master" else master_project
+    )
     rows = await query(
         search_sub_projects(filter_type),
         {"master_project": param},
     )
     return SubProjectsResponse(
         sub_projects=[
-            SubProjectItem(name=r["project_name_en"], transaction_count=int(r["transaction_count"]))
+            SubProjectItem(
+                name=r["project_name_en"], transaction_count=int(r["transaction_count"])
+            )
             for r in rows
         ]
     )
@@ -93,7 +99,9 @@ async def get_project_summary(
     For virtual_master, project_name is used as a LIKE prefix (suffix ' - %' appended here).
     """
     # For LIKE queries the param needs the wildcard appended
-    like_name = project_name + " - %" if filter_type == "virtual_master" else project_name
+    like_name = (
+        project_name + " - %" if filter_type == "virtual_master" else project_name
+    )
     params = {"project_name": like_name}
 
     # Unit composition: master/project use master_project_en equality;
@@ -111,7 +119,11 @@ async def get_project_summary(
         "project": project_meta_by_name,
     }[filter_type]
     # meta for master/virtual_master uses the like_name for virtual (LIKE) or plain name
-    meta_params = {"project_name": like_name} if filter_type == "virtual_master" else {"project_name": project_name}
+    meta_params = (
+        {"project_name": like_name}
+        if filter_type == "virtual_master"
+        else {"project_name": project_name}
+    )
 
     existing_params = {**params, "reg_type_en": "Existing Properties"}
 
@@ -131,9 +143,15 @@ async def get_project_summary(
         meta_rows,
     ) = await asyncio.gather(
         query(project_sales_summary(filter_type), params),
-        query(project_sales_summary(filter_type, reg_type="Existing Properties"), existing_params),
+        query(
+            project_sales_summary(filter_type, reg_type="Existing Properties"),
+            existing_params,
+        ),
         query(project_sales_by_rooms(filter_type), params),
-        query(project_sales_by_rooms(filter_type, reg_type="Existing Properties"), existing_params),
+        query(
+            project_sales_by_rooms(filter_type, reg_type="Existing Properties"),
+            existing_params,
+        ),
         query(project_sales_by_property_type(filter_type), params),
         query(project_sales_by_reg_type(filter_type), params),
         query(project_rentals_summary(filter_type), params),
@@ -154,8 +172,12 @@ async def get_project_summary(
                 project_status=None,
                 completion_date=None,
                 percent_completed=None,
-                no_of_units=int(m["no_of_units"]) if m.get("no_of_units") is not None else None,
-                no_of_buildings=int(m["no_of_buildings"]) if m.get("no_of_buildings") is not None else None,
+                no_of_units=int(m["no_of_units"])
+                if m.get("no_of_units") is not None
+                else None,
+                no_of_buildings=int(m["no_of_buildings"])
+                if m.get("no_of_buildings") is not None
+                else None,
             )
         else:
             project = ProjectMeta(
@@ -164,9 +186,15 @@ async def get_project_summary(
                 developer_name=m.get("developer_name_en") or None,
                 project_status=m.get("project_status") or None,
                 completion_date=m.get("completion_date") or None,
-                percent_completed=float(m["percent_completed"]) if m.get("percent_completed") is not None else None,
-                no_of_units=int(m["no_of_units"]) if m.get("no_of_units") is not None else None,
-                no_of_buildings=int(m["no_of_buildings"]) if m.get("no_of_buildings") is not None else None,
+                percent_completed=float(m["percent_completed"])
+                if m.get("percent_completed") is not None
+                else None,
+                no_of_units=int(m["no_of_units"])
+                if m.get("no_of_units") is not None
+                else None,
+                no_of_buildings=int(m["no_of_buildings"])
+                if m.get("no_of_buildings") is not None
+                else None,
             )
 
     # --- Sales summary ---
@@ -193,11 +221,15 @@ async def get_project_summary(
     # and would produce artificially inflated yields (e.g. JVC showing ~25%).
     # Median/median: both sides use the same central tendency measure for a consistent yield.
     existing_median_price = float(
-        (sales_sum_existing_rows[0].get("median_price") or 0) if sales_sum_existing_rows else 0
+        (sales_sum_existing_rows[0].get("median_price") or 0)
+        if sales_sum_existing_rows
+        else 0
     )
     overall_yield: Optional[float] = None
     if existing_median_price > 0 and rentals.median_annual_rent > 0:
-        overall_yield = round(rentals.median_annual_rent / existing_median_price * 100, 2)
+        overall_yield = round(
+            rentals.median_annual_rent / existing_median_price * 100, 2
+        )
 
     # --- By rooms (merge sales + rentals) ---
     sales_by_room = {row["rooms_en"]: row for row in sales_rooms_rows}
@@ -217,16 +249,18 @@ async def get_project_summary(
         yield_pct: Optional[float] = None
         if existing_median_sale > 0 and median_rent > 0:
             yield_pct = round(median_rent / existing_median_sale * 100, 2)
-        by_rooms.append(RoomAnalytics(
-            rooms=rooms,
-            sale_count=int(s_row.get("sale_count", 0)),
-            avg_sale_price=avg_sale,
-            avg_sale_price_sqm=float(s_row.get("avg_sale_price_sqm", 0) or 0),
-            rental_count=int(r_row.get("rental_count", 0)),
-            median_annual_rent=median_rent,
-            median_rent_sqm=float(r_row.get("median_rent_sqm", 0) or 0),
-            gross_yield_pct=yield_pct,
-        ))
+        by_rooms.append(
+            RoomAnalytics(
+                rooms=rooms,
+                sale_count=int(s_row.get("sale_count", 0)),
+                avg_sale_price=avg_sale,
+                avg_sale_price_sqm=float(s_row.get("avg_sale_price_sqm", 0) or 0),
+                rental_count=int(r_row.get("rental_count", 0)),
+                median_annual_rent=median_rent,
+                median_rent_sqm=float(r_row.get("median_rent_sqm", 0) or 0),
+                gross_yield_pct=yield_pct,
+            )
+        )
     by_rooms.sort(key=lambda x: _room_sort_key(x.rooms))
 
     # --- By property type ---
@@ -277,7 +311,9 @@ async def get_project_summary(
     )
 
 
-async def get_project_trends(project_name: str, days: int, filter_type: str = "project") -> ProjectTrendsResponse:
+async def get_project_trends(
+    project_name: str, days: int, filter_type: str = "project"
+) -> ProjectTrendsResponse:
     """Price trend time series for a project over the given number of days."""
     end_dt = date.today()
     start_dt = end_dt - timedelta(days=days)
@@ -289,7 +325,9 @@ async def get_project_trends(project_name: str, days: int, filter_type: str = "p
     else:
         interval = "month"
 
-    like_name = project_name + " - %" if filter_type == "virtual_master" else project_name
+    like_name = (
+        project_name + " - %" if filter_type == "virtual_master" else project_name
+    )
     rows = await query(
         project_price_trends(interval, filter_type),
         {

@@ -19,7 +19,12 @@ from app.analytics.models import (
     SubProjectsResponse,
 )
 from app.clickhouse.client import query
-from app.clickhouse.queries import sales_summary, rentals_summary, price_trends, MARKET_FILTERS
+from app.clickhouse.queries import (
+    sales_summary,
+    rentals_summary,
+    price_trends,
+    MARKET_FILTERS,
+)
 from app.analytics.service import (
     get_project_search,
     get_sub_project_list,
@@ -41,7 +46,8 @@ async def get_sales_analytics(
         description=f"Market type (overrides property_usage/property_type). One of: {', '.join(MARKET_FILTERS)}",
     ),
     property_usage: Optional[str] = Query(
-        default="Residential", description="Residential or Commercial (ignored if market_type set)"
+        default="Residential",
+        description="Residential or Commercial (ignored if market_type set)",
     ),
     timeframe_days: Optional[int] = Query(
         default=None,
@@ -91,7 +97,10 @@ async def get_sales_analytics(
 
     if market_type is not None:
         if market_type not in MARKET_FILTERS:
-            raise HTTPException(status_code=422, detail=f"Invalid market_type. Valid values: {list(MARKET_FILTERS)}")
+            raise HTTPException(
+                status_code=422,
+                detail=f"Invalid market_type. Valid values: {list(MARKET_FILTERS)}",
+            )
         mf = MARKET_FILTERS[market_type]
         resolved_property_usage = mf.get("property_usage_en")
         resolved_property_usage_in = mf.get("property_usage_en__in")
@@ -336,7 +345,8 @@ async def get_market_trend(
         description=f"Market type (overrides property_usage). One of: {', '.join(MARKET_FILTERS)}",
     ),
     property_usage: Optional[str] = Query(
-        default="Residential", description="Residential or Commercial (ignored if market_type set)"
+        default="Residential",
+        description="Residential or Commercial (ignored if market_type set)",
     ),
 ):
     """Get aggregated price trend data for the market trend chart.
@@ -352,7 +362,10 @@ async def get_market_trend(
 
     if market_type is not None:
         if market_type not in MARKET_FILTERS:
-            raise HTTPException(status_code=422, detail=f"Invalid market_type. Valid values: {list(MARKET_FILTERS)}")
+            raise HTTPException(
+                status_code=422,
+                detail=f"Invalid market_type. Valid values: {list(MARKET_FILTERS)}",
+            )
         mf = MARKET_FILTERS[market_type]
         resolved_property_usage = mf.get("property_usage_en")
         resolved_property_usage_in = mf.get("property_usage_en__in")
@@ -403,12 +416,21 @@ async def get_market_trend(
 
     try:
         trend_result, current_result, prev_result = await asyncio.gather(
-            query(trend_sql, _trend_params(start_date.isoformat(), end_date.isoformat())),
-            query(current_summary_sql, _trend_params(start_date.isoformat(), end_date.isoformat())),
-            query(prev_summary_sql, _trend_params(prev_start.isoformat(), prev_end.isoformat())),
+            query(
+                trend_sql, _trend_params(start_date.isoformat(), end_date.isoformat())
+            ),
+            query(
+                current_summary_sql,
+                _trend_params(start_date.isoformat(), end_date.isoformat()),
+            ),
+            query(
+                prev_summary_sql,
+                _trend_params(prev_start.isoformat(), prev_end.isoformat()),
+            ),
         )
     except Exception as e:
         import logging
+
         logging.getLogger(__name__).error(f"Error executing market trend query: {e}")
         return MarketTrendResponse(data=[], total_transactions=0)
 
@@ -432,7 +454,9 @@ async def get_market_trend(
     if current_result and prev_result:
         curr = current_result[0]
         prev = prev_result[0]
-        avg_price_change_pct = pct_change(float(curr["avg_price"]), float(prev["avg_price"]))
+        avg_price_change_pct = pct_change(
+            float(curr["avg_price"]), float(prev["avg_price"])
+        )
         avg_price_sqm_change_pct = pct_change(
             float(curr["median_price_per_sqm"]), float(prev["median_price_per_sqm"])
         )
@@ -464,18 +488,28 @@ async def search_projects_endpoint(
 async def get_sub_projects_endpoint(
     context: AuthContext = Depends(require_active_subscription),
     master_project: str = Query(description="Master project name"),
-    filter_type: str = Query(default="master", description="Filter type: master or virtual_master"),
+    filter_type: str = Query(
+        default="master", description="Filter type: master or virtual_master"
+    ),
 ):
     """List sub-projects within a master or virtual master, sorted by transaction count."""
-    return await get_sub_project_list(master_project=master_project, filter_type=filter_type)
+    return await get_sub_project_list(
+        master_project=master_project, filter_type=filter_type
+    )
 
 
 @router.get("/project/summary", response_model=ProjectAnalyticsResponse)
 async def get_project_summary_endpoint(
     context: AuthContext = Depends(require_active_subscription),
-    master_project: Optional[str] = Query(default=None, description="Master project name"),
-    project: Optional[str] = Query(default=None, description="Sub-project name (project_name_en)"),
-    filter_type: str = Query(default="project", description="Filter type: master, virtual_master, or project"),
+    master_project: Optional[str] = Query(
+        default=None, description="Master project name"
+    ),
+    project: Optional[str] = Query(
+        default=None, description="Sub-project name (project_name_en)"
+    ),
+    filter_type: str = Query(
+        default="project", description="Filter type: master, virtual_master, or project"
+    ),
 ):
     """
     Full analytics for a master project, virtual master, or specific sub-project.
@@ -483,25 +517,45 @@ async def get_project_summary_endpoint(
     or project with filter_type=project for a specific sub-project.
     """
     from fastapi import HTTPException
+
     if project:
-        return await get_project_summary(project_name=project, filter_type="project", master_project=master_project)
+        return await get_project_summary(
+            project_name=project, filter_type="project", master_project=master_project
+        )
     if master_project:
-        return await get_project_summary(project_name=master_project, filter_type=filter_type)
-    raise HTTPException(status_code=422, detail="Either master_project or project is required")
+        return await get_project_summary(
+            project_name=master_project, filter_type=filter_type
+        )
+    raise HTTPException(
+        status_code=422, detail="Either master_project or project is required"
+    )
 
 
 @router.get("/project/trends", response_model=ProjectTrendsResponse)
 async def get_project_trends_endpoint(
     context: AuthContext = Depends(require_active_subscription),
-    master_project: Optional[str] = Query(default=None, description="Master project name"),
-    project: Optional[str] = Query(default=None, description="Sub-project name (project_name_en)"),
-    filter_type: str = Query(default="project", description="Filter type: master, virtual_master, or project"),
+    master_project: Optional[str] = Query(
+        default=None, description="Master project name"
+    ),
+    project: Optional[str] = Query(
+        default=None, description="Sub-project name (project_name_en)"
+    ),
+    filter_type: str = Query(
+        default="project", description="Filter type: master, virtual_master, or project"
+    ),
     days: int = Query(default=365, description="Number of days to look back"),
 ):
     """Sales price trend time series for a project, master, or virtual master."""
     from fastapi import HTTPException
+
     if project:
-        return await get_project_trends(project_name=project, days=days, filter_type="project")
+        return await get_project_trends(
+            project_name=project, days=days, filter_type="project"
+        )
     if master_project:
-        return await get_project_trends(project_name=master_project, days=days, filter_type=filter_type)
-    raise HTTPException(status_code=422, detail="Either master_project or project is required")
+        return await get_project_trends(
+            project_name=master_project, days=days, filter_type=filter_type
+        )
+    raise HTTPException(
+        status_code=422, detail="Either master_project or project is required"
+    )

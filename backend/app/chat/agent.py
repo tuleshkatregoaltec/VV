@@ -1,9 +1,6 @@
 import logging
 from typing import Any
 
-import logfire
-from posthog import Posthog
-from posthog.ai.openai import AsyncOpenAI as PostHogAsyncOpenAI
 from pydantic_ai import Agent, RunContext
 from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai.providers.openrouter import OpenRouterProvider
@@ -13,20 +10,6 @@ from app.clickhouse import query
 
 logger = logging.getLogger(__name__)
 
-# Configure Logfire for LLM observability
-logfire.configure()
-logfire.instrument_pydantic_ai()
-
-# PostHog client
-posthog_client = Posthog(project_api_key=settings.POSTHOG_API_KEY, host=settings.POSTHOG_HOST)
-
-_ph_openai_client = PostHogAsyncOpenAI(
-    api_key=settings.OPENROUTER_API_KEY,
-    base_url="https://openrouter.ai/api/v1",
-    posthog_client=posthog_client,
-)
-
-# Configure OpenRouter model
 model = OpenAIChatModel(
     model_name=settings.DEFAULT_CHAT_MODEL,
     provider=OpenRouterProvider(openai_client=_ph_openai_client),

@@ -15,8 +15,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from pydantic_ai.models.openrouter import OpenRouterModelSettings
 
-from app.config import settings
-from app.chat.agent import agent, posthog_client
+from app.chat.agent import agent
 from app.chat.models import Conversation, Message
 from app.token_usage.service import token_usage_service
 
@@ -185,25 +184,6 @@ async def stream_chat_response(
     total_tokens = 0
 
     try:
-        # Track chat start event in PostHog
-        posthog_properties = {
-            "conversation_id": conversation_id,
-            "message_length": len(user_message),
-        }
-        if organization_id:
-            posthog_client.capture(
-                distinct_id=user_id,
-                event="chat_message_sent",
-                properties=posthog_properties,
-                groups={"organization": str(organization_id)},
-            )
-        else:
-            posthog_client.capture(
-                distinct_id=user_id,
-                event="chat_message_sent",
-                properties=posthog_properties,
-            )
-
         # Stream agent response with native reasoning
         async with agent.run_stream(
             user_message,
@@ -253,24 +233,4 @@ async def stream_chat_response(
 
     except Exception as e:
         logger.exception("Error during chat streaming")
-
-        # Track error in PostHog
-        error_properties = {
-            "conversation_id": conversation_id,
-            "error_message": str(e),
-        }
-        if organization_id:
-            posthog_client.capture(
-                distinct_id=user_id,
-                event="chat_error",
-                properties=error_properties,
-                groups={"organization": str(organization_id)},
-            )
-        else:
-            posthog_client.capture(
-                distinct_id=user_id,
-                event="chat_error",
-                properties=error_properties,
-            )
-
         yield f"data: {json.dumps({'type': 'error', 'error': str(e)})}\n\n"

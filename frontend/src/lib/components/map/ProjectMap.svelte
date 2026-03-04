@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import maplibregl from 'maplibre-gl';
-	import type { GeoPolygon, BuildingInfo } from '$lib/api/projects';
+	import type { GeoPolygon, GeoPin } from '$lib/api/projects';
 
 	interface ProjectPin {
 		projectId: number;
@@ -13,10 +13,10 @@
 
 	let {
 		onProjectSelect,
-		onBuildingSelect
+		onBuildingPinClick
 	}: {
 		onProjectSelect?: (projectId: number) => void;
-		onBuildingSelect?: (propertyId: number) => void;
+		onBuildingPinClick?: (pin: GeoPin) => void;
 	} = $props();
 
 	let mapContainer = $state<HTMLDivElement>();
@@ -24,6 +24,7 @@
 	let projectMarkers = $state<Map<number, ProjectPin>>(new Map());
 	let currentMarker = $state<maplibregl.Marker | null>(null);
 	let buildingMarkers = $state<maplibregl.Marker[]>([]);
+	let buildingPopups = $state<maplibregl.Popup[]>([]);
 	let areaPolygonLayer = $state<string | null>(null);
 
 	onMount(() => {
@@ -47,10 +48,6 @@
 			console.error('Map error:', e);
 		});
 
-		// Wait for map to be fully loaded
-		map.on('load', () => {
-			console.log('Map fully loaded and ready');
-		});
 
 		return () => {
 			map?.remove();
@@ -66,21 +63,18 @@
 
 		const drawPolygon = () => {
 			try {
-				// Remove existing polygon layer if present
 				if (areaPolygonLayer) {
 					try {
 						map!.removeLayer(areaPolygonLayer);
 						map!.removeLayer(`${areaPolygonLayer}-outline`);
 						map!.removeSource('area-polygon');
 					} catch (e) {
-						console.log('Polygon layers not found, skipping removal');
+						// layers may not exist yet
 					}
 				}
 
 				const sourceId = 'area-polygon';
 				const layerId = 'area-polygon-layer';
-
-				console.log('Drawing polygon with coordinates:', polygon.coordinates.length, 'points');
 
 				// Add source with polygon data
 				map!.addSource(sourceId, {
@@ -119,7 +113,6 @@
 				});
 
 				areaPolygonLayer = layerId;
-				console.log('Polygon drawn successfully');
 			} catch (error) {
 				console.error('Error drawing polygon:', error);
 			}
@@ -128,31 +121,45 @@
 		if (map.isStyleLoaded()) {
 			drawPolygon();
 		} else {
-			console.log('Map style not loaded yet, waiting...');
 			map.once('styledata', drawPolygon);
 		}
 	}
 
-	// Add building markers to map
-	function addBuildingMarkers(buildings: BuildingInfo[]) {
+	// Add building pin markers to map
+	function addBuildingMarkers(pins: GeoPin[]) {
+		buildingPopups.forEach((p) => p.remove());
+		buildingPopups = [];
 		buildingMarkers.forEach((marker) => marker.remove());
 		buildingMarkers = [];
 
-		buildings.forEach((building, i) => {
+		pins.forEach((pin) => {
 			const markerEl = document.createElement('div');
-			markerEl.className =
-				'w-8 h-8 bg-amber-500 rounded-lg flex items-center justify-center shadow-md border border-amber-600 cursor-pointer hover:bg-amber-400 transition-colors text-xs font-bold text-white select-none';
-			markerEl.textContent = (i + 1).toString();
+			markerEl.style.cssText = 'cursor: pointer; display: flex; flex-direction: column; align-items: center;';
+			markerEl.innerHTML = `
+				<svg width="28" height="36" viewBox="0 0 28 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+					<path d="M14 0C6.268 0 0 6.268 0 14C0 24.5 14 36 14 36C14 36 28 24.5 28 14C28 6.268 21.732 0 14 0Z" fill="#0d9488"/>
+					<circle cx="14" cy="14" r="6" fill="white"/>
+				</svg>
+			`;
 
-			markerEl.addEventListener('click', () => {
-				onBuildingSelect?.(building.property_id);
-			});
+			const label = pin.building_name || pin.project_name;
+			const popup = new maplibregl.Popup({
+				offset: [0, -38],
+				closeButton: false,
+				closeOnClick: false,
+				className: 'building-popup'
+			}).setHTML(`<div style="font-size:13px;font-weight:600;color:#0f172a;white-space:nowrap;padding:2px 0;">${label}</div>`);
 
 			const marker = new maplibregl.Marker({ element: markerEl })
-				.setLngLat([building.longitude, building.latitude])
+				.setLngLat([pin.longitude, pin.latitude])
 				.addTo(map!);
 
+			markerEl.addEventListener('mouseenter', () => popup.addTo(map!).setLngLat([pin.longitude, pin.latitude]));
+			markerEl.addEventListener('mouseleave', () => popup.remove());
+			markerEl.addEventListener('click', () => onBuildingPinClick?.(pin));
+
 			buildingMarkers.push(marker);
+			buildingPopups.push(popup);
 		});
 	}
 
@@ -207,7 +214,9 @@
 		});
 		projectMarkers.clear();
 
-		// Clear building markers
+		// Clear building markers and popups
+		buildingPopups.forEach((p) => p.remove());
+		buildingPopups = [];
 		buildingMarkers.forEach((marker) => marker.remove());
 		buildingMarkers = [];
 
@@ -231,17 +240,13 @@
 		latitude: number,
 		longitude: number,
 		areaPolygon: GeoPolygon | null = null,
-		buildings: BuildingInfo[] = [],
+		geoPins: GeoPin[] = [],
 		zoom: number = 14
 	) {
 		if (!map) {
 			console.error('Map not initialized');
 			return;
 		}
-
-		console.log('Flying to project:', projectName, 'at', latitude, longitude);
-		console.log('Area polygon:', areaPolygon ? 'present' : 'missing');
-		console.log('Buildings:', buildings.length);
 
 		// Clear previous markers
 		clearMarkers();
@@ -252,26 +257,34 @@
 		// Add main project marker
 		addProjectMarker(projectId, projectName, latitude, longitude);
 
-		// Draw area polygon if available
 		if (areaPolygon && areaPolygon.coordinates && areaPolygon.coordinates.length > 0) {
-			console.log('Drawing area polygon');
 			drawAreaPolygon(areaPolygon);
-		} else {
-			console.log('No valid area polygon data');
 		}
 
-		// Add building markers if available
-		if (buildings && buildings.length > 0) {
-			console.log('Adding', buildings.length, 'building markers');
-			addBuildingMarkers(buildings);
-		} else {
-			console.log('No buildings to display');
+		// Add building pin markers if available
+		if (geoPins && geoPins.length > 0) {
+			addBuildingMarkers(geoPins);
 		}
 	}
 
-	// Expose method to fly to location (legacy)
 	export function flyToLocation(lng: number, lat: number, zoom: number = 14) {
 		map?.flyTo({ center: [lng, lat], zoom });
+	}
+
+	// Show all building pins for a master project and fit map to their bounds
+	export function fitBounds(pins: GeoPin[]) {
+		if (!map || pins.length === 0) return;
+		clearMarkers();
+		addBuildingMarkers(pins);
+		const lats = pins.map((p) => p.latitude);
+		const lngs = pins.map((p) => p.longitude);
+		map.fitBounds(
+			[
+				[Math.min(...lngs), Math.min(...lats)],
+				[Math.max(...lngs), Math.max(...lats)]
+			],
+			{ padding: 60 }
+		);
 	}
 </script>
 

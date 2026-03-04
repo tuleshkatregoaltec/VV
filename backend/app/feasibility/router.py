@@ -5,7 +5,7 @@ from fastapi.responses import StreamingResponse
 
 from app.core.dependencies import require_active_subscription, AuthContext
 from app.feasibility.models import LandPlot, ComparableData, FeasibilityChatRequest
-from app.feasibility.service import get_areas, get_land_plots, get_comparable_data
+from app.feasibility.service import get_areas, get_land_plots, search_land_plots, get_comparable_data
 from app.feasibility.agent import stream_feasibility_response
 
 logger = logging.getLogger(__name__)
@@ -32,6 +32,16 @@ async def land_endpoint(
     return await get_land_plots(area, size_sqm, tolerance)
 
 
+@router.get("/land/search", response_model=list[LandPlot])
+async def land_search_endpoint(
+    area: str = Query(...),
+    q: str = Query(..., min_length=1),
+    _: AuthContext = Depends(require_active_subscription),
+):
+    """Search land plots by land number or project name."""
+    return await search_land_plots(area, q)
+
+
 @router.get("/comparable", response_model=ComparableData)
 async def comparable_endpoint(
     project_ids: str = Query(..., description="Comma-separated project IDs"),
@@ -42,7 +52,10 @@ async def comparable_endpoint(
     result = await get_comparable_data(ids)
     if result is None:
         from fastapi import HTTPException
-        raise HTTPException(status_code=404, detail="No data found for given project IDs")
+
+        raise HTTPException(
+            status_code=404, detail="No data found for given project IDs"
+        )
     return result
 
 
@@ -55,7 +68,9 @@ async def chat_stream_endpoint(
 
     async def event_stream():
         try:
-            async for chunk in stream_feasibility_response(request.messages, request.context):
+            async for chunk in stream_feasibility_response(
+                request.messages, request.context, request.history_json
+            ):
                 yield chunk
         except Exception as e:
             logger.exception("Error in feasibility chat stream endpoint")

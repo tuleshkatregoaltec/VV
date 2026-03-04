@@ -1,3 +1,4 @@
+import logfire
 import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -23,7 +24,7 @@ from app.transaction.router import router as transaction_router
 from app.upload.router import router as upload_router
 from app.upload.router import health_router
 from app.billing.router import router as billing_router
-from app.billing import webhooks as billing_webhooks
+from app.billing.webhooks import router as billing_webhooks
 from app.admin.router import router as admin_router
 from app.feasibility.router import router as feasibility_router
 
@@ -42,7 +43,11 @@ async def lifespan(app: FastAPI):
     await close_postgres()
 
 
+logfire.configure()
+logfire.instrument_pydantic_ai()
+
 app = FastAPI(title="Real Estate API", version="1.0.0", lifespan=lifespan)
+logfire.instrument_fastapi(app)
 
 honeybadger.configure(
     api_key=settings.HONEYBADGER_API_KEY,
@@ -71,7 +76,7 @@ app.include_router(transaction_router, tags=["transactions"])
 app.include_router(upload_router, tags=["upload"])
 app.include_router(health_router, tags=["upload"])
 app.include_router(billing_router, tags=["billing"])
-app.include_router(billing_webhooks.router, tags=["webhooks"])
+app.include_router(billing_webhooks, tags=["webhooks"])
 app.include_router(admin_router, tags=["admin"])
 app.include_router(feasibility_router, tags=["feasibility"])
 

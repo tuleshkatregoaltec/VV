@@ -20,14 +20,16 @@ RATE_LIMIT_SLEEP = 1.1  # Nominatim requires >= 1 req/sec
 
 
 def nominatim_search(query: str) -> dict | None:
-    params = urllib.parse.urlencode({
-        "q": query,
-        "format": "json",
-        "limit": 3,
-        "polygon_geojson": 1,
-        "countrycodes": "ae",
-        "addressdetails": 1,
-    })
+    params = urllib.parse.urlencode(
+        {
+            "q": query,
+            "format": "json",
+            "limit": 3,
+            "polygon_geojson": 1,
+            "countrycodes": "ae",
+            "addressdetails": 1,
+        }
+    )
     req = urllib.request.Request(
         f"{NOMINATIM_URL}?{params}",
         headers={"User-Agent": USER_AGENT},
@@ -52,8 +54,12 @@ def extract_polygon(geojson: dict | None) -> list:
 
 def main():
     parser = argparse.ArgumentParser(description="Geocode ch_projects via Nominatim")
-    parser.add_argument("--limit", type=int, default=None, help="Max projects to geocode")
-    parser.add_argument("--dry-run", action="store_true", help="Print without inserting")
+    parser.add_argument(
+        "--limit", type=int, default=None, help="Max projects to geocode"
+    )
+    parser.add_argument(
+        "--dry-run", action="store_true", help="Print without inserting"
+    )
     args = parser.parse_args()
 
     client = Client(
@@ -84,7 +90,7 @@ def main():
             result = nominatim_search(f"{name}, Dubai, UAE")
             time.sleep(RATE_LIMIT_SLEEP)
         if not result:
-            print(f"[{i+1}/{total}] {name} → NOT FOUND")
+            print(f"[{i + 1}/{total}] {name} → NOT FOUND")
             time.sleep(RATE_LIMIT_SLEEP)
             continue
 
@@ -102,7 +108,7 @@ def main():
 
         poly_str = "yes" if polygon else "no"
         print(
-            f"[{i+1}/{total}] {name} → {lat:.4f}, {lng:.4f} "
+            f"[{i + 1}/{total}] {name} → {lat:.4f}, {lng:.4f} "
             f"imp={importance:.3f} (polygon: {poly_str})"
         )
         time.sleep(RATE_LIMIT_SLEEP)

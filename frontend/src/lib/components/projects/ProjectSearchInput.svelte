@@ -1,39 +1,74 @@
 <script lang="ts">
-	import type { ProjectSearchResult } from '$lib/api/projects';
+	import type { ProjectSearchResult, SearchSelection } from '$lib/api/projects';
 
 	let {
 		allProjects,
-		onProjectSelect
+		onSelect
 	}: {
 		allProjects: ProjectSearchResult[];
-		onProjectSelect: (projectId: number) => void;
+		onSelect: (sel: SearchSelection) => void;
 	} = $props();
 
 	let searchQuery = $state('');
 	let isFocused = $state(false);
 	let showDropdown = $state(false);
 
-	// Client-side filtering - instant results!
+	// Build master index: masterName → { count, areaName }
+	let masterIndex = $derived.by(() => {
+		const map = new Map<string, { count: number; areaName: string }>();
+		for (const p of allProjects) {
+			if (p.master_project_en) {
+				const existing = map.get(p.master_project_en);
+				if (existing) {
+					existing.count++;
+				} else {
+					map.set(p.master_project_en, { count: 1, areaName: p.area_name });
+				}
+			}
+		}
+		return map;
+	});
+
 	let searchResults = $derived.by(() => {
-		const query = searchQuery.trim().toLowerCase();
-		if (query.length < 2) return [];
-		return allProjects
+		const q = searchQuery.trim().toLowerCase();
+		if (q.length < 2) return { masters: [], projects: [] };
+
+		const masters: Array<{ name: string; count: number; areaName: string }> = [];
+		for (const [name, info] of masterIndex) {
+			if (name.toLowerCase().includes(q)) {
+				masters.push({ name, count: info.count, areaName: info.areaName });
+			}
+		}
+
+		const projects = allProjects
 			.filter(
 				(p) =>
-					p.project_name.toLowerCase().includes(query) ||
-					p.area_name.toLowerCase().includes(query) ||
-					(p.master_project_en && p.master_project_en.toLowerCase().includes(query)) ||
-					(p.developer_name && p.developer_name.toLowerCase().includes(query))
+					p.project_name.toLowerCase().includes(q) ||
+					p.area_name.toLowerCase().includes(q) ||
+					(p.developer_name && p.developer_name.toLowerCase().includes(q))
 			)
-			.slice(0, 25);
+			.slice(0, 20);
+
+		return { masters: masters.slice(0, 5), projects };
 	});
+
+	const hasResults = $derived(
+		searchResults.masters.length > 0 || searchResults.projects.length > 0
+	);
 
 	function handleInput() {
 		showDropdown = searchQuery.trim().length >= 2;
 	}
 
+	function selectMaster(masterName: string) {
+		onSelect({ type: 'master', masterName });
+		searchQuery = masterName;
+		showDropdown = false;
+		isFocused = false;
+	}
+
 	function selectProject(projectId: number) {
-		onProjectSelect(projectId);
+		onSelect({ type: 'project', projectId });
 		searchQuery = '';
 		showDropdown = false;
 		isFocused = false;
@@ -45,7 +80,6 @@
 	}
 
 	function handleBlur() {
-		// Delay to allow click on dropdown item to fire first
 		setTimeout(() => {
 			showDropdown = false;
 			isFocused = false;
@@ -76,14 +110,34 @@
 			</div>
 		</div>
 
-		<!-- Dropdown Results -->
-		{#if showDropdown && searchResults.length > 0}
-			<!-- onmousedown prevents input blur firing before onclick -->
+		{#if showDropdown && hasResults}
 			<div
 				onmousedown={(e) => e.preventDefault()}
 				class="absolute z-50 w-full mt-1 bg-white rounded-xl shadow-2xl border border-slate-200 max-h-80 overflow-y-auto"
 			>
-				{#each searchResults as result}
+				<!-- Master projects first -->
+				{#each searchResults.masters as master}
+					<button
+						onclick={() => selectMaster(master.name)}
+						class="w-full text-left px-4 py-2.5 hover:bg-teal-50 transition-colors border-b border-slate-100"
+					>
+						<div class="flex items-start justify-between gap-2">
+							<div class="min-w-0">
+								<div class="text-sm font-semibold text-slate-900 truncate">{master.name}</div>
+								<div class="text-xs text-slate-500 mt-0.5">{master.areaName}</div>
+							</div>
+							<div class="flex flex-col items-end gap-1 flex-shrink-0">
+								<span class="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-violet-100 text-violet-700">
+									Master
+								</span>
+								<span class="text-[10px] text-slate-400">{master.count} projects</span>
+							</div>
+						</div>
+					</button>
+				{/each}
+
+				<!-- Individual projects -->
+				{#each searchResults.projects as result}
 					<button
 						onclick={() => selectProject(result.project_id)}
 						class="w-full text-left px-4 py-2.5 hover:bg-teal-50 transition-colors border-b border-slate-100 last:border-b-0"
