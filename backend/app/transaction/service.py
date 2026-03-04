@@ -74,7 +74,9 @@ async def fetch_sales_transactions(
 
     if project:
         where_clauses.append(_project_filter(filter_type))
-        params["project_name"] = project + " - %" if filter_type == "virtual_master" else project
+        params["project_name"] = (
+            project + " - %" if filter_type == "virtual_master" else project
+        )
 
     if building:
         where_clauses.append("building_name_en = {building:String}")
@@ -236,7 +238,9 @@ async def fetch_rental_contracts(
 
     if project:
         where_clauses.append(_project_filter(filter_type))
-        params["project_name"] = project + " - %" if filter_type == "virtual_master" else project
+        params["project_name"] = (
+            project + " - %" if filter_type == "virtual_master" else project
+        )
 
     if timeframe_days:
         where_clauses.append("contract_start_date >= today() - {timeframe_days:Int32}")
@@ -396,7 +400,9 @@ async def export_sales_transactions(
 
         if project:
             where_clauses.append(_project_filter(filter_type))
-            params["project_name"] = project + " - %" if filter_type == "virtual_master" else project
+            params["project_name"] = (
+                project + " - %" if filter_type == "virtual_master" else project
+            )
 
         if building:
             where_clauses.append("building_name_en = {building:String}")
@@ -589,7 +595,9 @@ async def export_rental_contracts(
 
         if project:
             where_clauses.append(_project_filter(filter_type))
-            params["project_name"] = project + " - %" if filter_type == "virtual_master" else project
+            params["project_name"] = (
+                project + " - %" if filter_type == "virtual_master" else project
+            )
 
         if timeframe_days:
             where_clauses.append(

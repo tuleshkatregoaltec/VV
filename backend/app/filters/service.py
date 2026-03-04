@@ -41,7 +41,9 @@ async def get_sales_filter_options(
 
     if project:
         where_clauses.append(_project_filter(filter_type))
-        params["project_name"] = project + " - %" if filter_type == "virtual_master" else project
+        params["project_name"] = (
+            project + " - %" if filter_type == "virtual_master" else project
+        )
 
     if property_type:
         where_clauses.append("property_type_en = {property_type:String}")
@@ -159,7 +161,9 @@ async def get_rental_filter_options(
 
     if project:
         where_clauses.append(_project_filter(filter_type))
-        params["project_name"] = project + " - %" if filter_type == "virtual_master" else project
+        params["project_name"] = (
+            project + " - %" if filter_type == "virtual_master" else project
+        )
 
     if property_type:
         where_clauses.append("ejari_property_type_en = {property_type:String}")

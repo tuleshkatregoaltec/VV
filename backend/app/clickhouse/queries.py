@@ -1251,7 +1251,9 @@ def _project_filter(filter_type: str) -> str:
     return "project_name_en = {project_name:String}"
 
 
-def project_sales_summary(filter_type: str = "project", reg_type: Optional[str] = None) -> str:
+def project_sales_summary(
+    filter_type: str = "project", reg_type: Optional[str] = None
+) -> str:
     """Overall sales KPIs for a project, master project, or virtual master.
 
     Filters to Sales transactions on Unit/Villa only to exclude mortgage/gift/building/land noise.
@@ -1275,7 +1277,9 @@ def project_sales_summary(filter_type: str = "project", reg_type: Optional[str] 
     """
 
 
-def project_sales_by_rooms(filter_type: str = "project", reg_type: Optional[str] = None) -> str:
+def project_sales_by_rooms(
+    filter_type: str = "project", reg_type: Optional[str] = None
+) -> str:
     """Sales breakdown by bedroom count for a project, master project, or virtual master.
 
     Pass reg_type='Existing Properties' to get existing-only avg_sale_price for yield denominator.
