@@ -68,7 +68,10 @@
 				<td class="px-2 py-1.5 font-semibold text-slate-700">Total</td>
 				<td class="border-r border-slate-200 px-2 py-1.5 text-right font-semibold tabular-nums text-slate-900">{feasibilityStore.totalUnits}</td>
 				<td class="border-r border-slate-200"></td>
-				<td class="border-r border-slate-200 px-2 py-1.5 text-right font-semibold tabular-nums text-slate-900">{fmt(feasibilityStore.totalSellableAreaSqm)}</td>
+				<td class="border-r border-slate-200 px-2 py-1.5 text-right font-semibold tabular-nums text-slate-900">
+					{fmt(feasibilityStore.totalSellableAreaSqm)}
+					<div class="text-[10px] font-normal text-slate-400">BUA: {fmt(feasibilityStore.totalBUA)}</div>
+				</td>
 				<td class="border-r border-slate-200"></td>
 				<td class="border-r border-slate-200 px-2 py-1.5 text-right font-bold tabular-nums text-slate-900">{fmtK(feasibilityStore.totalGDV)}</td>
 				<td class="px-2 py-1.5 text-right font-semibold tabular-nums text-slate-900">100.0%</td>

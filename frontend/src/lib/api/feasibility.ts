@@ -8,6 +8,11 @@ export const feasibility = {
 		return api('/api/v1/feasibility/areas');
 	},
 
+	searchLandPlots(area: string, q: string): Promise<LandPlot[]> {
+		const params = new URLSearchParams({ area, q });
+		return api(`/api/v1/feasibility/land/search?${params}`);
+	},
+
 	getLandPlots(area: string, sizeSqm: number, tolerance = 0.25): Promise<LandPlot[]> {
 		const params = new URLSearchParams({
 			area,

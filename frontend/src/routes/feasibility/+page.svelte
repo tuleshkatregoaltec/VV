@@ -47,11 +47,13 @@
 			>
 				<div class="h-full flex flex-col bg-white border-r border-slate-200 overflow-hidden" style="width: {leftWidth}px; min-width: {leftWidth}px;">
 					<div class="px-3 pt-3 pb-2 border-b border-slate-200 flex-shrink-0">
-						<div class="flex items-start justify-between gap-2">
-							<StepProgress
-								currentStep={feasibilityStore.step}
-								onGoToStep={(s) => feasibilityStore.goToStep(s)}
-							/>
+						<div class="flex items-center justify-between gap-2">
+							<p class="text-xs font-medium text-slate-700 truncate">
+								{feasibilityStore.area} ·
+								{feasibilityStore.plot
+									? `${feasibilityStore.plot.actual_area.toLocaleString('en-AE', { maximumFractionDigits: 0 })} sqm`
+									: 'Custom plot'}
+							</p>
 							{#if import.meta.env.DEV}
 								<button
 									onclick={() => feasibilityStore.devJump()}
@@ -59,12 +61,6 @@
 								>dev</button>
 							{/if}
 						</div>
-						<p class="text-xs text-slate-500 mt-1">
-							{feasibilityStore.area} ·
-							{feasibilityStore.plot
-								? `${feasibilityStore.plot.actual_area.toLocaleString('en-AE', { maximumFractionDigits: 0 })} sqm`
-								: 'Custom plot'}
-						</p>
 					</div>
 					<div class="flex-1 min-h-0 overflow-hidden">
 						<ResearchPanel />

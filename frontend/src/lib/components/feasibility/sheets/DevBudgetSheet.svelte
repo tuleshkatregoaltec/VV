@@ -61,7 +61,7 @@
 					{#if uf['transferFeePct']}<div class="absolute inset-0 field-flash-undo pointer-events-none rounded-sm"></div>{/if}
 					<input type="number" class={inputClass} value={a.transferFeePct} min="0" step="0.5" oninput={(e) => numInput('transferFeePct', e)} />
 				</td>
-				<td class="px-2 py-1.5 text-slate-500 tabular-nums">→ {fmtK(s.transferFees)} %</td>
+				<td class="px-2 py-1.5 text-slate-500 tabular-nums">→ {fmtK(s.transferFees)}</td>
 			</tr>
 			<tr class="border-t-2 border-slate-300">
 				<td class="border-r border-slate-200 px-2 py-1.5 font-semibold text-slate-700">Total Land Cost</td>
@@ -76,8 +76,17 @@
 			</td>
 		</tr>
 		{#if open.hard}
+			<tr class="border-b border-slate-100">
+				<td class="border-r border-slate-200 px-2 py-1.5 text-slate-600">BUA Efficiency</td>
+				<td class="border-r border-slate-200 p-0 relative">
+					{#if cf['buaEfficiencyPct']}<div class="absolute inset-0 field-flash pointer-events-none rounded-sm"></div>{/if}
+					{#if uf['buaEfficiencyPct']}<div class="absolute inset-0 field-flash-undo pointer-events-none rounded-sm"></div>{/if}
+					<input type="number" class={inputClass} value={a.buaEfficiencyPct} min="1" max="100" step="1" oninput={(e) => numInput('buaEfficiencyPct', e)} />
+				</td>
+				<td class="px-2 py-1.5 text-slate-500 tabular-nums">→ BUA {s.totalBUA > 0 ? Math.round(s.totalBUA).toLocaleString() : '—'} sqm</td>
+			</tr>
 			<tr class="border-b border-slate-100 hover:bg-slate-50/60">
-				<td class="border-r border-slate-200 px-2 py-1.5 text-slate-600">Build Cost/sqm</td>
+				<td class="border-r border-slate-200 px-2 py-1.5 text-slate-600">Build Cost/sqm (BUA)</td>
 				<td class="border-r border-slate-200 p-0 relative">
 					{#if cf['buildCostPerSqm']}<div class="absolute inset-0 field-flash pointer-events-none rounded-sm"></div>{/if}
 					{#if uf['buildCostPerSqm']}<div class="absolute inset-0 field-flash-undo pointer-events-none rounded-sm"></div>{/if}
@@ -92,7 +101,7 @@
 					{#if uf['contingencyPct']}<div class="absolute inset-0 field-flash-undo pointer-events-none rounded-sm"></div>{/if}
 					<input type="number" class={inputClass} value={a.contingencyPct} min="0" step="1" oninput={(e) => numInput('contingencyPct', e)} />
 				</td>
-				<td class="px-2 py-1.5 text-slate-500 tabular-nums">→ {fmtK(s.contingencyCost)} %</td>
+				<td class="px-2 py-1.5 text-slate-500 tabular-nums">→ {fmtK(s.contingencyCost)}</td>
 			</tr>
 			<tr class="border-t-2 border-slate-300">
 				<td class="border-r border-slate-200 px-2 py-1.5 font-semibold text-slate-700">Total Hard Costs</td>
@@ -126,7 +135,7 @@
 					{#if uf['designFeePct']}<div class="absolute inset-0 field-flash-undo pointer-events-none rounded-sm"></div>{/if}
 					<input type="number" class={inputClass} value={a.designFeePct} min="0" step="0.5" oninput={(e) => numInput('designFeePct', e)} />
 				</td>
-				<td class="px-2 py-1.5 text-slate-500 tabular-nums">→ {fmtK(s.designCost)} %</td>
+				<td class="px-2 py-1.5 text-slate-500 tabular-nums">→ {fmtK(s.designCost)}</td>
 			</tr>
 			<tr class="border-b border-slate-100 hover:bg-slate-50/60">
 				<td class="border-r border-slate-200 px-2 py-1.5 pl-5 text-slate-500">└ Project Management</td>
@@ -135,7 +144,7 @@
 					{#if uf['projectMgmtPct']}<div class="absolute inset-0 field-flash-undo pointer-events-none rounded-sm"></div>{/if}
 					<input type="number" class={inputClass} value={a.projectMgmtPct} min="0" step="0.5" oninput={(e) => numInput('projectMgmtPct', e)} />
 				</td>
-				<td class="px-2 py-1.5 text-slate-500 tabular-nums">→ {fmtK(s.projectMgmtCost)} %</td>
+				<td class="px-2 py-1.5 text-slate-500 tabular-nums">→ {fmtK(s.projectMgmtCost)}</td>
 			</tr>
 			<tr class="border-b border-slate-100">
 				<td class="border-r border-slate-200 px-2 py-1.5 pl-5 text-slate-400">└ Other Soft Costs</td>
@@ -164,7 +173,7 @@
 					{#if uf['agentCommissionPct']}<div class="absolute inset-0 field-flash-undo pointer-events-none rounded-sm"></div>{/if}
 					<input type="number" class={inputClass} value={a.agentCommissionPct} min="0" step="0.5" oninput={(e) => numInput('agentCommissionPct', e)} />
 				</td>
-				<td class="px-2 py-1.5 text-slate-500 tabular-nums">→ {fmtK(s.agentFees)} %</td>
+				<td class="px-2 py-1.5 text-slate-500 tabular-nums">→ {fmtK(s.agentFees)}</td>
 			</tr>
 			<tr class="border-b border-slate-100 hover:bg-slate-50/60">
 				<td class="border-r border-slate-200 px-2 py-1.5 text-slate-600">Marketing Budget</td>
@@ -173,7 +182,7 @@
 					{#if uf['marketingBudgetPct']}<div class="absolute inset-0 field-flash-undo pointer-events-none rounded-sm"></div>{/if}
 					<input type="number" class={inputClass} value={a.marketingBudgetPct} min="0" step="0.5" oninput={(e) => numInput('marketingBudgetPct', e)} />
 				</td>
-				<td class="px-2 py-1.5 text-slate-500 tabular-nums">→ {fmtK(s.marketingCost)} %</td>
+				<td class="px-2 py-1.5 text-slate-500 tabular-nums">→ {fmtK(s.marketingCost)}</td>
 			</tr>
 			<tr class="border-t-2 border-slate-300">
 				<td class="border-r border-slate-200 px-2 py-1.5 font-semibold text-slate-700">Total Sales Costs</td>
@@ -200,7 +209,7 @@
 					{#if uf['financeRatePct']}<div class="absolute inset-0 field-flash-undo pointer-events-none rounded-sm"></div>{/if}
 					<input type="number" class={inputClass} value={a.financeRatePct} min="0" step="0.5" oninput={(e) => numInput('financeRatePct', e)} />
 				</td>
-				<td class="px-2 py-1.5 text-slate-500 tabular-nums">→ {fmtK(s.totalInterest)} %</td>
+				<td class="px-2 py-1.5 text-slate-500 tabular-nums">→ {fmtK(s.totalInterest)}</td>
 			</tr>
 			<tr class="border-b border-slate-100 hover:bg-slate-50/60">
 				<td class="border-r border-slate-200 px-2 py-1.5 text-slate-600">Arrangement Fee</td>
@@ -209,7 +218,7 @@
 					{#if uf['arrangementFeePct']}<div class="absolute inset-0 field-flash-undo pointer-events-none rounded-sm"></div>{/if}
 					<input type="number" class={inputClass} value={a.arrangementFeePct} min="0" step="0.25" oninput={(e) => numInput('arrangementFeePct', e)} />
 				</td>
-				<td class="px-2 py-1.5 text-slate-500 tabular-nums">→ {fmtK(s.arrangementFee)} %</td>
+				<td class="px-2 py-1.5 text-slate-500 tabular-nums">→ {fmtK(s.arrangementFee)}</td>
 			</tr>
 			<tr class="border-t-2 border-slate-300">
 				<td class="border-r border-slate-200 px-2 py-1.5 font-semibold text-slate-700">Total Finance Costs</td>

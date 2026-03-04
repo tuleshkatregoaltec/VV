@@ -29,7 +29,8 @@ async def get_land_plots(
         actual_area,
         property_type_en,
         is_free_hold,
-        project_name_en
+        project_name_en,
+        land_type_en
     FROM ch_land_registry
     WHERE area_name_en = {area:String}
       AND actual_area BETWEEN {min_area:Float64} AND {max_area:Float64}
@@ -54,6 +55,44 @@ async def get_land_plots(
             property_type_en=r.get("property_type_en") or None,
             is_free_hold=r.get("is_free_hold"),
             project_name_en=r.get("project_name_en") or None,
+            land_type_en=r.get("land_type_en") or None,
+        )
+        for r in rows
+    ]
+
+
+async def search_land_plots(area: str, q: str, limit: int = 30) -> list[LandPlot]:
+    """Search land plots by land number or project name within an area."""
+    sql = """
+    SELECT
+        property_id,
+        land_number,
+        area_name_en,
+        actual_area,
+        property_type_en,
+        is_free_hold,
+        project_name_en,
+        land_type_en
+    FROM ch_land_registry
+    WHERE area_name_en = {area:String}
+      AND (
+          land_number ILIKE {q:String}
+          OR project_name_en ILIKE {q:String}
+      )
+    ORDER BY actual_area
+    LIMIT {limit:UInt32}
+    """
+    rows = await query(sql, {"area": area, "q": f"%{q}%", "limit": limit})
+    return [
+        LandPlot(
+            property_id=r["property_id"],
+            land_number=r.get("land_number") or None,
+            area_name_en=r["area_name_en"],
+            actual_area=float(r["actual_area"]),
+            property_type_en=r.get("property_type_en") or None,
+            is_free_hold=r.get("is_free_hold"),
+            project_name_en=r.get("project_name_en") or None,
+            land_type_en=r.get("land_type_en") or None,
         )
         for r in rows
     ]

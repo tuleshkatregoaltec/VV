@@ -10,6 +10,7 @@ class LandPlot(BaseModel):
     property_type_en: Optional[str]
     is_free_hold: Optional[bool]
     project_name_en: Optional[str]
+    land_type_en: Optional[str]
 
 
 class UnitTypeData(BaseModel):

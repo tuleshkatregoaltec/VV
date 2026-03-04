@@ -47,6 +47,9 @@ export interface Assumptions {
 	arrangementFeePct: number;
 	interestOnlyMonthsOverride: number | null;
 
+	// BUA
+	buaEfficiencyPct: number;
+
 	// Macro
 	inflationPct: number;
 	discountRatePct: number;
@@ -62,6 +65,7 @@ export interface LandPlot {
 	property_type_en: string | null;
 	is_free_hold: boolean | null;
 	project_name_en: string | null;
+	land_type_en: string | null;
 }
 
 export interface ComparableProject {
@@ -119,6 +123,7 @@ const assumptions = $state<{ value: Assumptions }>({
 		contingencyPct: 5,
 		designFeePct: 3,
 		projectMgmtPct: 2,
+		buaEfficiencyPct: 80,
 		constructionMonths: 24,
 		salesLaunchMonth: 6,
 		salesMonths: 18,
@@ -200,6 +205,12 @@ const spreadsheetRows = $derived(() => {
 	}));
 });
 
+const totalBUA = $derived(
+	assumptions.value.buaEfficiencyPct > 0
+		? totalSellableAreaSqm / (assumptions.value.buaEfficiencyPct / 100)
+		: totalSellableAreaSqm,
+);
+
 // ── Financial derived (dependency order) ──────────────────────────────────────
 
 // interestOnlyMonths: auto-shadows constructionMonths unless overridden
@@ -212,7 +223,7 @@ const transferFees = $derived((assumptions.value.landCost * assumptions.value.tr
 const totalLandCost = $derived(assumptions.value.landCost + transferFees);
 
 // Hard construction
-const hardCost = $derived(totalSellableAreaSqm * assumptions.value.buildCostPerSqm);
+const hardCost = $derived(totalBUA * assumptions.value.buildCostPerSqm);
 const contingencyCost = $derived((hardCost * assumptions.value.contingencyPct) / 100);
 const totalHardCost = $derived(hardCost + contingencyCost);
 
@@ -426,7 +437,7 @@ function flashFieldUndo(key: string) {
 
 // Keys that have direct inputs in DevBudget (in addition to Assumptions)
 const DEVBUDGET_KEYS = new Set([
-	'landCost', 'transferFeePct', 'buildCostPerSqm', 'contingencyPct',
+	'landCost', 'transferFeePct', 'buaEfficiencyPct', 'buildCostPerSqm', 'contingencyPct',
 	'softCostsPct', 'designFeePct', 'projectMgmtPct',
 	'agentCommissionPct', 'marketingBudgetPct', 'financeRatePct', 'arrangementFeePct',
 ]);
@@ -517,6 +528,7 @@ function devJump() {
 		property_type_en: 'Land',
 		is_free_hold: true,
 		project_name_en: null,
+		land_type_en: 'Residential',
 	};
 	assumptions.value = { ...assumptions.value, landCost: 50_000_000 };
 	applyComparableData({
@@ -548,6 +560,7 @@ export const feasibilityStore = {
 	// Unit config
 	get totalUnits() { return totalUnits; },
 	get totalSellableAreaSqm() { return totalSellableAreaSqm; },
+	get totalBUA() { return totalBUA; },
 	get gdvByType() { return gdvByType(); },
 	get totalGDV() { return totalGDV; },
 	get spreadsheetRows() { return spreadsheetRows(); },

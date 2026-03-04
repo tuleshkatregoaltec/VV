@@ -5,7 +5,7 @@ from fastapi.responses import StreamingResponse
 
 from app.core.dependencies import require_active_subscription, AuthContext
 from app.feasibility.models import LandPlot, ComparableData, FeasibilityChatRequest
-from app.feasibility.service import get_areas, get_land_plots, get_comparable_data
+from app.feasibility.service import get_areas, get_land_plots, search_land_plots, get_comparable_data
 from app.feasibility.agent import stream_feasibility_response
 
 logger = logging.getLogger(__name__)
@@ -30,6 +30,16 @@ async def land_endpoint(
 ):
     """Find land plots near a given size in the specified area."""
     return await get_land_plots(area, size_sqm, tolerance)
+
+
+@router.get("/land/search", response_model=list[LandPlot])
+async def land_search_endpoint(
+    area: str = Query(...),
+    q: str = Query(..., min_length=1),
+    _: AuthContext = Depends(require_active_subscription),
+):
+    """Search land plots by land number or project name."""
+    return await search_land_plots(area, q)
 
 
 @router.get("/comparable", response_model=ComparableData)
