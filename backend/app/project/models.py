@@ -3,13 +3,6 @@ from typing import Optional, List
 from datetime import date
 
 
-class GeoPoint(BaseModel):
-    """Geographic point with latitude and longitude"""
-
-    latitude: float
-    longitude: float
-
-
 class GeoPolygon(BaseModel):
     """Geographic polygon (area boundaries)"""
 
@@ -17,14 +10,47 @@ class GeoPolygon(BaseModel):
 
 
 class BuildingInfo(BaseModel):
-    """Building information with coordinates"""
+    """Building with property_id for drilldown"""
 
     property_id: int
     building_number: Optional[str]
     building_name: Optional[str]
     floors: Optional[int]
+
+
+class GeoPin(BaseModel):
+    """Geocoded pin for map display"""
+
+    building_name: str
+    project_name: str
     latitude: float
     longitude: float
+    property_id: Optional[int] = None
+
+
+class MasterProjectSummary(BaseModel):
+    """Summary of a sub-project within a master"""
+
+    project_id: int
+    project_name: str
+    project_status: Optional[str]
+    percent_completed: Optional[float]
+    no_of_buildings: Optional[int]
+    no_of_units: Optional[int]
+
+
+class MasterProjectResponse(BaseModel):
+    """Aggregated data for a master project"""
+
+    master_name: str
+    area_name: str
+    developer_name: Optional[str]
+    total_projects: int
+    total_buildings: int
+    total_units: int
+    projects: List[MasterProjectSummary]
+    geo_pins: List[GeoPin]
+    unit_composition: List["UnitComposition"]
 
 
 class ProjectSearchResult(BaseModel):
@@ -108,3 +134,4 @@ class ProjectDetailResponse(BaseModel):
     # Derived data
     unit_composition: List[UnitComposition]
     buildings: List[BuildingInfo] = []
+    geo_pins: List[GeoPin] = []

@@ -1,12 +1,40 @@
 import { http } from './client';
 
-export interface GeoPoint {
-	latitude: number;
-	longitude: number;
-}
-
 export interface GeoPolygon {
 	coordinates: Array<[number, number]>;
+}
+
+export interface GeoPin {
+	building_name: string;
+	project_name: string;
+	latitude: number;
+	longitude: number;
+	property_id?: number;
+}
+
+export type SearchSelection =
+	| { type: 'master'; masterName: string }
+	| { type: 'project'; projectId: number };
+
+export interface MasterProjectSummary {
+	project_id: number;
+	project_name: string;
+	project_status: string | null;
+	percent_completed: number | null;
+	no_of_buildings: number | null;
+	no_of_units: number | null;
+}
+
+export interface MasterProjectResponse {
+	master_name: string;
+	area_name: string;
+	developer_name: string | null;
+	total_projects: number;
+	total_buildings: number;
+	total_units: number;
+	projects: MasterProjectSummary[];
+	geo_pins: GeoPin[];
+	unit_composition: UnitComposition[];
 }
 
 export interface BuildingInfo {
@@ -14,8 +42,6 @@ export interface BuildingInfo {
 	building_number: string | null;
 	building_name: string | null;
 	floors: number | null;
-	latitude: number;
-	longitude: number;
 }
 
 export interface ProjectSearchResult {
@@ -78,11 +104,14 @@ export interface ProjectDetailResponse {
 	project_status: string | null;
 	unit_composition: UnitComposition[];
 	buildings: BuildingInfo[];
+	geo_pins: GeoPin[];
 }
 
 export const projects = {
 	list: (): Promise<ProjectSearchResult[]> => http.get(`/api/v1/projects/list`),
 	getDetails: (id: number): Promise<ProjectDetailResponse> => http.get(`/api/v1/projects/${id}`),
+	getMaster: (name: string): Promise<MasterProjectResponse> =>
+		http.get(`/api/v1/projects/master?name=${encodeURIComponent(name)}`),
 	getBuilding: (propertyId: number): Promise<BuildingDetailResponse> =>
 		http.get(`/api/v1/projects/building/${propertyId}`)
 };

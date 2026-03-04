@@ -1,6 +1,16 @@
-from fastapi import APIRouter, Depends, HTTPException
-from app.project.service import list_all_projects, get_project_details, get_building_details
-from app.project.models import ProjectSearchResult, ProjectDetailResponse, BuildingDetailResponse
+from fastapi import APIRouter, Depends, HTTPException, Query
+from app.project.service import (
+    list_all_projects,
+    get_project_details,
+    get_master_project,
+    get_building_details,
+)
+from app.project.models import (
+    ProjectSearchResult,
+    ProjectDetailResponse,
+    MasterProjectResponse,
+    BuildingDetailResponse,
+)
 from app.core.decorators import cached_endpoint
 from app.core.dependencies import require_active_subscription, AuthContext
 from typing import List
@@ -16,6 +26,19 @@ router = APIRouter(
 async def list_projects(context: AuthContext = Depends(require_active_subscription)):
     """Get all projects for client-side search"""
     return await list_all_projects()
+
+
+@router.get("/master", response_model=MasterProjectResponse)
+@cached_endpoint(prefix="master_project", expire=1800)  # 30 minutes
+async def master_project(
+    name: str = Query(..., description="master_project_en value"),
+    context: AuthContext = Depends(require_active_subscription),
+):
+    """Get aggregated data for a master project and its sub-projects"""
+    master = await get_master_project(name)
+    if not master:
+        raise HTTPException(status_code=404, detail="Master project not found")
+    return master
 
 
 @router.get("/building/{property_id}", response_model=BuildingDetailResponse)

@@ -4,19 +4,27 @@
 	import ProjectMap from '$lib/components/map/ProjectMap.svelte';
 	import ProjectSearchInput from '$lib/components/projects/ProjectSearchInput.svelte';
 	import ProjectDetails from '$lib/components/projects/ProjectDetails.svelte';
+	import MasterProjectPanel from '$lib/components/projects/MasterProjectPanel.svelte';
 	import BuildingDetails from '$lib/components/projects/BuildingDetails.svelte';
 	import { projects as projectsAPI } from '$lib/api/projects';
-	import type { ProjectDetailResponse, BuildingDetailResponse, ProjectSearchResult } from '$lib/api/projects';
+	import type {
+		ProjectDetailResponse,
+		MasterProjectResponse,
+		BuildingDetailResponse,
+		ProjectSearchResult,
+		SearchSelection,
+		GeoPin
+	} from '$lib/api/projects';
 
 	let isMinimized = $state(false);
 	let projectDetails = $state<ProjectDetailResponse | null>(null);
+	let masterDetails = $state<MasterProjectResponse | null>(null);
 	let buildingDetails = $state<BuildingDetailResponse | null>(null);
 	let projectAnalytics = $state<{ avg_price: number; gross_yield_pct: number | null } | null>(null);
 	let isLoading = $state(false);
-	let panelView = $state<'empty' | 'project' | 'building'>('empty');
+	let panelView = $state<'empty' | 'project' | 'building' | 'master'>('empty');
 	let mapComponent = $state<any>();
 
-	// Load all projects in background for client-side search
 	let allProjects = $state<ProjectSearchResult[]>([]);
 
 	onMount(async () => {
@@ -28,7 +36,6 @@
 	});
 
 	// Hardcoded JVC (Jumeirah Village Circle) boundary polygon [lng, lat]
-	// JVC is circular; DLD area name is "Al Barsha South Fourth"
 	const JVC_POLYGON: Array<[number, number]> = [
 		[55.1880, 25.0740],
 		[55.2020, 25.0790],
@@ -45,16 +52,8 @@
 		[55.1880, 25.0740]
 	];
 
-	// Bloom Towers JVC: 3 towers near the center of JVC
-	const JVC_BUILDING_COORDS = [
-		{ lat: 25.0572, lng: 55.2038, floors: 45, name: 'Tower 1' },
-		{ lat: 25.0565, lng: 55.2048, floors: 35, name: 'Tower 2' },
-		{ lat: 25.0558, lng: 55.2032, floors: 35, name: 'Tower 3' }
-	];
-
 	const JVC_ANALYTICS = { avg_price: 975000, gross_yield_pct: 7.2 };
 
-	// JVC projects are stored under "Al Barsha South Fourth" in the DLD data
 	function isJVCProject(areaName: string, projectName: string): boolean {
 		const a = areaName.toLowerCase();
 		const p = projectName.toLowerCase();
@@ -63,6 +62,34 @@
 			a.includes('jumeirah village circle') ||
 			p.includes('jumeirah village circle')
 		);
+	}
+
+	async function handleSearchSelect(sel: SearchSelection) {
+		if (sel.type === 'master') {
+			await handleMasterSelect(sel.masterName);
+		} else {
+			await handleProjectSelect(sel.projectId);
+		}
+	}
+
+	async function handleMasterSelect(masterName: string) {
+		isLoading = true;
+		projectDetails = null;
+		buildingDetails = null;
+		projectAnalytics = null;
+		panelView = 'master';
+
+		try {
+			masterDetails = await projectsAPI.getMaster(masterName);
+			if (masterDetails && mapComponent && masterDetails.geo_pins.length > 0) {
+				mapComponent.fitBounds(masterDetails.geo_pins);
+			}
+		} catch (error) {
+			console.error('Failed to load master project:', error);
+			panelView = 'empty';
+		} finally {
+			isLoading = false;
+		}
 	}
 
 	async function handleProjectSelect(projectId: number) {
@@ -79,24 +106,6 @@
 				details.longitude = 55.2065;
 				details.area_polygon = { coordinates: JVC_POLYGON };
 				projectAnalytics = JVC_ANALYTICS;
-
-				if (details.buildings.length > 0) {
-					details.buildings = details.buildings.map((b, i) => ({
-						...b,
-						latitude: JVC_BUILDING_COORDS[i % JVC_BUILDING_COORDS.length].lat,
-						longitude: JVC_BUILDING_COORDS[i % JVC_BUILDING_COORDS.length].lng,
-						floors: b.floors ?? JVC_BUILDING_COORDS[i % JVC_BUILDING_COORDS.length].floors
-					}));
-				} else {
-					details.buildings = JVC_BUILDING_COORDS.map((c, i) => ({
-						property_id: i + 1,
-						building_number: `${i + 1}`,
-						building_name: c.name,
-						floors: c.floors,
-						latitude: c.lat,
-						longitude: c.lng
-					}));
-				}
 			}
 
 			projectDetails = details;
@@ -108,7 +117,7 @@
 					details.latitude,
 					details.longitude,
 					details.area_polygon,
-					details.buildings,
+					details.geo_pins,
 					13
 				);
 			}
@@ -138,6 +147,18 @@
 		}
 	}
 
+	function handleBuildingPinClick(pin: GeoPin) {
+		if (pin.property_id) {
+			handleBuildingSelect(pin.property_id, pin.longitude, pin.latitude);
+		} else {
+			mapComponent?.flyToLocation(pin.longitude, pin.latitude, 17);
+		}
+	}
+
+	function handleGeoPinSelect(lat: number, lng: number) {
+		if (mapComponent) mapComponent.flyToLocation(lng, lat, 17);
+	}
+
 	function handleBackToProject() {
 		buildingDetails = null;
 		panelView = 'project';
@@ -155,7 +176,7 @@
 			<ProjectMap
 				bind:this={mapComponent}
 				onProjectSelect={handleProjectSelect}
-				onBuildingSelect={handleBuildingSelect}
+				onBuildingPinClick={handleBuildingPinClick}
 			/>
 		</div>
 
@@ -176,8 +197,7 @@
 							aria-label="Expand panel"
 						>
 							<svg class="w-4 h-4 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"
-								></path>
+								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
 							</svg>
 						</button>
 					</div>
@@ -205,7 +225,7 @@
 
 						<!-- Search Input -->
 						<div class="p-4 border-b border-slate-200 flex-shrink-0">
-							<ProjectSearchInput {allProjects} onProjectSelect={handleProjectSelect} />
+							<ProjectSearchInput {allProjects} onSelect={handleSearchSelect} />
 						</div>
 
 						<!-- Content Area (scrollable) -->
@@ -224,10 +244,16 @@
 								<BuildingDetails building={buildingDetails} onBack={handleBackToProject} />
 							{:else if panelView === 'project' && projectDetails}
 								<ProjectDetails
-							project={projectDetails}
-							analytics={projectAnalytics}
-							onBuildingSelect={handleBuildingSelect}
-						/>
+									project={projectDetails}
+									analytics={projectAnalytics}
+									onBuildingSelect={handleBuildingSelect}
+									onGeoPinSelect={handleGeoPinSelect}
+								/>
+							{:else if panelView === 'master' && masterDetails}
+								<MasterProjectPanel
+									master={masterDetails}
+									onProjectSelect={handleProjectSelect}
+								/>
 							{:else}
 								<div class="flex flex-col items-center justify-center h-full px-6 py-12 text-center">
 									<div class="w-14 h-14 bg-slate-100 rounded-2xl flex items-center justify-center mb-4">
