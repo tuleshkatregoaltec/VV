@@ -1,7 +1,6 @@
 import logging
 from typing import Any
 
-import logfire
 from pydantic_ai import Agent, RunContext
 from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai.providers.openrouter import OpenRouterProvider
@@ -11,12 +10,6 @@ from app.clickhouse import query
 
 logger = logging.getLogger(__name__)
 
-# Configure Logfire for LLM observability
-logfire.configure()
-logfire.instrument_pydantic_ai()
-
-
-# Configure OpenRouter model
 model = OpenAIChatModel(
     model_name=settings.DEFAULT_CHAT_MODEL,
     provider=OpenRouterProvider(api_key=settings.OPENROUTER_API_KEY),
