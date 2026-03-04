@@ -7,7 +7,7 @@ CREATE TABLE IF NOT EXISTS ch_transactions (
     procedure_name_ar String DEFAULT '',
     procedure_name_en String DEFAULT '',
     instance_date Date,
-    property_type_id Int32 DEFAULT 0,
+    property_typeB_id Int32 DEFAULT 0,
     property_type_ar String DEFAULT '',
     property_type_en LowCardinality(String) DEFAULT '',
     property_sub_type_id Int32 DEFAULT 0,
@@ -313,6 +313,18 @@ ORDER BY developer_id;
 -- =============================================================
 -- Silver tables — enriched / derived, populated by scripts
 -- =============================================================
+
+CREATE TABLE IF NOT EXISTS ch_geo_buildings (
+    address_key       String,
+    building_name_en  String DEFAULT '',
+    project_name_en   String DEFAULT '',
+    master_project_en String DEFAULT '',
+    area_name_en      String DEFAULT '',
+    lat               Float64,
+    lng               Float64
+) ENGINE = ReplacingMergeTree()
+ORDER BY address_key;
+
 
 CREATE TABLE IF NOT EXISTS ch_geo_projects (
     project_id   Int32,
