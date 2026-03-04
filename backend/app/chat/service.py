@@ -3,7 +3,6 @@ import logging
 from datetime import datetime, timezone
 from typing import Any, AsyncGenerator, List, Optional
 
-from posthog import Posthog
 from pydantic_ai.messages import (
     ModelMessage,
     ModelRequest,
@@ -16,17 +15,11 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from pydantic_ai.models.openrouter import OpenRouterModelSettings
 
-from app.config import settings
 from app.chat.agent import agent
 from app.chat.models import Conversation, Message
 from app.token_usage.service import token_usage_service
 
 logger = logging.getLogger(__name__)
-
-# Initialize PostHog client
-posthog_client = Posthog(
-    project_api_key=settings.POSTHOG_API_KEY, host=settings.POSTHOG_HOST
-)
 
 
 async def create_conversation(
@@ -189,28 +182,8 @@ async def stream_chat_response(
 
     assistant_message = ""
     total_tokens = 0
-    start_time = datetime.now(timezone.utc)
 
     try:
-        # Track chat start event in PostHog
-        posthog_properties = {
-            "conversation_id": conversation_id,
-            "message_length": len(user_message),
-        }
-        if organization_id:
-            posthog_client.capture(
-                distinct_id=user_id,
-                event="chat_message_sent",
-                properties=posthog_properties,
-                groups={"organization": str(organization_id)},
-            )
-        else:
-            posthog_client.capture(
-                distinct_id=user_id,
-                event="chat_message_sent",
-                properties=posthog_properties,
-            )
-
         # Stream agent response with native reasoning
         async with agent.run_stream(
             user_message,
@@ -256,52 +229,8 @@ async def stream_chat_response(
                 db, conversation_id, "assistant", assistant_message, meta_data
             )
 
-        # Track completion event in PostHog
-        response_time_ms = int(
-            (datetime.now(timezone.utc) - start_time).total_seconds() * 1000
-        )
-        completion_properties = {
-            "conversation_id": conversation_id,
-            "response_length": len(assistant_message),
-            "response_time_ms": response_time_ms,
-            "total_tokens": total_tokens,
-        }
-        if organization_id:
-            posthog_client.capture(
-                distinct_id=user_id,
-                event="chat_response_completed",
-                properties=completion_properties,
-                groups={"organization": str(organization_id)},
-            )
-        else:
-            posthog_client.capture(
-                distinct_id=user_id,
-                event="chat_response_completed",
-                properties=completion_properties,
-            )
-
         yield f"data: {json.dumps({'type': 'done'})}\n\n"
 
     except Exception as e:
         logger.exception("Error during chat streaming")
-
-        # Track error in PostHog
-        error_properties = {
-            "conversation_id": conversation_id,
-            "error_message": str(e),
-        }
-        if organization_id:
-            posthog_client.capture(
-                distinct_id=user_id,
-                event="chat_error",
-                properties=error_properties,
-                groups={"organization": str(organization_id)},
-            )
-        else:
-            posthog_client.capture(
-                distinct_id=user_id,
-                event="chat_error",
-                properties=error_properties,
-            )
-
         yield f"data: {json.dumps({'type': 'error', 'error': str(e)})}\n\n"

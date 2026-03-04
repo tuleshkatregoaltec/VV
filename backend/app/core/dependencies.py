@@ -4,12 +4,11 @@ from dataclasses import dataclass
 from typing import Optional
 from fastapi import Request, HTTPException, Header, Depends
 
-from posthog import Posthog
 from sqlmodel.ext.asyncio.session import AsyncSession
 from sqlmodel import select
 
 from app.auth.service import get_user_by_id
-from app.organization.service import get_organization_for_user, get_membership_for_user
+from app.organization.service import get_membership_for_user
 from app.config import settings
 from app.postgres import get_db_session
 from app.token_usage.service import token_usage_service
@@ -18,11 +17,6 @@ from app.providers.auth.scopes import AuthScopes
 from app.providers.auth.platform_user import PlatformUser
 
 logger = logging.getLogger(__name__)
-
-# Initialize PostHog client for event tracking
-posthog_client = Posthog(
-    project_api_key=settings.POSTHOG_API_KEY, host=settings.POSTHOG_HOST
-)
 
 
 async def require_auth(request: Request) -> PlatformUser:
@@ -81,33 +75,6 @@ async def require_token_quota(
     tokens_used = usage.total_tokens if usage else 0
 
     if tokens_used >= user_obj.app_metadata.daily_token_limit:
-        # Capture PostHog event for rate limit breach
-        try:
-            event_properties = {
-                "user_id": current_user.id,
-                "tokens_used": tokens_used,
-                "daily_limit": user_obj.app_metadata.daily_token_limit,
-                "quota_type": "daily_tokens",
-                "user_email": user_obj.email,
-            }
-
-            # Add organization info if available
-
-            organization = await get_organization_for_user(db, current_user.id)
-            if organization:
-                event_properties["organization_id"] = organization.id
-                event_properties["organization_name"] = organization.name
-
-            # Capture the rate limit event
-            posthog_client.capture(
-                distinct_id=current_user.id,
-                event="rate_limit_exceeded",
-                properties=event_properties,
-            )
-        except Exception as e:
-            # Don't block the request if PostHog capture fails
-            logger.error(f"Failed to capture PostHog event for rate limit: {e}")
-
         raise HTTPException(
             status_code=429,
             detail=f"Daily token limit exceeded ({tokens_used}/{user_obj.app_metadata.daily_token_limit} tokens used today)",
