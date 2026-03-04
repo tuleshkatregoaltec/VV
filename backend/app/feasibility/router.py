@@ -42,7 +42,10 @@ async def comparable_endpoint(
     result = await get_comparable_data(ids)
     if result is None:
         from fastapi import HTTPException
-        raise HTTPException(status_code=404, detail="No data found for given project IDs")
+
+        raise HTTPException(
+            status_code=404, detail="No data found for given project IDs"
+        )
     return result
 
 
@@ -55,7 +58,9 @@ async def chat_stream_endpoint(
 
     async def event_stream():
         try:
-            async for chunk in stream_feasibility_response(request.messages, request.context):
+            async for chunk in stream_feasibility_response(
+                request.messages, request.context, request.history_json
+            ):
                 yield chunk
         except Exception as e:
             logger.exception("Error in feasibility chat stream endpoint")

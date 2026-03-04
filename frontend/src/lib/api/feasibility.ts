@@ -24,11 +24,12 @@ export const feasibility = {
 	streamChat(
 		messages: Array<{ role: string; content: string }>,
 		context: object,
+		historyJson: string | null,
 		onChunk: (data: string) => void
 	) {
 		return stream('/api/v1/feasibility/chat/stream', onChunk, {
 			method: 'POST',
-			body: { messages, context },
+			body: { messages, context, history_json: historyJson },
 		});
 	},
 };

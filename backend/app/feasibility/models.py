@@ -33,3 +33,4 @@ class ComparableData(BaseModel):
 class FeasibilityChatRequest(BaseModel):
     messages: list[dict]
     context: dict
+    history_json: str | None = None

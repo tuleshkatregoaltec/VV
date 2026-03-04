@@ -4,34 +4,136 @@
 	import StepArea from '$lib/components/feasibility/StepArea.svelte';
 	import StepPlot from '$lib/components/feasibility/StepPlot.svelte';
 	import StepComparables from '$lib/components/feasibility/StepComparables.svelte';
-	import ProjectConfigurator from '$lib/components/feasibility/ProjectConfigurator.svelte';
+	import ResearchPanel from '$lib/components/feasibility/ResearchPanel.svelte';
 	import SpreadsheetPanel from '$lib/components/feasibility/SpreadsheetPanel.svelte';
 	import FeasibilityChat from '$lib/components/feasibility/FeasibilityChat.svelte';
 	import { feasibilityStore } from '$lib/stores/feasibility.svelte';
 	import type { LandPlot, ComparableData } from '$lib/stores/feasibility.svelte';
+
+	let leftWidth = $state(300);
+	let rightWidth = $state(320);
+	let isResizing = $state(false);
+	let showConfigurator = $state(true);
+
+	function startResize(side: 'left' | 'right', e: MouseEvent) {
+		e.preventDefault();
+		isResizing = true;
+		const startX = e.clientX;
+		const startWidth = side === 'left' ? leftWidth : rightWidth;
+		function onMove(e: MouseEvent) {
+			const delta = e.clientX - startX;
+			if (side === 'left') leftWidth = Math.max(200, Math.min(480, startWidth + delta));
+			else rightWidth = Math.max(240, Math.min(560, startWidth - delta));
+		}
+		function onUp() {
+			isResizing = false;
+			document.removeEventListener('mousemove', onMove);
+			document.removeEventListener('mouseup', onUp);
+		}
+		document.addEventListener('mousemove', onMove);
+		document.addEventListener('mouseup', onUp);
+	}
 </script>
 
 <AppShell>
-	<div class="flex h-full">
-		<!-- Spreadsheet panel (slides in at step 4) -->
-		<div
-			class="flex-shrink-0 overflow-hidden transition-all duration-400 ease-in-out"
-			style="width: {feasibilityStore.showSpreadsheet ? '320px' : '0px'};"
-		>
-			<SpreadsheetPanel />
-		</div>
+	<div class="flex h-full min-h-0 overflow-hidden">
 
-		<!-- Main content -->
-		<div class="flex-1 overflow-y-auto">
-			<div class="max-w-4xl mx-auto px-4 py-8">
-				<!-- Step progress -->
-				<StepProgress
-					currentStep={feasibilityStore.step}
-					onGoToStep={(s) => feasibilityStore.goToStep(s)}
-				/>
+		{#if feasibilityStore.step === 4}
 
-				<!-- Step content -->
-				<div class="transition-all">
+			<!-- Left: ProjectConfigurator sidebar -->
+			<div
+				class="flex-shrink-0 overflow-hidden h-full {isResizing ? '' : 'transition-[width] duration-300 ease-in-out'}"
+				style="width: {showConfigurator ? leftWidth : 0}px;"
+			>
+				<div class="h-full flex flex-col bg-white border-r border-slate-200 overflow-hidden" style="width: {leftWidth}px; min-width: {leftWidth}px;">
+					<div class="px-3 pt-3 pb-2 border-b border-slate-200 flex-shrink-0">
+						<div class="flex items-start justify-between gap-2">
+							<StepProgress
+								currentStep={feasibilityStore.step}
+								onGoToStep={(s) => feasibilityStore.goToStep(s)}
+							/>
+							{#if import.meta.env.DEV}
+								<button
+									onclick={() => feasibilityStore.devJump()}
+									class="text-[10px] text-slate-400 hover:text-teal-600 border border-dashed border-slate-300 hover:border-teal-400 rounded px-1.5 py-0.5 transition-colors shrink-0"
+								>dev</button>
+							{/if}
+						</div>
+						<p class="text-xs text-slate-500 mt-1">
+							{feasibilityStore.area} ·
+							{feasibilityStore.plot
+								? `${feasibilityStore.plot.actual_area.toLocaleString('en-AE', { maximumFractionDigits: 0 })} sqm`
+								: 'Custom plot'}
+						</p>
+					</div>
+					<div class="flex-1 min-h-0 overflow-hidden">
+						<ResearchPanel />
+					</div>
+				</div>
+			</div>
+
+			<!-- Divider: resize + collapse toggle -->
+			<div class="relative flex-shrink-0 h-full flex items-stretch">
+				<button
+					type="button"
+					aria-label="Resize configurator panel"
+					tabindex="-1"
+					class="w-1.5 cursor-col-resize bg-slate-200 hover:bg-teal-400 active:bg-teal-500 transition-colors p-0 border-0"
+					onmousedown={(e) => startResize('left', e)}
+				></button>
+				<button
+					type="button"
+					aria-label="{showConfigurator ? 'Hide' : 'Show'} configurator"
+					class="absolute top-1/2 -translate-y-1/2 left-full flex items-center justify-center w-4 h-8 rounded-r-md bg-slate-200 hover:bg-teal-400 hover:text-white text-slate-500 transition-colors z-10 border-y border-r border-slate-300"
+					onclick={() => (showConfigurator = !showConfigurator)}
+				>
+					{#if showConfigurator}
+						<svg class="w-2.5 h-2.5" viewBox="0 0 8 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+							<path d="M6 1L2 6l4 5" />
+						</svg>
+					{:else}
+						<svg class="w-2.5 h-2.5" viewBox="0 0 8 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+							<path d="M2 1l4 5-4 5" />
+						</svg>
+					{/if}
+				</button>
+			</div>
+
+			<!-- Center: SpreadsheetPanel -->
+			<div class="flex-1 min-w-0 h-full overflow-hidden">
+				<SpreadsheetPanel />
+			</div>
+
+			<!-- Right divider + Chat -->
+			<button
+				type="button"
+				aria-label="Resize chat panel"
+				tabindex="-1"
+				class="w-1 flex-shrink-0 cursor-col-resize bg-slate-200 hover:bg-teal-400 active:bg-teal-500 transition-colors p-0 border-0"
+				onmousedown={(e) => startResize('right', e)}
+			></button>
+			<div class="flex-shrink-0 overflow-hidden h-full" style="width: {rightWidth}px;">
+				<FeasibilityChat />
+			</div>
+
+		{:else}
+
+			<!-- Steps 1–3: centered content -->
+			<div class="flex-1 min-w-0 overflow-y-auto scrollbar-hide">
+				<div class="max-w-3xl mx-auto px-6 py-8">
+					<div class="flex items-start justify-between">
+						<StepProgress
+							currentStep={feasibilityStore.step}
+							onGoToStep={(s) => feasibilityStore.goToStep(s)}
+						/>
+						{#if import.meta.env.DEV}
+							<button
+								onclick={() => feasibilityStore.devJump()}
+								class="text-xs text-slate-400 hover:text-teal-600 border border-dashed border-slate-300 hover:border-teal-400 rounded px-2 py-1 transition-colors shrink-0 mt-1"
+							>dev: skip to config</button>
+						{/if}
+					</div>
+
 					{#if feasibilityStore.step === 1}
 						<StepArea onSelect={(a) => feasibilityStore.setArea(a)} />
 					{:else if feasibilityStore.step === 2}
@@ -43,44 +145,11 @@
 						<StepComparables
 							onApply={(data: ComparableData) => feasibilityStore.applyComparableData(data)}
 						/>
-					{:else if feasibilityStore.step === 4}
-						<div>
-							<!-- Spreadsheet toggle -->
-							<div class="flex items-center justify-between mb-6">
-								<div>
-									<h2 class="text-xl font-semibold text-slate-800">Configure your project</h2>
-									<p class="text-sm text-slate-500 mt-0.5">
-										{feasibilityStore.area} ·
-										{feasibilityStore.plot
-											? `${feasibilityStore.plot.actual_area.toLocaleString('en-AE', { maximumFractionDigits: 0 })} sqm`
-											: 'Custom plot'}
-									</p>
-								</div>
-								<button
-									type="button"
-									class="flex items-center gap-1.5 px-3 py-2 rounded-lg border text-sm font-medium transition-colors
-										{feasibilityStore.showSpreadsheet
-											? 'bg-teal-600 border-teal-600 text-white'
-											: 'bg-white border-slate-200 text-slate-600 hover:border-teal-400'}"
-									onclick={() => feasibilityStore.toggleSpreadsheet()}
-								>
-									<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 0v10" />
-									</svg>
-									{feasibilityStore.showSpreadsheet ? 'Hide' : 'Show'} Spreadsheet
-								</button>
-							</div>
-
-							<ProjectConfigurator />
-						</div>
 					{/if}
 				</div>
 			</div>
-		</div>
-	</div>
 
-	<!-- Floating chat (step 3+) -->
-	{#if feasibilityStore.step >= 3}
-		<FeasibilityChat />
-	{/if}
+		{/if}
+
+	</div>
 </AppShell>

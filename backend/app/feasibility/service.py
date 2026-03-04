@@ -17,7 +17,9 @@ async def get_areas() -> list[str]:
     return [r["area_name_en"] for r in rows]
 
 
-async def get_land_plots(area: str, size_sqm: float, tolerance: float = 0.25) -> list[LandPlot]:
+async def get_land_plots(
+    area: str, size_sqm: float, tolerance: float = 0.25
+) -> list[LandPlot]:
     """Find land plots near a given size in the specified area."""
     sql = """
     SELECT
@@ -34,12 +36,15 @@ async def get_land_plots(area: str, size_sqm: float, tolerance: float = 0.25) ->
     ORDER BY abs(actual_area - {size_sqm:Float64})
     LIMIT 50
     """
-    rows = await query(sql, {
-        "area": area,
-        "min_area": size_sqm * (1 - tolerance),
-        "max_area": size_sqm * (1 + tolerance),
-        "size_sqm": size_sqm,
-    })
+    rows = await query(
+        sql,
+        {
+            "area": area,
+            "min_area": size_sqm * (1 - tolerance),
+            "max_area": size_sqm * (1 + tolerance),
+            "size_sqm": size_sqm,
+        },
+    )
     return [
         LandPlot(
             property_id=r["property_id"],
@@ -80,7 +85,9 @@ async def get_comparable_data(project_ids: list[int]) -> ComparableData | None:
     WHERE project_id IN ({project_ids:Array(Int32)})
     """
     project_rows = await query(project_sql, {"project_ids": project_ids})
-    project_names = [r["project_name_en"] for r in project_rows if r.get("project_name_en")]
+    project_names = [
+        r["project_name_en"] for r in project_rows if r.get("project_name_en")
+    ]
     area_names = [r["area_name_en"] for r in project_rows if r.get("area_name_en")]
 
     # Get unit composition across all projects
@@ -111,7 +118,11 @@ async def get_comparable_data(project_ids: list[int]) -> ComparableData | None:
       AND instance_date >= today() - 730
     GROUP BY rooms_en
     """
-    price_rows = await query(price_sql, {"project_names": project_names}) if project_names else []
+    price_rows = (
+        await query(price_sql, {"project_names": project_names})
+        if project_names
+        else []
+    )
     price_by_type = {r["unit_type"]: float(r["median_price_sqm"]) for r in price_rows}
 
     unit_mix = [
