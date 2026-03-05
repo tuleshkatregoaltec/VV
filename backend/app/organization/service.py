@@ -164,6 +164,22 @@ async def remove_user_from_organization(
     return True
 
 
+async def update_subscription_status(
+    db: AsyncSession, org_id: str, status: str
+) -> Organization | None:
+    """Update organization subscription status (and sync is_active)."""
+    org = await db.get(Organization, org_id)
+    if not org:
+        return None
+    org.subscription_status = status
+    org.is_active = status in ["active", "trialing"]
+    org.updated_at = datetime.now(timezone.utc)
+    db.add(org)
+    await db.commit()
+    await db.refresh(org)
+    return org
+
+
 async def delete_organization(db: AsyncSession, org_id: str) -> bool:
     """Delete organization from WorkOS and local DB"""
     organization = await db.get(Organization, org_id)

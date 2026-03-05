@@ -3,6 +3,7 @@ from fastapi.responses import JSONResponse
 from sqlmodel.ext.asyncio.session import AsyncSession
 from pydantic import BaseModel, Field
 
+from app.config import settings
 from app.postgres import get_db_session
 from app.core.dependencies import require_auth
 from app.providers.auth.platform_user import PlatformUser
@@ -54,8 +55,8 @@ async def get_user(
     if membership:
         from app.postgres.models import Organization
 
-        role = membership.role
         is_owner = membership.role == "owner"
+        role = membership.role
 
         org = await db.get(Organization, membership.organization_id)
         if org:
@@ -65,6 +66,10 @@ async def get_user(
             # Use org.subscription_status as single source of truth
             subscription_status = org.subscription_status
             subscription_is_active = org.subscription_status in ["active", "trialing"]
+
+    # System admin overrides the membership role
+    if current_user.email == settings.SYSTEM_ADMIN_EMAIL:
+        role = "admin"
 
     return JSONResponse(
         content={

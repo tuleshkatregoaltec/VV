@@ -7,6 +7,23 @@ import { env } from '$env/dynamic/public';
 import { get_session, me, identifyUser } from '$lib/api/auth';
 import { currentUser, setUser, loadCached } from '$lib/stores/user.svelte';
 
+// Singleton — survives client-side navigations so TanStack Query cache is preserved
+let queryClient: QueryClient | undefined;
+function getQueryClient(): QueryClient {
+	if (!queryClient) {
+		queryClient = new QueryClient({
+			defaultOptions: {
+				queries: {
+					enabled: browser,
+					staleTime: 5 * 60 * 1000,
+					refetchOnWindowFocus: false
+				}
+			}
+		});
+	}
+	return queryClient;
+}
+
 export const prerender = false;
 export const ssr = false;
 
@@ -30,14 +47,17 @@ function matchesCategory(pathname: string, paths: string[]): boolean {
 
 /** Get user from store cache or fetch from backend. Returns null if no session. */
 async function resolveUser() {
-	// Use cached store data if available (no network call)
+	// Use in-memory store if available (fastest path, no I/O)
 	if (currentUser.data) return currentUser.data;
 
-	// Try localStorage cache
+	// Try localStorage cache — call setUser() so auto-refresh starts and in-memory is populated
 	const cached = loadCached();
-	if (cached) return cached;
+	if (cached) {
+		setUser(cached);
+		return cached;
+	}
 
-	// No cache — need to fetch from backend
+	// No cache — fetch fresh from backend
 	const session = await get_session();
 	if (!session) return null;
 
@@ -61,15 +81,7 @@ function getOnboardingRedirect(user: { first_name: string; last_name: string; or
 }
 
 export const load: LayoutLoad = async ({ url }) => {
-	const queryClient = new QueryClient({
-		defaultOptions: {
-			queries: {
-				enabled: browser,
-				staleTime: 5 * 60 * 1000,
-				refetchOnWindowFocus: false
-			}
-		}
-	});
+	const queryClient = getQueryClient();
 
 	if (!browser) return { queryClient };
 

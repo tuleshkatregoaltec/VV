@@ -215,6 +215,36 @@ async def get_user_by_id(id: str, **kwargs):
 
 
 @admin_auth.with_admin_client()
+async def create_user_admin(
+    email: str, password: str, first_name: str, last_name: str, **kwargs
+) -> Optional["PlatformUser"]:
+    """Create a Supabase user with email/password (auto-confirmed, no invite email)."""
+    client: AsyncGoTrueClient = kwargs["client"]
+    attrs = AdminUserAttributes()
+    attrs["email"] = email
+    attrs["password"] = password
+    attrs["email_confirm"] = True
+    attrs["user_metadata"] = {"first_name": first_name, "last_name": last_name}
+    try:
+        user_response = await client.admin.create_user(attrs)
+        return PlatformUser(None, user_response.user)
+    except (ValueError, AuthApiError) as e:
+        logger.error(f"Failed to create user {email}: {e}")
+        raise
+
+
+@admin_auth.with_admin_client()
+async def delete_user_admin(user_id: str, **kwargs) -> None:
+    """Delete a Supabase user by ID."""
+    client: AsyncGoTrueClient = kwargs["client"]
+    try:
+        await client.admin.delete_user(user_id)
+    except (ValueError, AuthApiError) as e:
+        logger.error(f"Failed to delete user {user_id}: {e}")
+        raise
+
+
+@admin_auth.with_admin_client()
 async def invite_user_by_email_admin(
     email: str, organization_id: str, redirect_url: str, **kwargs
 ) -> dict:

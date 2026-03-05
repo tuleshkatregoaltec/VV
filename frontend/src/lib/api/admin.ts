@@ -1,47 +1,56 @@
 import { http } from './client';
 
-export interface Organization {
+export interface OrgListItem {
     id: string;
     name: string;
-    email_domain: string;
+    owner_email: string;
+    user_count: number;
     max_users: number;
-    is_active: boolean;
-    active_user_count: number;
+    subscription_status: string;
+    seats: number;
+    created_at: string;
 }
 
-export interface OrganizationUser {
+export interface OrgUser {
     id: string;
     email: string;
     first_name: string;
     last_name: string;
-    is_active: boolean;
-    created_at: string;
-    last_login: string | null;
-    // Token usage fields
+    role: string;
     daily_token_limit: number;
     tokens_used_today: number;
     usage_percentage: number;
+    last_login: string | null;
 }
 
-export interface OrganizationDetail {
-    organization: Organization;
-    users: OrganizationUser[];
-}
-
-export interface CreateOrganizationRequest {
+export interface OrgDetail {
+    id: string;
     name: string;
-    domain: string;
+    owner_email: string;
+    user_count: number;
     max_users: number;
+    is_active: boolean;
+    subscription_status: string;
+    created_at: string;
+    users: OrgUser[];
 }
 
-export interface UpdateOrganizationRequest {
-    max_users?: number;
-    is_active?: boolean;
+export interface CreateUserRequest {
+    email: string;
+    password: string;
+    first_name: string;
+    last_name: string;
+    org_mode: 'new' | 'existing';
+    org_name?: string;
+    org_id?: string;
+    daily_token_limit: number;
 }
 
-export interface UpdateUserRequest {
-    is_active?: boolean;
-    daily_token_limit?: number;
+export interface CreateUserResponse {
+    user_id: string;
+    email: string;
+    organization_id: string;
+    organization_name: string;
 }
 
 export interface UserTokenStats {
@@ -52,26 +61,22 @@ export interface UserTokenStats {
     remaining_tokens: number;
 }
 
-
 export const admin = {
-	organizations: {
-		list: () => http.get<Organization[]>('/api/v1/admin/organizations'),
-		get: (id: string) => http.get<OrganizationDetail>(`/api/v1/admin/organizations/${id}`),
-		create: (data: CreateOrganizationRequest) =>
-			http.post<Organization>('/api/v1/admin/organizations', data),
-		update: (id: string, data: UpdateOrganizationRequest) =>
-			http.put<Organization>(`/api/v1/admin/organizations/${id}`, data),
-		delete: (id: string) => http.delete<void>(`/api/v1/admin/organizations/${id}`)
-	},
+    organizations: {
+        list: () => http.get<OrgListItem[]>('/api/v1/admin/organizations'),
+        get: (id: string) => http.get<OrgDetail>(`/api/v1/admin/organizations/${id}`),
+        update: (id: string, data: { max_users?: number; is_active?: boolean }) =>
+            http.put<OrgListItem>(`/api/v1/admin/organizations/${id}`, data),
+        delete: (id: string) => http.delete<void>(`/api/v1/admin/organizations/${id}`),
+        setSubscription: (id: string, status: string) =>
+            http.patch<OrgListItem>(`/api/v1/admin/organizations/${id}/subscription`, { status }),
+    },
 
-	users: {
-		update: (id: string, data: UpdateUserRequest) =>
-			http.put<OrganizationUser>(`/api/v1/admin/users/${id}`, data),
-
-		getTokenUsage: (id: string) =>
-			http.get<UserTokenStats>(`/api/v1/admin/users/${id}/token-usage`),
-
-		updateTokenLimit: (id: string, dailyTokenLimit: number) =>
-			http.put<OrganizationUser>(`/api/v1/admin/users/${id}`, { daily_token_limit: dailyTokenLimit })
-	}
+    users: {
+        create: (data: CreateUserRequest) =>
+            http.post<CreateUserResponse>('/api/v1/admin/users', data),
+        updateTokenLimit: (id: string, daily_token_limit: number) =>
+            http.patch<{ id: string }>(`/api/v1/admin/users/${id}`, { daily_token_limit }),
+        delete: (id: string) => http.delete<void>(`/api/v1/admin/users/${id}`),
+    },
 };
