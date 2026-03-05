@@ -5,6 +5,10 @@ import tailwindcss from '@tailwindcss/vite';
 export default defineConfig({
 	plugins: [tailwindcss(), sveltekit()],
 
+	server: {
+		allowedHosts: ['demo.vitevue.com']
+	},
+
 	build: {
 		rollupOptions: {
 			output: {
