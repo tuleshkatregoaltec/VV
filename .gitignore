@@ -238,6 +238,18 @@ cython_debug/
 #  exclude from AI features like autocomplete and code analysis. Recommended for sensitive data
 #  refer to https://docs.cursor.com/context/ignore-files
 .cursorignore
+
+# Local test artifacts and generated data
+.playwright-cli/
+.playwright-mcp/
+AGENTS.md
+playwright-report/
+test-results/
+backend/logs/
+sheets/
+ch_data/
+dda_plots.csv
+e2e/.auth/
 .cursorindexingignore
 
 # Marimo
