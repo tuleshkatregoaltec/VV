@@ -246,7 +246,7 @@ AGENTS.md
 playwright-report/
 test-results/
 backend/logs/
-sheets/
+/sheets/
 ch_data/
 dda_plots.csv
 e2e/.auth/
