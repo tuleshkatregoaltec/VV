@@ -1,7 +1,7 @@
 <script lang="ts">
     import { logout, update_user_profile } from '$lib/api/auth';
     import { areaUnit } from '$lib/stores/preferences.svelte';
-    import { currentUser, setUser } from '$lib/stores/user.svelte';
+    import { currentUser, refreshUser } from '$lib/stores/user.svelte';
 
     let editingName = $state(false);
     let firstName = $state('');
@@ -28,27 +28,19 @@
         const trimmedFirstName = firstName.trim();
         const trimmedLastName = lastName.trim();
 
-        // Immediately update local user store
-        if (currentUser.data) {
-            setUser({
-                ...currentUser.data,
-                first_name: trimmedFirstName,
-                last_name: trimmedLastName
-            });
-        }
-
-        editSuccess = 'Profile updated successfully';
-        editingName = false;
-
-        setTimeout(() => {
-            editSuccess = '';
-        }, 3000);
-
-        // Make the update request in the background
-        update_user_profile(trimmedFirstName, trimmedLastName).then(result => {
+        update_user_profile(trimmedFirstName, trimmedLastName).then(async (result) => {
             if (!result.success) {
                 editError = result.error || 'Failed to sync profile changes';
+                return;
             }
+
+            await refreshUser();
+            editSuccess = 'Profile updated successfully';
+            editingName = false;
+
+            setTimeout(() => {
+                editSuccess = '';
+            }, 3000);
         });
     }
 

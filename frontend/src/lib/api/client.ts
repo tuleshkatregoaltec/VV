@@ -6,8 +6,6 @@ import { get_access_token } from './auth';
 interface ErrorDetail {
     code: string;
     message: string;
-    action?: string;
-    redirect_url?: string;
 }
 
 export class ApiError extends Error {
@@ -79,21 +77,6 @@ export async function api<T>(endpoint: string, options: RequestOptions = {}): Pr
                 errorCode = errorDetail.code;
                 message = errorDetail.message;
 
-                // Invalidate user store on auth/subscription errors
-                if (browser && (
-                    errorCode === 'NO_ORG_MEMBERSHIP' ||
-                    errorCode === 'SUBSCRIPTION_REQUIRED' ||
-                    errorCode === 'SUBSCRIPTION_PAST_DUE'
-                )) {
-                    const { clearUser } = await import('$lib/stores/user.svelte');
-                    clearUser();
-
-                    if (errorDetail.action === 'REDIRECT_ONBOARDING') {
-                        window.location.href = '/organization-setup';
-                    } else if (errorDetail.action === 'REDIRECT_BILLING') {
-                        window.location.href = errorDetail.redirect_url || '/renew';
-                    }
-                }
             } else if (Array.isArray(data.detail)) {
                 message = data.detail.map((e: { msg: string }) => e.msg).join(', ');
             } else if (typeof data.detail === 'string') {

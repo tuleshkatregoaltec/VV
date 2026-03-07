@@ -29,7 +29,6 @@ export interface OrgDetail {
     owner_email: string;
     user_count: number;
     max_users: number;
-    is_active: boolean;
     subscription_status: string;
     created_at: string;
     users: OrgUser[];
@@ -65,7 +64,7 @@ export const admin = {
     organizations: {
         list: () => http.get<OrgListItem[]>('/api/v1/admin/organizations'),
         get: (id: string) => http.get<OrgDetail>(`/api/v1/admin/organizations/${id}`),
-        update: (id: string, data: { max_users?: number; is_active?: boolean }) =>
+        update: (id: string, data: { max_users?: number }) =>
             http.put<OrgListItem>(`/api/v1/admin/organizations/${id}`, data),
         delete: (id: string) => http.delete<void>(`/api/v1/admin/organizations/${id}`),
         setSubscription: (id: string, status: string) =>

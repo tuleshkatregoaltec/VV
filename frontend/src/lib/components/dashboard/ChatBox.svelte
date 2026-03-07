@@ -439,7 +439,7 @@
 <ConfirmModal
   open={tokenLimitModalOpen}
   title="Daily Token Limit Exceeded"
-  message="You have reached your daily token usage limit. Please try again tomorrow or contact your organization administrator to increase your limit."
+  message="You have reached your daily token usage limit. Please try again tomorrow or contact your organization owner to increase your limit."
   confirmText="OK"
   confirmVariant="primary"
   onConfirm={() => tokenLimitModalOpen = false}

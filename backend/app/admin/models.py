@@ -32,7 +32,6 @@ class OrgDetailResponse(BaseModel):
     owner_email: str
     user_count: int
     max_users: int
-    is_active: bool
     subscription_status: str
     created_at: datetime
     users: List[OrgUserResponse]
@@ -40,7 +39,6 @@ class OrgDetailResponse(BaseModel):
 
 class UpdateOrgRequest(BaseModel):
     max_users: Optional[int] = None
-    is_active: Optional[bool] = None
 
 
 class UpdateSubscriptionRequest(BaseModel):
@@ -52,7 +50,7 @@ class CreateUserRequest(BaseModel):
     password: str = Field(min_length=8)
     first_name: str
     last_name: str
-    org_mode: Literal['new', 'existing']
+    org_mode: Literal["new", "existing"]
     org_name: Optional[str] = None  # required when org_mode='new'
     org_id: Optional[str] = None  # required when org_mode='existing'
     daily_token_limit: int = 100000

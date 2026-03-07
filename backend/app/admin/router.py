@@ -18,6 +18,7 @@ from app.auth.service import (
 from app.organization.models import Organization, OrganizationMembership
 from app.organization.service import (
     get_membership_for_user,
+    get_owner_membership_for_org,
     create_organization,
     update_organization,
     delete_organization,
@@ -46,6 +47,15 @@ router = APIRouter(
 )
 
 
+async def get_owner_email(db: AsyncSession, org_id: str) -> str:
+    owner_membership = await get_owner_membership_for_org(db, org_id)
+    if not owner_membership:
+        return "unknown"
+
+    owner = await get_user_by_id(owner_membership.user_id)
+    return owner.email if owner else "unknown"
+
+
 # ─── Organizations ────────────────────────────────────────────────────────────
 
 
@@ -69,8 +79,7 @@ async def list_all_organizations(db: AsyncSession = Depends(get_db_session)):
         )
         subscription = sub_result.scalar_one_or_none()
 
-        owner = await get_user_by_id(org.owner_user_id)
-        owner_email = owner.email if owner else "unknown"
+        owner_email = await get_owner_email(db, org.id)
 
         response.append(
             OrganizationListResponse(
@@ -139,8 +148,7 @@ async def get_organization(org_id: str, db: AsyncSession = Depends(get_db_sessio
             )
         )
 
-    owner = await get_user_by_id(org.owner_user_id)
-    owner_email = owner.email if owner else "unknown"
+    owner_email = await get_owner_email(db, org.id)
 
     return OrgDetailResponse(
         id=org.id,
@@ -148,7 +156,6 @@ async def get_organization(org_id: str, db: AsyncSession = Depends(get_db_sessio
         owner_email=owner_email,
         user_count=len(users),
         max_users=org.max_users,
-        is_active=org.is_active,
         subscription_status=org.subscription_status,
         created_at=org.created_at,
         users=users,
@@ -168,7 +175,6 @@ async def update_org(
         db,
         org_id,
         max_users=request.max_users if request.max_users is not None else org.max_users,
-        is_active=request.is_active if request.is_active is not None else org.is_active,
     )
 
     members_result = await db.execute(
@@ -181,12 +187,12 @@ async def update_org(
         select(Subscription).where(Subscription.organization_id == org_id)
     )
     subscription = sub_result.scalar_one_or_none()
-    owner = await get_user_by_id(updated.owner_user_id)
+    owner_email = await get_owner_email(db, updated.id)
 
     return OrganizationListResponse(
         id=updated.id,
         name=updated.name,
-        owner_email=owner.email if owner else "unknown",
+        owner_email=owner_email,
         user_count=user_count,
         max_users=updated.max_users,
         subscription_status=updated.subscription_status,
@@ -195,16 +201,28 @@ async def update_org(
     )
 
 
-@router.patch("/organizations/{org_id}/subscription", response_model=OrganizationListResponse)
+@router.patch(
+    "/organizations/{org_id}/subscription", response_model=OrganizationListResponse
+)
 async def set_subscription_status(
     org_id: str,
     request: UpdateSubscriptionRequest,
     db: AsyncSession = Depends(get_db_session),
 ):
     """Update organization subscription status."""
-    valid_statuses = {"active", "trialing", "pending", "past_due", "canceled", "failed", "none"}
+    valid_statuses = {
+        "active",
+        "trialing",
+        "pending",
+        "past_due",
+        "canceled",
+        "failed",
+        "none",
+    }
     if request.status not in valid_statuses:
-        raise HTTPException(status_code=400, detail=f"Invalid status. Must be one of: {valid_statuses}")
+        raise HTTPException(
+            status_code=400, detail=f"Invalid status. Must be one of: {valid_statuses}"
+        )
 
     updated = await update_subscription_status(db, org_id, request.status)
     if not updated:
@@ -220,12 +238,12 @@ async def set_subscription_status(
         select(Subscription).where(Subscription.organization_id == org_id)
     )
     subscription = sub_result.scalar_one_or_none()
-    owner = await get_user_by_id(updated.owner_user_id)
+    owner_email = await get_owner_email(db, updated.id)
 
     return OrganizationListResponse(
         id=updated.id,
         name=updated.name,
-        owner_email=owner.email if owner else "unknown",
+        owner_email=owner_email,
         user_count=user_count,
         max_users=updated.max_users,
         subscription_status=updated.subscription_status,
@@ -273,12 +291,18 @@ async def list_token_usage(db: AsyncSession = Depends(get_db_session)):
 
 
 @router.post("/users", response_model=CreateUserResponse, status_code=201)
-async def create_user(request: CreateUserRequest, db: AsyncSession = Depends(get_db_session)):
+async def create_user(
+    request: CreateUserRequest, db: AsyncSession = Depends(get_db_session)
+):
     """Create a Supabase user and assign to an org (new or existing)."""
     if request.org_mode == "new" and not request.org_name:
-        raise HTTPException(status_code=400, detail="org_name required when org_mode='new'")
+        raise HTTPException(
+            status_code=400, detail="org_name required when org_mode='new'"
+        )
     if request.org_mode == "existing" and not request.org_id:
-        raise HTTPException(status_code=400, detail="org_id required when org_mode='existing'")
+        raise HTTPException(
+            status_code=400, detail="org_id required when org_mode='existing'"
+        )
 
     # Create Supabase user
     try:
@@ -298,7 +322,7 @@ async def create_user(request: CreateUserRequest, db: AsyncSession = Depends(get
 
     # Resolve org
     if request.org_mode == "new":
-        org = await create_organization(db, request.org_name, 5, user_id)
+        org = await create_organization(db, request.org_name, 5)
         org = await update_subscription_status(db, org.id, "active")
         role = "owner"
     else:
@@ -316,7 +340,9 @@ async def create_user(request: CreateUserRequest, db: AsyncSession = Depends(get
             await delete_user_admin(user_id)
         except Exception as cleanup_err:
             logger.error(f"Failed to cleanup orphan user {user_id}: {cleanup_err}")
-        raise HTTPException(status_code=500, detail="Failed to assign user to organization")
+        raise HTTPException(
+            status_code=500, detail="Failed to assign user to organization"
+        )
 
     return CreateUserResponse(
         user_id=user_id,

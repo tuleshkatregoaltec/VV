@@ -69,10 +69,9 @@ class PaymentStatusResponse(BaseModel):
 class PaymentSyncResponse(BaseModel):
     """Payment sync response"""
 
-    payment_completed: bool
-    organization_id: str | None
-    organization_status: str | None
-    message: str
+    status: str
+    organization_id: str
+    seats: int
 
 
 class SubscriptionResponse(BaseModel):

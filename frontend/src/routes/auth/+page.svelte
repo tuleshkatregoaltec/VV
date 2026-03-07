@@ -70,6 +70,47 @@
 		goto('/dashboard');
 	}
 
+	function requireOtpCode(): boolean {
+		if (otpCode.length === 6) return true;
+		error = 'Please enter the complete 6-digit code';
+		return false;
+	}
+
+	async function verifyOtpFlow(type: 'signup' | 'magiclink' | 'recovery') {
+		if (!requireOtpCode()) return;
+
+		loading = true;
+		error = '';
+
+		try {
+			const result = await verify_otp(email, otpCode, type);
+			if (result.success) {
+				navigateAfterAuth();
+			} else {
+				error = result.error || 'Invalid verification code';
+			}
+		} finally {
+			loading = false;
+		}
+	}
+
+	async function resendCodeFlow(send: () => Promise<{ success: boolean; error?: string }>) {
+		loading = true;
+		error = '';
+
+		try {
+			const result = await send();
+			if (result.success) {
+				startResendCountdown();
+				error = '';
+			} else {
+				error = result.error || 'Failed to resend code';
+			}
+		} finally {
+			loading = false;
+		}
+	}
+
 	async function handleLogin() {
 		fieldErrors.password = '';
 		if (!password) {
@@ -141,41 +182,11 @@
 	}
 
 	async function handleVerifyOTP() {
-		if (otpCode.length !== 6) {
-			error = 'Please enter the complete 6-digit code';
-			return;
-		}
-
-		loading = true;
-		error = '';
-
-		try {
-			const result = await verify_otp(email, otpCode, 'signup');
-			if (result.success) {
-				navigateAfterAuth();
-			} else {
-				error = result.error || 'Invalid verification code';
-			}
-		} finally {
-			loading = false;
-		}
+		await verifyOtpFlow('signup');
 	}
 
 	async function handleResendOTP() {
-		loading = true;
-		error = '';
-
-		try {
-			const result = await resend_otp(email, 'signup');
-			if (result.success) {
-				startResendCountdown();
-				error = '';
-			} else {
-				error = result.error || 'Failed to resend code';
-			}
-		} finally {
-			loading = false;
-		}
+		await resendCodeFlow(() => resend_otp(email, 'signup'));
 	}
 
 	async function handleEmailAuth() {
@@ -202,41 +213,11 @@
 	}
 
 	async function handleEmailAuthOTP() {
-		if (otpCode.length !== 6) {
-			error = 'Please enter the complete 6-digit code';
-			return;
-		}
-
-		loading = true;
-		error = '';
-
-		try {
-			const result = await verify_otp(email, otpCode, 'magiclink');
-			if (result.success) {
-				navigateAfterAuth();
-			} else {
-				error = result.error || 'Invalid verification code';
-			}
-		} finally {
-			loading = false;
-		}
+		await verifyOtpFlow('magiclink');
 	}
 
 	async function handleResendEmailAuthOTP() {
-		loading = true;
-		error = '';
-
-		try {
-			const result = await sign_in_with_magic_link(email);
-			if (result.success) {
-				startResendCountdown();
-				error = '';
-			} else {
-				error = result.error || 'Failed to resend code';
-			}
-		} finally {
-			loading = false;
-		}
+		await resendCodeFlow(() => sign_in_with_magic_link(email));
 	}
 
 	async function handleForgotPassword() {
@@ -265,42 +246,14 @@
 	}
 
 	async function handleForgotPasswordOTP() {
-		if (otpCode.length !== 6) {
-			error = 'Please enter the complete 6-digit code';
-			return;
-		}
-
-		loading = true;
-		error = '';
-
-		try {
-			const result = await verify_otp(email, otpCode, 'recovery');
-			if (result.success) {
-				navigateAfterAuth();
-			} else {
-				error = result.error || 'Invalid verification code';
-			}
-		} finally {
-			loading = false;
-		}
+		await verifyOtpFlow('recovery');
 	}
 
 	async function handleResendForgotPasswordOTP() {
-		loading = true;
-		error = '';
-
 		try {
-			const result = await request_password_reset(email);
-			if (result.success) {
-				startResendCountdown();
-				error = '';
-			} else {
-				error = result.error || 'Failed to resend code';
-			}
+			await resendCodeFlow(() => request_password_reset(email));
 		} catch {
 			error = 'Failed to resend code. Please try again.';
-		} finally {
-			loading = false;
 		}
 	}
 </script>

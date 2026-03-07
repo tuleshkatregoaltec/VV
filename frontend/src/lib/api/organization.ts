@@ -1,9 +1,16 @@
 import { api } from './client';
-import { client } from './auth';
 
-export interface CreateOrganizationRequest {
-	name: string;
-	max_users: number;
+export interface InviteUserResponse {
+	success: boolean;
+	invitation_token: string;
+}
+
+export interface CustomerPortalUrlResponse {
+	url: string;
+}
+
+export interface OperationSuccessResponse {
+	success: boolean;
 }
 
 export interface CreateOrganizationResponse {
@@ -27,24 +34,11 @@ export async function createOrganization(
 }
 
 export async function inviteUserByEmail(
-	email: string,
-	organizationId: string,
-	redirectUrl: string
-): Promise<{ success: boolean; error?: string }> {
-	try {
-		return api<{ success: boolean; error?: string }>('/api/v1/organization/invite-user', {
-			method: 'POST',
-			body: { email, organization_id: organizationId, redirect_url: redirectUrl }
-		});
-	} catch (error) {
-		return { success: false, error: (error as Error).message };
-	}
-}
-
-export async function completeProfile(organizationId: string): Promise<{ success: boolean }> {
-	return api<{ success: boolean }>('/api/v1/organization/complete-profile', {
+	email: string
+): Promise<InviteUserResponse> {
+	return api<InviteUserResponse>('/api/v1/organization/invite-user', {
 		method: 'POST',
-		body: { organization_id: organizationId }
+		body: { email }
 	});
 }
 
@@ -99,7 +93,15 @@ export interface OrganizationMember {
 	first_name: string;
 	last_name: string;
 	role: string;
-	is_active: boolean;
+}
+
+export interface OrganizationInvitation {
+	id: string;
+	email: string;
+	role: string;
+	status: string;
+	expires_at: string;
+	created_at: string;
 }
 
 export interface Subscription {
@@ -119,16 +121,20 @@ export async function getOrganizationMembers(): Promise<OrganizationMember[]> {
 	return api<OrganizationMember[]>('/api/v1/organization/members');
 }
 
+export async function getOrganizationInvitations(): Promise<OrganizationInvitation[]> {
+	return api<OrganizationInvitation[]>('/api/v1/organization/invitations');
+}
+
 export async function getOrganizationSubscription(): Promise<Subscription> {
 	return api<Subscription>('/api/v1/organization/subscription');
 }
 
-export async function getCustomerPortalUrl(): Promise<{ url: string }> {
-	return api<{ url: string }>('/api/v1/organization/customer-portal');
+export async function getCustomerPortalUrl(): Promise<CustomerPortalUrlResponse> {
+	return api<CustomerPortalUrlResponse>('/api/v1/organization/customer-portal');
 }
 
-export async function deactivateUser(userId: string): Promise<{ success: boolean }> {
-	return api<{ success: boolean }>(`/api/v1/organization/users/${userId}/deactivate`, {
-		method: 'POST'
+export async function removeOrganizationMember(userId: string): Promise<OperationSuccessResponse> {
+	return api<OperationSuccessResponse>(`/api/v1/organization/members/${userId}`, {
+		method: 'DELETE'
 	});
 }

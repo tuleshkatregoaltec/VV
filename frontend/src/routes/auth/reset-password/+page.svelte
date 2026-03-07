@@ -2,7 +2,8 @@
 	import { goto } from '$app/navigation';
 	import { onMount } from 'svelte';
 	import PasswordInput from '$lib/components/auth/PasswordInput.svelte';
-	import { get_session, update_password, identifyUser, me } from '$lib/api/auth';
+	import { get_session, update_password } from '$lib/api/auth';
+	import { refreshUser } from '$lib/stores/user.svelte';
 
 	let newPassword = $state('');
 	let confirmPassword = $state('');
@@ -61,9 +62,7 @@
 		try {
 			const result = await update_password(newPassword);
 			if (result.success) {
-				// Identify user on successful password reset
-				const user = await me();
-				identifyUser(user);
+				await refreshUser();
 				success = true;
 				setTimeout(() => {
 					goto('/dashboard');

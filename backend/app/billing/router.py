@@ -9,6 +9,7 @@ from app.auth.service import update_user_profile_metadata
 from app.billing.models import (
     CheckoutSessionRequest,
     CheckoutSessionResponse,
+    PaymentSyncResponse,
 )
 from app.billing.service import create_checkout_session, sync_after_checkout
 
@@ -59,7 +60,7 @@ class SyncAfterCheckoutRequest(BaseModel):
     session_id: str
 
 
-@router.post("/sync-after-checkout")
+@router.post("/sync-after-checkout", response_model=PaymentSyncResponse)
 async def sync_after_checkout_endpoint(
     request: SyncAfterCheckoutRequest,
     current_user: PlatformUser = Depends(require_auth),

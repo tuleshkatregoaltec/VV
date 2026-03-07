@@ -8,7 +8,6 @@ import logging
 from app.config import settings
 from app.billing.models import Subscription
 from app.organization.models import Organization, OrganizationMembership
-from app.core.exceptions import AuthError
 from fastapi import HTTPException
 from uuid import uuid4
 
@@ -54,7 +53,6 @@ async def sync_stripe_to_postgres(stripe_customer_id: str, db: AsyncSession) -> 
 
         if not stripe_sub:
             logger.info(f"No subscription for customer {stripe_customer_id}")
-            org.is_active = False
             org.subscription_status = "none"
             await db.commit()
             return {"status": "none", "organization_id": org.id}
@@ -78,7 +76,6 @@ async def sync_stripe_to_postgres(stripe_customer_id: str, db: AsyncSession) -> 
         seats = seat_item["quantity"]
 
         org.subscription_status = stripe_sub.status
-        org.is_active = stripe_sub.status in ["active", "trialing"]
         org.max_users = seats
 
         stmt = select(Subscription).where(
@@ -195,7 +192,6 @@ async def create_checkout_session(
                 name=f"{first_name} {last_name}",
                 metadata={
                     "organization_id": org.id,
-                    "owner_user_id": user_id,
                     "organization_name": org.name,
                 },
             )
@@ -294,20 +290,13 @@ async def sync_after_checkout(session_id: str, user_id: str, db: AsyncSession) -
     if not org:
         raise HTTPException(404, "Organization not found for session")
 
-    # Verify user is owner
-    is_owner = False
-
-    if org.owner_user_id == user_id:
-        is_owner = True
-    else:
-        stmt = select(OrganizationMembership).where(
-            OrganizationMembership.organization_id == org.id,
-            OrganizationMembership.user_id == user_id,
-            OrganizationMembership.role == "owner",
-        )
-        result = await db.execute(stmt)
-        if result.scalar_one_or_none():
-            is_owner = True
+    stmt = select(OrganizationMembership).where(
+        OrganizationMembership.organization_id == org.id,
+        OrganizationMembership.user_id == user_id,
+        OrganizationMembership.role == "owner",
+    )
+    result = await db.execute(stmt)
+    is_owner = result.scalar_one_or_none() is not None
 
     if not is_owner:
         raise HTTPException(403, "Not authorized for this organization")

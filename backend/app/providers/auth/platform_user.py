@@ -49,7 +49,6 @@ class PlatformUser(BaseUser):
             self.__user_metadata = UserMetadata()
 
     @property
-    # TODO: check if *still* authed?
     def is_authenticated(self) -> bool:
         """
         Was the user authenticated as the time of this object's creation.
@@ -80,14 +79,7 @@ class PlatformUser(BaseUser):
     def email(self) -> str:
         return self.__auth_user.email or ""
 
-    # @property.setter
-    # def auth_user(self, value: User):
-    #    self.__auth_user = value
-
     # endregion
-
-    # def display_name(self) -> str:
-    #    return self.username
 
     @property
     def app_metadata(self):
@@ -112,8 +104,6 @@ class PlatformUser(BaseUser):
         """
         Construct a user info dict that the frontend expects.
         """
-        # return {"user": user, "access_token": access_token, "authenticated": True}
-
         role = "user"
 
         if self.is_admin():

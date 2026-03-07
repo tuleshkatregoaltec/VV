@@ -86,29 +86,35 @@ class AdminAuth:
     def has_session(self):
         return self.__session is not None
 
-    async def get_valid_session(self):
-        if not await self.is_session_active():
-            # no active session
+    async def get_valid_session(self) -> AsyncGoTrueClient | None:
+        is_active = await self.is_session_active()
+        if is_active:
+            return self.__client
 
-            # check if we ever had a session
-            if self.has_session():
-                # refresh
-                result = await self.ensure_valid_refresh()
-            else:
-                # login with user/pass
-                result = await self.login_username_pass()
+        result = False
+        # no active session
 
-            if result:
-                return self.__client
+        # check if we ever had a session
+        if self.has_session():
+            # refresh
+            result = await self.ensure_valid_refresh()
+        else:
+            # login with user/pass
+            result = await self.login_username_pass()
 
-        return self.__client
+        if result:
+            return self.__client
+
+        return None
 
     async def get_valid_session_with_auth(self):
-        await self.get_valid_session()
+        client = await self.get_valid_session()
+        if client is None or self.__session is None:
+            raise RuntimeError("Failed to authenticate admin client")
 
         client = AsyncGoTrueClient(
-            url=self.__client._url,
-            headers={"Authorization": f"Bearer ${self.__session.access_token}"},
+            url=client._url,
+            headers={"Authorization": f"Bearer {self.__session.access_token}"},
         )
 
         # admin funcs don't pass required jwt, do it ourselves
@@ -133,8 +139,6 @@ class AdminAuth:
             @functools.wraps(func)
             async def wrapped(*args, **kwargs):
                 kwargs["client"] = await self.get_valid_session_with_auth()
-
-                # TODO: if client is None
 
                 return await func(*args, **kwargs)
 
@@ -244,21 +248,22 @@ async def delete_user_admin(user_id: str, **kwargs) -> None:
         raise
 
 
-@admin_auth.with_admin_client()
-async def invite_user_by_email_admin(
-    email: str, organization_id: str, redirect_url: str, **kwargs
+async def send_magic_link_email(
+    email: str, redirect_url: str, should_create_user: bool = True
 ) -> dict:
-    """Send invitation email to user via Supabase admin."""
-    client: AsyncGoTrueClient = kwargs["client"]
+    """Send passwordless auth email for an existing or new user."""
+    client = AsyncGoTrueClient(url=settings.AUTH_URL)
     try:
-        await client.admin.invite_user_by_email(
-            email,
-            options={
-                "data": {"organization_id": organization_id},
-                "redirect_to": redirect_url,
-            },
+        await client.sign_in_with_otp(
+            {
+                "email": email,
+                "options": {
+                    "email_redirect_to": redirect_url,
+                    "should_create_user": should_create_user,
+                },
+            }
         )
         return {"success": True, "error": None}
     except AuthApiError as e:
-        logger.error(f"Failed to invite user {email}: {e}")
+        logger.error(f"Failed to send magic link to {email}: {e}")
         return {"success": False, "error": str(e)}

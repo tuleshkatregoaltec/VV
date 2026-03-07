@@ -2,9 +2,10 @@
 	import { createQuery } from '@tanstack/svelte-query';
 	import {
 		getOrganizationMembers,
+		getOrganizationInvitations,
 		getOrganizationSubscription,
 		getCustomerPortalUrl,
-		deactivateUser,
+		removeOrganizationMember,
 		inviteUserByEmail
 	} from '$lib/api/organization';
 	import { currentUser as userStore } from '$lib/stores/user.svelte';
@@ -32,11 +33,32 @@
 		enabled: isOwner
 	}));
 
+	const invitationsQuery = createQuery(() => ({
+		queryKey: ['organization', 'invitations'] as const,
+		queryFn: () => getOrganizationInvitations(),
+		enabled: isOwner
+	}));
+
 	const members = $derived(membersQuery.data ?? []);
+	const invitations = $derived(invitationsQuery.data ?? []);
 	const subscription = $derived(subscriptionQuery.data);
 	const availableSeats = $derived(subscription?.available_seats ?? 0);
 	const hasExcessUsers = $derived((subscription?.excess_users ?? 0) > 0);
 	const withinPaidPeriod = $derived(subscription?.within_paid_period ?? false);
+
+	function normalizeInviteEmail(email: string): string {
+		return email.trim().toLowerCase();
+	}
+
+	function validateInviteEmail(email: string): string | null {
+		if (!email) return 'Email is required';
+		if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return 'Invalid email format';
+		return null;
+	}
+
+	async function sendInvite(email: string): Promise<void> {
+		await inviteUserByEmail(email);
+	}
 
 	async function handleManageSubscription() {
 		try {
@@ -47,21 +69,20 @@
 		}
 	}
 
-	async function handleDeactivateUser(userId: string, userName: string) {
-		if (!confirm(`Are you sure you want to deactivate ${userName}?`)) return;
+	async function handleRemoveMember(userId: string, userName: string) {
+		if (!confirm(`Remove ${userName} from this organization?`)) return;
 		try {
-			await deactivateUser(userId);
+			await removeOrganizationMember(userId);
 			membersQuery.refetch();
 		} catch (err: any) {
-			alert(err.message || 'Failed to deactivate user');
+			alert(err.message || 'Failed to remove member');
 		}
 	}
 
 	async function handleResendInvitation(email: string) {
 		resendingEmail = email;
 		try {
-			const redirectUrl = `${window.location.origin}/profile-setup`;
-			await inviteUserByEmail(email, currentUser!.organization_id!, redirectUrl);
+			await sendInvite(email);
 			alert(`Invitation resent to ${email}`);
 		} catch (err: any) {
 			alert(err.message || 'Failed to resend invitation');
@@ -73,14 +94,11 @@
 	async function handleInviteUser() {
 		inviteError = '';
 		inviteSuccess = false;
+		const email = normalizeInviteEmail(inviteEmail);
 
-		if (!inviteEmail.trim()) {
-			inviteError = 'Email is required';
-			return;
-		}
-
-		if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(inviteEmail)) {
-			inviteError = 'Invalid email format';
+		const validationError = validateInviteEmail(email);
+		if (validationError) {
+			inviteError = validationError;
 			return;
 		}
 
@@ -92,19 +110,14 @@
 		inviteLoading = true;
 
 		try {
-			const redirectUrl = `${window.location.origin}/profile-setup`;
-			const result = await inviteUserByEmail(inviteEmail, currentUser!.organization_id!, redirectUrl);
-
-			if (result.success) {
-				inviteSuccess = true;
-				inviteEmail = '';
-				setTimeout(() => {
-					showInviteModal = false;
-					inviteSuccess = false;
-				}, 2000);
-			} else {
-				inviteError = result.error || 'Failed to send invitation';
-			}
+			await sendInvite(email);
+			invitationsQuery.refetch();
+			inviteSuccess = true;
+			inviteEmail = '';
+			setTimeout(() => {
+				showInviteModal = false;
+				inviteSuccess = false;
+			}, 2000);
 		} catch (err: any) {
 			inviteError = err.message || 'Failed to send invitation';
 		} finally {
@@ -118,6 +131,10 @@
 			month: 'long',
 			day: 'numeric'
 		});
+	}
+
+	function roleLabel(role: string): string {
+		return role === 'owner' ? 'Owner' : 'Member';
 	}
 </script>
 
@@ -139,7 +156,7 @@
 					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path>
 				</svg>
 				<h2 class="text-xl font-semibold text-slate-900 mb-2">Access Restricted</h2>
-				<p class="text-slate-600">Only organization administrators can access these settings.</p>
+				<p class="text-slate-600">Only the organization owner can access these settings.</p>
 			</div>
 		{:else}
 			<!-- Subscription Info -->
@@ -185,7 +202,7 @@
 											You have {subscription?.excess_users} too many users for your subscription ({subscription?.current_members} users, {subscription?.seats} seats).
 										</p>
 										<p class="text-sm text-amber-800">
-											All users will remain active until {new Date(subscription?.current_period_end || '').toLocaleDateString()}. After this date, you must either deactivate {subscription?.excess_users} {subscription?.excess_users === 1 ? 'user' : 'users'} or upgrade your subscription.
+											All users will remain active until {new Date(subscription?.current_period_end || '').toLocaleDateString()}. After this date, you must either remove {subscription?.excess_users} {subscription?.excess_users === 1 ? 'member' : 'members'} or upgrade your subscription.
 										</p>
 									</div>
 								</div>
@@ -202,7 +219,7 @@
 											You have {subscription?.excess_users} too many users ({subscription?.current_members} users, {subscription?.seats} seats). Your billing period has ended.
 										</p>
 										<p class="text-sm text-red-800">
-											Please deactivate {subscription?.excess_users} {subscription?.excess_users === 1 ? 'user' : 'users'} immediately or upgrade your subscription to prevent service disruption.
+											Please remove {subscription?.excess_users} {subscription?.excess_users === 1 ? 'member' : 'members'} immediately or upgrade your subscription to prevent service disruption.
 										</p>
 									</div>
 								</div>
@@ -269,27 +286,18 @@
 										</div>
 									</div>
 									<div class="flex items-center gap-3">
-										<span class="px-3 py-1 text-xs font-semibold rounded-full {member.is_active ? 'bg-green-100 text-green-800' : 'bg-slate-200 text-slate-600'}">
-											{member.is_active ? 'Active' : 'Inactive'}
+										<span class="px-3 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">
+											Active
 										</span>
 										<span class="px-3 py-1 text-xs font-semibold rounded-full bg-slate-100 text-slate-700 capitalize">
-											{member.role === 'organization_admin' ? 'Admin' : 'Member'}
+											{roleLabel(member.role)}
 										</span>
-										{#if !member.is_active}
+										{#if member.id !== currentUser?.id && member.role !== 'owner'}
 											<button
-												onclick={() => handleResendInvitation(member.email)}
-												disabled={resendingEmail === member.email}
-												class="text-sm text-blue-600 hover:text-blue-700 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-											>
-												{resendingEmail === member.email ? 'Sending...' : 'Resend Invite'}
-											</button>
-										{/if}
-										{#if member.is_active && member.id !== currentUser?.id && member.role !== 'organization_admin'}
-											<button
-												onclick={() => handleDeactivateUser(member.id, `${member.first_name} ${member.last_name}`)}
+												onclick={() => handleRemoveMember(member.id, `${member.first_name} ${member.last_name}`)}
 												class="{hasExcessUsers && !withinPaidPeriod ? 'bg-red-100 text-red-700 hover:bg-red-200' : 'text-red-600 hover:text-red-700'} text-sm font-medium px-3 py-1 rounded transition-colors"
 											>
-												Deactivate
+												Remove
 											</button>
 										{/if}
 									</div>
@@ -298,6 +306,49 @@
 						</div>
 					{:else}
 						<p class="text-slate-600 text-center py-8">No team members found</p>
+					{/if}
+				</div>
+			</div>
+
+			<!-- Pending Invitations -->
+			<div class="bg-white rounded-lg shadow mt-6">
+				<div class="p-6 border-b border-slate-200">
+					<h2 class="text-xl font-semibold text-slate-900">Pending Invitations</h2>
+				</div>
+				<div class="p-6">
+					{#if invitationsQuery.isLoading}
+						<div class="animate-pulse space-y-4">
+							{#each [1, 2] as _}
+								<div class="h-16 bg-slate-200 rounded"></div>
+							{/each}
+						</div>
+					{:else if invitations.length > 0}
+						<div class="space-y-3">
+							{#each invitations as invitation}
+								<div class="flex items-center justify-between p-4 border border-slate-200 rounded-lg">
+									<div>
+										<p class="font-medium text-slate-900">{invitation.email}</p>
+										<p class="text-sm text-slate-600">
+											Expires {formatDate(invitation.expires_at)}
+										</p>
+									</div>
+									<div class="flex items-center gap-3">
+										<span class="px-3 py-1 text-xs font-semibold rounded-full bg-amber-100 text-amber-800">
+											Pending
+										</span>
+										<button
+											onclick={() => handleResendInvitation(invitation.email)}
+											disabled={resendingEmail === invitation.email}
+											class="text-sm text-blue-600 hover:text-blue-700 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+										>
+											{resendingEmail === invitation.email ? 'Sending...' : 'Resend Invite'}
+										</button>
+									</div>
+								</div>
+							{/each}
+						</div>
+					{:else}
+						<p class="text-slate-600 text-center py-8">No pending invitations</p>
 					{/if}
 				</div>
 			</div>

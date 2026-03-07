@@ -31,9 +31,6 @@ class Settings(BaseSettings):
     AUTH_ADMIN_PASSWORD: str  # Bitwarden Secrets
     AUTH_URL: str  # configMap
 
-    # System Admin (full platform access)
-    SYSTEM_ADMIN_EMAIL: str  # configMap - email of system administrator
-
     # PostHog
     POSTHOG_API_KEY: str  # Bitwarden Secrets
     POSTHOG_HOST: str  # configMap

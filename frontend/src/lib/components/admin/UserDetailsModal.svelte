@@ -1,6 +1,6 @@
 <script lang="ts">
 	import Modal from '$lib/components/ui/Modal.svelte';
-	import { admin, type OrganizationUser } from '$lib/api/admin';
+	import { admin, type OrgUser } from '$lib/api/admin';
 	import { ApiError } from '$lib/api/client';
 
 	let {
@@ -10,7 +10,7 @@
 		onUpdated
 	}: {
 		open: boolean;
-		user: OrganizationUser | null;
+		user: OrgUser | null;
 		onClose: () => void;
 		onUpdated: () => void;
 	} = $props();
@@ -63,7 +63,7 @@
 		}
 	}
 
-	function fullName(u: OrganizationUser): string {
+	function fullName(u: OrgUser): string {
 		const name = `${u.first_name || ''} ${u.last_name || ''}`.trim();
 		return name || u.email;
 	}
@@ -75,13 +75,6 @@
 		<div class="mb-6">
 			<h3 class="text-lg font-semibold text-gray-900 mb-2">{fullName(user)}</h3>
 			<p class="text-sm text-gray-600">{user.email}</p>
-			<span
-				class="mt-2 inline-flex px-2 py-1 text-xs font-semibold rounded-full {user.is_active
-					? 'bg-green-100 text-green-800'
-					: 'bg-gray-100 text-gray-800'}"
-			>
-				{user.is_active ? 'Active' : 'Inactive'}
-			</span>
 		</div>
 
 		<!-- Token Usage Stats -->

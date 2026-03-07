@@ -28,7 +28,7 @@
 			// Eager sync - no polling, direct call
 			const result = await syncAfterCheckout(sessionId);
 
-			if (result.status === 'active') {
+			if (result.status === 'active' || result.status === 'trialing') {
 				organizationId = result.organization_id;
 				seats = result.seats;
 
@@ -89,14 +89,12 @@
 
 		sendingInvites = true;
 
-		const redirectUrl = `${window.location.origin}/profile-setup?organization_id=${organizationId}`;
-
 		// Send invitations
 		const results = await Promise.all(
 			validEmails.map(async (email) => {
 				try {
-					const result = await inviteUserByEmail(email, organizationId, redirectUrl);
-					return { email, success: result.success, error: result.error };
+					await inviteUserByEmail(email);
+					return { email, success: true };
 				} catch (err: any) {
 					return { email, success: false, error: err.message };
 				}

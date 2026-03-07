@@ -1,15 +1,12 @@
-from fastapi import APIRouter, Depends, Request
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, Depends
 from sqlmodel.ext.asyncio.session import AsyncSession
 from pydantic import BaseModel, Field
 
-from app.config import settings
 from app.postgres import get_db_session
 from app.core.dependencies import require_auth
 from app.providers.auth.platform_user import PlatformUser
 from app.organization import service as organization_service
 from app.auth.service import update_user_profile_metadata
-from app.billing.service import get_subscription_by_org
 
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 
@@ -29,12 +26,23 @@ class UpdateProfileResponse(BaseModel):
     last_name: str
 
 
-@router.get("/me")
+class AuthMeResponse(BaseModel):
+    id: str
+    email: str
+    first_name: str
+    last_name: str
+    organization_id: str | None
+    organization_name: str | None
+    role: str
+    is_owner: bool
+    subscription_status: str | None
+
+
+@router.get("/me", response_model=AuthMeResponse)
 async def get_user(
-    request: Request,
     db: AsyncSession = Depends(get_db_session),
     current_user: PlatformUser = Depends(require_auth),
-):
+) -> AuthMeResponse:
     """
     Get current authenticated user with organization and subscription context.
 
@@ -50,7 +58,6 @@ async def get_user(
     role = "user"
     is_owner = False
     subscription_status = None
-    subscription_is_active = False
 
     if membership:
         from app.postgres.models import Organization
@@ -65,25 +72,21 @@ async def get_user(
 
             # Use org.subscription_status as single source of truth
             subscription_status = org.subscription_status
-            subscription_is_active = org.subscription_status in ["active", "trialing"]
 
     # System admin overrides the membership role
-    if current_user.email == settings.SYSTEM_ADMIN_EMAIL:
+    if current_user.is_admin():
         role = "admin"
 
-    return JSONResponse(
-        content={
-            "id": current_user.id,
-            "email": current_user.email,
-            "first_name": current_user.user_metadata.first_name,
-            "last_name": current_user.user_metadata.last_name,
-            "organization_id": organization_id,
-            "organization_name": organization_name,
-            "role": role,
-            "is_owner": is_owner,
-            "subscription_status": subscription_status,
-            "subscription_is_active": subscription_is_active,
-        }
+    return AuthMeResponse(
+        id=current_user.id,
+        email=current_user.email,
+        first_name=current_user.user_metadata.first_name,
+        last_name=current_user.user_metadata.last_name,
+        organization_id=organization_id,
+        organization_name=organization_name,
+        role=role,
+        is_owner=is_owner,
+        subscription_status=subscription_status,
     )
 
 

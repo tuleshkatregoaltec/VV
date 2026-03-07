@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { logout } from '$lib/api/auth';
+	import { getCustomerPortalUrl } from '$lib/api/organization';
 	import { currentUser } from '$lib/stores/user.svelte';
 
 	// Layout ensures user is authenticated with profile + org before this page loads
@@ -45,7 +46,6 @@
 
 	async function handleManageSubscription() {
 		try {
-			const { getCustomerPortalUrl } = await import('$lib/api/organization');
 			const result = await getCustomerPortalUrl();
 			window.location.href = result.url;
 		} catch (err: any) {
