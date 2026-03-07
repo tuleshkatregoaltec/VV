@@ -8,15 +8,14 @@
 	} = $props();
 
 	const steps = [
-		{ n: 1, label: 'Select Area' },
-		{ n: 2, label: 'Choose Plot' },
-		{ n: 3, label: 'Comparables' },
+		{ n: 1, label: 'Select Plot' },
+		{ n: 2, label: 'Plot & HBU' },
 		{ n: 4, label: 'Configure' },
 	];
 </script>
 
 <div class="flex items-center gap-0 mb-8">
-	{#each steps as step, i}
+	{#each steps as step, i (step.n)}
 		<button
 			class="flex items-center gap-2 group"
 			onclick={() => onGoToStep(step.n as 1 | 2 | 3 | 4)}

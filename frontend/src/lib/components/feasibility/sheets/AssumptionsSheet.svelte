@@ -22,6 +22,8 @@
 		} else if (editingField === 'floors') {
 			const v = parseInt(editValue);
 			if (!isNaN(v) && v > 0) feasibilityStore.updateBuilding(building.id, { floors: v });
+		} else if (editingField === 'phase') {
+			feasibilityStore.updateBuilding(building.id, { phase: editValue });
 		}
 		editingBuildingId = null;
 		editingField = null;
@@ -59,17 +61,44 @@
 		return defaults[type] ?? 80;
 	}
 
+	import { toSqft } from '$lib/utils/currency';
+
 	function fmt(n: number) { return n.toLocaleString('en-AE', { maximumFractionDigits: 0 }); }
 	function fmtK(n: number): string {
 		const k = Math.round(Math.abs(n) / 1000);
 		const f = k.toLocaleString('en-AE');
 		return n < 0 ? `(${f})` : f;
 	}
-	function fmtPct(n: number): string { return `${n.toFixed(1)}%`; }
+
+	// GSA per unit derived from NSA + loss factor
+	function unitGSA(nsaSqm: number): number {
+		const lf = feasibilityStore.assumptions.lossFactorGFAtoNSA;
+		return lf < 100 ? nsaSqm / (1 - lf / 100) : nsaSqm;
+	}
+
+	// Per-type summary aggregated across all buildings
+	const unitSummary = $derived((() => {
+		const byType: Record<string, { count: number; totalNSA: number }> = {};
+		for (const b of feasibilityStore.config.buildings) {
+			for (const u of b.units) {
+				if (!byType[u.type]) byType[u.type] = { count: 0, totalNSA: 0 };
+				byType[u.type].count += u.count;
+				byType[u.type].totalNSA += u.count * u.avgSizeSqm;
+			}
+		}
+		return Object.entries(byType).map(([type, d]) => ({
+			type,
+			count: d.count,
+			avgGSASqft: d.count > 0 ? toSqft(unitGSA(d.totalNSA / d.count)) : 0,
+			totalGSASqft: toSqft(unitGSA(d.totalNSA)),
+			totalNSASqm: d.totalNSA,
+		}));
+	})());
 
 	// --- Assumptions ---
 	let open = $state<Record<string, boolean>>({
-		land: true, construction: true, sales: true, financing: true, macro: true,
+		site: true, land: true, construction: true, sales: true, financing: true,
+		escrow: false, retail: false, macro: true,
 	});
 	function toggle(key: string) { open[key] = !open[key]; }
 
@@ -106,7 +135,8 @@
 		<div class="p-2 space-y-2 border-b-2 border-slate-200">
 			<div class="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[11px] text-slate-500 pb-0.5">
 				<span class="font-semibold text-slate-700">{fmt(feasibilityStore.totalUnits)}</span> units ·
-				<span class="font-semibold text-slate-700">{fmt(feasibilityStore.totalSellableAreaSqm)}</span> sqm ·
+				<span class="font-semibold text-slate-700">{fmt(feasibilityStore.totalSellableAreaSqm)}</span> NSA sqm ·
+				<span class="font-semibold text-slate-700">{fmt(toSqft(feasibilityStore.totalGSA))}</span> GSA sqft ·
 				<span class="font-semibold text-slate-700">{fmtK(feasibilityStore.totalGDV)}</span> GDV ('000)
 			</div>
 
@@ -130,6 +160,20 @@
 									class="text-xs font-semibold text-slate-700 hover:text-teal-600 text-left truncate w-full"
 									onclick={() => startEdit(building.id, 'name', building.name)}
 								>{building.name}</button>
+							{/if}
+							<!-- Phase label -->
+							{#if editingBuildingId === building.id && editingField === 'phase'}
+								<input type="text" placeholder="Phase / Tower label"
+									class="text-[10px] text-slate-500 bg-transparent border-b border-teal-400 outline-none w-full mt-0.5"
+									bind:value={editValue}
+									onblur={() => commitEdit(building)}
+									onkeydown={(e) => { if (e.key === 'Enter') commitEdit(building); }}
+									autofocus />
+							{:else}
+								<button type="button"
+									class="text-[10px] text-slate-400 hover:text-teal-600 text-left truncate w-full mt-0.5"
+									onclick={() => startEdit(building.id, 'phase', building.phase ?? '')}>
+									{building.phase || '+ phase label'}</button>
 							{/if}
 						</div>
 						<div class="flex items-center gap-1 text-[11px] text-slate-400 flex-shrink-0">
@@ -164,9 +208,12 @@
 								<input type="number" class={unitInputClass} value={unit.count} min="0" title="Count"
 									oninput={(e) => updateUnitCount(building, unit.type, parseInt((e.target as HTMLInputElement).value) || 0)} />
 								<span class="text-[11px] text-slate-300">×</span>
-								<input type="number" class={unitInputClass} value={unit.avgSizeSqm} min="1" step="0.5" title="Avg sqm"
+								<input type="number" class={unitInputClass} value={unit.avgSizeSqm} min="1" step="0.5" title="Avg NSA sqm"
 									oninput={(e) => updateUnitSize(building, unit.type, parseFloat((e.target as HTMLInputElement).value) || 0)} />
-								<span class="text-[11px] text-slate-400">sqm</span>
+								<span class="text-[10px] text-slate-400 leading-none whitespace-nowrap">
+									<span class="block">NSA sqm</span>
+									<span class="block text-slate-300">{fmt(toSqft(unitGSA(unit.avgSizeSqm)))} sqft GSA</span>
+								</span>
 								<button type="button" class="text-slate-200 hover:text-red-400 transition-colors"
 									onclick={() => updateUnitCount(building, unit.type, 0)} title="Remove">
 									<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -192,6 +239,49 @@
 			<button type="button"
 				class="w-full py-1.5 text-xs font-medium text-slate-400 hover:text-teal-600 border border-dashed border-slate-200 hover:border-teal-400 rounded transition-colors"
 				onclick={() => feasibilityStore.addBuilding()}>+ Add building</button>
+
+			<!-- Unit mix summary table -->
+			{#if unitSummary.length > 0}
+			<table class="w-full text-[10px] border border-slate-200 rounded overflow-hidden mt-1">
+				<thead>
+					<tr class="bg-slate-100 text-slate-500 text-right">
+						<th class="px-2 py-1 text-left font-medium">Type</th>
+						<th class="px-2 py-1 font-medium">Count</th>
+						<th class="px-2 py-1 font-medium">Avg GSA (sqft)</th>
+						<th class="px-2 py-1 font-medium">Total GSA (sqft)</th>
+						<th class="px-2 py-1 font-medium">Total NSA (sqm)</th>
+					</tr>
+				</thead>
+				<tbody>
+					{#each unitSummary as row}
+					<tr class="border-t border-slate-100 text-right">
+						<td class="px-2 py-1 text-left text-slate-600 font-medium">{row.type}</td>
+						<td class="px-2 py-1 tabular-nums text-slate-700">{row.count}</td>
+						<td class="px-2 py-1 tabular-nums text-slate-700">{fmt(row.avgGSASqft)}</td>
+						<td class="px-2 py-1 tabular-nums text-slate-700">{fmt(row.totalGSASqft)}</td>
+						<td class="px-2 py-1 tabular-nums text-slate-700">{fmt(row.totalNSASqm)}</td>
+					</tr>
+					{/each}
+					<tr class="border-t-2 border-slate-300 bg-slate-50 text-right font-semibold text-slate-800">
+						<td class="px-2 py-1 text-left">Total</td>
+						<td class="px-2 py-1 tabular-nums">{feasibilityStore.totalUnits}</td>
+						<td class="px-2 py-1">—</td>
+						<td class="px-2 py-1 tabular-nums">{fmt(toSqft(feasibilityStore.totalGSA))}</td>
+						<td class="px-2 py-1 tabular-nums">{fmt(feasibilityStore.totalSellableAreaSqm)}</td>
+					</tr>
+				</tbody>
+			</table>
+			{/if}
+
+			<!-- Ancillary Retail toggle -->
+			<label class="flex items-center gap-2 text-[11px] text-slate-600 cursor-pointer select-none pt-1">
+				<input type="checkbox"
+					checked={feasibilityStore.assumptions.hasAncillaryRetail}
+					onchange={(e) => feasibilityStore.setAssumptions({ hasAncillaryRetail: (e.target as HTMLInputElement).checked })}
+					class="rounded border-slate-300 text-teal-600 focus:ring-teal-400" />
+				<span>Ancillary Retail</span>
+				<span class="text-slate-400 text-[10px]">(coming soon)</span>
+			</label>
 		</div>
 	{/if}
 
@@ -199,7 +289,58 @@
 	<table class="w-full border-collapse">
 		<tbody>
 
-		<!-- LAND & SITE -->
+		<!-- SITE & AREAS -->
+		<tr class="bg-slate-800 cursor-pointer select-none border-b border-slate-600" onclick={() => toggle('site')}>
+			<td colspan="3" class="px-2 py-1.5 font-bold text-white uppercase tracking-wider text-[10px]">
+				{open.site ? '▼' : '▶'} Site & Areas
+			</td>
+		</tr>
+		{#if open.site}
+			<tr class="border-b border-slate-100 hover:bg-slate-50/60">
+				<td class="border-r border-slate-200 px-2 py-1.5 text-slate-600 w-56">Site Area</td>
+				<td class="border-r border-slate-200 p-0 relative">
+					<input type="number" class={inputClass} value={a.siteAreaSqm} min="0" step="100"
+						oninput={(e) => numInput('siteAreaSqm', e)} />
+				</td>
+				<td class="px-2 py-1.5 text-slate-400">sqm</td>
+			</tr>
+			<tr class="border-b border-slate-100 hover:bg-slate-50/60">
+				<td class="border-r border-slate-200 px-2 py-1.5 text-slate-600">Plot Ratio / FAR</td>
+				<td class="border-r border-slate-200 p-0 relative">
+					<input type="number" class={inputClass} value={a.plotRatioFAR} min="0" step="0.1"
+						oninput={(e) => numInput('plotRatioFAR', e)} />
+				</td>
+				<td class="px-2 py-1.5 text-slate-400">
+					{#if a.siteAreaSqm > 0 && a.plotRatioFAR > 0}
+						→ Max GFA: {fmt(feasibilityStore.maxGFA)} sqm
+					{/if}
+				</td>
+			</tr>
+			<tr class="border-b border-slate-100 hover:bg-slate-50/60">
+				<td class="border-r border-slate-200 px-2 py-1.5 text-slate-600">Loss Factor (GFA → NSA)</td>
+				<td class="border-r border-slate-200 p-0 relative">
+					<input type="number" class={inputClass} value={a.lossFactorGFAtoNSA} min="0" max="50" step="1"
+						oninput={(e) => numInput('lossFactorGFAtoNSA', e)} />
+				</td>
+				<td class="px-2 py-1.5 text-slate-400">
+					% → {fmt(toSqft(feasibilityStore.totalGSA))} sqft GSA total
+				</td>
+			</tr>
+			<tr class="border-b border-slate-100 hover:bg-slate-50/60">
+				<td class="border-r border-slate-200 px-2 py-1.5 text-slate-600">Demolition Works</td>
+				<td class="border-r border-slate-200 px-2 py-1.5 text-right" colspan="2">
+					<label class="flex items-center justify-end gap-2 cursor-pointer select-none">
+						<input type="checkbox"
+							checked={a.hasDemolition}
+							onchange={(e) => feasibilityStore.setAssumptions({ hasDemolition: (e.target as HTMLInputElement).checked })}
+							class="rounded border-slate-300 text-teal-600 focus:ring-teal-400" />
+						<span class="text-slate-500">Required</span>
+					</label>
+				</td>
+			</tr>
+		{/if}
+
+	<!-- LAND & SITE -->
 		<tr class="bg-slate-800 cursor-pointer select-none border-b border-slate-600" onclick={() => toggle('land')}>
 			<td colspan="3" class="px-2 py-1.5 font-bold text-white uppercase tracking-wider text-[10px]">
 				{open.land ? '▼' : '▶'} Land & Site
@@ -243,7 +384,6 @@
 				{ label: 'Build Cost/sqm', key: 'buildCostPerSqm' as const, step: 50, unit: 'AED/sqm' },
 				{ label: 'Contingency (% of hard)', key: 'contingencyPct' as const, step: 1, unit: '%' },
 				{ label: 'Construction Period', key: 'constructionMonths' as const, step: 1, unit: 'months' },
-				{ label: 'Soft Costs (% of hard)', key: 'softCostsPct' as const, step: 1, unit: '%' },
 			] as row}
 				<tr class="border-b border-slate-100 hover:bg-slate-50/60">
 					<td class="border-r border-slate-200 px-2 py-1.5 text-slate-600">{row.label}</td>
@@ -256,28 +396,6 @@
 					<td class="px-2 py-1.5 text-slate-400">{row.unit}</td>
 				</tr>
 			{/each}
-			{#each [
-				{ label: '└ Design & Engineering', key: 'designFeePct' as const, step: 0.5 },
-				{ label: '└ Project Management', key: 'projectMgmtPct' as const, step: 0.5 },
-			] as row}
-				<tr class="border-b border-slate-100 hover:bg-slate-50/60">
-					<td class="border-r border-slate-200 px-2 py-1.5 pl-5 text-slate-500">{row.label}</td>
-					<td class="border-r border-slate-200 p-0 relative">
-						{#if feasibilityStore.changedFields[row.key]}
-							<div class="absolute inset-0 field-flash pointer-events-none rounded-sm"></div>
-						{/if}
-						<input type="number" class={inputClass} value={a[row.key]} min="0" step={row.step} oninput={(e) => numInput(row.key, e)} />
-					</td>
-					<td class="px-2 py-1.5 text-slate-400">%</td>
-				</tr>
-			{/each}
-			<tr class="border-b border-slate-100">
-				<td class="border-r border-slate-200 px-2 py-1.5 pl-5 text-slate-400">└ Other Soft Costs</td>
-				<td class="border-r border-slate-200 px-2 py-1.5 text-right tabular-nums text-slate-900">
-					{fmtPct(Math.max(0, a.softCostsPct - a.designFeePct - a.projectMgmtPct))}
-				</td>
-				<td class="px-2 py-1.5 text-slate-400">(derived)</td>
-			</tr>
 		{/if}
 
 		<!-- SALES & MARKETING -->
@@ -374,6 +492,148 @@
 			</tr>
 		{/if}
 
+	<!-- ESCROW MODEL -->
+	<tr class="bg-blue-900 cursor-pointer select-none border-b border-blue-700" onclick={() => toggle('escrow')}>
+		<td colspan="3" class="px-2 py-1.5 font-bold text-blue-100 uppercase tracking-wider text-[10px]">
+			{open.escrow ? '▼' : '▶'} Escrow & Revenue Model
+		</td>
+	</tr>
+	{#if open.escrow}
+		<tr class="border-b border-slate-100 hover:bg-slate-50/60">
+			<td class="border-r border-slate-200 px-2 py-1.5 text-slate-600 w-56">RERA Escrow Model</td>
+			<td class="border-r border-slate-200 px-2 py-1.5 text-right" colspan="2">
+				<label class="flex items-center justify-end gap-2 cursor-pointer select-none">
+					<input type="checkbox"
+						checked={a.useEscrowModel}
+						onchange={(e) => feasibilityStore.setAssumptions({ useEscrowModel: (e.target as HTMLInputElement).checked })}
+						class="rounded border-slate-300 text-teal-600 focus:ring-teal-400" />
+					<span class="text-slate-600">Enabled</span>
+				</label>
+			</td>
+		</tr>
+		{#if a.useEscrowModel}
+		<tr class="border-b border-slate-100 hover:bg-slate-50/60">
+			<td class="border-r border-slate-200 px-2 py-1.5 text-slate-600">Proceeds for Construction</td>
+			<td class="border-r border-slate-200 p-0 relative">
+				<input type="number" class={inputClass} value={a.offPlanProceedsUsedForConstructionPct} min="0" max="100" step="5"
+					oninput={(e) => numInput('offPlanProceedsUsedForConstructionPct', e)} />
+			</td>
+			<td class="px-2 py-1.5 text-slate-400">%</td>
+		</tr>
+		<tr class="border-b border-slate-100">
+			<td colspan="3" class="px-2 py-2">
+				<div class="text-[10px] font-semibold text-slate-600 mb-1.5 flex items-center justify-between">
+					<span>Escrow Milestones</span>
+					<button type="button"
+						class="text-[9px] px-1.5 py-0.5 bg-slate-200 hover:bg-slate-300 text-slate-600 rounded transition-colors"
+						onclick={() => feasibilityStore.resetEscrowMilestones()}>Reset to RERA defaults</button>
+				</div>
+				<table class="w-full text-[10px] border border-slate-200 rounded overflow-hidden">
+					<thead>
+						<tr class="bg-slate-100 text-right">
+							<th class="px-2 py-1 text-left text-slate-500 font-medium">Milestone</th>
+							<th class="px-2 py-1 text-slate-500 font-medium">% GDV</th>
+							<th class="px-2 py-1 text-slate-500 font-medium">Const. %</th>
+						</tr>
+					</thead>
+					<tbody>
+						{#each a.escrowMilestones as m, idx}
+						<tr class="border-t border-slate-100">
+							<td class="px-1 py-0.5">
+								<input type="text" class="w-full px-1 py-0.5 text-[10px] bg-amber-50 border border-transparent focus:border-teal-400 focus:outline-none rounded text-slate-700"
+									value={m.name}
+									oninput={(e) => feasibilityStore.setEscrowMilestone(idx, { name: (e.target as HTMLInputElement).value })} />
+							</td>
+							<td class="px-1 py-0.5">
+								<input type="number" class="w-full px-1 py-0.5 text-right text-[10px] bg-amber-50 border border-transparent focus:border-teal-400 focus:outline-none rounded tabular-nums text-blue-800"
+									value={m.pct} min="0" max="100" step="5"
+									oninput={(e) => {
+										const v = parseFloat((e.target as HTMLInputElement).value);
+										if (!isNaN(v)) feasibilityStore.setEscrowMilestone(idx, { pct: v });
+									}} />
+							</td>
+							<td class="px-1 py-0.5">
+								<input type="number" class="w-full px-1 py-0.5 text-right text-[10px] bg-amber-50 border border-transparent focus:border-teal-400 focus:outline-none rounded tabular-nums text-blue-800"
+									value={m.constructionPct} min="0" max="100" step="10"
+									oninput={(e) => {
+										const v = parseFloat((e.target as HTMLInputElement).value);
+										if (!isNaN(v)) feasibilityStore.setEscrowMilestone(idx, { constructionPct: v });
+									}} />
+							</td>
+						</tr>
+						{/each}
+						<tr class="border-t-2 border-slate-200 bg-slate-50">
+							<td class="px-2 py-1 font-semibold text-slate-600">Total</td>
+							<td class="px-2 py-1 text-right tabular-nums font-semibold
+								{Math.abs(a.escrowMilestones.reduce((s, m) => s + m.pct, 0) - 100) < 0.1 ? 'text-green-600' : 'text-red-500'}">
+								{a.escrowMilestones.reduce((s, m) => s + m.pct, 0).toFixed(0)}%
+							</td>
+							<td></td>
+						</tr>
+					</tbody>
+				</table>
+			</td>
+		</tr>
+		<tr class="border-b border-slate-100 hover:bg-slate-50/60">
+			<td class="border-r border-slate-200 px-2 py-1.5 text-slate-600">VAT Bridge Loan</td>
+			<td class="border-r border-slate-200 px-2 py-1.5 text-right" colspan="2">
+				<label class="flex items-center justify-end gap-2 cursor-pointer select-none">
+					<input type="checkbox"
+						checked={a.hasVATBridgeLoan}
+						onchange={(e) => feasibilityStore.setAssumptions({ hasVATBridgeLoan: (e.target as HTMLInputElement).checked })}
+						class="rounded border-slate-300 text-teal-600 focus:ring-teal-400" />
+					<span class="text-slate-500">Required</span>
+				</label>
+			</td>
+		</tr>
+		{#if a.hasVATBridgeLoan}
+		{#each [
+			{ label: '└ Bridge Loan Term', key: 'vatBridgeLoanTermMonths' as const, step: 1, unit: 'months' },
+			{ label: '└ Bridge Loan Rate', key: 'vatBridgeLoanRatePct' as const, step: 0.5, unit: '%' },
+		] as row}
+			<tr class="border-b border-slate-100 hover:bg-slate-50/60">
+				<td class="border-r border-slate-200 px-2 py-1.5 pl-5 text-slate-500">{row.label}</td>
+				<td class="border-r border-slate-200 p-0 relative">
+					<input type="number" class={inputClass} value={a[row.key]} min="0" step={row.step} oninput={(e) => numInput(row.key, e)} />
+				</td>
+				<td class="px-2 py-1.5 text-slate-400">{row.unit}</td>
+			</tr>
+		{/each}
+		{/if}
+		{/if}
+	{/if}
+
+	<!-- RETAIL INCOME -->
+	<tr class="bg-slate-800 cursor-pointer select-none border-b border-slate-600" onclick={() => toggle('retail')}>
+		<td colspan="3" class="px-2 py-1.5 font-bold text-white uppercase tracking-wider text-[10px]">
+			{open.retail ? '▼' : '▶'} Ancillary Retail Income
+			{#if !a.hasAncillaryRetail}<span class="ml-1 text-[9px] font-normal text-slate-400 normal-case">(enable in Unit Mix)</span>{/if}
+		</td>
+	</tr>
+	{#if open.retail && a.hasAncillaryRetail}
+		{#each [
+			{ label: 'Retail Area', key: 'retailAreaSqm' as const, step: 50, unit: 'sqm' },
+			{ label: 'Rent per sqm/yr', key: 'retailRentPerSqmYr' as const, step: 50, unit: 'AED/sqm/yr' },
+			{ label: 'Cap Rate', key: 'retailYieldCapRate' as const, step: 0.5, unit: '%' },
+		] as row}
+			<tr class="border-b border-slate-100 hover:bg-slate-50/60">
+				<td class="border-r border-slate-200 px-2 py-1.5 text-slate-600">{row.label}</td>
+				<td class="border-r border-slate-200 p-0 relative">
+					<input type="number" class={inputClass} value={a[row.key]} min="0" step={row.step} oninput={(e) => numInput(row.key, e)} />
+				</td>
+				<td class="px-2 py-1.5 text-slate-400">{row.unit}</td>
+			</tr>
+		{/each}
+		{#if a.retailAreaSqm > 0 && a.retailRentPerSqmYr > 0}
+		<tr class="border-b border-slate-100 bg-teal-50/30">
+			<td class="border-r border-slate-200 px-2 py-1.5 text-teal-700">Annual Income</td>
+			<td class="border-r border-slate-200 px-2 py-1.5 text-right tabular-nums text-teal-800" colspan="2">
+				{fmtK(feasibilityStore.retailAnnualIncome)} '000/yr → cap value {fmtK(feasibilityStore.retailCapValue)} '000
+			</td>
+		</tr>
+		{/if}
+	{/if}
+
 		<!-- MACRO -->
 		<tr class="bg-slate-800 cursor-pointer select-none border-b border-slate-600" onclick={() => toggle('macro')}>
 			<td colspan="3" class="px-2 py-1.5 font-bold text-white uppercase tracking-wider text-[10px]">
@@ -382,9 +642,7 @@
 		</tr>
 		{#if open.macro}
 			{#each [
-				{ label: 'Inflation / Cost Escalation', key: 'inflationPct' as const, step: 0.5, unit: '%' },
 				{ label: 'Discount Rate', key: 'discountRatePct' as const, step: 0.5, unit: '%' },
-				{ label: 'Rental Yield Assumption', key: 'rentalYieldPct' as const, step: 0.5, unit: '%' },
 				{ label: 'Target ROC', key: 'targetROCPct' as const, step: 5, unit: '%' },
 			] as row}
 				<tr class="border-b border-slate-100 hover:bg-slate-50/60">

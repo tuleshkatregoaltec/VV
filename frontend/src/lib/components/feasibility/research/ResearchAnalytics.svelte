@@ -12,6 +12,7 @@
 
 	const agentData = $derived(researchPanelStore.agentAnalytics);
 	const marketPrices = $derived(researchPanelStore.comparableMarketPrices);
+	const hbuMarketPricing = $derived(researchPanelStore.hbuMarketPricing);
 	const pricePerSqm = $derived(feasibilityStore.config.pricePerSqm);
 
 	// All unit types from either source
@@ -82,7 +83,7 @@
 					<span class="text-right">Median/sqm</span>
 					<span class="text-right">Count</span>
 				</div>
-				{#each agentData.by_rooms as row}
+				{#each agentData.by_rooms as row (row.rooms_en)}
 					<div class="grid grid-cols-3 px-2 py-1 border-b border-slate-50 last:border-0 hover:bg-slate-50/60">
 						<span class="text-slate-600">{row.rooms_en}</span>
 						<span class="text-right tabular-nums text-slate-800 font-medium">{fmtK(row.median_price_sqm)}</span>
@@ -105,7 +106,7 @@
 						<span class="text-right">Your price</span>
 						<span class="text-right">Comparable</span>
 					</div>
-					{#each unitTypes as type}
+					{#each unitTypes as type (type)}
 						{@const yours = pricePerSqm[type] ?? 0}
 						{@const market = marketPrices?.[type] ?? null}
 						<div class="grid grid-cols-3 px-2 py-1.5 border-b border-slate-50 last:border-0 hover:bg-slate-50/60">
@@ -117,7 +118,11 @@
 						</div>
 					{/each}
 				</div>
-				<p class="text-[9px] text-slate-300 mt-1 text-right">AED/sqm · comparable from seeded data</p>
+				{#if hbuMarketPricing.length > 0}
+					<p class="text-[9px] text-slate-300 mt-1 text-right">AED/sqm · segmented pricing from HBU evidence</p>
+				{:else}
+					<p class="text-[9px] text-slate-300 mt-1 text-right">AED/sqm · comparable from seeded data</p>
+				{/if}
 			{/if}
 		</div>
 

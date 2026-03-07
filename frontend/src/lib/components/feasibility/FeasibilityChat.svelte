@@ -115,6 +115,8 @@
 		return {
 			area: s.area,
 			plot: s.plot,
+			plotDossier: s.plotDossier,
+			hbuStudy: s.hbuStudy,
 			config: s.config,
 			assumptions: s.assumptions,
 			derived: {
@@ -125,13 +127,18 @@
 				netRevenue: Math.round(s.netRevenue),
 				hardConstructionCost: Math.round(s.hardCost),
 				totalHardCost: Math.round(s.totalHardCost),
+				totalInfrastructureCost: Math.round(s.totalInfrastructureCost),
+				totalProfessionalFees: Math.round(s.totalProfessionalFees),
 				totalSoftCost: Math.round(s.totalSoftCost),
+				inflationOnCosts: Math.round(s.inflationOnCosts),
 				totalSalesCost: Math.round(s.totalSalesCost),
 				totalFinanceCost: Math.round(s.totalFinanceCost),
 				totalDevCost: Math.round(s.totalDevCost),
 				equityRequired: Math.round(s.equityRequired),
 				debtAmount: Math.round(s.debtAmount),
 				grossProfit: Math.round(s.grossProfit),
+				corporateTaxProvision: Math.round(s.corporateTaxProvision),
+				netProfit: Math.round(s.netProfit),
 				returnOnCost: +s.returnOnCost.toFixed(1),
 				returnOnEquity: +s.returnOnEquity.toFixed(1),
 				equityMultiple: +s.equityMultiple.toFixed(2),
@@ -139,6 +146,8 @@
 				leveredIRR: isNaN(s.leveredIRR) ? null : +(s.leveredIRR * 100).toFixed(1),
 				peakFunding: Math.round(s.peakFunding),
 				cashBreakevenQuarter: s.cashBreakevenQuarter,
+				npvUnlevered: isNaN(s.npvUnlevered) ? null : Math.round(s.npvUnlevered),
+				npvLevered: isNaN(s.npvLevered) ? null : Math.round(s.npvLevered),
 				blendedPricePerSqm: Math.round(s.blendedPricePerSqm),
 			},
 		};
@@ -214,11 +223,11 @@
 					</svg>
 				</div>
 				<p class="text-xs font-medium text-slate-600 mb-1">Ask me anything</p>
-				<p class="text-xs text-slate-400">Market prices, unit mix, assumptions — I'll propose changes for your approval.</p>
+				<p class="text-xs text-slate-400">Plot constraints, HBU strategy, pricing, unit mix, assumptions — I&apos;ll propose changes for your approval.</p>
 			</div>
 		{/if}
 
-		{#each messages as msg, i}
+		{#each messages as msg, i (`${msg.role}-${i}`)}
 			{#if msg.role === 'system'}
 				<!-- Status pill: applied / undone / declined / warning -->
 				<div class="flex justify-center items-center gap-2">
@@ -265,11 +274,11 @@
 			<div class="flex justify-start">
 				<div class="max-w-[92%] rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs">
 					<p class="font-semibold text-amber-800 mb-2">Proposed changes</p>
-					{#each pendingActions as pa}
+					{#each pendingActions as pa, paIndex (`${pa.action}-${paIndex}`)}
 						{@const desc = describeAction(pa)}
 						<p class="text-[10px] font-semibold text-amber-600 uppercase tracking-wider mb-1">{desc.title}</p>
 						<table class="w-full mb-2 text-[11px]">
-							{#each desc.changes as change}
+							{#each desc.changes as change, changeIndex (`${change.key || 'change'}-${changeIndex}`)}
 								<tr>
 									{#if change.key}
 										<td class="text-amber-700 pr-2 pb-0.5 whitespace-nowrap font-medium">{change.key}</td>

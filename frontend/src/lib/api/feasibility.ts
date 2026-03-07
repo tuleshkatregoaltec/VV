@@ -1,19 +1,57 @@
 import { api, stream } from './client';
-import type { LandPlot, ComparableData } from '$lib/stores/feasibility.svelte';
+import type {
+	ComparableData,
+	GISPlotDossier,
+	GISPlotSummary,
+	HBUStudy,
+} from '$lib/stores/feasibility.svelte';
 
-export type { LandPlot, ComparableData };
+export type { ComparableData, GISPlotDossier, GISPlotSummary, HBUStudy };
 
 export const feasibility = {
 	getAreas(): Promise<string[]> {
 		return api('/api/v1/feasibility/areas');
 	},
 
-	searchLandPlots(area: string, q: string): Promise<LandPlot[]> {
+	getCommunities(): Promise<string[]> {
+		return api('/api/v1/feasibility/communities');
+	},
+
+	searchPlots(params: {
+		q?: string;
+		community?: string;
+		minPlotAreaSqm?: number;
+		maxPlotAreaSqm?: number;
+		offset?: number;
+		limit?: number;
+	}): Promise<GISPlotSummary[]> {
+		const query = new URLSearchParams();
+		if (params.q) query.set('q', params.q);
+		if (params.community) query.set('community', params.community);
+		if (params.minPlotAreaSqm !== undefined) query.set('min_plot_area_sqm', params.minPlotAreaSqm.toString());
+		if (params.maxPlotAreaSqm !== undefined) query.set('max_plot_area_sqm', params.maxPlotAreaSqm.toString());
+		if (params.offset !== undefined) query.set('offset', params.offset.toString());
+		if (params.limit !== undefined) query.set('limit', params.limit.toString());
+		return api(`/api/v1/feasibility/plots?${query}`);
+	},
+
+	getPlotDossier(plotNumber: string): Promise<GISPlotDossier> {
+		return api(`/api/v1/feasibility/plots/${encodeURIComponent(plotNumber)}`);
+	},
+
+	generateHBUStudy(plotNumber: string, usageOverride?: GISPlotDossier['inferred_usage']): Promise<HBUStudy> {
+		const params = new URLSearchParams();
+		if (usageOverride && usageOverride !== 'unknown') params.set('usage_override', usageOverride);
+		const suffix = params.toString() ? `?${params}` : '';
+		return api(`/api/v1/feasibility/hbu/${encodeURIComponent(plotNumber)}${suffix}`, { method: 'POST' });
+	},
+
+	searchLandPlots(area: string, q: string): Promise<GISPlotSummary[]> {
 		const params = new URLSearchParams({ area, q });
 		return api(`/api/v1/feasibility/land/search?${params}`);
 	},
 
-	getLandPlots(area: string, sizeSqm: number, tolerance = 0.25): Promise<LandPlot[]> {
+	getLandPlots(area: string, sizeSqm: number, tolerance = 0.25): Promise<GISPlotSummary[]> {
 		const params = new URLSearchParams({
 			area,
 			size_sqm: sizeSqm.toString(),

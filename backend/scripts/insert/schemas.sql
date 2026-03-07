@@ -326,6 +326,40 @@ CREATE TABLE IF NOT EXISTS ch_geo_buildings (
 ORDER BY address_key;
 
 
+CREATE TABLE IF NOT EXISTS ch_gis_land_plots (
+    plot_number           String,
+    old_numbers           String DEFAULT '',
+    project_name          String DEFAULT '',
+    community_name        LowCardinality(String) DEFAULT '',
+    master_developer      String DEFAULT '',
+    plot_area_sqm         Float64 DEFAULT 0,
+    plot_area_sqft        Float64 DEFAULT 0,
+    max_gfa_sqm           Float64 DEFAULT 0,
+    max_gfa_sqft          Float64 DEFAULT 0,
+    max_height            String DEFAULT '',
+    max_coverage          String DEFAULT '',
+    site_plan_issue_date  Nullable(Date),
+    site_plan_expiry_date Nullable(Date),
+    side1_building        String DEFAULT '',
+    side1_podium          String DEFAULT '',
+    side2_building        String DEFAULT '',
+    side2_podium          String DEFAULT '',
+    side3_building        String DEFAULT '',
+    side3_podium          String DEFAULT '',
+    side4_building        String DEFAULT '',
+    side4_podium          String DEFAULT '',
+    land_use              String DEFAULT '',   -- JSON: [{"type": "...", "use": "..."}]
+    general_notes         String DEFAULT '',
+    coordinates           String DEFAULT '',   -- JSON: [[east, north], ...] UTM (WGS84 Zone 40N)
+    landuse_symbols       String DEFAULT '',
+    gfa_type              LowCardinality(String) DEFAULT '',
+    is_verified           UInt8 DEFAULT 0,
+    verify_comments       String DEFAULT ''
+
+) ENGINE = ReplacingMergeTree()
+ORDER BY plot_number;
+
+
 CREATE TABLE IF NOT EXISTS ch_geo_projects (
     project_id   Int32,
     centroid_lat Float64,

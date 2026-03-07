@@ -1,14 +1,14 @@
 <script lang="ts">
 	import AppShell from '$lib/components/layout/AppShell.svelte';
 	import StepProgress from '$lib/components/feasibility/StepProgress.svelte';
-	import StepArea from '$lib/components/feasibility/StepArea.svelte';
 	import StepPlot from '$lib/components/feasibility/StepPlot.svelte';
-	import StepComparables from '$lib/components/feasibility/StepComparables.svelte';
+	import StepHBUStudy from '$lib/components/feasibility/StepHBUStudy.svelte';
 	import ResearchPanel from '$lib/components/feasibility/ResearchPanel.svelte';
 	import SpreadsheetPanel from '$lib/components/feasibility/SpreadsheetPanel.svelte';
 	import FeasibilityChat from '$lib/components/feasibility/FeasibilityChat.svelte';
+	import { feasibility } from '$lib/api/feasibility';
 	import { feasibilityStore } from '$lib/stores/feasibility.svelte';
-	import type { LandPlot, ComparableData } from '$lib/stores/feasibility.svelte';
+	import type { GISPlotSummary, HBUStudy } from '$lib/stores/feasibility.svelte';
 
 	let leftWidth = $state(300);
 	let rightWidth = $state(320);
@@ -33,14 +33,21 @@
 		document.addEventListener('mousemove', onMove);
 		document.addEventListener('mouseup', onUp);
 	}
+
+	async function selectPlot(plot: GISPlotSummary) {
+		feasibilityStore.setPlot(plot);
+		const dossier = await feasibility.getPlotDossier(plot.plot_number);
+		feasibilityStore.setPlotDossier(dossier);
+	}
+
+	function applyHBUStudy(study: HBUStudy) {
+		feasibilityStore.applyHBUStudy(study);
+	}
 </script>
 
 <AppShell>
 	<div class="flex h-full min-h-0 overflow-hidden">
-
 		{#if feasibilityStore.step === 4}
-
-			<!-- Left: ProjectConfigurator sidebar -->
 			<div
 				class="flex-shrink-0 overflow-hidden h-full {isResizing ? '' : 'transition-[width] duration-300 ease-in-out'}"
 				style="width: {showConfigurator ? leftWidth : 0}px;"
@@ -49,9 +56,9 @@
 					<div class="px-3 pt-3 pb-2 border-b border-slate-200 flex-shrink-0">
 						<div class="flex items-center justify-between gap-2">
 							<p class="text-xs font-medium text-slate-700 truncate">
-								{feasibilityStore.area} ·
+								{feasibilityStore.plot?.community_name || 'Selected plot'} ·
 								{feasibilityStore.plot
-									? `${feasibilityStore.plot.actual_area.toLocaleString('en-AE', { maximumFractionDigits: 0 })} sqm`
+									? `${feasibilityStore.plot.plot_area_sqm.toLocaleString('en-AE', { maximumFractionDigits: 0 })} sqm`
 									: 'Custom plot'}
 							</p>
 							{#if import.meta.env.DEV}
@@ -68,7 +75,6 @@
 				</div>
 			</div>
 
-			<!-- Divider: resize + collapse toggle -->
 			<div class="relative flex-shrink-0 h-full flex items-stretch">
 				<button
 					type="button"
@@ -95,12 +101,10 @@
 				</button>
 			</div>
 
-			<!-- Center: SpreadsheetPanel -->
 			<div class="flex-1 min-w-0 h-full overflow-hidden">
 				<SpreadsheetPanel />
 			</div>
 
-			<!-- Right divider + Chat -->
 			<button
 				type="button"
 				aria-label="Resize chat panel"
@@ -111,41 +115,26 @@
 			<div class="flex-shrink-0 overflow-hidden h-full" style="width: {rightWidth}px;">
 				<FeasibilityChat />
 			</div>
-
 		{:else}
-
-			<!-- Steps 1–3: centered content -->
 			<div class="flex-1 min-w-0 overflow-y-auto scrollbar-hide">
-				<div class="max-w-3xl mx-auto px-6 py-8">
+				<div class="max-w-5xl mx-auto px-6 py-8">
 					<div class="flex items-start justify-between">
-						<StepProgress
-							currentStep={feasibilityStore.step}
-							onGoToStep={(s) => feasibilityStore.goToStep(s)}
-						/>
+						<StepProgress currentStep={feasibilityStore.step} onGoToStep={(s) => feasibilityStore.goToStep(s)} />
 						{#if import.meta.env.DEV}
 							<button
 								onclick={() => feasibilityStore.devJump()}
 								class="text-xs text-slate-400 hover:text-teal-600 border border-dashed border-slate-300 hover:border-teal-400 rounded px-2 py-1 transition-colors shrink-0 mt-1"
-							>dev: skip to config</button>
+							>dev: seed HBU</button>
 						{/if}
 					</div>
 
 					{#if feasibilityStore.step === 1}
-						<StepArea onSelect={(a) => feasibilityStore.setArea(a)} />
-					{:else if feasibilityStore.step === 2}
-						<StepPlot
-							area={feasibilityStore.area ?? ''}
-							onSelect={(p: LandPlot) => feasibilityStore.setPlot(p)}
-						/>
-					{:else if feasibilityStore.step === 3}
-						<StepComparables
-							onApply={(data: ComparableData) => feasibilityStore.applyComparableData(data)}
-						/>
+						<StepPlot onSelect={selectPlot} />
+					{:else if feasibilityStore.step === 2 && feasibilityStore.plotDossier}
+						<StepHBUStudy dossier={feasibilityStore.plotDossier} onApply={applyHBUStudy} />
 					{/if}
 				</div>
 			</div>
-
 		{/if}
-
 	</div>
 </AppShell>

@@ -7,25 +7,16 @@
 		return n < 0 ? `(${f})` : f;
 	}
 
-	let sCurve = $state(false);
-
 	const s = $derived(feasibilityStore);
 	const displayQ = $derived(Math.min(s.totalQ, 20));
 	const quarters = $derived(Array.from({ length: displayQ }, (_, i) => i));
 
-	function constructionDist(q: number, cq: number): number {
-		if (!sCurve) return 1 / cq;
-		const third = cq / 3;
-		if (q < third) return 0.25 / (cq / 3);
-		if (q < 2 * third) return 0.5 / (cq / 3);
-		return 0.25 / (cq / 3);
-	}
-
 	const capex = $derived(
 		quarters.map((q) => {
+			const w = q < s.cq ? (s.capexWeights[q] ?? 0) : 0;
 			const land = q === 0 ? s.assumptions.landCost : 0;
-			const construction = q < s.cq ? s.totalHardCost * constructionDist(q, s.cq) : 0;
-			const soft = q < s.cq ? s.totalSoftCost * constructionDist(q, s.cq) : 0;
+			const construction = s.totalHardCost * w;
+			const soft = s.totalSoftCost * w;
 			const finance = q < s.cq ? (s.debtAmount * s.assumptions.financeRatePct) / 100 / 4 : 0;
 			return { q, land, construction, soft, finance };
 		}),
@@ -46,6 +37,32 @@
 			return acc;
 		}, [] as number[]),
 	);
+
+	// Peak funding chart: cumulative outflows vs cumulative inflows
+	const chartData = $derived((() => {
+		let cumOut = 0, cumIn = 0;
+		return quarters.map((q) => {
+			const p = capex[q];
+			cumOut += p.land + p.construction + p.soft + p.finance;
+			cumIn += s.cashflow[q]?.revenue ?? 0;
+			return { cumOut, cumIn };
+		});
+	})());
+
+	const chartMax = $derived(Math.max(1, ...chartData.map(d => Math.max(d.cumOut, d.cumIn))));
+	const chartMin = $derived(Math.min(0, ...chartData.map(d => Math.min(d.cumOut, d.cumIn))));
+	const chartRange = $derived(chartMax - chartMin || 1);
+
+	function chartY(val: number, h: number, pad: number): number {
+		return pad + (1 - (val - chartMin) / chartRange) * (h - 2 * pad);
+	}
+	function chartX(q: number, w: number, pad: number): number {
+		const n = Math.max(1, displayQ - 1);
+		return pad + (q / n) * (w - 2 * pad);
+	}
+	function toPath(pts: Array<[number, number]>): string {
+		return pts.map((p, i) => `${i === 0 ? 'M' : 'L'}${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(' ');
+	}
 </script>
 
 <div class="overflow-auto flex-1 text-[11px]">
@@ -98,10 +115,19 @@
 	<div>
 		<div class="flex items-center justify-between px-2 py-1.5 bg-slate-800 border-b border-slate-600">
 			<span class="text-[10px] font-bold text-white uppercase tracking-wider">Quarterly Capex ('000)</span>
-			<label class="flex items-center gap-1.5 text-[10px] text-slate-300 cursor-pointer">
-				<input type="checkbox" bind:checked={sCurve} class="accent-teal-500" />
-				S-curve
-			</label>
+			<div class="flex items-center gap-1.5 text-[10px] text-slate-300">
+				<span>Capex curve:</span>
+				<select
+					class="bg-slate-700 text-slate-200 border border-slate-600 rounded px-1 py-0.5 text-[10px] focus:outline-none"
+					value={s.assumptions.capexDistributionCurve}
+					onchange={(e) => feasibilityStore.setAssumptions({ capexDistributionCurve: (e.target as HTMLSelectElement).value as 'linear' | 'sCurve' | 'frontLoaded' | 'backLoaded' })}
+				>
+					<option value="linear">Linear</option>
+					<option value="sCurve">S-Curve</option>
+					<option value="frontLoaded">Front-loaded</option>
+					<option value="backLoaded">Back-loaded</option>
+				</select>
+			</div>
 		</div>
 		<div class="overflow-x-auto">
 			<table class="border-collapse text-[11px]" style="min-width: max-content;">
@@ -150,7 +176,45 @@
 		</div>
 	</div>
 
-	<!-- Section C: Sales Absorption -->
+	<!-- Section C: Peak Funding Chart -->
+	{#if displayQ > 1}
+		{@const W = 480}
+		{@const H = 90}
+		{@const pad = 6}
+		{@const data = chartData}
+		<div class="border-t border-slate-200">
+			<div class="px-2 py-1.5 bg-slate-800 border-b border-slate-600">
+				<span class="text-[10px] font-bold text-white uppercase tracking-wider">Peak Funding Profile</span>
+			</div>
+			<div class="px-3 py-3">
+				<svg viewBox="0 0 {W} {H}" class="w-full" style="max-height: 90px;">
+					<!-- Zero line -->
+					<line
+						x1={pad} y1={chartY(0, H, pad)}
+						x2={W - pad} y2={chartY(0, H, pad)}
+						stroke="#cbd5e1" stroke-width="1" stroke-dasharray="3,2"
+					/>
+					<!-- Cumulative outflows (costs) -->
+					<path
+						d={toPath(data.map((d, i) => [chartX(i, W, pad), chartY(d.cumOut, H, pad)]))}
+						fill="none" stroke="#f87171" stroke-width="1.5"
+					/>
+					<!-- Cumulative inflows (revenue) -->
+					<path
+						d={toPath(data.map((d, i) => [chartX(i, W, pad), chartY(d.cumIn, H, pad)]))}
+						fill="none" stroke="#14b8a6" stroke-width="1.5"
+					/>
+				</svg>
+				<div class="flex gap-4 mt-1 text-[10px] text-slate-500">
+					<span class="flex items-center gap-1"><span class="inline-block w-3 h-0.5 bg-red-400"></span>Cumul. Outflows</span>
+					<span class="flex items-center gap-1"><span class="inline-block w-3 h-0.5 bg-teal-500"></span>Cumul. Inflows</span>
+					<span class="ml-auto">Peak funding: <strong class="text-slate-700">{Math.round(s.peakFunding / 1000).toLocaleString('en-AE')} '000</strong></span>
+				</div>
+			</div>
+		</div>
+	{/if}
+
+	<!-- Section D: Sales Absorption -->
 	<div>
 		<div class="px-2 py-1.5 bg-slate-800 border-b border-slate-600">
 			<span class="text-[10px] font-bold text-white uppercase tracking-wider">Sales Absorption</span>

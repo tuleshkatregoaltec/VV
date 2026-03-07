@@ -1,4 +1,5 @@
 <script lang="ts">
+	import SummarySheet from './sheets/SummarySheet.svelte';
 	import RevenueSheet from './sheets/RevenueSheet.svelte';
 	import DevBudgetSheet from './sheets/DevBudgetSheet.svelte';
 	import ScheduleSheet from './sheets/ScheduleSheet.svelte';
@@ -8,8 +9,8 @@
 	import { feasibilityStore } from '$lib/stores/feasibility.svelte';
 	import { exportFeasibility } from '$lib/utils/exportFeasibility';
 
-	type Sheet = 'revenue' | 'devbudget' | 'schedule' | 'cashflow' | 'returns' | 'assumptions';
-	let activeSheet = $state<Sheet>('revenue');
+	type Sheet = 'summary' | 'assumptions' | 'devbudget' | 'revenue' | 'schedule' | 'cashflow' | 'returns';
+	let activeSheet = $state<Sheet>('summary');
 
 	function switchTab(id: Sheet) {
 		activeSheet = id;
@@ -24,12 +25,13 @@
 	});
 
 	const SHEETS: { id: Sheet; label: string }[] = [
-		{ id: 'revenue', label: 'Revenue' },
+		{ id: 'summary', label: 'Summary' },
+		{ id: 'assumptions', label: 'Assumptions' },
 		{ id: 'devbudget', label: 'Dev Budget' },
+		{ id: 'revenue', label: 'Revenue' },
 		{ id: 'schedule', label: 'Schedule' },
 		{ id: 'cashflow', label: 'Cash Flow' },
 		{ id: 'returns', label: 'Returns' },
-		{ id: 'assumptions', label: 'Assumptions' },
 	];
 </script>
 
@@ -51,7 +53,9 @@
 
 	<!-- Sheet content -->
 	<div class="flex-1 overflow-hidden flex flex-col min-h-0">
-		{#if activeSheet === 'revenue'}
+		{#if activeSheet === 'summary'}
+			<SummarySheet {switchTab} />
+		{:else if activeSheet === 'revenue'}
 			<RevenueSheet />
 		{:else if activeSheet === 'devbudget'}
 			<DevBudgetSheet />

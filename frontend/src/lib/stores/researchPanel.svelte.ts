@@ -1,4 +1,6 @@
-export type ResearchTab = 'summary' | 'transactions' | 'analytics' | 'map';
+import type { ComparableProjectEvidence, MarketPricingRow } from './feasibility.svelte';
+
+export type ResearchTab = 'summary' | 'transactions' | 'analytics' | 'comparables' | 'map';
 
 export interface AgentTransactionData {
 	rows: Record<string, unknown>[];
@@ -17,6 +19,9 @@ const agentTransactions = $state({ value: null as AgentTransactionData | null })
 const agentAnalytics = $state({ value: null as AgentAnalyticsData | null });
 const txFilters = $state({ value: { unitType: '', days: 365 } });
 const comparableMarketPrices = $state({ value: null as Record<string, number> | null });
+const pricingComparables = $state({ value: [] as ComparableProjectEvidence[] });
+const pipelineComparables = $state({ value: [] as ComparableProjectEvidence[] });
+const hbuMarketPricing = $state({ value: [] as MarketPricingRow[] });
 
 export const researchPanelStore = {
 	get activeTab() { return activeTab.value; },
@@ -24,6 +29,9 @@ export const researchPanelStore = {
 	get agentAnalytics() { return agentAnalytics.value; },
 	get txFilters() { return txFilters.value; },
 	get comparableMarketPrices() { return comparableMarketPrices.value; },
+	get pricingComparables() { return pricingComparables.value; },
+	get pipelineComparables() { return pipelineComparables.value; },
+	get hbuMarketPricing() { return hbuMarketPricing.value; },
 
 	setActiveTab(tab: ResearchTab) { activeTab.value = tab; },
 	setAgentData(tab: 'transactions' | 'analytics', data: unknown) {
@@ -35,5 +43,14 @@ export const researchPanelStore = {
 	},
 	setComparableMarketPrices(prices: Record<string, number>) {
 		comparableMarketPrices.value = prices;
+	},
+	setComparableEvidence(data: {
+		pricing: ComparableProjectEvidence[];
+		pipeline: ComparableProjectEvidence[];
+		marketPricing: MarketPricingRow[];
+	}) {
+		pricingComparables.value = data.pricing;
+		pipelineComparables.value = data.pipeline;
+		hbuMarketPricing.value = data.marketPricing;
 	},
 };
