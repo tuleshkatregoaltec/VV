@@ -1,9 +1,9 @@
 <script lang="ts">
-	import { page } from '$app/state';
+import { page } from '$app/state'
 
-	let { href, label }: { href: string; label: string } = $props();
+let { href, label }: { href: string; label: string } = $props()
 
-	const isActive = $derived(page.url.pathname === href || page.url.pathname.startsWith(href + '/'));
+const isActive = $derived(page.url.pathname === href || page.url.pathname.startsWith(`${href}/`))
 </script>
 
 <a

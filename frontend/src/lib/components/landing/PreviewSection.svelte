@@ -1,27 +1,29 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+import { onMount } from 'svelte'
 
-	let featuresInView = $state<boolean[]>([false, false, false]);
-	let sectionElement: HTMLElement;
+let featuresInView = $state<boolean[]>([false, false, false])
+let sectionElement: HTMLElement
 
-	onMount(() => {
-		const observer = new IntersectionObserver(
-			(entries) => {
-				entries.forEach((entry) => {
-					if (entry.isIntersecting) {
-						const featureIndex = parseInt(entry.target.getAttribute('data-feature-index') || '0');
-						featuresInView[featureIndex] = true;
-					}
-				});
-			},
-			{ threshold: 0.2 }
-		);
+onMount(() => {
+	const observer = new IntersectionObserver(
+		(entries) => {
+			entries.forEach((entry) => {
+				if (entry.isIntersecting) {
+					const featureIndex = parseInt(entry.target.getAttribute('data-feature-index') || '0', 10)
+					featuresInView[featureIndex] = true
+				}
+			})
+		},
+		{ threshold: 0.2 }
+	)
 
-		const features = sectionElement.querySelectorAll('[data-feature-index]');
-		features.forEach((feature) => observer.observe(feature));
+	const features = sectionElement.querySelectorAll('[data-feature-index]')
+	features.forEach((feature) => {
+		observer.observe(feature)
+	})
 
-		return () => observer.disconnect();
-	});
+	return () => observer.disconnect()
+})
 </script>
 
 <section bind:this={sectionElement} id="preview" class="py-24 bg-white relative overflow-hidden">

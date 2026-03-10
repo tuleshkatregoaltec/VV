@@ -1,143 +1,143 @@
 <script lang="ts">
-	import {
-		feasibilityStore,
-		type BuildingConfig,
-		type UnitTypeCount
-	} from '$lib/stores/feasibility.svelte';
+import {
+	type BuildingConfig,
+	feasibilityStore,
+	type UnitTypeCount
+} from '$lib/stores/feasibility.svelte'
 
-	const UNIT_TYPES = ['Studio', '1BR', '2BR', '3BR', '4BR', '5BR', 'Penthouse'];
+const UNIT_TYPES = ['Studio', '1BR', '2BR', '3BR', '4BR', '5BR', 'Penthouse']
 
-	// --- Unit mix editor ---
-	let editingBuildingId = $state<string | null>(null);
-	let editingField = $state<string | null>(null);
-	let editValue = $state('');
-	let unitMixOpen = $state(true);
+// --- Unit mix editor ---
+let editingBuildingId = $state<string | null>(null)
+let editingField = $state<string | null>(null)
+let editValue = $state('')
+let unitMixOpen = $state(true)
 
-	function startEdit(buildingId: string, field: string, current: string | number) {
-		editingBuildingId = buildingId;
-		editingField = field;
-		editValue = String(current);
+function startEdit(buildingId: string, field: string, current: string | number) {
+	editingBuildingId = buildingId
+	editingField = field
+	editValue = String(current)
+}
+
+function commitEdit(building: BuildingConfig) {
+	if (!editingBuildingId || !editingField) return
+	if (editingField === 'name') {
+		feasibilityStore.updateBuilding(building.id, { name: editValue })
+	} else if (editingField === 'floors') {
+		const v = parseInt(editValue, 10)
+		if (!Number.isNaN(v) && v > 0) feasibilityStore.updateBuilding(building.id, { floors: v })
+	} else if (editingField === 'phase') {
+		feasibilityStore.updateBuilding(building.id, { phase: editValue })
 	}
+	editingBuildingId = null
+	editingField = null
+}
 
-	function commitEdit(building: BuildingConfig) {
-		if (!editingBuildingId || !editingField) return;
-		if (editingField === 'name') {
-			feasibilityStore.updateBuilding(building.id, { name: editValue });
-		} else if (editingField === 'floors') {
-			const v = parseInt(editValue);
-			if (!isNaN(v) && v > 0) feasibilityStore.updateBuilding(building.id, { floors: v });
-		} else if (editingField === 'phase') {
-			feasibilityStore.updateBuilding(building.id, { phase: editValue });
-		}
-		editingBuildingId = null;
-		editingField = null;
+function updateUnitCount(building: BuildingConfig, type: string, count: number) {
+	const existing = building.units.find((u) => u.type === type)
+	let units: UnitTypeCount[]
+	if (count <= 0) {
+		units = building.units.filter((u) => u.type !== type)
+	} else if (existing) {
+		units = building.units.map((u) => (u.type === type ? { ...u, count } : u))
+	} else {
+		units = [...building.units, { type, count, avgSizeSqm: defaultSize(type) }]
 	}
+	feasibilityStore.updateBuilding(building.id, { units })
+}
 
-	function updateUnitCount(building: BuildingConfig, type: string, count: number) {
-		const existing = building.units.find((u) => u.type === type);
-		let units: UnitTypeCount[];
-		if (count <= 0) {
-			units = building.units.filter((u) => u.type !== type);
-		} else if (existing) {
-			units = building.units.map((u) => (u.type === type ? { ...u, count } : u));
-		} else {
-			units = [...building.units, { type, count, avgSizeSqm: defaultSize(type) }];
-		}
-		feasibilityStore.updateBuilding(building.id, { units });
+function updateUnitSize(building: BuildingConfig, type: string, size: number) {
+	feasibilityStore.updateBuilding(building.id, {
+		units: building.units.map((u) => (u.type === type ? { ...u, avgSizeSqm: size } : u))
+	})
+}
+
+function addUnitType(building: BuildingConfig, type: string) {
+	const units = [...building.units, { type, count: 10, avgSizeSqm: defaultSize(type) }]
+	units.sort((a, b) => UNIT_TYPES.indexOf(a.type) - UNIT_TYPES.indexOf(b.type))
+	feasibilityStore.updateBuilding(building.id, { units })
+}
+
+function defaultSize(type: string): number {
+	const defaults: Record<string, number> = {
+		Studio: 45,
+		'1BR': 70,
+		'2BR': 110,
+		'3BR': 160,
+		'4BR': 220,
+		'5BR': 280,
+		Penthouse: 350
 	}
+	return defaults[type] ?? 80
+}
 
-	function updateUnitSize(building: BuildingConfig, type: string, size: number) {
-		feasibilityStore.updateBuilding(building.id, {
-			units: building.units.map((u) => (u.type === type ? { ...u, avgSizeSqm: size } : u))
-		});
-	}
+import { toSqft } from '$lib/utils/currency'
 
-	function addUnitType(building: BuildingConfig, type: string) {
-		const units = [...building.units, { type, count: 10, avgSizeSqm: defaultSize(type) }];
-		units.sort((a, b) => UNIT_TYPES.indexOf(a.type) - UNIT_TYPES.indexOf(b.type));
-		feasibilityStore.updateBuilding(building.id, { units });
-	}
+function fmt(n: number) {
+	return n.toLocaleString('en-AE', { maximumFractionDigits: 0 })
+}
+function fmtK(n: number): string {
+	const k = Math.round(Math.abs(n) / 1000)
+	const f = k.toLocaleString('en-AE')
+	return n < 0 ? `(${f})` : f
+}
 
-	function defaultSize(type: string): number {
-		const defaults: Record<string, number> = {
-			Studio: 45,
-			'1BR': 70,
-			'2BR': 110,
-			'3BR': 160,
-			'4BR': 220,
-			'5BR': 280,
-			Penthouse: 350
-		};
-		return defaults[type] ?? 80;
-	}
+// GSA per unit derived from NSA + loss factor
+function unitGSA(nsaSqm: number): number {
+	const lf = feasibilityStore.assumptions.lossFactorGFAtoNSA
+	return lf < 100 ? nsaSqm / (1 - lf / 100) : nsaSqm
+}
 
-	import { toSqft } from '$lib/utils/currency';
-
-	function fmt(n: number) {
-		return n.toLocaleString('en-AE', { maximumFractionDigits: 0 });
-	}
-	function fmtK(n: number): string {
-		const k = Math.round(Math.abs(n) / 1000);
-		const f = k.toLocaleString('en-AE');
-		return n < 0 ? `(${f})` : f;
-	}
-
-	// GSA per unit derived from NSA + loss factor
-	function unitGSA(nsaSqm: number): number {
-		const lf = feasibilityStore.assumptions.lossFactorGFAtoNSA;
-		return lf < 100 ? nsaSqm / (1 - lf / 100) : nsaSqm;
-	}
-
-	// Per-type summary aggregated across all buildings
-	const unitSummary = $derived(
-		(() => {
-			const byType: Record<string, { count: number; totalNSA: number }> = {};
-			for (const b of feasibilityStore.config.buildings) {
-				for (const u of b.units) {
-					if (!byType[u.type]) byType[u.type] = { count: 0, totalNSA: 0 };
-					byType[u.type].count += u.count;
-					byType[u.type].totalNSA += u.count * u.avgSizeSqm;
-				}
+// Per-type summary aggregated across all buildings
+const unitSummary = $derived(
+	(() => {
+		const byType: Record<string, { count: number; totalNSA: number }> = {}
+		for (const b of feasibilityStore.config.buildings) {
+			for (const u of b.units) {
+				if (!byType[u.type]) byType[u.type] = { count: 0, totalNSA: 0 }
+				byType[u.type].count += u.count
+				byType[u.type].totalNSA += u.count * u.avgSizeSqm
 			}
-			return Object.entries(byType).map(([type, d]) => ({
-				type,
-				count: d.count,
-				avgGSASqft: d.count > 0 ? toSqft(unitGSA(d.totalNSA / d.count)) : 0,
-				totalGSASqft: toSqft(unitGSA(d.totalNSA)),
-				totalNSASqm: d.totalNSA
-			}));
-		})()
-	);
+		}
+		return Object.entries(byType).map(([type, d]) => ({
+			type,
+			count: d.count,
+			avgGSASqft: d.count > 0 ? toSqft(unitGSA(d.totalNSA / d.count)) : 0,
+			totalGSASqft: toSqft(unitGSA(d.totalNSA)),
+			totalNSASqm: d.totalNSA
+		}))
+	})()
+)
 
-	// --- Assumptions ---
-	let open = $state<Record<string, boolean>>({
-		site: true,
-		land: true,
-		construction: true,
-		sales: true,
-		financing: true,
-		escrow: false,
-		retail: false,
-		macro: true
-	});
-	function toggle(key: string) {
-		open[key] = !open[key];
-	}
+// --- Assumptions ---
+let open = $state<Record<string, boolean>>({
+	site: true,
+	land: true,
+	construction: true,
+	sales: true,
+	financing: true,
+	escrow: false,
+	retail: false,
+	macro: true
+})
+function toggle(key: string) {
+	open[key] = !open[key]
+}
 
-	const a = $derived(feasibilityStore.assumptions);
+const a = $derived(feasibilityStore.assumptions)
 
-	// Editable: yellow bg + dark blue text
-	const inputClass =
-		'w-full text-right px-2 py-1.5 bg-amber-50 focus:outline focus:outline-2 focus:-outline-offset-2 focus:outline-teal-400 tabular-nums text-blue-800 text-[11px]';
+// Editable: yellow bg + dark blue text
+const inputClass =
+	'w-full text-right px-2 py-1.5 bg-amber-50 focus:outline focus:outline-2 focus:-outline-offset-2 focus:outline-teal-400 tabular-nums text-blue-800 text-[11px]'
 
-	// Unit mix inputs
-	const unitInputClass =
-		'w-full px-1.5 py-1 text-xs rounded border border-slate-200 bg-amber-50 text-blue-800 focus:outline-none focus:ring-1 focus:ring-teal-400 tabular-nums min-w-0';
+// Unit mix inputs
+const unitInputClass =
+	'w-full px-1.5 py-1 text-xs rounded border border-slate-200 bg-amber-50 text-blue-800 focus:outline-none focus:ring-1 focus:ring-teal-400 tabular-nums min-w-0'
 
-	function numInput(key: keyof typeof a, e: Event) {
-		const v = parseFloat((e.target as HTMLInputElement).value);
-		if (!isNaN(v)) feasibilityStore.setAssumptions({ [key]: v });
-	}
+function numInput(key: keyof typeof a, e: Event) {
+	const v = parseFloat((e.target as HTMLInputElement).value)
+	if (!Number.isNaN(v)) feasibilityStore.setAssumptions({ [key]: v })
+}
 </script>
 
 <div class="overflow-auto flex-1 text-[11px]">
@@ -270,7 +270,7 @@
 					</div>
 
 					<div class="space-y-1.5">
-						{#each building.units as unit}
+						{#each building.units as unit (unit.id)}
 							<div
 								class="grid items-center gap-x-1.5 min-w-0"
 								style="grid-template-columns: 3rem 1fr auto 1fr auto auto"
@@ -331,7 +331,7 @@
 
 					{#if availableTypes.length > 0}
 						<div class="flex flex-wrap gap-1 pt-0.5">
-							{#each availableTypes as type}
+							{#each availableTypes as type (type)}
 								<button
 									type="button"
 									class="text-[10px] px-1.5 py-0.5 rounded border border-dashed border-slate-200 text-slate-400 hover:border-teal-400 hover:text-teal-600 transition-colors"
@@ -362,7 +362,7 @@
 						</tr>
 					</thead>
 					<tbody>
-						{#each unitSummary as row}
+						{#each unitSummary as row (row.type)}
 							<tr class="border-t border-slate-100 text-right">
 								<td class="px-2 py-1 text-left text-slate-600 font-medium">{row.type}</td>
 								<td class="px-2 py-1 tabular-nums text-slate-700">{row.count}</td>
@@ -554,7 +554,7 @@
 				</td>
 			</tr>
 			{#if open.construction}
-				{#each [{ label: 'Build Cost/sqm', key: 'buildCostPerSqm' as const, step: 50, unit: 'AED/sqm' }, { label: 'Contingency (% of hard)', key: 'contingencyPct' as const, step: 1, unit: '%' }, { label: 'Construction Period', key: 'constructionMonths' as const, step: 1, unit: 'months' }] as row}
+				{#each [{ label: 'Build Cost/sqm', key: 'buildCostPerSqm' as const, step: 50, unit: 'AED/sqm' }, { label: 'Contingency (% of hard)', key: 'contingencyPct' as const, step: 1, unit: '%' }, { label: 'Construction Period', key: 'constructionMonths' as const, step: 1, unit: 'months' }] as row (row.key)}
 					<tr class="border-b border-slate-100 hover:bg-slate-50/60">
 						<td class="border-r border-slate-200 px-2 py-1.5 text-slate-600">{row.label}</td>
 						<td class="border-r border-slate-200 p-0 relative">
@@ -588,7 +588,7 @@
 				</td>
 			</tr>
 			{#if open.sales}
-				{#each [{ label: 'Sales Launch (months)', key: 'salesLaunchMonth' as const, step: 1, unit: 'months' }, { label: 'Sales Duration (months)', key: 'salesMonths' as const, step: 1, unit: 'months' }, { label: 'Agent Commission', key: 'agentCommissionPct' as const, step: 0.5, unit: '%' }, { label: 'Marketing Budget', key: 'marketingBudgetPct' as const, step: 0.5, unit: '%' }, { label: 'Presale Discount', key: 'presaleDiscountPct' as const, step: 1, unit: '%' }, { label: 'Price Escalation p.a.', key: 'priceEscalationPct' as const, step: 0.5, unit: '%' }, { label: 'Post-handover Unsold', key: 'postHandoverSalesPct' as const, step: 5, unit: '%' }] as row}
+				{#each [{ label: 'Sales Launch (months)', key: 'salesLaunchMonth' as const, step: 1, unit: 'months' }, { label: 'Sales Duration (months)', key: 'salesMonths' as const, step: 1, unit: 'months' }, { label: 'Agent Commission', key: 'agentCommissionPct' as const, step: 0.5, unit: '%' }, { label: 'Marketing Budget', key: 'marketingBudgetPct' as const, step: 0.5, unit: '%' }, { label: 'Presale Discount', key: 'presaleDiscountPct' as const, step: 1, unit: '%' }, { label: 'Price Escalation p.a.', key: 'priceEscalationPct' as const, step: 0.5, unit: '%' }, { label: 'Post-handover Unsold', key: 'postHandoverSalesPct' as const, step: 5, unit: '%' }] as row (row.key)}
 					<tr class="border-b border-slate-100 hover:bg-slate-50/60">
 						<td class="border-r border-slate-200 px-2 py-1.5 text-slate-600">{row.label}</td>
 						<td class="border-r border-slate-200 p-0 relative">
@@ -643,7 +643,7 @@
 					</td>
 					<td class="px-2 py-1.5 text-slate-400">%</td>
 				</tr>
-				{#each [{ label: 'Interest Rate p.a.', key: 'financeRatePct' as const, step: 0.5, unit: '%' }, { label: 'Arrangement Fee', key: 'arrangementFeePct' as const, step: 0.25, unit: '%' }] as row}
+				{#each [{ label: 'Interest Rate p.a.', key: 'financeRatePct' as const, step: 0.5, unit: '%' }, { label: 'Arrangement Fee', key: 'arrangementFeePct' as const, step: 0.25, unit: '%' }] as row (row.key)}
 					<tr class="border-b border-slate-100 hover:bg-slate-50/60">
 						<td class="border-r border-slate-200 px-2 py-1.5 text-slate-600">{row.label}</td>
 						<td class="border-r border-slate-200 p-0 relative">
@@ -775,7 +775,7 @@
 									</tr>
 								</thead>
 								<tbody>
-									{#each a.escrowMilestones as m, idx}
+									{#each a.escrowMilestones as m, idx (`${m.label}-${idx}`)}
 										<tr class="border-t border-slate-100">
 											<td class="px-1 py-0.5">
 												<input
@@ -853,7 +853,7 @@
 						</td>
 					</tr>
 					{#if a.hasVATBridgeLoan}
-						{#each [{ label: '└ Bridge Loan Term', key: 'vatBridgeLoanTermMonths' as const, step: 1, unit: 'months' }, { label: '└ Bridge Loan Rate', key: 'vatBridgeLoanRatePct' as const, step: 0.5, unit: '%' }] as row}
+						{#each [{ label: '└ Bridge Loan Term', key: 'vatBridgeLoanTermMonths' as const, step: 1, unit: 'months' }, { label: '└ Bridge Loan Rate', key: 'vatBridgeLoanRatePct' as const, step: 0.5, unit: '%' }] as row (row.key)}
 							<tr class="border-b border-slate-100 hover:bg-slate-50/60">
 								<td class="border-r border-slate-200 px-2 py-1.5 pl-5 text-slate-500"
 									>{row.label}</td
@@ -892,7 +892,7 @@
 				</td>
 			</tr>
 			{#if open.retail && a.hasAncillaryRetail}
-				{#each [{ label: 'Retail Area', key: 'retailAreaSqm' as const, step: 50, unit: 'sqm' }, { label: 'Rent per sqm/yr', key: 'retailRentPerSqmYr' as const, step: 50, unit: 'AED/sqm/yr' }, { label: 'Cap Rate', key: 'retailYieldCapRate' as const, step: 0.5, unit: '%' }] as row}
+				{#each [{ label: 'Retail Area', key: 'retailAreaSqm' as const, step: 50, unit: 'sqm' }, { label: 'Rent per sqm/yr', key: 'retailRentPerSqmYr' as const, step: 50, unit: 'AED/sqm/yr' }, { label: 'Cap Rate', key: 'retailYieldCapRate' as const, step: 0.5, unit: '%' }] as row (row.key)}
 					<tr class="border-b border-slate-100 hover:bg-slate-50/60">
 						<td class="border-r border-slate-200 px-2 py-1.5 text-slate-600">{row.label}</td>
 						<td class="border-r border-slate-200 p-0 relative">
@@ -936,7 +936,7 @@
 				</td>
 			</tr>
 			{#if open.macro}
-				{#each [{ label: 'Discount Rate', key: 'discountRatePct' as const, step: 0.5, unit: '%' }, { label: 'Target ROC', key: 'targetROCPct' as const, step: 5, unit: '%' }] as row}
+				{#each [{ label: 'Discount Rate', key: 'discountRatePct' as const, step: 0.5, unit: '%' }, { label: 'Target ROC', key: 'targetROCPct' as const, step: 5, unit: '%' }] as row (row.key)}
 					<tr class="border-b border-slate-100 hover:bg-slate-50/60">
 						<td class="border-r border-slate-200 px-2 py-1.5 text-slate-600">{row.label}</td>
 						<td class="border-r border-slate-200 p-0 relative">

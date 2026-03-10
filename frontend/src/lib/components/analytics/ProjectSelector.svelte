@@ -1,70 +1,70 @@
 <script lang="ts">
-	import { createQuery } from '@tanstack/svelte-query';
-	import { analytics, type ProjectSearchItem } from '$lib/api/analytics';
+import { createQuery } from '@tanstack/svelte-query'
+import { analytics, type ProjectSearchItem } from '$lib/api/analytics'
 
-	let {
-		value = $bindable<ProjectSearchItem | null>(null),
-		placeholder = 'Search project...',
-		onSelect
-	}: {
-		value?: ProjectSearchItem | null;
-		placeholder?: string;
-		onSelect?: (project: ProjectSearchItem | null) => void;
-	} = $props();
+let {
+	value = $bindable<ProjectSearchItem | null>(null),
+	placeholder = 'Search project...',
+	onSelect
+}: {
+	value?: ProjectSearchItem | null
+	placeholder?: string
+	onSelect?: (project: ProjectSearchItem | null) => void
+} = $props()
 
-	let inputValue = $state(value?.name ?? '');
-	let isOpen = $state(false);
+let inputValue = $state(value?.name ?? '')
+let isOpen = $state(false)
 
-	function clickOutside(node: HTMLElement, callback: () => void) {
-		function handle(e: MouseEvent) {
-			if (!node.contains(e.target as Node)) callback();
-		}
-		document.addEventListener('mousedown', handle, true);
-		return {
-			destroy() {
-				document.removeEventListener('mousedown', handle, true);
-			}
-		};
+function clickOutside(node: HTMLElement, callback: () => void) {
+	function handle(e: MouseEvent) {
+		if (!node.contains(e.target as Node)) callback()
 	}
-
-	// Load all projects once — master projects + standalone orphans
-	const allProjectsQuery = createQuery(() => ({
-		queryKey: ['project-search-all'],
-		queryFn: () => analytics.projectSearch('', 500),
-		staleTime: Infinity
-	}));
-
-	const allProjects = $derived(allProjectsQuery.data?.projects ?? []);
-
-	const filtered = $derived(
-		inputValue.trim() && inputValue !== value?.name
-			? allProjects.filter((p) => p.name.toLowerCase().includes(inputValue.toLowerCase()))
-			: allProjects
-	);
-
-	function select(project: ProjectSearchItem) {
-		value = project;
-		inputValue = project.name;
-		isOpen = false;
-		onSelect?.(project);
-	}
-
-	function clear() {
-		value = null;
-		inputValue = '';
-		isOpen = false;
-		onSelect?.(null);
-	}
-
-	function handleKeydown(e: KeyboardEvent) {
-		if (e.key === 'Escape') {
-			isOpen = false;
-		}
-		if (e.key === 'Enter') {
-			e.preventDefault();
-			if (filtered.length > 0) select(filtered[0]);
+	document.addEventListener('mousedown', handle, true)
+	return {
+		destroy() {
+			document.removeEventListener('mousedown', handle, true)
 		}
 	}
+}
+
+// Load all projects once — master projects + standalone orphans
+const allProjectsQuery = createQuery(() => ({
+	queryKey: ['project-search-all'],
+	queryFn: () => analytics.projectSearch('', 500),
+	staleTime: Infinity
+}))
+
+const allProjects = $derived(allProjectsQuery.data?.projects ?? [])
+
+const filtered = $derived(
+	inputValue.trim() && inputValue !== value?.name
+		? allProjects.filter((p) => p.name.toLowerCase().includes(inputValue.toLowerCase()))
+		: allProjects
+)
+
+function select(project: ProjectSearchItem) {
+	value = project
+	inputValue = project.name
+	isOpen = false
+	onSelect?.(project)
+}
+
+function clear() {
+	value = null
+	inputValue = ''
+	isOpen = false
+	onSelect?.(null)
+}
+
+function handleKeydown(e: KeyboardEvent) {
+	if (e.key === 'Escape') {
+		isOpen = false
+	}
+	if (e.key === 'Enter') {
+		e.preventDefault()
+		if (filtered.length > 0) select(filtered[0])
+	}
+}
 </script>
 
 <div class="relative" use:clickOutside={() => (isOpen = false)}>
@@ -116,7 +116,7 @@
 			{:else if filtered.length === 0}
 				<div class="px-4 py-3 text-sm text-slate-400">No projects found</div>
 			{:else}
-				{#each filtered as project}
+				{#each filtered as project (project.project_id)}
 					<button
 						type="button"
 						class="w-full text-left px-4 py-2.5 text-sm hover:bg-teal-50 transition-colors {project.name ===

@@ -1,31 +1,31 @@
 <script lang="ts">
-	import BaseDropdown from './BaseDropdown.svelte';
+import BaseDropdown from './BaseDropdown.svelte'
 
-	let {
-		id,
-		ariaLabel,
-		options,
-		value = $bindable('All'),
-		onchange
-	}: {
-		id: string;
-		ariaLabel: string;
-		options: string[];
-		value?: string;
-		onchange?: (newValue: string) => void;
-	} = $props();
+let {
+	id,
+	ariaLabel,
+	options,
+	value = $bindable('All'),
+	onchange
+}: {
+	id: string
+	ariaLabel: string
+	options: string[]
+	value?: string
+	onchange?: (newValue: string) => void
+} = $props()
 
-	function select(option: string, close: () => void) {
-		value = option;
-		onchange?.(option);
-		close();
-	}
+function select(option: string, close: () => void) {
+	value = option
+	onchange?.(option)
+	close()
+}
 </script>
 
 <BaseDropdown {id} {ariaLabel} displayValue={value}>
 	{#snippet children({ close })}
 		<ul class="max-h-60 overflow-y-auto p-2">
-			{#each options as option}
+			{#each options as option (option)}
 				<li>
 					<button
 						type="button"

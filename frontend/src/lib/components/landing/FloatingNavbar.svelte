@@ -1,9 +1,9 @@
 <script lang="ts">
-	const navItems = [
-		{ label: 'Preview', href: '#preview' },
-		{ label: 'Our Partners', href: '#personas' },
-		{ label: 'Pricing', href: '#pricing' }
-	];
+const navItems = [
+	{ label: 'Preview', href: '#preview' },
+	{ label: 'Our Partners', href: '#personas' },
+	{ label: 'Pricing', href: '#pricing' }
+]
 </script>
 
 <nav class="fixed top-4 left-0 right-0 z-50">
@@ -23,7 +23,7 @@
 
 				<div class="flex items-center gap-6">
 					<div class="hidden sm:flex items-center gap-6">
-						{#each navItems as item}
+						{#each navItems as item (item.href)}
 							<a
 								href={item.href}
 								class="text-sm font-medium text-slate-700 hover:text-slate-900 transition-colors"

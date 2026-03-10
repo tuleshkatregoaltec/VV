@@ -1,83 +1,84 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
-	import { goto } from '$app/navigation';
-	import { admin, type OrgListItem } from '$lib/api/admin';
-	import { ApiError } from '$lib/api/client';
-	import CreateUserModal from '$lib/components/admin/CreateUserModal.svelte';
-	import ConfirmModal from '$lib/components/ui/ConfirmModal.svelte';
+import { onMount } from 'svelte'
+import { goto } from '$app/navigation'
+import { admin, type OrgListItem } from '$lib/api/admin'
+import { ApiError } from '$lib/api/client'
+import CreateUserModal from '$lib/components/admin/CreateUserModal.svelte'
+import ConfirmModal from '$lib/components/ui/ConfirmModal.svelte'
 
-	let orgs = $state<OrgListItem[]>([]);
-	let loading = $state(true);
-	let error = $state('');
-	let showCreateUser = $state(false);
-	let activatingOrgId = $state<string | null>(null);
-	let deletingOrgId = $state<string | null>(null);
-	let confirmDeleteOrg = $state<OrgListItem | null>(null);
+let orgs = $state<OrgListItem[]>([])
+let loading = $state(true)
+let error = $state('')
+let showCreateUser = $state(false)
+let activatingOrgId = $state<string | null>(null)
+let deletingOrgId = $state<string | null>(null)
+let confirmDeleteOrg = $state<OrgListItem | null>(null)
 
-	async function fetchOrgs() {
-		loading = true;
-		error = '';
-		try {
-			orgs = await admin.organizations.list();
-		} catch (e) {
-			error = e instanceof ApiError ? e.message : 'Failed to load organizations';
-		} finally {
-			loading = false;
-		}
+async function fetchOrgs() {
+	loading = true
+	error = ''
+	try {
+		orgs = await admin.organizations.list()
+	} catch (e) {
+		error = e instanceof ApiError ? e.message : 'Failed to load organizations'
+	} finally {
+		loading = false
 	}
+}
 
-	async function activateOrg(org: OrgListItem) {
-		activatingOrgId = org.id;
-		try {
-			const updated = await admin.organizations.setSubscription(org.id, 'active');
-			const idx = orgs.findIndex((o) => o.id === org.id);
-			if (idx !== -1) orgs[idx] = updated;
-			orgs = [...orgs];
-		} catch (e) {
-			alert(e instanceof ApiError ? e.message : 'Failed to activate');
-		} finally {
-			activatingOrgId = null;
-		}
+async function activateOrg(org: OrgListItem) {
+	activatingOrgId = org.id
+	try {
+		const updated = await admin.organizations.setSubscription(org.id, 'active')
+		const idx = orgs.findIndex((o) => o.id === org.id)
+		if (idx !== -1) orgs[idx] = updated
+		orgs = [...orgs]
+	} catch (e) {
+		alert(e instanceof ApiError ? e.message : 'Failed to activate')
+	} finally {
+		activatingOrgId = null
 	}
+}
 
-	async function deleteOrg() {
-		if (!confirmDeleteOrg) return;
-		deletingOrgId = confirmDeleteOrg.id;
-		try {
-			await admin.organizations.delete(confirmDeleteOrg.id);
-			orgs = orgs.filter((o) => o.id !== confirmDeleteOrg!.id);
-			confirmDeleteOrg = null;
-		} catch (e) {
-			alert(e instanceof ApiError ? e.message : 'Failed to delete');
-		} finally {
-			deletingOrgId = null;
-		}
+async function deleteOrg() {
+	if (!confirmDeleteOrg) return
+	const orgToDelete = confirmDeleteOrg
+	deletingOrgId = orgToDelete.id
+	try {
+		await admin.organizations.delete(orgToDelete.id)
+		orgs = orgs.filter((o) => o.id !== orgToDelete.id)
+		confirmDeleteOrg = null
+	} catch (e) {
+		alert(e instanceof ApiError ? e.message : 'Failed to delete')
+	} finally {
+		deletingOrgId = null
 	}
+}
 
-	function statusBadge(status: string) {
-		switch (status) {
-			case 'active':
-				return 'bg-green-100 text-green-800';
-			case 'trialing':
-				return 'bg-blue-100 text-blue-800';
-			case 'past_due':
-				return 'bg-orange-100 text-orange-800';
-			case 'canceled':
-				return 'bg-red-100 text-red-800';
-			default:
-				return 'bg-gray-100 text-gray-600';
-		}
+function statusBadge(status: string) {
+	switch (status) {
+		case 'active':
+			return 'bg-green-100 text-green-800'
+		case 'trialing':
+			return 'bg-blue-100 text-blue-800'
+		case 'past_due':
+			return 'bg-orange-100 text-orange-800'
+		case 'canceled':
+			return 'bg-red-100 text-red-800'
+		default:
+			return 'bg-gray-100 text-gray-600'
 	}
+}
 
-	function formatDate(d: string) {
-		return new Date(d).toLocaleDateString(undefined, {
-			year: 'numeric',
-			month: 'short',
-			day: 'numeric'
-		});
-	}
+function formatDate(d: string) {
+	return new Date(d).toLocaleDateString(undefined, {
+		year: 'numeric',
+		month: 'short',
+		day: 'numeric'
+	})
+}
 
-	onMount(fetchOrgs);
+onMount(fetchOrgs)
 </script>
 
 <div class="max-w-7xl mx-auto px-4 py-6">
@@ -126,7 +127,7 @@
 					</tr>
 				</thead>
 				<tbody class="divide-y divide-gray-100">
-					{#each orgs as org}
+					{#each orgs as org (org.id)}
 						<tr class="hover:bg-gray-50 transition-colors">
 							<td class="px-5 py-4">
 								<span class="font-medium text-gray-900 text-sm">{org.name}</span>

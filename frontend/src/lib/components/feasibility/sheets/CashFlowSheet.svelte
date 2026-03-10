@@ -1,34 +1,34 @@
 <script lang="ts">
-	import { feasibilityStore } from '$lib/stores/feasibility.svelte';
+import { feasibilityStore } from '$lib/stores/feasibility.svelte'
 
-	// Positive cost → show in brackets as outflow; zero → dash
-	function outflow(n: number): string {
-		if (n <= 0) return '—';
-		return `(${Math.round(n / 1000).toLocaleString('en-AE')})`;
-	}
-	// Positive inflow → show as number; zero → dash
-	function inflow(n: number): string {
-		if (n <= 0) return '—';
-		return Math.round(n / 1000).toLocaleString('en-AE');
-	}
-	// Net value — brackets for negative, dash for zero
-	function fmtK(n: number): string {
-		if (n === 0) return '—';
-		const k = Math.round(Math.abs(n) / 1000);
-		const f = k.toLocaleString('en-AE');
-		return n < 0 ? `(${f})` : f;
-	}
+// Positive cost → show in brackets as outflow; zero → dash
+function outflow(n: number): string {
+	if (n <= 0) return '—'
+	return `(${Math.round(n / 1000).toLocaleString('en-AE')})`
+}
+// Positive inflow → show as number; zero → dash
+function inflow(n: number): string {
+	if (n <= 0) return '—'
+	return Math.round(n / 1000).toLocaleString('en-AE')
+}
+// Net value — brackets for negative, dash for zero
+function fmtK(n: number): string {
+	if (n === 0) return '—'
+	const k = Math.round(Math.abs(n) / 1000)
+	const f = k.toLocaleString('en-AE')
+	return n < 0 ? `(${f})` : f
+}
 
-	const s = $derived(feasibilityStore);
-	const cf = $derived(s.cashflow.slice(0, 20));
-	const escrow = $derived(s.escrowData.slice(0, 20));
-	const useEscrow = $derived(s.assumptions.useEscrowModel);
+const s = $derived(feasibilityStore)
+const cf = $derived(s.cashflow.slice(0, 20))
+const escrow = $derived(s.escrowData.slice(0, 20))
+const useEscrow = $derived(s.assumptions.useEscrowModel)
 
-	let leveredOpen = $state(false);
+let leveredOpen = $state(false)
 
-	const sectionRow = 'bg-slate-800 border-b border-slate-600';
-	const sectionCell =
-		'px-2 py-1.5 text-[10px] font-bold text-white uppercase tracking-wider sticky left-0 bg-slate-800';
+const sectionRow = 'bg-slate-800 border-b border-slate-600'
+const sectionCell =
+	'px-2 py-1.5 text-[10px] font-bold text-white uppercase tracking-wider sticky left-0 bg-slate-800'
 </script>
 
 <div class="overflow-auto flex-1">
@@ -42,7 +42,7 @@
 					class="border-r border-slate-300 text-left px-2 py-1.5 text-slate-600 font-semibold sticky left-0 bg-slate-100 z-20 w-36"
 					>Line Item</th
 				>
-				{#each cf as p}
+				{#each cf as p (`header-${p.q}`)}
 					<th
 						class="border-r border-slate-200 text-right px-1.5 py-1.5 text-slate-600 font-semibold w-14"
 						>Q{p.q + 1}</th
@@ -66,7 +66,7 @@
 				<td class="border-r border-slate-200 px-2 py-1.5 text-slate-600 sticky left-0 bg-white"
 					>Equity Draw</td
 				>
-				{#each cf as p}
+				{#each cf as p (`equity-${p.q}`)}
 					{@const draw = p.q < s.cq ? s.equityRequired / s.cq : 0}
 					<td class="border-r border-slate-100 px-1.5 py-1.5 text-right tabular-nums text-slate-900"
 						>{inflow(draw)}</td
@@ -82,7 +82,7 @@
 				<td class="border-r border-slate-200 px-2 py-1.5 text-slate-600 sticky left-0 bg-white"
 					>Debt Draw</td
 				>
-				{#each cf as p}
+				{#each cf as p (`debt-${p.q}`)}
 					{@const draw = p.q < s.cq ? s.debtAmount / s.cq : 0}
 					<td class="border-r border-slate-100 px-1.5 py-1.5 text-right tabular-nums text-slate-900"
 						>{inflow(draw)}</td
@@ -98,7 +98,7 @@
 				<td class="border-r border-slate-200 px-2 py-1.5 text-slate-600 sticky left-0 bg-white">
 					{useEscrow ? 'Escrow Releases' : 'Sales Revenue'}
 				</td>
-				{#each cf as p}
+				{#each cf as p (`revenue-${p.q}`)}
 					<td class="border-r border-slate-100 px-1.5 py-1.5 text-right tabular-nums text-slate-900"
 						>{inflow(p.revenue)}</td
 					>
@@ -127,7 +127,7 @@
 						class="border-r border-blue-100 px-2 py-1.5 text-blue-700 pl-4 sticky left-0 bg-blue-50"
 						>Buyer Receipts</td
 					>
-					{#each escrow as e}
+					{#each escrow as e (`receipt-${e.q}`)}
 						<td class="border-r border-blue-50 px-1.5 py-1.5 text-right tabular-nums text-blue-800"
 							>{e.receipt > 0 ? inflow(e.receipt) : '—'}</td
 						>
@@ -142,7 +142,7 @@
 						class="border-r border-blue-100 px-2 py-1.5 text-blue-700 pl-4 sticky left-0 bg-blue-50"
 						>Developer Releases</td
 					>
-					{#each escrow as e}
+					{#each escrow as e (`release-${e.q}`)}
 						<td class="border-r border-blue-50 px-1.5 py-1.5 text-right tabular-nums text-blue-800"
 							>{e.release > 0 ? inflow(e.release) : '—'}</td
 						>
@@ -157,7 +157,7 @@
 						class="border-r border-blue-100 px-2 py-1.5 text-blue-600 pl-4 italic sticky left-0 bg-blue-50"
 						>Escrow Float</td
 					>
-					{#each escrow as e}
+					{#each escrow as e (`float-${e.q}`)}
 						<td
 							class="border-r border-blue-50 px-1.5 py-1.5 text-right tabular-nums text-blue-600 italic"
 							>{e.float !== 0 ? fmtK(e.float) : '—'}</td
@@ -173,12 +173,12 @@
 				<td class={sectionCell} colspan={cf.length + 3}>Outflows</td>
 			</tr>
 
-			{#each [{ label: 'Land', key: 'land' as const }, { label: 'Construction', key: 'construction' as const }, { label: 'Soft Costs', key: 'soft' as const }, { label: 'Selling & Mkt', key: 'marketing' as const }] as row}
+			{#each [{ label: 'Land', key: 'land' as const }, { label: 'Construction', key: 'construction' as const }, { label: 'Soft Costs', key: 'soft' as const }, { label: 'Selling & Mkt', key: 'marketing' as const }] as row (row.key)}
 				<tr class="border-b border-slate-100 hover:bg-slate-50/60">
 					<td class="border-r border-slate-200 px-2 py-1.5 text-slate-600 sticky left-0 bg-white"
 						>{row.label}</td
 					>
-					{#each cf as p}
+					{#each cf as p (`${row.key}-${p.q}`)}
 						<td
 							class="border-r border-slate-100 px-1.5 py-1.5 text-right tabular-nums text-slate-900"
 							>{outflow(p[row.key])}</td
@@ -195,7 +195,7 @@
 				<td class="border-r border-slate-200 px-2 py-1.5 text-slate-600 sticky left-0 bg-white"
 					>Interest</td
 				>
-				{#each cf as p}
+				{#each cf as p (`interest-${p.q}`)}
 					{@const interest =
 						p.q < s.cq ? (s.debtAmount * s.assumptions.financeRatePct) / 100 / 4 : 0}
 					<td class="border-r border-slate-100 px-1.5 py-1.5 text-right tabular-nums text-slate-900"
@@ -213,7 +213,7 @@
 					class="border-r border-slate-200 px-2 py-1.5 font-bold text-slate-700 sticky left-0 bg-white"
 					>Total Outflows</td
 				>
-				{#each cf as p}
+				{#each cf as p (`total-outflows-${p.q}`)}
 					<td
 						class="border-r border-slate-100 px-1.5 py-1.5 text-right font-semibold tabular-nums text-slate-900"
 						>{outflow(p.costs)}</td
@@ -235,7 +235,7 @@
 					class="border-r border-slate-200 px-2 py-1.5 font-semibold text-slate-700 sticky left-0 bg-white"
 					>Net Cash Flow</td
 				>
-				{#each cf as p}
+				{#each cf as p (`net-${p.q}`)}
 					<td
 						class="border-r border-slate-100 px-1.5 py-1.5 text-right font-semibold tabular-nums text-slate-900"
 						>{fmtK(p.net)}</td
@@ -251,7 +251,7 @@
 				<td class="border-r border-slate-200 px-2 py-1.5 text-slate-600 sticky left-0 bg-white"
 					>Cumulative</td
 				>
-				{#each cf as p}
+				{#each cf as p (`cum-${p.q}`)}
 					<td
 						class="border-r border-slate-100 px-1.5 py-1.5 text-right tabular-nums
 						{p.cum < 0 ? 'text-red-600' : 'text-slate-900'}">{fmtK(p.cum)}</td
@@ -266,7 +266,7 @@
 				<td class="border-r border-slate-200 px-2 py-1.5 text-slate-500 sticky left-0 bg-white"
 					>Debt Balance</td
 				>
-				{#each cf as p}
+				{#each cf as p (`debt-balance-${p.q}`)}
 					{@const bal = p.q < s.cq ? s.debtAmount * ((p.q + 1) / s.cq) : 0}
 					<td
 						class="border-r border-slate-100 px-1.5 py-1.5 text-right tabular-nums text-slate-900"
@@ -298,7 +298,7 @@
 						class="border-r border-slate-200 px-2 py-1.5 text-slate-600 pl-4 sticky left-0 bg-slate-50"
 						>Equity Cost Share</td
 					>
-					{#each cf as p}
+					{#each cf as p (`equity-share-${p.q}`)}
 						<td
 							class="border-r border-slate-100 px-1.5 py-1.5 text-right tabular-nums text-slate-900"
 							>{outflow(p.costs * equityRatio)}</td
@@ -314,7 +314,7 @@
 						class="border-r border-slate-200 px-2 py-1.5 text-slate-600 pl-4 sticky left-0 bg-slate-50"
 						>Interest Expense</td
 					>
-					{#each cf as p}
+					{#each cf as p (`interest-expense-${p.q}`)}
 						{@const interest = p.q < s.cq ? s.debtAmount * quarterlyRate : 0}
 						<td
 							class="border-r border-slate-100 px-1.5 py-1.5 text-right tabular-nums text-slate-900"
@@ -331,7 +331,7 @@
 						class="border-r border-slate-200 px-2 py-1.5 text-slate-600 pl-4 sticky left-0 bg-slate-50"
 						>Debt Repayment</td
 					>
-					{#each cf as p}
+					{#each cf as p (`repay-${p.q}`)}
 						{@const repay = p.q === s.cq ? s.debtAmount : 0}
 						<td
 							class="border-r border-slate-100 px-1.5 py-1.5 text-right tabular-nums text-slate-900"
@@ -348,7 +348,7 @@
 						class="border-r border-slate-200 px-2 py-1.5 font-semibold text-slate-700 sticky left-0 bg-slate-50"
 						>Levered Net CF</td
 					>
-					{#each cf as p}
+					{#each cf as p (`levered-${p.q}`)}
 						{@const interest = p.q < s.cq ? s.debtAmount * quarterlyRate : 0}
 						{@const repay = p.q === s.cq ? s.debtAmount : 0}
 						{@const levNet = p.revenue - p.costs * equityRatio - interest - repay}

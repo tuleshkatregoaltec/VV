@@ -1,21 +1,21 @@
 <script lang="ts">
-	import { feasibilityStore } from '$lib/stores/feasibility.svelte';
-	import { toSqft } from '$lib/utils/currency';
+import { feasibilityStore } from '$lib/stores/feasibility.svelte'
+import { toSqft } from '$lib/utils/currency'
 
-	function fmt(n: number) {
-		return n.toLocaleString('en-AE', { maximumFractionDigits: 0 });
-	}
-	function fmtK(n: number): string {
-		const k = Math.round(Math.abs(n) / 1000);
-		const f = k.toLocaleString('en-AE');
-		return n < 0 ? `(${f})` : f;
-	}
-	function fmtPct(n: number): string {
-		return `${n.toFixed(1)}%`;
-	}
+function fmt(n: number) {
+	return n.toLocaleString('en-AE', { maximumFractionDigits: 0 })
+}
+function fmtK(n: number): string {
+	const k = Math.round(Math.abs(n) / 1000)
+	const f = k.toLocaleString('en-AE')
+	return n < 0 ? `(${f})` : f
+}
+function fmtPct(n: number): string {
+	return `${n.toFixed(1)}%`
+}
 
-	const sectionRow = 'bg-slate-800 border-b border-slate-600';
-	const sectionCell = 'px-2 py-1.5 text-[10px] font-bold text-white uppercase tracking-wider';
+const sectionRow = 'bg-slate-800 border-b border-slate-600'
+const sectionCell = 'px-2 py-1.5 text-[10px] font-bold text-white uppercase tracking-wider'
 </script>
 
 <div class="overflow-auto flex-1">
@@ -55,7 +55,7 @@
 			</tr>
 		</thead>
 		<tbody>
-			{#each feasibilityStore.spreadsheetRows as row}
+			{#each feasibilityStore.spreadsheetRows as row (row.id ?? row.type)}
 				{@const totalArea = row.count * row.avgSizeSqm}
 				{@const gdvPct =
 					feasibilityStore.totalGDV > 0 ? (row.totalProceeds / feasibilityStore.totalGDV) * 100 : 0}
@@ -296,7 +296,7 @@
 				</tr>
 			</thead>
 			<tbody>
-				{#each milestones as m}
+				{#each milestones as m (m.label)}
 					{@const qIdx =
 						m.constructionPct === 0
 							? feasibilityStore.sq

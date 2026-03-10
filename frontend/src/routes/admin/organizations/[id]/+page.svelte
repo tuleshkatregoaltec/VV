@@ -1,167 +1,164 @@
 <script lang="ts">
-	import { page } from '$app/state';
-	import { onMount } from 'svelte';
-	import { goto } from '$app/navigation';
-	import { admin, type OrgDetail, type OrgUser } from '$lib/api/admin';
-	import { ApiError } from '$lib/api/client';
-	import Modal from '$lib/components/ui/Modal.svelte';
-	import ConfirmModal from '$lib/components/ui/ConfirmModal.svelte';
+import { onMount } from 'svelte'
+import { goto } from '$app/navigation'
+import { page } from '$app/state'
+import { admin, type OrgDetail, type OrgUser } from '$lib/api/admin'
+import { ApiError } from '$lib/api/client'
+import ConfirmModal from '$lib/components/ui/ConfirmModal.svelte'
+import Modal from '$lib/components/ui/Modal.svelte'
 
-	let org = $state<OrgDetail | null>(null);
-	let loading = $state(true);
-	let error = $state('');
+let org = $state<OrgDetail | null>(null)
+let loading = $state(true)
+let error = $state('')
 
-	// Settings edit state
-	let editMaxUsers = $state(0);
-	let editIsActive = $state(false);
-	let editSubscription = $state('');
-	let saving = $state(false);
-	let savingSubscription = $state(false);
+// Settings edit state
+let editMaxUsers = $state(0)
+let editSubscription = $state('')
+let saving = $state(false)
+let savingSubscription = $state(false)
 
-	// Delete org
-	let confirmDeleteOrg = $state(false);
-	let deletingOrg = $state(false);
+// Delete org
+let confirmDeleteOrg = $state(false)
+let deletingOrg = $state(false)
 
-	// Token limit modal
-	let selectedUser = $state<OrgUser | null>(null);
-	let showTokenModal = $state(false);
-	let editedLimit = $state(0);
-	let savingLimit = $state(false);
-	let limitError = $state('');
+// Token limit modal
+let selectedUser = $state<OrgUser | null>(null)
+let showTokenModal = $state(false)
+let editedLimit = $state(0)
+let savingLimit = $state(false)
+let limitError = $state('')
 
-	// Delete user
-	let confirmDeleteUser = $state<OrgUser | null>(null);
-	let deletingUser = $state(false);
+// Delete user
+let confirmDeleteUser = $state<OrgUser | null>(null)
+let deletingUser = $state(false)
 
-	async function fetchOrg() {
-		loading = true;
-		error = '';
-		try {
-			org = await admin.organizations.get(page.params.id);
-			editMaxUsers = org.max_users;
-			editIsActive = org.is_active;
-			editSubscription = org.subscription_status;
-		} catch (e) {
-			error = e instanceof ApiError ? e.message : 'Failed to load organization';
-		} finally {
-			loading = false;
-		}
+async function fetchOrg() {
+	loading = true
+	error = ''
+	try {
+		org = await admin.organizations.get(page.params.id)
+		editMaxUsers = org.max_users
+		editSubscription = org.subscription_status
+	} catch (e) {
+		error = e instanceof ApiError ? e.message : 'Failed to load organization'
+	} finally {
+		loading = false
 	}
+}
 
-	async function saveSettings() {
-		if (!org) return;
-		saving = true;
-		try {
-			await admin.organizations.update(org.id, {
-				max_users: editMaxUsers,
-				is_active: editIsActive
-			});
-			await fetchOrg();
-		} catch (e) {
-			error = e instanceof ApiError ? e.message : 'Failed to save';
-		} finally {
-			saving = false;
-		}
+async function saveSettings() {
+	if (!org) return
+	saving = true
+	try {
+		await admin.organizations.update(org.id, {
+			max_users: editMaxUsers
+		})
+		await fetchOrg()
+	} catch (e) {
+		error = e instanceof ApiError ? e.message : 'Failed to save'
+	} finally {
+		saving = false
 	}
+}
 
-	async function saveSubscription() {
-		if (!org) return;
-		savingSubscription = true;
-		try {
-			await admin.organizations.setSubscription(org.id, editSubscription);
-			await fetchOrg();
-		} catch (e) {
-			error = e instanceof ApiError ? e.message : 'Failed to update subscription';
-		} finally {
-			savingSubscription = false;
-		}
+async function saveSubscription() {
+	if (!org) return
+	savingSubscription = true
+	try {
+		await admin.organizations.setSubscription(org.id, editSubscription)
+		await fetchOrg()
+	} catch (e) {
+		error = e instanceof ApiError ? e.message : 'Failed to update subscription'
+	} finally {
+		savingSubscription = false
 	}
+}
 
-	async function deleteOrg() {
-		if (!org) return;
-		deletingOrg = true;
-		try {
-			await admin.organizations.delete(org.id);
-			goto('/admin/organizations');
-		} catch (e) {
-			error = e instanceof ApiError ? e.message : 'Failed to delete';
-			deletingOrg = false;
-			confirmDeleteOrg = false;
-		}
+async function deleteOrg() {
+	if (!org) return
+	deletingOrg = true
+	try {
+		await admin.organizations.delete(org.id)
+		goto('/admin/organizations')
+	} catch (e) {
+		error = e instanceof ApiError ? e.message : 'Failed to delete'
+		deletingOrg = false
+		confirmDeleteOrg = false
 	}
+}
 
-	function openTokenModal(user: OrgUser) {
-		selectedUser = user;
-		editedLimit = user.daily_token_limit;
-		limitError = '';
-		showTokenModal = true;
+function openTokenModal(user: OrgUser) {
+	selectedUser = user
+	editedLimit = user.daily_token_limit
+	limitError = ''
+	showTokenModal = true
+}
+
+async function saveTokenLimit() {
+	if (!selectedUser) return
+	savingLimit = true
+	limitError = ''
+	try {
+		await admin.users.updateTokenLimit(selectedUser.id, editedLimit)
+		showTokenModal = false
+		await fetchOrg()
+	} catch (e) {
+		limitError = e instanceof ApiError ? e.message : 'Failed to update limit'
+	} finally {
+		savingLimit = false
 	}
+}
 
-	async function saveTokenLimit() {
-		if (!selectedUser) return;
-		savingLimit = true;
-		limitError = '';
-		try {
-			await admin.users.updateTokenLimit(selectedUser.id, editedLimit);
-			showTokenModal = false;
-			await fetchOrg();
-		} catch (e) {
-			limitError = e instanceof ApiError ? e.message : 'Failed to update limit';
-		} finally {
-			savingLimit = false;
-		}
+async function deleteUser() {
+	if (!confirmDeleteUser) return
+	deletingUser = true
+	try {
+		await admin.users.delete(confirmDeleteUser.id)
+		confirmDeleteUser = null
+		await fetchOrg()
+	} catch (e) {
+		alert(e instanceof ApiError ? e.message : 'Failed to delete user')
+	} finally {
+		deletingUser = false
 	}
+}
 
-	async function deleteUser() {
-		if (!confirmDeleteUser) return;
-		deletingUser = true;
-		try {
-			await admin.users.delete(confirmDeleteUser.id);
-			confirmDeleteUser = null;
-			await fetchOrg();
-		} catch (e) {
-			alert(e instanceof ApiError ? e.message : 'Failed to delete user');
-		} finally {
-			deletingUser = false;
-		}
+function fullName(u: OrgUser) {
+	const name = `${u.first_name || ''} ${u.last_name || ''}`.trim()
+	return name || u.email
+}
+
+function formatDate(d: string | null) {
+	if (!d) return '—'
+	return new Date(d).toLocaleDateString(undefined, {
+		month: 'short',
+		day: 'numeric',
+		year: 'numeric'
+	})
+}
+
+function usageColor(pct: number) {
+	if (pct >= 90) return 'bg-red-500'
+	if (pct >= 70) return 'bg-yellow-500'
+	return 'bg-green-500'
+}
+
+function statusBadge(status: string) {
+	switch (status) {
+		case 'active':
+			return 'bg-green-100 text-green-800'
+		case 'trialing':
+			return 'bg-blue-100 text-blue-800'
+		case 'past_due':
+			return 'bg-orange-100 text-orange-800'
+		case 'canceled':
+			return 'bg-red-100 text-red-800'
+		default:
+			return 'bg-gray-100 text-gray-600'
 	}
+}
 
-	function fullName(u: OrgUser) {
-		const name = `${u.first_name || ''} ${u.last_name || ''}`.trim();
-		return name || u.email;
-	}
-
-	function formatDate(d: string | null) {
-		if (!d) return '—';
-		return new Date(d).toLocaleDateString(undefined, {
-			month: 'short',
-			day: 'numeric',
-			year: 'numeric'
-		});
-	}
-
-	function usageColor(pct: number) {
-		if (pct >= 90) return 'bg-red-500';
-		if (pct >= 70) return 'bg-yellow-500';
-		return 'bg-green-500';
-	}
-
-	function statusBadge(status: string) {
-		switch (status) {
-			case 'active':
-				return 'bg-green-100 text-green-800';
-			case 'trialing':
-				return 'bg-blue-100 text-blue-800';
-			case 'past_due':
-				return 'bg-orange-100 text-orange-800';
-			case 'canceled':
-				return 'bg-red-100 text-red-800';
-			default:
-				return 'bg-gray-100 text-gray-600';
-		}
-	}
-
-	onMount(fetchOrg);
+onMount(fetchOrg)
 </script>
 
 <div class="max-w-7xl mx-auto px-4 py-6">
@@ -219,10 +216,6 @@
 							class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
 						/>
 					</div>
-					<label class="flex items-center gap-2 text-sm text-gray-700">
-						<input type="checkbox" bind:checked={editIsActive} class="rounded" />
-						Organization active
-					</label>
 					<button
 						onclick={saveSettings}
 						disabled={saving}
@@ -308,7 +301,7 @@
 						</tr>
 					</thead>
 					<tbody class="divide-y divide-gray-100">
-						{#each org.users as user}
+						{#each org.users as user (user.id)}
 							<tr class="hover:bg-gray-50 transition-colors">
 								<td class="px-5 py-4">
 									<div class="font-medium text-sm text-gray-900">{fullName(user)}</div>

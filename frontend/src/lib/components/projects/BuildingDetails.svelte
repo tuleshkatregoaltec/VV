@@ -1,13 +1,13 @@
 <script lang="ts">
-	import type { BuildingDetailResponse } from '$lib/api/projects';
+import type { BuildingDetailResponse } from '$lib/api/projects'
 
-	let {
-		building,
-		onBack
-	}: {
-		building: BuildingDetailResponse;
-		onBack: () => void;
-	} = $props();
+let {
+	building,
+	onBack
+}: {
+	building: BuildingDetailResponse
+	onBack: () => void
+} = $props()
 </script>
 
 <div class="p-5 space-y-5">
@@ -67,7 +67,7 @@
 		<div class="space-y-2.5">
 			<h3 class="text-sm font-semibold text-slate-700 uppercase tracking-wide">Unit Mix</h3>
 			<div class="space-y-2">
-				{#each building.unit_composition as unit}
+				{#each building.unit_composition as unit (unit.rooms_en)}
 					<div>
 						<div class="flex items-center justify-between mb-1">
 							<span class="text-sm font-medium text-slate-700">{unit.rooms_en}</span>

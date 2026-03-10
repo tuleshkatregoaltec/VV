@@ -1,31 +1,31 @@
-import * as XLSX from 'xlsx';
-import type { feasibilityStore as FeasibilityStore } from '$lib/stores/feasibility.svelte';
+import * as XLSX from 'xlsx'
+import type { feasibilityStore as FeasibilityStore } from '$lib/stores/feasibility.svelte'
 
-type Store = typeof FeasibilityStore;
+type Store = typeof FeasibilityStore
 
 function r(n: number) {
-	return Math.round(n);
+	return Math.round(n)
 }
 function pct(n: number) {
-	return `${n.toFixed(1)}%`;
+	return `${n.toFixed(1)}%`
 }
 function irrFmt(v: number) {
-	return isNaN(v) || !isFinite(v) ? '—' : pct(v * 100);
+	return Number.isNaN(v) || !Number.isFinite(v) ? '—' : pct(v * 100)
 }
 function fmtK(n: number) {
-	return isFinite(n) ? r(n / 1000) : '—';
+	return Number.isFinite(n) ? r(n / 1000) : '—'
 }
 
 export function exportFeasibility(s: Store) {
-	const a = s.assumptions;
-	const wb = XLSX.utils.book_new();
+	const a = s.assumptions
+	const wb = XLSX.utils.book_new()
 
 	// ── Revenue ────────────────────────────────────────────────────────────────
 	const revenueRows: unknown[][] = [
 		['Type', 'Count', 'Avg sqm', 'Total sqm', 'AED/sqm', 'GDV (AED)', '% of GDV'],
 		...s.spreadsheetRows.map((row) => {
-			const totalArea = row.count * row.avgSizeSqm;
-			const gdvPct = s.totalGDV > 0 ? (row.totalProceeds / s.totalGDV) * 100 : 0;
+			const totalArea = row.count * row.avgSizeSqm
+			const gdvPct = s.totalGDV > 0 ? (row.totalProceeds / s.totalGDV) * 100 : 0
 			return [
 				row.type,
 				row.count,
@@ -34,7 +34,7 @@ export function exportFeasibility(s: Store) {
 				row.pricePerSqm,
 				r(row.totalProceeds),
 				+gdvPct.toFixed(1)
-			];
+			]
 		}),
 		['Total', s.totalUnits, '', r(s.totalSellableAreaSqm), '', r(s.totalGDV), 100],
 		[],
@@ -55,8 +55,8 @@ export function exportFeasibility(s: Store) {
 					['Capitalised Value (AED)', r(s.retailCapValue)]
 				]
 			: [])
-	];
-	XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(revenueRows), 'Revenue');
+	]
+	XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(revenueRows), 'Revenue')
 
 	// ── Dev Budget ─────────────────────────────────────────────────────────────
 	const devBudgetRows: unknown[][] = [
@@ -129,8 +129,8 @@ export function exportFeasibility(s: Store) {
 		[],
 		[`Corporate Tax (${a.corporateTaxRatePct}%)`, r(s.corporateTaxProvision)],
 		['Net Profit (post-tax)', r(s.netProfit)]
-	];
-	XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(devBudgetRows), 'Dev Budget');
+	]
+	XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(devBudgetRows), 'Dev Budget')
 
 	// ── Schedule ───────────────────────────────────────────────────────────────
 	const scheduleRows: unknown[][] = [
@@ -165,8 +165,8 @@ export function exportFeasibility(s: Store) {
 		]),
 		[],
 		['Peak Funding Required (AED)', r(s.peakFunding)]
-	];
-	XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(scheduleRows), 'Schedule');
+	]
+	XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(scheduleRows), 'Schedule')
 
 	// ── Cash Flow ──────────────────────────────────────────────────────────────
 	const cashFlowRows: unknown[][] = [
@@ -199,8 +199,8 @@ export function exportFeasibility(s: Store) {
 			s.cashBreakevenQuarter >= 0 ? `Q${s.cashBreakevenQuarter + 1}` : '—'
 		],
 		['Total Interest (AED)', r(s.totalInterest)]
-	];
-	XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(cashFlowRows), 'Cash Flow');
+	]
+	XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(cashFlowRows), 'Cash Flow')
 
 	// ── Returns ────────────────────────────────────────────────────────────────
 	const returnsRows: unknown[][] = [
@@ -217,15 +217,15 @@ export function exportFeasibility(s: Store) {
 		[
 			`NPV @ ${a.discountRatePct}% (AED)`,
 			r(s.npvUnlevered),
-			isFinite(s.npvLevered) ? r(s.npvLevered) : '—'
+			Number.isFinite(s.npvLevered) ? r(s.npvLevered) : '—'
 		],
 		['Cash Payback', s.cashBreakevenQuarter >= 0 ? `Q${s.cashBreakevenQuarter + 1}` : '—', '—']
-	];
-	XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(returnsRows), 'Returns');
+	]
+	XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(returnsRows), 'Returns')
 
 	// ── Sources & Uses ─────────────────────────────────────────────────────────
-	const totalDevCost = r(s.totalDevCost);
-	const sourcesTotal = r(s.preHandoverGDV + s.debtAmount + s.equityRequired);
+	const totalDevCost = r(s.totalDevCost)
+	const sourcesTotal = r(s.preHandoverGDV + s.debtAmount + s.equityRequired)
 	const sourcesUsesRows: unknown[][] = [
 		['SOURCES', '%', "AED '000"],
 		[
@@ -281,8 +281,8 @@ export function exportFeasibility(s: Store) {
 				]
 			: []),
 		['Total Uses', '100%', fmtK(s.totalDevCost)]
-	];
-	XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(sourcesUsesRows), 'Sources & Uses');
+	]
+	XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(sourcesUsesRows), 'Sources & Uses')
 
 	// ── Escrow (conditional) ───────────────────────────────────────────────────
 	if (a.useEscrowModel && s.escrowData.length > 0) {
@@ -293,14 +293,14 @@ export function exportFeasibility(s: Store) {
 				const qIdx =
 					m.constructionPct === 0
 						? s.sq
-						: Math.min(Math.floor((m.constructionPct / 100) * s.cq), s.totalQ - 1);
+						: Math.min(Math.floor((m.constructionPct / 100) * s.cq), s.totalQ - 1)
 				return [
 					m.name,
 					pct(m.pct),
 					pct(m.constructionPct),
 					`Q${qIdx + 1}`,
 					fmtK((m.pct / 100) * s.preHandoverGDV)
-				];
+				]
 			}),
 			[],
 			['Quarterly Escrow Flow'],
@@ -308,8 +308,8 @@ export function exportFeasibility(s: Store) {
 			...s.escrowData
 				.filter((d) => d.receipt > 0 || d.release > 0 || d.float > 0)
 				.map((d) => [`Q${d.q + 1}`, fmtK(d.receipt), fmtK(d.release), fmtK(d.float)])
-		];
-		XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(escrowRows), 'Escrow');
+		]
+		XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(escrowRows), 'Escrow')
 	}
 
 	// ── Assumptions ────────────────────────────────────────────────────────────
@@ -393,18 +393,18 @@ export function exportFeasibility(s: Store) {
 		['MACRO'],
 		['Discount Rate (%)', a.discountRatePct],
 		['Target ROC (%)', a.targetROCPct]
-	];
-	XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(assumptionsRows), 'Assumptions');
+	]
+	XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(assumptionsRows), 'Assumptions')
 
 	// ── Download ───────────────────────────────────────────────────────────────
-	const buf = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+	const buf = XLSX.write(wb, { bookType: 'xlsx', type: 'array' })
 	const blob = new Blob([buf], {
 		type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-	});
-	const url = URL.createObjectURL(blob);
-	const anchor = document.createElement('a');
-	anchor.href = url;
-	anchor.download = `feasibility_${Date.now()}.xlsx`;
-	anchor.click();
-	URL.revokeObjectURL(url);
+	})
+	const url = URL.createObjectURL(blob)
+	const anchor = document.createElement('a')
+	anchor.href = url
+	anchor.download = `feasibility_${Date.now()}.xlsx`
+	anchor.click()
+	URL.revokeObjectURL(url)
 }

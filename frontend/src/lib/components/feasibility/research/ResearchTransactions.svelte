@@ -1,52 +1,52 @@
 <script lang="ts">
-	import { createQuery } from '@tanstack/svelte-query';
-	import { transactions } from '$lib/api/transactions';
-	import { feasibilityStore } from '$lib/stores/feasibility.svelte';
-	import { researchPanelStore } from '$lib/stores/researchPanel.svelte';
+import { createQuery } from '@tanstack/svelte-query'
+import { transactions } from '$lib/api/transactions'
+import { feasibilityStore } from '$lib/stores/feasibility.svelte'
+import { researchPanelStore } from '$lib/stores/researchPanel.svelte'
 
-	function fmtK(n: number | null): string {
-		if (n === null || n === undefined) return '—';
-		const k = Math.round(Math.abs(n) / 1000);
-		return k.toLocaleString('en-AE');
-	}
+function fmtK(n: number | null): string {
+	if (n === null || n === undefined) return '—'
+	const k = Math.round(Math.abs(n) / 1000)
+	return k.toLocaleString('en-AE')
+}
 
-	function fmtDate(d: string | null): string {
-		if (!d) return '—';
-		return new Date(d).toLocaleDateString('en-AE', {
-			day: 'numeric',
-			month: 'short',
-			year: '2-digit'
-		});
-	}
+function fmtDate(d: string | null): string {
+	if (!d) return '—'
+	return new Date(d).toLocaleDateString('en-AE', {
+		day: 'numeric',
+		month: 'short',
+		year: '2-digit'
+	})
+}
 
-	function truncate(s: string | null, n = 20): string {
-		if (!s) return '—';
-		return s.length > n ? s.slice(0, n) + '…' : s;
-	}
+function truncate(s: string | null, n = 20): string {
+	if (!s) return '—'
+	return s.length > n ? `${s.slice(0, n)}…` : s
+}
 
-	const area = $derived(feasibilityStore.area ?? '');
-	const agentData = $derived(researchPanelStore.agentTransactions);
-	const filters = $derived(researchPanelStore.txFilters);
+const area = $derived(feasibilityStore.area ?? '')
+const agentData = $derived(researchPanelStore.agentTransactions)
+const filters = $derived(researchPanelStore.txFilters)
 
-	const UNIT_TYPES = ['', 'Studio', '1BR', '2BR', '3BR', '4BR'];
-	const DAY_OPTIONS = [90, 180, 365, 730];
+const UNIT_TYPES = ['', 'Studio', '1BR', '2BR', '3BR', '4BR']
+const DAY_OPTIONS = [90, 180, 365, 730]
 
-	// TanStack Query — only active when no agent data
-	const query = createQuery(() => ({
-		queryKey: ['res-tx', area, filters.unitType, filters.days] as const,
-		queryFn: () =>
-			transactions.sales({
-				area,
-				rooms: filters.unitType || undefined,
-				timeframe_days: filters.days,
-				limit: 50,
-				trans_group: 'Sales'
-			}),
-		enabled: !!area && !agentData,
-		staleTime: 5 * 60_000
-	}));
+// TanStack Query — only active when no agent data
+const query = createQuery(() => ({
+	queryKey: ['res-tx', area, filters.unitType, filters.days] as const,
+	queryFn: () =>
+		transactions.sales({
+			area,
+			rooms: filters.unitType || undefined,
+			timeframe_days: filters.days,
+			limit: 50,
+			trans_group: 'Sales'
+		}),
+	enabled: !!area && !agentData,
+	staleTime: 5 * 60_000
+}))
 
-	const rows = $derived(agentData ? agentData.rows : (query.data?.transactions ?? []));
+const rows = $derived(agentData ? agentData.rows : (query.data?.transactions ?? []))
 </script>
 
 <div class="flex flex-col h-full min-h-0">
@@ -69,7 +69,7 @@
 				onchange={(e) =>
 					researchPanelStore.setTxFilter({ unitType: (e.target as HTMLSelectElement).value })}
 			>
-				{#each UNIT_TYPES as t}
+				{#each UNIT_TYPES as t (t)}
 					<option value={t}>{t || 'All types'}</option>
 				{/each}
 			</select>
@@ -79,7 +79,7 @@
 				onchange={(e) =>
 					researchPanelStore.setTxFilter({ days: Number((e.target as HTMLSelectElement).value) })}
 			>
-				{#each DAY_OPTIONS as d}
+				{#each DAY_OPTIONS as d (d)}
 					<option value={d}>{d}d</option>
 				{/each}
 			</select>
@@ -91,7 +91,7 @@
 		{#if !agentData && query.isPending}
 			<!-- Skeleton -->
 			<div class="space-y-px">
-				{#each Array(8) as _}
+				{#each Array(8) as _, i (`tx-skeleton-${i}`)}
 					<div class="flex gap-1 px-2 py-1.5 animate-pulse">
 						<div class="h-3 bg-slate-100 rounded flex-1"></div>
 						<div class="h-3 bg-slate-100 rounded w-14"></div>
@@ -118,7 +118,7 @@
 					</tr>
 				</thead>
 				<tbody>
-					{#each rows as row}
+					{#each rows as row (`${row.instance_date}-${row.project_name}-${row.actual_worth}`)}
 						{@const r = row as Record<string, unknown>}
 						<tr class="border-b border-slate-50 hover:bg-slate-50/60">
 							<td class="px-2 py-1 text-slate-500 whitespace-nowrap"

@@ -1,254 +1,257 @@
 <script lang="ts">
-	import { createQuery } from '@tanstack/svelte-query';
-	import { onMount } from 'svelte';
-	import { Chart, registerables } from 'chart.js';
-	import { analytics, type ProjectSearchItem } from '$lib/api/analytics';
+import { createQuery } from '@tanstack/svelte-query'
+import { Chart, registerables } from 'chart.js'
+import { onMount } from 'svelte'
+import { analytics, type ProjectSearchItem } from '$lib/api/analytics'
 
-	Chart.register(...registerables);
+Chart.register(...registerables)
 
-	let { selection }: { selection: ProjectSearchItem } = $props();
+let { selection }: { selection: ProjectSearchItem } = $props()
 
-	let subProject = $state<string | null>(null);
+let subProject = $state<string | null>(null)
 
-	// Reset sub-project when selection changes
-	$effect(() => {
-		selection;
-		subProject = null;
-	});
+// Reset sub-project when selection changes
+$effect(() => {
+	selection
+	subProject = null
+})
 
-	const subProjectsQuery = createQuery(() => ({
-		queryKey: ['sub-projects', selection.name],
-		queryFn: () => analytics.subProjects(selection.name, selection.filter_type),
-		staleTime: 10 * 60_000,
-		enabled: selection.filter_type !== 'project'
-	}));
+const subProjectsQuery = createQuery(() => ({
+	queryKey: ['sub-projects', selection.name],
+	queryFn: () => analytics.subProjects(selection.name, selection.filter_type),
+	staleTime: 10 * 60_000,
+	enabled: selection.filter_type !== 'project'
+}))
 
-	const queryParams = $derived(
-		subProject
-			? { project: subProject, masterProject: selection.name }
-			: selection.filter_type === 'project'
-				? { project: selection.name }
-				: { masterProject: selection.name, filterType: selection.filter_type }
-	);
+const queryParams = $derived(
+	subProject
+		? { project: subProject, masterProject: selection.name }
+		: selection.filter_type === 'project'
+			? { project: selection.name }
+			: { masterProject: selection.name, filterType: selection.filter_type }
+)
 
-	const summaryQuery = createQuery(() => ({
-		queryKey: ['project-summary', selection.name, subProject],
-		queryFn: () => analytics.projectSummary(queryParams),
-		staleTime: 5 * 60_000
-	}));
+const summaryQuery = createQuery(() => ({
+	queryKey: ['project-summary', selection.name, subProject],
+	queryFn: () => analytics.projectSummary(queryParams),
+	staleTime: 5 * 60_000
+}))
 
-	const trendsQuery = createQuery(() => ({
-		queryKey: ['project-trends', selection.name, subProject],
-		queryFn: () => analytics.projectTrends(queryParams, 365),
-		staleTime: 5 * 60_000
-	}));
+const trendsQuery = createQuery(() => ({
+	queryKey: ['project-trends', selection.name, subProject],
+	queryFn: () => analytics.projectTrends(queryParams, 365),
+	staleTime: 5 * 60_000
+}))
 
-	const subProjects = $derived(subProjectsQuery.data?.sub_projects ?? []);
+const subProjects = $derived(subProjectsQuery.data?.sub_projects ?? [])
 
-	// Sub-project dropdown state
-	let subDropdownOpen = $state(false);
-	let subSearch = $state('');
+// Sub-project dropdown state
+let subDropdownOpen = $state(false)
+let subSearch = $state('')
 
-	const filteredSubProjects = $derived(
-		subSearch.trim()
-			? subProjects.filter((sp) => sp.name.toLowerCase().includes(subSearch.toLowerCase()))
-			: subProjects
-	);
+const filteredSubProjects = $derived(
+	subSearch.trim()
+		? subProjects.filter((sp) => sp.name.toLowerCase().includes(subSearch.toLowerCase()))
+		: subProjects
+)
 
-	function stripPrefix(name: string): string {
-		return name.replace(selection.name, '').replace(/^[\s\-–]+/, '') || name;
+function stripPrefix(name: string): string {
+	return name.replace(selection.name, '').replace(/^[\s\-–]+/, '') || name
+}
+
+function clickOutside(node: HTMLElement, callback: () => void) {
+	function handle(e: MouseEvent) {
+		if (!node.contains(e.target as Node)) callback()
 	}
-
-	function clickOutside(node: HTMLElement, callback: () => void) {
-		function handle(e: MouseEvent) {
-			if (!node.contains(e.target as Node)) callback();
-		}
-		document.addEventListener('mousedown', handle, true);
-		return {
-			destroy() {
-				document.removeEventListener('mousedown', handle, true);
-			}
-		};
-	}
-
-	function closeSubDropdown() {
-		subDropdownOpen = false;
-		subSearch = '';
-	}
-
-	function handleSubKeydown(e: KeyboardEvent) {
-		if (e.key === 'Escape') {
-			closeSubDropdown();
-		}
-		if (e.key === 'Enter') {
-			e.preventDefault();
-			if (filteredSubProjects.length > 0) {
-				subProject = filteredSubProjects[0].name;
-				closeSubDropdown();
-			}
+	document.addEventListener('mousedown', handle, true)
+	return {
+		destroy() {
+			document.removeEventListener('mousedown', handle, true)
 		}
 	}
+}
 
-	// Chart canvases
-	let trendCanvas = $state<HTMLCanvasElement>();
-	let typeCanvas = $state<HTMLCanvasElement>();
-	let regCanvas = $state<HTMLCanvasElement>();
-	let trendChart: Chart | null = null;
-	let typeChart: Chart | null = null;
-	let regChart: Chart | null = null;
+function closeSubDropdown() {
+	subDropdownOpen = false
+	subSearch = ''
+}
 
-	const TEAL_PALETTE = [
-		'rgba(13,148,136,0.85)',
-		'rgba(20,184,166,0.85)',
-		'rgba(94,234,212,0.85)',
-		'rgba(153,246,228,0.85)',
-		'rgba(6,182,212,0.85)',
-		'rgba(8,145,178,0.85)'
-	];
-
-	function fmt(n: number): string {
-		if (n >= 1_000_000_000) return `AED ${(n / 1_000_000_000).toFixed(2)}B`;
-		if (n >= 1_000_000) return `AED ${(n / 1_000_000).toFixed(2)}M`;
-		if (n >= 1_000) return `AED ${(n / 1_000).toFixed(0)}K`;
-		return `AED ${Math.round(n).toLocaleString()}`;
+function handleSubKeydown(e: KeyboardEvent) {
+	if (e.key === 'Escape') {
+		closeSubDropdown()
 	}
-
-	function fmtShort(n: number): string {
-		if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
-		if (n >= 1_000) return `${(n / 1_000).toFixed(0)}K`;
-		return Math.round(n).toLocaleString();
+	if (e.key === 'Enter') {
+		e.preventDefault()
+		if (filteredSubProjects.length > 0) {
+			subProject = filteredSubProjects[0].name
+			closeSubDropdown()
+		}
 	}
+}
 
-	function buildTrendChart() {
-		if (!trendCanvas || !trendsQuery.data?.data?.length) return;
-		trendChart?.destroy();
-		const ctx = trendCanvas.getContext('2d');
-		if (!ctx) return;
-		const pts = trendsQuery.data.data;
-		trendChart = new Chart(ctx, {
-			type: 'line',
-			data: {
-				labels: pts.map((p) => {
-					const d = new Date(p.date);
-					return d.toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
-				}),
-				datasets: [
-					{
-						label: 'Avg Sale Price (AED)',
-						data: pts.map((p) => p.avg_price),
-						borderColor: 'rgb(13,148,136)',
-						backgroundColor: 'rgba(13,148,136,0.08)',
-						borderWidth: 2,
-						fill: true,
-						tension: 0.3,
-						pointRadius: 2,
-						pointHoverRadius: 4
+// Chart canvases
+let trendCanvas = $state<HTMLCanvasElement>()
+let typeCanvas = $state<HTMLCanvasElement>()
+let regCanvas = $state<HTMLCanvasElement>()
+let trendChart: Chart | null = null
+let typeChart: Chart | null = null
+let regChart: Chart | null = null
+
+const TEAL_PALETTE = [
+	'rgba(13,148,136,0.85)',
+	'rgba(20,184,166,0.85)',
+	'rgba(94,234,212,0.85)',
+	'rgba(153,246,228,0.85)',
+	'rgba(6,182,212,0.85)',
+	'rgba(8,145,178,0.85)'
+]
+
+function fmt(n: number): string {
+	if (n >= 1_000_000_000) return `AED ${(n / 1_000_000_000).toFixed(2)}B`
+	if (n >= 1_000_000) return `AED ${(n / 1_000_000).toFixed(2)}M`
+	if (n >= 1_000) return `AED ${(n / 1_000).toFixed(0)}K`
+	return `AED ${Math.round(n).toLocaleString()}`
+}
+
+function fmtShort(n: number): string {
+	if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
+	if (n >= 1_000) return `${(n / 1_000).toFixed(0)}K`
+	return Math.round(n).toLocaleString()
+}
+
+function buildTrendChart() {
+	if (!trendCanvas || !trendsQuery.data?.data?.length) return
+	trendChart?.destroy()
+	const ctx = trendCanvas.getContext('2d')
+	if (!ctx) return
+	const pts = trendsQuery.data.data
+	trendChart = new Chart(ctx, {
+		type: 'line',
+		data: {
+			labels: pts.map((p) => {
+				const d = new Date(p.date)
+				return d.toLocaleDateString('en-US', { month: 'short', year: '2-digit' })
+			}),
+			datasets: [
+				{
+					label: 'Avg Sale Price (AED)',
+					data: pts.map((p) => p.avg_price),
+					borderColor: 'rgb(13,148,136)',
+					backgroundColor: 'rgba(13,148,136,0.08)',
+					borderWidth: 2,
+					fill: true,
+					tension: 0.3,
+					pointRadius: 2,
+					pointHoverRadius: 4
+				}
+			]
+		},
+		options: {
+			responsive: true,
+			maintainAspectRatio: false,
+			plugins: {
+				legend: { display: false },
+				tooltip: {
+					callbacks: {
+						label: (ctx) => ` ${fmt(ctx.parsed.y)}`
 					}
-				]
+				}
 			},
-			options: {
-				responsive: true,
-				maintainAspectRatio: false,
-				plugins: {
-					legend: { display: false },
-					tooltip: {
-						callbacks: {
-							label: (ctx) => ` ${fmt(ctx.parsed.y)}`
-						}
-					}
+			scales: {
+				x: { grid: { display: false }, ticks: { maxTicksLimit: 8 } },
+				y: {
+					beginAtZero: false,
+					grid: { color: 'rgba(0,0,0,0.04)' },
+					ticks: { callback: (v) => fmtShort(Number(v)) }
+				}
+			}
+		}
+	})
+}
+
+function buildDonutChart(
+	canvas: HTMLCanvasElement,
+	labels: string[],
+	values: number[],
+	existing: Chart | null
+): Chart {
+	existing?.destroy()
+	const ctx = canvas.getContext('2d')
+	if (!ctx) {
+		throw new Error('Canvas 2D context unavailable')
+	}
+	return new Chart(ctx, {
+		type: 'doughnut',
+		data: {
+			labels,
+			datasets: [
+				{
+					data: values,
+					backgroundColor: TEAL_PALETTE,
+					borderWidth: 2,
+					borderColor: '#fff'
+				}
+			]
+		},
+		options: {
+			responsive: true,
+			maintainAspectRatio: false,
+			cutout: '62%',
+			plugins: {
+				legend: {
+					position: 'right',
+					labels: { boxWidth: 12, font: { size: 11 }, padding: 8 }
 				},
-				scales: {
-					x: { grid: { display: false }, ticks: { maxTicksLimit: 8 } },
-					y: {
-						beginAtZero: false,
-						grid: { color: 'rgba(0,0,0,0.04)' },
-						ticks: { callback: (v) => fmtShort(Number(v)) }
+				tooltip: {
+					callbacks: {
+						label: (ctx) => ` ${ctx.label}: ${ctx.parsed}%`
 					}
 				}
 			}
-		});
-	}
-
-	function buildDonutChart(
-		canvas: HTMLCanvasElement,
-		labels: string[],
-		values: number[],
-		existing: Chart | null
-	): Chart {
-		existing?.destroy();
-		const ctx = canvas.getContext('2d')!;
-		return new Chart(ctx, {
-			type: 'doughnut',
-			data: {
-				labels,
-				datasets: [
-					{
-						data: values,
-						backgroundColor: TEAL_PALETTE,
-						borderWidth: 2,
-						borderColor: '#fff'
-					}
-				]
-			},
-			options: {
-				responsive: true,
-				maintainAspectRatio: false,
-				cutout: '62%',
-				plugins: {
-					legend: {
-						position: 'right',
-						labels: { boxWidth: 12, font: { size: 11 }, padding: 8 }
-					},
-					tooltip: {
-						callbacks: {
-							label: (ctx) => ` ${ctx.label}: ${ctx.parsed}%`
-						}
-					}
-				}
-			}
-		});
-	}
-
-	$effect(() => {
-		if (trendsQuery.data) buildTrendChart();
-	});
-
-	$effect(() => {
-		const data = summaryQuery.data;
-		if (!data) return;
-
-		if (typeCanvas && data.by_property_type.length) {
-			typeChart = buildDonutChart(
-				typeCanvas,
-				data.by_property_type.map((d) => d.property_type),
-				data.by_property_type.map((d) => d.pct_of_total),
-				typeChart
-			);
 		}
-		if (regCanvas && data.by_reg_type.length) {
-			regChart = buildDonutChart(
-				regCanvas,
-				data.by_reg_type.map((d) => d.reg_type),
-				data.by_reg_type.map((d) => d.pct_of_total),
-				regChart
-			);
-		}
-	});
+	})
+}
 
-	onMount(() => {
-		return () => {
-			trendChart?.destroy();
-			typeChart?.destroy();
-			regChart?.destroy();
-		};
-	});
+$effect(() => {
+	if (trendsQuery.data) buildTrendChart()
+})
+
+$effect(() => {
+	const data = summaryQuery.data
+	if (!data) return
+
+	if (typeCanvas && data.by_property_type.length) {
+		typeChart = buildDonutChart(
+			typeCanvas,
+			data.by_property_type.map((d) => d.property_type),
+			data.by_property_type.map((d) => d.pct_of_total),
+			typeChart
+		)
+	}
+	if (regCanvas && data.by_reg_type.length) {
+		regChart = buildDonutChart(
+			regCanvas,
+			data.by_reg_type.map((d) => d.reg_type),
+			data.by_reg_type.map((d) => d.pct_of_total),
+			regChart
+		)
+	}
+})
+
+onMount(() => {
+	return () => {
+		trendChart?.destroy()
+		typeChart?.destroy()
+		regChart?.destroy()
+	}
+})
 </script>
 
 <div class="space-y-6">
 	{#if summaryQuery.isLoading}
 		<!-- Skeleton -->
 		<div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
-			{#each [0, 1, 2, 3] as _}
+			{#each [0, 1, 2, 3] as skeleton (skeleton)}
 				<div class="bg-white rounded-xl p-4 border border-slate-100 animate-pulse">
 					<div class="h-3 w-20 bg-slate-200 rounded mb-3"></div>
 					<div class="h-7 w-28 bg-slate-200 rounded"></div>
@@ -317,7 +320,7 @@
 							>
 								All development
 							</button>
-							{#each filteredSubProjects as sp}
+							{#each filteredSubProjects as sp (sp.project_id ?? sp.name)}
 								<button
 									type="button"
 									class="w-full text-left px-3 py-2 text-sm transition-colors {subProject ===
@@ -474,7 +477,7 @@
 							</tr>
 						</thead>
 						<tbody class="divide-y divide-slate-50">
-							{#each d.by_rooms as row}
+							{#each d.by_rooms as row (row.rooms)}
 								<tr class="hover:bg-slate-50/50 transition-colors">
 									<td class="px-4 py-3 font-medium text-slate-800">{row.rooms}</td>
 									<td class="px-4 py-3 text-right text-slate-600"
@@ -545,7 +548,7 @@
 			<div class="bg-white rounded-xl border border-slate-100 p-4">
 				<h3 class="text-sm font-semibold text-slate-700 mb-3">Unit Supply Composition</h3>
 				<div class="space-y-2">
-					{#each d.unit_composition as u}
+					{#each d.unit_composition as u (u.rooms)}
 						<div class="flex items-center gap-3">
 							<span class="text-xs text-slate-600 w-16 flex-shrink-0">{u.rooms}</span>
 							<div class="flex-1 bg-slate-100 rounded-full h-2">

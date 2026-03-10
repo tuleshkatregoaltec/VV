@@ -1,5 +1,5 @@
 <script module lang="ts">
-	let nextId = 0;
+let nextId = 0
 </script>
 
 <script lang="ts">
@@ -77,7 +77,7 @@
 			in:fly={{ y: -10, duration: 200, easing: quintOut }}
 			out:fade={{ duration: 150 }}
 		>
-			{#each items as item}
+			{#each items as item (item.href)}
 				<a
 					href={item.href}
 					class="block px-3 py-2 text-sm text-gray-700 hover:text-primary hover:bg-gray-50 transition-colors"

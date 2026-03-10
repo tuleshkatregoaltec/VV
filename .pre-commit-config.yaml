@@ -19,15 +19,8 @@ repos:
         entry: uv run --project backend ruff check --fix --exit-non-zero-on-fix
         language: system
         files: ^backend/.*\.py$
-      - id: frontend-prettier
-        name: frontend prettier
-        entry: sh -lc 'cd frontend && bun run format'
+      - id: frontend-biome
+        name: frontend biome
+        entry: bash -lc 'cd frontend && set -- "${@/#frontend\//}"; ./node_modules/.bin/biome check --write --diagnostic-level=error "$@"' --
         language: system
         files: ^frontend/
-        pass_filenames: false
-      - id: frontend-eslint
-        name: frontend eslint
-        entry: sh -lc 'cd frontend && bun run lint'
-        language: system
-        files: ^frontend/
-        pass_filenames: false

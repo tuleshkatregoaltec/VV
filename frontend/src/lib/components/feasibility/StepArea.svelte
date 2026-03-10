@@ -1,35 +1,35 @@
 <script lang="ts">
-	import { createQuery } from '@tanstack/svelte-query';
-	import { feasibility } from '$lib/api/feasibility';
+import { createQuery } from '@tanstack/svelte-query'
+import { feasibility } from '$lib/api/feasibility'
 
-	let { onSelect }: { onSelect: (area: string) => void } = $props();
+let { onSelect }: { onSelect: (area: string) => void } = $props()
 
-	let search = $state('');
-	let isOpen = $state(false);
+let search = $state('')
+let isOpen = $state(false)
 
-	const areasQuery = createQuery(() => ({
-		queryKey: ['feasibility-areas'],
-		queryFn: () => feasibility.getAreas(),
-		staleTime: Infinity
-	}));
+const areasQuery = createQuery(() => ({
+	queryKey: ['feasibility-areas'],
+	queryFn: () => feasibility.getAreas(),
+	staleTime: Infinity
+}))
 
-	const filtered = $derived(
-		search.trim()
-			? (areasQuery.data ?? []).filter((a) => a.toLowerCase().includes(search.toLowerCase()))
-			: (areasQuery.data ?? [])
-	);
+const filtered = $derived(
+	search.trim()
+		? (areasQuery.data ?? []).filter((a) => a.toLowerCase().includes(search.toLowerCase()))
+		: (areasQuery.data ?? [])
+)
 
-	function clickOutside(node: HTMLElement, cb: () => void) {
-		function handle(e: MouseEvent) {
-			if (!node.contains(e.target as Node)) cb();
-		}
-		document.addEventListener('mousedown', handle, true);
-		return {
-			destroy() {
-				document.removeEventListener('mousedown', handle, true);
-			}
-		};
+function clickOutside(node: HTMLElement, cb: () => void) {
+	function handle(e: MouseEvent) {
+		if (!node.contains(e.target as Node)) cb()
 	}
+	document.addEventListener('mousedown', handle, true)
+	return {
+		destroy() {
+			document.removeEventListener('mousedown', handle, true)
+		}
+	}
+}
 </script>
 
 <div class="max-w-md mx-auto">
@@ -69,7 +69,7 @@
 				{:else if filtered.length === 0}
 					<div class="px-4 py-3 text-sm text-slate-400">No areas found</div>
 				{:else}
-					{#each filtered as area}
+					{#each filtered as area (area)}
 						<button
 							type="button"
 							class="w-full text-left px-4 py-2.5 text-sm text-slate-900 hover:bg-teal-50 hover:text-teal-700 transition-colors"

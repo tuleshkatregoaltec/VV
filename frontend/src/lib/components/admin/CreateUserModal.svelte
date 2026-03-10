@@ -1,93 +1,92 @@
 <script lang="ts">
-	import Modal from '$lib/components/ui/Modal.svelte';
-	import { admin, type OrgListItem, type CreateUserRequest } from '$lib/api/admin';
-	import { ApiError } from '$lib/api/client';
+import { admin, type CreateUserRequest, type OrgListItem } from '$lib/api/admin'
+import { ApiError } from '$lib/api/client'
 
-	let {
-		open = false,
-		orgs = [],
-		onClose,
-		onCreated
-	}: {
-		open: boolean;
-		orgs: OrgListItem[];
-		onClose: () => void;
-		onCreated: () => void;
-	} = $props();
+let {
+	open = false,
+	orgs = [],
+	onClose,
+	onCreated
+}: {
+	open: boolean
+	orgs: OrgListItem[]
+	onClose: () => void
+	onCreated: () => void
+} = $props()
 
-	let email = $state('');
-	let password = $state('');
-	let firstName = $state('');
-	let lastName = $state('');
-	let orgMode = $state<'new' | 'existing'>('new');
-	let newOrgName = $state('');
-	let existingOrgId = $state('');
-	let tokenLimit = $state(100000);
-	let submitting = $state(false);
-	let error = $state('');
-	let success = $state('');
+let email = $state('')
+let password = $state('')
+let firstName = $state('')
+let lastName = $state('')
+let orgMode = $state<'new' | 'existing'>('new')
+let newOrgName = $state('')
+let existingOrgId = $state('')
+let tokenLimit = $state(100000)
+let submitting = $state(false)
+let error = $state('')
+let success = $state('')
 
-	function reset() {
-		email = '';
-		password = '';
-		firstName = '';
-		lastName = '';
-		orgMode = 'new';
-		newOrgName = '';
-		existingOrgId = orgs[0]?.id ?? '';
-		tokenLimit = 100000;
-		error = '';
-		success = '';
+function reset() {
+	email = ''
+	password = ''
+	firstName = ''
+	lastName = ''
+	orgMode = 'new'
+	newOrgName = ''
+	existingOrgId = orgs[0]?.id ?? ''
+	tokenLimit = 100000
+	error = ''
+	success = ''
+}
+
+$effect(() => {
+	if (open) {
+		reset()
+		existingOrgId = orgs[0]?.id ?? ''
+	}
+})
+
+async function submit() {
+	error = ''
+	success = ''
+
+	if (!email || !password || !firstName || !lastName) {
+		error = 'All fields are required.'
+		return
+	}
+	if (orgMode === 'new' && !newOrgName.trim()) {
+		error = 'Organization name is required.'
+		return
+	}
+	if (orgMode === 'existing' && !existingOrgId) {
+		error = 'Please select an organization.'
+		return
 	}
 
-	$effect(() => {
-		if (open) {
-			reset();
-			existingOrgId = orgs[0]?.id ?? '';
+	submitting = true
+	try {
+		const payload: CreateUserRequest = {
+			email,
+			password,
+			first_name: firstName,
+			last_name: lastName,
+			org_mode: orgMode,
+			org_name: orgMode === 'new' ? newOrgName.trim() : undefined,
+			org_id: orgMode === 'existing' ? existingOrgId : undefined,
+			daily_token_limit: tokenLimit
 		}
-	});
-
-	async function submit() {
-		error = '';
-		success = '';
-
-		if (!email || !password || !firstName || !lastName) {
-			error = 'All fields are required.';
-			return;
-		}
-		if (orgMode === 'new' && !newOrgName.trim()) {
-			error = 'Organization name is required.';
-			return;
-		}
-		if (orgMode === 'existing' && !existingOrgId) {
-			error = 'Please select an organization.';
-			return;
-		}
-
-		submitting = true;
-		try {
-			const payload: CreateUserRequest = {
-				email,
-				password,
-				first_name: firstName,
-				last_name: lastName,
-				org_mode: orgMode,
-				org_name: orgMode === 'new' ? newOrgName.trim() : undefined,
-				org_id: orgMode === 'existing' ? existingOrgId : undefined,
-				daily_token_limit: tokenLimit
-			};
-			const result = await admin.users.create(payload);
-			success = `Created ${result.email} in "${result.organization_name}"`;
-			onCreated();
-			setTimeout(() => {
-				onClose();
-			}, 1500);
-		} catch (e) {
-			error = e instanceof ApiError ? e.message : 'Failed to create user';
-		} finally {
-			submitting = false;
-		}
+		const result = await admin.users.create(payload)
+		success = `Created ${result.email} in "${result.organization_name}"`
+		onCreated()
+		setTimeout(() => {
+			onClose()
+		}, 1500)
+	} catch (e) {
+		error = e instanceof ApiError ? e.message : 'Failed to create user'
+	} finally {
+		submitting = false
 	}
+}
 </script>
 
 <Modal {open} {onClose} title="Create User" size="md">
@@ -175,7 +174,7 @@
 					bind:value={existingOrgId}
 					class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
 				>
-					{#each orgs as org}
+					{#each orgs as org (org.id)}
 						<option value={org.id}>{org.name} ({org.subscription_status})</option>
 					{/each}
 				</select>

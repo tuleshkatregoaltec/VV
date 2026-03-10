@@ -1,52 +1,52 @@
 <script lang="ts">
-	import type { ProjectDetailResponse } from '$lib/api/projects';
+import type { ProjectDetailResponse } from '$lib/api/projects'
 
-	let {
-		project,
-		analytics = null,
-		onBuildingSelect,
-		onGeoPinSelect
-	}: {
-		project: ProjectDetailResponse;
-		analytics?: { avg_price: number; gross_yield_pct: number | null } | null;
-		onBuildingSelect?: (propertyId: number, lng: number, lat: number) => void;
-		onGeoPinSelect?: (lat: number, lng: number) => void;
-	} = $props();
+let {
+	project,
+	analytics = null,
+	onBuildingSelect,
+	onGeoPinSelect
+}: {
+	project: ProjectDetailResponse
+	analytics?: { avg_price: number; gross_yield_pct: number | null } | null
+	onBuildingSelect?: (propertyId: number, lng: number, lat: number) => void
+	onGeoPinSelect?: (lat: number, lng: number) => void
+} = $props()
 
-	function formatCurrency(value: number): string {
-		if (value >= 1_000_000) return `AED ${(value / 1_000_000).toFixed(1)}M`;
-		if (value >= 1_000) return `AED ${Math.round(value / 1_000)}K`;
-		return `AED ${value.toLocaleString()}`;
+function formatCurrency(value: number): string {
+	if (value >= 1_000_000) return `AED ${(value / 1_000_000).toFixed(1)}M`
+	if (value >= 1_000) return `AED ${Math.round(value / 1_000)}K`
+	return `AED ${value.toLocaleString()}`
+}
+
+function formatDate(d: string | null): string | null {
+	if (!d) return null
+	return new Date(d).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' })
+}
+
+function statusLabel(status: string | null): string {
+	if (status === 'C') return 'Completed'
+	if (status === 'U') return 'Under Construction'
+	if (status === 'P') return 'Planned'
+	return status || ''
+}
+
+function statusColor(status: string | null): string {
+	if (status === 'C') return 'bg-emerald-100 text-emerald-700'
+	if (status === 'U') return 'bg-amber-100 text-amber-700'
+	if (status === 'P') return 'bg-blue-100 text-blue-700'
+	return 'bg-slate-100 text-slate-600'
+}
+
+const isCompleted = $derived(project.project_status === 'C')
+
+function handleBuildingClick(pin: { latitude: number; longitude: number; property_id?: number }) {
+	if (pin.property_id) {
+		onBuildingSelect?.(pin.property_id, pin.longitude, pin.latitude)
+	} else {
+		onGeoPinSelect?.(pin.latitude, pin.longitude)
 	}
-
-	function formatDate(d: string | null): string | null {
-		if (!d) return null;
-		return new Date(d).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' });
-	}
-
-	function statusLabel(status: string | null): string {
-		if (status === 'C') return 'Completed';
-		if (status === 'U') return 'Under Construction';
-		if (status === 'P') return 'Planned';
-		return status || '';
-	}
-
-	function statusColor(status: string | null): string {
-		if (status === 'C') return 'bg-emerald-100 text-emerald-700';
-		if (status === 'U') return 'bg-amber-100 text-amber-700';
-		if (status === 'P') return 'bg-blue-100 text-blue-700';
-		return 'bg-slate-100 text-slate-600';
-	}
-
-	const isCompleted = $derived(project.project_status === 'C');
-
-	function handleBuildingClick(pin: { latitude: number; longitude: number; property_id?: number }) {
-		if (pin.property_id) {
-			onBuildingSelect?.(pin.property_id, pin.longitude, pin.latitude);
-		} else {
-			onGeoPinSelect?.(pin.latitude, pin.longitude);
-		}
-	}
+}
 </script>
 
 <div class="p-5 space-y-5">
@@ -140,7 +140,7 @@
 		<div class="space-y-2.5">
 			<h3 class="text-sm font-semibold text-slate-700 uppercase tracking-wide">Unit Mix</h3>
 			<div class="space-y-2">
-				{#each project.unit_composition as unit_type}
+				{#each project.unit_composition as unit_type (unit_type.property_sub_type)}
 					<div>
 						<div class="flex items-center justify-between mb-1">
 							<span class="text-sm font-medium text-slate-700">{unit_type.property_sub_type}</span>
@@ -167,7 +167,7 @@
 				Buildings ({project.geo_pins.length})
 			</h3>
 			<div class="space-y-1.5 max-h-48 overflow-y-auto">
-				{#each project.geo_pins as pin, i}
+				{#each project.geo_pins as pin, i (pin.pin_id ?? pin.building_name ?? i)}
 					<button
 						onclick={() => handleBuildingClick(pin)}
 						class="w-full flex items-center gap-3 bg-slate-50 rounded-lg px-3 py-2 border border-slate-100 hover:bg-teal-50 hover:border-teal-200 transition-colors text-left"

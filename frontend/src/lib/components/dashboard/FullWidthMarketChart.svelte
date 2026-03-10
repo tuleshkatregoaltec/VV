@@ -1,115 +1,115 @@
 <script lang="ts">
-	import { createQuery } from '@tanstack/svelte-query';
-	import { analytics } from '$lib/api/analytics';
+import { createQuery } from '@tanstack/svelte-query'
+import { analytics } from '$lib/api/analytics'
 
-	type TimeRange = '30d' | '90d' | '6mo' | '1yr';
-	type Metric = 'price_sqm' | 'avg_price';
+type TimeRange = '30d' | '90d' | '6mo' | '1yr'
+type Metric = 'price_sqm' | 'avg_price'
 
-	const RANGE_TO_DAYS: Record<TimeRange, number> = {
-		'30d': 30,
-		'90d': 90,
-		'6mo': 180,
-		'1yr': 365
-	};
+const RANGE_TO_DAYS: Record<TimeRange, number> = {
+	'30d': 30,
+	'90d': 90,
+	'6mo': 180,
+	'1yr': 365
+}
 
-	let selectedRange = $state<TimeRange>('6mo');
-	let selectedMetric = $state<Metric>('price_sqm');
+let selectedRange = $state<TimeRange>('6mo')
+let selectedMetric = $state<Metric>('price_sqm')
 
-	const trendQuery = createQuery(() => ({
-		queryKey: ['market-trend', selectedRange],
-		queryFn: () => analytics.marketTrend({ days: RANGE_TO_DAYS[selectedRange] }),
-		staleTime: 5 * 60 * 1000
-	}));
+const trendQuery = createQuery(() => ({
+	queryKey: ['market-trend', selectedRange],
+	queryFn: () => analytics.marketTrend({ days: RANGE_TO_DAYS[selectedRange] }),
+	staleTime: 5 * 60 * 1000
+}))
 
-	const chartData = $derived(trendQuery.data?.data ?? []);
+const chartData = $derived(trendQuery.data?.data ?? [])
 
-	const values = $derived(
-		chartData.map((d) => (selectedMetric === 'price_sqm' ? d.avg_price_sqm : d.avg_price))
-	);
-	const minValue = $derived(Math.min(...values));
-	const maxValue = $derived(Math.max(...values));
-	const valueRange = $derived(maxValue - minValue || 1);
+const values = $derived(
+	chartData.map((d) => (selectedMetric === 'price_sqm' ? d.avg_price_sqm : d.avg_price))
+)
+const minValue = $derived(Math.min(...values))
+const maxValue = $derived(Math.max(...values))
+const valueRange = $derived(maxValue - minValue || 1)
 
-	const currentValue = $derived(values[values.length - 1] ?? 0);
-	const percentChange = $derived(() => {
-		const pct =
-			selectedMetric === 'price_sqm'
-				? trendQuery.data?.avg_price_sqm_change_pct
-				: trendQuery.data?.avg_price_change_pct;
-		return pct != null ? pct.toFixed(1) : null;
-	});
-	const isPositive = $derived(percentChange() == null || Number(percentChange()) >= 0);
+const currentValue = $derived(values[values.length - 1] ?? 0)
+const percentChange = $derived(() => {
+	const pct =
+		selectedMetric === 'price_sqm'
+			? trendQuery.data?.avg_price_sqm_change_pct
+			: trendQuery.data?.avg_price_change_pct
+	return pct != null ? pct.toFixed(1) : null
+})
+const isPositive = $derived(percentChange() == null || Number(percentChange()) >= 0)
 
-	const PERIOD_LABEL: Record<TimeRange, string> = {
-		'30d': 'prev 30 days',
-		'90d': 'prev 90 days',
-		'6mo': 'prev 6 months',
-		'1yr': 'prev year'
-	};
+const PERIOD_LABEL: Record<TimeRange, string> = {
+	'30d': 'prev 30 days',
+	'90d': 'prev 90 days',
+	'6mo': 'prev 6 months',
+	'1yr': 'prev year'
+}
 
-	const metricLabel = $derived(
-		selectedMetric === 'price_sqm' ? 'Price per sq.m' : 'Average Transaction Price'
-	);
-	const metricUnit = $derived(selectedMetric === 'price_sqm' ? 'AED/sq.m' : 'AED');
+const metricLabel = $derived(
+	selectedMetric === 'price_sqm' ? 'Price per sq.m' : 'Average Transaction Price'
+)
+const metricUnit = $derived(selectedMetric === 'price_sqm' ? 'AED/sq.m' : 'AED')
 
-	const chartWidth = 1000;
-	const chartHeight = 200;
-	const padding = { top: 15, right: 20, bottom: 30, left: 60 };
-	const innerWidth = chartWidth - padding.left - padding.right;
-	const innerHeight = chartHeight - padding.top - padding.bottom;
+const chartWidth = 1000
+const chartHeight = 200
+const padding = { top: 15, right: 20, bottom: 30, left: 60 }
+const innerWidth = chartWidth - padding.left - padding.right
+const innerHeight = chartHeight - padding.top - padding.bottom
 
-	function generatePath(data: typeof chartData): string {
-		if (data.length < 2) return '';
+function generatePath(data: typeof chartData): string {
+	if (data.length < 2) return ''
 
-		const points = data.map((point, i) => {
-			const x = padding.left + (i / (data.length - 1)) * innerWidth;
-			const value = selectedMetric === 'price_sqm' ? point.avg_price_sqm : point.avg_price;
-			const normalizedValue = (value - minValue) / valueRange;
-			const y = padding.top + (1 - normalizedValue) * innerHeight;
-			return { x, y };
-		});
+	const points = data.map((point, i) => {
+		const x = padding.left + (i / (data.length - 1)) * innerWidth
+		const value = selectedMetric === 'price_sqm' ? point.avg_price_sqm : point.avg_price
+		const normalizedValue = (value - minValue) / valueRange
+		const y = padding.top + (1 - normalizedValue) * innerHeight
+		return { x, y }
+	})
 
-		let path = `M ${points[0].x} ${points[0].y}`;
-		for (let i = 1; i < points.length; i++) {
-			const prev = points[i - 1];
-			const curr = points[i];
-			const cp1x = prev.x + (curr.x - prev.x) / 3;
-			const cp2x = prev.x + ((curr.x - prev.x) * 2) / 3;
-			path += ` C ${cp1x} ${prev.y}, ${cp2x} ${curr.y}, ${curr.x} ${curr.y}`;
-		}
-		return path;
+	let path = `M ${points[0].x} ${points[0].y}`
+	for (let i = 1; i < points.length; i++) {
+		const prev = points[i - 1]
+		const curr = points[i]
+		const cp1x = prev.x + (curr.x - prev.x) / 3
+		const cp2x = prev.x + ((curr.x - prev.x) * 2) / 3
+		path += ` C ${cp1x} ${prev.y}, ${cp2x} ${curr.y}, ${curr.x} ${curr.y}`
 	}
+	return path
+}
 
-	const linePath = $derived(generatePath(chartData));
-	const areaPath = $derived(
-		linePath
-			? `${linePath} L ${padding.left + innerWidth} ${padding.top + innerHeight} L ${padding.left} ${padding.top + innerHeight} Z`
-			: ''
-	);
+const linePath = $derived(generatePath(chartData))
+const areaPath = $derived(
+	linePath
+		? `${linePath} L ${padding.left + innerWidth} ${padding.top + innerHeight} L ${padding.left} ${padding.top + innerHeight} Z`
+		: ''
+)
 
-	const yAxisTicks = $derived([
-		{ value: maxValue, y: padding.top },
-		{ value: (maxValue + minValue) / 2, y: padding.top + innerHeight / 2 },
-		{ value: minValue, y: padding.top + innerHeight }
-	]);
+const yAxisTicks = $derived([
+	{ value: maxValue, y: padding.top },
+	{ value: (maxValue + minValue) / 2, y: padding.top + innerHeight / 2 },
+	{ value: minValue, y: padding.top + innerHeight }
+])
 
-	const xAxisTicks = $derived(
-		chartData.length > 0
-			? [0, 0.25, 0.5, 0.75, 1].map((ratio) => {
-					const index = Math.min(Math.floor(ratio * (chartData.length - 1)), chartData.length - 1);
-					const point = chartData[index];
-					const d = new Date(point.date);
-					return {
-						label: d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-						x: padding.left + ratio * innerWidth
-					};
-				})
-			: []
-	);
+const xAxisTicks = $derived(
+	chartData.length > 0
+		? [0, 0.25, 0.5, 0.75, 1].map((ratio) => {
+				const index = Math.min(Math.floor(ratio * (chartData.length - 1)), chartData.length - 1)
+				const point = chartData[index]
+				const d = new Date(point.date)
+				return {
+					label: d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+					x: padding.left + ratio * innerWidth
+				}
+			})
+		: []
+)
 
-	function formatNumber(num: number): string {
-		return new Intl.NumberFormat('en-US').format(Math.round(num));
-	}
+function formatNumber(num: number): string {
+	return new Intl.NumberFormat('en-US').format(Math.round(num))
+}
 </script>
 
 <div class="bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg border border-teal-100 p-4 sm:p-6">
@@ -178,7 +178,7 @@
 			</div>
 
 			<div class="flex gap-2 bg-slate-100 p-1 rounded-lg">
-				{#each [{ label: '30D', value: '30d' }, { label: '90D', value: '90d' }, { label: '6M', value: '6mo' }, { label: '1Y', value: '1yr' }] as range}
+				{#each [{ label: '30D', value: '30d' }, { label: '90D', value: '90d' }, { label: '6M', value: '6mo' }, { label: '1Y', value: '1yr' }] as range (range.value)}
 					<button
 						class="px-3 py-1.5 rounded-md text-xs font-medium transition-all {selectedRange ===
 						range.value
@@ -225,7 +225,7 @@
 					</linearGradient>
 				</defs>
 
-				{#each yAxisTicks as tick}
+				{#each yAxisTicks as tick (`grid-${tick.value}`)}
 					<line
 						x1={padding.left}
 						y1={tick.y}
@@ -248,7 +248,7 @@
 					stroke-linejoin="round"
 				/>
 
-				{#each yAxisTicks as tick}
+				{#each yAxisTicks as tick (`label-${tick.value}`)}
 					<text
 						x={padding.left - 10}
 						y={tick.y}
@@ -260,7 +260,7 @@
 					</text>
 				{/each}
 
-				{#each xAxisTicks as tick}
+				{#each xAxisTicks as tick (tick.label)}
 					<text x={tick.x} y={chartHeight - 10} text-anchor="middle" class="text-xs fill-slate-500">
 						{tick.label}
 					</text>

@@ -1,122 +1,126 @@
 <script lang="ts">
-	import ColumnSettingsDropdown from '$lib/components/dropdowns/ColumnSettingsDropdown.svelte';
+import ColumnSettingsDropdown from '$lib/components/dropdowns/ColumnSettingsDropdown.svelte'
 
-	let {
-		columns = [],
-		data = [],
-		emptyMessage = 'No data available',
-		loading = false,
-		onrowclick,
-		// Selection props
-		selectable = false,
-		selectedIds = $bindable(new Set<string>()),
-		getRowId
-	}: {
-		columns?: Array<{
-			id: string;
-			label: string;
-			align?: 'left' | 'center' | 'right';
-			format?: (value: any, row: any) => string;
-			badge?: boolean;
-			highlighted?: boolean;
-			defaultVisible?: boolean;
-		}>;
-		data?: Array<Record<string, any>>;
-		emptyMessage?: string;
-		loading?: boolean;
-		onrowclick?: (row: any) => void;
-		// Selection
-		selectable?: boolean;
-		selectedIds?: Set<string>;
-		getRowId?: (row: any) => string;
-	} = $props();
+let {
+	columns = [],
+	data = [],
+	emptyMessage = 'No data available',
+	loading = false,
+	onrowclick,
+	// Selection props
+	selectable = false,
+	selectedIds = $bindable(new Set<string>()),
+	getRowId
+}: {
+	columns?: Array<{
+		id: string
+		label: string
+		align?: 'left' | 'center' | 'right'
+		format?: (value: any, row: any) => string
+		badge?: boolean
+		highlighted?: boolean
+		defaultVisible?: boolean
+	}>
+	data?: Array<Record<string, any>>
+	emptyMessage?: string
+	loading?: boolean
+	onrowclick?: (row: any) => void
+	// Selection
+	selectable?: boolean
+	selectedIds?: Set<string>
+	getRowId?: (row: any) => string
+} = $props()
 
-	// Track which columns are visible (using column id as key)
-	let columnVisibility: Record<string, boolean> = $state({});
-	let hoveredRowId: string | null = $state(null);
-	let lastColumnsKey = '';
+// Track which columns are visible (using column id as key)
+let columnVisibility: Record<string, boolean> = $state({})
+let hoveredRowId: string | null = $state(null)
+let lastColumnsKey = ''
 
-	// Initialize column visibility from defaultVisible property when columns change
-	$effect(() => {
-		// Create a key based on column IDs to detect when columns have changed
-		const columnsKey = columns.map((c) => c.id).join(',');
+// Initialize column visibility from defaultVisible property when columns change
+$effect(() => {
+	// Create a key based on column IDs to detect when columns have changed
+	const columnsKey = columns.map((c) => c.id).join(',')
 
-		if (columnsKey !== lastColumnsKey) {
-			// Columns have changed - reinitialize visibility
-			const newVisibility: Record<string, boolean> = {};
-			for (const col of columns) {
-				// Preserve existing visibility preference if column still exists
-				if (col.id in columnVisibility) {
-					newVisibility[col.id] = columnVisibility[col.id];
-				} else {
-					newVisibility[col.id] = col.defaultVisible !== false;
-				}
+	if (columnsKey !== lastColumnsKey) {
+		// Columns have changed - reinitialize visibility
+		const newVisibility: Record<string, boolean> = {}
+		for (const col of columns) {
+			// Preserve existing visibility preference if column still exists
+			if (col.id in columnVisibility) {
+				newVisibility[col.id] = columnVisibility[col.id]
+			} else {
+				newVisibility[col.id] = col.defaultVisible !== false
 			}
-			columnVisibility = newVisibility;
-			lastColumnsKey = columnsKey;
 		}
-	});
-
-	// All columns are available for toggling
-	let allColumnOptions = $derived(columns.map((c) => ({ id: c.id, label: c.label })));
-
-	let visibleColumns = $derived(columns.filter((c) => columnVisibility[c.id]));
-
-	// Selection mode is active when any items are selected
-	let inSelectionMode = $derived(selectable && selectedIds.size > 0);
-
-	// Get all row IDs on current page
-	let allRowIds = $derived(data.map((row) => getRowId?.(row) ?? row.id));
-
-	// Check if all rows on current page are selected
-	let allSelected = $derived(
-		selectable && data.length > 0 && allRowIds.every((id) => selectedIds.has(id))
-	);
-
-	// Check if some (but not all) rows on current page are selected
-	let someSelected = $derived(
-		selectable && allRowIds.some((id) => selectedIds.has(id)) && !allSelected
-	);
-
-	function handleRowClick(row: any) {
-		onrowclick?.(row);
+		columnVisibility = newVisibility
+		lastColumnsKey = columnsKey
 	}
+})
 
-	function toggleSelectAll() {
-		const newSet = new Set(selectedIds);
-		if (allSelected) {
-			// Deselect all on current page
-			allRowIds.forEach((id) => newSet.delete(id));
-		} else {
-			// Select all on current page
-			allRowIds.forEach((id) => newSet.add(id));
-		}
-		selectedIds = newSet;
-	}
+// All columns are available for toggling
+let allColumnOptions = $derived(columns.map((c) => ({ id: c.id, label: c.label })))
 
-	function toggleRow(row: any, event: Event) {
-		event.stopPropagation(); // Prevent row click handler
-		const id = getRowId?.(row) ?? row.id;
-		const newSet = new Set(selectedIds);
-		if (newSet.has(id)) {
-			newSet.delete(id);
-		} else {
-			newSet.add(id);
-		}
-		selectedIds = newSet;
-	}
+let visibleColumns = $derived(columns.filter((c) => columnVisibility[c.id]))
 
-	function isRowSelected(row: any): boolean {
-		const id = getRowId?.(row) ?? row.id;
-		return selectedIds.has(id);
-	}
+// Selection mode is active when any items are selected
+let inSelectionMode = $derived(selectable && selectedIds.size > 0)
 
-	function showCheckbox(row: any): boolean {
-		if (!selectable) return false;
-		// Always show in selection mode, or when hovering this row
-		const id = getRowId?.(row) ?? row.id;
-		return inSelectionMode || hoveredRowId === id;
+// Get all row IDs on current page
+let allRowIds = $derived(data.map((row) => getRowId?.(row) ?? row.id))
+
+// Check if all rows on current page are selected
+let allSelected = $derived(
+	selectable && data.length > 0 && allRowIds.every((id) => selectedIds.has(id))
+)
+
+// Check if some (but not all) rows on current page are selected
+let someSelected = $derived(
+	selectable && allRowIds.some((id) => selectedIds.has(id)) && !allSelected
+)
+
+function handleRowClick(row: any) {
+	onrowclick?.(row)
+}
+
+function toggleSelectAll() {
+	const newSet = new Set(selectedIds)
+	if (allSelected) {
+		// Deselect all on current page
+		allRowIds.forEach((id) => {
+			newSet.delete(id)
+		})
+	} else {
+		// Select all on current page
+		allRowIds.forEach((id) => {
+			newSet.add(id)
+		})
 	}
+	selectedIds = newSet
+}
+
+function toggleRow(row: any, event: Event) {
+	event.stopPropagation() // Prevent row click handler
+	const id = getRowId?.(row) ?? row.id
+	const newSet = new Set(selectedIds)
+	if (newSet.has(id)) {
+		newSet.delete(id)
+	} else {
+		newSet.add(id)
+	}
+	selectedIds = newSet
+}
+
+function isRowSelected(row: any): boolean {
+	const id = getRowId?.(row) ?? row.id
+	return selectedIds.has(id)
+}
+
+function showCheckbox(row: any): boolean {
+	if (!selectable) return false
+	// Always show in selection mode, or when hovering this row
+	const id = getRowId?.(row) ?? row.id
+	return inSelectionMode || hoveredRowId === id
+}
 </script>
 
 <div
@@ -150,7 +154,7 @@
 							{/if}
 						</th>
 					{/if}
-					{#each visibleColumns as column}
+					{#each visibleColumns as column (column.id)}
 						<th
 							class="px-6 py-3 text-{column.align ||
 								'left'} text-xs font-medium text-slate-600 uppercase tracking-wider whitespace-nowrap"
@@ -185,7 +189,7 @@
 						</td>
 					</tr>
 				{:else}
-					{#each data as row}
+					{#each data as row (getRowId?.(row) ?? row.id)}
 						<tr
 							onmouseenter={() => {
 								if (selectable) hoveredRowId = getRowId?.(row) ?? row.id;
@@ -218,7 +222,7 @@
 									</div>
 								</td>
 							{/if}
-							{#each visibleColumns as column}
+							{#each visibleColumns as column (column.id)}
 								<td
 									class="px-6 py-4 whitespace-nowrap text-{column.align ||
 										'left'} text-sm {column.highlighted

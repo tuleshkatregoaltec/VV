@@ -1,241 +1,238 @@
 <script lang="ts">
-	import { chat, type Message } from '$lib/api/chat';
-	import { fly, fade } from 'svelte/transition';
-	import { cubicOut } from 'svelte/easing';
-	import ConfirmModal from '$lib/components/ui/ConfirmModal.svelte';
-	import { browser } from '$app/environment';
-	import { marked } from 'marked';
-	import DOMPurify from 'dompurify';
+import DOMPurify from 'dompurify'
+import { marked } from 'marked'
+import { browser } from '$app/environment'
+import { chat, type Message } from '$lib/api/chat'
 
-	// Add target="_blank" rel="noopener noreferrer" to all links
-	marked.use({
-		renderer: {
-			link({ href, title, text }: any) {
-				const titleAttr = title ? ` title="${title}"` : '';
-				return `<a href="${href}"${titleAttr} target="_blank" rel="noopener noreferrer">${text}</a>`;
-			}
-		}
-	});
-
-	const SANITIZE_CONFIG = {
-		ALLOWED_TAGS: [
-			'p',
-			'br',
-			'strong',
-			'em',
-			'a',
-			'ul',
-			'ol',
-			'li',
-			'blockquote',
-			'code',
-			'pre',
-			'span'
-		],
-		ALLOWED_ATTR: ['href', 'title', 'target', 'rel']
-	};
-
-	function renderMarkdown(content: string): string {
-		if (!browser) return content.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-		return DOMPurify.sanitize(marked.parse(content) as string, SANITIZE_CONFIG);
-	}
-
-	let {
-		conversationId = $bindable(null),
-		initialMessage = null,
-		autoSend = false,
-		onMessageSent = () => {}
-	}: {
-		conversationId: number | null;
-		initialMessage?: string | null;
-		autoSend?: boolean;
-		onMessageSent?: () => void;
-	} = $props();
-
-	function startConversationWithPrompt(prompt: string) {
-		inputValue = prompt;
-		handleSubmit();
-	}
-
-	interface DisplayMessage {
-		role: string;
-		content: string;
-		toolCalls?: string[];
-	}
-
-	let inputValue = $state('');
-	let messages = $state<DisplayMessage[]>([]);
-	let streamController: { close: () => void } | null = $state(null);
-	let isThinking = $state(false);
-	let loading = $state(false);
-	let error = $state<string | null>(null);
-	let textareaRef = $state<HTMLTextAreaElement>();
-	let messagesEndRef = $state<HTMLDivElement>();
-	let activeStreamConversationId: number | null = $state(null);
-	let tokenLimitModalOpen = $state(false);
-
-	// Load messages when conversation changes
-	let previousConversationId = $state<number | null>(null);
-
-	$effect(() => {
-		if (conversationId !== previousConversationId) {
-			// Cancel any active stream when switching conversations
-			if (streamController && activeStreamConversationId !== conversationId) {
-				streamController.close();
-				streamController = null;
-				activeStreamConversationId = null;
-			}
-
-			if (conversationId) {
-				loadMessages();
-			} else {
-				messages = [];
-			}
-
-			previousConversationId = conversationId;
-		}
-	});
-
-	// Auto-scroll to bottom when messages change
-	$effect(() => {
-		if (messages.length > 0 && messagesEndRef) {
-			setTimeout(() => {
-				messagesEndRef?.scrollIntoView({ behavior: 'smooth' });
-			}, 100);
-		}
-	});
-
-	// Auto-send initial message when navigating from dashboard
-	$effect(() => {
-		if (autoSend && initialMessage && conversationId && !loading && !streamController) {
-			// Set the input value to the initial message
-			inputValue = initialMessage;
-
-			// Trigger send after a brief delay for smooth UX
-			setTimeout(() => {
-				handleSubmit();
-				onMessageSent();
-			}, 300);
-		}
-	});
-
-	async function loadMessages() {
-		if (!conversationId) return;
-		loading = true;
-		error = null;
-		try {
-			const msgs = await chat.getMessages(conversationId);
-			messages = msgs.map((m: Message) => ({
-				role: m.role,
-				content: m.content,
-				toolCalls: m.tool_call_ids?.map((id) => `Tool call ${id}`) || []
-			}));
-		} catch (err) {
-			console.error('Failed to load messages:', err);
-			error = 'Failed to load messages';
-		} finally {
-			loading = false;
+// Add target="_blank" rel="noopener noreferrer" to all links
+marked.use({
+	renderer: {
+		link({ href, title, text }: any) {
+			const titleAttr = title ? ` title="${title}"` : ''
+			return `<a href="${href}"${titleAttr} target="_blank" rel="noopener noreferrer">${text}</a>`
 		}
 	}
+})
 
-	function handleSubmit() {
-		const text = inputValue.trim();
-		if (!text || !conversationId) return;
+const SANITIZE_CONFIG = {
+	ALLOWED_TAGS: [
+		'p',
+		'br',
+		'strong',
+		'em',
+		'a',
+		'ul',
+		'ol',
+		'li',
+		'blockquote',
+		'code',
+		'pre',
+		'span'
+	],
+	ALLOWED_ATTR: ['href', 'title', 'target', 'rel']
+}
 
-		if (streamController) streamController.close();
+function renderMarkdown(content: string): string {
+	if (!browser) return content.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+	return DOMPurify.sanitize(marked.parse(content) as string, SANITIZE_CONFIG)
+}
 
-		// Store the conversation ID for this stream
-		const streamConversationId = conversationId;
-		activeStreamConversationId = streamConversationId;
+let {
+	conversationId = $bindable(null),
+	initialMessage = null,
+	autoSend = false,
+	onMessageSent = () => {}
+}: {
+	conversationId: number | null
+	initialMessage?: string | null
+	autoSend?: boolean
+	onMessageSent?: () => void
+} = $props()
 
-		// Add user message
-		messages = [...messages, { role: 'user', content: text }];
-		inputValue = '';
-		if (textareaRef) textareaRef.style.height = 'auto';
+function startConversationWithPrompt(prompt: string) {
+	inputValue = prompt
+	handleSubmit()
+}
 
-		// Start streaming
-		let currentAssistantMessage = '';
-		let currentToolCalls: string[] = [];
+interface DisplayMessage {
+	role: string
+	content: string
+	toolCalls?: string[]
+}
 
-		streamController = chat.sendMessage(streamConversationId, text, (rawChunk) => {
-			// Only update messages if we're still viewing the same conversation
-			if (conversationId !== streamConversationId) {
-				return;
-			}
+let inputValue = $state('')
+let messages = $state<DisplayMessage[]>([])
+let streamController: { close: () => void } | null = $state(null)
+let isThinking = $state(false)
+let loading = $state(false)
+let error = $state<string | null>(null)
+let textareaRef = $state<HTMLTextAreaElement>()
+let messagesEndRef = $state<HTMLDivElement>()
+let activeStreamConversationId: number | null = $state(null)
+let tokenLimitModalOpen = $state(false)
 
-			try {
-				// Parse SSE data
-				const data = JSON.parse(rawChunk);
+// Load messages when conversation changes
+let previousConversationId = $state<number | null>(null)
 
-				if (data.type === 'thinking') {
-					isThinking = true;
-					if (messages[messages.length - 1]?.role !== 'assistant') {
-						messages = [...messages, { role: 'assistant', content: '' }];
-					}
-				} else if (data.type === 'content') {
-					isThinking = false;
-					currentAssistantMessage += data.content;
-					updateLastMessage('assistant', currentAssistantMessage, currentToolCalls);
-				} else if (data.type === 'tool_call_start') {
-					currentToolCalls.push(`Calling ${data.tool}...`);
-					updateLastMessage('assistant', currentAssistantMessage, currentToolCalls);
-				} else if (data.type === 'tool_call_result') {
-					const cached = data.cached ? ' (cached)' : '';
-					currentToolCalls[currentToolCalls.length - 1] = `✓ ${data.tool}${cached}`;
-					updateLastMessage('assistant', currentAssistantMessage, currentToolCalls);
-				} else if (data.type === 'done') {
-					isThinking = false;
-					streamController = null;
-					activeStreamConversationId = null;
-					setTimeout(() => textareaRef?.focus(), 100);
-				} else if (data.type === 'error') {
-					console.error('Stream error:', data.error);
-					isThinking = false;
-					if (data.error === 'token_limit_exceeded') {
-						tokenLimitModalOpen = true;
-					} else {
-						error = `Error: ${data.error}`;
-					}
-					streamController = null;
-					activeStreamConversationId = null;
-				}
-			} catch (e) {
-				console.error('Failed to parse chunk:', rawChunk, e);
-			}
-		});
-	}
+$effect(() => {
+	if (conversationId !== previousConversationId) {
+		// Cancel any active stream when switching conversations
+		if (streamController && activeStreamConversationId !== conversationId) {
+			streamController.close()
+			streamController = null
+			activeStreamConversationId = null
+		}
 
-	function updateLastMessage(role: string, content: string, toolCalls: string[]) {
-		const lastMsg = messages[messages.length - 1];
-		if (lastMsg?.role === role) {
-			messages[messages.length - 1] = {
-				role,
-				content,
-				toolCalls: toolCalls.length > 0 ? [...toolCalls] : undefined
-			};
-			messages = [...messages];
+		if (conversationId) {
+			loadMessages()
 		} else {
-			messages = [
-				...messages,
-				{ role, content, toolCalls: toolCalls.length > 0 ? [...toolCalls] : undefined }
-			];
+			messages = []
 		}
-	}
 
-	function autoResizeTextarea() {
-		if (textareaRef) {
-			textareaRef.style.height = 'auto';
-			const newHeight = Math.min(textareaRef.scrollHeight, 200);
-			textareaRef.style.height = newHeight + 'px';
+		previousConversationId = conversationId
+	}
+})
+
+// Auto-scroll to bottom when messages change
+$effect(() => {
+	if (messages.length > 0 && messagesEndRef) {
+		setTimeout(() => {
+			messagesEndRef?.scrollIntoView({ behavior: 'smooth' })
+		}, 100)
+	}
+})
+
+// Auto-send initial message when navigating from dashboard
+$effect(() => {
+	if (autoSend && initialMessage && conversationId && !loading && !streamController) {
+		// Set the input value to the initial message
+		inputValue = initialMessage
+
+		// Trigger send after a brief delay for smooth UX
+		setTimeout(() => {
+			handleSubmit()
+			onMessageSent()
+		}, 300)
+	}
+})
+
+async function loadMessages() {
+	if (!conversationId) return
+	loading = true
+	error = null
+	try {
+		const msgs = await chat.getMessages(conversationId)
+		messages = msgs.map((m: Message) => ({
+			role: m.role,
+			content: m.content,
+			toolCalls: m.tool_call_ids?.map((id) => `Tool call ${id}`) || []
+		}))
+	} catch (err) {
+		console.error('Failed to load messages:', err)
+		error = 'Failed to load messages'
+	} finally {
+		loading = false
+	}
+}
+
+function handleSubmit() {
+	const text = inputValue.trim()
+	if (!text || !conversationId) return
+
+	if (streamController) streamController.close()
+
+	// Store the conversation ID for this stream
+	const streamConversationId = conversationId
+	activeStreamConversationId = streamConversationId
+
+	// Add user message
+	messages = [...messages, { role: 'user', content: text }]
+	inputValue = ''
+	if (textareaRef) textareaRef.style.height = 'auto'
+
+	// Start streaming
+	let currentAssistantMessage = ''
+	let currentToolCalls: string[] = []
+
+	streamController = chat.sendMessage(streamConversationId, text, (rawChunk) => {
+		// Only update messages if we're still viewing the same conversation
+		if (conversationId !== streamConversationId) {
+			return
 		}
-	}
 
-	function stopStreaming() {
-		streamController?.close();
-		streamController = null;
-		activeStreamConversationId = null;
-		isThinking = false;
+		try {
+			// Parse SSE data
+			const data = JSON.parse(rawChunk)
+
+			if (data.type === 'thinking') {
+				isThinking = true
+				if (messages[messages.length - 1]?.role !== 'assistant') {
+					messages = [...messages, { role: 'assistant', content: '' }]
+				}
+			} else if (data.type === 'content') {
+				isThinking = false
+				currentAssistantMessage += data.content
+				updateLastMessage('assistant', currentAssistantMessage, currentToolCalls)
+			} else if (data.type === 'tool_call_start') {
+				currentToolCalls.push(`Calling ${data.tool}...`)
+				updateLastMessage('assistant', currentAssistantMessage, currentToolCalls)
+			} else if (data.type === 'tool_call_result') {
+				const cached = data.cached ? ' (cached)' : ''
+				currentToolCalls[currentToolCalls.length - 1] = `✓ ${data.tool}${cached}`
+				updateLastMessage('assistant', currentAssistantMessage, currentToolCalls)
+			} else if (data.type === 'done') {
+				isThinking = false
+				streamController = null
+				activeStreamConversationId = null
+				setTimeout(() => textareaRef?.focus(), 100)
+			} else if (data.type === 'error') {
+				console.error('Stream error:', data.error)
+				isThinking = false
+				if (data.error === 'token_limit_exceeded') {
+					tokenLimitModalOpen = true
+				} else {
+					error = `Error: ${data.error}`
+				}
+				streamController = null
+				activeStreamConversationId = null
+			}
+		} catch (e) {
+			console.error('Failed to parse chunk:', rawChunk, e)
+		}
+	})
+}
+
+function updateLastMessage(role: string, content: string, toolCalls: string[]) {
+	const lastMsg = messages[messages.length - 1]
+	if (lastMsg?.role === role) {
+		messages[messages.length - 1] = {
+			role,
+			content,
+			toolCalls: toolCalls.length > 0 ? [...toolCalls] : undefined
+		}
+		messages = [...messages]
+	} else {
+		messages = [
+			...messages,
+			{ role, content, toolCalls: toolCalls.length > 0 ? [...toolCalls] : undefined }
+		]
 	}
+}
+
+function autoResizeTextarea() {
+	if (textareaRef) {
+		textareaRef.style.height = 'auto'
+		const newHeight = Math.min(textareaRef.scrollHeight, 200)
+		textareaRef.style.height = `${newHeight}px`
+	}
+}
+
+function stopStreaming() {
+	streamController?.close()
+	streamController = null
+	activeStreamConversationId = null
+	isThinking = false
+}
 </script>
 
 <div class="flex flex-col h-full bg-slate-50">
@@ -440,7 +437,7 @@
 									? 'border-slate-700'
 									: 'border-slate-200'} text-xs space-y-2"
 							>
-								{#each msg.toolCalls as toolCall}
+								{#each msg.toolCalls as toolCall (`${toolCall.name}-${toolCall.status}`)}
 									<div
 										class="flex items-center gap-2 {msg.role === 'user'
 											? 'text-slate-300'

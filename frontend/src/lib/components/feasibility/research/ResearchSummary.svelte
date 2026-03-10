@@ -1,16 +1,16 @@
 <script lang="ts">
-	import { feasibilityStore } from '$lib/stores/feasibility.svelte';
+import { feasibilityStore } from '$lib/stores/feasibility.svelte'
 
-	function fmtK(n: number): string {
-		const k = Math.round(Math.abs(n) / 1000);
-		const f = k.toLocaleString('en-AE');
-		return n < 0 ? `(${f})` : f;
-	}
-	function fmtPct(n: number) {
-		return isNaN(n) ? '—' : `${n.toFixed(1)}%`;
-	}
+function fmtK(n: number): string {
+	const k = Math.round(Math.abs(n) / 1000)
+	const f = k.toLocaleString('en-AE')
+	return n < 0 ? `(${f})` : f
+}
+function fmtPct(n: number) {
+	return Number.isNaN(n) ? '—' : `${n.toFixed(1)}%`
+}
 
-	const s = $derived(feasibilityStore);
+const s = $derived(feasibilityStore)
 </script>
 
 <div class="space-y-3">

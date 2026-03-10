@@ -1,45 +1,45 @@
 <script lang="ts">
-	import SummarySheet from './sheets/SummarySheet.svelte';
-	import RevenueSheet from './sheets/RevenueSheet.svelte';
-	import DevBudgetSheet from './sheets/DevBudgetSheet.svelte';
-	import ScheduleSheet from './sheets/ScheduleSheet.svelte';
-	import CashFlowSheet from './sheets/CashFlowSheet.svelte';
-	import ReturnsSheet from './sheets/ReturnsSheet.svelte';
-	import AssumptionsSheet from './sheets/AssumptionsSheet.svelte';
-	import { feasibilityStore } from '$lib/stores/feasibility.svelte';
-	import { exportFeasibility } from '$lib/utils/exportFeasibility';
+import { feasibilityStore } from '$lib/stores/feasibility.svelte'
+import { exportFeasibility } from '$lib/utils/exportFeasibility'
+import AssumptionsSheet from './sheets/AssumptionsSheet.svelte'
+import CashFlowSheet from './sheets/CashFlowSheet.svelte'
+import DevBudgetSheet from './sheets/DevBudgetSheet.svelte'
+import ReturnsSheet from './sheets/ReturnsSheet.svelte'
+import RevenueSheet from './sheets/RevenueSheet.svelte'
+import ScheduleSheet from './sheets/ScheduleSheet.svelte'
+import SummarySheet from './sheets/SummaryS2heet.svelte'
 
-	type Sheet =
-		| 'summary'
-		| 'assumptions'
-		| 'devbudget'
-		| 'revenue'
-		| 'schedule'
-		| 'cashflow'
-		| 'returns';
-	let activeSheet = $state<Sheet>('summary');
+type Sheet =
+	| 'summary'
+	| 'assumptions'
+	| 'devbudget'
+	| 'revenue'
+	| 'schedule'
+	| 'cashflow'
+	| 'returns'
+let activeSheet = $state<Sheet>('summary')
 
-	function switchTab(id: Sheet) {
-		activeSheet = id;
-		feasibilityStore.clearAffectedTab(id);
+function switchTab(id: Sheet) {
+	activeSheet = id
+	feasibilityStore.clearAffectedTab(id)
+}
+
+// Never show a dot on the currently visible tab
+$effect(() => {
+	if (feasibilityStore.affectedTabs.has(activeSheet)) {
+		feasibilityStore.clearAffectedTab(activeSheet)
 	}
+})
 
-	// Never show a dot on the currently visible tab
-	$effect(() => {
-		if (feasibilityStore.affectedTabs.has(activeSheet)) {
-			feasibilityStore.clearAffectedTab(activeSheet);
-		}
-	});
-
-	const SHEETS: { id: Sheet; label: string }[] = [
-		{ id: 'summary', label: 'Summary' },
-		{ id: 'assumptions', label: 'Assumptions' },
-		{ id: 'devbudget', label: 'Dev Budget' },
-		{ id: 'revenue', label: 'Revenue' },
-		{ id: 'schedule', label: 'Schedule' },
-		{ id: 'cashflow', label: 'Cash Flow' },
-		{ id: 'returns', label: 'Returns' }
-	];
+const SHEETS: { id: Sheet; label: string }[] = [
+	{ id: 'summary', label: 'Summary' },
+	{ id: 'assumptions', label: 'Assumptions' },
+	{ id: 'devbudget', label: 'Dev Budget' },
+	{ id: 'revenue', label: 'Revenue' },
+	{ id: 'schedule', label: 'Schedule' },
+	{ id: 'cashflow', label: 'Cash Flow' },
+	{ id: 'returns', label: 'Returns' }
+]
 </script>
 
 <div class="h-full flex flex-col overflow-hidden bg-white border-r border-slate-200">
@@ -88,7 +88,7 @@
 	<div
 		class="flex-shrink-0 flex items-end gap-0.5 px-2 pt-1 border-t border-slate-300 bg-slate-200/60 overflow-x-auto"
 	>
-		{#each SHEETS as sheet}
+		{#each SHEETS as sheet (sheet.id)}
 			{@const hasDot = feasibilityStore.affectedTabs.has(sheet.id)}
 			<button
 				type="button"

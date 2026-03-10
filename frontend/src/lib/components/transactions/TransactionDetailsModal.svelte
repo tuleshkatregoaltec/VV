@@ -1,109 +1,109 @@
 <script lang="ts">
-	import Modal from '$lib/components/ui/Modal.svelte';
-	import { transactionMatching } from '$lib/api/transaction-matching';
+import { transactionMatching } from '$lib/api/transaction-matching'
+import Modal from '$lib/components/ui/Modal.svelte'
 
-	// TransformedTransaction is the display format used in the table
-	// It's defined locally in each page (sales/rentals) that uses this modal
-	interface TransformedTransaction {
-		transaction_id: string;
-		date: string;
-		area_name: string;
-		project: string;
-		building: string;
-		propertyType: string;
-		propertySubType: string;
-		bedrooms: string;
-		area: number;
-		price: number;
-		pricePerSqM: number;
-		registration: string;
+// TransformedTransaction is the display format used in the table
+// It's defined locally in each page (sales/rentals) that uses this modal
+interface TransformedTransaction {
+	transaction_id: string
+	date: string
+	area_name: string
+	project: string
+	building: string
+	propertyType: string
+	propertySubType: string
+	bedrooms: string
+	area: number
+	price: number
+	pricePerSqM: number
+	registration: string
+}
+
+let {
+	transaction,
+	onClose
+}: {
+	transaction: TransformedTransaction | null
+	onClose: () => void
+} = $props()
+
+// State for managing matching and comparable transactions loading
+let isLoadingMatch = $state(false)
+let matchError = $state<string | null>(null)
+let matchResult = $state<any>(null)
+
+let isLoadingComparable = $state(false)
+let comparableError = $state<string | null>(null)
+let comparableResult = $state<any>(null)
+
+// Reset state when transaction changes
+$effect(() => {
+	if (transaction) {
+		// Clear previous results when opening a new transaction
+		matchError = null
+		matchResult = null
+		comparableError = null
+		comparableResult = null
+		isLoadingMatch = false
+		isLoadingComparable = false
 	}
+})
 
-	let {
-		transaction,
-		onClose
-	}: {
-		transaction: TransformedTransaction | null;
-		onClose: () => void;
-	} = $props();
+async function handleFindUnit() {
+	if (!transaction?.transaction_id) return
 
-	// State for managing matching and comparable transactions loading
-	let isLoadingMatch = $state(false);
-	let matchError = $state<string | null>(null);
-	let matchResult = $state<any>(null);
+	isLoadingMatch = true
+	matchError = null
+	matchResult = null
 
-	let isLoadingComparable = $state(false);
-	let comparableError = $state<string | null>(null);
-	let comparableResult = $state<any>(null);
-
-	// Reset state when transaction changes
-	$effect(() => {
-		if (transaction) {
-			// Clear previous results when opening a new transaction
-			matchError = null;
-			matchResult = null;
-			comparableError = null;
-			comparableResult = null;
-			isLoadingMatch = false;
-			isLoadingComparable = false;
-		}
-	});
-
-	async function handleFindUnit() {
-		if (!transaction?.transaction_id) return;
-
-		isLoadingMatch = true;
-		matchError = null;
-		matchResult = null;
-
-		try {
-			const result = await transactionMatching.matchUnits(transaction.transaction_id);
-			matchResult = result;
-		} catch (error: any) {
-			matchError = error?.message || 'Failed to match units';
-		} finally {
-			isLoadingMatch = false;
-		}
+	try {
+		const result = await transactionMatching.matchUnits(transaction.transaction_id)
+		matchResult = result
+	} catch (error: any) {
+		matchError = error?.message || 'Failed to match units'
+	} finally {
+		isLoadingMatch = false
 	}
+}
 
-	async function handleViewComparable(unitId: number) {
-		isLoadingComparable = true;
-		comparableError = null;
-		comparableResult = null;
+async function handleViewComparable(unitId: number) {
+	isLoadingComparable = true
+	comparableError = null
+	comparableResult = null
 
-		try {
-			const result = await transactionMatching.getComparableTransactions(unitId);
-			comparableResult = result;
-		} catch (error: any) {
-			comparableError = error?.message || 'Failed to load comparable transactions';
-		} finally {
-			isLoadingComparable = false;
-		}
+	try {
+		const result = await transactionMatching.getComparableTransactions(unitId)
+		comparableResult = result
+	} catch (error: any) {
+		comparableError = error?.message || 'Failed to load comparable transactions'
+	} finally {
+		isLoadingComparable = false
 	}
+}
 
-	function getConfidenceBadgeClass(confidence: number): string {
-		if (confidence >= 0.8) return 'bg-green-100 text-green-800 border-green-200';
-		if (confidence >= 0.6) return 'bg-yellow-100 text-yellow-800 border-yellow-200';
-		return 'bg-gray-100 text-gray-800 border-gray-200';
-	}
+function getConfidenceBadgeClass(confidence: number): string {
+	if (confidence >= 0.8) return 'bg-green-100 text-green-800 border-green-200'
+	if (confidence >= 0.6) return 'bg-yellow-100 text-yellow-800 border-yellow-200'
+	return 'bg-gray-100 text-gray-800 border-gray-200'
+}
 
-	function formatNumber(num: number | null | undefined): string {
-		if (num === null || num === undefined) return 'N/A';
-		return num.toLocaleString();
-	}
+function formatNumber(num: number | null | undefined): string {
+	if (num === null || num === undefined) return 'N/A'
+	return num.toLocaleString()
+}
 
-	function formatDate(dateStr: string | null | undefined): string {
-		if (!dateStr) return 'N/A';
-		try {
-			return new Date(dateStr).toLocaleDateString('en-US', {
-				year: 'numeric',
-				month: 'short',
-				day: 'numeric'
-			});
-		} catch {
-			return dateStr;
-		}
+function formatDate(dateStr: string | null | undefined): string {
+	if (!dateStr) return 'N/A'
+	try {
+		return new Date(dateStr).toLocaleDateString('en-US', {
+			year: 'numeric',
+			month: 'short',
+			day: 'numeric'
+		})
+	} catch {
+		return dateStr
 	}
+}
 </script>
 
 <Modal open={transaction !== null} {onClose} title="Transaction Details" size="xl">
@@ -230,7 +230,7 @@
 					</div>
 
 					<div class="space-y-3">
-						{#each data.matches as match}
+						{#each data.matches as match (match.unit_id)}
 							<div class="p-4 border rounded-lg hover:bg-gray-50 transition-colors">
 								<div class="flex justify-between items-start">
 									<div class="flex-1">
@@ -315,7 +315,7 @@
 					<p class="text-sm text-gray-600">No comparable transactions found for this unit.</p>
 				{:else}
 					<div class="space-y-2 max-h-64 overflow-y-auto">
-						{#each comparableData.transactions as trans}
+						{#each comparableData.transactions as trans (trans.transaction_id)}
 							<div class="p-3 bg-white rounded border border-gray-200">
 								<div class="flex justify-between items-start">
 									<div class="flex-1">

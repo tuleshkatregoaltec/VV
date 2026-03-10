@@ -1,84 +1,84 @@
 <script lang="ts">
-	import { feasibilityStore } from '$lib/stores/feasibility.svelte';
+import { feasibilityStore } from '$lib/stores/feasibility.svelte'
 
-	interface Props {
-		switchTab: (tab: string) => void;
-	}
-	let { switchTab }: Props = $props();
+interface Props {
+	switchTab: (tab: string) => void
+}
+let { switchTab }: Props = $props()
 
-	const s = $derived(feasibilityStore);
-	const a = $derived(feasibilityStore.assumptions);
+const s = $derived(feasibilityStore)
+const a = $derived(feasibilityStore.assumptions)
 
-	function fmtK(n: number): string {
-		if (!isFinite(n)) return '—';
-		const k = Math.round(Math.abs(n) / 1000);
-		const f = k.toLocaleString('en-AE');
-		return n < 0 ? `(${f})` : f;
-	}
-	function fmtPct(n: number): string {
-		return !isFinite(n) ? '—' : `${n.toFixed(1)}%`;
-	}
-	function fmtIRR(n: number): string {
-		return !isFinite(n) || isNaN(n) ? '—' : `${(n * 100).toFixed(1)}%`;
-	}
-	function fmtMx(n: number): string {
-		return !isFinite(n) || isNaN(n) ? '—' : `${n.toFixed(2)}x`;
-	}
+function fmtK(n: number): string {
+	if (!Number.isFinite(n)) return '—'
+	const k = Math.round(Math.abs(n) / 1000)
+	const f = k.toLocaleString('en-AE')
+	return n < 0 ? `(${f})` : f
+}
+function fmtPct(n: number): string {
+	return !Number.isFinite(n) ? '—' : `${n.toFixed(1)}%`
+}
+function fmtIRR(n: number): string {
+	return !Number.isFinite(n) || Number.isNaN(n) ? '—' : `${(n * 100).toFixed(1)}%`
+}
+function fmtMx(n: number): string {
+	return !Number.isFinite(n) || Number.isNaN(n) ? '—' : `${n.toFixed(2)}x`
+}
 
-	// Color coding for ROC vs target
-	function rocClass(roc: number): string {
-		const target = a.targetROCPct;
-		if (roc >= target) return 'text-emerald-700 font-bold';
-		if (roc >= target * 0.75) return 'text-amber-600 font-bold';
-		return 'text-red-600 font-bold';
-	}
+// Color coding for ROC vs target
+function rocClass(roc: number): string {
+	const target = a.targetROCPct
+	if (roc >= target) return 'text-emerald-700 font-bold'
+	if (roc >= target * 0.75) return 'text-amber-600 font-bold'
+	return 'text-red-600 font-bold'
+}
 
-	// Color coding for IRR vs discount rate
-	function irrClass(irr: number): string {
-		const hurdle = a.discountRatePct / 100;
-		if (irr >= hurdle) return 'text-emerald-700 font-bold';
-		if (irr >= hurdle * 0.75) return 'text-amber-600 font-bold';
-		return 'text-red-600 font-bold';
-	}
+// Color coding for IRR vs discount rate
+function irrClass(irr: number): string {
+	const hurdle = a.discountRatePct / 100
+	if (irr >= hurdle) return 'text-emerald-700 font-bold'
+	if (irr >= hurdle * 0.75) return 'text-amber-600 font-bold'
+	return 'text-red-600 font-bold'
+}
 
-	// Programme milestone labels
-	function quarterLabel(offsetMonths: number): string {
-		if (!a.projectStartDate) return `M${offsetMonths}`;
-		const d = new Date(a.projectStartDate);
-		d.setMonth(d.getMonth() + offsetMonths);
-		const q = Math.floor(d.getMonth() / 3) + 1;
-		return `Q${q} ${d.getFullYear()}`;
-	}
+// Programme milestone labels
+function quarterLabel(offsetMonths: number): string {
+	if (!a.projectStartDate) return `M${offsetMonths}`
+	const d = new Date(a.projectStartDate)
+	d.setMonth(d.getMonth() + offsetMonths)
+	const q = Math.floor(d.getMonth() / 3) + 1
+	return `Q${q} ${d.getFullYear()}`
+}
 
-	const milestones = $derived([
-		{ label: 'Construction Start', month: 0 },
-		{ label: 'Sales Launch', month: a.salesLaunchMonth },
-		{ label: 'Handover', month: a.constructionMonths },
-		{ label: 'Sales End', month: a.salesLaunchMonth + a.salesMonths }
-	]);
+const milestones = $derived([
+	{ label: 'Construction Start', month: 0 },
+	{ label: 'Sales Launch', month: a.salesLaunchMonth },
+	{ label: 'Handover', month: a.constructionMonths },
+	{ label: 'Sales End', month: a.salesLaunchMonth + a.salesMonths }
+])
 
-	// Sources & Uses
-	const sources = $derived([
-		{ label: 'Off-plan Proceeds', value: s.preHandoverGDV },
-		{ label: 'Senior Debt', value: s.debtAmount },
-		{ label: 'Equity', value: s.equityRequired }
-	]);
-	const sourcesTotal = $derived(sources.reduce((t, r) => t + r.value, 0));
+// Sources & Uses
+const sources = $derived([
+	{ label: 'Off-plan Proceeds', value: s.preHandoverGDV },
+	{ label: 'Senior Debt', value: s.debtAmount },
+	{ label: 'Equity', value: s.equityRequired }
+])
+const sourcesTotal = $derived(sources.reduce((t, r) => t + r.value, 0))
 
-	const uses = $derived([
-		{ label: 'Land Acquisition', value: s.totalLandCost },
-		{ label: 'Hard Construction', value: s.totalHardCost },
-		{ label: 'Soft Costs', value: s.totalSoftCost },
-		{ label: 'Sales & Marketing', value: s.totalSalesCost },
-		{ label: 'Finance Costs', value: s.totalFinanceCost },
-		...(s.vatBridgeLoanInterest > 0
-			? [{ label: 'VAT Bridge Loan', value: s.vatBridgeLoanInterest }]
-			: [])
-	]);
-	const usesTotal = $derived(uses.reduce((t, r) => t + r.value, 0));
-	const balanceOk = $derived(Math.abs(sourcesTotal - usesTotal) < Math.max(usesTotal, 1) * 0.01);
+const uses = $derived([
+	{ label: 'Land Acquisition', value: s.totalLandCost },
+	{ label: 'Hard Construction', value: s.totalHardCost },
+	{ label: 'Soft Costs', value: s.totalSoftCost },
+	{ label: 'Sales & Marketing', value: s.totalSalesCost },
+	{ label: 'Finance Costs', value: s.totalFinanceCost },
+	...(s.vatBridgeLoanInterest > 0
+		? [{ label: 'VAT Bridge Loan', value: s.vatBridgeLoanInterest }]
+		: [])
+])
+const usesTotal = $derived(uses.reduce((t, r) => t + r.value, 0))
+const balanceOk = $derived(Math.abs(sourcesTotal - usesTotal) < Math.max(usesTotal, 1) * 0.01)
 
-	const sectionCell = 'px-2 py-1.5 text-[10px] font-bold text-white uppercase tracking-wider';
+const sectionCell = 'px-2 py-1.5 text-[10px] font-bold text-white uppercase tracking-wider'
 </script>
 
 <div class="overflow-auto flex-1 text-[11px]">
@@ -249,7 +249,7 @@
 				</tr>
 			</thead>
 			<tbody>
-				{#each sources as row}
+				{#each sources as row (row.label)}
 					<tr class="border-b border-slate-100">
 						<td class="px-2 py-1 text-slate-600">{row.label}</td>
 						<td class="px-2 py-1 text-right tabular-nums text-slate-400 text-[10px]"
@@ -277,7 +277,7 @@
 				</tr>
 			</thead>
 			<tbody>
-				{#each uses as row}
+				{#each uses as row (row.label)}
 					<tr class="border-b border-slate-100">
 						<td class="px-2 py-1 text-slate-600">{row.label}</td>
 						<td class="px-2 py-1 text-right tabular-nums text-slate-400 text-[10px]"
@@ -320,7 +320,7 @@
 	</div>
 	<div class="px-3 py-3 border-b border-slate-200">
 		<div class="flex items-start gap-0">
-			{#each milestones as milestone, i}
+			{#each milestones as milestone, i (`${milestone.title}-${i}`)}
 				<div class="flex-1 flex flex-col items-center gap-1 relative">
 					<!-- Connector line (except first) -->
 					{#if i > 0}

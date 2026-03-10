@@ -1,54 +1,54 @@
 <script lang="ts">
-	import { feasibilityStore } from '$lib/stores/feasibility.svelte';
+import { feasibilityStore } from '$lib/stores/feasibility.svelte'
 
-	function fmtK(n: number): string {
-		const k = Math.round(Math.abs(n) / 1000);
-		const f = k.toLocaleString('en-AE');
-		return n < 0 ? `(${f})` : f;
-	}
-	function fmtPct(n: number): string {
-		return `${n.toFixed(1)}%`;
-	}
+function fmtK(n: number): string {
+	const k = Math.round(Math.abs(n) / 1000)
+	const f = k.toLocaleString('en-AE')
+	return n < 0 ? `(${f})` : f
+}
+function fmtPct(n: number): string {
+	return `${n.toFixed(1)}%`
+}
 
-	let open = $state<Record<string, boolean>>({
-		land: true,
-		hard: true,
-		infra: true,
-		prof: true,
-		sales: true,
-		finance: true,
-		inflation: false,
-		vat: false
-	});
-	function toggle(key: string) {
-		open[key] = !open[key];
-	}
+let open = $state<Record<string, boolean>>({
+	land: true,
+	hard: true,
+	infra: true,
+	prof: true,
+	sales: true,
+	finance: true,
+	inflation: false,
+	vat: false
+})
+function toggle(key: string) {
+	open[key] = !open[key]
+}
 
-	const inputClass =
-		'w-full text-right px-2 py-1.5 bg-amber-50 focus:outline focus:outline-2 focus:-outline-offset-2 focus:outline-teal-400 tabular-nums text-blue-800 text-[11px]';
+const inputClass =
+	'w-full text-right px-2 py-1.5 bg-amber-50 focus:outline focus:outline-2 focus:-outline-offset-2 focus:outline-teal-400 tabular-nums text-blue-800 text-[11px]'
 
-	function numInput(key: keyof typeof feasibilityStore.assumptions, e: Event) {
-		const v = parseFloat((e.target as HTMLInputElement).value);
-		if (!isNaN(v)) feasibilityStore.setAssumptions({ [key]: v });
-	}
-	function kInput(key: keyof typeof feasibilityStore.assumptions, e: Event) {
-		const v = parseFloat((e.target as HTMLInputElement).value);
-		if (!isNaN(v)) feasibilityStore.setAssumptions({ [key]: v * 1000 });
-	}
+function numInput(key: keyof typeof feasibilityStore.assumptions, e: Event) {
+	const v = parseFloat((e.target as HTMLInputElement).value)
+	if (!Number.isNaN(v)) feasibilityStore.setAssumptions({ [key]: v })
+}
+function kInput(key: keyof typeof feasibilityStore.assumptions, e: Event) {
+	const v = parseFloat((e.target as HTMLInputElement).value)
+	if (!Number.isNaN(v)) feasibilityStore.setAssumptions({ [key]: v * 1000 })
+}
 
-	const s = $derived(feasibilityStore);
-	const a = $derived(feasibilityStore.assumptions);
-	const cf = $derived(feasibilityStore.changedFields);
-	const uf = $derived(feasibilityStore.undoFields);
+const s = $derived(feasibilityStore)
+const a = $derived(feasibilityStore.assumptions)
+const cf = $derived(feasibilityStore.changedFields)
+const uf = $derived(feasibilityStore.undoFields)
 
-	function pctOfHard(abs: number): string {
-		return s.totalHardCost > 0
-			? `≈ ${((abs / s.totalHardCost) * 100).toFixed(1)}% of hard`
-			: "AED '000";
-	}
+function pctOfHard(abs: number): string {
+	return s.totalHardCost > 0
+		? `≈ ${((abs / s.totalHardCost) * 100).toFixed(1)}% of hard`
+		: "AED '000"
+}
 
-	const sectionRow = 'bg-slate-800 cursor-pointer select-none border-b border-slate-600';
-	const sectionCell = 'px-2 py-1.5 font-bold text-white uppercase tracking-wider text-[10px]';
+const sectionRow = 'bg-slate-800 cursor-pointer select-none border-b border-slate-600'
+const sectionCell = 'px-2 py-1.5 font-bold text-white uppercase tracking-wider text-[10px]'
 </script>
 
 <div class="overflow-auto flex-1 text-[11px]">

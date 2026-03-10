@@ -1,10 +1,10 @@
 <script lang="ts">
-	const navItems = [
-		{ label: 'Preview', href: '#preview' },
-		{ label: 'Our Partners', href: '#personas' },
-		{ label: 'Pricing', href: '#pricing' },
-		{ label: '', href: '#why-vitevue' }
-	];
+const navItems = [
+	{ label: 'Preview', href: '#preview' },
+	{ label: 'Our Partners', href: '#personas' },
+	{ label: 'Pricing', href: '#pricing' },
+	{ label: '', href: '#why-vitevue' }
+]
 </script>
 
 <nav class="fixed top-0 left-0 right-0 z-50 bg-white/90 backdrop-blur-md border-b border-slate-200">
@@ -15,7 +15,7 @@
 			</a>
 
 			<div class="flex items-center gap-6">
-				{#each navItems as item}
+				{#each navItems as item (item.href)}
 					<a
 						href={item.href}
 						class="text-sm font-medium text-slate-700 hover:text-slate-900 transition-colors"

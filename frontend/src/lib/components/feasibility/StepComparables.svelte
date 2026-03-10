@@ -1,70 +1,70 @@
 <script lang="ts">
-	import { createQuery } from '@tanstack/svelte-query';
-	import { projects as projectsAPI } from '$lib/api/projects';
-	import { feasibility } from '$lib/api/feasibility';
-	import type { ComparableData } from '$lib/stores/feasibility.svelte';
-	import type { ProjectSearchResult } from '$lib/api/projects';
+import { createQuery } from '@tanstack/svelte-query'
+import { feasibility } from '$lib/api/feasibility'
+import type { ProjectSearchResult } from '$lib/api/projects'
+import { projects as projectsAPI } from '$lib/api/projects'
+import type { ComparableData } from '$lib/stores/feasibility.svelte'
 
-	let {
-		onApply
-	}: {
-		onApply: (data: ComparableData) => void;
-	} = $props();
+let {
+	onApply
+}: {
+	onApply: (data: ComparableData) => void
+} = $props()
 
-	let selected = $state<ProjectSearchResult[]>([]);
-	let search = $state('');
-	let isOpen = $state(false);
-	let loading = $state(false);
+let selected = $state<ProjectSearchResult[]>([])
+let search = $state('')
+let isOpen = $state(false)
+let loading = $state(false)
 
-	const allQuery = createQuery<ProjectSearchResult[]>(() => ({
-		queryKey: ['projects-list'],
-		queryFn: () => projectsAPI.list(),
-		staleTime: Infinity
-	}));
+const allQuery = createQuery<ProjectSearchResult[]>(() => ({
+	queryKey: ['projects-list'],
+	queryFn: () => projectsAPI.list(),
+	staleTime: Infinity
+}))
 
-	const filtered = $derived(
-		search.trim()
-			? (allQuery.data ?? [])
-					.filter((p) => p.project_name.toLowerCase().includes(search.toLowerCase()))
-					.slice(0, 60)
-			: (allQuery.data ?? []).slice(0, 60)
-	);
+const filtered = $derived(
+	search.trim()
+		? (allQuery.data ?? [])
+				.filter((p) => p.project_name.toLowerCase().includes(search.toLowerCase()))
+				.slice(0, 60)
+		: (allQuery.data ?? []).slice(0, 60)
+)
 
-	function toggleSelect(p: ProjectSearchResult) {
-		const idx = selected.findIndex((s) => s.project_id === p.project_id);
-		if (idx >= 0) {
-			selected = selected.filter((_, i) => i !== idx);
-		} else {
-			selected = [...selected, p];
+function toggleSelect(p: ProjectSearchResult) {
+	const idx = selected.findIndex((s) => s.project_id === p.project_id)
+	if (idx >= 0) {
+		selected = selected.filter((_, i) => i !== idx)
+	} else {
+		selected = [...selected, p]
+	}
+}
+
+function remove(id: number) {
+	selected = selected.filter((p) => p.project_id !== id)
+}
+
+async function apply() {
+	if (selected.length === 0) return
+	loading = true
+	try {
+		const data = await feasibility.getComparableData(selected.map((p) => p.project_id))
+		onApply(data)
+	} finally {
+		loading = false
+	}
+}
+
+function clickOutside(node: HTMLElement, cb: () => void) {
+	function handle(e: MouseEvent) {
+		if (!node.contains(e.target as Node)) cb()
+	}
+	document.addEventListener('mousedown', handle, true)
+	return {
+		destroy() {
+			document.removeEventListener('mousedown', handle, true)
 		}
 	}
-
-	function remove(id: number) {
-		selected = selected.filter((p) => p.project_id !== id);
-	}
-
-	async function apply() {
-		if (selected.length === 0) return;
-		loading = true;
-		try {
-			const data = await feasibility.getComparableData(selected.map((p) => p.project_id));
-			onApply(data);
-		} finally {
-			loading = false;
-		}
-	}
-
-	function clickOutside(node: HTMLElement, cb: () => void) {
-		function handle(e: MouseEvent) {
-			if (!node.contains(e.target as Node)) cb();
-		}
-		document.addEventListener('mousedown', handle, true);
-		return {
-			destroy() {
-				document.removeEventListener('mousedown', handle, true);
-			}
-		};
-	}
+}
 </script>
 
 <div class="max-w-xl mx-auto">
@@ -102,7 +102,7 @@
 				{:else if filtered.length === 0}
 					<div class="px-4 py-3 text-sm text-slate-400">No projects found</div>
 				{:else}
-					{#each filtered as p}
+					{#each filtered as p (p.project_id)}
 						{@const isSelected = selected.some((s) => s.project_id === p.project_id)}
 						<button
 							type="button"
@@ -139,7 +139,7 @@
 	<!-- Selected chips -->
 	{#if selected.length > 0}
 		<div class="flex flex-wrap gap-2 mb-6">
-			{#each selected as p}
+			{#each selected as p (p.project_id)}
 				<span
 					class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-teal-100 text-teal-800 text-sm font-medium"
 				>

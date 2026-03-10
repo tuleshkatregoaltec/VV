@@ -1,131 +1,133 @@
 <script lang="ts">
-	import { feasibilityStore } from '$lib/stores/feasibility.svelte';
+import { feasibilityStore } from '$lib/stores/feasibility.svelte'
 
-	function fmtK(n: number): string {
-		const k = Math.round(Math.abs(n) / 1000);
-		const f = k.toLocaleString('en-AE');
-		return n < 0 ? `(${f})` : f;
+function fmtK(n: number): string {
+	const k = Math.round(Math.abs(n) / 1000)
+	const f = k.toLocaleString('en-AE')
+	return n < 0 ? `(${f})` : f
+}
+function fmtPct(n: number): string {
+	return Number.isNaN(n) || !Number.isFinite(n) ? '—' : `${n.toFixed(1)}%`
+}
+function fmtIRR(n: number): string {
+	return Number.isNaN(n) || !Number.isFinite(n) ? '—' : `${(n * 100).toFixed(1)}%`
+}
+
+type Axis = 'Price/sqm' | 'Build Cost/sqm' | 'Finance Rate' | 'Land Cost'
+const axisOptions: Axis[] = ['Price/sqm', 'Build Cost/sqm', 'Finance Rate', 'Land Cost']
+let axisX = $state<Axis>('Price/sqm')
+let axisY = $state<Axis>('Build Cost/sqm')
+
+// 5×5: ±20%, ±10%, base
+const steps = [-0.2, -0.1, 0, 0.1, 0.2]
+
+const s = $derived(feasibilityStore)
+
+function financeRateCostDelta(step: number): number {
+	const adjDevCost = s.preFinanceCost + s.totalInterest * (1 + step) + s.arrangementFee
+	return s.totalDevCost > 0 ? (adjDevCost - s.totalDevCost) / s.totalDevCost : 0
+}
+
+function axisFactors(axis: Axis, step: number): { pa: number; ca: number } {
+	switch (axis) {
+		case 'Price/sqm':
+			return { pa: step, ca: 0 }
+		case 'Build Cost/sqm':
+			return { pa: 0, ca: step * (s.totalDevCost > 0 ? s.totalHardCost / s.totalDevCost : 0) }
+		case 'Finance Rate':
+			return { pa: 0, ca: financeRateCostDelta(step) }
+		case 'Land Cost':
+			return { pa: 0, ca: step * (s.totalDevCost > 0 ? s.totalLandCost / s.totalDevCost : 0) }
 	}
-	function fmtPct(n: number): string {
-		return isNaN(n) || !isFinite(n) ? '—' : `${n.toFixed(1)}%`;
-	}
-	function fmtIRR(n: number): string {
-		return isNaN(n) || !isFinite(n) ? '—' : `${(n * 100).toFixed(1)}%`;
-	}
+}
 
-	type Axis = 'Price/sqm' | 'Build Cost/sqm' | 'Finance Rate' | 'Land Cost';
-	const axisOptions: Axis[] = ['Price/sqm', 'Build Cost/sqm', 'Finance Rate', 'Land Cost'];
-	let axisX = $state<Axis>('Price/sqm');
-	let axisY = $state<Axis>('Build Cost/sqm');
+function cellFactors(rowStep: number, colStep: number): { pa: number; ca: number } {
+	const row = axisFactors(axisY, rowStep)
+	const col = axisFactors(axisX, colStep)
+	return { pa: row.pa + col.pa, ca: row.ca + col.ca }
+}
 
-	// 5×5: ±20%, ±10%, base
-	const steps = [-0.2, -0.1, 0, 0.1, 0.2];
+function rocAtFactors(pa: number, ca: number): number {
+	const gdvAdj = s.totalGDV * (1 + pa)
+	const devCostAdj = s.totalDevCost * (1 + ca)
+	return devCostAdj > 0 ? ((gdvAdj - devCostAdj) / devCostAdj) * 100 : 0
+}
 
-	const s = $derived(feasibilityStore);
+function irrAtFactors(pa: number, ca: number): number {
+	return s.computeScenario(1 + pa, 1 + ca).unleveredIRR * 100
+}
 
-	function financeRateCostDelta(step: number): number {
-		const adjDevCost = s.preFinanceCost + s.totalInterest * (1 + step) + s.arrangementFee;
-		return s.totalDevCost > 0 ? (adjDevCost - s.totalDevCost) / s.totalDevCost : 0;
-	}
+function cellClass(pa: number, ca: number): string {
+	const roc = rocAtFactors(pa, ca)
+	const target = s.assumptions.targetROCPct
+	if (roc >= target) return 'bg-emerald-50'
+	if (roc >= target * 0.75) return 'bg-amber-50'
+	return 'bg-red-50'
+}
 
-	function axisFactors(axis: Axis, step: number): { pa: number; ca: number } {
-		switch (axis) {
-			case 'Price/sqm':
-				return { pa: step, ca: 0 };
-			case 'Build Cost/sqm':
-				return { pa: 0, ca: step * (s.totalDevCost > 0 ? s.totalHardCost / s.totalDevCost : 0) };
-			case 'Finance Rate':
-				return { pa: 0, ca: financeRateCostDelta(step) };
-			case 'Land Cost':
-				return { pa: 0, ca: step * (s.totalDevCost > 0 ? s.totalLandCost / s.totalDevCost : 0) };
+function stepLabel(step: number) {
+	if (step === 0) return 'Base'
+	const sign = step > 0 ? '+' : ''
+	return `${sign}${(step * 100).toFixed(0)}%`
+}
+
+// ── Tornado chart ─────────────────────────────────────────────────────────
+// Each driver: compute IRR at +10% and -10%, report delta from base
+interface TornadoBar {
+	name: string
+	upIRR: number // IRR at +10% (annualised, decimal)
+	downIRR: number // IRR at -10%
+	upDelta: number
+	downDelta: number
+	absMax: number
+}
+
+const tornadoBars = $derived(
+	(() => {
+		const base = s.unleveredIRR
+		if (Number.isNaN(base) || !Number.isFinite(base) || s.totalDevCost === 0) {
+			return [] as TornadoBar[]
 		}
-	}
 
-	function cellFactors(rowStep: number, colStep: number): { pa: number; ca: number } {
-		const row = axisFactors(axisY, rowStep);
-		const col = axisFactors(axisX, colStep);
-		return { pa: row.pa + col.pa, ca: row.ca + col.ca };
-	}
+		const hardFrac = s.totalHardCost / s.totalDevCost
+		const landFrac = s.totalLandCost / s.totalDevCost
+		const softFrac = s.totalSoftCost / s.totalDevCost
+		const salesFrac = s.totalSalesCost / s.totalDevCost
 
-	function rocAtFactors(pa: number, ca: number): number {
-		const gdvAdj = s.totalGDV * (1 + pa);
-		const devCostAdj = s.totalDevCost * (1 + ca);
-		return devCostAdj > 0 ? ((gdvAdj - devCostAdj) / devCostAdj) * 100 : 0;
-	}
+		const drivers: Array<{ name: string; pa10: number; ca10: number }> = [
+			{ name: 'Sale Price / sqm', pa10: 0.1, ca10: 0 },
+			{ name: 'Build Cost / sqm', pa10: 0, ca10: hardFrac * 0.1 },
+			{ name: 'Land Cost', pa10: 0, ca10: landFrac * 0.1 },
+			{ name: 'Soft Costs', pa10: 0, ca10: softFrac * 0.1 },
+			{ name: 'Sales & Marketing', pa10: 0, ca10: salesFrac * 0.1 },
+			{ name: 'Finance Rate', pa10: 0, ca10: financeRateCostDelta(0.1) }
+		]
 
-	function irrAtFactors(pa: number, ca: number): number {
-		return s.computeScenario(1 + pa, 1 + ca).unleveredIRR * 100;
-	}
+		const bars: TornadoBar[] = drivers.map((d) => {
+			const upIRR = s.computeScenario(1 + d.pa10, 1 + d.ca10).unleveredIRR
+			const downIRR = s.computeScenario(1 - d.pa10, 1 - d.ca10).unleveredIRR
+			const upDelta = Number.isFinite(upIRR) ? upIRR - base : 0
+			const downDelta = Number.isFinite(downIRR) ? downIRR - base : 0
+			return {
+				name: d.name,
+				upIRR,
+				downIRR,
+				upDelta,
+				downDelta,
+				absMax: Math.max(Math.abs(upDelta), Math.abs(downDelta))
+			}
+		})
 
-	function cellClass(pa: number, ca: number): string {
-		const roc = rocAtFactors(pa, ca);
-		const target = s.assumptions.targetROCPct;
-		if (roc >= target) return 'bg-emerald-50';
-		if (roc >= target * 0.75) return 'bg-amber-50';
-		return 'bg-red-50';
-	}
+		return bars.sort((a, b) => b.absMax - a.absMax)
+	})()
+)
 
-	function stepLabel(step: number) {
-		if (step === 0) return 'Base';
-		const sign = step > 0 ? '+' : '';
-		return `${sign}${(step * 100).toFixed(0)}%`;
-	}
+const tornadoScale = $derived(
+	tornadoBars.length > 0 ? Math.max(0.001, ...tornadoBars.map((b) => b.absMax)) : 0.001
+)
 
-	// ── Tornado chart ─────────────────────────────────────────────────────────
-	// Each driver: compute IRR at +10% and -10%, report delta from base
-	interface TornadoBar {
-		name: string;
-		upIRR: number; // IRR at +10% (annualised, decimal)
-		downIRR: number; // IRR at -10%
-		upDelta: number;
-		downDelta: number;
-		absMax: number;
-	}
-
-	const tornadoBars = $derived(
-		(() => {
-			const base = s.unleveredIRR;
-			if (isNaN(base) || !isFinite(base) || s.totalDevCost === 0) return [] as TornadoBar[];
-
-			const hardFrac = s.totalHardCost / s.totalDevCost;
-			const landFrac = s.totalLandCost / s.totalDevCost;
-			const softFrac = s.totalSoftCost / s.totalDevCost;
-			const salesFrac = s.totalSalesCost / s.totalDevCost;
-
-			const drivers: Array<{ name: string; pa10: number; ca10: number }> = [
-				{ name: 'Sale Price / sqm', pa10: 0.1, ca10: 0 },
-				{ name: 'Build Cost / sqm', pa10: 0, ca10: hardFrac * 0.1 },
-				{ name: 'Land Cost', pa10: 0, ca10: landFrac * 0.1 },
-				{ name: 'Soft Costs', pa10: 0, ca10: softFrac * 0.1 },
-				{ name: 'Sales & Marketing', pa10: 0, ca10: salesFrac * 0.1 },
-				{ name: 'Finance Rate', pa10: 0, ca10: financeRateCostDelta(0.1) }
-			];
-
-			const bars: TornadoBar[] = drivers.map((d) => {
-				const upIRR = s.computeScenario(1 + d.pa10, 1 + d.ca10).unleveredIRR;
-				const downIRR = s.computeScenario(1 - d.pa10, 1 - d.ca10).unleveredIRR;
-				const upDelta = isFinite(upIRR) ? upIRR - base : 0;
-				const downDelta = isFinite(downIRR) ? downIRR - base : 0;
-				return {
-					name: d.name,
-					upIRR,
-					downIRR,
-					upDelta,
-					downDelta,
-					absMax: Math.max(Math.abs(upDelta), Math.abs(downDelta))
-				};
-			});
-
-			return bars.sort((a, b) => b.absMax - a.absMax);
-		})()
-	);
-
-	const tornadoScale = $derived(
-		tornadoBars.length > 0 ? Math.max(0.001, ...tornadoBars.map((b) => b.absMax)) : 0.001
-	);
-
-	const sectionRow = 'bg-slate-800 border-b border-slate-600';
-	const sectionCell = 'px-2 py-1.5 text-[10px] font-bold text-white uppercase tracking-wider';
+const sectionRow = 'bg-slate-800 border-b border-slate-600'
+const sectionCell = 'px-2 py-1.5 text-[10px] font-bold text-white uppercase tracking-wider'
 </script>
 
 <div class="overflow-auto flex-1 text-[11px]">
@@ -259,7 +261,7 @@
 						bind:value={axisY}
 						class="text-[11px] border border-slate-300 rounded px-1.5 py-0.5 bg-white text-slate-700"
 					>
-						{#each axisOptions.filter((o) => o !== axisX) as opt}
+						{#each axisOptions.filter((o) => o !== axisX) as opt (opt)}
 							<option value={opt}>{opt}</option>
 						{/each}
 					</select>
@@ -272,7 +274,7 @@
 						bind:value={axisX}
 						class="text-[11px] border border-slate-300 rounded px-1.5 py-0.5 bg-white text-slate-700"
 					>
-						{#each axisOptions.filter((o) => o !== axisY) as opt}
+						{#each axisOptions.filter((o) => o !== axisY) as opt (opt)}
 							<option value={opt}>{opt}</option>
 						{/each}
 					</select>
@@ -287,7 +289,7 @@
 					class="border-r border-slate-200 px-1.5 py-1.5 text-slate-500 font-normal text-left w-20 text-[10px]"
 					>↓Y \ X→</th
 				>
-				{#each steps as cs}
+				{#each steps as cs (cs)}
 					<th
 						class="border-r border-slate-200 px-1.5 py-1.5 text-slate-600 font-semibold text-center text-[10px] {cs ===
 						0
@@ -298,7 +300,7 @@
 			</tr>
 		</thead>
 		<tbody>
-			{#each steps as rs}
+			{#each steps as rs (rs)}
 				<tr
 					class="border-b border-slate-100 {rs === 0
 						? 'border-t-2 border-b-2 border-slate-200'
@@ -310,7 +312,7 @@
 							? 'bg-slate-100'
 							: ''}">{stepLabel(rs)}</td
 					>
-					{#each steps as cs}
+					{#each steps as cs (`${rs}-${cs}`)}
 						{@const { pa, ca } = cellFactors(rs, cs)}
 						{@const roc = rocAtFactors(pa, ca)}
 						{@const irr = irrAtFactors(pa, ca)}
@@ -378,7 +380,7 @@
 					stroke-width="1"
 				/>
 
-				{#each tornadoBars as bar, i}
+				{#each tornadoBars as bar, i (`${bar.label}-${i}`)}
 					{@const y = 18 + i * rowH}
 					{@const cx = labelW + barScale}
 					{@const upW = Math.max(1, (Math.abs(bar.upDelta) / tornadoScale) * barScale * 0.9)}

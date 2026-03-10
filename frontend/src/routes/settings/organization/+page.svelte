@@ -1,141 +1,161 @@
 <script lang="ts">
-	import { createQuery } from '@tanstack/svelte-query';
-	import {
-		getOrganizationMembers,
-		getOrganizationInvitations,
-		getOrganizationSubscription,
-		getCustomerPortalUrl,
-		removeOrganizationMember,
-		inviteUserByEmail
-	} from '$lib/api/organization';
-	import { currentUser as userStore } from '$lib/stores/user.svelte';
+import { createQuery } from '@tanstack/svelte-query'
+import {
+	deleteOrganizationInvitation,
+	getCustomerPortalUrl,
+	getOrganizationInvitations,
+	getOrganizationMembers,
+	getOrganizationSubscription,
+	inviteUserByEmail,
+	removeOrganizationMember
+} from '$lib/api/organization'
+import { currentUser as userStore } from '$lib/stores/user.svelte'
 
-	let currentUser = $derived(userStore.data);
-	let isOwner = $derived(currentUser?.is_owner === true);
+let currentUser = $derived(userStore.data)
+let isOwner = $derived(currentUser?.is_owner === true)
 
-	let showInviteModal = $state(false);
-	let inviteEmail = $state('');
-	let inviteLoading = $state(false);
-	let inviteError = $state('');
-	let inviteSuccess = $state(false);
-	let resendingEmail = $state('');
+let showInviteModal = $state(false)
+let inviteEmail = $state('')
+let inviteLoading = $state(false)
+let inviteError = $state('')
+let inviteSuccess = $state(false)
+let resendingEmail = $state('')
+let cancelingInvitationId = $state('')
 
-	// Top-level createQuery calls (v6: pass a function returning options)
-	const membersQuery = createQuery(() => ({
-		queryKey: ['organization', 'members'] as const,
-		queryFn: () => getOrganizationMembers(),
-		enabled: isOwner
-	}));
+// Top-level createQuery calls (v6: pass a function returning options)
+const membersQuery = createQuery(() => ({
+	queryKey: ['organization', 'members'] as const,
+	queryFn: () => getOrganizationMembers(),
+	enabled: isOwner
+}))
 
-	const subscriptionQuery = createQuery(() => ({
-		queryKey: ['organization', 'subscription'] as const,
-		queryFn: () => getOrganizationSubscription(),
-		enabled: isOwner
-	}));
+const subscriptionQuery = createQuery(() => ({
+	queryKey: ['organization', 'subscription'] as const,
+	queryFn: () => getOrganizationSubscription(),
+	enabled: isOwner
+}))
 
-	const invitationsQuery = createQuery(() => ({
-		queryKey: ['organization', 'invitations'] as const,
-		queryFn: () => getOrganizationInvitations(),
-		enabled: isOwner
-	}));
+const invitationsQuery = createQuery(() => ({
+	queryKey: ['organization', 'invitations'] as const,
+	queryFn: () => getOrganizationInvitations(),
+	enabled: isOwner
+}))
 
-	const members = $derived(membersQuery.data ?? []);
-	const invitations = $derived(invitationsQuery.data ?? []);
-	const subscription = $derived(subscriptionQuery.data);
-	const availableSeats = $derived(subscription?.available_seats ?? 0);
-	const hasExcessUsers = $derived((subscription?.excess_users ?? 0) > 0);
-	const withinPaidPeriod = $derived(subscription?.within_paid_period ?? false);
+const members = $derived(membersQuery.data ?? [])
+const invitations = $derived(invitationsQuery.data ?? [])
+const subscription = $derived(subscriptionQuery.data)
+const availableSeats = $derived(subscription?.available_seats ?? 0)
+const hasExcessUsers = $derived((subscription?.excess_users ?? 0) > 0)
+const withinPaidPeriod = $derived(subscription?.within_paid_period ?? false)
 
-	function normalizeInviteEmail(email: string): string {
-		return email.trim().toLowerCase();
+function normalizeInviteEmail(email: string): string {
+	return email.trim().toLowerCase()
+}
+
+function validateInviteEmail(email: string): string | null {
+	if (!email) return 'Email is required'
+	if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return 'Invalid email format'
+	return null
+}
+
+async function sendInvite(email: string): Promise<void> {
+	await inviteUserByEmail(email)
+}
+
+async function handleManageSubscription() {
+	try {
+		const result = await getCustomerPortalUrl()
+		window.location.href = result.url
+	} catch (err: any) {
+		alert(err.message || 'Failed to open subscription management')
+	}
+}
+
+async function handleRemoveMember(userId: string, userName: string) {
+	if (!confirm(`Remove ${userName} from this organization?`)) return
+	try {
+		await removeOrganizationMember(userId)
+		membersQuery.refetch()
+		subscriptionQuery.refetch()
+	} catch (err: any) {
+		alert(err.message || 'Failed to remove member')
+	}
+}
+
+async function handleResendInvitation(email: string) {
+	resendingEmail = email
+	try {
+		await sendInvite(email)
+		invitationsQuery.refetch()
+		subscriptionQuery.refetch()
+		alert(`Invitation resent to ${email}`)
+	} catch (err: any) {
+		alert(err.message || 'Failed to resend invitation')
+	} finally {
+		resendingEmail = ''
+	}
+}
+
+async function handleCancelInvitation(invitationId: string, email: string) {
+	if (!confirm(`Cancel the pending invitation for ${email}?`)) return
+	cancelingInvitationId = invitationId
+	try {
+		await deleteOrganizationInvitation(invitationId)
+		invitationsQuery.refetch()
+		subscriptionQuery.refetch()
+	} catch (err: any) {
+		alert(err.message || 'Failed to cancel invitation')
+	} finally {
+		cancelingInvitationId = ''
+	}
+}
+
+async function handleInviteUser() {
+	inviteError = ''
+	inviteSuccess = false
+	const email = normalizeInviteEmail(inviteEmail)
+
+	const validationError = validateInviteEmail(email)
+	if (validationError) {
+		inviteError = validationError
+		return
 	}
 
-	function validateInviteEmail(email: string): string | null {
-		if (!email) return 'Email is required';
-		if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return 'Invalid email format';
-		return null;
+	if (subscription && availableSeats <= 0) {
+		inviteError = 'No available seats. Please upgrade your subscription first.'
+		return
 	}
 
-	async function sendInvite(email: string): Promise<void> {
-		await inviteUserByEmail(email);
+	inviteLoading = true
+
+	try {
+		await sendInvite(email)
+		invitationsQuery.refetch()
+		subscriptionQuery.refetch()
+		inviteSuccess = true
+		inviteEmail = ''
+		setTimeout(() => {
+			showInviteModal = false
+			inviteSuccess = false
+		}, 2000)
+	} catch (err: any) {
+		inviteError = err.message || 'Failed to send invitation'
+	} finally {
+		inviteLoading = false
 	}
+}
 
-	async function handleManageSubscription() {
-		try {
-			const result = await getCustomerPortalUrl();
-			window.location.href = result.url;
-		} catch (err: any) {
-			alert(err.message || 'Failed to open subscription management');
-		}
-	}
+function formatDate(dateString: string): string {
+	return new Date(dateString).toLocaleDateString('en-US', {
+		year: 'numeric',
+		month: 'long',
+		day: 'numeric'
+	})
+}
 
-	async function handleRemoveMember(userId: string, userName: string) {
-		if (!confirm(`Remove ${userName} from this organization?`)) return;
-		try {
-			await removeOrganizationMember(userId);
-			membersQuery.refetch();
-		} catch (err: any) {
-			alert(err.message || 'Failed to remove member');
-		}
-	}
-
-	async function handleResendInvitation(email: string) {
-		resendingEmail = email;
-		try {
-			await sendInvite(email);
-			alert(`Invitation resent to ${email}`);
-		} catch (err: any) {
-			alert(err.message || 'Failed to resend invitation');
-		} finally {
-			resendingEmail = '';
-		}
-	}
-
-	async function handleInviteUser() {
-		inviteError = '';
-		inviteSuccess = false;
-		const email = normalizeInviteEmail(inviteEmail);
-
-		const validationError = validateInviteEmail(email);
-		if (validationError) {
-			inviteError = validationError;
-			return;
-		}
-
-		if (subscription && availableSeats <= 0) {
-			inviteError = 'No available seats. Please upgrade your subscription first.';
-			return;
-		}
-
-		inviteLoading = true;
-
-		try {
-			await sendInvite(email);
-			invitationsQuery.refetch();
-			inviteSuccess = true;
-			inviteEmail = '';
-			setTimeout(() => {
-				showInviteModal = false;
-				inviteSuccess = false;
-			}, 2000);
-		} catch (err: any) {
-			inviteError = err.message || 'Failed to send invitation';
-		} finally {
-			inviteLoading = false;
-		}
-	}
-
-	function formatDate(dateString: string): string {
-		return new Date(dateString).toLocaleDateString('en-US', {
-			year: 'numeric',
-			month: 'long',
-			day: 'numeric'
-		});
-	}
-
-	function roleLabel(role: string): string {
-		return role === 'owner' ? 'Owner' : 'Member';
-	}
+function roleLabel(role: string): string {
+	return role === 'owner' ? 'Owner' : 'Member'
+}
 </script>
 
 <svelte:head>
@@ -314,13 +334,13 @@
 				<div class="p-6">
 					{#if membersQuery.isLoading}
 						<div class="animate-pulse space-y-4">
-							{#each [1, 2, 3] as _}
+							{#each [1, 2, 3] as skeleton (skeleton)}
 								<div class="h-16 bg-slate-200 rounded"></div>
 							{/each}
 						</div>
 					{:else if members.length > 0}
 						<div class="space-y-3">
-							{#each members as member}
+							{#each members as member (member.user_id)}
 								<div
 									class="flex items-center justify-between p-4 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
 								>
@@ -380,13 +400,13 @@
 				<div class="p-6">
 					{#if invitationsQuery.isLoading}
 						<div class="animate-pulse space-y-4">
-							{#each [1, 2] as _}
+							{#each [1, 2] as skeleton (skeleton)}
 								<div class="h-16 bg-slate-200 rounded"></div>
 							{/each}
 						</div>
 					{:else if invitations.length > 0}
 						<div class="space-y-3">
-							{#each invitations as invitation}
+							{#each invitations as invitation (invitation.id)}
 								<div
 									class="flex items-center justify-between p-4 border border-slate-200 rounded-lg"
 								>
@@ -404,10 +424,19 @@
 										</span>
 										<button
 											onclick={() => handleResendInvitation(invitation.email)}
-											disabled={resendingEmail === invitation.email}
+											disabled={resendingEmail === invitation.email ||
+												cancelingInvitationId === invitation.id}
 											class="text-sm text-blue-600 hover:text-blue-700 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
 										>
 											{resendingEmail === invitation.email ? 'Sending...' : 'Resend Invite'}
+										</button>
+										<button
+											onclick={() => handleCancelInvitation(invitation.id, invitation.email)}
+											disabled={cancelingInvitationId === invitation.id ||
+												resendingEmail === invitation.email}
+											class="text-sm text-red-600 hover:text-red-700 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+										>
+											{cancelingInvitationId === invitation.id ? 'Canceling...' : 'Cancel Invite'}
 										</button>
 									</div>
 								</div>

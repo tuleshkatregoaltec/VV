@@ -1,73 +1,72 @@
 <script lang="ts">
-	import { onDestroy } from 'svelte';
-	import BaseDropdown from './BaseDropdown.svelte';
+import { onDestroy } from 'svelte'
 
-	let {
-		id,
-		ariaLabel,
-		options,
-		value = $bindable('All'),
-		onchange
-	}: {
-		id: string;
-		ariaLabel: string;
-		options: string[];
-		value?: string;
-		onchange?: (newValue: string) => void;
-	} = $props();
+let {
+	id,
+	ariaLabel,
+	options,
+	value = $bindable('All'),
+	onchange
+}: {
+	id: string
+	ariaLabel: string
+	options: string[]
+	value?: string
+	onchange?: (newValue: string) => void
+} = $props()
 
-	let searchQuery = $state('');
-	let visibleCount = $state(50); // Start with 50 items
-	let loadingHandle: number | null = null;
+let searchQuery = $state('')
+let visibleCount = $state(50) // Start with 50 items
+let loadingHandle: number | null = null
 
-	// Cleanup on component destroy to prevent memory leaks
-	onDestroy(() => {
-		if (loadingHandle) {
-			cancelIdleCallback(loadingHandle);
-			loadingHandle = null;
-		}
-	});
+// Cleanup on component destroy to prevent memory leaks
+onDestroy(() => {
+	if (loadingHandle) {
+		cancelIdleCallback(loadingHandle)
+		loadingHandle = null
+	}
+})
 
-	function onOpen() {
-		visibleCount = 50;
+function onOpen() {
+	visibleCount = 50
 
-		if (loadingHandle) {
-			cancelIdleCallback(loadingHandle);
-		}
+	if (loadingHandle) {
+		cancelIdleCallback(loadingHandle)
+	}
 
-		const loadMore = () => {
+	const loadMore = () => {
+		if (visibleCount < options.length) {
+			visibleCount = Math.min(visibleCount + 100, options.length)
+
 			if (visibleCount < options.length) {
-				visibleCount = Math.min(visibleCount + 100, options.length);
-
-				if (visibleCount < options.length) {
-					loadingHandle = requestIdleCallback(loadMore);
-				}
+				loadingHandle = requestIdleCallback(loadMore)
 			}
-		};
-
-		loadingHandle = requestIdleCallback(loadMore);
-	}
-
-	function onClose() {
-		if (loadingHandle) {
-			cancelIdleCallback(loadingHandle);
-			loadingHandle = null;
 		}
-		searchQuery = '';
-		visibleCount = 50;
 	}
 
-	function select(option: string, close: () => void) {
-		value = option;
-		onchange?.(option);
-		close();
+	loadingHandle = requestIdleCallback(loadMore)
+}
+
+function onClose() {
+	if (loadingHandle) {
+		cancelIdleCallback(loadingHandle)
+		loadingHandle = null
 	}
+	searchQuery = ''
+	visibleCount = 50
+}
 
-	let filteredOptions = $derived(
-		options.filter((option) => option.toLowerCase().includes(searchQuery.toLowerCase()))
-	);
+function select(option: string, close: () => void) {
+	value = option
+	onchange?.(option)
+	close()
+}
 
-	let displayedOptions = $derived(filteredOptions.slice(0, visibleCount));
+let filteredOptions = $derived(
+	options.filter((option) => option.toLowerCase().includes(searchQuery.toLowerCase()))
+)
+
+let displayedOptions = $derived(filteredOptions.slice(0, visibleCount))
 </script>
 
 <BaseDropdown {id} {ariaLabel} displayValue={value} {onOpen} {onClose}>
@@ -81,7 +80,7 @@
 				aria-label={`Search options for ${ariaLabel}`}
 			/>
 			<ul class="max-h-80 overflow-y-auto">
-				{#each displayedOptions as option}
+				{#each displayedOptions as option (option)}
 					<li>
 						<button
 							type="button"

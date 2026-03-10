@@ -1,27 +1,27 @@
 <script lang="ts">
-	import type { MasterProjectResponse } from '$lib/api/projects';
+import type { MasterProjectResponse } from '$lib/api/projects'
 
-	let {
-		master,
-		onProjectSelect
-	}: {
-		master: MasterProjectResponse;
-		onProjectSelect: (projectId: number) => void;
-	} = $props();
+let {
+	master,
+	onProjectSelect
+}: {
+	master: MasterProjectResponse
+	onProjectSelect: (projectId: number) => void
+} = $props()
 
-	function statusLabel(status: string | null): string {
-		if (status === 'C') return 'Completed';
-		if (status === 'U') return 'Under Construction';
-		if (status === 'P') return 'Planned';
-		return status || '';
-	}
+function statusLabel(status: string | null): string {
+	if (status === 'C') return 'Completed'
+	if (status === 'U') return 'Under Construction'
+	if (status === 'P') return 'Planned'
+	return status || ''
+}
 
-	function statusColor(status: string | null): string {
-		if (status === 'C') return 'bg-emerald-100 text-emerald-700';
-		if (status === 'U') return 'bg-amber-100 text-amber-700';
-		if (status === 'P') return 'bg-blue-100 text-blue-700';
-		return 'bg-slate-100 text-slate-600';
-	}
+function statusColor(status: string | null): string {
+	if (status === 'C') return 'bg-emerald-100 text-emerald-700'
+	if (status === 'U') return 'bg-amber-100 text-amber-700'
+	if (status === 'P') return 'bg-blue-100 text-blue-700'
+	return 'bg-slate-100 text-slate-600'
+}
 </script>
 
 <div class="p-5 space-y-5">
@@ -80,7 +80,7 @@
 		<div class="space-y-2.5">
 			<h3 class="text-sm font-semibold text-slate-700 uppercase tracking-wide">Unit Mix</h3>
 			<div class="space-y-2">
-				{#each master.unit_composition as unit}
+				{#each master.unit_composition as unit (unit.property_sub_type)}
 					<div>
 						<div class="flex items-center justify-between mb-1">
 							<span class="text-sm font-medium text-slate-700">{unit.property_sub_type}</span>
@@ -106,7 +106,7 @@
 			Sub-Projects ({master.total_projects})
 		</h3>
 		<div class="space-y-1.5 max-h-72 overflow-y-auto">
-			{#each master.projects as project}
+			{#each master.projects as project (project.project_id)}
 				<button
 					onclick={() => onProjectSelect(project.project_id)}
 					class="w-full text-left bg-slate-50 rounded-lg px-3 py-2.5 border border-slate-100 hover:bg-teal-50 hover:border-teal-200 transition-colors"

@@ -1,219 +1,219 @@
 <script lang="ts">
-	import { browser } from '$app/environment';
-	import { feasibility } from '$lib/api/feasibility';
-	import { feasibilityStore } from '$lib/stores/feasibility.svelte';
-	import { researchPanelStore, type ResearchTab } from '$lib/stores/researchPanel.svelte';
-	import { marked } from 'marked';
-	import DOMPurify from 'dompurify';
+import DOMPurify from 'dompurify'
+import { marked } from 'marked'
+import { browser } from '$app/environment'
+import { feasibility } from '$lib/api/feasibility'
+import { feasibilityStore } from '$lib/stores/feasibility.svelte'
+import { type ResearchTab, researchPanelStore } from '$lib/stores/researchPanel.svelte'
 
-	const SANITIZE_CONFIG = {
-		ALLOWED_TAGS: ['p', 'br', 'strong', 'em', 'ul', 'ol', 'li', 'blockquote', 'code', 'span'],
-		ALLOWED_ATTR: []
-	};
+const SANITIZE_CONFIG = {
+	ALLOWED_TAGS: ['p', 'br', 'strong', 'em', 'ul', 'ol', 'li', 'blockquote', 'code', 'span'],
+	ALLOWED_ATTR: []
+}
 
-	function renderMarkdown(content: string): string {
-		if (!browser) return content;
-		return DOMPurify.sanitize(marked.parse(content) as string, SANITIZE_CONFIG);
+function renderMarkdown(content: string): string {
+	if (!browser) return content
+	return DOMPurify.sanitize(marked.parse(content) as string, SANITIZE_CONFIG)
+}
+
+type MessageRole = 'user' | 'assistant' | 'system'
+
+interface ChatMessage {
+	role: MessageRole
+	content: string // for system: 'applied' | 'declined'
+}
+
+interface PendingAction {
+	action: string
+	payload: unknown
+}
+
+let inputValue = $state('')
+let messages = $state<ChatMessage[]>([])
+let isStreaming = $state(false)
+let messagesEnd: HTMLDivElement | undefined = $state()
+let textarea: HTMLTextAreaElement | undefined = $state()
+let pendingActions = $state<PendingAction[]>([])
+let historyJson = $state<string | null>(null)
+let lastAppliedMsgIndex = $state(-1)
+
+function fmtAssumptionVal(key: string, val: unknown): string {
+	if (typeof val !== 'number') return String(val ?? '—')
+	if (key === 'landCost') {
+		if (val >= 1_000_000) return `AED ${(val / 1_000_000).toFixed(1)}M`
+		if (val >= 1_000) return `AED ${(val / 1_000).toFixed(0)}K`
+		return `AED ${val}`
 	}
+	if (key === 'debtToCostRatio') return `${(val * 100).toFixed(0)}%`
+	if (key.endsWith('Pct')) return `${val}%`
+	if (key.toLowerCase().includes('month')) return `${val} mo`
+	return val.toLocaleString('en-AE', { maximumFractionDigits: 2 })
+}
 
-	type MessageRole = 'user' | 'assistant' | 'system';
+interface Change {
+	key: string
+	before: string
+	after: string
+}
 
-	interface ChatMessage {
-		role: MessageRole;
-		content: string; // for system: 'applied' | 'declined'
-	}
-
-	interface PendingAction {
-		action: string;
-		payload: unknown;
-	}
-
-	let inputValue = $state('');
-	let messages = $state<ChatMessage[]>([]);
-	let isStreaming = $state(false);
-	let messagesEnd: HTMLDivElement | undefined = $state();
-	let textarea: HTMLTextAreaElement | undefined = $state();
-	let pendingActions = $state<PendingAction[]>([]);
-	let historyJson = $state<string | null>(null);
-	let lastAppliedMsgIndex = $state(-1);
-
-	function fmtAssumptionVal(key: string, val: unknown): string {
-		if (typeof val !== 'number') return String(val ?? '—');
-		if (key === 'landCost') {
-			if (val >= 1_000_000) return `AED ${(val / 1_000_000).toFixed(1)}M`;
-			if (val >= 1_000) return `AED ${(val / 1_000).toFixed(0)}K`;
-			return `AED ${val}`;
-		}
-		if (key === 'debtToCostRatio') return `${(val * 100).toFixed(0)}%`;
-		if (key.endsWith('Pct')) return `${val}%`;
-		if (key.toLowerCase().includes('month')) return `${val} mo`;
-		return val.toLocaleString('en-AE', { maximumFractionDigits: 2 });
-	}
-
-	interface Change {
-		key: string;
-		before: string;
-		after: string;
-	}
-
-	function describeAction(pa: PendingAction): { title: string; changes: Change[] } {
-		if (pa.action === 'set_price_per_sqm') {
-			const payload = pa.payload as Record<string, number>;
-			return {
-				title: 'Update prices',
-				changes: Object.entries(payload).map(([type, newPrice]) => ({
-					key: type,
-					before: `AED ${(feasibilityStore.config.pricePerSqm[type] ?? 0).toLocaleString()}/sqm`,
-					after: `AED ${newPrice.toLocaleString()}/sqm`
-				}))
-			};
-		}
-		if (pa.action === 'set_assumptions') {
-			const patch = pa.payload as Record<string, unknown>;
-			return {
-				title: 'Update assumptions',
-				changes: Object.entries(patch).map(([key, newVal]) => ({
-					key,
-					before: fmtAssumptionVal(
-						key,
-						(feasibilityStore.assumptions as Record<string, unknown>)[key]
-					),
-					after: fmtAssumptionVal(key, newVal)
-				}))
-			};
-		}
-		if (pa.action === 'set_buildings') {
-			const b = pa.payload as Array<{ name: string }>;
-			return {
-				title: 'Reconfigure buildings',
-				changes: [{ key: '', before: '', after: b.map((x) => x.name).join(', ') }]
-			};
-		}
-		return { title: pa.action, changes: [] };
-	}
-
-	function acceptChanges() {
-		feasibilityStore.takeUndoSnapshot();
-		for (const pa of pendingActions) {
-			feasibilityStore.applyLLMAction(pa.action, pa.payload);
-		}
-		pendingActions = [];
-		messages = [...messages, { role: 'system', content: 'applied' }];
-		lastAppliedMsgIndex = messages.length - 1;
-		scrollToBottom();
-	}
-
-	function undoChanges() {
-		feasibilityStore.undoLastChange();
-		messages[lastAppliedMsgIndex] = { role: 'system', content: 'undone' };
-		lastAppliedMsgIndex = -1;
-		scrollToBottom();
-	}
-
-	function declineChanges() {
-		pendingActions = [];
-		messages = [...messages, { role: 'system', content: 'declined' }];
-		scrollToBottom();
-	}
-
-	function scrollToBottom() {
-		setTimeout(() => messagesEnd?.scrollIntoView({ behavior: 'smooth' }), 50);
-	}
-
-	function buildContext() {
-		const s = feasibilityStore;
+function describeAction(pa: PendingAction): { title: string; changes: Change[] } {
+	if (pa.action === 'set_price_per_sqm') {
+		const payload = pa.payload as Record<string, number>
 		return {
-			area: s.area,
-			plot: s.plot,
-			plotDossier: s.plotDossier,
-			hbuStudy: s.hbuStudy,
-			config: s.config,
-			assumptions: s.assumptions,
-			derived: {
-				totalUnits: s.totalUnits,
-				totalSellableAreaSqm: Math.round(s.totalSellableAreaSqm),
-				totalGDV: Math.round(s.totalGDV),
-				totalBlendedGDV: Math.round(s.totalBlendedGDV),
-				netRevenue: Math.round(s.netRevenue),
-				hardConstructionCost: Math.round(s.hardCost),
-				totalHardCost: Math.round(s.totalHardCost),
-				totalInfrastructureCost: Math.round(s.totalInfrastructureCost),
-				totalProfessionalFees: Math.round(s.totalProfessionalFees),
-				totalSoftCost: Math.round(s.totalSoftCost),
-				inflationOnCosts: Math.round(s.inflationOnCosts),
-				totalSalesCost: Math.round(s.totalSalesCost),
-				totalFinanceCost: Math.round(s.totalFinanceCost),
-				totalDevCost: Math.round(s.totalDevCost),
-				equityRequired: Math.round(s.equityRequired),
-				debtAmount: Math.round(s.debtAmount),
-				grossProfit: Math.round(s.grossProfit),
-				corporateTaxProvision: Math.round(s.corporateTaxProvision),
-				netProfit: Math.round(s.netProfit),
-				returnOnCost: +s.returnOnCost.toFixed(1),
-				returnOnEquity: +s.returnOnEquity.toFixed(1),
-				equityMultiple: +s.equityMultiple.toFixed(2),
-				unleveredIRR: isNaN(s.unleveredIRR) ? null : +(s.unleveredIRR * 100).toFixed(1),
-				leveredIRR: isNaN(s.leveredIRR) ? null : +(s.leveredIRR * 100).toFixed(1),
-				peakFunding: Math.round(s.peakFunding),
-				cashBreakevenQuarter: s.cashBreakevenQuarter,
-				npvUnlevered: isNaN(s.npvUnlevered) ? null : Math.round(s.npvUnlevered),
-				npvLevered: isNaN(s.npvLevered) ? null : Math.round(s.npvLevered),
-				blendedPricePerSqm: Math.round(s.blendedPricePerSqm)
-			}
-		};
-	}
-
-	async function sendMessage() {
-		const content = inputValue.trim();
-		if (!content || isStreaming) return;
-		inputValue = '';
-		pendingActions = [];
-		messages = [...messages, { role: 'user', content }];
-		messages = [...messages, { role: 'assistant', content: '' }];
-		isStreaming = true;
-		scrollToBottom();
-
-		// Exclude system messages from API history
-		const apiMessages = messages
-			.slice(0, -1)
-			.filter((m) => m.role !== 'system')
-			.map((m) => ({ role: m.role, content: m.content }));
-
-		await feasibility.streamChat(apiMessages, buildContext(), historyJson, (raw) => {
-			try {
-				const parsed = JSON.parse(raw);
-				if (parsed.type === 'text') {
-					messages = messages.map((m, i) =>
-						i === messages.length - 1 ? { ...m, content: m.content + parsed.content } : m
-					);
-					scrollToBottom();
-				} else if (parsed.type === 'pending_action') {
-					pendingActions = [...pendingActions, { action: parsed.action, payload: parsed.payload }];
-				} else if (parsed.type === 'show_research') {
-					researchPanelStore.setActiveTab(parsed.tab as ResearchTab);
-					researchPanelStore.setAgentData(parsed.tab, parsed.data);
-				} else if (parsed.type === 'done') {
-					isStreaming = false;
-					if (parsed.new_messages_json) historyJson = parsed.new_messages_json;
-					if (!pendingActions.length) setTimeout(() => textarea?.focus(), 0);
-				} else if (parsed.type === 'warning') {
-					messages = [...messages, { role: 'system', content: parsed.content }];
-					scrollToBottom();
-				} else if (parsed.type === 'error') {
-					isStreaming = false;
-				}
-			} catch {
-				// ignore non-JSON chunks
-			}
-		});
-	}
-
-	function handleKeydown(e: KeyboardEvent) {
-		if (e.key === 'Enter' && !e.shiftKey) {
-			e.preventDefault();
-			sendMessage();
+			title: 'Update prices',
+			changes: Object.entries(payload).map(([type, newPrice]) => ({
+				key: type,
+				before: `AED ${(feasibilityStore.config.pricePerSqm[type] ?? 0).toLocaleString()}/sqm`,
+				after: `AED ${newPrice.toLocaleString()}/sqm`
+			}))
 		}
 	}
+	if (pa.action === 'set_assumptions') {
+		const patch = pa.payload as Record<string, unknown>
+		return {
+			title: 'Update assumptions',
+			changes: Object.entries(patch).map(([key, newVal]) => ({
+				key,
+				before: fmtAssumptionVal(
+					key,
+					(feasibilityStore.assumptions as Record<string, unknown>)[key]
+				),
+				after: fmtAssumptionVal(key, newVal)
+			}))
+		}
+	}
+	if (pa.action === 'set_buildings') {
+		const b = pa.payload as Array<{ name: string }>
+		return {
+			title: 'Reconfigure buildings',
+			changes: [{ key: '', before: '', after: b.map((x) => x.name).join(', ') }]
+		}
+	}
+	return { title: pa.action, changes: [] }
+}
+
+function acceptChanges() {
+	feasibilityStore.takeUndoSnapshot()
+	for (const pa of pendingActions) {
+		feasibilityStore.applyLLMAction(pa.action, pa.payload)
+	}
+	pendingActions = []
+	messages = [...messages, { role: 'system', content: 'applied' }]
+	lastAppliedMsgIndex = messages.length - 1
+	scrollToBottom()
+}
+
+function undoChanges() {
+	feasibilityStore.undoLastChange()
+	messages[lastAppliedMsgIndex] = { role: 'system', content: 'undone' }
+	lastAppliedMsgIndex = -1
+	scrollToBottom()
+}
+
+function declineChanges() {
+	pendingActions = []
+	messages = [...messages, { role: 'system', content: 'declined' }]
+	scrollToBottom()
+}
+
+function scrollToBottom() {
+	setTimeout(() => messagesEnd?.scrollIntoView({ behavior: 'smooth' }), 50)
+}
+
+function buildContext() {
+	const s = feasibilityStore
+	return {
+		area: s.area,
+		plot: s.plot,
+		plotDossier: s.plotDossier,
+		hbuStudy: s.hbuStudy,
+		config: s.config,
+		assumptions: s.assumptions,
+		derived: {
+			totalUnits: s.totalUnits,
+			totalSellableAreaSqm: Math.round(s.totalSellableAreaSqm),
+			totalGDV: Math.round(s.totalGDV),
+			totalBlendedGDV: Math.round(s.totalBlendedGDV),
+			netRevenue: Math.round(s.netRevenue),
+			hardConstructionCost: Math.round(s.hardCost),
+			totalHardCost: Math.round(s.totalHardCost),
+			totalInfrastructureCost: Math.round(s.totalInfrastructureCost),
+			totalProfessionalFees: Math.round(s.totalProfessionalFees),
+			totalSoftCost: Math.round(s.totalSoftCost),
+			inflationOnCosts: Math.round(s.inflationOnCosts),
+			totalSalesCost: Math.round(s.totalSalesCost),
+			totalFinanceCost: Math.round(s.totalFinanceCost),
+			totalDevCost: Math.round(s.totalDevCost),
+			equityRequired: Math.round(s.equityRequired),
+			debtAmount: Math.round(s.debtAmount),
+			grossProfit: Math.round(s.grossProfit),
+			corporateTaxProvision: Math.round(s.corporateTaxProvision),
+			netProfit: Math.round(s.netProfit),
+			returnOnCost: +s.returnOnCost.toFixed(1),
+			returnOnEquity: +s.returnOnEquity.toFixed(1),
+			equityMultiple: +s.equityMultiple.toFixed(2),
+			unleveredIRR: Number.isNaN(s.unleveredIRR) ? null : +(s.unleveredIRR * 100).toFixed(1),
+			leveredIRR: Number.isNaN(s.leveredIRR) ? null : +(s.leveredIRR * 100).toFixed(1),
+			peakFunding: Math.round(s.peakFunding),
+			cashBreakevenQuarter: s.cashBreakevenQuarter,
+			npvUnlevered: Number.isNaN(s.npvUnlevered) ? null : Math.round(s.npvUnlevered),
+			npvLevered: Number.isNaN(s.npvLevered) ? null : Math.round(s.npvLevered),
+			blendedPricePerSqm: Math.round(s.blendedPricePerSqm)
+		}
+	}
+}
+
+async function sendMessage() {
+	const content = inputValue.trim()
+	if (!content || isStreaming) return
+	inputValue = ''
+	pendingActions = []
+	messages = [...messages, { role: 'user', content }]
+	messages = [...messages, { role: 'assistant', content: '' }]
+	isStreaming = true
+	scrollToBottom()
+
+	// Exclude system messages from API history
+	const apiMessages = messages
+		.slice(0, -1)
+		.filter((m) => m.role !== 'system')
+		.map((m) => ({ role: m.role, content: m.content }))
+
+	await feasibility.streamChat(apiMessages, buildContext(), historyJson, (raw) => {
+		try {
+			const parsed = JSON.parse(raw)
+			if (parsed.type === 'text') {
+				messages = messages.map((m, i) =>
+					i === messages.length - 1 ? { ...m, content: m.content + parsed.content } : m
+				)
+				scrollToBottom()
+			} else if (parsed.type === 'pending_action') {
+				pendingActions = [...pendingActions, { action: parsed.action, payload: parsed.payload }]
+			} else if (parsed.type === 'show_research') {
+				researchPanelStore.setActiveTab(parsed.tab as ResearchTab)
+				researchPanelStore.setAgentData(parsed.tab, parsed.data)
+			} else if (parsed.type === 'done') {
+				isStreaming = false
+				if (parsed.new_messages_json) historyJson = parsed.new_messages_json
+				if (!pendingActions.length) setTimeout(() => textarea?.focus(), 0)
+			} else if (parsed.type === 'warning') {
+				messages = [...messages, { role: 'system', content: parsed.content }]
+				scrollToBottom()
+			} else if (parsed.type === 'error') {
+				isStreaming = false
+			}
+		} catch {
+			// ignore non-JSON chunks
+		}
+	})
+}
+
+function handleKeydown(e: KeyboardEvent) {
+	if (e.key === 'Enter' && !e.shiftKey) {
+		e.preventDefault()
+		sendMessage()
+	}
+}
 </script>
 
 <div class="h-full flex flex-col bg-white border-l border-slate-200">

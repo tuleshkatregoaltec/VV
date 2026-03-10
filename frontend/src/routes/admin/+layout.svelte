@@ -1,11 +1,11 @@
 <script lang="ts">
-	import type { Snippet } from 'svelte';
-	import AppShell from '$lib/components/layout/AppShell.svelte';
-	import { page } from '$app/state';
+import type { Snippet } from 'svelte'
+import { page } from '$app/state'
+import AppShell from '$lib/components/layout/AppShell.svelte'
 
-	let { children }: { children: Snippet } = $props();
+let { children }: { children: Snippet } = $props()
 
-	const navItems = [{ href: '/admin/organizations', label: 'Organizations' }];
+const navItems = [{ href: '/admin/organizations', label: 'Organizations' }]
 </script>
 
 <AppShell showFilters={false}>
@@ -14,7 +14,7 @@
 			<span class="text-xs font-semibold uppercase tracking-widest text-gray-400">Admin</span>
 		</div>
 		<nav class="flex gap-1 border-b border-gray-200">
-			{#each navItems as item}
+			{#each navItems as item (item.href)}
 				<a
 					href={item.href}
 					class="px-4 py-2 text-sm font-medium rounded-t transition-colors

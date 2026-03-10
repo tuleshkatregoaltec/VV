@@ -1,40 +1,40 @@
 <script lang="ts">
-	import { fly } from 'svelte/transition';
-	import { cubicOut } from 'svelte/easing';
-	import PersonaCard from './PersonaCard.svelte';
+import { cubicOut } from 'svelte/easing'
+import { fly } from 'svelte/transition'
+import PersonaCard from './PersonaCard.svelte'
 
-	let isVisible = $state(false);
+let isVisible = $state(false)
 
-	$effect(() => {
-		isVisible = true;
-	});
+$effect(() => {
+	isVisible = true
+})
 
-	const personas = [
-		{
-			title: 'Brokers & Agents',
-			description:
-				'Verify your pricing with ease, generate leads, automate your listing descriptions and stand out to clients with commercial-grade analysis.',
-			icon: 'M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z'
-		},
-		{
-			title: 'Consultants & Valuers',
-			description:
-				'Generate client-ready comps and reports instantly, predict hidden market trends with AI-native semantic and quantitative analysis.',
-			icon: 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z'
-		},
-		{
-			title: 'Developers',
-			description:
-				'Track supply and price dynamics, competitive positioning and identify feasibility and configuration opportunities across Dubai.',
-			icon: 'M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4'
-		},
-		{
-			title: 'Institutional Investors',
-			description:
-				'Obtain KPI-driven benchmarks across all asset classes, generate institutional-grade reports to narrow pipeline and win more mandates.',
-			icon: 'M13 7h8m0 0v8m0-8l-8 8-4-4-6 6'
-		}
-	];
+const personas = [
+	{
+		title: 'Brokers & Agents',
+		description:
+			'Verify your pricing with ease, generate leads, automate your listing descriptions and stand out to clients with commercial-grade analysis.',
+		icon: 'M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z'
+	},
+	{
+		title: 'Consultants & Valuers',
+		description:
+			'Generate client-ready comps and reports instantly, predict hidden market trends with AI-native semantic and quantitative analysis.',
+		icon: 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z'
+	},
+	{
+		title: 'Developers',
+		description:
+			'Track supply and price dynamics, competitive positioning and identify feasibility and configuration opportunities across Dubai.',
+		icon: 'M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4'
+	},
+	{
+		title: 'Institutional Investors',
+		description:
+			'Obtain KPI-driven benchmarks across all asset classes, generate institutional-grade reports to narrow pipeline and win more mandates.',
+		icon: 'M13 7h8m0 0v8m0-8l-8 8-4-4-6 6'
+	}
+]
 </script>
 
 <section id="personas" class="py-24 bg-white relative">
@@ -65,7 +65,7 @@
 		</div>
 
 		<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-			{#each personas as persona, i}
+			{#each personas as persona, i (persona.title)}
 				{#if isVisible}
 					<div in:fly={{ y: 20, duration: 600, delay: i * 100, easing: cubicOut }}>
 						<div
