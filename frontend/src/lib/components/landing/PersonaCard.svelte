@@ -1,11 +1,11 @@
 <script lang="ts">
-	interface Props {
-		title: string;
-		description: string;
-		icon: string;
-	}
+interface Props {
+	title: string
+	description: string
+	icon: string
+}
 
-	let { title, description, icon }: Props = $props();
+let { title, description, icon }: Props = $props()
 </script>
 
 <div

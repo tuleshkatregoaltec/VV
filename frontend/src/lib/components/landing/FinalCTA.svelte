@@ -1,12 +1,12 @@
 <script lang="ts">
-	import { fly } from 'svelte/transition';
-	import { cubicOut } from 'svelte/easing';
+import { cubicOut } from 'svelte/easing'
+import { fly } from 'svelte/transition'
 
-	let isVisible = $state(false);
+let isVisible = $state(false)
 
-	$effect(() => {
-		isVisible = true;
-	});
+$effect(() => {
+	isVisible = true
+})
 </script>
 
 <section id="get-started" class="py-24 bg-slate-50 relative overflow-hidden">

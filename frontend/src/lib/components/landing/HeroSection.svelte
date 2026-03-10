@@ -1,30 +1,30 @@
 <script lang="ts">
-	import { fly } from 'svelte/transition';
-	import { cubicOut } from 'svelte/easing';
-	import { onMount } from 'svelte';
+import { onMount } from 'svelte'
+import { cubicOut } from 'svelte/easing'
+import { fly } from 'svelte/transition'
 
-	let isVisible = $state(false);
-	let scrollY = $state(0);
+let isVisible = $state(false)
+let scrollY = $state(0)
 
-	$effect(() => {
-		isVisible = true;
-	});
+$effect(() => {
+	isVisible = true
+})
 
-	onMount(() => {
-		const handleScroll = () => {
-			scrollY = window.scrollY;
-		};
-		window.addEventListener('scroll', handleScroll);
-		return () => window.removeEventListener('scroll', handleScroll);
-	});
-
-	function scrollToPreview() {
-		document.getElementById('preview')?.scrollIntoView({ behavior: 'smooth' });
+onMount(() => {
+	const handleScroll = () => {
+		scrollY = window.scrollY
 	}
+	window.addEventListener('scroll', handleScroll)
+	return () => window.removeEventListener('scroll', handleScroll)
+})
 
-	// Parallax calculations
-	const opacity = $derived(Math.max(1 - scrollY / 500, 0));
-	const translateY = $derived(scrollY * 0.5);
+function scrollToPreview() {
+	document.getElementById('preview')?.scrollIntoView({ behavior: 'smooth' })
+}
+
+// Parallax calculations
+const opacity = $derived(Math.max(1 - scrollY / 500, 0))
+const translateY = $derived(scrollY * 0.5)
 </script>
 
 <section class="relative min-h-screen bg-white flex items-center justify-center overflow-hidden">
