@@ -39,8 +39,7 @@ format-frontend:
 	cd frontend && bun run format
 
 prepare-frontend:
-	just format-frontend
-	just lint-frontend
+	cd frontend && ./node_modules/.bin/biome check --write .
 
 test-e2e:
 	docker compose run --rm playwright bash -lc 'npm install && npm test'
