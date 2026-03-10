@@ -1,36 +1,34 @@
+import logging.config
+from contextlib import asynccontextmanager
+
 import logfire
 import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from starlette.middleware.sessions import SessionMiddleware
-from starlette.middleware.authentication import AuthenticationMiddleware
 from honeybadger import contrib, honeybadger
-import logging.config
-from contextlib import asynccontextmanager
+from starlette.middleware.authentication import AuthenticationMiddleware
+from starlette.middleware.sessions import SessionMiddleware
 
-from app.config import settings
-from app.clickhouse import close_clickhouse
-from app.postgres import close_postgres
-
+from app.admin.router import router as admin_router
 from app.analytics.router import router as analytics_router
 from app.auth.router import router as auth_router
+from app.billing.router import router as billing_router
+from app.billing.webhooks import router as billing_webhooks
 from app.chat.router import router as chat_router
+from app.clickhouse import close_clickhouse
+from app.config import settings
+from app.core.logging_config import LOGGING_CONFIG
+from app.feasibility.router import router as feasibility_router
 from app.filters.router import router as filters_router
 from app.news.router import router as news_router
 from app.organization.router import router as organization_router
+from app.postgres import close_postgres
 from app.project.router import router as project_router
+from app.providers.auth.auth_backend import AuthBackend
 from app.supply.router import router as supply_router
 from app.transaction.router import router as transaction_router
-from app.upload.router import router as upload_router
 from app.upload.router import health_router
-from app.billing.router import router as billing_router
-from app.billing.webhooks import router as billing_webhooks
-from app.admin.router import router as admin_router
-from app.feasibility.router import router as feasibility_router
-
-from app.providers.auth.auth_backend import AuthBackend
-
-from app.core.logging_config import LOGGING_CONFIG
+from app.upload.router import router as upload_router
 
 logging.config.dictConfig(LOGGING_CONFIG)
 
@@ -43,7 +41,7 @@ async def lifespan(app: FastAPI):
     await close_postgres()
 
 
-logfire.configure()
+logfire.configure(send_to_logfire=bool(settings.LOGFIRE_TOKEN))
 logfire.instrument_pydantic_ai()
 
 app = FastAPI(title="Real Estate API", version="1.0.0", lifespan=lifespan)

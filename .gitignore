@@ -221,9 +221,9 @@ cython_debug/
 .abstra/
 
 # Visual Studio Code
-#  Visual Studio Code specific template is maintained in a separate VisualStudioCode.gitignore 
+#  Visual Studio Code specific template is maintained in a separate VisualStudioCode.gitignore
 #  that can be found at https://github.com/github/gitignore/blob/main/Global/VisualStudioCode.gitignore
-#  and can be added to the global gitignore or merged into this file. However, if you prefer, 
+#  and can be added to the global gitignore or merged into this file. However, if you prefer,
 #  you could uncomment the following to ignore the entire vscode folder
 # .vscode/
 
@@ -242,9 +242,9 @@ cython_debug/
 # Local test artifacts and generated data
 .playwright-cli/
 .playwright-mcp/
-AGENTS.md
 playwright-report/
 test-results/
+output/
 backend/logs/
 /sheets/
 ch_data/
@@ -258,15 +258,9 @@ marimo/_lsp/
 __marimo__/
 
 data/
-llm-slop/
-alembic/
-tests/
-CLAUDE.md
-flows.md
-project-search-logic.md
 
 # Docker volumes
 .docker-volumes/
 
-# Local development env
-.env.dev
+AGENTS.md
+CLAUDE.md

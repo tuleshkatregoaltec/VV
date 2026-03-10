@@ -4,6 +4,10 @@ services:
       API_EXTERNAL_URL: https://demo-auth.vitevue.com
       GOTRUE_SITE_URL: https://demo.vitevue.com
       GOTRUE_URI_ALLOW_LIST: https://demo.vitevue.com,http://localhost:5173
+      GOTRUE_MAILER_URLPATHS_CONFIRMATION: /verify
+      GOTRUE_MAILER_URLPATHS_INVITE: /verify
+      GOTRUE_MAILER_URLPATHS_RECOVERY: /verify
+      GOTRUE_MAILER_URLPATHS_EMAIL_CHANGE: /verify
 
   backend:
     environment:

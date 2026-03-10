@@ -1,6 +1,6 @@
 import asyncio
 
-from app.services.auth_service import update_app_metadata, get_user_by_id
+from app.services.auth_service import get_user_by_id, update_app_metadata
 
 
 async def main():

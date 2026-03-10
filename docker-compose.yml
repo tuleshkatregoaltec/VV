@@ -16,7 +16,6 @@ services:
       timeout: 5s
       retries: 5
 
-  # Auth database initialization
   auth-db-init:
     image: postgres:18-alpine
     container_name: vitevue-auth-db-init
@@ -40,7 +39,6 @@ services:
           -v auth_user="$$AUTH_USER" \
           -v auth_pass="$$AUTH_PASSWORD" \
           <<'SQL'
-        -- Create postgres role if missing (needed by GoTrue migrations)
         DO $$$$
         BEGIN
           IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'postgres') THEN
@@ -48,7 +46,6 @@ services:
           END IF;
         END $$$$;
 
-        -- Create auth role only if missing
         SELECT format(
           'create role %I login noinherit createrole noreplication password %L',
           :'auth_user',
@@ -58,12 +55,10 @@ services:
           SELECT 1 FROM pg_roles WHERE rolname = :'auth_user'
         )\gexec
 
-        -- Ensure schema + search_path
         create schema if not exists auth authorization :"auth_user";
         alter role :"auth_user" set search_path = 'auth';
         SQL
 
-  # Supabase Auth Service (GoTrue)
   auth:
     image: ghcr.io/supabase/auth:v2.185.0
     container_name: vitevue-auth
@@ -82,6 +77,7 @@ services:
       GOTRUE_DISABLE_SIGNUP: "false"
       GOTRUE_JWT_ADMIN_GROUP_NAME: admin
       GOTRUE_JWT_DEFAULT_GROUP_NAME: user
+      GOTRUE_JWT_ADMIN_ROLES: service_role,supabase_admin,admin
       GOTRUE_JWT_SECRET: super-secret-jwt-token-with-at-least-32-characters-long
       GOTRUE_EXTERNAL_EMAIL_ENABLED: "true"
       GOTRUE_MAILER_AUTOCONFIRM: "true"
@@ -89,10 +85,10 @@ services:
       GOTRUE_SMTP_HOST: inbucket
       GOTRUE_SMTP_PORT: 2500
       GOTRUE_SMTP_SENDER_NAME: ViteVue
-      GOTRUE_MAILER_URLPATHS_CONFIRMATION: /auth/confirm
-      GOTRUE_MAILER_URLPATHS_INVITE: /auth/confirm
-      GOTRUE_MAILER_URLPATHS_RECOVERY: /auth/reset-password
-      GOTRUE_MAILER_URLPATHS_EMAIL_CHANGE: /auth/confirm
+      GOTRUE_MAILER_URLPATHS_CONFIRMATION: /verify
+      GOTRUE_MAILER_URLPATHS_INVITE: /verify
+      GOTRUE_MAILER_URLPATHS_RECOVERY: /verify
+      GOTRUE_MAILER_URLPATHS_EMAIL_CHANGE: /verify
     ports:
       - "9999:8081"
     healthcheck:
@@ -101,14 +97,13 @@ services:
       timeout: 5s
       retries: 5
 
-  # Inbucket - Local email testing (for auth emails)
   inbucket:
     image: inbucket/inbucket:stable
     container_name: vitevue-inbucket
     ports:
-      - "2500:2500"  # SMTP
-      - "9000:9000"  # Web UI
-      - "1100:1100"  # POP3
+      - "2500:2500"
+      - "9000:9000"
+      - "1100:1100"
     environment:
       INBUCKET_SMTP_ADDR: 0.0.0.0:2500
       INBUCKET_WEB_ADDR: 0.0.0.0:9000
@@ -123,11 +118,10 @@ services:
       CLICKHOUSE_PASSWORD: vitevue_dev
       CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
     ports:
-      - "8123:8123"  # HTTP interface
-      - "9001:9000"  # Native client (changed from 9000 to avoid conflict with inbucket)
+      - "8123:8123"
+      - "9001:9000"
     volumes:
       - ./.docker-volumes/clickhouse:/var/lib/clickhouse
-      - ./init-clickhouse.sh:/docker-entrypoint-initdb.d/init-clickhouse.sh
     ulimits:
       nofile:
         soft: 262144
@@ -152,13 +146,12 @@ services:
       timeout: 5s
       retries: 5
 
-  # MinIO - Local S3-compatible storage
   minio:
     image: minio/minio:latest
     container_name: vitevue-minio
     ports:
-      - "9002:9000"  # API
-      - "9003:9001"  # Console
+      - "9002:9000"
+      - "9003:9001"
     environment:
       MINIO_ROOT_USER: minioadmin
       MINIO_ROOT_PASSWORD: minioadmin
@@ -171,7 +164,6 @@ services:
       timeout: 5s
       retries: 5
 
-  # Create MinIO bucket on startup
   minio-setup:
     image: minio/mc:latest
     container_name: vitevue-minio-setup
@@ -189,12 +181,12 @@ services:
   backend:
     build:
       context: .
-      dockerfile: backend.dev.Dockerfile
+      dockerfile: backend/Dockerfile.dev
     container_name: vitevue-backend
+    working_dir: /app/backend
     env_file:
       - .env.dev
     environment:
-      # Override/set local service URLs
       DATABASE_URL: postgresql+asyncpg://vitevue:vitevue_dev@postgres:5432/vitevue
       CLICKHOUSE_HOST: clickhouse
       CLICKHOUSE_PORT: 8123
@@ -206,17 +198,17 @@ services:
       AUTH_URL: http://auth:8081
       FRONTEND_URL: http://localhost:5173
       ALLOWED_ORIGINS: '["http://localhost:5173", "http://localhost:3000"]'
-
-      # Local S3 (MinIO)
       S3_ENDPOINT_URL: http://minio:9000
       S3_ACCESS_KEY_ID: minioadmin
       S3_SECRET_ACCESS_KEY: minioadmin
       S3_BUCKET_NAME: vitevue-dev
       S3_REGION: us-east-1
+      PYTHONDONTWRITEBYTECODE: "1"
     ports:
       - "8000:8000"
     volumes:
       - ./backend:/app/backend
+      - backend_venv:/app/backend/.venv
     depends_on:
       postgres:
         condition: service_healthy
@@ -226,22 +218,27 @@ services:
         condition: service_healthy
       auth:
         condition: service_healthy
-      minio:
-        condition: service_healthy
+      minio-setup:
+        condition: service_completed_successfully
     dns:
       - 8.8.8.8
       - 8.8.4.4
-    command: uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    command: sh -lc "scripts/lifecycle/prestart.sh && uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   frontend:
     build:
       context: .
-      dockerfile: frontend.dev.Dockerfile
+      dockerfile: frontend/Dockerfile.dev
     container_name: vitevue-frontend
+    working_dir: /app/frontend
     env_file:
       - .env.dev
     environment:
-      # Override with local URLs
       PUBLIC_API_BASE_URL: http://localhost:8000
       PUBLIC_AUTH_BASE_URL: http://localhost:9999
     ports:
@@ -249,9 +246,31 @@ services:
     volumes:
       - ./frontend:/app/frontend
       - /app/frontend/node_modules
+      - frontend_svelte_kit:/app/frontend/.svelte-kit
     depends_on:
-      - backend
-    command: sh -c "bun install && bun run dev --host 0.0.0.0"
+      backend:
+        condition: service_healthy
+    command: sh -lc "bun install && bun run dev --host 0.0.0.0 --port 5173"
+
+  playwright:
+    build:
+      context: .
+      dockerfile: e2e/Dockerfile
+    container_name: vitevue-playwright
+    working_dir: /work/e2e
+    init: true
+    network_mode: host
+    shm_size: 1gb
+    environment:
+      PLAYWRIGHT_BASE_URL: http://localhost:5173
+      PLAYWRIGHT_SKIP_WEBSERVER: "1"
+    volumes:
+      - .:/work
+      - playwright_node_modules:/work/e2e/node_modules
+      - ./.docker-volumes/playwright/auth:/work/e2e/.auth
+      - ./.docker-volumes/playwright/report:/work/playwright-report
+      - ./.docker-volumes/playwright/results:/work/test-results
+    command: bash -lc "tail -f /dev/null"
 
 networks:
   default:
@@ -259,4 +278,7 @@ networks:
     driver_opts:
       com.docker.network.driver.mtu: "1280"
 
-# All data is now stored in .docker-volumes/ directory
+volumes:
+  backend_venv:
+  frontend_svelte_kit:
+  playwright_node_modules:

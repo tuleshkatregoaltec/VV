@@ -23,9 +23,7 @@ class RedisCache:
             self.redis = redis.from_url(self.redis_url, password=self.redis_password)
             logger.info("Redis client initialized at %s", self.redis_url)
         except Exception as e:
-            logger.error(
-                "Failed to initialize Redis client at %s: %s", self.redis_url, str(e)
-            )
+            logger.error("Failed to initialize Redis client at %s: %s", self.redis_url, str(e))
 
     async def get(self, key: str) -> Optional[Any]:
         """Get value from cache by key, returns None if not found or Redis unavailable"""
@@ -57,9 +55,7 @@ class RedisCache:
                 return float(obj)
             if isinstance(obj, (datetime.date, datetime.datetime)):
                 return obj.isoformat()
-            raise TypeError(
-                f"Object of type {obj.__class__.__name__} is not JSON serializable"
-            )
+            raise TypeError(f"Object of type {obj.__class__.__name__} is not JSON serializable")
 
         try:
             if not isinstance(value, str):
@@ -96,8 +92,6 @@ class RedisCache:
                     len(keys),
                 )
             else:
-                logger.debug(
-                    "Cache clear called for pattern %s but no keys found", pattern
-                )
+                logger.debug("Cache clear called for pattern %s but no keys found", pattern)
         except Exception as e:
             logger.error("Failed to clear cache for pattern %s: %s", pattern, str(e))

@@ -1,5 +1,5 @@
 import os
-from typing import Dict, Any
+from typing import Any, Dict
 
 os.makedirs("logs", exist_ok=True)
 

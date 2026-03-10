@@ -1,20 +1,19 @@
-"""Initial migration
+"""baseline schema
 
-Revision ID: 746b42cc1a6f
+Revision ID: 8395bd1f2518
 Revises:
-Create Date: 2026-02-03 21:28:50.568866
+Create Date: 2026-03-10 14:56:34.864066
 
 """
 
 from typing import Sequence, Union
 
-from alembic import op
 import sqlalchemy as sa
 import sqlmodel.sql.sqltypes
-
+from alembic import op
 
 # revision identifiers, used by Alembic.
-revision: str = "746b42cc1a6f"
+revision: str = "8395bd1f2518"
 down_revision: Union[str, Sequence[str], None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -32,22 +31,14 @@ def upgrade() -> None:
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
         sa.PrimaryKeyConstraint("id"),
     )
-    op.create_index(
-        op.f("ix_conversations_user_id"), "conversations", ["user_id"], unique=False
-    )
+    op.create_index(op.f("ix_conversations_user_id"), "conversations", ["user_id"], unique=False)
     op.create_table(
         "news_articles",
         sa.Column("id", sa.Integer(), nullable=False),
         sa.Column("url", sqlmodel.sql.sqltypes.AutoString(length=255), nullable=False),
-        sa.Column(
-            "headline", sqlmodel.sql.sqltypes.AutoString(length=255), nullable=False
-        ),
-        sa.Column(
-            "thumbnail_url", sqlmodel.sql.sqltypes.AutoString(length=255), nullable=True
-        ),
-        sa.Column(
-            "thumbnail_base64", sqlmodel.sql.sqltypes.AutoString(), nullable=True
-        ),
+        sa.Column("headline", sqlmodel.sql.sqltypes.AutoString(length=255), nullable=False),
+        sa.Column("thumbnail_url", sqlmodel.sql.sqltypes.AutoString(length=255), nullable=True),
+        sa.Column("thumbnail_base64", sqlmodel.sql.sqltypes.AutoString(), nullable=True),
         sa.Column("publish_date", sa.DateTime(timezone=True), nullable=True),
         sa.PrimaryKeyConstraint("id"),
     )
@@ -56,14 +47,8 @@ def upgrade() -> None:
         sa.Column("id", sqlmodel.sql.sqltypes.AutoString(), nullable=False),
         sa.Column("name", sqlmodel.sql.sqltypes.AutoString(), nullable=False),
         sa.Column("max_users", sa.Integer(), nullable=False),
-        sa.Column("is_active", sa.Boolean(), nullable=False),
-        sa.Column("owner_user_id", sqlmodel.sql.sqltypes.AutoString(), nullable=False),
-        sa.Column(
-            "subscription_status", sqlmodel.sql.sqltypes.AutoString(), nullable=False
-        ),
-        sa.Column(
-            "stripe_customer_id", sqlmodel.sql.sqltypes.AutoString(), nullable=True
-        ),
+        sa.Column("subscription_status", sqlmodel.sql.sqltypes.AutoString(), nullable=False),
+        sa.Column("stripe_customer_id", sqlmodel.sql.sqltypes.AutoString(), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
         sa.PrimaryKeyConstraint("id"),
@@ -86,14 +71,9 @@ def upgrade() -> None:
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
         sa.PrimaryKeyConstraint("id"),
     )
+    op.create_index(op.f("ix_user_token_usage_date"), "user_token_usage", ["date"], unique=False)
     op.create_index(
-        op.f("ix_user_token_usage_date"), "user_token_usage", ["date"], unique=False
-    )
-    op.create_index(
-        op.f("ix_user_token_usage_user_id"),
-        "user_token_usage",
-        ["user_id"],
-        unique=False,
+        op.f("ix_user_token_usage_user_id"), "user_token_usage", ["user_id"], unique=False
     )
     op.create_table(
         "messages",
@@ -110,24 +90,17 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index(
-        op.f("ix_messages_conversation_id"),
-        "messages",
-        ["conversation_id"],
-        unique=False,
+        op.f("ix_messages_conversation_id"), "messages", ["conversation_id"], unique=False
     )
     op.create_table(
         "organization_invitations",
         sa.Column("id", sqlmodel.sql.sqltypes.AutoString(), nullable=False),
-        sa.Column(
-            "organization_id", sqlmodel.sql.sqltypes.AutoString(), nullable=False
-        ),
+        sa.Column("organization_id", sqlmodel.sql.sqltypes.AutoString(), nullable=False),
         sa.Column("email", sqlmodel.sql.sqltypes.AutoString(), nullable=False),
         sa.Column("role", sqlmodel.sql.sqltypes.AutoString(), nullable=False),
         sa.Column("token", sqlmodel.sql.sqltypes.AutoString(), nullable=False),
         sa.Column("status", sqlmodel.sql.sqltypes.AutoString(), nullable=False),
-        sa.Column(
-            "invited_by_user_id", sqlmodel.sql.sqltypes.AutoString(), nullable=False
-        ),
+        sa.Column("invited_by_user_id", sqlmodel.sql.sqltypes.AutoString(), nullable=False),
         sa.Column("expires_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("accepted_at", sa.DateTime(timezone=True), nullable=True),
@@ -158,9 +131,7 @@ def upgrade() -> None:
     op.create_table(
         "organization_memberships",
         sa.Column("id", sqlmodel.sql.sqltypes.AutoString(), nullable=False),
-        sa.Column(
-            "organization_id", sqlmodel.sql.sqltypes.AutoString(), nullable=False
-        ),
+        sa.Column("organization_id", sqlmodel.sql.sqltypes.AutoString(), nullable=False),
         sa.Column("user_id", sqlmodel.sql.sqltypes.AutoString(), nullable=False),
         sa.Column("role", sqlmodel.sql.sqltypes.AutoString(), nullable=False),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
@@ -171,9 +142,7 @@ def upgrade() -> None:
             ["organizations.id"],
         ),
         sa.PrimaryKeyConstraint("id"),
-        sa.UniqueConstraint(
-            "organization_id", "user_id", name="uq_membership_org_user"
-        ),
+        sa.UniqueConstraint("organization_id", "user_id", name="uq_membership_org_user"),
         sa.UniqueConstraint("user_id", name="uq_membership_user_id"),
     )
     op.create_index(
@@ -191,18 +160,10 @@ def upgrade() -> None:
     op.create_table(
         "subscriptions",
         sa.Column("id", sqlmodel.sql.sqltypes.AutoString(), nullable=False),
-        sa.Column(
-            "organization_id", sqlmodel.sql.sqltypes.AutoString(), nullable=False
-        ),
-        sa.Column(
-            "stripe_subscription_id", sqlmodel.sql.sqltypes.AutoString(), nullable=False
-        ),
-        sa.Column(
-            "stripe_customer_id", sqlmodel.sql.sqltypes.AutoString(), nullable=False
-        ),
-        sa.Column(
-            "stripe_price_id", sqlmodel.sql.sqltypes.AutoString(), nullable=False
-        ),
+        sa.Column("organization_id", sqlmodel.sql.sqltypes.AutoString(), nullable=False),
+        sa.Column("stripe_subscription_id", sqlmodel.sql.sqltypes.AutoString(), nullable=False),
+        sa.Column("stripe_customer_id", sqlmodel.sql.sqltypes.AutoString(), nullable=False),
+        sa.Column("stripe_price_id", sqlmodel.sql.sqltypes.AutoString(), nullable=False),
         sa.Column("status", sqlmodel.sql.sqltypes.AutoString(), nullable=False),
         sa.Column("seats", sa.Integer(), nullable=False),
         sa.Column("current_period_start", sa.DateTime(timezone=True), nullable=False),
@@ -217,10 +178,7 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index(
-        op.f("ix_subscriptions_organization_id"),
-        "subscriptions",
-        ["organization_id"],
-        unique=False,
+        op.f("ix_subscriptions_organization_id"), "subscriptions", ["organization_id"], unique=False
     )
     op.create_index(
         op.f("ix_subscriptions_stripe_subscription_id"),
@@ -234,39 +192,28 @@ def upgrade() -> None:
 def downgrade() -> None:
     """Downgrade schema."""
     # ### commands auto generated by Alembic - please adjust! ###
-    op.drop_index(
-        op.f("ix_subscriptions_stripe_subscription_id"), table_name="subscriptions"
-    )
+    op.drop_index(op.f("ix_subscriptions_stripe_subscription_id"), table_name="subscriptions")
     op.drop_index(op.f("ix_subscriptions_organization_id"), table_name="subscriptions")
     op.drop_table("subscriptions")
     op.drop_index(
-        op.f("ix_organization_memberships_user_id"),
-        table_name="organization_memberships",
+        op.f("ix_organization_memberships_user_id"), table_name="organization_memberships"
     )
     op.drop_index(
-        op.f("ix_organization_memberships_organization_id"),
-        table_name="organization_memberships",
+        op.f("ix_organization_memberships_organization_id"), table_name="organization_memberships"
     )
     op.drop_table("organization_memberships")
+    op.drop_index(op.f("ix_organization_invitations_token"), table_name="organization_invitations")
     op.drop_index(
-        op.f("ix_organization_invitations_token"), table_name="organization_invitations"
+        op.f("ix_organization_invitations_organization_id"), table_name="organization_invitations"
     )
-    op.drop_index(
-        op.f("ix_organization_invitations_organization_id"),
-        table_name="organization_invitations",
-    )
-    op.drop_index(
-        op.f("ix_organization_invitations_email"), table_name="organization_invitations"
-    )
+    op.drop_index(op.f("ix_organization_invitations_email"), table_name="organization_invitations")
     op.drop_table("organization_invitations")
     op.drop_index(op.f("ix_messages_conversation_id"), table_name="messages")
     op.drop_table("messages")
     op.drop_index(op.f("ix_user_token_usage_user_id"), table_name="user_token_usage")
     op.drop_index(op.f("ix_user_token_usage_date"), table_name="user_token_usage")
     op.drop_table("user_token_usage")
-    op.drop_index(
-        op.f("ix_organizations_stripe_customer_id"), table_name="organizations"
-    )
+    op.drop_index(op.f("ix_organizations_stripe_customer_id"), table_name="organizations")
     op.drop_table("organizations")
     op.drop_table("news_articles")
     op.drop_index(op.f("ix_conversations_user_id"), table_name="conversations")

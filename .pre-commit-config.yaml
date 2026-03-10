@@ -23,4 +23,4 @@ repos:
         name: frontend biome
         entry: bash -lc 'cd frontend && set -- "${@/#frontend\//}"; ./node_modules/.bin/biome check --diagnostic-level=error "$@"' --
         language: system
-        files: ^frontend/
+        files: ^frontend/.*\.(svelte|ts|js|json|css)$

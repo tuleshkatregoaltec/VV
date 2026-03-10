@@ -1,5 +1,8 @@
-from pydantic_settings import BaseSettings
+from functools import cached_property
+from pathlib import Path
+
 from pydantic import field_validator
+from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
@@ -21,15 +24,18 @@ class Settings(BaseSettings):
 
     # Honeybadger
     HONEYBADGER_API_KEY: str  # Bitwarden Secrets
+    LOGFIRE_TOKEN: str | None = None
 
     # OpenRouter
     OPENROUTER_API_KEY: str  # Bitwarden Secrets
     DEFAULT_CHAT_MODEL: str  # configMap
 
     # Auth
-    AUTH_ADMIN_EMAIL: str  # configMap
-    AUTH_ADMIN_PASSWORD: str  # Bitwarden Secrets
     AUTH_URL: str  # configMap
+    AUTH_SERVICE_ROLE_KEY: str  # Bitwarden Secrets
+    AUTH_ADMIN_EMAIL: str | None = None
+    AUTH_ADMIN_PASSWORD: str | None = None
+    SYSTEM_ADMIN_EMAIL: str | None = None
 
     # PostHog
     POSTHOG_API_KEY: str  # Bitwarden Secrets
@@ -59,6 +65,12 @@ class Settings(BaseSettings):
     FRONTEND_SUCCESS_URL: str  # configMap
     FRONTEND_CANCEL_URL: str  # configMap
 
+    @cached_property
+    def ALEMBIC_DATABASE_URL(self) -> str:
+        if self.DATABASE_URL.startswith("postgresql+asyncpg://"):
+            return self.DATABASE_URL.replace("postgresql+asyncpg://", "postgresql://", 1)
+        return self.DATABASE_URL
+
     @field_validator("SERVICE_API_KEY")
     @classmethod
     def validate_service_api_key(cls, v: str) -> str:
@@ -67,7 +79,7 @@ class Settings(BaseSettings):
         return v
 
     class Config:
-        env_file = ".env"
+        env_file = Path(__file__).resolve().parents[2] / ".env.dev"
 
 
 settings = Settings()  # type: ignore

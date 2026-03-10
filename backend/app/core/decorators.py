@@ -1,9 +1,9 @@
-from functools import wraps
-from typing import Callable, Any
 import logging
+from functools import wraps
+from typing import Any, Callable
 
-from app.core.cache import RedisCache
 from app.config import settings
+from app.core.cache import RedisCache
 
 logger = logging.getLogger(__name__)
 
@@ -13,10 +13,7 @@ cache = RedisCache(settings.REDIS_URL, settings.REDIS_PASSWORD)
 def serialize_result(result: Any) -> Any:
     """Helper to convert SQLModel/Pydantic objects to dicts for caching"""
     if isinstance(result, list):
-        return [
-            item.model_dump() if hasattr(item, "model_dump") else item
-            for item in result
-        ]
+        return [item.model_dump() if hasattr(item, "model_dump") else item for item in result]
     if hasattr(result, "model_dump"):
         return result.model_dump()
     return result
@@ -31,9 +28,7 @@ def cached_endpoint(prefix: str, expire: int = 600):
             ignored_keys = {"session", "current_user", "request", "response"}
 
             key_params = {
-                k: v
-                for k, v in kwargs.items()
-                if k not in ignored_keys and v is not None
+                k: v for k, v in kwargs.items() if k not in ignored_keys and v is not None
             }
 
             param_str = ":".join(f"{k}={v}" for k, v in sorted(key_params.items()))

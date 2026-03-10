@@ -59,7 +59,7 @@ jobs:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
             type=raw,value=sha-{{sha}}-{{date 'YYYYMMDD-HHmmss'}},enable=${{ github.ref == 'refs/heads/production' }}
-#            type=sha,prefix=sha-  
+#            type=sha,prefix=sha-
 #            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/production' }}
 #            type=schedule,pattern=nightly-{{date 'YYYYMMDD-HHmmss'}},enable=${{ github.event_name == 'schedule' }}
 
