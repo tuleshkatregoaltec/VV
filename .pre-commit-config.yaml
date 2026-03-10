@@ -1,0 +1,35 @@
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: check-added-large-files
+      - id: check-merge-conflict
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+
+  - repo: local
+    hooks:
+      - id: backend-ruff-format
+        name: backend ruff format
+        entry: uv run --project backend ruff format backend
+        language: system
+        files: ^backend/.*\.py$
+        pass_filenames: false
+      - id: backend-ruff-check
+        name: backend ruff check
+        entry: uv run --project backend ruff check --fix --exit-non-zero-on-fix backend
+        language: system
+        files: ^backend/.*\.py$
+        pass_filenames: false
+      - id: frontend-prettier
+        name: frontend prettier
+        entry: sh -lc 'cd frontend && bun run format'
+        language: system
+        files: ^frontend/
+        pass_filenames: false
+      - id: frontend-eslint
+        name: frontend eslint
+        entry: sh -lc 'cd frontend && bun run lint'
+        language: system
+        files: ^frontend/
+        pass_filenames: false
