@@ -35,6 +35,14 @@ uv tool install prek
 prek install
 ```
 
+By default, `prek` runs on staged files during `git commit`. To run the configured hooks across the whole repo manually, use:
+
+```sh
+prek run --all-files
+```
+
+If host `uv` commands fail with cache permission errors, repair the ownership of `~/.cache/uv` and avoid running `uv` with `sudo`.
+
 Hook policy:
 
 - Hooks should stay lightweight and host-driven.

@@ -2,15 +2,12 @@ import os
 import sys
 from logging.config import fileConfig
 
-from sqlalchemy import engine_from_config
-from sqlalchemy import pool
-from dotenv import load_dotenv
-
 from alembic import context
+from sqlalchemy import engine_from_config, pool
+from sqlmodel import SQLModel
 
-
-# Load environment variables
-load_dotenv()
+from app.config import settings
+from app.postgres.models import *  # noqa: F401, F403 - Import all models for autogenerate
 
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -19,24 +16,44 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 # access to the values within the .ini file in use.
 config = context.config
 
-# Override sqlalchemy.url from environment variable
-# Convert asyncpg URL to psycopg2 for Alembic (sync driver)
-database_url = os.getenv("DATABASE_URL", "")
-if database_url.startswith("postgresql+asyncpg://"):
-    database_url = database_url.replace("postgresql+asyncpg://", "postgresql://")
-config.set_main_option("sqlalchemy.url", database_url)
+
+def get_url() -> str:
+    return settings.ALEMBIC_DATABASE_URL
+
 
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# add your model's MetaData object here
-# for 'autogenerate' support
-from sqlmodel import SQLModel
-from app.postgres.models import *  # noqa: F401, F403 - Import all models for autogenerate
-
 target_metadata = SQLModel.metadata
+managed_tables = set(target_metadata.tables.keys())
+
+
+def include_object(
+    object_: object,
+    name: str | None,
+    type_: str,
+    reflected: bool,
+    compare_to: object | None,
+) -> bool:
+    """Limit autogenerate to application-managed public tables."""
+    if type_ == "table" and name is not None:
+        if reflected and name not in managed_tables:
+            return False
+        if not reflected and name not in managed_tables:
+            return False
+    return True
+
+
+def process_revision_directives(context, revision, directives) -> None:
+    """Skip writing empty revision files."""
+    if not directives:
+        return
+    script = directives[0]
+    if script.upgrade_ops.is_empty():
+        directives.clear()
+
 
 # other values from the config, defined by the needs of env.py,
 # can be acquired:
@@ -56,12 +73,15 @@ def run_migrations_offline() -> None:
     script output.
 
     """
-    url = config.get_main_option("sqlalchemy.url")
+    url = get_url()
     context.configure(
         url=url,
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
+        compare_type=True,
+        compare_server_default=False,
+        include_object=include_object,
     )
 
     with context.begin_transaction():
@@ -75,14 +95,23 @@ def run_migrations_online() -> None:
     and associate a connection with the context.
 
     """
+    configuration = config.get_section(config.config_ini_section, {})
+    configuration["sqlalchemy.url"] = get_url()
     connectable = engine_from_config(
-        config.get_section(config.config_ini_section, {}),
+        configuration,
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
     )
 
     with connectable.connect() as connection:
-        context.configure(connection=connection, target_metadata=target_metadata)
+        context.configure(
+            connection=connection,
+            target_metadata=target_metadata,
+            compare_type=True,
+            compare_server_default=False,
+            include_object=include_object,
+            process_revision_directives=process_revision_directives,
+        )
 
         with context.begin_transaction():
             context.run_migrations()

@@ -1,15 +1,16 @@
-import stripe
+import logging
 from datetime import datetime, timezone
 from typing import Optional
-from sqlmodel import select
-from sqlalchemy.ext.asyncio import AsyncSession
-import logging
-
-from app.config import settings
-from app.billing.models import Subscription
-from app.organization.models import Organization, OrganizationMembership
-from fastapi import HTTPException
 from uuid import uuid4
+
+import stripe
+from fastapi import HTTPException
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlmodel import select
+
+from app.billing.models import Subscription
+from app.config import settings
+from app.organization.models import Organization, OrganizationMembership
 
 stripe.api_key = settings.STRIPE_SECRET_KEY
 logger = logging.getLogger(__name__)
@@ -20,17 +21,13 @@ async def sync_stripe_to_postgres(stripe_customer_id: str, db: AsyncSession) -> 
     try:
         logger.info(f"Syncing Stripe customer {stripe_customer_id}")
 
-        stmt = select(Organization).where(
-            Organization.stripe_customer_id == stripe_customer_id
-        )
+        stmt = select(Organization).where(Organization.stripe_customer_id == stripe_customer_id)
         result = await db.execute(stmt)
         org = result.scalar_one_or_none()
 
         if not org:
             logger.error(f"No organization found for customer {stripe_customer_id}")
-            raise ValueError(
-                f"Organization not found for customer {stripe_customer_id}"
-            )
+            raise ValueError(f"Organization not found for customer {stripe_customer_id}")
 
         subscriptions = stripe.Subscription.list(
             customer=stripe_customer_id,
@@ -78,19 +75,13 @@ async def sync_stripe_to_postgres(stripe_customer_id: str, db: AsyncSession) -> 
         org.subscription_status = stripe_sub.status
         org.max_users = seats
 
-        stmt = select(Subscription).where(
-            Subscription.stripe_subscription_id == stripe_sub.id
-        )
+        stmt = select(Subscription).where(Subscription.stripe_subscription_id == stripe_sub.id)
         result = await db.execute(stmt)
         subscription = result.scalar_one_or_none()
 
         # Stripe API 2025+: current_period_start/end moved from subscription to items
-        period_start = datetime.fromtimestamp(
-            seat_item["current_period_start"], tz=timezone.utc
-        )
-        period_end = datetime.fromtimestamp(
-            seat_item["current_period_end"], tz=timezone.utc
-        )
+        period_start = datetime.fromtimestamp(seat_item["current_period_start"], tz=timezone.utc)
+        period_end = datetime.fromtimestamp(seat_item["current_period_end"], tz=timezone.utc)
 
         if not subscription:
             subscription = Subscription(
@@ -116,9 +107,7 @@ async def sync_stripe_to_postgres(stripe_customer_id: str, db: AsyncSession) -> 
 
         await db.commit()
 
-        logger.info(
-            f"Synced org {org.id}: status={org.subscription_status}, seats={org.max_users}"
-        )
+        logger.info(f"Synced org {org.id}: status={org.subscription_status}, seats={org.max_users}")
 
         return {
             "status": org.subscription_status,
@@ -163,9 +152,7 @@ async def create_checkout_session(
     membership = result.scalar_one_or_none()
 
     if not membership:
-        raise HTTPException(
-            403, "Not authorized: You must be the owner of this organization"
-        )
+        raise HTTPException(403, "Not authorized: You must be the owner of this organization")
 
     # Update seats if different from org max_users
     if seats != org.max_users:
@@ -211,16 +198,14 @@ async def create_checkout_session(
             await db.rollback()
             try:
                 stripe.Customer.delete(customer_id)
-            except:
-                pass
+            except Exception:
+                logger.exception("Failed to delete Stripe customer %s during rollback", customer_id)
             logger.error(f"Failed to link Stripe customer: {e}")
             raise HTTPException(500, f"Failed to link Stripe customer: {str(e)}")
 
     # Use the price tier selected by the user
     price_id = (
-        settings.STRIPE_PRICE_ID_TIER1
-        if price_tier == "tier1"
-        else settings.STRIPE_PRICE_ID_TIER2
+        settings.STRIPE_PRICE_ID_TIER1 if price_tier == "tier1" else settings.STRIPE_PRICE_ID_TIER2
     )
 
     # Validate price ID format
@@ -234,9 +219,7 @@ async def create_checkout_session(
         )
 
     try:
-        idempotency_key = (
-            f"checkout_{org.id}_{int(datetime.now(timezone.utc).timestamp())}"
-        )
+        idempotency_key = f"checkout_{org.id}_{int(datetime.now(timezone.utc).timestamp())}"
 
         logger.info(f"Creating Stripe checkout for org {org.id} with price {price_id}")
 
@@ -306,9 +289,7 @@ async def sync_after_checkout(session_id: str, user_id: str, db: AsyncSession) -
     return result
 
 
-async def get_subscription_by_org(
-    organization_id: str, db: AsyncSession
-) -> Optional[Subscription]:
+async def get_subscription_by_org(organization_id: str, db: AsyncSession) -> Optional[Subscription]:
     """Get organization subscription."""
     stmt = select(Subscription).where(Subscription.organization_id == organization_id)
     result = await db.execute(stmt)

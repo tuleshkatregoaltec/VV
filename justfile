@@ -23,6 +23,7 @@ lint-backend:
 
 format-backend:
 	uv run --project backend ruff format backend
+	uv run --project backend ruff check --fix backend
 
 test-frontend:
 	docker compose run --rm --no-deps frontend sh -lc 'bun install && bun run test'

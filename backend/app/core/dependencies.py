@@ -1,18 +1,22 @@
-import secrets
 import logging
+import secrets
 from dataclasses import dataclass
-from typing import Optional
-from fastapi import Request, HTTPException, Header, Depends
+from typing import TYPE_CHECKING, Optional
 
-from sqlmodel.ext.asyncio.session import AsyncSession
+from fastapi import Depends, Header, HTTPException, Request
 from sqlmodel import select
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.auth.service import get_user_by_id
-from app.organization.service import get_membership_for_user
 from app.config import settings
+from app.organization.service import get_membership_for_user
 from app.postgres import get_db_session
-from app.token_usage.service import token_usage_service
 from app.providers.auth.platform_user import PlatformUser
+from app.token_usage.service import token_usage_service
+
+if TYPE_CHECKING:
+    from app.billing.models import Subscription
+    from app.organization.models import Organization, OrganizationMembership
 
 logger = logging.getLogger(__name__)
 
