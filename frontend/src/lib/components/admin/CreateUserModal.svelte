@@ -1,6 +1,7 @@
 <script lang="ts">
 import { admin, type CreateUserRequest, type OrgListItem } from '$lib/api/admin'
 import { ApiError } from '$lib/api/client'
+import Modal from '$lib/components/ui/Modal.svelte'
 
 let {
 	open = false,

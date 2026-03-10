@@ -116,7 +116,7 @@ function handleKeydown(e: KeyboardEvent) {
 			{:else if filtered.length === 0}
 				<div class="px-4 py-3 text-sm text-slate-400">No projects found</div>
 			{:else}
-				{#each filtered as project (project.project_id)}
+				{#each filtered as project (`${project.filter_type}-${project.name}`)}
 					<button
 						type="button"
 						class="w-full text-left px-4 py-2.5 text-sm hover:bg-teal-50 transition-colors {project.name ===

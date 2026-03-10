@@ -7,7 +7,7 @@ import DevBudgetSheet from './sheets/DevBudgetSheet.svelte'
 import ReturnsSheet from './sheets/ReturnsSheet.svelte'
 import RevenueSheet from './sheets/RevenueSheet.svelte'
 import ScheduleSheet from './sheets/ScheduleSheet.svelte'
-import SummarySheet from './sheets/SummaryS2heet.svelte'
+import SummarySheet from './sheets/SummarySheet.svelte'
 
 type Sheet =
 	| 'summary'

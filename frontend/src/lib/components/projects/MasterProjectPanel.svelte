@@ -22,6 +22,18 @@ function statusColor(status: string | null): string {
 	if (status === 'P') return 'bg-blue-100 text-blue-700'
 	return 'bg-slate-100 text-slate-600'
 }
+
+function getProjectKey(project: MasterProjectResponse['projects'][number], index: number): string {
+	return [
+		project.project_id,
+		project.project_name,
+		project.project_status,
+		project.percent_completed,
+		index
+	]
+		.filter((value) => value != null && value !== '')
+		.join(':')
+}
 </script>
 
 <div class="p-5 space-y-5">
@@ -106,7 +118,7 @@ function statusColor(status: string | null): string {
 			Sub-Projects ({master.total_projects})
 		</h3>
 		<div class="space-y-1.5 max-h-72 overflow-y-auto">
-			{#each master.projects as project (project.project_id)}
+			{#each master.projects as project, index (getProjectKey(project, index))}
 				<button
 					onclick={() => onProjectSelect(project.project_id)}
 					class="w-full text-left bg-slate-50 rounded-lg px-3 py-2.5 border border-slate-100 hover:bg-teal-50 hover:border-teal-200 transition-colors"

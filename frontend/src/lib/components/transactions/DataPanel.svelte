@@ -121,6 +121,23 @@ function showCheckbox(row: any): boolean {
 	const id = getRowId?.(row) ?? row.id
 	return inSelectionMode || hoveredRowId === id
 }
+
+function getRenderKey(row: any, index: number): string {
+	const baseId = String(getRowId?.(row) ?? row.id ?? 'row')
+	return [
+		baseId,
+		row.transaction_id,
+		row.contract_id,
+		row.date,
+		row.startDate,
+		row.endDate,
+		row.project,
+		row.building,
+		index
+	]
+		.filter((value) => value != null && value !== '')
+		.join(':')
+}
 </script>
 
 <div
@@ -189,7 +206,7 @@ function showCheckbox(row: any): boolean {
 						</td>
 					</tr>
 				{:else}
-					{#each data as row (getRowId?.(row) ?? row.id)}
+					{#each data as row, index (getRenderKey(row, index))}
 						<tr
 							onmouseenter={() => {
 								if (selectable) hoveredRowId = getRowId?.(row) ?? row.id;

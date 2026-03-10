@@ -65,6 +65,19 @@ function clickOutside(node: HTMLElement, cb: () => void) {
 		}
 	}
 }
+
+function getProjectKey(project: ProjectSearchResult, index: number): string {
+	return [
+		project.project_id,
+		project.project_name,
+		project.master_project_en,
+		project.area_name,
+		project.developer_name,
+		index
+	]
+		.filter((value) => value != null && value !== '')
+		.join(':')
+}
 </script>
 
 <div class="max-w-xl mx-auto">
@@ -102,7 +115,7 @@ function clickOutside(node: HTMLElement, cb: () => void) {
 				{:else if filtered.length === 0}
 					<div class="px-4 py-3 text-sm text-slate-400">No projects found</div>
 				{:else}
-					{#each filtered as p (p.project_id)}
+					{#each filtered as p, index (getProjectKey(p, index))}
 						{@const isSelected = selected.some((s) => s.project_id === p.project_id)}
 						<button
 							type="button"
@@ -139,7 +152,7 @@ function clickOutside(node: HTMLElement, cb: () => void) {
 	<!-- Selected chips -->
 	{#if selected.length > 0}
 		<div class="flex flex-wrap gap-2 mb-6">
-			{#each selected as p (p.project_id)}
+			{#each selected as p, index (getProjectKey(p, index))}
 				<span
 					class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-teal-100 text-teal-800 text-sm font-medium"
 				>

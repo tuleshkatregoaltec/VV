@@ -1,5 +1,6 @@
 <script lang="ts">
 import { onDestroy } from 'svelte'
+import BaseDropdown from './BaseDropdown.svelte'
 
 let {
 	id,

@@ -320,7 +320,7 @@ onMount(() => {
 							>
 								All development
 							</button>
-							{#each filteredSubProjects as sp (sp.project_id ?? sp.name)}
+							{#each filteredSubProjects as sp (sp.name)}
 								<button
 									type="button"
 									class="w-full text-left px-3 py-2 text-sm transition-colors {subProject ===

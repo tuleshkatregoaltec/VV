@@ -1,27 +1,27 @@
 <script lang="ts">
-	import BaseDropdown from './BaseDropdown.svelte';
+import BaseDropdown from './BaseDropdown.svelte'
 
-	let {
-		id,
-		ariaLabel,
-		options = [],
-		selected = $bindable({}),
-		onchange
-	}: {
-		id: string;
-		ariaLabel: string;
-		options?: Array<{ id: string; label: string }>;
-		selected?: Record<string, boolean>;
-		onchange?: (selected: Record<string, boolean>) => void;
-	} = $props();
+let {
+	id,
+	ariaLabel,
+	options = [],
+	selected = $bindable({}),
+	onchange
+}: {
+	id: string
+	ariaLabel: string
+	options?: Array<{ id: string; label: string }>
+	selected?: Record<string, boolean>
+	onchange?: (selected: Record<string, boolean>) => void
+} = $props()
 
-	let selectedCount = $derived(Object.values(selected).filter(Boolean).length);
+let selectedCount = $derived(Object.values(selected).filter(Boolean).length)
 
-	function toggleOption(optionId: string) {
-		const newSelected = { ...selected, [optionId]: !selected[optionId] };
-		selected = newSelected;
-		onchange?.(newSelected);
-	}
+function toggleOption(optionId: string) {
+	const newSelected = { ...selected, [optionId]: !selected[optionId] }
+	selected = newSelected
+	onchange?.(newSelected)
+}
 </script>
 
 <BaseDropdown {id} {ariaLabel} displayValue="" align="right">

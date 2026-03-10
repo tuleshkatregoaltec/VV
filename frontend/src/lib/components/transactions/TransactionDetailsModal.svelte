@@ -311,12 +311,12 @@ function formatDate(dateStr: string | null | undefined): string {
 					</div>
 				</div>
 
-				{#if comparableData.transactions.length === 0}
-					<p class="text-sm text-gray-600">No comparable transactions found for this unit.</p>
-				{:else}
-					<div class="space-y-2 max-h-64 overflow-y-auto">
-						{#each comparableData.transactions as trans (trans.transaction_id)}
-							<div class="p-3 bg-white rounded border border-gray-200">
+						{#if comparableData.transactions.length === 0}
+							<p class="text-sm text-gray-600">No comparable transactions found for this unit.</p>
+						{:else}
+							<div class="space-y-2 max-h-64 overflow-y-auto">
+								{#each comparableData.transactions as trans, index (`${trans.transaction_id}-${trans.instance_date}-${trans.building_name_en}-${index}`)}
+									<div class="p-3 bg-white rounded border border-gray-200">
 								<div class="flex justify-between items-start">
 									<div class="flex-1">
 										<p class="font-medium text-sm text-gray-900">

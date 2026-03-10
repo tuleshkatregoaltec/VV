@@ -1,8 +1,11 @@
 <script lang="ts">
 import DOMPurify from 'dompurify'
 import { marked } from 'marked'
+import { cubicOut } from 'svelte/easing'
+import { fade, fly } from 'svelte/transition'
 import { browser } from '$app/environment'
 import { chat, type Message } from '$lib/api/chat'
+import ConfirmModal from '$lib/components/ui/ConfirmModal.svelte'
 
 // Add target="_blank" rel="noopener noreferrer" to all links
 marked.use({
@@ -135,7 +138,7 @@ async function loadMessages() {
 	}
 }
 
-function handleSubmit() {
+async function handleSubmit() {
 	const text = inputValue.trim()
 	if (!text || !conversationId) return
 
@@ -154,7 +157,7 @@ function handleSubmit() {
 	let currentAssistantMessage = ''
 	let currentToolCalls: string[] = []
 
-	streamController = chat.sendMessage(streamConversationId, text, (rawChunk) => {
+	streamController = await chat.sendMessage(streamConversationId, text, (rawChunk) => {
 		// Only update messages if we're still viewing the same conversation
 		if (conversationId !== streamConversationId) {
 			return
@@ -437,7 +440,7 @@ function stopStreaming() {
 									? 'border-slate-700'
 									: 'border-slate-200'} text-xs space-y-2"
 							>
-								{#each msg.toolCalls as toolCall (`${toolCall.name}-${toolCall.status}`)}
+								{#each msg.toolCalls as toolCall (toolCall)}
 									<div
 										class="flex items-center gap-2 {msg.role === 'user'
 											? 'text-slate-300'

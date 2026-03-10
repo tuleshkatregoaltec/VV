@@ -1,14 +1,14 @@
 <script lang="ts">
-	import { researchPanelStore } from '$lib/stores/researchPanel.svelte';
+import { researchPanelStore } from '$lib/stores/researchPanel.svelte'
 
-	function fmt(n: number | null | undefined) {
-		if (n === null || n === undefined) return '—';
-		return Math.round(n).toLocaleString('en-AE');
-	}
+function fmt(n: number | null | undefined) {
+	if (n === null || n === undefined) return '—'
+	return Math.round(n).toLocaleString('en-AE')
+}
 
-	const pricing = $derived(researchPanelStore.pricingComparables);
-	const pipeline = $derived(researchPanelStore.pipelineComparables);
-	const marketPricing = $derived(researchPanelStore.hbuMarketPricing);
+const pricing = $derived(researchPanelStore.pricingComparables)
+const pipeline = $derived(researchPanelStore.pipelineComparables)
+const marketPricing = $derived(researchPanelStore.hbuMarketPricing)
 </script>
 
 <div class="flex flex-col h-full min-h-0 overflow-y-auto scrollbar-hide px-3 py-3 gap-4">
@@ -45,7 +45,7 @@
 		{#if pricing.length === 0}
 			<div class="px-3 py-3 text-slate-400">No pricing comparables loaded yet.</div>
 		{:else}
-			{#each pricing as comp (`pricing-${comp.project_id}`)}
+			{#each pricing as comp, index (`pricing-${comp.project_id}-${comp.project_name}-${index}`)}
 				<div class="px-3 py-2.5 border-b border-slate-50 last:border-0">
 					<div class="flex items-start justify-between gap-2">
 						<div>
@@ -76,7 +76,7 @@
 		{#if pipeline.length === 0}
 			<div class="px-3 py-3 text-slate-400">No pipeline comparables loaded yet.</div>
 		{:else}
-			{#each pipeline as comp (`pipeline-${comp.project_id}`)}
+			{#each pipeline as comp, index (`pipeline-${comp.project_id}-${comp.project_name}-${index}`)}
 				<div class="px-3 py-2.5 border-b border-slate-50 last:border-0">
 					<div class="flex items-start justify-between gap-2">
 						<div>

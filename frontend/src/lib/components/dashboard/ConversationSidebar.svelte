@@ -1,150 +1,150 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
-	import { chat, type Conversation } from '$lib/api/chat';
-	import ConfirmModal from '$lib/components/ui/ConfirmModal.svelte';
+import { onMount } from 'svelte'
+import { type Conversation, chat } from '$lib/api/chat'
+import ConfirmModal from '$lib/components/ui/ConfirmModal.svelte'
 
-	let {
-		selectedId = $bindable(null),
-		onSelect = (id: number) => {}
-	}: {
-		selectedId: number | null;
-		onSelect?: (id: number) => void;
-	} = $props();
+let {
+	selectedId = $bindable(null),
+	onSelect = (_id: number) => {}
+}: {
+	selectedId: number | null
+	onSelect?: (id: number) => void
+} = $props()
 
-	let conversations = $state<Conversation[]>([]);
-	let loading = $state(true);
-	let error = $state<string | null>(null);
-	let openMenuId = $state<number | null>(null);
-	let renamingId = $state<number | null>(null);
-	let renameValue = $state('');
-	let deleteConfirmOpen = $state(false);
-	let conversationToDelete = $state<number | null>(null);
+let conversations = $state<Conversation[]>([])
+let loading = $state(true)
+let error = $state<string | null>(null)
+let openMenuId = $state<number | null>(null)
+let renamingId = $state<number | null>(null)
+let renameValue = $state('')
+let deleteConfirmOpen = $state(false)
+let conversationToDelete = $state<number | null>(null)
 
-	onMount(() => {
-		loadConversations();
+onMount(() => {
+	loadConversations()
 
-		// Close menu when clicking outside
-		const handleClickOutside = () => {
-			if (openMenuId !== null) {
-				openMenuId = null;
+	// Close menu when clicking outside
+	const handleClickOutside = () => {
+		if (openMenuId !== null) {
+			openMenuId = null
+		}
+	}
+	document.addEventListener('click', handleClickOutside)
+
+	return () => {
+		document.removeEventListener('click', handleClickOutside)
+	}
+})
+
+async function loadConversations() {
+	loading = true
+	error = null
+	try {
+		const result = await chat.getConversations()
+		conversations = result.conversations
+		if (!selectedId && conversations.length > 0) {
+			selectedId = conversations[0].id
+			onSelect(selectedId)
+		}
+	} catch (err) {
+		console.error('Failed to load conversations:', err)
+		error = 'Failed to load conversations'
+	} finally {
+		loading = false
+	}
+}
+
+async function createNew() {
+	try {
+		const newConv = await chat.createConversation({})
+		conversations = [newConv, ...conversations]
+		selectedId = newConv.id
+		onSelect(newConv.id)
+	} catch (err) {
+		console.error('Failed to create conversation:', err)
+		error = 'Failed to create conversation'
+	}
+}
+
+function startRename(conv: Conversation) {
+	renamingId = conv.id
+	renameValue = conv.title || 'New Conversation'
+	openMenuId = null
+}
+
+async function saveRename(convId: number) {
+	if (!renameValue.trim()) {
+		renamingId = null
+		return
+	}
+
+	try {
+		const updated = await chat.updateConversation(convId, renameValue.trim())
+		conversations = conversations.map((c) => (c.id === convId ? updated : c))
+		renamingId = null
+	} catch (err) {
+		console.error('Failed to rename conversation:', err)
+		error = 'Failed to rename conversation'
+	}
+}
+
+function cancelRename() {
+	renamingId = null
+	renameValue = ''
+}
+
+function showDeleteConfirm(convId: number) {
+	conversationToDelete = convId
+	deleteConfirmOpen = true
+	openMenuId = null
+}
+
+async function confirmDelete() {
+	if (conversationToDelete === null) return
+
+	try {
+		await chat.deleteConversation(conversationToDelete)
+		conversations = conversations.filter((c) => c.id !== conversationToDelete)
+
+		// If deleted conversation was selected, select the first available one
+		if (selectedId === conversationToDelete) {
+			if (conversations.length > 0) {
+				selectedId = conversations[0].id
+				onSelect(selectedId)
+			} else {
+				selectedId = null
 			}
-		};
-		document.addEventListener('click', handleClickOutside);
-
-		return () => {
-			document.removeEventListener('click', handleClickOutside);
-		};
-	});
-
-	async function loadConversations() {
-		loading = true;
-		error = null;
-		try {
-			const result = await chat.getConversations();
-			conversations = result.conversations;
-			if (!selectedId && conversations.length > 0) {
-				selectedId = conversations[0].id;
-				onSelect(selectedId);
-			}
-		} catch (err) {
-			console.error('Failed to load conversations:', err);
-			error = 'Failed to load conversations';
-		} finally {
-			loading = false;
-		}
-	}
-
-	async function createNew() {
-		try {
-			const newConv = await chat.createConversation({});
-			conversations = [newConv, ...conversations];
-			selectedId = newConv.id;
-			onSelect(newConv.id);
-		} catch (err) {
-			console.error('Failed to create conversation:', err);
-			error = 'Failed to create conversation';
-		}
-	}
-
-	function startRename(conv: Conversation) {
-		renamingId = conv.id;
-		renameValue = conv.title || 'New Conversation';
-		openMenuId = null;
-	}
-
-	async function saveRename(convId: number) {
-		if (!renameValue.trim()) {
-			renamingId = null;
-			return;
 		}
 
-		try {
-			const updated = await chat.updateConversation(convId, renameValue.trim());
-			conversations = conversations.map((c) => (c.id === convId ? updated : c));
-			renamingId = null;
-		} catch (err) {
-			console.error('Failed to rename conversation:', err);
-			error = 'Failed to rename conversation';
-		}
+		deleteConfirmOpen = false
+		conversationToDelete = null
+	} catch (err) {
+		console.error('Failed to delete conversation:', err)
+		error = 'Failed to delete conversation'
 	}
+}
 
-	function cancelRename() {
-		renamingId = null;
-		renameValue = '';
-	}
+function cancelDelete() {
+	deleteConfirmOpen = false
+	conversationToDelete = null
+}
 
-	function showDeleteConfirm(convId: number) {
-		conversationToDelete = convId;
-		deleteConfirmOpen = true;
-		openMenuId = null;
-	}
+function toggleMenu(convId: number, event: MouseEvent) {
+	event.stopPropagation()
+	openMenuId = openMenuId === convId ? null : convId
+}
 
-	async function confirmDelete() {
-		if (conversationToDelete === null) return;
+function formatDate(dateString: string): string {
+	const date = new Date(dateString)
+	const now = new Date()
+	const diff = now.getTime() - date.getTime()
+	const days = Math.floor(diff / (1000 * 60 * 60 * 24))
 
-		try {
-			await chat.deleteConversation(conversationToDelete);
-			conversations = conversations.filter((c) => c.id !== conversationToDelete);
-
-			// If deleted conversation was selected, select the first available one
-			if (selectedId === conversationToDelete) {
-				if (conversations.length > 0) {
-					selectedId = conversations[0].id;
-					onSelect(selectedId);
-				} else {
-					selectedId = null;
-				}
-			}
-
-			deleteConfirmOpen = false;
-			conversationToDelete = null;
-		} catch (err) {
-			console.error('Failed to delete conversation:', err);
-			error = 'Failed to delete conversation';
-		}
-	}
-
-	function cancelDelete() {
-		deleteConfirmOpen = false;
-		conversationToDelete = null;
-	}
-
-	function toggleMenu(convId: number, event: MouseEvent) {
-		event.stopPropagation();
-		openMenuId = openMenuId === convId ? null : convId;
-	}
-
-	function formatDate(dateString: string): string {
-		const date = new Date(dateString);
-		const now = new Date();
-		const diff = now.getTime() - date.getTime();
-		const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-
-		if (days === 0) return 'Today';
-		if (days === 1) return 'Yesterday';
-		if (days < 7) return `${days} days ago`;
-		return date.toLocaleDateString();
-	}
+	if (days === 0) return 'Today'
+	if (days === 1) return 'Yesterday'
+	if (days < 7) return `${days} days ago`
+	return date.toLocaleDateString()
+}
 </script>
 
 <div class="flex flex-col h-full bg-white border-r border-slate-200">

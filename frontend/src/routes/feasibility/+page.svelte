@@ -1,48 +1,48 @@
 <script lang="ts">
-	import AppShell from '$lib/components/layout/AppShell.svelte';
-	import StepProgress from '$lib/components/feasibility/StepProgress.svelte';
-	import StepPlot from '$lib/components/feasibility/StepPlot.svelte';
-	import StepHBUStudy from '$lib/components/feasibility/StepHBUStudy.svelte';
-	import ResearchPanel from '$lib/components/feasibility/ResearchPanel.svelte';
-	import SpreadsheetPanel from '$lib/components/feasibility/SpreadsheetPanel.svelte';
-	import FeasibilityChat from '$lib/components/feasibility/FeasibilityChat.svelte';
-	import { feasibility } from '$lib/api/feasibility';
-	import { feasibilityStore } from '$lib/stores/feasibility.svelte';
-	import type { GISPlotSummary, HBUStudy } from '$lib/stores/feasibility.svelte';
+import { feasibility } from '$lib/api/feasibility'
+import FeasibilityChat from '$lib/components/feasibility/FeasibilityChat.svelte'
+import ResearchPanel from '$lib/components/feasibility/ResearchPanel.svelte'
+import SpreadsheetPanel from '$lib/components/feasibility/SpreadsheetPanel.svelte'
+import StepHBUStudy from '$lib/components/feasibility/StepHBUStudy.svelte'
+import StepPlot from '$lib/components/feasibility/StepPlot.svelte'
+import StepProgress from '$lib/components/feasibility/StepProgress.svelte'
+import AppShell from '$lib/components/layout/AppShell.svelte'
+import type { GISPlotSummary, HBUStudy } from '$lib/stores/feasibility.svelte'
+import { feasibilityStore } from '$lib/stores/feasibility.svelte'
 
-	let leftWidth = $state(300);
-	let rightWidth = $state(320);
-	let isResizing = $state(false);
-	let showConfigurator = $state(true);
+let leftWidth = $state(300)
+let rightWidth = $state(320)
+let isResizing = $state(false)
+let showConfigurator = $state(true)
 
-	function startResize(side: 'left' | 'right', e: MouseEvent) {
-		e.preventDefault();
-		isResizing = true;
-		const startX = e.clientX;
-		const startWidth = side === 'left' ? leftWidth : rightWidth;
-		function onMove(e: MouseEvent) {
-			const delta = e.clientX - startX;
-			if (side === 'left') leftWidth = Math.max(200, Math.min(480, startWidth + delta));
-			else rightWidth = Math.max(240, Math.min(560, startWidth - delta));
-		}
-		function onUp() {
-			isResizing = false;
-			document.removeEventListener('mousemove', onMove);
-			document.removeEventListener('mouseup', onUp);
-		}
-		document.addEventListener('mousemove', onMove);
-		document.addEventListener('mouseup', onUp);
+function startResize(side: 'left' | 'right', e: MouseEvent) {
+	e.preventDefault()
+	isResizing = true
+	const startX = e.clientX
+	const startWidth = side === 'left' ? leftWidth : rightWidth
+	function onMove(e: MouseEvent) {
+		const delta = e.clientX - startX
+		if (side === 'left') leftWidth = Math.max(200, Math.min(480, startWidth + delta))
+		else rightWidth = Math.max(240, Math.min(560, startWidth - delta))
 	}
-
-	async function selectPlot(plot: GISPlotSummary) {
-		feasibilityStore.setPlot(plot);
-		const dossier = await feasibility.getPlotDossier(plot.plot_number);
-		feasibilityStore.setPlotDossier(dossier);
+	function onUp() {
+		isResizing = false
+		document.removeEventListener('mousemove', onMove)
+		document.removeEventListener('mouseup', onUp)
 	}
+	document.addEventListener('mousemove', onMove)
+	document.addEventListener('mouseup', onUp)
+}
 
-	function applyHBUStudy(study: HBUStudy) {
-		feasibilityStore.applyHBUStudy(study);
-	}
+async function selectPlot(plot: GISPlotSummary) {
+	feasibilityStore.setPlot(plot)
+	const dossier = await feasibility.getPlotDossier(plot.plot_number)
+	feasibilityStore.setPlotDossier(dossier)
+}
+
+function applyHBUStudy(study: HBUStudy) {
+	feasibilityStore.applyHBUStudy(study)
+}
 </script>
 
 <AppShell>

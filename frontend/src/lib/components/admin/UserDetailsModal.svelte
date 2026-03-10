@@ -1,72 +1,72 @@
 <script lang="ts">
-	import Modal from '$lib/components/ui/Modal.svelte';
-	import { admin, type OrgUser } from '$lib/api/admin';
-	import { ApiError } from '$lib/api/client';
+import { admin, type OrgUser } from '$lib/api/admin'
+import { ApiError } from '$lib/api/client'
+import Modal from '$lib/components/ui/Modal.svelte'
 
-	let {
-		open = false,
-		user,
-		onClose,
-		onUpdated
-	}: {
-		open: boolean;
-		user: OrgUser | null;
-		onClose: () => void;
-		onUpdated: () => void;
-	} = $props();
+let {
+	open = false,
+	user,
+	onClose,
+	onUpdated
+}: {
+	open: boolean
+	user: OrgUser | null
+	onClose: () => void
+	onUpdated: () => void
+} = $props()
 
-	let editedLimit = $state(0);
-	let saving = $state(false);
-	let error = $state('');
+let editedLimit = $state(0)
+let saving = $state(false)
+let error = $state('')
 
-	// Sync edited limit when user changes
-	$effect(() => {
-		if (user) {
-			editedLimit = user.daily_token_limit;
-		}
-	});
-
-	function formatNumber(num: number): string {
-		return num.toLocaleString();
+// Sync edited limit when user changes
+$effect(() => {
+	if (user) {
+		editedLimit = user.daily_token_limit
 	}
+})
 
-	function getUsageColor(percentage: number): string {
-		if (percentage >= 90) return 'bg-red-500';
-		if (percentage >= 70) return 'bg-yellow-500';
-		return 'bg-green-500';
+function formatNumber(num: number): string {
+	return num.toLocaleString()
+}
+
+function getUsageColor(percentage: number): string {
+	if (percentage >= 90) return 'bg-red-500'
+	if (percentage >= 70) return 'bg-yellow-500'
+	return 'bg-green-500'
+}
+
+function getUsageTextColor(percentage: number): string {
+	if (percentage >= 90) return 'text-red-700'
+	if (percentage >= 70) return 'text-yellow-700'
+	return 'text-green-700'
+}
+
+async function saveLimit() {
+	if (!user) return
+
+	saving = true
+	error = ''
+
+	try {
+		await admin.users.updateTokenLimit(user.id, editedLimit)
+
+		// Update local user object
+		user.daily_token_limit = editedLimit
+
+		onUpdated()
+		onClose()
+	} catch (e) {
+		error = e instanceof ApiError ? e.message : 'Failed to update token limit'
+	} finally {
+		saving = false
 	}
+}
 
-	function getUsageTextColor(percentage: number): string {
-		if (percentage >= 90) return 'text-red-700';
-		if (percentage >= 70) return 'text-yellow-700';
-		return 'text-green-700';
-	}
-
-	async function saveLimit() {
-		if (!user) return;
-
-		saving = true;
-		error = '';
-
-		try {
-			await admin.users.updateTokenLimit(user.id, editedLimit);
-
-			// Update local user object
-			user.daily_token_limit = editedLimit;
-
-			onUpdated();
-			onClose();
-		} catch (e) {
-			error = e instanceof ApiError ? e.message : 'Failed to update token limit';
-		} finally {
-			saving = false;
-		}
-	}
-
-	function fullName(u: OrgUser): string {
-		const name = `${u.first_name || ''} ${u.last_name || ''}`.trim();
-		return name || u.email;
-	}
+function fullName(u: OrgUser): string {
+	const name = `${u.first_name || ''} ${u.last_name || ''}`.trim()
+	return name || u.email
+}
 </script>
 
 <Modal {open} {onClose} title="User Token Usage" size="lg">

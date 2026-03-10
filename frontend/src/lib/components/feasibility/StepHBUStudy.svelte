@@ -1,42 +1,42 @@
 <script lang="ts">
-	import { feasibility } from '$lib/api/feasibility';
-	import type { GISPlotDossier, HBUStudy } from '$lib/stores/feasibility.svelte';
+import { feasibility } from '$lib/api/feasibility'
+import type { GISPlotDossier, HBUStudy } from '$lib/stores/feasibility.svelte'
 
-	let {
-		dossier,
-		onApply
-	}: {
-		dossier: GISPlotDossier;
-		onApply: (study: HBUStudy) => void;
-	} = $props();
+let {
+	dossier,
+	onApply
+}: {
+	dossier: GISPlotDossier
+	onApply: (study: HBUStudy) => void
+} = $props()
 
-	let study = $state<HBUStudy | null>(null);
-	let loading = $state(false);
-	let error = $state('');
-	let lastGeneratedPlot = $state('');
+let study = $state<HBUStudy | null>(null)
+let loading = $state(false)
+let error = $state('')
+let lastGeneratedPlot = $state('')
 
-	function fmt(n: number) {
-		return n.toLocaleString('en-AE', { maximumFractionDigits: 0 });
+function fmt(n: number) {
+	return n.toLocaleString('en-AE', { maximumFractionDigits: 0 })
+}
+
+async function generate() {
+	error = ''
+	lastGeneratedPlot = dossier.plot_number
+	loading = true
+	try {
+		study = await feasibility.generateHBUStudy(dossier.plot_number, dossier.inferred_usage)
+	} catch (err) {
+		error = err instanceof Error ? err.message : 'Failed to generate the HBU study.'
+	} finally {
+		loading = false
 	}
+}
 
-	async function generate() {
-		error = '';
-		lastGeneratedPlot = dossier.plot_number;
-		loading = true;
-		try {
-			study = await feasibility.generateHBUStudy(dossier.plot_number, dossier.inferred_usage);
-		} catch (err) {
-			error = err instanceof Error ? err.message : 'Failed to generate the HBU study.';
-		} finally {
-			loading = false;
-		}
+$effect(() => {
+	if (dossier.plot_number && lastGeneratedPlot !== dossier.plot_number && !loading) {
+		generate()
 	}
-
-	$effect(() => {
-		if (dossier.plot_number && lastGeneratedPlot !== dossier.plot_number && !loading) {
-			generate();
-		}
-	});
+})
 </script>
 
 <div class="max-w-5xl mx-auto">
@@ -270,7 +270,7 @@
 				<div class="rounded-2xl border border-slate-200 bg-white p-5">
 					<p class="text-sm font-semibold text-slate-800 mb-3">Pricing evidence</p>
 					<div class="space-y-3">
-						{#each study.pricing_evidence as item (`pricing-${item.project_id}`)}
+						{#each study.pricing_evidence as item, index (`pricing-${item.project_id}-${item.project_name}-${index}`)}
 							<div class="rounded-xl border border-slate-200 px-4 py-3">
 								<div class="flex items-start justify-between gap-3">
 									<div>
@@ -292,7 +292,7 @@
 				<div class="rounded-2xl border border-slate-200 bg-white p-5">
 					<p class="text-sm font-semibold text-slate-800 mb-3">Pipeline competition</p>
 					<div class="space-y-3">
-						{#each study.competition_evidence as item (`pipeline-${item.project_id}`)}
+						{#each study.competition_evidence as item, index (`pipeline-${item.project_id}-${item.project_name}-${index}`)}
 							<div class="rounded-xl border border-slate-200 px-4 py-3">
 								<div class="flex items-start justify-between gap-3">
 									<div>
@@ -311,7 +311,7 @@
 				<div class="rounded-2xl border border-slate-200 bg-white p-5">
 					<p class="text-sm font-semibold text-slate-800 mb-3">Land sale evidence</p>
 					<div class="space-y-3">
-						{#each study.land_sales_evidence as item (`land-sale-${item.transaction_id}`)}
+						{#each study.land_sales_evidence as item, index (`land-sale-${item.transaction_id}-${item.instance_date}-${index}`)}
 							<div class="rounded-xl border border-slate-200 px-4 py-3">
 								<div class="flex items-start justify-between gap-3">
 									<div>

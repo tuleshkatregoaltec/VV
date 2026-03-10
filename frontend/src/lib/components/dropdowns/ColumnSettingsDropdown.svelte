@@ -1,43 +1,43 @@
 <script lang="ts">
-	import BaseDropdown from './BaseDropdown.svelte';
+import BaseDropdown from './BaseDropdown.svelte'
 
-	let {
-		id,
-		ariaLabel,
-		options = [],
-		selected = $bindable({}),
-		onchange
-	}: {
-		id: string;
-		ariaLabel: string;
-		options?: Array<{ id: string; label: string }>;
-		selected?: Record<string, boolean>;
-		onchange?: (selected: Record<string, boolean>) => void;
-	} = $props();
+let {
+	id,
+	ariaLabel,
+	options = [],
+	selected = $bindable({}),
+	onchange
+}: {
+	id: string
+	ariaLabel: string
+	options?: Array<{ id: string; label: string }>
+	selected?: Record<string, boolean>
+	onchange?: (selected: Record<string, boolean>) => void
+} = $props()
 
-	function toggleOption(optionId: string) {
-		const newSelected = { ...selected, [optionId]: !selected[optionId] };
-		selected = newSelected;
-		onchange?.(newSelected);
+function toggleOption(optionId: string) {
+	const newSelected = { ...selected, [optionId]: !selected[optionId] }
+	selected = newSelected
+	onchange?.(newSelected)
+}
+
+function showAll() {
+	const newSelected: Record<string, boolean> = {}
+	for (const opt of options) {
+		newSelected[opt.id] = true
 	}
+	selected = newSelected
+	onchange?.(newSelected)
+}
 
-	function showAll() {
-		const newSelected: Record<string, boolean> = {};
-		for (const opt of options) {
-			newSelected[opt.id] = true;
-		}
-		selected = newSelected;
-		onchange?.(newSelected);
+function hideAll() {
+	const newSelected: Record<string, boolean> = {}
+	for (const opt of options) {
+		newSelected[opt.id] = false
 	}
-
-	function hideAll() {
-		const newSelected: Record<string, boolean> = {};
-		for (const opt of options) {
-			newSelected[opt.id] = false;
-		}
-		selected = newSelected;
-		onchange?.(newSelected);
-	}
+	selected = newSelected
+	onchange?.(newSelected)
+}
 </script>
 
 <BaseDropdown {id} {ariaLabel} displayValue="" align="right">

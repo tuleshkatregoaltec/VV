@@ -83,6 +83,19 @@ function handleBlur() {
 		isFocused = false
 	}, 150)
 }
+
+function getProjectResultKey(result: ProjectSearchResult, index: number): string {
+	return [
+		result.project_id,
+		result.project_name,
+		result.master_project_en,
+		result.area_name,
+		result.developer_name,
+		index
+	]
+		.filter((value) => value != null && value !== '')
+		.join(':')
+}
 </script>
 
 <div class="w-full">
@@ -142,7 +155,7 @@ function handleBlur() {
 				{/each}
 
 				<!-- Individual projects -->
-				{#each searchResults.projects as result (result.project_id)}
+				{#each searchResults.projects as result, index (getProjectResultKey(result, index))}
 					<button
 						onclick={() => selectProject(result.project_id)}
 						class="w-full text-left px-4 py-2.5 hover:bg-teal-50 transition-colors border-b border-slate-100 last:border-b-0"
