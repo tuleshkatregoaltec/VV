@@ -5,12 +5,12 @@ from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, status
 from fastapi.responses import JSONResponse
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.postgres import get_db_session
 from app.core.dependencies import require_api_key
+from app.postgres import get_db_session
 from app.upload.models import (
+    ChunkedUploadResponse,
     NewsArticleUploadRequest,
     NewsArticleUploadResponse,
-    ChunkedUploadResponse,
 )
 from app.upload.service import create_news_article, process_chunked_upload
 
@@ -77,7 +77,7 @@ async def upload_news_article(
 
 @health_router.get("/health")
 async def health():
-    from app.upload.service import s3_client, cache
+    from app.upload.service import cache, s3_client
 
     try:
         # Test S3 connection by uploading and deleting a test file

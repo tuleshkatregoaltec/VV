@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { page } from '$app/state';
+import { page } from '$app/state'
 </script>
 
 <div class="flex min-h-screen bg-background px-4 pt-30 justify-center">

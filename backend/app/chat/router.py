@@ -6,12 +6,6 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.postgres import get_db_session
-from app.core.dependencies import (
-    require_active_subscription,
-    require_token_quota,
-    AuthContext,
-)
 from app.chat.models import (
     ConversationListResponse,
     ConversationResponse,
@@ -29,6 +23,12 @@ from app.chat.service import (
     stream_chat_response,
     update_conversation,
 )
+from app.core.dependencies import (
+    AuthContext,
+    require_active_subscription,
+    require_token_quota,
+)
+from app.postgres import get_db_session
 
 logger = logging.getLogger(__name__)
 
@@ -45,9 +45,7 @@ async def create_conversation_endpoint(
     db: AsyncSession = Depends(get_db_session),
 ):
     """Create a new conversation"""
-    conversation = await create_conversation(
-        db=db, user_id=context.user.id, title=request.title
-    )
+    conversation = await create_conversation(db=db, user_id=context.user.id, title=request.title)
     return ConversationResponse.model_validate(conversation)
 
 
@@ -101,9 +99,7 @@ async def delete_conversation_endpoint(
         raise HTTPException(status_code=404, detail="Conversation not found")
 
 
-@router.get(
-    "/conversations/{conversation_id}/messages", response_model=List[MessageResponse]
-)
+@router.get("/conversations/{conversation_id}/messages", response_model=List[MessageResponse])
 async def get_conversation_messages_endpoint(
     conversation_id: int,
     context: AuthContext = Depends(require_active_subscription),
@@ -116,9 +112,7 @@ async def get_conversation_messages_endpoint(
     if not conversation:
         raise HTTPException(status_code=404, detail="Conversation not found")
 
-    messages = await get_conversation_messages(
-        db=db, conversation_id=conversation_id, limit=limit
-    )
+    messages = await get_conversation_messages(db=db, conversation_id=conversation_id, limit=limit)
     return [MessageResponse.model_validate(m) for m in messages]
 
 

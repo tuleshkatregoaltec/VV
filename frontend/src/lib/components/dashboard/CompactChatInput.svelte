@@ -1,64 +1,64 @@
 <script lang="ts">
-	let {
-		placeholder = 'Ask me anything about Dubai real estate...',
-		onSubmit,
-		disabled = false
-	}: {
-		placeholder?: string;
-		onSubmit: (message: string) => void;
-		disabled?: boolean;
-	} = $props();
+let {
+	placeholder = 'Ask me anything about Dubai real estate...',
+	onSubmit,
+	disabled = false
+}: {
+	placeholder?: string
+	onSubmit: (message: string) => void
+	disabled?: boolean
+} = $props()
 
-	let inputValue = $state('');
-	let isFocused = $state(false);
-	let textareaRef = $state<HTMLTextAreaElement>();
-	let isSubmitting = $state(false);
-	let error = $state<string | null>(null);
+let inputValue = $state('')
+let isFocused = $state(false)
+let textareaRef = $state<HTMLTextAreaElement>()
+let isSubmitting = $state(false)
+let error = $state<string | null>(null)
 
-	function handleFocus() {
-		isFocused = true;
-		error = null;
+function handleFocus() {
+	isFocused = true
+	error = null
+}
+
+function handleBlur() {
+	// Only collapse if input is empty
+	if (!inputValue.trim()) {
+		isFocused = false
 	}
+}
 
-	function handleBlur() {
-		// Only collapse if input is empty
-		if (!inputValue.trim()) {
-			isFocused = false;
-		}
+function autoResize() {
+	if (textareaRef) {
+		textareaRef.style.height = 'auto'
+		const newHeight = Math.min(textareaRef.scrollHeight, 200)
+		textareaRef.style.height = `${newHeight}px`
 	}
+}
 
-	function autoResize() {
-		if (textareaRef) {
-			textareaRef.style.height = 'auto';
-			const newHeight = Math.min(textareaRef.scrollHeight, 200);
-			textareaRef.style.height = newHeight + 'px';
-		}
+async function handleSubmit() {
+	const text = inputValue.trim()
+	if (!text || disabled || isSubmitting) return
+
+	try {
+		isSubmitting = true
+		error = null
+		await onSubmit(text)
+		// Clear input after successful submission
+		inputValue = ''
+		isFocused = false
+		if (textareaRef) textareaRef.style.height = 'auto'
+	} catch (err) {
+		error = err instanceof Error ? err.message : 'Failed to submit message'
+		isSubmitting = false
 	}
+}
 
-	async function handleSubmit() {
-		const text = inputValue.trim();
-		if (!text || disabled || isSubmitting) return;
-
-		try {
-			isSubmitting = true;
-			error = null;
-			await onSubmit(text);
-			// Clear input after successful submission
-			inputValue = '';
-			isFocused = false;
-			if (textareaRef) textareaRef.style.height = 'auto';
-		} catch (err) {
-			error = err instanceof Error ? err.message : 'Failed to submit message';
-			isSubmitting = false;
-		}
+function handleKeyDown(e: KeyboardEvent) {
+	if (e.key === 'Enter' && !e.shiftKey) {
+		e.preventDefault()
+		handleSubmit()
 	}
-
-	function handleKeyDown(e: KeyboardEvent) {
-		if (e.key === 'Enter' && !e.shiftKey) {
-			e.preventDefault();
-			handleSubmit();
-		}
-	}
+}
 </script>
 
 <div class="w-full flex justify-center px-4 animate-fade-in">

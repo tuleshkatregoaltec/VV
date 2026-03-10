@@ -7,13 +7,12 @@ from pydantic_ai.messages import (
     ModelMessage,
     ModelRequest,
     ModelResponse,
-    UserPromptPart,
     TextPart,
+    UserPromptPart,
 )
+from pydantic_ai.models.openrouter import OpenRouterModelSettings
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
-
-from pydantic_ai.models.openrouter import OpenRouterModelSettings
 
 from app.chat.agent import agent
 from app.chat.models import Conversation, Message
@@ -81,9 +80,7 @@ async def update_conversation(
     return conversation
 
 
-async def delete_conversation(
-    db: AsyncSession, conversation_id: int, user_id: str
-) -> bool:
+async def delete_conversation(db: AsyncSession, conversation_id: int, user_id: str) -> bool:
     """Delete a conversation and all its messages"""
     conversation = await get_conversation(db, conversation_id, user_id)
     if not conversation:
@@ -146,13 +143,9 @@ def _convert_to_pydantic_messages(messages: List[Message]) -> List[ModelMessage]
 
     for msg in messages:
         if msg.role == "user":
-            pydantic_messages.append(
-                ModelRequest(parts=[UserPromptPart(content=msg.content)])
-            )
+            pydantic_messages.append(ModelRequest(parts=[UserPromptPart(content=msg.content)]))
         elif msg.role == "assistant":
-            pydantic_messages.append(
-                ModelResponse(parts=[TextPart(content=msg.content)])
-            )
+            pydantic_messages.append(ModelResponse(parts=[TextPart(content=msg.content)]))
 
     return pydantic_messages
 
@@ -176,9 +169,7 @@ async def stream_chat_response(
 
     # Get conversation history
     messages = await get_conversation_messages(db, conversation_id)
-    message_history = _convert_to_pydantic_messages(
-        messages[:-1]
-    )  # Exclude the just-added message
+    message_history = _convert_to_pydantic_messages(messages[:-1])  # Exclude the just-added message
 
     assistant_message = ""
     total_tokens = 0
@@ -188,9 +179,7 @@ async def stream_chat_response(
         async with agent.run_stream(
             user_message,
             message_history=message_history,
-            model_settings=OpenRouterModelSettings(
-                openrouter_reasoning={"effort": "low"}
-            ),
+            model_settings=OpenRouterModelSettings(openrouter_reasoning={"effort": "low"}),
         ) as result:
             yield f"data: {json.dumps({'type': 'thinking'})}\n\n"
             async for chunk_text in result.stream_text(delta=True, debounce_by=0.01):
@@ -225,9 +214,7 @@ async def stream_chat_response(
             if total_tokens:
                 meta_data["total_tokens"] = total_tokens
 
-            await add_message(
-                db, conversation_id, "assistant", assistant_message, meta_data
-            )
+            await add_message(db, conversation_id, "assistant", assistant_message, meta_data)
 
         yield f"data: {json.dumps({'type': 'done'})}\n\n"
 

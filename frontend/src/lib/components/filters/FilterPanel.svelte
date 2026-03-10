@@ -1,39 +1,39 @@
 <script lang="ts">
-	import StandardDropdown from '$lib/components/dropdowns/StandardDropdown.svelte';
-	import SearchableDropdown from '$lib/components/dropdowns/SearchableDropdown.svelte';
-	import CheckboxDropdown from '$lib/components/dropdowns/CheckboxDropdown.svelte';
-	import type { FilterDefinition } from '$lib/types/filters';
+import CheckboxDropdown from '$lib/components/dropdowns/CheckboxDropdown.svelte'
+import SearchableDropdown from '$lib/components/dropdowns/SearchableDropdown.svelte'
+import StandardDropdown from '$lib/components/dropdowns/StandardDropdown.svelte'
+import type { FilterDefinition } from '$lib/types/filters'
 
-	let {
-		filterDefinitions = [],
-		filters = $bindable({}),
-		onReset = () => {},
-		onExport = () => {},
-		selectedCount = 0,
-		onClearSelection = () => {}
-	}: {
-		filterDefinitions?: FilterDefinition[];
-		filters?: Record<string, any>;
-		onReset?: () => void;
-		onExport?: () => void;
-		selectedCount?: number;
-		onClearSelection?: () => void;
-	} = $props();
+let {
+	filterDefinitions = [],
+	filters = $bindable({}),
+	onReset = () => {},
+	onExport = () => {},
+	selectedCount = 0,
+	onClearSelection = () => {}
+}: {
+	filterDefinitions?: FilterDefinition[]
+	filters?: Record<string, any>
+	onReset?: () => void
+	onExport?: () => void
+	selectedCount?: number
+	onClearSelection?: () => void
+} = $props()
 
-	function resetFilters() {
-		filters = {};
-		onReset();
-	}
+function resetFilters() {
+	filters = {}
+	onReset()
+}
 
-	// Helper to get filter value with fallback
-	function getFilterValue(id: string): string {
-		return filters[id] ?? 'All';
-	}
+// Helper to get filter value with fallback
+function getFilterValue(id: string): string {
+	return filters[id] ?? 'All'
+}
 
-	// Helper to update filter value (supports both string and checkbox object values)
-	function setFilterValue(id: string, value: any) {
-		filters = { ...filters, [id]: value };
-	}
+// Helper to update filter value (supports both string and checkbox object values)
+function setFilterValue(id: string, value: any) {
+	filters = { ...filters, [id]: value }
+}
 </script>
 
 <div

@@ -1,10 +1,10 @@
 <script lang="ts">
-	import '../app.css';
-	import { QueryClientProvider } from '@tanstack/svelte-query';
-	import type { LayoutData } from './$types';
-	import type { Snippet } from 'svelte';
+import '../app.css'
+import { QueryClientProvider } from '@tanstack/svelte-query'
+import type { Snippet } from 'svelte'
+import type { LayoutData } from './$types'
 
-	let { children, data }: { children: Snippet; data: LayoutData } = $props();
+let { children, data }: { children: Snippet; data: LayoutData } = $props()
 </script>
 
 <svelte:head>

@@ -1,7 +1,7 @@
 <script lang="ts">
-	export let title: string;
-	export let subtitle: string = '';
-	export let gradient: boolean = true;
+export let title: string
+export let subtitle: string = ''
+export let gradient: boolean = true
 </script>
 
 <header class="pt-18 mb-12 text-center">

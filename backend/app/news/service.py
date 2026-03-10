@@ -1,7 +1,7 @@
-from sqlmodel import select, func
+from sqlmodel import func, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.news.models import NewsArticle, NewsListResponse, NewsArticleResponse
+from app.news.models import NewsArticle, NewsArticleResponse, NewsListResponse
 
 
 async def fetch_news_articles(
@@ -10,12 +10,7 @@ async def fetch_news_articles(
     offset: int = 0,
 ) -> NewsListResponse:
     """Fetch paginated news articles sorted by publish date."""
-    stmt = (
-        select(NewsArticle)
-        .order_by(NewsArticle.publish_date.desc())
-        .limit(limit)
-        .offset(offset)
-    )
+    stmt = select(NewsArticle).order_by(NewsArticle.publish_date.desc()).limit(limit).offset(offset)
     result = await db.exec(stmt)
     articles = result.all()
 

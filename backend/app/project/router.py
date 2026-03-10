@@ -1,19 +1,21 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
-from app.project.service import (
-    list_all_projects,
-    get_project_details,
-    get_master_project,
-    get_building_details,
-)
-from app.project.models import (
-    ProjectSearchResult,
-    ProjectDetailResponse,
-    MasterProjectResponse,
-    BuildingDetailResponse,
-)
-from app.core.decorators import cached_endpoint
-from app.core.dependencies import require_active_subscription, AuthContext
 from typing import List
+
+from fastapi import APIRouter, Depends, HTTPException, Query
+
+from app.core.decorators import cached_endpoint
+from app.core.dependencies import AuthContext, require_active_subscription
+from app.project.models import (
+    BuildingDetailResponse,
+    MasterProjectResponse,
+    ProjectDetailResponse,
+    ProjectSearchResult,
+)
+from app.project.service import (
+    get_building_details,
+    get_master_project,
+    get_project_details,
+    list_all_projects,
+)
 
 router = APIRouter(
     prefix="/api/v1/projects",

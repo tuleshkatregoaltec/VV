@@ -3,34 +3,35 @@
 import asyncio
 from datetime import date, timedelta
 from typing import Optional
+
 from fastapi import APIRouter, Depends, Query
 
-from app.core.dependencies import require_active_subscription, AuthContext
 from app.analytics.models import (
     AnalyticsResponse,
-    RentalAnalyticsResponse,
     AnalyticsSummary,
-    RentalSummary,
     MarketTrendPoint,
     MarketTrendResponse,
     ProjectAnalyticsResponse,
-    ProjectTrendsResponse,
     ProjectSearchResponse,
+    ProjectTrendsResponse,
+    RentalAnalyticsResponse,
+    RentalSummary,
     SubProjectsResponse,
-)
-from app.clickhouse.client import query
-from app.clickhouse.queries import (
-    sales_summary,
-    rentals_summary,
-    price_trends,
-    MARKET_FILTERS,
 )
 from app.analytics.service import (
     get_project_search,
-    get_sub_project_list,
     get_project_summary,
     get_project_trends,
+    get_sub_project_list,
 )
+from app.clickhouse.client import query
+from app.clickhouse.queries import (
+    MARKET_FILTERS,
+    price_trends,
+    rentals_summary,
+    sales_summary,
+)
+from app.core.dependencies import AuthContext, require_active_subscription
 
 router = APIRouter(
     prefix="/api/v1/analytics",
@@ -66,9 +67,7 @@ async def get_sales_analytics(
         default=None, description="Filter by property type (ignored if market_type set)"
     ),
     rooms: Optional[str] = Query(default=None, description="Filter by room count"),
-    reg_type: Optional[str] = Query(
-        default=None, description="Filter by registration type"
-    ),
+    reg_type: Optional[str] = Query(default=None, description="Filter by registration type"),
     price_bucket: Optional[str] = Query(
         default=None, description="Filter by price bucket (e.g., '1M-2M')"
     ),
@@ -215,9 +214,7 @@ async def get_sales_analytics(
 @router.get("/rentals", response_model=RentalAnalyticsResponse)
 async def get_rental_analytics(
     context: AuthContext = Depends(require_active_subscription),
-    property_usage: str = Query(
-        default="Residential", description="Residential or Commercial"
-    ),
+    property_usage: str = Query(default="Residential", description="Residential or Commercial"),
     timeframe_days: Optional[int] = Query(
         default=None,
         description="Number of days to look back (overrides start_date if provided)",
@@ -231,9 +228,7 @@ async def get_rental_analytics(
     master_project: Optional[str] = Query(
         default=None, description="Filter by master project name"
     ),
-    property_type: Optional[str] = Query(
-        default=None, description="Filter by property type"
-    ),
+    property_type: Optional[str] = Query(default=None, description="Filter by property type"),
     rent_bucket: Optional[str] = Query(
         default=None, description="Filter by rent bucket (e.g., '100K-200K')"
     ),
@@ -263,9 +258,7 @@ async def get_rental_analytics(
         if not start_date:
             from datetime import timedelta
 
-            start_date = date.today() - timedelta(
-                days=90
-            )  # Default 90 days for rentals
+            start_date = date.today() - timedelta(days=90)  # Default 90 days for rentals
         if not end_date:
             end_date = date.today()
 
@@ -337,9 +330,7 @@ async def get_rental_analytics(
 @router.get("/market-trend", response_model=MarketTrendResponse)
 async def get_market_trend(
     context: AuthContext = Depends(require_active_subscription),
-    days: int = Query(
-        default=180, description="Number of days to look back (30, 90, 180, 365)"
-    ),
+    days: int = Query(default=180, description="Number of days to look back (30, 90, 180, 365)"),
     market_type: Optional[str] = Query(
         default=None,
         description=f"Market type (overrides property_usage). One of: {', '.join(MARKET_FILTERS)}",
@@ -416,9 +407,7 @@ async def get_market_trend(
 
     try:
         trend_result, current_result, prev_result = await asyncio.gather(
-            query(
-                trend_sql, _trend_params(start_date.isoformat(), end_date.isoformat())
-            ),
+            query(trend_sql, _trend_params(start_date.isoformat(), end_date.isoformat())),
             query(
                 current_summary_sql,
                 _trend_params(start_date.isoformat(), end_date.isoformat()),
@@ -454,9 +443,7 @@ async def get_market_trend(
     if current_result and prev_result:
         curr = current_result[0]
         prev = prev_result[0]
-        avg_price_change_pct = pct_change(
-            float(curr["avg_price"]), float(prev["avg_price"])
-        )
+        avg_price_change_pct = pct_change(float(curr["avg_price"]), float(prev["avg_price"]))
         avg_price_sqm_change_pct = pct_change(
             float(curr["median_price_per_sqm"]), float(prev["median_price_per_sqm"])
         )
@@ -488,25 +475,17 @@ async def search_projects_endpoint(
 async def get_sub_projects_endpoint(
     context: AuthContext = Depends(require_active_subscription),
     master_project: str = Query(description="Master project name"),
-    filter_type: str = Query(
-        default="master", description="Filter type: master or virtual_master"
-    ),
+    filter_type: str = Query(default="master", description="Filter type: master or virtual_master"),
 ):
     """List sub-projects within a master or virtual master, sorted by transaction count."""
-    return await get_sub_project_list(
-        master_project=master_project, filter_type=filter_type
-    )
+    return await get_sub_project_list(master_project=master_project, filter_type=filter_type)
 
 
 @router.get("/project/summary", response_model=ProjectAnalyticsResponse)
 async def get_project_summary_endpoint(
     context: AuthContext = Depends(require_active_subscription),
-    master_project: Optional[str] = Query(
-        default=None, description="Master project name"
-    ),
-    project: Optional[str] = Query(
-        default=None, description="Sub-project name (project_name_en)"
-    ),
+    master_project: Optional[str] = Query(default=None, description="Master project name"),
+    project: Optional[str] = Query(default=None, description="Sub-project name (project_name_en)"),
     filter_type: str = Query(
         default="project", description="Filter type: master, virtual_master, or project"
     ),
@@ -523,23 +502,15 @@ async def get_project_summary_endpoint(
             project_name=project, filter_type="project", master_project=master_project
         )
     if master_project:
-        return await get_project_summary(
-            project_name=master_project, filter_type=filter_type
-        )
-    raise HTTPException(
-        status_code=422, detail="Either master_project or project is required"
-    )
+        return await get_project_summary(project_name=master_project, filter_type=filter_type)
+    raise HTTPException(status_code=422, detail="Either master_project or project is required")
 
 
 @router.get("/project/trends", response_model=ProjectTrendsResponse)
 async def get_project_trends_endpoint(
     context: AuthContext = Depends(require_active_subscription),
-    master_project: Optional[str] = Query(
-        default=None, description="Master project name"
-    ),
-    project: Optional[str] = Query(
-        default=None, description="Sub-project name (project_name_en)"
-    ),
+    master_project: Optional[str] = Query(default=None, description="Master project name"),
+    project: Optional[str] = Query(default=None, description="Sub-project name (project_name_en)"),
     filter_type: str = Query(
         default="project", description="Filter type: master, virtual_master, or project"
     ),
@@ -549,13 +520,9 @@ async def get_project_trends_endpoint(
     from fastapi import HTTPException
 
     if project:
-        return await get_project_trends(
-            project_name=project, days=days, filter_type="project"
-        )
+        return await get_project_trends(project_name=project, days=days, filter_type="project")
     if master_project:
         return await get_project_trends(
             project_name=master_project, days=days, filter_type=filter_type
         )
-    raise HTTPException(
-        status_code=422, detail="Either master_project or project is required"
-    )
+    raise HTTPException(status_code=422, detail="Either master_project or project is required")

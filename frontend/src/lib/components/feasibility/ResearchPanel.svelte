@@ -1,18 +1,18 @@
 <script lang="ts">
-	import ResearchSummary from './research/ResearchSummary.svelte';
-	import ResearchTransactions from './research/ResearchTransactions.svelte';
-	import ResearchAnalytics from './research/ResearchAnalytics.svelte';
-	import ResearchComparables from './research/ResearchComparables.svelte';
-	import ResearchMap from './research/ResearchMap.svelte';
-	import { researchPanelStore, type ResearchTab } from '$lib/stores/researchPanel.svelte';
+import { type ResearchTab, researchPanelStore } from '$lib/stores/researchPanel.svelte'
+import ResearchAnalytics from './research/ResearchAnalytics.svelte'
+import ResearchComparables from './research/ResearchComparables.svelte'
+import ResearchMap from './research/ResearchMap.svelte'
+import ResearchSummary from './research/ResearchSummary.svelte'
+import ResearchTransactions from './research/ResearchTransactions.svelte'
 
-	const TABS: { id: ResearchTab; label: string }[] = [
-		{ id: 'summary', label: 'Summary' },
-		{ id: 'transactions', label: 'Transactions' },
-		{ id: 'analytics', label: 'Analytics' },
-		{ id: 'comparables', label: 'Comparables' },
-		{ id: 'map', label: 'Map' }
-	];
+const TABS: { id: ResearchTab; label: string }[] = [
+	{ id: 'summary', label: 'Summary' },
+	{ id: 'transactions', label: 'Transactions' },
+	{ id: 'analytics', label: 'Analytics' },
+	{ id: 'comparables', label: 'Comparables' },
+	{ id: 'map', label: 'Map' }
+]
 </script>
 
 <div class="h-full flex flex-col overflow-hidden">

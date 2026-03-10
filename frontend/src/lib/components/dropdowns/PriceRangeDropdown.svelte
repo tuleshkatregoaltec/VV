@@ -1,40 +1,40 @@
 <script lang="ts">
-	import BaseDropdown from './BaseDropdown.svelte';
+import BaseDropdown from './BaseDropdown.svelte'
 
-	let {
-		id,
-		ariaLabel,
-		value = $bindable({ min: '', max: '' }),
-		placeholderMin = 'Min',
-		placeholderMax = 'Max',
-		onchange
-	}: {
-		id: string;
-		ariaLabel: string;
-		value?: { min: string; max: string };
-		placeholderMin?: string;
-		placeholderMax?: string;
-		onchange?: (newValue: { min: string; max: string }) => void;
-	} = $props();
+let {
+	id,
+	ariaLabel,
+	value = $bindable({ min: '', max: '' }),
+	placeholderMin = 'Min',
+	placeholderMax = 'Max',
+	onchange
+}: {
+	id: string
+	ariaLabel: string
+	value?: { min: string; max: string }
+	placeholderMin?: string
+	placeholderMax?: string
+	onchange?: (newValue: { min: string; max: string }) => void
+} = $props()
 
-	// Local state for inputs
-	let localMin = $state(value.min);
-	let localMax = $state(value.max);
+// Local state for inputs
+let localMin = $state(value.min)
+let localMax = $state(value.max)
 
-	// Sync local state with external changes
-	$effect(() => {
-		localMin = value.min;
-		localMax = value.max;
-	});
+// Sync local state with external changes
+$effect(() => {
+	localMin = value.min
+	localMax = value.max
+})
 
-	function handleInput() {
-		value = { min: localMin, max: localMax };
-		onchange?.(value);
-	}
+function handleInput() {
+	value = { min: localMin, max: localMax }
+	onchange?.(value)
+}
 
-	let displayValue = $derived(
-		value.min || value.max ? `${value.min || 'Any'} - ${value.max || 'Any'}` : ''
-	);
+let displayValue = $derived(
+	value.min || value.max ? `${value.min || 'Any'} - ${value.max || 'Any'}` : ''
+)
 </script>
 
 <BaseDropdown {id} {ariaLabel} {displayValue}>

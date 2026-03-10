@@ -601,9 +601,7 @@ def distinct_property_types(
         raise ValueError("table must be 'ch_transactions' or 'ch_rent_contracts'")
 
     # Use ejari_property_type_en for rent contracts
-    column = (
-        "ejari_property_type_en" if table == "ch_rent_contracts" else "property_type_en"
-    )
+    column = "ejari_property_type_en" if table == "ch_rent_contracts" else "property_type_en"
 
     where_clauses = []
     if property_usage is not None:
@@ -691,11 +689,7 @@ def distinct_rooms(
     if property_usage is not None:
         where_clauses.append("property_usage_en = {property_usage:String}")
     if property_type is not None:
-        column = (
-            "ejari_property_type_en"
-            if table == "ch_rent_contracts"
-            else "property_type_en"
-        )
+        column = "ejari_property_type_en" if table == "ch_rent_contracts" else "property_type_en"
         where_clauses.append(f"{column} = {{property_type:String}}")
 
     where_clause = " AND ".join(where_clauses)
@@ -723,13 +717,9 @@ def distinct_property_sub_types(
 
     # Use appropriate column name for each table
     sub_type_column = (
-        "ejari_property_sub_type_en"
-        if table == "ch_rent_contracts"
-        else "property_sub_type_en"
+        "ejari_property_sub_type_en" if table == "ch_rent_contracts" else "property_sub_type_en"
     )
-    type_column = (
-        "ejari_property_type_en" if table == "ch_rent_contracts" else "property_type_en"
-    )
+    type_column = "ejari_property_type_en" if table == "ch_rent_contracts" else "property_type_en"
 
     where_clauses = []
     if property_usage is not None:
@@ -960,9 +950,7 @@ def list_developers(limit: int = 100, offset: int = 0) -> str:
     """
 
 
-def list_buildings_for_project(
-    project_number: str, limit: int = 100, offset: int = 0
-) -> str:
+def list_buildings_for_project(project_number: str, limit: int = 100, offset: int = 0) -> str:
     """
     DEPRECATED: Use direct queries in service layer instead.
 
@@ -1055,7 +1043,7 @@ def find_comparable_units(
             AND property_usage_en = {property_usage:String}
             AND rooms_en = {rooms:String}
             AND actual_area BETWEEN {area_min:Decimal64(2)} AND {area_max:Decimal64(2)}
-           
+
         ORDER BY actual_area
         LIMIT {limit:Int32}
     """
@@ -1251,9 +1239,7 @@ def _project_filter(filter_type: str) -> str:
     return "project_name_en = {project_name:String}"
 
 
-def project_sales_summary(
-    filter_type: str = "project", reg_type: Optional[str] = None
-) -> str:
+def project_sales_summary(filter_type: str = "project", reg_type: Optional[str] = None) -> str:
     """Overall sales KPIs for a project, master project, or virtual master.
 
     Filters to Sales transactions on Unit/Villa only to exclude mortgage/gift/building/land noise.
@@ -1277,9 +1263,7 @@ def project_sales_summary(
     """
 
 
-def project_sales_by_rooms(
-    filter_type: str = "project", reg_type: Optional[str] = None
-) -> str:
+def project_sales_by_rooms(filter_type: str = "project", reg_type: Optional[str] = None) -> str:
     """Sales breakdown by bedroom count for a project, master project, or virtual master.
 
     Pass reg_type='Existing Properties' to get existing-only avg_sale_price for yield denominator.

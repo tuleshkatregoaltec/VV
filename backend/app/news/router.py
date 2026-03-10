@@ -1,10 +1,11 @@
 from fastapi import APIRouter, Depends, Query
 from sqlmodel.ext.asyncio.session import AsyncSession
-from app.core.dependencies import require_active_subscription, AuthContext
-from app.postgres import get_db_session
+
 from app.core.decorators import cached_endpoint
-from app.news.service import fetch_news_articles
+from app.core.dependencies import AuthContext, require_active_subscription
 from app.news.models import NewsListResponse
+from app.news.service import fetch_news_articles
+from app.postgres import get_db_session
 
 router = APIRouter(prefix="/api/v1/news", tags=["news"])
 

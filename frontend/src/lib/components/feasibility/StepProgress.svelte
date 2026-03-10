@@ -1,17 +1,17 @@
 <script lang="ts">
-	let {
-		currentStep,
-		onGoToStep
-	}: {
-		currentStep: number;
-		onGoToStep: (step: 1 | 2 | 3 | 4) => void;
-	} = $props();
+let {
+	currentStep,
+	onGoToStep
+}: {
+	currentStep: number
+	onGoToStep: (step: 1 | 2 | 3 | 4) => void
+} = $props()
 
-	const steps = [
-		{ n: 1, label: 'Select Plot' },
-		{ n: 2, label: 'Plot & HBU' },
-		{ n: 4, label: 'Configure' }
-	];
+const steps = [
+	{ n: 1, label: 'Select Plot' },
+	{ n: 2, label: 'Plot & HBU' },
+	{ n: 4, label: 'Configure' }
+]
 </script>
 
 <div class="flex items-center gap-0 mb-8">

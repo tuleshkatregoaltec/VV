@@ -1,21 +1,21 @@
 <script lang="ts">
-	let {
-		options = ['Residential', 'Commercial'],
-		selected = $bindable('Residential'),
-		onchange
-	}: {
-		options?: string[];
-		selected?: string;
-		onchange?: (newValue: string) => void;
-	} = $props();
+let {
+	options = ['Residential', 'Commercial'],
+	selected = $bindable('Residential'),
+	onchange
+}: {
+	options?: string[]
+	selected?: string
+	onchange?: (newValue: string) => void
+} = $props()
 
-	function toggleOption(option: string) {
-		selected = option;
-		onchange?.(option);
-	}
+function toggleOption(option: string) {
+	selected = option
+	onchange?.(option)
+}
 
-	// For sliding indicator
-	let selectedIdx = $derived(options.findIndex((o) => o === selected));
+// For sliding indicator
+let selectedIdx = $derived(options.indexOf(selected))
 </script>
 
 <div

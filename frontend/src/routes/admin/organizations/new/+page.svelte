@@ -1,8 +1,8 @@
 <script lang="ts">
-	import { goto } from '$app/navigation';
-	import { onMount } from 'svelte';
+import { onMount } from 'svelte'
+import { goto } from '$app/navigation'
 
-	onMount(() => {
-		goto('/admin/organizations');
-	});
+onMount(() => {
+	goto('/admin/organizations')
+})
 </script>

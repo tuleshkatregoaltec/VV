@@ -1,57 +1,57 @@
 <script lang="ts">
-	import { logout, update_user_profile } from '$lib/api/auth';
-	import { areaUnit } from '$lib/stores/preferences.svelte';
-	import { currentUser, refreshUser } from '$lib/stores/user.svelte';
+import { logout, update_user_profile } from '$lib/api/auth'
+import { areaUnit } from '$lib/stores/preferences.svelte'
+import { currentUser, refreshUser } from '$lib/stores/user.svelte'
 
-	let editingName = $state(false);
-	let firstName = $state('');
-	let lastName = $state('');
-	let editError = $state('');
-	let editSuccess = $state('');
+let editingName = $state(false)
+let firstName = $state('')
+let lastName = $state('')
+let editError = $state('')
+let editSuccess = $state('')
 
-	$effect(() => {
-		if (currentUser.data && !editingName) {
-			firstName = currentUser.data.first_name || '';
-			lastName = currentUser.data.last_name || '';
-		}
-	});
+$effect(() => {
+	if (currentUser.data && !editingName) {
+		firstName = currentUser.data.first_name || ''
+		lastName = currentUser.data.last_name || ''
+	}
+})
 
-	function handleNameEdit() {
-		editError = '';
-		editSuccess = '';
+function handleNameEdit() {
+	editError = ''
+	editSuccess = ''
 
-		if (!firstName.trim() || !lastName.trim()) {
-			editError = 'Both first and last names are required';
-			return;
-		}
-
-		const trimmedFirstName = firstName.trim();
-		const trimmedLastName = lastName.trim();
-
-		update_user_profile(trimmedFirstName, trimmedLastName).then(async (result) => {
-			if (!result.success) {
-				editError = result.error || 'Failed to sync profile changes';
-				return;
-			}
-
-			await refreshUser();
-			editSuccess = 'Profile updated successfully';
-			editingName = false;
-
-			setTimeout(() => {
-				editSuccess = '';
-			}, 3000);
-		});
+	if (!firstName.trim() || !lastName.trim()) {
+		editError = 'Both first and last names are required'
+		return
 	}
 
-	function handleCancel() {
-		editingName = false;
-		editError = '';
-		if (currentUser.data) {
-			firstName = currentUser.data.first_name || '';
-			lastName = currentUser.data.last_name || '';
+	const trimmedFirstName = firstName.trim()
+	const trimmedLastName = lastName.trim()
+
+	update_user_profile(trimmedFirstName, trimmedLastName).then(async (result) => {
+		if (!result.success) {
+			editError = result.error || 'Failed to sync profile changes'
+			return
 		}
+
+		await refreshUser()
+		editSuccess = 'Profile updated successfully'
+		editingName = false
+
+		setTimeout(() => {
+			editSuccess = ''
+		}, 3000)
+	})
+}
+
+function handleCancel() {
+	editingName = false
+	editError = ''
+	if (currentUser.data) {
+		firstName = currentUser.data.first_name || ''
+		lastName = currentUser.data.last_name || ''
 	}
+}
 </script>
 
 <div class="min-h-screen bg-slate-50">

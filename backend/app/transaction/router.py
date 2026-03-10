@@ -1,11 +1,12 @@
 """Transaction listing and export endpoints - redesigned for ClickHouse."""
 
 from datetime import datetime
+
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
 
 from app.core.decorators import cached_endpoint
-from app.core.dependencies import require_active_subscription, AuthContext
+from app.core.dependencies import AuthContext, require_active_subscription
 from app.transaction.models import (
     RentalContractListResponse,
     TransactionListResponse,
@@ -88,13 +89,9 @@ async def get_rental_contracts(
     # Category filters
     property_usage: str = Query(default=None, description="Residential or Commercial"),
     property_type: str = Query(default=None, description="Property type (ejari)"),
-    property_sub_type: str = Query(
-        default=None, description="Property sub-type (ejari)"
-    ),
+    property_sub_type: str = Query(default=None, description="Property sub-type (ejari)"),
     tenant_type: str = Query(default=None, description="Tenant type"),
-    contract_reg_type: str = Query(
-        default=None, description="Contract registration type"
-    ),
+    contract_reg_type: str = Query(default=None, description="Contract registration type"),
     # Location filters
     area: str = Query(default=None, description="Area name"),
     project: str = Query(default=None, description="Project name"),
@@ -211,13 +208,9 @@ async def export_rental_contracts_endpoint(
     # Category filters
     property_usage: str = Query(default=None, description="Residential or Commercial"),
     property_type: str = Query(default=None, description="Property type (ejari)"),
-    property_sub_type: str = Query(
-        default=None, description="Property sub-type (ejari)"
-    ),
+    property_sub_type: str = Query(default=None, description="Property sub-type (ejari)"),
     tenant_type: str = Query(default=None, description="Tenant type"),
-    contract_reg_type: str = Query(
-        default=None, description="Contract registration type"
-    ),
+    contract_reg_type: str = Query(default=None, description="Contract registration type"),
     # Location filters
     area: str = Query(default=None, description="Area name"),
     project: str = Query(default=None, description="Project name"),

@@ -2,18 +2,18 @@
 export const PROPERTY_USAGE = {
 	RESIDENTIAL: 'Residential',
 	COMMERCIAL: 'Commercial'
-} as const;
+} as const
 
 // Column type definition
 export type ColumnDefinition = {
-	id: string;
-	label: string;
-	align?: 'left' | 'center' | 'right';
-	format?: (value: any, row?: any) => string;
-	badge?: boolean;
-	highlighted?: boolean;
-	defaultVisible?: boolean; // If false, column is hidden by default but can be toggled on
-};
+	id: string
+	label: string
+	align?: 'left' | 'center' | 'right'
+	format?: (value: any, row?: any) => string
+	badge?: boolean
+	highlighted?: boolean
+	defaultVisible?: boolean // If false, column is hidden by default but can be toggled on
+}
 
 // Column definitions for sales transactions table
 export const RESIDENTIAL_COLUMNS: ColumnDefinition[] = [
@@ -51,7 +51,7 @@ export const RESIDENTIAL_COLUMNS: ColumnDefinition[] = [
 	{ id: 'landmark', label: 'Landmark', align: 'left', defaultVisible: false },
 	{ id: 'metro', label: 'Nearest Metro', align: 'left', defaultVisible: false },
 	{ id: 'mall', label: 'Nearest Mall', align: 'left', defaultVisible: false }
-];
+]
 
 export const COMMERCIAL_COLUMNS: ColumnDefinition[] = [
 	{ id: 'date', label: 'Date', align: 'left', defaultVisible: true },
@@ -88,7 +88,7 @@ export const COMMERCIAL_COLUMNS: ColumnDefinition[] = [
 	{ id: 'landmark', label: 'Landmark', align: 'left', defaultVisible: false },
 	{ id: 'metro', label: 'Nearest Metro', align: 'left', defaultVisible: false },
 	{ id: 'mall', label: 'Nearest Mall', align: 'left', defaultVisible: false }
-];
+]
 
 // Timeframe to days conversion
 export const TIMEFRAME_MAPPING: Record<string, number> = {
@@ -97,8 +97,8 @@ export const TIMEFRAME_MAPPING: Record<string, number> = {
 	'Last 3 Months': 90,
 	'Last 6 Months': 180,
 	'Last Year': 365
-};
+}
 
 // Pagination
-export const DEFAULT_ITEMS_PER_PAGE = 30;
-export const MAX_VISIBLE_PAGES = 7;
+export const DEFAULT_ITEMS_PER_PAGE = 30
+export const MAX_VISIBLE_PAGES = 7

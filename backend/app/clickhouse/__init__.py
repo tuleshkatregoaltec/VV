@@ -1,53 +1,53 @@
-from app.clickhouse.client import get_client, query, query_df, close_clickhouse
+from app.clickhouse.client import close_clickhouse, get_client, query, query_df
 from app.clickhouse.queries import (
-    # Analytics - Sales
-    sales_summary,
+    distinct_areas,
+    distinct_master_projects,
+    # Filters
+    distinct_property_types,
+    distinct_rooms,
+    # Comparables
+    find_comparable_units,
+    get_project_details,
+    list_buildings_for_project,
+    list_developers,
+    # Projects
+    list_projects,
+    list_units_for_building,
     price_trends,
+    recent_rentals_for_area,
+    recent_transactions_for_area,
+    # Analytics - Rentals
+    rentals_summary,
     sales_by_area,
     sales_by_property_type,
     sales_by_rooms,
-    # Analytics - Rentals
-    rentals_summary,
-    # Filters
-    distinct_property_types,
-    distinct_areas,
-    distinct_master_projects,
-    distinct_rooms,
-    # Projects
-    list_projects,
-    get_project_details,
-    list_developers,
-    list_buildings_for_project,
-    list_units_for_building,
-    # Comparables
-    find_comparable_units,
-    recent_transactions_for_area,
-    recent_rentals_for_area,
+    # Analytics - Sales
+    sales_summary,
 )
 from app.clickhouse.types import (
-    # Analytics
-    SalesSummary,
-    RentalSummary,
     AreaStats,
-    PriceTrend,
-    PropertyTypeBreakdown,
-    RoomsBreakdown,
-    # Projects
-    ProjectListItem,
-    ProjectDetails,
-    DeveloperListItem,
     BuildingListItem,
-    UnitListItem,
+    ComparableRentalContract,
+    ComparableTransaction,
     # Comparables
     ComparableUnit,
-    ComparableTransaction,
-    ComparableRentalContract,
+    DeveloperListItem,
     # Filters
     FilterOption,
     FilterOptions,
+    PriceTrend,
+    ProjectDetails,
+    # Projects
+    ProjectListItem,
+    PropertyTypeBreakdown,
+    RentalContractDetail,
+    RentalSummary,
+    RoomsBreakdown,
+    # Analytics
+    SalesSummary,
     # Transactions
     TransactionDetail,
-    RentalContractDetail,
+    UnitListItem,
 )
 
 __all__ = [

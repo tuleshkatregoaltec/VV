@@ -1,31 +1,31 @@
 <script lang="ts">
-	let {
-		currentPage = $bindable(1),
-		totalPages,
-		totalItems,
-		itemsPerPage,
-		itemLabel = 'results'
-	}: {
-		currentPage?: number;
-		totalPages: number;
-		totalItems: number;
-		itemsPerPage: number;
-		itemLabel?: string;
-	} = $props();
+let {
+	currentPage = $bindable(1),
+	totalPages,
+	totalItems,
+	itemsPerPage,
+	itemLabel = 'results'
+}: {
+	currentPage?: number
+	totalPages: number
+	totalItems: number
+	itemsPerPage: number
+	itemLabel?: string
+} = $props()
 
-	let startItem = $derived(totalItems === 0 ? 0 : (currentPage - 1) * itemsPerPage + 1);
-	let endItem = $derived(Math.min(currentPage * itemsPerPage, totalItems));
+let startItem = $derived(totalItems === 0 ? 0 : (currentPage - 1) * itemsPerPage + 1)
+let endItem = $derived(Math.min(currentPage * itemsPerPage, totalItems))
 
-	let canGoPrev = $derived(currentPage > 1);
-	let canGoNext = $derived(currentPage < totalPages);
+let canGoPrev = $derived(currentPage > 1)
+let canGoNext = $derived(currentPage < totalPages)
 
-	function prev() {
-		if (canGoPrev) currentPage--;
-	}
+function prev() {
+	if (canGoPrev) currentPage--
+}
 
-	function next() {
-		if (canGoNext) currentPage++;
-	}
+function next() {
+	if (canGoNext) currentPage++
+}
 </script>
 
 {#if totalItems > 0}

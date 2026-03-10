@@ -1,55 +1,55 @@
 <script lang="ts">
-	let {
-		open = false,
-		title,
-		message,
-		confirmText = 'Confirm',
-		cancelText = 'Cancel',
-		confirmVariant = 'danger',
-		onConfirm,
-		onCancel
-	}: {
-		open: boolean;
-		title: string;
-		message: string;
-		confirmText?: string;
-		cancelText?: string;
-		confirmVariant?: 'danger' | 'primary';
-		onConfirm: () => void;
-		onCancel: () => void;
-	} = $props();
+let {
+	open = false,
+	title,
+	message,
+	confirmText = 'Confirm',
+	cancelText = 'Cancel',
+	confirmVariant = 'danger',
+	onConfirm,
+	onCancel
+}: {
+	open: boolean
+	title: string
+	message: string
+	confirmText?: string
+	cancelText?: string
+	confirmVariant?: 'danger' | 'primary'
+	onConfirm: () => void
+	onCancel: () => void
+} = $props()
 
-	// Handle ESC key
-	function handleKeydown(event: KeyboardEvent) {
-		if (event.key === 'Escape' && open) {
-			onCancel();
-		}
+// Handle ESC key
+function handleKeydown(event: KeyboardEvent) {
+	if (event.key === 'Escape' && open) {
+		onCancel()
+	}
+}
+
+// Handle backdrop click
+function handleBackdropClick(event: MouseEvent) {
+	if (event.target === event.currentTarget) {
+		onCancel()
+	}
+}
+
+// Prevent body scroll when modal is open
+$effect(() => {
+	if (open) {
+		document.body.style.overflow = 'hidden'
+	} else {
+		document.body.style.overflow = ''
 	}
 
-	// Handle backdrop click
-	function handleBackdropClick(event: MouseEvent) {
-		if (event.target === event.currentTarget) {
-			onCancel();
-		}
+	return () => {
+		document.body.style.overflow = ''
 	}
+})
 
-	// Prevent body scroll when modal is open
-	$effect(() => {
-		if (open) {
-			document.body.style.overflow = 'hidden';
-		} else {
-			document.body.style.overflow = '';
-		}
-
-		return () => {
-			document.body.style.overflow = '';
-		};
-	});
-
-	const confirmButtonClasses =
-		confirmVariant === 'danger'
-			? 'bg-red-600 hover:bg-red-700 text-white'
-			: 'bg-primary hover:bg-primary-dark text-white';
+const confirmButtonClasses =
+	confirmVariant === 'danger'
+		? 'bg-red-600 hover:bg-red-700 text-white'
+		: 'bg-primary hover:bg-primary-dark text-white'
 </script>
 
 <svelte:window onkeydown={handleKeydown} />

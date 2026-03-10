@@ -81,9 +81,7 @@ def _build_setbacks(row: dict[str, Any]) -> dict[str, str]:
     return result
 
 
-def _build_plot_warnings(
-    row: dict[str, Any], far: float | None, notes: list[str]
-) -> list[str]:
+def _build_plot_warnings(row: dict[str, Any], far: float | None, notes: list[str]) -> list[str]:
     warnings: list[str] = []
     if not row.get("is_verified"):
         warnings.append("GIS plot is not marked as verified.")
@@ -92,31 +90,20 @@ def _build_plot_warnings(
     if row.get("site_plan_expiry_date"):
         warnings.append(f"Site plan expiry date: {row['site_plan_expiry_date']}.")
     if row.get("max_height", "").upper() == "SEE NOTES":
-        warnings.append(
-            "Maximum height is defined in notes instead of a structured field."
-        )
+        warnings.append("Maximum height is defined in notes instead of a structured field.")
     if row.get("max_coverage", "").upper() == "SEE NOTES":
-        warnings.append(
-            "Maximum coverage is defined in notes instead of a structured field."
-        )
+        warnings.append("Maximum coverage is defined in notes instead of a structured field.")
     if far and far > 12:
-        warnings.append(
-            "Derived FAR is unusually high; confirm the GIS record manually."
-        )
+        warnings.append("Derived FAR is unusually high; confirm the GIS record manually.")
     if any("NOC" in note.upper() for note in notes):
-        warnings.append(
-            "General notes include authority or third-party NOC requirements."
-        )
+        warnings.append("General notes include authority or third-party NOC requirements.")
     return warnings
 
 
 def _dominant_type(rows: list[dict[str, Any]]) -> str | None:
     if not rows:
         return None
-    return (
-        str(rows[0].get("unit_type") or rows[0].get("dominant_unit_type") or "").strip()
-        or None
-    )
+    return str(rows[0].get("unit_type") or rows[0].get("dominant_unit_type") or "").strip() or None
 
 
 async def get_areas() -> list[str]:
@@ -242,11 +229,7 @@ async def get_gis_plot_dossier(plot_number: str) -> GISPlotDossier | None:
     row = rows[0]
     plot_area_sqm = float(row.get("plot_area_sqm") or 0)
     max_gfa_sqm = float(row.get("max_gfa_sqm") or 0)
-    far = (
-        round(max_gfa_sqm / plot_area_sqm, 2)
-        if plot_area_sqm > 0 and max_gfa_sqm > 0
-        else None
-    )
+    far = round(max_gfa_sqm / plot_area_sqm, 2) if plot_area_sqm > 0 and max_gfa_sqm > 0 else None
     land_use = _parse_land_use(row.get("land_use", ""))
     notes = _parse_notes(row.get("general_notes", ""))
     inferred_usage = infer_usage_from_plot(
@@ -316,9 +299,7 @@ async def get_market_pricing(
             unit_type=row["unit_type"],
             transaction_count=int(row["transaction_count"]),
             median_price_sqm=float(row["median_price_sqm"]),
-            avg_area_sqm=float(row["avg_area_sqm"])
-            if row.get("avg_area_sqm")
-            else None,
+            avg_area_sqm=float(row["avg_area_sqm"]) if row.get("avg_area_sqm") else None,
         )
         for row in rows
     ]
@@ -481,18 +462,14 @@ async def rank_plot_comparables(
         """
         for row in await query(pricing_sql, {"market_area": market_area}):
             price_by_project[int(row["project_id"])] = float(row["median_price_sqm"])
-            dominant_type_by_project[int(row["project_id"])] = (
-                row.get("dominant_unit_type") or ""
-            )
+            dominant_type_by_project[int(row["project_id"])] = row.get("dominant_unit_type") or ""
 
     scored: list[ComparableProject] = []
     target_area = dossier.plot_area_sqm
     for row in project_rows:
         project_id = int(row["project_id"])
         total_land_area = (
-            float(row["total_land_area_sqm"])
-            if row.get("total_land_area_sqm")
-            else None
+            float(row["total_land_area_sqm"]) if row.get("total_land_area_sqm") else None
         )
         if comparison_type == "pricing" and project_id not in price_by_project:
             continue
@@ -502,20 +479,10 @@ async def rank_plot_comparables(
             continue
 
         unit_rows = unit_mix_by_project.get(project_id, [])
-        dominant_type = dominant_type_by_project.get(project_id) or _dominant_type(
-            unit_rows
-        )
-        if (
-            usage == "residential"
-            and dominant_type
-            and dominant_type not in RESIDENTIAL_TYPES
-        ):
+        dominant_type = dominant_type_by_project.get(project_id) or _dominant_type(unit_rows)
+        if usage == "residential" and dominant_type and dominant_type not in RESIDENTIAL_TYPES:
             continue
-        if (
-            usage == "commercial"
-            and dominant_type
-            and dominant_type not in COMMERCIAL_TYPES
-        ):
+        if usage == "commercial" and dominant_type and dominant_type not in COMMERCIAL_TYPES:
             continue
 
         score = 100.0
@@ -532,9 +499,7 @@ async def rank_plot_comparables(
         if comparison_type == "pricing":
             rationale.append("Has existing transaction evidence.")
         else:
-            rationale.append(
-                f"Pipeline status: {row.get('project_status') or 'Unknown'}."
-            )
+            rationale.append(f"Pipeline status: {row.get('project_status') or 'Unknown'}.")
             if stage == "upcoming":
                 score += 5
 
@@ -547,22 +512,14 @@ async def rank_plot_comparables(
                 project_name=row.get("project_name") or f"Project {project_id}",
                 area_name=row.get("area_name") or market_area,
                 project_status=row.get("project_status") or None,
-                comparison_type="pricing"
-                if comparison_type == "pricing"
-                else "pipeline",
+                comparison_type="pricing" if comparison_type == "pricing" else "pipeline",
                 score=round(score, 1),
-                total_land_area_sqm=round(total_land_area, 0)
-                if total_land_area
-                else None,
-                land_area_delta_pct=round(delta_pct * 100, 1)
-                if delta_pct is not None
-                else None,
+                total_land_area_sqm=round(total_land_area, 0) if total_land_area else None,
+                land_area_delta_pct=round(delta_pct * 100, 1) if delta_pct is not None else None,
                 no_of_buildings=int(row["no_of_buildings"])
                 if row.get("no_of_buildings") is not None
                 else None,
-                no_of_units=int(row["no_of_units"])
-                if row.get("no_of_units") is not None
-                else None,
+                no_of_units=int(row["no_of_units"]) if row.get("no_of_units") is not None else None,
                 median_price_sqm=price_by_project.get(project_id),
                 dominant_unit_type=dominant_type,
                 rationale=rationale,
@@ -573,9 +530,7 @@ async def rank_plot_comparables(
     return scored[:limit]
 
 
-def _pick_price(
-    pricing: list[MarketPricingRow], unit_type: str, fallback: float
-) -> float:
+def _pick_price(pricing: list[MarketPricingRow], unit_type: str, fallback: float) -> float:
     for row in pricing:
         if row.unit_type == unit_type:
             return row.median_price_sqm
@@ -607,9 +562,7 @@ def _build_product_options(
     adjusted_shares: dict[str, float],
     pipeline_pressure: dict[str, float],
 ) -> list[HBUProductOption]:
-    dominant_type = (
-        max(adjusted_shares, key=adjusted_shares.get) if adjusted_shares else None
-    )
+    dominant_type = max(adjusted_shares, key=adjusted_shares.get) if adjusted_shares else None
     blended_price = (
         _weighted_average(
             [
@@ -620,9 +573,7 @@ def _build_product_options(
         or 0
     )
     high_pipeline_types = [
-        unit_type
-        for unit_type, pressure in pipeline_pressure.items()
-        if pressure > 0.35
+        unit_type for unit_type, pressure in pipeline_pressure.items() if pressure > 0.35
     ]
 
     if usage == "commercial":
@@ -796,20 +747,15 @@ def _build_evidence_weighted_mix(
 
     if total_pricing_weight > 0:
         base_mix = {
-            unit_type: value / total_pricing_weight
-            for unit_type, value in base_mix.items()
+            unit_type: value / total_pricing_weight for unit_type, value in base_mix.items()
         }
     if total_pipeline_weight > 0:
         pipeline_mix = {
-            unit_type: value / total_pipeline_weight
-            for unit_type, value in pipeline_mix.items()
+            unit_type: value / total_pipeline_weight for unit_type, value in pipeline_mix.items()
         }
 
     if not base_mix:
-        base_mix = {
-            unit_type: share
-            for unit_type, share, _ in _evidence_defaults_for_usage(usage)
-        }
+        base_mix = {unit_type: share for unit_type, share, _ in _evidence_defaults_for_usage(usage)}
         for unit_type, _, avg_size in _evidence_defaults_for_usage(usage):
             size_evidence.setdefault(unit_type, []).append((avg_size, 1))
 
@@ -828,9 +774,7 @@ def _build_evidence_weighted_mix(
 
     mix_total = sum(adjusted_mix.values()) or 1.0
     adjusted_shares = {
-        unit_type: value / mix_total
-        for unit_type, value in adjusted_mix.items()
-        if value > 0
+        unit_type: value / mix_total for unit_type, value in adjusted_mix.items() if value > 0
     }
 
     weighted_prices: dict[str, float] = {}
@@ -838,9 +782,7 @@ def _build_evidence_weighted_mix(
     blended_price = _weighted_average(
         [(row.median_price_sqm, row.transaction_count) for row in market_pricing]
     ) or (11000 if usage == "commercial" else 15000)
-    for unit_type, share in sorted(
-        adjusted_shares.items(), key=lambda item: item[1], reverse=True
-    ):
+    for unit_type, share in sorted(adjusted_shares.items(), key=lambda item: item[1], reverse=True):
         price = _pick_price(market_pricing, unit_type, blended_price)
         size = _weighted_average(size_evidence.get(unit_type, []))
         if size is None:
@@ -863,9 +805,7 @@ def _build_evidence_weighted_mix(
         else dossier.plot_area_sqm * 1.2
     )
     recommended_mix: list[HBUUnitRecommendation] = []
-    for unit_type, share in sorted(
-        adjusted_shares.items(), key=lambda item: item[1], reverse=True
-    ):
+    for unit_type, share in sorted(adjusted_shares.items(), key=lambda item: item[1], reverse=True):
         avg_size_sqm = weighted_sizes[unit_type]
         target_nsa = sellable_area * share
         suggested_units = max(1, round(target_nsa / max(avg_size_sqm, 1)))
@@ -939,9 +879,7 @@ async def generate_hbu_study(
     )
     warnings = list(dossier.warnings)
     if not market_pricing:
-        warnings.append(
-            "No segmented transaction pricing was found for the resolved market area."
-        )
+        warnings.append("No segmented transaction pricing was found for the resolved market area.")
 
     return HBUStudy(
         plot_number=dossier.plot_number,
@@ -1001,9 +939,7 @@ async def get_comparable_data(project_ids: list[int]) -> ComparableData | None:
     WHERE project_id IN ({project_ids:Array(Int32)})
     """
     project_rows = await query(project_sql, {"project_ids": project_ids})
-    project_names = [
-        r["project_name_en"] for r in project_rows if r.get("project_name_en")
-    ]
+    project_names = [r["project_name_en"] for r in project_rows if r.get("project_name_en")]
     area_names = [r["area_name_en"] for r in project_rows if r.get("area_name_en")]
 
     canonical_unit_sql = canonical_unit_type_case_sql("rooms_en")
@@ -1033,11 +969,7 @@ async def get_comparable_data(project_ids: list[int]) -> ComparableData | None:
     GROUP BY unit_type
     HAVING unit_type != 'other'
     """
-    price_rows = (
-        await query(price_sql, {"project_names": project_names})
-        if project_names
-        else []
-    )
+    price_rows = await query(price_sql, {"project_names": project_names}) if project_names else []
     price_by_type = {r["unit_type"]: float(r["median_price_sqm"]) for r in price_rows}
 
     unit_mix = [

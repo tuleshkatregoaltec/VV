@@ -1,79 +1,79 @@
-import type { ComparableProjectEvidence, MarketPricingRow } from './feasibility.svelte';
+import type { ComparableProjectEvidence, MarketPricingRow } from './feasibility.svelte'
 
-export type ResearchTab = 'summary' | 'transactions' | 'analytics' | 'comparables' | 'map';
+export type ResearchTab = 'summary' | 'transactions' | 'analytics' | 'comparables' | 'map'
 
 export interface AgentTransactionData {
-	rows: Record<string, unknown>[];
-	filters: { area: string; unit_type: string; days: number };
-	count: number;
+	rows: Record<string, unknown>[]
+	filters: { area: string; unit_type: string; days: number }
+	count: number
 }
 
 export interface AgentAnalyticsData {
-	trend: Array<{ month: string; median_price_sqm: number; txn_count: number }>;
+	trend: Array<{ month: string; median_price_sqm: number; txn_count: number }>
 	by_rooms: Array<{
-		rooms_en: string;
-		txn_count: number;
-		median_price_sqm: number;
-		avg_area_sqm: number;
-	}>;
-	filters: { area: string; project_name: string; days: number };
+		rooms_en: string
+		txn_count: number
+		median_price_sqm: number
+		avg_area_sqm: number
+	}>
+	filters: { area: string; project_name: string; days: number }
 }
 
-const activeTab = $state({ value: 'summary' as ResearchTab });
-const agentTransactions = $state({ value: null as AgentTransactionData | null });
-const agentAnalytics = $state({ value: null as AgentAnalyticsData | null });
-const txFilters = $state({ value: { unitType: '', days: 365 } });
-const comparableMarketPrices = $state({ value: null as Record<string, number> | null });
-const pricingComparables = $state({ value: [] as ComparableProjectEvidence[] });
-const pipelineComparables = $state({ value: [] as ComparableProjectEvidence[] });
-const hbuMarketPricing = $state({ value: [] as MarketPricingRow[] });
+const activeTab = $state({ value: 'summary' as ResearchTab })
+const agentTransactions = $state({ value: null as AgentTransactionData | null })
+const agentAnalytics = $state({ value: null as AgentAnalyticsData | null })
+const txFilters = $state({ value: { unitType: '', days: 365 } })
+const comparableMarketPrices = $state({ value: null as Record<string, number> | null })
+const pricingComparables = $state({ value: [] as ComparableProjectEvidence[] })
+const pipelineComparables = $state({ value: [] as ComparableProjectEvidence[] })
+const hbuMarketPricing = $state({ value: [] as MarketPricingRow[] })
 
 export const researchPanelStore = {
 	get activeTab() {
-		return activeTab.value;
+		return activeTab.value
 	},
 	get agentTransactions() {
-		return agentTransactions.value;
+		return agentTransactions.value
 	},
 	get agentAnalytics() {
-		return agentAnalytics.value;
+		return agentAnalytics.value
 	},
 	get txFilters() {
-		return txFilters.value;
+		return txFilters.value
 	},
 	get comparableMarketPrices() {
-		return comparableMarketPrices.value;
+		return comparableMarketPrices.value
 	},
 	get pricingComparables() {
-		return pricingComparables.value;
+		return pricingComparables.value
 	},
 	get pipelineComparables() {
-		return pipelineComparables.value;
+		return pipelineComparables.value
 	},
 	get hbuMarketPricing() {
-		return hbuMarketPricing.value;
+		return hbuMarketPricing.value
 	},
 
 	setActiveTab(tab: ResearchTab) {
-		activeTab.value = tab;
+		activeTab.value = tab
 	},
 	setAgentData(tab: 'transactions' | 'analytics', data: unknown) {
-		if (tab === 'transactions') agentTransactions.value = data as AgentTransactionData;
-		if (tab === 'analytics') agentAnalytics.value = data as AgentAnalyticsData;
+		if (tab === 'transactions') agentTransactions.value = data as AgentTransactionData
+		if (tab === 'analytics') agentAnalytics.value = data as AgentAnalyticsData
 	},
 	setTxFilter(patch: Partial<{ unitType: string; days: number }>) {
-		txFilters.value = { ...txFilters.value, ...patch };
+		txFilters.value = { ...txFilters.value, ...patch }
 	},
 	setComparableMarketPrices(prices: Record<string, number>) {
-		comparableMarketPrices.value = prices;
+		comparableMarketPrices.value = prices
 	},
 	setComparableEvidence(data: {
-		pricing: ComparableProjectEvidence[];
-		pipeline: ComparableProjectEvidence[];
-		marketPricing: MarketPricingRow[];
+		pricing: ComparableProjectEvidence[]
+		pipeline: ComparableProjectEvidence[]
+		marketPricing: MarketPricingRow[]
 	}) {
-		pricingComparables.value = data.pricing;
-		pipelineComparables.value = data.pipeline;
-		hbuMarketPricing.value = data.marketPricing;
+		pricingComparables.value = data.pricing
+		pipelineComparables.value = data.pipeline
+		hbuMarketPricing.value = data.marketPricing
 	}
-};
+}

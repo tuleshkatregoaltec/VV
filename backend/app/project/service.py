@@ -1,21 +1,22 @@
 """Project and building services - redesigned for ClickHouse from first principles."""
 
 import asyncio
-from typing import List, Optional
-from app.project.models import (
-    ProjectSearchResult,
-    ProjectDetailResponse,
-    MasterProjectSummary,
-    MasterProjectResponse,
-    GeoPolygon,
-    BuildingInfo,
-    GeoPin,
-    UnitComposition,
-    BuildingDetailResponse,
-    BuildingUnitType,
-)
-from app.clickhouse.client import query
 import logging
+from typing import List, Optional
+
+from app.clickhouse.client import query
+from app.project.models import (
+    BuildingDetailResponse,
+    BuildingInfo,
+    BuildingUnitType,
+    GeoPin,
+    GeoPolygon,
+    MasterProjectResponse,
+    MasterProjectSummary,
+    ProjectDetailResponse,
+    ProjectSearchResult,
+    UnitComposition,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -149,9 +150,7 @@ async def get_project_details(project_id: int) -> Optional[ProjectDetailResponse
                     property_sub_type=row["property_sub_type_en"],
                     count=row["count"],
                     percentage=round((row["count"] / total_units) * 100, 2),
-                    avg_area_sqm=float(row["avg_area_sqm"])
-                    if row["avg_area_sqm"]
-                    else None,
+                    avg_area_sqm=float(row["avg_area_sqm"]) if row["avg_area_sqm"] else None,
                 )
             )
 
@@ -160,9 +159,7 @@ async def get_project_details(project_id: int) -> Optional[ProjectDetailResponse
         return "".join(c.lower() for c in s if c.isalnum())
 
     building_by_norm = {
-        _norm(b.building_name or ""): b.property_id
-        for b in buildings
-        if b.building_name
+        _norm(b.building_name or ""): b.property_id for b in buildings if b.building_name
     }
 
     geo_pins = [
@@ -285,9 +282,7 @@ async def get_master_project(master_name: str) -> Optional[MasterProjectResponse
                     property_sub_type=row["property_sub_type_en"],
                     count=row["count"],
                     percentage=round((row["count"] / total_units_comp) * 100, 2),
-                    avg_area_sqm=float(row["avg_area_sqm"])
-                    if row["avg_area_sqm"]
-                    else None,
+                    avg_area_sqm=float(row["avg_area_sqm"]) if row["avg_area_sqm"] else None,
                 )
             )
 
@@ -357,9 +352,7 @@ async def get_building_details(property_id: int) -> Optional[BuildingDetailRespo
         BuildingUnitType(
             rooms_en=row["rooms_en"],
             count=row["count"],
-            percentage=round((row["count"] / total_units) * 100, 1)
-            if total_units
-            else 0,
+            percentage=round((row["count"] / total_units) * 100, 1) if total_units else 0,
             avg_area_sqm=float(row["avg_area_sqm"]) if row["avg_area_sqm"] else None,
         )
         for row in units_result

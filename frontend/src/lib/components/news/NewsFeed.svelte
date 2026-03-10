@@ -1,35 +1,35 @@
 <script lang="ts">
-	import { createInfiniteQuery } from '@tanstack/svelte-query';
-	import { news } from '$lib/api/news';
-	import { onMount } from 'svelte';
-	import NewsCard from './NewsCard.svelte';
+import { createInfiniteQuery } from '@tanstack/svelte-query'
+import { onMount } from 'svelte'
+import { news } from '$lib/api/news'
+import NewsCard from './NewsCard.svelte'
 
-	const LIMIT = 20;
+const LIMIT = 20
 
-	const newsQuery = createInfiniteQuery(() => ({
-		queryKey: ['news'],
-		queryFn: ({ pageParam = 0 }) => news.list({ limit: LIMIT, offset: pageParam }),
-		getNextPageParam: (lastPage) => {
-			const nextOffset = lastPage.offset + lastPage.articles.length;
-			return nextOffset < lastPage.total ? nextOffset : undefined;
-		},
-		initialPageParam: 0
-	}));
+const newsQuery = createInfiniteQuery(() => ({
+	queryKey: ['news'],
+	queryFn: ({ pageParam = 0 }) => news.list({ limit: LIMIT, offset: pageParam }),
+	getNextPageParam: (lastPage) => {
+		const nextOffset = lastPage.offset + lastPage.articles.length
+		return nextOffset < lastPage.total ? nextOffset : undefined
+	},
+	initialPageParam: 0
+}))
 
-	let sentinel: HTMLDivElement;
+let sentinel: HTMLDivElement
 
-	onMount(() => {
-		const observer = new IntersectionObserver((entries) => {
-			if (entries[0].isIntersecting && newsQuery.hasNextPage && !newsQuery.isFetchingNextPage) {
-				newsQuery.fetchNextPage();
-			}
-		});
+onMount(() => {
+	const observer = new IntersectionObserver((entries) => {
+		if (entries[0].isIntersecting && newsQuery.hasNextPage && !newsQuery.isFetchingNextPage) {
+			newsQuery.fetchNextPage()
+		}
+	})
 
-		if (sentinel) observer.observe(sentinel);
-		return () => observer.disconnect();
-	});
+	if (sentinel) observer.observe(sentinel)
+	return () => observer.disconnect()
+})
 
-	const allArticles = $derived(newsQuery.data?.pages.flatMap((page) => page.articles) ?? []);
+const allArticles = $derived(newsQuery.data?.pages.flatMap((page) => page.articles) ?? [])
 </script>
 
 <div class="flex flex-col gap-4">

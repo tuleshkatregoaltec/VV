@@ -1,11 +1,11 @@
 <script lang="ts">
-	import FloatingNavbar from '$lib/components/landing/FloatingNavbar.svelte';
-	import HeroSection from '$lib/components/landing/HeroSection.svelte';
-	import PersonasSection from '$lib/components/landing/PersonasSection.svelte';
-	import PricingSection from '$lib/components/landing/PricingSection.svelte';
-	import PreviewSection from '$lib/components/landing/PreviewSection.svelte';
-	import FinalCTA from '$lib/components/landing/FinalCTA.svelte';
-	import Footer from '$lib/components/layout/Footer.svelte';
+import FinalCTA from '$lib/components/landing/FinalCTA.svelte'
+import FloatingNavbar from '$lib/components/landing/FloatingNavbar.svelte'
+import HeroSection from '$lib/components/landing/HeroSection.svelte'
+import PersonasSection from '$lib/components/landing/PersonasSection.svelte'
+import PreviewSection from '$lib/components/landing/PreviewSection.svelte'
+import PricingSection from '$lib/components/landing/PricingSection.svelte'
+import Footer from '$lib/components/layout/Footer.svelte'
 </script>
 
 <svelte:head>

@@ -1,15 +1,15 @@
 <script lang="ts">
-	import { logout } from '$lib/api/auth';
+import { logout } from '$lib/api/auth'
 
-	let {
-		show
-	}: {
-		show: boolean;
-	} = $props();
+let {
+	show
+}: {
+	show: boolean
+} = $props()
 
-	function handleLogout() {
-		logout();
-	}
+function handleLogout() {
+	logout()
+}
 </script>
 
 {#if show}

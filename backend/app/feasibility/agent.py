@@ -7,20 +7,20 @@ from typing import Any, AsyncGenerator
 
 from pydantic import BaseModel, Field
 from pydantic_ai import Agent, RunContext
+from pydantic_ai.messages import ModelMessagesTypeAdapter, ToolCallPart
 from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai.providers.openrouter import OpenRouterProvider
-from pydantic_ai.messages import ModelMessagesTypeAdapter, ToolCallPart
 from pydantic_ai.usage import UsageLimits
 
-from app.config import settings
 from app.clickhouse.client import query as ch_query
+from app.config import settings
+from app.feasibility.models import HBUProductOption, HBUStudy, HBUUnitRecommendation
 from app.feasibility.normalization import (
     Stage,
     Usage,
     transaction_stage_clause,
     transaction_usage_clause,
 )
-from app.feasibility.models import HBUProductOption, HBUStudy, HBUUnitRecommendation
 from app.feasibility.service import (
     get_gis_plot_dossier,
     get_land_sale_evidence,
@@ -61,9 +61,7 @@ class AssumptionUpdate(BaseModel):
     landCost: float | None = None
     buildCostPerSqm: float | None = None
     softCostsPct: float | None = None
-    sellingCostsPct: float | None = (
-        None  # kept for backward compat, aliased on frontend
-    )
+    sellingCostsPct: float | None = None  # kept for backward compat, aliased on frontend
     financeRatePct: float | None = None
     constructionMonths: int | None = None
     salesLaunchMonth: int | None = None
@@ -204,21 +202,19 @@ async def get_area_market_data(
     area: str, usage: Usage = "residential", stage: Stage = "existing", days: int = 365
 ) -> dict[str, Any]:
     """Get segmented median price per sqm for a Dubai area."""
-    sql = f"""
+    sql = """
     SELECT area_name_en
     FROM ch_transactions
     WHERE trans_group_en = 'Sales'
-      AND area_name_en ILIKE {{pattern:String}}
+      AND area_name_en ILIKE {pattern:String}
     GROUP BY area_name_en
-    ORDER BY (lower(area_name_en) = lower({{area:String}})) DESC, count() DESC
+    ORDER BY (lower(area_name_en) = lower({area:String})) DESC, count() DESC
     LIMIT 1
     """
     try:
         resolved = await ch_query(sql, {"area": area, "pattern": f"%{area}%"})
         resolved_area = resolved[0]["area_name_en"] if resolved else area
-        rows = await get_market_pricing(
-            resolved_area, usage=usage, stage=stage, days=days
-        )
+        rows = await get_market_pricing(resolved_area, usage=usage, stage=stage, days=days)
         return {
             "success": True,
             "area": resolved_area,
@@ -398,26 +394,18 @@ def _sanitize_agent_mix(
         share_delta = round(100 - sum(row.share_pct for row in rows), 1)
         rows[0].share_pct = round(rows[0].share_pct + share_delta, 1)
 
-    pricing_by_type = {
-        row.unit_type: float(row.median_price_sqm) for row in market_pricing
-    }
+    pricing_by_type = {row.unit_type: float(row.median_price_sqm) for row in market_pricing}
     fallback_price = (
         round(sum(pricing_by_type.values()) / len(pricing_by_type), 0)
         if pricing_by_type
         else (15000.0 if usage != "commercial" else 11000.0)
     )
 
-    nsa_efficiency = 1 - (
-        float(draft.assumptions_patch.get("lossFactorGFAtoNSA", 15)) / 100
-    )
+    nsa_efficiency = 1 - (float(draft.assumptions_patch.get("lossFactorGFAtoNSA", 15)) / 100)
     max_sellable_area = (
-        dossier.max_gfa_sqm * nsa_efficiency
-        if dossier.max_gfa_sqm > 0
-        else dossier.plot_area_sqm
+        dossier.max_gfa_sqm * nsa_efficiency if dossier.max_gfa_sqm > 0 else dossier.plot_area_sqm
     )
-    planned_sellable_area = sum(
-        max(row.suggested_units, 0) * row.avg_size_sqm for row in rows
-    )
+    planned_sellable_area = sum(max(row.suggested_units, 0) * row.avg_size_sqm for row in rows)
     if max_sellable_area > 0 and planned_sellable_area > max_sellable_area * 1.05:
         scale = max_sellable_area / planned_sellable_area
         for row in rows:
@@ -510,9 +498,7 @@ async def generate_agent_hbu_study(
 
 
 @agent.tool(docstring_format="google")
-async def update_prices(
-    ctx: RunContext[FeasibilityDeps], prices: dict[str, float]
-) -> str:
+async def update_prices(ctx: RunContext[FeasibilityDeps], prices: dict[str, float]) -> str:
     """Propose updated selling price per sqm assumptions by unit type (AED/sqm).
 
     Args:
@@ -523,9 +509,7 @@ async def update_prices(
         invalid = [k for k in prices if k not in ctx.deps.price_keys]
         if invalid:
             return f"Invalid unit type keys. Valid keys are: {json.dumps(ctx.deps.price_keys)}."
-    return (
-        f"Proposed price update for {len(prices)} unit type(s). Awaiting user approval."
-    )
+    return f"Proposed price update for {len(prices)} unit type(s). Awaiting user approval."
 
 
 @agent.tool_plain(docstring_format="google")
@@ -874,9 +858,7 @@ async def stream_feasibility_response(
             async for node in run:
                 if Agent.is_model_request_node(node):
                     async with node.stream(run.ctx) as stream:
-                        async for chunk in stream.stream_text(
-                            delta=True, debounce_by=0.01
-                        ):
+                        async for chunk in stream.stream_text(delta=True, debounce_by=0.01):
                             yield f"data: {json.dumps({'type': 'text', 'content': chunk})}\n\n"
                 elif Agent.is_call_tools_node(node):
                     for part in node.model_response.parts:

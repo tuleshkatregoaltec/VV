@@ -4,11 +4,13 @@ Global async client that releases GIL during I/O operations for better concurren
 Uses server-side parameter binding ({param:Type}) for security.
 """
 
-import clickhouse_connect
-from clickhouse_connect.driver.asyncclient import AsyncClient
-from typing import Any, Dict, List, Optional
-import pandas as pd
 import logging
+from typing import Any, Dict, List, Optional
+
+import clickhouse_connect
+import pandas as pd
+from clickhouse_connect.driver.asyncclient import AsyncClient
+
 from app.config import settings
 
 logger = logging.getLogger(__name__)

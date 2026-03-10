@@ -1,71 +1,71 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
-	import { Chart, registerables } from 'chart.js';
-	import { feasibilityStore } from '$lib/stores/feasibility.svelte';
-	import { researchPanelStore } from '$lib/stores/researchPanel.svelte';
+import { Chart, registerables } from 'chart.js'
+import { onMount } from 'svelte'
+import { feasibilityStore } from '$lib/stores/feasibility.svelte'
+import { researchPanelStore } from '$lib/stores/researchPanel.svelte'
 
-	Chart.register(...registerables);
+Chart.register(...registerables)
 
-	function fmtK(n: number): string {
-		return Math.round(n).toLocaleString('en-AE');
-	}
+function fmtK(n: number): string {
+	return Math.round(n).toLocaleString('en-AE')
+}
 
-	const agentData = $derived(researchPanelStore.agentAnalytics);
-	const marketPrices = $derived(researchPanelStore.comparableMarketPrices);
-	const hbuMarketPricing = $derived(researchPanelStore.hbuMarketPricing);
-	const pricePerSqm = $derived(feasibilityStore.config.pricePerSqm);
+const agentData = $derived(researchPanelStore.agentAnalytics)
+const marketPrices = $derived(researchPanelStore.comparableMarketPrices)
+const hbuMarketPricing = $derived(researchPanelStore.hbuMarketPricing)
+const pricePerSqm = $derived(feasibilityStore.config.pricePerSqm)
 
-	// All unit types from either source
-	const unitTypes = $derived(Object.keys(pricePerSqm));
+// All unit types from either source
+const unitTypes = $derived(Object.keys(pricePerSqm))
 
-	// Chart
-	let canvas: HTMLCanvasElement | undefined = $state();
-	let chart: Chart | null = null;
+// Chart
+let canvas: HTMLCanvasElement | undefined = $state()
+let chart: Chart | null = null
 
-	function buildChart(data: NonNullable<typeof agentData>) {
-		if (!canvas) return;
-		chart?.destroy();
-		const labels = data.trend.map((r) => r.month.slice(0, 7)); // YYYY-MM
-		const values = data.trend.map((r) => r.median_price_sqm);
-		chart = new Chart(canvas, {
-			type: 'line',
-			data: {
-				labels,
-				datasets: [
-					{
-						data: values,
-						borderColor: '#0d9488',
-						backgroundColor: 'rgba(13,148,136,0.08)',
-						borderWidth: 1.5,
-						pointRadius: 2,
-						tension: 0.3,
-						fill: true
-					}
-				]
-			},
-			options: {
-				responsive: true,
-				maintainAspectRatio: false,
-				plugins: { legend: { display: false } },
-				scales: {
-					x: { ticks: { font: { size: 9 }, maxTicksLimit: 6 }, grid: { display: false } },
-					y: { ticks: { font: { size: 9 } }, grid: { color: '#f1f5f9' } }
+function buildChart(data: NonNullable<typeof agentData>) {
+	if (!canvas) return
+	chart?.destroy()
+	const labels = data.trend.map((r) => r.month.slice(0, 7)) // YYYY-MM
+	const values = data.trend.map((r) => r.median_price_sqm)
+	chart = new Chart(canvas, {
+		type: 'line',
+		data: {
+			labels,
+			datasets: [
+				{
+					data: values,
+					borderColor: '#0d9488',
+					backgroundColor: 'rgba(13,148,136,0.08)',
+					borderWidth: 1.5,
+					pointRadius: 2,
+					tension: 0.3,
+					fill: true
 				}
+			]
+		},
+		options: {
+			responsive: true,
+			maintainAspectRatio: false,
+			plugins: { legend: { display: false } },
+			scales: {
+				x: { ticks: { font: { size: 9 }, maxTicksLimit: 6 }, grid: { display: false } },
+				y: { ticks: { font: { size: 9 } }, grid: { color: '#f1f5f9' } }
 			}
-		});
-	}
-
-	$effect(() => {
-		if (agentData && canvas) buildChart(agentData);
-		if (!agentData && chart) {
-			chart.destroy();
-			chart = null;
 		}
-	});
+	})
+}
 
-	onMount(() => {
-		return () => chart?.destroy();
-	});
+$effect(() => {
+	if (agentData && canvas) buildChart(agentData)
+	if (!agentData && chart) {
+		chart.destroy()
+		chart = null
+	}
+})
+
+onMount(() => {
+	return () => chart?.destroy()
+})
 </script>
 
 <div class="flex flex-col h-full min-h-0 overflow-y-auto scrollbar-hide">

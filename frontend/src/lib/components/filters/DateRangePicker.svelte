@@ -1,35 +1,35 @@
 <script lang="ts">
-	import { Calendar } from 'lucide-svelte';
+import { Calendar } from 'lucide-svelte'
 
-	interface Props {
-		startDate?: string;
-		endDate?: string;
-		onchange?: (dates: { start: string | null; end: string | null }) => void;
-		label?: string;
+interface Props {
+	startDate?: string
+	endDate?: string
+	onchange?: (dates: { start: string | null; end: string | null }) => void
+	label?: string
+}
+
+let { startDate = '', endDate = '', onchange, label = 'Date Range' }: Props = $props()
+
+let localStart = $state(startDate)
+let localEnd = $state(endDate)
+
+function handleChange() {
+	if (onchange) {
+		onchange({
+			start: localStart || null,
+			end: localEnd || null
+		})
 	}
+}
 
-	let { startDate = '', endDate = '', onchange, label = 'Date Range' }: Props = $props();
+function clearDates() {
+	localStart = ''
+	localEnd = ''
+	handleChange()
+}
 
-	let localStart = $state(startDate);
-	let localEnd = $state(endDate);
-
-	function handleChange() {
-		if (onchange) {
-			onchange({
-				start: localStart || null,
-				end: localEnd || null
-			});
-		}
-	}
-
-	function clearDates() {
-		localStart = '';
-		localEnd = '';
-		handleChange();
-	}
-
-	// Get today's date in YYYY-MM-DD format
-	const today = new Date().toISOString().split('T')[0];
+// Get today's date in YYYY-MM-DD format
+const today = new Date().toISOString().split('T')[0]
 </script>
 
 <div class="date-range-picker">

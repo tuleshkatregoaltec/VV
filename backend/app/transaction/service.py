@@ -74,9 +74,7 @@ async def fetch_sales_transactions(
 
     if project:
         where_clauses.append(_project_filter(filter_type))
-        params["project_name"] = (
-            project + " - %" if filter_type == "virtual_master" else project
-        )
+        params["project_name"] = project + " - %" if filter_type == "virtual_master" else project
 
     if building:
         where_clauses.append("building_name_en = {building:String}")
@@ -166,13 +164,9 @@ async def fetch_sales_transactions(
             area_name_en=row["area_name_en"],
             project_name_en=row["project_name_en"],
             building_name_en=row["building_name_en"],
-            procedure_area=float(row["procedure_area"])
-            if row["procedure_area"]
-            else None,
+            procedure_area=float(row["procedure_area"]) if row["procedure_area"] else None,
             actual_worth=float(row["actual_worth"]) if row["actual_worth"] else None,
-            meter_sale_price=float(row["meter_sale_price"])
-            if row["meter_sale_price"]
-            else None,
+            meter_sale_price=float(row["meter_sale_price"]) if row["meter_sale_price"] else None,
             reg_type_en=row["reg_type_en"],
             nearest_landmark_en=row["nearest_landmark_en"],
             nearest_metro_en=row["nearest_metro_en"],
@@ -181,9 +175,7 @@ async def fetch_sales_transactions(
         for row in transactions_result
     ]
 
-    return TransactionListResponse(
-        transactions=items, total=total, limit=limit, offset=offset
-    )
+    return TransactionListResponse(transactions=items, total=total, limit=limit, offset=offset)
 
 
 async def fetch_rental_contracts(
@@ -238,9 +230,7 @@ async def fetch_rental_contracts(
 
     if project:
         where_clauses.append(_project_filter(filter_type))
-        params["project_name"] = (
-            project + " - %" if filter_type == "virtual_master" else project
-        )
+        params["project_name"] = project + " - %" if filter_type == "virtual_master" else project
 
     if timeframe_days:
         where_clauses.append("contract_start_date >= today() - {timeframe_days:Int32}")
@@ -319,9 +309,7 @@ async def fetch_rental_contracts(
             project_name_en=row["project_name_en"],
             actual_area=float(row["actual_area"]) if row["actual_area"] else None,
             annual_amount=float(row["annual_amount"]) if row["annual_amount"] else None,
-            contract_amount=float(row["contract_amount"])
-            if row["contract_amount"]
-            else None,
+            contract_amount=float(row["contract_amount"]) if row["contract_amount"] else None,
             no_of_prop=row["no_of_prop"],
             is_free_hold=bool(row["is_free_hold"]),
             nearest_landmark_en=row["nearest_landmark_en"],
@@ -331,9 +319,7 @@ async def fetch_rental_contracts(
         for row in contracts_result
     ]
 
-    return RentalContractListResponse(
-        contracts=items, total=total, limit=limit, offset=offset
-    )
+    return RentalContractListResponse(contracts=items, total=total, limit=limit, offset=offset)
 
 
 async def export_sales_transactions(
@@ -576,9 +562,7 @@ async def export_rental_contracts(
             params["property_type"] = property_type
 
         if property_sub_type:
-            where_clauses.append(
-                "ejari_property_sub_type_en = {property_sub_type:String}"
-            )
+            where_clauses.append("ejari_property_sub_type_en = {property_sub_type:String}")
             params["property_sub_type"] = property_sub_type
 
         if tenant_type:
@@ -600,9 +584,7 @@ async def export_rental_contracts(
             )
 
         if timeframe_days:
-            where_clauses.append(
-                "contract_start_date >= today() - {timeframe_days:Int32}"
-            )
+            where_clauses.append("contract_start_date >= today() - {timeframe_days:Int32}")
             params["timeframe_days"] = timeframe_days
 
         if area_min:

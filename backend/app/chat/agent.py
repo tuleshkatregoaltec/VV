@@ -5,8 +5,8 @@ from pydantic_ai import Agent, RunContext
 from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai.providers.openrouter import OpenRouterProvider
 
-from app.config import settings
 from app.clickhouse import query
+from app.config import settings
 
 logger = logging.getLogger(__name__)
 

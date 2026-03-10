@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends
 
 from app.core.decorators import cached_endpoint
-from app.core.dependencies import require_active_subscription, AuthContext
+from app.core.dependencies import AuthContext, require_active_subscription
 from app.supply.models import (
     UpcomingProjectResponse,
     UpcomingProjectsResponse,

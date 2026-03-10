@@ -1,9 +1,9 @@
 """Analytics schemas for API responses"""
 
-from pydantic import BaseModel
-from typing import Optional, Literal
 from datetime import date
+from typing import Literal, Optional
 
+from pydantic import BaseModel
 
 # Valid timeframe options
 TimeframeDays = Literal[7, 30, 90, 180, 365]

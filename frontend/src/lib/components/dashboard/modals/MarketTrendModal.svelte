@@ -1,23 +1,23 @@
 <script lang="ts">
-	import TrendChart from '$lib/components/charts/TrendChart.svelte';
-	import type { SalesAnalyticsResponse } from '$lib/api/analytics';
+import type { SalesAnalyticsResponse } from '$lib/api/analytics'
+import TrendChart from '$lib/components/charts/TrendChart.svelte'
 
-	let { data }: { data: SalesAnalyticsResponse } = $props();
+let { data }: { data: SalesAnalyticsResponse } = $props()
 
-	function formatCurrency(value: number): string {
-		if (value >= 1_000_000_000) return `AED ${(value / 1_000_000_000).toFixed(1)}B`;
-		if (value >= 1_000_000) return `AED ${(value / 1_000_000).toFixed(1)}M`;
-		if (value >= 1_000) return `AED ${(value / 1_000).toFixed(0)}K`;
-		return `AED ${value.toFixed(0)}`;
-	}
+function formatCurrency(value: number): string {
+	if (value >= 1_000_000_000) return `AED ${(value / 1_000_000_000).toFixed(1)}B`
+	if (value >= 1_000_000) return `AED ${(value / 1_000_000).toFixed(1)}M`
+	if (value >= 1_000) return `AED ${(value / 1_000).toFixed(0)}K`
+	return `AED ${value.toFixed(0)}`
+}
 
-	// Calculate stats from trends
-	const avgPrices = $derived(data.trends.map((t) => t.avg_sqft).filter((p) => p > 0));
-	const minPrice = $derived(avgPrices.length > 0 ? Math.min(...avgPrices) : 0);
-	const maxPrice = $derived(avgPrices.length > 0 ? Math.max(...avgPrices) : 0);
-	const avgPrice = $derived(
-		avgPrices.length > 0 ? avgPrices.reduce((a, b) => a + b, 0) / avgPrices.length : 0
-	);
+// Calculate stats from trends
+const avgPrices = $derived(data.trends.map((t) => t.avg_sqft).filter((p) => p > 0))
+const minPrice = $derived(avgPrices.length > 0 ? Math.min(...avgPrices) : 0)
+const maxPrice = $derived(avgPrices.length > 0 ? Math.max(...avgPrices) : 0)
+const avgPrice = $derived(
+	avgPrices.length > 0 ? avgPrices.reduce((a, b) => a + b, 0) / avgPrices.length : 0
+)
 </script>
 
 <div class="space-y-6">

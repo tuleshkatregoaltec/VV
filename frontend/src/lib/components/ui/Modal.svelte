@@ -1,50 +1,50 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+import { onMount } from 'svelte'
 
-	let {
-		open = false,
-		onClose,
-		title,
-		size = 'lg'
-	}: {
-		open: boolean;
-		onClose: () => void;
-		title: string;
-		size?: 'md' | 'lg' | 'xl';
-	} = $props();
+let {
+	open = false,
+	onClose,
+	title,
+	size = 'lg'
+}: {
+	open: boolean
+	onClose: () => void
+	title: string
+	size?: 'md' | 'lg' | 'xl'
+} = $props()
 
-	// Handle ESC key
-	function handleKeydown(event: KeyboardEvent) {
-		if (event.key === 'Escape' && open) {
-			onClose();
-		}
+// Handle ESC key
+function handleKeydown(event: KeyboardEvent) {
+	if (event.key === 'Escape' && open) {
+		onClose()
+	}
+}
+
+// Handle backdrop click
+function handleBackdropClick(event: MouseEvent) {
+	if (event.target === event.currentTarget) {
+		onClose()
+	}
+}
+
+// Prevent body scroll when modal is open
+$effect(() => {
+	if (open) {
+		document.body.style.overflow = 'hidden'
+	} else {
+		document.body.style.overflow = ''
 	}
 
-	// Handle backdrop click
-	function handleBackdropClick(event: MouseEvent) {
-		if (event.target === event.currentTarget) {
-			onClose();
-		}
+	return () => {
+		document.body.style.overflow = ''
 	}
+})
 
-	// Prevent body scroll when modal is open
-	$effect(() => {
-		if (open) {
-			document.body.style.overflow = 'hidden';
-		} else {
-			document.body.style.overflow = '';
-		}
-
-		return () => {
-			document.body.style.overflow = '';
-		};
-	});
-
-	const sizeClasses = {
-		md: 'max-w-2xl',
-		lg: 'max-w-4xl',
-		xl: 'max-w-6xl'
-	};
+const sizeClasses = {
+	md: 'max-w-2xl',
+	lg: 'max-w-4xl',
+	xl: 'max-w-6xl'
+}
 </script>
 
 <svelte:window onkeydown={handleKeydown} />

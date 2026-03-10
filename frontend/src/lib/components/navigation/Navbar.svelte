@@ -1,15 +1,15 @@
 <script lang="ts">
-	import NavLink from './NavLink.svelte';
-	import NavDropdown from './NavDropdown.svelte';
-	import ProfileDropdown from './ProfileDropdown.svelte';
-	import MobileMenu from './MobileMenu.svelte';
+import MobileMenu from './MobileMenu.svelte'
+import NavDropdown from './NavDropdown.svelte'
+import NavLink from './NavLink.svelte'
+import ProfileDropdown from './ProfileDropdown.svelte'
 
-	let showMobileMenu = $state(false);
+let showMobileMenu = $state(false)
 
-	const transactionItems = [
-		{ href: '/transactions/sales', label: 'Sales' },
-		{ href: '/transactions/rentals', label: 'Rentals' }
-	];
+const transactionItems = [
+	{ href: '/transactions/sales', label: 'Sales' },
+	{ href: '/transactions/rentals', label: 'Rentals' }
+]
 </script>
 
 <nav class="fixed top-4 left-0 right-0 z-50">

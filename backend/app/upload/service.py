@@ -9,12 +9,11 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from app.config import settings
 from app.core.cache import RedisCache
 from app.core.s3 import S3Client
-from app.news.models import NewsArticle
-from app.news.models import NewsArticleResponse
+from app.news.models import NewsArticle, NewsArticleResponse
 from app.upload.models import (
+    ChunkedUploadResponse,
     NewsArticleCreate,
     NewsArticleUploadResponse,
-    ChunkedUploadResponse,
 )
 
 logger = logging.getLogger(__name__)
@@ -122,9 +121,7 @@ async def process_chunked_upload(
     await cache.redis.sadd(redis_key, chunk_index)  # type: ignore
     await cache.redis.expire(redis_key, 3600)  # type: ignore
 
-    logger.info(
-        f"Chunk {chunk_index}/{total_chunks} uploaded to S3 for {safe_filename}"
-    )
+    logger.info(f"Chunk {chunk_index}/{total_chunks} uploaded to S3 for {safe_filename}")
 
     received_count = await cache.redis.scard(redis_key)  # type: ignore
 
@@ -136,9 +133,7 @@ async def process_chunked_upload(
         )
 
     # All chunks received - save metadata for ETL node (no assembly here)
-    logger.info(
-        f"All {total_chunks} chunks received for {safe_filename}, saving metadata"
-    )
+    logger.info(f"All {total_chunks} chunks received for {safe_filename}, saving metadata")
 
     try:
         import json

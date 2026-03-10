@@ -1,9 +1,11 @@
 import json
 import logging
+
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
 
-from app.core.dependencies import require_active_subscription, AuthContext
+from app.core.dependencies import AuthContext, require_active_subscription
+from app.feasibility.agent import generate_agent_hbu_study, stream_feasibility_response
 from app.feasibility.models import (
     ComparableData,
     FeasibilityChatRequest,
@@ -17,13 +19,12 @@ from app.feasibility.service import (
     get_areas,
     get_comparable_data,
     get_gis_plot_dossier,
-    get_land_sale_evidence,
     get_land_plots,
+    get_land_sale_evidence,
     list_plot_communities,
     search_gis_plots,
     search_land_plots,
 )
-from app.feasibility.agent import generate_agent_hbu_study, stream_feasibility_response
 
 logger = logging.getLogger(__name__)
 
@@ -149,9 +150,7 @@ async def comparable_endpoint(
     if result is None:
         from fastapi import HTTPException
 
-        raise HTTPException(
-            status_code=404, detail="No data found for given project IDs"
-        )
+        raise HTTPException(status_code=404, detail="No data found for given project IDs")
     return result
 
 
@@ -168,7 +167,7 @@ async def chat_stream_endpoint(
                 request.messages, request.context, request.history_json
             ):
                 yield chunk
-        except Exception as e:
+        except Exception:
             logger.exception("Error in feasibility chat stream endpoint")
             yield f"data: {json.dumps({'type': 'error', 'error': 'Internal server error'})}\n\n"
 

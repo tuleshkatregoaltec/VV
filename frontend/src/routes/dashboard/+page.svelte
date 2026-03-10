@@ -1,122 +1,122 @@
 <script lang="ts">
-	import CompactChatInput from '$lib/components/dashboard/CompactChatInput.svelte';
-	import FullWidthMarketChart from '$lib/components/dashboard/FullWidthMarketChart.svelte';
-	import CompleteProfileModal from '$lib/components/dashboard/CompleteProfileModal.svelte';
-	import AppShell from '$lib/components/layout/AppShell.svelte';
-	import NewsCard from '$lib/components/news/NewsCard.svelte';
-	import { goto } from '$app/navigation';
-	import { chat } from '$lib/api/chat';
-	import { news } from '$lib/api/news';
-	import { analytics } from '$lib/api/analytics';
-	import { createQuery, createInfiniteQuery } from '@tanstack/svelte-query';
-	import { currentUser } from '$lib/stores/user.svelte';
+import { createInfiniteQuery, createQuery } from '@tanstack/svelte-query'
+import { goto } from '$app/navigation'
+import { analytics } from '$lib/api/analytics'
+import { chat } from '$lib/api/chat'
+import { news } from '$lib/api/news'
+import CompactChatInput from '$lib/components/dashboard/CompactChatInput.svelte'
+import CompleteProfileModal from '$lib/components/dashboard/CompleteProfileModal.svelte'
+import FullWidthMarketChart from '$lib/components/dashboard/FullWidthMarketChart.svelte'
+import AppShell from '$lib/components/layout/AppShell.svelte'
+import NewsCard from '$lib/components/news/NewsCard.svelte'
+import { currentUser } from '$lib/stores/user.svelte'
 
-	let username = $derived(currentUser.data?.first_name ?? '');
-	let newsSection = $state<HTMLElement>();
-	let newsSectionVisible = $state(false);
-	let sentinel = $state<HTMLDivElement>();
+let username = $derived(currentUser.data?.first_name ?? '')
+let newsSection = $state<HTMLElement>()
+let newsSectionVisible = $state(false)
+let sentinel = $state<HTMLDivElement>()
 
-	const LIMIT = 10; // Load 10 articles initially and per page
+const LIMIT = 10 // Load 10 articles initially and per page
 
-	// Fetch news articles with infinite scrolling
-	const newsQuery = createInfiniteQuery(() => ({
-		queryKey: ['news', 'dashboard'],
-		queryFn: ({ pageParam = 0 }) => news.list({ limit: LIMIT, offset: pageParam }),
-		getNextPageParam: (lastPage) => {
-			const nextOffset = lastPage.offset + lastPage.articles.length;
-			return nextOffset < lastPage.total ? nextOffset : undefined;
-		},
-		initialPageParam: 0
-	}));
+// Fetch news articles with infinite scrolling
+const newsQuery = createInfiniteQuery(() => ({
+	queryKey: ['news', 'dashboard'],
+	queryFn: ({ pageParam = 0 }) => news.list({ limit: LIMIT, offset: pageParam }),
+	getNextPageParam: (lastPage) => {
+		const nextOffset = lastPage.offset + lastPage.articles.length
+		return nextOffset < lastPage.total ? nextOffset : undefined
+	},
+	initialPageParam: 0
+}))
 
-	const newsArticles = $derived(newsQuery.data?.pages.flatMap((page) => page.articles) ?? []);
+const newsArticles = $derived(newsQuery.data?.pages.flatMap((page) => page.articles) ?? [])
 
-	async function handleChatSubmit(message: string) {
-		try {
-			const conversation = await chat.createConversation({
-				title: message.slice(0, 50)
-			});
+async function handleChatSubmit(message: string) {
+	try {
+		const conversation = await chat.createConversation({
+			title: message.slice(0, 50)
+		})
 
-			goto('/dashboard/chat', {
-				state: {
-					conversationId: conversation.id,
-					initialMessage: message
-				}
-			});
-		} catch (error) {
-			console.error('Failed to create conversation:', error);
-			throw error;
-		}
-	}
-
-	// Intersection observer to detect when news section is visible
-	$effect(() => {
-		if (!newsSection) return;
-
-		const observer = new IntersectionObserver(
-			(entries) => {
-				entries.forEach((entry) => {
-					if (entry.isIntersecting) {
-						newsSectionVisible = true;
-					}
-				});
-			},
-			{ threshold: 0.1 }
-		);
-
-		observer.observe(newsSection);
-
-		return () => observer.disconnect();
-	});
-
-	// Infinite scroll observer - trigger when user is 3 articles away from bottom
-	$effect(() => {
-		if (!sentinel) return;
-
-		const observer = new IntersectionObserver(
-			(entries) => {
-				if (entries[0].isIntersecting) {
-					if (newsQuery.hasNextPage && !newsQuery.isFetchingNextPage) {
-						console.log('Sentinel reached, loading next page...');
-						newsQuery.fetchNextPage();
-					}
-				}
-			},
-			{
-				threshold: 0.1,
-				rootMargin: '200px' // Start loading 200px before reaching sentinel
+		goto('/dashboard/chat', {
+			state: {
+				conversationId: conversation.id,
+				initialMessage: message
 			}
-		);
-
-		observer.observe(sentinel);
-
-		return () => observer.disconnect();
-	});
-
-	const kpiQuery = createQuery(() => ({
-		queryKey: ['market-trend', 365],
-		queryFn: () => analytics.marketTrend({ days: 365 }),
-		staleTime: 5 * 60 * 1000
-	}));
-
-	function formatPrice(n: number): string {
-		if (n >= 1_000_000) return `AED ${(n / 1_000_000).toFixed(2)}M`;
-		if (n >= 1_000) return `AED ${(n / 1_000).toFixed(0)}K`;
-		return `AED ${Math.round(n).toLocaleString()}`;
+		})
+	} catch (error) {
+		console.error('Failed to create conversation:', error)
+		throw error
 	}
+}
 
-	function formatCount(n: number): string {
-		return n.toLocaleString();
-	}
+// Intersection observer to detect when news section is visible
+$effect(() => {
+	if (!newsSection) return
 
-	function fmtPct(n: number | null | undefined): string | null {
-		if (n == null) return null;
-		return `${n >= 0 ? '+' : ''}${n.toFixed(1)}%`;
-	}
+	const observer = new IntersectionObserver(
+		(entries) => {
+			entries.forEach((entry) => {
+				if (entry.isIntersecting) {
+					newsSectionVisible = true
+				}
+			})
+		},
+		{ threshold: 0.1 }
+	)
 
-	const lastPoint = $derived(
-		kpiQuery.data?.data?.length ? kpiQuery.data.data[kpiQuery.data.data.length - 1] : null
-	);
+	observer.observe(newsSection)
+
+	return () => observer.disconnect()
+})
+
+// Infinite scroll observer - trigger when user is 3 articles away from bottom
+$effect(() => {
+	if (!sentinel) return
+
+	const observer = new IntersectionObserver(
+		(entries) => {
+			if (entries[0].isIntersecting) {
+				if (newsQuery.hasNextPage && !newsQuery.isFetchingNextPage) {
+					console.log('Sentinel reached, loading next page...')
+					newsQuery.fetchNextPage()
+				}
+			}
+		},
+		{
+			threshold: 0.1,
+			rootMargin: '200px' // Start loading 200px before reaching sentinel
+		}
+	)
+
+	observer.observe(sentinel)
+
+	return () => observer.disconnect()
+})
+
+const kpiQuery = createQuery(() => ({
+	queryKey: ['market-trend', 365],
+	queryFn: () => analytics.marketTrend({ days: 365 }),
+	staleTime: 5 * 60 * 1000
+}))
+
+function formatPrice(n: number): string {
+	if (n >= 1_000_000) return `AED ${(n / 1_000_000).toFixed(2)}M`
+	if (n >= 1_000) return `AED ${(n / 1_000).toFixed(0)}K`
+	return `AED ${Math.round(n).toLocaleString()}`
+}
+
+function formatCount(n: number): string {
+	return n.toLocaleString()
+}
+
+function fmtPct(n: number | null | undefined): string | null {
+	if (n == null) return null
+	return `${n >= 0 ? '+' : ''}${n.toFixed(1)}%`
+}
+
+const lastPoint = $derived(
+	kpiQuery.data?.data?.length ? kpiQuery.data.data[kpiQuery.data.data.length - 1] : null
+)
 </script>
 
 <AppShell showFilters={false}>

@@ -1,165 +1,165 @@
 <script lang="ts">
-	import { createQuery } from '@tanstack/svelte-query';
-	import { feasibility } from '$lib/api/feasibility';
-	import type { GISPlotSummary } from '$lib/stores/feasibility.svelte';
+import { createQuery } from '@tanstack/svelte-query'
+import { feasibility } from '$lib/api/feasibility'
+import type { GISPlotSummary } from '$lib/stores/feasibility.svelte'
 
-	let {
-		onSelect
-	}: {
-		onSelect: (plot: GISPlotSummary) => void;
-	} = $props();
+let {
+	onSelect
+}: {
+	onSelect: (plot: GISPlotSummary) => void
+} = $props()
 
-	type SortKey = 'largest' | 'highest_gfa' | 'verified_first';
-	type UsageFilter = 'all' | 'residential' | 'commercial' | 'mixed';
+type SortKey = 'largest' | 'highest_gfa' | 'verified_first'
+type UsageFilter = 'all' | 'residential' | 'commercial' | 'mixed'
 
-	let communitySearch = $state('');
-	let selectedCommunity = $state('');
-	let plotSearch = $state('');
-	let sizeInput = $state('');
-	let verifiedOnly = $state(false);
-	let usageFilter = $state<UsageFilter>('all');
-	let sortBy = $state<SortKey>('verified_first');
-	let plots = $state<GISPlotSummary[]>([]);
-	let totalCommunityPlots = $state(0);
-	let loading = $state(false);
-	let loadError = $state('');
-	let fullyLoaded = $state(false);
-	const pageSize = 100;
+let communitySearch = $state('')
+let selectedCommunity = $state('')
+let plotSearch = $state('')
+let sizeInput = $state('')
+let verifiedOnly = $state(false)
+let usageFilter = $state<UsageFilter>('all')
+let sortBy = $state<SortKey>('verified_first')
+let plots = $state<GISPlotSummary[]>([])
+let totalCommunityPlots = $state(0)
+let loading = $state(false)
+let loadError = $state('')
+let fullyLoaded = $state(false)
+const pageSize = 100
 
-	const communitiesQuery = createQuery(() => ({
-		queryKey: ['feasibility-plot-communities'],
-		queryFn: () => feasibility.getCommunities(),
-		staleTime: Infinity
-	}));
+const communitiesQuery = createQuery(() => ({
+	queryKey: ['feasibility-plot-communities'],
+	queryFn: () => feasibility.getCommunities(),
+	staleTime: Infinity
+}))
 
-	function fmt(n: number) {
-		return n.toLocaleString('en-AE', { maximumFractionDigits: 0 });
-	}
+function fmt(n: number) {
+	return n.toLocaleString('en-AE', { maximumFractionDigits: 0 })
+}
 
-	function prettyLabel(value: string) {
-		return value
-			.toLowerCase()
-			.split(' ')
-			.filter(Boolean)
-			.map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-			.join(' ');
-	}
+function prettyLabel(value: string) {
+	return value
+		.toLowerCase()
+		.split(' ')
+		.filter(Boolean)
+		.map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+		.join(' ')
+}
 
-	function initials(value: string) {
-		return prettyLabel(value)
-			.split(' ')
-			.filter((part) => part.length > 0)
-			.map((part) => part[0])
-			.join('')
-			.toLowerCase();
-	}
+function initials(value: string) {
+	return prettyLabel(value)
+		.split(' ')
+		.filter((part) => part.length > 0)
+		.map((part) => part[0])
+		.join('')
+		.toLowerCase()
+}
 
-	function matchesCommunityFilter(value: string, query: string) {
-		const q = query.trim().toLowerCase();
-		if (!q) return true;
-		const label = prettyLabel(value).toLowerCase();
-		const compact = label.replace(/[^a-z0-9]/g, '');
-		const queryCompact = q.replace(/[^a-z0-9]/g, '');
+function matchesCommunityFilter(value: string, query: string) {
+	const q = query.trim().toLowerCase()
+	if (!q) return true
+	const label = prettyLabel(value).toLowerCase()
+	const compact = label.replace(/[^a-z0-9]/g, '')
+	const queryCompact = q.replace(/[^a-z0-9]/g, '')
+	return (
+		label.includes(q) || compact.includes(queryCompact) || initials(value).includes(queryCompact)
+	)
+}
+
+function inferUsage(plot: GISPlotSummary): UsageFilter {
+	const haystack = `${plot.gfa_type} ${plot.land_use_summary.join(' ')}`.toLowerCase()
+	const hasRes = ['residential', 'apartment', 'villa', 'townhouse'].some((token) =>
+		haystack.includes(token)
+	)
+	const hasCom = ['commercial', 'office', 'retail', 'shop', 'hotel', 'industrial'].some((token) =>
+		haystack.includes(token)
+	)
+	if (hasRes && hasCom) return 'mixed'
+	if (hasRes) return 'residential'
+	if (hasCom) return 'commercial'
+	return 'all'
+}
+
+const filteredCommunities = $derived(
+	(communitiesQuery.data ?? []).filter((value) => matchesCommunityFilter(value, communitySearch))
+)
+
+const visiblePlots = $derived.by(() => {
+	const q = plotSearch.trim().toLowerCase()
+	const targetSize = parseFloat(sizeInput)
+	const hasSize = sizeInput.trim() !== '' && !Number.isNaN(targetSize) && targetSize > 0
+	let rows = plots.filter((plot) => {
+		if (verifiedOnly && !plot.is_verified) return false
+		if (usageFilter !== 'all') {
+			const usage = inferUsage(plot)
+			if (usageFilter === 'mixed' ? usage !== 'mixed' : usage !== usageFilter) return false
+		}
+		if (hasSize) {
+			const min = targetSize * 0.8
+			const max = targetSize * 1.2
+			if (plot.plot_area_sqm < min || plot.plot_area_sqm > max) return false
+		}
+		if (!q) return true
 		return (
-			label.includes(q) || compact.includes(queryCompact) || initials(value).includes(queryCompact)
-		);
+			plot.plot_number.toLowerCase().includes(q) ||
+			plot.project_name.toLowerCase().includes(q) ||
+			plot.community_name.toLowerCase().includes(q)
+		)
+	})
+
+	rows = [...rows].sort((a, b) => {
+		if (sortBy === 'largest') return b.plot_area_sqm - a.plot_area_sqm
+		if (sortBy === 'highest_gfa') return b.max_gfa_sqm - a.max_gfa_sqm
+		if (a.is_verified !== b.is_verified) return Number(b.is_verified) - Number(a.is_verified)
+		return b.plot_area_sqm - a.plot_area_sqm
+	})
+	return rows
+})
+
+async function loadCommunityPlots(community: string) {
+	if (!community) {
+		plots = []
+		totalCommunityPlots = 0
+		fullyLoaded = false
+		loadError = ''
+		return
 	}
-
-	function inferUsage(plot: GISPlotSummary): UsageFilter {
-		const haystack = `${plot.gfa_type} ${plot.land_use_summary.join(' ')}`.toLowerCase();
-		const hasRes = ['residential', 'apartment', 'villa', 'townhouse'].some((token) =>
-			haystack.includes(token)
-		);
-		const hasCom = ['commercial', 'office', 'retail', 'shop', 'hotel', 'industrial'].some((token) =>
-			haystack.includes(token)
-		);
-		if (hasRes && hasCom) return 'mixed';
-		if (hasRes) return 'residential';
-		if (hasCom) return 'commercial';
-		return 'all';
-	}
-
-	const filteredCommunities = $derived(
-		(communitiesQuery.data ?? []).filter((value) => matchesCommunityFilter(value, communitySearch))
-	);
-
-	const visiblePlots = $derived.by(() => {
-		const q = plotSearch.trim().toLowerCase();
-		const targetSize = parseFloat(sizeInput);
-		const hasSize = sizeInput.trim() !== '' && !Number.isNaN(targetSize) && targetSize > 0;
-		let rows = plots.filter((plot) => {
-			if (verifiedOnly && !plot.is_verified) return false;
-			if (usageFilter !== 'all') {
-				const usage = inferUsage(plot);
-				if (usageFilter === 'mixed' ? usage !== 'mixed' : usage !== usageFilter) return false;
-			}
-			if (hasSize) {
-				const min = targetSize * 0.8;
-				const max = targetSize * 1.2;
-				if (plot.plot_area_sqm < min || plot.plot_area_sqm > max) return false;
-			}
-			if (!q) return true;
-			return (
-				plot.plot_number.toLowerCase().includes(q) ||
-				plot.project_name.toLowerCase().includes(q) ||
-				plot.community_name.toLowerCase().includes(q)
-			);
-		});
-
-		rows = [...rows].sort((a, b) => {
-			if (sortBy === 'largest') return b.plot_area_sqm - a.plot_area_sqm;
-			if (sortBy === 'highest_gfa') return b.max_gfa_sqm - a.max_gfa_sqm;
-			if (a.is_verified !== b.is_verified) return Number(b.is_verified) - Number(a.is_verified);
-			return b.plot_area_sqm - a.plot_area_sqm;
-		});
-		return rows;
-	});
-
-	async function loadCommunityPlots(community: string) {
-		if (!community) {
-			plots = [];
-			totalCommunityPlots = 0;
-			fullyLoaded = false;
-			loadError = '';
-			return;
+	loading = true
+	loadError = ''
+	try {
+		const allRows: GISPlotSummary[] = []
+		let offset = 0
+		while (true) {
+			const nextRows = await feasibility.searchPlots({
+				community,
+				offset,
+				limit: pageSize
+			})
+			allRows.push(...nextRows)
+			if (nextRows.length < pageSize) break
+			offset += nextRows.length
 		}
-		loading = true;
-		loadError = '';
-		try {
-			const allRows: GISPlotSummary[] = [];
-			let offset = 0;
-			while (true) {
-				const nextRows = await feasibility.searchPlots({
-					community,
-					offset,
-					limit: pageSize
-				});
-				allRows.push(...nextRows);
-				if (nextRows.length < pageSize) break;
-				offset += nextRows.length;
-			}
-			plots = allRows;
-			totalCommunityPlots = allRows.length;
-			fullyLoaded = true;
-		} catch (err) {
-			plots = [];
-			totalCommunityPlots = 0;
-			fullyLoaded = false;
-			loadError = err instanceof Error ? err.message : 'Failed to load plots for this community.';
-		} finally {
-			loading = false;
-		}
+		plots = allRows
+		totalCommunityPlots = allRows.length
+		fullyLoaded = true
+	} catch (err) {
+		plots = []
+		totalCommunityPlots = 0
+		fullyLoaded = false
+		loadError = err instanceof Error ? err.message : 'Failed to load plots for this community.'
+	} finally {
+		loading = false
 	}
+}
 
-	function pickCommunity(value: string) {
-		selectedCommunity = value;
-		plotSearch = '';
-		sizeInput = '';
-		verifiedOnly = false;
-		usageFilter = 'all';
-		sortBy = 'verified_first';
-		loadCommunityPlots(value);
-	}
+function pickCommunity(value: string) {
+	selectedCommunity = value
+	plotSearch = ''
+	sizeInput = ''
+	verifiedOnly = false
+	usageFilter = 'all'
+	sortBy = 'verified_first'
+	loadCommunityPlots(value)
+}
 </script>
 
 <div class="max-w-6xl mx-auto">

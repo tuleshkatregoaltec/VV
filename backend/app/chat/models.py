@@ -1,9 +1,9 @@
-from typing import Optional, List, Dict, Any, LiteralString
 from datetime import datetime, timezone
+from typing import Any, Dict, List, LiteralString, Optional
+
 from pydantic import BaseModel, ConfigDict
-from sqlmodel import SQLModel, Field, Relationship, JSON
-from sqlmodel import Column
-from sqlalchemy import Text, DateTime
+from sqlalchemy import DateTime, Text
+from sqlmodel import JSON, Column, Field, Relationship, SQLModel
 
 
 class Conversation(SQLModel, table=True):

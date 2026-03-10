@@ -14,11 +14,11 @@
   </defs>
 
   <!-- Left polygon -->
-  <polygon fill="url(#gradient1)" 
+  <polygon fill="url(#gradient1)"
            points="22,25 241,425 290,339 112,25"/>
 
   <!-- Right polygon -->
-  <polygon fill="url(#gradient2)" 
+  <polygon fill="url(#gradient2)"
            points="478,26 300,323 250,236 390,26"/>
 
 </svg>

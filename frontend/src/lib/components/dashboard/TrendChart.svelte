@@ -1,53 +1,53 @@
 <script lang="ts">
-	import type { TrendPoint } from '$lib/api/analytics';
+import type { TrendPoint } from '$lib/api/analytics'
 
-	let { trends }: { trends: TrendPoint[] } = $props();
+let { trends }: { trends: TrendPoint[] } = $props()
 
-	// Calculate min/max for scaling
-	const values = $derived(trends.map((t) => t.avg_sqft));
-	const minValue = $derived(Math.min(...values));
-	const maxValue = $derived(Math.max(...values));
-	const valueRange = $derived(maxValue - minValue || 1);
+// Calculate min/max for scaling
+const values = $derived(trends.map((t) => t.avg_sqft))
+const minValue = $derived(Math.min(...values))
+const maxValue = $derived(Math.max(...values))
+const valueRange = $derived(maxValue - minValue || 1)
 
-	// Calculate percentage change
-	const firstValue = $derived(trends[0]?.avg_sqft ?? 0);
-	const lastValue = $derived(trends[trends.length - 1]?.avg_sqft ?? 0);
-	const percentChange = $derived(
-		firstValue ? (((lastValue - firstValue) / firstValue) * 100).toFixed(1) : '0.0'
-	);
-	const isPositive = $derived(Number(percentChange) >= 0);
+// Calculate percentage change
+const firstValue = $derived(trends[0]?.avg_sqft ?? 0)
+const lastValue = $derived(trends[trends.length - 1]?.avg_sqft ?? 0)
+const percentChange = $derived(
+	firstValue ? (((lastValue - firstValue) / firstValue) * 100).toFixed(1) : '0.0'
+)
+const isPositive = $derived(Number(percentChange) >= 0)
 
-	// Generate SVG path for trend line
-	const chartWidth = 200;
-	const chartHeight = 64;
-	const padding = 4;
+// Generate SVG path for trend line
+const chartWidth = 200
+const chartHeight = 64
+const padding = 4
 
-	function generatePath(data: TrendPoint[]): string {
-		if (data.length === 0) return '';
+function generatePath(data: TrendPoint[]): string {
+	if (data.length === 0) return ''
 
-		const points = data.map((point, i) => {
-			const x = (i / (data.length - 1)) * chartWidth;
-			const normalizedValue = (point.avg_sqft - minValue) / valueRange;
-			const y = chartHeight - padding - normalizedValue * (chartHeight - 2 * padding);
-			return { x, y };
-		});
+	const points = data.map((point, i) => {
+		const x = (i / (data.length - 1)) * chartWidth
+		const normalizedValue = (point.avg_sqft - minValue) / valueRange
+		const y = chartHeight - padding - normalizedValue * (chartHeight - 2 * padding)
+		return { x, y }
+	})
 
-		// Create smooth curve using cubic bezier
-		let path = `M ${points[0].x} ${points[0].y}`;
-		for (let i = 1; i < points.length; i++) {
-			const prev = points[i - 1];
-			const curr = points[i];
-			const cp1x = prev.x + (curr.x - prev.x) / 3;
-			const cp2x = prev.x + ((curr.x - prev.x) * 2) / 3;
-			path += ` C ${cp1x} ${prev.y}, ${cp2x} ${curr.y}, ${curr.x} ${curr.y}`;
-		}
-		return path;
+	// Create smooth curve using cubic bezier
+	let path = `M ${points[0].x} ${points[0].y}`
+	for (let i = 1; i < points.length; i++) {
+		const prev = points[i - 1]
+		const curr = points[i]
+		const cp1x = prev.x + (curr.x - prev.x) / 3
+		const cp2x = prev.x + ((curr.x - prev.x) * 2) / 3
+		path += ` C ${cp1x} ${prev.y}, ${cp2x} ${curr.y}, ${curr.x} ${curr.y}`
 	}
+	return path
+}
 
-	const linePath = $derived(generatePath(trends));
-	const areaPath = $derived(
-		linePath ? `${linePath} L ${chartWidth} ${chartHeight} L 0 ${chartHeight} Z` : ''
-	);
+const linePath = $derived(generatePath(trends))
+const areaPath = $derived(
+	linePath ? `${linePath} L ${chartWidth} ${chartHeight} L 0 ${chartHeight} Z` : ''
+)
 </script>
 
 <div class="mt-4">

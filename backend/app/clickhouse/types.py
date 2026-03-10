@@ -6,11 +6,11 @@ returned from ClickHouse queries for API responses.
 Column names match ClickHouse schema exactly - no renaming.
 """
 
-from pydantic import BaseModel, Field
-from typing import Optional, List
 from datetime import date
 from decimal import Decimal
+from typing import List, Optional
 
+from pydantic import BaseModel, Field
 
 # =============================================================================
 # ANALYTICS RESPONSES

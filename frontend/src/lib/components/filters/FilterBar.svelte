@@ -1,9 +1,9 @@
 <script lang="ts">
-	import FilterToggle from './FilterToggle.svelte';
-	import StandardDropdown from '../dropdowns/StandardDropdown.svelte';
-	import { propertyType, timeframe } from './globalFilters.svelte';
+import StandardDropdown from '../dropdowns/StandardDropdown.svelte'
+import FilterToggle from './FilterToggle.svelte'
+import { propertyType, timeframe } from './globalFilters.svelte'
 
-	const timeframes = ['Last Week', 'Last Month', 'Last 3 Months', 'Last 6 Months', 'Last Year'];
+const timeframes = ['Last Week', 'Last Month', 'Last 3 Months', 'Last 6 Months', 'Last Year']
 </script>
 
 <div class="max-w-7xl mx-auto px-0 sm:px-1 lg:px-1">

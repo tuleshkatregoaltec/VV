@@ -2,6 +2,7 @@
 
 import re
 from typing import Optional
+
 from app.clickhouse.client import query
 from app.clickhouse.queries import _project_filter
 from app.filters.models import FilterOptionsResponse
@@ -41,9 +42,7 @@ async def get_sales_filter_options(
 
     if project:
         where_clauses.append(_project_filter(filter_type))
-        params["project_name"] = (
-            project + " - %" if filter_type == "virtual_master" else project
-        )
+        params["project_name"] = project + " - %" if filter_type == "virtual_master" else project
 
     if property_type:
         where_clauses.append("property_type_en = {property_type:String}")
@@ -73,9 +72,7 @@ async def get_sales_filter_options(
         ORDER BY property_sub_type_en
     """
     property_sub_types_result = await query(property_sub_types_sql, params)
-    property_sub_types = [
-        row["property_sub_type_en"] for row in property_sub_types_result
-    ]
+    property_sub_types = [row["property_sub_type_en"] for row in property_sub_types_result]
 
     # Get rooms (LowCardinality = instant) - sorted numerically, not alphabetically
     rooms_sql = f"""
@@ -161,9 +158,7 @@ async def get_rental_filter_options(
 
     if project:
         where_clauses.append(_project_filter(filter_type))
-        params["project_name"] = (
-            project + " - %" if filter_type == "virtual_master" else project
-        )
+        params["project_name"] = project + " - %" if filter_type == "virtual_master" else project
 
     if property_type:
         where_clauses.append("ejari_property_type_en = {property_type:String}")
@@ -193,9 +188,7 @@ async def get_rental_filter_options(
         ORDER BY ejari_property_sub_type_en
     """
     property_sub_types_result = await query(property_sub_types_sql, params)
-    property_sub_types = [
-        row["ejari_property_sub_type_en"] for row in property_sub_types_result
-    ]
+    property_sub_types = [row["ejari_property_sub_type_en"] for row in property_sub_types_result]
 
     # Get tenant types (LowCardinality = instant)
     tenant_types_sql = f"""
@@ -215,9 +208,7 @@ async def get_rental_filter_options(
         ORDER BY contract_reg_type_en
     """
     contract_reg_types_result = await query(contract_reg_types_sql, params)
-    contract_reg_types = [
-        row["contract_reg_type_en"] for row in contract_reg_types_result
-    ]
+    contract_reg_types = [row["contract_reg_type_en"] for row in contract_reg_types_result]
 
     # Get areas (LowCardinality = instant)
     areas_sql = f"""

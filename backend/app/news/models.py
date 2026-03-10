@@ -1,8 +1,9 @@
-from typing import LiteralString, Optional
 from datetime import datetime
-from pydantic import BaseModel, AwareDatetime
-from sqlmodel import SQLModel, Field
+from typing import LiteralString, Optional
+
+from pydantic import AwareDatetime, BaseModel
 from sqlalchemy import Column, DateTime
+from sqlmodel import Field, SQLModel
 
 
 class NewsArticle(SQLModel, table=True):

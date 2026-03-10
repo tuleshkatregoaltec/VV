@@ -1,7 +1,7 @@
 <script lang="ts">
-	export let title: string;
-	export let value: string | number;
-	export let trend: { value: string; direction: 'up' | 'down' } | null = null;
+export let title: string
+export let value: string | number
+export let trend: { value: string; direction: 'up' | 'down' } | null = null
 </script>
 
 <div

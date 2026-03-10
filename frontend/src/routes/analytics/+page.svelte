@@ -1,16 +1,16 @@
 <script lang="ts">
-	import ProjectSelector from '$lib/components/analytics/ProjectSelector.svelte';
-	import ProjectPanel from '$lib/components/analytics/ProjectPanel.svelte';
-	import type { ProjectSearchItem } from '$lib/api/analytics';
+import type { ProjectSearchItem } from '$lib/api/analytics'
+import ProjectPanel from '$lib/components/analytics/ProjectPanel.svelte'
+import ProjectSelector from '$lib/components/analytics/ProjectSelector.svelte'
 
-	let projectA = $state<ProjectSearchItem | null>(null);
-	let projectB = $state<ProjectSearchItem | null>(null);
-	let comparing = $state(false);
+let projectA = $state<ProjectSearchItem | null>(null)
+let projectB = $state<ProjectSearchItem | null>(null)
+let comparing = $state(false)
 
-	function toggleCompare() {
-		comparing = !comparing;
-		if (!comparing) projectB = null;
-	}
+function toggleCompare() {
+	comparing = !comparing
+	if (!comparing) projectB = null
+}
 </script>
 
 <div class="min-h-screen bg-slate-50">

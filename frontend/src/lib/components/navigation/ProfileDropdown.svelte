@@ -1,5 +1,5 @@
 <script module lang="ts">
-	let nextId = 0;
+let nextId = 0
 </script>
 
 <script lang="ts">
