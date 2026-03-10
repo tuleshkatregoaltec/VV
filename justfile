@@ -25,6 +25,10 @@ format-backend:
 	uv run --project backend ruff format backend
 	uv run --project backend ruff check --fix backend
 
+prepare-backend:
+	just format-backend
+	just lint-backend
+
 test-frontend:
 	docker compose run --rm --no-deps frontend sh -lc 'bun install && bun run test'
 
@@ -33,6 +37,10 @@ lint-frontend:
 
 format-frontend:
 	cd frontend && bun run format
+
+prepare-frontend:
+	just format-frontend
+	just lint-frontend
 
 test-e2e:
 	docker compose run --rm playwright bash -lc 'npm install && npm test'
