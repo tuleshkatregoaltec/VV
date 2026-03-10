@@ -1,157 +1,44 @@
+import functools
 import logging
 from typing import Optional
 
-
-from supabase_auth import AdminUserAttributes, AsyncGoTrueClient, User as AuthUser
+from supabase_auth import AdminUserAttributes, AsyncGoTrueClient
+from supabase_auth import User as AuthUser
 from supabase_auth.errors import AuthApiError
 
 from app.config import settings
 from app.providers.auth.platform_user import PlatformUser
-import functools
-from datetime import datetime, timedelta
-
-from supabase_auth import SignInWithEmailAndPasswordCredentials, Session
-from supabase_auth.errors import AuthSessionMissingError
-
-
-class AdminAuth:
-    def __init__(self):
-        self.__client = AsyncGoTrueClient(url=settings.AUTH_URL)
-
-        self.__user: PlatformUser | None = None
-        self.__session: Session | None = None
-
-    async def login_username_pass(self) -> bool:
-        """
-        returns boolean success
-        """
-
-        try:
-            credentials = SignInWithEmailAndPasswordCredentials(
-                email=settings.AUTH_ADMIN_EMAIL, password=settings.AUTH_ADMIN_PASSWORD
-            )
-
-            auth_response = await self.__client.sign_in_with_password(credentials)
-
-            del credentials  # re-create when needed
-        except AuthApiError:
-            logger.error("Failed to get admin authentication, check admin user/pass.")
-            return False
-
-        # succeeded
-
-        self.__user = auth_response.user  # type: ignore
-        self.__session = auth_response.session
-
-        return True
-
-    async def ensure_valid_refresh(self) -> bool:
-        """
-        Ensure that we have a valid refresh token
-        returns boolean success
-        """
-
-        if self.__session is None:
-            logger.error("Attempted to refresh login without a session")
-            return False
-
-        # check if we need to refresh
-        dt_expires_at = datetime.fromtimestamp(self.__session.expires_at)  # type: ignore
-
-        # run 30s earlier than we need to in case it expires mid-operation
-        dt_expires_at -= timedelta(seconds=30)
-
-        dt_now = datetime.today()
-
-        if dt_now < dt_expires_at:
-            return True
-
-        # needs refreshing
-        try:
-            auth_response = await self.__client.refresh_session(
-                self.__session.refresh_token
-            )
-        except AuthSessionMissingError:
-            logger.error("Failed to refresh token")
-            return False
-
-        self.__user = auth_response.user
-        self.__session = auth_response.session
-
-        return True
-
-    async def is_session_active(self):
-        return await self.__client.get_user() is not None
-
-    def has_session(self):
-        return self.__session is not None
-
-    async def get_valid_session(self) -> AsyncGoTrueClient | None:
-        is_active = await self.is_session_active()
-        if is_active:
-            return self.__client
-
-        result = False
-        # no active session
-
-        # check if we ever had a session
-        if self.has_session():
-            # refresh
-            result = await self.ensure_valid_refresh()
-        else:
-            # login with user/pass
-            result = await self.login_username_pass()
-
-        if result:
-            return self.__client
-
-        return None
-
-    async def get_valid_session_with_auth(self):
-        client = await self.get_valid_session()
-        if client is None or self.__session is None:
-            raise RuntimeError("Failed to authenticate admin client")
-
-        client = AsyncGoTrueClient(
-            url=client._url,
-            headers={"Authorization": f"Bearer {self.__session.access_token}"},
-        )
-
-        # admin funcs don't pass required jwt, do it ourselves
-        client.admin._headers["Authorization"] = f"Bearer {self.__session.access_token}"
-
-        return client
-
-    async def get_admin_platform_user(self):
-        await self.get_valid_session()
-
-        user_response = await self.__client.get_user()
-
-        if user_response is not None:
-            return PlatformUser(None, user_response.user)
-
-    def with_admin_client(self):
-        """
-        Decorator
-        """
-
-        def wrapper(func):
-            @functools.wraps(func)
-            async def wrapped(*args, **kwargs):
-                kwargs["client"] = await self.get_valid_session_with_auth()
-
-                return await func(*args, **kwargs)
-
-            return wrapped
-
-        return wrapper
-
 
 logger = logging.getLogger(__name__)
 
 auth_client = AsyncGoTrueClient(url=settings.AUTH_URL)
+admin_headers = {
+    "Authorization": f"Bearer {settings.AUTH_SERVICE_ROLE_KEY}",
+    "apikey": settings.AUTH_SERVICE_ROLE_KEY,
+}
 
-admin_auth = AdminAuth()
+
+def get_admin_client() -> AsyncGoTrueClient:
+    client = AsyncGoTrueClient(url=settings.AUTH_URL, headers=admin_headers.copy())
+
+    # GoTrue admin helpers use their own header store.
+    client.admin._headers.update(admin_headers)
+
+    return client
+
+
+def with_admin_client():
+    """Inject a service-role authenticated admin client into auth admin helpers."""
+
+    def wrapper(func):
+        @functools.wraps(func)
+        async def wrapped(*args, **kwargs):
+            kwargs["client"] = get_admin_client()
+            return await func(*args, **kwargs)
+
+        return wrapped
+
+    return wrapper
 
 
 async def get_auth_user(jwt: str) -> Optional[AuthUser]:
@@ -169,7 +56,7 @@ async def get_auth_user(jwt: str) -> Optional[AuthUser]:
         return None
 
 
-@admin_auth.with_admin_client()
+@with_admin_client()
 async def update_user_token_limit(user_id: str, daily_token_limit: int, **kwargs):
     """Update user's daily token limit in app_metadata."""
     client: AsyncGoTrueClient = kwargs["client"]
@@ -188,7 +75,7 @@ async def update_user_token_limit(user_id: str, daily_token_limit: int, **kwargs
         raise
 
 
-@admin_auth.with_admin_client()
+@with_admin_client()
 async def update_user_profile_metadata(
     user_id: str, first_name: str, last_name: str, **kwargs
 ) -> None:
@@ -206,7 +93,7 @@ async def update_user_profile_metadata(
         raise
 
 
-@admin_auth.with_admin_client()
+@with_admin_client()
 async def get_user_by_id(id: str, **kwargs):
     client: AsyncGoTrueClient = kwargs["client"]
 
@@ -218,7 +105,7 @@ async def get_user_by_id(id: str, **kwargs):
         return None
 
 
-@admin_auth.with_admin_client()
+@with_admin_client()
 async def create_user_admin(
     email: str, password: str, first_name: str, last_name: str, **kwargs
 ) -> Optional["PlatformUser"]:
@@ -237,7 +124,7 @@ async def create_user_admin(
         raise
 
 
-@admin_auth.with_admin_client()
+@with_admin_client()
 async def delete_user_admin(user_id: str, **kwargs) -> None:
     """Delete a Supabase user by ID."""
     client: AsyncGoTrueClient = kwargs["client"]

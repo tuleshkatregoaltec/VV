@@ -1,10 +1,11 @@
-from typing import Optional, List, LiteralString
 from datetime import datetime, timezone
-from uuid import uuid4
 from enum import Enum
+from typing import List, LiteralString, Optional
+from uuid import uuid4
+
 from pydantic import BaseModel, ConfigDict, EmailStr
-from sqlmodel import SQLModel, Field
-from sqlalchemy import Column, DateTime, UniqueConstraint, CheckConstraint
+from sqlalchemy import CheckConstraint, Column, DateTime, UniqueConstraint
+from sqlmodel import Field, SQLModel
 
 
 class Organization(SQLModel, table=True):
@@ -25,9 +26,7 @@ class Organization(SQLModel, table=True):
     )  # "pending", "active", "past_due", "canceled", "failed", "none"
 
     # Stripe integration (one customer per org)
-    stripe_customer_id: Optional[str] = Field(
-        default=None, unique=True, index=True, nullable=True
-    )
+    stripe_customer_id: Optional[str] = Field(default=None, unique=True, index=True, nullable=True)
     created_at: datetime = Field(
         sa_column=Column(DateTime(timezone=True), nullable=False),
         default_factory=lambda: datetime.now(timezone.utc),
@@ -79,13 +78,9 @@ class OrganizationInvitation(SQLModel, table=True):
     email: str = Field(index=True)
     role: str = Field(default="member")  # "owner" or "member"
     token: str = Field(unique=True, index=True)
-    status: str = Field(
-        default="pending"
-    )  # "pending", "accepted", "declined", "expired"
+    status: str = Field(default="pending")  # "pending", "accepted", "declined", "expired"
     invited_by_user_id: str
-    expires_at: datetime = Field(
-        sa_column=Column(DateTime(timezone=True), nullable=False)
-    )
+    expires_at: datetime = Field(sa_column=Column(DateTime(timezone=True), nullable=False))
     created_at: datetime = Field(
         sa_column=Column(DateTime(timezone=True), nullable=False),
         default_factory=lambda: datetime.now(timezone.utc),

@@ -1,326 +1,342 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
-	import { goto } from '$app/navigation';
-	import TextInput from '$lib/components/auth/TextInput.svelte';
-	import {
-		client,
-		get_session,
-		sign_in_with_magic_link_to,
-		update_user_profile,
-		verify_otp
-	} from '$lib/api/auth';
-	import {
-		acceptInvite,
-		validateInviteToken,
-		type InviteConflictResponse,
-		type ValidateInviteTokenResponse
-	} from '$lib/api/organization';
-	import { clearUser, refreshUser } from '$lib/stores/user.svelte';
+import { onMount } from 'svelte'
+import { goto } from '$app/navigation'
+import { resolve } from '$app/paths'
+import { client, get_session, update_user_profile } from '$lib/api/auth'
+import { ApiError } from '$lib/api/client'
+import {
+	acceptInvite,
+	type InviteConflictResponse,
+	type ValidateInviteTokenResponse,
+	validateInviteToken
+} from '$lib/api/organization'
+import AccountContextBar from '$lib/components/auth/AccountContextBar.svelte'
+import AuthFlowShell from '$lib/components/auth/AuthFlowShell.svelte'
+import TextInput from '$lib/components/auth/TextInput.svelte'
+import { clearUser, refreshUser } from '$lib/stores/user.svelte'
 
-	type Step = 'loading' | 'verify-code' | 'profile' | 'accept' | 'mismatch' | 'error';
+type Step = 'loading' | 'profile' | 'accept' | 'mismatch' | 'error'
 
-	let step = $state<Step>('loading');
-	let inviteToken = $state('');
-	let inviteDetails = $state<ValidateInviteTokenResponse | null>(null);
-	let firstName = $state('');
-	let lastName = $state('');
-	let verificationCode = $state('');
-	let currentEmail = $state('');
-	let loading = $state(false);
-	let error = $state('');
-	let conflictMessage = $state('');
+let step = $state<Step>('loading')
+let inviteToken = $state('')
+let inviteDetails = $state<ValidateInviteTokenResponse | null>(null)
+let firstName = $state('')
+let lastName = $state('')
+let currentEmail = $state('')
+let loading = $state(false)
+let error = $state('')
+let conflictMessage = $state('')
 
-	let fieldErrors = $state({
-		firstName: '',
-		lastName: '',
-		verificationCode: ''
-	});
+let fieldErrors = $state({
+	firstName: '',
+	lastName: ''
+})
 
-	onMount(async () => {
-		inviteToken = new URL(window.location.href).searchParams.get('token') || '';
-		await syncInviteState();
-	});
+onMount(async () => {
+	inviteToken = new URL(window.location.href).searchParams.get('token') || ''
+	await syncInviteState()
+})
 
-	function resetMessages() {
-		error = '';
-		conflictMessage = '';
-		fieldErrors.firstName = '';
-		fieldErrors.lastName = '';
-		fieldErrors.verificationCode = '';
+function getAuthPath() {
+	return `${resolve('/auth')}?next=${encodeURIComponent(`/invite?token=${inviteToken}`)}`
+}
+
+function resetMessages() {
+	error = ''
+	conflictMessage = ''
+	fieldErrors.firstName = ''
+	fieldErrors.lastName = ''
+}
+
+function setProfileStep(first: string, last: string) {
+	firstName = first
+	lastName = last
+	step = first && last ? 'accept' : 'profile'
+}
+
+function getTitle() {
+	switch (step) {
+		case 'loading':
+			return 'Checking your invitation'
+		case 'profile':
+			return 'Complete your profile'
+		case 'accept':
+			return `Join ${inviteDetails?.organization_name}`
+		case 'mismatch':
+			return 'This invite is for a different account'
+		case 'error':
+			return 'Invitation unavailable'
+	}
+}
+
+function getDescription() {
+	switch (step) {
+		case 'loading':
+			return 'We are validating the invitation and checking your current session.'
+		case 'profile':
+			return `Add your name, then we’ll finish joining ${inviteDetails?.organization_name}.`
+		case 'accept':
+			return `You’re signed in as the invited email and ready to join ${inviteDetails?.organization_name}.`
+		case 'mismatch':
+			return `This invite is for ${inviteDetails?.email}, but your current session belongs to ${currentEmail}.`
+		case 'error':
+			return error || 'The invitation link is invalid or expired.'
+	}
+}
+
+async function syncInviteState() {
+	resetMessages()
+
+	if (!inviteToken) {
+		error = 'Invitation token is missing.'
+		step = 'error'
+		return
 	}
 
-	function setProfileStep(first: string, last: string) {
-		firstName = first;
-		lastName = last;
-		step = first && last ? 'accept' : 'profile';
+	step = 'loading'
+
+	try {
+		inviteDetails = await validateInviteToken(inviteToken)
+	} catch (err: unknown) {
+		error =
+			err instanceof Error
+				? err.message
+				: 'Invalid invitation link. Please contact your administrator.'
+		step = 'error'
+		return
 	}
 
-	async function syncInviteState() {
-		resetMessages();
-
-		if (!inviteToken) {
-			error = 'Invitation token is missing.';
-			step = 'error';
-			return;
-		}
-
-		step = 'loading';
-
-		try {
-			inviteDetails = await validateInviteToken(inviteToken);
-		} catch (err: any) {
-			error = err.message || 'Invalid invitation link. Please contact your administrator.';
-			step = 'error';
-			return;
-		}
-
-		const session = await get_session();
-		if (!session?.user?.email) {
-			currentEmail = '';
-			step = 'verify-code';
-			return;
-		}
-
-		currentEmail = session.user.email;
-		if (session.user.email.toLowerCase() !== inviteDetails.email.toLowerCase()) {
-			step = 'mismatch';
-			return;
-		}
-
-		const user = await refreshUser();
-		setProfileStep(
-			user?.first_name ?? (session.user.user_metadata?.first_name as string) ?? '',
-			user?.last_name ?? (session.user.user_metadata?.last_name as string) ?? ''
-		);
+	const session = await get_session()
+	if (!session?.user?.email) {
+		// eslint-disable-next-line svelte/no-navigation-without-resolve
+		await goto(getAuthPath())
+		return
 	}
 
-	async function sendCode() {
-		if (!inviteDetails) return;
+	currentEmail = session.user.email
+	if (session.user.email.toLowerCase() !== inviteDetails.email.toLowerCase()) {
+		step = 'mismatch'
+		return
+	}
 
-		loading = true;
-		error = '';
-		try {
-			const result = await sign_in_with_magic_link_to(
-				inviteDetails.email,
-				`/invite?token=${inviteToken}`
-			);
-			if (result.success) {
-				step = 'verify-code';
-			} else {
-				error = result.error || 'Failed to send sign-in code.';
-			}
-		} finally {
-			loading = false;
+	const user = await refreshUser()
+	setProfileStep(
+		user?.first_name ?? (session.user.user_metadata?.first_name as string) ?? '',
+		user?.last_name ?? (session.user.user_metadata?.last_name as string) ?? ''
+	)
+}
+
+async function joinOrganization() {
+	resetMessages()
+
+	if (step === 'profile') {
+		if (!firstName.trim()) {
+			fieldErrors.firstName = 'First name is required'
+		}
+		if (!lastName.trim()) {
+			fieldErrors.lastName = 'Last name is required'
+		}
+		if (fieldErrors.firstName || fieldErrors.lastName) {
+			return
 		}
 	}
 
-	async function verifyCode() {
-		fieldErrors.verificationCode = '';
-		if (verificationCode.trim().length !== 6) {
-			fieldErrors.verificationCode = 'Please enter the 6-digit code.';
-			return;
-		}
-
-		if (!inviteDetails) return;
-
-		loading = true;
-		error = '';
-		try {
-			const result = await verify_otp(inviteDetails.email, verificationCode.trim(), 'magiclink');
-			if (!result.success) {
-				error = result.error || 'Invalid verification code.';
-				return;
-			}
-
-			verificationCode = '';
-			await syncInviteState();
-		} finally {
-			loading = false;
-		}
-	}
-
-	async function joinOrganization() {
-		resetMessages();
-
+	loading = true
+	try {
 		if (step === 'profile') {
-			if (!firstName.trim()) {
-				fieldErrors.firstName = 'First name is required';
-			}
-			if (!lastName.trim()) {
-				fieldErrors.lastName = 'Last name is required';
-			}
-			if (fieldErrors.firstName || fieldErrors.lastName) {
-				return;
-			}
+			await update_user_profile(firstName.trim(), lastName.trim())
 		}
 
-		loading = true;
-		try {
-			if (step === 'profile') {
-				await update_user_profile(firstName.trim(), lastName.trim());
-			}
-
-			const result = await acceptInvite(inviteToken);
-			if ('conflict' in result && result.conflict) {
-				conflictMessage = getConflictMessage(result);
-				return;
-			}
-
-			await refreshUser();
-			goto('/dashboard');
-		} catch (err: any) {
-			if (err.status === 409 && err.details?.detail) {
-				conflictMessage = getConflictMessage(err.details.detail as InviteConflictResponse);
-				return;
-			}
-			error = err.message || 'Failed to join organization. Please try again.';
-		} finally {
-			loading = false;
-		}
-	}
-
-	async function switchAccount() {
-		await client.signOut();
-		clearUser();
-		await goto(`/invite?token=${inviteToken}`);
-		step = 'verify-code';
-	}
-
-	function getConflictMessage(conflict: InviteConflictResponse): string {
-		if (conflict.current_role === 'owner') {
-			return `You already own ${conflict.current_org_name}. Transfer ownership or cancel that organization before joining another one.`;
+		const result = await acceptInvite(inviteToken)
+		if ('conflict' in result && result.conflict) {
+			conflictMessage = getConflictMessage(result)
+			return
 		}
 
-		return `You are already a member of ${conflict.current_org_name}. Leave that organization before joining another one.`;
+		await refreshUser()
+		goto(resolve('/dashboard'))
+	} catch (err: unknown) {
+		if (
+			err instanceof ApiError &&
+			err.status === 409 &&
+			err.details &&
+			typeof err.details === 'object' &&
+			'detail' in err.details
+		) {
+			conflictMessage = getConflictMessage(
+				(err.details as { detail: InviteConflictResponse }).detail
+			)
+			return
+		}
+		error = err instanceof Error ? err.message : 'Failed to join organization. Please try again.'
+	} finally {
+		loading = false
 	}
+}
+
+async function switchAccount() {
+	await client.signOut()
+	clearUser()
+	// eslint-disable-next-line svelte/no-navigation-without-resolve
+	await goto(getAuthPath())
+}
+
+function getConflictMessage(conflict: InviteConflictResponse): string {
+	if (conflict.current_role === 'owner') {
+		return `You already own ${conflict.current_org_name}. Transfer ownership or cancel that organization before joining another one.`
+	}
+
+	return `You are already a member of ${conflict.current_org_name}. Leave that organization before joining another one.`
+}
 </script>
 
 <svelte:head>
 	<title>Organization Invite - Vitevue</title>
 </svelte:head>
 
-<div class="min-h-screen bg-slate-50 px-4 py-12">
-	<div class="mx-auto max-w-xl rounded-2xl bg-white p-8 shadow-sm">
-		{#if step === 'loading'}
-			<div class="space-y-3 text-center">
-				<h1 class="text-2xl font-semibold text-slate-900">Loading invitation…</h1>
-				<p class="text-sm text-slate-600">Checking your invite details.</p>
-			</div>
-		{:else if step === 'error'}
-			<div class="space-y-4 text-center">
-				<h1 class="text-2xl font-semibold text-slate-900">Invitation Unavailable</h1>
-				<p class="text-sm text-red-600">{error}</p>
-			</div>
-		{:else}
-			<div class="space-y-6">
-				<div class="space-y-2 text-center">
-					<h1 class="text-3xl font-semibold text-slate-900">
-						{step === 'profile'
-							? 'Complete Your Profile'
-							: `Join ${inviteDetails?.organization_name}`}
-					</h1>
-					<p class="text-sm text-slate-600">
-						{#if step === 'profile'}
-							Add your name, then you can join {inviteDetails?.organization_name}.
-						{:else}
-							This invitation is for <span class="font-medium text-slate-900"
-								>{inviteDetails?.email}</span
-							>.
-						{/if}
-					</p>
+<AuthFlowShell
+	title={getTitle()}
+	description={getDescription()}
+	eyebrow="Organization invite"
+	sideAccent="Guided join flow"
+	sideTitle="Join the right workspace with the right account."
+	sideCopy="Vitevue keeps the invite flow narrow: authenticate first, confirm the invited email, add your name if needed, then join the organization."
+>
+	{#if currentEmail}
+		<svelte:fragment slot="account">
+			<AccountContextBar email={currentEmail} redirectTo={getAuthPath()} />
+		</svelte:fragment>
+	{/if}
+
+	<svelte:fragment slot="side">
+		<div class="space-y-4 rounded-[1.6rem] border border-white/10 bg-white/5 p-6">
+			{#if inviteDetails}
+				<div class="rounded-3xl border border-white/10 bg-slate-900/60 p-5">
+					<p class="text-xs font-semibold uppercase tracking-[0.22em] text-slate-400">Invitation</p>
+					<p class="mt-3 text-2xl font-semibold text-white">{inviteDetails.organization_name}</p>
+					<p class="mt-2 text-sm leading-6 text-slate-300">Invited email: {inviteDetails.email}</p>
 				</div>
-
-				{#if error}
-					<div class="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-						{error}
-					</div>
-				{/if}
-
-				{#if conflictMessage}
-					<div
-						class="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800"
-					>
-						{conflictMessage}
-					</div>
-				{/if}
-
-				{#if step === 'verify-code'}
-					<div class="space-y-4">
-						<div
-							class="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700"
-						>
-							Enter the code from the invite email sent to <span class="font-medium text-slate-900"
-								>{inviteDetails?.email}</span
-							>.
-						</div>
-						<TextInput
-							label="Verification Code"
-							bind:value={verificationCode}
-							error={fieldErrors.verificationCode}
-							placeholder="123456"
-							autocomplete="off"
-						/>
-						<button
-							type="button"
-							class="w-full rounded-lg bg-slate-900 px-4 py-3 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-60"
-							onclick={verifyCode}
-							disabled={loading}
-						>
-							{loading ? 'Verifying…' : 'Verify Code'}
-						</button>
-						<button
-							type="button"
-							class="w-full rounded-lg border border-slate-300 px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
-							onclick={sendCode}
-							disabled={loading}
-						>
-							{loading ? 'Sending…' : 'Resend Code'}
-						</button>
-					</div>
-				{:else if step === 'mismatch'}
-					<div class="space-y-4">
-						<div
-							class="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800"
-						>
-							This invite was sent to {inviteDetails?.email}. You are currently signed in as {currentEmail}.
-						</div>
-						<button
-							type="button"
-							class="w-full rounded-lg bg-slate-900 px-4 py-3 text-sm font-semibold text-white hover:bg-slate-800"
-							onclick={switchAccount}
-						>
-							Use a Different Account
-						</button>
-					</div>
-				{:else}
-					<div class="space-y-4">
-						{#if step === 'profile'}
-							<TextInput
-								label="First Name"
-								bind:value={firstName}
-								error={fieldErrors.firstName}
-								required
-								autocomplete="given-name"
-							/>
-							<TextInput
-								label="Last Name"
-								bind:value={lastName}
-								error={fieldErrors.lastName}
-								required
-								autocomplete="family-name"
-							/>
-						{/if}
-						<button
-							type="button"
-							class="w-full rounded-lg bg-slate-900 px-4 py-3 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-60"
-							onclick={joinOrganization}
-							disabled={loading}
-						>
-							{loading ? 'Joining…' : 'Join Organization'}
-						</button>
-					</div>
-				{/if}
+			{/if}
+			<div class="grid gap-3">
+				<div class="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-200">
+					Authenticate with the invited account first
+				</div>
+				<div class="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-200">
+					Add your name only if it is still missing
+				</div>
+				<div class="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-200">
+					Join the workspace and let the normal guard flow take over
+				</div>
 			</div>
-		{/if}
-	</div>
-</div>
+		</div>
+	</svelte:fragment>
+
+	{#if error && step !== 'error'}
+		<div class="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+			{error}
+		</div>
+	{/if}
+
+	{#if conflictMessage}
+		<div class="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+			{conflictMessage}
+		</div>
+	{/if}
+
+	{#if step === 'loading'}
+		<div class="rounded-[1.8rem] border border-slate-200 bg-slate-50/80 p-8 text-center">
+			<div
+				class="mx-auto h-14 w-14 animate-spin rounded-full border-4 border-slate-200 border-t-slate-950"
+			></div>
+			<p class="mt-6 text-lg font-semibold text-slate-950">Loading invitation</p>
+			<p class="mt-2 text-sm text-slate-600">This should only take a moment.</p>
+		</div>
+	{:else if step === 'error'}
+		<div class="space-y-5">
+			<div class="rounded-[1.8rem] border border-rose-200 bg-rose-50 p-6">
+				<p class="text-sm font-semibold text-rose-900">Invitation unavailable</p>
+				<p class="mt-2 text-sm leading-6 text-rose-700">{error}</p>
+			</div>
+			<a
+				href={resolve('/auth')}
+				class="inline-flex rounded-2xl bg-slate-950 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
+			>
+				Return to sign in
+			</a>
+		</div>
+	{:else if step === 'mismatch'}
+		<div class="space-y-5">
+			<div class="rounded-[1.8rem] border border-amber-200 bg-amber-50 p-6">
+				<p class="text-sm font-semibold text-amber-900">Wrong account</p>
+				<p class="mt-2 text-sm leading-6 text-amber-800">
+					You are signed in as <span class="font-semibold">{currentEmail}</span>, but this invite is
+					for <span class="font-semibold">{inviteDetails?.email}</span>.
+				</p>
+			</div>
+			<div class="flex flex-col gap-3 sm:flex-row">
+				<button
+					type="button"
+					onclick={switchAccount}
+					class="flex-1 rounded-2xl bg-slate-950 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
+				>
+					Use the invited account instead
+				</button>
+				<a
+					href={resolve('/dashboard')}
+					class="rounded-2xl border border-slate-300 px-5 py-3 text-center text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+				>
+					Go to current workspace
+				</a>
+			</div>
+		</div>
+	{:else if step === 'profile'}
+		<form
+			onsubmit={(event) => {
+				event.preventDefault();
+				joinOrganization();
+			}}
+			class="space-y-5"
+		>
+			<div class="grid gap-5 sm:grid-cols-2">
+				<TextInput
+					label="First name"
+					bind:value={firstName}
+					error={fieldErrors.firstName}
+					placeholder="John"
+					autocomplete="given-name"
+				/>
+				<TextInput
+					label="Last name"
+					bind:value={lastName}
+					error={fieldErrors.lastName}
+					placeholder="Doe"
+					autocomplete="family-name"
+				/>
+			</div>
+			<button
+				type="submit"
+				disabled={loading}
+				class="w-full rounded-2xl bg-slate-950 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+			>
+				{loading ? 'Joining organization...' : `Join ${inviteDetails?.organization_name}`}
+			</button>
+		</form>
+	{:else}
+		<div class="space-y-5">
+			<div class="rounded-[1.8rem] border border-slate-200 bg-slate-50/80 p-6">
+				<p class="text-sm font-semibold text-slate-900">Ready to join</p>
+				<p class="mt-2 text-sm leading-6 text-slate-600">
+					You are signed in as the invited user and your profile is complete.
+				</p>
+			</div>
+			<button
+				type="button"
+				onclick={joinOrganization}
+				disabled={loading}
+				class="w-full rounded-2xl bg-slate-950 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+			>
+				{loading ? 'Joining organization...' : `Join ${inviteDetails?.organization_name}`}
+			</button>
+		</div>
+	{/if}
+</AuthFlowShell>

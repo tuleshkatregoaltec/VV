@@ -1,8 +1,9 @@
-from typing import LiteralString
 from datetime import datetime, timezone
+from typing import LiteralString
+
 from pydantic import BaseModel
-from sqlmodel import SQLModel, Field
 from sqlalchemy import Column, DateTime
+from sqlmodel import Field, SQLModel
 
 
 class Subscription(SQLModel, table=True):
@@ -27,9 +28,7 @@ class Subscription(SQLModel, table=True):
     current_period_start: datetime = Field(
         sa_column=Column(DateTime(timezone=True), nullable=False)
     )
-    current_period_end: datetime = Field(
-        sa_column=Column(DateTime(timezone=True), nullable=False)
-    )
+    current_period_end: datetime = Field(sa_column=Column(DateTime(timezone=True), nullable=False))
     cancel_at_period_end: bool = Field(default=False)
 
     # Timestamps

@@ -1,12 +1,12 @@
 from fastapi import APIRouter, Depends
-from sqlmodel.ext.asyncio.session import AsyncSession
 from pydantic import BaseModel, Field
+from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.postgres import get_db_session
-from app.core.dependencies import require_auth
-from app.providers.auth.platform_user import PlatformUser
-from app.organization import service as organization_service
 from app.auth.service import update_user_profile_metadata
+from app.core.dependencies import require_auth
+from app.organization import service as organization_service
+from app.postgres import get_db_session
+from app.providers.auth.platform_user import PlatformUser
 
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 
@@ -96,9 +96,7 @@ async def update_profile(
     current_user: PlatformUser = Depends(require_auth),
 ):
     """Update user profile (first name and last name)."""
-    await update_user_profile_metadata(
-        current_user.id, request.first_name, request.last_name
-    )
+    await update_user_profile_metadata(current_user.id, request.first_name, request.last_name)
 
     return UpdateProfileResponse(
         success=True, first_name=request.first_name, last_name=request.last_name

@@ -1,71 +1,71 @@
 <script lang="ts">
-	import { AuthClient } from '@supabase/auth-js';
-	import { env } from '$env/dynamic/public';
-	import TextInput from '$lib/components/auth/TextInput.svelte';
-	import { currentUser } from '$lib/stores/user.svelte';
+import { AuthClient } from '@supabase/auth-js'
+import { env } from '$env/dynamic/public'
+import TextInput from '$lib/components/auth/TextInput.svelte'
+import { currentUser } from '$lib/stores/user.svelte'
 
-	const client = new AuthClient({
-		url: `${env.PUBLIC_AUTH_BASE_URL}`,
-		storageKey: 'authentication',
-		detectSessionInUrl: true,
-		persistSession: true
-	});
+const client = new AuthClient({
+	url: `${env.PUBLIC_AUTH_BASE_URL}`,
+	storageKey: 'authentication',
+	detectSessionInUrl: true,
+	persistSession: true
+})
 
-	let firstName = $state('');
-	let lastName = $state('');
-	let loading = $state(false);
-	let error = $state('');
+let firstName = $state('')
+let lastName = $state('')
+let loading = $state(false)
+let error = $state('')
 
-	let fieldErrors = $state({
-		firstName: '',
-		lastName: ''
-	});
+let fieldErrors = $state({
+	firstName: '',
+	lastName: ''
+})
 
-	async function handleSubmit() {
-		fieldErrors.firstName = '';
-		fieldErrors.lastName = '';
+async function handleSubmit() {
+	fieldErrors.firstName = ''
+	fieldErrors.lastName = ''
 
-		if (!firstName.trim()) {
-			fieldErrors.firstName = 'First name is required';
-			return;
-		}
-		if (!lastName.trim()) {
-			fieldErrors.lastName = 'Last name is required';
-			return;
-		}
-
-		loading = true;
-		error = '';
-
-		try {
-			// Update Supabase auth metadata
-			const result = await client.updateUser({
-				data: {
-					first_name: firstName,
-					last_name: lastName
-				}
-			});
-
-			if (result.error) {
-				error = result.error.message || 'Failed to update profile';
-				return;
-			}
-
-			// Manually update the user store (Option A)
-			if (currentUser.data) {
-				currentUser.data = {
-					...currentUser.data,
-					first_name: firstName,
-					last_name: lastName
-				};
-			}
-		} catch (e) {
-			error = 'Failed to update profile. Please try again.';
-			console.error('Profile update error:', e);
-		} finally {
-			loading = false;
-		}
+	if (!firstName.trim()) {
+		fieldErrors.firstName = 'First name is required'
+		return
 	}
+	if (!lastName.trim()) {
+		fieldErrors.lastName = 'Last name is required'
+		return
+	}
+
+	loading = true
+	error = ''
+
+	try {
+		// Update Supabase auth metadata
+		const result = await client.updateUser({
+			data: {
+				first_name: firstName,
+				last_name: lastName
+			}
+		})
+
+		if (result.error) {
+			error = result.error.message || 'Failed to update profile'
+			return
+		}
+
+		// Manually update the user store (Option A)
+		if (currentUser.data) {
+			currentUser.data = {
+				...currentUser.data,
+				first_name: firstName,
+				last_name: lastName
+			}
+		}
+	} catch (e) {
+		error = 'Failed to update profile. Please try again.'
+		console.error('Profile update error:', e)
+	} finally {
+		loading = false
+	}
+}
 </script>
 
 <!-- Blocking modal overlay -->

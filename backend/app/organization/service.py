@@ -1,13 +1,13 @@
-from uuid import uuid4
-from datetime import datetime, timezone, timedelta
-from typing import Sequence, Optional
 import secrets
+from datetime import datetime, timedelta, timezone
+from typing import Optional, Sequence
+from uuid import uuid4
 
-from sqlmodel import select, func
+from sqlmodel import func, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from app.organization.models import OrganizationInvitation, OrganizationMembership
 from app.postgres.models import Organization
-from app.organization.models import OrganizationMembership, OrganizationInvitation
 
 
 async def get_free_org_id(db: AsyncSession):
@@ -60,9 +60,7 @@ async def get_owner_membership_for_org(
     return result.first()
 
 
-async def get_organization_for_user(
-    db: AsyncSession, user_id: str
-) -> Organization | None:
+async def get_organization_for_user(db: AsyncSession, user_id: str) -> Organization | None:
     """Get organization via membership (replaces JSONB lookup)"""
     membership = await get_membership_for_user(db, user_id)
     if not membership:
@@ -85,9 +83,20 @@ async def get_active_user_count(db: AsyncSession, org_id: str) -> int:
     return await get_member_count(db, org_id)
 
 
-async def create_organization(
-    db: AsyncSession, name: str, max_users: int
-) -> Organization:
+async def get_pending_invitation_count(db: AsyncSession, org_id: str) -> int:
+    """Count non-expired pending invitations for seat reservation checks."""
+    now = datetime.now(timezone.utc)
+    result = await db.exec(
+        select(func.count(OrganizationInvitation.id)).where(
+            OrganizationInvitation.organization_id == org_id,
+            OrganizationInvitation.status == "pending",
+            OrganizationInvitation.expires_at >= now,
+        )
+    )
+    return result.first()
+
+
+async def create_organization(db: AsyncSession, name: str, max_users: int) -> Organization:
     organization = Organization(
         id=await get_free_org_id(db),
         name=name,
@@ -108,9 +117,7 @@ async def list_organizations(db: AsyncSession) -> Sequence[Organization]:
     return organizations.all()
 
 
-async def update_organization(
-    db: AsyncSession, org_id: str, max_users: int
-) -> Organization | None:
+async def update_organization(db: AsyncSession, org_id: str, max_users: int) -> Organization | None:
     """Update organization settings"""
     organization = await db.get(Organization, org_id)
 
@@ -144,9 +151,7 @@ async def add_user_to_organization(
     return membership
 
 
-async def remove_user_from_organization(
-    db: AsyncSession, org_id: str, user_id: str
-) -> bool:
+async def remove_user_from_organization(db: AsyncSession, org_id: str, user_id: str) -> bool:
     """Delete membership to free seat"""
     result = await db.exec(
         select(OrganizationMembership)
@@ -249,19 +254,22 @@ async def expire_pending_invitations(
         db.add(invitation)
 
     await db.commit()
-    return len(
-        [invitation for invitation in invitations if invitation.token != exclude_token]
-    )
+    return len([invitation for invitation in invitations if invitation.token != exclude_token])
 
 
-async def get_invitation_by_token(
-    db: AsyncSession, token: str
-) -> Optional[OrganizationInvitation]:
+async def get_invitation_by_token(db: AsyncSession, token: str) -> Optional[OrganizationInvitation]:
     """Get invitation by token"""
     result = await db.exec(
         select(OrganizationInvitation).where(OrganizationInvitation.token == token)
     )
     return result.first()
+
+
+async def get_invitation_by_id(
+    db: AsyncSession, invitation_id: str
+) -> Optional[OrganizationInvitation]:
+    """Get invitation by ID."""
+    return await db.get(OrganizationInvitation, invitation_id)
 
 
 async def mark_invitation_accepted(
@@ -270,6 +278,18 @@ async def mark_invitation_accepted(
     """Mark invitation as accepted"""
     invitation.status = "accepted"
     invitation.accepted_at = datetime.now(timezone.utc)
+    db.add(invitation)
+    await db.commit()
+    await db.refresh(invitation)
+    return invitation
+
+
+async def cancel_invitation(
+    db: AsyncSession, invitation: OrganizationInvitation
+) -> OrganizationInvitation:
+    """Cancel a pending invitation and free its reserved seat."""
+    invitation.status = "declined"
+    invitation.expires_at = datetime.now(timezone.utc)
     db.add(invitation)
     await db.commit()
     await db.refresh(invitation)

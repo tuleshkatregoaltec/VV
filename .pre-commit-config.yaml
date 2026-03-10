@@ -21,6 +21,6 @@ repos:
         files: ^backend/.*\.py$
       - id: frontend-biome
         name: frontend biome
-        entry: bash -lc 'cd frontend && set -- "${@/#frontend\//}"; ./node_modules/.bin/biome check --write --diagnostic-level=error "$@"' --
+        entry: bash -lc 'cd frontend && set -- "${@/#frontend\//}"; ./node_modules/.bin/biome check --diagnostic-level=error "$@"' --
         language: system
         files: ^frontend/

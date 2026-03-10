@@ -3,7 +3,6 @@ from http.client import HTTPConnection
 from starlette.authentication import AuthenticationBackend, AuthenticationError
 
 from app.auth.service import get_auth_user
-
 from app.providers.auth.platform_user import PlatformUser
 
 # based on starlette.authentication.AuthenticationBackend

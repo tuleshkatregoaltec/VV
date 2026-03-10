@@ -1,27 +1,27 @@
 <script lang="ts">
-	interface Props {
-		label: string;
-		type?: string;
-		value: string;
-		placeholder?: string;
-		error?: string;
-		disabled?: boolean;
-		required?: boolean;
-		autocomplete?: 'off' | 'on' | 'email' | 'username' | 'given-name' | 'family-name' | 'name';
-		id?: string;
-	}
+interface Props {
+	label: string
+	type?: string
+	value: string
+	placeholder?: string
+	error?: string
+	disabled?: boolean
+	required?: boolean
+	autocomplete?: 'off' | 'on' | 'email' | 'username' | 'given-name' | 'family-name' | 'name'
+	id?: string
+}
 
-	let {
-		label,
-		type = 'text',
-		value = $bindable(''),
-		placeholder = '',
-		error = '',
-		disabled = false,
-		required = false,
-		autocomplete = 'off',
-		id = `input-${Math.random().toString(36).substring(2, 11)}`
-	}: Props = $props();
+let {
+	label,
+	type = 'text',
+	value = $bindable(''),
+	placeholder = '',
+	error = '',
+	disabled = false,
+	required = false,
+	autocomplete = 'off',
+	id = `input-${Math.random().toString(36).substring(2, 11)}`
+}: Props = $props()
 </script>
 
 <div class="w-full">

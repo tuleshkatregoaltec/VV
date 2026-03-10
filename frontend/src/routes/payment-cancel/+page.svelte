@@ -1,3 +1,7 @@
+<script lang="ts">
+import { resolve } from '$app/paths'
+</script>
+
 <svelte:head>
 	<title>Payment Cancelled - Vitevue</title>
 </svelte:head>
@@ -31,7 +35,7 @@
 
 			<div class="space-y-3">
 				<a
-					href="/organization-setup"
+					href={resolve('/setup')}
 					class="block w-full bg-slate-900 hover:bg-slate-800 text-white font-semibold rounded-lg px-6 py-3 transition-colors"
 				>
 					Try Again

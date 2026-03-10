@@ -1,11 +1,11 @@
-import { env } from '$env/dynamic/public';
-import { browser } from '$app/environment';
+import { browser } from '$app/environment'
+import { env } from '$env/dynamic/public'
 
-import { get_access_token } from './auth';
+import { get_access_token } from './auth'
 
 interface ErrorDetail {
-	code: string;
-	message: string;
+	code: string
+	message: string
 }
 
 export class ApiError extends Error {
@@ -15,25 +15,25 @@ export class ApiError extends Error {
 		public code?: string,
 		public details?: unknown
 	) {
-		super(message);
-		this.name = 'ApiError';
+		super(message)
+		this.name = 'ApiError'
 	}
 }
 
 export interface RequestOptions {
-	method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
-	body?: unknown;
-	headers?: Record<string, string>;
-	returnBlob?: boolean;
+	method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
+	body?: unknown
+	headers?: Record<string, string>
+	returnBlob?: boolean
 }
 
 export async function api<T>(endpoint: string, options: RequestOptions = {}): Promise<T> {
-	const { method = 'GET', body, headers = {}, returnBlob = false } = options;
+	const { method = 'GET', body, headers = {}, returnBlob = false } = options
 
 	// if access token available, add auth header.
-	const access_token = await get_access_token();
+	const access_token = await get_access_token()
 	if (access_token) {
-		headers['Authorization'] = `Bearer ${access_token}`;
+		headers.Authorization = `Bearer ${access_token}`
 	}
 
 	const config: RequestInit = {
@@ -42,66 +42,66 @@ export async function api<T>(endpoint: string, options: RequestOptions = {}): Pr
 		headers: {
 			...headers
 		}
-	};
+	}
 
 	if (body !== undefined) {
 		config.headers = {
 			'Content-Type': 'application/json',
 			...config.headers
-		};
-		config.body = JSON.stringify(body);
+		}
+		config.body = JSON.stringify(body)
 	}
-	// @ts-ignore - Using window.fetch in CSR-only mode
-	const res = await fetch(`${env.PUBLIC_API_BASE_URL}${endpoint}`, config);
+	// @ts-expect-error - Using window.fetch in CSR-only mode
+	const res = await fetch(`${env.PUBLIC_API_BASE_URL}${endpoint}`, config)
 
 	if (!res.ok) {
 		// 401 = expired/invalid JWT — clear session and redirect to auth
 		if (browser && res.status === 401) {
-			const { clearUser } = await import('$lib/stores/user.svelte');
-			clearUser();
-			window.location.href = '/auth';
-			throw new ApiError('Session expired', 401);
+			const { clearUser } = await import('$lib/stores/user.svelte')
+			clearUser()
+			window.location.href = '/auth'
+			throw new ApiError('Session expired', 401)
 		}
 
-		let details: unknown;
-		let message = res.statusText;
-		let errorCode: string | undefined;
+		let details: unknown
+		let message = res.statusText
+		let errorCode: string | undefined
 
 		try {
-			const data = await res.json();
-			details = data;
+			const data = await res.json()
+			details = data
 
 			// Check for structured error response
 			if (data.detail && typeof data.detail === 'object' && 'code' in data.detail) {
-				const errorDetail = data.detail as ErrorDetail;
-				errorCode = errorDetail.code;
-				message = errorDetail.message;
+				const errorDetail = data.detail as ErrorDetail
+				errorCode = errorDetail.code
+				message = errorDetail.message
 			} else if (Array.isArray(data.detail)) {
-				message = data.detail.map((e: { msg: string }) => e.msg).join(', ');
+				message = data.detail.map((e: { msg: string }) => e.msg).join(', ')
 			} else if (typeof data.detail === 'string') {
-				message = data.detail;
+				message = data.detail
 			} else if (data.message) {
-				message = data.message;
+				message = data.message
 			}
 		} catch {
 			// Response wasn't JSON, use statusText
 		}
 
-		throw new ApiError(message, res.status, errorCode, details);
+		throw new ApiError(message, res.status, errorCode, details)
 	}
 
 	if (res.status === 204) {
-		return undefined as T;
+		return undefined as T
 	}
 
 	if (returnBlob) {
-		return res.blob() as Promise<T>;
+		return res.blob() as Promise<T>
 	}
 
-	return res.json();
+	return res.json()
 }
 
-export type StreamCallback = (chunk: string) => void;
+export type StreamCallback = (chunk: string) => void
 
 /**
  * Stream SSE responses using fetch with ReadableStream.
@@ -112,16 +112,16 @@ export async function stream(
 	onChunk: StreamCallback,
 	options: { method?: 'GET' | 'POST'; body?: unknown } = {}
 ) {
-	const { method = 'GET', body } = options;
+	const { method = 'GET', body } = options
 
-	let abortController = new AbortController();
-	let streamComplete = false;
+	const abortController = new AbortController()
+	let streamComplete = false
 
 	// if access token available, add auth header.
-	const access_token = await get_access_token();
-	const headers: Record<string, string> = {};
+	const access_token = await get_access_token()
+	const headers: Record<string, string> = {}
 	if (access_token) {
-		headers['Authorization'] = `Bearer ${access_token}`;
+		headers.Authorization = `Bearer ${access_token}`
 	}
 
 	const config: RequestInit = {
@@ -131,70 +131,70 @@ export async function stream(
 		headers: {
 			...headers
 		}
-	};
+	}
 
 	if (body !== undefined) {
 		config.headers = {
 			'Content-Type': 'application/json',
 			...config.headers
-		};
-		config.body = JSON.stringify(body);
+		}
+		config.body = JSON.stringify(body)
 	}
 
 	// Start streaming
-	// @ts-ignore - Using window.fetch in CSR-only mode
+	// @ts-expect-error - Using window.fetch in CSR-only mode
 	fetch(`${env.PUBLIC_API_BASE_URL}${endpoint}`, config)
 		.then(async (response) => {
 			if (!response.ok) {
 				if (response.status === 429) {
 					// Token limit exceeded
-					const errorData = await response.text().catch(() => 'Daily token limit exceeded');
-					throw new Error(`TOKEN_LIMIT_EXCEEDED: ${errorData}`);
+					const errorData = await response.text().catch(() => 'Daily token limit exceeded')
+					throw new Error(`TOKEN_LIMIT_EXCEEDED: ${errorData}`)
 				}
-				throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+				throw new Error(`HTTP ${response.status}: ${response.statusText}`)
 			}
 
-			const reader = response.body?.pipeThrough(new TextDecoderStream()).getReader();
+			const reader = response.body?.pipeThrough(new TextDecoderStream()).getReader()
 			if (!reader) {
-				throw new Error('Response body is not readable');
+				throw new Error('Response body is not readable')
 			}
 
-			let buffer = '';
+			let buffer = ''
 
 			while (true) {
-				const { value, done } = await reader.read();
-				if (done) break;
+				const { value, done } = await reader.read()
+				if (done) break
 
 				// Add new data to buffer
-				buffer += value;
+				buffer += value
 
 				// Process complete SSE messages (separated by \n\n)
-				const messages = buffer.split('\n\n');
+				const messages = buffer.split('\n\n')
 
 				// Keep the last incomplete message in buffer
-				buffer = messages.pop() || '';
+				buffer = messages.pop() || ''
 
 				// Process complete messages
 				for (const message of messages) {
-					if (!message.trim()) continue;
+					if (!message.trim()) continue
 
 					// Extract data from SSE format (data: {...})
-					const lines = message.split('\n');
+					const lines = message.split('\n')
 					for (const line of lines) {
 						if (line.startsWith('data: ')) {
-							const data = line.slice(6); // Remove 'data: ' prefix
+							const data = line.slice(6) // Remove 'data: ' prefix
 
 							// Check if stream is complete
 							try {
-								const parsed = JSON.parse(data);
+								const parsed = JSON.parse(data)
 								if (parsed.type === 'done') {
-									streamComplete = true;
+									streamComplete = true
 								}
 							} catch {
 								// Not JSON, ignore
 							}
 
-							onChunk(data);
+							onChunk(data)
 						}
 					}
 				}
@@ -202,28 +202,28 @@ export async function stream(
 		})
 		.catch((error) => {
 			if (error.name === 'AbortError') {
-				return; // Stream was intentionally closed
+				return // Stream was intentionally closed
 			}
 
-			console.error('Stream error:', error);
+			console.error('Stream error:', error)
 
 			// Only send error if stream wasn't completed normally
 			if (!streamComplete) {
 				if (error.message.startsWith('TOKEN_LIMIT_EXCEEDED:')) {
 					onChunk(
 						JSON.stringify({ type: 'error', error: 'token_limit_exceeded', details: error.message })
-					);
+					)
 				} else {
-					onChunk(JSON.stringify({ type: 'error', error: 'Stream connection failed' }));
+					onChunk(JSON.stringify({ type: 'error', error: 'Stream connection failed' }))
 				}
 			}
-		});
+		})
 
 	return {
 		close: () => {
-			abortController.abort();
+			abortController.abort()
 		}
-	};
+	}
 }
 
 /**
@@ -235,4 +235,4 @@ export const http = {
 	put: <T>(endpoint: string, body?: unknown) => api<T>(endpoint, { method: 'PUT', body }),
 	patch: <T>(endpoint: string, body?: unknown) => api<T>(endpoint, { method: 'PATCH', body }),
 	delete: <T>(endpoint: string) => api<T>(endpoint, { method: 'DELETE' })
-};
+}

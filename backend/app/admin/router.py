@@ -3,48 +3,46 @@ from datetime import date
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlmodel import select, func
+from sqlmodel import func, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.core.dependencies import require_admin
-from app.postgres import get_db_session
-from app.token_usage.models import UserTokenUsage, UserTokenStatsResponse
-from app.auth.service import (
-    get_user_by_id,
-    update_user_token_limit,
-    create_user_admin,
-    delete_user_admin,
-)
-from app.organization.models import Organization, OrganizationMembership
-from app.organization.service import (
-    get_membership_for_user,
-    get_owner_membership_for_org,
-    create_organization,
-    update_organization,
-    delete_organization,
-    add_user_to_organization,
-    remove_user_from_organization,
-    update_subscription_status,
-)
-from app.billing.models import Subscription
 from app.admin.models import (
+    CreateUserRequest,
+    CreateUserResponse,
     OrganizationListResponse,
     OrganizationMemberResponse,
     OrgDetailResponse,
     OrgUserResponse,
     UpdateOrgRequest,
     UpdateSubscriptionRequest,
-    CreateUserRequest,
-    CreateUserResponse,
-    UserDetailResponse,
     UpdateUserRequest,
+    UserDetailResponse,
 )
+from app.auth.service import (
+    create_user_admin,
+    delete_user_admin,
+    get_user_by_id,
+    update_user_token_limit,
+)
+from app.billing.models import Subscription
+from app.core.dependencies import require_admin
+from app.organization.models import Organization, OrganizationMembership
+from app.organization.service import (
+    add_user_to_organization,
+    create_organization,
+    delete_organization,
+    get_membership_for_user,
+    get_owner_membership_for_org,
+    remove_user_from_organization,
+    update_organization,
+    update_subscription_status,
+)
+from app.postgres import get_db_session
+from app.token_usage.models import UserTokenStatsResponse, UserTokenUsage
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(
-    prefix="/api/v1/admin", tags=["admin"], dependencies=[Depends(require_admin)]
-)
+router = APIRouter(prefix="/api/v1/admin", tags=["admin"], dependencies=[Depends(require_admin)])
 
 
 async def get_owner_email(db: AsyncSession, org_id: str) -> str:
@@ -105,9 +103,7 @@ async def get_organization(org_id: str, db: AsyncSession = Depends(get_db_sessio
         raise HTTPException(status_code=404, detail="Organization not found")
 
     memberships_result = await db.execute(
-        select(OrganizationMembership).where(
-            OrganizationMembership.organization_id == org_id
-        )
+        select(OrganizationMembership).where(OrganizationMembership.organization_id == org_id)
     )
     memberships = memberships_result.scalars().all()
 
@@ -201,9 +197,7 @@ async def update_org(
     )
 
 
-@router.patch(
-    "/organizations/{org_id}/subscription", response_model=OrganizationListResponse
-)
+@router.patch("/organizations/{org_id}/subscription", response_model=OrganizationListResponse)
 async def set_subscription_status(
     org_id: str,
     request: UpdateSubscriptionRequest,
@@ -291,18 +285,12 @@ async def list_token_usage(db: AsyncSession = Depends(get_db_session)):
 
 
 @router.post("/users", response_model=CreateUserResponse, status_code=201)
-async def create_user(
-    request: CreateUserRequest, db: AsyncSession = Depends(get_db_session)
-):
+async def create_user(request: CreateUserRequest, db: AsyncSession = Depends(get_db_session)):
     """Create a Supabase user and assign to an org (new or existing)."""
     if request.org_mode == "new" and not request.org_name:
-        raise HTTPException(
-            status_code=400, detail="org_name required when org_mode='new'"
-        )
+        raise HTTPException(status_code=400, detail="org_name required when org_mode='new'")
     if request.org_mode == "existing" and not request.org_id:
-        raise HTTPException(
-            status_code=400, detail="org_id required when org_mode='existing'"
-        )
+        raise HTTPException(status_code=400, detail="org_id required when org_mode='existing'")
 
     # Create Supabase user
     try:
@@ -340,9 +328,7 @@ async def create_user(
             await delete_user_admin(user_id)
         except Exception as cleanup_err:
             logger.error(f"Failed to cleanup orphan user {user_id}: {cleanup_err}")
-        raise HTTPException(
-            status_code=500, detail="Failed to assign user to organization"
-        )
+        raise HTTPException(status_code=500, detail="Failed to assign user to organization")
 
     return CreateUserResponse(
         user_id=user_id,

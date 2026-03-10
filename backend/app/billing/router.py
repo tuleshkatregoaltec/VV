@@ -1,17 +1,16 @@
 from fastapi import APIRouter, Depends, HTTPException
-from sqlmodel.ext.asyncio.session import AsyncSession
 from pydantic import BaseModel
+from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.postgres import get_db_session
-from app.core.dependencies import require_auth
-from app.providers.auth.platform_user import PlatformUser
-from app.auth.service import update_user_profile_metadata
 from app.billing.models import (
     CheckoutSessionRequest,
     CheckoutSessionResponse,
     PaymentSyncResponse,
 )
 from app.billing.service import create_checkout_session, sync_after_checkout
+from app.core.dependencies import require_auth
+from app.postgres import get_db_session
+from app.providers.auth.platform_user import PlatformUser
 
 router = APIRouter(prefix="/api/v1/billing", tags=["billing"])
 
@@ -29,10 +28,7 @@ async def create_checkout_session_endpoint(
     User profile (first_name/last_name) must be set in auth metadata.
     """
     # Verify user has profile set
-    if (
-        not current_user.user_metadata.first_name
-        or not current_user.user_metadata.last_name
-    ):
+    if not current_user.user_metadata.first_name or not current_user.user_metadata.last_name:
         raise HTTPException(
             status_code=400,
             detail="Profile incomplete. Please set first name and last name before checkout.",
