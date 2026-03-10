@@ -264,3 +264,5 @@ data/
 
 AGENTS.md
 CLAUDE.md
+
+.env.dev
