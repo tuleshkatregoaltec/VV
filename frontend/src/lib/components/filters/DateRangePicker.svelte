@@ -69,9 +69,7 @@
 		</div>
 
 		{#if localStart || localEnd}
-			<button type="button" onclick={clearDates} class="clear-btn" title="Clear dates">
-				×
-			</button>
+			<button type="button" onclick={clearDates} class="clear-btn" title="Clear dates"> × </button>
 		{/if}
 	</div>
 </div>

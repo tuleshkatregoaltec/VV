@@ -122,12 +122,16 @@
 	<title>Payment Successful - Vitevue</title>
 </svelte:head>
 
-<div class="min-h-screen bg-gradient-to-br from-slate-50 to-white flex items-center justify-center p-4">
+<div
+	class="min-h-screen bg-gradient-to-br from-slate-50 to-white flex items-center justify-center p-4"
+>
 	<div class="w-full max-w-2xl">
 		{#if status === 'syncing'}
 			<div class="bg-white rounded-xl shadow-lg p-12 text-center">
 				<div class="mb-6">
-					<div class="inline-block animate-spin rounded-full h-16 w-16 border-4 border-slate-200 border-t-slate-900"></div>
+					<div
+						class="inline-block animate-spin rounded-full h-16 w-16 border-4 border-slate-200 border-t-slate-900"
+					></div>
 				</div>
 				<h1 class="text-2xl font-bold text-slate-900 mb-2">Setting up your organization...</h1>
 				<p class="text-slate-600">This will only take a moment</p>
@@ -135,8 +139,18 @@
 		{:else if status === 'failed'}
 			<div class="bg-white rounded-xl shadow-lg p-12 text-center">
 				<div class="mb-6">
-					<svg class="w-16 h-16 text-red-500 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+					<svg
+						class="w-16 h-16 text-red-500 mx-auto"
+						fill="none"
+						stroke="currentColor"
+						viewBox="0 0 24 24"
+					>
+						<path
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							stroke-width="2"
+							d="M6 18L18 6M6 6l12 12"
+						></path>
 					</svg>
 				</div>
 				<h1 class="text-2xl font-bold text-slate-900 mb-2">Payment Failed</h1>
@@ -152,8 +166,18 @@
 			<div class="bg-white rounded-xl shadow-lg p-8">
 				<div class="mb-8 text-center">
 					<div class="mb-4">
-						<svg class="w-16 h-16 text-green-500 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+						<svg
+							class="w-16 h-16 text-green-500 mx-auto"
+							fill="none"
+							stroke="currentColor"
+							viewBox="0 0 24 24"
+						>
+							<path
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								stroke-width="2"
+								d="M5 13l4 4L19 7"
+							></path>
 						</svg>
 					</div>
 					<h1 class="text-3xl font-bold text-slate-900 mb-2">Payment Successful!</h1>
@@ -166,7 +190,8 @@
 						<span class="text-sm text-slate-500">(Optional)</span>
 					</div>
 					<p class="text-slate-600 text-sm mb-4">
-						Invite team members now or do it later from settings. Each member will receive an email invitation.
+						Invite team members now or do it later from settings. Each member will receive an email
+						invitation.
 					</p>
 				</div>
 
@@ -191,10 +216,17 @@
 							{#if inviteEmails.length > 1}
 								<button
 									type="button"
-									onclick={() => removeEmailField(index)}								aria-label="Remove email field"									class="p-2 text-slate-400 hover:text-red-500 transition-colors"
+									onclick={() => removeEmailField(index)}
+									aria-label="Remove email field"
+									class="p-2 text-slate-400 hover:text-red-500 transition-colors"
 								>
 									<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+										<path
+											stroke-linecap="round"
+											stroke-linejoin="round"
+											stroke-width="2"
+											d="M6 18L18 6M6 6l12 12"
+										></path>
 									</svg>
 								</button>
 							{/if}
@@ -208,7 +240,8 @@
 					class="mb-6 text-sm text-slate-600 hover:text-slate-900 flex items-center gap-1"
 				>
 					<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"
+						></path>
 					</svg>
 					Add another email
 				</button>

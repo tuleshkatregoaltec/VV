@@ -6,7 +6,7 @@
 	import type { ProjectSearchResult } from '$lib/api/projects';
 
 	let {
-		onApply,
+		onApply
 	}: {
 		onApply: (data: ComparableData) => void;
 	} = $props();
@@ -19,14 +19,14 @@
 	const allQuery = createQuery<ProjectSearchResult[]>(() => ({
 		queryKey: ['projects-list'],
 		queryFn: () => projectsAPI.list(),
-		staleTime: Infinity,
+		staleTime: Infinity
 	}));
 
 	const filtered = $derived(
 		search.trim()
-			? (allQuery.data ?? []).filter((p) =>
-					p.project_name.toLowerCase().includes(search.toLowerCase())
-			  ).slice(0, 60)
+			? (allQuery.data ?? [])
+					.filter((p) => p.project_name.toLowerCase().includes(search.toLowerCase()))
+					.slice(0, 60)
 			: (allQuery.data ?? []).slice(0, 60)
 	);
 
@@ -59,7 +59,11 @@
 			if (!node.contains(e.target as Node)) cb();
 		}
 		document.addEventListener('mousedown', handle, true);
-		return { destroy() { document.removeEventListener('mousedown', handle, true); } };
+		return {
+			destroy() {
+				document.removeEventListener('mousedown', handle, true);
+			}
+		};
 	}
 </script>
 
@@ -73,7 +77,12 @@
 	<div class="relative mb-4" use:clickOutside={() => (isOpen = false)}>
 		<div class="pointer-events-none absolute inset-y-0 left-3 flex items-center">
 			<svg class="w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+				<path
+					stroke-linecap="round"
+					stroke-linejoin="round"
+					stroke-width="2"
+					d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+				/>
 			</svg>
 		</div>
 		<input
@@ -85,7 +94,9 @@
 			onfocus={() => (isOpen = true)}
 		/>
 		{#if isOpen}
-			<div class="absolute z-50 mt-1 w-full max-h-60 overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-lg">
+			<div
+				class="absolute z-50 mt-1 w-full max-h-60 overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-lg"
+			>
 				{#if allQuery.isPending}
 					<div class="px-4 py-3 text-sm text-slate-400">Loading projects...</div>
 				{:else if filtered.length === 0}
@@ -104,8 +115,18 @@
 								<span class="text-slate-400 ml-2">{p.area_name}</span>
 							</span>
 							{#if isSelected}
-								<svg class="w-4 h-4 text-teal-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7" />
+								<svg
+									class="w-4 h-4 text-teal-500 flex-shrink-0"
+									fill="none"
+									viewBox="0 0 24 24"
+									stroke="currentColor"
+								>
+									<path
+										stroke-linecap="round"
+										stroke-linejoin="round"
+										stroke-width="2.5"
+										d="M5 13l4 4L19 7"
+									/>
 								</svg>
 							{/if}
 						</button>
@@ -119,11 +140,22 @@
 	{#if selected.length > 0}
 		<div class="flex flex-wrap gap-2 mb-6">
 			{#each selected as p}
-				<span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-teal-100 text-teal-800 text-sm font-medium">
+				<span
+					class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-teal-100 text-teal-800 text-sm font-medium"
+				>
 					{p.project_name}
-					<button type="button" onclick={() => remove(p.project_id)} class="text-teal-500 hover:text-teal-700">
+					<button
+						type="button"
+						onclick={() => remove(p.project_id)}
+						class="text-teal-500 hover:text-teal-700"
+					>
 						<svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+							<path
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								stroke-width="2"
+								d="M6 18L18 6M6 6l12 12"
+							/>
 						</svg>
 					</button>
 				</span>
@@ -138,7 +170,9 @@
 		disabled={selected.length === 0 || loading}
 	>
 		{#if loading}
-			<div class="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+			<div
+				class="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"
+			></div>
 			Analysing comparables...
 		{:else}
 			Use {selected.length} comparable{selected.length !== 1 ? 's' : ''} →

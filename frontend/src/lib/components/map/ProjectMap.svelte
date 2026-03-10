@@ -48,7 +48,6 @@
 			console.error('Map error:', e);
 		});
 
-
 		return () => {
 			map?.remove();
 		};
@@ -134,7 +133,8 @@
 
 		pins.forEach((pin) => {
 			const markerEl = document.createElement('div');
-			markerEl.style.cssText = 'cursor: pointer; display: flex; flex-direction: column; align-items: center;';
+			markerEl.style.cssText =
+				'cursor: pointer; display: flex; flex-direction: column; align-items: center;';
 			markerEl.innerHTML = `
 				<svg width="28" height="36" viewBox="0 0 28 36" fill="none" xmlns="http://www.w3.org/2000/svg">
 					<path d="M14 0C6.268 0 0 6.268 0 14C0 24.5 14 36 14 36C14 36 28 24.5 28 14C28 6.268 21.732 0 14 0Z" fill="#0d9488"/>
@@ -148,13 +148,17 @@
 				closeButton: false,
 				closeOnClick: false,
 				className: 'building-popup'
-			}).setHTML(`<div style="font-size:13px;font-weight:600;color:#0f172a;white-space:nowrap;padding:2px 0;">${label}</div>`);
+			}).setHTML(
+				`<div style="font-size:13px;font-weight:600;color:#0f172a;white-space:nowrap;padding:2px 0;">${label}</div>`
+			);
 
 			const marker = new maplibregl.Marker({ element: markerEl })
 				.setLngLat([pin.longitude, pin.latitude])
 				.addTo(map!);
 
-			markerEl.addEventListener('mouseenter', () => popup.addTo(map!).setLngLat([pin.longitude, pin.latitude]));
+			markerEl.addEventListener('mouseenter', () =>
+				popup.addTo(map!).setLngLat([pin.longitude, pin.latitude])
+			);
 			markerEl.addEventListener('mouseleave', () => popup.remove());
 			markerEl.addEventListener('click', () => onBuildingPinClick?.(pin));
 
@@ -164,7 +168,12 @@
 	}
 
 	// Add or update a marker on the map
-	export function addProjectMarker(projectId: number, projectName: string, latitude: number, longitude: number) {
+	export function addProjectMarker(
+		projectId: number,
+		projectName: string,
+		latitude: number,
+		longitude: number
+	) {
 		// Remove previous marker if exists
 		if (currentMarker) {
 			currentMarker.remove();
@@ -172,7 +181,8 @@
 
 		// Create marker element
 		const markerEl = document.createElement('div');
-		markerEl.className = 'w-10 h-10 bg-teal-600 rounded-full flex items-center justify-center shadow-lg border-2 border-white cursor-pointer hover:bg-teal-700 transition-colors';
+		markerEl.className =
+			'w-10 h-10 bg-teal-600 rounded-full flex items-center justify-center shadow-lg border-2 border-white cursor-pointer hover:bg-teal-700 transition-colors';
 		markerEl.innerHTML = `
 			<svg class="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 20 20">
 				<path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16z" clip-rule="evenodd" />
@@ -185,8 +195,9 @@
 			.addTo(map!);
 
 		// Create popup
-		const popup = new maplibregl.Popup({ offset: 25 })
-			.setHTML(`<div class="font-semibold text-sm">${projectName}</div>`);
+		const popup = new maplibregl.Popup({ offset: 25 }).setHTML(
+			`<div class="font-semibold text-sm">${projectName}</div>`
+		);
 
 		marker.setPopup(popup);
 

@@ -23,9 +23,28 @@ export const RESIDENTIAL_COLUMNS: ColumnDefinition[] = [
 	{ id: 'building', label: 'Building', align: 'left', defaultVisible: true },
 	{ id: 'propertyType', label: 'Property Type', align: 'left', defaultVisible: true },
 	{ id: 'bedrooms', label: 'Bedrooms', align: 'left', badge: true, defaultVisible: true },
-	{ id: 'area', label: 'Area (sq.m)', align: 'right', format: (val: number) => val.toLocaleString(), defaultVisible: true },
-	{ id: 'price', label: 'Price (AED)', align: 'right', format: (val: number) => val.toLocaleString(), defaultVisible: true },
-	{ id: 'pricePerSqM', label: 'Price/sq.m', align: 'right', highlighted: true, format: (val: number) => val.toLocaleString(), defaultVisible: true },
+	{
+		id: 'area',
+		label: 'Area (sq.m)',
+		align: 'right',
+		format: (val: number) => val.toLocaleString(),
+		defaultVisible: true
+	},
+	{
+		id: 'price',
+		label: 'Price (AED)',
+		align: 'right',
+		format: (val: number) => val.toLocaleString(),
+		defaultVisible: true
+	},
+	{
+		id: 'pricePerSqM',
+		label: 'Price/sq.m',
+		align: 'right',
+		highlighted: true,
+		format: (val: number) => val.toLocaleString(),
+		defaultVisible: true
+	},
 	{ id: 'registration', label: 'Registration', align: 'left', defaultVisible: false },
 	{ id: 'trans_group', label: 'Group', align: 'left', defaultVisible: false },
 	{ id: 'procedure_name', label: 'Procedure', align: 'left', defaultVisible: false },
@@ -41,9 +60,28 @@ export const COMMERCIAL_COLUMNS: ColumnDefinition[] = [
 	{ id: 'building', label: 'Building', align: 'left', defaultVisible: true },
 	{ id: 'propertyType', label: 'Property Type', align: 'left', defaultVisible: true },
 	{ id: 'propertySubType', label: 'Sub Type', align: 'left', defaultVisible: true },
-	{ id: 'area', label: 'Area (sq.m)', align: 'right', format: (val: number) => val.toLocaleString(), defaultVisible: true },
-	{ id: 'price', label: 'Price (AED)', align: 'right', format: (val: number) => val.toLocaleString(), defaultVisible: true },
-	{ id: 'pricePerSqM', label: 'Price/sq.m', align: 'right', highlighted: true, format: (val: number) => val.toLocaleString(), defaultVisible: true },
+	{
+		id: 'area',
+		label: 'Area (sq.m)',
+		align: 'right',
+		format: (val: number) => val.toLocaleString(),
+		defaultVisible: true
+	},
+	{
+		id: 'price',
+		label: 'Price (AED)',
+		align: 'right',
+		format: (val: number) => val.toLocaleString(),
+		defaultVisible: true
+	},
+	{
+		id: 'pricePerSqM',
+		label: 'Price/sq.m',
+		align: 'right',
+		highlighted: true,
+		format: (val: number) => val.toLocaleString(),
+		defaultVisible: true
+	},
 	{ id: 'registration', label: 'Registration', align: 'left', defaultVisible: false },
 	{ id: 'trans_group', label: 'Group', align: 'left', defaultVisible: false },
 	{ id: 'procedure_name', label: 'Procedure', align: 'left', defaultVisible: false },

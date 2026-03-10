@@ -49,10 +49,15 @@
 	<div class="flex h-full min-h-0 overflow-hidden">
 		{#if feasibilityStore.step === 4}
 			<div
-				class="flex-shrink-0 overflow-hidden h-full {isResizing ? '' : 'transition-[width] duration-300 ease-in-out'}"
+				class="flex-shrink-0 overflow-hidden h-full {isResizing
+					? ''
+					: 'transition-[width] duration-300 ease-in-out'}"
 				style="width: {showConfigurator ? leftWidth : 0}px;"
 			>
-				<div class="h-full flex flex-col bg-white border-r border-slate-200 overflow-hidden" style="width: {leftWidth}px; min-width: {leftWidth}px;">
+				<div
+					class="h-full flex flex-col bg-white border-r border-slate-200 overflow-hidden"
+					style="width: {leftWidth}px; min-width: {leftWidth}px;"
+				>
 					<div class="px-3 pt-3 pb-2 border-b border-slate-200 flex-shrink-0">
 						<div class="flex items-center justify-between gap-2">
 							<p class="text-xs font-medium text-slate-700 truncate">
@@ -65,7 +70,8 @@
 								<button
 									onclick={() => feasibilityStore.devJump()}
 									class="text-[10px] text-slate-400 hover:text-teal-600 border border-dashed border-slate-300 hover:border-teal-400 rounded px-1.5 py-0.5 transition-colors shrink-0"
-								>dev</button>
+									>dev</button
+								>
 							{/if}
 						</div>
 					</div>
@@ -90,11 +96,27 @@
 					onclick={() => (showConfigurator = !showConfigurator)}
 				>
 					{#if showConfigurator}
-						<svg class="w-2.5 h-2.5" viewBox="0 0 8 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+						<svg
+							class="w-2.5 h-2.5"
+							viewBox="0 0 8 12"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+						>
 							<path d="M6 1L2 6l4 5" />
 						</svg>
 					{:else}
-						<svg class="w-2.5 h-2.5" viewBox="0 0 8 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+						<svg
+							class="w-2.5 h-2.5"
+							viewBox="0 0 8 12"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+						>
 							<path d="M2 1l4 5-4 5" />
 						</svg>
 					{/if}
@@ -119,12 +141,16 @@
 			<div class="flex-1 min-w-0 overflow-y-auto scrollbar-hide">
 				<div class="max-w-5xl mx-auto px-6 py-8">
 					<div class="flex items-start justify-between">
-						<StepProgress currentStep={feasibilityStore.step} onGoToStep={(s) => feasibilityStore.goToStep(s)} />
+						<StepProgress
+							currentStep={feasibilityStore.step}
+							onGoToStep={(s) => feasibilityStore.goToStep(s)}
+						/>
 						{#if import.meta.env.DEV}
 							<button
 								onclick={() => feasibilityStore.devJump()}
 								class="text-xs text-slate-400 hover:text-teal-600 border border-dashed border-slate-300 hover:border-teal-400 rounded px-2 py-1 transition-colors shrink-0 mt-1"
-							>dev: seed HBU</button>
+								>dev: seed HBU</button
+							>
 						{/if}
 					</div>
 

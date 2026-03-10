@@ -31,15 +31,17 @@
 			type: 'line',
 			data: {
 				labels,
-				datasets: [{
-					data: values,
-					borderColor: '#0d9488',
-					backgroundColor: 'rgba(13,148,136,0.08)',
-					borderWidth: 1.5,
-					pointRadius: 2,
-					tension: 0.3,
-					fill: true,
-				}],
+				datasets: [
+					{
+						data: values,
+						borderColor: '#0d9488',
+						backgroundColor: 'rgba(13,148,136,0.08)',
+						borderWidth: 1.5,
+						pointRadius: 2,
+						tension: 0.3,
+						fill: true
+					}
+				]
 			},
 			options: {
 				responsive: true,
@@ -47,15 +49,18 @@
 				plugins: { legend: { display: false } },
 				scales: {
 					x: { ticks: { font: { size: 9 }, maxTicksLimit: 6 }, grid: { display: false } },
-					y: { ticks: { font: { size: 9 } }, grid: { color: '#f1f5f9' } },
-				},
-			},
+					y: { ticks: { font: { size: 9 } }, grid: { color: '#f1f5f9' } }
+				}
+			}
 		});
 	}
 
 	$effect(() => {
 		if (agentData && canvas) buildChart(agentData);
-		if (!agentData && chart) { chart.destroy(); chart = null; }
+		if (!agentData && chart) {
+			chart.destroy();
+			chart = null;
+		}
 	});
 
 	onMount(() => {
@@ -66,8 +71,11 @@
 <div class="flex flex-col h-full min-h-0 overflow-y-auto scrollbar-hide">
 	{#if agentData}
 		<!-- Agent view -->
-		<div class="px-2 py-1.5 bg-teal-50 border-b border-teal-100 text-[10px] text-teal-700 font-medium flex-shrink-0">
-			Analytics — {agentData.filters.project_name || agentData.filters.area || 'area'} · {agentData.filters.days}d
+		<div
+			class="px-2 py-1.5 bg-teal-50 border-b border-teal-100 text-[10px] text-teal-700 font-medium flex-shrink-0"
+		>
+			Analytics — {agentData.filters.project_name || agentData.filters.area || 'area'} · {agentData
+				.filters.days}d
 		</div>
 
 		<!-- Trend chart -->
@@ -77,22 +85,31 @@
 
 		<!-- By rooms breakdown -->
 		{#if agentData.by_rooms.length > 0}
-			<div class="rounded border border-slate-200 overflow-hidden text-[10px] mx-2 mb-2 mt-1 flex-shrink-0">
-				<div class="grid grid-cols-3 bg-slate-50 border-b border-slate-200 px-2 py-1 font-medium text-slate-400">
+			<div
+				class="rounded border border-slate-200 overflow-hidden text-[10px] mx-2 mb-2 mt-1 flex-shrink-0"
+			>
+				<div
+					class="grid grid-cols-3 bg-slate-50 border-b border-slate-200 px-2 py-1 font-medium text-slate-400"
+				>
 					<span>Type</span>
 					<span class="text-right">Median/sqm</span>
 					<span class="text-right">Count</span>
 				</div>
 				{#each agentData.by_rooms as row (row.rooms_en)}
-					<div class="grid grid-cols-3 px-2 py-1 border-b border-slate-50 last:border-0 hover:bg-slate-50/60">
+					<div
+						class="grid grid-cols-3 px-2 py-1 border-b border-slate-50 last:border-0 hover:bg-slate-50/60"
+					>
 						<span class="text-slate-600">{row.rooms_en}</span>
-						<span class="text-right tabular-nums text-slate-800 font-medium">{fmtK(row.median_price_sqm)}</span>
-						<span class="text-right tabular-nums text-slate-500">{row.txn_count.toLocaleString()}</span>
+						<span class="text-right tabular-nums text-slate-800 font-medium"
+							>{fmtK(row.median_price_sqm)}</span
+						>
+						<span class="text-right tabular-nums text-slate-500"
+							>{row.txn_count.toLocaleString()}</span
+						>
 					</div>
 				{/each}
 			</div>
 		{/if}
-
 	{:else}
 		<!-- Default view: your prices vs comparable market -->
 		<div class="px-2 pt-2 pb-1 flex-shrink-0">
@@ -101,7 +118,9 @@
 				<p class="text-[11px] text-slate-400">No unit types configured.</p>
 			{:else}
 				<div class="rounded border border-slate-200 overflow-hidden text-[10px]">
-					<div class="grid grid-cols-3 bg-slate-50 border-b border-slate-200 px-2 py-1 font-medium text-slate-400">
+					<div
+						class="grid grid-cols-3 bg-slate-50 border-b border-slate-200 px-2 py-1 font-medium text-slate-400"
+					>
 						<span>Type</span>
 						<span class="text-right">Your price</span>
 						<span class="text-right">Comparable</span>
@@ -109,25 +128,42 @@
 					{#each unitTypes as type (type)}
 						{@const yours = pricePerSqm[type] ?? 0}
 						{@const market = marketPrices?.[type] ?? null}
-						<div class="grid grid-cols-3 px-2 py-1.5 border-b border-slate-50 last:border-0 hover:bg-slate-50/60">
+						<div
+							class="grid grid-cols-3 px-2 py-1.5 border-b border-slate-50 last:border-0 hover:bg-slate-50/60"
+						>
 							<span class="text-slate-600 font-medium">{type}</span>
-							<span class="text-right tabular-nums text-slate-800">{yours > 0 ? fmtK(yours) : '—'}</span>
-							<span class="text-right tabular-nums {market ? (yours > market ? 'text-emerald-600' : 'text-slate-500') : 'text-slate-300'}">
+							<span class="text-right tabular-nums text-slate-800"
+								>{yours > 0 ? fmtK(yours) : '—'}</span
+							>
+							<span
+								class="text-right tabular-nums {market
+									? yours > market
+										? 'text-emerald-600'
+										: 'text-slate-500'
+									: 'text-slate-300'}"
+							>
 								{market ? fmtK(market) : '—'}
 							</span>
 						</div>
 					{/each}
 				</div>
 				{#if hbuMarketPricing.length > 0}
-					<p class="text-[9px] text-slate-300 mt-1 text-right">AED/sqm · segmented pricing from HBU evidence</p>
+					<p class="text-[9px] text-slate-300 mt-1 text-right">
+						AED/sqm · segmented pricing from HBU evidence
+					</p>
 				{:else}
-					<p class="text-[9px] text-slate-300 mt-1 text-right">AED/sqm · comparable from seeded data</p>
+					<p class="text-[9px] text-slate-300 mt-1 text-right">
+						AED/sqm · comparable from seeded data
+					</p>
 				{/if}
 			{/if}
 		</div>
 
 		<div class="flex-1 flex items-end justify-center pb-4 px-4 text-center">
-			<p class="text-[10px] text-slate-300">Ask the agent "show me price analytics for {feasibilityStore.area || 'this area'}" for trend data.</p>
+			<p class="text-[10px] text-slate-300">
+				Ask the agent "show me price analytics for {feasibilityStore.area || 'this area'}" for trend
+				data.
+			</p>
 		</div>
 	{/if}
 </div>

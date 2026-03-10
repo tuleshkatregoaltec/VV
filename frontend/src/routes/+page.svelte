@@ -4,7 +4,7 @@
 	import PersonasSection from '$lib/components/landing/PersonasSection.svelte';
 	import PricingSection from '$lib/components/landing/PricingSection.svelte';
 	import PreviewSection from '$lib/components/landing/PreviewSection.svelte';
-import FinalCTA from '$lib/components/landing/FinalCTA.svelte';
+	import FinalCTA from '$lib/components/landing/FinalCTA.svelte';
 	import Footer from '$lib/components/layout/Footer.svelte';
 </script>
 

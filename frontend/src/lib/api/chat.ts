@@ -2,24 +2,24 @@ import { http, stream } from './client';
 import type { StreamCallback } from './client';
 
 export interface Conversation {
-  id: number;
-  user_id: string;
-  title: string | null;
-  created_at: string;
-  updated_at: string;
+	id: number;
+	user_id: string;
+	title: string | null;
+	created_at: string;
+	updated_at: string;
 }
 
 export interface Message {
-  id: number;
-  conversation_id: number;
-  role: string;
-  content: string;
-  created_at: string;
-  tool_call_ids: number[] | null;
+	id: number;
+	conversation_id: number;
+	role: string;
+	content: string;
+	created_at: string;
+	tool_call_ids: number[] | null;
 }
 
 export interface CreateConversationRequest {
-  title?: string;
+	title?: string;
 }
 
 export const chat = {
@@ -40,9 +40,8 @@ export const chat = {
 
 	/** Streams AI response chunks via Server-Sent Events */
 	sendMessage: (conversationId: number, message: string, onChunk: StreamCallback) =>
-		stream(
-			`/api/v1/chat/conversations/${conversationId}/messages/stream`,
-			onChunk,
-			{ method: 'POST', body: { message } }
-		)
+		stream(`/api/v1/chat/conversations/${conversationId}/messages/stream`, onChunk, {
+			method: 'POST',
+			body: { message }
+		})
 };

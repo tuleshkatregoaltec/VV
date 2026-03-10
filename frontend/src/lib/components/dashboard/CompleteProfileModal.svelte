@@ -73,7 +73,9 @@
 	<div class="bg-white rounded-2xl shadow-2xl max-w-md w-full p-8">
 		<!-- Header -->
 		<div class="mb-6 text-center">
-			<div class="w-16 h-16 bg-gradient-to-br from-teal-600 to-cyan-600 rounded-full flex items-center justify-center mx-auto mb-4">
+			<div
+				class="w-16 h-16 bg-gradient-to-br from-teal-600 to-cyan-600 rounded-full flex items-center justify-center mx-auto mb-4"
+			>
 				<svg class="w-8 h-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
 					<path
 						stroke-linecap="round"

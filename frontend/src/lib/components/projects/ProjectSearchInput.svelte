@@ -105,7 +105,12 @@
 			/>
 			<div class="absolute right-3 top-1/2 -translate-y-1/2">
 				<svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+					<path
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						stroke-width="2"
+						d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+					></path>
 				</svg>
 			</div>
 		</div>
@@ -127,7 +132,9 @@
 								<div class="text-xs text-slate-500 mt-0.5">{master.areaName}</div>
 							</div>
 							<div class="flex flex-col items-end gap-1 flex-shrink-0">
-								<span class="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-violet-100 text-violet-700">
+								<span
+									class="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-violet-100 text-violet-700"
+								>
 									Master
 								</span>
 								<span class="text-[10px] text-slate-400">{master.count} projects</span>
@@ -144,7 +151,9 @@
 					>
 						<div class="flex items-start justify-between gap-2">
 							<div class="min-w-0">
-								<div class="text-sm font-semibold text-slate-900 truncate">{result.project_name}</div>
+								<div class="text-sm font-semibold text-slate-900 truncate">
+									{result.project_name}
+								</div>
 								<div class="text-xs text-slate-500 mt-0.5 truncate">
 									{result.master_project_en || result.area_name}
 									{#if result.developer_name}
@@ -152,7 +161,9 @@
 									{/if}
 								</div>
 							</div>
-							<span class="flex-shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-teal-100 text-teal-700 mt-0.5">
+							<span
+								class="flex-shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-teal-100 text-teal-700 mt-0.5"
+							>
 								Project
 							</span>
 						</div>

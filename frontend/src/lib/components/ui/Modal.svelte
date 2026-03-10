@@ -73,12 +73,7 @@
 					class="p-2 rounded-lg hover:bg-gray-100 transition-colors"
 					aria-label="Close modal"
 				>
-					<svg
-						class="w-6 h-6 text-gray-600"
-						fill="none"
-						viewBox="0 0 24 24"
-						stroke="currentColor"
-					>
+					<svg class="w-6 h-6 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
 						<path
 							stroke-linecap="round"
 							stroke-linejoin="round"

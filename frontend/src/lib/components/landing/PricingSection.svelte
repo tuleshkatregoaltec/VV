@@ -23,7 +23,7 @@
 				'Real-time transaction data',
 				'AI-powered market insights',
 				'Advanced analytics dashboard',
-				'Unlimited project tracking',
+				'Unlimited project tracking'
 			],
 			href: '/auth?view=signup&tier=tier1',
 			comingSoon: true
@@ -51,7 +51,7 @@
 				'Tailored to your organization',
 				'Early access to advanced features',
 				'Custom integrations',
-				'Bespoke product suite',
+				'Bespoke product suite'
 			],
 			href: 'mailto:contact@vitevue.com',
 			isContact: true
@@ -62,15 +62,20 @@
 <section id="pricing" class="py-24 bg-gradient-to-b from-white via-slate-50 to-white relative">
 	<div class="max-w-6xl mx-auto px-6 lg:px-8">
 		<div class="text-center mb-16">
-			<h2 class="text-4xl sm:text-5xl font-bold text-slate-900 mb-4">
-				Early bird pricing
-			</h2>
+			<h2 class="text-4xl sm:text-5xl font-bold text-slate-900 mb-4">Early bird pricing</h2>
 			<p class="text-xl text-slate-600 max-w-2xl mx-auto mb-4">
 				Lock in our launch pricing before rates increase
 			</p>
-			<div class="inline-flex items-center gap-2 px-4 py-2 bg-teal-50 border border-teal-200 rounded-full">
+			<div
+				class="inline-flex items-center gap-2 px-4 py-2 bg-teal-50 border border-teal-200 rounded-full"
+			>
 				<svg class="w-4 h-4 text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+					<path
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						stroke-width="2"
+						d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+					></path>
 				</svg>
 				<span class="text-sm font-semibold text-teal-700">Limited time offer</span>
 			</div>
@@ -101,9 +106,14 @@
 									<div class="mb-2">
 										{#if tier.originalPrice}
 											<div class="flex items-baseline gap-2 mb-1">
-												<span class="text-lg text-slate-400 line-through">{tier.originalPrice}</span>
-												<span class="text-xs font-semibold text-teal-600 bg-teal-50 px-2 py-0.5 rounded">
-													Save {Math.round((1 - parseInt(tier.price) / parseInt(tier.originalPrice)) * 100)}%
+												<span class="text-lg text-slate-400 line-through">{tier.originalPrice}</span
+												>
+												<span
+													class="text-xs font-semibold text-teal-600 bg-teal-50 px-2 py-0.5 rounded"
+												>
+													Save {Math.round(
+														(1 - parseInt(tier.price) / parseInt(tier.originalPrice)) * 100
+													)}%
 												</span>
 											</div>
 										{/if}
@@ -138,7 +148,11 @@
 						</div>
 
 						{#if tier.comingSoon}
-							<button type="button" disabled class="block w-full text-center px-6 py-3 rounded-lg font-semibold bg-slate-200 text-slate-400 cursor-not-allowed">
+							<button
+								type="button"
+								disabled
+								class="block w-full text-center px-6 py-3 rounded-lg font-semibold bg-slate-200 text-slate-400 cursor-not-allowed"
+							>
 								Get Started
 							</button>
 						{:else}

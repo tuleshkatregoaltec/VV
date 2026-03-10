@@ -50,7 +50,9 @@
 	<title>Complete Your Profile - Vitevue</title>
 </svelte:head>
 
-<div class="min-h-screen bg-gradient-to-br from-slate-50 to-white flex items-center justify-center p-4">
+<div
+	class="min-h-screen bg-gradient-to-br from-slate-50 to-white flex items-center justify-center p-4"
+>
 	<div class="w-full max-w-md">
 		<div class="bg-white rounded-xl shadow-lg p-8">
 			<!-- Header -->
@@ -65,7 +67,13 @@
 				</div>
 			{/if}
 
-			<form onsubmit={(e) => { e.preventDefault(); handleSubmit(); }} class="space-y-5">
+			<form
+				onsubmit={(e) => {
+					e.preventDefault();
+					handleSubmit();
+				}}
+				class="space-y-5"
+			>
 				<!-- Name Fields -->
 				<TextInput
 					label="First Name"

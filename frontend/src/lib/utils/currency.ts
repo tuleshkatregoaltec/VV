@@ -14,8 +14,12 @@ export function currencySymbol(): string {
 
 /** Area unit conversions. */
 export const SQM_PER_SQFT = 0.092903;
-export function toSqft(sqm: number): number { return sqm / SQM_PER_SQFT; }
-export function fromSqft(sqft: number): number { return sqft * SQM_PER_SQFT; }
+export function toSqft(sqm: number): number {
+	return sqm / SQM_PER_SQFT;
+}
+export function fromSqft(sqft: number): number {
+	return sqft * SQM_PER_SQFT;
+}
 
 /** Format as '000 with brackets for negatives, applying display currency. */
 export function displayK(valueInAED: number): string {

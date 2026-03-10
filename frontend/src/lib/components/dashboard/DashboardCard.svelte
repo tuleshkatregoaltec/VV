@@ -1,7 +1,7 @@
 <script lang="ts">
-  export let title: string;
-  export let value: string | number;
-  export let trend: { value: string; direction: 'up' | 'down' } | null = null;
+	export let title: string;
+	export let value: string | number;
+	export let trend: { value: string; direction: 'up' | 'down' } | null = null;
 </script>
 
 <div
@@ -10,7 +10,9 @@
 	<!-- Header with icon and title -->
 	<div class="flex items-center justify-between mb-3">
 		<h2 class="text-base font-semibold text-slate-700">{title}</h2>
-		<div class="h-6 w-6 text-primary opacity-70 group-hover:opacity-100 transition-opacity duration-300">
+		<div
+			class="h-6 w-6 text-primary opacity-70 group-hover:opacity-100 transition-opacity duration-300"
+		>
 			<slot name="icon" />
 		</div>
 	</div>

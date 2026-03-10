@@ -1,11 +1,11 @@
 /**
  * Unit conversion utilities for area and price per unit area.
- * 
+ *
  * Database stores:
  * - procedure_area: square meters (sqm)
  * - meter_sale_price: price per square meter (AED/sqm)
  * - actual_area (rentals): square meters (sqm)
- * 
+ *
  * Conversion factor: 1 sqm = 10.764 sqft
  */
 
@@ -61,9 +61,9 @@ export function getPricePerAreaLabel(unit: AreaUnit): string {
  */
 export function formatArea(value: number, unit: AreaUnit): string {
 	const converted = convertArea(value, unit);
-	return converted.toLocaleString(undefined, { 
-		minimumFractionDigits: 0, 
-		maximumFractionDigits: 2 
+	return converted.toLocaleString(undefined, {
+		minimumFractionDigits: 0,
+		maximumFractionDigits: 2
 	});
 }
 
@@ -72,8 +72,8 @@ export function formatArea(value: number, unit: AreaUnit): string {
  */
 export function formatPricePerArea(value: number, unit: AreaUnit): string {
 	const converted = convertPricePerArea(value, unit);
-	return converted.toLocaleString(undefined, { 
-		minimumFractionDigits: 0, 
-		maximumFractionDigits: 2 
+	return converted.toLocaleString(undefined, {
+		minimumFractionDigits: 0,
+		maximumFractionDigits: 2
 	});
 }

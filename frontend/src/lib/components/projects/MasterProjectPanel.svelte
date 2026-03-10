@@ -28,14 +28,27 @@
 	<!-- Header -->
 	<div class="border-b border-slate-200 pb-4">
 		<div class="flex items-center gap-2 mb-1">
-			<span class="text-[10px] font-semibold uppercase tracking-wider text-violet-600 bg-violet-50 px-2 py-0.5 rounded-full">Master Project</span>
+			<span
+				class="text-[10px] font-semibold uppercase tracking-wider text-violet-600 bg-violet-50 px-2 py-0.5 rounded-full"
+				>Master Project</span
+			>
 		</div>
 		<h2 class="text-xl font-bold text-slate-900 leading-tight">{master.master_name}</h2>
 		<div class="flex flex-wrap items-center gap-x-2 gap-y-1 mt-2 text-sm text-slate-500">
 			<span class="flex items-center gap-1">
 				<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path>
-					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path>
+					<path
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						stroke-width="2"
+						d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
+					></path>
+					<path
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						stroke-width="2"
+						d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
+					></path>
 				</svg>
 				{master.area_name}
 			</span>
@@ -71,7 +84,9 @@
 					<div>
 						<div class="flex items-center justify-between mb-1">
 							<span class="text-sm font-medium text-slate-700">{unit.property_sub_type}</span>
-							<span class="text-xs text-slate-500">{unit.count.toLocaleString()} · {unit.percentage}%</span>
+							<span class="text-xs text-slate-500"
+								>{unit.count.toLocaleString()} · {unit.percentage}%</span
+							>
 						</div>
 						<div class="w-full bg-slate-200 rounded-full h-1.5">
 							<div
@@ -113,12 +128,26 @@
 						</div>
 						<div class="flex items-center gap-1.5 flex-shrink-0">
 							{#if project.project_status}
-								<span class="text-[10px] font-medium px-1.5 py-0.5 rounded-full {statusColor(project.project_status)}">
+								<span
+									class="text-[10px] font-medium px-1.5 py-0.5 rounded-full {statusColor(
+										project.project_status
+									)}"
+								>
 									{statusLabel(project.project_status)}
 								</span>
 							{/if}
-							<svg class="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+							<svg
+								class="w-3.5 h-3.5 text-slate-400"
+								fill="none"
+								stroke="currentColor"
+								viewBox="0 0 24 24"
+							>
+								<path
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									stroke-width="2"
+									d="M9 5l7 7-7 7"
+								></path>
 							</svg>
 						</div>
 					</div>

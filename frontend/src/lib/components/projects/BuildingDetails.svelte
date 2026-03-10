@@ -18,15 +18,23 @@
 			class="flex items-center gap-1.5 text-xs text-slate-500 hover:text-teal-600 transition-colors mb-3"
 		>
 			<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"
+				></path>
 			</svg>
 			Back to {building.project_name}
 		</button>
 
 		<div class="flex items-start gap-2">
-			<div class="w-8 h-8 bg-amber-500 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5">
+			<div
+				class="w-8 h-8 bg-amber-500 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5"
+			>
 				<svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16"></path>
+					<path
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						stroke-width="2"
+						d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16"
+					></path>
 				</svg>
 			</div>
 			<div>
@@ -86,6 +94,7 @@
 
 	<!-- Note about project-level analytics -->
 	<div class="bg-slate-50 rounded-xl p-3 border border-slate-100 text-xs text-slate-500">
-		Sale price and rental analytics are shown at the project level. Select the project to view full analytics.
+		Sale price and rental analytics are shown at the project level. Select the project to view full
+		analytics.
 	</div>
 </div>

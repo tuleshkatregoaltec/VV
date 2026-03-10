@@ -55,7 +55,11 @@
 		<div class="flex items-start justify-between gap-2 mb-1">
 			<h2 class="text-xl font-bold text-slate-900 leading-tight">{project.project_name}</h2>
 			{#if project.project_status}
-				<span class="flex-shrink-0 text-[10px] font-medium px-2 py-0.5 rounded-full {statusColor(project.project_status)}">
+				<span
+					class="flex-shrink-0 text-[10px] font-medium px-2 py-0.5 rounded-full {statusColor(
+						project.project_status
+					)}"
+				>
 					{statusLabel(project.project_status)}
 				</span>
 			{/if}
@@ -63,8 +67,18 @@
 		<div class="flex flex-wrap items-center gap-x-2 gap-y-1 mt-2 text-sm text-slate-500">
 			<span class="flex items-center gap-1">
 				<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path>
-					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path>
+					<path
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						stroke-width="2"
+						d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
+					></path>
+					<path
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						stroke-width="2"
+						d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
+					></path>
 				</svg>
 				{project.master_project_en || project.area_name}
 			</span>
@@ -130,7 +144,9 @@
 					<div>
 						<div class="flex items-center justify-between mb-1">
 							<span class="text-sm font-medium text-slate-700">{unit_type.property_sub_type}</span>
-							<span class="text-xs text-slate-500">{unit_type.count.toLocaleString()} · {unit_type.percentage}%</span>
+							<span class="text-xs text-slate-500"
+								>{unit_type.count.toLocaleString()} · {unit_type.percentage}%</span
+							>
 						</div>
 						<div class="w-full bg-slate-200 rounded-full h-1.5">
 							<div
@@ -156,7 +172,9 @@
 						onclick={() => handleBuildingClick(pin)}
 						class="w-full flex items-center gap-3 bg-slate-50 rounded-lg px-3 py-2 border border-slate-100 hover:bg-teal-50 hover:border-teal-200 transition-colors text-left"
 					>
-						<span class="w-5 h-5 bg-teal-600 rounded-full flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0">
+						<span
+							class="w-5 h-5 bg-teal-600 rounded-full flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0"
+						>
 							{i + 1}
 						</span>
 						<div class="min-w-0 flex-1">
@@ -164,8 +182,14 @@
 								{pin.building_name || pin.project_name}
 							</div>
 						</div>
-						<svg class="w-4 h-4 {pin.property_id ? 'text-teal-500' : 'text-slate-300'} flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+						<svg
+							class="w-4 h-4 {pin.property_id ? 'text-teal-500' : 'text-slate-300'} flex-shrink-0"
+							fill="none"
+							stroke="currentColor"
+							viewBox="0 0 24 24"
+						>
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"
+							></path>
 						</svg>
 					</button>
 				{/each}
@@ -185,7 +209,9 @@
 				{/if}
 				<div class="flex justify-between">
 					<span class="text-slate-500">Completed</span>
-					<span class="font-medium text-emerald-600">{formatDate(project.completion_date || project.project_end_date)}</span>
+					<span class="font-medium text-emerald-600"
+						>{formatDate(project.completion_date || project.project_end_date)}</span
+					>
 				</div>
 			{:else}
 				{#if project.project_start_date}
@@ -221,7 +247,9 @@
 	<!-- Master Developer (only if different from main developer) -->
 	{#if project.master_developer_name && project.master_developer_name !== project.developer_name}
 		<div class="text-xs text-slate-500 border-t border-slate-100 pt-3">
-			Master Developer: <span class="font-medium text-slate-700">{project.master_developer_name}</span>
+			Master Developer: <span class="font-medium text-slate-700"
+				>{project.master_developer_name}</span
+			>
 		</div>
 	{/if}
 </div>

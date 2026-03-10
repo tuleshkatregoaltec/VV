@@ -20,7 +20,11 @@
 			if (!node.contains(e.target as Node)) callback();
 		}
 		document.addEventListener('mousedown', handle, true);
-		return { destroy() { document.removeEventListener('mousedown', handle, true); } };
+		return {
+			destroy() {
+				document.removeEventListener('mousedown', handle, true);
+			}
+		};
 	}
 
 	// Load all projects once — master projects + standalone orphans
@@ -34,7 +38,7 @@
 
 	const filtered = $derived(
 		inputValue.trim() && inputValue !== value?.name
-			? allProjects.filter(p => p.name.toLowerCase().includes(inputValue.toLowerCase()))
+			? allProjects.filter((p) => p.name.toLowerCase().includes(inputValue.toLowerCase()))
 			: allProjects
 	);
 
@@ -53,7 +57,9 @@
 	}
 
 	function handleKeydown(e: KeyboardEvent) {
-		if (e.key === 'Escape') { isOpen = false; }
+		if (e.key === 'Escape') {
+			isOpen = false;
+		}
 		if (e.key === 'Enter') {
 			e.preventDefault();
 			if (filtered.length > 0) select(filtered[0]);
@@ -65,7 +71,12 @@
 	<div class="relative">
 		<div class="pointer-events-none absolute inset-y-0 left-3 flex items-center">
 			<svg class="w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+				<path
+					stroke-linecap="round"
+					stroke-linejoin="round"
+					stroke-width="2"
+					d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+				/>
 			</svg>
 		</div>
 		<input
@@ -85,14 +96,21 @@
 				aria-label="Clear selection"
 			>
 				<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+					<path
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						stroke-width="2"
+						d="M6 18L18 6M6 6l12 12"
+					/>
 				</svg>
 			</button>
 		{/if}
 	</div>
 
 	{#if isOpen}
-		<div class="absolute z-50 mt-1 w-full max-h-72 overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-lg">
+		<div
+			class="absolute z-50 mt-1 w-full max-h-72 overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-lg"
+		>
 			{#if allProjectsQuery.isLoading}
 				<div class="px-4 py-3 text-sm text-slate-400">Loading...</div>
 			{:else if filtered.length === 0}
@@ -101,7 +119,10 @@
 				{#each filtered as project}
 					<button
 						type="button"
-						class="w-full text-left px-4 py-2.5 text-sm hover:bg-teal-50 transition-colors {project.name === value?.name ? 'bg-teal-50 text-teal-700 font-medium' : 'text-slate-900'}"
+						class="w-full text-left px-4 py-2.5 text-sm hover:bg-teal-50 transition-colors {project.name ===
+						value?.name
+							? 'bg-teal-50 text-teal-700 font-medium'
+							: 'text-slate-900'}"
 						onmousedown={() => select(project)}
 					>
 						{project.name}

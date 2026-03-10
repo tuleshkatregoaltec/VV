@@ -46,7 +46,9 @@
 			{/if}
 			<time>{relativeTime}</time>
 		</div>
-		<h3 class="text-base font-semibold text-slate-900 group-hover:text-teal-600 line-clamp-2 transition-colors duration-300">
+		<h3
+			class="text-base font-semibold text-slate-900 group-hover:text-teal-600 line-clamp-2 transition-colors duration-300"
+		>
 			{article.headline}
 		</h3>
 	</div>

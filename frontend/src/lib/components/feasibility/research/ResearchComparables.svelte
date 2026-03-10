@@ -19,7 +19,9 @@
 		{#if marketPricing.length === 0}
 			<div class="px-3 py-3 text-slate-400">No HBU pricing evidence loaded yet.</div>
 		{:else}
-			<div class="grid grid-cols-4 px-3 py-1.5 border-b border-slate-100 text-slate-400 font-medium uppercase tracking-[0.1em]">
+			<div
+				class="grid grid-cols-4 px-3 py-1.5 border-b border-slate-100 text-slate-400 font-medium uppercase tracking-[0.1em]"
+			>
 				<span>Type</span>
 				<span class="text-right">Median/sqm</span>
 				<span class="text-right">Avg sqm</span>
@@ -52,7 +54,9 @@
 						</div>
 						<div class="text-right">
 							<p class="text-slate-800 font-medium">Score {comp.score}</p>
-							<p class="text-slate-500">{comp.median_price_sqm ? `${fmt(comp.median_price_sqm)}/sqm` : '—'}</p>
+							<p class="text-slate-500">
+								{comp.median_price_sqm ? `${fmt(comp.median_price_sqm)}/sqm` : '—'}
+							</p>
 						</div>
 					</div>
 					<div class="flex flex-wrap gap-2 mt-2 text-slate-500">

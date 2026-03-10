@@ -215,13 +215,17 @@
 			<div class="space-y-6">
 				<div class="space-y-2 text-center">
 					<h1 class="text-3xl font-semibold text-slate-900">
-						{step === 'profile' ? 'Complete Your Profile' : `Join ${inviteDetails?.organization_name}`}
+						{step === 'profile'
+							? 'Complete Your Profile'
+							: `Join ${inviteDetails?.organization_name}`}
 					</h1>
 					<p class="text-sm text-slate-600">
 						{#if step === 'profile'}
 							Add your name, then you can join {inviteDetails?.organization_name}.
 						{:else}
-							This invitation is for <span class="font-medium text-slate-900">{inviteDetails?.email}</span>.
+							This invitation is for <span class="font-medium text-slate-900"
+								>{inviteDetails?.email}</span
+							>.
 						{/if}
 					</p>
 				</div>
@@ -233,15 +237,21 @@
 				{/if}
 
 				{#if conflictMessage}
-					<div class="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+					<div
+						class="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800"
+					>
 						{conflictMessage}
 					</div>
 				{/if}
 
 				{#if step === 'verify-code'}
 					<div class="space-y-4">
-						<div class="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
-							Enter the code from the invite email sent to <span class="font-medium text-slate-900">{inviteDetails?.email}</span>.
+						<div
+							class="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700"
+						>
+							Enter the code from the invite email sent to <span class="font-medium text-slate-900"
+								>{inviteDetails?.email}</span
+							>.
 						</div>
 						<TextInput
 							label="Verification Code"
@@ -269,7 +279,9 @@
 					</div>
 				{:else if step === 'mismatch'}
 					<div class="space-y-4">
-						<div class="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+						<div
+							class="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800"
+						>
 							This invite was sent to {inviteDetails?.email}. You are currently signed in as {currentEmail}.
 						</div>
 						<button

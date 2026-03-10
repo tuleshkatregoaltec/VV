@@ -15,7 +15,6 @@
 
 <div class="min-h-screen bg-slate-50">
 	<div class="max-w-7xl mx-auto px-4 py-6">
-
 		<!-- Toolbar -->
 		<div class="flex items-center gap-3 mb-6">
 			{#if comparing}
@@ -33,11 +32,16 @@
 				onclick={toggleCompare}
 				class="flex-shrink-0 flex items-center gap-1.5 px-3 py-2.5 rounded-lg border text-sm font-medium transition-colors
 					{comparing
-						? 'bg-teal-600 border-teal-600 text-white hover:bg-teal-700'
-						: 'bg-white border-slate-200 text-slate-600 hover:border-teal-400 hover:text-teal-600'}"
+					? 'bg-teal-600 border-teal-600 text-white hover:bg-teal-700'
+					: 'bg-white border-slate-200 text-slate-600 hover:border-teal-400 hover:text-teal-600'}"
 			>
 				<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+					<path
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						stroke-width="2"
+						d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
+					/>
 				</svg>
 				Compare
 			</button>
@@ -73,7 +77,12 @@
 	<div class="flex flex-col items-center justify-center py-24 text-center">
 		<div class="w-14 h-14 rounded-2xl bg-teal-50 flex items-center justify-center mb-4">
 			<svg class="w-7 h-7 text-teal-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+				<path
+					stroke-linecap="round"
+					stroke-linejoin="round"
+					stroke-width="1.5"
+					d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
+				/>
 			</svg>
 		</div>
 		<p class="text-slate-700 font-medium mb-1">Search for a project</p>

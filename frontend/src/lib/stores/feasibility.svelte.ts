@@ -23,7 +23,7 @@ export interface ProjectConfig {
 
 export interface EscrowMilestone {
 	name: string;
-	pct: number;            // % of pre-handover GDV collected at this milestone
+	pct: number; // % of pre-handover GDV collected at this milestone
 	constructionPct: number; // % construction completion that triggers this (0 = booking/SPA)
 }
 
@@ -33,7 +33,7 @@ const DEFAULT_ESCROW_MILESTONES: EscrowMilestone[] = [
 	{ name: '40% Complete', pct: 10, constructionPct: 40 },
 	{ name: '60% Complete', pct: 10, constructionPct: 60 },
 	{ name: '80% Complete', pct: 10, constructionPct: 80 },
-	{ name: 'Handover', pct: 40, constructionPct: 100 },
+	{ name: 'Handover', pct: 40, constructionPct: 100 }
 ];
 
 export interface Assumptions {
@@ -68,8 +68,8 @@ export interface Assumptions {
 	buaEfficiencyPct: number;
 
 	// Site & Areas (Phase 2)
-	siteAreaSqm: number;       // total site / plot area
-	plotRatioFAR: number;      // floor area ratio
+	siteAreaSqm: number; // total site / plot area
+	plotRatioFAR: number; // floor area ratio
 	lossFactorGFAtoNSA: number; // % loss from GFA to NSA (default 15%)
 	hasDemolition: boolean;
 	hasAncillaryRetail: boolean;
@@ -314,15 +314,15 @@ const assumptions = $state<{ value: Assumptions }>({
 		interestOnlyMonthsOverride: null,
 		discountRatePct: 10,
 		targetROCPct: 20,
-		projectStartDate: null,
-	},
+		projectStartDate: null
+	}
 });
 
 // ── Display currency state ─────────────────────────────────────────────────────
 const displayCurrency = $state({ value: 'AED' as 'AED' | 'USD' });
 const fxRateAEDtoUSD = $state({ value: 3.6725 });
 const config = $state<{ value: ProjectConfig }>({
-	value: { buildings: [], pricePerSqm: {} },
+	value: { buildings: [], pricePerSqm: {} }
 });
 
 // ── UX state: agent-change feedback ───────────────────────────────────────────
@@ -334,7 +334,11 @@ const undoFields = $state({ value: {} as Record<string, number> });
 const affectedTabs = $state({ value: new SvelteSet<string>() });
 // undoSnapshot: taken before each batch of agent actions
 const undoSnapshot = $state<{
-	value: { assumptions: Assumptions; pricePerSqm: Record<string, number>; buildings: BuildingConfig[] } | null;
+	value: {
+		assumptions: Assumptions;
+		pricePerSqm: Record<string, number>;
+		buildings: BuildingConfig[];
+	} | null;
 }>({ value: null });
 // lastChangedKeys: keys changed in the last agent batch, used for undo flash
 const lastChangedKeys = $state({ value: [] as string[] });
@@ -342,14 +346,14 @@ const lastChangedKeys = $state({ value: [] as string[] });
 // ── Unit config derived ────────────────────────────────────────────────────────
 
 const totalUnits = $derived(
-	config.value.buildings.reduce((sum, b) => sum + b.units.reduce((s, u) => s + u.count, 0), 0),
+	config.value.buildings.reduce((sum, b) => sum + b.units.reduce((s, u) => s + u.count, 0), 0)
 );
 
 const totalSellableAreaSqm = $derived(
 	config.value.buildings.reduce(
 		(sum, b) => sum + b.units.reduce((s, u) => s + u.count * u.avgSizeSqm, 0),
-		0,
-	),
+		0
+	)
 );
 
 const gdvByType = $derived(() => {
@@ -379,14 +383,14 @@ const spreadsheetRows = $derived(() => {
 		count: data.count,
 		avgSizeSqm: data.count > 0 ? data.totalArea / data.count : 0,
 		pricePerSqm: config.value.pricePerSqm[type] ?? 0,
-		totalProceeds: data.totalArea * (config.value.pricePerSqm[type] ?? 0),
+		totalProceeds: data.totalArea * (config.value.pricePerSqm[type] ?? 0)
 	}));
 });
 
 const totalBUA = $derived(
 	assumptions.value.buaEfficiencyPct > 0
 		? totalSellableAreaSqm / (assumptions.value.buaEfficiencyPct / 100)
-		: totalSellableAreaSqm,
+		: totalSellableAreaSqm
 );
 
 // Area model (Phase 2) — GFA/GSA/NSA chain
@@ -396,18 +400,20 @@ const maxGFA = $derived(assumptions.value.siteAreaSqm * assumptions.value.plotRa
 const totalGSA = $derived(
 	assumptions.value.lossFactorGFAtoNSA < 100
 		? totalSellableAreaSqm / (1 - assumptions.value.lossFactorGFAtoNSA / 100)
-		: totalSellableAreaSqm,
+		: totalSellableAreaSqm
 );
 
 // ── Financial derived (dependency order) ──────────────────────────────────────
 
 // interestOnlyMonths: auto-shadows constructionMonths unless overridden
 const interestOnlyMonths = $derived(
-	assumptions.value.interestOnlyMonthsOverride ?? assumptions.value.constructionMonths,
+	assumptions.value.interestOnlyMonthsOverride ?? assumptions.value.constructionMonths
 );
 
 // Land
-const transferFees = $derived((assumptions.value.landCost * assumptions.value.transferFeePct) / 100);
+const transferFees = $derived(
+	(assumptions.value.landCost * assumptions.value.transferFeePct) / 100
+);
 const totalLandCost = $derived(assumptions.value.landCost + transferFees);
 
 // Hard construction
@@ -418,14 +424,14 @@ const totalHardCost = $derived(hardCost + contingencyCost);
 // Phase 3: absolute cost line items
 const totalInfrastructureCost = $derived(
 	assumptions.value.infrastructureCostAED +
-	assumptions.value.authorityConnectionFeesAED +
-	assumptions.value.communityMasterDevFeesAED +
-	(assumptions.value.hasDemolition ? assumptions.value.demolitionCostAED : 0)
+		assumptions.value.authorityConnectionFeesAED +
+		assumptions.value.communityMasterDevFeesAED +
+		(assumptions.value.hasDemolition ? assumptions.value.demolitionCostAED : 0)
 );
 const totalProfessionalFees = $derived(
 	assumptions.value.designSupervisionAED +
-	assumptions.value.projectMgmtAED +
-	assumptions.value.otherProfessionalFeesAED
+		assumptions.value.projectMgmtAED +
+		assumptions.value.otherProfessionalFeesAED
 );
 const absoluteSoftCostTotal = $derived(totalInfrastructureCost + totalProfessionalFees);
 const totalSoftCost = $derived(absoluteSoftCostTotal);
@@ -438,20 +444,20 @@ const netRevenue = $derived(totalGDV - totalSalesCost);
 
 // Pre/post handover revenue split
 const postHandoverUnits = $derived(
-	Math.round((totalUnits * assumptions.value.postHandoverSalesPct) / 100),
+	Math.round((totalUnits * assumptions.value.postHandoverSalesPct) / 100)
 );
 const preHandoverUnits = $derived(totalUnits - postHandoverUnits);
 const preHandoverGDV = $derived(
 	totalGDV *
 		(preHandoverUnits / Math.max(1, totalUnits)) *
-		(1 - assumptions.value.presaleDiscountPct / 100),
+		(1 - assumptions.value.presaleDiscountPct / 100)
 );
 const postHandoverGDV = $derived(totalGDV * (postHandoverUnits / Math.max(1, totalUnits)));
 const totalBlendedGDV = $derived(preHandoverGDV + postHandoverGDV);
 
 // Price escalation
 const priceEscalationMultiplier = $derived(
-	(1 + assumptions.value.priceEscalationPct / 100) ** (assumptions.value.salesMonths / 24),
+	(1 + assumptions.value.priceEscalationPct / 100) ** (assumptions.value.salesMonths / 24)
 );
 const escalatedGDV = $derived(totalGDV * priceEscalationMultiplier);
 
@@ -459,19 +465,23 @@ const escalatedGDV = $derived(totalGDV * priceEscalationMultiplier);
 const inflationOnCosts = $derived(
 	assumptions.value.midPointInflationPct > 0
 		? (totalHardCost + totalSoftCost) *
-		  ((1 + assumptions.value.midPointInflationPct / 100) ** (assumptions.value.constructionMonths / 24) - 1)
+				((1 + assumptions.value.midPointInflationPct / 100) **
+					(assumptions.value.constructionMonths / 24) -
+					1)
 		: 0
 );
 
 // Pre-finance subtotal (debtAmount must not include finance costs to avoid circularity)
-const preFinanceCost = $derived(totalLandCost + totalHardCost + totalSoftCost + inflationOnCosts + totalSalesCost);
+const preFinanceCost = $derived(
+	totalLandCost + totalHardCost + totalSoftCost + inflationOnCosts + totalSalesCost
+);
 
 // Finance
 const debtAmount = $derived(preFinanceCost * assumptions.value.debtToCostRatio);
 const equityRequired = $derived(preFinanceCost * (1 - assumptions.value.debtToCostRatio));
 const arrangementFee = $derived((debtAmount * assumptions.value.arrangementFeePct) / 100);
 const totalInterest = $derived(
-	(debtAmount * assumptions.value.financeRatePct * interestOnlyMonths) / (100 * 12),
+	(debtAmount * assumptions.value.financeRatePct * interestOnlyMonths) / (100 * 12)
 );
 const totalFinanceCost = $derived(totalInterest + arrangementFee);
 
@@ -481,7 +491,7 @@ const grossProfit = $derived(totalGDV - totalDevCost);
 const returnOnCost = $derived(totalDevCost > 0 ? (grossProfit / totalDevCost) * 100 : 0);
 const returnOnEquity = $derived(equityRequired > 0 ? (grossProfit / equityRequired) * 100 : 0);
 const equityMultiple = $derived(
-	equityRequired > 0 ? (equityRequired + grossProfit) / equityRequired : 0,
+	equityRequired > 0 ? (equityRequired + grossProfit) / equityRequired : 0
 );
 
 // VAT (memo only — typically fully recoverable by registered UAE developers)
@@ -503,19 +513,21 @@ const blendedPricePerSqm = $derived(totalSellableAreaSqm > 0 ? totalGDV / totalS
 const retailAnnualIncome = $derived(
 	assumptions.value.hasAncillaryRetail && assumptions.value.retailAreaSqm > 0
 		? assumptions.value.retailAreaSqm * assumptions.value.retailRentPerSqmYr
-		: 0,
+		: 0
 );
 const retailCapValue = $derived(
 	retailAnnualIncome > 0 && assumptions.value.retailYieldCapRate > 0
 		? retailAnnualIncome / (assumptions.value.retailYieldCapRate / 100)
-		: 0,
+		: 0
 );
 
 // VAT bridge loan (Phase 4)
 const vatBridgeLoanInterest = $derived(
 	assumptions.value.hasVATBridgeLoan
-		? vatOnCosts * (assumptions.value.vatBridgeLoanRatePct / 100) * (assumptions.value.vatBridgeLoanTermMonths / 12)
-		: 0,
+		? vatOnCosts *
+				(assumptions.value.vatBridgeLoanRatePct / 100) *
+				(assumptions.value.vatBridgeLoanTermMonths / 12)
+		: 0
 );
 
 // ── Cashflow model ─────────────────────────────────────────────────────────────
@@ -534,24 +546,24 @@ const capexWeights = $derived(
 			const third = cq / 3;
 			if (curve === 'sCurve') {
 				if (q < third) return 0.25 / (cq / 3);
-				if (q < 2 * third) return 0.50 / (cq / 3);
+				if (q < 2 * third) return 0.5 / (cq / 3);
 				return 0.25 / (cq / 3);
 			}
 			if (curve === 'frontLoaded') {
-				if (q < third) return 0.50 / (cq / 3);
+				if (q < third) return 0.5 / (cq / 3);
 				if (q < 2 * third) return 0.35 / (cq / 3);
 				return 0.15 / (cq / 3);
 			}
 			if (curve === 'backLoaded') {
 				if (q < third) return 0.15 / (cq / 3);
 				if (q < 2 * third) return 0.35 / (cq / 3);
-				return 0.50 / (cq / 3);
+				return 0.5 / (cq / 3);
 			}
 			return 1 / cq; // linear
 		});
 		const sum = weights.reduce((s, w) => s + w, 0);
-		return sum > 0 ? weights.map(w => w / sum) : weights;
-	})(),
+		return sum > 0 ? weights.map((w) => w / sum) : weights;
+	})()
 );
 
 // Escrow receipts/releases per quarter (Phase 4)
@@ -562,9 +574,10 @@ const escrowData = $derived(
 		if (assumptions.value.useEscrowModel && totalQ > 0 && cq > 0) {
 			const releasePct = assumptions.value.offPlanProceedsUsedForConstructionPct / 100;
 			for (const m of assumptions.value.escrowMilestones) {
-				const qIdx = m.constructionPct === 0
-					? Math.max(0, sq)
-					: Math.min(Math.floor((m.constructionPct / 100) * cq), totalQ - 1);
+				const qIdx =
+					m.constructionPct === 0
+						? Math.max(0, sq)
+						: Math.min(Math.floor((m.constructionPct / 100) * cq), totalQ - 1);
 				const amount = (m.pct / 100) * preHandoverGDV;
 				if (qIdx >= 0 && qIdx < totalQ) {
 					receipts[qIdx] += amount;
@@ -581,7 +594,7 @@ const escrowData = $derived(
 			cumFloat += receipts[q] - releases[q];
 			return { q, receipt: receipts[q], release: releases[q], float: cumFloat };
 		});
-	})(),
+	})()
 );
 
 const cashflow = $derived(
@@ -610,7 +623,7 @@ const cashflow = $derived(
 			cum += net;
 			return { q, land, construction, soft, marketing, costs, revenue, net, cum };
 		});
-	})(),
+	})()
 );
 
 const peakFunding = $derived(Math.abs(Math.min(0, ...cashflow.map((p) => p.cum))));
@@ -620,17 +633,19 @@ const cashBreakevenQuarter = $derived(cashflow.findIndex((p) => p.cum >= 0));
 const unleveredIRR = $derived(quarterlyIRR(cashflow.map((p) => p.revenue - p.costs)));
 
 // Levered cash flows (shared by leveredIRR and npvLevered)
-const leveredCashFlows = $derived((() => {
-	if (cq === 0) return null;
-	const quarterlyRate = assumptions.value.financeRatePct / 100 / 4;
-	const equityRatio = 1 - assumptions.value.debtToCostRatio;
-	const cfs = cashflow.map((p) => {
-		const interest = p.q < cq ? debtAmount * quarterlyRate : 0;
-		return p.revenue - p.costs * equityRatio - interest;
-	});
-	if (cfs.length > cq) cfs[cq] = (cfs[cq] ?? 0) - debtAmount;
-	return cfs;
-})());
+const leveredCashFlows = $derived(
+	(() => {
+		if (cq === 0) return null;
+		const quarterlyRate = assumptions.value.financeRatePct / 100 / 4;
+		const equityRatio = 1 - assumptions.value.debtToCostRatio;
+		const cfs = cashflow.map((p) => {
+			const interest = p.q < cq ? debtAmount * quarterlyRate : 0;
+			return p.revenue - p.costs * equityRatio - interest;
+		});
+		if (cfs.length > cq) cfs[cq] = (cfs[cq] ?? 0) - debtAmount;
+		return cfs;
+	})()
+);
 
 const leveredIRR = $derived(leveredCashFlows ? quarterlyIRR(leveredCashFlows) : NaN);
 
@@ -646,14 +661,14 @@ const profitOnGDVPct = $derived(totalGDV > 0 ? (grossProfit / totalGDV) * 100 : 
 const npvUnlevered = $derived(
 	calculateNPV(
 		cashflow.map((p) => p.revenue - p.costs),
-		assumptions.value.discountRatePct / 100 / 4,
-	),
+		assumptions.value.discountRatePct / 100 / 4
+	)
 );
 
 const npvLevered = $derived(
 	leveredCashFlows
 		? calculateNPV(leveredCashFlows, assumptions.value.discountRatePct / 100 / 4)
-		: NaN,
+		: NaN
 );
 
 // Scenario snapshots: scale cashflow revenues/costs by multipliers
@@ -712,45 +727,50 @@ function setPlotDossier(dossier: GISPlotDossier) {
 function estimateStudyGDV(study: HBUStudy) {
 	return study.recommended_mix.reduce(
 		(sum, row) => sum + row.suggested_units * row.avg_size_sqm * row.price_sqm,
-		0,
+		0
 	);
 }
 
-function conservativeSeedAssumptions(study: HBUStudy, dossier: GISPlotDossier | null): Partial<Assumptions> {
+function conservativeSeedAssumptions(
+	study: HBUStudy,
+	dossier: GISPlotDossier | null
+): Partial<Assumptions> {
 	const estimatedGDV = estimateStudyGDV(study);
 	const usage = study.usage;
-	const buildCostFloor =
-		usage === 'commercial' ? 4500 : usage === 'mixed_use' ? 4250 : 3500;
-	const landRatio =
-		usage === 'commercial' ? 0.28 : usage === 'mixed_use' ? 0.3 : 0.25;
+	const buildCostFloor = usage === 'commercial' ? 4500 : usage === 'mixed_use' ? 4250 : 3500;
+	const landRatio = usage === 'commercial' ? 0.28 : usage === 'mixed_use' ? 0.3 : 0.25;
 
 	return {
 		siteAreaSqm: dossier?.plot_area_sqm ?? assumptions.value.siteAreaSqm,
 		plotRatioFAR: dossier?.far && dossier.far > 0 ? dossier.far : assumptions.value.plotRatioFAR,
 		lossFactorGFAtoNSA: Math.max(
-			Number(study.assumptions_patch.lossFactorGFAtoNSA ?? assumptions.value.lossFactorGFAtoNSA ?? 15),
-			15,
+			Number(
+				study.assumptions_patch.lossFactorGFAtoNSA ?? assumptions.value.lossFactorGFAtoNSA ?? 15
+			),
+			15
 		),
 		buildCostPerSqm: Math.max(
 			Number(study.assumptions_patch.buildCostPerSqm ?? assumptions.value.buildCostPerSqm ?? 0),
-			buildCostFloor,
+			buildCostFloor
 		),
 		contingencyPct: Math.max(
 			Number(study.assumptions_patch.contingencyPct ?? assumptions.value.contingencyPct ?? 0),
-			7,
+			7
 		),
 		constructionMonths: Math.max(
-			Number(study.assumptions_patch.constructionMonths ?? assumptions.value.constructionMonths ?? 0),
-			30,
+			Number(
+				study.assumptions_patch.constructionMonths ?? assumptions.value.constructionMonths ?? 0
+			),
+			30
 		),
 		salesMonths: Math.max(
 			Number(study.assumptions_patch.salesMonths ?? assumptions.value.salesMonths ?? 0),
-			24,
+			24
 		),
 		landCost:
 			assumptions.value.landCost > 0
 				? assumptions.value.landCost
-				: Math.round(estimatedGDV * landRatio),
+				: Math.round(estimatedGDV * landRatio)
 	};
 }
 
@@ -765,11 +785,11 @@ function applyComparableData(data: ComparableData) {
 		units: data.unit_mix.map((u) => ({
 			type: normalizeUnitType(u.type),
 			count: Math.round(u.count / numBuildings),
-			avgSizeSqm: u.avg_size_sqm,
-		})),
+			avgSizeSqm: u.avg_size_sqm
+		}))
 	}));
 	const pricePerSqm = Object.fromEntries(
-		Object.entries(data.price_per_sqm_by_type).map(([k, v]) => [normalizeUnitType(k), v]),
+		Object.entries(data.price_per_sqm_by_type).map(([k, v]) => [normalizeUnitType(k), v])
 	);
 	config.value = { buildings, pricePerSqm };
 	researchPanelStore.setComparableMarketPrices(pricePerSqm);
@@ -779,23 +799,28 @@ function applyComparableData(data: ComparableData) {
 
 function applyHBUStudy(study: HBUStudy) {
 	hbuStudy.value = study;
-	const buildings: BuildingConfig[] = [{
-		id: nanoid(),
-		name: study.product_options[0]?.name || 'HBU Scheme',
-		phase: 'Phase 1',
-		floors: Math.max(1, Math.round((plotDossier.value?.far ?? 0) * 4) || 10),
-		units: study.recommended_mix.map((row) => ({
-			type: normalizeUnitType(row.unit_type),
-			count: row.suggested_units,
-			avgSizeSqm: row.avg_size_sqm,
-		})),
-	}];
+	const buildings: BuildingConfig[] = [
+		{
+			id: nanoid(),
+			name: study.product_options[0]?.name || 'HBU Scheme',
+			phase: 'Phase 1',
+			floors: Math.max(1, Math.round((plotDossier.value?.far ?? 0) * 4) || 10),
+			units: study.recommended_mix.map((row) => ({
+				type: normalizeUnitType(row.unit_type),
+				count: row.suggested_units,
+				avgSizeSqm: row.avg_size_sqm
+			}))
+		}
+	];
 	const pricePerSqm = Object.fromEntries(
-		Object.entries(study.price_per_sqm_by_type).map(([key, value]) => [normalizeUnitType(key), value]),
+		Object.entries(study.price_per_sqm_by_type).map(([key, value]) => [
+			normalizeUnitType(key),
+			value
+		])
 	);
 	const assumptionsPatch = {
 		...study.assumptions_patch,
-		...conservativeSeedAssumptions(study, plotDossier.value),
+		...conservativeSeedAssumptions(study, plotDossier.value)
 	} as Partial<Assumptions>;
 	config.value = { buildings, pricePerSqm };
 	researchPanelStore.setComparableMarketPrices(pricePerSqm);
@@ -803,7 +828,7 @@ function applyHBUStudy(study: HBUStudy) {
 	researchPanelStore.setComparableEvidence({
 		pricing: study.pricing_evidence,
 		pipeline: study.competition_evidence,
-		marketPricing: study.market_pricing,
+		marketPricing: study.market_pricing
 	});
 	researchPanelStore.setActiveTab('comparables');
 	step.value = 4;
@@ -814,13 +839,13 @@ function addBuilding() {
 	const n = config.value.buildings.length + 1;
 	config.value.buildings = [
 		...config.value.buildings,
-		{ id: nanoid(), name: `Tower ${n}`, phase: '', floors: 10, units: [] },
+		{ id: nanoid(), name: `Tower ${n}`, phase: '', floors: 10, units: [] }
 	];
 }
 
 function updateBuilding(id: string, patch: Partial<Omit<BuildingConfig, 'id'>>) {
 	config.value.buildings = config.value.buildings.map((b) =>
-		b.id === id ? { ...b, ...patch } : b,
+		b.id === id ? { ...b, ...patch } : b
 	);
 }
 
@@ -834,7 +859,7 @@ function setBuildings(buildings: BuildingConfig[]) {
 
 function setUnitMix(unitMix: Record<string, UnitTypeCount[]>) {
 	config.value.buildings = config.value.buildings.map((b) =>
-		unitMix[b.id] ? { ...b, units: unitMix[b.id] } : b,
+		unitMix[b.id] ? { ...b, units: unitMix[b.id] } : b
 	);
 }
 
@@ -854,16 +879,35 @@ function flashField(key: string, undo = false) {
 
 // Keys that have direct inputs in DevBudget (in addition to Assumptions)
 const DEVBUDGET_KEYS = new Set([
-	'landCost', 'transferFeePct', 'buaEfficiencyPct', 'buildCostPerSqm', 'contingencyPct',
-	'softCostsPct', 'designFeePct', 'projectMgmtPct',
-	'agentCommissionPct', 'marketingBudgetPct', 'financeRatePct', 'arrangementFeePct',
+	'landCost',
+	'transferFeePct',
+	'buaEfficiencyPct',
+	'buildCostPerSqm',
+	'contingencyPct',
+	'softCostsPct',
+	'designFeePct',
+	'projectMgmtPct',
+	'agentCommissionPct',
+	'marketingBudgetPct',
+	'financeRatePct',
+	'arrangementFeePct',
 	// Phase 3 — absolute line items
-	'infrastructureCostAED', 'authorityConnectionFeesAED', 'communityMasterDevFeesAED',
-	'demolitionCostAED', 'designSupervisionAED', 'projectMgmtAED', 'otherProfessionalFeesAED',
-	'marketingLaunchAED', 'midPointInflationPct', 'vatRateOnCostsPct', 'vatRecoveryPct',
+	'infrastructureCostAED',
+	'authorityConnectionFeesAED',
+	'communityMasterDevFeesAED',
+	'demolitionCostAED',
+	'designSupervisionAED',
+	'projectMgmtAED',
+	'otherProfessionalFeesAED',
+	'marketingLaunchAED',
+	'midPointInflationPct',
+	'vatRateOnCostsPct',
+	'vatRecoveryPct',
 	'corporateTaxRatePct',
 	// Phase 4
-	'hasVATBridgeLoan', 'vatBridgeLoanTermMonths', 'vatBridgeLoanRatePct',
+	'hasVATBridgeLoan',
+	'vatBridgeLoanTermMonths',
+	'vatBridgeLoanRatePct'
 ]);
 
 function markTabsAffected(action: string, patch?: Record<string, unknown>) {
@@ -886,7 +930,7 @@ function takeUndoSnapshot() {
 	undoSnapshot.value = {
 		assumptions: { ...assumptions.value },
 		pricePerSqm: { ...config.value.pricePerSqm },
-		buildings: config.value.buildings.map((b) => ({ ...b, units: [...b.units] })),
+		buildings: config.value.buildings.map((b) => ({ ...b, units: [...b.units] }))
 	};
 }
 
@@ -969,7 +1013,7 @@ function devJump() {
 		max_coverage: '65%',
 		gfa_type: 'Residential',
 		is_verified: true,
-		land_use_summary: ['RESIDENTIAL: APARTMENTS'],
+		land_use_summary: ['RESIDENTIAL: APARTMENTS']
 	};
 	plotDossier.value = {
 		plot_number: 'BB-001',
@@ -992,9 +1036,14 @@ function devJump() {
 		general_notes: [],
 		setbacks: {},
 		coordinates: [],
-		warnings: [],
+		warnings: []
 	};
-	assumptions.value = { ...assumptions.value, landCost: 50_000_000, siteAreaSqm: 5000, plotRatioFAR: 3.5 };
+	assumptions.value = {
+		...assumptions.value,
+		landCost: 50_000_000,
+		siteAreaSqm: 5000,
+		plotRatioFAR: 3.5
+	};
 	applyHBUStudy({
 		plot_number: 'BB-001',
 		usage: 'residential',
@@ -1005,120 +1054,314 @@ function devJump() {
 		pricing_evidence: [],
 		competition_evidence: [],
 		market_pricing: [],
-		product_options: [{ name: 'Luxury residential', positioning: 'High-end apartments with limited studios', fit_score: 91, rationale: [] }],
+		product_options: [
+			{
+				name: 'Luxury residential',
+				positioning: 'High-end apartments with limited studios',
+				fit_score: 91,
+				rationale: []
+			}
+		],
 		recommended_mix: [
 			{ unit_type: '1br', share_pct: 30, avg_size_sqm: 82, price_sqm: 22000, suggested_units: 48 },
 			{ unit_type: '2br', share_pct: 35, avg_size_sqm: 128, price_sqm: 20000, suggested_units: 39 },
 			{ unit_type: '3br', share_pct: 20, avg_size_sqm: 182, price_sqm: 18500, suggested_units: 17 },
-			{ unit_type: 'studio', share_pct: 15, avg_size_sqm: 48, price_sqm: 24500, suggested_units: 51 },
+			{
+				unit_type: 'studio',
+				share_pct: 15,
+				avg_size_sqm: 48,
+				price_sqm: 24500,
+				suggested_units: 51
+			}
 		],
 		price_per_sqm_by_type: { '1br': 22000, '2br': 20000, '3br': 18500, studio: 24500 },
-		assumptions_patch: { siteAreaSqm: 5000, plotRatioFAR: 3.5, lossFactorGFAtoNSA: 15, buaEfficiencyPct: 82 },
-		warnings: [],
+		assumptions_patch: {
+			siteAreaSqm: 5000,
+			plotRatioFAR: 3.5,
+			lossFactorGFAtoNSA: 15,
+			buaEfficiencyPct: 82
+		},
+		warnings: []
 	});
 }
 
 export const feasibilityStore = {
-	get step() { return step.value; },
-	get area() { return area.value; },
-	get plot() { return plot.value; },
-	get plotDossier() { return plotDossier.value; },
-	get hbuStudy() { return hbuStudy.value; },
-	get plotSizeInput() { return plotSizeInput.value; },
-	get showSpreadsheet() { return showSpreadsheet.value; },
-	get config() { return config.value; },
-	get assumptions() { return assumptions.value; },
+	get step() {
+		return step.value;
+	},
+	get area() {
+		return area.value;
+	},
+	get plot() {
+		return plot.value;
+	},
+	get plotDossier() {
+		return plotDossier.value;
+	},
+	get hbuStudy() {
+		return hbuStudy.value;
+	},
+	get plotSizeInput() {
+		return plotSizeInput.value;
+	},
+	get showSpreadsheet() {
+		return showSpreadsheet.value;
+	},
+	get config() {
+		return config.value;
+	},
+	get assumptions() {
+		return assumptions.value;
+	},
 	// Display currency
-	get displayCurrency() { return displayCurrency.value; },
-	get fxRateAEDtoUSD() { return fxRateAEDtoUSD.value; },
+	get displayCurrency() {
+		return displayCurrency.value;
+	},
+	get fxRateAEDtoUSD() {
+		return fxRateAEDtoUSD.value;
+	},
 	// Unit config
-	get totalUnits() { return totalUnits; },
-	get totalSellableAreaSqm() { return totalSellableAreaSqm; },
-	get totalBUA() { return totalBUA; },
-	get maxGFA() { return maxGFA; },
-	get totalGSA() { return totalGSA; },
-	get gdvByType() { return gdvByType(); },
-	get totalGDV() { return totalGDV; },
-	get spreadsheetRows() { return spreadsheetRows(); },
+	get totalUnits() {
+		return totalUnits;
+	},
+	get totalSellableAreaSqm() {
+		return totalSellableAreaSqm;
+	},
+	get totalBUA() {
+		return totalBUA;
+	},
+	get maxGFA() {
+		return maxGFA;
+	},
+	get totalGSA() {
+		return totalGSA;
+	},
+	get gdvByType() {
+		return gdvByType();
+	},
+	get totalGDV() {
+		return totalGDV;
+	},
+	get spreadsheetRows() {
+		return spreadsheetRows();
+	},
 	// Financial derived
-	get interestOnlyMonths() { return interestOnlyMonths; },
-	get transferFees() { return transferFees; },
-	get totalLandCost() { return totalLandCost; },
-	get hardCost() { return hardCost; },
-	get contingencyCost() { return contingencyCost; },
-	get totalHardCost() { return totalHardCost; },
-	get designCost() { return designCost; },
-	get projectMgmtCost() { return projectMgmtCost; },
-	get otherSoftCost() { return otherSoftCost; },
-	get totalInfrastructureCost() { return totalInfrastructureCost; },
-	get totalProfessionalFees() { return totalProfessionalFees; },
-	get absoluteSoftCostTotal() { return absoluteSoftCostTotal; },
-	get totalSoftCost() { return totalSoftCost; },
-	get agentFees() { return agentFees; },
-	get marketingCost() { return marketingCost; },
-	get totalSalesCost() { return totalSalesCost; },
-	get netRevenue() { return netRevenue; },
-	get postHandoverUnits() { return postHandoverUnits; },
-	get preHandoverUnits() { return preHandoverUnits; },
-	get preHandoverGDV() { return preHandoverGDV; },
-	get postHandoverGDV() { return postHandoverGDV; },
-	get totalBlendedGDV() { return totalBlendedGDV; },
-	get priceEscalationMultiplier() { return priceEscalationMultiplier; },
-	get escalatedGDV() { return escalatedGDV; },
-	get inflationOnCosts() { return inflationOnCosts; },
-	get preFinanceCost() { return preFinanceCost; },
-	get debtAmount() { return debtAmount; },
-	get equityRequired() { return equityRequired; },
-	get arrangementFee() { return arrangementFee; },
-	get totalInterest() { return totalInterest; },
-	get totalFinanceCost() { return totalFinanceCost; },
-	get totalDevCost() { return totalDevCost; },
-	get grossProfit() { return grossProfit; },
-	get returnOnCost() { return returnOnCost; },
-	get returnOnEquity() { return returnOnEquity; },
-	get equityMultiple() { return equityMultiple; },
-	get vatOnCosts() { return vatOnCosts; },
-	get vatRecovery() { return vatRecovery; },
-	get netVATPosition() { return netVATPosition; },
-	get corporateTaxProvision() { return corporateTaxProvision; },
-	get netProfit() { return netProfit; },
-	get blendedPricePerSqm() { return blendedPricePerSqm; },
+	get interestOnlyMonths() {
+		return interestOnlyMonths;
+	},
+	get transferFees() {
+		return transferFees;
+	},
+	get totalLandCost() {
+		return totalLandCost;
+	},
+	get hardCost() {
+		return hardCost;
+	},
+	get contingencyCost() {
+		return contingencyCost;
+	},
+	get totalHardCost() {
+		return totalHardCost;
+	},
+	get designCost() {
+		return designCost;
+	},
+	get projectMgmtCost() {
+		return projectMgmtCost;
+	},
+	get otherSoftCost() {
+		return otherSoftCost;
+	},
+	get totalInfrastructureCost() {
+		return totalInfrastructureCost;
+	},
+	get totalProfessionalFees() {
+		return totalProfessionalFees;
+	},
+	get absoluteSoftCostTotal() {
+		return absoluteSoftCostTotal;
+	},
+	get totalSoftCost() {
+		return totalSoftCost;
+	},
+	get agentFees() {
+		return agentFees;
+	},
+	get marketingCost() {
+		return marketingCost;
+	},
+	get totalSalesCost() {
+		return totalSalesCost;
+	},
+	get netRevenue() {
+		return netRevenue;
+	},
+	get postHandoverUnits() {
+		return postHandoverUnits;
+	},
+	get preHandoverUnits() {
+		return preHandoverUnits;
+	},
+	get preHandoverGDV() {
+		return preHandoverGDV;
+	},
+	get postHandoverGDV() {
+		return postHandoverGDV;
+	},
+	get totalBlendedGDV() {
+		return totalBlendedGDV;
+	},
+	get priceEscalationMultiplier() {
+		return priceEscalationMultiplier;
+	},
+	get escalatedGDV() {
+		return escalatedGDV;
+	},
+	get inflationOnCosts() {
+		return inflationOnCosts;
+	},
+	get preFinanceCost() {
+		return preFinanceCost;
+	},
+	get debtAmount() {
+		return debtAmount;
+	},
+	get equityRequired() {
+		return equityRequired;
+	},
+	get arrangementFee() {
+		return arrangementFee;
+	},
+	get totalInterest() {
+		return totalInterest;
+	},
+	get totalFinanceCost() {
+		return totalFinanceCost;
+	},
+	get totalDevCost() {
+		return totalDevCost;
+	},
+	get grossProfit() {
+		return grossProfit;
+	},
+	get returnOnCost() {
+		return returnOnCost;
+	},
+	get returnOnEquity() {
+		return returnOnEquity;
+	},
+	get equityMultiple() {
+		return equityMultiple;
+	},
+	get vatOnCosts() {
+		return vatOnCosts;
+	},
+	get vatRecovery() {
+		return vatRecovery;
+	},
+	get netVATPosition() {
+		return netVATPosition;
+	},
+	get corporateTaxProvision() {
+		return corporateTaxProvision;
+	},
+	get netProfit() {
+		return netProfit;
+	},
+	get blendedPricePerSqm() {
+		return blendedPricePerSqm;
+	},
 	// Phase 4
-	get retailAnnualIncome() { return retailAnnualIncome; },
-	get retailCapValue() { return retailCapValue; },
-	get vatBridgeLoanInterest() { return vatBridgeLoanInterest; },
-	get capexWeights() { return capexWeights; },
-	get escrowData() { return escrowData; },
+	get retailAnnualIncome() {
+		return retailAnnualIncome;
+	},
+	get retailCapValue() {
+		return retailCapValue;
+	},
+	get vatBridgeLoanInterest() {
+		return vatBridgeLoanInterest;
+	},
+	get capexWeights() {
+		return capexWeights;
+	},
+	get escrowData() {
+		return escrowData;
+	},
 	// Phase 1 additions
-	get leveredProfit() { return leveredProfit; },
-	get profitOnCostPct() { return returnOnCost; },
-	get profitOnGDVPct() { return profitOnGDVPct; },
-	get npvUnlevered() { return npvUnlevered; },
-	get npvLevered() { return npvLevered; },
-	get stressScenario() { return stressScenario; },
-	get baseScenario() { return baseScenario; },
-	get upsideScenario() { return upsideScenario; },
+	get leveredProfit() {
+		return leveredProfit;
+	},
+	get profitOnCostPct() {
+		return returnOnCost;
+	},
+	get profitOnGDVPct() {
+		return profitOnGDVPct;
+	},
+	get npvUnlevered() {
+		return npvUnlevered;
+	},
+	get npvLevered() {
+		return npvLevered;
+	},
+	get stressScenario() {
+		return stressScenario;
+	},
+	get baseScenario() {
+		return baseScenario;
+	},
+	get upsideScenario() {
+		return upsideScenario;
+	},
 	computeScenario,
 	// Cashflow
-	get cq() { return cq; },
-	get sq() { return sq; },
-	get nq() { return nq; },
-	get totalQ() { return totalQ; },
-	get cashflow() { return cashflow; },
-	get peakFunding() { return peakFunding; },
-	get cashBreakevenQuarter() { return cashBreakevenQuarter; },
-	get unleveredIRR() { return unleveredIRR; },
-	get leveredIRR() { return leveredIRR; },
+	get cq() {
+		return cq;
+	},
+	get sq() {
+		return sq;
+	},
+	get nq() {
+		return nq;
+	},
+	get totalQ() {
+		return totalQ;
+	},
+	get cashflow() {
+		return cashflow;
+	},
+	get peakFunding() {
+		return peakFunding;
+	},
+	get cashBreakevenQuarter() {
+		return cashBreakevenQuarter;
+	},
+	get unleveredIRR() {
+		return unleveredIRR;
+	},
+	get leveredIRR() {
+		return leveredIRR;
+	},
 	// UX feedback
-	get changedFields() { return changedFields.value; },
-	get undoFields() { return undoFields.value; },
-	get affectedTabs() { return affectedTabs.value; },
-	get canUndo() { return undoSnapshot.value !== null; },
+	get changedFields() {
+		return changedFields.value;
+	},
+	get undoFields() {
+		return undoFields.value;
+	},
+	get affectedTabs() {
+		return affectedTabs.value;
+	},
+	get canUndo() {
+		return undoSnapshot.value !== null;
+	},
 	// Actions
 	setArea,
 	setPlot,
 	setPlotDossier,
-	setPlotSizeInput: (v: number | null) => { plotSizeInput.value = v; },
+	setPlotSizeInput: (v: number | null) => {
+		plotSizeInput.value = v;
+	},
 	applyComparableData,
 	applyHBUStudy,
 	addBuilding,
@@ -1133,19 +1376,25 @@ export const feasibilityStore = {
 	applyLLMAction,
 	goToStep,
 	devJump,
-	toggleSpreadsheet: () => { showSpreadsheet.value = !showSpreadsheet.value; },
+	toggleSpreadsheet: () => {
+		showSpreadsheet.value = !showSpreadsheet.value;
+	},
 	setAssumptions: (patch: Partial<Assumptions>) => {
 		assumptions.value = { ...assumptions.value, ...patch };
 	},
 	setEscrowMilestone: (idx: number, patch: Partial<EscrowMilestone>) => {
 		const milestones = assumptions.value.escrowMilestones.map((m, i) =>
-			i === idx ? { ...m, ...patch } : m,
+			i === idx ? { ...m, ...patch } : m
 		);
 		assumptions.value = { ...assumptions.value, escrowMilestones: milestones };
 	},
 	resetEscrowMilestones: () => {
 		assumptions.value = { ...assumptions.value, escrowMilestones: DEFAULT_ESCROW_MILESTONES };
 	},
-	setDisplayCurrency: (c: 'AED' | 'USD') => { displayCurrency.value = c; },
-	setFxRate: (rate: number) => { fxRateAEDtoUSD.value = rate; },
+	setDisplayCurrency: (c: 'AED' | 'USD') => {
+		displayCurrency.value = c;
+	},
+	setFxRate: (rate: number) => {
+		fxRateAEDtoUSD.value = rate;
+	}
 };

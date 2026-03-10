@@ -2,9 +2,7 @@ import type { BackendUser } from '$lib/api/auth';
 
 export type RouteCategory = 'public' | 'auth' | 'onboarding' | 'recovery' | 'protected';
 
-export type GuardDecision =
-	| { action: 'allow' }
-	| { action: 'redirect'; location: string };
+export type GuardDecision = { action: 'allow' } | { action: 'redirect'; location: string };
 
 const PUBLIC_PATHS = [
 	'/',
@@ -17,7 +15,12 @@ const PUBLIC_PATHS = [
 	'/auth/deactivated'
 ];
 const AUTH_PATHS = ['/auth'];
-const ONBOARDING_PATHS = ['/profile-setup', '/organization-setup', '/payment-success', '/payment-cancel'];
+const ONBOARDING_PATHS = [
+	'/profile-setup',
+	'/organization-setup',
+	'/payment-success',
+	'/payment-cancel'
+];
 const RECOVERY_PATHS = ['/renew'];
 
 function hasActiveSubscription(status: BackendUser['subscription_status']): boolean {
@@ -36,7 +39,12 @@ export function getRouteCategory(pathname: string): RouteCategory {
 	return 'protected';
 }
 
-export function getOnboardingRedirect(user: Pick<BackendUser, 'first_name' | 'last_name' | 'organization_id' | 'is_owner' | 'subscription_status'>): string {
+export function getOnboardingRedirect(
+	user: Pick<
+		BackendUser,
+		'first_name' | 'last_name' | 'organization_id' | 'is_owner' | 'subscription_status'
+	>
+): string {
 	if (!user.first_name || !user.last_name) return '/profile-setup';
 	if (!user.organization_id) return '/organization-setup';
 
@@ -58,7 +66,10 @@ export function getOnboardingRedirect(user: Pick<BackendUser, 'first_name' | 'la
 
 export function decideRouteAccess(
 	pathname: string,
-	user: Pick<BackendUser, 'first_name' | 'last_name' | 'organization_id' | 'is_owner' | 'subscription_status'> | null,
+	user: Pick<
+		BackendUser,
+		'first_name' | 'last_name' | 'organization_id' | 'is_owner' | 'subscription_status'
+	> | null,
 	options: { hasPaymentSessionId?: boolean } = {}
 ): GuardDecision {
 	const category = getRouteCategory(pathname);

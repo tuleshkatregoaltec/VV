@@ -33,9 +33,7 @@ export async function createOrganization(
 	});
 }
 
-export async function inviteUserByEmail(
-	email: string
-): Promise<InviteUserResponse> {
+export async function inviteUserByEmail(email: string): Promise<InviteUserResponse> {
 	return api<InviteUserResponse>('/api/v1/organization/invite-user', {
 		method: 'POST',
 		body: { email }
@@ -67,9 +65,7 @@ export interface InviteConflictResponse {
 	is_single_seat: boolean;
 }
 
-export async function validateInviteToken(
-	token: string
-): Promise<ValidateInviteTokenResponse> {
+export async function validateInviteToken(token: string): Promise<ValidateInviteTokenResponse> {
 	return api<ValidateInviteTokenResponse>(
 		`/api/v1/organization/validate-invite-token?token=${token}`
 	);
@@ -78,13 +74,10 @@ export async function validateInviteToken(
 export async function acceptInvite(
 	token: string
 ): Promise<AcceptInviteResponse | InviteConflictResponse> {
-	return api<AcceptInviteResponse | InviteConflictResponse>(
-		'/api/v1/organization/accept-invite',
-		{
-			method: 'POST',
-			body: { token }
-		}
-	);
+	return api<AcceptInviteResponse | InviteConflictResponse>('/api/v1/organization/accept-invite', {
+		method: 'POST',
+		body: { token }
+	});
 }
 
 export interface OrganizationMember {

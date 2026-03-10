@@ -8,7 +8,7 @@
 
 	const SANITIZE_CONFIG = {
 		ALLOWED_TAGS: ['p', 'br', 'strong', 'em', 'ul', 'ol', 'li', 'blockquote', 'code', 'span'],
-		ALLOWED_ATTR: [],
+		ALLOWED_ATTR: []
 	};
 
 	function renderMarkdown(content: string): string {
@@ -50,7 +50,11 @@
 		return val.toLocaleString('en-AE', { maximumFractionDigits: 2 });
 	}
 
-	interface Change { key: string; before: string; after: string }
+	interface Change {
+		key: string;
+		before: string;
+		after: string;
+	}
 
 	function describeAction(pa: PendingAction): { title: string; changes: Change[] } {
 		if (pa.action === 'set_price_per_sqm') {
@@ -60,8 +64,8 @@
 				changes: Object.entries(payload).map(([type, newPrice]) => ({
 					key: type,
 					before: `AED ${(feasibilityStore.config.pricePerSqm[type] ?? 0).toLocaleString()}/sqm`,
-					after: `AED ${newPrice.toLocaleString()}/sqm`,
-				})),
+					after: `AED ${newPrice.toLocaleString()}/sqm`
+				}))
 			};
 		}
 		if (pa.action === 'set_assumptions') {
@@ -70,14 +74,20 @@
 				title: 'Update assumptions',
 				changes: Object.entries(patch).map(([key, newVal]) => ({
 					key,
-					before: fmtAssumptionVal(key, (feasibilityStore.assumptions as Record<string, unknown>)[key]),
-					after: fmtAssumptionVal(key, newVal),
-				})),
+					before: fmtAssumptionVal(
+						key,
+						(feasibilityStore.assumptions as Record<string, unknown>)[key]
+					),
+					after: fmtAssumptionVal(key, newVal)
+				}))
 			};
 		}
 		if (pa.action === 'set_buildings') {
 			const b = pa.payload as Array<{ name: string }>;
-			return { title: 'Reconfigure buildings', changes: [{ key: '', before: '', after: b.map((x) => x.name).join(', ') }] };
+			return {
+				title: 'Reconfigure buildings',
+				changes: [{ key: '', before: '', after: b.map((x) => x.name).join(', ') }]
+			};
 		}
 		return { title: pa.action, changes: [] };
 	}
@@ -148,8 +158,8 @@
 				cashBreakevenQuarter: s.cashBreakevenQuarter,
 				npvUnlevered: isNaN(s.npvUnlevered) ? null : Math.round(s.npvUnlevered),
 				npvLevered: isNaN(s.npvLevered) ? null : Math.round(s.npvLevered),
-				blendedPricePerSqm: Math.round(s.blendedPricePerSqm),
-			},
+				blendedPricePerSqm: Math.round(s.blendedPricePerSqm)
+			}
 		};
 	}
 
@@ -219,11 +229,19 @@
 			<div class="flex flex-col items-center justify-center h-full text-center px-4">
 				<div class="w-10 h-10 rounded-xl bg-teal-50 flex items-center justify-center mb-3">
 					<svg class="w-5 h-5 text-teal-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+						<path
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							stroke-width="1.5"
+							d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"
+						/>
 					</svg>
 				</div>
 				<p class="text-xs font-medium text-slate-600 mb-1">Ask me anything</p>
-				<p class="text-xs text-slate-400">Plot constraints, HBU strategy, pricing, unit mix, assumptions — I&apos;ll propose changes for your approval.</p>
+				<p class="text-xs text-slate-400">
+					Plot constraints, HBU strategy, pricing, unit mix, assumptions — I&apos;ll propose changes
+					for your approval.
+				</p>
 			</div>
 		{/if}
 
@@ -232,29 +250,39 @@
 				<!-- Status pill: applied / undone / declined / warning -->
 				<div class="flex justify-center items-center gap-2">
 					{#if msg.content === 'applied'}
-						<span class="text-[10px] px-2.5 py-0.5 rounded-full border text-emerald-600 bg-emerald-50 border-emerald-200">✓ Changes applied</span>
+						<span
+							class="text-[10px] px-2.5 py-0.5 rounded-full border text-emerald-600 bg-emerald-50 border-emerald-200"
+							>✓ Changes applied</span
+						>
 						{#if i === lastAppliedMsgIndex && feasibilityStore.canUndo}
 							<button
 								type="button"
 								class="text-[10px] text-slate-400 hover:text-slate-600 underline transition-colors"
-								onclick={undoChanges}
-							>↩ Undo</button>
+								onclick={undoChanges}>↩ Undo</button
+							>
 						{/if}
 					{:else if msg.content === 'undone'}
-						<span class="text-[10px] px-2.5 py-0.5 rounded-full border text-slate-500 bg-slate-50 border-slate-200">↩ Undone</span>
+						<span
+							class="text-[10px] px-2.5 py-0.5 rounded-full border text-slate-500 bg-slate-50 border-slate-200"
+							>↩ Undone</span
+						>
 					{:else if msg.content === 'declined'}
-						<span class="text-[10px] px-2.5 py-0.5 rounded-full border text-slate-400 bg-slate-50 border-slate-200">✗ Declined</span>
+						<span
+							class="text-[10px] px-2.5 py-0.5 rounded-full border text-slate-400 bg-slate-50 border-slate-200"
+							>✗ Declined</span
+						>
 					{:else}
-						<span class="text-[10px] px-2.5 py-0.5 rounded-full border text-amber-600 bg-amber-50 border-amber-200">⚠ {msg.content}</span>
+						<span
+							class="text-[10px] px-2.5 py-0.5 rounded-full border text-amber-600 bg-amber-50 border-amber-200"
+							>⚠ {msg.content}</span
+						>
 					{/if}
 				</div>
 			{:else}
 				<div class="flex {msg.role === 'user' ? 'justify-end' : 'justify-start'}">
 					<div
 						class="max-w-[88%] rounded-xl px-3 py-2 text-xs leading-relaxed
-							{msg.role === 'user'
-								? 'bg-teal-600 text-white'
-								: 'bg-slate-100 text-slate-800'}"
+							{msg.role === 'user' ? 'bg-teal-600 text-white' : 'bg-slate-100 text-slate-800'}"
 					>
 						{#if msg.role === 'assistant' && msg.content}
 							<!-- eslint-disable-next-line svelte/no-at-html-tags -->
@@ -276,15 +304,24 @@
 					<p class="font-semibold text-amber-800 mb-2">Proposed changes</p>
 					{#each pendingActions as pa, paIndex (`${pa.action}-${paIndex}`)}
 						{@const desc = describeAction(pa)}
-						<p class="text-[10px] font-semibold text-amber-600 uppercase tracking-wider mb-1">{desc.title}</p>
+						<p class="text-[10px] font-semibold text-amber-600 uppercase tracking-wider mb-1">
+							{desc.title}
+						</p>
 						<table class="w-full mb-2 text-[11px]">
 							{#each desc.changes as change, changeIndex (`${change.key || 'change'}-${changeIndex}`)}
 								<tr>
 									{#if change.key}
-										<td class="text-amber-700 pr-2 pb-0.5 whitespace-nowrap font-medium">{change.key}</td>
-										<td class="text-slate-400 pr-1.5 pb-0.5 line-through tabular-nums whitespace-nowrap">{change.before}</td>
+										<td class="text-amber-700 pr-2 pb-0.5 whitespace-nowrap font-medium"
+											>{change.key}</td
+										>
+										<td
+											class="text-slate-400 pr-1.5 pb-0.5 line-through tabular-nums whitespace-nowrap"
+											>{change.before}</td
+										>
 										<td class="text-amber-500 pr-1 pb-0.5">→</td>
-										<td class="text-emerald-700 font-semibold pb-0.5 tabular-nums whitespace-nowrap">{change.after}</td>
+										<td class="text-emerald-700 font-semibold pb-0.5 tabular-nums whitespace-nowrap"
+											>{change.after}</td
+										>
 									{:else}
 										<td colspan="4" class="text-amber-700 pb-0.5">{change.after}</td>
 									{/if}
@@ -318,28 +355,35 @@
 	<!-- Input -->
 	<div class="flex items-end gap-2 px-3 py-3 border-t border-slate-200 flex-shrink-0">
 		{#if pendingActions.length > 0}
-			<p class="flex-1 text-xs text-amber-600 text-center py-1">Review the proposed changes above before continuing.</p>
+			<p class="flex-1 text-xs text-amber-600 text-center py-1">
+				Review the proposed changes above before continuing.
+			</p>
 		{:else}
-		<textarea
-			class="flex-1 px-3 py-2 text-xs rounded-xl border border-slate-200 text-slate-800 placeholder-slate-400 resize-none focus:outline-none focus:ring-2 focus:ring-teal-400 transition-all"
-			placeholder="Ask anything..."
-			rows="2"
-			bind:value={inputValue}
-			bind:this={textarea}
-			onkeydown={handleKeydown}
-			disabled={isStreaming}
-		></textarea>
-		<button
-			type="button"
-			aria-label="Send message"
-			class="flex-shrink-0 w-8 h-8 rounded-xl bg-teal-600 text-white flex items-center justify-center hover:bg-teal-700 disabled:opacity-40 transition-colors"
-			onclick={sendMessage}
-			disabled={isStreaming || !inputValue.trim()}
-		>
-			<svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-			</svg>
-		</button>
+			<textarea
+				class="flex-1 px-3 py-2 text-xs rounded-xl border border-slate-200 text-slate-800 placeholder-slate-400 resize-none focus:outline-none focus:ring-2 focus:ring-teal-400 transition-all"
+				placeholder="Ask anything..."
+				rows="2"
+				bind:value={inputValue}
+				bind:this={textarea}
+				onkeydown={handleKeydown}
+				disabled={isStreaming}
+			></textarea>
+			<button
+				type="button"
+				aria-label="Send message"
+				class="flex-shrink-0 w-8 h-8 rounded-xl bg-teal-600 text-white flex items-center justify-center hover:bg-teal-700 disabled:opacity-40 transition-colors"
+				onclick={sendMessage}
+				disabled={isStreaming || !inputValue.trim()}
+			>
+				<svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+					<path
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						stroke-width="2"
+						d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"
+					/>
+				</svg>
+			</button>
 		{/if}
 	</div>
 </div>

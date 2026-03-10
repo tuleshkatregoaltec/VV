@@ -20,11 +20,7 @@
 
 	onMount(() => {
 		const observer = new IntersectionObserver((entries) => {
-			if (
-				entries[0].isIntersecting &&
-				newsQuery.hasNextPage &&
-				!newsQuery.isFetchingNextPage
-			) {
+			if (entries[0].isIntersecting && newsQuery.hasNextPage && !newsQuery.isFetchingNextPage) {
 				newsQuery.fetchNextPage();
 			}
 		});

@@ -81,7 +81,9 @@
 		<div class="bg-white rounded-xl shadow-lg p-8">
 			{#if success}
 				<div class="text-center">
-					<div class="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+					<div
+						class="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4"
+					>
 						<svg
 							xmlns="http://www.w3.org/2000/svg"
 							class="h-8 w-8 text-green-600"
@@ -98,11 +100,15 @@
 						</svg>
 					</div>
 					<h1 class="text-3xl font-bold text-black mb-2">Password Updated</h1>
-					<p class="text-gray-600">Your password has been successfully updated. Redirecting to dashboard...</p>
+					<p class="text-gray-600">
+						Your password has been successfully updated. Redirecting to dashboard...
+					</p>
 				</div>
 			{:else if !hasValidSession && error}
 				<div class="text-center">
-					<div class="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+					<div
+						class="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4"
+					>
 						<svg
 							xmlns="http://www.w3.org/2000/svg"
 							class="h-8 w-8 text-red-600"

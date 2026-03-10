@@ -238,9 +238,8 @@
 											Unit {match.unit_number} - Building {match.building_number}
 										</h4>
 										<p class="text-sm text-gray-600 mt-1">
-											{#if match.floor}Floor {match.floor} • {/if}{formatNumber(
-												match.actual_area
-											)} m²
+											{#if match.floor}Floor {match.floor} •
+											{/if}{formatNumber(match.actual_area)} m²
 											{#if match.rooms}• {match.rooms}{/if}
 										</p>
 										<p class="text-sm text-gray-700 mt-2">{match.reasoning}</p>
@@ -374,13 +373,7 @@
 						fill="none"
 						viewBox="0 0 24 24"
 					>
-						<circle
-							class="opacity-25"
-							cx="12"
-							cy="12"
-							r="10"
-							stroke="currentColor"
-							stroke-width="4"
+						<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"
 						></circle>
 						<path
 							class="opacity-75"

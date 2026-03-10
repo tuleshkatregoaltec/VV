@@ -2,7 +2,9 @@
 	<title>Payment Cancelled - Vitevue</title>
 </svelte:head>
 
-<div class="min-h-screen bg-gradient-to-br from-slate-50 to-white flex items-center justify-center p-4">
+<div
+	class="min-h-screen bg-gradient-to-br from-slate-50 to-white flex items-center justify-center p-4"
+>
 	<div class="w-full max-w-md">
 		<div class="bg-white rounded-xl shadow-lg p-12 text-center">
 			<div class="mb-6">

@@ -96,10 +96,7 @@
 	const xAxisTicks = $derived(
 		chartData.length > 0
 			? [0, 0.25, 0.5, 0.75, 1].map((ratio) => {
-					const index = Math.min(
-						Math.floor(ratio * (chartData.length - 1)),
-						chartData.length - 1
-					);
+					const index = Math.min(Math.floor(ratio * (chartData.length - 1)), chartData.length - 1);
 					const point = chartData[index];
 					const d = new Date(point.date);
 					return {
@@ -219,11 +216,7 @@
 			>
 				<defs>
 					<linearGradient id="areaGradient" x1="0" x2="0" y1="0" y2="1">
-						<stop
-							offset="0%"
-							stop-color={isPositive ? '#10b981' : '#ef4444'}
-							stop-opacity="0.3"
-						/>
+						<stop offset="0%" stop-color={isPositive ? '#10b981' : '#ef4444'} stop-opacity="0.3" />
 						<stop
 							offset="100%"
 							stop-color={isPositive ? '#10b981' : '#ef4444'}
@@ -268,12 +261,7 @@
 				{/each}
 
 				{#each xAxisTicks as tick}
-					<text
-						x={tick.x}
-						y={chartHeight - 10}
-						text-anchor="middle"
-						class="text-xs fill-slate-500"
-					>
+					<text x={tick.x} y={chartHeight - 10} text-anchor="middle" class="text-xs fill-slate-500">
 						{tick.label}
 					</text>
 				{/each}

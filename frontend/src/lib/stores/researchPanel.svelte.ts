@@ -10,7 +10,12 @@ export interface AgentTransactionData {
 
 export interface AgentAnalyticsData {
 	trend: Array<{ month: string; median_price_sqm: number; txn_count: number }>;
-	by_rooms: Array<{ rooms_en: string; txn_count: number; median_price_sqm: number; avg_area_sqm: number }>;
+	by_rooms: Array<{
+		rooms_en: string;
+		txn_count: number;
+		median_price_sqm: number;
+		avg_area_sqm: number;
+	}>;
 	filters: { area: string; project_name: string; days: number };
 }
 
@@ -24,16 +29,34 @@ const pipelineComparables = $state({ value: [] as ComparableProjectEvidence[] })
 const hbuMarketPricing = $state({ value: [] as MarketPricingRow[] });
 
 export const researchPanelStore = {
-	get activeTab() { return activeTab.value; },
-	get agentTransactions() { return agentTransactions.value; },
-	get agentAnalytics() { return agentAnalytics.value; },
-	get txFilters() { return txFilters.value; },
-	get comparableMarketPrices() { return comparableMarketPrices.value; },
-	get pricingComparables() { return pricingComparables.value; },
-	get pipelineComparables() { return pipelineComparables.value; },
-	get hbuMarketPricing() { return hbuMarketPricing.value; },
+	get activeTab() {
+		return activeTab.value;
+	},
+	get agentTransactions() {
+		return agentTransactions.value;
+	},
+	get agentAnalytics() {
+		return agentAnalytics.value;
+	},
+	get txFilters() {
+		return txFilters.value;
+	},
+	get comparableMarketPrices() {
+		return comparableMarketPrices.value;
+	},
+	get pricingComparables() {
+		return pricingComparables.value;
+	},
+	get pipelineComparables() {
+		return pipelineComparables.value;
+	},
+	get hbuMarketPricing() {
+		return hbuMarketPricing.value;
+	},
 
-	setActiveTab(tab: ResearchTab) { activeTab.value = tab; },
+	setActiveTab(tab: ResearchTab) {
+		activeTab.value = tab;
+	},
 	setAgentData(tab: 'transactions' | 'analytics', data: unknown) {
 		if (tab === 'transactions') agentTransactions.value = data as AgentTransactionData;
 		if (tab === 'analytics') agentAnalytics.value = data as AgentAnalyticsData;
@@ -52,5 +75,5 @@ export const researchPanelStore = {
 		pricingComparables.value = data.pricing;
 		pipelineComparables.value = data.pipeline;
 		hbuMarketPricing.value = data.marketPricing;
-	},
+	}
 };

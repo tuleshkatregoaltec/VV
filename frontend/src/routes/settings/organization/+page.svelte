@@ -152,8 +152,18 @@
 
 		{#if !isOwner}
 			<div class="bg-white rounded-lg shadow p-8 text-center">
-				<svg class="w-16 h-16 text-slate-300 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path>
+				<svg
+					class="w-16 h-16 text-slate-300 mx-auto mb-4"
+					fill="none"
+					stroke="currentColor"
+					viewBox="0 0 24 24"
+				>
+					<path
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						stroke-width="2"
+						d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
+					></path>
 				</svg>
 				<h2 class="text-xl font-semibold text-slate-900 mb-2">Access Restricted</h2>
 				<p class="text-slate-600">Only the organization owner can access these settings.</p>
@@ -193,16 +203,32 @@
 						{#if hasExcessUsers && withinPaidPeriod}
 							<div class="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-lg">
 								<div class="flex items-start gap-3">
-									<svg class="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+									<svg
+										class="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5"
+										fill="none"
+										stroke="currentColor"
+										viewBox="0 0 24 24"
+									>
+										<path
+											stroke-linecap="round"
+											stroke-linejoin="round"
+											stroke-width="2"
+											d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+										></path>
 									</svg>
 									<div>
-										<p class="font-medium text-amber-900 mb-1">Action Required After Billing Period</p>
+										<p class="font-medium text-amber-900 mb-1">
+											Action Required After Billing Period
+										</p>
 										<p class="text-sm text-amber-800 mb-2">
-											You have {subscription?.excess_users} too many users for your subscription ({subscription?.current_members} users, {subscription?.seats} seats).
+											You have {subscription?.excess_users} too many users for your subscription ({subscription?.current_members}
+											users, {subscription?.seats} seats).
 										</p>
 										<p class="text-sm text-amber-800">
-											All users will remain active until {new Date(subscription?.current_period_end || '').toLocaleDateString()}. After this date, you must either remove {subscription?.excess_users} {subscription?.excess_users === 1 ? 'member' : 'members'} or upgrade your subscription.
+											All users will remain active until {new Date(
+												subscription?.current_period_end || ''
+											).toLocaleDateString()}. After this date, you must either remove {subscription?.excess_users}
+											{subscription?.excess_users === 1 ? 'member' : 'members'} or upgrade your subscription.
 										</p>
 									</div>
 								</div>
@@ -210,16 +236,29 @@
 						{:else if hasExcessUsers && !withinPaidPeriod}
 							<div class="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
 								<div class="flex items-start gap-3">
-									<svg class="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+									<svg
+										class="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5"
+										fill="none"
+										stroke="currentColor"
+										viewBox="0 0 24 24"
+									>
+										<path
+											stroke-linecap="round"
+											stroke-linejoin="round"
+											stroke-width="2"
+											d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+										></path>
 									</svg>
 									<div>
 										<p class="font-medium text-red-900 mb-1">Immediate Action Required</p>
 										<p class="text-sm text-red-800 mb-2">
-											You have {subscription?.excess_users} too many users ({subscription?.current_members} users, {subscription?.seats} seats). Your billing period has ended.
+											You have {subscription?.excess_users} too many users ({subscription?.current_members}
+											users, {subscription?.seats} seats). Your billing period has ended.
 										</p>
 										<p class="text-sm text-red-800">
-											Please remove {subscription?.excess_users} {subscription?.excess_users === 1 ? 'member' : 'members'} immediately or upgrade your subscription to prevent service disruption.
+											Please remove {subscription?.excess_users}
+											{subscription?.excess_users === 1 ? 'member' : 'members'} immediately or upgrade
+											your subscription to prevent service disruption.
 										</p>
 									</div>
 								</div>
@@ -227,11 +266,22 @@
 						{:else if availableSeats > 0}
 							<div class="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg">
 								<div class="flex items-center gap-3">
-									<svg class="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+									<svg
+										class="w-5 h-5 text-green-600"
+										fill="none"
+										stroke="currentColor"
+										viewBox="0 0 24 24"
+									>
+										<path
+											stroke-linecap="round"
+											stroke-linejoin="round"
+											stroke-width="2"
+											d="M5 13l4 4L19 7"
+										></path>
 									</svg>
 									<p class="text-sm text-green-800">
-										You have {availableSeats} available {availableSeats === 1 ? 'seat' : 'seats'}. Invite new members!
+										You have {availableSeats} available {availableSeats === 1 ? 'seat' : 'seats'}.
+										Invite new members!
 									</p>
 								</div>
 							</div>
@@ -254,7 +304,7 @@
 				<div class="p-6 border-b border-slate-200 flex items-center justify-between">
 					<h2 class="text-xl font-semibold text-slate-900">Team Members</h2>
 					<button
-						onclick={() => showInviteModal = true}
+						onclick={() => (showInviteModal = true)}
 						disabled={subscription !== undefined && availableSeats <= 0}
 						class="px-4 py-2 bg-slate-900 text-white font-semibold rounded-lg hover:bg-slate-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
 					>
@@ -271,31 +321,43 @@
 					{:else if members.length > 0}
 						<div class="space-y-3">
 							{#each members as member}
-								<div class="flex items-center justify-between p-4 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors">
+								<div
+									class="flex items-center justify-between p-4 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
+								>
 									<div class="flex items-center gap-4">
-										<div class="w-10 h-10 rounded-full bg-slate-200 flex items-center justify-center">
+										<div
+											class="w-10 h-10 rounded-full bg-slate-200 flex items-center justify-center"
+										>
 											<span class="text-slate-700 font-semibold">
 												{member.first_name?.[0]}{member.last_name?.[0]}
 											</span>
 										</div>
 										<div>
 											<p class="font-medium text-slate-900">
-												{member.first_name} {member.last_name}
+												{member.first_name}
+												{member.last_name}
 											</p>
 											<p class="text-sm text-slate-600">{member.email}</p>
 										</div>
 									</div>
 									<div class="flex items-center gap-3">
-										<span class="px-3 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">
+										<span
+											class="px-3 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800"
+										>
 											Active
 										</span>
-										<span class="px-3 py-1 text-xs font-semibold rounded-full bg-slate-100 text-slate-700 capitalize">
+										<span
+											class="px-3 py-1 text-xs font-semibold rounded-full bg-slate-100 text-slate-700 capitalize"
+										>
 											{roleLabel(member.role)}
 										</span>
 										{#if member.id !== currentUser?.id && member.role !== 'owner'}
 											<button
-												onclick={() => handleRemoveMember(member.id, `${member.first_name} ${member.last_name}`)}
-												class="{hasExcessUsers && !withinPaidPeriod ? 'bg-red-100 text-red-700 hover:bg-red-200' : 'text-red-600 hover:text-red-700'} text-sm font-medium px-3 py-1 rounded transition-colors"
+												onclick={() =>
+													handleRemoveMember(member.id, `${member.first_name} ${member.last_name}`)}
+												class="{hasExcessUsers && !withinPaidPeriod
+													? 'bg-red-100 text-red-700 hover:bg-red-200'
+													: 'text-red-600 hover:text-red-700'} text-sm font-medium px-3 py-1 rounded transition-colors"
 											>
 												Remove
 											</button>
@@ -325,7 +387,9 @@
 					{:else if invitations.length > 0}
 						<div class="space-y-3">
 							{#each invitations as invitation}
-								<div class="flex items-center justify-between p-4 border border-slate-200 rounded-lg">
+								<div
+									class="flex items-center justify-between p-4 border border-slate-200 rounded-lg"
+								>
 									<div>
 										<p class="font-medium text-slate-900">{invitation.email}</p>
 										<p class="text-sm text-slate-600">
@@ -333,7 +397,9 @@
 										</p>
 									</div>
 									<div class="flex items-center gap-3">
-										<span class="px-3 py-1 text-xs font-semibold rounded-full bg-amber-100 text-amber-800">
+										<span
+											class="px-3 py-1 text-xs font-semibold rounded-full bg-amber-100 text-amber-800"
+										>
 											Pending
 										</span>
 										<button
@@ -358,16 +424,34 @@
 
 <!-- Invite Modal -->
 {#if showInviteModal}
-	<div class="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50" role="presentation" onkeydown={(e) => e.key === 'Escape' && (showInviteModal = false)} onclick={() => showInviteModal = false}>
-		<div class="bg-white rounded-lg shadow-xl max-w-md w-full p-6" role="dialog" aria-modal="true" tabindex="-1" onkeydown={(e) => e.key === 'Escape' && (showInviteModal = false)} onclick={(e) => e.stopPropagation()}>
+	<div
+		class="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50"
+		role="presentation"
+		onkeydown={(e) => e.key === 'Escape' && (showInviteModal = false)}
+		onclick={() => (showInviteModal = false)}
+	>
+		<div
+			class="bg-white rounded-lg shadow-xl max-w-md w-full p-6"
+			role="dialog"
+			aria-modal="true"
+			tabindex="-1"
+			onkeydown={(e) => e.key === 'Escape' && (showInviteModal = false)}
+			onclick={(e) => e.stopPropagation()}
+		>
 			<div class="flex items-center justify-between mb-4">
 				<h3 class="text-xl font-semibold text-slate-900">Invite Team Member</h3>
 				<button
-					onclick={() => showInviteModal = false}
+					onclick={() => (showInviteModal = false)}
 					aria-label="Close invite modal"
-					class="text-slate-400 hover:text-slate-600">
+					class="text-slate-400 hover:text-slate-600"
+				>
 					<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+						<path
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							stroke-width="2"
+							d="M6 18L18 6M6 6l12 12"
+						></path>
 					</svg>
 				</button>
 			</div>
@@ -384,7 +468,12 @@
 				</div>
 			{/if}
 
-			<form onsubmit={(e) => { e.preventDefault(); handleInviteUser(); }}>
+			<form
+				onsubmit={(e) => {
+					e.preventDefault();
+					handleInviteUser();
+				}}
+			>
 				<div class="mb-4">
 					<label for="inviteEmail" class="block text-sm font-medium text-slate-700 mb-2">
 						Email Address
@@ -409,7 +498,7 @@
 					</button>
 					<button
 						type="button"
-						onclick={() => showInviteModal = false}
+						onclick={() => (showInviteModal = false)}
 						class="px-4 py-2 border border-slate-300 text-slate-700 font-semibold rounded-lg hover:bg-slate-50 transition-colors"
 					>
 						Cancel

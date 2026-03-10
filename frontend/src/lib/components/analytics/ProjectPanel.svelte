@@ -51,7 +51,7 @@
 
 	const filteredSubProjects = $derived(
 		subSearch.trim()
-			? subProjects.filter(sp => sp.name.toLowerCase().includes(subSearch.toLowerCase()))
+			? subProjects.filter((sp) => sp.name.toLowerCase().includes(subSearch.toLowerCase()))
 			: subProjects
 	);
 
@@ -64,7 +64,11 @@
 			if (!node.contains(e.target as Node)) callback();
 		}
 		document.addEventListener('mousedown', handle, true);
-		return { destroy() { document.removeEventListener('mousedown', handle, true); } };
+		return {
+			destroy() {
+				document.removeEventListener('mousedown', handle, true);
+			}
+		};
 	}
 
 	function closeSubDropdown() {
@@ -73,7 +77,9 @@
 	}
 
 	function handleSubKeydown(e: KeyboardEvent) {
-		if (e.key === 'Escape') { closeSubDropdown(); }
+		if (e.key === 'Escape') {
+			closeSubDropdown();
+		}
 		if (e.key === 'Enter') {
 			e.preventDefault();
 			if (filteredSubProjects.length > 0) {
@@ -163,19 +169,26 @@
 		});
 	}
 
-	function buildDonutChart(canvas: HTMLCanvasElement, labels: string[], values: number[], existing: Chart | null): Chart {
+	function buildDonutChart(
+		canvas: HTMLCanvasElement,
+		labels: string[],
+		values: number[],
+		existing: Chart | null
+	): Chart {
 		existing?.destroy();
 		const ctx = canvas.getContext('2d')!;
 		return new Chart(ctx, {
 			type: 'doughnut',
 			data: {
 				labels,
-				datasets: [{
-					data: values,
-					backgroundColor: TEAL_PALETTE,
-					borderWidth: 2,
-					borderColor: '#fff'
-				}]
+				datasets: [
+					{
+						data: values,
+						backgroundColor: TEAL_PALETTE,
+						borderWidth: 2,
+						borderColor: '#fff'
+					}
+				]
 			},
 			options: {
 				responsive: true,
@@ -232,11 +245,10 @@
 </script>
 
 <div class="space-y-6">
-
 	{#if summaryQuery.isLoading}
 		<!-- Skeleton -->
 		<div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
-			{#each [0,1,2,3] as _}
+			{#each [0, 1, 2, 3] as _}
 				<div class="bg-white rounded-xl p-4 border border-slate-100 animate-pulse">
 					<div class="h-3 w-20 bg-slate-200 rounded mb-3"></div>
 					<div class="h-7 w-28 bg-slate-200 rounded"></div>
@@ -251,19 +263,36 @@
 			<div class="relative" use:clickOutside={closeSubDropdown}>
 				<button
 					type="button"
-					onclick={() => { subDropdownOpen = !subDropdownOpen; subSearch = ''; }}
+					onclick={() => {
+						subDropdownOpen = !subDropdownOpen;
+						subSearch = '';
+					}}
 					class="flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-200 bg-white text-sm text-slate-700 hover:border-teal-400 transition-colors"
 				>
 					<span class="font-medium">
-						{subProject ? stripPrefix(subProject) : `All development (${subProjects.length} sub-projects)`}
+						{subProject
+							? stripPrefix(subProject)
+							: `All development (${subProjects.length} sub-projects)`}
 					</span>
-					<svg class="w-4 h-4 text-slate-400 ml-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+					<svg
+						class="w-4 h-4 text-slate-400 ml-1"
+						fill="none"
+						viewBox="0 0 24 24"
+						stroke="currentColor"
+					>
+						<path
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							stroke-width="2"
+							d="M19 9l-7 7-7-7"
+						/>
 					</svg>
 				</button>
 
 				{#if subDropdownOpen}
-					<div class="absolute z-50 mt-1 w-80 rounded-lg border border-slate-200 bg-white shadow-lg">
+					<div
+						class="absolute z-50 mt-1 w-80 rounded-lg border border-slate-200 bg-white shadow-lg"
+					>
 						<div class="p-2 border-b border-slate-100">
 							<input
 								type="text"
@@ -277,16 +306,29 @@
 						<div class="max-h-64 overflow-y-auto">
 							<button
 								type="button"
-								class="w-full text-left px-3 py-2 text-sm transition-colors {subProject === null ? 'bg-teal-50 text-teal-700 font-medium' : 'text-slate-700 hover:bg-slate-50'}"
-								onmousedown={() => { subProject = null; subDropdownOpen = false; subSearch = ''; }}
+								class="w-full text-left px-3 py-2 text-sm transition-colors {subProject === null
+									? 'bg-teal-50 text-teal-700 font-medium'
+									: 'text-slate-700 hover:bg-slate-50'}"
+								onmousedown={() => {
+									subProject = null;
+									subDropdownOpen = false;
+									subSearch = '';
+								}}
 							>
 								All development
 							</button>
 							{#each filteredSubProjects as sp}
 								<button
 									type="button"
-									class="w-full text-left px-3 py-2 text-sm transition-colors {subProject === sp.name ? 'bg-teal-50 text-teal-700 font-medium' : 'text-slate-700 hover:bg-slate-50'}"
-									onmousedown={() => { subProject = sp.name; subDropdownOpen = false; subSearch = ''; }}
+									class="w-full text-left px-3 py-2 text-sm transition-colors {subProject ===
+									sp.name
+										? 'bg-teal-50 text-teal-700 font-medium'
+										: 'text-slate-700 hover:bg-slate-50'}"
+									onmousedown={() => {
+										subProject = sp.name;
+										subDropdownOpen = false;
+										subSearch = '';
+									}}
 								>
 									{stripPrefix(sp.name)}
 								</button>
@@ -304,19 +346,31 @@
 		{#if d.project}
 			<div class="flex flex-wrap gap-4 text-xs text-slate-500">
 				{#if d.project.developer_name}
-					<span><span class="font-medium text-slate-700">Developer:</span> {d.project.developer_name}</span>
+					<span
+						><span class="font-medium text-slate-700">Developer:</span>
+						{d.project.developer_name}</span
+					>
 				{/if}
 				{#if d.project.area_name}
 					<span><span class="font-medium text-slate-700">Area:</span> {d.project.area_name}</span>
 				{/if}
 				{#if d.project.project_status}
-					<span><span class="font-medium text-slate-700">Status:</span> {d.project.project_status}</span>
+					<span
+						><span class="font-medium text-slate-700">Status:</span>
+						{d.project.project_status}</span
+					>
 				{/if}
 				{#if d.project.no_of_units}
-					<span><span class="font-medium text-slate-700">Units:</span> {d.project.no_of_units.toLocaleString()}</span>
+					<span
+						><span class="font-medium text-slate-700">Units:</span>
+						{d.project.no_of_units.toLocaleString()}</span
+					>
 				{/if}
 				{#if d.project.percent_completed != null}
-					<span><span class="font-medium text-slate-700">Completion:</span> {d.project.percent_completed}%</span>
+					<span
+						><span class="font-medium text-slate-700">Completion:</span>
+						{d.project.percent_completed}%</span
+					>
 				{/if}
 			</div>
 		{/if}
@@ -325,7 +379,9 @@
 		<div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
 			<div class="bg-white rounded-xl p-4 border border-slate-100">
 				<p class="text-xs font-medium text-slate-500 mb-1">Total Sales</p>
-				<p class="text-2xl font-bold text-slate-900">{d.sales.transaction_count.toLocaleString()}</p>
+				<p class="text-2xl font-bold text-slate-900">
+					{d.sales.transaction_count.toLocaleString()}
+				</p>
 				<p class="text-xs text-slate-400 mt-1">transactions</p>
 			</div>
 			<div class="bg-white rounded-xl p-4 border border-slate-100">
@@ -336,7 +392,9 @@
 			<div class="bg-white rounded-xl p-4 border border-slate-100">
 				<p class="text-xs font-medium text-slate-500 mb-1">Median Annual Rent</p>
 				<p class="text-2xl font-bold text-slate-900">{fmt(d.rentals.median_annual_rent)}</p>
-				<p class="text-xs text-slate-400 mt-1">{d.rentals.contract_count.toLocaleString()} contracts</p>
+				<p class="text-xs text-slate-400 mt-1">
+					{d.rentals.contract_count.toLocaleString()} contracts
+				</p>
 			</div>
 			<div class="bg-white rounded-xl p-4 border border-teal-100 bg-teal-50/40">
 				<p class="text-xs font-medium text-teal-600 mb-1">Gross Yield</p>
@@ -365,11 +423,24 @@
 									<span class="inline-flex items-center justify-end gap-1">
 										Est. Annual Rent
 										<span class="group relative cursor-default">
-											<svg class="w-3.5 h-3.5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-												<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+											<svg
+												class="w-3.5 h-3.5 text-slate-400"
+												fill="none"
+												viewBox="0 0 24 24"
+												stroke="currentColor"
+											>
+												<path
+													stroke-linecap="round"
+													stroke-linejoin="round"
+													stroke-width="2"
+													d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+												/>
 											</svg>
-											<div class="pointer-events-none absolute top-full right-0 mt-2 z-50 w-72 rounded-lg bg-slate-800 px-3 py-2 text-xs font-normal text-slate-200 opacity-0 shadow-lg transition-opacity group-hover:opacity-100 normal-case tracking-normal">
-												Median annual rent inferred from Ejari contracts matched by unit area. Shown only when enough rental data exists for this bedroom type.
+											<div
+												class="pointer-events-none absolute top-full right-0 mt-2 z-50 w-72 rounded-lg bg-slate-800 px-3 py-2 text-xs font-normal text-slate-200 opacity-0 shadow-lg transition-opacity group-hover:opacity-100 normal-case tracking-normal"
+											>
+												Median annual rent inferred from Ejari contracts matched by unit area. Shown
+												only when enough rental data exists for this bedroom type.
 											</div>
 										</span>
 									</span>
@@ -378,11 +449,24 @@
 									<span class="inline-flex items-center justify-end gap-1 text-teal-600">
 										Gross Yield
 										<span class="group relative cursor-default">
-											<svg class="w-3.5 h-3.5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-												<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+											<svg
+												class="w-3.5 h-3.5 text-slate-400"
+												fill="none"
+												viewBox="0 0 24 24"
+												stroke="currentColor"
+											>
+												<path
+													stroke-linecap="round"
+													stroke-linejoin="round"
+													stroke-width="2"
+													d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+												/>
 											</svg>
-											<div class="pointer-events-none absolute top-full right-0 mt-2 z-50 w-72 rounded-lg bg-slate-800 px-3 py-2 text-xs font-normal text-slate-200 opacity-0 shadow-lg transition-opacity group-hover:opacity-100 normal-case tracking-normal">
-												Median annual rent ÷ median existing-market sale price. Off-plan prices excluded to avoid inflated yields.
+											<div
+												class="pointer-events-none absolute top-full right-0 mt-2 z-50 w-72 rounded-lg bg-slate-800 px-3 py-2 text-xs font-normal text-slate-200 opacity-0 shadow-lg transition-opacity group-hover:opacity-100 normal-case tracking-normal"
+											>
+												Median annual rent ÷ median existing-market sale price. Off-plan prices
+												excluded to avoid inflated yields.
 											</div>
 										</span>
 									</span>
@@ -393,13 +477,21 @@
 							{#each d.by_rooms as row}
 								<tr class="hover:bg-slate-50/50 transition-colors">
 									<td class="px-4 py-3 font-medium text-slate-800">{row.rooms}</td>
-									<td class="px-4 py-3 text-right text-slate-600">{row.sale_count.toLocaleString()}</td>
-									<td class="px-4 py-3 text-right text-slate-800 font-medium">{fmt(row.avg_sale_price)}</td>
+									<td class="px-4 py-3 text-right text-slate-600"
+										>{row.sale_count.toLocaleString()}</td
+									>
+									<td class="px-4 py-3 text-right text-slate-800 font-medium"
+										>{fmt(row.avg_sale_price)}</td
+									>
 									<td class="px-4 py-3 text-right text-slate-500">{fmt(row.avg_sale_price_sqm)}</td>
 									<td class="px-4 py-3 text-right text-slate-700">
 										{row.median_annual_rent > 0 ? fmt(row.median_annual_rent) : '—'}
 									</td>
-									<td class="px-4 py-3 text-right font-semibold {row.gross_yield_pct != null ? 'text-teal-600' : 'text-slate-400'}">
+									<td
+										class="px-4 py-3 text-right font-semibold {row.gross_yield_pct != null
+											? 'text-teal-600'
+											: 'text-slate-400'}"
+									>
 										{row.gross_yield_pct != null ? `${row.gross_yield_pct.toFixed(1)}%` : '—'}
 									</td>
 								</tr>
@@ -420,7 +512,9 @@
 					<canvas bind:this={trendCanvas}></canvas>
 				</div>
 			{:else}
-				<div class="h-48 flex items-center justify-center text-slate-400 text-sm">No trend data</div>
+				<div class="h-48 flex items-center justify-center text-slate-400 text-sm">
+					No trend data
+				</div>
 			{/if}
 		</div>
 
@@ -460,13 +554,14 @@
 									style="width: {u.pct_of_total}%"
 								></div>
 							</div>
-							<span class="text-xs text-slate-500 w-16 text-right">{u.count.toLocaleString()} ({u.pct_of_total}%)</span>
+							<span class="text-xs text-slate-500 w-16 text-right"
+								>{u.count.toLocaleString()} ({u.pct_of_total}%)</span
+							>
 						</div>
 					{/each}
 				</div>
 			</div>
 		{/if}
-
 	{:else if summaryQuery.isError}
 		<div class="bg-red-50 border border-red-200 rounded-xl p-6 text-center text-sm text-red-600">
 			Failed to load analytics for this project.

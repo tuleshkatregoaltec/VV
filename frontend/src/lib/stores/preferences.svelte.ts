@@ -18,7 +18,7 @@ const defaultPreferences: UserPreferences = {
 
 function loadPreferences(): UserPreferences {
 	if (!browser) return defaultPreferences;
-	
+
 	try {
 		const stored = localStorage.getItem(STORAGE_KEY);
 		if (stored) {
@@ -27,13 +27,13 @@ function loadPreferences(): UserPreferences {
 	} catch (e) {
 		console.warn('Failed to load preferences from localStorage:', e);
 	}
-	
+
 	return defaultPreferences;
 }
 
 function savePreferences(prefs: UserPreferences): void {
 	if (!browser) return;
-	
+
 	try {
 		localStorage.setItem(STORAGE_KEY, JSON.stringify(prefs));
 	} catch (e) {

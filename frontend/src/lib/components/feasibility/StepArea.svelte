@@ -10,7 +10,7 @@
 	const areasQuery = createQuery(() => ({
 		queryKey: ['feasibility-areas'],
 		queryFn: () => feasibility.getAreas(),
-		staleTime: Infinity,
+		staleTime: Infinity
 	}));
 
 	const filtered = $derived(
@@ -24,19 +24,30 @@
 			if (!node.contains(e.target as Node)) cb();
 		}
 		document.addEventListener('mousedown', handle, true);
-		return { destroy() { document.removeEventListener('mousedown', handle, true); } };
+		return {
+			destroy() {
+				document.removeEventListener('mousedown', handle, true);
+			}
+		};
 	}
 </script>
 
 <div class="max-w-md mx-auto">
 	<h2 class="text-xl font-semibold text-slate-800 mb-2">Select an area</h2>
-	<p class="text-sm text-slate-500 mb-6">Choose the Dubai area where your project will be located.</p>
+	<p class="text-sm text-slate-500 mb-6">
+		Choose the Dubai area where your project will be located.
+	</p>
 
 	<div class="relative" use:clickOutside={() => (isOpen = false)}>
 		<div class="relative">
 			<div class="pointer-events-none absolute inset-y-0 left-3 flex items-center">
 				<svg class="w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+					<path
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						stroke-width="2"
+						d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+					/>
 				</svg>
 			</div>
 			<input
@@ -50,7 +61,9 @@
 		</div>
 
 		{#if isOpen}
-			<div class="absolute z-50 mt-1 w-full max-h-72 overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-lg">
+			<div
+				class="absolute z-50 mt-1 w-full max-h-72 overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-lg"
+			>
 				{#if areasQuery.isLoading}
 					<div class="px-4 py-3 text-sm text-slate-400">Loading areas...</div>
 				{:else if filtered.length === 0}
@@ -60,7 +73,11 @@
 						<button
 							type="button"
 							class="w-full text-left px-4 py-2.5 text-sm text-slate-900 hover:bg-teal-50 hover:text-teal-700 transition-colors"
-							onmousedown={() => { onSelect(area); search = area; isOpen = false; }}
+							onmousedown={() => {
+								onSelect(area);
+								search = area;
+								isOpen = false;
+							}}
 						>
 							{area}
 						</button>

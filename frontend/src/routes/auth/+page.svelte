@@ -13,7 +13,14 @@
 		request_password_reset
 	} from '$lib/api/auth';
 
-	type View = 'login' | 'signup' | 'verify-otp' | 'email-auth' | 'email-auth-otp' | 'forgot-password' | 'forgot-password-otp';
+	type View =
+		| 'login'
+		| 'signup'
+		| 'verify-otp'
+		| 'email-auth'
+		| 'email-auth-otp'
+		| 'forgot-password'
+		| 'forgot-password-otp';
 
 	let currentView = $state<View>('login');
 	let email = $state('');

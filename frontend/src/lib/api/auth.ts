@@ -6,32 +6,25 @@ import type { AuthChangeEvent, Session } from '@supabase/auth-js';
 import { api } from './client';
 
 export interface BackendUser {
-    id: string;
-    email: string;
-    first_name: string;
-    last_name: string;
-    organization_id: string | null;
-    organization_name: string | null;
-    role: 'user' | 'admin' | 'owner' | 'member';
-    is_owner: boolean;
-    subscription_status: string | null;
+	id: string;
+	email: string;
+	first_name: string;
+	last_name: string;
+	organization_id: string | null;
+	organization_name: string | null;
+	role: 'user' | 'admin' | 'owner' | 'member';
+	is_owner: boolean;
+	subscription_status: string | null;
 }
 
 export const client = new AuthClient({
-    url: `${env.PUBLIC_AUTH_BASE_URL}`,
-    storageKey: "authentication",
-    detectSessionInUrl: true,
-    persistSession: true,
-
+	url: `${env.PUBLIC_AUTH_BASE_URL}`,
+	storageKey: 'authentication',
+	detectSessionInUrl: true,
+	persistSession: true
 });
 
-const authSearchParams = [
-    'code',
-    'state',
-    'provider_token',
-    'provider_refresh_token',
-    'error'
-]
+const authSearchParams = ['code', 'state', 'provider_token', 'provider_refresh_token', 'error'];
 
 client.onAuthStateChange((event: AuthChangeEvent, _session: Session | null) => {
 	if (!browser) return;
@@ -54,19 +47,21 @@ function toAuthResult<T>(
 	fallbackMessage: string
 ): AuthResult<T> {
 	if (!res.error) {
-		return res.data !== undefined ? { success: true, data: res.data ?? undefined } : { success: true };
+		return res.data !== undefined
+			? { success: true, data: res.data ?? undefined }
+			: { success: true };
 	}
 
 	return { success: false, error: res.error.message || fallbackMessage };
 }
 
 export async function get_access_token(): Promise<string | undefined> {
-    const res = await client.getSession();
+	const res = await client.getSession();
 
-    if (res.data && !res.error) {
-        return res.data.session?.access_token;
-    }
-};
+	if (res.data && !res.error) {
+		return res.data.session?.access_token;
+	}
+}
 
 /**
  * Login with email/password, storing into localstorage if successful.
@@ -91,10 +86,10 @@ export async function login_with_email_pass(email: string, password: string): Pr
  * @returns AuthResult with success status and error message
  */
 export async function sign_up_with_password(
-    email: string,
-    password: string,
-    firstName: string,
-    lastName: string
+	email: string,
+	password: string,
+	firstName: string,
+	lastName: string
 ): Promise<AuthResult> {
 	const res = await client.signUp({
 		email,
@@ -172,9 +167,9 @@ export async function sign_up_with_magic_link(
  * @returns AuthResult with success status and session data
  */
 export async function verify_otp(
-    email: string,
-    token: string,
-    type: 'signup' | 'magiclink' | 'recovery' | 'email_change' = 'signup'
+	email: string,
+	token: string,
+	type: 'signup' | 'magiclink' | 'recovery' | 'email_change' = 'signup'
 ): Promise<AuthResult> {
 	const res = await client.verifyOtp({
 		email,
@@ -193,8 +188,8 @@ export async function verify_otp(
  * @returns AuthResult with success status
  */
 export async function resend_otp(
-    email: string,
-    type: 'signup' | 'email_change' = 'signup'
+	email: string,
+	type: 'signup' | 'email_change' = 'signup'
 ): Promise<AuthResult> {
 	const res = await client.resend({
 		email,
@@ -238,10 +233,9 @@ export async function update_password(newPassword: string): Promise<AuthResult> 
  * @returns Current session or null
  */
 export async function get_session(): Promise<Session | null> {
-    const res = await client.getSession();
-    return res.data?.session || null;
+	const res = await client.getSession();
+	return res.data?.session || null;
 }
-
 
 /**
  * Listen to auth state changes.
@@ -250,16 +244,16 @@ export async function get_session(): Promise<Session | null> {
  * @returns Unsubscribe function
  */
 export function on_auth_state_change(
-    callback: (event: AuthChangeEvent, session: Session | null) => void
+	callback: (event: AuthChangeEvent, session: Session | null) => void
 ): { data: { subscription: { unsubscribe: () => void } } } {
-    return client.onAuthStateChange(callback);
+	return client.onAuthStateChange(callback);
 }
 
 /**
  * Get current user info from backend
  */
 export async function me(): Promise<BackendUser> {
-    return api<BackendUser>('/api/v1/auth/me');
+	return api<BackendUser>('/api/v1/auth/me');
 }
 
 /**
@@ -270,16 +264,16 @@ export async function me(): Promise<BackendUser> {
  * @returns AuthResult with success status
  */
 export async function update_user_profile(
-    firstName: string,
-    lastName: string
+	firstName: string,
+	lastName: string
 ): Promise<{ success: boolean; first_name: string; last_name: string }> {
-    return api<{ success: boolean; first_name: string; last_name: string }>(
-        '/api/v1/auth/update-profile',
-        {
-            method: 'POST',
-            body: { first_name: firstName, last_name: lastName }
-        }
-    );
+	return api<{ success: boolean; first_name: string; last_name: string }>(
+		'/api/v1/auth/update-profile',
+		{
+			method: 'POST',
+			body: { first_name: firstName, last_name: lastName }
+		}
+	);
 }
 
 /**
