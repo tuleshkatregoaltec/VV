@@ -10,13 +10,15 @@ from app.providers.auth import AuthenticatedUser
 
 logger = logging.getLogger(__name__)
 
-auth_client = AsyncGoTrueClient(url=settings.AUTH_URL)
+auth_base_url = str(settings.AUTH_URL).rstrip("/")
+
+auth_client = AsyncGoTrueClient(url=auth_base_url)
 
 _admin_headers = {
     "Authorization": f"Bearer {settings.AUTH_SERVICE_ROLE_KEY}",
     "apikey": settings.AUTH_SERVICE_ROLE_KEY,
 }
-admin_client = AsyncGoTrueClient(url=settings.AUTH_URL, headers=_admin_headers)
+admin_client = AsyncGoTrueClient(url=auth_base_url, headers=_admin_headers)
 admin_client.admin._headers.update(_admin_headers)
 
 

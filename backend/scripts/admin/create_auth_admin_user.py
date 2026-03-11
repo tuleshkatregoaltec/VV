@@ -13,8 +13,8 @@ def _headers() -> dict[str, str]:
 
 def _payload() -> dict:
     return {
-        "email": settings.AUTH_ADMIN_EMAIL,
-        "password": settings.AUTH_ADMIN_PASSWORD,
+        "email": settings.FIRST_SUPERUSER,
+        "password": settings.FIRST_SUPERUSER_PASSWORD,
         "email_confirm": True,
         "role": "supabase_admin",
         "app_metadata": {
@@ -25,8 +25,8 @@ def _payload() -> dict:
 
 
 def create_user():
-    if not settings.AUTH_ADMIN_EMAIL or not settings.AUTH_ADMIN_PASSWORD:
-        raise RuntimeError("AUTH_ADMIN_EMAIL and AUTH_ADMIN_PASSWORD must be configured")
+    if not settings.bootstrap_superuser_enabled:
+        raise RuntimeError("FIRST_SUPERUSER and FIRST_SUPERUSER_PASSWORD must be configured")
 
     response = requests.post(
         f"{settings.AUTH_URL}/admin/users",
@@ -37,7 +37,7 @@ def create_user():
 
     if response.status_code == 201 or response.status_code == 200:
         print("Admin user created.")
-        print(f"email: '{settings.AUTH_ADMIN_EMAIL}'")
+        print(f"email: '{settings.FIRST_SUPERUSER}'")
         print(response.json())
         return
 
@@ -50,7 +50,7 @@ def create_user():
         users_response.raise_for_status()
         users = users_response.json().get("users", [])
         existing_user = next(
-            (user for user in users if user.get("email") == settings.AUTH_ADMIN_EMAIL), None
+            (user for user in users if user.get("email") == settings.FIRST_SUPERUSER), None
         )
 
         if existing_user:
@@ -62,7 +62,7 @@ def create_user():
             )
             if update_response.status_code in {200, 201}:
                 print("Admin user updated.")
-                print(f"email: '{settings.AUTH_ADMIN_EMAIL}'")
+                print(f"email: '{settings.FIRST_SUPERUSER}'")
                 print(update_response.json())
                 return
             print(f"Failed to update existing admin: {update_response.status_code}")

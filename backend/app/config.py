@@ -1,29 +1,57 @@
+import warnings
 from functools import cached_property
-from pathlib import Path
+from typing import Annotated, Any, Literal
 
-from pydantic import field_validator
-from pydantic_settings import BaseSettings
+from pydantic import (
+    AnyUrl,
+    BeforeValidator,
+    EmailStr,
+    PostgresDsn,
+    computed_field,
+    field_validator,
+    model_validator,
+)
+from pydantic_settings import BaseSettings, SettingsConfigDict
+from typing_extensions import Self
+
+
+def parse_cors(v: Any) -> list[str] | str:
+    if isinstance(v, str) and not v.startswith("["):
+        return [origin.strip() for origin in v.split(",") if origin.strip()]
+    if isinstance(v, list | str):
+        return v
+    raise ValueError(v)
 
 
 class Settings(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_file=(".env.dev", "../.env.dev"),
+        env_ignore_empty=True,
+        extra="ignore",
+    )
+
+    API_V1_STR: str = "/api/v1"
+    PROJECT_NAME: str = "Vitevue API"
+    ENVIRONMENT: Literal["local", "staging", "production"] = "local"
+
     # Database
-    DATABASE_URL: str  # configMap
+    DATABASE_URL: PostgresDsn  # configMap
 
     # Redis
     REDIS_URL: str  # configMap
     REDIS_PASSWORD: str  # Bitwarden Secrets
 
-    FRONTEND_URL: str  # configMap
+    FRONTEND_URL: AnyUrl  # configMap
 
     # Security
     SESSION_SECRET: str  # Bitwarden Secrets
     SERVICE_API_KEY: str  # Bitwarden Secrets
 
     # CORS
-    ALLOWED_ORIGINS: list[str]  # configMap
+    ALLOWED_ORIGINS: Annotated[list[AnyUrl] | str, BeforeValidator(parse_cors)] = []
 
     # Honeybadger
-    HONEYBADGER_API_KEY: str  # Bitwarden Secrets
+    HONEYBADGER_API_KEY: str | None = None
     LOGFIRE_TOKEN: str | None = None
 
     # OpenRouter
@@ -31,17 +59,17 @@ class Settings(BaseSettings):
     DEFAULT_CHAT_MODEL: str  # configMap
 
     # Auth
-    AUTH_URL: str  # configMap
+    AUTH_URL: AnyUrl  # configMap
     AUTH_SERVICE_ROLE_KEY: str  # Bitwarden Secrets
-    AUTH_ADMIN_EMAIL: str | None = None
-    AUTH_ADMIN_PASSWORD: str | None = None
+    FIRST_SUPERUSER: EmailStr | None = None
+    FIRST_SUPERUSER_PASSWORD: str | None = None
 
     # PostHog
-    POSTHOG_API_KEY: str  # Bitwarden Secrets
-    POSTHOG_HOST: str  # configMap
+    POSTHOG_API_KEY: str | None = None
+    POSTHOG_HOST: AnyUrl | None = None
 
     # S3
-    S3_ENDPOINT_URL: str  # configMap
+    S3_ENDPOINT_URL: AnyUrl  # configMap
     S3_ACCESS_KEY_ID: str  # Bitwarden Secrets
     S3_SECRET_ACCESS_KEY: str
     S3_BUCKET_NAME: str  # configMap
@@ -61,14 +89,44 @@ class Settings(BaseSettings):
     STRIPE_PRICE_ID_TIER2: str  # configMap
 
     # Frontend URLs for Stripe redirects
-    FRONTEND_SUCCESS_URL: str  # configMap
-    FRONTEND_CANCEL_URL: str  # configMap
+    FRONTEND_SUCCESS_URL: AnyUrl  # configMap
+    FRONTEND_CANCEL_URL: AnyUrl  # configMap
 
     @cached_property
     def ALEMBIC_DATABASE_URL(self) -> str:
-        if self.DATABASE_URL.startswith("postgresql+asyncpg://"):
-            return self.DATABASE_URL.replace("postgresql+asyncpg://", "postgresql://", 1)
-        return self.DATABASE_URL
+        database_url = str(self.DATABASE_URL)
+        if database_url.startswith("postgresql+asyncpg://"):
+            return database_url.replace("postgresql+asyncpg://", "postgresql://", 1)
+        return database_url
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def all_cors_origins(self) -> list[str]:
+        origins = [str(origin).rstrip("/") for origin in self.ALLOWED_ORIGINS]
+        frontend_url = str(self.FRONTEND_URL).rstrip("/")
+        if frontend_url not in origins:
+            origins.append(frontend_url)
+        return origins
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def honeybadger_enabled(self) -> bool:
+        return bool(self.HONEYBADGER_API_KEY)
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def logfire_enabled(self) -> bool:
+        return bool(self.LOGFIRE_TOKEN)
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def posthog_enabled(self) -> bool:
+        return bool(self.POSTHOG_API_KEY and self.POSTHOG_HOST)
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def bootstrap_superuser_enabled(self) -> bool:
+        return bool(self.FIRST_SUPERUSER and self.FIRST_SUPERUSER_PASSWORD)
 
     @field_validator("SERVICE_API_KEY")
     @classmethod
@@ -77,8 +135,45 @@ class Settings(BaseSettings):
             raise ValueError("SERVICE_API_KEY must be at least 32 characters")
         return v
 
-    class Config:
-        env_file = Path(__file__).resolve().parents[2] / ".env.dev"
+    @field_validator("SESSION_SECRET")
+    @classmethod
+    def validate_session_secret(cls, v: str) -> str:
+        if len(v) < 32:
+            raise ValueError("SESSION_SECRET must be at least 32 characters")
+        return v
+
+    @model_validator(mode="after")
+    def validate_superuser_bootstrap(self) -> Self:
+        if bool(self.FIRST_SUPERUSER) != bool(self.FIRST_SUPERUSER_PASSWORD):
+            raise ValueError(
+                "FIRST_SUPERUSER and FIRST_SUPERUSER_PASSWORD must both be set together"
+            )
+        return self
+
+    def _check_default_secret(self, var_name: str, value: str | None) -> None:
+        default_values = {
+            "SESSION_SECRET": "dev_session_secret_at_least_32_chars_long_12345",
+            "SERVICE_API_KEY": "dev_service_api_key_at_least_32_chars_long_12345",
+            "FIRST_SUPERUSER_PASSWORD": "admin123",
+        }
+        if value != default_values.get(var_name):
+            return
+
+        message = (
+            f"{var_name} is using a local development default. "
+            "Change it for staging and production."
+        )
+        if self.ENVIRONMENT == "local":
+            warnings.warn(message, stacklevel=1)
+            return
+        raise ValueError(message)
+
+    @model_validator(mode="after")
+    def enforce_non_default_secrets(self) -> Self:
+        self._check_default_secret("SESSION_SECRET", self.SESSION_SECRET)
+        self._check_default_secret("SERVICE_API_KEY", self.SERVICE_API_KEY)
+        self._check_default_secret("FIRST_SUPERUSER_PASSWORD", self.FIRST_SUPERUSER_PASSWORD)
+        return self
 
 
 settings = Settings()  # type: ignore

@@ -58,8 +58,8 @@ Main local endpoints:
 Local admin bootstrap:
 
 - `just dev-backend` runs `backend/scripts/lifecycle/prestart.sh` before starting Uvicorn
-- that script applies migrations and ensures the local auth admin user exists
-- the default local admin credentials live in [`.env.dev`](/home/vitevue/repos/vitevue-platform/.env.dev) via `AUTH_ADMIN_EMAIL` and `AUTH_ADMIN_PASSWORD`
+- that script applies migrations and ensures the local bootstrap superuser exists
+- the default local bootstrap superuser credentials live in [`.env.dev`](/home/vitevue/repos/vitevue-platform/.env.dev) via `FIRST_SUPERUSER` and `FIRST_SUPERUSER_PASSWORD`
 
 ## Common Commands
 
