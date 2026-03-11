@@ -31,8 +31,11 @@ def make_owner_context(max_users: int = 3, org_id: str = "org-1") -> AuthContext
     user = SimpleNamespace(
         id="owner-user-id",
         email="owner@example.com",
+        first_name="Owner",
+        last_name="User",
+        daily_token_limit=500000,
         user_metadata=SimpleNamespace(first_name="Owner", last_name="User"),
-        app_metadata=SimpleNamespace(role=SimpleNamespace(roles=[]), daily_token_limit=500000),
+        app_metadata=SimpleNamespace(is_admin=False, daily_token_limit=500000),
         is_authenticated=True,
     )
     organization = SimpleNamespace(

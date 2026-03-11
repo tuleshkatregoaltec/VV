@@ -127,20 +127,20 @@ async def get_organization(org_id: str, db: AsyncSession = Depends(get_db_sessio
             continue
         usage = usage_by_user.get(membership.user_id)
         tokens_used = usage.total_tokens if usage else 0
-        limit = user.app_metadata.daily_token_limit or 0
+        limit = user.daily_token_limit or 0
         pct = (tokens_used / limit * 100) if limit > 0 else 0.0
 
         users.append(
             OrgUserResponse(
                 id=user.id,
                 email=user.email,
-                first_name=user.user_metadata.first_name or "",
-                last_name=user.user_metadata.last_name or "",
+                first_name=user.first_name or "",
+                last_name=user.last_name or "",
                 role=membership.role,
                 daily_token_limit=limit,
                 tokens_used_today=tokens_used,
                 usage_percentage=round(pct, 1),
-                last_login=user.auth_user.last_sign_in_at,
+                last_login=user.last_login_at,
             )
         )
 
@@ -268,7 +268,7 @@ async def list_token_usage(db: AsyncSession = Depends(get_db_session)):
     out: List[UserTokenStatsResponse] = []
     for usage in usages:
         user = await get_user_by_id(usage.user_id)
-        daily_limit = getattr(user.app_metadata, "daily_token_limit", 0) if user else 0
+        daily_limit = user.daily_token_limit if user else 0
         tokens_used = usage.total_tokens if usage else 0
         remaining = max(0, daily_limit - tokens_used)
         usage_percentage = (tokens_used / daily_limit * 100) if daily_limit > 0 else 0.0
@@ -294,13 +294,13 @@ async def create_user(request: CreateUserRequest, db: AsyncSession = Depends(get
 
     # Create Supabase user
     try:
-        platform_user = await create_user_admin(
+        created_user = await create_user_admin(
             request.email, request.password, request.first_name, request.last_name
         )
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Failed to create user: {e}")
 
-    user_id = platform_user.id
+    user_id = created_user.id
 
     # Set token limit
     try:
@@ -360,12 +360,12 @@ async def get_user_details(user_id: str, db: AsyncSession = Depends(get_db_sessi
     return UserDetailResponse(
         id=user.id,
         email=user.email,
-        first_name=user.user_metadata.first_name,
-        last_name=user.user_metadata.last_name,
+        first_name=user.first_name,
+        last_name=user.last_name,
         organization_id=organization_id,
         organization_name=organization_name,
         role=role,
-        daily_token_limit=user.app_metadata.daily_token_limit,
+        daily_token_limit=user.daily_token_limit,
     )
 
 
@@ -397,12 +397,12 @@ async def update_user(
     return UserDetailResponse(
         id=user.id,
         email=user.email,
-        first_name=user.user_metadata.first_name,
-        last_name=user.user_metadata.last_name,
+        first_name=user.first_name,
+        last_name=user.last_name,
         organization_id=organization_id,
         organization_name=organization_name,
         role=role,
-        daily_token_limit=user.app_metadata.daily_token_limit,
+        daily_token_limit=user.daily_token_limit,
     )
 
 
@@ -447,8 +447,8 @@ async def list_organization_members(
                 OrganizationMemberResponse(
                     id=membership.user_id,
                     email=user.email,
-                    first_name=user.user_metadata.first_name,
-                    last_name=user.user_metadata.last_name,
+                    first_name=user.first_name,
+                    last_name=user.last_name,
                     role=membership.role,
                     joined_at=membership.created_at,
                 )

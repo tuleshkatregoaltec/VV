@@ -26,8 +26,11 @@ def make_current_user(**overrides):
     user = SimpleNamespace(
         id="test-user-id",
         email="test@example.com",
+        first_name="Test",
+        last_name="User",
+        daily_token_limit=500000,
         user_metadata=SimpleNamespace(first_name="Test", last_name="User"),
-        app_metadata=SimpleNamespace(role=SimpleNamespace(roles=[]), daily_token_limit=500000),
+        app_metadata=SimpleNamespace(is_admin=False, daily_token_limit=500000),
         is_authenticated=True,
     )
 

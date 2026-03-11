@@ -1,52 +1,31 @@
 from fastapi import APIRouter, Depends
-from pydantic import BaseModel, Field
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from app.auth.models import AuthMeResponse, UpdateProfileRequest, UpdateProfileResponse
 from app.auth.service import update_user_profile_metadata
 from app.core.dependencies import require_auth
 from app.organization import service as organization_service
 from app.postgres import get_db_session
-from app.providers.auth.platform_user import PlatformUser
+from app.providers.auth import AuthenticatedUser
 
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 
 
-class UpdateProfileRequest(BaseModel):
-    """Request to update user profile"""
-
-    first_name: str = Field(min_length=1, max_length=100)
-    last_name: str = Field(min_length=1, max_length=100)
-
-
-class UpdateProfileResponse(BaseModel):
-    """Response for profile update"""
-
-    success: bool
-    first_name: str
-    last_name: str
-
-
-class AuthMeResponse(BaseModel):
-    id: str
-    email: str
-    first_name: str
-    last_name: str
-    organization_id: str | None
-    organization_name: str | None
-    role: str
-    is_owner: bool
-    subscription_status: str | None
+def derive_role(current_user: AuthenticatedUser, organization_role: str | None) -> str:
+    if current_user.is_admin:
+        return "admin"
+    return organization_role or "user"
 
 
 @router.get("/me", response_model=AuthMeResponse)
 async def get_user(
     db: AsyncSession = Depends(get_db_session),
-    current_user: PlatformUser = Depends(require_auth),
+    current_user: AuthenticatedUser = Depends(require_auth),
 ) -> AuthMeResponse:
     """
     Get current authenticated user with organization and subscription context.
 
-    Returns first_name/last_name from Supabase auth user_metadata.
+    Returns first_name/last_name from the authenticated user principal.
     Returns subscription_status from organization.subscription_status (single source of truth).
     """
 
@@ -55,7 +34,7 @@ async def get_user(
 
     organization_id = None
     organization_name = None
-    role = "user"
+    organization_role = None
     is_owner = False
     subscription_status = None
 
@@ -63,7 +42,7 @@ async def get_user(
         from app.postgres.models import Organization
 
         is_owner = membership.role == "owner"
-        role = membership.role
+        organization_role = membership.role
 
         org = await db.get(Organization, membership.organization_id)
         if org:
@@ -73,15 +52,13 @@ async def get_user(
             # Use org.subscription_status as single source of truth
             subscription_status = org.subscription_status
 
-    # System admin overrides the membership role
-    if current_user.is_admin():
-        role = "admin"
+    role = derive_role(current_user, organization_role)
 
     return AuthMeResponse(
         id=current_user.id,
         email=current_user.email,
-        first_name=current_user.user_metadata.first_name,
-        last_name=current_user.user_metadata.last_name,
+        first_name=current_user.first_name,
+        last_name=current_user.last_name,
         organization_id=organization_id,
         organization_name=organization_name,
         role=role,
@@ -93,7 +70,7 @@ async def get_user(
 @router.post("/update-profile", response_model=UpdateProfileResponse)
 async def update_profile(
     request: UpdateProfileRequest,
-    current_user: PlatformUser = Depends(require_auth),
+    current_user: AuthenticatedUser = Depends(require_auth),
 ):
     """Update user profile (first name and last name)."""
     await update_user_profile_metadata(current_user.id, request.first_name, request.last_name)

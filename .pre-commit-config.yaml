@@ -9,18 +9,15 @@ repos:
 
   - repo: local
     hooks:
-      - id: backend-ruff-format
-        name: backend ruff format
-        entry: uv run --project backend ruff format
-        language: system
-        files: ^backend/.*\.py$
       - id: backend-ruff-check
-        name: backend ruff check
-        entry: uv run --project backend ruff check --fix --exit-non-zero-on-fix
+        name: backend lint
+        entry: just lint-backend
         language: system
+        pass_filenames: false
         files: ^backend/.*\.py$
       - id: frontend-biome
-        name: frontend biome
-        entry: bash -lc 'cd frontend && set -- "${@/#frontend\//}"; ./node_modules/.bin/biome check --diagnostic-level=error "$@"' --
+        name: frontend lint
+        entry: just lint-frontend
         language: system
+        pass_filenames: false
         files: ^frontend/.*\.(svelte|ts|js|json|css)$

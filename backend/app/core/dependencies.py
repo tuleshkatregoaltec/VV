@@ -11,7 +11,7 @@ from app.auth.service import get_user_by_id
 from app.config import settings
 from app.organization.service import get_membership_for_user
 from app.postgres import get_db_session
-from app.providers.auth.platform_user import PlatformUser
+from app.providers.auth import AuthenticatedUser
 from app.token_usage.service import token_usage_service
 
 if TYPE_CHECKING:
@@ -21,7 +21,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-async def require_auth(request: Request) -> PlatformUser:
+async def require_auth(request: Request) -> AuthenticatedUser:
     """Dependency to require authentication on routes"""
     if not request.user.is_authenticated:
         raise HTTPException(status_code=401, detail="Not authenticated")
@@ -29,12 +29,12 @@ async def require_auth(request: Request) -> PlatformUser:
     return request.user
 
 
-async def require_admin(request: Request) -> PlatformUser:
+async def require_admin(request: Request) -> AuthenticatedUser:
     """Dependency to require system admin role."""
     if not request.user.is_authenticated:
         raise HTTPException(status_code=401, detail="Not authenticated")
 
-    if not request.user.is_admin():
+    if not request.user.is_admin:
         raise HTTPException(status_code=403, detail="System admin access required")
 
     return request.user
@@ -49,23 +49,23 @@ async def require_api_key(x_api_key: str = Header(...)) -> None:
 async def require_token_quota(
     request: Request,
     db: AsyncSession = Depends(get_db_session),
-    current_user: PlatformUser = Depends(require_auth),
+    current_user: AuthenticatedUser = Depends(require_auth),
 ) -> None:
     """Dependency to check user has token quota remaining"""
 
     # Get today's usage
     usage = await token_usage_service.get_today_usage(db, current_user.id)
-    user_obj = await get_user_by_id(current_user.id)
+    user = await get_user_by_id(current_user.id)
 
-    if not user_obj:
+    if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
     tokens_used = usage.total_tokens if usage else 0
 
-    if tokens_used >= user_obj.app_metadata.daily_token_limit:
+    if tokens_used >= user.daily_token_limit:
         raise HTTPException(
             status_code=429,
-            detail=f"Daily token limit exceeded ({tokens_used}/{user_obj.app_metadata.daily_token_limit} tokens used today)",
+            detail=f"Daily token limit exceeded ({tokens_used}/{user.daily_token_limit} tokens used today)",
         )
 
     return None
@@ -75,7 +75,7 @@ async def require_token_quota(
 class AuthContext:
     """Typed authentication context for protected routes"""
 
-    user: PlatformUser
+    user: AuthenticatedUser
     organization: "Organization"
     membership: "OrganizationMembership"
     subscription: Optional["Subscription"]
@@ -105,7 +105,7 @@ def ensure_active_subscription(context: AuthContext) -> AuthContext:
 
 
 async def require_membership(
-    current_user: PlatformUser = Depends(require_auth),
+    current_user: AuthenticatedUser = Depends(require_auth),
     db: AsyncSession = Depends(get_db_session),
 ) -> AuthContext:
     """
@@ -144,7 +144,7 @@ async def require_membership(
 
 
 async def require_owner_membership(
-    current_user: PlatformUser = Depends(require_auth),
+    current_user: AuthenticatedUser = Depends(require_auth),
     db: AsyncSession = Depends(get_db_session),
 ) -> AuthContext:
     """
@@ -165,7 +165,7 @@ async def require_owner_membership(
 
 
 async def require_active_subscription(
-    current_user: PlatformUser = Depends(require_auth),
+    current_user: AuthenticatedUser = Depends(require_auth),
     db: AsyncSession = Depends(get_db_session),
 ) -> AuthContext:
     """
@@ -180,7 +180,7 @@ async def require_active_subscription(
 
 
 async def require_active_owner(
-    current_user: PlatformUser = Depends(require_auth),
+    current_user: AuthenticatedUser = Depends(require_auth),
     db: AsyncSession = Depends(get_db_session),
 ) -> AuthContext:
     """Require organization owner with an active subscription."""

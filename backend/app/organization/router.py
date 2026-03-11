@@ -72,7 +72,7 @@ from app.organization.service import (
 )
 from app.postgres import get_db_session
 from app.postgres.models import Organization
-from app.providers.auth.platform_user import PlatformUser
+from app.providers.auth import AuthenticatedUser
 from app.token_usage.service import token_usage_service
 
 logger = logging.getLogger(__name__)
@@ -106,7 +106,7 @@ async def get_pending_invitation_or_error(db: AsyncSession, token: str):
 @router.post("/create", response_model=OwnerOrganizationCreateResponse)
 async def create_owner_organization(
     request: OwnerOrganizationCreateRequest,
-    current_user: PlatformUser = Depends(require_auth),
+    current_user: AuthenticatedUser = Depends(require_auth),
     db: AsyncSession = Depends(get_db_session),
 ):
     """
@@ -221,14 +221,14 @@ async def get_organization_members(
 
     response = []
     for member in members:
-        user_obj = await get_user_by_id(member.user_id)
-        if user_obj:
+        user = await get_user_by_id(member.user_id)
+        if user:
             response.append(
                 OrganizationMemberResponse(
                     id=member.user_id,
-                    email=user_obj.email,
-                    first_name=user_obj.user_metadata.first_name,
-                    last_name=user_obj.user_metadata.last_name,
+                    email=user.email,
+                    first_name=user.first_name,
+                    last_name=user.last_name,
                     role=member.role,
                 )
             )
@@ -435,7 +435,7 @@ async def validate_invite_token(
 @router.post("/accept-invite")
 async def accept_invite(
     request: AcceptInviteRequest,
-    current_user: PlatformUser = Depends(require_auth),
+    current_user: AuthenticatedUser = Depends(require_auth),
     db: AsyncSession = Depends(get_db_session),
 ):
     """Accept organization invitation with conflict detection."""
@@ -508,7 +508,7 @@ async def accept_invite(
 async def create_organization(
     organization_in: OrganizationCreateRequest,
     db: AsyncSession = Depends(get_db_session),
-    _admin_user: PlatformUser = Depends(require_admin),
+    _admin_user: AuthenticatedUser = Depends(require_admin),
 ):
     """Create a new organization (admin only)."""
     if not await get_user_by_id(organization_in.owner_id):
@@ -596,17 +596,17 @@ async def get_organization(
         if user is not None:
             usage = await token_usage_service.get_today_usage(db, user.id)
             tokens_used = usage.total_tokens if usage else 0
-            daily_limit = user.app_metadata.daily_token_limit
+            daily_limit = user.daily_token_limit
             usage_percentage = (tokens_used / daily_limit * 100) if daily_limit > 0 else 0
 
             user_list.append(
                 OrganizationUserDetailResponse(
                     id=user.id,
                     email=user.email,
-                    first_name=user.user_metadata.first_name,
-                    last_name=user.user_metadata.last_name,
-                    created_at=user.auth_user.created_at,
-                    last_login=user.auth_user.last_sign_in_at,
+                    first_name=user.first_name,
+                    last_name=user.last_name,
+                    created_at=user.created_at,
+                    last_login=user.last_login_at,
                     daily_token_limit=daily_limit,
                     tokens_used_today=tokens_used,
                     usage_percentage=usage_percentage,
@@ -686,6 +686,6 @@ async def update_user(
     return UserTokenLimitUpdateResponse(
         id=user.id,
         email=user.email,
-        daily_token_limit=user.app_metadata.daily_token_limit,
-        updated_at=user.auth_user.updated_at,
+        daily_token_limit=user.daily_token_limit,
+        updated_at=user.updated_at,
     )

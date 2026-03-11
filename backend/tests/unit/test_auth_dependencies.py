@@ -39,9 +39,12 @@ def make_user(**overrides):
         id="user-1",
         email="owner@example.com",
         is_authenticated=True,
-        app_metadata=SimpleNamespace(role=SimpleNamespace(roles=[]), daily_token_limit=500000),
+        first_name="Owner",
+        last_name="User",
+        daily_token_limit=500000,
+        app_metadata=SimpleNamespace(is_admin=False, daily_token_limit=500000),
         user_metadata=SimpleNamespace(first_name="Owner", last_name="User"),
-        is_admin=lambda: False,
+        is_admin=False,
     )
     for key, value in overrides.items():
         setattr(user, key, value)
@@ -92,11 +95,7 @@ async def test_require_auth_rejects_unauthenticated_request():
 
 
 @pytest.mark.asyncio
-async def test_require_admin_rejects_non_admin_email(monkeypatch):
-    from app.core import dependencies
-
-    monkeypatch.setattr(dependencies.settings, "SYSTEM_ADMIN_EMAIL", "admin@example.com")
-
+async def test_require_admin_rejects_non_admin_user():
     with pytest.raises(HTTPException) as exc:
         await require_admin(SimpleNamespace(user=make_user(email="owner@example.com")))
 

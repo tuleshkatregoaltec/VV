@@ -19,10 +19,13 @@ def make_user(**overrides):
     user = SimpleNamespace(
         id="user-1",
         email="owner@example.com",
+        first_name="Ada",
+        last_name="Lovelace",
+        daily_token_limit=500000,
         user_metadata=SimpleNamespace(first_name="Ada", last_name="Lovelace"),
-        app_metadata=SimpleNamespace(role=SimpleNamespace(roles=[]), daily_token_limit=500000),
+        app_metadata=SimpleNamespace(is_admin=False, daily_token_limit=500000),
         is_authenticated=True,
-        is_admin=lambda: False,
+        is_admin=False,
     )
     for key, value in overrides.items():
         setattr(user, key, value)
@@ -81,7 +84,7 @@ async def test_me_promotes_system_admin_role(api_client, monkeypatch):
     from app.auth import router
 
     async def override_require_auth():
-        return make_user(email="admin@example.com", is_admin=lambda: True)
+        return make_user(email="admin@example.com", is_admin=True)
 
     async def override_db():
         yield FakeDB(organization=None)

@@ -10,7 +10,7 @@ from app.billing.models import (
 from app.billing.service import create_checkout_session, sync_after_checkout
 from app.core.dependencies import require_auth
 from app.postgres import get_db_session
-from app.providers.auth.platform_user import PlatformUser
+from app.providers.auth import AuthenticatedUser
 
 router = APIRouter(prefix="/api/v1/billing", tags=["billing"])
 
@@ -18,7 +18,7 @@ router = APIRouter(prefix="/api/v1/billing", tags=["billing"])
 @router.post("/create-checkout", response_model=CheckoutSessionResponse)
 async def create_checkout_session_endpoint(
     request: CheckoutSessionRequest,
-    current_user: PlatformUser = Depends(require_auth),
+    current_user: AuthenticatedUser = Depends(require_auth),
     db: AsyncSession = Depends(get_db_session),
 ):
     """
@@ -28,7 +28,7 @@ async def create_checkout_session_endpoint(
     User profile (first_name/last_name) must be set in auth metadata.
     """
     # Verify user has profile set
-    if not current_user.user_metadata.first_name or not current_user.user_metadata.last_name:
+    if not current_user.first_name or not current_user.last_name:
         raise HTTPException(
             status_code=400,
             detail="Profile incomplete. Please set first name and last name before checkout.",
@@ -40,8 +40,8 @@ async def create_checkout_session_endpoint(
             email=current_user.email,
             organization_id=request.organization_id,
             seats=request.seats,
-            first_name=current_user.user_metadata.first_name,
-            last_name=current_user.user_metadata.last_name,
+            first_name=current_user.first_name,
+            last_name=current_user.last_name,
             price_tier=request.price_tier,
             db=db,
         )
@@ -59,7 +59,7 @@ class SyncAfterCheckoutRequest(BaseModel):
 @router.post("/sync-after-checkout", response_model=PaymentSyncResponse)
 async def sync_after_checkout_endpoint(
     request: SyncAfterCheckoutRequest,
-    current_user: PlatformUser = Depends(require_auth),
+    current_user: AuthenticatedUser = Depends(require_auth),
     db: AsyncSession = Depends(get_db_session),
 ):
     """Eager sync after checkout success."""
