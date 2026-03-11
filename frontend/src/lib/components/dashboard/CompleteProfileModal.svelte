@@ -38,7 +38,6 @@ async function handleSubmit() {
 	error = ''
 
 	try {
-		// Update Supabase auth metadata
 		const result = await client.updateUser({
 			data: {
 				first_name: firstName,
@@ -51,7 +50,6 @@ async function handleSubmit() {
 			return
 		}
 
-		// Manually update the user store (Option A)
 		if (currentUser.data) {
 			currentUser.data = {
 				...currentUser.data,

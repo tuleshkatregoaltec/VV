@@ -102,11 +102,11 @@ async function handleResetPassword() {
 	sideTitle="Recovery should be short, explicit, and easy to trust."
 	sideCopy="We only ask for a new password once the recovery session is valid. After that, the normal user state machine takes over again."
 >
-	{#if email}
-		<svelte:fragment slot="account">
+	<svelte:fragment slot="account">
+		{#if email}
 			<AccountContextBar {email} redirectTo="/auth" />
-		</svelte:fragment>
-	{/if}
+		{/if}
+	</svelte:fragment>
 
 	<svelte:fragment slot="side">
 		<div class="space-y-4 rounded-[1.6rem] border border-white/10 bg-white/5 p-6">

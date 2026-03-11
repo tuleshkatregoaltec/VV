@@ -208,8 +208,11 @@ onMount(fetchOrg)
 				<h2 class="text-sm font-semibold text-gray-700 uppercase tracking-wider mb-4">Settings</h2>
 				<div class="space-y-4">
 					<div>
-						<label class="block text-xs font-medium text-gray-500 mb-1">Max Users</label>
+						<label for="org-max-users" class="block text-xs font-medium text-gray-500 mb-1">
+							Max Users
+						</label>
 						<input
+							id="org-max-users"
 							type="number"
 							bind:value={editMaxUsers}
 							min="1"
@@ -243,8 +246,11 @@ onMount(fetchOrg)
 						</span>
 					</div>
 					<div>
-						<label class="block text-xs font-medium text-gray-500 mb-1">Set Status</label>
+						<label for="org-subscription-status" class="block text-xs font-medium text-gray-500 mb-1">
+							Set Status
+						</label>
 						<select
+							id="org-subscription-status"
 							bind:value={editSubscription}
 							class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
 						>
@@ -369,8 +375,11 @@ onMount(fetchOrg)
 				<p class="text-xs text-gray-400">{selectedUser.email}</p>
 			</div>
 			<div>
-				<label class="block text-xs font-medium text-gray-500 mb-1">Daily Token Limit</label>
+				<label for="daily-token-limit" class="block text-xs font-medium text-gray-500 mb-1">
+					Daily Token Limit
+				</label>
 				<input
+					id="daily-token-limit"
 					type="number"
 					bind:value={editedLimit}
 					min="0"

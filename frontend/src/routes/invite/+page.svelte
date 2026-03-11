@@ -202,11 +202,11 @@ function getConflictMessage(conflict: InviteConflictResponse): string {
 	sideTitle="Join the right workspace with the right account."
 	sideCopy="Vitevue keeps the invite flow narrow: authenticate first, confirm the invited email, add your name if needed, then join the organization."
 >
-	{#if currentEmail}
-		<svelte:fragment slot="account">
+	<svelte:fragment slot="account">
+		{#if currentEmail}
 			<AccountContextBar email={currentEmail} redirectTo={getAuthPath()} />
-		</svelte:fragment>
-	{/if}
+		{/if}
+	</svelte:fragment>
 
 	<svelte:fragment slot="side">
 		<div class="space-y-4 rounded-[1.6rem] border border-white/10 bg-white/5 p-6">
