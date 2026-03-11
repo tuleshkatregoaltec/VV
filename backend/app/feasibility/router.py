@@ -154,7 +154,10 @@ async def comparable_endpoint(
     return result
 
 
-@router.post("/chat/stream")
+@router.post(
+    "/chat/stream",
+    response_class=StreamingResponse,
+)
 async def chat_stream_endpoint(
     request: FeasibilityChatRequest,
     _: AuthContext = Depends(require_active_subscription),

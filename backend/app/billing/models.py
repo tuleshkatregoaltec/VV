@@ -92,3 +92,9 @@ class CustomerPortalResponse(BaseModel):
     """Response containing Stripe Customer Portal URL"""
 
     url: str
+
+
+class WebhookStatusResponse(BaseModel):
+    """Simple webhook acknowledgement response."""
+
+    status: str

@@ -18,10 +18,7 @@ from app.transaction.service import (
     fetch_sales_transactions,
 )
 
-router = APIRouter(
-    prefix="/api/v1/transactions",
-    tags=["transactions"],
-)
+router = APIRouter(prefix="/api/v1/transactions", tags=["transactions"])
 
 
 @router.get("/sales", response_model=TransactionListResponse)
@@ -130,7 +127,10 @@ async def get_rental_contracts(
     )
 
 
-@router.get("/sales/export")
+@router.get(
+    "/sales/export",
+    response_class=StreamingResponse,
+)
 async def export_sales_transactions_endpoint(
     context: AuthContext = Depends(require_active_subscription),
     transaction_ids: str = Query(
@@ -198,7 +198,10 @@ async def export_sales_transactions_endpoint(
     )
 
 
-@router.get("/rentals/export")
+@router.get(
+    "/rentals/export",
+    response_class=StreamingResponse,
+)
 async def export_rental_contracts_endpoint(
     context: AuthContext = Depends(require_active_subscription),
     contract_ids: str = Query(

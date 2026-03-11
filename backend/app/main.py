@@ -5,7 +5,9 @@ import logfire
 import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.routing import APIRoute
 from honeybadger import contrib, honeybadger
+from pydantic import BaseModel
 from starlette.middleware.authentication import AuthenticationMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 
@@ -33,6 +35,11 @@ from app.upload.router import router as upload_router
 logging.config.dictConfig(LOGGING_CONFIG)
 
 
+def custom_generate_unique_id(route: APIRoute) -> str:
+    tag = route.tags[0] if route.tags else "default"
+    return f"{tag}-{route.name}"
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Manage application startup and shutdown."""
@@ -44,19 +51,24 @@ async def lifespan(app: FastAPI):
 logfire.configure(send_to_logfire=bool(settings.LOGFIRE_TOKEN))
 logfire.instrument_pydantic_ai()
 
-app = FastAPI(title="Real Estate API", version="1.0.0", lifespan=lifespan)
+app = FastAPI(
+    title=settings.PROJECT_NAME,
+    version="1.0.0",
+    lifespan=lifespan,
+    generate_unique_id_function=custom_generate_unique_id,
+)
 logfire.instrument_fastapi(app)
 
-honeybadger.configure(
-    api_key=settings.HONEYBADGER_API_KEY,
-)
+if settings.honeybadger_enabled:
+    honeybadger.configure(api_key=settings.HONEYBADGER_API_KEY)
 
 app.add_middleware(AuthenticationMiddleware, backend=AuthBackend())
 app.add_middleware(SessionMiddleware, secret_key=settings.SESSION_SECRET)
-app.add_middleware(contrib.ASGIHoneybadger)  # type: ignore
+if settings.honeybadger_enabled:
+    app.add_middleware(contrib.ASGIHoneybadger)  # type: ignore
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.ALLOWED_ORIGINS,
+    allow_origins=settings.all_cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -79,7 +91,11 @@ app.include_router(admin_router, tags=["admin"])
 app.include_router(feasibility_router, tags=["feasibility"])
 
 
-@app.get("/api/v1/health")
+class HealthResponse(BaseModel):
+    status: str
+
+
+@app.get(f"{settings.API_V1_STR}/health", response_model=HealthResponse)
 def health_check():
     return {"status": "healthy"}
 

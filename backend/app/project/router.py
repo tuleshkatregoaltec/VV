@@ -17,10 +17,7 @@ from app.project.service import (
     list_all_projects,
 )
 
-router = APIRouter(
-    prefix="/api/v1/projects",
-    tags=["projects"],
-)
+router = APIRouter(prefix="/api/v1/projects", tags=["projects"])
 
 
 @router.get("/list", response_model=List[ProjectSearchResult])

@@ -11,6 +11,7 @@ from app.upload.models import (
     ChunkedUploadResponse,
     NewsArticleUploadRequest,
     NewsArticleUploadResponse,
+    UploadHealthResponse,
 )
 from app.upload.service import create_news_article, process_chunked_upload
 
@@ -75,7 +76,7 @@ async def upload_news_article(
         raise HTTPException(500, f"Failed to upload news article: {e}")
 
 
-@health_router.get("/health")
+@health_router.get("/health", response_model=UploadHealthResponse)
 async def health():
     from app.upload.service import cache, s3_client
 

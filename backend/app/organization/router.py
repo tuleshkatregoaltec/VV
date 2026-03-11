@@ -432,7 +432,10 @@ async def validate_invite_token(
     )
 
 
-@router.post("/accept-invite")
+@router.post(
+    "/accept-invite",
+    response_model=AcceptInviteResponse,
+)
 async def accept_invite(
     request: AcceptInviteRequest,
     current_user: AuthenticatedUser = Depends(require_auth),

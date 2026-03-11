@@ -12,10 +12,7 @@ from app.filters.service import (
     get_sales_filter_options as get_sales_filters_service,
 )
 
-router = APIRouter(
-    prefix="/api/v1/filters",
-    tags=["filters"],
-)
+router = APIRouter(prefix="/api/v1/filters", tags=["filters"])
 
 
 @router.get("/sales", response_model=FilterOptionsResponse)

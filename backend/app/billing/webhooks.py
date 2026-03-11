@@ -4,6 +4,7 @@ import stripe
 from fastapi import APIRouter, HTTPException, Request
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from app.billing.models import WebhookStatusResponse
 from app.billing.service import sync_stripe_to_postgres
 from app.config import settings
 from app.postgres import get_db_session
@@ -23,7 +24,7 @@ TRACKED_EVENTS = [
 ]
 
 
-@router.post("/stripe")
+@router.post("/stripe", response_model=WebhookStatusResponse)
 async def stripe_webhook(request: Request):
     """Stripe webhook: treat Stripe as source of truth and sync Postgres from Stripe."""
 

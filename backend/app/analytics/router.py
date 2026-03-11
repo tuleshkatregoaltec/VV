@@ -33,10 +33,7 @@ from app.clickhouse.queries import (
 )
 from app.core.dependencies import AuthContext, require_active_subscription
 
-router = APIRouter(
-    prefix="/api/v1/analytics",
-    tags=["analytics"],
-)
+router = APIRouter(prefix="/api/v1/analytics", tags=["analytics"])
 
 
 @router.get("/sales", response_model=AnalyticsResponse)

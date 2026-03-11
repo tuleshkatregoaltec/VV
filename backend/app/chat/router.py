@@ -116,7 +116,10 @@ async def get_conversation_messages_endpoint(
     return [MessageResponse.model_validate(m) for m in messages]
 
 
-@router.post("/conversations/{conversation_id}/messages/stream")
+@router.post(
+    "/conversations/{conversation_id}/messages/stream",
+    response_class=StreamingResponse,
+)
 async def send_message(
     conversation_id: int,
     request: SendMessageRequest,
