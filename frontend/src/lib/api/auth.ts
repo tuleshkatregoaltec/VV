@@ -1,6 +1,5 @@
 import type { AuthChangeEvent, Session } from '@supabase/auth-js'
 import { AuthClient } from '@supabase/auth-js'
-import { browser } from '$app/environment'
 import { env } from '$env/dynamic/public'
 import { api } from './client'
 
@@ -17,7 +16,7 @@ export interface BackendUser {
 }
 
 export const client = new AuthClient({
-	url: `${env.PUBLIC_AUTH_BASE_URL}`,
+	url: env.PUBLIC_AUTH_BASE_URL,
 	storageKey: 'authentication',
 	detectSessionInUrl: true,
 	persistSession: true

@@ -35,7 +35,6 @@ class Settings(BaseSettings):
     AUTH_SERVICE_ROLE_KEY: str  # Bitwarden Secrets
     AUTH_ADMIN_EMAIL: str | None = None
     AUTH_ADMIN_PASSWORD: str | None = None
-    SYSTEM_ADMIN_EMAIL: str | None = None
 
     # PostHog
     POSTHOG_API_KEY: str  # Bitwarden Secrets

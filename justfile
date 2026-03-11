@@ -3,8 +3,12 @@ set shell := ["bash", "-cu"]
 default:
 	@just --list
 
+setup:
+	cd frontend && bun install
+	cd backend && uv sync
+
 up:
-	docker compose up -d
+	docker compose up --build -d postgres auth-db-init auth inbucket clickhouse redis minio minio-setup
 
 down:
 	docker compose down -v
@@ -15,22 +19,28 @@ logs service='':
 ps:
 	docker compose ps
 
+dev-backend:
+	set -a && source .env.dev && set +a && cd backend && uv sync && scripts/lifecycle/prestart.sh && uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+dev-frontend:
+	set -a && source .env.dev && set +a && cd frontend && bun install && bun run dev -- --host 0.0.0.0 --port 5173
+
 test-backend:
-	docker compose run --rm backend scripts/lifecycle/tests-start.sh
+	set -a && source .env.dev && set +a && cd backend && scripts/lifecycle/tests-start.sh
 
 lint-backend:
+	uv run --project backend ruff format --check backend
 	uv run --project backend ruff check backend
 
 format-backend:
 	uv run --project backend ruff format backend
 	uv run --project backend ruff check --fix backend
 
-prepare-backend:
-	just format-backend
-	just lint-backend
-
 test-frontend:
-	docker compose run --rm --no-deps frontend sh -lc 'bun install && bun run test'
+	set -a && source .env.dev && set +a && cd frontend && bun run test
+
+build-frontend:
+	set -a && source .env.dev && set +a && cd frontend && bun run build
 
 lint-frontend:
 	cd frontend && bun run lint
@@ -38,14 +48,19 @@ lint-frontend:
 format-frontend:
 	cd frontend && bun run format
 
-prepare-frontend:
-	cd frontend && ./node_modules/.bin/biome check --write .
+check-all:
+	just format-backend
+	just format-frontend
+	just lint-backend
+	just lint-frontend
+	just test-backend
+	just test-frontend
 
 test-e2e:
-	docker compose run --rm playwright bash -lc 'npm install && npm test'
+	docker compose run --rm playwright bash -lc 'npm test'
 
 test-guards:
-	docker compose run --rm playwright bash -lc 'npm install && npm run test:guards'
+	docker compose run --rm playwright bash -lc 'npm run test:guards'
 
 generate-client:
-	docker compose run --rm frontend sh -lc 'mkdir -p src/lib/api/generated && bunx openapi-typescript http://backend:8000/openapi.json -o src/lib/api/generated/schema.ts'
+	set -a && source .env.dev && set +a && cd frontend && mkdir -p src/lib/api/generated && bunx openapi-typescript http://localhost:8000/openapi.json -o src/lib/api/generated/schema.ts

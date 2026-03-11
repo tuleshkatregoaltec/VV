@@ -1,8 +1,9 @@
 import { expect, type APIRequestContext, type Page } from '@playwright/test';
 
-const AUTH_BASE_URL = 'http://127.0.0.1:9999';
-const API_BASE_URL = 'http://127.0.0.1:8000';
-const INBUCKET_BASE_URL = 'http://127.0.0.1:9000';
+const AUTH_BASE_URL = process.env.PLAYWRIGHT_AUTH_BASE_URL ?? 'http://127.0.0.1:9999';
+const API_BASE_URL = process.env.PLAYWRIGHT_API_BASE_URL ?? 'http://127.0.0.1:8000';
+const INBUCKET_BASE_URL =
+	process.env.PLAYWRIGHT_INBUCKET_BASE_URL ?? 'http://127.0.0.1:9000';
 export const DEFAULT_PASSWORD = 'Password123!';
 
 type AuthSession = {

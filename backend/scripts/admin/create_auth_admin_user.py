@@ -18,7 +18,7 @@ def _payload() -> dict:
         "email_confirm": True,
         "role": "supabase_admin",
         "app_metadata": {
-            "role": {"roles": ["admin"]},
+            "is_admin": True,
             "daily_token_limit": 500000,
         },
     }

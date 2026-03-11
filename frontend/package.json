@@ -10,8 +10,11 @@
 		"prepare": "svelte-kit sync || echo ''",
 		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
 		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
-		"format": "biome format --write .",
-		"lint": "biome lint .",
+		"biome:check": "biome check --diagnostic-level=error",
+		"biome:write": "biome check --write",
+		"format": "bun run biome:write -- .",
+		"lint": "bun run biome:check -- .",
+		"precommit": "bun ./scripts/precommit-biome.mjs",
 		"test": "vitest run",
 		"test:unit": "vitest run tests/unit src/lib",
 		"test:watch": "vitest"
