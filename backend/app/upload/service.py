@@ -71,6 +71,7 @@ async def create_news_article(
     db.add(news_article)
     await db.commit()
     await db.refresh(news_article)
+    await cache.clear_prefix("news")
 
     return NewsArticleUploadResponse(
         created=True,

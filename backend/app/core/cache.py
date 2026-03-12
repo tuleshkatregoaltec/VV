@@ -2,7 +2,7 @@ import datetime
 import json
 import logging
 from decimal import Decimal
-from typing import Any, Optional
+from typing import Any
 
 import redis.asyncio as redis
 
@@ -17,57 +17,63 @@ class RedisCache:
         self.redis_password = redis_password
         self.default_expire = default_expire
         self.redis = None
-        self.is_authed = False
 
         try:
-            self.redis = redis.from_url(self.redis_url, password=self.redis_password)
-            logger.info("Redis client initialized at %s", self.redis_url)
+            self.redis = redis.from_url(
+                self.redis_url,
+                password=self.redis_password,
+                encoding="utf-8",
+                decode_responses=True,
+            )
+            logger.info("Redis client configured for %s", self.redis_url)
         except Exception as e:
-            logger.error("Failed to initialize Redis client at %s: %s", self.redis_url, str(e))
+            logger.error("Failed to configure Redis client at %s: %s", self.redis_url, str(e))
 
-    async def get(self, key: str) -> Optional[Any]:
-        """Get value from cache by key, returns None if not found or Redis unavailable"""
+    @staticmethod
+    def _json_default(obj: Any) -> Any:
+        if isinstance(obj, Decimal):
+            return float(obj)
+        if isinstance(obj, (datetime.date, datetime.datetime)):
+            return obj.isoformat()
+        raise TypeError(f"Object of type {obj.__class__.__name__} is not JSON serializable")
+
+    def _resolve_expire(self, expire: int | None) -> int:
+        resolved = self.default_expire if expire is None else expire
+        if resolved <= 0:
+            raise ValueError("expire must be a positive integer")
+        return resolved
+
+    async def get(self, key: str) -> Any | None:
+        """Get a cached JSON value by key, or None if not found."""
         if not self.redis:
             return None
 
         try:
             value = await self.redis.get(key)
-            if value is not None:
-                try:
-                    logger.debug("Cache hit for key: %s", key)
-                    return json.loads(value)
-                except Exception:
-                    logger.warning("Failed to deserialize cache value for key: %s", key)
-                    return value
+            if value is None:
+                logger.debug("Cache miss for key: %s", key)
+                return None
 
-            logger.debug("Cache miss for key: %s", key)
+            logger.debug("Cache hit for key: %s", key)
+            return json.loads(value)
         except Exception as e:
             logger.error("Failed to get cache for key %s: %s", key, str(e))
-        return None
+            return None
 
-    async def set(self, key: str, value: Any, expire: Optional[int] = None):
-        """Set value in cache with optional expiration time in seconds"""
+    async def set(self, key: str, value: Any, expire: int | None = None):
+        """Set a JSON-serializable value in cache."""
         if not self.redis:
             return
 
-        def default(obj):
-            if isinstance(obj, Decimal):
-                return float(obj)
-            if isinstance(obj, (datetime.date, datetime.datetime)):
-                return obj.isoformat()
-            raise TypeError(f"Object of type {obj.__class__.__name__} is not JSON serializable")
-
         try:
-            if not isinstance(value, str):
-                value = json.dumps(value, default=default)
-
-            await self.redis.set(key, value, ex=expire or self.default_expire)
+            payload = json.dumps(value, default=self._json_default)
+            await self.redis.set(key, payload, ex=self._resolve_expire(expire))
             logger.debug("Cache set for key: %s", key)
         except Exception as e:
             logger.error("Failed to set cache for key %s: %s", key, str(e))
 
-    async def delete(self, key: str):
-        """Delete value from cache by key"""
+    async def delete(self, key: str) -> None:
+        """Delete a cached key."""
         if not self.redis:
             return
 
@@ -77,21 +83,47 @@ class RedisCache:
         except Exception as e:
             logger.error("Failed to delete cache for key %s: %s", key, str(e))
 
-    async def clear(self, pattern: str = "*"):
-        """Clear all keys matching pattern from cache"""
+    async def clear(self, pattern: str = "*") -> int:
+        """Clear keys matching a pattern using SCAN to avoid blocking Redis."""
         if not self.redis:
-            return
+            return 0
 
         try:
-            keys = await self.redis.keys(pattern)
-            if keys:
-                await self.redis.delete(*keys)
-                logger.info(
-                    "Cache cleared for pattern: %s (%d keys removed)",
-                    pattern,
-                    len(keys),
-                )
+            deleted = 0
+            batch: list[str] = []
+
+            async for key in self.redis.scan_iter(match=pattern, count=100):
+                batch.append(key)
+                if len(batch) >= 100:
+                    await self.redis.delete(*batch)
+                    deleted += len(batch)
+                    batch.clear()
+
+            if batch:
+                await self.redis.delete(*batch)
+                deleted += len(batch)
+
+            if deleted:
+                logger.info("Cache cleared for pattern: %s (%d keys removed)", pattern, deleted)
             else:
                 logger.debug("Cache clear called for pattern %s but no keys found", pattern)
+
+            return deleted
         except Exception as e:
             logger.error("Failed to clear cache for pattern %s: %s", pattern, str(e))
+            return 0
+
+    async def clear_prefix(self, prefix: str) -> int:
+        """Clear all keys with the given prefix."""
+        return await self.clear(f"{prefix}*")
+
+    async def ping(self) -> bool:
+        """Check whether Redis is reachable."""
+        if not self.redis:
+            return False
+
+        try:
+            return bool(await self.redis.ping())
+        except Exception as e:
+            logger.error("Redis ping failed: %s", str(e))
+            return False

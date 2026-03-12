@@ -88,10 +88,7 @@ async def health():
         await s3_client.delete_many([test_key])
 
         # Test Redis connection
-        redis_ok = False
-        if cache.redis:
-            cache.redis.ping()
-            redis_ok = True
+        redis_ok = await cache.ping()
 
         return JSONResponse(
             status_code=status.HTTP_200_OK,
