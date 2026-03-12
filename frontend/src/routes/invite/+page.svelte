@@ -2,7 +2,7 @@
 import { onMount } from 'svelte'
 import { goto } from '$app/navigation'
 import { resolve } from '$app/paths'
-import { client, get_session, update_user_profile } from '$lib/api/auth'
+import { authClient, get_session, update_user_profile } from '$lib/api/auth'
 import { ApiError } from '$lib/api/client'
 import {
 	acceptInvite,
@@ -175,7 +175,7 @@ async function joinOrganization() {
 }
 
 async function switchAccount() {
-	await client.signOut()
+	await authClient.signOut()
 	clearUser()
 	// eslint-disable-next-line svelte/no-navigation-without-resolve
 	await goto(getAuthPath())

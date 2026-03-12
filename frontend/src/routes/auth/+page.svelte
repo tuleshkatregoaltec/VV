@@ -1,7 +1,6 @@
 <script lang="ts">
 import { onDestroy, onMount } from 'svelte'
 import { goto } from '$app/navigation'
-import { resolve } from '$app/paths'
 import {
 	login_with_email_pass,
 	request_password_reset,
@@ -121,10 +120,7 @@ function getPostAuthPath(defaultPath: '/dashboard' | '/setup' | '/reset') {
 }
 
 function navigateAfterAuth(path: string = '/dashboard') {
-	const [pathname, search = ''] = path.split('?')
-	const resolvedPath = resolve(pathname)
-	// eslint-disable-next-line svelte/no-navigation-without-resolve
-	goto(search ? `${resolvedPath}?${search}` : resolvedPath)
+	goto(path)
 }
 
 function requireOtpCode(): boolean {
@@ -583,18 +579,18 @@ async function handleResendForgotPasswordOTP() {
 						class="mt-1 h-4 w-4 rounded border-slate-300 text-slate-950 focus:ring-slate-950"
 					/>
 					<span>
-						I agree to the
-						<a
-							href={resolve('/terms')}
-							target="_blank"
+							I agree to the
+							<a
+								href="/terms"
+								target="_blank"
 							class="font-medium text-slate-950 underline-offset-2 hover:underline"
 						>
 							Terms of Service
 						</a>
-						and
-						<a
-							href={resolve('/privacy')}
-							target="_blank"
+							and
+							<a
+								href="/privacy"
+								target="_blank"
 							class="font-medium text-slate-950 underline-offset-2 hover:underline"
 						>
 							Privacy Policy

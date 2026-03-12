@@ -2,12 +2,12 @@
 import { onMount } from 'svelte'
 import { goto } from '$app/navigation'
 import { page } from '$app/state'
-import { admin, type OrgDetail, type OrgUser } from '$lib/api/admin'
+import { admin, type OrgDetailResponse, type OrgUserResponse } from '$lib/api/admin'
 import { ApiError } from '$lib/api/client'
 import ConfirmModal from '$lib/components/ui/ConfirmModal.svelte'
 import Modal from '$lib/components/ui/Modal.svelte'
 
-let org = $state<OrgDetail | null>(null)
+let org = $state<OrgDetailResponse | null>(null)
 let loading = $state(true)
 let error = $state('')
 
@@ -22,21 +22,27 @@ let confirmDeleteOrg = $state(false)
 let deletingOrg = $state(false)
 
 // Token limit modal
-let selectedUser = $state<OrgUser | null>(null)
+let selectedUser = $state<OrgUserResponse | null>(null)
 let showTokenModal = $state(false)
 let editedLimit = $state(0)
 let savingLimit = $state(false)
 let limitError = $state('')
 
 // Delete user
-let confirmDeleteUser = $state<OrgUser | null>(null)
+let confirmDeleteUser = $state<OrgUserResponse | null>(null)
 let deletingUser = $state(false)
 
 async function fetchOrg() {
 	loading = true
 	error = ''
+	const organizationId = page.params.id
+	if (!organizationId) {
+		error = 'Organization ID is missing'
+		loading = false
+		return
+	}
 	try {
-		org = await admin.organizations.get(page.params.id)
+		org = await admin.organizations.get(organizationId)
 		editMaxUsers = org.max_users
 		editSubscription = org.subscription_status
 	} catch (e) {
@@ -87,7 +93,7 @@ async function deleteOrg() {
 	}
 }
 
-function openTokenModal(user: OrgUser) {
+function openTokenModal(user: OrgUserResponse) {
 	selectedUser = user
 	editedLimit = user.daily_token_limit
 	limitError = ''
@@ -123,7 +129,7 @@ async function deleteUser() {
 	}
 }
 
-function fullName(u: OrgUser) {
+function fullName(u: OrgUserResponse) {
 	const name = `${u.first_name || ''} ${u.last_name || ''}`.trim()
 	return name || u.email
 }

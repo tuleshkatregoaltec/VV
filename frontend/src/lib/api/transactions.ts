@@ -1,57 +1,16 @@
-import { api } from './client'
+import { client } from './client'
+import type {
+	RentalContractListResponse,
+	RentalContractResponseOutput,
+	TransactionListResponse,
+	TransactionResponseOutput
+} from './generated/hey-api/types.gen'
 
-export interface Transaction {
-	transaction_id: string
-	instance_date: string | null
-	trans_group_en: string | null
-	procedure_name_en: string | null
-	property_type_en: string | null
-	property_sub_type_en: string | null
-	rooms_en: string | null
-	area_name_en: string | null
-	project_name_en: string | null
-	building_name_en: string | null
-	procedure_area: number | null
-	actual_worth: number | null
-	meter_sale_price: number | null
-	reg_type_en: string | null
-	nearest_landmark_en: string | null
-	nearest_metro_en: string | null
-	nearest_mall_en: string | null
-}
-
-export interface TransactionListResponse {
-	transactions: Transaction[]
-	total: number
-	limit: number
-	offset: number
-}
-
-export interface RentalContract {
-	contract_id: string
-	contract_start_date: string | null
-	contract_end_date: string | null
-	ejari_property_type_en: string | null
-	ejari_property_sub_type_en: string | null
-	tenant_type_en: string | null
-	contract_reg_type_en: string | null
-	area_name_en: string | null
-	project_name_en: string | null
-	actual_area: number | null
-	annual_amount: number | null
-	contract_amount: number | null
-	no_of_prop: number | null
-	is_free_hold: boolean | null
-	nearest_landmark_en: string | null
-	nearest_metro_en: string | null
-	nearest_mall_en: string | null
-}
-
-export interface RentalContractListResponse {
-	contracts: RentalContract[]
-	total: number
-	limit: number
-	offset: number
+export type {
+	RentalContractListResponse,
+	RentalContractResponseOutput,
+	TransactionListResponse,
+	TransactionResponseOutput
 }
 
 export interface TransactionFilters {
@@ -131,14 +90,18 @@ function buildQuery(filters: TransactionFilters): string {
 
 export const transactions = {
 	sales: (filters: TransactionFilters) =>
-		api<TransactionListResponse>(`/api/v1/transactions/sales?${buildQuery(filters)}`),
+		client.get<TransactionListResponse>(`/api/v1/transactions/sales?${buildQuery(filters)}`),
 
 	rentals: (filters: TransactionFilters) =>
-		api<RentalContractListResponse>(`/api/v1/transactions/rentals?${buildQuery(filters)}`),
+		client.get<RentalContractListResponse>(`/api/v1/transactions/rentals?${buildQuery(filters)}`),
 
 	exportSales: (filters: TransactionFilters): Promise<Blob> =>
-		api<Blob>(`/api/v1/transactions/sales/export?${buildQuery(filters)}`, { returnBlob: true }),
+		client.get<Blob>(`/api/v1/transactions/sales/export?${buildQuery(filters)}`, {
+			returnBlob: true
+		}),
 
 	exportRentals: (filters: TransactionFilters): Promise<Blob> =>
-		api<Blob>(`/api/v1/transactions/rentals/export?${buildQuery(filters)}`, { returnBlob: true })
+		client.get<Blob>(`/api/v1/transactions/rentals/export?${buildQuery(filters)}`, {
+			returnBlob: true
+		})
 }

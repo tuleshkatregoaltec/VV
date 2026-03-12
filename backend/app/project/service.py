@@ -15,7 +15,7 @@ from app.project.models import (
     MasterProjectSummary,
     ProjectDetailResponse,
     ProjectSearchResult,
-    UnitComposition,
+    ProjectUnitComposition,
 )
 
 logger = logging.getLogger(__name__)
@@ -141,12 +141,12 @@ async def get_project_details(project_id: int) -> Optional[ProjectDetailResponse
         for b in buildings_result
     ]
 
-    unit_composition: List[UnitComposition] = []
+    unit_composition: List[ProjectUnitComposition] = []
     total_units = sum(row["count"] for row in composition_result)
     if total_units > 0:
         for row in composition_result:
             unit_composition.append(
-                UnitComposition(
+                ProjectUnitComposition(
                     property_sub_type=row["property_sub_type_en"],
                     count=row["count"],
                     percentage=round((row["count"] / total_units) * 100, 2),
@@ -274,11 +274,11 @@ async def get_master_project(master_name: str) -> Optional[MasterProjectResponse
     ]
 
     total_units_comp = sum(r["count"] for r in composition_result)
-    unit_composition: List[UnitComposition] = []
+    unit_composition: List[ProjectUnitComposition] = []
     if total_units_comp > 0:
         for row in composition_result:
             unit_composition.append(
-                UnitComposition(
+                ProjectUnitComposition(
                     property_sub_type=row["property_sub_type_en"],
                     count=row["count"],
                     percentage=round((row["count"] / total_units_comp) * 100, 2),

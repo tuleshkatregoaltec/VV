@@ -1,21 +1,21 @@
-import type { AuthChangeEvent, Session } from '@supabase/auth-js'
+import type {
+	AuthChangeEvent,
+	AuthOtpResponse,
+	AuthResponse,
+	AuthTokenResponsePassword,
+	Session,
+	UserResponse
+} from '@supabase/auth-js'
 import { AuthClient } from '@supabase/auth-js'
+import { browser } from '$app/environment'
 import { env } from '$env/dynamic/public'
-import { api } from './client'
+import { client } from './client'
+import type { AuthMeResponse, UpdateProfileResponse } from './generated/hey-api/types.gen'
 
-export interface BackendUser {
-	id: string
-	email: string
-	first_name: string
-	last_name: string
-	organization_id: string | null
-	organization_name: string | null
-	role: 'user' | 'admin' | 'owner' | 'member'
-	is_owner: boolean
-	subscription_status: string | null
-}
+export type { AuthMeResponse, UpdateProfileResponse }
+export type AuthenticatedUser = AuthMeResponse
 
-export const client = new AuthClient({
+export const authClient = new AuthClient({
 	url: env.PUBLIC_AUTH_BASE_URL,
 	storageKey: 'authentication',
 	detectSessionInUrl: true,
@@ -24,7 +24,7 @@ export const client = new AuthClient({
 
 const authSearchParams = ['code', 'state', 'provider_token', 'provider_refresh_token', 'error']
 
-client.onAuthStateChange((event: AuthChangeEvent) => {
+authClient.onAuthStateChange((event: AuthChangeEvent) => {
 	if (!browser) return
 
 	if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
@@ -42,13 +42,14 @@ export type AuthResult<T = unknown> = {
 	data?: T
 }
 
-function toAuthResult<T>(
-	res: { error: { message?: string } | null; data?: T | null },
-	fallbackMessage: string
-): AuthResult<T> {
+type AuthResultData<T extends { data?: unknown | null }> = NonNullable<T['data']>
+
+function toAuthResult<
+	TResponse extends { error: { message?: string } | null; data?: unknown | null }
+>(res: TResponse, fallbackMessage: string): AuthResult<AuthResultData<TResponse>> {
 	if (!res.error) {
 		return res.data !== undefined
-			? { success: true, data: res.data ?? undefined }
+			? { success: true, data: (res.data ?? undefined) as AuthResultData<TResponse> | undefined }
 			: { success: true }
 	}
 
@@ -56,7 +57,7 @@ function toAuthResult<T>(
 }
 
 export async function get_access_token(): Promise<string | undefined> {
-	const res = await client.getSession()
+	const res = await authClient.getSession()
 
 	if (res.data && !res.error) {
 		return res.data.session?.access_token
@@ -64,8 +65,11 @@ export async function get_access_token(): Promise<string | undefined> {
 }
 
 /** Login with email/password. */
-export async function login_with_email_pass(email: string, password: string): Promise<AuthResult> {
-	const res = await client.signInWithPassword({ email, password })
+export async function login_with_email_pass(
+	email: string,
+	password: string
+): Promise<AuthResult<AuthResultData<AuthTokenResponsePassword>>> {
+	const res = await authClient.signInWithPassword({ email, password })
 	return toAuthResult(res, 'Login failed')
 }
 
@@ -76,8 +80,8 @@ export async function sign_up_with_password(
 	firstName: string,
 	lastName: string,
 	redirectPath = '/setup'
-): Promise<AuthResult> {
-	const res = await client.signUp({
+): Promise<AuthResult<AuthResultData<AuthResponse>>> {
+	const res = await authClient.signUp({
 		email,
 		password,
 		options: {
@@ -93,15 +97,17 @@ export async function sign_up_with_password(
 }
 
 /** Send a passwordless sign-in code or magic link. */
-export async function sign_in_with_magic_link(email: string): Promise<AuthResult> {
+export async function sign_in_with_magic_link(
+	email: string
+): Promise<AuthResult<AuthResultData<AuthOtpResponse>>> {
 	return sign_in_with_magic_link_to(email)
 }
 
 export async function sign_in_with_magic_link_to(
 	email: string,
 	redirectPath = '/dashboard'
-): Promise<AuthResult> {
-	const res = await client.signInWithOtp({
+): Promise<AuthResult<AuthResultData<AuthOtpResponse>>> {
+	const res = await authClient.signInWithOtp({
 		email,
 		options: {
 			emailRedirectTo: `${window.location.origin}${redirectPath}`
@@ -117,8 +123,8 @@ export async function sign_up_with_magic_link(
 	firstName: string,
 	lastName: string,
 	redirectPath = '/dashboard'
-): Promise<AuthResult> {
-	const res = await client.signInWithOtp({
+): Promise<AuthResult<AuthResultData<AuthOtpResponse>>> {
+	const res = await authClient.signInWithOtp({
 		email,
 		options: {
 			data: {
@@ -137,8 +143,8 @@ export async function verify_otp(
 	email: string,
 	token: string,
 	type: 'signup' | 'magiclink' | 'recovery' | 'email_change' = 'signup'
-): Promise<AuthResult> {
-	const res = await client.verifyOtp({
+): Promise<AuthResult<AuthResultData<AuthResponse>>> {
+	const res = await authClient.verifyOtp({
 		email,
 		token,
 		type
@@ -152,7 +158,7 @@ export async function resend_otp(
 	email: string,
 	type: 'signup' | 'email_change' = 'signup'
 ): Promise<AuthResult> {
-	const res = await client.resend({
+	const res = await authClient.resend({
 		email,
 		type
 	})
@@ -162,7 +168,7 @@ export async function resend_otp(
 
 /** Request a password reset email. */
 export async function request_password_reset(email: string): Promise<AuthResult> {
-	const res = await client.resetPasswordForEmail(email, {
+	const res = await authClient.resetPasswordForEmail(email, {
 		redirectTo: `${window.location.origin}/reset`
 	})
 
@@ -170,8 +176,10 @@ export async function request_password_reset(email: string): Promise<AuthResult>
 }
 
 /** Update the current user's password. */
-export async function update_password(newPassword: string): Promise<AuthResult> {
-	const res = await client.updateUser({
+export async function update_password(
+	newPassword: string
+): Promise<AuthResult<AuthResultData<UserResponse>>> {
+	const res = await authClient.updateUser({
 		password: newPassword
 	})
 
@@ -180,7 +188,7 @@ export async function update_password(newPassword: string): Promise<AuthResult> 
 
 /** Get the current auth session. */
 export async function get_session(): Promise<Session | null> {
-	const res = await client.getSession()
+	const res = await authClient.getSession()
 	return res.data?.session || null
 }
 
@@ -188,32 +196,29 @@ export async function get_session(): Promise<Session | null> {
 export function on_auth_state_change(
 	callback: (event: AuthChangeEvent, session: Session | null) => void
 ): { data: { subscription: { unsubscribe: () => void } } } {
-	return client.onAuthStateChange(callback)
+	return authClient.onAuthStateChange(callback)
 }
 
 /** Get current user info from the backend. */
-export async function me(): Promise<BackendUser> {
-	return api<BackendUser>('/api/v1/auth/me')
+export async function me(): Promise<AuthMeResponse> {
+	return client.get<AuthMeResponse>('/api/v1/auth/me')
 }
 
 /** Update current user's profile through the backend API. */
 export async function update_user_profile(
 	firstName: string,
 	lastName: string
-): Promise<{ success: boolean; first_name: string; last_name: string }> {
-	return api<{ success: boolean; first_name: string; last_name: string }>(
-		'/api/v1/auth/update-profile',
-		{
-			method: 'POST',
-			body: { first_name: firstName, last_name: lastName }
-		}
-	)
+): Promise<UpdateProfileResponse> {
+	return client.post<UpdateProfileResponse>('/api/v1/auth/update-profile', {
+		first_name: firstName,
+		last_name: lastName
+	})
 }
 
 /** Sign out the current user and redirect. */
 export async function logout(redirectTo = '/'): Promise<void> {
 	try {
-		const res = await client.signOut()
+		const res = await authClient.signOut()
 		if (res.error) {
 			console.error('Supabase logout error:', res.error.message)
 		}

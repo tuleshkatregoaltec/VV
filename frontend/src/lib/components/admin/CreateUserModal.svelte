@@ -1,5 +1,5 @@
 <script lang="ts">
-import { admin, type CreateUserRequest, type OrgListItem } from '$lib/api/admin'
+import { admin, type CreateUserRequest, type OrganizationListResponse } from '$lib/api/admin'
 import { ApiError } from '$lib/api/client'
 import Modal from '$lib/components/ui/Modal.svelte'
 
@@ -10,7 +10,7 @@ let {
 	onCreated
 }: {
 	open: boolean
-	orgs: OrgListItem[]
+	orgs: OrganizationListResponse[]
 	onClose: () => void
 	onCreated: () => void
 } = $props()

@@ -63,4 +63,4 @@ test-guards:
 	docker compose run --rm playwright bash -lc 'npm run test:guards'
 
 generate-client:
-	set -a && source .env.dev && set +a && cd frontend && mkdir -p src/lib/api/generated && bunx openapi-typescript http://localhost:8000/openapi.json -o src/lib/api/generated/schema.ts
+	./scripts/generate-client.sh

@@ -1,0 +1,8660 @@
+{
+	"openapi": "3.1.0",
+	"info": {
+		"title": "Vitevue API",
+		"version": "1.0.0"
+	},
+	"paths": {
+		"/api/v1/auth/me": {
+			"get": {
+				"tags": ["auth", "auth"],
+				"summary": "Get User",
+				"description": "Get current authenticated user with organization and subscription context.\n\nReturns first_name/last_name from the authenticated user principal.\nReturns subscription_status from organization.subscription_status (single source of truth).",
+				"operationId": "auth-get_user",
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/AuthMeResponse"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/auth/update-profile": {
+			"post": {
+				"tags": ["auth", "auth"],
+				"summary": "Update Profile",
+				"description": "Update user profile (first name and last name).",
+				"operationId": "auth-update_profile",
+				"requestBody": {
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/UpdateProfileRequest"
+							}
+						}
+					},
+					"required": true
+				},
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/UpdateProfileResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/analytics/sales": {
+			"get": {
+				"tags": ["analytics", "analytics"],
+				"summary": "Get Sales Analytics",
+				"description": "Get sales analytics with flexible filtering and custom date ranges.\n\nSupports:\n- Custom date ranges (use start_date/end_date or timeframe_days)\n- market_type for taxonomy-correct filtering (recommended)\n- Manual filtering via property_usage + property_type (legacy)\n\nExamples:\n- Last 30 days: ?timeframe_days=30\n- By market: ?market_type=residential_units&timeframe_days=90\n- Custom range: ?start_date=2024-01-01&end_date=2024-12-31",
+				"operationId": "analytics-get_sales_analytics",
+				"parameters": [
+					{
+						"name": "market_type",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "string"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "Market type (overrides property_usage/property_type). One of: residential_units, villas, commercial_units, bulk_building, land, mortgages, gifts",
+							"title": "Market Type"
+						},
+						"description": "Market type (overrides property_usage/property_type). One of: residential_units, villas, commercial_units, bulk_building, land, mortgages, gifts"
+					},
+					{
+						"name": "property_usage",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "string"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "Residential or Commercial (ignored if market_type set)",
+							"default": "Residential",
+							"title": "Property Usage"
+						},
+						"description": "Residential or Commercial (ignored if market_type set)"
+					},
+					{
+						"name": "timeframe_days",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "integer"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "Number of days to look back (overrides start_date if provided)",
+							"title": "Timeframe Days"
+						},
+						"description": "Number of days to look back (overrides start_date if provided)"
+					},
+					{
+						"name": "start_date",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "string",
+									"format": "date"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "Explicit start date (YYYY-MM-DD)",
+							"title": "Start Date"
+						},
+						"description": "Explicit start date (YYYY-MM-DD)"
+					},
+					{
+						"name": "end_date",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "string",
+									"format": "date"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "Explicit end date (YYYY-MM-DD), defaults to today",
+							"title": "End Date"
+						},
+						"description": "Explicit end date (YYYY-MM-DD), defaults to today"
+					},
+					{
+						"name": "master_project",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "string"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "Filter by master project name",
+							"title": "Master Project"
+						},
+						"description": "Filter by master project name"
+					},
+					{
+						"name": "property_type",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "string"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "Filter by property type (ignored if market_type set)",
+							"title": "Property Type"
+						},
+						"description": "Filter by property type (ignored if market_type set)"
+					},
+					{
+						"name": "rooms",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "string"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "Filter by room count",
+							"title": "Rooms"
+						},
+						"description": "Filter by room count"
+					},
+					{
+						"name": "reg_type",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "string"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "Filter by registration type",
+							"title": "Reg Type"
+						},
+						"description": "Filter by registration type"
+					},
+					{
+						"name": "price_bucket",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "string"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "Filter by price bucket (e.g., '1M-2M')",
+							"title": "Price Bucket"
+						},
+						"description": "Filter by price bucket (e.g., '1M-2M')"
+					},
+					{
+						"name": "area_bucket",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "string"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "Filter by area bucket (e.g., '1K-2K')",
+							"title": "Area Bucket"
+						},
+						"description": "Filter by area bucket (e.g., '1K-2K')"
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/AnalyticsResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/analytics/rentals": {
+			"get": {
+				"tags": ["analytics", "analytics"],
+				"summary": "Get Rental Analytics",
+				"description": "Get rental analytics with flexible filtering and custom date ranges.\n\nSupports:\n- Custom date ranges (use start_date/end_date or timeframe_days)\n- Multi-dimensional filtering (combine property_type, location, rent ranges)\n- Bucketed filtering (rent ranges, area ranges)\n\nExamples:\n- Last 90 days: ?timeframe_days=90\n- Custom range: ?start_date=2024-06-01&end_date=2024-08-31\n- Filtered: ?property_usage=Commercial&rent_bucket=200K-500K",
+				"operationId": "analytics-get_rental_analytics",
+				"parameters": [
+					{
+						"name": "property_usage",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"description": "Residential or Commercial",
+							"default": "Residential",
+							"title": "Property Usage"
+						},
+						"description": "Residential or Commercial"
+					},
+					{
+						"name": "timeframe_days",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "integer"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "Number of days to look back (overrides start_date if provided)",
+							"title": "Timeframe Days"
+						},
+						"description": "Number of days to look back (overrides start_date if provided)"
+					},
+					{
+						"name": "start_date",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "string",
+									"format": "date"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "Explicit start date (YYYY-MM-DD)",
+							"title": "Start Date"
+						},
+						"description": "Explicit start date (YYYY-MM-DD)"
+					},
+					{
+						"name": "end_date",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "string",
+									"format": "date"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "Explicit end date (YYYY-MM-DD), defaults to today",
+							"title": "End Date"
+						},
+						"description": "Explicit end date (YYYY-MM-DD), defaults to today"
+					},
+					{
+						"name": "master_project",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "string"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "Filter by master project name",
+							"title": "Master Project"
+						},
+						"description": "Filter by master project name"
+					},
+					{
+						"name": "property_type",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "string"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "Filter by property type",
+							"title": "Property Type"
+						},
+						"description": "Filter by property type"
+					},
+					{
+						"name": "rent_bucket",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "string"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "Filter by rent bucket (e.g., '100K-200K')",
+							"title": "Rent Bucket"
+						},
+						"description": "Filter by rent bucket (e.g., '100K-200K')"
+					},
+					{
+						"name": "area_bucket",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "string"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "Filter by area bucket (e.g., '1K-2K')",
+							"title": "Area Bucket"
+						},
+						"description": "Filter by area bucket (e.g., '1K-2K')"
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/RentalAnalyticsResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/analytics/market-trend": {
+			"get": {
+				"tags": ["analytics", "analytics"],
+				"summary": "Get Market Trend",
+				"description": "Get aggregated price trend data for the market trend chart.\n\nReturns trend points plus period-over-period change vs the equivalent prior period.",
+				"operationId": "analytics-get_market_trend",
+				"parameters": [
+					{
+						"name": "days",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer",
+							"description": "Number of days to look back (30, 90, 180, 365)",
+							"default": 180,
+							"title": "Days"
+						},
+						"description": "Number of days to look back (30, 90, 180, 365)"
+					},
+					{
+						"name": "market_type",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "string"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "Market type (overrides property_usage). One of: residential_units, villas, commercial_units, bulk_building, land, mortgages, gifts",
+							"title": "Market Type"
+						},
+						"description": "Market type (overrides property_usage). One of: residential_units, villas, commercial_units, bulk_building, land, mortgages, gifts"
+					},
+					{
+						"name": "property_usage",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "string"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "Residential or Commercial (ignored if market_type set)",
+							"default": "Residential",
+							"title": "Property Usage"
+						},
+						"description": "Residential or Commercial (ignored if market_type set)"
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/MarketTrendResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/analytics/projects": {
+			"get": {
+				"tags": ["analytics", "analytics"],
+				"summary": "Search Projects Endpoint",
+				"description": "Search master project names for the selector dropdown.",
+				"operationId": "analytics-search_projects_endpoint",
+				"parameters": [
+					{
+						"name": "search",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"description": "Master project name search term",
+							"default": "",
+							"title": "Search"
+						},
+						"description": "Master project name search term"
+					},
+					{
+						"name": "limit",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer",
+							"description": "Max results to return",
+							"default": 50,
+							"title": "Limit"
+						},
+						"description": "Max results to return"
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/ProjectSearchResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/analytics/project/sub-projects": {
+			"get": {
+				"tags": ["analytics", "analytics"],
+				"summary": "Get Sub Projects Endpoint",
+				"description": "List sub-projects within a master or virtual master, sorted by transaction count.",
+				"operationId": "analytics-get_sub_projects_endpoint",
+				"parameters": [
+					{
+						"name": "master_project",
+						"in": "query",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"description": "Master project name",
+							"title": "Master Project"
+						},
+						"description": "Master project name"
+					},
+					{
+						"name": "filter_type",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"description": "Filter type: master or virtual_master",
+							"default": "master",
+							"title": "Filter Type"
+						},
+						"description": "Filter type: master or virtual_master"
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/SubProjectsResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/analytics/project/summary": {
+			"get": {
+				"tags": ["analytics", "analytics"],
+				"summary": "Get Project Summary Endpoint",
+				"description": "Full analytics for a master project, virtual master, or specific sub-project.\nPass master_project with filter_type=master/virtual_master to aggregate the whole development,\nor project with filter_type=project for a specific sub-project.",
+				"operationId": "analytics-get_project_summary_endpoint",
+				"parameters": [
+					{
+						"name": "master_project",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "string"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "Master project name",
+							"title": "Master Project"
+						},
+						"description": "Master project name"
+					},
+					{
+						"name": "project",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "string"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "Sub-project name (project_name_en)",
+							"title": "Project"
+						},
+						"description": "Sub-project name (project_name_en)"
+					},
+					{
+						"name": "filter_type",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"description": "Filter type: master, virtual_master, or project",
+							"default": "project",
+							"title": "Filter Type"
+						},
+						"description": "Filter type: master, virtual_master, or project"
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/ProjectAnalyticsResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/analytics/project/trends": {
+			"get": {
+				"tags": ["analytics", "analytics"],
+				"summary": "Get Project Trends Endpoint",
+				"description": "Sales price trend time series for a project, master, or virtual master.",
+				"operationId": "analytics-get_project_trends_endpoint",
+				"parameters": [
+					{
+						"name": "master_project",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "string"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "Master project name",
+							"title": "Master Project"
+						},
+						"description": "Master project name"
+					},
+					{
+						"name": "project",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "string"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "Sub-project name (project_name_en)",
+							"title": "Project"
+						},
+						"description": "Sub-project name (project_name_en)"
+					},
+					{
+						"name": "filter_type",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"description": "Filter type: master, virtual_master, or project",
+							"default": "project",
+							"title": "Filter Type"
+						},
+						"description": "Filter type: master, virtual_master, or project"
+					},
+					{
+						"name": "days",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer",
+							"description": "Number of days to look back",
+							"default": 365,
+							"title": "Days"
+						},
+						"description": "Number of days to look back"
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/ProjectTrendsResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/chat/conversations": {
+			"post": {
+				"tags": ["chat", "chat"],
+				"summary": "Create Conversation Endpoint",
+				"description": "Create a new conversation",
+				"operationId": "chat-create_conversation_endpoint",
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/CreateConversationRequest"
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/ConversationResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			},
+			"get": {
+				"tags": ["chat", "chat"],
+				"summary": "List Conversations",
+				"description": "Get all conversations for current user",
+				"operationId": "chat-list_conversations",
+				"parameters": [
+					{
+						"name": "limit",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer",
+							"maximum": 100,
+							"minimum": 1,
+							"default": 50,
+							"title": "Limit"
+						}
+					},
+					{
+						"name": "offset",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer",
+							"minimum": 0,
+							"default": 0,
+							"title": "Offset"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/ConversationListResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/chat/conversations/{conversation_id}": {
+			"patch": {
+				"tags": ["chat", "chat"],
+				"summary": "Update Conversation Endpoint",
+				"description": "Update a conversation's title",
+				"operationId": "chat-update_conversation_endpoint",
+				"parameters": [
+					{
+						"name": "conversation_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "integer",
+							"title": "Conversation Id"
+						}
+					}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/UpdateConversationRequest"
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/ConversationResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			},
+			"delete": {
+				"tags": ["chat", "chat"],
+				"summary": "Delete Conversation Endpoint",
+				"description": "Delete a conversation",
+				"operationId": "chat-delete_conversation_endpoint",
+				"parameters": [
+					{
+						"name": "conversation_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "integer",
+							"title": "Conversation Id"
+						}
+					}
+				],
+				"responses": {
+					"204": {
+						"description": "Successful Response"
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/chat/conversations/{conversation_id}/messages": {
+			"get": {
+				"tags": ["chat", "chat"],
+				"summary": "Get Conversation Messages Endpoint",
+				"description": "Get messages for a conversation",
+				"operationId": "chat-get_conversation_messages_endpoint",
+				"parameters": [
+					{
+						"name": "conversation_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "integer",
+							"title": "Conversation Id"
+						}
+					},
+					{
+						"name": "limit",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer",
+							"maximum": 500,
+							"minimum": 1,
+							"default": 100,
+							"title": "Limit"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "array",
+									"items": {
+										"$ref": "#/components/schemas/MessageResponse"
+									},
+									"title": "Response Chat-Get Conversation Messages Endpoint"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/chat/conversations/{conversation_id}/messages/stream": {
+			"post": {
+				"tags": ["chat", "chat"],
+				"summary": "Send Message",
+				"description": "Send a message and stream AI response via SSE",
+				"operationId": "chat-send_message",
+				"parameters": [
+					{
+						"name": "conversation_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "integer",
+							"title": "Conversation Id"
+						}
+					}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/SendMessageRequest"
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "Successful Response"
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/filters/sales": {
+			"get": {
+				"tags": ["filters", "filters"],
+				"summary": "Get Sales Filter Options",
+				"description": "Get filter options for sales transactions.\n\nOptimized for ClickHouse LowCardinality columns (<10ms queries).\nSupports dynamic narrowing (e.g., project \u2192 buildings in that project).",
+				"operationId": "filters-get_sales_filter_options",
+				"parameters": [
+					{
+						"name": "property_usage",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"description": "Residential or Commercial",
+							"title": "Property Usage"
+						},
+						"description": "Residential or Commercial"
+					},
+					{
+						"name": "project",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"description": "Filter buildings by project",
+							"title": "Project"
+						},
+						"description": "Filter buildings by project"
+					},
+					{
+						"name": "filter_type",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"description": "Project filter type: master, virtual_master, or project",
+							"default": "project",
+							"title": "Filter Type"
+						},
+						"description": "Project filter type: master, virtual_master, or project"
+					},
+					{
+						"name": "property_type",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"description": "Filter subtypes and rooms",
+							"title": "Property Type"
+						},
+						"description": "Filter subtypes and rooms"
+					},
+					{
+						"name": "area",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"description": "Filter by area",
+							"title": "Area"
+						},
+						"description": "Filter by area"
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/FilterOptionsResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/filters/rentals": {
+			"get": {
+				"tags": ["filters", "filters"],
+				"summary": "Get Rental Filter Options",
+				"description": "Get filter options for rental contracts.\n\nOptimized for ClickHouse LowCardinality columns (<10ms queries).",
+				"operationId": "filters-get_rental_filter_options",
+				"parameters": [
+					{
+						"name": "property_usage",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"description": "Residential or Commercial",
+							"title": "Property Usage"
+						},
+						"description": "Residential or Commercial"
+					},
+					{
+						"name": "project",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"description": "Filter buildings by project",
+							"title": "Project"
+						},
+						"description": "Filter buildings by project"
+					},
+					{
+						"name": "filter_type",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"description": "Project filter type: master, virtual_master, or project",
+							"default": "project",
+							"title": "Filter Type"
+						},
+						"description": "Project filter type: master, virtual_master, or project"
+					},
+					{
+						"name": "property_type",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"description": "Filter subtypes",
+							"title": "Property Type"
+						},
+						"description": "Filter subtypes"
+					},
+					{
+						"name": "area",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"description": "Filter by area",
+							"title": "Area"
+						},
+						"description": "Filter by area"
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/FilterOptionsResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/news/articles": {
+			"get": {
+				"tags": ["news", "news"],
+				"summary": "Get News",
+				"operationId": "news-get_news",
+				"parameters": [
+					{
+						"name": "limit",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer",
+							"maximum": 100,
+							"minimum": 1,
+							"default": 20,
+							"title": "Limit"
+						}
+					},
+					{
+						"name": "offset",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer",
+							"minimum": 0,
+							"default": 0,
+							"title": "Offset"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/NewsListResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/organization/create": {
+			"post": {
+				"tags": ["organization", "organization"],
+				"summary": "Create Owner Organization",
+				"description": "Create organization for owner during self-signup (before checkout).\n\nIdempotent: If user already owns an organization, updates and returns existing org_id.\nThis allows users to retry checkout after abandoning payment.",
+				"operationId": "organization-create_owner_organization",
+				"requestBody": {
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/OwnerOrganizationCreateRequest"
+							}
+						}
+					},
+					"required": true
+				},
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/OwnerOrganizationCreateResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/organization/members": {
+			"get": {
+				"tags": ["organization", "organization"],
+				"summary": "Get Organization Members",
+				"description": "Get organization members (query from memberships table)",
+				"operationId": "organization-get_organization_members",
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"items": {
+										"$ref": "#/components/schemas/app__organization__router__OrganizationMemberResponse"
+									},
+									"type": "array",
+									"title": "Response Organization-Get Organization Members"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/organization/invitations": {
+			"get": {
+				"tags": ["organization", "organization"],
+				"summary": "Get Organization Invitations",
+				"description": "Get pending invitations for the current organization.",
+				"operationId": "organization-get_organization_invitations",
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"items": {
+										"$ref": "#/components/schemas/OrganizationInvitationResponse"
+									},
+									"type": "array",
+									"title": "Response Organization-Get Organization Invitations"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/organization/invitations/{invitation_id}": {
+			"delete": {
+				"tags": ["organization", "organization"],
+				"summary": "Delete Organization Invitation",
+				"description": "Cancel a pending invitation for the current organization.",
+				"operationId": "organization-delete_organization_invitation",
+				"parameters": [
+					{
+						"name": "invitation_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"title": "Invitation Id"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/OperationSuccessResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/organization/members/{user_id}": {
+			"delete": {
+				"tags": ["organization", "organization"],
+				"summary": "Remove Member",
+				"description": "Remove user from organization (delete membership to free seat)",
+				"operationId": "organization-remove_member",
+				"parameters": [
+					{
+						"name": "user_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"title": "User Id"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/OperationSuccessResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/organization/subscription": {
+			"get": {
+				"tags": ["organization", "organization"],
+				"summary": "Get Organization Subscription",
+				"description": "Get organization subscription details (owner only).",
+				"operationId": "organization-get_organization_subscription",
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/SubscriptionResponse"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/organization/customer-portal": {
+			"get": {
+				"tags": ["organization", "organization"],
+				"summary": "Get Stripe Customer Portal",
+				"description": "Get Stripe Customer Portal URL (admin only).",
+				"operationId": "organization-get_stripe_customer_portal",
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/CustomerPortalResponse"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/organization/invite-user": {
+			"post": {
+				"tags": ["organization", "organization"],
+				"summary": "Invite User To Organization",
+				"description": "Invite user to organization (admin only).",
+				"operationId": "organization-invite_user_to_organization",
+				"requestBody": {
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/InviteUserRequest"
+							}
+						}
+					},
+					"required": true
+				},
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/InviteUserResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/organization/validate-invite-token": {
+			"get": {
+				"tags": ["organization", "organization"],
+				"summary": "Validate Invite Token",
+				"description": "Validate invitation token and return organization details.",
+				"operationId": "organization-validate_invite_token",
+				"parameters": [
+					{
+						"name": "token",
+						"in": "query",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"title": "Token"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/ValidateInviteTokenResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/organization/accept-invite": {
+			"post": {
+				"tags": ["organization", "organization"],
+				"summary": "Accept Invite",
+				"description": "Accept organization invitation with conflict detection.",
+				"operationId": "organization-accept_invite",
+				"requestBody": {
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/AcceptInviteRequest"
+							}
+						}
+					},
+					"required": true
+				},
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/AcceptInviteResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/organization/organizations": {
+			"get": {
+				"tags": ["organization", "organization"],
+				"summary": "List Organization",
+				"description": "List all organizations with user counts (admin only).",
+				"operationId": "organization-list_organization",
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"items": {
+										"$ref": "#/components/schemas/OrganizationResponse"
+									},
+									"type": "array",
+									"title": "Response Organization-List Organization"
+								}
+							}
+						}
+					}
+				}
+			},
+			"post": {
+				"tags": ["organization", "organization"],
+				"summary": "Create Organization",
+				"description": "Create a new organization (admin only).",
+				"operationId": "organization-create_organization",
+				"requestBody": {
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/OrganizationCreateRequest"
+							}
+						}
+					},
+					"required": true
+				},
+				"responses": {
+					"201": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/OrganizationResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/organization/organizations/{org_id}": {
+			"get": {
+				"tags": ["organization", "organization"],
+				"summary": "Get Organization",
+				"description": "Get organization details with user list (organization admin).",
+				"operationId": "organization-get_organization",
+				"parameters": [
+					{
+						"name": "org_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"title": "Org Id"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/OrganizationDetailResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			},
+			"put": {
+				"tags": ["organization", "organization"],
+				"summary": "Update Organization",
+				"description": "Update organization settings (organization admin).",
+				"operationId": "organization-update_organization",
+				"parameters": [
+					{
+						"name": "org_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"title": "Org Id"
+						}
+					}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/OrganizationUpdateRequest"
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/OrganizationResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			},
+			"delete": {
+				"tags": ["organization", "organization"],
+				"summary": "Delete Organization",
+				"description": "Delete organization (admin only).",
+				"operationId": "organization-delete_organization",
+				"parameters": [
+					{
+						"name": "org_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"title": "Org Id"
+						}
+					}
+				],
+				"responses": {
+					"204": {
+						"description": "Successful Response"
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/organization/users/{user_id}": {
+			"put": {
+				"tags": ["organization", "organization"],
+				"summary": "Update User",
+				"description": "Update user daily token limit (organization admin).",
+				"operationId": "organization-update_user",
+				"parameters": [
+					{
+						"name": "user_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"title": "User Id"
+						}
+					}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/UserUpdateRequest"
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/UserTokenLimitUpdateResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/projects/list": {
+			"get": {
+				"tags": ["projects", "projects"],
+				"summary": "List Projects",
+				"description": "Get all projects for client-side search",
+				"operationId": "projects-list_projects",
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"items": {
+										"$ref": "#/components/schemas/ProjectSearchResult"
+									},
+									"type": "array",
+									"title": "Response Projects-List Projects"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/projects/master": {
+			"get": {
+				"tags": ["projects", "projects"],
+				"summary": "Master Project",
+				"description": "Get aggregated data for a master project and its sub-projects",
+				"operationId": "projects-master_project",
+				"parameters": [
+					{
+						"name": "name",
+						"in": "query",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"description": "master_project_en value",
+							"title": "Name"
+						},
+						"description": "master_project_en value"
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/MasterProjectResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/projects/building/{property_id}": {
+			"get": {
+				"tags": ["projects", "projects"],
+				"summary": "Building Details",
+				"description": "Get building details with unit composition by bedroom type",
+				"operationId": "projects-building_details",
+				"parameters": [
+					{
+						"name": "property_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "integer",
+							"title": "Property Id"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/BuildingDetailResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/projects/{project_id}": {
+			"get": {
+				"tags": ["projects", "projects"],
+				"summary": "Project Details",
+				"description": "Get full project details with unit composition",
+				"operationId": "projects-project_details",
+				"parameters": [
+					{
+						"name": "project_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "integer",
+							"title": "Project Id"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/ProjectDetailResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/supply/upcoming-projects": {
+			"get": {
+				"tags": ["supply", "supply"],
+				"summary": "List Upcoming Projects",
+				"description": "Get all upcoming/active projects for catalogue view.",
+				"operationId": "supply-list_upcoming_projects",
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/UpcomingProjectsResponse"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/transactions/sales": {
+			"get": {
+				"tags": ["transactions", "transactions"],
+				"summary": "Get Sales Transactions",
+				"description": "List sales transactions with filtering and pagination.\n\nDefault sort: instance_date DESC (most recent first), split by property_usage_en.",
+				"operationId": "transactions-get_sales_transactions",
+				"parameters": [
+					{
+						"name": "limit",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer",
+							"maximum": 1000,
+							"minimum": 1,
+							"description": "Page size",
+							"default": 30,
+							"title": "Limit"
+						},
+						"description": "Page size"
+					},
+					{
+						"name": "offset",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer",
+							"minimum": 0,
+							"description": "Page offset",
+							"default": 0,
+							"title": "Offset"
+						},
+						"description": "Page offset"
+					},
+					{
+						"name": "property_usage",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"description": "Residential or Commercial",
+							"title": "Property Usage"
+						},
+						"description": "Residential or Commercial"
+					},
+					{
+						"name": "property_type",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"description": "Property type",
+							"title": "Property Type"
+						},
+						"description": "Property type"
+					},
+					{
+						"name": "property_sub_type",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"description": "Property sub-type",
+							"title": "Property Sub Type"
+						},
+						"description": "Property sub-type"
+					},
+					{
+						"name": "rooms",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"description": "Number of rooms",
+							"title": "Rooms"
+						},
+						"description": "Number of rooms"
+					},
+					{
+						"name": "registration_type",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"description": "Registration type",
+							"title": "Registration Type"
+						},
+						"description": "Registration type"
+					},
+					{
+						"name": "area",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"description": "Area name",
+							"title": "Area"
+						},
+						"description": "Area name"
+					},
+					{
+						"name": "project",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"description": "Project name",
+							"title": "Project"
+						},
+						"description": "Project name"
+					},
+					{
+						"name": "filter_type",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"description": "Project filter type: master, virtual_master, or project",
+							"default": "project",
+							"title": "Filter Type"
+						},
+						"description": "Project filter type: master, virtual_master, or project"
+					},
+					{
+						"name": "building",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"description": "Building name",
+							"title": "Building"
+						},
+						"description": "Building name"
+					},
+					{
+						"name": "timeframe_days",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer",
+							"description": "Days back from today",
+							"title": "Timeframe Days"
+						},
+						"description": "Days back from today"
+					},
+					{
+						"name": "area_min",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "number",
+							"description": "Minimum property area (sqm)",
+							"title": "Area Min"
+						},
+						"description": "Minimum property area (sqm)"
+					},
+					{
+						"name": "area_max",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "number",
+							"description": "Maximum property area (sqm)",
+							"title": "Area Max"
+						},
+						"description": "Maximum property area (sqm)"
+					},
+					{
+						"name": "price_min",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "number",
+							"description": "Minimum price",
+							"title": "Price Min"
+						},
+						"description": "Minimum price"
+					},
+					{
+						"name": "price_max",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "number",
+							"description": "Maximum price",
+							"title": "Price Max"
+						},
+						"description": "Maximum price"
+					},
+					{
+						"name": "price_per_sqm_min",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "number",
+							"description": "Minimum price per sqm",
+							"title": "Price Per Sqm Min"
+						},
+						"description": "Minimum price per sqm"
+					},
+					{
+						"name": "price_per_sqm_max",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "number",
+							"description": "Maximum price per sqm",
+							"title": "Price Per Sqm Max"
+						},
+						"description": "Maximum price per sqm"
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/TransactionListResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/transactions/rentals": {
+			"get": {
+				"tags": ["transactions", "transactions"],
+				"summary": "Get Rental Contracts",
+				"description": "List rental contracts with filtering and pagination.\n\nDefault sort: contract_start_date DESC (most recent first), split by property_usage_en.",
+				"operationId": "transactions-get_rental_contracts",
+				"parameters": [
+					{
+						"name": "limit",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer",
+							"maximum": 1000,
+							"minimum": 1,
+							"description": "Page size",
+							"default": 30,
+							"title": "Limit"
+						},
+						"description": "Page size"
+					},
+					{
+						"name": "offset",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer",
+							"minimum": 0,
+							"description": "Page offset",
+							"default": 0,
+							"title": "Offset"
+						},
+						"description": "Page offset"
+					},
+					{
+						"name": "property_usage",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"description": "Residential or Commercial",
+							"title": "Property Usage"
+						},
+						"description": "Residential or Commercial"
+					},
+					{
+						"name": "property_type",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"description": "Property type (ejari)",
+							"title": "Property Type"
+						},
+						"description": "Property type (ejari)"
+					},
+					{
+						"name": "property_sub_type",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"description": "Property sub-type (ejari)",
+							"title": "Property Sub Type"
+						},
+						"description": "Property sub-type (ejari)"
+					},
+					{
+						"name": "tenant_type",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"description": "Tenant type",
+							"title": "Tenant Type"
+						},
+						"description": "Tenant type"
+					},
+					{
+						"name": "contract_reg_type",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"description": "Contract registration type",
+							"title": "Contract Reg Type"
+						},
+						"description": "Contract registration type"
+					},
+					{
+						"name": "area",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"description": "Area name",
+							"title": "Area"
+						},
+						"description": "Area name"
+					},
+					{
+						"name": "project",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"description": "Project name",
+							"title": "Project"
+						},
+						"description": "Project name"
+					},
+					{
+						"name": "filter_type",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"description": "Project filter type: master, virtual_master, or project",
+							"default": "project",
+							"title": "Filter Type"
+						},
+						"description": "Project filter type: master, virtual_master, or project"
+					},
+					{
+						"name": "timeframe_days",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer",
+							"description": "Days back from today",
+							"title": "Timeframe Days"
+						},
+						"description": "Days back from today"
+					},
+					{
+						"name": "area_min",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "number",
+							"description": "Minimum property area (sqm)",
+							"title": "Area Min"
+						},
+						"description": "Minimum property area (sqm)"
+					},
+					{
+						"name": "area_max",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "number",
+							"description": "Maximum property area (sqm)",
+							"title": "Area Max"
+						},
+						"description": "Maximum property area (sqm)"
+					},
+					{
+						"name": "rent_min",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "number",
+							"description": "Minimum annual rent",
+							"title": "Rent Min"
+						},
+						"description": "Minimum annual rent"
+					},
+					{
+						"name": "rent_max",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "number",
+							"description": "Maximum annual rent",
+							"title": "Rent Max"
+						},
+						"description": "Maximum annual rent"
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/RentalContractListResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/transactions/sales/export": {
+			"get": {
+				"tags": ["transactions", "transactions"],
+				"summary": "Export Sales Transactions Endpoint",
+				"description": "Export sales transactions to Excel.\n\nLimit: 100 rows max (or specific transaction_ids if provided).",
+				"operationId": "transactions-export_sales_transactions_endpoint",
+				"parameters": [
+					{
+						"name": "transaction_ids",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"description": "Comma-separated transaction IDs (overrides filters and limit)",
+							"title": "Transaction Ids"
+						},
+						"description": "Comma-separated transaction IDs (overrides filters and limit)"
+					},
+					{
+						"name": "property_usage",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"description": "Residential or Commercial",
+							"title": "Property Usage"
+						},
+						"description": "Residential or Commercial"
+					},
+					{
+						"name": "property_type",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"description": "Property type",
+							"title": "Property Type"
+						},
+						"description": "Property type"
+					},
+					{
+						"name": "property_sub_type",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"description": "Property sub-type",
+							"title": "Property Sub Type"
+						},
+						"description": "Property sub-type"
+					},
+					{
+						"name": "rooms",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"description": "Number of rooms",
+							"title": "Rooms"
+						},
+						"description": "Number of rooms"
+					},
+					{
+						"name": "registration_type",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"description": "Registration type",
+							"title": "Registration Type"
+						},
+						"description": "Registration type"
+					},
+					{
+						"name": "area",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"description": "Area name",
+							"title": "Area"
+						},
+						"description": "Area name"
+					},
+					{
+						"name": "project",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"description": "Project name",
+							"title": "Project"
+						},
+						"description": "Project name"
+					},
+					{
+						"name": "filter_type",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"description": "Project filter type: master, virtual_master, or project",
+							"default": "project",
+							"title": "Filter Type"
+						},
+						"description": "Project filter type: master, virtual_master, or project"
+					},
+					{
+						"name": "building",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"description": "Building name",
+							"title": "Building"
+						},
+						"description": "Building name"
+					},
+					{
+						"name": "timeframe_days",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer",
+							"description": "Days back from today",
+							"title": "Timeframe Days"
+						},
+						"description": "Days back from today"
+					},
+					{
+						"name": "area_min",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "number",
+							"description": "Minimum property area (sqm)",
+							"title": "Area Min"
+						},
+						"description": "Minimum property area (sqm)"
+					},
+					{
+						"name": "area_max",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "number",
+							"description": "Maximum property area (sqm)",
+							"title": "Area Max"
+						},
+						"description": "Maximum property area (sqm)"
+					},
+					{
+						"name": "price_min",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "number",
+							"description": "Minimum price",
+							"title": "Price Min"
+						},
+						"description": "Minimum price"
+					},
+					{
+						"name": "price_max",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "number",
+							"description": "Maximum price",
+							"title": "Price Max"
+						},
+						"description": "Maximum price"
+					},
+					{
+						"name": "price_per_sqm_min",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "number",
+							"description": "Minimum price per sqm",
+							"title": "Price Per Sqm Min"
+						},
+						"description": "Minimum price per sqm"
+					},
+					{
+						"name": "price_per_sqm_max",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "number",
+							"description": "Maximum price per sqm",
+							"title": "Price Per Sqm Max"
+						},
+						"description": "Maximum price per sqm"
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response"
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/transactions/rentals/export": {
+			"get": {
+				"tags": ["transactions", "transactions"],
+				"summary": "Export Rental Contracts Endpoint",
+				"description": "Export rental contracts to Excel.\n\nLimit: 100 rows max (or specific contract_ids if provided).",
+				"operationId": "transactions-export_rental_contracts_endpoint",
+				"parameters": [
+					{
+						"name": "contract_ids",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"description": "Comma-separated contract IDs (overrides filters and limit)",
+							"title": "Contract Ids"
+						},
+						"description": "Comma-separated contract IDs (overrides filters and limit)"
+					},
+					{
+						"name": "property_usage",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"description": "Residential or Commercial",
+							"title": "Property Usage"
+						},
+						"description": "Residential or Commercial"
+					},
+					{
+						"name": "property_type",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"description": "Property type (ejari)",
+							"title": "Property Type"
+						},
+						"description": "Property type (ejari)"
+					},
+					{
+						"name": "property_sub_type",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"description": "Property sub-type (ejari)",
+							"title": "Property Sub Type"
+						},
+						"description": "Property sub-type (ejari)"
+					},
+					{
+						"name": "tenant_type",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"description": "Tenant type",
+							"title": "Tenant Type"
+						},
+						"description": "Tenant type"
+					},
+					{
+						"name": "contract_reg_type",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"description": "Contract registration type",
+							"title": "Contract Reg Type"
+						},
+						"description": "Contract registration type"
+					},
+					{
+						"name": "area",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"description": "Area name",
+							"title": "Area"
+						},
+						"description": "Area name"
+					},
+					{
+						"name": "project",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"description": "Project name",
+							"title": "Project"
+						},
+						"description": "Project name"
+					},
+					{
+						"name": "filter_type",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"description": "Project filter type: master, virtual_master, or project",
+							"default": "project",
+							"title": "Filter Type"
+						},
+						"description": "Project filter type: master, virtual_master, or project"
+					},
+					{
+						"name": "timeframe_days",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer",
+							"description": "Days back from today",
+							"title": "Timeframe Days"
+						},
+						"description": "Days back from today"
+					},
+					{
+						"name": "area_min",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "number",
+							"description": "Minimum property area (sqm)",
+							"title": "Area Min"
+						},
+						"description": "Minimum property area (sqm)"
+					},
+					{
+						"name": "area_max",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "number",
+							"description": "Maximum property area (sqm)",
+							"title": "Area Max"
+						},
+						"description": "Maximum property area (sqm)"
+					},
+					{
+						"name": "rent_min",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "number",
+							"description": "Minimum annual rent",
+							"title": "Rent Min"
+						},
+						"description": "Minimum annual rent"
+					},
+					{
+						"name": "rent_max",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "number",
+							"description": "Maximum annual rent",
+							"title": "Rent Max"
+						},
+						"description": "Maximum annual rent"
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response"
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/upload/chunked": {
+			"post": {
+				"tags": ["upload", "upload"],
+				"summary": "Upload Chunked",
+				"description": "Upload file chunks. Stores chunks to S3 for ETL node assembly.\n\nWhen all chunks are received, saves metadata.json with upload info.\nThe ETL node is responsible for downloading, assembling, and verifying.",
+				"operationId": "upload-upload_chunked",
+				"parameters": [
+					{
+						"name": "source_url",
+						"in": "query",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"title": "Source Url"
+						}
+					},
+					{
+						"name": "upload_session_id",
+						"in": "query",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"title": "Upload Session Id"
+						}
+					},
+					{
+						"name": "chunk_index",
+						"in": "query",
+						"required": true,
+						"schema": {
+							"type": "integer",
+							"title": "Chunk Index"
+						}
+					},
+					{
+						"name": "total_chunks",
+						"in": "query",
+						"required": true,
+						"schema": {
+							"type": "integer",
+							"title": "Total Chunks"
+						}
+					},
+					{
+						"name": "original_filename",
+						"in": "query",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"title": "Original Filename"
+						}
+					},
+					{
+						"name": "total_file_size",
+						"in": "query",
+						"required": true,
+						"schema": {
+							"type": "integer",
+							"title": "Total File Size"
+						}
+					},
+					{
+						"name": "chunk_size",
+						"in": "query",
+						"required": true,
+						"schema": {
+							"type": "integer",
+							"title": "Chunk Size"
+						}
+					},
+					{
+						"name": "expected_hash",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "string"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"title": "Expected Hash"
+						}
+					},
+					{
+						"name": "x-api-key",
+						"in": "header",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"title": "X-Api-Key"
+						}
+					}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"multipart/form-data": {
+							"schema": {
+								"$ref": "#/components/schemas/Body_upload-upload_chunked"
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/ChunkedUploadResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/upload/news/article": {
+			"post": {
+				"tags": ["upload", "upload"],
+				"summary": "Upload News Article",
+				"operationId": "upload-upload_news_article",
+				"parameters": [
+					{
+						"name": "x-api-key",
+						"in": "header",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"title": "X-Api-Key"
+						}
+					}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/NewsArticleUploadRequest"
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/NewsArticleUploadResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/upload/health": {
+			"get": {
+				"tags": ["upload", "upload"],
+				"summary": "Health",
+				"operationId": "upload-health",
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/UploadHealthResponse"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/billing/create-checkout": {
+			"post": {
+				"tags": ["billing", "billing"],
+				"summary": "Create Checkout Session Endpoint",
+				"description": "Create Stripe checkout session for existing organization.\n\nOrganization must already exist (created via /organization/create).\nUser profile (first_name/last_name) must be set in auth metadata.",
+				"operationId": "billing-create_checkout_session_endpoint",
+				"requestBody": {
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/CheckoutSessionRequest"
+							}
+						}
+					},
+					"required": true
+				},
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/CheckoutSessionResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/billing/sync-after-checkout": {
+			"post": {
+				"tags": ["billing", "billing"],
+				"summary": "Sync After Checkout Endpoint",
+				"description": "Eager sync after checkout success.",
+				"operationId": "billing-sync_after_checkout_endpoint",
+				"requestBody": {
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/SyncAfterCheckoutRequest"
+							}
+						}
+					},
+					"required": true
+				},
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/PaymentSyncResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/webhooks/stripe": {
+			"post": {
+				"tags": ["webhooks", "webhooks"],
+				"summary": "Stripe Webhook",
+				"description": "Stripe webhook: treat Stripe as source of truth and sync Postgres from Stripe.",
+				"operationId": "webhooks-stripe_webhook",
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/WebhookStatusResponse"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/admin/organizations": {
+			"get": {
+				"tags": ["admin", "admin"],
+				"summary": "List All Organizations",
+				"description": "List all organizations with stats.",
+				"operationId": "admin-list_all_organizations",
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"items": {
+										"$ref": "#/components/schemas/OrganizationListResponse"
+									},
+									"type": "array",
+									"title": "Response Admin-List All Organizations"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/admin/organizations/{org_id}": {
+			"get": {
+				"tags": ["admin", "admin"],
+				"summary": "Get Organization",
+				"description": "Get organization details with members.",
+				"operationId": "admin-get_organization",
+				"parameters": [
+					{
+						"name": "org_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"title": "Org Id"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/OrgDetailResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			},
+			"put": {
+				"tags": ["admin", "admin"],
+				"summary": "Update Org",
+				"description": "Update organization settings.",
+				"operationId": "admin-update_org",
+				"parameters": [
+					{
+						"name": "org_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"title": "Org Id"
+						}
+					}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/UpdateOrgRequest"
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/OrganizationListResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			},
+			"delete": {
+				"tags": ["admin", "admin"],
+				"summary": "Delete Org",
+				"description": "Delete organization and all memberships.",
+				"operationId": "admin-delete_org",
+				"parameters": [
+					{
+						"name": "org_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"title": "Org Id"
+						}
+					}
+				],
+				"responses": {
+					"204": {
+						"description": "Successful Response"
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/admin/organizations/{org_id}/subscription": {
+			"patch": {
+				"tags": ["admin", "admin"],
+				"summary": "Set Subscription Status",
+				"description": "Update organization subscription status.",
+				"operationId": "admin-set_subscription_status",
+				"parameters": [
+					{
+						"name": "org_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"title": "Org Id"
+						}
+					}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/UpdateSubscriptionRequest"
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/OrganizationListResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/admin/token-usage": {
+			"get": {
+				"tags": ["admin", "admin"],
+				"summary": "List Token Usage",
+				"description": "List today's token usage for all users.",
+				"operationId": "admin-list_token_usage",
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"items": {
+										"$ref": "#/components/schemas/UserTokenStatsResponse"
+									},
+									"type": "array",
+									"title": "Response Admin-List Token Usage"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/admin/users": {
+			"post": {
+				"tags": ["admin", "admin"],
+				"summary": "Create User",
+				"description": "Create a Supabase user and assign to an org (new or existing).",
+				"operationId": "admin-create_user",
+				"requestBody": {
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/CreateUserRequest"
+							}
+						}
+					},
+					"required": true
+				},
+				"responses": {
+					"201": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/CreateUserResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/admin/users/{user_id}": {
+			"get": {
+				"tags": ["admin", "admin"],
+				"summary": "Get User Details",
+				"description": "Get user details.",
+				"operationId": "admin-get_user_details",
+				"parameters": [
+					{
+						"name": "user_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"title": "User Id"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/UserDetailResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			},
+			"patch": {
+				"tags": ["admin", "admin"],
+				"summary": "Update User",
+				"description": "Update user settings.",
+				"operationId": "admin-update_user",
+				"parameters": [
+					{
+						"name": "user_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"title": "User Id"
+						}
+					}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/UpdateUserRequest"
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/UserDetailResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			},
+			"delete": {
+				"tags": ["admin", "admin"],
+				"summary": "Delete User",
+				"description": "Delete user from Supabase and remove org membership.",
+				"operationId": "admin-delete_user",
+				"parameters": [
+					{
+						"name": "user_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"title": "User Id"
+						}
+					}
+				],
+				"responses": {
+					"204": {
+						"description": "Successful Response"
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/admin/organizations/{organization_id}/members": {
+			"get": {
+				"tags": ["admin", "admin"],
+				"summary": "List Organization Members",
+				"description": "List all members in an organization.",
+				"operationId": "admin-list_organization_members",
+				"parameters": [
+					{
+						"name": "organization_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"title": "Organization Id"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "array",
+									"items": {
+										"$ref": "#/components/schemas/app__admin__models__OrganizationMemberResponse"
+									},
+									"title": "Response Admin-List Organization Members"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/feasibility/areas": {
+			"get": {
+				"tags": ["feasibility", "feasibility"],
+				"summary": "Areas Endpoint",
+				"description": "Get all distinct transaction areas with sales activity.",
+				"operationId": "feasibility-areas_endpoint",
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"items": {
+										"type": "string"
+									},
+									"type": "array",
+									"title": "Response Feasibility-Areas Endpoint"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/feasibility/communities": {
+			"get": {
+				"tags": ["feasibility", "feasibility"],
+				"summary": "Communities Endpoint",
+				"description": "Get GIS plot communities ordered by activity.",
+				"operationId": "feasibility-communities_endpoint",
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"items": {
+										"type": "string"
+									},
+									"type": "array",
+									"title": "Response Feasibility-Communities Endpoint"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/feasibility/plots": {
+			"get": {
+				"tags": ["feasibility", "feasibility"],
+				"summary": "Plots Endpoint",
+				"description": "Search GIS plots by plot number, project, community, and plot area.",
+				"operationId": "feasibility-plots_endpoint",
+				"parameters": [
+					{
+						"name": "q",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"default": "",
+							"title": "Q"
+						}
+					},
+					{
+						"name": "community",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"default": "",
+							"title": "Community"
+						}
+					},
+					{
+						"name": "min_plot_area_sqm",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "number",
+									"minimum": 0.0
+								},
+								{
+									"type": "null"
+								}
+							],
+							"title": "Min Plot Area Sqm"
+						}
+					},
+					{
+						"name": "max_plot_area_sqm",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "number",
+									"minimum": 0.0
+								},
+								{
+									"type": "null"
+								}
+							],
+							"title": "Max Plot Area Sqm"
+						}
+					},
+					{
+						"name": "offset",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer",
+							"minimum": 0,
+							"default": 0,
+							"title": "Offset"
+						}
+					},
+					{
+						"name": "limit",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer",
+							"maximum": 100,
+							"minimum": 1,
+							"default": 30,
+							"title": "Limit"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "array",
+									"items": {
+										"$ref": "#/components/schemas/GISPlotSummary"
+									},
+									"title": "Response Feasibility-Plots Endpoint"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/feasibility/plots/{plot_number}": {
+			"get": {
+				"tags": ["feasibility", "feasibility"],
+				"summary": "Plot Dossier Endpoint",
+				"description": "Get full GIS-backed plot dossier for feasibility and HBU analysis.",
+				"operationId": "feasibility-plot_dossier_endpoint",
+				"parameters": [
+					{
+						"name": "plot_number",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"title": "Plot Number"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GISPlotDossier"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/feasibility/hbu/{plot_number}": {
+			"post": {
+				"tags": ["feasibility", "feasibility"],
+				"summary": "Generate Hbu Endpoint",
+				"description": "Generate an agent-authored initial HBU study for the selected GIS plot.",
+				"operationId": "feasibility-generate_hbu_endpoint",
+				"parameters": [
+					{
+						"name": "plot_number",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"title": "Plot Number"
+						}
+					},
+					{
+						"name": "usage_override",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"enum": ["residential", "commercial", "mixed_use", "unknown"],
+									"type": "string"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"title": "Usage Override"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HBUStudy"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/feasibility/plots/{plot_number}/land-sales": {
+			"get": {
+				"tags": ["feasibility", "feasibility"],
+				"summary": "Plot Land Sales Endpoint",
+				"description": "Get recent land sale evidence for the selected GIS plot area.",
+				"operationId": "feasibility-plot_land_sales_endpoint",
+				"parameters": [
+					{
+						"name": "plot_number",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"title": "Plot Number"
+						}
+					},
+					{
+						"name": "days",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer",
+							"maximum": 3650,
+							"minimum": 30,
+							"default": 1825,
+							"title": "Days"
+						}
+					},
+					{
+						"name": "limit",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer",
+							"maximum": 50,
+							"minimum": 1,
+							"default": 12,
+							"title": "Limit"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "array",
+									"items": {
+										"$ref": "#/components/schemas/LandSaleEvidence"
+									},
+									"title": "Response Feasibility-Plot Land Sales Endpoint"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/feasibility/land": {
+			"get": {
+				"tags": ["feasibility", "feasibility"],
+				"summary": "Land Endpoint",
+				"description": "Find land plots near a given size in the specified area.",
+				"operationId": "feasibility-land_endpoint",
+				"parameters": [
+					{
+						"name": "area",
+						"in": "query",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"title": "Area"
+						}
+					},
+					{
+						"name": "size_sqm",
+						"in": "query",
+						"required": true,
+						"schema": {
+							"type": "number",
+							"title": "Size Sqm"
+						}
+					},
+					{
+						"name": "tolerance",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "number",
+							"maximum": 1.0,
+							"minimum": 0.0,
+							"default": 0.25,
+							"title": "Tolerance"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "array",
+									"items": {
+										"$ref": "#/components/schemas/GISPlotSummary"
+									},
+									"title": "Response Feasibility-Land Endpoint"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/feasibility/land/search": {
+			"get": {
+				"tags": ["feasibility", "feasibility"],
+				"summary": "Land Search Endpoint",
+				"description": "Legacy plot search alias backed by GIS plot data.",
+				"operationId": "feasibility-land_search_endpoint",
+				"parameters": [
+					{
+						"name": "area",
+						"in": "query",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"title": "Area"
+						}
+					},
+					{
+						"name": "q",
+						"in": "query",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"minLength": 1,
+							"title": "Q"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "array",
+									"items": {
+										"$ref": "#/components/schemas/GISPlotSummary"
+									},
+									"title": "Response Feasibility-Land Search Endpoint"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/feasibility/comparable": {
+			"get": {
+				"tags": ["feasibility", "feasibility"],
+				"summary": "Comparable Endpoint",
+				"description": "Get aggregated comparable data for a set of projects.",
+				"operationId": "feasibility-comparable_endpoint",
+				"parameters": [
+					{
+						"name": "project_ids",
+						"in": "query",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"description": "Comma-separated project IDs",
+							"title": "Project Ids"
+						},
+						"description": "Comma-separated project IDs"
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/ComparableData"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/feasibility/chat/stream": {
+			"post": {
+				"tags": ["feasibility", "feasibility"],
+				"summary": "Chat Stream Endpoint",
+				"description": "Stream LLM feasibility assistant response via SSE.",
+				"operationId": "feasibility-chat_stream_endpoint",
+				"requestBody": {
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/FeasibilityChatRequest"
+							}
+						}
+					},
+					"required": true
+				},
+				"responses": {
+					"200": {
+						"description": "Successful Response"
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/health": {
+			"get": {
+				"summary": "Health Check",
+				"operationId": "default-health_check",
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HealthResponse"
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	},
+	"components": {
+		"schemas": {
+			"AcceptInviteRequest": {
+				"properties": {
+					"token": {
+						"type": "string",
+						"title": "Token"
+					}
+				},
+				"type": "object",
+				"required": ["token"],
+				"title": "AcceptInviteRequest",
+				"description": "Request to accept invitation"
+			},
+			"AcceptInviteResponse": {
+				"properties": {
+					"success": {
+						"type": "boolean",
+						"title": "Success"
+					},
+					"organization_id": {
+						"type": "string",
+						"title": "Organization Id"
+					},
+					"organization_name": {
+						"type": "string",
+						"title": "Organization Name"
+					},
+					"role": {
+						"type": "string",
+						"title": "Role"
+					}
+				},
+				"type": "object",
+				"required": ["success", "organization_id", "organization_name", "role"],
+				"title": "AcceptInviteResponse",
+				"description": "Response for accepting invitation"
+			},
+			"AnalyticsResponse": {
+				"properties": {
+					"timeframe_days": {
+						"type": "integer",
+						"title": "Timeframe Days"
+					},
+					"property_usage": {
+						"type": "string",
+						"title": "Property Usage"
+					},
+					"summary": {
+						"$ref": "#/components/schemas/AnalyticsSummary"
+					},
+					"trends": {
+						"items": {
+							"$ref": "#/components/schemas/TrendPoint"
+						},
+						"type": "array",
+						"title": "Trends"
+					},
+					"by_property_type": {
+						"items": {
+							"$ref": "#/components/schemas/DimensionBreakdown"
+						},
+						"type": "array",
+						"title": "By Property Type"
+					},
+					"by_rooms": {
+						"items": {
+							"$ref": "#/components/schemas/DimensionBreakdown"
+						},
+						"type": "array",
+						"title": "By Rooms"
+					},
+					"by_reg_type": {
+						"items": {
+							"$ref": "#/components/schemas/DimensionBreakdown"
+						},
+						"type": "array",
+						"title": "By Reg Type"
+					},
+					"by_master_project": {
+						"items": {
+							"$ref": "#/components/schemas/DimensionBreakdown"
+						},
+						"type": "array",
+						"title": "By Master Project"
+					}
+				},
+				"type": "object",
+				"required": [
+					"timeframe_days",
+					"property_usage",
+					"summary",
+					"trends",
+					"by_property_type",
+					"by_rooms",
+					"by_reg_type",
+					"by_master_project"
+				],
+				"title": "AnalyticsResponse",
+				"description": "Complete analytics response for dashboard"
+			},
+			"AnalyticsSummary": {
+				"properties": {
+					"transaction_count": {
+						"type": "integer",
+						"title": "Transaction Count"
+					},
+					"total_volume": {
+						"type": "number",
+						"title": "Total Volume"
+					},
+					"avg_price": {
+						"type": "number",
+						"title": "Avg Price"
+					},
+					"avg_price_sqft": {
+						"type": "number",
+						"title": "Avg Price Sqft"
+					},
+					"min_price": {
+						"type": "number",
+						"title": "Min Price"
+					},
+					"max_price": {
+						"type": "number",
+						"title": "Max Price"
+					},
+					"volume_change_pct": {
+						"anyOf": [
+							{
+								"type": "number"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Volume Change Pct"
+					},
+					"count_change_pct": {
+						"anyOf": [
+							{
+								"type": "number"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Count Change Pct"
+					}
+				},
+				"type": "object",
+				"required": [
+					"transaction_count",
+					"total_volume",
+					"avg_price",
+					"avg_price_sqft",
+					"min_price",
+					"max_price"
+				],
+				"title": "AnalyticsSummary",
+				"description": "Summary KPI metrics for analytics dashboard"
+			},
+			"AnalyticsUnitComposition": {
+				"properties": {
+					"rooms": {
+						"type": "string",
+						"title": "Rooms"
+					},
+					"count": {
+						"type": "integer",
+						"title": "Count"
+					},
+					"pct_of_total": {
+						"type": "number",
+						"title": "Pct Of Total"
+					}
+				},
+				"type": "object",
+				"required": ["rooms", "count", "pct_of_total"],
+				"title": "AnalyticsUnitComposition"
+			},
+			"AuthMeResponse": {
+				"properties": {
+					"id": {
+						"type": "string",
+						"title": "Id"
+					},
+					"email": {
+						"type": "string",
+						"title": "Email"
+					},
+					"first_name": {
+						"type": "string",
+						"title": "First Name"
+					},
+					"last_name": {
+						"type": "string",
+						"title": "Last Name"
+					},
+					"organization_id": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Organization Id"
+					},
+					"organization_name": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Organization Name"
+					},
+					"role": {
+						"type": "string",
+						"title": "Role"
+					},
+					"is_owner": {
+						"type": "boolean",
+						"title": "Is Owner"
+					},
+					"subscription_status": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Subscription Status"
+					}
+				},
+				"type": "object",
+				"required": [
+					"id",
+					"email",
+					"first_name",
+					"last_name",
+					"organization_id",
+					"organization_name",
+					"role",
+					"is_owner",
+					"subscription_status"
+				],
+				"title": "AuthMeResponse"
+			},
+			"Body_upload-upload_chunked": {
+				"properties": {
+					"chunk": {
+						"type": "string",
+						"format": "binary",
+						"title": "Chunk"
+					}
+				},
+				"type": "object",
+				"required": ["chunk"],
+				"title": "Body_upload-upload_chunked"
+			},
+			"BuildingDetailResponse": {
+				"properties": {
+					"property_id": {
+						"type": "integer",
+						"title": "Property Id"
+					},
+					"building_number": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Building Number"
+					},
+					"floors": {
+						"anyOf": [
+							{
+								"type": "integer"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Floors"
+					},
+					"project_id": {
+						"type": "integer",
+						"title": "Project Id"
+					},
+					"project_name": {
+						"type": "string",
+						"title": "Project Name"
+					},
+					"area_name": {
+						"type": "string",
+						"title": "Area Name"
+					},
+					"total_units": {
+						"type": "integer",
+						"title": "Total Units"
+					},
+					"unit_composition": {
+						"items": {
+							"$ref": "#/components/schemas/BuildingUnitType"
+						},
+						"type": "array",
+						"title": "Unit Composition"
+					}
+				},
+				"type": "object",
+				"required": [
+					"property_id",
+					"building_number",
+					"floors",
+					"project_id",
+					"project_name",
+					"area_name",
+					"total_units",
+					"unit_composition"
+				],
+				"title": "BuildingDetailResponse",
+				"description": "Building-level details with unit composition"
+			},
+			"BuildingInfo": {
+				"properties": {
+					"property_id": {
+						"type": "integer",
+						"title": "Property Id"
+					},
+					"building_number": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Building Number"
+					},
+					"building_name": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Building Name"
+					},
+					"floors": {
+						"anyOf": [
+							{
+								"type": "integer"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Floors"
+					}
+				},
+				"type": "object",
+				"required": ["property_id", "building_number", "building_name", "floors"],
+				"title": "BuildingInfo",
+				"description": "Building with property_id for drilldown"
+			},
+			"BuildingUnitType": {
+				"properties": {
+					"rooms_en": {
+						"type": "string",
+						"title": "Rooms En"
+					},
+					"count": {
+						"type": "integer",
+						"title": "Count"
+					},
+					"percentage": {
+						"type": "number",
+						"title": "Percentage"
+					},
+					"avg_area_sqm": {
+						"anyOf": [
+							{
+								"type": "number"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Avg Area Sqm"
+					}
+				},
+				"type": "object",
+				"required": ["rooms_en", "count", "percentage", "avg_area_sqm"],
+				"title": "BuildingUnitType",
+				"description": "Bedroom/type breakdown for a specific building"
+			},
+			"CheckoutSessionRequest": {
+				"properties": {
+					"organization_id": {
+						"type": "string",
+						"title": "Organization Id"
+					},
+					"seats": {
+						"type": "integer",
+						"minimum": 1.0,
+						"title": "Seats"
+					},
+					"price_tier": {
+						"type": "string",
+						"title": "Price Tier"
+					}
+				},
+				"type": "object",
+				"required": ["organization_id", "seats", "price_tier"],
+				"title": "CheckoutSessionRequest",
+				"description": "Request to create a Stripe checkout session (org must exist)"
+			},
+			"CheckoutSessionResponse": {
+				"properties": {
+					"checkout_url": {
+						"type": "string",
+						"title": "Checkout Url"
+					},
+					"session_id": {
+						"type": "string",
+						"title": "Session Id"
+					},
+					"organization_id": {
+						"type": "string",
+						"title": "Organization Id"
+					}
+				},
+				"type": "object",
+				"required": ["checkout_url", "session_id", "organization_id"],
+				"title": "CheckoutSessionResponse",
+				"description": "Response containing Stripe checkout URL"
+			},
+			"ChunkedUploadResponse": {
+				"properties": {
+					"status": {
+						"type": "string",
+						"title": "Status"
+					},
+					"chunk_index": {
+						"anyOf": [
+							{
+								"type": "integer"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Chunk Index"
+					},
+					"total_chunks": {
+						"anyOf": [
+							{
+								"type": "integer"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Total Chunks"
+					},
+					"filename": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Filename"
+					},
+					"size": {
+						"anyOf": [
+							{
+								"type": "integer"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Size"
+					},
+					"hash": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Hash"
+					},
+					"path": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Path"
+					},
+					"source_url": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Source Url"
+					},
+					"uploaded_at": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Uploaded At"
+					},
+					"session_id": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Session Id"
+					}
+				},
+				"type": "object",
+				"required": ["status"],
+				"title": "ChunkedUploadResponse"
+			},
+			"ComparableData": {
+				"properties": {
+					"project_id": {
+						"type": "integer",
+						"title": "Project Id"
+					},
+					"project_name": {
+						"type": "string",
+						"title": "Project Name"
+					},
+					"area_name": {
+						"type": "string",
+						"title": "Area Name"
+					},
+					"no_of_buildings": {
+						"type": "integer",
+						"title": "No Of Buildings"
+					},
+					"avg_floors": {
+						"anyOf": [
+							{
+								"type": "number"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Avg Floors"
+					},
+					"unit_mix": {
+						"items": {
+							"$ref": "#/components/schemas/UnitTypeData"
+						},
+						"type": "array",
+						"title": "Unit Mix"
+					},
+					"price_per_sqm_by_type": {
+						"additionalProperties": {
+							"type": "number"
+						},
+						"type": "object",
+						"title": "Price Per Sqm By Type"
+					}
+				},
+				"type": "object",
+				"required": [
+					"project_id",
+					"project_name",
+					"area_name",
+					"no_of_buildings",
+					"avg_floors",
+					"unit_mix",
+					"price_per_sqm_by_type"
+				],
+				"title": "ComparableData"
+			},
+			"ComparableProject": {
+				"properties": {
+					"project_id": {
+						"type": "integer",
+						"title": "Project Id"
+					},
+					"project_name": {
+						"type": "string",
+						"title": "Project Name"
+					},
+					"area_name": {
+						"type": "string",
+						"title": "Area Name"
+					},
+					"project_status": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Project Status"
+					},
+					"comparison_type": {
+						"type": "string",
+						"enum": ["pricing", "pipeline"],
+						"title": "Comparison Type"
+					},
+					"score": {
+						"type": "number",
+						"title": "Score"
+					},
+					"total_land_area_sqm": {
+						"anyOf": [
+							{
+								"type": "number"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Total Land Area Sqm"
+					},
+					"land_area_delta_pct": {
+						"anyOf": [
+							{
+								"type": "number"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Land Area Delta Pct"
+					},
+					"no_of_buildings": {
+						"anyOf": [
+							{
+								"type": "integer"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "No Of Buildings"
+					},
+					"no_of_units": {
+						"anyOf": [
+							{
+								"type": "integer"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "No Of Units"
+					},
+					"median_price_sqm": {
+						"anyOf": [
+							{
+								"type": "number"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Median Price Sqm"
+					},
+					"dominant_unit_type": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Dominant Unit Type"
+					},
+					"rationale": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"title": "Rationale"
+					}
+				},
+				"type": "object",
+				"required": ["project_id", "project_name", "area_name", "comparison_type", "score"],
+				"title": "ComparableProject"
+			},
+			"ConversationListResponse": {
+				"properties": {
+					"conversations": {
+						"items": {
+							"$ref": "#/components/schemas/ConversationResponse"
+						},
+						"type": "array",
+						"title": "Conversations"
+					},
+					"total": {
+						"type": "integer",
+						"title": "Total"
+					}
+				},
+				"type": "object",
+				"required": ["conversations", "total"],
+				"title": "ConversationListResponse",
+				"description": "Response model for list of conversations"
+			},
+			"ConversationResponse": {
+				"properties": {
+					"id": {
+						"type": "integer",
+						"title": "Id"
+					},
+					"user_id": {
+						"type": "string",
+						"title": "User Id"
+					},
+					"title": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Title"
+					},
+					"created_at": {
+						"type": "string",
+						"format": "date-time",
+						"title": "Created At"
+					},
+					"updated_at": {
+						"type": "string",
+						"format": "date-time",
+						"title": "Updated At"
+					}
+				},
+				"type": "object",
+				"required": ["id", "user_id", "title", "created_at", "updated_at"],
+				"title": "ConversationResponse",
+				"description": "Response model for conversation data"
+			},
+			"CreateConversationRequest": {
+				"properties": {
+					"title": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Title"
+					}
+				},
+				"type": "object",
+				"title": "CreateConversationRequest",
+				"description": "Request model for creating a new conversation"
+			},
+			"CreateUserRequest": {
+				"properties": {
+					"email": {
+						"type": "string",
+						"title": "Email"
+					},
+					"password": {
+						"type": "string",
+						"minLength": 8,
+						"title": "Password"
+					},
+					"first_name": {
+						"type": "string",
+						"title": "First Name"
+					},
+					"last_name": {
+						"type": "string",
+						"title": "Last Name"
+					},
+					"org_mode": {
+						"type": "string",
+						"enum": ["new", "existing"],
+						"title": "Org Mode"
+					},
+					"org_name": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Org Name"
+					},
+					"org_id": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Org Id"
+					},
+					"daily_token_limit": {
+						"type": "integer",
+						"title": "Daily Token Limit",
+						"default": 100000
+					}
+				},
+				"type": "object",
+				"required": ["email", "password", "first_name", "last_name", "org_mode"],
+				"title": "CreateUserRequest"
+			},
+			"CreateUserResponse": {
+				"properties": {
+					"user_id": {
+						"type": "string",
+						"title": "User Id"
+					},
+					"email": {
+						"type": "string",
+						"title": "Email"
+					},
+					"organization_id": {
+						"type": "string",
+						"title": "Organization Id"
+					},
+					"organization_name": {
+						"type": "string",
+						"title": "Organization Name"
+					}
+				},
+				"type": "object",
+				"required": ["user_id", "email", "organization_id", "organization_name"],
+				"title": "CreateUserResponse"
+			},
+			"CustomerPortalResponse": {
+				"properties": {
+					"url": {
+						"type": "string",
+						"title": "Url"
+					}
+				},
+				"type": "object",
+				"required": ["url"],
+				"title": "CustomerPortalResponse",
+				"description": "Response containing Stripe Customer Portal URL"
+			},
+			"DimensionBreakdown": {
+				"properties": {
+					"dimension_value": {
+						"type": "string",
+						"title": "Dimension Value"
+					},
+					"transaction_count": {
+						"type": "integer",
+						"title": "Transaction Count"
+					},
+					"total_volume": {
+						"type": "number",
+						"title": "Total Volume"
+					},
+					"avg_price_sqft": {
+						"type": "number",
+						"title": "Avg Price Sqft"
+					},
+					"pct_of_total": {
+						"anyOf": [
+							{
+								"type": "number"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Pct Of Total"
+					}
+				},
+				"type": "object",
+				"required": ["dimension_value", "transaction_count", "total_volume", "avg_price_sqft"],
+				"title": "DimensionBreakdown",
+				"description": "Breakdown by a specific dimension (property_type, rooms, etc.)"
+			},
+			"FeasibilityChatRequest": {
+				"properties": {
+					"messages": {
+						"items": {
+							"additionalProperties": true,
+							"type": "object"
+						},
+						"type": "array",
+						"title": "Messages"
+					},
+					"context": {
+						"additionalProperties": true,
+						"type": "object",
+						"title": "Context"
+					},
+					"history_json": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "History Json"
+					}
+				},
+				"type": "object",
+				"required": ["messages", "context"],
+				"title": "FeasibilityChatRequest"
+			},
+			"FilterOptionsResponse": {
+				"properties": {
+					"projects": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"title": "Projects",
+						"default": []
+					},
+					"buildings": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"title": "Buildings",
+						"default": []
+					},
+					"property_types": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"title": "Property Types",
+						"default": []
+					},
+					"property_sub_types": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"title": "Property Sub Types",
+						"default": []
+					},
+					"rooms": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"title": "Rooms",
+						"default": []
+					},
+					"registration_types": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"title": "Registration Types",
+						"default": []
+					},
+					"tenant_types": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"title": "Tenant Types",
+						"default": []
+					},
+					"contract_reg_types": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"title": "Contract Reg Types",
+						"default": []
+					},
+					"areas": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"title": "Areas",
+						"default": []
+					}
+				},
+				"type": "object",
+				"title": "FilterOptionsResponse",
+				"description": "Filter options for transactions and rentals - dynamically narrowed by selections."
+			},
+			"GISLandUse": {
+				"properties": {
+					"type": {
+						"type": "string",
+						"title": "Type"
+					},
+					"use": {
+						"type": "string",
+						"title": "Use"
+					}
+				},
+				"type": "object",
+				"required": ["type", "use"],
+				"title": "GISLandUse"
+			},
+			"GISPlotDossier": {
+				"properties": {
+					"plot_number": {
+						"type": "string",
+						"title": "Plot Number"
+					},
+					"community_name": {
+						"type": "string",
+						"title": "Community Name"
+					},
+					"project_name": {
+						"type": "string",
+						"title": "Project Name"
+					},
+					"master_developer": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Master Developer"
+					},
+					"plot_area_sqm": {
+						"type": "number",
+						"title": "Plot Area Sqm"
+					},
+					"max_gfa_sqm": {
+						"type": "number",
+						"title": "Max Gfa Sqm"
+					},
+					"max_gfa_sqft": {
+						"type": "number",
+						"title": "Max Gfa Sqft"
+					},
+					"max_height": {
+						"type": "string",
+						"title": "Max Height"
+					},
+					"max_coverage": {
+						"type": "string",
+						"title": "Max Coverage"
+					},
+					"gfa_type": {
+						"type": "string",
+						"title": "Gfa Type"
+					},
+					"far": {
+						"anyOf": [
+							{
+								"type": "number"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Far"
+					},
+					"inferred_usage": {
+						"type": "string",
+						"enum": ["residential", "commercial", "mixed_use", "unknown"],
+						"title": "Inferred Usage"
+					},
+					"site_plan_issue_date": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Site Plan Issue Date"
+					},
+					"site_plan_expiry_date": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Site Plan Expiry Date"
+					},
+					"is_verified": {
+						"type": "boolean",
+						"title": "Is Verified"
+					},
+					"verify_comments": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Verify Comments"
+					},
+					"land_use": {
+						"items": {
+							"$ref": "#/components/schemas/GISLandUse"
+						},
+						"type": "array",
+						"title": "Land Use"
+					},
+					"general_notes": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"title": "General Notes"
+					},
+					"setbacks": {
+						"additionalProperties": {
+							"type": "string"
+						},
+						"type": "object",
+						"title": "Setbacks"
+					},
+					"coordinates": {
+						"items": {
+							"items": {
+								"type": "number"
+							},
+							"type": "array"
+						},
+						"type": "array",
+						"title": "Coordinates"
+					},
+					"warnings": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"title": "Warnings"
+					}
+				},
+				"type": "object",
+				"required": [
+					"plot_number",
+					"community_name",
+					"project_name",
+					"plot_area_sqm",
+					"max_gfa_sqm",
+					"max_gfa_sqft",
+					"max_height",
+					"max_coverage",
+					"gfa_type",
+					"inferred_usage",
+					"is_verified"
+				],
+				"title": "GISPlotDossier"
+			},
+			"GISPlotSummary": {
+				"properties": {
+					"plot_number": {
+						"type": "string",
+						"title": "Plot Number"
+					},
+					"community_name": {
+						"type": "string",
+						"title": "Community Name"
+					},
+					"project_name": {
+						"type": "string",
+						"title": "Project Name"
+					},
+					"plot_area_sqm": {
+						"type": "number",
+						"title": "Plot Area Sqm"
+					},
+					"max_gfa_sqm": {
+						"type": "number",
+						"title": "Max Gfa Sqm"
+					},
+					"max_height": {
+						"type": "string",
+						"title": "Max Height"
+					},
+					"max_coverage": {
+						"type": "string",
+						"title": "Max Coverage"
+					},
+					"gfa_type": {
+						"type": "string",
+						"title": "Gfa Type"
+					},
+					"is_verified": {
+						"type": "boolean",
+						"title": "Is Verified"
+					},
+					"land_use_summary": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"title": "Land Use Summary"
+					}
+				},
+				"type": "object",
+				"required": [
+					"plot_number",
+					"community_name",
+					"project_name",
+					"plot_area_sqm",
+					"max_gfa_sqm",
+					"max_height",
+					"max_coverage",
+					"gfa_type",
+					"is_verified"
+				],
+				"title": "GISPlotSummary"
+			},
+			"GeoPin": {
+				"properties": {
+					"building_name": {
+						"type": "string",
+						"title": "Building Name"
+					},
+					"project_name": {
+						"type": "string",
+						"title": "Project Name"
+					},
+					"latitude": {
+						"type": "number",
+						"title": "Latitude"
+					},
+					"longitude": {
+						"type": "number",
+						"title": "Longitude"
+					},
+					"property_id": {
+						"anyOf": [
+							{
+								"type": "integer"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Property Id"
+					}
+				},
+				"type": "object",
+				"required": ["building_name", "project_name", "latitude", "longitude"],
+				"title": "GeoPin",
+				"description": "Geocoded pin for map display"
+			},
+			"GeoPolygon": {
+				"properties": {
+					"coordinates": {
+						"items": {
+							"items": {
+								"type": "number"
+							},
+							"type": "array"
+						},
+						"type": "array",
+						"title": "Coordinates"
+					}
+				},
+				"type": "object",
+				"required": ["coordinates"],
+				"title": "GeoPolygon",
+				"description": "Geographic polygon (area boundaries)"
+			},
+			"HBUProductOption": {
+				"properties": {
+					"name": {
+						"type": "string",
+						"title": "Name"
+					},
+					"positioning": {
+						"type": "string",
+						"title": "Positioning"
+					},
+					"fit_score": {
+						"type": "number",
+						"title": "Fit Score"
+					},
+					"rationale": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"title": "Rationale"
+					}
+				},
+				"type": "object",
+				"required": ["name", "positioning", "fit_score"],
+				"title": "HBUProductOption"
+			},
+			"HBUStudy": {
+				"properties": {
+					"plot_number": {
+						"type": "string",
+						"title": "Plot Number"
+					},
+					"usage": {
+						"type": "string",
+						"enum": ["residential", "commercial", "mixed_use", "unknown"],
+						"title": "Usage"
+					},
+					"market_area": {
+						"type": "string",
+						"title": "Market Area"
+					},
+					"headline": {
+						"type": "string",
+						"title": "Headline"
+					},
+					"summary": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"title": "Summary"
+					},
+					"constraints": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"title": "Constraints"
+					},
+					"pricing_evidence": {
+						"items": {
+							"$ref": "#/components/schemas/ComparableProject"
+						},
+						"type": "array",
+						"title": "Pricing Evidence"
+					},
+					"competition_evidence": {
+						"items": {
+							"$ref": "#/components/schemas/ComparableProject"
+						},
+						"type": "array",
+						"title": "Competition Evidence"
+					},
+					"land_sales_evidence": {
+						"items": {
+							"$ref": "#/components/schemas/LandSaleEvidence"
+						},
+						"type": "array",
+						"title": "Land Sales Evidence"
+					},
+					"market_pricing": {
+						"items": {
+							"$ref": "#/components/schemas/MarketPricingRow"
+						},
+						"type": "array",
+						"title": "Market Pricing"
+					},
+					"product_options": {
+						"items": {
+							"$ref": "#/components/schemas/HBUProductOption"
+						},
+						"type": "array",
+						"title": "Product Options"
+					},
+					"recommended_mix": {
+						"items": {
+							"$ref": "#/components/schemas/HBUUnitRecommendation"
+						},
+						"type": "array",
+						"title": "Recommended Mix"
+					},
+					"price_per_sqm_by_type": {
+						"additionalProperties": {
+							"type": "number"
+						},
+						"type": "object",
+						"title": "Price Per Sqm By Type"
+					},
+					"assumptions_patch": {
+						"additionalProperties": {
+							"anyOf": [
+								{
+									"type": "number"
+								},
+								{
+									"type": "boolean"
+								},
+								{
+									"type": "string"
+								}
+							]
+						},
+						"type": "object",
+						"title": "Assumptions Patch"
+					},
+					"warnings": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"title": "Warnings"
+					}
+				},
+				"type": "object",
+				"required": ["plot_number", "usage", "market_area", "headline"],
+				"title": "HBUStudy"
+			},
+			"HBUUnitRecommendation": {
+				"properties": {
+					"unit_type": {
+						"type": "string",
+						"title": "Unit Type"
+					},
+					"share_pct": {
+						"type": "number",
+						"title": "Share Pct"
+					},
+					"avg_size_sqm": {
+						"type": "number",
+						"title": "Avg Size Sqm"
+					},
+					"price_sqm": {
+						"type": "number",
+						"title": "Price Sqm"
+					},
+					"suggested_units": {
+						"type": "integer",
+						"title": "Suggested Units"
+					}
+				},
+				"type": "object",
+				"required": ["unit_type", "share_pct", "avg_size_sqm", "price_sqm", "suggested_units"],
+				"title": "HBUUnitRecommendation"
+			},
+			"HTTPValidationError": {
+				"properties": {
+					"detail": {
+						"items": {
+							"$ref": "#/components/schemas/ValidationError"
+						},
+						"type": "array",
+						"title": "Detail"
+					}
+				},
+				"type": "object",
+				"title": "HTTPValidationError"
+			},
+			"HealthResponse": {
+				"properties": {
+					"status": {
+						"type": "string",
+						"title": "Status"
+					}
+				},
+				"type": "object",
+				"required": ["status"],
+				"title": "HealthResponse"
+			},
+			"InviteUserRequest": {
+				"properties": {
+					"email": {
+						"type": "string",
+						"format": "email",
+						"title": "Email"
+					}
+				},
+				"type": "object",
+				"required": ["email"],
+				"title": "InviteUserRequest",
+				"description": "Request to invite a user to an organization"
+			},
+			"InviteUserResponse": {
+				"properties": {
+					"success": {
+						"type": "boolean",
+						"title": "Success"
+					},
+					"invitation_token": {
+						"type": "string",
+						"title": "Invitation Token"
+					}
+				},
+				"type": "object",
+				"required": ["success", "invitation_token"],
+				"title": "InviteUserResponse",
+				"description": "Response after creating an organization invitation"
+			},
+			"LandSaleEvidence": {
+				"properties": {
+					"transaction_id": {
+						"type": "string",
+						"title": "Transaction Id"
+					},
+					"instance_date": {
+						"type": "string",
+						"title": "Instance Date"
+					},
+					"area_name": {
+						"type": "string",
+						"title": "Area Name"
+					},
+					"project_name": {
+						"type": "string",
+						"title": "Project Name"
+					},
+					"procedure_name": {
+						"type": "string",
+						"title": "Procedure Name"
+					},
+					"property_usage": {
+						"type": "string",
+						"title": "Property Usage"
+					},
+					"plot_area_sqm": {
+						"type": "number",
+						"title": "Plot Area Sqm"
+					},
+					"price_aed": {
+						"type": "number",
+						"title": "Price Aed"
+					},
+					"price_sqm": {
+						"type": "number",
+						"title": "Price Sqm"
+					},
+					"nearest_landmark": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Nearest Landmark"
+					}
+				},
+				"type": "object",
+				"required": [
+					"transaction_id",
+					"instance_date",
+					"area_name",
+					"project_name",
+					"procedure_name",
+					"property_usage",
+					"plot_area_sqm",
+					"price_aed",
+					"price_sqm"
+				],
+				"title": "LandSaleEvidence"
+			},
+			"MarketPricingRow": {
+				"properties": {
+					"unit_type": {
+						"type": "string",
+						"title": "Unit Type"
+					},
+					"transaction_count": {
+						"type": "integer",
+						"title": "Transaction Count"
+					},
+					"median_price_sqm": {
+						"type": "number",
+						"title": "Median Price Sqm"
+					},
+					"avg_area_sqm": {
+						"anyOf": [
+							{
+								"type": "number"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Avg Area Sqm"
+					}
+				},
+				"type": "object",
+				"required": ["unit_type", "transaction_count", "median_price_sqm"],
+				"title": "MarketPricingRow"
+			},
+			"MarketTrendPoint": {
+				"properties": {
+					"date": {
+						"type": "string",
+						"format": "date",
+						"title": "Date"
+					},
+					"transaction_count": {
+						"type": "integer",
+						"title": "Transaction Count"
+					},
+					"avg_price": {
+						"type": "number",
+						"title": "Avg Price"
+					},
+					"avg_price_sqm": {
+						"type": "number",
+						"title": "Avg Price Sqm"
+					}
+				},
+				"type": "object",
+				"required": ["date", "transaction_count", "avg_price", "avg_price_sqm"],
+				"title": "MarketTrendPoint",
+				"description": "Single data point for the market trend chart"
+			},
+			"MarketTrendResponse": {
+				"properties": {
+					"data": {
+						"items": {
+							"$ref": "#/components/schemas/MarketTrendPoint"
+						},
+						"type": "array",
+						"title": "Data"
+					},
+					"total_transactions": {
+						"type": "integer",
+						"title": "Total Transactions"
+					},
+					"avg_price_change_pct": {
+						"anyOf": [
+							{
+								"type": "number"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Avg Price Change Pct"
+					},
+					"avg_price_sqm_change_pct": {
+						"anyOf": [
+							{
+								"type": "number"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Avg Price Sqm Change Pct"
+					}
+				},
+				"type": "object",
+				"required": ["data", "total_transactions"],
+				"title": "MarketTrendResponse",
+				"description": "Response for the market trend chart endpoint"
+			},
+			"MasterProjectResponse": {
+				"properties": {
+					"master_name": {
+						"type": "string",
+						"title": "Master Name"
+					},
+					"area_name": {
+						"type": "string",
+						"title": "Area Name"
+					},
+					"developer_name": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Developer Name"
+					},
+					"total_projects": {
+						"type": "integer",
+						"title": "Total Projects"
+					},
+					"total_buildings": {
+						"type": "integer",
+						"title": "Total Buildings"
+					},
+					"total_units": {
+						"type": "integer",
+						"title": "Total Units"
+					},
+					"projects": {
+						"items": {
+							"$ref": "#/components/schemas/MasterProjectSummary"
+						},
+						"type": "array",
+						"title": "Projects"
+					},
+					"geo_pins": {
+						"items": {
+							"$ref": "#/components/schemas/GeoPin"
+						},
+						"type": "array",
+						"title": "Geo Pins"
+					},
+					"unit_composition": {
+						"items": {
+							"$ref": "#/components/schemas/ProjectUnitComposition"
+						},
+						"type": "array",
+						"title": "Unit Composition"
+					}
+				},
+				"type": "object",
+				"required": [
+					"master_name",
+					"area_name",
+					"developer_name",
+					"total_projects",
+					"total_buildings",
+					"total_units",
+					"projects",
+					"geo_pins",
+					"unit_composition"
+				],
+				"title": "MasterProjectResponse",
+				"description": "Aggregated data for a master project"
+			},
+			"MasterProjectSummary": {
+				"properties": {
+					"project_id": {
+						"type": "integer",
+						"title": "Project Id"
+					},
+					"project_name": {
+						"type": "string",
+						"title": "Project Name"
+					},
+					"project_status": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Project Status"
+					},
+					"percent_completed": {
+						"anyOf": [
+							{
+								"type": "number"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Percent Completed"
+					},
+					"no_of_buildings": {
+						"anyOf": [
+							{
+								"type": "integer"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "No Of Buildings"
+					},
+					"no_of_units": {
+						"anyOf": [
+							{
+								"type": "integer"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "No Of Units"
+					}
+				},
+				"type": "object",
+				"required": [
+					"project_id",
+					"project_name",
+					"project_status",
+					"percent_completed",
+					"no_of_buildings",
+					"no_of_units"
+				],
+				"title": "MasterProjectSummary",
+				"description": "Summary of a sub-project within a master"
+			},
+			"MessageResponse": {
+				"properties": {
+					"id": {
+						"type": "integer",
+						"title": "Id"
+					},
+					"conversation_id": {
+						"type": "integer",
+						"title": "Conversation Id"
+					},
+					"role": {
+						"type": "string",
+						"title": "Role"
+					},
+					"content": {
+						"type": "string",
+						"title": "Content"
+					},
+					"created_at": {
+						"type": "string",
+						"format": "date-time",
+						"title": "Created At"
+					}
+				},
+				"type": "object",
+				"required": ["id", "conversation_id", "role", "content", "created_at"],
+				"title": "MessageResponse",
+				"description": "Response model for message data"
+			},
+			"NewsArticleCreate": {
+				"properties": {
+					"url": {
+						"type": "string",
+						"title": "Url"
+					},
+					"headline": {
+						"type": "string",
+						"title": "Headline"
+					},
+					"thumbnail_url": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Thumbnail Url"
+					},
+					"thumbnail_base64": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Thumbnail Base64"
+					},
+					"publish_date": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "date-time"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Publish Date"
+					}
+				},
+				"type": "object",
+				"required": ["url", "headline"],
+				"title": "NewsArticleCreate"
+			},
+			"NewsArticleResponse": {
+				"properties": {
+					"id": {
+						"type": "integer",
+						"title": "Id"
+					},
+					"url": {
+						"type": "string",
+						"title": "Url"
+					},
+					"headline": {
+						"type": "string",
+						"title": "Headline"
+					},
+					"thumbnail_url": {
+						"type": "string",
+						"title": "Thumbnail Url"
+					},
+					"thumbnail_base64": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Thumbnail Base64"
+					},
+					"publish_date": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "date-time"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Publish Date"
+					}
+				},
+				"type": "object",
+				"required": ["id", "url", "headline", "thumbnail_url", "thumbnail_base64", "publish_date"],
+				"title": "NewsArticleResponse"
+			},
+			"NewsArticleUploadRequest": {
+				"properties": {
+					"article": {
+						"$ref": "#/components/schemas/NewsArticleCreate"
+					}
+				},
+				"type": "object",
+				"required": ["article"],
+				"title": "NewsArticleUploadRequest"
+			},
+			"NewsArticleUploadResponse": {
+				"properties": {
+					"created": {
+						"type": "boolean",
+						"title": "Created"
+					},
+					"article": {
+						"anyOf": [
+							{
+								"$ref": "#/components/schemas/NewsArticleResponse"
+							},
+							{
+								"type": "null"
+							}
+						]
+					},
+					"message": {
+						"type": "string",
+						"title": "Message"
+					}
+				},
+				"type": "object",
+				"required": ["created", "message"],
+				"title": "NewsArticleUploadResponse"
+			},
+			"NewsListResponse": {
+				"properties": {
+					"articles": {
+						"items": {
+							"$ref": "#/components/schemas/NewsArticleResponse"
+						},
+						"type": "array",
+						"title": "Articles"
+					},
+					"total": {
+						"type": "integer",
+						"title": "Total"
+					},
+					"limit": {
+						"type": "integer",
+						"title": "Limit"
+					},
+					"offset": {
+						"type": "integer",
+						"title": "Offset"
+					}
+				},
+				"type": "object",
+				"required": ["articles", "total", "limit", "offset"],
+				"title": "NewsListResponse"
+			},
+			"OperationSuccessResponse": {
+				"properties": {
+					"success": {
+						"type": "boolean",
+						"title": "Success"
+					}
+				},
+				"type": "object",
+				"required": ["success"],
+				"title": "OperationSuccessResponse"
+			},
+			"OrgDetailResponse": {
+				"properties": {
+					"id": {
+						"type": "string",
+						"title": "Id"
+					},
+					"name": {
+						"type": "string",
+						"title": "Name"
+					},
+					"owner_email": {
+						"type": "string",
+						"title": "Owner Email"
+					},
+					"user_count": {
+						"type": "integer",
+						"title": "User Count"
+					},
+					"max_users": {
+						"type": "integer",
+						"title": "Max Users"
+					},
+					"subscription_status": {
+						"type": "string",
+						"title": "Subscription Status"
+					},
+					"created_at": {
+						"type": "string",
+						"format": "date-time",
+						"title": "Created At"
+					},
+					"users": {
+						"items": {
+							"$ref": "#/components/schemas/OrgUserResponse"
+						},
+						"type": "array",
+						"title": "Users"
+					}
+				},
+				"type": "object",
+				"required": [
+					"id",
+					"name",
+					"owner_email",
+					"user_count",
+					"max_users",
+					"subscription_status",
+					"created_at",
+					"users"
+				],
+				"title": "OrgDetailResponse"
+			},
+			"OrgUserResponse": {
+				"properties": {
+					"id": {
+						"type": "string",
+						"title": "Id"
+					},
+					"email": {
+						"type": "string",
+						"title": "Email"
+					},
+					"first_name": {
+						"type": "string",
+						"title": "First Name"
+					},
+					"last_name": {
+						"type": "string",
+						"title": "Last Name"
+					},
+					"role": {
+						"type": "string",
+						"title": "Role"
+					},
+					"daily_token_limit": {
+						"type": "integer",
+						"title": "Daily Token Limit"
+					},
+					"tokens_used_today": {
+						"type": "integer",
+						"title": "Tokens Used Today"
+					},
+					"usage_percentage": {
+						"type": "number",
+						"title": "Usage Percentage"
+					},
+					"last_login": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "date-time"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Last Login"
+					}
+				},
+				"type": "object",
+				"required": [
+					"id",
+					"email",
+					"first_name",
+					"last_name",
+					"role",
+					"daily_token_limit",
+					"tokens_used_today",
+					"usage_percentage",
+					"last_login"
+				],
+				"title": "OrgUserResponse"
+			},
+			"OrganizationCreateRequest": {
+				"properties": {
+					"name": {
+						"type": "string",
+						"title": "Name"
+					},
+					"max_users": {
+						"type": "integer",
+						"title": "Max Users",
+						"default": 5
+					},
+					"owner_id": {
+						"type": "string",
+						"title": "Owner Id"
+					}
+				},
+				"type": "object",
+				"required": ["name", "owner_id"],
+				"title": "OrganizationCreateRequest"
+			},
+			"OrganizationDetailResponse": {
+				"properties": {
+					"organization": {
+						"$ref": "#/components/schemas/OrganizationResponse"
+					},
+					"users": {
+						"items": {
+							"$ref": "#/components/schemas/OrganizationUserDetailResponse"
+						},
+						"type": "array",
+						"title": "Users"
+					}
+				},
+				"type": "object",
+				"required": ["organization", "users"],
+				"title": "OrganizationDetailResponse"
+			},
+			"OrganizationInvitationResponse": {
+				"properties": {
+					"id": {
+						"type": "string",
+						"title": "Id"
+					},
+					"email": {
+						"type": "string",
+						"title": "Email"
+					},
+					"role": {
+						"type": "string",
+						"title": "Role"
+					},
+					"status": {
+						"type": "string",
+						"title": "Status"
+					},
+					"expires_at": {
+						"type": "string",
+						"format": "date-time",
+						"title": "Expires At"
+					},
+					"created_at": {
+						"type": "string",
+						"format": "date-time",
+						"title": "Created At"
+					}
+				},
+				"type": "object",
+				"required": ["id", "email", "role", "status", "expires_at", "created_at"],
+				"title": "OrganizationInvitationResponse",
+				"description": "Pending invitation response for organization settings."
+			},
+			"OrganizationListResponse": {
+				"properties": {
+					"id": {
+						"type": "string",
+						"title": "Id"
+					},
+					"name": {
+						"type": "string",
+						"title": "Name"
+					},
+					"owner_email": {
+						"type": "string",
+						"title": "Owner Email"
+					},
+					"user_count": {
+						"type": "integer",
+						"title": "User Count"
+					},
+					"max_users": {
+						"type": "integer",
+						"title": "Max Users"
+					},
+					"subscription_status": {
+						"type": "string",
+						"title": "Subscription Status"
+					},
+					"seats": {
+						"type": "integer",
+						"title": "Seats"
+					},
+					"created_at": {
+						"type": "string",
+						"format": "date-time",
+						"title": "Created At"
+					}
+				},
+				"type": "object",
+				"required": [
+					"id",
+					"name",
+					"owner_email",
+					"user_count",
+					"max_users",
+					"subscription_status",
+					"seats",
+					"created_at"
+				],
+				"title": "OrganizationListResponse"
+			},
+			"OrganizationResponse": {
+				"properties": {
+					"id": {
+						"type": "string",
+						"title": "Id"
+					},
+					"name": {
+						"type": "string",
+						"title": "Name"
+					},
+					"max_users": {
+						"type": "integer",
+						"title": "Max Users"
+					},
+					"active_user_count": {
+						"anyOf": [
+							{
+								"type": "integer"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Active User Count",
+						"default": 0
+					},
+					"created_at": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "date-time"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Created At"
+					},
+					"updated_at": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "date-time"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Updated At"
+					}
+				},
+				"type": "object",
+				"required": ["id", "name", "max_users"],
+				"title": "OrganizationResponse"
+			},
+			"OrganizationUpdateRequest": {
+				"properties": {
+					"max_users": {
+						"type": "integer",
+						"title": "Max Users"
+					}
+				},
+				"type": "object",
+				"required": ["max_users"],
+				"title": "OrganizationUpdateRequest"
+			},
+			"OrganizationUserDetailResponse": {
+				"properties": {
+					"id": {
+						"type": "string",
+						"title": "Id"
+					},
+					"email": {
+						"type": "string",
+						"title": "Email"
+					},
+					"first_name": {
+						"type": "string",
+						"title": "First Name"
+					},
+					"last_name": {
+						"type": "string",
+						"title": "Last Name"
+					},
+					"created_at": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "date-time"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Created At"
+					},
+					"last_login": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "date-time"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Last Login"
+					},
+					"daily_token_limit": {
+						"type": "integer",
+						"title": "Daily Token Limit"
+					},
+					"tokens_used_today": {
+						"type": "integer",
+						"title": "Tokens Used Today"
+					},
+					"usage_percentage": {
+						"type": "number",
+						"title": "Usage Percentage"
+					}
+				},
+				"type": "object",
+				"required": [
+					"id",
+					"email",
+					"first_name",
+					"last_name",
+					"created_at",
+					"last_login",
+					"daily_token_limit",
+					"tokens_used_today",
+					"usage_percentage"
+				],
+				"title": "OrganizationUserDetailResponse"
+			},
+			"OwnerOrganizationCreateRequest": {
+				"properties": {
+					"name": {
+						"type": "string",
+						"maxLength": 100,
+						"minLength": 1,
+						"title": "Name"
+					},
+					"max_users": {
+						"type": "integer",
+						"maximum": 1000.0,
+						"minimum": 1.0,
+						"title": "Max Users"
+					}
+				},
+				"type": "object",
+				"required": ["name", "max_users"],
+				"title": "OwnerOrganizationCreateRequest",
+				"description": "Request for owner to create organization during self-signup"
+			},
+			"OwnerOrganizationCreateResponse": {
+				"properties": {
+					"organization_id": {
+						"type": "string",
+						"title": "Organization Id"
+					},
+					"name": {
+						"type": "string",
+						"title": "Name"
+					},
+					"max_users": {
+						"type": "integer",
+						"title": "Max Users"
+					},
+					"is_new": {
+						"type": "boolean",
+						"title": "Is New"
+					}
+				},
+				"type": "object",
+				"required": ["organization_id", "name", "max_users", "is_new"],
+				"title": "OwnerOrganizationCreateResponse",
+				"description": "Response after creating organization"
+			},
+			"PaymentSyncResponse": {
+				"properties": {
+					"status": {
+						"type": "string",
+						"title": "Status"
+					},
+					"organization_id": {
+						"type": "string",
+						"title": "Organization Id"
+					},
+					"seats": {
+						"type": "integer",
+						"title": "Seats"
+					}
+				},
+				"type": "object",
+				"required": ["status", "organization_id", "seats"],
+				"title": "PaymentSyncResponse",
+				"description": "Payment sync response"
+			},
+			"ProjectAnalyticsResponse": {
+				"properties": {
+					"project": {
+						"anyOf": [
+							{
+								"$ref": "#/components/schemas/ProjectMeta"
+							},
+							{
+								"type": "null"
+							}
+						]
+					},
+					"sales": {
+						"$ref": "#/components/schemas/ProjectSalesSummary"
+					},
+					"rentals": {
+						"$ref": "#/components/schemas/ProjectRentalSummary"
+					},
+					"overall_gross_yield_pct": {
+						"anyOf": [
+							{
+								"type": "number"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Overall Gross Yield Pct"
+					},
+					"by_rooms": {
+						"items": {
+							"$ref": "#/components/schemas/RoomAnalytics"
+						},
+						"type": "array",
+						"title": "By Rooms"
+					},
+					"by_property_type": {
+						"items": {
+							"$ref": "#/components/schemas/PropertyTypeBreakdown"
+						},
+						"type": "array",
+						"title": "By Property Type"
+					},
+					"by_reg_type": {
+						"items": {
+							"$ref": "#/components/schemas/RegTypeBreakdown"
+						},
+						"type": "array",
+						"title": "By Reg Type"
+					},
+					"unit_composition": {
+						"items": {
+							"$ref": "#/components/schemas/AnalyticsUnitComposition"
+						},
+						"type": "array",
+						"title": "Unit Composition"
+					}
+				},
+				"type": "object",
+				"required": [
+					"sales",
+					"rentals",
+					"by_rooms",
+					"by_property_type",
+					"by_reg_type",
+					"unit_composition"
+				],
+				"title": "ProjectAnalyticsResponse",
+				"description": "Full analytics response for a single project"
+			},
+			"ProjectDetailResponse": {
+				"properties": {
+					"project_id": {
+						"type": "integer",
+						"title": "Project Id"
+					},
+					"project_name": {
+						"type": "string",
+						"title": "Project Name"
+					},
+					"project_number": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Project Number"
+					},
+					"master_project_en": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Master Project En"
+					},
+					"area_id": {
+						"anyOf": [
+							{
+								"type": "integer"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Area Id"
+					},
+					"area_name": {
+						"type": "string",
+						"title": "Area Name"
+					},
+					"latitude": {
+						"type": "number",
+						"title": "Latitude"
+					},
+					"longitude": {
+						"type": "number",
+						"title": "Longitude"
+					},
+					"area_polygon": {
+						"anyOf": [
+							{
+								"$ref": "#/components/schemas/GeoPolygon"
+							},
+							{
+								"type": "null"
+							}
+						]
+					},
+					"developer_id": {
+						"anyOf": [
+							{
+								"type": "integer"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Developer Id"
+					},
+					"developer_name": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Developer Name"
+					},
+					"master_developer_id": {
+						"anyOf": [
+							{
+								"type": "integer"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Master Developer Id"
+					},
+					"master_developer_name": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Master Developer Name"
+					},
+					"no_of_buildings": {
+						"anyOf": [
+							{
+								"type": "integer"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "No Of Buildings"
+					},
+					"no_of_units": {
+						"anyOf": [
+							{
+								"type": "integer"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "No Of Units"
+					},
+					"no_of_villas": {
+						"anyOf": [
+							{
+								"type": "integer"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "No Of Villas"
+					},
+					"no_of_lands": {
+						"anyOf": [
+							{
+								"type": "integer"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "No Of Lands"
+					},
+					"project_start_date": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "date"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Project Start Date"
+					},
+					"project_end_date": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "date"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Project End Date"
+					},
+					"completion_date": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "date"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Completion Date"
+					},
+					"percent_completed": {
+						"anyOf": [
+							{
+								"type": "number"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Percent Completed"
+					},
+					"project_status": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Project Status"
+					},
+					"unit_composition": {
+						"items": {
+							"$ref": "#/components/schemas/ProjectUnitComposition"
+						},
+						"type": "array",
+						"title": "Unit Composition"
+					},
+					"buildings": {
+						"items": {
+							"$ref": "#/components/schemas/BuildingInfo"
+						},
+						"type": "array",
+						"title": "Buildings",
+						"default": []
+					},
+					"geo_pins": {
+						"items": {
+							"$ref": "#/components/schemas/GeoPin"
+						},
+						"type": "array",
+						"title": "Geo Pins",
+						"default": []
+					}
+				},
+				"type": "object",
+				"required": [
+					"project_id",
+					"project_name",
+					"project_number",
+					"master_project_en",
+					"area_id",
+					"area_name",
+					"latitude",
+					"longitude",
+					"developer_id",
+					"developer_name",
+					"master_developer_id",
+					"master_developer_name",
+					"no_of_buildings",
+					"no_of_units",
+					"no_of_villas",
+					"no_of_lands",
+					"project_start_date",
+					"project_end_date",
+					"completion_date",
+					"percent_completed",
+					"project_status",
+					"unit_composition"
+				],
+				"title": "ProjectDetailResponse",
+				"description": "Full project details for overlay"
+			},
+			"ProjectMeta": {
+				"properties": {
+					"project_name": {
+						"type": "string",
+						"title": "Project Name"
+					},
+					"area_name": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Area Name"
+					},
+					"developer_name": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Developer Name"
+					},
+					"project_status": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Project Status"
+					},
+					"completion_date": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "date"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Completion Date"
+					},
+					"percent_completed": {
+						"anyOf": [
+							{
+								"type": "number"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Percent Completed"
+					},
+					"no_of_units": {
+						"anyOf": [
+							{
+								"type": "integer"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "No Of Units"
+					},
+					"no_of_buildings": {
+						"anyOf": [
+							{
+								"type": "integer"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "No Of Buildings"
+					}
+				},
+				"type": "object",
+				"required": ["project_name"],
+				"title": "ProjectMeta",
+				"description": "Metadata from ch_projects + ch_developers"
+			},
+			"ProjectRentalSummary": {
+				"properties": {
+					"contract_count": {
+						"type": "integer",
+						"title": "Contract Count"
+					},
+					"total_annual_value": {
+						"type": "number",
+						"title": "Total Annual Value"
+					},
+					"median_annual_rent": {
+						"type": "number",
+						"title": "Median Annual Rent"
+					},
+					"median_rent_sqm": {
+						"type": "number",
+						"title": "Median Rent Sqm"
+					}
+				},
+				"type": "object",
+				"required": [
+					"contract_count",
+					"total_annual_value",
+					"median_annual_rent",
+					"median_rent_sqm"
+				],
+				"title": "ProjectRentalSummary"
+			},
+			"ProjectSalesSummary": {
+				"properties": {
+					"transaction_count": {
+						"type": "integer",
+						"title": "Transaction Count"
+					},
+					"total_volume": {
+						"type": "number",
+						"title": "Total Volume"
+					},
+					"avg_price": {
+						"type": "number",
+						"title": "Avg Price"
+					},
+					"avg_price_sqm": {
+						"type": "number",
+						"title": "Avg Price Sqm"
+					},
+					"median_price": {
+						"type": "number",
+						"title": "Median Price"
+					}
+				},
+				"type": "object",
+				"required": [
+					"transaction_count",
+					"total_volume",
+					"avg_price",
+					"avg_price_sqm",
+					"median_price"
+				],
+				"title": "ProjectSalesSummary"
+			},
+			"ProjectSearchItem": {
+				"properties": {
+					"name": {
+						"type": "string",
+						"title": "Name"
+					},
+					"filter_type": {
+						"type": "string",
+						"title": "Filter Type"
+					}
+				},
+				"type": "object",
+				"required": ["name", "filter_type"],
+				"title": "ProjectSearchItem"
+			},
+			"ProjectSearchResponse": {
+				"properties": {
+					"projects": {
+						"items": {
+							"$ref": "#/components/schemas/ProjectSearchItem"
+						},
+						"type": "array",
+						"title": "Projects"
+					}
+				},
+				"type": "object",
+				"required": ["projects"],
+				"title": "ProjectSearchResponse"
+			},
+			"ProjectSearchResult": {
+				"properties": {
+					"project_id": {
+						"type": "integer",
+						"title": "Project Id"
+					},
+					"project_name": {
+						"type": "string",
+						"title": "Project Name"
+					},
+					"area_name": {
+						"type": "string",
+						"title": "Area Name"
+					},
+					"developer_name": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Developer Name"
+					},
+					"master_project_en": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Master Project En"
+					},
+					"latitude": {
+						"type": "number",
+						"title": "Latitude"
+					},
+					"longitude": {
+						"type": "number",
+						"title": "Longitude"
+					}
+				},
+				"type": "object",
+				"required": [
+					"project_id",
+					"project_name",
+					"area_name",
+					"developer_name",
+					"master_project_en",
+					"latitude",
+					"longitude"
+				],
+				"title": "ProjectSearchResult",
+				"description": "Minimal project info for search dropdown"
+			},
+			"ProjectTrendPoint": {
+				"properties": {
+					"date": {
+						"type": "string",
+						"format": "date",
+						"title": "Date"
+					},
+					"transaction_count": {
+						"type": "integer",
+						"title": "Transaction Count"
+					},
+					"avg_price": {
+						"type": "number",
+						"title": "Avg Price"
+					},
+					"avg_price_sqm": {
+						"type": "number",
+						"title": "Avg Price Sqm"
+					}
+				},
+				"type": "object",
+				"required": ["date", "transaction_count", "avg_price", "avg_price_sqm"],
+				"title": "ProjectTrendPoint"
+			},
+			"ProjectTrendsResponse": {
+				"properties": {
+					"data": {
+						"items": {
+							"$ref": "#/components/schemas/ProjectTrendPoint"
+						},
+						"type": "array",
+						"title": "Data"
+					}
+				},
+				"type": "object",
+				"required": ["data"],
+				"title": "ProjectTrendsResponse"
+			},
+			"ProjectUnitComposition": {
+				"properties": {
+					"property_sub_type": {
+						"type": "string",
+						"title": "Property Sub Type"
+					},
+					"count": {
+						"type": "integer",
+						"title": "Count"
+					},
+					"percentage": {
+						"type": "number",
+						"title": "Percentage"
+					},
+					"avg_area_sqm": {
+						"anyOf": [
+							{
+								"type": "number"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Avg Area Sqm"
+					}
+				},
+				"type": "object",
+				"required": ["property_sub_type", "count", "percentage", "avg_area_sqm"],
+				"title": "ProjectUnitComposition",
+				"description": "Unit type breakdown"
+			},
+			"PropertyTypeBreakdown": {
+				"properties": {
+					"property_type": {
+						"type": "string",
+						"title": "Property Type"
+					},
+					"count": {
+						"type": "integer",
+						"title": "Count"
+					},
+					"avg_price": {
+						"type": "number",
+						"title": "Avg Price"
+					},
+					"pct_of_total": {
+						"type": "number",
+						"title": "Pct Of Total"
+					}
+				},
+				"type": "object",
+				"required": ["property_type", "count", "avg_price", "pct_of_total"],
+				"title": "PropertyTypeBreakdown"
+			},
+			"RegTypeBreakdown": {
+				"properties": {
+					"reg_type": {
+						"type": "string",
+						"title": "Reg Type"
+					},
+					"count": {
+						"type": "integer",
+						"title": "Count"
+					},
+					"avg_price": {
+						"type": "number",
+						"title": "Avg Price"
+					},
+					"pct_of_total": {
+						"type": "number",
+						"title": "Pct Of Total"
+					}
+				},
+				"type": "object",
+				"required": ["reg_type", "count", "avg_price", "pct_of_total"],
+				"title": "RegTypeBreakdown"
+			},
+			"RentalAnalyticsResponse": {
+				"properties": {
+					"timeframe_days": {
+						"type": "integer",
+						"title": "Timeframe Days"
+					},
+					"property_usage": {
+						"type": "string",
+						"title": "Property Usage"
+					},
+					"summary": {
+						"$ref": "#/components/schemas/RentalSummary"
+					},
+					"trends": {
+						"items": {
+							"$ref": "#/components/schemas/TrendPoint"
+						},
+						"type": "array",
+						"title": "Trends"
+					},
+					"by_property_type": {
+						"items": {
+							"$ref": "#/components/schemas/RentalDimensionBreakdown"
+						},
+						"type": "array",
+						"title": "By Property Type"
+					},
+					"by_master_project": {
+						"items": {
+							"$ref": "#/components/schemas/RentalDimensionBreakdown"
+						},
+						"type": "array",
+						"title": "By Master Project"
+					}
+				},
+				"type": "object",
+				"required": [
+					"timeframe_days",
+					"property_usage",
+					"summary",
+					"trends",
+					"by_property_type",
+					"by_master_project"
+				],
+				"title": "RentalAnalyticsResponse",
+				"description": "Complete rental analytics response for dashboard"
+			},
+			"RentalContractListResponse": {
+				"properties": {
+					"contracts": {
+						"items": {
+							"$ref": "#/components/schemas/RentalContractResponse"
+						},
+						"type": "array",
+						"title": "Contracts"
+					},
+					"total": {
+						"type": "integer",
+						"title": "Total"
+					},
+					"limit": {
+						"type": "integer",
+						"title": "Limit"
+					},
+					"offset": {
+						"type": "integer",
+						"title": "Offset"
+					}
+				},
+				"type": "object",
+				"required": ["contracts", "total", "limit", "offset"],
+				"title": "RentalContractListResponse"
+			},
+			"RentalContractResponse": {
+				"properties": {
+					"contract_id": {
+						"type": "string",
+						"title": "Contract Id"
+					},
+					"contract_start_date": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "date"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Contract Start Date"
+					},
+					"contract_end_date": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "date"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Contract End Date"
+					},
+					"ejari_property_type_en": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Ejari Property Type En"
+					},
+					"ejari_property_sub_type_en": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Ejari Property Sub Type En"
+					},
+					"tenant_type_en": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Tenant Type En"
+					},
+					"contract_reg_type_en": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Contract Reg Type En"
+					},
+					"area_name_en": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Area Name En"
+					},
+					"project_name_en": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Project Name En"
+					},
+					"actual_area": {
+						"anyOf": [
+							{
+								"type": "number"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Actual Area"
+					},
+					"annual_amount": {
+						"anyOf": [
+							{
+								"type": "number"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Annual Amount"
+					},
+					"contract_amount": {
+						"anyOf": [
+							{
+								"type": "number"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Contract Amount"
+					},
+					"no_of_prop": {
+						"anyOf": [
+							{
+								"type": "integer"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "No Of Prop"
+					},
+					"is_free_hold": {
+						"anyOf": [
+							{
+								"type": "boolean"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Is Free Hold"
+					},
+					"nearest_landmark_en": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Nearest Landmark En"
+					},
+					"nearest_metro_en": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Nearest Metro En"
+					},
+					"nearest_mall_en": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Nearest Mall En"
+					}
+				},
+				"type": "object",
+				"required": ["contract_id"],
+				"title": "RentalContractResponse"
+			},
+			"RentalDimensionBreakdown": {
+				"properties": {
+					"dimension_value": {
+						"type": "string",
+						"title": "Dimension Value"
+					},
+					"contract_count": {
+						"type": "integer",
+						"title": "Contract Count"
+					},
+					"total_annual_value": {
+						"type": "number",
+						"title": "Total Annual Value"
+					},
+					"avg_rent_sqft": {
+						"type": "number",
+						"title": "Avg Rent Sqft"
+					},
+					"pct_of_total": {
+						"anyOf": [
+							{
+								"type": "number"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Pct Of Total"
+					}
+				},
+				"type": "object",
+				"required": ["dimension_value", "contract_count", "total_annual_value", "avg_rent_sqft"],
+				"title": "RentalDimensionBreakdown",
+				"description": "Breakdown by a specific dimension for rentals"
+			},
+			"RentalSummary": {
+				"properties": {
+					"contract_count": {
+						"type": "integer",
+						"title": "Contract Count"
+					},
+					"total_annual_value": {
+						"type": "number",
+						"title": "Total Annual Value"
+					},
+					"avg_annual_rent": {
+						"type": "number",
+						"title": "Avg Annual Rent"
+					},
+					"avg_rent_sqft": {
+						"type": "number",
+						"title": "Avg Rent Sqft"
+					},
+					"min_annual_rent": {
+						"type": "number",
+						"title": "Min Annual Rent"
+					},
+					"max_annual_rent": {
+						"type": "number",
+						"title": "Max Annual Rent"
+					},
+					"value_change_pct": {
+						"anyOf": [
+							{
+								"type": "number"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Value Change Pct"
+					},
+					"count_change_pct": {
+						"anyOf": [
+							{
+								"type": "number"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Count Change Pct"
+					}
+				},
+				"type": "object",
+				"required": [
+					"contract_count",
+					"total_annual_value",
+					"avg_annual_rent",
+					"avg_rent_sqft",
+					"min_annual_rent",
+					"max_annual_rent"
+				],
+				"title": "RentalSummary",
+				"description": "Summary KPI metrics for rental analytics"
+			},
+			"RoomAnalytics": {
+				"properties": {
+					"rooms": {
+						"type": "string",
+						"title": "Rooms"
+					},
+					"sale_count": {
+						"type": "integer",
+						"title": "Sale Count"
+					},
+					"avg_sale_price": {
+						"type": "number",
+						"title": "Avg Sale Price"
+					},
+					"avg_sale_price_sqm": {
+						"type": "number",
+						"title": "Avg Sale Price Sqm"
+					},
+					"rental_count": {
+						"type": "integer",
+						"title": "Rental Count"
+					},
+					"median_annual_rent": {
+						"type": "number",
+						"title": "Median Annual Rent"
+					},
+					"median_rent_sqm": {
+						"type": "number",
+						"title": "Median Rent Sqm"
+					},
+					"gross_yield_pct": {
+						"anyOf": [
+							{
+								"type": "number"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Gross Yield Pct"
+					}
+				},
+				"type": "object",
+				"required": [
+					"rooms",
+					"sale_count",
+					"avg_sale_price",
+					"avg_sale_price_sqm",
+					"rental_count",
+					"median_annual_rent",
+					"median_rent_sqm"
+				],
+				"title": "RoomAnalytics",
+				"description": "Combined sales + rental + yield metrics per bedroom count"
+			},
+			"SendMessageRequest": {
+				"properties": {
+					"message": {
+						"type": "string",
+						"title": "Message"
+					}
+				},
+				"type": "object",
+				"required": ["message"],
+				"title": "SendMessageRequest",
+				"description": "Request model for sending a message in a conversation"
+			},
+			"SubProjectItem": {
+				"properties": {
+					"name": {
+						"type": "string",
+						"title": "Name"
+					},
+					"transaction_count": {
+						"type": "integer",
+						"title": "Transaction Count"
+					}
+				},
+				"type": "object",
+				"required": ["name", "transaction_count"],
+				"title": "SubProjectItem"
+			},
+			"SubProjectsResponse": {
+				"properties": {
+					"sub_projects": {
+						"items": {
+							"$ref": "#/components/schemas/SubProjectItem"
+						},
+						"type": "array",
+						"title": "Sub Projects"
+					}
+				},
+				"type": "object",
+				"required": ["sub_projects"],
+				"title": "SubProjectsResponse"
+			},
+			"SubscriptionResponse": {
+				"properties": {
+					"id": {
+						"type": "string",
+						"title": "Id"
+					},
+					"organization_id": {
+						"type": "string",
+						"title": "Organization Id"
+					},
+					"status": {
+						"type": "string",
+						"title": "Status"
+					},
+					"seats": {
+						"type": "integer",
+						"title": "Seats"
+					},
+					"current_period_end": {
+						"type": "string",
+						"format": "date-time",
+						"title": "Current Period End"
+					},
+					"cancel_at_period_end": {
+						"type": "boolean",
+						"title": "Cancel At Period End"
+					},
+					"current_members": {
+						"type": "integer",
+						"title": "Current Members"
+					},
+					"available_seats": {
+						"type": "integer",
+						"title": "Available Seats"
+					},
+					"excess_users": {
+						"type": "integer",
+						"title": "Excess Users"
+					},
+					"within_paid_period": {
+						"type": "boolean",
+						"title": "Within Paid Period"
+					}
+				},
+				"type": "object",
+				"required": [
+					"id",
+					"organization_id",
+					"status",
+					"seats",
+					"current_period_end",
+					"cancel_at_period_end",
+					"current_members",
+					"available_seats",
+					"excess_users",
+					"within_paid_period"
+				],
+				"title": "SubscriptionResponse",
+				"description": "Response containing subscription details"
+			},
+			"SyncAfterCheckoutRequest": {
+				"properties": {
+					"session_id": {
+						"type": "string",
+						"title": "Session Id"
+					}
+				},
+				"type": "object",
+				"required": ["session_id"],
+				"title": "SyncAfterCheckoutRequest",
+				"description": "Request to sync after checkout"
+			},
+			"TransactionListResponse": {
+				"properties": {
+					"transactions": {
+						"items": {
+							"$ref": "#/components/schemas/TransactionResponse"
+						},
+						"type": "array",
+						"title": "Transactions"
+					},
+					"total": {
+						"type": "integer",
+						"title": "Total"
+					},
+					"limit": {
+						"type": "integer",
+						"title": "Limit"
+					},
+					"offset": {
+						"type": "integer",
+						"title": "Offset"
+					}
+				},
+				"type": "object",
+				"required": ["transactions", "total", "limit", "offset"],
+				"title": "TransactionListResponse"
+			},
+			"TransactionResponse": {
+				"properties": {
+					"transaction_id": {
+						"type": "string",
+						"title": "Transaction Id"
+					},
+					"instance_date": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "date"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Instance Date"
+					},
+					"trans_group_en": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Trans Group En"
+					},
+					"procedure_name_en": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Procedure Name En"
+					},
+					"property_type_en": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Property Type En"
+					},
+					"property_sub_type_en": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Property Sub Type En"
+					},
+					"rooms_en": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Rooms En"
+					},
+					"area_name_en": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Area Name En"
+					},
+					"project_name_en": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Project Name En"
+					},
+					"building_name_en": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Building Name En"
+					},
+					"procedure_area": {
+						"anyOf": [
+							{
+								"type": "number"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Procedure Area"
+					},
+					"actual_worth": {
+						"anyOf": [
+							{
+								"type": "number"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Actual Worth"
+					},
+					"meter_sale_price": {
+						"anyOf": [
+							{
+								"type": "number"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Meter Sale Price"
+					},
+					"reg_type_en": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Reg Type En"
+					},
+					"nearest_landmark_en": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Nearest Landmark En"
+					},
+					"nearest_metro_en": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Nearest Metro En"
+					},
+					"nearest_mall_en": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Nearest Mall En"
+					}
+				},
+				"type": "object",
+				"required": ["transaction_id"],
+				"title": "TransactionResponse"
+			},
+			"TrendPoint": {
+				"properties": {
+					"date": {
+						"type": "string",
+						"format": "date",
+						"title": "Date"
+					},
+					"count": {
+						"type": "integer",
+						"title": "Count"
+					},
+					"total_value": {
+						"type": "number",
+						"title": "Total Value"
+					},
+					"avg_value": {
+						"type": "number",
+						"title": "Avg Value"
+					},
+					"avg_sqft": {
+						"type": "number",
+						"title": "Avg Sqft"
+					}
+				},
+				"type": "object",
+				"required": ["date", "count", "total_value", "avg_value", "avg_sqft"],
+				"title": "TrendPoint",
+				"description": "Single data point for trend charts"
+			},
+			"UnitTypeData": {
+				"properties": {
+					"type": {
+						"type": "string",
+						"title": "Type"
+					},
+					"count": {
+						"type": "integer",
+						"title": "Count"
+					},
+					"percentage": {
+						"type": "number",
+						"title": "Percentage"
+					},
+					"avg_size_sqm": {
+						"type": "number",
+						"title": "Avg Size Sqm"
+					},
+					"avg_price_sqm": {
+						"anyOf": [
+							{
+								"type": "number"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Avg Price Sqm"
+					}
+				},
+				"type": "object",
+				"required": ["type", "count", "percentage", "avg_size_sqm", "avg_price_sqm"],
+				"title": "UnitTypeData"
+			},
+			"UpcomingProjectResponse": {
+				"properties": {
+					"project_id": {
+						"type": "integer",
+						"title": "Project Id"
+					},
+					"project_name": {
+						"type": "string",
+						"title": "Project Name"
+					},
+					"developer_name": {
+						"type": "string",
+						"title": "Developer Name"
+					},
+					"developer_id": {
+						"anyOf": [
+							{
+								"type": "integer"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Developer Id"
+					},
+					"area_name": {
+						"type": "string",
+						"title": "Area Name"
+					},
+					"project_start_date": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "date"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Project Start Date"
+					},
+					"project_end_date": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "date"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Project End Date"
+					},
+					"percent_completed": {
+						"type": "integer",
+						"title": "Percent Completed",
+						"default": 0
+					},
+					"no_of_buildings": {
+						"anyOf": [
+							{
+								"type": "integer"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "No Of Buildings"
+					},
+					"no_of_units": {
+						"anyOf": [
+							{
+								"type": "integer"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "No Of Units"
+					}
+				},
+				"type": "object",
+				"required": ["project_id", "project_name", "developer_name", "area_name"],
+				"title": "UpcomingProjectResponse"
+			},
+			"UpcomingProjectsResponse": {
+				"properties": {
+					"projects": {
+						"items": {
+							"$ref": "#/components/schemas/UpcomingProjectResponse"
+						},
+						"type": "array",
+						"title": "Projects"
+					},
+					"total": {
+						"type": "integer",
+						"title": "Total"
+					}
+				},
+				"type": "object",
+				"required": ["projects", "total"],
+				"title": "UpcomingProjectsResponse"
+			},
+			"UpdateConversationRequest": {
+				"properties": {
+					"title": {
+						"type": "string",
+						"title": "Title"
+					}
+				},
+				"type": "object",
+				"required": ["title"],
+				"title": "UpdateConversationRequest",
+				"description": "Request model for updating a conversation"
+			},
+			"UpdateOrgRequest": {
+				"properties": {
+					"max_users": {
+						"anyOf": [
+							{
+								"type": "integer"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Max Users"
+					}
+				},
+				"type": "object",
+				"title": "UpdateOrgRequest"
+			},
+			"UpdateProfileRequest": {
+				"properties": {
+					"first_name": {
+						"type": "string",
+						"maxLength": 100,
+						"minLength": 1,
+						"title": "First Name"
+					},
+					"last_name": {
+						"type": "string",
+						"maxLength": 100,
+						"minLength": 1,
+						"title": "Last Name"
+					}
+				},
+				"type": "object",
+				"required": ["first_name", "last_name"],
+				"title": "UpdateProfileRequest"
+			},
+			"UpdateProfileResponse": {
+				"properties": {
+					"success": {
+						"type": "boolean",
+						"title": "Success"
+					},
+					"first_name": {
+						"type": "string",
+						"title": "First Name"
+					},
+					"last_name": {
+						"type": "string",
+						"title": "Last Name"
+					}
+				},
+				"type": "object",
+				"required": ["success", "first_name", "last_name"],
+				"title": "UpdateProfileResponse"
+			},
+			"UpdateSubscriptionRequest": {
+				"properties": {
+					"status": {
+						"type": "string",
+						"title": "Status"
+					}
+				},
+				"type": "object",
+				"required": ["status"],
+				"title": "UpdateSubscriptionRequest"
+			},
+			"UpdateUserRequest": {
+				"properties": {
+					"daily_token_limit": {
+						"anyOf": [
+							{
+								"type": "integer"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Daily Token Limit"
+					}
+				},
+				"type": "object",
+				"title": "UpdateUserRequest"
+			},
+			"UploadHealthResponse": {
+				"properties": {
+					"status": {
+						"type": "string",
+						"title": "Status"
+					},
+					"s3": {
+						"type": "boolean",
+						"title": "S3"
+					},
+					"redis": {
+						"anyOf": [
+							{
+								"type": "boolean"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Redis"
+					},
+					"error": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Error"
+					}
+				},
+				"type": "object",
+				"required": ["status", "s3"],
+				"title": "UploadHealthResponse"
+			},
+			"UserDetailResponse": {
+				"properties": {
+					"id": {
+						"type": "string",
+						"title": "Id"
+					},
+					"email": {
+						"type": "string",
+						"title": "Email"
+					},
+					"first_name": {
+						"type": "string",
+						"title": "First Name"
+					},
+					"last_name": {
+						"type": "string",
+						"title": "Last Name"
+					},
+					"organization_id": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Organization Id"
+					},
+					"organization_name": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Organization Name"
+					},
+					"role": {
+						"type": "string",
+						"title": "Role"
+					},
+					"daily_token_limit": {
+						"type": "integer",
+						"title": "Daily Token Limit"
+					}
+				},
+				"type": "object",
+				"required": [
+					"id",
+					"email",
+					"first_name",
+					"last_name",
+					"organization_id",
+					"organization_name",
+					"role",
+					"daily_token_limit"
+				],
+				"title": "UserDetailResponse"
+			},
+			"UserTokenLimitUpdateResponse": {
+				"properties": {
+					"id": {
+						"type": "string",
+						"title": "Id"
+					},
+					"email": {
+						"type": "string",
+						"title": "Email"
+					},
+					"daily_token_limit": {
+						"type": "integer",
+						"title": "Daily Token Limit"
+					},
+					"updated_at": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "date-time"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Updated At"
+					}
+				},
+				"type": "object",
+				"required": ["id", "email", "daily_token_limit", "updated_at"],
+				"title": "UserTokenLimitUpdateResponse"
+			},
+			"UserTokenStatsResponse": {
+				"properties": {
+					"user_id": {
+						"type": "string",
+						"title": "User Id"
+					},
+					"tokens_used_today": {
+						"type": "integer",
+						"title": "Tokens Used Today"
+					},
+					"daily_limit": {
+						"type": "integer",
+						"title": "Daily Limit"
+					},
+					"usage_percentage": {
+						"type": "number",
+						"title": "Usage Percentage"
+					},
+					"remaining_tokens": {
+						"type": "integer",
+						"title": "Remaining Tokens"
+					}
+				},
+				"type": "object",
+				"required": [
+					"user_id",
+					"tokens_used_today",
+					"daily_limit",
+					"usage_percentage",
+					"remaining_tokens"
+				],
+				"title": "UserTokenStatsResponse",
+				"description": "Token usage statistics for a user"
+			},
+			"UserUpdateRequest": {
+				"properties": {
+					"daily_token_limit": {
+						"anyOf": [
+							{
+								"type": "integer"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Daily Token Limit"
+					}
+				},
+				"type": "object",
+				"title": "UserUpdateRequest",
+				"description": "Request to update user settings (admin only)"
+			},
+			"ValidateInviteTokenResponse": {
+				"properties": {
+					"organization_name": {
+						"type": "string",
+						"title": "Organization Name"
+					},
+					"organization_id": {
+						"type": "string",
+						"title": "Organization Id"
+					},
+					"role": {
+						"type": "string",
+						"title": "Role"
+					},
+					"email": {
+						"type": "string",
+						"title": "Email"
+					},
+					"expires_at": {
+						"type": "string",
+						"format": "date-time",
+						"title": "Expires At"
+					},
+					"status": {
+						"type": "string",
+						"title": "Status"
+					}
+				},
+				"type": "object",
+				"required": [
+					"organization_name",
+					"organization_id",
+					"role",
+					"email",
+					"expires_at",
+					"status"
+				],
+				"title": "ValidateInviteTokenResponse",
+				"description": "Response for validating invitation token"
+			},
+			"ValidationError": {
+				"properties": {
+					"loc": {
+						"items": {
+							"anyOf": [
+								{
+									"type": "string"
+								},
+								{
+									"type": "integer"
+								}
+							]
+						},
+						"type": "array",
+						"title": "Location"
+					},
+					"msg": {
+						"type": "string",
+						"title": "Message"
+					},
+					"type": {
+						"type": "string",
+						"title": "Error Type"
+					}
+				},
+				"type": "object",
+				"required": ["loc", "msg", "type"],
+				"title": "ValidationError"
+			},
+			"WebhookStatusResponse": {
+				"properties": {
+					"status": {
+						"type": "string",
+						"title": "Status"
+					}
+				},
+				"type": "object",
+				"required": ["status"],
+				"title": "WebhookStatusResponse",
+				"description": "Simple webhook acknowledgement response."
+			},
+			"app__admin__models__OrganizationMemberResponse": {
+				"properties": {
+					"id": {
+						"type": "string",
+						"title": "Id"
+					},
+					"email": {
+						"type": "string",
+						"title": "Email"
+					},
+					"first_name": {
+						"type": "string",
+						"title": "First Name"
+					},
+					"last_name": {
+						"type": "string",
+						"title": "Last Name"
+					},
+					"role": {
+						"type": "string",
+						"title": "Role"
+					},
+					"joined_at": {
+						"type": "string",
+						"format": "date-time",
+						"title": "Joined At"
+					}
+				},
+				"type": "object",
+				"required": ["id", "email", "first_name", "last_name", "role", "joined_at"],
+				"title": "OrganizationMemberResponse"
+			},
+			"app__organization__router__OrganizationMemberResponse": {
+				"properties": {
+					"id": {
+						"type": "string",
+						"title": "Id"
+					},
+					"email": {
+						"type": "string",
+						"title": "Email"
+					},
+					"first_name": {
+						"type": "string",
+						"title": "First Name"
+					},
+					"last_name": {
+						"type": "string",
+						"title": "Last Name"
+					},
+					"role": {
+						"type": "string",
+						"title": "Role"
+					}
+				},
+				"type": "object",
+				"required": ["id", "email", "first_name", "last_name", "role"],
+				"title": "OrganizationMemberResponse",
+				"description": "Organization member response."
+			}
+		}
+	}
+}

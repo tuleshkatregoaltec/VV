@@ -167,7 +167,7 @@ class RegTypeBreakdown(BaseModel):
     pct_of_total: float
 
 
-class UnitComposition(BaseModel):
+class AnalyticsUnitComposition(BaseModel):
     rooms: str
     count: int
     pct_of_total: float
@@ -183,7 +183,7 @@ class ProjectAnalyticsResponse(BaseModel):
     by_rooms: list[RoomAnalytics]
     by_property_type: list[PropertyTypeBreakdown]
     by_reg_type: list[RegTypeBreakdown]
-    unit_composition: list[UnitComposition]
+    unit_composition: list[AnalyticsUnitComposition]
 
 
 class ProjectTrendPoint(BaseModel):

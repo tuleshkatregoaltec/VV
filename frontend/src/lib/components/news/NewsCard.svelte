@@ -1,7 +1,7 @@
 <script lang="ts">
-import type { NewsArticle } from '$lib/api/news'
+import type { NewsArticleResponse } from '$lib/api/news'
 
-let { article }: { article: NewsArticle } = $props()
+let { article }: { article: NewsArticleResponse } = $props()
 
 const imageSrc = $derived(article.thumbnail_url)
 
@@ -25,6 +25,13 @@ function formatRelativeTime(dateString: string | null): string {
 }
 
 const relativeTime = $derived(formatRelativeTime(article.publish_date))
+const sourceLabel = $derived.by(() => {
+	try {
+		return new URL(article.url).hostname.replace(/^www\./, '')
+	} catch {
+		return null
+	}
+})
 </script>
 
 <a
@@ -40,8 +47,8 @@ const relativeTime = $derived(formatRelativeTime(article.publish_date))
 	/>
 	<div class="flex flex-col gap-2 flex-1">
 		<div class="flex items-center gap-2 text-xs text-slate-500">
-			{#if article.source}
-				<span class="font-semibold text-slate-600">{article.source}</span>
+			{#if sourceLabel}
+				<span class="font-semibold text-slate-600">{sourceLabel}</span>
 				<span class="text-slate-400">•</span>
 			{/if}
 			<time>{relativeTime}</time>

@@ -1,5 +1,5 @@
 <script lang="ts">
-import { admin, type OrgUser } from '$lib/api/admin'
+import { admin, type OrgUserResponse } from '$lib/api/admin'
 import { ApiError } from '$lib/api/client'
 import Modal from '$lib/components/ui/Modal.svelte'
 
@@ -10,7 +10,7 @@ let {
 	onUpdated
 }: {
 	open: boolean
-	user: OrgUser | null
+	user: OrgUserResponse | null
 	onClose: () => void
 	onUpdated: () => void
 } = $props()
@@ -63,7 +63,7 @@ async function saveLimit() {
 	}
 }
 
-function fullName(u: OrgUser): string {
+function fullName(u: OrgUserResponse): string {
 	const name = `${u.first_name || ''} ${u.last_name || ''}`.trim()
 	return name || u.email
 }

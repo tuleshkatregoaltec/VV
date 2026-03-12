@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import type { BackendUser } from '$lib/api/auth'
+import type { AuthenticatedUser } from '$lib/api/auth'
 import { decideRouteAccess, getOnboardingRedirect, getRouteCategory } from '$lib/auth/route-guards'
 
-function makeUser(overrides: Partial<BackendUser> = {}): BackendUser {
+function makeUser(overrides: Partial<AuthenticatedUser> = {}): AuthenticatedUser {
 	return {
 		id: 'user-1',
 		email: 'user@example.com',

@@ -1,6 +1,6 @@
 <script lang="ts">
 import { onMount } from 'svelte'
-import { type Conversation, chat } from '$lib/api/chat'
+import { type ConversationResponse, chat } from '$lib/api/chat'
 import ConfirmModal from '$lib/components/ui/ConfirmModal.svelte'
 
 let {
@@ -11,7 +11,7 @@ let {
 	onSelect?: (id: number) => void
 } = $props()
 
-let conversations = $state<Conversation[]>([])
+let conversations = $state<ConversationResponse[]>([])
 let loading = $state(true)
 let error = $state<string | null>(null)
 let openMenuId = $state<number | null>(null)
@@ -66,7 +66,7 @@ async function createNew() {
 	}
 }
 
-function startRename(conv: Conversation) {
+function startRename(conv: ConversationResponse) {
 	renamingId = conv.id
 	renameValue = conv.title || 'New Conversation'
 	openMenuId = null

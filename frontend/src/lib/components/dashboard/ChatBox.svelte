@@ -4,7 +4,7 @@ import { marked } from 'marked'
 import { cubicOut } from 'svelte/easing'
 import { fade, fly } from 'svelte/transition'
 import { browser } from '$app/environment'
-import { chat, type Message } from '$lib/api/chat'
+import { chat, type MessageResponse } from '$lib/api/chat'
 import ConfirmModal from '$lib/components/ui/ConfirmModal.svelte'
 
 // Add target="_blank" rel="noopener noreferrer" to all links
@@ -125,10 +125,10 @@ async function loadMessages() {
 	error = null
 	try {
 		const msgs = await chat.getMessages(conversationId)
-		messages = msgs.map((m: Message) => ({
+		messages = msgs.map((m: MessageResponse) => ({
 			role: m.role,
 			content: m.content,
-			toolCalls: m.tool_call_ids?.map((id) => `Tool call ${id}`) || []
+			toolCalls: []
 		}))
 	} catch (err) {
 		console.error('Failed to load messages:', err)

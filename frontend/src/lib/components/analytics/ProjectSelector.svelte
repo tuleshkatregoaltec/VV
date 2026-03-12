@@ -4,10 +4,14 @@ import { analytics, type ProjectSearchItem } from '$lib/api/analytics'
 
 let {
 	value = $bindable<ProjectSearchItem | null>(null),
+	id = 'project-selector',
+	ariaLabel = 'Project',
 	placeholder = 'Search project...',
 	onSelect
 }: {
 	value?: ProjectSearchItem | null
+	id?: string
+	ariaLabel?: string
 	placeholder?: string
 	onSelect?: (project: ProjectSearchItem | null) => void
 } = $props()
@@ -80,9 +84,11 @@ function handleKeydown(e: KeyboardEvent) {
 			</svg>
 		</div>
 		<input
+			{id}
 			type="text"
 			class="w-full pl-9 pr-8 py-2.5 rounded-lg border border-slate-200 bg-white text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500 transition-all"
 			{placeholder}
+			aria-label={ariaLabel}
 			bind:value={inputValue}
 			oninput={() => (isOpen = true)}
 			onfocus={() => (isOpen = true)}

@@ -28,20 +28,19 @@ function handleNameEdit() {
 	const trimmedFirstName = firstName.trim()
 	const trimmedLastName = lastName.trim()
 
-	update_user_profile(trimmedFirstName, trimmedLastName).then(async (result) => {
-		if (!result.success) {
-			editError = result.error || 'Failed to sync profile changes'
-			return
-		}
+	update_user_profile(trimmedFirstName, trimmedLastName)
+		.then(async () => {
+			await refreshUser()
+			editSuccess = 'Profile updated successfully'
+			editingName = false
 
-		await refreshUser()
-		editSuccess = 'Profile updated successfully'
-		editingName = false
-
-		setTimeout(() => {
-			editSuccess = ''
-		}, 3000)
-	})
+			setTimeout(() => {
+				editSuccess = ''
+			}, 3000)
+		})
+		.catch(() => {
+			editError = 'Failed to sync profile changes'
+		})
 }
 
 function handleCancel() {

@@ -2,7 +2,7 @@
 import { createQuery } from '@tanstack/svelte-query'
 import { analytics, type ProjectSearchItem } from '$lib/api/analytics'
 import { filters } from '$lib/api/filters'
-import type { Transaction } from '$lib/api/transactions'
+import type { TransactionResponseOutput } from '$lib/api/transactions'
 import { transactions as api } from '$lib/api/transactions'
 import ProjectSelector from '$lib/components/analytics/ProjectSelector.svelte'
 import SearchableDropdown from '$lib/components/dropdowns/SearchableDropdown.svelte'
@@ -243,7 +243,7 @@ let filterDefinitions = $derived<FilterDefinition[]>([
 	}
 ])
 
-function transformTransaction(t: Transaction): TransformedTransaction {
+function transformTransaction(t: TransactionResponseOutput): TransformedTransaction {
 	return {
 		transaction_id: t.transaction_id,
 		date: t.instance_date ?? '-',
@@ -378,23 +378,27 @@ async function handleExport() {
 	class="relative z-20 bg-white/80 backdrop-blur-sm rounded-xl shadow-sm border border-slate-200 px-6 pt-6 pb-4 mb-2"
 >
 	<div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-		<div class="flex flex-col gap-2">
-			<label class="block text-sm text-slate-900">Project</label>
-			<ProjectSelector
-				bind:value={selectedProject}
-				placeholder="Search project..."
-				onSelect={() => {
+			<div class="flex flex-col gap-2">
+				<label for="sales-project" class="block text-sm text-slate-900">Project</label>
+				<ProjectSelector
+					id="sales-project"
+					ariaLabel="Project"
+					bind:value={selectedProject}
+					placeholder="Search project..."
+					onSelect={() => {
 					selectedSubProject = null;
 					currentPage = 1;
 				}}
 			/>
 		</div>
-		{#if selectedProject && selectedProject.filter_type !== 'project'}
-			<div class="flex flex-col gap-2">
-				<label class="block text-sm text-slate-900">Sub-project</label>
-				<SearchableDropdown
-					id="sales-sub-project"
-					ariaLabel="Sub-project"
+			{#if selectedProject && selectedProject.filter_type !== 'project'}
+				<div class="flex flex-col gap-2">
+					<label for="sales-sub-project-button" class="block text-sm text-slate-900">
+						Sub-project
+					</label>
+					<SearchableDropdown
+						id="sales-sub-project"
+						ariaLabel="Sub-project"
 					options={['All', ...subProjectOptions]}
 					value={selectedSubProject ?? 'All'}
 					onchange={(v) => {

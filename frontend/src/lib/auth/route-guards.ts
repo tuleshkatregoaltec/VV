@@ -1,4 +1,4 @@
-import type { BackendUser } from '$lib/api/auth'
+import type { AuthenticatedUser } from '$lib/api/auth'
 
 export type RouteCategory = 'public' | 'auth' | 'onboarding' | 'recovery' | 'protected'
 
@@ -25,7 +25,7 @@ const ONBOARDING_PATHS = [
 ]
 const RECOVERY_PATHS = ['/renew']
 
-function hasActiveSubscription(status: BackendUser['subscription_status']): boolean {
+function hasActiveSubscription(status: AuthenticatedUser['subscription_status']): boolean {
 	return status === 'active' || status === 'trialing'
 }
 
@@ -43,7 +43,7 @@ export function getRouteCategory(pathname: string): RouteCategory {
 
 export function getOnboardingRedirect(
 	user: Pick<
-		BackendUser,
+		AuthenticatedUser,
 		'first_name' | 'last_name' | 'organization_id' | 'is_owner' | 'subscription_status'
 	>
 ): string {
@@ -69,7 +69,7 @@ export function getOnboardingRedirect(
 export function decideRouteAccess(
 	pathname: string,
 	user: Pick<
-		BackendUser,
+		AuthenticatedUser,
 		'first_name' | 'last_name' | 'organization_id' | 'is_owner' | 'subscription_status'
 	> | null,
 	options: { hasPaymentSessionId?: boolean } = {}

@@ -1,5 +1,4 @@
 from datetime import date
-from decimal import Decimal
 from typing import List, Optional
 
 from pydantic import BaseModel, ConfigDict
@@ -18,9 +17,9 @@ class TransactionResponse(BaseModel):
     area_name_en: Optional[str] = None
     project_name_en: Optional[str] = None
     building_name_en: Optional[str] = None
-    procedure_area: Optional[Decimal] = None
-    actual_worth: Optional[Decimal] = None
-    meter_sale_price: Optional[Decimal] = None
+    procedure_area: Optional[float] = None
+    actual_worth: Optional[float] = None
+    meter_sale_price: Optional[float] = None
     reg_type_en: Optional[str] = None
     nearest_landmark_en: Optional[str] = None
     nearest_metro_en: Optional[str] = None
@@ -46,9 +45,9 @@ class RentalContractResponse(BaseModel):
     contract_reg_type_en: Optional[str] = None
     area_name_en: Optional[str] = None
     project_name_en: Optional[str] = None
-    actual_area: Optional[Decimal] = None
-    annual_amount: Optional[Decimal] = None
-    contract_amount: Optional[Decimal] = None
+    actual_area: Optional[float] = None
+    annual_amount: Optional[float] = None
+    contract_amount: Optional[float] = None
     no_of_prop: Optional[int] = None
     is_free_hold: Optional[bool] = None
     nearest_landmark_en: Optional[str] = None
@@ -73,7 +72,7 @@ class MatchedUnit(BaseModel):
     unit_number: str
     building_number: str
     floor: Optional[str] = None
-    actual_area: Decimal
+    actual_area: float
     rooms: Optional[str] = None
     confidence: float  # 0.0 to 1.0
     reasoning: str  # LLM's explanation of why this unit matches
@@ -95,7 +94,7 @@ class UnitDetails(BaseModel):
 
     unit_number: str
     building_number: str
-    actual_area: Decimal
+    actual_area: float
     rooms: Optional[str] = None
 
 
@@ -106,10 +105,10 @@ class ComparableTransactionItem(BaseModel):
 
     transaction_id: str
     instance_date: Optional[date] = None
-    actual_worth: Optional[Decimal] = None
-    meter_sale_price: Optional[Decimal] = None
+    actual_worth: Optional[float] = None
+    meter_sale_price: Optional[float] = None
     building_name_en: Optional[str] = None
-    procedure_area: Optional[Decimal] = None
+    procedure_area: Optional[float] = None
 
 
 class ComparableTransactionsResponse(BaseModel):

@@ -1,18 +1,18 @@
 <script lang="ts">
 import { onMount } from 'svelte'
 import { goto } from '$app/navigation'
-import { admin, type OrgListItem } from '$lib/api/admin'
+import { admin, type OrganizationListResponse } from '$lib/api/admin'
 import { ApiError } from '$lib/api/client'
 import CreateUserModal from '$lib/components/admin/CreateUserModal.svelte'
 import ConfirmModal from '$lib/components/ui/ConfirmModal.svelte'
 
-let orgs = $state<OrgListItem[]>([])
+let orgs = $state<OrganizationListResponse[]>([])
 let loading = $state(true)
 let error = $state('')
 let showCreateUser = $state(false)
 let activatingOrgId = $state<string | null>(null)
 let deletingOrgId = $state<string | null>(null)
-let confirmDeleteOrg = $state<OrgListItem | null>(null)
+let confirmDeleteOrg = $state<OrganizationListResponse | null>(null)
 
 async function fetchOrgs() {
 	loading = true
@@ -26,7 +26,7 @@ async function fetchOrgs() {
 	}
 }
 
-async function activateOrg(org: OrgListItem) {
+async function activateOrg(org: OrganizationListResponse) {
 	activatingOrgId = org.id
 	try {
 		const updated = await admin.organizations.setSubscription(org.id, 'active')

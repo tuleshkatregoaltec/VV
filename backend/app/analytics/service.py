@@ -5,6 +5,7 @@ from datetime import date, timedelta
 from typing import Optional
 
 from app.analytics.models import (
+    AnalyticsUnitComposition,
     ProjectAnalyticsResponse,
     ProjectMeta,
     ProjectRentalSummary,
@@ -18,7 +19,6 @@ from app.analytics.models import (
     RoomAnalytics,
     SubProjectItem,
     SubProjectsResponse,
-    UnitComposition,
 )
 from app.clickhouse.client import query
 from app.clickhouse.queries import (
@@ -273,7 +273,7 @@ async def get_project_summary(
     # --- Unit composition ---
     total_units = sum(int(row["unit_count"]) for row in units_rows) or 1
     unit_composition = [
-        UnitComposition(
+        AnalyticsUnitComposition(
             rooms=row["rooms_en"],
             count=int(row["unit_count"]),
             pct_of_total=round(int(row["unit_count"]) / total_units * 100, 1),

@@ -1,10 +1,10 @@
 import posthog from 'posthog-js'
 import { browser } from '$app/environment'
-import { type BackendUser, get_session, me } from '$lib/api/auth'
+import { type AuthMeResponse, get_session, me } from '$lib/api/auth'
 
 const REFRESH_INTERVAL = 5 * 60 * 1000 // 5 minutes
 
-const userState = $state<{ data: BackendUser | null }>({ data: null })
+const userState = $state<{ data: AuthMeResponse | null }>({ data: null })
 
 let refreshInterval: number | null = null
 let lastRefresh = 0
@@ -17,7 +17,7 @@ function handleVisibilityChange() {
 	}
 }
 
-function identifyUser(user: BackendUser) {
+function identifyUser(user: AuthMeResponse) {
 	if (browser && posthog.__loaded && identifiedUserId !== user.id) {
 		posthog.identify(user.id, {
 			email: user.email,
@@ -30,7 +30,7 @@ function identifyUser(user: BackendUser) {
 	}
 }
 
-function setUser(user: BackendUser | null) {
+function setUser(user: AuthMeResponse | null) {
 	userState.data = user
 	if (browser && user) {
 		identifyUser(user)
@@ -54,7 +54,7 @@ function clearUser() {
 	}
 }
 
-async function getCurrentUser(): Promise<BackendUser | null> {
+async function getCurrentUser(): Promise<AuthMeResponse | null> {
 	if (!browser) return null
 
 	const session = await get_session()
@@ -71,7 +71,7 @@ async function getCurrentUser(): Promise<BackendUser | null> {
 }
 
 /** Refresh user data from backend. Use after payment, invite acceptance, etc. */
-async function refreshUser(): Promise<BackendUser | null> {
+async function refreshUser(): Promise<AuthMeResponse | null> {
 	if (!browser) return null
 
 	try {

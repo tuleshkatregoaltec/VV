@@ -1,5 +1,5 @@
-import { api } from './client'
-import type { Transaction } from './transactions'
+import { client } from './client'
+import type { TransactionResponseOutput } from './transactions'
 
 export interface MatchedUnit {
 	unit_id: number
@@ -14,7 +14,7 @@ export interface MatchedUnit {
 
 export interface MatchedUnitsResponse {
 	transaction_id: string
-	transaction_details: Transaction
+	transaction_details: TransactionResponseOutput
 	matched: boolean
 	matches: MatchedUnit[]
 	total_candidates: number
@@ -50,7 +50,7 @@ export const transactionMatching = {
 	 * Results are cached for 1 hour to save costs.
 	 */
 	matchUnits: (transactionId: string) =>
-		api<MatchedUnitsResponse>(`/api/v1/transactions/${transactionId}/match-units`),
+		client.get<MatchedUnitsResponse>(`/api/v1/transactions/${transactionId}/match-units`),
 
 	/**
 	 * Get comparable transactions for a specific unit (reverse lookup).
@@ -58,5 +58,5 @@ export const transactionMatching = {
 	 * Results are cached for 30 minutes.
 	 */
 	getComparableTransactions: (unitId: number) =>
-		api<ComparableTransactionsResponse>(`/api/v1/transactions/units/${unitId}/comparable`)
+		client.get<ComparableTransactionsResponse>(`/api/v1/transactions/units/${unitId}/comparable`)
 }

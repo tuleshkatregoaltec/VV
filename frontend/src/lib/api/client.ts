@@ -27,7 +27,15 @@ export interface RequestOptions {
 	returnBlob?: boolean
 }
 
-export async function api<T>(endpoint: string, options: RequestOptions = {}): Promise<T> {
+interface StreamOptions {
+	method?: 'GET' | 'POST'
+	body?: unknown
+}
+
+type QueryValue = string | number | boolean | null | undefined | Date
+type QueryParams = Record<string, QueryValue | QueryValue[]>
+
+async function request<T>(endpoint: string, options: RequestOptions = {}): Promise<T> {
 	const { method = 'GET', body, headers = {}, returnBlob = false } = options
 
 	// if access token available, add auth header.
@@ -51,7 +59,7 @@ export async function api<T>(endpoint: string, options: RequestOptions = {}): Pr
 		}
 		config.body = JSON.stringify(body)
 	}
-	// @ts-expect-error - Using window.fetch in CSR-only mode
+
 	const res = await fetch(`${env.PUBLIC_API_BASE_URL}${endpoint}`, config)
 
 	if (!res.ok) {
@@ -107,11 +115,7 @@ export type StreamCallback = (chunk: string) => void
  * Stream SSE responses using fetch with ReadableStream.
  * Supports POST requests with request bodies.
  */
-export async function stream(
-	endpoint: string,
-	onChunk: StreamCallback,
-	options: { method?: 'GET' | 'POST'; body?: unknown } = {}
-) {
+async function stream(endpoint: string, onChunk: StreamCallback, options: StreamOptions = {}) {
 	const { method = 'GET', body } = options
 
 	const abortController = new AbortController()
@@ -142,7 +146,6 @@ export async function stream(
 	}
 
 	// Start streaming
-	// @ts-expect-error - Using window.fetch in CSR-only mode
 	fetch(`${env.PUBLIC_API_BASE_URL}${endpoint}`, config)
 		.then(async (response) => {
 			if (!response.ok) {
@@ -226,13 +229,61 @@ export async function stream(
 	}
 }
 
-/**
- * Shorthand methods for common HTTP operations
- */
-export const http = {
-	get: <T>(endpoint: string) => api<T>(endpoint),
-	post: <T>(endpoint: string, body?: unknown) => api<T>(endpoint, { method: 'POST', body }),
-	put: <T>(endpoint: string, body?: unknown) => api<T>(endpoint, { method: 'PUT', body }),
-	patch: <T>(endpoint: string, body?: unknown) => api<T>(endpoint, { method: 'PATCH', body }),
-	delete: <T>(endpoint: string) => api<T>(endpoint, { method: 'DELETE' })
+function toQueryValue(value: QueryValue): string | null {
+	if (value === undefined || value === null || value === '') return null
+	if (value instanceof Date) return value.toISOString()
+	return String(value)
+}
+
+function withQuery(endpoint: string, params: QueryParams): string {
+	const query = new URLSearchParams()
+
+	for (const [key, rawValue] of Object.entries(params)) {
+		if (Array.isArray(rawValue)) {
+			for (const item of rawValue) {
+				const value = toQueryValue(item)
+				if (value !== null) query.append(key, value)
+			}
+			continue
+		}
+
+		const value = toQueryValue(rawValue)
+		if (value !== null) query.append(key, value)
+	}
+
+	const search = query.toString()
+	return search ? `${endpoint}?${search}` : endpoint
+}
+
+export const client = {
+	request,
+	get<T>(endpoint: string, options: Omit<RequestOptions, 'method' | 'body'> = {}) {
+		return request<T>(endpoint, options)
+	},
+	post<TResponse, TBody = unknown>(
+		endpoint: string,
+		body?: TBody,
+		options: Omit<RequestOptions, 'method' | 'body'> = {}
+	) {
+		return request<TResponse>(endpoint, { ...options, method: 'POST', body })
+	},
+	put<TResponse, TBody = unknown>(
+		endpoint: string,
+		body?: TBody,
+		options: Omit<RequestOptions, 'method' | 'body'> = {}
+	) {
+		return request<TResponse>(endpoint, { ...options, method: 'PUT', body })
+	},
+	patch<TResponse, TBody = unknown>(
+		endpoint: string,
+		body?: TBody,
+		options: Omit<RequestOptions, 'method' | 'body'> = {}
+	) {
+		return request<TResponse>(endpoint, { ...options, method: 'PATCH', body })
+	},
+	delete<T>(endpoint: string, options: Omit<RequestOptions, 'method' | 'body'> = {}) {
+		return request<T>(endpoint, { ...options, method: 'DELETE' })
+	},
+	stream,
+	withQuery
 }

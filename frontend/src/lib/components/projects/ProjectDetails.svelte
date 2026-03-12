@@ -40,7 +40,11 @@ function statusColor(status: string | null): string {
 
 const isCompleted = $derived(project.project_status === 'C')
 
-function handleBuildingClick(pin: { latitude: number; longitude: number; property_id?: number }) {
+function handleBuildingClick(pin: {
+	latitude: number
+	longitude: number
+	property_id?: number | null
+}) {
 	if (pin.property_id) {
 		onBuildingSelect?.(pin.property_id, pin.longitude, pin.latitude)
 	} else {
@@ -167,7 +171,7 @@ function handleBuildingClick(pin: { latitude: number; longitude: number; propert
 				Buildings ({project.geo_pins.length})
 			</h3>
 			<div class="space-y-1.5 max-h-48 overflow-y-auto">
-				{#each project.geo_pins as pin, i (pin.pin_id ?? pin.building_name ?? i)}
+				{#each project.geo_pins as pin, i (pin.property_id ?? pin.building_name ?? i)}
 					<button
 						onclick={() => handleBuildingClick(pin)}
 						class="w-full flex items-center gap-3 bg-slate-50 rounded-lg px-3 py-2 border border-slate-100 hover:bg-teal-50 hover:border-teal-200 transition-colors text-left"

@@ -51,7 +51,7 @@ class MasterProjectResponse(BaseModel):
     total_units: int
     projects: List[MasterProjectSummary]
     geo_pins: List[GeoPin]
-    unit_composition: List["UnitComposition"]
+    unit_composition: List["ProjectUnitComposition"]
 
 
 class ProjectSearchResult(BaseModel):
@@ -66,7 +66,7 @@ class ProjectSearchResult(BaseModel):
     longitude: float
 
 
-class UnitComposition(BaseModel):
+class ProjectUnitComposition(BaseModel):
     """Unit type breakdown"""
 
     property_sub_type: str  # "Studio", "1 B/R", "2 B/R", "3 B/R", "Penthouse"
@@ -133,6 +133,6 @@ class ProjectDetailResponse(BaseModel):
     project_status: Optional[str]
 
     # Derived data
-    unit_composition: List[UnitComposition]
+    unit_composition: List[ProjectUnitComposition]
     buildings: List[BuildingInfo] = []
     geo_pins: List[GeoPin] = []

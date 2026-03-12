@@ -117,7 +117,7 @@ async function handleProjectSelect(projectId: number) {
 				details.latitude,
 				details.longitude,
 				details.area_polygon,
-				details.geo_pins,
+				details.geo_pins ?? [],
 				13
 			)
 		}

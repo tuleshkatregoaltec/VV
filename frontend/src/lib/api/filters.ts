@@ -1,15 +1,7 @@
-import { api } from './client'
+import { client } from './client'
+import type { FilterOptionsResponse } from './generated/hey-api/types.gen'
 
-export interface FilterOptions {
-	projects: string[]
-	buildings: string[]
-	property_types: string[]
-	property_sub_types: string[]
-	rooms: string[]
-	registration_types: string[]
-	tenant_types?: string[]
-	contract_reg_types?: string[]
-}
+export type { FilterOptionsResponse }
 
 export interface FilterParams {
 	property_usage?: string
@@ -19,25 +11,34 @@ export interface FilterParams {
 	area?: string
 }
 
-function buildQuery(filters: FilterParams): string {
-	const params = new URLSearchParams()
-	Object.entries(filters).forEach(([k, v]) => {
-		if (v !== undefined && v !== null && v !== 'All') {
-			params.append(k, String(v))
-		}
-	})
-	const qs = params.toString()
-	return qs ? `?${qs}` : ''
-}
-
 export const filters = {
 	sales: (filterParams: FilterParams = {}) => {
-		const query = buildQuery(filterParams)
-		return api<FilterOptions>(`/api/v1/filters/sales${query}`)
+		return client.get<FilterOptionsResponse>(
+			client.withQuery('/api/v1/filters/sales', {
+				property_usage: filterParams.property_usage,
+				project: filterParams.project,
+				filter_type: filterParams.filter_type,
+				property_type:
+					filterParams.property_type && filterParams.property_type !== 'All'
+						? filterParams.property_type
+						: undefined,
+				area: filterParams.area && filterParams.area !== 'All' ? filterParams.area : undefined
+			})
+		)
 	},
 
 	rentals: (filterParams: FilterParams = {}) => {
-		const query = buildQuery(filterParams)
-		return api<FilterOptions>(`/api/v1/filters/rentals${query}`)
+		return client.get<FilterOptionsResponse>(
+			client.withQuery('/api/v1/filters/rentals', {
+				property_usage: filterParams.property_usage,
+				project: filterParams.project,
+				filter_type: filterParams.filter_type,
+				property_type:
+					filterParams.property_type && filterParams.property_type !== 'All'
+						? filterParams.property_type
+						: undefined,
+				area: filterParams.area && filterParams.area !== 'All' ? filterParams.area : undefined
+			})
+		)
 	}
 }
