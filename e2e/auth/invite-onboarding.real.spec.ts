@@ -152,3 +152,12 @@ test('invite page rejects a logged-in user whose email does not match the invita
 	await expect(page.getByText(inviteeEmail, { exact: true })).toBeVisible();
 	await expect(page.getByRole('button', { name: 'Join Invite Test Org' })).toHaveCount(0);
 });
+
+test('invalid invite token shows the unavailable state', async ({ page }) => {
+	await page.goto('/invite?token=invalid-token');
+
+	await expect(page.getByRole('heading', { name: 'Invitation unavailable' })).toBeVisible({
+		timeout: 10_000
+	});
+	await expect(page.getByRole('link', { name: 'Return to sign in' })).toBeVisible();
+});
