@@ -8,10 +8,14 @@ import FilterPanel from '$lib/components/filters/FilterPanel.svelte'
 import { propertyType, timeframe } from '$lib/components/filters/globalFilters.svelte'
 import DataPanel from '$lib/components/transactions/DataPanel.svelte'
 import Pagination from '$lib/components/ui/Pagination.svelte'
-import { DEFAULT_ITEMS_PER_PAGE, TIMEFRAME_MAPPING } from '$lib/constants/transactions'
 import { analyticsQueries } from '$lib/queries/analytics'
 import { transactionQueries } from '$lib/queries/transactions'
 import type { FilterDefinition } from '$lib/types/filters'
+import {
+	buildRentalsApiFilters,
+	buildRentalsFilterParams,
+	withSelectedIds
+} from '$lib/utils/transactionPages'
 
 // Area in sq.m (database stores in sqm)
 const AREA_OPTIONS = ['All', '<50', '50-100', '100-200', '200-500', '>500']
@@ -114,44 +118,14 @@ const subProjectOptions = $derived(subProjectsQuery.data?.sub_projects.map((p) =
 // Build API Filters
 // ========================================
 function buildApiFilters() {
-	const apiFilters: Record<string, any> = {
-		property_usage: propertyType.current,
-		timeframe_days: TIMEFRAME_MAPPING[timeframe.current],
-		limit: DEFAULT_ITEMS_PER_PAGE,
-		offset: (currentPage - 1) * DEFAULT_ITEMS_PER_PAGE
-	}
-
-	// Project filter — use sub-project if selected, otherwise canonical grouping
-	if (selectedSubProject) {
-		apiFilters.project = selectedSubProject
-		apiFilters.filter_type = 'project'
-	} else if (selectedProject) {
-		apiFilters.project = selectedProject.name
-		apiFilters.filter_type = selectedProject.filter_type
-	}
-
-	if (localFilters.selectedPropertyType !== 'All') {
-		apiFilters.property_type = localFilters.selectedPropertyType
-	}
-	if (localFilters.selectedPropertySubType !== 'All') {
-		apiFilters.property_sub_type = localFilters.selectedPropertySubType
-	}
-	if (localFilters.selectedTenantType !== 'All') {
-		apiFilters.tenant_type = localFilters.selectedTenantType
-	}
-	if (localFilters.selectedRegistration !== 'All') {
-		apiFilters.contract_reg_type = localFilters.selectedRegistration
-	}
-
-	// Range filters
-	if (localFilters.areaRange !== 'All') {
-		apiFilters.area = localFilters.areaRange
-	}
-	if (localFilters.rentRange !== 'All') {
-		apiFilters.rent = localFilters.rentRange
-	}
-
-	return apiFilters
+	return buildRentalsApiFilters({
+		propertyUsage: propertyType.current,
+		timeframe: timeframe.current,
+		currentPage,
+		selectedProject,
+		selectedSubProject,
+		localFilters
+	})
 }
 
 // ========================================
@@ -164,23 +138,12 @@ const rentalsApiFilters = $derived(buildApiFilters())
 const rentalsQuery = createQuery(() => transactionQueries.rentals(rentalsApiFilters))
 
 const rentalFilterParams = $derived.by(() => {
-	const filterParams: Record<string, any> = {
-		property_usage: propertyType.current
-	}
-
-	if (selectedSubProject) {
-		filterParams.project = selectedSubProject
-		filterParams.filter_type = 'project'
-	} else if (selectedProject) {
-		filterParams.project = selectedProject.name
-		filterParams.filter_type = selectedProject.filter_type
-	}
-
-	if (localFilters.selectedPropertyType !== 'All') {
-		filterParams.property_type = localFilters.selectedPropertyType
-	}
-
-	return filterParams
+	return buildRentalsFilterParams(
+		propertyType.current,
+		selectedProject,
+		selectedSubProject,
+		localFilters.selectedPropertyType
+	)
 })
 
 // Filter options query
@@ -334,13 +297,7 @@ let isExporting = $state(false)
 async function handleExport() {
 	isExporting = true
 	try {
-		const filters = buildApiFilters()
-
-		// Add selected contract IDs if any are selected
-		if (selectedContractIds.size > 0) {
-			filters.contract_ids = Array.from(selectedContractIds).join(',')
-		}
-
+		const filters = withSelectedIds(buildApiFilters(), 'contract_ids', selectedContractIds)
 		const blob = await transactions.exportRentals(filters)
 
 		const url = window.URL.createObjectURL(blob)

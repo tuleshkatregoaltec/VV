@@ -23,7 +23,9 @@ export interface TransactionFilters {
 	property_type?: string
 	rooms?: string
 	property_sub_type?: string
+	tenant_type?: string
 	registration_type?: string
+	contract_reg_type?: string
 	area?: string
 	area_min?: number
 	area_max?: number
@@ -35,6 +37,7 @@ export interface TransactionFilters {
 	price_sqft_min?: number
 	price_sqft_max?: number
 	annualRent?: string
+	rent?: string
 	transaction_ids?: string
 	contract_ids?: string
 	limit?: number
