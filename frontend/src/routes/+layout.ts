@@ -45,7 +45,7 @@ export const load: LayoutLoad = async ({ url }) => {
 	})
 
 	if (decision.action === 'redirect') {
-		redirect(302, decision.location)
+		throw redirect(302, decision.location)
 	}
 
 	return { queryClient }

@@ -1,7 +1,6 @@
 import { defineConfig, devices } from '@playwright/test';
 
 const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? 'http://localhost:5173';
-const useExistingServer = process.env.PLAYWRIGHT_SKIP_WEBSERVER === '1';
 
 export default defineConfig({
 	testDir: '.',
@@ -46,12 +45,10 @@ export default defineConfig({
 		}
 	],
 
-	webServer: useExistingServer
-		? undefined
-		: {
-				command: 'cd ../frontend && bun run dev -- --host 127.0.0.1',
-				url: 'http://localhost:5173',
-				reuseExistingServer: !process.env.CI,
-				timeout: 120_000
-			}
+	webServer: {
+		command: 'cd ../frontend && bun run dev -- --host 127.0.0.1',
+		url: 'http://localhost:5173',
+		reuseExistingServer: !process.env.CI,
+		timeout: 120_000
+	}
 });

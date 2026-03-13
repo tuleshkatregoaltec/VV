@@ -260,7 +260,7 @@ export async function loginViaUi(page: Page, email: string, password = DEFAULT_P
 	await page.goto('/auth');
 	await page.getByLabel('Email').fill(email);
 	await page.getByLabel('Password').fill(password);
-	await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+	await page.locator('form').getByRole('button', { name: 'Sign in', exact: true }).click();
 }
 
 export async function createActiveOrganization(

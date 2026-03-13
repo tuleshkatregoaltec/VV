@@ -1,32 +1,50 @@
 import { test as setup, expect } from '@playwright/test';
 import path from 'path';
+import {
+	createActiveOrganization,
+	loginUser,
+	signupUser,
+	uniqueEmail
+} from './fixtures/real-auth';
 
 const authFile = path.join(__dirname, '.auth/user.json');
+const DEFAULT_ADMIN_EMAIL = process.env.FIRST_SUPERUSER ?? 'admin@example.com';
+const DEFAULT_ADMIN_PASSWORD = process.env.FIRST_SUPERUSER_PASSWORD ?? 'admin123';
+const SETUP_PASSWORD = 'PlaywrightOwner123!';
 
 /**
- * Runs once before other tests to authenticate and save session state.
- * Requires TEST_EMAIL and TEST_PASSWORD environment variables.
+ * Runs once before other tests to provision an active owner account and save
+ * its browser session state for the authenticated chromium project.
  *
  * Run with:
  *   TEST_EMAIL=you@example.com TEST_PASSWORD=yourpassword bunx playwright test --project=setup
  */
-setup('authenticate', async ({ page }) => {
-	const email = process.env.TEST_EMAIL;
-	const password = process.env.TEST_PASSWORD;
+setup('authenticate', async ({ page, request }) => {
+	const adminEmail = process.env.TEST_EMAIL ?? DEFAULT_ADMIN_EMAIL;
+	const adminPassword = process.env.TEST_PASSWORD ?? DEFAULT_ADMIN_PASSWORD;
+	const ownerEmail = uniqueEmail('playwright_owner');
 
-	if (!email || !password) {
-		throw new Error('TEST_EMAIL and TEST_PASSWORD environment variables are required for auth setup');
-	}
+	const adminSession = await loginUser(request, adminEmail, adminPassword);
+	const ownerSession = await signupUser(request, {
+		email: ownerEmail,
+		password: SETUP_PASSWORD,
+		firstName: 'Playwright',
+		lastName: 'Owner'
+	});
+	await createActiveOrganization(
+		request,
+		ownerSession.access_token,
+		adminSession.access_token,
+		`Playwright Org ${Date.now()}`,
+		3
+	);
 
 	await page.goto('/auth');
 	await expect(page.getByRole('heading', { name: 'Sign in to Vitevue' })).toBeVisible();
+	await page.getByLabel('Email').fill(ownerEmail);
+	await page.getByLabel('Password').fill(SETUP_PASSWORD);
+	await page.locator('form').getByRole('button', { name: 'Sign in', exact: true }).click();
 
-	// Fill login form
-	await page.getByLabel('Email').fill(email);
-	await page.getByLabel('Password').fill(password);
-	await page.getByRole('button', { name: 'Sign in', exact: true }).click();
-
-	// Wait for redirect to dashboard
 	await page.waitForURL(/\/dashboard/, { timeout: 15_000 });
 
 	// Save auth state (cookies + localStorage)

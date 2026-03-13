@@ -30,18 +30,20 @@ test('/auth page renders sign in form', async ({ page }) => {
 	await expect(page.getByRole('heading', { name: 'Sign in to Vitevue' })).toBeVisible();
 	await expect(page.getByLabel('Email')).toBeVisible();
 	await expect(page.getByLabel('Password')).toBeVisible();
-	await expect(page.getByRole('button', { name: 'Sign in', exact: true })).toBeVisible();
+	await expect(
+		page.locator('form').getByRole('button', { name: 'Sign in', exact: true })
+	).toBeVisible();
 });
 
 test('sign in with wrong credentials shows error', async ({ page }) => {
 	await page.goto('/auth');
 	await page.getByLabel('Email').fill('wrong@example.com');
 	await page.getByLabel('Password').fill('wrongpassword');
-	await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+	await page.locator('form').getByRole('button', { name: 'Sign in', exact: true }).click();
 
 	// Should stay on /auth and show an error
 	await expect(page).toHaveURL(/\/auth/);
-	await expect(page.getByText('Invalid email or password')).toBeVisible({ timeout: 10_000 });
+	await expect(page.getByText('Invalid login credentials')).toBeVisible({ timeout: 10_000 });
 });
 
 test('switching to signup view shows create account form', async ({ page }) => {
@@ -52,7 +54,7 @@ test('switching to signup view shows create account form', async ({ page }) => {
 
 test('forgot password flow shows reset form', async ({ page }) => {
 	await page.goto('/auth');
-	await page.getByRole('button', { name: 'Need a password reset?' }).click();
+	await page.getByRole('button', { name: 'Forgot password?' }).click();
 	await expect(page.getByRole('heading', { name: 'Reset your password' })).toBeVisible();
 	await expect(page.getByRole('button', { name: 'Send reset email' })).toBeVisible();
 });

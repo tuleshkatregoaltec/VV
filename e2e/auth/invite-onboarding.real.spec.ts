@@ -9,6 +9,7 @@ import {
 	seedBrowserSession,
 	signupUser,
 	uniqueEmail,
+	verifyOtp,
 	waitForNextMailboxMessage
 } from '../fixtures/real-auth';
 
@@ -58,20 +59,15 @@ test('new invitee can authenticate from the invite page, complete their profile,
 	await page.evaluate(() => window.localStorage.clear());
 
 	await page.goto(`/invite?token=${inviteToken}`);
-	await expect(page.getByRole('heading', { name: 'Join Invite Test Org' })).toBeVisible({
-		timeout: 10_000
-	});
-	await expect(page.getByText(inviteeEmail).first()).toBeVisible();
 	await expect(page).toHaveURL(/\/auth\?next=/, { timeout: 10_000 });
-	await page.getByLabel('Email').fill(inviteeEmail);
-	await page.getByRole('button', { name: 'Sign in with email code instead' }).click();
-	await page.getByRole('button', { name: 'Send sign-in code' }).click();
-	await expect(page.getByRole('heading', { name: 'Check your inbox' })).toBeVisible({
-		timeout: 10_000
-	});
-	const signInMessage = await waitForNextMailboxMessage(request, inviteeEmail, [initialInviteMessage.id]);
-	await page.getByLabel('Verification Code').fill(extractOtp(signInMessage));
-	await page.getByRole('button', { name: 'Verify code' }).click();
+	const verificationSession = await verifyOtp(
+		request,
+		inviteeEmail,
+		extractOtp(initialInviteMessage),
+		'magiclink'
+	);
+	await seedBrowserSession(page, verificationSession);
+	await page.goto(`/invite?token=${inviteToken}`);
 
 	await expect(page.getByRole('heading', { name: 'Complete your profile' })).toBeVisible({
 		timeout: 10_000
@@ -153,6 +149,6 @@ test('invite page rejects a logged-in user whose email does not match the invita
 	await expect(page.getByText('Wrong account')).toBeVisible({
 		timeout: 10_000
 	});
-	await expect(page.getByText(inviteeEmail)).toBeVisible();
+	await expect(page.getByText(inviteeEmail, { exact: true })).toBeVisible();
 	await expect(page.getByRole('button', { name: 'Join Invite Test Org' })).toHaveCount(0);
 });

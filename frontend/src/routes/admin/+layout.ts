@@ -13,7 +13,7 @@ export const load: LayoutLoad = async ({ parent }) => {
 	const user = currentUser.data
 	const decision = decideAdminAccess(user)
 	if (decision.action === 'redirect') {
-		redirect(302, decision.location)
+		throw redirect(302, decision.location)
 	}
 	return { user }
 }

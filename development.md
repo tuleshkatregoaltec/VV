@@ -15,7 +15,7 @@ Optional host-side developer tooling:
 
 Docker Compose exists to give every developer a reproducible local services environment from a fresh clone. It is local-development-only infrastructure, not a production deployment definition.
 
-The source of truth is the code in the host checkout. Frontend and backend run on the host by default. Use Docker Compose for external services and for Playwright.
+The source of truth is the code in the host checkout. Frontend, backend, and Playwright run on the host by default. Use Docker Compose for external services only.
 
 Environment file:
 
@@ -34,7 +34,7 @@ prek install
 
 What these do:
 
-- `just setup` installs frontend dependencies with Bun and syncs the backend environment with `uv`
+- `just setup` installs frontend and e2e dependencies with Bun, installs the local Playwright Chromium browser, and syncs the backend environment with `uv`
 - `just up` starts the external services stack
 - `prek install` enables the repo hooks locally
 
@@ -78,7 +78,7 @@ just test-e2e
 just test-guards
 ```
 
-`just setup` prepares host-side backend and frontend tooling. It does not start Docker Compose.
+`just setup` prepares host-side backend, frontend, and Playwright tooling. It does not start Docker Compose.
 
 Backend lifecycle is handled by:
 
@@ -122,6 +122,7 @@ Hook policy:
 Before committing:
 
 - Make sure services are up with `just up`.
+- Make sure the backend is running with `just dev-backend`.
 - Run `just check-all`.
 - Run `just test-e2e` if your change touches auth flows, route guards, or browser-critical UI behavior.
 - Commits are blocked when the configured Prek hooks fail.
@@ -132,7 +133,7 @@ Cross-platform note:
 
 - The host-first workflow is the supported way to develop on Linux and macOS.
 - Docker Compose is the supported way to boot local dependencies on Linux and macOS.
-- The Playwright container targets the host apps through `host.docker.internal`, with a host-gateway mapping for Linux.
+- Playwright runs on the host and targets the local app URLs directly.
 
 ## Checks And Tests
 
@@ -152,5 +153,3 @@ Deployment policy:
 - Managed production services such as databases, caches, and object storage are external and are not provisioned by this repo.
 
 The generated API client is manual for now. Run `just generate-client` after changing backend routes or schemas.
-
-Playwright runs in its own container using the tooling defined under `e2e/`.

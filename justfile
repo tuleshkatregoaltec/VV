@@ -5,6 +5,7 @@ default:
 
 setup:
 	cd frontend && bun install
+	cd e2e && bun install && bunx --bun playwright install chromium
 	cd backend && uv sync
 
 up:
@@ -57,10 +58,10 @@ check-all:
 	just test-frontend
 
 test-e2e:
-	docker compose run --rm playwright bash -lc 'npm test'
+	set -a && source .env.dev && set +a && cd e2e && bun run test
 
 test-guards:
-	docker compose run --rm playwright bash -lc 'npm run test:guards'
+	set -a && source .env.dev && set +a && cd e2e && bun run test:guards
 
 generate-client:
 	./scripts/generate-client.sh
