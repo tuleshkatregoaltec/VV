@@ -14,7 +14,6 @@ function makeProject(overrides: Partial<ProjectSearchItem> = {}): ProjectSearchI
 	return {
 		name: 'Downtown Views',
 		filter_type: 'master',
-		transaction_count: 10,
 		...overrides
 	}
 }
@@ -49,9 +48,12 @@ describe('transaction page helpers', () => {
 			property_type: 'Apartment',
 			rooms: '2BR',
 			registration_type: 'Freehold',
-			area: '100-200',
-			price: '1M-2M',
-			pricePerSqM: '20000-30000'
+			area_min: 100,
+			area_max: 200,
+			price_min: 1000000,
+			price_max: 2000000,
+			price_per_sqm_min: 20000,
+			price_per_sqm_max: 30000
 		})
 
 		expect(withSelectedIds(filters, 'transaction_ids', new Set(['tx-1', 'tx-2']))).toMatchObject({
@@ -90,9 +92,24 @@ describe('transaction page helpers', () => {
 		})
 
 		expect(
-			buildSalesFilterParams(PROPERTY_USAGE.COMMERCIAL, selectedProject, 'The Binary', 'Office')
+			buildSalesFilterParams({
+				propertyUsage: PROPERTY_USAGE.COMMERCIAL,
+				timeframe: 'Last Year',
+				selectedProject,
+				selectedSubProject: 'The Binary',
+				localFilters: {
+					selectedBuilding: 'All',
+					selectedPropertyType: 'Office',
+					selectedBedroomsOrSubType: 'All',
+					selectedRegistration: 'All',
+					areaRange: 'All',
+					priceRange: 'All',
+					pricePerSqMRange: 'All'
+				}
+			})
 		).toEqual({
 			property_usage: 'Commercial',
+			timeframe_days: 365,
 			project: 'The Binary',
 			filter_type: 'project',
 			property_type: 'Office'
@@ -127,22 +144,33 @@ describe('transaction page helpers', () => {
 			property_sub_type: 'Furnished',
 			tenant_type: 'Individual',
 			contract_reg_type: 'Ejari',
-			area: '50-100',
-			rent: '50k-100k'
+			area_min: 50,
+			area_max: 100,
+			rent_min: 50000,
+			rent_max: 100000
 		})
 
 		expect(withSelectedIds(filters, 'contract_ids', new Set(['c-1']))).toMatchObject({
 			contract_ids: 'c-1'
 		})
 		expect(
-			buildRentalsFilterParams(
-				PROPERTY_USAGE.RESIDENTIAL,
-				makeProject({ name: 'Marina Gate', filter_type: 'project' }),
-				null,
-				'Apartment'
-			)
+			buildRentalsFilterParams({
+				propertyUsage: PROPERTY_USAGE.RESIDENTIAL,
+				timeframe: 'Last 6 Months',
+				selectedProject: makeProject({ name: 'Marina Gate', filter_type: 'project' }),
+				selectedSubProject: null,
+				localFilters: {
+					selectedPropertyType: 'Apartment',
+					selectedPropertySubType: 'All',
+					selectedTenantType: 'All',
+					selectedRegistration: 'All',
+					areaRange: 'All',
+					rentRange: 'All'
+				}
+			})
 		).toEqual({
 			property_usage: 'Residential',
+			timeframe_days: 180,
 			project: 'Marina Gate',
 			filter_type: 'project',
 			property_type: 'Apartment'

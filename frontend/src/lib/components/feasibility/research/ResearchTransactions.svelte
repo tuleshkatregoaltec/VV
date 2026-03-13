@@ -116,7 +116,7 @@ const rows = $derived(agentData ? agentData.rows : (query.data?.transactions ?? 
 					</tr>
 				</thead>
 				<tbody>
-					{#each rows as row (`${row.instance_date}-${row.project_name}-${row.actual_worth}`)}
+					{#each rows as row (`${row.instance_date}-${row.project_name_en}-${row.actual_worth}`)}
 						{@const r = row as Record<string, unknown>}
 						<tr class="border-b border-slate-50 hover:bg-slate-50/60">
 							<td class="px-2 py-1 text-slate-500 whitespace-nowrap"

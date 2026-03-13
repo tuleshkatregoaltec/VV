@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import re
 from typing import List, Optional
 
 from app.clickhouse.client import query
@@ -19,6 +20,16 @@ from app.project.models import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _room_sort_key(rooms: str) -> tuple:
+    normalized = rooms.strip()
+    if normalized.lower() == "studio":
+        return (0, 0, normalized)
+    match = re.match(r"^(\d+)", normalized)
+    if match:
+        return (1, int(match.group(1)), normalized)
+    return (2, 0, normalized.lower())
 
 
 async def list_all_projects() -> List[ProjectSearchResult]:
@@ -357,6 +368,7 @@ async def get_building_details(property_id: int) -> Optional[BuildingDetailRespo
         )
         for row in units_result
     ]
+    unit_composition.sort(key=lambda row: _room_sort_key(row.rooms_en))
 
     return BuildingDetailResponse(
         property_id=b["property_id"],

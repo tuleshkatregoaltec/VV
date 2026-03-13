@@ -8,18 +8,19 @@ import FilterPanel from '$lib/components/filters/FilterPanel.svelte'
 import { propertyType, timeframe } from '$lib/components/filters/globalFilters.svelte'
 import DataPanel from '$lib/components/transactions/DataPanel.svelte'
 import Pagination from '$lib/components/ui/Pagination.svelte'
+import { DEFAULT_ITEMS_PER_PAGE } from '$lib/constants/transactions'
 import { analyticsQueries } from '$lib/queries/analytics'
 import { transactionQueries } from '$lib/queries/transactions'
 import type { FilterDefinition } from '$lib/types/filters'
 import {
 	buildRentalsApiFilters,
 	buildRentalsFilterParams,
+	DEFAULT_RENTALS_LOCAL_FILTERS,
+	RENTAL_ANNUAL_RENT_OPTIONS,
+	type RentalsLocalFilters,
+	SALES_AREA_OPTIONS,
 	withSelectedIds
 } from '$lib/utils/transactionPages'
-
-// Area in sq.m (database stores in sqm)
-const AREA_OPTIONS = ['All', '<50', '50-100', '100-200', '200-500', '>500']
-const ANNUAL_RENT_OPTIONS = ['All', '<50k', '50k-100k', '100k-200k', '>200k']
 
 interface TransformedRental {
 	contract_id: string
@@ -98,14 +99,7 @@ let selectedContractIds = $state(new Set<string>())
 let selectedProject = $state<ProjectSearchItem | null>(null)
 let selectedSubProject = $state<string | null>(null)
 
-let localFilters = $state({
-	selectedPropertyType: 'All',
-	selectedPropertySubType: 'All',
-	selectedTenantType: 'All',
-	selectedRegistration: 'All',
-	areaRange: 'All',
-	rentRange: 'All'
-})
+let localFilters = $state<RentalsLocalFilters>({ ...DEFAULT_RENTALS_LOCAL_FILTERS })
 
 // Sub-projects query — enabled when a master or virtual_master is selected
 const subProjectsQuery = createQuery(() =>
@@ -138,12 +132,13 @@ const rentalsApiFilters = $derived(buildApiFilters())
 const rentalsQuery = createQuery(() => transactionQueries.rentals(rentalsApiFilters))
 
 const rentalFilterParams = $derived.by(() => {
-	return buildRentalsFilterParams(
-		propertyType.current,
+	return buildRentalsFilterParams({
+		propertyUsage: propertyType.current,
+		timeframe: timeframe.current,
 		selectedProject,
 		selectedSubProject,
-		localFilters.selectedPropertyType
-	)
+		localFilters
+	})
 })
 
 // Filter options query
@@ -186,13 +181,13 @@ let filterDefinitions = $derived<FilterDefinition[]>([
 		id: 'areaRange',
 		label: 'Area (sq.m)',
 		type: 'standard',
-		options: AREA_OPTIONS
+		options: [...SALES_AREA_OPTIONS]
 	},
 	{
 		id: 'rentRange',
 		label: 'Annual Rent (AED)',
 		type: 'standard',
-		options: ANNUAL_RENT_OPTIONS
+		options: [...RENTAL_ANNUAL_RENT_OPTIONS]
 	}
 ])
 
@@ -236,14 +231,7 @@ const columns = RENTAL_COLUMNS
 function resetFilters() {
 	selectedProject = null
 	selectedSubProject = null
-	localFilters = {
-		selectedPropertyType: 'All',
-		selectedPropertySubType: 'All',
-		selectedTenantType: 'All',
-		selectedRegistration: 'All',
-		areaRange: 'All',
-		rentRange: 'All'
-	}
+	localFilters = { ...DEFAULT_RENTALS_LOCAL_FILTERS }
 	currentPage = 1
 }
 

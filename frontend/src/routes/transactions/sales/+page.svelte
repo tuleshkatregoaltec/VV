@@ -11,6 +11,7 @@ import TransactionDetailsModal from '$lib/components/transactions/TransactionDet
 import Pagination from '$lib/components/ui/Pagination.svelte'
 import {
 	COMMERCIAL_COLUMNS,
+	DEFAULT_ITEMS_PER_PAGE,
 	PROPERTY_USAGE,
 	RESIDENTIAL_COLUMNS
 } from '$lib/constants/transactions'
@@ -20,14 +21,13 @@ import type { FilterDefinition } from '$lib/types/filters'
 import {
 	buildSalesApiFilters,
 	buildSalesFilterParams,
+	DEFAULT_SALES_LOCAL_FILTERS,
+	SALES_AREA_OPTIONS,
+	SALES_PRICE_OPTIONS,
+	SALES_PRICE_SQM_OPTIONS,
+	type SalesLocalFilters,
 	withSelectedIds
 } from '$lib/utils/transactionPages'
-
-// Area in sq.m (database stores in sqm)
-const AREA_OPTIONS = ['All', '<50', '50-100', '100-200', '200-500', '>500']
-const PRICE_OPTIONS = ['All', '<500k', '500k-1M', '1M-2M', '2M-5M', '>5M']
-// Price per sq.m (database stores price/sqm, typical range 15000-35000 AED/sqm)
-const PRICE_SQM_OPTIONS = ['All', '<10000', '10000-20000', '20000-30000', '>30000']
 
 interface TransformedTransaction {
 	transaction_id: string
@@ -59,15 +59,7 @@ let selectedTransaction = $state<TransformedTransaction | null>(null)
 let selectedProject = $state<ProjectSearchItem | null>(null)
 let selectedSubProject = $state<string | null>(null)
 
-let localFilters = $state({
-	selectedBuilding: 'All',
-	selectedPropertyType: 'All',
-	selectedBedroomsOrSubType: 'All',
-	selectedRegistration: 'All',
-	areaRange: 'All',
-	priceRange: 'All',
-	pricePerSqMRange: 'All'
-})
+let localFilters = $state<SalesLocalFilters>({ ...DEFAULT_SALES_LOCAL_FILTERS })
 
 // Sub-projects query — enabled when a master or virtual_master is selected
 const subProjectsQuery = createQuery(() =>
@@ -90,12 +82,13 @@ function buildApiFilters() {
 const salesApiFilters = $derived(buildApiFilters())
 
 const salesFilterParams = $derived.by(() => {
-	return buildSalesFilterParams(
-		propertyType.current,
+	return buildSalesFilterParams({
+		propertyUsage: propertyType.current,
+		timeframe: timeframe.current,
 		selectedProject,
 		selectedSubProject,
-		localFilters.selectedPropertyType
-	)
+		localFilters
+	})
 })
 
 // Main transactions query
@@ -145,19 +138,19 @@ let filterDefinitions = $derived<FilterDefinition[]>([
 		id: 'areaRange',
 		label: 'Area (sq.m)',
 		type: 'standard',
-		options: AREA_OPTIONS
+		options: [...SALES_AREA_OPTIONS]
 	},
 	{
 		id: 'priceRange',
 		label: 'Price (AED)',
 		type: 'standard',
-		options: PRICE_OPTIONS
+		options: [...SALES_PRICE_OPTIONS]
 	},
 	{
 		id: 'pricePerSqMRange',
 		label: 'Price/sq.m (AED)',
 		type: 'standard',
-		options: PRICE_SQM_OPTIONS
+		options: [...SALES_PRICE_SQM_OPTIONS]
 	}
 ])
 
@@ -195,15 +188,7 @@ let totalPages = $derived(Math.ceil(totalRecords / DEFAULT_ITEMS_PER_PAGE))
 function resetFilters() {
 	selectedProject = null
 	selectedSubProject = null
-	localFilters = {
-		selectedBuilding: 'All',
-		selectedPropertyType: 'All',
-		selectedBedroomsOrSubType: 'All',
-		selectedRegistration: 'All',
-		areaRange: 'All',
-		priceRange: 'All',
-		pricePerSqMRange: 'All'
-	}
+	localFilters = { ...DEFAULT_SALES_LOCAL_FILTERS }
 	currentPage = 1
 }
 

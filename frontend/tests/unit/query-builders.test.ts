@@ -67,14 +67,24 @@ describe('shared query builders', () => {
 
 		const salesQuery = transactionQueries.sales(params)
 		expect(salesQuery.queryKey).toEqual(transactionKeys.sales(params))
-		const previousSales = { total: 1, transactions: [] } as TransactionListResponse
+		const previousSales = {
+			total: 1,
+			transactions: [],
+			limit: 50,
+			offset: 0
+		} as TransactionListResponse
 		expect(salesQuery.placeholderData(previousSales)).toBe(previousSales)
 		await salesQuery.queryFn()
 		expect(salesSpy).toHaveBeenCalledWith(params)
 
 		const rentalsQuery = transactionQueries.rentals(params)
 		expect(rentalsQuery.queryKey).toEqual(transactionKeys.rentals(params))
-		const previousRentals = { total: 1, contracts: [] } as RentalContractListResponse
+		const previousRentals = {
+			total: 1,
+			contracts: [],
+			limit: 50,
+			offset: 0
+		} as RentalContractListResponse
 		expect(rentalsQuery.placeholderData(previousRentals)).toBe(previousRentals)
 		await rentalsQuery.queryFn()
 		expect(rentalsSpy).toHaveBeenCalledWith(params)

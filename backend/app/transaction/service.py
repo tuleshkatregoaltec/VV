@@ -80,31 +80,31 @@ async def fetch_sales_transactions(
         where_clauses.append("building_name_en = {building:String}")
         params["building"] = building
 
-    if timeframe_days:
+    if timeframe_days is not None:
         where_clauses.append("instance_date >= today() - {timeframe_days:Int32}")
         params["timeframe_days"] = timeframe_days
 
-    if area_min:
+    if area_min is not None:
         where_clauses.append("procedure_area >= {area_min:Decimal64(2)}")
         params["area_min"] = area_min
 
-    if area_max:
+    if area_max is not None:
         where_clauses.append("procedure_area <= {area_max:Decimal64(2)}")
         params["area_max"] = area_max
 
-    if price_min:
+    if price_min is not None:
         where_clauses.append("actual_worth >= {price_min:Decimal64(2)}")
         params["price_min"] = price_min
 
-    if price_max:
+    if price_max is not None:
         where_clauses.append("actual_worth <= {price_max:Decimal64(2)}")
         params["price_max"] = price_max
 
-    if price_per_sqm_min:
+    if price_per_sqm_min is not None:
         where_clauses.append("meter_sale_price >= {price_per_sqm_min:Decimal64(2)}")
         params["price_per_sqm_min"] = price_per_sqm_min
 
-    if price_per_sqm_max:
+    if price_per_sqm_max is not None:
         where_clauses.append("meter_sale_price <= {price_per_sqm_max:Decimal64(2)}")
         params["price_per_sqm_max"] = price_per_sqm_max
 
@@ -232,23 +232,23 @@ async def fetch_rental_contracts(
         where_clauses.append(_project_filter(filter_type))
         params["project_name"] = project + " - %" if filter_type == "virtual_master" else project
 
-    if timeframe_days:
+    if timeframe_days is not None:
         where_clauses.append("contract_start_date >= today() - {timeframe_days:Int32}")
         params["timeframe_days"] = timeframe_days
 
-    if area_min:
+    if area_min is not None:
         where_clauses.append("actual_area >= {area_min:Decimal64(2)}")
         params["area_min"] = area_min
 
-    if area_max:
+    if area_max is not None:
         where_clauses.append("actual_area <= {area_max:Decimal64(2)}")
         params["area_max"] = area_max
 
-    if rent_min:
+    if rent_min is not None:
         where_clauses.append("annual_amount >= {rent_min:Decimal64(2)}")
         params["rent_min"] = rent_min
 
-    if rent_max:
+    if rent_max is not None:
         where_clauses.append("annual_amount <= {rent_max:Decimal64(2)}")
         params["rent_max"] = rent_max
 
@@ -394,31 +394,31 @@ async def export_sales_transactions(
             where_clauses.append("building_name_en = {building:String}")
             params["building"] = building
 
-        if timeframe_days:
+        if timeframe_days is not None:
             where_clauses.append("instance_date >= today() - {timeframe_days:Int32}")
             params["timeframe_days"] = timeframe_days
 
-        if area_min:
+        if area_min is not None:
             where_clauses.append("procedure_area >= {area_min:Decimal64(2)}")
             params["area_min"] = area_min
 
-        if area_max:
+        if area_max is not None:
             where_clauses.append("procedure_area <= {area_max:Decimal64(2)}")
             params["area_max"] = area_max
 
-        if price_min:
+        if price_min is not None:
             where_clauses.append("actual_worth >= {price_min:Decimal64(2)}")
             params["price_min"] = price_min
 
-        if price_max:
+        if price_max is not None:
             where_clauses.append("actual_worth <= {price_max:Decimal64(2)}")
             params["price_max"] = price_max
 
-        if price_per_sqm_min:
+        if price_per_sqm_min is not None:
             where_clauses.append("meter_sale_price >= {price_per_sqm_min:Decimal64(2)}")
             params["price_per_sqm_min"] = price_per_sqm_min
 
-        if price_per_sqm_max:
+        if price_per_sqm_max is not None:
             where_clauses.append("meter_sale_price <= {price_per_sqm_max:Decimal64(2)}")
             params["price_per_sqm_max"] = price_per_sqm_max
 
@@ -583,23 +583,23 @@ async def export_rental_contracts(
                 project + " - %" if filter_type == "virtual_master" else project
             )
 
-        if timeframe_days:
+        if timeframe_days is not None:
             where_clauses.append("contract_start_date >= today() - {timeframe_days:Int32}")
             params["timeframe_days"] = timeframe_days
 
-        if area_min:
+        if area_min is not None:
             where_clauses.append("actual_area >= {area_min:Decimal64(2)}")
             params["area_min"] = area_min
 
-        if area_max:
+        if area_max is not None:
             where_clauses.append("actual_area <= {area_max:Decimal64(2)}")
             params["area_max"] = area_max
 
-        if rent_min:
+        if rent_min is not None:
             where_clauses.append("annual_amount >= {rent_min:Decimal64(2)}")
             params["rent_min"] = rent_min
 
-        if rent_max:
+        if rent_max is not None:
             where_clauses.append("annual_amount <= {rent_max:Decimal64(2)}")
             params["rent_max"] = rent_max
 
