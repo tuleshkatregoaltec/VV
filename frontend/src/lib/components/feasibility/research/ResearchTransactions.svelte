@@ -1,6 +1,6 @@
 <script lang="ts">
 import { createQuery } from '@tanstack/svelte-query'
-import { transactions } from '$lib/api/transactions'
+import { transactionQueries } from '$lib/queries/transactions'
 import { feasibilityStore } from '$lib/stores/feasibility.svelte'
 import { researchPanelStore } from '$lib/stores/researchPanel.svelte'
 
@@ -33,15 +33,13 @@ const DAY_OPTIONS = [90, 180, 365, 730]
 
 // TanStack Query — only active when no agent data
 const query = createQuery(() => ({
-	queryKey: ['res-tx', area, filters.unitType, filters.days] as const,
-	queryFn: () =>
-		transactions.sales({
-			area,
-			rooms: filters.unitType || undefined,
-			timeframe_days: filters.days,
-			limit: 50,
-			trans_group: 'Sales'
-		}),
+	...transactionQueries.sales({
+		area,
+		rooms: filters.unitType || undefined,
+		timeframe_days: filters.days,
+		limit: 50,
+		trans_group: 'Sales'
+	}),
 	enabled: !!area && !agentData,
 	staleTime: 5 * 60_000
 }))

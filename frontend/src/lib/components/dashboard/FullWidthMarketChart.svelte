@@ -1,6 +1,6 @@
 <script lang="ts">
 import { createQuery } from '@tanstack/svelte-query'
-import { analytics } from '$lib/api/analytics'
+import { analyticsQueries } from '$lib/queries/analytics'
 
 type TimeRange = '30d' | '90d' | '6mo' | '1yr'
 type Metric = 'price_sqm' | 'avg_price'
@@ -15,11 +15,7 @@ const RANGE_TO_DAYS: Record<TimeRange, number> = {
 let selectedRange = $state<TimeRange>('6mo')
 let selectedMetric = $state<Metric>('price_sqm')
 
-const trendQuery = createQuery(() => ({
-	queryKey: ['market-trend', selectedRange],
-	queryFn: () => analytics.marketTrend({ days: RANGE_TO_DAYS[selectedRange] }),
-	staleTime: 5 * 60 * 1000
-}))
+const trendQuery = createQuery(() => analyticsQueries.marketTrend(RANGE_TO_DAYS[selectedRange]))
 
 const chartData = $derived(trendQuery.data?.data ?? [])
 

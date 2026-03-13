@@ -1,9 +1,7 @@
 <script lang="ts">
 import { createQuery } from '@tanstack/svelte-query'
-import { analytics, type ProjectSearchItem } from '$lib/api/analytics'
-import { filters } from '$lib/api/filters'
-import type { TransactionResponseOutput } from '$lib/api/transactions'
-import { transactions as api } from '$lib/api/transactions'
+import type { ProjectSearchItem } from '$lib/api/analytics'
+import { type TransactionResponseOutput, transactions } from '$lib/api/transactions'
 import ProjectSelector from '$lib/components/analytics/ProjectSelector.svelte'
 import SearchableDropdown from '$lib/components/dropdowns/SearchableDropdown.svelte'
 import FilterPanel from '$lib/components/filters/FilterPanel.svelte'
@@ -18,6 +16,8 @@ import {
 	RESIDENTIAL_COLUMNS,
 	TIMEFRAME_MAPPING
 } from '$lib/constants/transactions'
+import { analyticsQueries } from '$lib/queries/analytics'
+import { transactionQueries } from '$lib/queries/transactions'
 import type { FilterDefinition } from '$lib/types/filters'
 
 // Area in sq.m (database stores in sqm)
@@ -67,17 +67,9 @@ let localFilters = $state({
 })
 
 // Sub-projects query — enabled when a master or virtual_master is selected
-const subProjectsQuery = createQuery(() => ({
-	queryKey: ['sub-projects', selectedProject?.name, selectedProject?.filter_type],
-	queryFn: () => {
-		if (!selectedProject) {
-			throw new Error('selectedProject is required to load sub-projects')
-		}
-		return analytics.subProjects(selectedProject.name, selectedProject.filter_type)
-	},
-	enabled: !!selectedProject && selectedProject.filter_type !== 'project',
-	staleTime: Infinity
-}))
+const subProjectsQuery = createQuery(() =>
+	analyticsQueries.subProjects(selectedProject?.name ?? null, selectedProject?.filter_type ?? null)
+)
 
 const subProjectOptions = $derived(subProjectsQuery.data?.sub_projects.map((p) => p.name) ?? [])
 
@@ -128,64 +120,34 @@ function buildApiFilters() {
 	return apiFilters
 }
 
-// Derive query keys explicitly to ensure proper reactivity tracking
-let salesQueryKey = $derived([
-	'sales-transactions',
-	propertyType.current,
-	timeframe.current,
-	currentPage,
-	selectedProject?.name,
-	selectedProject?.filter_type,
-	selectedSubProject,
-	localFilters.selectedBuilding,
-	localFilters.selectedPropertyType,
-	localFilters.selectedBedroomsOrSubType,
-	localFilters.selectedRegistration,
-	localFilters.areaRange,
-	localFilters.priceRange,
-	localFilters.pricePerSqMRange
-])
+const salesApiFilters = $derived(buildApiFilters())
 
-let salesFilterOptionsQueryKey = $derived([
-	'filterOptions',
-	'sales',
-	propertyType.current,
-	selectedProject?.name,
-	selectedProject?.filter_type,
-	selectedSubProject,
-	localFilters.selectedPropertyType
-])
+const salesFilterParams = $derived.by(() => {
+	const filterParams: Record<string, any> = {
+		property_usage: propertyType.current
+	}
+
+	if (selectedSubProject) {
+		filterParams.project = selectedSubProject
+		filterParams.filter_type = 'project'
+	} else if (selectedProject) {
+		filterParams.project = selectedProject.name
+		filterParams.filter_type = selectedProject.filter_type
+	}
+
+	if (localFilters.selectedPropertyType !== 'All') {
+		filterParams.property_type = localFilters.selectedPropertyType
+	}
+
+	return filterParams
+})
 
 // Main transactions query
-const transactionsQuery = createQuery(() => ({
-	queryKey: salesQueryKey,
-	queryFn: () => api.sales(buildApiFilters())
-}))
+const transactionsQuery = createQuery(() => transactionQueries.sales(salesApiFilters))
 
-const filterOptionsQuery = createQuery(() => ({
-	queryKey: salesFilterOptionsQueryKey,
-	queryFn: () => {
-		const filterParams: Record<string, any> = {
-			property_usage: propertyType.current
-		}
-
-		// Narrow by project selection (same logic as main query)
-		if (selectedSubProject) {
-			filterParams.project = selectedSubProject
-			filterParams.filter_type = 'project'
-		} else if (selectedProject) {
-			filterParams.project = selectedProject.name
-			filterParams.filter_type = selectedProject.filter_type
-		}
-
-		if (localFilters.selectedPropertyType !== 'All') {
-			filterParams.property_type = localFilters.selectedPropertyType
-		}
-
-		return filters.sales(filterParams)
-	},
-	staleTime: 5 * 60 * 1000 // 5 minutes
-}))
+const filterOptionsQuery = createQuery(() =>
+	transactionQueries.salesFilterOptions(salesFilterParams)
+)
 
 let columns = $derived(
 	propertyType.current === PROPERTY_USAGE.RESIDENTIAL ? RESIDENTIAL_COLUMNS : COMMERCIAL_COLUMNS
@@ -342,7 +304,7 @@ async function handleExport() {
 			filters.transaction_ids = Array.from(selectedTransactionIds).join(',')
 		}
 
-		const blob = await api.exportSales(filters)
+		const blob = await transactions.exportSales(filters)
 
 		const url = window.URL.createObjectURL(blob)
 		const a = document.createElement('a')

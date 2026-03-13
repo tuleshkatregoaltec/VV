@@ -1,6 +1,7 @@
 <script lang="ts">
 import { createQuery } from '@tanstack/svelte-query'
 import { feasibility } from '$lib/api/feasibility'
+import { feasibilityQueries } from '$lib/queries/feasibility'
 import type { GISPlotSummary } from '$lib/stores/feasibility.svelte'
 
 let {
@@ -26,11 +27,7 @@ let loadError = $state('')
 let fullyLoaded = $state(false)
 const pageSize = 100
 
-const communitiesQuery = createQuery(() => ({
-	queryKey: ['feasibility-plot-communities'],
-	queryFn: () => feasibility.getCommunities(),
-	staleTime: Infinity
-}))
+const communitiesQuery = createQuery(() => feasibilityQueries.communities())
 
 function fmt(n: number) {
 	return n.toLocaleString('en-AE', { maximumFractionDigits: 0 })

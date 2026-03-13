@@ -3,16 +3,16 @@ import { createQuery } from '@tanstack/svelte-query'
 import {
 	deleteOrganizationInvitation,
 	getCustomerPortalUrl,
-	getOrganizationInvitations,
-	getOrganizationMembers,
-	getOrganizationSubscription,
 	inviteUserByEmail,
 	removeOrganizationMember
 } from '$lib/api/organization'
+import { getQueryClient } from '$lib/queries/client'
+import { organizationKeys, organizationQueries } from '$lib/queries/organization'
 import { currentUser as userStore } from '$lib/stores/user.svelte'
 
 let currentUser = $derived(userStore.data)
 let isOwner = $derived(currentUser?.is_owner === true)
+const queryClient = getQueryClient()
 
 let showInviteModal = $state(false)
 let inviteEmail = $state('')
@@ -22,24 +22,11 @@ let inviteSuccess = $state(false)
 let resendingEmail = $state('')
 let cancelingInvitationId = $state('')
 
-// Top-level createQuery calls (v6: pass a function returning options)
-const membersQuery = createQuery(() => ({
-	queryKey: ['organization', 'members'] as const,
-	queryFn: () => getOrganizationMembers(),
-	enabled: isOwner
-}))
+const membersQuery = createQuery(() => organizationQueries.members(isOwner))
 
-const subscriptionQuery = createQuery(() => ({
-	queryKey: ['organization', 'subscription'] as const,
-	queryFn: () => getOrganizationSubscription(),
-	enabled: isOwner
-}))
+const subscriptionQuery = createQuery(() => organizationQueries.subscription(isOwner))
 
-const invitationsQuery = createQuery(() => ({
-	queryKey: ['organization', 'invitations'] as const,
-	queryFn: () => getOrganizationInvitations(),
-	enabled: isOwner
-}))
+const invitationsQuery = createQuery(() => organizationQueries.invitations(isOwner))
 
 const members = $derived(membersQuery.data ?? [])
 const invitations = $derived(invitationsQuery.data ?? [])
@@ -62,6 +49,10 @@ async function sendInvite(email: string): Promise<void> {
 	await inviteUserByEmail(email)
 }
 
+async function invalidateOrganizationQueries(keys: ReadonlyArray<readonly unknown[]>) {
+	await Promise.all(keys.map((queryKey) => queryClient.invalidateQueries({ queryKey })))
+}
+
 async function handleManageSubscription() {
 	try {
 		const result = await getCustomerPortalUrl()
@@ -75,8 +66,10 @@ async function handleRemoveMember(userId: string, userName: string) {
 	if (!confirm(`Remove ${userName} from this organization?`)) return
 	try {
 		await removeOrganizationMember(userId)
-		membersQuery.refetch()
-		subscriptionQuery.refetch()
+		await invalidateOrganizationQueries([
+			organizationKeys.members(),
+			organizationKeys.subscription()
+		])
 	} catch (err: any) {
 		alert(err.message || 'Failed to remove member')
 	}
@@ -86,8 +79,10 @@ async function handleResendInvitation(email: string) {
 	resendingEmail = email
 	try {
 		await sendInvite(email)
-		invitationsQuery.refetch()
-		subscriptionQuery.refetch()
+		await invalidateOrganizationQueries([
+			organizationKeys.invitations(),
+			organizationKeys.subscription()
+		])
 		alert(`Invitation resent to ${email}`)
 	} catch (err: any) {
 		alert(err.message || 'Failed to resend invitation')
@@ -101,8 +96,10 @@ async function handleCancelInvitation(invitationId: string, email: string) {
 	cancelingInvitationId = invitationId
 	try {
 		await deleteOrganizationInvitation(invitationId)
-		invitationsQuery.refetch()
-		subscriptionQuery.refetch()
+		await invalidateOrganizationQueries([
+			organizationKeys.invitations(),
+			organizationKeys.subscription()
+		])
 	} catch (err: any) {
 		alert(err.message || 'Failed to cancel invitation')
 	} finally {
@@ -130,8 +127,10 @@ async function handleInviteUser() {
 
 	try {
 		await sendInvite(email)
-		invitationsQuery.refetch()
-		subscriptionQuery.refetch()
+		await invalidateOrganizationQueries([
+			organizationKeys.invitations(),
+			organizationKeys.subscription()
+		])
 		inviteSuccess = true
 		inviteEmail = ''
 		setTimeout(() => {
@@ -340,7 +339,7 @@ function roleLabel(role: string): string {
 						</div>
 					{:else if members.length > 0}
 						<div class="space-y-3">
-							{#each members as member (member.user_id)}
+							{#each members as member (member.id)}
 								<div
 									class="flex items-center justify-between p-4 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
 								>

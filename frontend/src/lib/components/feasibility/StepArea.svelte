@@ -1,17 +1,13 @@
 <script lang="ts">
 import { createQuery } from '@tanstack/svelte-query'
-import { feasibility } from '$lib/api/feasibility'
+import { feasibilityQueries } from '$lib/queries/feasibility'
 
 let { onSelect }: { onSelect: (area: string) => void } = $props()
 
 let search = $state('')
 let isOpen = $state(false)
 
-const areasQuery = createQuery(() => ({
-	queryKey: ['feasibility-areas'],
-	queryFn: () => feasibility.getAreas(),
-	staleTime: Infinity
-}))
+const areasQuery = createQuery(() => feasibilityQueries.areas())
 
 const filtered = $derived(
 	search.trim()

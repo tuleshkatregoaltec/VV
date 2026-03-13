@@ -1,28 +1,11 @@
 import { redirect } from '@sveltejs/kit'
-import { QueryClient } from '@tanstack/svelte-query'
 import posthog from 'posthog-js'
 import { browser } from '$app/environment'
 import { env } from '$env/dynamic/public'
 import { decideRouteAccess, getRouteCategory } from '$lib/auth/route-guards'
+import { getQueryClient } from '$lib/queries/client'
 import { getCurrentUser } from '$lib/stores/user.svelte'
 import type { LayoutLoad } from './$types'
-
-// Singleton — survives client-side navigations so TanStack Query cache is preserved
-let queryClient: QueryClient | undefined
-function getQueryClient(): QueryClient {
-	if (!queryClient) {
-		queryClient = new QueryClient({
-			defaultOptions: {
-				queries: {
-					enabled: browser,
-					staleTime: 5 * 60 * 1000,
-					refetchOnWindowFocus: false
-				}
-			}
-		})
-	}
-	return queryClient
-}
 
 export const prerender = false
 export const ssr = false

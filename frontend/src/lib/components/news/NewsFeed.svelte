@@ -1,20 +1,12 @@
 <script lang="ts">
 import { createInfiniteQuery } from '@tanstack/svelte-query'
 import { onMount } from 'svelte'
-import { news } from '$lib/api/news'
+import { newsQueries } from '$lib/queries/news'
 import NewsCard from './NewsCard.svelte'
 
 const LIMIT = 20
 
-const newsQuery = createInfiniteQuery(() => ({
-	queryKey: ['news'],
-	queryFn: ({ pageParam = 0 }) => news.list({ limit: LIMIT, offset: pageParam }),
-	getNextPageParam: (lastPage) => {
-		const nextOffset = lastPage.offset + lastPage.articles.length
-		return nextOffset < lastPage.total ? nextOffset : undefined
-	},
-	initialPageParam: 0
-}))
+const newsQuery = createInfiniteQuery(() => newsQueries.listInfinite('feed', LIMIT))
 
 let sentinel: HTMLDivElement
 

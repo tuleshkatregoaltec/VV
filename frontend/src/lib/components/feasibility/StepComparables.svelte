@@ -2,7 +2,7 @@
 import { createQuery } from '@tanstack/svelte-query'
 import { feasibility } from '$lib/api/feasibility'
 import type { ProjectSearchResult } from '$lib/api/projects'
-import { projects as projectsAPI } from '$lib/api/projects'
+import { projectQueries } from '$lib/queries/projects'
 import type { ComparableData } from '$lib/stores/feasibility.svelte'
 
 let {
@@ -16,11 +16,7 @@ let search = $state('')
 let isOpen = $state(false)
 let loading = $state(false)
 
-const allQuery = createQuery<ProjectSearchResult[]>(() => ({
-	queryKey: ['projects-list'],
-	queryFn: () => projectsAPI.list(),
-	staleTime: Infinity
-}))
+const allQuery = createQuery<ProjectSearchResult[]>(() => projectQueries.list())
 
 const filtered = $derived(
 	search.trim()

@@ -1,9 +1,7 @@
 <script lang="ts">
 import { createQuery } from '@tanstack/svelte-query'
-import { analytics, type ProjectSearchItem } from '$lib/api/analytics'
-import { filters } from '$lib/api/filters'
-import type { RentalContractResponseOutput } from '$lib/api/transactions'
-import { transactions as api } from '$lib/api/transactions'
+import type { ProjectSearchItem } from '$lib/api/analytics'
+import { type RentalContractResponseOutput, transactions } from '$lib/api/transactions'
 import ProjectSelector from '$lib/components/analytics/ProjectSelector.svelte'
 import SearchableDropdown from '$lib/components/dropdowns/SearchableDropdown.svelte'
 import FilterPanel from '$lib/components/filters/FilterPanel.svelte'
@@ -11,6 +9,8 @@ import { propertyType, timeframe } from '$lib/components/filters/globalFilters.s
 import DataPanel from '$lib/components/transactions/DataPanel.svelte'
 import Pagination from '$lib/components/ui/Pagination.svelte'
 import { DEFAULT_ITEMS_PER_PAGE, TIMEFRAME_MAPPING } from '$lib/constants/transactions'
+import { analyticsQueries } from '$lib/queries/analytics'
+import { transactionQueries } from '$lib/queries/transactions'
 import type { FilterDefinition } from '$lib/types/filters'
 
 // Area in sq.m (database stores in sqm)
@@ -104,17 +104,9 @@ let localFilters = $state({
 })
 
 // Sub-projects query — enabled when a master or virtual_master is selected
-const subProjectsQuery = createQuery(() => ({
-	queryKey: ['sub-projects', selectedProject?.name, selectedProject?.filter_type],
-	queryFn: () => {
-		if (!selectedProject) {
-			throw new Error('selectedProject is required to load sub-projects')
-		}
-		return analytics.subProjects(selectedProject.name, selectedProject.filter_type)
-	},
-	enabled: !!selectedProject && selectedProject.filter_type !== 'project',
-	staleTime: Infinity
-}))
+const subProjectsQuery = createQuery(() =>
+	analyticsQueries.subProjects(selectedProject?.name ?? null, selectedProject?.filter_type ?? null)
+)
 
 const subProjectOptions = $derived(subProjectsQuery.data?.sub_projects.map((p) => p.name) ?? [])
 
@@ -166,65 +158,35 @@ function buildApiFilters() {
 // TanStack Queries
 // ========================================
 
-// Derive query key explicitly to ensure proper reactivity tracking
-let rentalsQueryKey = $derived([
-	'rental-contracts',
-	propertyType.current,
-	timeframe.current,
-	currentPage,
-	selectedProject?.name,
-	selectedProject?.filter_type,
-	selectedSubProject,
-	localFilters.selectedPropertyType,
-	localFilters.selectedPropertySubType,
-	localFilters.selectedTenantType,
-	localFilters.selectedRegistration,
-	localFilters.areaRange,
-	localFilters.rentRange
-])
+const rentalsApiFilters = $derived(buildApiFilters())
 
 // Main rentals query
-const rentalsQuery = createQuery(() => ({
-	queryKey: rentalsQueryKey,
-	queryFn: () => api.rentals(buildApiFilters())
-}))
+const rentalsQuery = createQuery(() => transactionQueries.rentals(rentalsApiFilters))
 
-// Derive filter options query key explicitly
-let filterOptionsQueryKey = $derived([
-	'filterOptions',
-	'rentals',
-	propertyType.current,
-	selectedProject?.name,
-	selectedProject?.filter_type,
-	selectedSubProject,
-	localFilters.selectedPropertyType
-])
+const rentalFilterParams = $derived.by(() => {
+	const filterParams: Record<string, any> = {
+		property_usage: propertyType.current
+	}
+
+	if (selectedSubProject) {
+		filterParams.project = selectedSubProject
+		filterParams.filter_type = 'project'
+	} else if (selectedProject) {
+		filterParams.project = selectedProject.name
+		filterParams.filter_type = selectedProject.filter_type
+	}
+
+	if (localFilters.selectedPropertyType !== 'All') {
+		filterParams.property_type = localFilters.selectedPropertyType
+	}
+
+	return filterParams
+})
 
 // Filter options query
-const filterOptionsQuery = createQuery(() => ({
-	queryKey: filterOptionsQueryKey,
-	queryFn: () => {
-		const filterParams: Record<string, any> = {
-			property_usage: propertyType.current
-		}
-
-		// Narrow by project selection (same logic as main query)
-		if (selectedSubProject) {
-			filterParams.project = selectedSubProject
-			filterParams.filter_type = 'project'
-		} else if (selectedProject) {
-			filterParams.project = selectedProject.name
-			filterParams.filter_type = selectedProject.filter_type
-		}
-
-		if (localFilters.selectedPropertyType !== 'All') {
-			filterParams.property_type = localFilters.selectedPropertyType
-		}
-
-		return filters.rentals(filterParams)
-	},
-	staleTime: 5 * 60 * 1000 // 5 minutes
-}))
+const filterOptionsQuery = createQuery(() =>
+	transactionQueries.rentalFilterOptions(rentalFilterParams)
+)
 
 // ========================================
 // Derived Values
@@ -379,7 +341,7 @@ async function handleExport() {
 			filters.contract_ids = Array.from(selectedContractIds).join(',')
 		}
 
-		const blob = await api.exportRentals(filters)
+		const blob = await transactions.exportRentals(filters)
 
 		const url = window.URL.createObjectURL(blob)
 		const a = document.createElement('a')

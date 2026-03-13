@@ -1,6 +1,7 @@
 <script lang="ts">
 import { createQuery } from '@tanstack/svelte-query'
-import { analytics, type ProjectSearchItem } from '$lib/api/analytics'
+import type { ProjectSearchItem } from '$lib/api/analytics'
+import { analyticsQueries } from '$lib/queries/analytics'
 
 let {
 	value = $bindable<ProjectSearchItem | null>(null),
@@ -32,11 +33,7 @@ function clickOutside(node: HTMLElement, callback: () => void) {
 }
 
 // Load all projects once — master projects + standalone orphans
-const allProjectsQuery = createQuery(() => ({
-	queryKey: ['project-search-all'],
-	queryFn: () => analytics.projectSearch('', 500),
-	staleTime: Infinity
-}))
+const allProjectsQuery = createQuery(() => analyticsQueries.projectSearch('', 500))
 
 const allProjects = $derived(allProjectsQuery.data?.projects ?? [])
 

@@ -1,39 +1,39 @@
 <script lang="ts">
-import { onMount } from 'svelte'
+import { createQuery } from '@tanstack/svelte-query'
 import type {
 	BuildingDetailResponse,
 	GeoPin,
 	MasterProjectResponse,
 	ProjectDetailResponse,
-	ProjectSearchResult,
 	SearchSelection
 } from '$lib/api/projects'
-import { projects as projectsAPI } from '$lib/api/projects'
 import AppShell from '$lib/components/layout/AppShell.svelte'
 import ProjectMap from '$lib/components/map/ProjectMap.svelte'
 import BuildingDetails from '$lib/components/projects/BuildingDetails.svelte'
 import MasterProjectPanel from '$lib/components/projects/MasterProjectPanel.svelte'
 import ProjectDetails from '$lib/components/projects/ProjectDetails.svelte'
 import ProjectSearchInput from '$lib/components/projects/ProjectSearchInput.svelte'
+import { projectQueries } from '$lib/queries/projects'
 
 let isMinimized = $state(false)
-let projectDetails = $state<ProjectDetailResponse | null>(null)
-let masterDetails = $state<MasterProjectResponse | null>(null)
-let buildingDetails = $state<BuildingDetailResponse | null>(null)
-let projectAnalytics = $state<{ avg_price: number; gross_yield_pct: number | null } | null>(null)
-let isLoading = $state(false)
 let panelView = $state<'empty' | 'project' | 'building' | 'master'>('empty')
 let mapComponent = $state<any>()
+let selectedMasterName = $state<string | null>(null)
+let selectedProjectId = $state<number | null>(null)
+let selectedBuildingId = $state<number | null>(null)
 
-let allProjects = $state<ProjectSearchResult[]>([])
+const allProjectsQuery = createQuery(() => projectQueries.list())
+const masterDetailsQuery = createQuery(() =>
+	projectQueries.master(panelView === 'master' ? selectedMasterName : null)
+)
+const projectDetailsQuery = createQuery(() =>
+	projectQueries.detail(panelView === 'project' ? selectedProjectId : null)
+)
+const buildingDetailsQuery = createQuery(() =>
+	projectQueries.building(panelView === 'building' ? selectedBuildingId : null)
+)
 
-onMount(async () => {
-	try {
-		allProjects = await projectsAPI.list()
-	} catch (error) {
-		console.error('Failed to load projects:', error)
-	}
-})
+let allProjects = $derived(allProjectsQuery.data ?? [])
 
 // Hardcoded JVC (Jumeirah Village Circle) boundary polygon [lng, lat]
 const JVC_POLYGON: Array<[number, number]> = [
@@ -54,6 +54,44 @@ const JVC_POLYGON: Array<[number, number]> = [
 
 const JVC_ANALYTICS = { avg_price: 975000, gross_yield_pct: 7.2 }
 
+function withJvcOverrides(details: ProjectDetailResponse): {
+	project: ProjectDetailResponse
+	analytics: { avg_price: number; gross_yield_pct: number | null } | null
+} {
+	if (!isJVCProject(details.area_name, details.project_name)) {
+		return { project: details, analytics: null }
+	}
+
+	return {
+		project: {
+			...details,
+			latitude: 25.0565,
+			longitude: 55.2065,
+			area_polygon: { coordinates: JVC_POLYGON }
+		},
+		analytics: JVC_ANALYTICS
+	}
+}
+
+const masterDetails = $derived<MasterProjectResponse | null>(masterDetailsQuery.data ?? null)
+const projectState = $derived(
+	projectDetailsQuery.data
+		? withJvcOverrides(projectDetailsQuery.data)
+		: { project: null, analytics: null }
+)
+const projectDetails = $derived<ProjectDetailResponse | null>(projectState.project)
+const projectAnalytics = $derived(projectState.analytics)
+const buildingDetails = $derived<BuildingDetailResponse | null>(buildingDetailsQuery.data ?? null)
+const isLoading = $derived.by(() => {
+	if (panelView === 'master') return masterDetailsQuery.isPending || masterDetailsQuery.isFetching
+	if (panelView === 'project')
+		return projectDetailsQuery.isPending || projectDetailsQuery.isFetching
+	if (panelView === 'building') {
+		return buildingDetailsQuery.isPending || buildingDetailsQuery.isFetching
+	}
+	return allProjectsQuery.isPending
+})
+
 function isJVCProject(areaName: string, projectName: string): boolean {
 	const a = areaName.toLowerCase()
 	const p = projectName.toLowerCase()
@@ -64,86 +102,34 @@ function isJVCProject(areaName: string, projectName: string): boolean {
 	)
 }
 
-async function handleSearchSelect(sel: SearchSelection) {
+function handleSearchSelect(sel: SearchSelection) {
 	if (sel.type === 'master') {
-		await handleMasterSelect(sel.masterName)
+		handleMasterSelect(sel.masterName)
 	} else {
-		await handleProjectSelect(sel.projectId)
+		handleProjectSelect(sel.projectId)
 	}
 }
 
-async function handleMasterSelect(masterName: string) {
-	isLoading = true
-	projectDetails = null
-	buildingDetails = null
-	projectAnalytics = null
+function handleMasterSelect(masterName: string) {
+	selectedMasterName = masterName
+	selectedProjectId = null
+	selectedBuildingId = null
 	panelView = 'master'
-
-	try {
-		masterDetails = await projectsAPI.getMaster(masterName)
-		if (masterDetails && mapComponent && masterDetails.geo_pins.length > 0) {
-			mapComponent.fitBounds(masterDetails.geo_pins)
-		}
-	} catch (error) {
-		console.error('Failed to load master project:', error)
-		panelView = 'empty'
-	} finally {
-		isLoading = false
-	}
 }
 
-async function handleProjectSelect(projectId: number) {
-	isLoading = true
-	buildingDetails = null
-	projectAnalytics = null
+function handleProjectSelect(projectId: number) {
+	selectedProjectId = projectId
+	selectedMasterName = null
+	selectedBuildingId = null
 	panelView = 'project'
-
-	try {
-		const details = await projectsAPI.getDetails(projectId)
-
-		if (isJVCProject(details.area_name, details.project_name)) {
-			details.latitude = 25.0565
-			details.longitude = 55.2065
-			details.area_polygon = { coordinates: JVC_POLYGON }
-			projectAnalytics = JVC_ANALYTICS
-		}
-
-		projectDetails = details
-
-		if (mapComponent) {
-			mapComponent.flyToProject(
-				details.project_id,
-				details.project_name,
-				details.latitude,
-				details.longitude,
-				details.area_polygon,
-				details.geo_pins ?? [],
-				13
-			)
-		}
-	} catch (error) {
-		console.error('Failed to load project details:', error)
-		panelView = 'empty'
-	} finally {
-		isLoading = false
-	}
 }
 
-async function handleBuildingSelect(propertyId: number, lng?: number, lat?: number) {
-	isLoading = true
+function handleBuildingSelect(propertyId: number, lng?: number, lat?: number) {
+	selectedBuildingId = propertyId
 	panelView = 'building'
 
 	if (lng && lat && mapComponent) {
 		mapComponent.flyToLocation(lng, lat, 17)
-	}
-
-	try {
-		buildingDetails = await projectsAPI.getBuilding(propertyId)
-	} catch (error) {
-		console.error('Failed to load building details:', error)
-		panelView = 'project'
-	} finally {
-		isLoading = false
 	}
 }
 
@@ -160,13 +146,31 @@ function handleGeoPinSelect(lat: number, lng: number) {
 }
 
 function handleBackToProject() {
-	buildingDetails = null
+	selectedBuildingId = null
 	panelView = 'project'
 }
 
 function toggleMinimize() {
 	isMinimized = !isMinimized
 }
+
+$effect(() => {
+	if (!masterDetails || !mapComponent || masterDetails.geo_pins.length === 0) return
+	mapComponent.fitBounds(masterDetails.geo_pins)
+})
+
+$effect(() => {
+	if (!projectDetails || !mapComponent) return
+	mapComponent.flyToProject(
+		projectDetails.project_id,
+		projectDetails.project_name,
+		projectDetails.latitude,
+		projectDetails.longitude,
+		projectDetails.area_polygon,
+		projectDetails.geo_pins ?? [],
+		13
+	)
+})
 </script>
 
 <AppShell showFilters={false}>

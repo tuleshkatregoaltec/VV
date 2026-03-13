@@ -2,7 +2,8 @@
 import { createQuery } from '@tanstack/svelte-query'
 import { Chart, registerables } from 'chart.js'
 import { onMount } from 'svelte'
-import { analytics, type ProjectSearchItem } from '$lib/api/analytics'
+import type { ProjectSearchItem } from '$lib/api/analytics'
+import { analyticsQueries } from '$lib/queries/analytics'
 
 Chart.register(...registerables)
 
@@ -16,12 +17,9 @@ $effect(() => {
 	subProject = null
 })
 
-const subProjectsQuery = createQuery(() => ({
-	queryKey: ['sub-projects', selection.name],
-	queryFn: () => analytics.subProjects(selection.name, selection.filter_type),
-	staleTime: 10 * 60_000,
-	enabled: selection.filter_type !== 'project'
-}))
+const subProjectsQuery = createQuery(() =>
+	analyticsQueries.subProjects(selection.name, selection.filter_type)
+)
 
 const queryParams = $derived(
 	subProject
@@ -31,17 +29,9 @@ const queryParams = $derived(
 			: { masterProject: selection.name, filterType: selection.filter_type }
 )
 
-const summaryQuery = createQuery(() => ({
-	queryKey: ['project-summary', selection.name, subProject],
-	queryFn: () => analytics.projectSummary(queryParams),
-	staleTime: 5 * 60_000
-}))
+const summaryQuery = createQuery(() => analyticsQueries.projectSummary(queryParams))
 
-const trendsQuery = createQuery(() => ({
-	queryKey: ['project-trends', selection.name, subProject],
-	queryFn: () => analytics.projectTrends(queryParams, 365),
-	staleTime: 5 * 60_000
-}))
+const trendsQuery = createQuery(() => analyticsQueries.projectTrends(queryParams, 365))
 
 const subProjects = $derived(subProjectsQuery.data?.sub_projects ?? [])
 

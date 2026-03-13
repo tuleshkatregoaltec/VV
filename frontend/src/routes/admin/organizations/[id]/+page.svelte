@@ -1,15 +1,17 @@
 <script lang="ts">
-import { onMount } from 'svelte'
+import { createQuery } from '@tanstack/svelte-query'
 import { goto } from '$app/navigation'
 import { page } from '$app/state'
-import { admin, type OrgDetailResponse, type OrgUserResponse } from '$lib/api/admin'
+import { admin, type OrgUserResponse } from '$lib/api/admin'
 import { ApiError } from '$lib/api/client'
 import ConfirmModal from '$lib/components/ui/ConfirmModal.svelte'
 import Modal from '$lib/components/ui/Modal.svelte'
+import { adminKeys, adminQueries } from '$lib/queries/admin'
+import { getQueryClient } from '$lib/queries/client'
 
-let org = $state<OrgDetailResponse | null>(null)
-let loading = $state(true)
 let error = $state('')
+const queryClient = getQueryClient()
+let lastSyncedOrg = $state('')
 
 // Settings edit state
 let editMaxUsers = $state(0)
@@ -32,34 +34,46 @@ let limitError = $state('')
 let confirmDeleteUser = $state<OrgUserResponse | null>(null)
 let deletingUser = $state(false)
 
-async function fetchOrg() {
-	loading = true
-	error = ''
-	const organizationId = page.params.id
-	if (!organizationId) {
-		error = 'Organization ID is missing'
-		loading = false
-		return
-	}
-	try {
-		org = await admin.organizations.get(organizationId)
+const organizationId = $derived(page.params.id ?? '')
+
+const orgQuery = createQuery(() => adminQueries.organizations.detail(organizationId))
+
+const org = $derived(orgQuery.data ?? null)
+const loadError = $derived.by(() => {
+	if (!organizationId) return 'Organization ID is missing'
+	if (!orgQuery.isError) return ''
+	return orgQuery.error instanceof ApiError ? orgQuery.error.message : 'Failed to load organization'
+})
+
+$effect(() => {
+	if (!org) return
+
+	const syncKey = `${org.id}:${org.max_users}:${org.subscription_status}`
+	if (syncKey !== lastSyncedOrg) {
 		editMaxUsers = org.max_users
 		editSubscription = org.subscription_status
-	} catch (e) {
-		error = e instanceof ApiError ? e.message : 'Failed to load organization'
-	} finally {
-		loading = false
+		lastSyncedOrg = syncKey
 	}
+})
+
+async function refreshOrganization() {
+	if (!organizationId) return
+
+	await Promise.all([
+		queryClient.invalidateQueries({ queryKey: adminKeys.organization(organizationId) }),
+		queryClient.invalidateQueries({ queryKey: adminKeys.organizations() })
+	])
 }
 
 async function saveSettings() {
 	if (!org) return
+	error = ''
 	saving = true
 	try {
 		await admin.organizations.update(org.id, {
 			max_users: editMaxUsers
 		})
-		await fetchOrg()
+		await refreshOrganization()
 	} catch (e) {
 		error = e instanceof ApiError ? e.message : 'Failed to save'
 	} finally {
@@ -69,10 +83,11 @@ async function saveSettings() {
 
 async function saveSubscription() {
 	if (!org) return
+	error = ''
 	savingSubscription = true
 	try {
 		await admin.organizations.setSubscription(org.id, editSubscription)
-		await fetchOrg()
+		await refreshOrganization()
 	} catch (e) {
 		error = e instanceof ApiError ? e.message : 'Failed to update subscription'
 	} finally {
@@ -82,9 +97,11 @@ async function saveSubscription() {
 
 async function deleteOrg() {
 	if (!org) return
+	error = ''
 	deletingOrg = true
 	try {
 		await admin.organizations.delete(org.id)
+		await queryClient.invalidateQueries({ queryKey: adminKeys.organizations() })
 		goto('/admin/organizations')
 	} catch (e) {
 		error = e instanceof ApiError ? e.message : 'Failed to delete'
@@ -107,7 +124,7 @@ async function saveTokenLimit() {
 	try {
 		await admin.users.updateTokenLimit(selectedUser.id, editedLimit)
 		showTokenModal = false
-		await fetchOrg()
+		await refreshOrganization()
 	} catch (e) {
 		limitError = e instanceof ApiError ? e.message : 'Failed to update limit'
 	} finally {
@@ -117,11 +134,12 @@ async function saveTokenLimit() {
 
 async function deleteUser() {
 	if (!confirmDeleteUser) return
+	error = ''
 	deletingUser = true
 	try {
 		await admin.users.delete(confirmDeleteUser.id)
 		confirmDeleteUser = null
-		await fetchOrg()
+		await refreshOrganization()
 	} catch (e) {
 		alert(e instanceof ApiError ? e.message : 'Failed to delete user')
 	} finally {
@@ -163,16 +181,14 @@ function statusBadge(status: string) {
 			return 'bg-gray-100 text-gray-600'
 	}
 }
-
-onMount(fetchOrg)
 </script>
 
 <div class="max-w-7xl mx-auto px-4 py-6">
-	{#if loading}
+	{#if orgQuery.isPending}
 		<div class="text-center py-16 text-gray-400">Loading...</div>
-	{:else if error && !org}
+	{:else if loadError && !org}
 		<div class="bg-red-50 border border-red-200 rounded-lg p-4 text-red-700 text-sm mb-4">
-			{error}
+			{loadError}
 		</div>
 		<button
 			onclick={() => goto('/admin/organizations')}

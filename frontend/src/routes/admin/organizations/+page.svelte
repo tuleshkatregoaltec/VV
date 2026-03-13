@@ -1,38 +1,42 @@
 <script lang="ts">
-import { onMount } from 'svelte'
+import { createQuery } from '@tanstack/svelte-query'
 import { goto } from '$app/navigation'
 import { admin, type OrganizationListResponse } from '$lib/api/admin'
 import { ApiError } from '$lib/api/client'
 import CreateUserModal from '$lib/components/admin/CreateUserModal.svelte'
 import ConfirmModal from '$lib/components/ui/ConfirmModal.svelte'
+import { adminKeys, adminQueries } from '$lib/queries/admin'
+import { getQueryClient } from '$lib/queries/client'
 
-let orgs = $state<OrganizationListResponse[]>([])
-let loading = $state(true)
-let error = $state('')
 let showCreateUser = $state(false)
 let activatingOrgId = $state<string | null>(null)
 let deletingOrgId = $state<string | null>(null)
 let confirmDeleteOrg = $state<OrganizationListResponse | null>(null)
+const queryClient = getQueryClient()
 
-async function fetchOrgs() {
-	loading = true
-	error = ''
-	try {
-		orgs = await admin.organizations.list()
-	} catch (e) {
-		error = e instanceof ApiError ? e.message : 'Failed to load organizations'
-	} finally {
-		loading = false
-	}
+const organizationsQuery = createQuery(() => adminQueries.organizations.list())
+
+const orgs = $derived(organizationsQuery.data ?? [])
+const error = $derived(
+	organizationsQuery.isError
+		? organizationsQuery.error instanceof ApiError
+			? organizationsQuery.error.message
+			: 'Failed to load organizations'
+		: ''
+)
+
+async function refreshOrganizations() {
+	await queryClient.invalidateQueries({ queryKey: adminKeys.organizations() })
 }
 
 async function activateOrg(org: OrganizationListResponse) {
 	activatingOrgId = org.id
 	try {
 		const updated = await admin.organizations.setSubscription(org.id, 'active')
-		const idx = orgs.findIndex((o) => o.id === org.id)
-		if (idx !== -1) orgs[idx] = updated
-		orgs = [...orgs]
+		queryClient.setQueryData<OrganizationListResponse[]>(
+			adminKeys.organizations(),
+			(current = []) => current.map((item) => (item.id === org.id ? updated : item))
+		)
 	} catch (e) {
 		alert(e instanceof ApiError ? e.message : 'Failed to activate')
 	} finally {
@@ -46,7 +50,10 @@ async function deleteOrg() {
 	deletingOrgId = orgToDelete.id
 	try {
 		await admin.organizations.delete(orgToDelete.id)
-		orgs = orgs.filter((o) => o.id !== orgToDelete.id)
+		queryClient.setQueryData<OrganizationListResponse[]>(
+			adminKeys.organizations(),
+			(current = []) => current.filter((item) => item.id !== orgToDelete.id)
+		)
 		confirmDeleteOrg = null
 	} catch (e) {
 		alert(e instanceof ApiError ? e.message : 'Failed to delete')
@@ -77,8 +84,6 @@ function formatDate(d: string) {
 		day: 'numeric'
 	})
 }
-
-onMount(fetchOrgs)
 </script>
 
 <div class="max-w-7xl mx-auto px-4 py-6">
@@ -92,7 +97,7 @@ onMount(fetchOrgs)
 		</button>
 	</div>
 
-	{#if loading}
+	{#if organizationsQuery.isPending}
 		<div class="text-center py-16 text-gray-400">Loading...</div>
 	{:else if error}
 		<div class="bg-red-50 border border-red-200 rounded-lg p-4 text-red-700 text-sm">{error}</div>
@@ -183,7 +188,7 @@ onMount(fetchOrgs)
 	open={showCreateUser}
 	{orgs}
 	onClose={() => (showCreateUser = false)}
-	onCreated={fetchOrgs}
+	onCreated={refreshOrganizations}
 />
 
 <ConfirmModal

@@ -12,7 +12,7 @@ let {
 	open: boolean
 	orgs: OrganizationListResponse[]
 	onClose: () => void
-	onCreated: () => void
+	onCreated: () => void | Promise<void>
 } = $props()
 
 let email = $state('')
@@ -78,7 +78,7 @@ async function submit() {
 		}
 		const result = await admin.users.create(payload)
 		success = `Created ${result.email} in "${result.organization_name}"`
-		onCreated()
+		await onCreated()
 		setTimeout(() => {
 			onClose()
 		}, 1500)

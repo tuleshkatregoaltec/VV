@@ -1,14 +1,14 @@
 <script lang="ts">
 import { createInfiniteQuery, createQuery } from '@tanstack/svelte-query'
 import { goto } from '$app/navigation'
-import { analytics } from '$lib/api/analytics'
 import { chat } from '$lib/api/chat'
-import { news } from '$lib/api/news'
 import CompactChatInput from '$lib/components/dashboard/CompactChatInput.svelte'
 import CompleteProfileModal from '$lib/components/dashboard/CompleteProfileModal.svelte'
 import FullWidthMarketChart from '$lib/components/dashboard/FullWidthMarketChart.svelte'
 import AppShell from '$lib/components/layout/AppShell.svelte'
 import NewsCard from '$lib/components/news/NewsCard.svelte'
+import { analyticsQueries } from '$lib/queries/analytics'
+import { newsQueries } from '$lib/queries/news'
 import { currentUser } from '$lib/stores/user.svelte'
 
 let username = $derived(currentUser.data?.first_name ?? '')
@@ -19,15 +19,7 @@ let sentinel = $state<HTMLDivElement>()
 const LIMIT = 10 // Load 10 articles initially and per page
 
 // Fetch news articles with infinite scrolling
-const newsQuery = createInfiniteQuery(() => ({
-	queryKey: ['news', 'dashboard'],
-	queryFn: ({ pageParam = 0 }) => news.list({ limit: LIMIT, offset: pageParam }),
-	getNextPageParam: (lastPage) => {
-		const nextOffset = lastPage.offset + lastPage.articles.length
-		return nextOffset < lastPage.total ? nextOffset : undefined
-	},
-	initialPageParam: 0
-}))
+const newsQuery = createInfiniteQuery(() => newsQueries.listInfinite('dashboard', LIMIT))
 
 const newsArticles = $derived(newsQuery.data?.pages.flatMap((page) => page.articles) ?? [])
 
@@ -93,11 +85,7 @@ $effect(() => {
 	return () => observer.disconnect()
 })
 
-const kpiQuery = createQuery(() => ({
-	queryKey: ['market-trend', 365],
-	queryFn: () => analytics.marketTrend({ days: 365 }),
-	staleTime: 5 * 60 * 1000
-}))
+const kpiQuery = createQuery(() => analyticsQueries.marketTrend(365))
 
 function formatPrice(n: number): string {
 	if (n >= 1_000_000) return `AED ${(n / 1_000_000).toFixed(2)}M`
