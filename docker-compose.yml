@@ -1,0 +1,33 @@
+services:
+  dagster-webserver:
+    image: etl:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: dagster-webserver -h 0.0.0.0 -p 3000 -w /app/workspace.yaml
+    ports:
+      - "3000:3000"
+    volumes:
+      - .:/app
+    environment:
+      DAGSTER_HOME: /app
+    env_file:
+      - .env
+    restart: unless-stopped
+    depends_on:
+      dagster-daemon:
+        condition: service_started
+
+  dagster-daemon:
+    image: etl:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: dagster-daemon run -w /app/workspace.yaml
+    volumes:
+      - .:/app
+    environment:
+      DAGSTER_HOME: /app
+    env_file:
+      - .env
+    restart: unless-stopped
