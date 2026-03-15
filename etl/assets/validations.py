@@ -1,45 +1,81 @@
-"""Row-count validations for ClickHouse tables."""
+"""Dataset release validations."""
 
-from __future__ import annotations
+from dagster import AssetExecutionContext, Output, asset
 
-from dagster import AssetExecutionContext, Config, Output, asset
-
-from etl.lib.dataset_specs import DLD_FILES, GIS_FILES, GEO_FILES
+from etl.core.dataset_registry import DATASET_SPECS
+from etl.core.releases import ReleaseManifest
+from etl.core.validation import validate_dataset_release
 from etl.resources.clickhouse import ClickHouseResource
 
-_DLD_TABLES = [f.ch_table for f in DLD_FILES]
-_GIS_TABLES = [f.ch_table for f in GIS_FILES]
-_GEO_TABLES = [f.ch_table for f in GEO_FILES]
+
+def _validate_release(
+    context: AssetExecutionContext, clickhouse: ClickHouseResource, manifest_dict: dict
+) -> Output[dict]:
+    manifest = ReleaseManifest.model_validate(manifest_dict)
+    dataset_spec = DATASET_SPECS[manifest.dataset]
+    results = validate_dataset_release(
+        context=context,
+        clickhouse=clickhouse,
+        dataset_spec=dataset_spec,
+        manifest=manifest,
+    )
+    from etl.orchestration.source_registry import validation_hook_for_dataset
+
+    validation_hook = validation_hook_for_dataset(manifest.dataset)
+    if validation_hook:
+        results.update(validation_hook(context, clickhouse, manifest))
+    return Output(
+        value=results, metadata={"release_id": manifest.release_id, "tables": len(results)}
+    )
 
 
-class ValidationConfig(Config):
-    min_rows: int = 1
+@asset(
+    name="validate_dld",
+    group_name="validations",
+    deps=[table.table_name for table in DATASET_SPECS["dld"].tables],
+)
+def validate_dld(
+    context: AssetExecutionContext,
+    raw_dld_files: dict,
+    clickhouse: ClickHouseResource,
+) -> Output[dict]:
+    return _validate_release(context, clickhouse, raw_dld_files)
 
 
-def _check_table(
-    context: AssetExecutionContext, clickhouse: ClickHouseResource, table: str, min_rows: int
-) -> int:
-    count = int(clickhouse.query_scalar(f"SELECT count() FROM {table}"))
-    context.log.info(f"{table}: {count:,} rows")
-    if count < min_rows:
-        raise ValueError(f"Validation failed: {table} has {count} rows (min {min_rows})")
-    return count
+@asset(
+    name="validate_gis",
+    group_name="validations",
+    deps=["gis_release_manifest", *[table.table_name for table in DATASET_SPECS["gis"].tables]],
+)
+def validate_gis(
+    context: AssetExecutionContext,
+    gis_release_manifest: dict,
+    clickhouse: ClickHouseResource,
+) -> Output[dict]:
+    return _validate_release(context, clickhouse, gis_release_manifest)
 
 
-def _make_validation_asset(name: str, tables: list[str], deps: list[str]):
-    @asset(name=name, group_name="validations", deps=deps)
-    def _asset(
-        context: AssetExecutionContext,
-        config: ValidationConfig,
-        clickhouse: ClickHouseResource,
-    ) -> Output[dict]:
-        results = {t: _check_table(context, clickhouse, t, config.min_rows) for t in tables}
-        context.log.info(f"All {name} checks passed")
-        return Output(value=results, metadata=results)
+@asset(
+    name="validate_geo",
+    group_name="validations",
+    deps=[table.table_name for table in DATASET_SPECS["geo"].tables],
+)
+def validate_geo(
+    context: AssetExecutionContext,
+    raw_building_coordinates: dict,
+    clickhouse: ClickHouseResource,
+) -> Output[dict]:
+    return _validate_release(context, clickhouse, raw_building_coordinates)
 
-    return _asset
 
-
-validate_dld = _make_validation_asset("validate_dld", _DLD_TABLES, deps=_DLD_TABLES)
-validate_gis = _make_validation_asset("validate_gis", _GIS_TABLES, deps=_GIS_TABLES)
-validate_geo = _make_validation_asset("validate_geo", _GEO_TABLES, deps=_GEO_TABLES)
+@asset(
+    name="validate_dxbi",
+    group_name="validations",
+    deps=[table.table_name for table in DATASET_SPECS["dxbi"].tables],
+)
+def validate_dxbi(
+    context: AssetExecutionContext,
+    raw_dxbi_files: dict,
+    clickhouse: ClickHouseResource,
+) -> Output[dict]:
+    return _validate_release(context, clickhouse, raw_dxbi_files)

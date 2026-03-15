@@ -1,26 +1,24 @@
 #!/usr/bin/env python3
-"""
-Reload ClickHouse tables from existing S3 manifests.
+"""Reload ClickHouse tables from existing release manifests."""
 
-Usage:
-    python -m etl.scripts.backfill --dataset dld --batch-id 2026-03-13T06-00-00Z
-"""
-
-import argparse
 import os
-import sys
+import argparse
 
+from etl.core.dataset_registry import DATASET_SPECS, table_by_filename
+from etl.core.load_strategies import load_table_from_release
+from etl.core.releases import ReleaseManifest
+from etl.lib.paths import manifest_key
+from etl.orchestration.source_registry import SOURCE_BY_DATASET
 from etl.resources.clickhouse import ClickHouseResource
 from etl.resources.s3 import S3Resource
-from etl.lib.manifests import Manifest
-from etl.lib.paths import dld_manifest_key, dld_raw_key, gis_manifest_key, geo_manifest_key
-from etl.lib.dataset_specs import DLD_FILES, GIS_FILES, GEO_FILES
 
 
 def get_resources():
     s3 = S3Resource(
         bucket=os.environ["S3_BUCKET"],
         region=os.environ.get("AWS_REGION", "us-east-1"),
+        endpoint_url=os.environ.get("S3_ENDPOINT_URL", ""),
+        use_path_style=os.environ.get("S3_USE_PATH_STYLE", "false").lower() == "true",
         aws_access_key_id=os.environ.get("AWS_ACCESS_KEY_ID", ""),
         aws_secret_access_key=os.environ.get("AWS_SECRET_ACCESS_KEY", ""),
     )
@@ -35,37 +33,43 @@ def get_resources():
     return s3, ch
 
 
-def backfill_dld(s3: S3Resource, ch: ClickHouseResource, batch_id: str):
-    raw = s3.get_json(dld_manifest_key(batch_id))
-    manifest = Manifest.from_dict(raw)
-    print(f"Loaded manifest for batch {batch_id} with {len(manifest.files)} files")
+def backfill_dataset(s3: S3Resource, ch: ClickHouseResource, dataset: str, release_id: str) -> None:
+    manifest = ReleaseManifest.model_validate(s3.get_json(manifest_key(dataset, release_id)))
+    if dataset not in SOURCE_BY_DATASET:
+        raise ValueError(f"Dataset {dataset} is not registered to any source")
+    files_by_name = table_by_filename(dataset)
+    print(f"Loaded {dataset} release {release_id} with {len(manifest.files)} files")
 
-    for spec in DLD_FILES:
-        url = s3.s3_url(dld_raw_key(batch_id, spec.filename))
-        print(f"Loading {spec.ch_table} from {url}")
-        count = ch.load_table_from_s3(
-            table=spec.ch_table,
-            s3_url=url,
-            aws_access_key_id=s3.aws_access_key_id,
-            aws_secret_access_key=s3.aws_secret_access_key,
+    for artifact in manifest.files:
+        table_spec = files_by_name.get(artifact.name)
+        if table_spec is None:
+            print(f"Skipping unregistered artifact {artifact.name}")
+            continue
+        print(f"Loading {table_spec.table_name} from s3://{s3.bucket}/{artifact.s3_key}")
+        count = load_table_from_release(
+            clickhouse=ch,
+            s3=s3,
+            table_spec=table_spec,
+            s3_key=artifact.s3_key,
+            release_id=release_id,
         )
-        print(f"  → {count:,} rows")
+        print(f"  -> {count:,} rows")
 
 
 def main():
     parser = argparse.ArgumentParser(description="Backfill ClickHouse from S3")
-    parser.add_argument("--dataset", required=True, choices=["dld", "gis", "geo"])
-    parser.add_argument("--batch-id", required=True)
+    parser.add_argument("--dataset", required=True, choices=sorted(DATASET_SPECS))
+    parser.add_argument("--release-id", default="", help="Release ID to replay")
+    parser.add_argument(
+        "--batch-id", default="", help="Backward-compatible alias for DLD release IDs"
+    )
     args = parser.parse_args()
+    release_id = args.release_id or args.batch_id
+    if not release_id:
+        parser.error("One of --release-id or --batch-id is required")
 
     s3, ch = get_resources()
-
-    if args.dataset == "dld":
-        backfill_dld(s3, ch, args.batch_id)
-    else:
-        print(f"Backfill for {args.dataset} not yet implemented.")
-        sys.exit(1)
-
+    backfill_dataset(s3, ch, args.dataset, release_id)
     print("Done.")
 
 

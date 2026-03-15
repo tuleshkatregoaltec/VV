@@ -33,7 +33,7 @@ Relevant layers:
 
 ## Layer 13 — Plot
 
-Used for: `raw_gis_plots` → `ch_gis_land_plots`
+Used for: `raw_gis_plots` → `gis_land_plots`
 
 Fields from the ArcGIS query (layer attributes):
 - `PLOT_NUMBER`, `OLD_PLOT_NUMBERS`, `LANDUSE_SYMBOLS`, `GFA_TYPE`, `IS_VERIFIED`, `VERIFY_COMMENTS`
@@ -53,7 +53,7 @@ in the native projected CRS (WKID 3997, Dubai local).
 
 ## Layer 10 — Project Limit Outline
 
-Used for: `raw_project_polygons` → `ch_geo_projects`
+Used for: `raw_gis_project_areas` → `gis_project_areas`
 
 Fields: `OBJECTID` (Int32), `ProjectName` (String 255)
 
@@ -124,8 +124,8 @@ GET /server/rest/services/DIS/MAIN_MAP/MapServer/10/query
 | File                              | Purpose                                      |
 |-----------------------------------|----------------------------------------------|
 | `etl/lib/scrapers/dda_gis.py`     | `scrape()` for plots, `scrape_projects()` for project polygons |
-| `etl/assets/gis.py`               | `raw_gis_plots` Dagster asset                |
-| `etl/assets/geo.py`               | `raw_project_polygons` Dagster asset         |
+| `etl/assets/gis.py`               | GIS Dagster assets for plots and overlay layers |
+| `etl/assets/geo.py`               | Separate geo enrichment assets               |
 
 ## Operational Notes
 
@@ -135,3 +135,8 @@ GET /server/rest/services/DIS/MAIN_MAP/MapServer/10/query
 - Concurrency for plot info fetches is configurable (default 15). The WAF will block if
   too aggressive — the scraper detects this via the absence of `form-info-dda` in the response.
 - The project polygon scrape is a single request and completes in under a second.
+- Live check on 2026-03-14:
+  - Layer 13 `returnCountOnly=true` returned `99,122` plots.
+  - A 100-plot sample with concurrency `15` completed in about `1.6s` with full detail responses.
+  - Rough runtime estimate for a full scrape at the sampled rate is about `27 minutes`, excluding retries.
+- The scraper now supports an optional `max_plots` limit for smoke runs without attempting the full dataset.

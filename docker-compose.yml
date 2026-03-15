@@ -12,7 +12,7 @@ services:
     environment:
       DAGSTER_HOME: /app
     env_file:
-      - .env
+      - ${ENV_FILE:-.env}
     restart: unless-stopped
     depends_on:
       dagster-daemon:
@@ -29,5 +29,5 @@ services:
     environment:
       DAGSTER_HOME: /app
     env_file:
-      - .env
+      - ${ENV_FILE:-.env}
     restart: unless-stopped

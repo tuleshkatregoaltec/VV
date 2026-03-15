@@ -1,63 +1,44 @@
-"""Top-level Dagster Definitions — loaded by workspace.yaml."""
+"""Top-level Dagster definitions."""
 
 from __future__ import annotations
 
 import os
 
-from dagster import Definitions, EnvVar, ScheduleDefinition
+from dagster import Definitions, EnvVar
 
-from etl.assets.dld import raw_dld_files, DLD_CH_ASSETS
-from etl.assets.gis import raw_gis_plots, ch_gis_land_plots
-from etl.assets.geo import (
-    raw_building_coordinates,
-    ch_geo_buildings,
-    raw_project_polygons,
-    ch_geo_projects,
+from etl.orchestration.jobs import (
+    dld_ingest_job,
+    dxbi_ingest_job,
+    full_refresh_job,
+    geo_enrichment_job,
+    gis_ingest_job,
+    gis_smoke_job,
 )
-from etl.assets.validations import validate_dld, validate_gis, validate_geo
-from etl.jobs.dld_job import dld_ingest_job
-from etl.jobs.gis_job import gis_ingest_job
-from etl.jobs.geo_job import geo_enrichment_job
-from etl.jobs.full_refresh_job import full_refresh_job
+from etl.orchestration.schedules import schedules
+from etl.orchestration.source_registry import all_source_assets
 from etl.resources.s3 import S3Resource
 from etl.resources.clickhouse import ClickHouseResource
 from etl.resources.http import HttpClientResource
 
-all_assets = [
-    raw_dld_files,
-    *DLD_CH_ASSETS,
-    raw_gis_plots,
-    ch_gis_land_plots,
-    raw_building_coordinates,
-    ch_geo_buildings,
-    raw_project_polygons,
-    ch_geo_projects,
-    validate_dld,
-    validate_gis,
-    validate_geo,
-]
-
-schedules = [
-    ScheduleDefinition(
-        job=dld_ingest_job,
-        cron_schedule="0 6 * * *",  # daily 06:00 UTC
-        name="dld_daily",
-    ),
-    ScheduleDefinition(
-        job=gis_ingest_job,
-        cron_schedule="0 7 * * 1",  # weekly Monday 07:00 UTC
-        name="gis_weekly",
-    ),
-]
+all_assets = all_source_assets()
 
 defs = Definitions(
     assets=all_assets,
-    jobs=[dld_ingest_job, gis_ingest_job, geo_enrichment_job, full_refresh_job],
+    jobs=[
+        dld_ingest_job,
+        dxbi_ingest_job,
+        gis_ingest_job,
+        gis_smoke_job,
+        geo_enrichment_job,
+        full_refresh_job,
+    ],
     schedules=schedules,
     resources={
         "s3": S3Resource(
             bucket=EnvVar("S3_BUCKET"),
             region=EnvVar("AWS_REGION"),
+            endpoint_url=os.environ.get("S3_ENDPOINT_URL", ""),
+            use_path_style=os.environ.get("S3_USE_PATH_STYLE", "false").lower() == "true",
             aws_access_key_id=EnvVar("AWS_ACCESS_KEY_ID"),
             aws_secret_access_key=EnvVar("AWS_SECRET_ACCESS_KEY"),
         ),

@@ -6,7 +6,7 @@
 -- DLD bronze tables (full-refresh via S3 → EXCHANGE TABLES)
 -- ---------------------------------------------------------------------------
 
-CREATE TABLE IF NOT EXISTS ch_transactions (
+CREATE TABLE IF NOT EXISTS dld_transactions (
     transaction_id String,
     procedure_id String DEFAULT '',
     trans_group_id Int32 DEFAULT 0,
@@ -58,7 +58,7 @@ PARTITION BY toYYYYMM(instance_date)
 ORDER BY (property_usage_en, instance_date, transaction_id);
 
 
-CREATE TABLE IF NOT EXISTS ch_rent_contracts (
+CREATE TABLE IF NOT EXISTS dld_rent_contracts (
     contract_id String,
     contract_reg_type_id Int32 DEFAULT 0,
     contract_reg_type_ar String DEFAULT '',
@@ -104,7 +104,7 @@ PARTITION BY toYYYYMM(contract_start_date)
 ORDER BY (property_usage_en, contract_start_date, contract_id, line_number);
 
 
-CREATE TABLE IF NOT EXISTS ch_projects (
+CREATE TABLE IF NOT EXISTS dld_projects (
     project_id Int32,
     project_number String DEFAULT '',
     project_name_ar String DEFAULT '',
@@ -147,7 +147,7 @@ CREATE TABLE IF NOT EXISTS ch_projects (
 ORDER BY project_id;
 
 
-CREATE TABLE IF NOT EXISTS ch_buildings (
+CREATE TABLE IF NOT EXISTS dld_buildings (
     property_id Int32,
     area_id Int32 DEFAULT 0,
     zone_id Int32 DEFAULT 0,
@@ -197,7 +197,7 @@ CREATE TABLE IF NOT EXISTS ch_buildings (
 ORDER BY property_id;
 
 
-CREATE TABLE IF NOT EXISTS ch_units (
+CREATE TABLE IF NOT EXISTS dld_units (
     property_id Int32,
     area_id Int32 DEFAULT 0,
     zone_id Int32 DEFAULT 0,
@@ -248,7 +248,7 @@ CREATE TABLE IF NOT EXISTS ch_units (
 ORDER BY property_id;
 
 
-CREATE TABLE IF NOT EXISTS ch_land_registry (
+CREATE TABLE IF NOT EXISTS dld_land_registry (
     property_id Int32,
     area_id Int32 DEFAULT 0,
     zone_id Int32 DEFAULT 0,
@@ -284,7 +284,7 @@ CREATE TABLE IF NOT EXISTS ch_land_registry (
 ORDER BY property_id;
 
 
-CREATE TABLE IF NOT EXISTS ch_developers (
+CREATE TABLE IF NOT EXISTS dld_developers (
     developer_id Int32,
     participant_id String DEFAULT '',
     developer_number String DEFAULT '',
@@ -312,10 +312,111 @@ ORDER BY developer_id;
 
 
 -- ---------------------------------------------------------------------------
+-- DXB Interact bronze tables
+-- ---------------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS dxbi_locations (
+    run_id String,
+    location_id Int32,
+    location_name LowCardinality(String) DEFAULT '',
+    location_slug String DEFAULT '',
+    location_flag LowCardinality(String) DEFAULT '',
+    is_featured UInt8 DEFAULT 0,
+    seq Nullable(Int32),
+    scraped_at DateTime
+) ENGINE = MergeTree()
+ORDER BY (location_id, location_slug);
+
+
+CREATE TABLE IF NOT EXISTS dxbi_developers (
+    run_id String,
+    developer_id Int32,
+    developer_name String DEFAULT '',
+    is_hot UInt8 DEFAULT 0,
+    scraped_at DateTime
+) ENGINE = MergeTree()
+ORDER BY developer_id;
+
+
+CREATE TABLE IF NOT EXISTS dxbi_popular_searches (
+    run_id String,
+    source_page String DEFAULT '',
+    scope_slug String DEFAULT '',
+    item_rank UInt16 DEFAULT 0,
+    location_name String DEFAULT '',
+    location_slug String DEFAULT '',
+    transaction_count UInt32 DEFAULT 0,
+    metric_label LowCardinality(String) DEFAULT '',
+    scraped_at DateTime
+) ENGINE = MergeTree()
+ORDER BY (scope_slug, item_rank, location_slug);
+
+
+CREATE TABLE IF NOT EXISTS dxbi_popular_sales_areas (
+    run_id String,
+    source_page String DEFAULT '',
+    scope_slug String DEFAULT '',
+    item_rank UInt16 DEFAULT 0,
+    location_name String DEFAULT '',
+    location_slug String DEFAULT '',
+    transaction_count UInt32 DEFAULT 0,
+    metric_label LowCardinality(String) DEFAULT '',
+    scraped_at DateTime
+) ENGINE = MergeTree()
+ORDER BY (scope_slug, item_rank, location_slug);
+
+
+CREATE TABLE IF NOT EXISTS dxbi_sales_transactions (
+    run_id String,
+    source_page String DEFAULT '',
+    scope_slug String DEFAULT '',
+    listing_rank UInt32 DEFAULT 0,
+    location_path String DEFAULT '',
+    status_text String DEFAULT '',
+    price_aed Nullable(Decimal64(2)),
+    capital_gain_text String DEFAULT '',
+    price_per_sqft_aed Nullable(Decimal64(2)),
+    transaction_size_sqft Nullable(Decimal64(2)),
+    bua_sqft Nullable(Decimal64(2)),
+    bedrooms_label LowCardinality(String) DEFAULT '',
+    transaction_date Nullable(Date),
+    seller_type LowCardinality(String) DEFAULT '',
+    unit_is_locked UInt8 DEFAULT 0,
+    scraped_at DateTime,
+    filters_json String DEFAULT ''
+) ENGINE = MergeTree()
+PARTITION BY toYYYYMM(scraped_at)
+ORDER BY (scope_slug, transaction_date, listing_rank, location_path);
+
+
+CREATE TABLE IF NOT EXISTS dxbi_rental_transactions (
+    run_id String,
+    source_page String DEFAULT '',
+    scope_slug String DEFAULT '',
+    listing_rank UInt32 DEFAULT 0,
+    location_path String DEFAULT '',
+    status_text String DEFAULT '',
+    bedrooms_label LowCardinality(String) DEFAULT '',
+    size_sqft Nullable(Decimal64(2)),
+    annual_rent_aed Nullable(Decimal64(2)),
+    rental_yield_pct Nullable(Decimal64(4)),
+    lease_start_date Nullable(Date),
+    lease_end_date Nullable(Date),
+    duration_text LowCardinality(String) DEFAULT '',
+    purchase_price_aed Nullable(Decimal64(2)),
+    unit_is_locked UInt8 DEFAULT 0,
+    scraped_at DateTime,
+    filters_json String DEFAULT ''
+) ENGINE = MergeTree()
+PARTITION BY toYYYYMM(scraped_at)
+ORDER BY (scope_slug, lease_start_date, listing_rank, location_path);
+
+
+-- ---------------------------------------------------------------------------
 -- Silver tables (enriched / geocoded)
 -- ---------------------------------------------------------------------------
 
-CREATE TABLE IF NOT EXISTS ch_geo_buildings (
+CREATE TABLE IF NOT EXISTS geo_buildings (
     address_key       String,
     building_name_en  String DEFAULT '',
     project_name_en   String DEFAULT '',
@@ -323,11 +424,11 @@ CREATE TABLE IF NOT EXISTS ch_geo_buildings (
     area_name_en      String DEFAULT '',
     lat               Float64,
     lng               Float64
-) ENGINE = ReplacingMergeTree()
+) ENGINE = MergeTree()
 ORDER BY address_key;
 
 
-CREATE TABLE IF NOT EXISTS ch_gis_land_plots (
+CREATE TABLE IF NOT EXISTS gis_land_plots (
     plot_number           String,
     old_numbers           String DEFAULT '',
     project_name          String DEFAULT '',
@@ -356,13 +457,106 @@ CREATE TABLE IF NOT EXISTS ch_gis_land_plots (
     gfa_type              LowCardinality(String) DEFAULT '',
     is_verified           UInt8 DEFAULT 0,
     verify_comments       String DEFAULT ''
-) ENGINE = ReplacingMergeTree()
+) ENGINE = MergeTree()
 ORDER BY plot_number;
 
 
-CREATE TABLE IF NOT EXISTS ch_geo_projects (
+CREATE TABLE IF NOT EXISTS gis_project_areas (
     object_id    Int32,
     project_name String,
     rings        String DEFAULT ''   -- JSON: array of rings, each ring [[lng, lat], ...] WGS84
-) ENGINE = ReplacingMergeTree()
+) ENGINE = MergeTree()
 ORDER BY object_id;
+
+
+CREATE TABLE IF NOT EXISTS gis_subproject_areas (
+    object_id            Int32,
+    project_id           String DEFAULT '',
+    project_name         String DEFAULT '',
+    entity_name          String DEFAULT '',
+    developer_name       String DEFAULT '',
+    master_project_name  String DEFAULT '',
+    original_plot_number String DEFAULT '',
+    project_logo         String DEFAULT '',
+    rings                String DEFAULT ''
+) ENGINE = MergeTree()
+ORDER BY object_id;
+
+
+CREATE TABLE IF NOT EXISTS gis_plot_building_limits (
+    object_id   Int32,
+    plot_number String,
+    rings       String DEFAULT ''
+) ENGINE = MergeTree()
+ORDER BY (plot_number, object_id);
+
+
+CREATE TABLE IF NOT EXISTS gis_plot_podium_limits (
+    object_id   Int32,
+    plot_number String,
+    max_height  String DEFAULT '',
+    rings       String DEFAULT ''
+) ENGINE = MergeTree()
+ORDER BY (plot_number, object_id);
+
+
+CREATE TABLE IF NOT EXISTS gis_plot_features (
+    object_id           Int32,
+    plot_number         String,
+    feature_type_code   Int32 DEFAULT 0,
+    feature_type_label  LowCardinality(String) DEFAULT '',
+    feature_area_sqm    Float64 DEFAULT 0,
+    feature_perimeter_m Float64 DEFAULT 0,
+    rings               String DEFAULT ''
+) ENGINE = MergeTree()
+ORDER BY (plot_number, object_id);
+
+
+CREATE TABLE IF NOT EXISTS gis_frozen_plots (
+    object_id         Int32,
+    plot_number       String,
+    old_plot_numbers  String DEFAULT '',
+    is_frozen         UInt8 DEFAULT 0,
+    plot_area_sqm     Float64 DEFAULT 0,
+    plot_perimeter_m  Float64 DEFAULT 0,
+    gfa_type          LowCardinality(String) DEFAULT '',
+    gfa_sqm_t         String DEFAULT '',
+    gfa_sqft_t        String DEFAULT '',
+    rings             String DEFAULT ''
+) ENGINE = MergeTree()
+ORDER BY (plot_number, object_id);
+
+
+CREATE TABLE IF NOT EXISTS gis_landuse_symbols (
+    object_id         Int32,
+    landuse           String DEFAULT '',
+    landuse_character String DEFAULT '',
+    landuse_id        String DEFAULT '',
+    lat               Float64 DEFAULT 0,
+    lng               Float64 DEFAULT 0
+) ENGINE = MergeTree()
+ORDER BY object_id;
+
+
+CREATE TABLE IF NOT EXISTS gis_plot_built_to_lines (
+    object_id   Int32,
+    plot_number String,
+    paths       String DEFAULT ''
+) ENGINE = MergeTree()
+ORDER BY (plot_number, object_id);
+
+
+CREATE TABLE IF NOT EXISTS gis_plot_arcades (
+    object_id   Int32,
+    plot_number String,
+    rings       String DEFAULT ''
+) ENGINE = MergeTree()
+ORDER BY (plot_number, object_id);
+
+
+CREATE TABLE IF NOT EXISTS gis_plot_retail (
+    object_id   Int32,
+    plot_number String,
+    rings       String DEFAULT ''
+) ENGINE = MergeTree()
+ORDER BY (plot_number, object_id);

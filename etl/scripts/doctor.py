@@ -1,10 +1,5 @@
 #!/usr/bin/env python3
-"""
-Health check: verify connectivity to S3, ClickHouse, and Dagster Postgres.
-
-Usage:
-    python -m etl.scripts.doctor
-"""
+"""Health check: verify connectivity to S3, ClickHouse, Dagster Postgres, and definitions."""
 
 import os
 import sys
@@ -18,12 +13,15 @@ def check_s3():
     if not bucket:
         return False, "S3_BUCKET not set"
     try:
-        s3 = boto3.client(
-            "s3",
-            region_name=os.environ.get("AWS_REGION", "us-east-1"),
-            aws_access_key_id=os.environ.get("AWS_ACCESS_KEY_ID") or None,
-            aws_secret_access_key=os.environ.get("AWS_SECRET_ACCESS_KEY") or None,
-        )
+        kwargs = {
+            "region_name": os.environ.get("AWS_REGION", "us-east-1"),
+            "endpoint_url": os.environ.get("S3_ENDPOINT_URL") or None,
+            "aws_access_key_id": os.environ.get("AWS_ACCESS_KEY_ID") or None,
+            "aws_secret_access_key": os.environ.get("AWS_SECRET_ACCESS_KEY") or None,
+        }
+        if os.environ.get("S3_USE_PATH_STYLE", "false").lower() == "true":
+            kwargs["config"] = boto3.session.Config(s3={"addressing_style": "path"})
+        s3 = boto3.client("s3", **kwargs)
         s3.head_bucket(Bucket=bucket)
         return True, f"bucket={bucket} OK"
     except ClientError as e:
@@ -51,19 +49,34 @@ def check_clickhouse():
 
 
 def check_postgres():
-    import urllib.parse
-
     url = os.environ.get("DAGSTER_POSTGRES_URL", "")
     if not url:
         return False, "DAGSTER_POSTGRES_URL not set"
     try:
-        import psycopg2  # type: ignore
+        try:
+            import psycopg  # type: ignore
 
-        conn = psycopg2.connect(url)
+            conn = psycopg.connect(url)
+        except ImportError:
+            import psycopg2  # type: ignore
+
+            conn = psycopg2.connect(url)
         conn.close()
         return True, "connected"
     except ImportError:
-        return None, "psycopg2 not installed (optional)"
+        return None, "psycopg/psycopg2 not installed"
+    except Exception as e:
+        return False, str(e)
+
+
+def check_definitions():
+    try:
+        from dagster import Definitions
+
+        from etl.definitions import defs
+
+        Definitions.validate_loadable(defs)
+        return True, "Definitions.validate_loadable() OK"
     except Exception as e:
         return False, str(e)
 
@@ -73,6 +86,7 @@ def main():
         ("S3", check_s3),
         ("ClickHouse", check_clickhouse),
         ("Postgres (Dagster metadata)", check_postgres),
+        ("Dagster definitions", check_definitions),
     ]
 
     all_ok = True

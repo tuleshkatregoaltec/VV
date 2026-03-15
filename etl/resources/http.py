@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from contextlib import contextmanager
 
 import httpx
 from dagster import ConfigurableResource
