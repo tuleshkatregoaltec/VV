@@ -1,0 +1,64 @@
+# AGENTS
+
+## Active Package
+
+The active runtime package in this repo is `holocron`.
+
+- New work should go into `holocron/`
+
+## Source Layout
+
+Each source should live under `holocron/sources/<source>/`:
+
+- `source.py` contains the declarative source contract
+- `extract.py` normally contains the source-local extraction logic
+
+Keep source-specific logic local to the source package. Do not reintroduce a shared top-level scraper registry.
+
+Handwritten downstream assets that derive new tables from already-published source tables belong in `holocron/assets/`.
+
+## Onboarding Rule
+
+Adding a new source should normally require:
+
+1. a new `holocron/sources/<source>/source.py`
+2. a new `holocron/sources/<source>/extract.py`
+3. registration in `holocron/sources/__init__.py`
+4. optional ClickHouse schema changes in `holocron/lib/sql/clickhouse_schema.sql`
+
+If a change requires edits in many unrelated framework files, the architecture is probably drifting back toward over-engineering.
+
+Small legacy/simple sources may still inline extraction in `source.py`, but new source-specific extraction code should still be split into `extract.py`.
+
+## Dagster Modeling
+
+- Keep one asset per durable ClickHouse table
+- Keep one local release asset per source
+- Keep one raw release asset per source
+- Express data quality as asset checks
+- Generate Dagster assets from source metadata rather than hand-writing per-table asset functions, except for clearly downstream derived assets
+
+## Tooling
+
+**Package manager:** `uv`
+
+- Install deps: `uv sync`
+- Run a command in the venv: `uv run <command>`
+- Add a dependency: `uv add <package>`
+- Add a dev dependency: `uv add --dev <package>`
+
+**Linting and formatting:** `ruff`
+
+- Format: `uv run ruff format`
+- Lint: `uv run ruff check`
+- Lint and auto-fix: `uv run ruff check --fix`
+- Line length is 100, target is Python 3.11 (see `pyproject.toml`)
+
+**Tests:** `pytest`
+
+- Run all tests: `uv run pytest`
+- Run a specific file: `uv run pytest tests/test_holocron_definitions.py`
+
+## Migration Note
+
+Keep the repo Holocron-only. Do not reintroduce legacy package names or parallel orchestration stacks.

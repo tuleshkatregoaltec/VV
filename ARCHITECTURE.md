@@ -2,11 +2,9 @@
 
 ## Release Model
 
-Each ingestion creates a typed release manifest, not just a Dagster run.
+Each ingestion run stages files locally first, then promotes them into a durable raw release.
 
-The repo tracks current dataset modes like `full_snapshot` and `reference_replace`, but the architecture is intentionally open-ended. New datasets may introduce additional lifecycle or publish patterns later without requiring a repo restructure.
-
-Every release writes immutable raw files to S3 plus a manifest with:
+The staged local release and the raw S3 release both use typed manifests carrying:
 
 - dataset
 - release ID
@@ -14,61 +12,64 @@ Every release writes immutable raw files to S3 plus a manifest with:
 - source
 - checksums
 - row counts
-- validation metadata
 
 ## Publish Model
 
 Raw data lands in object storage first. ClickHouse publishing depends on the table strategy declared by each table:
 
-- `full_swap`: load to staging, validate non-empty, `EXCHANGE TABLES`
+- `full_swap`: load to staging, then `EXCHANGE TABLES`
 - `append`: load to staging, then append into target
-
-Additional publish strategies can be added later without changing the source registration model.
 
 This keeps raw history immutable while letting each dataset publish according to its own semantics.
 
-## Dataset Semantics
+## Dagster Model
 
-### DLD
+Holocron uses Dagster to model durable warehouse outputs:
 
-DLD exports are treated as complete replacement truth sets. New source drops can reshuffle prior rows arbitrarily, so incremental diff logic is intentionally avoided.
+- one local release asset per source
+- one raw release asset per source
+- one asset per final ClickHouse table
+- one cleanup job per source for removing staged local files by release ID
+- asset checks for data quality and source-specific assertions
 
-### GIS
-
-GIS publishes weekly full snapshots. All GIS tables in one run share one `release_id`, so the served snapshot is coherent across overlays and plot details.
-
-### DXBI
-
-Cheap lookup/reference tables can be replaced wholesale. Heavier scraped tables should move to append-only bronze keyed by `ingestion_run_id`, with downstream “latest” tables or views built on top.
+Most Dagster assets are generated from source metadata rather than hand-written per-table
+orchestration modules. Hand-written downstream assets are reserved for derived tables such as
+`pf_location_hierarchy`.
 
 ## Source Contract
 
-Every source is registered through a `SourceSpec` in `etl/orchestration/source_registry.py`.
+Every source is defined locally under `holocron/sources/<source>/`.
 
-A source spec owns:
+`source.py` owns:
 
-- dataset names
-- asset definitions
-- validation asset
-- ingest job metadata
-- optional schedules
-- optional source-specific validation hook
-- local run-config behavior for operator scripts
+- source metadata
+- table declarations
+- config schema and defaults
+- optional extra checks
+- the extract function for simple sources that have not been split yet
 
-This keeps source onboarding declarative without hard-coding source behavior across `definitions.py`, jobs, schedules, and scripts.
+`extract.py` normally owns:
+
+- source-specific scraping or download logic
+- writing one or more CSV files for the release
 
 ## Code Layout
 
-The package root stays `etl/etl`, but internals are split by concern:
+- `holocron/assets`: handwritten downstream assets derived from published tables
+- `holocron/framework`: release models, validation, Dagster factory, storage helpers
+- `holocron/resources`: S3, ClickHouse, and HTTP resources
+- `holocron/sources`: source-local contracts and extraction code
+- `holocron/scripts`: operator tooling
 
-- `etl/core`: shared release, registry, load, and validation logic
-- `etl/sources`: source-local pipeline code
-- `etl/orchestration`: Dagster jobs and schedules
-- `etl/resources`: infrastructure clients
-- `etl/scripts`: operator tooling
+## Adding a Source
 
-Adding a new source should primarily require:
+Adding a new source should normally require:
 
-1. adding dataset/table entries in `etl/core/dataset_registry.py`
-2. adding source-local assets and scrape logic under `etl/sources/<name>/`
-3. registering a new `SourceSpec` in `etl/orchestration/source_registry.py`
+1. adding `holocron/sources/<name>/source.py`
+2. adding `holocron/sources/<name>/extract.py`
+3. registering the source in `holocron/sources/__init__.py`
+4. optionally adding new ClickHouse tables in `holocron/lib/sql/clickhouse_schema.sql`
+
+Some older/simple sources still keep extraction inline in `source.py`, but new source-specific
+logic should remain local to the source package rather than being reintroduced through shared
+top-level registries or orchestration modules.
