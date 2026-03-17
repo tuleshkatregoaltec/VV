@@ -2,6 +2,101 @@
 -- Source of truth: old/insert/schemas.sql
 -- Run once against the target ClickHouse database.
 
+-- ---------------------------------------------------------------------------
+-- Bayut bronze tables (append-only browser-backed extraction)
+-- ---------------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS bayut_sale_transactions (
+    release_id String,
+    scraped_at DateTime,
+    window_start_date Date,
+    window_end_date Date,
+    purpose LowCardinality(String) DEFAULT 'for-sale',
+    page UInt32 DEFAULT 0,
+    transaction_hash_id String,
+    transaction_date String DEFAULT '',
+    transaction_amount String DEFAULT '',
+    transaction_per_sqm_amount String DEFAULT '',
+    builtup_area_sqm String DEFAULT '',
+    plot_area_sqm String DEFAULT '',
+    balcony_area_sqm String DEFAULT '',
+    beds String DEFAULT '',
+    floor String DEFAULT '',
+    latitude String DEFAULT '',
+    longitude String DEFAULT '',
+    bayut_latitude String DEFAULT '',
+    bayut_longitude String DEFAULT '',
+    bayut_property_type_id String DEFAULT '',
+    bayut_leaf_location_id String DEFAULT '',
+    bayut_leaf_location_name_en String DEFAULT '',
+    bayut_leaf_location_name_ar String DEFAULT '',
+    bayut_location_l3_name_en String DEFAULT '',
+    bayut_location_l3_name_ar String DEFAULT '',
+    bayut_location_l4_name_en String DEFAULT '',
+    bayut_location_l4_name_ar String DEFAULT '',
+    bayut_location_l5_name_en String DEFAULT '',
+    bayut_location_l5_name_ar String DEFAULT '',
+    bayut_location_l6_name_en String DEFAULT '',
+    bayut_location_l6_name_ar String DEFAULT '',
+    occupancy_status_name String DEFAULT '',
+    claimed_transaction_status String DEFAULT '',
+    property_completion_status_sk String DEFAULT '',
+    sale_market_name String DEFAULT '',
+    seller_type String DEFAULT '',
+    transaction_payment_method String DEFAULT '',
+    unit_number String DEFAULT '',
+    has_kpi_value UInt8 DEFAULT 0,
+    previous_sale_transaction_date String DEFAULT ''
+) ENGINE = MergeTree()
+PARTITION BY toYYYYMM(window_end_date)
+ORDER BY (window_end_date, transaction_hash_id, scraped_at);
+
+
+CREATE TABLE IF NOT EXISTS bayut_rental_transactions (
+    release_id String,
+    scraped_at DateTime,
+    window_start_date Date,
+    window_end_date Date,
+    purpose LowCardinality(String) DEFAULT 'for-rent',
+    page UInt32 DEFAULT 0,
+    transaction_hash_id String,
+    transaction_date String DEFAULT '',
+    contract_start_date String DEFAULT '',
+    contract_end_date String DEFAULT '',
+    transaction_amount String DEFAULT '',
+    contract_monthly_amount String DEFAULT '',
+    transaction_per_sqm_amount String DEFAULT '',
+    builtup_area_sqm String DEFAULT '',
+    plot_area_sqm String DEFAULT '',
+    balcony_area_sqm String DEFAULT '',
+    beds String DEFAULT '',
+    floor String DEFAULT '',
+    latitude String DEFAULT '',
+    longitude String DEFAULT '',
+    bayut_latitude String DEFAULT '',
+    bayut_longitude String DEFAULT '',
+    bayut_property_type_id String DEFAULT '',
+    bayut_leaf_location_id String DEFAULT '',
+    bayut_leaf_location_name_en String DEFAULT '',
+    bayut_leaf_location_name_ar String DEFAULT '',
+    bayut_location_l3_name_en String DEFAULT '',
+    bayut_location_l3_name_ar String DEFAULT '',
+    bayut_location_l4_name_en String DEFAULT '',
+    bayut_location_l4_name_ar String DEFAULT '',
+    bayut_location_l5_name_en String DEFAULT '',
+    bayut_location_l5_name_ar String DEFAULT '',
+    bayut_location_l6_name_en String DEFAULT '',
+    bayut_location_l6_name_ar String DEFAULT '',
+    occupancy_status_name String DEFAULT '',
+    claimed_transaction_status String DEFAULT '',
+    property_completion_status_sk String DEFAULT '',
+    rent_contract_duration_months String DEFAULT '',
+    rent_contract_renewal_status_name String DEFAULT '',
+    has_kpi_value UInt8 DEFAULT 0,
+    previous_sale_transaction_date String DEFAULT ''
+) ENGINE = MergeTree()
+PARTITION BY toYYYYMM(window_end_date)
+ORDER BY (window_end_date, transaction_hash_id, scraped_at);
 
 -- ---------------------------------------------------------------------------
 -- DLD bronze tables (full-refresh via S3 → EXCHANGE TABLES)
