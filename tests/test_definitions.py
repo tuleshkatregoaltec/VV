@@ -2,7 +2,7 @@ import unittest
 
 from dagster import Definitions
 
-from etl.definitions import defs
+from holocron.definitions import defs
 
 
 class DefinitionsTest(unittest.TestCase):

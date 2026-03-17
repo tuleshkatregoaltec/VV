@@ -1,6 +1,6 @@
 services:
   dagster-webserver:
-    image: etl:latest
+    image: holocron:latest
     build:
       context: .
       dockerfile: Dockerfile
@@ -19,7 +19,7 @@ services:
         condition: service_started
 
   dagster-daemon:
-    image: etl:latest
+    image: holocron:latest
     build:
       context: .
       dockerfile: Dockerfile

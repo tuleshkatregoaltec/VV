@@ -63,7 +63,7 @@ services:
       - .:/work
     entrypoint: >
       /bin/sh -c "
-      clickhouse-client --host clickhouse --port 9000 --multiquery < /work/etl/lib/sql/clickhouse_schema.sql
+      clickhouse-client --host clickhouse --port 9000 --database vitevue --multiquery < /work/holocron/lib/sql/clickhouse_schema.sql
       "
     restart: "no"
 
@@ -92,7 +92,7 @@ services:
     entrypoint: >
       /bin/sh -c "
       mc alias set local http://minio:9000 minio minio123 &&
-      mc mb --ignore-existing local/vitevue-etl
+      mc mb --ignore-existing local/vitevue-holocron
       "
     restart: "no"
 
