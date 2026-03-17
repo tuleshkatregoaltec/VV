@@ -6,6 +6,7 @@ import os
 
 from dagster import Definitions, EnvVar
 
+from holocron.assets.pf_locations import pf_location_hierarchy
 from holocron.framework.dagster_factory import (
     build_assets_for_source,
     build_cleanup_job_for_source,
@@ -32,7 +33,7 @@ for source in SOURCES:
         schedules.append(schedule)
 
 defs = Definitions(
-    assets=all_assets,
+    assets=[*all_assets, pf_location_hierarchy],
     jobs=jobs,
     schedules=schedules,
     resources={

@@ -9,6 +9,7 @@ class DatasetRegistryTest(unittest.TestCase):
         self.assertEqual(modes["dld"], "full_snapshot")
         self.assertEqual(modes["gis"], "full_snapshot")
         self.assertEqual(modes["dxbi"], "reference_replace")
+        self.assertEqual(modes["pf_locations"], "reference_replace")
 
     def test_all_registered_tables_have_filenames(self) -> None:
         for source in SOURCES:

@@ -658,3 +658,64 @@ CREATE TABLE IF NOT EXISTS gis_plot_retail (
 ORDER BY (plot_number, object_id);
 
 
+CREATE TABLE IF NOT EXISTS pf_locations (
+    release_id               String,
+    scraped_at               DateTime,
+    pf_location_id           String,
+    parent_pf_location_id    String DEFAULT '',
+    city_pf_location_id      String DEFAULT '',
+    path_ids                 String DEFAULT '',
+    path_depth               UInt8 DEFAULT 0,
+    level_type               LowCardinality(String) DEFAULT '',
+    location_name            String DEFAULT '',
+    alternate_name           String DEFAULT '',
+    slug                     String DEFAULT '',
+    city_slug                LowCardinality(String) DEFAULT '',
+    parent_path_name_en      String DEFAULT '',
+    full_path_name_en        String DEFAULT '',
+    breadcrumbs_json         String DEFAULT '',
+    is_transaction_visible   UInt8 DEFAULT 0,
+    is_community_visible     UInt8 DEFAULT 0,
+    is_subcommunity_visible  UInt8 DEFAULT 0,
+    is_in_cms                UInt8 DEFAULT 0,
+    seen_in_buy              UInt8 DEFAULT 0,
+    seen_in_rent             UInt8 DEFAULT 0,
+    buy_listing_url          String DEFAULT '',
+    rent_listing_url         String DEFAULT ''
+) ENGINE = MergeTree()
+ORDER BY (pf_location_id);
+
+
+CREATE TABLE IF NOT EXISTS pf_location_hierarchy (
+    release_id               String,
+    scraped_at               DateTime,
+    pf_location_id           String,
+    parent_pf_location_id    String DEFAULT '',
+    city_pf_location_id      String DEFAULT '',
+    path_ids                 String DEFAULT '',
+    path_depth               UInt8 DEFAULT 0,
+    level_type               LowCardinality(String) DEFAULT '',
+    normalized_level         LowCardinality(String) DEFAULT '',
+    location_name            String DEFAULT '',
+    alternate_name           String DEFAULT '',
+    slug                     String DEFAULT '',
+    city_slug                LowCardinality(String) DEFAULT '',
+    parent_name              String DEFAULT '',
+    parent_slug              String DEFAULT '',
+    parent_path_name_en      String DEFAULT '',
+    full_path_name_en        String DEFAULT '',
+    ancestor_ids_json        String DEFAULT '',
+    ancestor_names_json      String DEFAULT '',
+    ancestor_slugs_json      String DEFAULT '',
+    breadcrumbs_json         String DEFAULT '',
+    is_leaf                  UInt8 DEFAULT 0,
+    is_transaction_visible   UInt8 DEFAULT 0,
+    is_community_visible     UInt8 DEFAULT 0,
+    is_subcommunity_visible  UInt8 DEFAULT 0,
+    is_in_cms                UInt8 DEFAULT 0,
+    seen_in_buy              UInt8 DEFAULT 0,
+    seen_in_rent             UInt8 DEFAULT 0,
+    buy_listing_url          String DEFAULT '',
+    rent_listing_url         String DEFAULT ''
+) ENGINE = MergeTree()
+ORDER BY (pf_location_id);
