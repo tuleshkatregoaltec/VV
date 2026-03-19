@@ -212,3 +212,4 @@ __marimo__/
 dagster_home/
 old/
 .playwright-cli/
+.tmp/
