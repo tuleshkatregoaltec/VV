@@ -38,6 +38,7 @@ def extract(
 
 SOURCE = SourceSpec(
     name="pf_locations",
+    provider="propertyfinder",
     source="propertyfinder.ae",
     mode=REFERENCE_REPLACE,
     description=(

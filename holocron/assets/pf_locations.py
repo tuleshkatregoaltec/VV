@@ -82,7 +82,13 @@ def _normalize_level(level_type: str, path_depth: int) -> str:
 
 @asset(
     name="pf_location_hierarchy",
-    group_name="pf_locations",
+    group_name="propertyfinder",
+    tags={
+        "provider": "propertyfinder",
+        "dataset": "pf_locations",
+        "asset_type": "silver",
+        "table": "pf_location_hierarchy",
+    },
     ins={"pf_locations_bronze": AssetIn(key="pf_locations")},
     description=(
         "Build a cleaned Property Finder location hierarchy from the bronze pf_locations "

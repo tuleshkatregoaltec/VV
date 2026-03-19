@@ -33,7 +33,8 @@ def extract(
 
 
 SOURCE = SourceSpec(
-    name="dld",
+    name="dld_bulk_data",
+    provider="dld",
     source="dubaipulse.gov.ae",
     mode=FULL_SNAPSHOT,
     schedule="0 6 * * *",

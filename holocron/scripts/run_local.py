@@ -5,14 +5,27 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+from pathlib import Path
 import sys
 
 from dagster import DagsterInstance
+from dotenv import load_dotenv
 
 from holocron.sources import SOURCES_BY_NAME
 
 
 def main() -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    dagster_home = repo_root / ".tmp" / "dagster_home"
+    dagster_home.mkdir(parents=True, exist_ok=True)
+
+    load_dotenv(repo_root / ".env")
+    os.environ.setdefault("DAGSTER_HOME", str(dagster_home))
+    os.environ.setdefault("LOCAL_RELEASES_DIR", str(repo_root / ".tmp" / "releases"))
+    Path(os.environ["DAGSTER_HOME"]).mkdir(parents=True, exist_ok=True)
+    Path(os.environ["LOCAL_RELEASES_DIR"]).mkdir(parents=True, exist_ok=True)
+
     parser = argparse.ArgumentParser(description="Run a Holocron source locally")
     parser.add_argument("--source", required=True, choices=sorted(SOURCES_BY_NAME))
     parser.add_argument(

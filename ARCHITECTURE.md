@@ -31,6 +31,8 @@ Holocron uses Dagster to model durable warehouse outputs:
 - one asset per final ClickHouse table
 - one cleanup job per source for removing staged local files by release ID
 - asset checks for data quality and source-specific assertions
+- Dagster asset groups are provider-level, not dataset-level
+- ingest jobs select the exact source-owned asset set explicitly rather than selecting an entire group
 
 Most Dagster assets are generated from source metadata rather than hand-written per-table
 orchestration modules. Hand-written downstream assets are reserved for derived tables such as
@@ -40,9 +42,19 @@ orchestration modules. Hand-written downstream assets are reserved for derived t
 
 Every source is defined locally under `holocron/sources/<source>/`.
 
+A source is a dataset-level operational boundary, not a whole website or provider.
+For example:
+
+- `pf_locations` is one Property Finder dataset
+- `bay_transactions` is one Bay dataset
+- `dda_planning_layers` is one DDA dataset
+
+Each source may declare a separate `provider` used for Dagster grouping and catalog metadata.
+
 `source.py` owns:
 
 - source metadata
+- provider metadata
 - table declarations
 - config schema and defaults
 - optional extra checks

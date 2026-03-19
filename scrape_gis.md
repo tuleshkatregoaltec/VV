@@ -2,6 +2,12 @@
 
 Source: https://gis.dda.gov.ae/DIS
 
+Current Holocron naming:
+
+- source / dataset id: `dda_planning_layers`
+- provider group: `dda`
+- warehouse tables use the `dda_*` prefix, for example `dda_land_plots`
+
 ## Authentication
 
 All ArcGIS REST queries require a token. The token is a short-lived, read-only session
@@ -33,7 +39,7 @@ Relevant layers:
 
 ## Layer 13 — Plot
 
-Used for: `raw_gis_plots` → `gis_land_plots`
+Used for: `dda_plots.csv` → `dda_land_plots`
 
 Fields from the ArcGIS query (layer attributes):
 - `PLOT_NUMBER`, `OLD_PLOT_NUMBERS`, `LANDUSE_SYMBOLS`, `GFA_TYPE`, `IS_VERIFIED`, `VERIFY_COMMENTS`
@@ -45,7 +51,7 @@ per-plot via a separate handler:
 GET /DIS?handler=PlotInfo&plotNumber={PLOT_NUMBER}
 ```
 
-Returns HTML. Parsed with regex into the fields in `CSV_FIELDS` (see `dda_gis.py`).
+Returns HTML. Parsed with regex into the fields in `CSV_FIELDS` in `holocron/sources/gis/extract.py`.
 
 Pagination: 2000 records per page. Total plots is in the tens of thousands.
 The `coordinates` field contains the plot polygon rings in JSON as `[[easting, northing], ...]`
@@ -53,7 +59,7 @@ in the native projected CRS (WKID 3997, Dubai local).
 
 ## Layer 10 — Project Limit Outline
 
-Used for: `raw_gis_project_areas` → `gis_project_areas`
+Used for: `dda_project_areas.csv` → `dda_project_areas`
 
 Fields: `OBJECTID` (Int32), `ProjectName` (String 255)
 
@@ -111,7 +117,7 @@ GET /server/rest/services/DIS/MAIN_MAP/MapServer/10/query
 | is_verified          | string |                                         |
 | verify_comments      | string |                                         |
 
-### project_polygons.csv (layer 10)
+### dda_project_areas.csv (layer 10)
 
 | Column       | Type   | Notes                                              |
 |--------------|--------|----------------------------------------------------|
@@ -123,9 +129,9 @@ GET /server/rest/services/DIS/MAIN_MAP/MapServer/10/query
 
 | File                              | Purpose                                      |
 |-----------------------------------|----------------------------------------------|
-| `etl/lib/scrapers/dda_gis.py`     | `scrape()` for plots, `scrape_projects()` for project polygons |
-| `etl/assets/gis.py`               | GIS Dagster assets for plots and overlay layers |
-| `etl/assets/geo.py`               | Separate geo enrichment assets               |
+| `holocron/sources/gis/extract.py` | GIS extraction functions for plots and overlay layers |
+| `holocron/sources/gis/source.py`  | GIS source contract, table mappings, config, and schedule |
+| `holocron/sources/geo/source.py`  | Separate geo source contract and checks      |
 
 ## Operational Notes
 

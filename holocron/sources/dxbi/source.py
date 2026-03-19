@@ -21,7 +21,8 @@ def extract(
 
 
 SOURCE = SourceSpec(
-    name="dxbi",
+    name="dxbi_lookups",
+    provider="dxbinteract",
     source="dxbinteract.com",
     mode=REFERENCE_REPLACE,
     description="Fetch DXBI lookup tables, persist the release, and publish ClickHouse tables.",

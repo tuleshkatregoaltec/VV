@@ -31,6 +31,10 @@ def merged_config(source: SourceSpec, config: dict[str, Any] | None) -> dict[str
     return {**source.default_config, **(config or {})}
 
 
+def manifest_config_metadata(config: dict[str, Any]) -> dict[str, Any]:
+    return {key: value for key, value in config.items()}
+
+
 def resolve_release_id(config: dict[str, Any]) -> str:
     for key in ("release_id", "batch_id", "run_id"):
         value = str(config.get(key, "")).strip()
@@ -85,6 +89,7 @@ def stage_local_source(
         created_at=utc_now_iso(),
         root_path=str(output_dir),
         files=artifacts,
+        metadata={"config": manifest_config_metadata(source_config)},
     )
 
 
@@ -129,6 +134,7 @@ def promote_local_source(
         metadata={
             "local_root_path": local_release.root_path,
             "local_file_count": len(local_release.files),
+            **local_release.metadata,
         },
     )
     s3.put_json(manifest_key(source.name, local_release.release_id), manifest.to_json())
@@ -168,7 +174,10 @@ def publish_table(
     if table_spec.load_strategy == FULL_SWAP:
         row_count = clickhouse.load_table_from_s3(**kwargs)
     elif table_spec.load_strategy == APPEND:
-        row_count = clickhouse.append_table_from_s3(**kwargs)
+        row_count = clickhouse.append_table_from_s3(
+            **kwargs,
+            dedupe_key=table_spec.unique_key,
+        )
     else:
         raise ValueError(
             f"Unsupported load strategy {table_spec.load_strategy!r} for {table_spec.table_name}"

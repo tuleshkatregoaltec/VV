@@ -16,13 +16,23 @@ from holocron.framework.models import (
 )
 from holocron.sources.bayut.extract import download_all as bayut_download_all
 
-
-def _default_start_date() -> str:
-    return (date.today() - timedelta(days=30)).isoformat()
+DEFAULT_LOOKBACK_DAYS = 3
 
 
 def _default_end_date() -> str:
     return date.today().isoformat()
+
+
+def _resolve_window(config: dict) -> tuple[str, str]:
+    start_date = str(config.get("start_date") or "").strip()
+    end_date = str(config.get("end_date") or "").strip() or _default_end_date()
+    if start_date:
+        return start_date, end_date
+
+    lookback_days = int(config.get("lookback_days") or DEFAULT_LOOKBACK_DAYS)
+    resolved_end = date.fromisoformat(end_date)
+    resolved_start = resolved_end - timedelta(days=max(lookback_days, 0))
+    return resolved_start.isoformat(), end_date
 
 
 def extract(
@@ -33,11 +43,12 @@ def extract(
     http,
     context,
 ) -> list[Path]:
+    start_date, end_date = _resolve_window(config)
     results = bayut_download_all(
         dest_dir=output_dir,
         run_id=release_id,
-        start_date=str(config.get("start_date") or _default_start_date()),
-        end_date=str(config.get("end_date") or _default_end_date()),
+        start_date=start_date,
+        end_date=end_date,
         max_pages=int(config["max_pages"]) if config.get("max_pages") else None,
         chrome_path=str(config.get("chrome_path") or ""),
     )
@@ -45,9 +56,11 @@ def extract(
 
 
 SOURCE = SourceSpec(
-    name="bayut",
+    name="bay_transactions",
+    provider="bayut",
     source="bayut.com",
     mode=REFERENCE_REPLACE,
+    schedule="0 8 * * *",
     description=(
         "Fetch Bayut transaction list data through a browser-backed Humbucker bootstrap and "
         "append sale and rent transaction rows to ClickHouse."
@@ -55,12 +68,25 @@ SOURCE = SourceSpec(
     config_schema={
         "release_id": release_id_field(""),
         "start_date": optional_str(
-            _default_start_date(),
-            description="Inclusive UTC start date for the Bayut transaction window (YYYY-MM-DD).",
+            "",
+            description=(
+                "Inclusive UTC start date for the Bayut transaction window (YYYY-MM-DD). "
+                "If omitted, Bayut uses a rolling lookback window ending today."
+            ),
         ),
         "end_date": optional_str(
-            _default_end_date(),
-            description="Inclusive UTC end date for the Bayut transaction window (YYYY-MM-DD).",
+            "",
+            description=(
+                "Inclusive UTC end date for the Bayut transaction window (YYYY-MM-DD). "
+                "If omitted, Bayut uses today in UTC."
+            ),
+        ),
+        "lookback_days": optional_int(
+            DEFAULT_LOOKBACK_DAYS,
+            description=(
+                "Rolling overlap window for scheduled or ad hoc incremental runs when "
+                "start_date is omitted."
+            ),
         ),
         "max_pages": optional_int(
             None,
@@ -76,24 +102,27 @@ SOURCE = SourceSpec(
     },
     default_config={
         "release_id": "",
-        "start_date": _default_start_date(),
-        "end_date": _default_end_date(),
+        "start_date": "",
+        "end_date": "",
+        "lookback_days": DEFAULT_LOOKBACK_DAYS,
         "max_pages": None,
         "chrome_path": "",
     },
     tables=(
         TableSpec(
             "sales.csv",
-            "bayut_sale_transactions",
+            "bay_sale_transactions",
             load_strategy=APPEND,
             min_rows=0,
+            unique_key=("transaction_hash_id",),
             non_empty_columns=("transaction_hash_id",),
         ),
         TableSpec(
             "rentals.csv",
-            "bayut_rental_transactions",
+            "bay_rental_transactions",
             load_strategy=APPEND,
             min_rows=0,
+            unique_key=("transaction_hash_id",),
             non_empty_columns=("transaction_hash_id",),
         ),
     ),

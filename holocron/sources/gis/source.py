@@ -42,7 +42,7 @@ def extract(
     concurrency = int(config.get("concurrency", 20))
     max_plots = config.get("max_plots")
     _run_with_retries(
-        "gis",
+        "dda",
         lambda: scrape_all_layers(output_dir, concurrency, max_plots),
         log=context.log,
     )
@@ -50,11 +50,15 @@ def extract(
 
 
 SOURCE = SourceSpec(
-    name="gis",
+    name="dda_planning_layers",
+    provider="dda",
     source="gis.dda.gov.ae",
     mode=FULL_SNAPSHOT,
     schedule="0 7 * * 1",
-    description="Scrape GIS release files, upload them to S3, and publish ClickHouse tables.",
+    description=(
+        "Scrape DDA planning map layers, upload the release files to S3, and publish "
+        "ClickHouse tables."
+    ),
     config_schema={
         "release_id": release_id_field(""),
         "concurrency": worker_count_field(
@@ -72,67 +76,67 @@ SOURCE = SourceSpec(
     tables=(
         TableSpec(
             "dda_plots.csv",
-            "gis_land_plots",
+            "dda_land_plots",
             unique_key=("plot_number",),
             non_empty_columns=("plot_number",),
         ),
         TableSpec(
-            "project_areas.csv",
-            "gis_project_areas",
+            "dda_project_areas.csv",
+            "dda_project_areas",
             unique_key=("object_id",),
             nonzero_columns=("object_id",),
         ),
         TableSpec(
-            "subproject_areas.csv",
-            "gis_subproject_areas",
+            "dda_subproject_areas.csv",
+            "dda_subproject_areas",
             unique_key=("object_id",),
             nonzero_columns=("object_id",),
         ),
         TableSpec(
-            "plot_building_limits.csv",
-            "gis_plot_building_limits",
+            "dda_plot_building_limits.csv",
+            "dda_plot_building_limits",
             unique_key=("object_id",),
             nonzero_columns=("object_id",),
         ),
         TableSpec(
-            "plot_podium_limits.csv",
-            "gis_plot_podium_limits",
+            "dda_plot_podium_limits.csv",
+            "dda_plot_podium_limits",
             unique_key=("object_id",),
             nonzero_columns=("object_id",),
         ),
         TableSpec(
-            "plot_features.csv",
-            "gis_plot_features",
+            "dda_plot_features.csv",
+            "dda_plot_features",
             unique_key=("object_id",),
             nonzero_columns=("object_id",),
         ),
         TableSpec(
-            "frozen_plots.csv",
-            "gis_frozen_plots",
+            "dda_frozen_plots.csv",
+            "dda_frozen_plots",
             unique_key=("object_id",),
             nonzero_columns=("object_id",),
         ),
         TableSpec(
-            "landuse_symbols.csv",
-            "gis_landuse_symbols",
+            "dda_landuse_symbols.csv",
+            "dda_landuse_symbols",
             unique_key=("object_id",),
             nonzero_columns=("object_id",),
         ),
         TableSpec(
-            "plot_built_to_lines.csv",
-            "gis_plot_built_to_lines",
+            "dda_plot_built_to_lines.csv",
+            "dda_plot_built_to_lines",
             unique_key=("object_id",),
             nonzero_columns=("object_id",),
         ),
         TableSpec(
-            "plot_arcades.csv",
-            "gis_plot_arcades",
+            "dda_plot_arcades.csv",
+            "dda_plot_arcades",
             unique_key=("object_id",),
             nonzero_columns=("object_id",),
         ),
         TableSpec(
-            "plot_retail.csv",
-            "gis_plot_retail",
+            "dda_plot_retail.csv",
+            "dda_plot_retail",
             unique_key=("object_id",),
             nonzero_columns=("object_id",),
         ),

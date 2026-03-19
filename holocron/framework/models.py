@@ -110,6 +110,7 @@ class SourceSpec:
     mode: str
     tables: tuple[TableSpec, ...]
     extract_fn: Callable[..., Sequence[Path]]
+    provider: str | None = None
     publish_mode: PublishMode = PER_TABLE
     schedule: str | None = None
     description: str = ""
@@ -137,6 +138,14 @@ class SourceSpec:
     @property
     def schedule_name(self) -> str | None:
         return f"{self.name}_schedule" if self.schedule else None
+
+    @property
+    def provider_name(self) -> str:
+        return self.provider or self.name
+
+    @property
+    def asset_group_name(self) -> str:
+        return self.provider_name
 
 
 def optional_str(default: str = "", description: str = "") -> Field:

@@ -19,6 +19,7 @@ Dagster models:
 - one asset per final ClickHouse table
 - one cleanup job per source for removing staged local files after promotion
 - asset checks for row counts, uniqueness, empties, and source-specific assertions
+- source identity is dataset-level; Dagster grouping is provider-level
 
 ## Quickstart
 
@@ -35,8 +36,8 @@ clickhouse-client < holocron/lib/sql/clickhouse_schema.sql
 docker compose up -d
 
 # or run one source locally
-uv run python -m holocron.scripts.run_local --source dld
-uv run python -m holocron.scripts.run_local --source gis --config '{"max_plots": 100}'
+uv run python -m holocron.scripts.run_local --source dld_bulk_data
+uv run python -m holocron.scripts.run_local --source dda_planning_layers --config '{"max_plots": 100}'
 ```
 
 ## Local Stack
@@ -59,50 +60,62 @@ Notes:
 
 | Job | Trigger | What it does |
 |-----|---------|--------------|
-| `bayut_ingest` | Manual / on demand | Fetch one Bayut release, store raw CSVs in S3, publish append-only tables, run checks |
-| `dld_ingest` | Daily 06:00 UTC | Fetch one DLD release, store raw CSVs in S3, publish tables, run checks |
-| `dxbi_ingest` | Manual / on demand | Fetch one DXBI release, store raw CSVs in S3, publish tables, run checks |
-| `gis_ingest` | Weekly Monday 07:00 UTC | Scrape one GIS release, store raw CSVs in S3, publish tables, run checks |
-| `geo_ingest` | Manual / on demand | Fetch one geo release, store raw CSVs in S3, publish tables, run checks |
+| `bay_transactions_ingest` | Manual / on demand | Fetch one Bay transactions release, store raw CSVs in S3, publish append-only tables, run checks |
+| `dld_bulk_data_ingest` | Daily 06:00 UTC | Fetch one DLD bulk-data release, store raw CSVs in S3, publish tables, run checks |
+| `dxbi_lookups_ingest` | Manual / on demand | Fetch one DXBI lookup release, store raw CSVs in S3, publish tables, run checks |
+| `dxbi_transactions_ingest` | Manual / on demand | Fetch DXBI transaction/rent history tables from supplied DXBI pages through a browser-backed session, store CSVs in S3, publish append-only tables, run checks |
+| `dda_planning_layers_ingest` | Weekly Monday 07:00 UTC | Scrape one DDA planning-layers release, store raw CSVs in S3, publish tables, run checks |
+| `geo_buildings_ingest` | Manual / on demand | Fetch one geo buildings release, store raw CSVs in S3, publish tables, run checks |
 | `pf_locations_ingest` | Manual / on demand | Scrape one Property Finder locations release, publish the bronze table, then build the derived hierarchy table |
+
+## Naming
+
+- `SourceSpec.name` is the dataset / operational ingestion unit, for example `pf_locations`, `bay_transactions`, or `dda_planning_layers`
+- `SourceSpec.provider` is the upstream family used for Dagster grouping, for example `propertyfinder`, `bayut`, or `dda`
+- Keep warehouse table names concise and source-scoped: `pf_*`, `dxbi_*`, `dld_*`, `dda_*`, `bay_*`
+- Keep hand-written downstream assets in `holocron/assets/` and group them by provider when they are derived from a source table
 
 ## S3 Layout
 
 ```text
-raw/bayut/{release_id}/sales.csv
-raw/bayut/{release_id}/rentals.csv
+raw/bay_transactions/{release_id}/sales.csv
+raw/bay_transactions/{release_id}/rentals.csv
 
-raw/dld/{release_id}/transactions.csv
-raw/dld/{release_id}/rent_contracts.csv
-raw/dld/{release_id}/projects.csv
-raw/dld/{release_id}/buildings.csv
-raw/dld/{release_id}/units.csv
-raw/dld/{release_id}/land_registry.csv
-raw/dld/{release_id}/developers.csv
+raw/dld_bulk_data/{release_id}/transactions.csv
+raw/dld_bulk_data/{release_id}/rent_contracts.csv
+raw/dld_bulk_data/{release_id}/projects.csv
+raw/dld_bulk_data/{release_id}/buildings.csv
+raw/dld_bulk_data/{release_id}/units.csv
+raw/dld_bulk_data/{release_id}/land_registry.csv
+raw/dld_bulk_data/{release_id}/developers.csv
 
-raw/dxbi/{release_id}/locations.csv
-raw/dxbi/{release_id}/developers.csv
+raw/dxbi_lookups/{release_id}/locations.csv
+raw/dxbi_lookups/{release_id}/developers.csv
 
-raw/gis/{release_id}/dda_plots.csv
-raw/gis/{release_id}/project_areas.csv
-raw/gis/{release_id}/subproject_areas.csv
-raw/gis/{release_id}/plot_building_limits.csv
-raw/gis/{release_id}/plot_podium_limits.csv
-raw/gis/{release_id}/plot_features.csv
-raw/gis/{release_id}/frozen_plots.csv
-raw/gis/{release_id}/landuse_symbols.csv
-raw/gis/{release_id}/plot_built_to_lines.csv
-raw/gis/{release_id}/plot_arcades.csv
-raw/gis/{release_id}/plot_retail.csv
+raw/dxbi_transactions/{release_id}/sales.csv
+raw/dxbi_transactions/{release_id}/rentals.csv
 
-raw/geo/{release_id}/building_coordinates.csv
+raw/dda_planning_layers/{release_id}/dda_plots.csv
+raw/dda_planning_layers/{release_id}/dda_project_areas.csv
+raw/dda_planning_layers/{release_id}/dda_subproject_areas.csv
+raw/dda_planning_layers/{release_id}/dda_plot_building_limits.csv
+raw/dda_planning_layers/{release_id}/dda_plot_podium_limits.csv
+raw/dda_planning_layers/{release_id}/dda_plot_features.csv
+raw/dda_planning_layers/{release_id}/dda_frozen_plots.csv
+raw/dda_planning_layers/{release_id}/dda_landuse_symbols.csv
+raw/dda_planning_layers/{release_id}/dda_plot_built_to_lines.csv
+raw/dda_planning_layers/{release_id}/dda_plot_arcades.csv
+raw/dda_planning_layers/{release_id}/dda_plot_retail.csv
+
+raw/geo_buildings/{release_id}/building_coordinates.csv
 raw/pf_locations/{release_id}/pf_locations.csv
 
-manifests/bayut/{release_id}.json
-manifests/dld/{release_id}.json
-manifests/dxbi/{release_id}.json
-manifests/gis/{release_id}.json
-manifests/geo/{release_id}.json
+manifests/bay_transactions/{release_id}.json
+manifests/dld_bulk_data/{release_id}.json
+manifests/dxbi_lookups/{release_id}.json
+manifests/dxbi_transactions/{release_id}.json
+manifests/dda_planning_layers/{release_id}.json
+manifests/geo_buildings/{release_id}.json
 manifests/pf_locations/{release_id}.json
 ```
 
@@ -155,10 +168,13 @@ See `.env.example` for the full list. Key groups:
 ## Scripts
 
 ```bash
-uv run python -m holocron.scripts.run_local --source bayut
-uv run python -m holocron.scripts.run_local --source dld
-uv run python -m holocron.scripts.run_local --source dxbi
-uv run python -m holocron.scripts.run_local --source gis --config '{"release_id": "2026-03-15T07-00-00Z"}'
-uv run python -m holocron.scripts.run_local --source geo
+uv run python -m holocron.scripts.run_local --source bay_transactions
+uv run python -m holocron.scripts.run_local --source dld_bulk_data
+uv run python -m holocron.scripts.run_local --source dxbi_lookups
+uv run python -m holocron.scripts.run_local --source dxbi_transactions
+uv run python -m holocron.scripts.run_local --source dda_planning_layers --config '{"release_id": "2026-03-15T07-00-00Z"}'
+uv run python -m holocron.scripts.run_local --source geo_buildings
 uv run python -m holocron.scripts.run_local --source pf_locations
 ```
+
+For `dxbi_transactions`, a real local Chrome-family binary can currently clear DXBI's Cloudflare gate automatically in headless Playwright. `storage_state_path` is optional fallback state for environments where that automatic clearance does not work.

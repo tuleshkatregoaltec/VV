@@ -52,7 +52,8 @@ def extra_checks(context, clickhouse, manifest: ReleaseManifest, table_spec: Tab
 
 
 SOURCE = SourceSpec(
-    name="geo",
+    name="geo_buildings",
+    provider="geo_api",
     source="geo_api_buildings",
     mode=REFERENCE_REPLACE,
     description="Fetch geo building coordinates and publish the reference table to ClickHouse.",

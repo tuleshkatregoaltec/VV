@@ -1,4 +1,4 @@
-"""GIS extraction logic local to the GIS source."""
+"""DDA planning map extraction logic."""
 
 from __future__ import annotations
 
@@ -133,13 +133,13 @@ def _log(message: str) -> None:
 
 
 def _fetch_token(client: httpx.Client) -> str:
-    _log("gis: fetching ArcGIS token")
+    _log("dda: fetching planning map token")
     response = client.get(f"{_BASE_URL}/DIS", headers=_HEADERS)
     response.raise_for_status()
     match = re.search(r'"AGSToken"\s*:\s*"([^"]+)"', response.text)
     if not match:
         raise RuntimeError("Could not extract AGSToken from DIS page HTML")
-    _log("gis: fetched ArcGIS token")
+    _log("dda: fetched planning map token")
     return match.group(1)
 
 
@@ -257,7 +257,7 @@ def _fetch_plot_info(client: httpx.Client, plot: dict) -> dict:
             return {**base, **_parse_plot_info(response.text, plot_number)}
         except Exception as exc:
             if attempt == _MAX_RETRIES:
-                _log(f"gis: plot {plot_number} failed after {_MAX_RETRIES} attempts: {exc}")
+                _log(f"dda: plot {plot_number} failed after {_MAX_RETRIES} attempts: {exc}")
                 return base
             time.sleep(2**attempt)
 
@@ -272,13 +272,13 @@ def scrape(output: Path, concurrency: int = 20, max_plots: int | None = None) ->
                 row["plot_number"] for row in csv.DictReader(handle) if row.get("plot_number")
             }
         if done_plots:
-            _log(f"gis: resuming plot scrape with {len(done_plots)} plots already in {output}")
+            _log(f"dda: resuming plot scrape with {len(done_plots)} plots already in {output}")
 
     with httpx.Client(timeout=60, follow_redirects=True) as client:
         token = _fetch_token(client)
         fetch_limit = None if max_plots is None else len(done_plots) + max_plots
         _log(
-            "gis: fetching plot layer 13 features"
+            "dda: fetching plot layer 13 features"
             + (f" with max_plots={max_plots}" if max_plots is not None else "")
         )
         raw = _fetch_all_layer_features(
@@ -294,7 +294,7 @@ def scrape(output: Path, concurrency: int = 20, max_plots: int | None = None) ->
             layer_name="plots",
         )
         all_plots = [f["attributes"] for f in raw]
-        _log(f"gis: fetched {len(all_plots)} plot records from ArcGIS layer 13")
+        _log(f"dda: fetched {len(all_plots)} plot records from ArcGIS layer 13")
 
         pending = [plot for plot in all_plots if plot["PLOT_NUMBER"] not in done_plots]
         if max_plots is not None:
@@ -302,7 +302,7 @@ def scrape(output: Path, concurrency: int = 20, max_plots: int | None = None) ->
         target_total = len(done_plots) + len(pending)
         worker_count = max(1, concurrency)
         _log(
-            f"gis: starting plot detail fetch for {len(pending)} pending plots "
+            f"dda: starting plot detail fetch for {len(pending)} pending plots "
             f"with workers={worker_count}"
         )
 
@@ -325,9 +325,9 @@ def scrape(output: Path, concurrency: int = 20, max_plots: int | None = None) ->
                         or completed == target_total
                         or completed == len(done_plots) + 1
                     ):
-                        _log(f"gis: plot detail progress {completed}/{target_total}")
+                        _log(f"dda: plot detail progress {completed}/{target_total}")
 
-        _log(f"gis: wrote plot details to {output}")
+        _log(f"dda: wrote plot details to {output}")
 
 
 def _fetch_all_layer_features(
@@ -347,7 +347,7 @@ def _fetch_all_layer_features(
     current_token = token
     token_refreshes = 0
     label = layer_name or f"layer {layer_id}"
-    _log(f"gis: starting {label} fetch (layer_id={layer_id})")
+    _log(f"dda: starting {label} fetch (layer_id={layer_id})")
 
     while True:
         params = {
@@ -376,7 +376,7 @@ def _fetch_all_layer_features(
                     f"ArcGIS token refresh failed {token_refreshes} times for layer {layer_id}"
                 )
             _log(
-                f"gis: token expired while fetching {label}; refreshing token "
+                f"dda: token expired while fetching {label}; refreshing token "
                 f"({token_refreshes}/{_MAX_RETRIES})"
             )
             current_token = _fetch_token(client)
@@ -390,7 +390,7 @@ def _fetch_all_layer_features(
             break
         features.extend(batch)
         _log(
-            f"gis: {label} fetched batch offset={offset} batch_size={len(batch)} total={len(features)}"
+            f"dda: {label} fetched batch offset={offset} batch_size={len(batch)} total={len(features)}"
         )
         if limit is not None and len(features) >= limit:
             features = features[:limit]
@@ -399,7 +399,7 @@ def _fetch_all_layer_features(
             break
         offset += _PAGE_SIZE
 
-    _log(f"gis: completed {label} fetch with {len(features)} features")
+    _log(f"dda: completed {label} fetch with {len(features)} features")
     return features
 
 
@@ -424,7 +424,7 @@ def scrape_project_areas(client: httpx.Client, token: str, output: Path) -> None
         for feat in features
     ]
     write_csv(output, PROJECT_CSV_FIELDS, rows)
-    _log(f"gis: wrote {len(rows)} project areas to {output}")
+    _log(f"dda: wrote {len(rows)} project areas to {output}")
 
 
 def scrape_subproject_areas(client: httpx.Client, token: str, output: Path) -> None:
@@ -446,7 +446,7 @@ def scrape_subproject_areas(client: httpx.Client, token: str, output: Path) -> N
             }
         )
     write_csv(output, SUBPROJECT_CSV_FIELDS, rows)
-    _log(f"gis: wrote {len(rows)} subproject areas to {output}")
+    _log(f"dda: wrote {len(rows)} subproject areas to {output}")
 
 
 def scrape_building_limits(client: httpx.Client, token: str, output: Path) -> None:
@@ -466,7 +466,7 @@ def scrape_building_limits(client: httpx.Client, token: str, output: Path) -> No
         for feat in features
     ]
     write_csv(output, BUILDING_LIMIT_CSV_FIELDS, rows)
-    _log(f"gis: wrote {len(rows)} building limits to {output}")
+    _log(f"dda: wrote {len(rows)} building limits to {output}")
 
 
 def scrape_podium_limits(client: httpx.Client, token: str, output: Path) -> None:
@@ -489,7 +489,7 @@ def scrape_podium_limits(client: httpx.Client, token: str, output: Path) -> None
             }
         )
     write_csv(output, PODIUM_LIMIT_CSV_FIELDS, rows)
-    _log(f"gis: wrote {len(rows)} podium limits to {output}")
+    _log(f"dda: wrote {len(rows)} podium limits to {output}")
 
 
 def scrape_plot_features(client: httpx.Client, token: str, output: Path) -> None:
@@ -516,7 +516,7 @@ def scrape_plot_features(client: httpx.Client, token: str, output: Path) -> None
             }
         )
     write_csv(output, PLOT_FEATURE_CSV_FIELDS, rows)
-    _log(f"gis: wrote {len(rows)} plot features to {output}")
+    _log(f"dda: wrote {len(rows)} plot features to {output}")
 
 
 def scrape_frozen_plots(client: httpx.Client, token: str, output: Path) -> None:
@@ -548,7 +548,7 @@ def scrape_frozen_plots(client: httpx.Client, token: str, output: Path) -> None:
             }
         )
     write_csv(output, FROZEN_PLOT_CSV_FIELDS, rows)
-    _log(f"gis: wrote {len(rows)} frozen plots to {output}")
+    _log(f"dda: wrote {len(rows)} frozen plots to {output}")
 
 
 def scrape_landuse_symbols(client: httpx.Client, token: str, output: Path) -> None:
@@ -574,7 +574,7 @@ def scrape_landuse_symbols(client: httpx.Client, token: str, output: Path) -> No
             }
         )
     write_csv(output, LANDUSE_SYMBOL_CSV_FIELDS, rows)
-    _log(f"gis: wrote {len(rows)} landuse symbols to {output}")
+    _log(f"dda: wrote {len(rows)} landuse symbols to {output}")
 
 
 def scrape_plot_built_to_lines(client: httpx.Client, token: str, output: Path) -> None:
@@ -594,7 +594,7 @@ def scrape_plot_built_to_lines(client: httpx.Client, token: str, output: Path) -
         for feat in features
     ]
     write_csv(output, PLOT_BUILT_TO_LINE_CSV_FIELDS, rows)
-    _log(f"gis: wrote {len(rows)} built-to-line records to {output}")
+    _log(f"dda: wrote {len(rows)} built-to-line records to {output}")
 
 
 def scrape_plot_arcades(client: httpx.Client, token: str, output: Path) -> None:
@@ -614,7 +614,7 @@ def scrape_plot_arcades(client: httpx.Client, token: str, output: Path) -> None:
         for feat in features
     ]
     write_csv(output, PLOT_ARCADE_CSV_FIELDS, rows)
-    _log(f"gis: wrote {len(rows)} arcade records to {output}")
+    _log(f"dda: wrote {len(rows)} arcade records to {output}")
 
 
 def scrape_plot_retail(client: httpx.Client, token: str, output: Path) -> None:
@@ -634,18 +634,18 @@ def scrape_plot_retail(client: httpx.Client, token: str, output: Path) -> None:
         for feat in features
     ]
     write_csv(output, PLOT_RETAIL_CSV_FIELDS, rows)
-    _log(f"gis: wrote {len(rows)} plot retail records to {output}")
+    _log(f"dda: wrote {len(rows)} plot retail records to {output}")
 
 
 def _skip_if_done(output: Path, label: str) -> bool:
     if output.exists() and output.stat().st_size > 0:
-        _log(f"gis: skipping {label} (already complete at {output})")
+        _log(f"dda: skipping {label} (already complete at {output})")
         return True
     return False
 
 
 def scrape_all_layers(output_dir: Path, concurrency: int, max_plots: int | None) -> None:
-    _log(f"gis: starting full scrape into {output_dir}")
+    _log(f"dda: starting full scrape into {output_dir}")
     scrape(
         output=output_dir / "dda_plots.csv",
         concurrency=concurrency,
@@ -654,19 +654,19 @@ def scrape_all_layers(output_dir: Path, concurrency: int, max_plots: int | None)
     with httpx.Client(timeout=60, follow_redirects=True) as client:
         token = _fetch_token(client)
         layers = [
-            ("project_areas.csv", scrape_project_areas, "project_areas"),
-            ("subproject_areas.csv", scrape_subproject_areas, "subproject_areas"),
-            ("plot_building_limits.csv", scrape_building_limits, "plot_building_limits"),
-            ("plot_podium_limits.csv", scrape_podium_limits, "plot_podium_limits"),
-            ("plot_features.csv", scrape_plot_features, "plot_features"),
-            ("frozen_plots.csv", scrape_frozen_plots, "frozen_plots"),
-            ("landuse_symbols.csv", scrape_landuse_symbols, "landuse_symbols"),
-            ("plot_built_to_lines.csv", scrape_plot_built_to_lines, "plot_built_to_lines"),
-            ("plot_arcades.csv", scrape_plot_arcades, "plot_arcades"),
-            ("plot_retail.csv", scrape_plot_retail, "plot_retail"),
+            ("dda_project_areas.csv", scrape_project_areas, "project_areas"),
+            ("dda_subproject_areas.csv", scrape_subproject_areas, "subproject_areas"),
+            ("dda_plot_building_limits.csv", scrape_building_limits, "plot_building_limits"),
+            ("dda_plot_podium_limits.csv", scrape_podium_limits, "plot_podium_limits"),
+            ("dda_plot_features.csv", scrape_plot_features, "plot_features"),
+            ("dda_frozen_plots.csv", scrape_frozen_plots, "frozen_plots"),
+            ("dda_landuse_symbols.csv", scrape_landuse_symbols, "landuse_symbols"),
+            ("dda_plot_built_to_lines.csv", scrape_plot_built_to_lines, "plot_built_to_lines"),
+            ("dda_plot_arcades.csv", scrape_plot_arcades, "plot_arcades"),
+            ("dda_plot_retail.csv", scrape_plot_retail, "plot_retail"),
         ]
         for filename, fn, label in layers:
             output = output_dir / filename
             if not _skip_if_done(output, label):
                 fn(client, token, output)
-    _log("gis: completed full scrape")
+    _log("dda: completed full scrape")

@@ -29,6 +29,7 @@ from holocron.framework.models import (
 )
 from holocron.framework.runner import (
     cleanup_local_release,
+    manifest_config_metadata,
     promote_local_source,
     publish_table,
     resolve_release_id,
@@ -56,7 +57,7 @@ def _manifest_totals(files) -> tuple[int, int]:
 
 def _local_release_metadata(manifest: LocalReleaseManifest) -> dict:
     total_bytes, total_rows = _manifest_totals(manifest.files)
-    return {
+    metadata = {
         "release_id": manifest.release_id,
         "local_root_path": MetadataValue.path(manifest.root_path),
         "file_count": len(manifest.files),
@@ -75,11 +76,14 @@ def _local_release_metadata(manifest: LocalReleaseManifest) -> dict:
             ]
         ),
     }
+    if manifest.metadata:
+        metadata["manifest_metadata"] = MetadataValue.json(manifest.metadata)
+    return metadata
 
 
 def _raw_release_metadata(manifest: ReleaseManifest) -> dict:
     total_bytes, total_rows = _manifest_totals(manifest.files)
-    return {
+    metadata = {
         "release_id": manifest.release_id,
         "manifest_key": manifest_key(manifest.dataset, manifest.release_id),
         "file_count": len(manifest.files),
@@ -99,16 +103,33 @@ def _raw_release_metadata(manifest: ReleaseManifest) -> dict:
             ]
         ),
     }
+    if manifest.metadata:
+        metadata["manifest_metadata"] = MetadataValue.json(manifest.metadata)
+    return metadata
 
 
 def _effective_config_metadata(config: dict) -> MetadataValue:
     return MetadataValue.json({key: value for key, value in config.items()})
 
 
+def _asset_tags(
+    source: SourceSpec, *, asset_type: str, table_name: str | None = None
+) -> dict[str, str]:
+    tags = {
+        "provider": source.provider_name,
+        "dataset": source.name,
+        "asset_type": asset_type,
+    }
+    if table_name:
+        tags["table"] = table_name
+    return tags
+
+
 def build_local_release_asset(source: SourceSpec):
     @asset(
         name=source.local_release_asset_name,
-        group_name=source.name,
+        group_name=source.asset_group_name,
+        tags=_asset_tags(source, asset_type="local_release"),
         config_schema=source.config_schema or None,
         description=(
             f"Scrape {source.name} source files into the mounted local staging volume. "
@@ -129,7 +150,7 @@ def build_local_release_asset(source: SourceSpec):
             local_storage=local_storage,
         )
         metadata = _local_release_metadata(manifest)
-        metadata["config"] = _effective_config_metadata(config)
+        metadata["config"] = _effective_config_metadata(manifest_config_metadata(config))
         return Output(
             manifest.model_dump(mode="json"),
             metadata=metadata,
@@ -141,7 +162,8 @@ def build_local_release_asset(source: SourceSpec):
 def build_raw_release_asset(source: SourceSpec):
     @asset(
         name=source.raw_release_asset_name,
-        group_name=source.name,
+        group_name=source.asset_group_name,
+        tags=_asset_tags(source, asset_type="raw_release"),
         ins={"local_release": AssetIn(key=source.local_release_asset_name)},
         description=(
             f"Upload staged {source.name} files from local storage to S3 and write the raw "
@@ -170,7 +192,14 @@ def build_raw_release_asset(source: SourceSpec):
 
 def build_grouped_publish_asset(source: SourceSpec):
     release_key = source.raw_release_asset_name
-    specs = [AssetSpec(key=table.table_name, group_name=source.name) for table in source.tables]
+    specs = [
+        AssetSpec(
+            key=table.table_name,
+            group_name=source.asset_group_name,
+            tags=_asset_tags(source, asset_type="table", table_name=table.table_name),
+        )
+        for table in source.tables
+    ]
     all_check_specs = [
         check_spec
         for table in source.tables
@@ -179,7 +208,7 @@ def build_grouped_publish_asset(source: SourceSpec):
 
     @multi_asset(
         name=f"{source.name}_publish",
-        group_name=source.name,
+        group_name=source.asset_group_name,
         ins={"release": AssetIn(key=release_key)},
         specs=specs,
         can_subset=False,
@@ -231,7 +260,8 @@ def build_per_table_publish_assets(source: SourceSpec):
         def _build_publish_asset(current_table: TableSpec, current_check_specs):
             @asset(
                 name=current_table.table_name,
-                group_name=source.name,
+                group_name=source.asset_group_name,
+                tags=_asset_tags(source, asset_type="table", table_name=current_table.table_name),
                 ins={"release": AssetIn(key=release_key)},
                 check_specs=current_check_specs,
                 description=(
@@ -290,7 +320,11 @@ def build_assets_for_source(source: SourceSpec):
 def build_job_for_source(source: SourceSpec):
     return define_asset_job(
         name=source.ingest_job_name,
-        selection=AssetSelection.groups(source.name),
+        selection=AssetSelection.assets(
+            source.local_release_asset_name,
+            source.raw_release_asset_name,
+            *(table.table_name for table in source.tables),
+        ),
         description=(
             source.description
             or f"Run the {source.name} pipeline from local staging to raw S3 release to publish."

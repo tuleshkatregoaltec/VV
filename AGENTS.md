@@ -37,6 +37,15 @@ Small legacy/simple sources may still inline extraction in `source.py`, but new 
 - Keep one raw release asset per source
 - Express data quality as asset checks
 - Generate Dagster assets from source metadata rather than hand-writing per-table asset functions, except for clearly downstream derived assets
+- Model `SourceSpec.name` as the dataset / operational ingestion unit, not the whole provider
+- Use `SourceSpec.provider` for provider-level grouping in Dagster
+- Do not couple source ingest jobs to Dagster asset groups; jobs should target the source's explicit asset set
+
+## Naming
+
+- Prefer short, recognizable dataset ids for sources: `pf_locations`, `bay_transactions`, `dxbi_lookups`
+- Prefer provider-scoped warehouse table prefixes: `pf_*`, `bay_*`, `dld_*`, `dxbi_*`, `dda_*`
+- For DDA planning data, use `dda_*` rather than `gis_*`; GIS is the data type, not the provider
 
 ## Tooling
 
