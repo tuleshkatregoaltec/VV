@@ -94,7 +94,9 @@ class DxbiTransactionsExtractTest(unittest.TestCase):
         )
 
     def test_load_page_urls_defaults_to_homepage(self) -> None:
-        self.assertEqual(_load_page_urls(page_urls_text="", page_urls_file=""), ["https://dxbinteract.com/"])
+        self.assertEqual(
+            _load_page_urls(page_urls_text="", page_urls_file=""), ["https://dxbinteract.com/"]
+        )
 
     def test_extract_pagination_calls_by_table_index(self) -> None:
         sales = _extract_pagination_calls(PAGINATION_HTML, table_index=0)

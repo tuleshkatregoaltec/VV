@@ -6,7 +6,17 @@ import os
 
 from dagster import Definitions, EnvVar
 
+from holocron.assets.dda_silver import (
+    dda_plot_silver,
+    dda_project_area_silver,
+    dda_subproject_area_silver,
+)
 from holocron.assets.pf_locations import pf_location_hierarchy
+from holocron.assets.transaction_silver import (
+    bay_transaction_location_silver,
+    dxbi_transaction_location_silver,
+    pf_transaction_location_silver,
+)
 from holocron.framework.dagster_factory import (
     build_assets_for_source,
     build_cleanup_job_for_source,
@@ -33,7 +43,16 @@ for source in SOURCES:
         schedules.append(schedule)
 
 defs = Definitions(
-    assets=[*all_assets, pf_location_hierarchy],
+    assets=[
+        *all_assets,
+        pf_location_hierarchy,
+        bay_transaction_location_silver,
+        dxbi_transaction_location_silver,
+        dda_plot_silver,
+        dda_project_area_silver,
+        dda_subproject_area_silver,
+        pf_transaction_location_silver,
+    ],
     jobs=jobs,
     schedules=schedules,
     resources={

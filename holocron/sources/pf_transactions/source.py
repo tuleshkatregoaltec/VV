@@ -88,7 +88,11 @@ SOURCE = SourceSpec(
             load_strategy=APPEND,
             min_rows=0,
             unique_key=("pf_transaction_id",),
-            non_empty_columns=("pf_transaction_id", "transaction_date", "propertyfinder_location_id"),
+            non_empty_columns=(
+                "pf_transaction_id",
+                "transaction_date",
+                "propertyfinder_location_id",
+            ),
         ),
         TableSpec(
             "rentals.csv",
@@ -96,7 +100,11 @@ SOURCE = SourceSpec(
             load_strategy=APPEND,
             min_rows=0,
             unique_key=("pf_transaction_id",),
-            non_empty_columns=("pf_transaction_id", "transaction_date", "propertyfinder_location_id"),
+            non_empty_columns=(
+                "pf_transaction_id",
+                "transaction_date",
+                "propertyfinder_location_id",
+            ),
         ),
         TableSpec(
             "coverage.csv",
@@ -108,4 +116,3 @@ SOURCE = SourceSpec(
     ),
     extract_fn=extract,
 )
-

@@ -663,6 +663,88 @@ CREATE TABLE IF NOT EXISTS dda_plot_retail (
 ORDER BY (plot_number, object_id);
 
 
+CREATE TABLE IF NOT EXISTS dda_plot_silver (
+    source_name                     LowCardinality(String),
+    source_table                    LowCardinality(String),
+    source_record_key               String,
+    source_system_id                String DEFAULT '',
+    entity_hint_type                LowCardinality(String) DEFAULT '',
+    relationship_hint_type          LowCardinality(String) DEFAULT '',
+    raw_display_name                String DEFAULT '',
+    normalized_display_name         String DEFAULT '',
+    normalized_tokens_json          String DEFAULT '[]',
+    plot_number_raw                 String DEFAULT '',
+    plot_number_normalized          String DEFAULT '',
+    old_plot_numbers_raw            String DEFAULT '',
+    old_plot_numbers_normalized_json String DEFAULT '[]',
+    project_name_raw                String DEFAULT '',
+    project_name_normalized         String DEFAULT '',
+    area_name_raw                   String DEFAULT '',
+    area_name_normalized            String DEFAULT '',
+    developer_name_raw              String DEFAULT '',
+    developer_name_normalized       String DEFAULT '',
+    plot_area_sqm                   Float64 DEFAULT 0,
+    max_gfa_sqm                     Float64 DEFAULT 0,
+    max_height_raw                  String DEFAULT '',
+    land_use_json                   String DEFAULT '[]',
+    geometry_json                   String DEFAULT '[]',
+    lat                             Nullable(Float64),
+    lng                             Nullable(Float64),
+    source_confidence_notes         String DEFAULT ''
+) ENGINE = MergeTree()
+ORDER BY (plot_number_normalized, source_record_key);
+
+
+CREATE TABLE IF NOT EXISTS dda_project_area_silver (
+    source_name                LowCardinality(String),
+    source_table               LowCardinality(String),
+    source_record_key          String,
+    source_system_id           String DEFAULT '',
+    entity_hint_type           LowCardinality(String) DEFAULT '',
+    relationship_hint_type     LowCardinality(String) DEFAULT '',
+    raw_display_name           String DEFAULT '',
+    normalized_display_name    String DEFAULT '',
+    normalized_tokens_json     String DEFAULT '[]',
+    project_name_raw           String DEFAULT '',
+    project_name_normalized    String DEFAULT '',
+    geometry_json              String DEFAULT '[]',
+    lat                        Nullable(Float64),
+    lng                        Nullable(Float64),
+    source_confidence_notes    String DEFAULT ''
+) ENGINE = MergeTree()
+ORDER BY (project_name_normalized, source_record_key);
+
+
+CREATE TABLE IF NOT EXISTS dda_subproject_area_silver (
+    source_name                     LowCardinality(String),
+    source_table                    LowCardinality(String),
+    source_record_key               String,
+    source_system_id                String DEFAULT '',
+    entity_hint_type                LowCardinality(String) DEFAULT '',
+    relationship_hint_type          LowCardinality(String) DEFAULT '',
+    raw_display_name                String DEFAULT '',
+    normalized_display_name         String DEFAULT '',
+    normalized_tokens_json          String DEFAULT '[]',
+    project_id_raw                  String DEFAULT '',
+    project_id_normalized           String DEFAULT '',
+    project_name_raw                String DEFAULT '',
+    project_name_normalized         String DEFAULT '',
+    subproject_name_raw             String DEFAULT '',
+    subproject_name_normalized      String DEFAULT '',
+    developer_name_raw              String DEFAULT '',
+    developer_name_normalized       String DEFAULT '',
+    master_project_name_raw         String DEFAULT '',
+    master_project_name_normalized  String DEFAULT '',
+    original_plot_number_raw        String DEFAULT '',
+    original_plot_number_normalized String DEFAULT '',
+    geometry_json                   String DEFAULT '[]',
+    lat                             Nullable(Float64),
+    lng                             Nullable(Float64),
+    source_confidence_notes         String DEFAULT ''
+) ENGINE = MergeTree()
+ORDER BY (project_name_normalized, subproject_name_normalized, source_record_key);
+
+
 CREATE TABLE IF NOT EXISTS pf_locations (
     release_id               String,
     scraped_at               DateTime,
@@ -808,3 +890,105 @@ CREATE TABLE IF NOT EXISTS pf_transaction_coverage (
     is_self_complete           UInt8 DEFAULT 0
 ) ENGINE = MergeTree()
 ORDER BY (purpose, pf_location_id);
+
+
+CREATE TABLE IF NOT EXISTS bay_transaction_location_silver (
+    release_id                  String,
+    scraped_at                  DateTime,
+    source_name                 LowCardinality(String),
+    source_table                LowCardinality(String),
+    source_record_key           String,
+    source_system_id            String DEFAULT '',
+    transaction_kind            LowCardinality(String) DEFAULT '',
+    transaction_date            Nullable(Date),
+    raw_display_name            String DEFAULT '',
+    normalized_display_name     String DEFAULT '',
+    normalized_tokens_json      String DEFAULT '[]',
+    entity_hint_type            LowCardinality(String) DEFAULT '',
+    relationship_hint_type      LowCardinality(String) DEFAULT '',
+    area_name_raw               String DEFAULT '',
+    area_name_normalized        String DEFAULT '',
+    project_name_raw            String DEFAULT '',
+    project_name_normalized     String DEFAULT '',
+    building_name_raw           String DEFAULT '',
+    building_name_normalized    String DEFAULT '',
+    property_number_raw         String DEFAULT '',
+    property_number_normalized  String DEFAULT '',
+    unit_number_raw             String DEFAULT '',
+    unit_number_normalized      String DEFAULT '',
+    plot_number_raw             String DEFAULT '',
+    plot_number_normalized      String DEFAULT '',
+    lat                         Nullable(Float64),
+    lng                         Nullable(Float64),
+    hierarchy_json              String DEFAULT '[]',
+    source_confidence_notes     String DEFAULT ''
+) ENGINE = MergeTree()
+ORDER BY (transaction_date, source_record_key);
+
+
+CREATE TABLE IF NOT EXISTS dxbi_transaction_location_silver (
+    release_id                  String,
+    scraped_at                  DateTime,
+    source_name                 LowCardinality(String),
+    source_table                LowCardinality(String),
+    source_record_key           String,
+    source_system_id            String DEFAULT '',
+    transaction_kind            LowCardinality(String) DEFAULT '',
+    transaction_date            Nullable(Date),
+    raw_display_name            String DEFAULT '',
+    normalized_display_name     String DEFAULT '',
+    normalized_tokens_json      String DEFAULT '[]',
+    entity_hint_type            LowCardinality(String) DEFAULT '',
+    relationship_hint_type      LowCardinality(String) DEFAULT '',
+    area_name_raw               String DEFAULT '',
+    area_name_normalized        String DEFAULT '',
+    project_name_raw            String DEFAULT '',
+    project_name_normalized     String DEFAULT '',
+    building_name_raw           String DEFAULT '',
+    building_name_normalized    String DEFAULT '',
+    property_number_raw         String DEFAULT '',
+    property_number_normalized  String DEFAULT '',
+    unit_number_raw             String DEFAULT '',
+    unit_number_normalized      String DEFAULT '',
+    plot_number_raw             String DEFAULT '',
+    plot_number_normalized      String DEFAULT '',
+    lat                         Nullable(Float64),
+    lng                         Nullable(Float64),
+    hierarchy_json              String DEFAULT '[]',
+    source_confidence_notes     String DEFAULT ''
+) ENGINE = MergeTree()
+ORDER BY (transaction_date, source_record_key);
+
+
+CREATE TABLE IF NOT EXISTS pf_transaction_location_silver (
+    release_id                  String,
+    scraped_at                  DateTime,
+    source_name                 LowCardinality(String),
+    source_table                LowCardinality(String),
+    source_record_key           String,
+    source_system_id            String DEFAULT '',
+    transaction_kind            LowCardinality(String) DEFAULT '',
+    transaction_date            Nullable(Date),
+    raw_display_name            String DEFAULT '',
+    normalized_display_name     String DEFAULT '',
+    normalized_tokens_json      String DEFAULT '[]',
+    entity_hint_type            LowCardinality(String) DEFAULT '',
+    relationship_hint_type      LowCardinality(String) DEFAULT '',
+    area_name_raw               String DEFAULT '',
+    area_name_normalized        String DEFAULT '',
+    project_name_raw            String DEFAULT '',
+    project_name_normalized     String DEFAULT '',
+    building_name_raw           String DEFAULT '',
+    building_name_normalized    String DEFAULT '',
+    property_number_raw         String DEFAULT '',
+    property_number_normalized  String DEFAULT '',
+    unit_number_raw             String DEFAULT '',
+    unit_number_normalized      String DEFAULT '',
+    plot_number_raw             String DEFAULT '',
+    plot_number_normalized      String DEFAULT '',
+    lat                         Nullable(Float64),
+    lng                         Nullable(Float64),
+    hierarchy_json              String DEFAULT '[]',
+    source_confidence_notes     String DEFAULT ''
+) ENGINE = MergeTree()
+ORDER BY (transaction_date, source_record_key);

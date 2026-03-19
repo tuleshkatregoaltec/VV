@@ -240,13 +240,16 @@ def _discover_transaction_nodes(
     records: dict[str, RawLocationRecord] = {}
     with ThreadPoolExecutor(max_workers=max(1, worker_count)) as executor:
         future_map = {
-            executor.submit(_fetch_listing_location, http, purpose=purpose, url=url): url for url in urls
+            executor.submit(_fetch_listing_location, http, purpose=purpose, url=url): url
+            for url in urls
         }
         for index, future in enumerate(as_completed(future_map), start=1):
             record = future.result()
             if record.is_transaction_visible and record.pf_location_id:
                 existing = records.get(record.pf_location_id)
-                if existing is None or _path_depth(record.path_ids) < _path_depth(existing.path_ids):
+                if existing is None or _path_depth(record.path_ids) < _path_depth(
+                    existing.path_ids
+                ):
                     records[record.pf_location_id] = record
             if context is not None and (index <= 5 or index % 250 == 0):
                 context.log.info(
@@ -606,7 +609,9 @@ def _sorted_children(nodes: dict[str, LocationNode]) -> dict[str, list[str]]:
             continue
         children.setdefault(parent_id, []).append(node.pf_location_id)
     for child_ids in children.values():
-        child_ids.sort(key=lambda node_id: (nodes[node_id].path_depth, nodes[node_id].slug, node_id))
+        child_ids.sort(
+            key=lambda node_id: (nodes[node_id].path_depth, nodes[node_id].slug, node_id)
+        )
     return children
 
 
@@ -840,7 +845,11 @@ def download_all(
             rentals.extend(purpose_rows)
 
     outputs = [
-        ("sales.csv", [field.name for field in fields(TransactionRow)], (asdict(row) for row in sales)),
+        (
+            "sales.csv",
+            [field.name for field in fields(TransactionRow)],
+            (asdict(row) for row in sales),
+        ),
         (
             "rentals.csv",
             [field.name for field in fields(TransactionRow)],
