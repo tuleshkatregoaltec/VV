@@ -214,3 +214,5 @@ old/
 .playwright-cli/
 .tmp/
 lkp/
+memory/
+.nux/
