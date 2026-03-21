@@ -9,11 +9,11 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from datetime import datetime
 
-import requests
 from bs4 import BeautifulSoup
 
 from holocron.framework.csv_utils import write_csv
 from holocron.framework.models import DownloadResult, utc_now_sql
+from holocron.scrape.diagnostics import DiagnosticsCollector
 
 DXBI_BASE_URL = "https://dxbinteract.com"
 LOCATION_LOV_URL = f"{DXBI_BASE_URL}/property/website/DLDLOV?RETURN_COLUMN=LOCATION_URL"
@@ -108,20 +108,40 @@ class RentalTransactionRow:
 _now_iso = utc_now_sql
 
 
-def _session() -> requests.Session:
-    session = requests.Session()
-    session.headers.update(_DEFAULT_HEADERS)
-    return session
-
-
-def _fetch_json(url: str) -> dict:
-    response = _session().get(url, timeout=60)
+def _fetch_json(
+    http,
+    url: str,
+    *,
+    proxy: str,
+    diagnostics: DiagnosticsCollector | None,
+    failure_label: str,
+) -> dict:
+    response = http.get(
+        url,
+        headers=_DEFAULT_HEADERS,
+        proxy=proxy,
+        diagnostics=diagnostics,
+        failure_label=failure_label,
+        timeout=60,
+    )
     response.raise_for_status()
     return response.json()
 
 
-def fetch_location_rows(run_id: str) -> list[LocationRow]:
-    payload = _fetch_json(LOCATION_LOV_URL)
+def fetch_location_rows(
+    run_id: str,
+    *,
+    http,
+    proxy: str,
+    diagnostics: DiagnosticsCollector | None,
+) -> list[LocationRow]:
+    payload = _fetch_json(
+        http,
+        LOCATION_LOV_URL,
+        proxy=proxy,
+        diagnostics=diagnostics,
+        failure_label="dxbi_locations_lookup",
+    )
     scraped_at = _now_iso()
     rows = []
     for item in payload.get("items", []):
@@ -140,8 +160,20 @@ def fetch_location_rows(run_id: str) -> list[LocationRow]:
     return rows
 
 
-def fetch_developer_rows(run_id: str) -> list[DeveloperRow]:
-    payload = _fetch_json(DEVELOPER_LOV_URL)
+def fetch_developer_rows(
+    run_id: str,
+    *,
+    http,
+    proxy: str,
+    diagnostics: DiagnosticsCollector | None,
+) -> list[DeveloperRow]:
+    payload = _fetch_json(
+        http,
+        DEVELOPER_LOV_URL,
+        proxy=proxy,
+        diagnostics=diagnostics,
+        failure_label="dxbi_developers_lookup",
+    )
     scraped_at = _now_iso()
     rows = []
     for item in payload.get("items", []):
@@ -355,12 +387,30 @@ def write_rental_transactions_csv(path: Path, rows: list[RentalTransactionRow]) 
     return _write_dataclass_csv(path, rows, RentalTransactionRow)
 
 
-def download_all(dest_dir: Path, run_id: str) -> list[DownloadResult]:
+def download_all(
+    dest_dir: Path,
+    run_id: str,
+    *,
+    http,
+    proxy: str = "",
+    diagnostics_dir: str = "",
+) -> list[DownloadResult]:
+    diagnostics = DiagnosticsCollector(
+        root_dir=diagnostics_dir,
+        source_name="dxbi_lookups",
+        release_id=run_id,
+    )
     locations_path = dest_dir / "locations.csv"
     developers_path = dest_dir / "developers.csv"
 
-    write_locations_csv(locations_path, fetch_location_rows(run_id))
-    write_developers_csv(developers_path, fetch_developer_rows(run_id))
+    write_locations_csv(
+        locations_path,
+        fetch_location_rows(run_id, http=http, proxy=proxy, diagnostics=diagnostics),
+    )
+    write_developers_csv(
+        developers_path,
+        fetch_developer_rows(run_id, http=http, proxy=proxy, diagnostics=diagnostics),
+    )
 
     return [
         DownloadResult(canonical_name="locations.csv", local_path=locations_path),

@@ -33,6 +33,8 @@ def extract(
         page_urls_file=str(config.get("page_urls_file") or ""),
         storage_state_path=str(config.get("storage_state_path") or ""),
         chrome_path=str(config.get("chrome_path") or ""),
+        proxy=str(config.get("proxy") or ""),
+        diagnostics_dir=str(config.get("diagnostics_dir") or ""),
         max_pages=int(config["max_pages"]) if config.get("max_pages") else None,
         context=context,
     )

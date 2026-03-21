@@ -11,7 +11,12 @@ from playwright.sync_api import Browser, BrowserContext, Playwright, TimeoutErro
 
 from holocron.framework.csv_utils import write_csv
 from holocron.framework.models import DownloadResult
-from holocron.scrape.browser import browser_context_kwargs, resolve_browser_executable
+from holocron.scrape.browser import (
+    AdaptiveBackoff,
+    browser_context_kwargs,
+    launch_browser,
+)
+from holocron.scrape.diagnostics import DiagnosticsCollector
 from holocron.sources.dxbi_transactions.parse import (
     RentalTransactionRow,
     SaleTransactionRow,
@@ -75,11 +80,13 @@ def _new_context(
     *,
     chrome_path: str,
     storage_state_path: str,
+    proxy: str,
 ) -> tuple[Browser, BrowserContext]:
-    browser = playwright.chromium.launch(
-        executable_path=resolve_browser_executable(chrome_path, source_name="DXBI"),
-        headless=True,
-        args=["--disable-blink-features=AutomationControlled"],
+    browser = launch_browser(
+        playwright,
+        chrome_path=chrome_path,
+        source_name="DXBI",
+        proxy=proxy,
     )
     kwargs = browser_context_kwargs(
         user_agent=DEFAULT_USER_AGENT,
@@ -243,18 +250,39 @@ def _extract_root_page_rows(
 def _bootstrap_clearance(
     *,
     context: BrowserContext,
+    diagnostics: DiagnosticsCollector | None,
+    backoff: AdaptiveBackoff,
 ) -> None:
     page = context.new_page()
     try:
+        backoff.before_request()
         page.goto(DXBI_BASE_URL, wait_until="domcontentloaded", timeout=120000)
         page.wait_for_timeout(8000)
         cookies = {cookie["name"] for cookie in context.cookies()}
         if "cf_clearance" not in cookies:
+            backoff.record_signal()
+            screenshot_path = (
+                diagnostics.reserve_screenshot_path("dxbi_clearance") if diagnostics else None
+            )
+            if screenshot_path is not None:
+                try:
+                    page.screenshot(path=str(screenshot_path), full_page=True)
+                except Exception:
+                    screenshot_path = None
+            if diagnostics is not None:
+                diagnostics.capture_failure(
+                    label="dxbi_clearance",
+                    url=DXBI_BASE_URL,
+                    body=page.content(),
+                    screenshot_path=screenshot_path,
+                    error="missing_cf_clearance",
+                )
             raise RuntimeError(
                 "DXBI browser bootstrap did not obtain cf_clearance. "
                 "Set chrome_path to a local Chrome/Chromium binary that clears Cloudflare, "
                 "or provide a valid storage_state_path."
             )
+        backoff.record_success()
     finally:
         page.close()
 
@@ -267,6 +295,8 @@ def download_all(
     page_urls_file: str,
     storage_state_path: str,
     chrome_path: str,
+    proxy: str,
+    diagnostics_dir: str,
     max_pages: int | None,
     context,
 ) -> list[DownloadResult]:
@@ -283,27 +313,57 @@ def download_all(
 
     sale_rows: list[SaleTransactionRow] = []
     rental_rows: list[RentalTransactionRow] = []
+    diagnostics = DiagnosticsCollector(
+        root_dir=diagnostics_dir,
+        source_name="dxbi_transactions",
+        release_id=run_id,
+    )
+    backoff = AdaptiveBackoff(base_delay_seconds=1.0, max_delay_seconds=16.0)
 
     with sync_playwright() as playwright:
         browser, browser_context = _new_context(
             playwright,
             chrome_path=chrome_path,
             storage_state_path=storage_state_path,
+            proxy=proxy,
         )
         try:
             if not storage_state_path.strip():
-                _bootstrap_clearance(context=browser_context)
+                _bootstrap_clearance(
+                    context=browser_context,
+                    diagnostics=diagnostics,
+                    backoff=backoff,
+                )
             for index, url in enumerate(urls, start=1):
                 page = browser_context.new_page()
                 try:
+                    backoff.before_request()
                     page.goto(url, wait_until="domcontentloaded", timeout=120000)
                     page.wait_for_timeout(4000)
                     html = page.content()
                     if "Just a moment..." in html:
+                        backoff.record_signal()
+                        screenshot_path = diagnostics.reserve_screenshot_path(
+                            f"dxbi_page_{index}"
+                        ) if diagnostics else None
+                        if screenshot_path is not None:
+                            try:
+                                page.screenshot(path=str(screenshot_path), full_page=True)
+                            except Exception:
+                                screenshot_path = None
+                        if diagnostics is not None:
+                            diagnostics.capture_failure(
+                                label=f"dxbi_page_{index}",
+                                url=url,
+                                body=html,
+                                screenshot_path=screenshot_path,
+                                error="cloudflare_challenge",
+                            )
                         raise RuntimeError(
                             "DXBI returned a Cloudflare challenge page. Supply a valid "
                             "storage_state_path captured after solving the challenge in a browser."
                         )
+                    backoff.record_success()
                     if url.rstrip("/") == DXBI_BASE_URL.rstrip("/"):
                         page_sales, page_rentals = _extract_root_page_rows(
                             page=page,
@@ -324,6 +384,27 @@ def download_all(
                             source_page=url,
                             scope_slug=scope_slug,
                         )
+                except Exception as exc:
+                    screenshot_path = (
+                        diagnostics.reserve_screenshot_path(f"dxbi_page_{index}")
+                        if diagnostics
+                        else None
+                    )
+                    if screenshot_path is not None:
+                        try:
+                            page.screenshot(path=str(screenshot_path), full_page=True)
+                        except Exception:
+                            screenshot_path = None
+                    if diagnostics is not None:
+                        diagnostics.capture_failure(
+                            label=f"dxbi_page_{index}",
+                            url=url,
+                            body=page.content(),
+                            screenshot_path=screenshot_path,
+                            error=str(exc),
+                            metadata={"page_index": index},
+                        )
+                    raise
                 finally:
                     page.close()
                 sale_rows.extend(page_sales)

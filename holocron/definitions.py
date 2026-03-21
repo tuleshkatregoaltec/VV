@@ -24,7 +24,7 @@ from holocron.framework.dagster_factory import (
     build_schedule_for_source,
 )
 from holocron.resources.clickhouse import ClickHouseResource
-from holocron.resources.http import HttpClientResource
+from holocron.resources.http_browser import BrowserlikeHTTPClient
 from holocron.resources.local_release import LocalReleaseStorageResource
 from holocron.resources.s3 import S3Resource
 from holocron.sources import SOURCES
@@ -72,7 +72,7 @@ defs = Definitions(
             database=EnvVar("CLICKHOUSE_DATABASE"),
             secure=os.environ.get("CLICKHOUSE_SECURE", "true").lower() == "true",
         ),
-        "http": HttpClientResource(),
+        "http": BrowserlikeHTTPClient(),
         "local_storage": LocalReleaseStorageResource(
             root_dir=os.environ.get("LOCAL_RELEASES_DIR", "/var/lib/holocron/releases")
         ),

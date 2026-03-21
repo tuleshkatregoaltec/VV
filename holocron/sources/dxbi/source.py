@@ -16,7 +16,13 @@ def extract(
     http,
     context,
 ) -> list[Path]:
-    results = dxbi_download_all(dest_dir=output_dir, run_id=release_id)
+    results = dxbi_download_all(
+        dest_dir=output_dir,
+        run_id=release_id,
+        http=http,
+        proxy=str(config.get("proxy") or ""),
+        diagnostics_dir=str(config.get("diagnostics_dir") or ""),
+    )
     return [result.local_path for result in results]
 
 

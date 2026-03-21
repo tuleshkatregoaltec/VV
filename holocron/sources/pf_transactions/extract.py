@@ -15,7 +15,13 @@ from tenacity import RetryError
 
 from holocron.framework.csv_utils import write_csv
 from holocron.framework.models import DownloadResult, utc_now_sql
-from holocron.scrape.propertyfinder import collect_location_urls, extract_next_data, fetch_json, fetch_text
+from holocron.scrape.diagnostics import DiagnosticsCollector
+from holocron.scrape.propertyfinder import (
+    collect_location_urls,
+    extract_next_data,
+    fetch_json,
+    fetch_text,
+)
 
 TRANSACTION_ROOT_URLS = {
     "buy": "https://www.propertyfinder.ae/en/transactions/buy/dubai",
@@ -149,16 +155,38 @@ def _extract_listing_location(*, purpose: str, html: str) -> RawLocationRecord:
     )
 
 
-def _fetch_listing_location(http, *, purpose: str, url: str) -> RawLocationRecord:
-    html = fetch_text(http, url)
+def _fetch_listing_location(
+    http,
+    *,
+    purpose: str,
+    url: str,
+    proxy: str,
+    diagnostics: DiagnosticsCollector | None,
+) -> RawLocationRecord:
+    html = fetch_text(
+        http,
+        url,
+        proxy=proxy,
+        diagnostics=diagnostics,
+        failure_label=f"pf_transactions_listing_{purpose}_{url.rsplit('/', 1)[-1]}",
+    )
     return _extract_listing_location(purpose=purpose, html=html)
 
 
-def _collect_location_urls(http, *, purpose: str, max_pages_per_purpose: int | None) -> list[str]:
+def _collect_location_urls(
+    http,
+    *,
+    purpose: str,
+    max_pages_per_purpose: int | None,
+    proxy: str,
+    diagnostics: DiagnosticsCollector | None,
+) -> list[str]:
     return collect_location_urls(
         http,
         purpose=purpose,
         max_pages_per_purpose=max_pages_per_purpose,
+        proxy=proxy,
+        diagnostics=diagnostics,
     )
 
 
@@ -168,12 +196,16 @@ def _discover_transaction_nodes(
     purpose: str,
     max_listing_pages_per_purpose: int | None,
     worker_count: int,
+    proxy: str,
+    diagnostics: DiagnosticsCollector | None,
     context=None,
 ) -> dict[str, LocationNode]:
     urls = _collect_location_urls(
         http,
         purpose=purpose,
         max_pages_per_purpose=max_listing_pages_per_purpose,
+        proxy=proxy,
+        diagnostics=diagnostics,
     )
     if context is not None:
         context.log.info(
@@ -184,7 +216,14 @@ def _discover_transaction_nodes(
     records: dict[str, RawLocationRecord] = {}
     with ThreadPoolExecutor(max_workers=max(1, worker_count)) as executor:
         future_map = {
-            executor.submit(_fetch_listing_location, http, purpose=purpose, url=url): url
+            executor.submit(
+                _fetch_listing_location,
+                http,
+                purpose=purpose,
+                url=url,
+                proxy=proxy,
+                diagnostics=diagnostics,
+            ): url
             for url in urls
         }
         for index, future in enumerate(as_completed(future_map), start=1):
@@ -223,8 +262,20 @@ def _discover_transaction_nodes(
     return nodes
 
 
-def _resolve_build_id(http, *, purpose: str) -> str:
-    html = fetch_text(http, TRANSACTION_ROOT_URLS[purpose])
+def _resolve_build_id(
+    http,
+    *,
+    purpose: str,
+    proxy: str,
+    diagnostics: DiagnosticsCollector | None,
+) -> str:
+    html = fetch_text(
+        http,
+        TRANSACTION_ROOT_URLS[purpose],
+        proxy=proxy,
+        diagnostics=diagnostics,
+        failure_label=f"pf_transactions_build_{purpose}",
+    )
     match = BUILD_ID_PATTERN.search(html)
     if match is None:
         raise ValueError("Could not resolve Property Finder Next.js build id")
@@ -285,6 +336,8 @@ def _fetch_transaction_page(
     period: str,
     sort: str,
     page: int,
+    proxy: str,
+    diagnostics: DiagnosticsCollector | None,
     path_overrides: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     payload = fetch_json(
@@ -298,11 +351,17 @@ def _fetch_transaction_page(
             page=page,
             path_overrides=path_overrides,
         ),
+        proxy=proxy,
+        diagnostics=diagnostics,
+        failure_label=f"pf_transactions_page_{purpose}_{node.pf_location_id}_{sort}_{page}",
     )
     return payload["pageProps"]
 
 
 def _is_not_found_error(exc: Exception) -> bool:
+    response = getattr(exc, "response", None)
+    if response is not None and getattr(response, "status_code", None) == 404:
+        return True
     if isinstance(exc, httpx.HTTPStatusError):
         return exc.response.status_code == 404
     if isinstance(exc, RetryError):
@@ -417,6 +476,8 @@ def _collect_all_pages(
     run_id: str,
     scraped_at: str,
     first_page_props: dict[str, Any],
+    proxy: str,
+    diagnostics: DiagnosticsCollector | None,
     path_overrides: dict[str, str] | None = None,
 ) -> tuple[list[TransactionRow], int]:
     store: dict[str, CapturedTransaction] = {}
@@ -444,6 +505,8 @@ def _collect_all_pages(
             period=period,
             sort="td",
             page=page_no,
+            proxy=proxy,
+            diagnostics=diagnostics,
             path_overrides=path_overrides,
         )
         request_count += 1
@@ -472,6 +535,8 @@ def _collect_dual_sort_pages(
     run_id: str,
     scraped_at: str,
     first_page_props: dict[str, Any],
+    proxy: str,
+    diagnostics: DiagnosticsCollector | None,
     path_overrides: dict[str, str] | None = None,
 ) -> tuple[list[TransactionRow], int, bool]:
     store: dict[str, CapturedTransaction] = {}
@@ -499,6 +564,8 @@ def _collect_dual_sort_pages(
                 period=period,
                 sort="td",
                 page=page_no,
+                proxy=proxy,
+                diagnostics=diagnostics,
                 path_overrides=path_overrides,
             )
             request_count += 1
@@ -524,6 +591,8 @@ def _collect_dual_sort_pages(
             period=period,
             sort="ta",
             page=page_no,
+            proxy=proxy,
+            diagnostics=diagnostics,
             path_overrides=path_overrides,
         )
         request_count += 1
@@ -579,6 +648,8 @@ def _crawl_transactions_for_purpose(
     max_nodes_per_purpose: int | None,
     run_id: str,
     scraped_at: str,
+    proxy: str,
+    diagnostics: DiagnosticsCollector | None,
     context=None,
 ) -> tuple[list[TransactionRow], list[CoverageRow]]:
     children_by_parent = _sorted_children(nodes)
@@ -614,6 +685,8 @@ def _crawl_transactions_for_purpose(
                 period=period,
                 sort="td",
                 page=1,
+                proxy=proxy,
+                diagnostics=diagnostics,
                 path_overrides=path_overrides,
             )
         except Exception as exc:
@@ -675,6 +748,8 @@ def _crawl_transactions_for_purpose(
                 run_id=run_id,
                 scraped_at=scraped_at,
                 first_page_props=first_page,
+                proxy=proxy,
+                diagnostics=diagnostics,
                 path_overrides=path_overrides,
             )
             is_self_complete = 1 if len(captured_rows) >= total_count else 0
@@ -689,6 +764,8 @@ def _crawl_transactions_for_purpose(
                 run_id=run_id,
                 scraped_at=scraped_at,
                 first_page_props=first_page,
+                proxy=proxy,
+                diagnostics=diagnostics,
                 path_overrides=path_overrides,
             )
             is_self_complete = 1 if complete else 0
@@ -744,6 +821,8 @@ def download_all(
     dest_dir: Path,
     run_id: str,
     http,
+    proxy: str = "",
+    diagnostics_dir: str = "",
     period: str = "3y",
     max_listing_pages_per_purpose: int | None = None,
     max_nodes_per_purpose: int | None = None,
@@ -751,6 +830,11 @@ def download_all(
     context=None,
 ) -> list[DownloadResult]:
     scraped_at = utc_now_sql()
+    diagnostics = DiagnosticsCollector(
+        root_dir=diagnostics_dir,
+        source_name="pf_transactions",
+        release_id=run_id,
+    )
     sales: list[TransactionRow] = []
     rentals: list[TransactionRow] = []
     coverage: list[CoverageRow] = []
@@ -761,9 +845,16 @@ def download_all(
             purpose=purpose,
             max_listing_pages_per_purpose=max_listing_pages_per_purpose,
             worker_count=worker_count,
+            proxy=proxy,
+            diagnostics=diagnostics,
             context=context,
         )
-        build_id = _resolve_build_id(http, purpose=purpose)
+        build_id = _resolve_build_id(
+            http,
+            purpose=purpose,
+            proxy=proxy,
+            diagnostics=diagnostics,
+        )
         if context is not None:
             context.log.info(
                 f"pf_transactions: resolved build_id={build_id} for {purpose}; "
@@ -778,6 +869,8 @@ def download_all(
             max_nodes_per_purpose=max_nodes_per_purpose,
             run_id=run_id,
             scraped_at=scraped_at,
+            proxy=proxy,
+            diagnostics=diagnostics,
             context=context,
         )
         purpose_rows.sort(key=lambda row: (row.transaction_date, row.pf_transaction_id))

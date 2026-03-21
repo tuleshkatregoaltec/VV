@@ -22,13 +22,18 @@ from holocron.framework.models import (
 )
 from holocron.framework.storage import manifest_key, raw_key
 from holocron.resources.clickhouse import ClickHouseResource
-from holocron.resources.http import HttpClientResource
+from holocron.resources.http_browser import BrowserlikeHTTPClient
 from holocron.resources.local_release import LocalReleaseStorageResource
 from holocron.resources.s3 import S3Resource
 
 
 def merged_config(source: SourceSpec, config: dict[str, Any] | None) -> dict[str, Any]:
-    return {**source.default_config, **(config or {})}
+    runtime_defaults = {
+        "proxy": source.proxy or "",
+        "diagnostics_dir": source.diagnostics_dir or "",
+        "storage_state_path": source.storage_state_path or "",
+    }
+    return {**runtime_defaults, **source.default_config, **(config or {})}
 
 
 def manifest_config_metadata(config: dict[str, Any]) -> dict[str, Any]:
@@ -48,7 +53,7 @@ def stage_local_source(
     context: AssetExecutionContext,
     source: SourceSpec,
     config: dict[str, Any] | None,
-    http: HttpClientResource,
+    http: BrowserlikeHTTPClient,
     local_storage: LocalReleaseStorageResource,
 ) -> LocalReleaseManifest:
     source_config = merged_config(source, config)

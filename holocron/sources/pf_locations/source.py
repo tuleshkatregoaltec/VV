@@ -27,6 +27,8 @@ def extract(
         dest_dir=output_dir,
         run_id=release_id,
         http=http,
+        proxy=str(config.get("proxy") or ""),
+        diagnostics_dir=str(config.get("diagnostics_dir") or ""),
         max_pages_per_purpose=(
             int(config["max_pages_per_purpose"]) if config.get("max_pages_per_purpose") else None
         ),

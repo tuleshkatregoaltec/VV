@@ -37,7 +37,7 @@ from holocron.framework.runner import (
 )
 from holocron.framework.validation import check_names_for_table, run_checks_for_table
 from holocron.resources.clickhouse import ClickHouseResource
-from holocron.resources.http import HttpClientResource
+from holocron.resources.http_browser import BrowserlikeHTTPClient
 from holocron.resources.local_release import LocalReleaseStorageResource
 from holocron.resources.s3 import S3Resource
 
@@ -126,11 +126,26 @@ def _asset_tags(
 
 
 def build_local_release_asset(source: SourceSpec):
+    runtime_config_schema = {
+        "proxy": optional_str(
+            "",
+            description="Optional proxy URL used by browser-like HTTP and Playwright scrapers.",
+        ),
+        "diagnostics_dir": optional_str(
+            "",
+            description="Optional directory for failure artifacts such as bodies and screenshots.",
+        ),
+        "storage_state_path": optional_str(
+            "",
+            description="Optional Playwright storage-state JSON reused by browser scrapers.",
+        ),
+    }
+
     @asset(
         name=source.local_release_asset_name,
         group_name=source.asset_group_name,
         tags=_asset_tags(source, asset_type="local_release"),
-        config_schema=source.config_schema or None,
+        config_schema={**runtime_config_schema, **source.config_schema} or None,
         description=(
             f"Scrape {source.name} source files into the mounted local staging volume. "
             "This is the resumable boundary before S3 upload."
@@ -138,7 +153,7 @@ def build_local_release_asset(source: SourceSpec):
     )
     def local_release_asset(
         context,
-        http: HttpClientResource,
+        http: BrowserlikeHTTPClient,
         local_storage: LocalReleaseStorageResource,
     ) -> Output[dict]:
         config = dict(context.op_config)

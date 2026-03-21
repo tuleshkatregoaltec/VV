@@ -114,6 +114,9 @@ class SourceSpec:
     publish_mode: PublishMode = PER_TABLE
     schedule: str | None = None
     description: str = ""
+    proxy: str | None = None
+    diagnostics_dir: str | None = None
+    storage_state_path: str | None = None
     config_schema: Mapping[str, Any] = field(default_factory=dict)
     default_config: Mapping[str, Any] = field(default_factory=dict)
     extra_check_names: Mapping[str, tuple[str, ...]] = field(default_factory=dict)

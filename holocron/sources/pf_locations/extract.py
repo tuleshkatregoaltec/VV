@@ -8,6 +8,7 @@ from pathlib import Path
 
 from holocron.framework.csv_utils import write_csv
 from holocron.framework.models import DownloadResult, utc_now_sql
+from holocron.scrape.diagnostics import DiagnosticsCollector
 from holocron.scrape.propertyfinder import collect_location_urls, fetch_text
 from holocron.sources.pf_locations.parse import (
     PfLocationRow,
@@ -19,16 +20,38 @@ from holocron.sources.pf_locations.parse import (
 _utc_now_sql = utc_now_sql
 
 
-def _fetch_record(http, *, purpose: str, url: str) -> RawLocationRecord:
-    html = fetch_text(http, url)
+def _fetch_record(
+    http,
+    *,
+    purpose: str,
+    url: str,
+    proxy: str,
+    diagnostics: DiagnosticsCollector | None,
+) -> RawLocationRecord:
+    html = fetch_text(
+        http,
+        url,
+        proxy=proxy,
+        diagnostics=diagnostics,
+        failure_label=f"pf_locations_{purpose}_{url.rsplit('/', 1)[-1]}",
+    )
     return extract_location_record(purpose=purpose, source_url=url, html=html)
 
 
-def _collect_location_urls(http, *, purpose: str, max_pages_per_purpose: int | None) -> list[str]:
+def _collect_location_urls(
+    http,
+    *,
+    purpose: str,
+    max_pages_per_purpose: int | None,
+    proxy: str,
+    diagnostics: DiagnosticsCollector | None,
+) -> list[str]:
     return collect_location_urls(
         http,
         purpose=purpose,
         max_pages_per_purpose=max_pages_per_purpose,
+        proxy=proxy,
+        diagnostics=diagnostics,
     )
 
 
@@ -37,15 +60,24 @@ def download_all(
     dest_dir: Path,
     run_id: str,
     http,
+    proxy: str = "",
+    diagnostics_dir: str = "",
     max_pages_per_purpose: int | None = None,
     worker_count: int = 8,
     context=None,
 ) -> list[DownloadResult]:
+    diagnostics = DiagnosticsCollector(
+        root_dir=diagnostics_dir,
+        source_name="pf_locations",
+        release_id=run_id,
+    )
     urls_by_purpose = {
         purpose: _collect_location_urls(
             http,
             purpose=purpose,
             max_pages_per_purpose=max_pages_per_purpose,
+            proxy=proxy,
+            diagnostics=diagnostics,
         )
         for purpose in ("buy", "rent")
     }
@@ -57,7 +89,14 @@ def download_all(
     records: list[RawLocationRecord] = []
     with ThreadPoolExecutor(max_workers=max(1, worker_count)) as executor:
         future_map = {
-            executor.submit(_fetch_record, http, purpose=purpose, url=url): (purpose, url)
+            executor.submit(
+                _fetch_record,
+                http,
+                purpose=purpose,
+                url=url,
+                proxy=proxy,
+                diagnostics=diagnostics,
+            ): (purpose, url)
             for purpose, url in tasks
         }
         for index, future in enumerate(as_completed(future_map), start=1):

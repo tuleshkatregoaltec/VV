@@ -6,6 +6,8 @@ import json
 import re
 from typing import Any
 
+from holocron.scrape.diagnostics import DiagnosticsCollector
+
 SITEMAP_URLS = {
     "buy": "https://www.propertyfinder.ae/sitemaps/dubai-buy-0.xml",
     "rent": "https://www.propertyfinder.ae/sitemaps/dubai-rent-0.xml",
@@ -34,13 +36,40 @@ NEXT_DATA_PATTERN = re.compile(
 SITEMAP_LOC_PATTERN = re.compile(r"<loc>(.*?)</loc>")
 
 
-def fetch_text(http, url: str, *, headers: dict[str, str] | None = None) -> str:
-    response = http.get(url, headers=headers or DEFAULT_HEADERS)
+def fetch_text(
+    http,
+    url: str,
+    *,
+    headers: dict[str, str] | None = None,
+    proxy: str = "",
+    diagnostics: DiagnosticsCollector | None = None,
+    failure_label: str = "",
+) -> str:
+    response = http.get(
+        url,
+        headers=headers or DEFAULT_HEADERS,
+        proxy=proxy,
+        diagnostics=diagnostics,
+        failure_label=failure_label or "propertyfinder_html",
+    )
     return response.text
 
 
-def fetch_json(http, url: str) -> dict[str, Any]:
-    response = http.get(url, headers=JSON_HEADERS)
+def fetch_json(
+    http,
+    url: str,
+    *,
+    proxy: str = "",
+    diagnostics: DiagnosticsCollector | None = None,
+    failure_label: str = "",
+) -> dict[str, Any]:
+    response = http.get(
+        url,
+        headers=JSON_HEADERS,
+        proxy=proxy,
+        diagnostics=diagnostics,
+        failure_label=failure_label or "propertyfinder_json",
+    )
     return response.json()
 
 
@@ -63,10 +92,22 @@ def parse_generic_location_urls(xml_text: str, *, purpose: str) -> list[str]:
     return urls
 
 
-def collect_location_urls(http, *, purpose: str, max_pages_per_purpose: int | None) -> list[str]:
-    sitemap_xml = fetch_text(http, SITEMAP_URLS[purpose])
+def collect_location_urls(
+    http,
+    *,
+    purpose: str,
+    max_pages_per_purpose: int | None,
+    proxy: str = "",
+    diagnostics: DiagnosticsCollector | None = None,
+) -> list[str]:
+    sitemap_xml = fetch_text(
+        http,
+        SITEMAP_URLS[purpose],
+        proxy=proxy,
+        diagnostics=diagnostics,
+        failure_label=f"propertyfinder_sitemap_{purpose}",
+    )
     urls = parse_generic_location_urls(sitemap_xml, purpose=purpose)
     if max_pages_per_purpose is not None:
         return urls[:max_pages_per_purpose]
     return urls
-

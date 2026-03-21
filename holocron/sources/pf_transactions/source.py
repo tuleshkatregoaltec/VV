@@ -29,6 +29,8 @@ def extract(
         dest_dir=output_dir,
         run_id=release_id,
         http=http,
+        proxy=str(config.get("proxy") or ""),
+        diagnostics_dir=str(config.get("diagnostics_dir") or ""),
         period=str(config.get("period") or "3y"),
         max_listing_pages_per_purpose=(
             int(config["max_listing_pages_per_purpose"])
