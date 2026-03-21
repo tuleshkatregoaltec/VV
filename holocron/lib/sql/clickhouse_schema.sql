@@ -923,7 +923,7 @@ CREATE TABLE IF NOT EXISTS bay_transaction_location_silver (
     hierarchy_json              String DEFAULT '[]',
     source_confidence_notes     String DEFAULT ''
 ) ENGINE = MergeTree()
-ORDER BY (transaction_date, source_record_key);
+ORDER BY (ifNull(transaction_date, toDate('1970-01-01')), source_record_key);
 
 
 CREATE TABLE IF NOT EXISTS dxbi_transaction_location_silver (
@@ -957,7 +957,7 @@ CREATE TABLE IF NOT EXISTS dxbi_transaction_location_silver (
     hierarchy_json              String DEFAULT '[]',
     source_confidence_notes     String DEFAULT ''
 ) ENGINE = MergeTree()
-ORDER BY (transaction_date, source_record_key);
+ORDER BY (ifNull(transaction_date, toDate('1970-01-01')), source_record_key);
 
 
 CREATE TABLE IF NOT EXISTS pf_transaction_location_silver (
@@ -991,4 +991,4 @@ CREATE TABLE IF NOT EXISTS pf_transaction_location_silver (
     hierarchy_json              String DEFAULT '[]',
     source_confidence_notes     String DEFAULT ''
 ) ENGINE = MergeTree()
-ORDER BY (transaction_date, source_record_key);
+ORDER BY (ifNull(transaction_date, toDate('1970-01-01')), source_record_key);
