@@ -29,6 +29,9 @@ DEFAULT_USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36"
 )
+TRANSIENT_BAYUT_STATUSES = (401, 403, 429)
+BOOTSTRAP_RETRY_ATTEMPTS = 3
+BOOTSTRAP_RETRY_DELAY_SECONDS = 2.0
 
 _utc_now_sql = utc_now_sql
 
@@ -115,6 +118,13 @@ def _fetch_transactions_page(
     return payload
 
 
+def _is_retryable_bayut_error(exc: Exception) -> bool:
+    if not isinstance(exc, RuntimeError):
+        return False
+    message = str(exc)
+    return any(f": {status}" in message for status in TRANSIENT_BAYUT_STATUSES)
+
+
 def _fetch_all_hits(
     api: APIRequestContext,
     *,
@@ -163,6 +173,49 @@ def _write_rows(path: Path, *, fieldnames: list[str], rows: list[Any]) -> None:
     write_csv(path, fieldnames=fieldnames, rows=[asdict(row) for row in rows])
 
 
+def _download_payloads(
+    *,
+    playwright: Playwright,
+    chrome_path: str,
+    parsed_start: date,
+    parsed_end: date,
+    max_pages: int | None,
+) -> tuple[list[tuple[int, dict[str, Any]]], list[tuple[int, dict[str, Any]]]]:
+    last_error: Exception | None = None
+    for attempt in range(1, BOOTSTRAP_RETRY_ATTEMPTS + 1):
+        browser, api = _bootstrap_api(playwright=playwright, chrome_path=chrome_path)
+        try:
+            sale_pages = _fetch_all_hits(
+                api,
+                purpose="for-sale",
+                start_date=parsed_start,
+                end_date=parsed_end,
+                max_pages=max_pages,
+            )
+            rent_pages = _fetch_all_hits(
+                api,
+                purpose="for-rent",
+                start_date=parsed_start,
+                end_date=parsed_end,
+                max_pages=max_pages,
+            )
+            return sale_pages, rent_pages
+        except Exception as exc:
+            last_error = exc
+            if attempt >= BOOTSTRAP_RETRY_ATTEMPTS or not _is_retryable_bayut_error(exc):
+                raise
+            time.sleep(BOOTSTRAP_RETRY_DELAY_SECONDS * attempt)
+        finally:
+            api.dispose()
+            browser.close()
+
+    if last_error is not None:
+        raise RuntimeError(
+            "Bayut transactions bootstrap exhausted retries without a successful API session"
+        ) from last_error
+    raise RuntimeError("Bayut transactions bootstrap exhausted retries without an error")
+
+
 def download_all(
     *,
     dest_dir: Path,
@@ -181,25 +234,13 @@ def download_all(
     scraped_at = _utc_now_sql()
 
     with sync_playwright() as playwright:
-        browser, api = _bootstrap_api(playwright=playwright, chrome_path=chrome_path)
-        try:
-            sale_pages = _fetch_all_hits(
-                api,
-                purpose="for-sale",
-                start_date=parsed_start,
-                end_date=parsed_end,
-                max_pages=max_pages,
-            )
-            rent_pages = _fetch_all_hits(
-                api,
-                purpose="for-rent",
-                start_date=parsed_start,
-                end_date=parsed_end,
-                max_pages=max_pages,
-            )
-        finally:
-            api.dispose()
-            browser.close()
+        sale_pages, rent_pages = _download_payloads(
+            playwright=playwright,
+            chrome_path=chrome_path,
+            parsed_start=parsed_start,
+            parsed_end=parsed_end,
+            max_pages=max_pages,
+        )
 
     sale_rows: list[SaleTransactionRow] = []
     for page_number, payload in sale_pages:
