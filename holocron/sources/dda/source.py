@@ -1,4 +1,4 @@
-"""GIS source definition for Holocron."""
+"""DDA planning-layers source definition for Holocron."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ from holocron.framework.models import (
     testing_limit_field,
     worker_count_field,
 )
-from holocron.sources.gis.extract import scrape_all_layers
+from holocron.sources.dda.extract import scrape_all_layers
 
 
 def _run_with_retries(label: str, fn, *, attempts: int = 3, log=None) -> None:

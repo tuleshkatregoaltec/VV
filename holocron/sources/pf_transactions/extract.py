@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import asdict, dataclass, fields
-import json
 import math
 import re
 from pathlib import Path
@@ -16,38 +15,12 @@ from tenacity import RetryError
 
 from holocron.framework.csv_utils import write_csv
 from holocron.framework.models import DownloadResult, utc_now_sql
-
-SITEMAP_URLS = {
-    "buy": "https://www.propertyfinder.ae/sitemaps/dubai-buy-0.xml",
-    "rent": "https://www.propertyfinder.ae/sitemaps/dubai-rent-0.xml",
-}
-
-GENERIC_PAGE_MARKERS = {
-    "buy": "/en/buy/dubai/properties-for-sale-",
-    "rent": "/en/rent/dubai/properties-for-rent-",
-}
+from holocron.scrape.propertyfinder import collect_location_urls, extract_next_data, fetch_json, fetch_text
 
 TRANSACTION_ROOT_URLS = {
     "buy": "https://www.propertyfinder.ae/en/transactions/buy/dubai",
     "rent": "https://www.propertyfinder.ae/en/transactions/rent/dubai",
 }
-
-DEFAULT_HEADERS = {
-    "User-Agent": (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36"
-    ),
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-    "Accept-Language": "en-US,en;q=0.9",
-}
-
-JSON_HEADERS = {**DEFAULT_HEADERS, "Accept": "application/json", "x-nextjs-data": "1"}
-
-NEXT_DATA_PATTERN = re.compile(
-    r'<script id="__NEXT_DATA__" type="application/json">(.*?)</script>',
-    re.DOTALL,
-)
-SITEMAP_LOC_PATTERN = re.compile(r"<loc>(.*?)</loc>")
 BUILD_ID_PATTERN = re.compile(r'"buildId":"([^"]+)"')
 TRANSACTION_URL_PATH_PATTERN = re.compile(r"^/en/transactions/(?P<purpose>buy|rent)/(?P<path>.+)$")
 
@@ -142,35 +115,6 @@ class CapturedTransaction:
     key: str
 
 
-def _fetch_text(http, url: str, *, headers: dict[str, str] | None = None) -> str:
-    response = http.get(url, headers=headers or DEFAULT_HEADERS)
-    return response.text
-
-
-def _fetch_json(http, url: str) -> dict[str, Any]:
-    response = http.get(url, headers=JSON_HEADERS)
-    return response.json()
-
-
-def _extract_next_data(html: str) -> dict[str, Any]:
-    match = NEXT_DATA_PATTERN.search(html)
-    if match is None:
-        raise ValueError("Property Finder page missing __NEXT_DATA__ payload")
-    return json.loads(match.group(1))
-
-
-def _parse_generic_location_urls(xml_text: str, *, purpose: str) -> list[str]:
-    marker = GENERIC_PAGE_MARKERS[purpose]
-    urls: list[str] = []
-    seen: set[str] = set()
-    for url in SITEMAP_LOC_PATTERN.findall(xml_text):
-        if marker not in url or url in seen:
-            continue
-        seen.add(url)
-        urls.append(url)
-    return urls
-
-
 def _path_depth(path_ids: str) -> int:
     return len([part for part in path_ids.split(".") if part])
 
@@ -190,7 +134,7 @@ def _city_id(path_ids: str) -> str:
 
 
 def _extract_listing_location(*, purpose: str, html: str) -> RawLocationRecord:
-    payload = _extract_next_data(html)
+    payload = extract_next_data(html)
     page_props = payload["props"]["pageProps"]
     location = page_props["filtersValueFromQuery"]["filter[locations_ids]"][0]
     return RawLocationRecord(
@@ -206,16 +150,16 @@ def _extract_listing_location(*, purpose: str, html: str) -> RawLocationRecord:
 
 
 def _fetch_listing_location(http, *, purpose: str, url: str) -> RawLocationRecord:
-    html = _fetch_text(http, url)
+    html = fetch_text(http, url)
     return _extract_listing_location(purpose=purpose, html=html)
 
 
 def _collect_location_urls(http, *, purpose: str, max_pages_per_purpose: int | None) -> list[str]:
-    sitemap_xml = _fetch_text(http, SITEMAP_URLS[purpose])
-    urls = _parse_generic_location_urls(sitemap_xml, purpose=purpose)
-    if max_pages_per_purpose is not None:
-        return urls[:max_pages_per_purpose]
-    return urls
+    return collect_location_urls(
+        http,
+        purpose=purpose,
+        max_pages_per_purpose=max_pages_per_purpose,
+    )
 
 
 def _discover_transaction_nodes(
@@ -280,7 +224,7 @@ def _discover_transaction_nodes(
 
 
 def _resolve_build_id(http, *, purpose: str) -> str:
-    html = _fetch_text(http, TRANSACTION_ROOT_URLS[purpose])
+    html = fetch_text(http, TRANSACTION_ROOT_URLS[purpose])
     match = BUILD_ID_PATTERN.search(html)
     if match is None:
         raise ValueError("Could not resolve Property Finder Next.js build id")
@@ -343,7 +287,7 @@ def _fetch_transaction_page(
     page: int,
     path_overrides: dict[str, str] | None = None,
 ) -> dict[str, Any]:
-    payload = _fetch_json(
+    payload = fetch_json(
         http,
         _transaction_json_url(
             build_id=build_id,

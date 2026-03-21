@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import csv
-import html as html_lib
-import json
 import re
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -14,6 +12,30 @@ import httpx
 from dagster import get_dagster_logger
 
 from holocron.framework.csv_utils import write_csv
+from holocron.sources.dda.parse import (
+    BUILDING_LIMIT_CSV_FIELDS,
+    CSV_FIELDS,
+    FROZEN_PLOT_CSV_FIELDS,
+    LANDUSE_SYMBOL_CSV_FIELDS,
+    PLOT_ARCADE_CSV_FIELDS,
+    PLOT_BUILT_TO_LINE_CSV_FIELDS,
+    PLOT_FEATURE_CSV_FIELDS,
+    PLOT_RETAIL_CSV_FIELDS,
+    PODIUM_LIMIT_CSV_FIELDS,
+    PROJECT_CSV_FIELDS,
+    SUBPROJECT_CSV_FIELDS,
+    arcade_row,
+    building_limit_row,
+    built_to_line_row,
+    frozen_plot_row,
+    landuse_symbol_row,
+    parse_plot_info,
+    plot_feature_row,
+    podium_limit_row,
+    project_area_row,
+    retail_row,
+    subproject_area_row,
+)
 
 _BASE_URL = "https://gis.dda.gov.ae"
 _PAGE_SIZE = 2000
@@ -27,105 +49,6 @@ _HEADERS = {
     "Referer": f"{_BASE_URL}/DIS",
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
 }
-
-CSV_FIELDS = [
-    "plot_number",
-    "old_numbers",
-    "project_name",
-    "community_name",
-    "master_developer",
-    "plot_area_sqm",
-    "plot_area_sqft",
-    "max_gfa_sqm",
-    "max_gfa_sqft",
-    "max_height",
-    "max_coverage",
-    "site_plan_issue_date",
-    "site_plan_expiry_date",
-    "side1_building",
-    "side1_podium",
-    "side2_building",
-    "side2_podium",
-    "side3_building",
-    "side3_podium",
-    "side4_building",
-    "side4_podium",
-    "land_use",
-    "general_notes",
-    "coordinates",
-    "landuse_symbols",
-    "gfa_type",
-    "is_verified",
-    "verify_comments",
-]
-
-PROJECT_CSV_FIELDS = ["object_id", "project_name", "rings"]
-SUBPROJECT_CSV_FIELDS = [
-    "object_id",
-    "project_id",
-    "project_name",
-    "entity_name",
-    "developer_name",
-    "master_project_name",
-    "original_plot_number",
-    "project_logo",
-    "rings",
-]
-BUILDING_LIMIT_CSV_FIELDS = ["object_id", "plot_number", "rings"]
-PODIUM_LIMIT_CSV_FIELDS = ["object_id", "plot_number", "max_height", "rings"]
-PLOT_FEATURE_CSV_FIELDS = [
-    "object_id",
-    "plot_number",
-    "feature_type_code",
-    "feature_type_label",
-    "feature_area_sqm",
-    "feature_perimeter_m",
-    "rings",
-]
-FROZEN_PLOT_CSV_FIELDS = [
-    "object_id",
-    "plot_number",
-    "old_plot_numbers",
-    "is_frozen",
-    "plot_area_sqm",
-    "plot_perimeter_m",
-    "gfa_type",
-    "gfa_sqm_t",
-    "gfa_sqft_t",
-    "rings",
-]
-LANDUSE_SYMBOL_CSV_FIELDS = [
-    "object_id",
-    "landuse",
-    "landuse_character",
-    "landuse_id",
-    "lat",
-    "lng",
-]
-PLOT_BUILT_TO_LINE_CSV_FIELDS = ["object_id", "plot_number", "paths"]
-PLOT_ARCADE_CSV_FIELDS = ["object_id", "plot_number", "rings"]
-PLOT_RETAIL_CSV_FIELDS = ["object_id", "plot_number", "rings"]
-
-PLOT_FEATURE_LABELS = {
-    1: "No Construction Allowed",
-    2: "Affected Area",
-    3: "Basement Limit",
-    4: "Frozen Area",
-    5: "Reserved Corridor",
-    6: "Easement Limit",
-    7: "Pedestrian Interface",
-    8: "Walkway",
-    9: "Loading Area",
-    10: "Landscape",
-    11: "Optional Podium",
-    12: "Low Rise Zone",
-    13: "Restricted Build Zone",
-    14: "Parking Structure",
-    15: "Parking Area",
-    16: "Structure Limit",
-    17: "Allocated Underground Parking",
-}
-
 
 def _log(message: str) -> None:
     get_dagster_logger().info(message)
@@ -146,90 +69,6 @@ def _fetch_token(client: httpx.Client) -> str:
 def _is_token_error(data: dict) -> bool:
     error = data.get("error") or {}
     return error.get("code") in {498, 499}
-
-
-def _strip_tags(text: str) -> str:
-    return html_lib.unescape(re.sub(r"<[^>]+>", "", text)).strip()
-
-
-def _parse_area(text: str) -> tuple[str, str]:
-    sqm_match = re.search(r"([\d,]+\.?\d*)\s*M", text)
-    sqm = sqm_match.group(1).replace(",", "") if sqm_match else ""
-    sqft_match = re.search(r"\(([\d,]+\.?\d*)\s*Ft", text)
-    sqft = sqft_match.group(1).replace(",", "") if sqft_match else ""
-    return sqm, sqft
-
-
-def _parse_plot_info(html: str, plot_number: str) -> dict:
-    row: dict = {"plot_number": plot_number}
-    for match in re.finditer(
-        r"<label[^>]*>([^<]+)</label>\s*<div[^>]*form-info-dda[^>]*>(.*?)</div>",
-        html,
-        re.DOTALL | re.IGNORECASE,
-    ):
-        label = match.group(1).strip()
-        value = _strip_tags(match.group(2)).replace("\xa0", " ")
-
-        if label == "Old Numbers":
-            row["old_numbers"] = value
-        elif label == "Project Name":
-            row["project_name"] = value
-        elif label == "Community Name":
-            row["community_name"] = value
-        elif label == "Master Developer":
-            row["master_developer"] = value
-        elif label == "Plot Area":
-            row["plot_area_sqm"], row["plot_area_sqft"] = _parse_area(value)
-        elif label == "Maximum GFA":
-            row["max_gfa_sqm"], row["max_gfa_sqft"] = _parse_area(value)
-        elif label == "Maximum Height":
-            row["max_height"] = value
-        elif label == "Maximum Coverage":
-            row["max_coverage"] = value
-        elif label == "Site Plan Issue Date":
-            row["site_plan_issue_date"] = value
-        elif label == "Site Plan Expiry Date":
-            row["site_plan_expiry_date"] = value
-
-    for match in re.finditer(
-        r"<td[^>]*>Side (\d+)</td>\s*<td[^>]*>([^<]*)</td>\s*<td[^>]*>([^<]*)</td>",
-        html,
-        re.IGNORECASE,
-    ):
-        side = match.group(1)
-        row[f"side{side}_building"] = match.group(2).strip()
-        row[f"side{side}_podium"] = match.group(3).strip()
-
-    land_use = [
-        {"type": land_type.strip(), "use": land_use.strip()}
-        for land_type, land_use in re.findall(
-            r"<li>\s*<b>([^<]+)</b>:\s*([^<]+)</li>", html, re.IGNORECASE
-        )
-    ]
-    row["land_use"] = json.dumps(land_use)
-
-    notes_match = re.search(
-        r"General Notes</div>(.*?)(?:<div class=\"section-header|<div class=\"w-100 overflow-auto)",
-        html,
-        re.DOTALL | re.IGNORECASE,
-    )
-    if notes_match:
-        row["general_notes"] = " | ".join(
-            note.strip() for note in re.findall(r"<li[^>]*>([^<]+)</li>", notes_match.group(1))
-        )
-    else:
-        row["general_notes"] = ""
-
-    coords = [
-        [float(east), float(north)]
-        for east, north in re.findall(
-            r"<td[^>]*>\d+</td>\s*<td[^>]*>([\d.]+)</td>\s*<td[^>]*>([\d.]+)</td>",
-            html,
-            re.IGNORECASE,
-        )
-    ]
-    row["coordinates"] = json.dumps(coords)
-    return row
 
 
 def _fetch_plot_info(client: httpx.Client, plot: dict) -> dict:
@@ -254,7 +93,7 @@ def _fetch_plot_info(client: httpx.Client, plot: dict) -> dict:
             response.raise_for_status()
             if "form-info-dda" not in response.text:
                 raise ValueError("Unexpected response (possible WAF block)")
-            return {**base, **_parse_plot_info(response.text, plot_number)}
+            return {**base, **parse_plot_info(response.text, plot_number)}
         except Exception as exc:
             if attempt == _MAX_RETRIES:
                 _log(f"dda: plot {plot_number} failed after {_MAX_RETRIES} attempts: {exc}")
@@ -402,11 +241,6 @@ def _fetch_all_layer_features(
     _log(f"dda: completed {label} fetch with {len(features)} features")
     return features
 
-
-def _json_dumps(value: object) -> str:
-    return json.dumps(value, ensure_ascii=False)
-
-
 def scrape_project_areas(client: httpx.Client, token: str, output: Path) -> None:
     features = _fetch_all_layer_features(
         client,
@@ -415,36 +249,14 @@ def scrape_project_areas(client: httpx.Client, token: str, output: Path) -> None
         out_fields="OBJECTID,ProjectName",
         layer_name="project_areas",
     )
-    rows = [
-        {
-            "object_id": feat.get("attributes", {}).get("OBJECTID", ""),
-            "project_name": feat.get("attributes", {}).get("ProjectName", ""),
-            "rings": _json_dumps(feat.get("geometry", {}).get("rings", [])),
-        }
-        for feat in features
-    ]
+    rows = [project_area_row(feature) for feature in features]
     write_csv(output, PROJECT_CSV_FIELDS, rows)
     _log(f"dda: wrote {len(rows)} project areas to {output}")
 
 
 def scrape_subproject_areas(client: httpx.Client, token: str, output: Path) -> None:
     features = _fetch_all_layer_features(client, token, 11, layer_name="subproject_areas")
-    rows = []
-    for feat in features:
-        attrs = feat.get("attributes", {})
-        rows.append(
-            {
-                "object_id": attrs.get("OBJECTID", ""),
-                "project_id": attrs.get("ProjectID") or "",
-                "project_name": attrs.get("ProjectName") or "",
-                "entity_name": attrs.get("EntityName") or "",
-                "developer_name": attrs.get("DeveloperName") or "",
-                "master_project_name": attrs.get("MasterProjectName") or "",
-                "original_plot_number": attrs.get("OriginalPlotNumber") or "",
-                "project_logo": attrs.get("ProjectLogo") or "",
-                "rings": _json_dumps(feat.get("geometry", {}).get("rings", [])),
-            }
-        )
+    rows = [subproject_area_row(feature) for feature in features]
     write_csv(output, SUBPROJECT_CSV_FIELDS, rows)
     _log(f"dda: wrote {len(rows)} subproject areas to {output}")
 
@@ -457,14 +269,7 @@ def scrape_building_limits(client: httpx.Client, token: str, output: Path) -> No
         out_fields="OBJECTID,PlotNumber",
         layer_name="plot_building_limits",
     )
-    rows = [
-        {
-            "object_id": feat.get("attributes", {}).get("OBJECTID", ""),
-            "plot_number": feat.get("attributes", {}).get("PlotNumber") or "",
-            "rings": _json_dumps(feat.get("geometry", {}).get("rings", [])),
-        }
-        for feat in features
-    ]
+    rows = [building_limit_row(feature) for feature in features]
     write_csv(output, BUILDING_LIMIT_CSV_FIELDS, rows)
     _log(f"dda: wrote {len(rows)} building limits to {output}")
 
@@ -477,17 +282,7 @@ def scrape_podium_limits(client: httpx.Client, token: str, output: Path) -> None
         out_fields="OBJECTID,PlotNumber,MaxHeight",
         layer_name="plot_podium_limits",
     )
-    rows = []
-    for feat in features:
-        attrs = feat.get("attributes", {})
-        rows.append(
-            {
-                "object_id": attrs.get("OBJECTID", ""),
-                "plot_number": attrs.get("PlotNumber") or "",
-                "max_height": attrs.get("MaxHeight") or "",
-                "rings": _json_dumps(feat.get("geometry", {}).get("rings", [])),
-            }
-        )
+    rows = [podium_limit_row(feature) for feature in features]
     write_csv(output, PODIUM_LIMIT_CSV_FIELDS, rows)
     _log(f"dda: wrote {len(rows)} podium limits to {output}")
 
@@ -500,21 +295,7 @@ def scrape_plot_features(client: httpx.Client, token: str, output: Path) -> None
         out_fields="OBJECTID,FeatureType,PlotNumber,SHAPE.STArea(),SHAPE.STLength()",
         layer_name="plot_features",
     )
-    rows = []
-    for feat in features:
-        attrs = feat.get("attributes", {})
-        feature_type = attrs.get("FeatureType")
-        rows.append(
-            {
-                "object_id": attrs.get("OBJECTID", ""),
-                "plot_number": attrs.get("PlotNumber") or "",
-                "feature_type_code": feature_type if feature_type is not None else "",
-                "feature_type_label": PLOT_FEATURE_LABELS.get(feature_type, ""),
-                "feature_area_sqm": attrs.get("SHAPE.STArea()") or 0,
-                "feature_perimeter_m": attrs.get("SHAPE.STLength()") or 0,
-                "rings": _json_dumps(feat.get("geometry", {}).get("rings", [])),
-            }
-        )
+    rows = [plot_feature_row(feature) for feature in features]
     write_csv(output, PLOT_FEATURE_CSV_FIELDS, rows)
     _log(f"dda: wrote {len(rows)} plot features to {output}")
 
@@ -530,23 +311,7 @@ def scrape_frozen_plots(client: httpx.Client, token: str, output: Path) -> None:
         ),
         layer_name="frozen_plots",
     )
-    rows = []
-    for feat in features:
-        attrs = feat.get("attributes", {})
-        rows.append(
-            {
-                "object_id": attrs.get("OBJECTID", ""),
-                "plot_number": attrs.get("PLOT_NUMBER") or "",
-                "old_plot_numbers": attrs.get("OLD_PLOT_NUMBERS") or "",
-                "is_frozen": attrs.get("IS_FROZEN") or 0,
-                "plot_area_sqm": attrs.get("SHAPE.STArea()") or 0,
-                "plot_perimeter_m": attrs.get("SHAPE.STLength()") or 0,
-                "gfa_type": attrs.get("GFA_TYPE") or "",
-                "gfa_sqm_t": attrs.get("GFA_SQM_T") or "",
-                "gfa_sqft_t": attrs.get("GFA_SQFT_T") or "",
-                "rings": _json_dumps(feat.get("geometry", {}).get("rings", [])),
-            }
-        )
+    rows = [frozen_plot_row(feature) for feature in features]
     write_csv(output, FROZEN_PLOT_CSV_FIELDS, rows)
     _log(f"dda: wrote {len(rows)} frozen plots to {output}")
 
@@ -559,20 +324,7 @@ def scrape_landuse_symbols(client: httpx.Client, token: str, output: Path) -> No
         out_fields="OBJECTID,LANDUSE,LANDUSE_CHARACTER,LANDUSE_ID",
         layer_name="landuse_symbols",
     )
-    rows = []
-    for feat in features:
-        attrs = feat.get("attributes", {})
-        geom = feat.get("geometry", {})
-        rows.append(
-            {
-                "object_id": attrs.get("OBJECTID", ""),
-                "landuse": attrs.get("LANDUSE") or "",
-                "landuse_character": attrs.get("LANDUSE_CHARACTER") or "",
-                "landuse_id": attrs.get("LANDUSE_ID") or "",
-                "lat": geom.get("y") or 0,
-                "lng": geom.get("x") or 0,
-            }
-        )
+    rows = [landuse_symbol_row(feature) for feature in features]
     write_csv(output, LANDUSE_SYMBOL_CSV_FIELDS, rows)
     _log(f"dda: wrote {len(rows)} landuse symbols to {output}")
 
@@ -585,14 +337,7 @@ def scrape_plot_built_to_lines(client: httpx.Client, token: str, output: Path) -
         out_fields="OBJECTID,PlotNumber",
         layer_name="plot_built_to_lines",
     )
-    rows = [
-        {
-            "object_id": feat.get("attributes", {}).get("OBJECTID", ""),
-            "plot_number": feat.get("attributes", {}).get("PlotNumber") or "",
-            "paths": _json_dumps(feat.get("geometry", {}).get("paths", [])),
-        }
-        for feat in features
-    ]
+    rows = [built_to_line_row(feature) for feature in features]
     write_csv(output, PLOT_BUILT_TO_LINE_CSV_FIELDS, rows)
     _log(f"dda: wrote {len(rows)} built-to-line records to {output}")
 
@@ -605,14 +350,7 @@ def scrape_plot_arcades(client: httpx.Client, token: str, output: Path) -> None:
         out_fields="OBJECTID,PlotNumber",
         layer_name="plot_arcades",
     )
-    rows = [
-        {
-            "object_id": feat.get("attributes", {}).get("OBJECTID", ""),
-            "plot_number": feat.get("attributes", {}).get("PlotNumber") or "",
-            "rings": _json_dumps(feat.get("geometry", {}).get("rings", [])),
-        }
-        for feat in features
-    ]
+    rows = [arcade_row(feature) for feature in features]
     write_csv(output, PLOT_ARCADE_CSV_FIELDS, rows)
     _log(f"dda: wrote {len(rows)} arcade records to {output}")
 
@@ -625,14 +363,7 @@ def scrape_plot_retail(client: httpx.Client, token: str, output: Path) -> None:
         out_fields="OBJECTID,PlotNumber",
         layer_name="plot_retail",
     )
-    rows = [
-        {
-            "object_id": feat.get("attributes", {}).get("OBJECTID", ""),
-            "plot_number": feat.get("attributes", {}).get("PlotNumber") or "",
-            "rings": _json_dumps(feat.get("geometry", {}).get("rings", [])),
-        }
-        for feat in features
-    ]
+    rows = [retail_row(feature) for feature in features]
     write_csv(output, PLOT_RETAIL_CSV_FIELDS, rows)
     _log(f"dda: wrote {len(rows)} plot retail records to {output}")
 
