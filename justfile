@@ -65,3 +65,6 @@ test-guards:
 
 generate-client:
 	./scripts/generate-client.sh
+
+load-clickhouse-local:
+	set -a && source .env.dev && set +a && cd backend && uv run scripts/data/insert/load_local_clickhouse.py
