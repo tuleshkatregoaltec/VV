@@ -1,12 +1,6 @@
+import type { FeasibilityStudy, PlotDataResponse } from '$lib/feasibility/workbook/models'
 import { client } from './client'
-import type {
-	ComparableData,
-	GisPlotDossier,
-	GisPlotSummary,
-	HbuStudy
-} from './generated/hey-api/types.gen'
-
-export type { ComparableData, GisPlotDossier, GisPlotSummary, HbuStudy }
+import type { FeasibilityAssumptions, Plot, PlotResearch } from './generated/hey-api/types.gen'
 
 export const feasibility = {
 	getAreas(): Promise<string[]> {
@@ -24,7 +18,7 @@ export const feasibility = {
 		maxPlotAreaSqm?: number
 		offset?: number
 		limit?: number
-	}): Promise<GisPlotSummary[]> {
+	}): Promise<Plot[]> {
 		return client.get(
 			client.withQuery('/api/v1/feasibility/plots', {
 				q: params.q,
@@ -37,52 +31,34 @@ export const feasibility = {
 		)
 	},
 
-	getPlotDossier(plotNumber: string): Promise<GisPlotDossier> {
+	getPlotData(plotNumber: string): Promise<PlotDataResponse> {
 		return client.get(`/api/v1/feasibility/plots/${encodeURIComponent(plotNumber)}`)
 	},
 
-	generateHBUStudy(
-		plotNumber: string,
-		usageOverride?: GisPlotDossier['inferred_usage']
-	): Promise<HbuStudy> {
-		return client.post(
-			client.withQuery(`/api/v1/feasibility/hbu/${encodeURIComponent(plotNumber)}`, {
-				usage_override: usageOverride && usageOverride !== 'unknown' ? usageOverride : undefined
-			})
-		)
-	},
-
-	searchLandPlots(area: string, q: string): Promise<GisPlotSummary[]> {
-		return client.get(client.withQuery('/api/v1/feasibility/land/search', { area, q }))
-	},
-
-	getLandPlots(area: string, sizeSqm: number, tolerance = 0.25): Promise<GisPlotSummary[]> {
-		return client.get(
-			client.withQuery('/api/v1/feasibility/land', {
-				area,
-				size_sqm: sizeSqm,
-				tolerance
-			})
-		)
-	},
-
-	getComparableData(projectIds: number[]): Promise<ComparableData> {
-		return client.get(
-			client.withQuery('/api/v1/feasibility/comparable', {
-				project_ids: projectIds.join(',')
-			})
-		)
+	generateStudy(params: {
+		plot_number: string
+		usage_override?: 'residential' | 'commercial' | 'mixed_use' | 'unknown'
+	}): Promise<FeasibilityStudy> {
+		return client.post('/api/v1/feasibility/generate-study', params)
 	},
 
 	streamChat(
 		messages: Array<{ role: string; content: string }>,
-		context: object,
-		historyJson: string | null,
+		params: {
+			plot_data: FeasibilityStudy['plot_data']
+			assumptions: FeasibilityAssumptions
+			research: PlotResearch
+		},
 		onChunk: (data: string) => void
 	) {
 		return client.stream('/api/v1/feasibility/chat/stream', onChunk, {
 			method: 'POST',
-			body: { messages, context, history_json: historyJson }
+			body: {
+				messages,
+				plot_data: params.plot_data,
+				assumptions: params.assumptions,
+				research: params.research
+			}
 		})
 	}
 }

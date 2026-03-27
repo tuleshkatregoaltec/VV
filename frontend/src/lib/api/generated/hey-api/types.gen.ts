@@ -133,6 +133,10 @@ export type AnalyticsUnitComposition = {
      * Pct Of Total
      */
     pct_of_total: number;
+    /**
+     * Avg Unit Size Sqm
+     */
+    avg_unit_size_sqm?: number;
 };
 
 /**
@@ -612,6 +616,369 @@ export type DimensionBreakdown = {
 };
 
 /**
+ * FeasibilityAssumptions
+ */
+export type FeasibilityAssumptions = {
+    /**
+     * Usage
+     */
+    usage?: 'residential' | 'commercial' | 'mixed_use' | 'unknown';
+    /**
+     * Plotareasqm
+     */
+    plotAreaSqm: number;
+    /**
+     * Maxgfasqm
+     */
+    maxGfaSqm?: number;
+    /**
+     * Maxcoveragepct
+     */
+    maxCoveragePct?: number | null;
+    /**
+     * Maxstoreys
+     */
+    maxStoreys?: number | null;
+    /**
+     * Maxfar
+     */
+    maxFar: number;
+    /**
+     * Numberoftowers
+     */
+    numberOfTowers: number;
+    /**
+     * Numberoffloors
+     */
+    numberOfFloors: number;
+    /**
+     * Buamultiplier
+     */
+    buaMultiplier: number;
+    /**
+     * Nsaefficiencypct
+     */
+    nsaEfficiencyPct: number;
+    /**
+     * Landpricepsqm
+     */
+    landPricePsqm: number;
+    /**
+     * Constructioncostpsqmbua
+     */
+    constructionCostPsqmBua: number;
+    /**
+     * Designsupervisionpct
+     */
+    designSupervisionPct: number;
+    /**
+     * Salesagentfeepct
+     */
+    salesAgentFeePct: number;
+    /**
+     * Marketingcostpct
+     */
+    marketingCostPct: number;
+    /**
+     * Contingencypct
+     */
+    contingencyPct: number;
+    /**
+     * Financeratepct
+     */
+    financeRatePct: number;
+    /**
+     * Arrangementfeepct
+     */
+    arrangementFeePct: number;
+    /**
+     * Commitmentfeepct
+     */
+    commitmentFeePct: number;
+    /**
+     * Debttocostratio
+     */
+    debtToCostRatio: number;
+    /**
+     * Presalethresholdpct
+     */
+    presaleThresholdPct: number;
+    /**
+     * Escrowretentionpct
+     */
+    escrowRetentionPct: number;
+    /**
+     * Standardparkingratio
+     */
+    standardParkingRatio: number;
+    /**
+     * Largeunitthresholdsqm
+     */
+    largeUnitThresholdSqm: number;
+    /**
+     * Largeunitparkingratio
+     */
+    largeUnitParkingRatio: number;
+    /**
+     * Demolitionenabled
+     */
+    demolitionEnabled: boolean;
+    /**
+     * Salescommencementdate
+     */
+    salesCommencementDate: string;
+    /**
+     * Salesperiodmonths
+     */
+    salesPeriodMonths: number;
+    /**
+     * Demolitionenablingdate
+     */
+    demolitionEnablingDate: string;
+    /**
+     * Constructiondate
+     */
+    constructionDate: string;
+    /**
+     * Handoverdate
+     */
+    handoverDate: string;
+    /**
+     * Landacquisitioncostoverrideaed
+     */
+    landAcquisitionCostOverrideAed?: number | null;
+    /**
+     * Designsupervisioncostoverrideaed
+     */
+    designSupervisionCostOverrideAed?: number | null;
+    /**
+     * Constructioncostoverrideaed
+     */
+    constructionCostOverrideAed?: number | null;
+    /**
+     * Demolitioncostaed
+     */
+    demolitionCostAed: number;
+    /**
+     * Infrastructurecostaed
+     */
+    infrastructureCostAed: number;
+    /**
+     * Governmentfeesaed
+     */
+    governmentFeesAed: number;
+    /**
+     * Marketingcostoverrideaed
+     */
+    marketingCostOverrideAed?: number | null;
+    /**
+     * Salesagentfeesoverrideaed
+     */
+    salesAgentFeesOverrideAed?: number | null;
+    /**
+     * Mastercommunityfeesaed
+     */
+    masterCommunityFeesAed: number;
+    /**
+     * Ffeosepreopeningcostaed
+     */
+    ffeOsePreopeningCostAed: number;
+    /**
+     * Contingencycostoverrideaed
+     */
+    contingencyCostOverrideAed?: number | null;
+    /**
+     * Midpointinflationpct
+     */
+    midPointInflationPct: number;
+    /**
+     * Vatpct
+     */
+    vatPct: number;
+    /**
+     * Debtfundingaed
+     */
+    debtFundingAed: number;
+    /**
+     * Equityfundingaed
+     */
+    equityFundingAed: number;
+    /**
+     * Brokeragefeeaed
+     */
+    brokerageFeeAed: number;
+    /**
+     * Legalddcostaed
+     */
+    legalDdCostAed: number;
+    /**
+     * Landacquisitiondate
+     */
+    landAcquisitionDate: string;
+    /**
+     * Landloanltvpct
+     */
+    landLoanLtvPct: number;
+    /**
+     * Eiborratepct
+     */
+    eiborRatePct: number;
+    /**
+     * Landloanspreadbps
+     */
+    landLoanSpreadBps: number;
+    /**
+     * Constructionloanspreadbps
+     */
+    constructionLoanSpreadBps: number;
+    /**
+     * Prehandovermilestonedate
+     */
+    preHandoverMilestoneDate: string;
+    /**
+     * Debtrepaymentmode
+     */
+    debtRepaymentMode: 'bullet_at_handover' | 'sales_sweep';
+    /**
+     * Unitconfigs
+     */
+    unitConfigs?: Array<FeasibilityUnitConfig>;
+    paymentPlan?: FeasibilityPaymentPlan;
+};
+
+/**
+ * FeasibilityCashFlowPeriod
+ */
+export type FeasibilityCashFlowPeriod = {
+    /**
+     * Period Label
+     */
+    period_label: string;
+    /**
+     * Period End Date
+     */
+    period_end_date: string;
+    /**
+     * Revenue Inflows Aed
+     */
+    revenue_inflows_aed: number;
+    /**
+     * Operating Outflows Aed
+     */
+    operating_outflows_aed: number;
+    /**
+     * Debt Draw Aed
+     */
+    debt_draw_aed: number;
+    /**
+     * Debt Repayment Aed
+     */
+    debt_repayment_aed: number;
+    /**
+     * Interest Paid Aed
+     */
+    interest_paid_aed: number;
+    /**
+     * Commitment Fee Paid Aed
+     */
+    commitment_fee_paid_aed: number;
+    /**
+     * Equity Contribution Aed
+     */
+    equity_contribution_aed: number;
+    /**
+     * Equity Distribution Aed
+     */
+    equity_distribution_aed: number;
+    /**
+     * Debt Balance Aed
+     */
+    debt_balance_aed: number;
+    /**
+     * Debt Headroom Aed
+     */
+    debt_headroom_aed: number;
+    /**
+     * Escrow Balance Aed
+     */
+    escrow_balance_aed: number;
+    /**
+     * Unlevered Net Cash Flow Aed
+     */
+    unlevered_net_cash_flow_aed: number;
+    /**
+     * Levered Net Cash Flow Aed
+     */
+    levered_net_cash_flow_aed: number;
+    /**
+     * Deposit Inflows Aed
+     */
+    deposit_inflows_aed?: number;
+    /**
+     * Pre Handover Inflows Aed
+     */
+    pre_handover_inflows_aed?: number;
+    /**
+     * Handover Inflows Aed
+     */
+    handover_inflows_aed?: number;
+    /**
+     * Land Loan Balance Aed
+     */
+    land_loan_balance_aed?: number;
+    /**
+     * Construction Loan Balance Aed
+     */
+    construction_loan_balance_aed?: number;
+    /**
+     * Cost Land Aed
+     */
+    cost_land_aed?: number;
+    /**
+     * Cost Construction Aed
+     */
+    cost_construction_aed?: number;
+    /**
+     * Cost Marketing Aed
+     */
+    cost_marketing_aed?: number;
+    /**
+     * Cost Sales Agent Aed
+     */
+    cost_sales_agent_aed?: number;
+    /**
+     * Cost Contingency Aed
+     */
+    cost_contingency_aed?: number;
+    /**
+     * Cost Vat Aed
+     */
+    cost_vat_aed?: number;
+    /**
+     * Land Draw Aed
+     */
+    land_draw_aed?: number;
+    /**
+     * Construction Draw Aed
+     */
+    construction_draw_aed?: number;
+    /**
+     * Vat Refund Inflows Aed
+     */
+    vat_refund_inflows_aed?: number;
+};
+
+/**
+ * FeasibilityCashFlowSummary
+ */
+export type FeasibilityCashFlowSummary = {
+    /**
+     * Periods
+     */
+    periods?: Array<FeasibilityCashFlowPeriod>;
+};
+
+/**
  * FeasibilityChatRequest
  */
 export type FeasibilityChatRequest = {
@@ -621,16 +988,632 @@ export type FeasibilityChatRequest = {
     messages: Array<{
         [key: string]: unknown;
     }>;
+    plot_data: PlotDetails;
+    assumptions: FeasibilityAssumptions;
+    workbook: FeasibilityWorkbook;
     /**
-     * Context
+     * Research
      */
-    context: {
+    research?: {
         [key: string]: unknown;
-    };
+    } | null;
+    /**
+     * Study Context
+     */
+    study_context?: {
+        [key: string]: unknown;
+    } | null;
     /**
      * History Json
      */
     history_json?: string | null;
+};
+
+/**
+ * FeasibilityCostLineItem
+ */
+export type FeasibilityCostLineItem = {
+    /**
+     * Code
+     */
+    code: string;
+    /**
+     * Label
+     */
+    label: string;
+    /**
+     * Amount Aed
+     */
+    amount_aed: number;
+    /**
+     * Basis
+     */
+    basis: string;
+    /**
+     * Basis Value
+     */
+    basis_value?: number | null;
+    /**
+     * Basis Unit
+     */
+    basis_unit?: string | null;
+    /**
+     * Source
+     */
+    source?: 'evidence' | 'heuristic' | 'derived' | 'input';
+    /**
+     * Timing Rule
+     */
+    timing_rule?: 'land_acquisition' | 'construction_straight_line' | 'sales_velocity' | 'non_cash_placeholder';
+    /**
+     * Timing Group
+     */
+    timing_group?: 'land' | 'hard_cost' | 'professional_fees' | 'authority_and_infrastructure' | 'selling_costs' | 'contingency' | 'financing_fees' | 'other';
+};
+
+/**
+ * FeasibilityCostSummary
+ */
+export type FeasibilityCostSummary = {
+    /**
+     * Total Costs Excl Vat Aed
+     */
+    total_costs_excl_vat_aed: number;
+    /**
+     * Vat Amount Aed
+     */
+    vat_amount_aed: number;
+    /**
+     * Total Costs Incl Vat Aed
+     */
+    total_costs_incl_vat_aed: number;
+    /**
+     * Cost To Revenue Pct
+     */
+    cost_to_revenue_pct: number;
+    /**
+     * Gross Profit Aed
+     */
+    gross_profit_aed: number;
+    /**
+     * Gross Margin Pct
+     */
+    gross_margin_pct: number;
+    /**
+     * Line Items
+     */
+    line_items?: Array<FeasibilityCostLineItem>;
+};
+
+/**
+ * FeasibilityFinancingSummary
+ */
+export type FeasibilityFinancingSummary = {
+    /**
+     * Base Project Cost Aed
+     */
+    base_project_cost_aed: number;
+    /**
+     * All In Project Cost Aed
+     */
+    all_in_project_cost_aed: number;
+    /**
+     * All In Cost To Revenue Pct
+     */
+    all_in_cost_to_revenue_pct: number;
+    /**
+     * Presale Coverage Pct At Construction
+     */
+    presale_coverage_pct_at_construction: number;
+    /**
+     * Required Completion Reserve Aed
+     */
+    required_completion_reserve_aed: number;
+    /**
+     * Completion Reserve Coverage Pct
+     */
+    completion_reserve_coverage_pct: number;
+    /**
+     * Sponsor Release Capacity Aed
+     */
+    sponsor_release_capacity_aed: number;
+    /**
+     * Debt Commitment Utilization Pct
+     */
+    debt_commitment_utilization_pct: number;
+    /**
+     * Debt Commitment Aed
+     */
+    debt_commitment_aed: number;
+    /**
+     * Peak Debt Aed
+     */
+    peak_debt_aed: number;
+    /**
+     * Min Debt Headroom Aed
+     */
+    min_debt_headroom_aed: number;
+    /**
+     * Arrangement Fee Aed
+     */
+    arrangement_fee_aed: number;
+    /**
+     * Initial Commitment Fee Aed
+     */
+    initial_commitment_fee_aed: number;
+    /**
+     * Capitalized Interest Aed
+     */
+    capitalized_interest_aed: number;
+    /**
+     * Commitment Fee Carry Aed
+     */
+    commitment_fee_carry_aed: number;
+    /**
+     * Total Finance Costs Aed
+     */
+    total_finance_costs_aed: number;
+    /**
+     * Equity Contributed Aed
+     */
+    equity_contributed_aed: number;
+    /**
+     * Equity Distributed Aed
+     */
+    equity_distributed_aed: number;
+    /**
+     * Closing Debt Balance Aed
+     */
+    closing_debt_balance_aed: number;
+    /**
+     * Closing Escrow Balance Aed
+     */
+    closing_escrow_balance_aed: number;
+};
+
+/**
+ * FeasibilityFundingSource
+ */
+export type FeasibilityFundingSource = {
+    /**
+     * Code
+     */
+    code: string;
+    /**
+     * Label
+     */
+    label: string;
+    /**
+     * Amount Aed
+     */
+    amount_aed: number;
+    /**
+     * Basis
+     */
+    basis: string;
+};
+
+/**
+ * FeasibilityFundingSummary
+ */
+export type FeasibilityFundingSummary = {
+    /**
+     * Deposit Pct
+     */
+    deposit_pct: number;
+    /**
+     * Pre Handover Pct
+     */
+    pre_handover_pct: number;
+    /**
+     * Handover Pct
+     */
+    handover_pct: number;
+    /**
+     * Presale Threshold Pct
+     */
+    presale_threshold_pct: number;
+    /**
+     * Presales At Construction Start Aed
+     */
+    presales_at_construction_start_aed: number;
+    /**
+     * Escrow Retention Pct
+     */
+    escrow_retention_pct: number;
+    /**
+     * Debt To Cost Ratio
+     */
+    debt_to_cost_ratio: number;
+    /**
+     * Debt Repayment Mode
+     */
+    debt_repayment_mode: 'bullet_at_handover' | 'sales_sweep';
+    /**
+     * Off Plan Proceeds Aed
+     */
+    off_plan_proceeds_aed: number;
+    /**
+     * Debt Funding Aed
+     */
+    debt_funding_aed: number;
+    /**
+     * Equity Funding Aed
+     */
+    equity_funding_aed: number;
+    /**
+     * Vat Refunds Aed
+     */
+    vat_refunds_aed: number;
+    /**
+     * Total Sources Aed
+     */
+    total_sources_aed: number;
+    /**
+     * Total Uses Aed
+     */
+    total_uses_aed: number;
+    /**
+     * Funding Gap Aed
+     */
+    funding_gap_aed: number;
+    /**
+     * Sources
+     */
+    sources?: Array<FeasibilityFundingSource>;
+};
+
+/**
+ * FeasibilityPaymentPlan
+ */
+export type FeasibilityPaymentPlan = {
+    /**
+     * Depositpct
+     */
+    depositPct?: number;
+    /**
+     * Constructionpct
+     */
+    constructionPct?: number;
+    /**
+     * Handoverpct
+     */
+    handoverPct?: number;
+};
+
+/**
+ * FeasibilityProgramRow
+ */
+export type FeasibilityProgramRow = {
+    /**
+     * Unit Type
+     */
+    unit_type: string;
+    /**
+     * Share Pct
+     */
+    share_pct: number;
+    /**
+     * Suggested Units
+     */
+    suggested_units: number;
+    /**
+     * Avg Size Sqm
+     */
+    avg_size_sqm: number;
+    /**
+     * Saleable Area Sqm
+     */
+    saleable_area_sqm: number;
+    /**
+     * Sales Rate Aed Per Sqm
+     */
+    sales_rate_aed_per_sqm: number;
+    /**
+     * Gross Revenue Aed
+     */
+    gross_revenue_aed: number;
+    /**
+     * Parking Ratio
+     */
+    parking_ratio?: number;
+    /**
+     * Parking Spaces
+     */
+    parking_spaces?: number;
+};
+
+/**
+ * FeasibilityProgramSummary
+ */
+export type FeasibilityProgramSummary = {
+    /**
+     * Usage
+     */
+    usage: 'residential' | 'commercial' | 'mixed_use' | 'unknown';
+    /**
+     * Market Area
+     */
+    market_area: string;
+    /**
+     * Headline
+     */
+    headline: string;
+    /**
+     * Gfa Sqm
+     */
+    gfa_sqm: number;
+    /**
+     * Saleable Area Sqm
+     */
+    saleable_area_sqm: number;
+    /**
+     * Saleable Efficiency Pct
+     */
+    saleable_efficiency_pct: number;
+    /**
+     * Total Units
+     */
+    total_units: number;
+    /**
+     * Total Parking Spaces
+     */
+    total_parking_spaces?: number;
+    /**
+     * Weighted Avg Sales Rate Aed Per Sqm
+     */
+    weighted_avg_sales_rate_aed_per_sqm: number;
+    /**
+     * Gross Revenue Aed
+     */
+    gross_revenue_aed: number;
+    /**
+     * Rows
+     */
+    rows?: Array<FeasibilityProgramRow>;
+    /**
+     * Warnings
+     */
+    warnings?: Array<string>;
+};
+
+/**
+ * FeasibilityReturnsSummary
+ */
+export type FeasibilityReturnsSummary = {
+    /**
+     * Project Profit Aed
+     */
+    project_profit_aed: number;
+    /**
+     * Gross Margin Pct
+     */
+    gross_margin_pct: number;
+    /**
+     * All In Project Profit Aed
+     */
+    all_in_project_profit_aed?: number | null;
+    /**
+     * All In Margin Pct
+     */
+    all_in_margin_pct?: number | null;
+    /**
+     * Project Irr Pct
+     */
+    project_irr_pct?: number | null;
+    /**
+     * Project Moic
+     */
+    project_moic?: number | null;
+    /**
+     * Equity Irr Pct
+     */
+    equity_irr_pct?: number | null;
+    /**
+     * Equity Moic
+     */
+    equity_moic?: number | null;
+    /**
+     * Peak Debt Aed
+     */
+    peak_debt_aed?: number | null;
+    /**
+     * Peak Equity Aed
+     */
+    peak_equity_aed?: number | null;
+    /**
+     * Total Interest Paid Aed
+     */
+    total_interest_paid_aed?: number | null;
+    /**
+     * Total Commitment Fees Aed
+     */
+    total_commitment_fees_aed?: number | null;
+};
+
+/**
+ * FeasibilityScheduleSummary
+ */
+export type FeasibilityScheduleSummary = {
+    /**
+     * Sales Commencement Date
+     */
+    sales_commencement_date: string;
+    /**
+     * Construction Start Date
+     */
+    construction_start_date: string;
+    /**
+     * Handover Date
+     */
+    handover_date: string;
+    /**
+     * Sales Period Months
+     */
+    sales_period_months: number;
+    /**
+     * Construction Duration Months
+     */
+    construction_duration_months: number;
+    /**
+     * Sales To Handover Months
+     */
+    sales_to_handover_months: number;
+};
+
+/**
+ * FeasibilitySiteEnvelope
+ */
+export type FeasibilitySiteEnvelope = {
+    /**
+     * Plot Number
+     */
+    plot_number: string;
+    /**
+     * Community Name
+     */
+    community_name: string;
+    /**
+     * Project Name
+     */
+    project_name: string;
+    /**
+     * Permitted Use
+     */
+    permitted_use: 'residential' | 'commercial' | 'mixed_use' | 'unknown';
+    /**
+     * Plot Area Sqm
+     */
+    plot_area_sqm: number;
+    /**
+     * Max Gfa Sqm
+     */
+    max_gfa_sqm: number;
+    /**
+     * Max Storeys
+     */
+    max_storeys?: number | null;
+    /**
+     * Far
+     */
+    far?: number | null;
+    /**
+     * Applied Coverage Pct
+     */
+    applied_coverage_pct?: number | null;
+    /**
+     * Buildable Footprint Sqm
+     */
+    buildable_footprint_sqm?: number | null;
+    /**
+     * Built Up Area Sqm
+     */
+    built_up_area_sqm?: number | null;
+    /**
+     * Modeled Gfa Sqm
+     */
+    modeled_gfa_sqm?: number | null;
+    /**
+     * Gross Saleable Area Sqm
+     */
+    gross_saleable_area_sqm?: number | null;
+    /**
+     * Gfa From Bua Efficiency Pct
+     */
+    gfa_from_bua_efficiency_pct?: number | null;
+    /**
+     * Gsa From Gfa Efficiency Pct
+     */
+    gsa_from_gfa_efficiency_pct?: number | null;
+    /**
+     * Max Height
+     */
+    max_height: string;
+    /**
+     * Max Coverage
+     */
+    max_coverage: string;
+    /**
+     * Gfa Type
+     */
+    gfa_type: string;
+    /**
+     * Site Plan Issue Date
+     */
+    site_plan_issue_date?: string | null;
+    /**
+     * Site Plan Expiry Date
+     */
+    site_plan_expiry_date?: string | null;
+    /**
+     * Is Verified
+     */
+    is_verified: boolean;
+    /**
+     * Area Assumption Notes
+     */
+    area_assumption_notes?: Array<string>;
+    /**
+     * Warnings
+     */
+    warnings?: Array<string>;
+};
+
+/**
+ * FeasibilityUnitConfig
+ */
+export type FeasibilityUnitConfig = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Label
+     */
+    label: string;
+    /**
+     * Units
+     */
+    units: number;
+    /**
+     * Avgsizesqm
+     */
+    avgSizeSqm: number;
+    /**
+     * Sellingratepsqm
+     */
+    sellingRatePsqm: number;
+    /**
+     * Typicalfloor
+     */
+    typicalFloor?: number;
+    /**
+     * Parkingratio
+     */
+    parkingRatio?: number;
+};
+
+/**
+ * FeasibilityWorkbook
+ */
+export type FeasibilityWorkbook = {
+    /**
+     * Generated At
+     */
+    generated_at: string;
+    /**
+     * Plot Number
+     */
+    plot_number: string;
+    site: FeasibilitySiteEnvelope;
+    program: FeasibilityProgramSummary;
+    costs: FeasibilityCostSummary;
+    funding: FeasibilityFundingSummary;
+    schedule: FeasibilityScheduleSummary;
+    cash_flow: FeasibilityCashFlowSummary;
+    returns: FeasibilityReturnsSummary;
+    financing: FeasibilityFinancingSummary;
+    validation: ValidationSummary;
 };
 
 /**
@@ -692,141 +1675,23 @@ export type GisLandUse = {
 };
 
 /**
- * GISPlotDossier
+ * GenerateStudyResponse
  */
-export type GisPlotDossier = {
+export type GenerateStudyResponse = {
     /**
-     * Plot Number
+     * Status
      */
-    plot_number: string;
+    status?: string;
+    plot_data: PlotDetails;
+    assumptions: FeasibilityAssumptions;
+    research: PlotResearch;
+    study_context: StudyContext;
     /**
-     * Community Name
+     * Chat
      */
-    community_name: string;
-    /**
-     * Project Name
-     */
-    project_name: string;
-    /**
-     * Master Developer
-     */
-    master_developer?: string | null;
-    /**
-     * Plot Area Sqm
-     */
-    plot_area_sqm: number;
-    /**
-     * Max Gfa Sqm
-     */
-    max_gfa_sqm: number;
-    /**
-     * Max Gfa Sqft
-     */
-    max_gfa_sqft: number;
-    /**
-     * Max Height
-     */
-    max_height: string;
-    /**
-     * Max Coverage
-     */
-    max_coverage: string;
-    /**
-     * Gfa Type
-     */
-    gfa_type: string;
-    /**
-     * Far
-     */
-    far?: number | null;
-    /**
-     * Inferred Usage
-     */
-    inferred_usage: 'residential' | 'commercial' | 'mixed_use' | 'unknown';
-    /**
-     * Site Plan Issue Date
-     */
-    site_plan_issue_date?: string | null;
-    /**
-     * Site Plan Expiry Date
-     */
-    site_plan_expiry_date?: string | null;
-    /**
-     * Is Verified
-     */
-    is_verified: boolean;
-    /**
-     * Verify Comments
-     */
-    verify_comments?: string | null;
-    /**
-     * Land Use
-     */
-    land_use?: Array<GisLandUse>;
-    /**
-     * General Notes
-     */
-    general_notes?: Array<string>;
-    /**
-     * Setbacks
-     */
-    setbacks?: {
-        [key: string]: string;
+    chat?: {
+        [key: string]: unknown;
     };
-    /**
-     * Coordinates
-     */
-    coordinates?: Array<Array<number>>;
-    /**
-     * Warnings
-     */
-    warnings?: Array<string>;
-};
-
-/**
- * GISPlotSummary
- */
-export type GisPlotSummary = {
-    /**
-     * Plot Number
-     */
-    plot_number: string;
-    /**
-     * Community Name
-     */
-    community_name: string;
-    /**
-     * Project Name
-     */
-    project_name: string;
-    /**
-     * Plot Area Sqm
-     */
-    plot_area_sqm: number;
-    /**
-     * Max Gfa Sqm
-     */
-    max_gfa_sqm: number;
-    /**
-     * Max Height
-     */
-    max_height: string;
-    /**
-     * Max Coverage
-     */
-    max_coverage: string;
-    /**
-     * Gfa Type
-     */
-    gfa_type: string;
-    /**
-     * Is Verified
-     */
-    is_verified: boolean;
-    /**
-     * Land Use Summary
-     */
-    land_use_summary?: Array<string>;
 };
 
 /**
@@ -867,124 +1732,6 @@ export type GeoPolygon = {
      * Coordinates
      */
     coordinates: Array<Array<number>>;
-};
-
-/**
- * HBUProductOption
- */
-export type HbuProductOption = {
-    /**
-     * Name
-     */
-    name: string;
-    /**
-     * Positioning
-     */
-    positioning: string;
-    /**
-     * Fit Score
-     */
-    fit_score: number;
-    /**
-     * Rationale
-     */
-    rationale?: Array<string>;
-};
-
-/**
- * HBUStudy
- */
-export type HbuStudy = {
-    /**
-     * Plot Number
-     */
-    plot_number: string;
-    /**
-     * Usage
-     */
-    usage: 'residential' | 'commercial' | 'mixed_use' | 'unknown';
-    /**
-     * Market Area
-     */
-    market_area: string;
-    /**
-     * Headline
-     */
-    headline: string;
-    /**
-     * Summary
-     */
-    summary?: Array<string>;
-    /**
-     * Constraints
-     */
-    constraints?: Array<string>;
-    /**
-     * Pricing Evidence
-     */
-    pricing_evidence?: Array<ComparableProject>;
-    /**
-     * Competition Evidence
-     */
-    competition_evidence?: Array<ComparableProject>;
-    /**
-     * Land Sales Evidence
-     */
-    land_sales_evidence?: Array<LandSaleEvidence>;
-    /**
-     * Market Pricing
-     */
-    market_pricing?: Array<MarketPricingRow>;
-    /**
-     * Product Options
-     */
-    product_options?: Array<HbuProductOption>;
-    /**
-     * Recommended Mix
-     */
-    recommended_mix?: Array<HbuUnitRecommendation>;
-    /**
-     * Price Per Sqm By Type
-     */
-    price_per_sqm_by_type?: {
-        [key: string]: number;
-    };
-    /**
-     * Assumptions Patch
-     */
-    assumptions_patch?: {
-        [key: string]: number | boolean | string;
-    };
-    /**
-     * Warnings
-     */
-    warnings?: Array<string>;
-};
-
-/**
- * HBUUnitRecommendation
- */
-export type HbuUnitRecommendation = {
-    /**
-     * Unit Type
-     */
-    unit_type: string;
-    /**
-     * Share Pct
-     */
-    share_pct: number;
-    /**
-     * Avg Size Sqm
-     */
-    avg_size_sqm: number;
-    /**
-     * Price Sqm
-     */
-    price_sqm: number;
-    /**
-     * Suggested Units
-     */
-    suggested_units: number;
 };
 
 /**
@@ -1356,6 +2103,136 @@ export type NewsListResponse = {
 };
 
 /**
+ * OffPlanPricingConfidence
+ */
+export type OffPlanPricingConfidence = {
+    /**
+     * Target Horizon Months
+     */
+    target_horizon_months: number;
+    /**
+     * Matched Transactions
+     */
+    matched_transactions: number;
+    /**
+     * Confidence Score
+     */
+    confidence_score: number;
+    /**
+     * Confidence Label
+     */
+    confidence_label: 'high' | 'medium' | 'low';
+    /**
+     * Sample Score
+     */
+    sample_score: number;
+    /**
+     * Horizon Score
+     */
+    horizon_score: number;
+    /**
+     * Recency Score
+     */
+    recency_score: number;
+    /**
+     * Note
+     */
+    note: string;
+};
+
+/**
+ * OffPlanPricingRow
+ */
+export type OffPlanPricingRow = {
+    /**
+     * Unit Type
+     */
+    unit_type: string;
+    /**
+     * Horizon Bucket
+     */
+    horizon_bucket: string;
+    /**
+     * Avg Months To Completion
+     */
+    avg_months_to_completion: number;
+    /**
+     * Transaction Count
+     */
+    transaction_count: number;
+    /**
+     * Median Price Sqm
+     */
+    median_price_sqm: number;
+    /**
+     * Avg Area Sqm
+     */
+    avg_area_sqm?: number | null;
+    /**
+     * Last Transaction Date
+     */
+    last_transaction_date?: string | null;
+};
+
+/**
+ * OffPlanUnitPricingBenchmark
+ */
+export type OffPlanUnitPricingBenchmark = {
+    /**
+     * Unit Type
+     */
+    unit_type: string;
+    /**
+     * Selected Horizon Bucket
+     */
+    selected_horizon_bucket: string;
+    /**
+     * Avg Months To Completion
+     */
+    avg_months_to_completion: number;
+    /**
+     * Transaction Count
+     */
+    transaction_count: number;
+    /**
+     * Selected Price Sqm
+     */
+    selected_price_sqm: number;
+    /**
+     * Fallback Used
+     */
+    fallback_used?: boolean;
+    /**
+     * Confidence Score
+     */
+    confidence_score: number;
+    /**
+     * Confidence Label
+     */
+    confidence_label: 'high' | 'medium' | 'low';
+    /**
+     * Sample Score
+     */
+    sample_score: number;
+    /**
+     * Horizon Score
+     */
+    horizon_score: number;
+    /**
+     * Recency Score
+     */
+    recency_score: number;
+    /**
+     * Last Transaction Date
+     */
+    last_transaction_date?: string | null;
+    /**
+     * Note
+     */
+    note: string;
+};
+
+/**
  * OperationSuccessResponse
  */
 export type OperationSuccessResponse = {
@@ -1687,6 +2564,276 @@ export type PaymentSyncResponse = {
 };
 
 /**
+ * Plot
+ */
+export type Plot = {
+    /**
+     * Plot Number
+     */
+    plot_number: string;
+    /**
+     * Community Name
+     */
+    community_name: string;
+    /**
+     * Project Name
+     */
+    project_name: string;
+    /**
+     * Plot Area Sqm
+     */
+    plot_area_sqm: number;
+    /**
+     * Max Gfa Sqm
+     */
+    max_gfa_sqm: number;
+    /**
+     * Max Height
+     */
+    max_height: string;
+    /**
+     * Max Coverage
+     */
+    max_coverage: string;
+    /**
+     * Gfa Type
+     */
+    gfa_type: string;
+    /**
+     * Is Verified
+     */
+    is_verified: boolean;
+    /**
+     * Land Use Summary
+     */
+    land_use_summary?: Array<string>;
+};
+
+/**
+ * PlotDetails
+ */
+export type PlotDetails = {
+    /**
+     * Plot Number
+     */
+    plot_number: string;
+    /**
+     * Community Name
+     */
+    community_name: string;
+    /**
+     * Project Name
+     */
+    project_name: string;
+    /**
+     * Master Developer
+     */
+    master_developer?: string | null;
+    /**
+     * Plot Area Sqm
+     */
+    plot_area_sqm: number;
+    /**
+     * Max Gfa Sqm
+     */
+    max_gfa_sqm: number;
+    /**
+     * Max Gfa Sqft
+     */
+    max_gfa_sqft: number;
+    /**
+     * Max Height
+     */
+    max_height: string;
+    /**
+     * Max Coverage
+     */
+    max_coverage: string;
+    /**
+     * Gfa Type
+     */
+    gfa_type: string;
+    /**
+     * Far
+     */
+    far?: number | null;
+    /**
+     * Inferred Usage
+     */
+    inferred_usage: 'residential' | 'commercial' | 'mixed_use' | 'unknown';
+    /**
+     * Site Plan Issue Date
+     */
+    site_plan_issue_date?: string | null;
+    /**
+     * Site Plan Expiry Date
+     */
+    site_plan_expiry_date?: string | null;
+    /**
+     * Is Verified
+     */
+    is_verified: boolean;
+    /**
+     * Verify Comments
+     */
+    verify_comments?: string | null;
+    /**
+     * Land Use
+     */
+    land_use?: Array<GisLandUse>;
+    /**
+     * General Notes
+     */
+    general_notes?: Array<string>;
+    /**
+     * Setbacks
+     */
+    setbacks?: {
+        [key: string]: string;
+    };
+    /**
+     * Coordinates
+     */
+    coordinates?: Array<Array<number>>;
+    /**
+     * Warnings
+     */
+    warnings?: Array<string>;
+};
+
+/**
+ * PlotResearch
+ */
+export type PlotResearch = {
+    /**
+     * Plot Number
+     */
+    plot_number: string;
+    /**
+     * Usage
+     */
+    usage: 'residential' | 'commercial' | 'mixed_use' | 'unknown';
+    /**
+     * Market Area
+     */
+    market_area: string;
+    /**
+     * Headline
+     */
+    headline: string;
+    /**
+     * Summary
+     */
+    summary?: Array<string>;
+    /**
+     * Constraints
+     */
+    constraints?: Array<string>;
+    /**
+     * Pricing Evidence
+     */
+    pricing_evidence?: Array<ComparableProject>;
+    /**
+     * Competition Evidence
+     */
+    competition_evidence?: Array<ComparableProject>;
+    /**
+     * Land Sales Evidence
+     */
+    land_sales_evidence?: Array<LandSaleEvidence>;
+    /**
+     * Market Pricing
+     */
+    market_pricing?: Array<MarketPricingRow>;
+    /**
+     * Off Plan Market Pricing
+     */
+    off_plan_market_pricing?: Array<OffPlanPricingRow>;
+    off_plan_pricing_confidence?: OffPlanPricingConfidence | null;
+    /**
+     * Off Plan Unit Benchmarks
+     */
+    off_plan_unit_benchmarks?: Array<OffPlanUnitPricingBenchmark>;
+    assumptions: FeasibilityAssumptions;
+    /**
+     * Warnings
+     */
+    warnings?: Array<string>;
+    /**
+     * Land Cost Estimate Aed Low
+     */
+    land_cost_estimate_aed_low?: number | null;
+    /**
+     * Land Cost Estimate Aed Mid
+     */
+    land_cost_estimate_aed_mid?: number | null;
+    /**
+     * Land Cost Estimate Aed High
+     */
+    land_cost_estimate_aed_high?: number | null;
+};
+
+/**
+ * PriceDistributionBucket
+ *
+ * Mean + population std dev for a single bedroom type.
+ */
+export type PriceDistributionBucket = {
+    /**
+     * Rooms
+     */
+    rooms: string;
+    /**
+     * Sale Count
+     */
+    sale_count: number;
+    /**
+     * Mean Price
+     */
+    mean_price: number;
+    /**
+     * Std Price
+     */
+    std_price: number;
+    /**
+     * Log Mean Price
+     */
+    log_mean_price?: number;
+    /**
+     * Log Std Price
+     */
+    log_std_price?: number;
+    /**
+     * P05 Price
+     */
+    p05_price?: number;
+    /**
+     * P25 Price
+     */
+    p25_price?: number;
+    /**
+     * P50 Price
+     */
+    p50_price?: number;
+    /**
+     * P75 Price
+     */
+    p75_price?: number;
+    /**
+     * P95 Price
+     */
+    p95_price?: number;
+    /**
+     * Mean Price Sqm
+     */
+    mean_price_sqm: number;
+    /**
+     * Std Price Sqm
+     */
+    std_price_sqm: number;
+};
+
+/**
  * ProjectAnalyticsResponse
  *
  * Full analytics response for a single project
@@ -1715,6 +2862,92 @@ export type ProjectAnalyticsResponse = {
      * Unit Composition
      */
     unit_composition: Array<AnalyticsUnitComposition>;
+    /**
+     * Configuration Analysis
+     */
+    configuration_analysis: Array<ProjectConfigurationRow>;
+};
+
+/**
+ * ProjectConfigurationRow
+ */
+export type ProjectConfigurationRow = {
+    /**
+     * Market Segment
+     */
+    market_segment: 'all' | 'off_plan' | 'secondary';
+    /**
+     * Rooms
+     */
+    rooms: string;
+    /**
+     * Stock Units
+     */
+    stock_units: number;
+    /**
+     * Sale Count
+     */
+    sale_count: number;
+    /**
+     * Sales Last 12M
+     */
+    sales_last_12m: number;
+    /**
+     * Avg Sale Price
+     */
+    avg_sale_price: number;
+    /**
+     * Median Sale Price
+     */
+    median_sale_price: number;
+    /**
+     * Avg Sale Price Sqm
+     */
+    avg_sale_price_sqm: number;
+    /**
+     * Avg Unit Size Sqm
+     */
+    avg_unit_size_sqm: number;
+    /**
+     * Rental Count
+     */
+    rental_count: number;
+    /**
+     * Median Annual Rent
+     */
+    median_annual_rent: number;
+    /**
+     * Median Rent Sqm
+     */
+    median_rent_sqm: number;
+    /**
+     * Gross Yield Pct
+     */
+    gross_yield_pct?: number | null;
+    /**
+     * Price Change Yoy Pct
+     */
+    price_change_yoy_pct?: number | null;
+    /**
+     * Sales Momentum Pct
+     */
+    sales_momentum_pct?: number | null;
+    /**
+     * Absorption Rate Pct
+     */
+    absorption_rate_pct?: number | null;
+    /**
+     * Price P25
+     */
+    price_p25: number;
+    /**
+     * Price P50
+     */
+    price_p50: number;
+    /**
+     * Price P75
+     */
+    price_p75: number;
 };
 
 /**
@@ -1823,6 +3056,50 @@ export type ProjectDetailResponse = {
 };
 
 /**
+ * ProjectForecastPoint
+ */
+export type ProjectForecastPoint = {
+    /**
+     * Date
+     */
+    date: string;
+    /**
+     * Avg Price
+     */
+    avg_price: number;
+    /**
+     * Avg Price Sqm
+     */
+    avg_price_sqm: number;
+    /**
+     * Series
+     */
+    series: 'historical' | 'forecast';
+};
+
+/**
+ * ProjectForecastResponse
+ */
+export type ProjectForecastResponse = {
+    /**
+     * Data
+     */
+    data: Array<ProjectForecastPoint>;
+    /**
+     * Delivery Date
+     */
+    delivery_date?: string | null;
+    /**
+     * Source Reg Type
+     */
+    source_reg_type?: string;
+    /**
+     * Methodology
+     */
+    methodology: string;
+};
+
+/**
  * ProjectMeta
  *
  * Metadata from ch_projects + ch_developers
@@ -1840,6 +3117,10 @@ export type ProjectMeta = {
      * Developer Name
      */
     developer_name?: string | null;
+    /**
+     * Developer Names
+     */
+    developer_names?: Array<string>;
     /**
      * Project Status
      */
@@ -1860,6 +3141,59 @@ export type ProjectMeta = {
      * No Of Buildings
      */
     no_of_buildings?: number | null;
+};
+
+/**
+ * ProjectPipelinePoint
+ */
+export type ProjectPipelinePoint = {
+    /**
+     * Period
+     */
+    period: string;
+    /**
+     * Existing Stock Units
+     */
+    existing_stock_units: number;
+    /**
+     * Carried Stock Units
+     */
+    carried_stock_units: number;
+    /**
+     * New Pipeline Units
+     */
+    new_pipeline_units: number;
+};
+
+/**
+ * ProjectPipelineResponse
+ */
+export type ProjectPipelineResponse = {
+    /**
+     * Area Name
+     */
+    area_name?: string | null;
+    /**
+     * Developer Name
+     */
+    developer_name?: string | null;
+    /**
+     * Data
+     */
+    data: Array<ProjectPipelinePoint>;
+};
+
+/**
+ * ProjectPriceDistributionResponse
+ *
+ * Price distribution by bedroom type, including an all-rooms aggregate.
+ */
+export type ProjectPriceDistributionResponse = {
+    all?: PriceDistributionBucket | null;
+    /**
+     * By Rooms
+     */
+    by_rooms: Array<PriceDistributionBucket>;
 };
 
 /**
@@ -2313,6 +3647,52 @@ export type SendMessageRequest = {
      * Message
      */
     message: string;
+};
+
+/**
+ * StudyContext
+ */
+export type StudyContext = {
+    /**
+     * Headline
+     */
+    headline?: string;
+    /**
+     * Project Tier
+     */
+    project_tier?: string;
+    /**
+     * Positioning
+     */
+    positioning?: string;
+    /**
+     * Summary Points
+     */
+    summary_points?: Array<string>;
+    /**
+     * Unit Mix Rationale
+     */
+    unit_mix_rationale?: string;
+    /**
+     * Pricing Rationale
+     */
+    pricing_rationale?: string;
+    /**
+     * Cost Rationale
+     */
+    cost_rationale?: string;
+    /**
+     * Timing Rationale
+     */
+    timing_rationale?: string;
+    /**
+     * Financing Rationale
+     */
+    financing_rationale?: string;
+    /**
+     * Market Summary
+     */
+    market_summary?: string;
 };
 
 /**
@@ -2856,6 +4236,54 @@ export type ValidationError = {
 };
 
 /**
+ * ValidationIssue
+ */
+export type ValidationIssue = {
+    /**
+     * Code
+     */
+    code: string;
+    /**
+     * Severity
+     */
+    severity: 'hard_fail' | 'warning' | 'missing_evidence';
+    /**
+     * Message
+     */
+    message: string;
+    /**
+     * Field
+     */
+    field?: string | null;
+};
+
+/**
+ * ValidationSummary
+ */
+export type ValidationSummary = {
+    /**
+     * Status
+     */
+    status: 'ready' | 'needs_review' | 'invalid';
+    /**
+     * Hard Failures
+     */
+    hard_failures: number;
+    /**
+     * Warnings
+     */
+    warnings: number;
+    /**
+     * Missing Evidence
+     */
+    missing_evidence: number;
+    /**
+     * Issues
+     */
+    issues?: Array<ValidationIssue>;
+};
+
+/**
  * WebhookStatusResponse
  *
  * Simple webhook acknowledgement response.
@@ -3229,7 +4657,7 @@ export type AnalyticsGetSubProjectsEndpointData = {
          *
          * Filter type: master or virtual_master
          */
-        filter_type?: string;
+        filter_type?: 'project' | 'master' | 'virtual_master';
     };
     url: '/api/v1/analytics/project/sub-projects';
 };
@@ -3273,7 +4701,7 @@ export type AnalyticsGetProjectSummaryEndpointData = {
          *
          * Filter type: master, virtual_master, or project
          */
-        filter_type?: string;
+        filter_type?: 'project' | 'master' | 'virtual_master';
     };
     url: '/api/v1/analytics/project/summary';
 };
@@ -3317,7 +4745,7 @@ export type AnalyticsGetProjectTrendsEndpointData = {
          *
          * Filter type: master, virtual_master, or project
          */
-        filter_type?: string;
+        filter_type?: 'project' | 'master' | 'virtual_master';
         /**
          * Days
          *
@@ -3345,6 +4773,150 @@ export type AnalyticsGetProjectTrendsEndpointResponses = {
 };
 
 export type AnalyticsGetProjectTrendsEndpointResponse = AnalyticsGetProjectTrendsEndpointResponses[keyof AnalyticsGetProjectTrendsEndpointResponses];
+
+export type AnalyticsGetProjectForecastEndpointData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Master Project
+         *
+         * Master project name
+         */
+        master_project?: string | null;
+        /**
+         * Project
+         *
+         * Sub-project name (project_name_en)
+         */
+        project?: string | null;
+        /**
+         * Filter Type
+         *
+         * Filter type: master, virtual_master, or project
+         */
+        filter_type?: 'project' | 'master' | 'virtual_master';
+        /**
+         * Days
+         *
+         * Number of days to look back
+         */
+        days?: number;
+    };
+    url: '/api/v1/analytics/project/forecast';
+};
+
+export type AnalyticsGetProjectForecastEndpointErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type AnalyticsGetProjectForecastEndpointError = AnalyticsGetProjectForecastEndpointErrors[keyof AnalyticsGetProjectForecastEndpointErrors];
+
+export type AnalyticsGetProjectForecastEndpointResponses = {
+    /**
+     * Successful Response
+     */
+    200: ProjectForecastResponse;
+};
+
+export type AnalyticsGetProjectForecastEndpointResponse = AnalyticsGetProjectForecastEndpointResponses[keyof AnalyticsGetProjectForecastEndpointResponses];
+
+export type AnalyticsGetProjectPipelineEndpointData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Master Project
+         *
+         * Master project name
+         */
+        master_project?: string | null;
+        /**
+         * Project
+         *
+         * Sub-project name (project_name_en)
+         */
+        project?: string | null;
+        /**
+         * Filter Type
+         *
+         * Filter type: master, virtual_master, or project
+         */
+        filter_type?: 'project' | 'master' | 'virtual_master';
+    };
+    url: '/api/v1/analytics/project/pipeline';
+};
+
+export type AnalyticsGetProjectPipelineEndpointErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type AnalyticsGetProjectPipelineEndpointError = AnalyticsGetProjectPipelineEndpointErrors[keyof AnalyticsGetProjectPipelineEndpointErrors];
+
+export type AnalyticsGetProjectPipelineEndpointResponses = {
+    /**
+     * Successful Response
+     */
+    200: ProjectPipelineResponse;
+};
+
+export type AnalyticsGetProjectPipelineEndpointResponse = AnalyticsGetProjectPipelineEndpointResponses[keyof AnalyticsGetProjectPipelineEndpointResponses];
+
+export type AnalyticsGetProjectPriceDistributionEndpointData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Master Project
+         *
+         * Master project name
+         */
+        master_project?: string | null;
+        /**
+         * Project
+         *
+         * Sub-project name (project_name_en)
+         */
+        project?: string | null;
+        /**
+         * Filter Type
+         *
+         * Filter type: master, virtual_master, or project
+         */
+        filter_type?: 'project' | 'master' | 'virtual_master';
+        /**
+         * Reg Type
+         *
+         * Optional registration type filter (e.g. 'Off-Plan Properties')
+         */
+        reg_type?: string | null;
+    };
+    url: '/api/v1/analytics/project/price-distribution';
+};
+
+export type AnalyticsGetProjectPriceDistributionEndpointErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type AnalyticsGetProjectPriceDistributionEndpointError = AnalyticsGetProjectPriceDistributionEndpointErrors[keyof AnalyticsGetProjectPriceDistributionEndpointErrors];
+
+export type AnalyticsGetProjectPriceDistributionEndpointResponses = {
+    /**
+     * Successful Response
+     */
+    200: ProjectPriceDistributionResponse;
+};
+
+export type AnalyticsGetProjectPriceDistributionEndpointResponse = AnalyticsGetProjectPriceDistributionEndpointResponses[keyof AnalyticsGetProjectPriceDistributionEndpointResponses];
 
 export type ChatListConversationsData = {
     body?: never;
@@ -3559,11 +5131,77 @@ export type FiltersGetSalesFilterOptionsData = {
          */
         property_type?: string;
         /**
+         * Property Sub Type
+         *
+         * Filter by property sub-type
+         */
+        property_sub_type?: string;
+        /**
+         * Rooms
+         *
+         * Filter by room count
+         */
+        rooms?: string;
+        /**
+         * Registration Type
+         *
+         * Filter by registration type
+         */
+        registration_type?: string;
+        /**
          * Area
          *
          * Filter by area
          */
         area?: string;
+        /**
+         * Building
+         *
+         * Filter by building
+         */
+        building?: string;
+        /**
+         * Timeframe Days
+         *
+         * Days back from today
+         */
+        timeframe_days?: number;
+        /**
+         * Area Min
+         *
+         * Minimum property area (sqm)
+         */
+        area_min?: number;
+        /**
+         * Area Max
+         *
+         * Maximum property area (sqm)
+         */
+        area_max?: number;
+        /**
+         * Price Min
+         *
+         * Minimum price
+         */
+        price_min?: number;
+        /**
+         * Price Max
+         *
+         * Maximum price
+         */
+        price_max?: number;
+        /**
+         * Price Per Sqm Min
+         *
+         * Minimum price per sqm
+         */
+        price_per_sqm_min?: number;
+        /**
+         * Price Per Sqm Max
+         *
+         * Maximum price per sqm
+         */
+        price_per_sqm_max?: number;
     };
     url: '/api/v1/filters/sales';
 };
@@ -3615,11 +5253,59 @@ export type FiltersGetRentalFilterOptionsData = {
          */
         property_type?: string;
         /**
+         * Property Sub Type
+         *
+         * Filter by property sub-type
+         */
+        property_sub_type?: string;
+        /**
+         * Tenant Type
+         *
+         * Filter by tenant type
+         */
+        tenant_type?: string;
+        /**
+         * Contract Reg Type
+         *
+         * Filter by contract registration type
+         */
+        contract_reg_type?: string;
+        /**
          * Area
          *
          * Filter by area
          */
         area?: string;
+        /**
+         * Timeframe Days
+         *
+         * Days back from today
+         */
+        timeframe_days?: number;
+        /**
+         * Area Min
+         *
+         * Minimum property area (sqm)
+         */
+        area_min?: number;
+        /**
+         * Area Max
+         *
+         * Maximum property area (sqm)
+         */
+        area_max?: number;
+        /**
+         * Rent Min
+         *
+         * Minimum annual rent
+         */
+        rent_min?: number;
+        /**
+         * Rent Max
+         *
+         * Maximum annual rent
+         */
+        rent_max?: number;
     };
     url: '/api/v1/filters/rentals';
 };
@@ -5245,12 +6931,12 @@ export type FeasibilityPlotsEndpointResponses = {
      *
      * Successful Response
      */
-    200: Array<GisPlotSummary>;
+    200: Array<Plot>;
 };
 
 export type FeasibilityPlotsEndpointResponse = FeasibilityPlotsEndpointResponses[keyof FeasibilityPlotsEndpointResponses];
 
-export type FeasibilityPlotDossierEndpointData = {
+export type FeasibilityPlotDetailsEndpointData = {
     body?: never;
     path: {
         /**
@@ -5262,23 +6948,23 @@ export type FeasibilityPlotDossierEndpointData = {
     url: '/api/v1/feasibility/plots/{plot_number}';
 };
 
-export type FeasibilityPlotDossierEndpointErrors = {
+export type FeasibilityPlotDetailsEndpointErrors = {
     /**
      * Validation Error
      */
     422: HttpValidationError;
 };
 
-export type FeasibilityPlotDossierEndpointError = FeasibilityPlotDossierEndpointErrors[keyof FeasibilityPlotDossierEndpointErrors];
+export type FeasibilityPlotDetailsEndpointError = FeasibilityPlotDetailsEndpointErrors[keyof FeasibilityPlotDetailsEndpointErrors];
 
-export type FeasibilityPlotDossierEndpointResponses = {
+export type FeasibilityPlotDetailsEndpointResponses = {
     /**
      * Successful Response
      */
-    200: GisPlotDossier;
+    200: PlotDetails;
 };
 
-export type FeasibilityPlotDossierEndpointResponse = FeasibilityPlotDossierEndpointResponses[keyof FeasibilityPlotDossierEndpointResponses];
+export type FeasibilityPlotDetailsEndpointResponse = FeasibilityPlotDetailsEndpointResponses[keyof FeasibilityPlotDetailsEndpointResponses];
 
 export type FeasibilityGenerateHbuEndpointData = {
     body?: never;
@@ -5310,7 +6996,7 @@ export type FeasibilityGenerateHbuEndpointResponses = {
     /**
      * Successful Response
      */
-    200: HbuStudy;
+    200: PlotResearch;
 };
 
 export type FeasibilityGenerateHbuEndpointResponse = FeasibilityGenerateHbuEndpointResponses[keyof FeasibilityGenerateHbuEndpointResponses];
@@ -5391,7 +7077,7 @@ export type FeasibilityLandEndpointResponses = {
      *
      * Successful Response
      */
-    200: Array<GisPlotSummary>;
+    200: Array<Plot>;
 };
 
 export type FeasibilityLandEndpointResponse = FeasibilityLandEndpointResponses[keyof FeasibilityLandEndpointResponses];
@@ -5427,7 +7113,7 @@ export type FeasibilityLandSearchEndpointResponses = {
      *
      * Successful Response
      */
-    200: Array<GisPlotSummary>;
+    200: Array<Plot>;
 };
 
 export type FeasibilityLandSearchEndpointResponse = FeasibilityLandSearchEndpointResponses[keyof FeasibilityLandSearchEndpointResponses];
@@ -5463,6 +7149,40 @@ export type FeasibilityComparableEndpointResponses = {
 };
 
 export type FeasibilityComparableEndpointResponse = FeasibilityComparableEndpointResponses[keyof FeasibilityComparableEndpointResponses];
+
+export type FeasibilityGenerateStudyEndpointData = {
+    body?: never;
+    path?: never;
+    query: {
+        /**
+         * Plot Number
+         */
+        plot_number: string;
+        /**
+         * Usage Override
+         */
+        usage_override?: 'residential' | 'commercial' | 'mixed_use' | 'unknown' | null;
+    };
+    url: '/api/v1/feasibility/generate-study';
+};
+
+export type FeasibilityGenerateStudyEndpointErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type FeasibilityGenerateStudyEndpointError = FeasibilityGenerateStudyEndpointErrors[keyof FeasibilityGenerateStudyEndpointErrors];
+
+export type FeasibilityGenerateStudyEndpointResponses = {
+    /**
+     * Successful Response
+     */
+    200: GenerateStudyResponse;
+};
+
+export type FeasibilityGenerateStudyEndpointResponse = FeasibilityGenerateStudyEndpointResponses[keyof FeasibilityGenerateStudyEndpointResponses];
 
 export type FeasibilityChatStreamEndpointData = {
     body: FeasibilityChatRequest;

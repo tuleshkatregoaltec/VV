@@ -1,109 +1,105 @@
 <script lang="ts">
-import { feasibilityStore } from '$lib/stores/feasibility.svelte'
-import { exportFeasibility } from '$lib/utils/exportFeasibility'
-import AssumptionsSheet from './sheets/AssumptionsSheet.svelte'
+import { onMount } from 'svelte'
+import { type FeasibilitySheetTab, workbookStore } from '$lib/feasibility/workbook/store.svelte'
+import BlankSheet from './sheets/BlankSheet.svelte'
+import BudgetSheet from './sheets/BudgetSheet.svelte'
 import CashFlowSheet from './sheets/CashFlowSheet.svelte'
-import DevBudgetSheet from './sheets/DevBudgetSheet.svelte'
+import ChecksSheet from './sheets/ChecksSheet.svelte'
+import EiborSheet from './sheets/EiborSheet.svelte'
+import FinancingSheet from './sheets/FinancingSheet.svelte'
+import KeyAssumptionsSheet from './sheets/KeyAssumptionsSheet.svelte'
+import MonthlyCashFlowSheet from './sheets/MonthlyCashFlowSheet.svelte'
+import PricingEvidenceSheet from './sheets/PricingEvidenceSheet.svelte'
 import ReturnsSheet from './sheets/ReturnsSheet.svelte'
 import RevenueSheet from './sheets/RevenueSheet.svelte'
-import ScheduleSheet from './sheets/ScheduleSheet.svelte'
-import SummarySheet from './sheets/SummarySheet.svelte'
 
-type Sheet =
-	| 'summary'
-	| 'assumptions'
-	| 'devbudget'
-	| 'revenue'
-	| 'schedule'
-	| 'cashflow'
-	| 'returns'
-let activeSheet = $state<Sheet>('summary')
+const tabs: { id: FeasibilitySheetTab; label: string }[] = [
+	{ id: 'key_assumptions', label: 'Key Assumptions' },
+	{ id: 'sales_collections', label: 'Sales & Collections' },
+	{ id: 'budget', label: 'Budget' },
+	{ id: 'financing', label: 'Financing' },
+	{ id: 'pricing_evidence', label: 'Pricing Evidence' },
+	{ id: 'cashflow', label: 'Cash Flow' },
+	{ id: 'monthly_cf', label: 'Monthly CF' },
+	{ id: 'returns', label: 'Returns' },
+	{ id: 'checks', label: 'Checks' },
+	{ id: 'eibor', label: 'EIBOR' }
+]
 
-function switchTab(id: Sheet) {
-	activeSheet = id
-	feasibilityStore.clearAffectedTab(id)
-}
+const validation = $derived(workbookStore.validation)
+const activeTab = $derived(workbookStore.activeSheet)
 
-// Never show a dot on the currently visible tab
-$effect(() => {
-	if (feasibilityStore.affectedTabs.has(activeSheet)) {
-		feasibilityStore.clearAffectedTab(activeSheet)
-	}
+onMount(() => {
+	workbookStore.clearSheetDirty(activeTab)
 })
 
-const SHEETS: { id: Sheet; label: string }[] = [
-	{ id: 'summary', label: 'Summary' },
-	{ id: 'assumptions', label: 'Assumptions' },
-	{ id: 'devbudget', label: 'Dev Budget' },
-	{ id: 'revenue', label: 'Revenue' },
-	{ id: 'schedule', label: 'Schedule' },
-	{ id: 'cashflow', label: 'Cash Flow' },
-	{ id: 'returns', label: 'Returns' }
-]
+function isTabDirty(tab: FeasibilitySheetTab) {
+	return workbookStore.sheetDirty?.[tab] ?? false
+}
+
+function openTab(tab: FeasibilitySheetTab) {
+	workbookStore.setActiveSheet(tab)
+}
 </script>
 
 <div class="h-full flex flex-col overflow-hidden bg-white border-r border-slate-200">
-	<!-- Toolbar -->
-	<div
-		class="flex items-center justify-between px-3 py-2 border-b border-slate-300 flex-shrink-0 bg-slate-50"
-	>
+	<div class="flex items-center justify-between px-3 py-2 border-b border-slate-300 flex-shrink-0 bg-slate-50">
 		<span class="text-xs font-semibold text-slate-700">Feasibility Model</span>
-		<button
-			type="button"
-			class="flex items-center gap-1 px-2 py-0.5 rounded border border-slate-300 bg-white text-slate-600 text-[10px] font-medium hover:bg-slate-50 transition-colors"
-			onclick={() => exportFeasibility(feasibilityStore)}
-		>
-			<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-				<path
-					stroke-linecap="round"
-					stroke-linejoin="round"
-					stroke-width="2"
-					d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
-				/>
-			</svg>
-			Export Excel
-		</button>
+		<div class="flex items-center gap-2">
+			{#if validation}
+				<span class="text-[10px] px-2 py-0.5 rounded-full font-medium uppercase tracking-[0.12em] {validation.status === 'invalid'
+					? 'bg-rose-100 text-rose-700'
+					: validation.status === 'needs_review'
+						? 'bg-amber-100 text-amber-700'
+						: 'bg-emerald-100 text-emerald-700'}">
+					{validation.status.replace('_', ' ')}
+				</span>
+			{/if}
+		</div>
 	</div>
 
-	<!-- Sheet content -->
 	<div class="flex-1 overflow-hidden flex flex-col min-h-0">
-		{#if activeSheet === 'summary'}
-			<SummarySheet {switchTab} />
-		{:else if activeSheet === 'revenue'}
+		{#if activeTab === 'key_assumptions'}
+			<KeyAssumptionsSheet />
+		{:else if activeTab === 'sales_collections'}
 			<RevenueSheet />
-		{:else if activeSheet === 'devbudget'}
-			<DevBudgetSheet />
-		{:else if activeSheet === 'schedule'}
-			<ScheduleSheet />
-		{:else if activeSheet === 'cashflow'}
+		{:else if activeTab === 'budget'}
+			<BudgetSheet />
+		{:else if activeTab === 'financing'}
+			<FinancingSheet />
+		{:else if activeTab === 'pricing_evidence'}
+			<PricingEvidenceSheet />
+		{:else if activeTab === 'cashflow'}
 			<CashFlowSheet />
-		{:else if activeSheet === 'returns'}
+		{:else if activeTab === 'monthly_cf'}
+			<MonthlyCashFlowSheet />
+		{:else if activeTab === 'returns'}
 			<ReturnsSheet />
+		{:else if activeTab === 'checks'}
+			<ChecksSheet />
+		{:else if activeTab === 'eibor'}
+			<EiborSheet />
 		{:else}
-			<AssumptionsSheet />
+			<BlankSheet />
 		{/if}
 	</div>
 
-	<!-- Sheet tabs (Excel-style at bottom) -->
-	<div
-		class="flex-shrink-0 flex items-end gap-0.5 px-2 pt-1 border-t border-slate-300 bg-slate-200/60 overflow-x-auto"
-	>
-		{#each SHEETS as sheet (sheet.id)}
-			{@const hasDot = feasibilityStore.affectedTabs.has(sheet.id)}
-			<button
-				type="button"
-				onclick={() => switchTab(sheet.id)}
-				class="relative px-3 py-1 text-[11px] font-medium rounded-t transition-colors select-none whitespace-nowrap
-					{activeSheet === sheet.id
-					? 'bg-white border border-b-0 border-slate-300 text-teal-700 border-t-2 border-t-teal-500 -mb-px'
-					: 'bg-slate-100 border border-slate-300 text-slate-500 hover:bg-slate-50 hover:text-slate-700'}"
-			>
-				{sheet.label}
-				{#if hasDot && activeSheet !== sheet.id}
-					<span class="absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full bg-teal-500 dot-appear"
-					></span>
-				{/if}
-			</button>
+	<div class="relative z-30 flex-shrink-0 flex items-end gap-0.5 overflow-x-auto border-t border-slate-300 bg-slate-200/60 px-2 pt-1 shadow-[0_-1px_0_rgba(148,163,184,0.18)]">
+		{#each tabs as tab (tab.id)}
+				<button
+					type="button"
+					class="relative z-10 px-3 py-1 text-[11px] font-medium rounded-t border border-b-0 border-slate-300 -mb-px whitespace-nowrap transition-colors {activeTab === tab.id
+						? 'bg-white text-teal-700 border-t-2 border-t-teal-500'
+						: isTabDirty(tab.id)
+							? 'bg-teal-50/80 text-teal-600 hover:text-teal-700'
+							: 'bg-slate-100/80 text-slate-500 hover:text-slate-700'}"
+					onclick={() => openTab(tab.id)}
+				>
+					{tab.label}
+					{#if isTabDirty(tab.id) && activeTab !== tab.id}
+						<span class="ml-1 inline-block w-1.5 h-1.5 rounded-full bg-teal-400 align-middle -mt-0.5"></span>
+					{/if}
+				</button>
 		{/each}
 	</div>
 </div>

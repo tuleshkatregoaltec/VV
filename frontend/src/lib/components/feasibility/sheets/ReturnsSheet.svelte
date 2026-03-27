@@ -1,430 +1,471 @@
 <script lang="ts">
-import { feasibilityStore } from '$lib/stores/feasibility.svelte'
+import { workbookStore } from '$lib/feasibility/workbook/store.svelte'
 
-function fmtK(n: number): string {
-	const k = Math.round(Math.abs(n) / 1000)
-	const f = k.toLocaleString('en-AE')
-	return n < 0 ? `(${f})` : f
-}
-function fmtPct(n: number): string {
-	return Number.isNaN(n) || !Number.isFinite(n) ? '—' : `${n.toFixed(1)}%`
-}
-function fmtIRR(n: number): string {
-	return Number.isNaN(n) || !Number.isFinite(n) ? '—' : `${(n * 100).toFixed(1)}%`
+function fmt(value: number, digits = 0) {
+	return value.toLocaleString('en-AE', {
+		minimumFractionDigits: digits,
+		maximumFractionDigits: digits
+	})
 }
 
-type Axis = 'Price/sqm' | 'Build Cost/sqm' | 'Finance Rate' | 'Land Cost'
-const axisOptions: Axis[] = ['Price/sqm', 'Build Cost/sqm', 'Finance Rate', 'Land Cost']
-let axisX = $state<Axis>('Price/sqm')
-let axisY = $state<Axis>('Build Cost/sqm')
-
-// 5×5: ±20%, ±10%, base
-const steps = [-0.2, -0.1, 0, 0.1, 0.2]
-
-const s = $derived(feasibilityStore)
-
-function financeRateCostDelta(step: number): number {
-	const adjDevCost = s.preFinanceCost + s.totalInterest * (1 + step) + s.arrangementFee
-	return s.totalDevCost > 0 ? (adjDevCost - s.totalDevCost) / s.totalDevCost : 0
+function fmtMaybe(value: number | null | undefined, digits = 1, suffix = '%') {
+	if (value === null || value === undefined || !Number.isFinite(value)) return 'N/A'
+	return `${fmt(value, digits)}${suffix}`
 }
 
-function axisFactors(axis: Axis, step: number): { pa: number; ca: number } {
-	switch (axis) {
-		case 'Price/sqm':
-			return { pa: step, ca: 0 }
-		case 'Build Cost/sqm':
-			return { pa: 0, ca: step * (s.totalDevCost > 0 ? s.totalHardCost / s.totalDevCost : 0) }
-		case 'Finance Rate':
-			return { pa: 0, ca: financeRateCostDelta(step) }
-		case 'Land Cost':
-			return { pa: 0, ca: step * (s.totalDevCost > 0 ? s.totalLandCost / s.totalDevCost : 0) }
+const validationIssueCodes = $derived(
+	new Set((workbookStore.validation?.issues ?? []).map((issue) => issue.code))
+)
+
+function hasIssue(code: string) {
+	if (validationIssueCodes.has(code)) return true
+	if (code === 'negative_all_in_margin') return validationIssueCodes.has('negative_margin')
+	if (code === 'finance_cost_load_high') return validationIssueCodes.has('funding_gap')
+	return false
+}
+
+type RangeStatus = 'within range' | 'warning' | 'outlier'
+
+function statusClasses(status: RangeStatus) {
+	if (status === 'outlier') return 'bg-rose-100 text-rose-700'
+	if (status === 'warning') return 'bg-amber-100 text-amber-700'
+	return 'bg-emerald-100 text-emerald-700'
+}
+
+const outputs = $derived(workbookStore.outputs)
+const assumptions = $derived(workbookStore.assumptions)
+const draftSensitivities = $derived(
+	[] as Array<{
+		code: string
+		label: string
+		changeNote: string
+		projectIrrPct: number | null
+		equityIrrPct: number | null
+		allInMarginPct: number | null
+		peakDebtAed: number | null
+		totalFinanceCostsAed: number | null
+	}>
+)
+
+const grossRevenueAed = $derived(outputs?.program.grossRevenueAed ?? 0)
+const totalCostsInclVatAed = $derived(outputs?.costs.totalCostsInclVatAed ?? 0)
+const projectIrrPct = $derived(outputs?.returns.projectIrrPct ?? 0)
+const projectMoic = $derived(outputs?.returns.projectMoic ?? 0)
+const offPlanProceedsAed = $derived(outputs?.funding.offPlanProceedsAed ?? 0)
+const debtFundingAed = $derived(assumptions?.debtFundingAed ?? outputs?.funding.debtFundingAed ?? 0)
+const equityFundingAed = $derived(
+	assumptions?.equityFundingAed ?? outputs?.funding.equityFundingAed ?? 0
+)
+const vatRefundsAed = $derived(outputs?.funding.vatRefundsAed ?? 0)
+const totalSourcesAed = $derived(outputs?.funding.totalSourcesAed ?? 0)
+const totalUsesAed = $derived(outputs?.funding.totalUsesAed ?? 0)
+const returnOnCostPct = $derived(
+	totalCostsInclVatAed > 0
+		? ((grossRevenueAed - totalCostsInclVatAed) / totalCostsInclVatAed) * 100
+		: 0
+)
+const revenueMultiple = $derived(
+	totalCostsInclVatAed > 0 ? grossRevenueAed / totalCostsInclVatAed : 0
+)
+
+const draftRevenue = $derived(outputs?.program.grossRevenueAed ?? 0)
+const draftCostsInclVat = $derived(outputs?.costs.totalCostsInclVatAed ?? 0)
+const draftProfit = $derived(outputs?.returns.grossProfitAed ?? 0)
+const draftMarginPct = $derived(outputs?.returns.grossMarginPct ?? 0)
+const fundingGap = $derived(outputs?.funding.gapAed ?? totalSourcesAed - totalUsesAed)
+const localProfit = $derived(grossRevenueAed - totalCostsInclVatAed)
+const localMarginPct = $derived(grossRevenueAed > 0 ? (localProfit / grossRevenueAed) * 100 : 0)
+const profitGap = $derived(localProfit - draftProfit)
+const marginGap = $derived(localMarginPct - draftMarginPct)
+const returnChecks = $derived([
+	{
+		label: 'Project IRR',
+		value:
+			outputs?.returns.projectIrrPct !== null && outputs?.returns.projectIrrPct !== undefined
+				? `${fmt(outputs.returns.projectIrrPct, 1)}%`
+				: 'N/A',
+		status: (hasIssue('project_irr_negative')
+			? 'outlier'
+			: hasIssue('project_irr_too_high')
+				? 'warning'
+				: 'within range') as RangeStatus
+	},
+	{
+		label: 'Equity IRR',
+		value:
+			outputs?.returns.equityIrrPct !== null && outputs?.returns.equityIrrPct !== undefined
+				? `${fmt(outputs.returns.equityIrrPct, 1)}%`
+				: 'N/A',
+		status: (hasIssue('equity_irr_negative')
+			? 'outlier'
+			: hasIssue('equity_irr_too_high')
+				? 'warning'
+				: 'within range') as RangeStatus
+	},
+	{
+		label: 'All-in margin',
+		value:
+			outputs?.returns.allInMarginPct !== null && outputs?.returns.allInMarginPct !== undefined
+				? `${fmt(outputs.returns.allInMarginPct, 1)}%`
+				: 'N/A',
+		status: (hasIssue('negative_all_in_margin')
+			? 'outlier'
+			: hasIssue('finance_cost_load_high')
+				? 'warning'
+				: 'within range') as RangeStatus
 	}
-}
+])
 
-function cellFactors(rowStep: number, colStep: number): { pa: number; ca: number } {
-	const row = axisFactors(axisY, rowStep)
-	const col = axisFactors(axisX, colStep)
-	return { pa: row.pa + col.pa, ca: row.ca + col.ca }
-}
+const reconciliationRows = $derived([
+	{
+		label: 'Revenue',
+		draft: draftRevenue,
+		local: grossRevenueAed,
+		suffix: 'AED'
+	},
+	{
+		label: 'Costs incl. VAT',
+		draft: draftCostsInclVat,
+		local: totalCostsInclVatAed,
+		suffix: 'AED'
+	},
+	{ label: 'Profit', draft: draftProfit, local: localProfit, suffix: 'AED' },
+	{
+		label: 'All-in profit',
+		draft: outputs?.returns.allInProjectProfitAed ?? 0,
+		local: localProfit,
+		suffix: 'AED'
+	},
+	{ label: 'Margin', draft: draftMarginPct, local: localMarginPct, suffix: '%' },
+	{
+		label: 'All-in margin',
+		draft: outputs?.returns.allInMarginPct ?? 0,
+		local: localMarginPct,
+		suffix: '%'
+	},
+	{
+		label: 'Project IRR',
+		draft: outputs?.returns.projectIrrPct ?? 0,
+		local: projectIrrPct,
+		suffix: '%'
+	},
+	{
+		label: 'Project MOIC',
+		draft: outputs?.returns.projectMoic ?? 0,
+		local: projectMoic,
+		suffix: 'x'
+	},
+	{ label: 'Equity IRR', draft: outputs?.returns.equityIrrPct ?? 0, local: 0, suffix: '%' },
+	{ label: 'Equity MOIC', draft: outputs?.returns.equityMoic ?? 0, local: 0, suffix: 'x' }
+])
 
-function rocAtFactors(pa: number, ca: number): number {
-	const gdvAdj = s.totalGDV * (1 + pa)
-	const devCostAdj = s.totalDevCost * (1 + ca)
-	return devCostAdj > 0 ? ((gdvAdj - devCostAdj) / devCostAdj) * 100 : 0
-}
-
-function irrAtFactors(pa: number, ca: number): number {
-	return s.computeScenario(1 + pa, 1 + ca).unleveredIRR * 100
-}
-
-function cellClass(pa: number, ca: number): string {
-	const roc = rocAtFactors(pa, ca)
-	const target = s.assumptions.targetROCPct
-	if (roc >= target) return 'bg-emerald-50'
-	if (roc >= target * 0.75) return 'bg-amber-50'
-	return 'bg-red-50'
-}
-
-function stepLabel(step: number) {
-	if (step === 0) return 'Base'
-	const sign = step > 0 ? '+' : ''
-	return `${sign}${(step * 100).toFixed(0)}%`
-}
-
-// ── Tornado chart ─────────────────────────────────────────────────────────
-// Each driver: compute IRR at +10% and -10%, report delta from base
-interface TornadoBar {
-	name: string
-	upIRR: number // IRR at +10% (annualised, decimal)
-	downIRR: number // IRR at -10%
-	upDelta: number
-	downDelta: number
-	absMax: number
-}
-
-const tornadoBars = $derived(
-	(() => {
-		const base = s.unleveredIRR
-		if (Number.isNaN(base) || !Number.isFinite(base) || s.totalDevCost === 0) {
-			return [] as TornadoBar[]
-		}
-
-		const hardFrac = s.totalHardCost / s.totalDevCost
-		const landFrac = s.totalLandCost / s.totalDevCost
-		const softFrac = s.totalSoftCost / s.totalDevCost
-		const salesFrac = s.totalSalesCost / s.totalDevCost
-
-		const drivers: Array<{ name: string; pa10: number; ca10: number }> = [
-			{ name: 'Sale Price / sqm', pa10: 0.1, ca10: 0 },
-			{ name: 'Build Cost / sqm', pa10: 0, ca10: hardFrac * 0.1 },
-			{ name: 'Land Cost', pa10: 0, ca10: landFrac * 0.1 },
-			{ name: 'Soft Costs', pa10: 0, ca10: softFrac * 0.1 },
-			{ name: 'Sales & Marketing', pa10: 0, ca10: salesFrac * 0.1 },
-			{ name: 'Finance Rate', pa10: 0, ca10: financeRateCostDelta(0.1) }
-		]
-
-		const bars: TornadoBar[] = drivers.map((d) => {
-			const upIRR = s.computeScenario(1 + d.pa10, 1 + d.ca10).unleveredIRR
-			const downIRR = s.computeScenario(1 - d.pa10, 1 - d.ca10).unleveredIRR
-			const upDelta = Number.isFinite(upIRR) ? upIRR - base : 0
-			const downDelta = Number.isFinite(downIRR) ? downIRR - base : 0
-			return {
-				name: d.name,
-				upIRR,
-				downIRR,
-				upDelta,
-				downDelta,
-				absMax: Math.max(Math.abs(upDelta), Math.abs(downDelta))
-			}
-		})
-
-		return bars.sort((a, b) => b.absMax - a.absMax)
-	})()
-)
-
-const tornadoScale = $derived(
-	tornadoBars.length > 0 ? Math.max(0.001, ...tornadoBars.map((b) => b.absMax)) : 0.001
-)
-
-const sectionRow = 'bg-slate-800 border-b border-slate-600'
-const sectionCell = 'px-2 py-1.5 text-[10px] font-bold text-white uppercase tracking-wider'
+const sourcesUsesRows = $derived([
+	{
+		label: 'Off-plan proceeds',
+		draft: outputs?.funding.offPlanProceedsAed ?? 0,
+		local: offPlanProceedsAed,
+		basis: 'Backend modeled collections vs local payment-plan estimate'
+	},
+	{
+		label: 'Debt funding',
+		draft: outputs?.funding.debtFundingAed ?? 0,
+		local: debtFundingAed,
+		basis: 'Backend peak debt support vs local input'
+	},
+	{
+		label: 'Equity funding',
+		draft: outputs?.funding.equityFundingAed ?? 0,
+		local: equityFundingAed,
+		basis: 'Backend actual equity contributions vs local input'
+	},
+	{
+		label: 'VAT refunds',
+		draft: outputs?.funding.vatRefundsAed ?? 0,
+		local: vatRefundsAed,
+		basis: 'Backend modeled VAT refund inflows'
+	},
+	{
+		label: 'Total sources',
+		draft: outputs?.funding.totalSourcesAed ?? 0,
+		local: totalSourcesAed,
+		basis: 'Backend sources-and-uses'
+	},
+	{
+		label: 'Total uses',
+		draft: outputs?.funding.totalUsesAed ?? 0,
+		local: totalUsesAed,
+		basis: 'Backend sources-and-uses'
+	},
+	{
+		label: 'Funding gap',
+		draft: outputs?.funding.gapAed ?? 0,
+		local: fundingGap,
+		basis: 'Backend sources-and-uses gap'
+	}
+])
 </script>
 
-<div class="overflow-auto flex-1 text-[11px]">
-	<div class="px-2 py-0.5 text-[10px] text-right text-slate-400 italic border-b border-slate-200">
-		AED '000 unless stated
+{#if !outputs}
+	<div class="h-full flex items-center justify-center text-sm text-slate-400">
+		Generate an HBU study to build the draft returns view.
 	</div>
+{:else}
+	<div class="overflow-auto flex-1 bg-white text-[11px] font-[Calibri,'Segoe_UI',Arial,sans-serif] select-none">
 
-	<!-- Section A: Returns Summary -->
-	<table class="w-full border-collapse">
-		<thead>
-			<tr class={sectionRow}>
-				<td colspan="3" class={sectionCell}>Returns Summary</td>
-			</tr>
-			<tr class="bg-slate-100 border-b border-slate-200">
-				<th class="border-r border-slate-200 text-left px-2 py-1.5 text-slate-600 font-semibold"
-					>Metric</th
-				>
-				<th class="border-r border-slate-200 text-right px-2 py-1.5 text-slate-600 font-semibold"
-					>Unlevered</th
-				>
-				<th class="text-right px-2 py-1.5 text-slate-600 font-semibold">Levered</th>
-			</tr>
-		</thead>
-		<tbody>
-			<tr class="border-b border-slate-100 bg-green-50">
-				<td class="border-r border-slate-200 px-2 py-1.5 text-slate-600">Total Investment</td>
-				<td class="border-r border-slate-200 px-2 py-1.5 text-right tabular-nums text-slate-900"
-					>{fmtK(s.totalDevCost)}</td
-				>
-				<td class="px-2 py-1.5 text-right tabular-nums text-slate-900">{fmtK(s.equityRequired)}</td>
-			</tr>
-			<tr class="border-b border-slate-100 bg-green-50">
-				<td class="border-r border-slate-200 px-2 py-1.5 text-slate-600">Gross Revenue (GDV)</td>
-				<td class="border-r border-slate-200 px-2 py-1.5 text-right tabular-nums text-slate-900"
-					>{fmtK(s.totalGDV)}</td
-				>
-				<td class="px-2 py-1.5 text-right tabular-nums text-slate-900">{fmtK(s.netRevenue)}</td>
-			</tr>
-			<tr class="border-b border-slate-100">
-				<td class="border-r border-slate-200 px-2 py-1.5 text-slate-600">Gross Profit</td>
-				<td
-					class="border-r border-slate-200 px-2 py-1.5 text-right tabular-nums text-slate-900 font-semibold"
-					>{fmtK(s.grossProfit)}</td
-				>
-				<td class="px-2 py-1.5 text-right tabular-nums text-slate-900 font-semibold"
-					>{fmtK(s.leveredProfit)}</td
-				>
-			</tr>
-			<tr class="border-b border-slate-100">
-				<td class="border-r border-slate-200 px-2 py-1.5 text-slate-600">Net Profit (post-tax)</td>
-				<td
-					class="border-r border-slate-200 px-2 py-1.5 text-right tabular-nums text-slate-900 font-semibold"
-					>{fmtK(s.netProfit)}</td
-				>
-				<td class="px-2 py-1.5 text-slate-300 text-right">—</td>
-			</tr>
-			<tr class="border-b border-slate-100">
-				<td class="border-r border-slate-200 px-2 py-1.5 text-slate-600">Profit on Cost (ROC)</td>
-				<td
-					class="border-r border-slate-200 px-2 py-1.5 text-right tabular-nums text-slate-900 font-semibold"
-					>{fmtPct(s.returnOnCost)}</td
-				>
-				<td class="px-2 py-1.5 text-slate-300 text-right">—</td>
-			</tr>
-			<tr class="border-b border-slate-100">
-				<td class="border-r border-slate-200 px-2 py-1.5 text-slate-600">Profit on GDV</td>
-				<td class="border-r border-slate-200 px-2 py-1.5 text-right tabular-nums text-slate-900"
-					>{fmtPct(s.profitOnGDVPct)}</td
-				>
-				<td class="px-2 py-1.5 text-slate-300 text-right">—</td>
-			</tr>
-			<tr class="border-b border-slate-100">
-				<td class="border-r border-slate-200 px-2 py-1.5 text-slate-600">Return on Equity</td>
-				<td class="border-r border-slate-200 px-2 py-1.5 text-slate-300 text-right">—</td>
-				<td class="px-2 py-1.5 text-right tabular-nums text-slate-900 font-semibold"
-					>{fmtPct(s.returnOnEquity)}</td
-				>
-			</tr>
-			<tr class="border-b border-slate-100">
-				<td class="border-r border-slate-200 px-2 py-1.5 text-slate-600">Equity Multiple</td>
-				<td class="border-r border-slate-200 px-2 py-1.5 text-slate-300 text-right">—</td>
-				<td class="px-2 py-1.5 text-right tabular-nums text-slate-900 font-semibold"
-					>{isNaN(s.equityMultiple) ? '—' : `${s.equityMultiple.toFixed(2)}x`}</td
-				>
-			</tr>
-			<tr class="border-b border-slate-100">
-				<td class="border-r border-slate-200 px-2 py-1.5 text-slate-600"
-					>NPV @ {s.assumptions.discountRatePct}%</td
-				>
-				<td class="border-r border-slate-200 px-2 py-1.5 text-right tabular-nums text-slate-900"
-					>{fmtK(s.npvUnlevered)}</td
-				>
-				<td class="px-2 py-1.5 text-right tabular-nums text-slate-900"
-					>{isFinite(s.npvLevered) ? fmtK(s.npvLevered) : '—'}</td
-				>
-			</tr>
-			<tr class="border-b border-slate-100">
-				<td class="border-r border-slate-200 px-2 py-1.5 text-slate-600">Cash Payback</td>
-				<td class="border-r border-slate-200 px-2 py-1.5 text-right tabular-nums text-slate-900">
-					{s.cashBreakevenQuarter >= 0 ? `Q${s.cashBreakevenQuarter + 1}` : '—'}
-				</td>
-				<td class="px-2 py-1.5 text-slate-300 text-right">—</td>
-			</tr>
-			<tr class="border-t-2 border-slate-300">
-				<td class="border-r border-slate-200 px-2 py-1.5 font-semibold text-slate-700"
-					>IRR (annualised)</td
-				>
-				<td
-					class="border-r border-slate-200 px-2 py-1.5 text-right tabular-nums font-semibold text-slate-900"
-					>{fmtIRR(s.unleveredIRR)}</td
-				>
-				<td class="px-2 py-1.5 text-right tabular-nums font-semibold text-slate-900"
-					>{fmtIRR(s.leveredIRR)}</td
-				>
-			</tr>
-		</tbody>
-	</table>
-
-	<!-- Section B: ROC + IRR Sensitivity Heatmap (5×5) -->
-	<table class="w-full border-collapse">
-		<thead>
-			<tr class={sectionRow}>
-				<td colspan="7" class={sectionCell}>Sensitivity Heatmap — ROC / Unlevered IRR</td>
-			</tr>
-		</thead>
-		<tbody>
-			<tr class="border-b border-slate-100">
-				<td class="border-r border-slate-200 px-2 py-1.5 text-slate-600 w-24">Rows (Y axis)</td>
-				<td colspan="6" class="px-2 py-1.5">
-					<select
-						bind:value={axisY}
-						class="text-[11px] border border-slate-300 rounded px-1.5 py-0.5 bg-white text-slate-700"
-					>
-						{#each axisOptions.filter((o) => o !== axisX) as opt (opt)}
-							<option value={opt}>{opt}</option>
-						{/each}
-					</select>
-				</td>
-			</tr>
-			<tr class="border-b border-slate-200">
-				<td class="border-r border-slate-200 px-2 py-1.5 text-slate-600">Cols (X axis)</td>
-				<td colspan="6" class="px-2 py-1.5">
-					<select
-						bind:value={axisX}
-						class="text-[11px] border border-slate-300 rounded px-1.5 py-0.5 bg-white text-slate-700"
-					>
-						{#each axisOptions.filter((o) => o !== axisY) as opt (opt)}
-							<option value={opt}>{opt}</option>
-						{/each}
-					</select>
-				</td>
-			</tr>
-		</tbody>
-	</table>
-	<table class="w-full border-collapse">
-		<thead>
-			<tr class="bg-slate-100 border-b border-slate-200">
-				<th
-					class="border-r border-slate-200 px-1.5 py-1.5 text-slate-500 font-normal text-left w-20 text-[10px]"
-					>↓Y \ X→</th
-				>
-				{#each steps as cs (cs)}
-					<th
-						class="border-r border-slate-200 px-1.5 py-1.5 text-slate-600 font-semibold text-center text-[10px] {cs ===
-						0
-							? 'bg-slate-200'
-							: ''}">{stepLabel(cs)}</th
-					>
-				{/each}
-			</tr>
-		</thead>
-		<tbody>
-			{#each steps as rs (rs)}
-				<tr
-					class="border-b border-slate-100 {rs === 0
-						? 'border-t-2 border-b-2 border-slate-200'
-						: ''}"
-				>
-					<td
-						class="border-r border-slate-200 px-1.5 py-1.5 text-slate-600 font-semibold text-[10px] {rs ===
-						0
-							? 'bg-slate-100'
-							: ''}">{stepLabel(rs)}</td
-					>
-					{#each steps as cs (`${rs}-${cs}`)}
-						{@const { pa, ca } = cellFactors(rs, cs)}
-						{@const roc = rocAtFactors(pa, ca)}
-						{@const irr = irrAtFactors(pa, ca)}
-						<td
-							class="border-r border-slate-100 px-1.5 py-1 text-center {cellClass(pa, ca)} {rs ===
-								0 && cs === 0
-								? 'ring-2 ring-inset ring-slate-400'
-								: ''}"
-						>
-							<div class="tabular-nums text-[10px] font-semibold leading-tight">{fmtPct(roc)}</div>
-							<div class="tabular-nums text-[9px] leading-tight text-slate-500">{fmtIRR(irr)}</div>
-						</td>
-					{/each}
-				</tr>
-			{/each}
-		</tbody>
-	</table>
-	<div class="flex gap-4 px-3 py-1.5 text-[10px] text-slate-500 border-b border-slate-200">
-		<span class="font-medium text-slate-600">Top: ROC · Bottom: Unlevered IRR</span>
-		<span class="flex items-center gap-1"
-			><span class="inline-block w-3 h-3 rounded bg-emerald-50 border border-emerald-200"></span> ≥
-			target ({s.assumptions.targetROCPct}%)</span
-		>
-		<span class="flex items-center gap-1"
-			><span class="inline-block w-3 h-3 rounded bg-amber-50 border border-amber-200"></span> ≥ 75% of
-			target</span
-		>
-		<span class="flex items-center gap-1"
-			><span class="inline-block w-3 h-3 rounded bg-red-50 border border-red-200"></span> below 75% of
-			target</span
-		>
-	</div>
-
-	<!-- Section C: Tornado Chart -->
-	{#if tornadoBars.length > 0}
-		{@const barH = 18}
-		{@const rowH = barH + 6}
-		{@const labelW = 120}
-		{@const midX = 200}
-		{@const barScale = 160}
-		{@const svgW = labelW + barScale * 2 + midX - midX + 40}
-		{@const svgH = tornadoBars.length * rowH + 24}
-		<div class="bg-slate-800 border-b border-slate-600">
-			<div class="{sectionCell} px-2 py-1.5">Tornado Chart — ±10% Sensitivity on Unlevered IRR</div>
+		<!-- Title bar -->
+		<div class="bg-[#1F3864] border-b-2 border-[#1F3864] text-white px-4 py-2.5 flex items-center justify-between gap-4">
+			<div class="text-[13px] font-bold tracking-wide">RETURNS &amp; BENCHMARKS</div>
+			<div class="text-[10px] text-blue-200 shrink-0">Modeled investment returns — AED unless stated</div>
 		</div>
-		<div class="px-3 py-3 border-b border-slate-200">
-			<svg viewBox="0 0 {svgW} {svgH}" class="w-full" style="max-height: {svgH}px;">
-				<!-- Axis labels -->
-				<text x={labelW + barScale} y="12" text-anchor="middle" font-size="8" fill="#94a3b8"
-					>−10%</text
-				>
-				<text x={labelW + barScale + 1} y="12" text-anchor="middle" font-size="8" fill="#94a3b8"
-					>Base</text
-				>
-				<text x={labelW + barScale * 2} y="12" text-anchor="middle" font-size="8" fill="#94a3b8"
-					>+10%</text
-				>
-				<!-- Center line -->
-				<line
-					x1={labelW + barScale}
-					y1="16"
-					x2={labelW + barScale}
-					y2={svgH}
-					stroke="#cbd5e1"
-					stroke-width="1"
-				/>
 
-				{#each tornadoBars as bar, i (`${bar.label}-${i}`)}
-					{@const y = 18 + i * rowH}
-					{@const cx = labelW + barScale}
-					{@const upW = Math.max(1, (Math.abs(bar.upDelta) / tornadoScale) * barScale * 0.9)}
-					{@const downW = Math.max(1, (Math.abs(bar.downDelta) / tornadoScale) * barScale * 0.9)}
-					<!-- Driver label -->
-					<text x={labelW - 4} y={y + barH / 2 + 3} text-anchor="end" font-size="8.5" fill="#475569"
-						>{bar.name}</text
-					>
-					<!-- Down bar (left of center, red) -->
-					<rect x={cx - downW} {y} width={downW} height={barH} fill="#fca5a5" rx="2" />
-					<!-- Up bar (right of center, green) -->
-					<rect x={cx} {y} width={upW} height={barH} fill="#6ee7b7" rx="2" />
-					<!-- Delta labels -->
-					<text
-						x={cx - downW - 2}
-						y={y + barH / 2 + 3}
-						text-anchor="end"
-						font-size="7.5"
-						fill="#b91c1c"
-					>
-						{bar.downDelta >= 0 ? '+' : ''}{(bar.downDelta * 100).toFixed(1)}pp
-					</text>
-					<text
-						x={cx + upW + 2}
-						y={y + barH / 2 + 3}
-						text-anchor="start"
-						font-size="7.5"
-						fill="#047857"
-					>
-						{bar.upDelta >= 0 ? '+' : ''}{(bar.upDelta * 100).toFixed(1)}pp
-					</text>
-				{/each}
-			</svg>
-			<div class="flex gap-4 mt-1 text-[9px] text-slate-500">
-				<span class="flex items-center gap-1"
-					><span class="inline-block w-3 h-2 rounded" style="background:#6ee7b7"></span>+10% driver
-					→ IRR delta</span
-				>
-				<span class="flex items-center gap-1"
-					><span class="inline-block w-3 h-2 rounded" style="background:#fca5a5"></span>−10% driver
-					→ IRR delta</span
-				>
-				<span class="ml-auto text-slate-400">Base IRR: {fmtIRR(s.unleveredIRR)}</span>
+		<!-- Summary bar -->
+		<div class="grid grid-cols-4 border-b border-[#B8C4CE] bg-[#EEF2F7]">
+			<div class="px-3 py-2 border-r border-[#D9D9D9]">
+				<div class="text-[9px] uppercase tracking-wider text-slate-500 font-semibold">Local Profit</div>
+				<div class="text-[13px] font-bold text-slate-900 tabular-nums mt-0.5">{fmt(localProfit)}</div>
+				<div class="text-[10px] text-slate-500">AED</div>
+			</div>
+			<div class="px-3 py-2 border-r border-[#D9D9D9]">
+				<div class="text-[9px] uppercase tracking-wider text-slate-500 font-semibold">Draft Profit</div>
+				<div class="text-[13px] font-bold text-slate-900 tabular-nums mt-0.5">{fmt(draftProfit)}</div>
+				<div class="text-[10px] text-slate-500">AED</div>
+			</div>
+			<div class="px-3 py-2 border-r border-[#D9D9D9]">
+				<div class="text-[9px] uppercase tracking-wider text-slate-500 font-semibold">Margin Gap</div>
+				<div class="text-[13px] font-bold {Math.abs(marginGap) >= 5 ? 'text-amber-700' : 'text-slate-900'} tabular-nums mt-0.5">{fmt(marginGap, 1)} pts</div>
+				<div class="text-[10px] text-slate-500">local {fmt(localMarginPct, 1)}% vs draft {fmt(draftMarginPct, 1)}%</div>
+			</div>
+			<div class="px-3 py-2">
+				<div class="text-[9px] uppercase tracking-wider text-slate-500 font-semibold">Funding Gap</div>
+				<div class="text-[13px] font-bold {Math.abs(fundingGap) > 1_000_000 ? 'text-amber-700' : 'text-slate-900'} tabular-nums mt-0.5">{fmt(fundingGap)}</div>
+				<div class="text-[10px] text-slate-500">AED sources minus uses</div>
 			</div>
 		</div>
-	{/if}
-</div>
+
+		<!-- Section A: Return Checks -->
+		<table class="w-full border-collapse" style="border-spacing:0">
+			<tbody>
+			<tr class="bg-[#1F3864]">
+				<td colspan="4" class="px-2 py-[4px] text-white font-bold text-[11px] tracking-wide">A.&nbsp;&nbsp;RETURN CHECKS</td>
+			</tr>
+			<tr class="bg-[#D6DCE4] border-b border-[#B8C4CE]">
+				<th class="px-1 py-[4px] text-center text-[9px] font-semibold text-slate-500 uppercase tracking-wider">#</th>
+				<th class="px-2 py-[4px] text-left text-[9px] font-semibold text-slate-600 uppercase tracking-wider">Metric</th>
+				<th class="px-2 py-[4px] text-right text-[9px] font-semibold text-slate-600 uppercase tracking-wider">Value</th>
+				<th class="px-2 py-[4px] text-right text-[9px] font-semibold text-slate-600 uppercase tracking-wider">Status</th>
+			</tr>
+			{#each returnChecks as check, idx (check.label)}
+				<tr class="border-b border-[#D9D9D9] hover:bg-slate-50/60">
+					<td class="px-1 py-[3px] text-center text-[9px] text-slate-400">{idx + 1}</td>
+					<td class="px-2 py-[3px] text-left text-[10px] text-slate-800">{check.label}</td>
+					<td class="px-2 py-[3px] text-right tabular-nums text-slate-900 text-[10px] font-semibold">{check.value}</td>
+					<td class="px-2 py-[3px] text-right">
+						{#if check.status === 'outlier'}
+							<span class="inline-block px-2 py-0.5 text-[9px] font-semibold uppercase rounded-sm bg-[#FCE4D6] text-[#843C0C]">{check.status}</span>
+						{:else if check.status === 'warning'}
+							<span class="inline-block px-2 py-0.5 text-[9px] font-semibold uppercase rounded-sm bg-[#FFF2CC] text-[#7F6000]">{check.status}</span>
+						{:else}
+							<span class="inline-block px-2 py-0.5 text-[9px] font-semibold uppercase rounded-sm bg-[#E2F0D9] text-[#375623]">{check.status}</span>
+						{/if}
+					</td>
+				</tr>
+			{/each}
+			</tbody>
+		</table>
+
+		<!-- Section B: Returns Summary -->
+		<table class="w-full border-collapse" style="border-spacing:0">
+			<tbody>
+			<tr class="bg-[#1F3864]">
+				<td colspan="4" class="px-2 py-[4px] text-white font-bold text-[11px] tracking-wide">B.&nbsp;&nbsp;RETURNS SUMMARY</td>
+			</tr>
+			<tr class="bg-[#D6DCE4] border-b border-[#B8C4CE]">
+				<th class="px-1 py-[4px] text-center text-[9px] font-semibold text-slate-500 uppercase tracking-wider">#</th>
+				<th class="px-2 py-[4px] text-left text-[9px] font-semibold text-slate-600 uppercase tracking-wider">Metric</th>
+				<th class="px-2 py-[4px] text-right text-[9px] font-semibold text-slate-600 uppercase tracking-wider">Value</th>
+				<th class="px-2 py-[4px] text-left text-[9px] font-semibold text-slate-600 uppercase tracking-wider">Note</th>
+			</tr>
+			<tr class="border-b border-[#D9D9D9] hover:bg-slate-50/60">
+				<td class="px-1 py-[3px] text-center text-[9px] text-slate-400">a</td>
+				<td class="px-2 py-[3px] text-left text-[10px] text-slate-900 font-semibold">Project IRR</td>
+				<td class="px-2 py-[3px] text-right tabular-nums text-[10px] font-bold {outputs?.returns.projectIrrPct != null && outputs.returns.projectIrrPct < 10 ? 'text-rose-600' : outputs?.returns.projectIrrPct != null && outputs.returns.projectIrrPct < 15 ? 'text-amber-600' : 'text-emerald-700'}">
+					{outputs?.returns.projectIrrPct != null ? fmt(outputs.returns.projectIrrPct, 1) + '%' : 'N/A'}
+				</td>
+				<td class="px-2 py-[3px] text-left text-[9px] text-slate-500">Backend timed cash-flow IRR</td>
+			</tr>
+			<tr class="border-b border-[#D9D9D9] hover:bg-slate-50/60">
+				<td class="px-1 py-[3px] text-center text-[9px] text-slate-400">b</td>
+				<td class="px-2 py-[3px] text-left text-[10px] text-slate-900 font-semibold">Equity IRR</td>
+				<td class="px-2 py-[3px] text-right tabular-nums text-[10px] font-bold {outputs?.returns.equityIrrPct === null || outputs?.returns.equityIrrPct === undefined ? 'text-slate-400' : outputs.returns.equityIrrPct < 12 ? 'text-rose-600' : outputs.returns.equityIrrPct < 18 ? 'text-amber-600' : 'text-emerald-700'}">
+					{outputs?.returns.equityIrrPct != null ? fmt(outputs.returns.equityIrrPct, 1) + '%' : 'N/A'}
+				</td>
+				<td class="px-2 py-[3px] text-left text-[9px] text-slate-500">Sponsor cash flows after debt cleanup</td>
+			</tr>
+			<tr class="border-b border-[#D9D9D9] hover:bg-slate-50/60">
+				<td class="px-1 py-[3px] text-center text-[9px] text-slate-400">c</td>
+				<td class="px-2 py-[3px] text-left text-[10px] text-slate-800">Return on cost</td>
+				<td class="px-2 py-[3px] text-right tabular-nums text-slate-900 text-[10px]">{fmt(returnOnCostPct, 1)}%</td>
+				<td class="px-2 py-[3px] text-left text-[9px] text-slate-500">Workbook outputs</td>
+			</tr>
+			<tr class="border-b border-[#D9D9D9] hover:bg-slate-50/60">
+				<td class="px-1 py-[3px] text-center text-[9px] text-slate-400">d</td>
+				<td class="px-2 py-[3px] text-left text-[10px] text-slate-800">Revenue multiple</td>
+				<td class="px-2 py-[3px] text-right tabular-nums text-slate-900 text-[10px]">{fmt(revenueMultiple, 2)}x</td>
+				<td class="px-2 py-[3px] text-left text-[9px] text-slate-500">Workbook outputs</td>
+			</tr>
+			<tr class="border-b border-[#D9D9D9] hover:bg-slate-50/60">
+				<td class="px-1 py-[3px] text-center text-[9px] text-slate-400">e</td>
+				<td class="px-2 py-[3px] text-left text-[10px] text-slate-800">Draft project MOIC</td>
+				<td class="px-2 py-[3px] text-right tabular-nums text-slate-900 text-[10px]">{outputs?.returns.projectMoic != null ? fmt(outputs.returns.projectMoic, 2) + 'x' : 'N/A'}</td>
+				<td class="px-2 py-[3px] text-left text-[9px] text-slate-500">Backend timed cash-flow multiple</td>
+			</tr>
+			<tr class="border-b border-[#D9D9D9] hover:bg-slate-50/60">
+				<td class="px-1 py-[3px] text-center text-[9px] text-slate-400">f</td>
+				<td class="px-2 py-[3px] text-left text-[10px] text-slate-800">Draft equity MOIC</td>
+				<td class="px-2 py-[3px] text-right tabular-nums text-slate-900 text-[10px]">{outputs?.returns.equityMoic != null ? fmt(outputs.returns.equityMoic, 2) + 'x' : 'N/A'}</td>
+				<td class="px-2 py-[3px] text-left text-[9px] text-slate-500">Sponsor distributions vs equity contributions</td>
+			</tr>
+			<tr class="border-b border-[#D9D9D9] hover:bg-slate-50/60">
+				<td class="px-1 py-[3px] text-center text-[9px] text-slate-400">g</td>
+				<td class="px-2 py-[3px] text-left text-[10px] text-slate-800">All-in profit</td>
+				<td class="px-2 py-[3px] text-right tabular-nums text-slate-900 text-[10px]">{outputs?.returns.allInProjectProfitAed != null ? 'AED ' + fmt(outputs.returns.allInProjectProfitAed) : 'N/A'}</td>
+				<td class="px-2 py-[3px] text-left text-[9px] text-slate-500">Revenue less total project cost including finance carry</td>
+			</tr>
+			<tr class="border-b border-[#D9D9D9] hover:bg-slate-50/60">
+				<td class="px-1 py-[3px] text-center text-[9px] text-slate-400">h</td>
+				<td class="px-2 py-[3px] text-left text-[10px] text-slate-800">All-in margin</td>
+				<td class="px-2 py-[3px] text-right tabular-nums text-slate-900 text-[10px]">{outputs?.returns.allInMarginPct != null ? fmt(outputs.returns.allInMarginPct, 1) + '%' : 'N/A'}</td>
+				<td class="px-2 py-[3px] text-left text-[9px] text-slate-500">All-in profit as share of gross revenue</td>
+			</tr>
+			<tr class="border-b border-[#D9D9D9] hover:bg-slate-50/60">
+				<td class="px-1 py-[3px] text-center text-[9px] text-slate-400">i</td>
+				<td class="px-2 py-[3px] text-left text-[10px] text-slate-800">Peak debt</td>
+				<td class="px-2 py-[3px] text-right tabular-nums text-slate-900 text-[10px]">{outputs?.cashFlow.peakFundingAed != null ? 'AED ' + fmt(outputs.cashFlow.peakFundingAed) : 'N/A'}</td>
+				<td class="px-2 py-[3px] text-left text-[9px] text-slate-500">Backend monthly financing path</td>
+			</tr>
+			<tr class="border-b border-[#D9D9D9] hover:bg-slate-50/60">
+				<td class="px-1 py-[3px] text-center text-[9px] text-slate-400">j</td>
+				<td class="px-2 py-[3px] text-left text-[10px] text-slate-800">Peak equity</td>
+				<td class="px-2 py-[3px] text-right tabular-nums text-slate-900 text-[10px]">{outputs?.funding.equityFundingAed != null ? 'AED ' + fmt(outputs.funding.equityFundingAed) : 'N/A'}</td>
+				<td class="px-2 py-[3px] text-left text-[9px] text-slate-500">Backend monthly financing path</td>
+			</tr>
+			<tr class="border-b border-[#D9D9D9] hover:bg-slate-50/60">
+				<td class="px-1 py-[3px] text-center text-[9px] text-slate-400">k</td>
+				<td class="px-2 py-[3px] text-left text-[10px] text-slate-800">Interest carry</td>
+				<td class="px-2 py-[3px] text-right tabular-nums text-slate-900 text-[10px]">{outputs?.returns.totalInterestPaidAed != null ? 'AED ' + fmt(outputs.returns.totalInterestPaidAed) : 'N/A'}</td>
+				<td class="px-2 py-[3px] text-left text-[9px] text-slate-500">Capitalized monthly interest across draft debt path</td>
+			</tr>
+			<tr class="border-b border-[#D9D9D9] hover:bg-slate-50/60">
+				<td class="px-1 py-[3px] text-center text-[9px] text-slate-400">l</td>
+				<td class="px-2 py-[3px] text-left text-[10px] text-slate-800">Commitment fees</td>
+				<td class="px-2 py-[3px] text-right tabular-nums text-slate-900 text-[10px]">{outputs?.returns.totalCommitmentFeesAed != null ? 'AED ' + fmt(outputs.returns.totalCommitmentFeesAed) : 'N/A'}</td>
+				<td class="px-2 py-[3px] text-left text-[9px] text-slate-500">Undrawn debt commitment fee carry</td>
+			</tr>
+			<tr class="border-b border-[#D9D9D9] hover:bg-slate-50/60">
+				<td class="px-1 py-[3px] text-center text-[9px] text-slate-400">m</td>
+				<td class="px-2 py-[3px] text-left text-[10px] text-slate-800">Off-plan proceeds</td>
+				<td class="px-2 py-[3px] text-right tabular-nums text-slate-900 text-[10px]">AED {fmt(offPlanProceedsAed)}</td>
+				<td class="px-2 py-[3px] text-left text-[9px] text-slate-500">Deposit + pre-handover collections</td>
+			</tr>
+			<tr class="border-b border-[#D9D9D9] hover:bg-slate-50/60">
+				<td class="px-1 py-[3px] text-center text-[9px] text-slate-400">n</td>
+				<td class="px-2 py-[3px] text-left text-[10px] text-slate-800">Debt / equity funding</td>
+				<td class="px-2 py-[3px] text-right tabular-nums text-slate-900 text-[10px]">AED {fmt(debtFundingAed)} / {fmt(equityFundingAed)}</td>
+				<td class="px-2 py-[3px] text-left text-[9px] text-slate-500">Workbook funding inputs</td>
+			</tr>
+			</tbody>
+		</table>
+
+		<!-- Section C: Draft vs Local Reconciliation -->
+		<table class="w-full border-collapse" style="border-spacing:0">
+			<tbody>
+			<tr class="bg-[#1F3864]">
+				<td colspan="4" class="px-2 py-[4px] text-white font-bold text-[11px] tracking-wide">C.&nbsp;&nbsp;DRAFT vs LOCAL RECONCILIATION</td>
+			</tr>
+			<tr class="bg-[#D6DCE4] border-b border-[#B8C4CE]">
+				<th class="px-1 py-[4px] text-center text-[9px] font-semibold text-slate-500 uppercase tracking-wider"></th>
+				<th class="px-2 py-[4px] text-left text-[9px] font-semibold text-slate-600 uppercase tracking-wider">Metric</th>
+				<th class="px-2 py-[4px] text-right text-[9px] font-semibold text-slate-600 uppercase tracking-wider">Draft / Local</th>
+				<th class="px-2 py-[4px] text-right text-[9px] font-semibold text-slate-600 uppercase tracking-wider">Gap</th>
+			</tr>
+			{#each reconciliationRows as row (row.label)}
+				{@const localValue = row.local ?? 0}
+				{@const gap = localValue - row.draft}
+				{@const isMaterial = Math.abs(gap) > (row.suffix === '%' ? 5 : row.suffix === 'x' ? 0.25 : 1_000_000)}
+				<tr class="border-b border-[#D9D9D9] hover:bg-slate-50/60">
+					<td></td>
+					<td class="px-2 py-[3px] text-left text-[10px] text-slate-800">{row.label}</td>
+					<td class="px-2 py-[3px] text-right tabular-nums text-slate-900 text-[10px]">
+						{#if row.suffix === '%'}{fmt(row.draft, 1)}% / {fmt(localValue, 1)}%{:else if row.suffix === 'x'}{fmt(row.draft, 2)}x / {fmt(localValue, 2)}x{:else}AED {fmt(row.draft)} / {fmt(localValue)}{/if}
+					</td>
+					<td class="px-2 py-[3px] text-right tabular-nums text-[10px] font-semibold {isMaterial ? 'text-amber-700' : 'text-slate-600'}">
+						{#if row.suffix === '%'}{fmt(gap, 1)} pts{:else if row.suffix === 'x'}{fmt(gap, 2)}x{:else}AED {fmt(gap)}{/if}
+					</td>
+				</tr>
+			{/each}
+			</tbody>
+		</table>
+
+		<!-- Section D: Sensitivity Scenarios (optional) -->
+		{#if draftSensitivities.length}
+			<table class="w-full border-collapse" style="border-spacing:0">
+				<thead>
+				<tr class="bg-[#1F3864]">
+					<td colspan="7" class="px-2 py-[4px] text-white font-bold text-[11px] tracking-wide">D.&nbsp;&nbsp;SENSITIVITY SCENARIOS</td>
+				</tr>
+				<tr class="bg-[#D6DCE4] border-b border-[#B8C4CE]">
+					<th class="px-2 py-[4px] text-left text-[9px] font-semibold text-slate-600 uppercase tracking-wider">Scenario</th>
+					<th class="px-2 py-[4px] text-left text-[9px] font-semibold text-slate-600 uppercase tracking-wider">Change</th>
+					<th class="px-2 py-[4px] text-right text-[9px] font-semibold text-slate-600 uppercase tracking-wider">Project IRR</th>
+					<th class="px-2 py-[4px] text-right text-[9px] font-semibold text-slate-600 uppercase tracking-wider">Equity IRR</th>
+					<th class="px-2 py-[4px] text-right text-[9px] font-semibold text-slate-600 uppercase tracking-wider">All-in Margin</th>
+					<th class="px-2 py-[4px] text-right text-[9px] font-semibold text-slate-600 uppercase tracking-wider">Peak Debt</th>
+					<th class="px-2 py-[4px] text-right text-[9px] font-semibold text-slate-600 uppercase tracking-wider">Finance Carry</th>
+				</tr>
+				</thead>
+				<tbody>
+				{#each draftSensitivities as scenario (scenario.code)}
+					<tr class="border-b border-[#D9D9D9] hover:bg-slate-50/60">
+						<td class="px-2 py-[3px] text-left text-[10px] text-slate-800 font-semibold">{scenario.label}</td>
+						<td class="pl-6 pr-2 py-[3px] text-left text-[9px] text-slate-500 italic">{scenario.changeNote}</td>
+						<td class="px-2 py-[3px] text-right tabular-nums text-slate-900 text-[10px]">{scenario.projectIrrPct != null ? fmt(scenario.projectIrrPct, 1) + '%' : 'N/A'}</td>
+						<td class="px-2 py-[3px] text-right tabular-nums text-slate-900 text-[10px]">{scenario.equityIrrPct != null ? fmt(scenario.equityIrrPct, 1) + '%' : 'N/A'}</td>
+						<td class="px-2 py-[3px] text-right tabular-nums text-slate-900 text-[10px]">{scenario.allInMarginPct != null ? fmt(scenario.allInMarginPct, 1) + '%' : 'N/A'}</td>
+						<td class="px-2 py-[3px] text-right tabular-nums text-slate-900 text-[10px]">{scenario.peakDebtAed != null ? 'AED ' + fmt(scenario.peakDebtAed) : 'N/A'}</td>
+						<td class="px-2 py-[3px] text-right tabular-nums text-slate-900 text-[10px]">{scenario.totalFinanceCostsAed != null ? 'AED ' + fmt(scenario.totalFinanceCostsAed) : 'N/A'}</td>
+					</tr>
+				{/each}
+				</tbody>
+			</table>
+		{/if}
+
+		<!-- Section E: Sources & Uses (optional) -->
+		{#if outputs}
+			<table class="w-full border-collapse" style="border-spacing:0">
+				<thead>
+				<tr class="bg-[#1F3864]">
+					<td colspan="4" class="px-2 py-[4px] text-white font-bold text-[11px] tracking-wide">{draftSensitivities.length ? 'E.' : 'D.'}&nbsp;&nbsp;SOURCES &amp; USES</td>
+				</tr>
+				<tr class="bg-[#D6DCE4] border-b border-[#B8C4CE]">
+					<th class="px-2 py-[4px] text-left text-[9px] font-semibold text-slate-600 uppercase tracking-wider">Category</th>
+					<th class="px-2 py-[4px] text-left text-[9px] font-semibold text-slate-600 uppercase tracking-wider">Line Item</th>
+					<th class="px-2 py-[4px] text-right text-[9px] font-semibold text-slate-600 uppercase tracking-wider">Draft / Local</th>
+					<th class="px-2 py-[4px] text-left text-[9px] font-semibold text-slate-600 uppercase tracking-wider">Basis</th>
+				</tr>
+				</thead>
+				<tbody>
+				{#each sourcesUsesRows as row (row.label)}
+					<tr class="border-b border-[#D9D9D9] hover:bg-slate-50/60">
+						<td class="px-2 py-[3px] text-left text-[10px] text-slate-500 italic"></td>
+						<td class="px-2 py-[3px] text-left text-[10px] text-slate-800">{row.label}</td>
+						<td class="px-2 py-[3px] text-right tabular-nums text-slate-900 text-[10px]">AED {fmt(row.draft)} / {fmt(row.local)}</td>
+						<td class="px-2 py-[3px] text-left text-[9px] text-slate-500">{row.basis}</td>
+					</tr>
+				{/each}
+				</tbody>
+			</table>
+		{/if}
+
+		<div class="py-3"></div>
+	</div>
+{/if}

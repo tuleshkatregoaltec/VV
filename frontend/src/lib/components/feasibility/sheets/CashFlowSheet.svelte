@@ -1,396 +1,569 @@
 <script lang="ts">
-import { feasibilityStore } from '$lib/stores/feasibility.svelte'
+import { workbookStore } from '$lib/feasibility/workbook/store.svelte'
 
-// Positive cost → show in brackets as outflow; zero → dash
-function outflow(n: number): string {
-	if (n <= 0) return '—'
-	return `(${Math.round(n / 1000).toLocaleString('en-AE')})`
-}
-// Positive inflow → show as number; zero → dash
-function inflow(n: number): string {
-	if (n <= 0) return '—'
-	return Math.round(n / 1000).toLocaleString('en-AE')
-}
-// Net value — brackets for negative, dash for zero
-function fmtK(n: number): string {
-	if (n === 0) return '—'
-	const k = Math.round(Math.abs(n) / 1000)
-	const f = k.toLocaleString('en-AE')
-	return n < 0 ? `(${f})` : f
+function fmt(value: number, digits = 0): string {
+	return value.toLocaleString('en-AE', {
+		minimumFractionDigits: digits,
+		maximumFractionDigits: digits
+	})
 }
 
-const s = $derived(feasibilityStore)
-const cf = $derived(s.cashflow.slice(0, 20))
-const escrow = $derived(s.escrowData.slice(0, 20))
-const useEscrow = $derived(s.assumptions.useEscrowModel)
+function fmtPct(value: number | null | undefined): string {
+	if (value == null) return '—'
+	return value.toFixed(1) + '%'
+}
 
-let leveredOpen = $state(false)
+function fmtMoic(value: number | null | undefined): string {
+	if (value == null) return '—'
+	return value.toFixed(2) + 'x'
+}
 
-const sectionRow = 'bg-slate-800 border-b border-slate-600'
-const sectionCell =
-	'px-2 py-1.5 text-[10px] font-bold text-white uppercase tracking-wider sticky left-0 bg-slate-800'
+type AnnualRow = {
+	year: number
+	revenueInflowsAed: number
+	depositInflowsAed: number
+	preHandoverInflowsAed: number
+	handoverInflowsAed: number
+	operatingOutflowsAed: number
+	costLandAed: number
+	costConstructionAed: number
+	costProfessionalFeesAed: number
+	costMarketingAed: number
+	costSalesAgentAed: number
+	costInfrastructureAed: number
+	costAuthorityFeesAed: number
+	costCommunityFeesAed: number
+	costContingencyAed: number
+	costVatAed: number
+	unleveredNetCashFlowAed: number
+	debtDrawAed: number
+	debtRepaymentAed: number
+	interestPaidAed: number
+	commitmentFeePaidAed: number
+	equityContributionAed: number
+	equityDistributionAed: number
+	leveredNetCashFlowAed: number
+	// per-period draw breakdown
+	landDrawAed: number
+	constructionDrawAed: number
+	// sales proceeds that funded costs (shows presales coverage of construction)
+	costPaidFromEscrowAed: number
+	// VAT refund inflow (non-zero in handover year)
+	vatRefundInflowsAed: number
+	// year-end closing balances (last period of that year)
+	debtBalanceAed: number
+	landLoanBalanceAed: number
+	constructionLoanBalanceAed: number
+	escrowBalanceAed: number
+}
+
+const draftCashFlow = $derived(workbookStore.workbook?.cashFlow ?? null)
+const returns = $derived(workbookStore.workbook?.returns ?? null)
+
+const hasBreakdown = $derived(
+	(draftCashFlow?.periods ?? []).some(
+		(p) => p.depositInflowsAed !== 0 || p.preHandoverInflowsAed !== 0 || p.handoverInflowsAed !== 0
+	)
+)
+
+const hasTranche = $derived(
+	(draftCashFlow?.periods ?? []).some(
+		(p) => p.landLoanBalanceAed !== 0 || p.constructionLoanBalanceAed !== 0
+	)
+)
+
+const annualRows: AnnualRow[] = $derived(
+	(() => {
+		if (!draftCashFlow) return []
+		const byYear = new Map<number, AnnualRow>()
+		for (const p of draftCashFlow.periods) {
+			const year = parseInt(p.periodEndDate.slice(0, 4), 10)
+			if (!byYear.has(year)) {
+				byYear.set(year, {
+					year,
+					revenueInflowsAed: 0,
+					depositInflowsAed: 0,
+					preHandoverInflowsAed: 0,
+					handoverInflowsAed: 0,
+					operatingOutflowsAed: 0,
+					costLandAed: 0,
+					costConstructionAed: 0,
+					costProfessionalFeesAed: 0,
+					costMarketingAed: 0,
+					costSalesAgentAed: 0,
+					costInfrastructureAed: 0,
+					costAuthorityFeesAed: 0,
+					costCommunityFeesAed: 0,
+					costContingencyAed: 0,
+					costVatAed: 0,
+					unleveredNetCashFlowAed: 0,
+					debtDrawAed: 0,
+					debtRepaymentAed: 0,
+					interestPaidAed: 0,
+					commitmentFeePaidAed: 0,
+					equityContributionAed: 0,
+					equityDistributionAed: 0,
+					leveredNetCashFlowAed: 0,
+					landDrawAed: 0,
+					constructionDrawAed: 0,
+					costPaidFromEscrowAed: 0,
+					vatRefundInflowsAed: 0,
+					// balances overwritten each period (year-end closing = last period's value)
+					debtBalanceAed: 0,
+					landLoanBalanceAed: 0,
+					constructionLoanBalanceAed: 0,
+					escrowBalanceAed: 0
+				})
+			}
+			const row = byYear.get(year)!
+			// flow rows: sum
+			row.revenueInflowsAed += p.revenueInflowsAed
+			row.depositInflowsAed += p.depositInflowsAed
+			row.preHandoverInflowsAed += p.preHandoverInflowsAed
+			row.handoverInflowsAed += p.handoverInflowsAed
+			row.operatingOutflowsAed += p.operatingOutflowsAed
+			row.costLandAed += p.costLandAed
+			row.costConstructionAed += p.costConstructionAed
+			row.costProfessionalFeesAed += p.costProfessionalFeesAed
+			row.costMarketingAed += p.costMarketingAed
+			row.costSalesAgentAed += p.costSalesAgentAed
+			row.costInfrastructureAed += p.costInfrastructureAed
+			row.costAuthorityFeesAed += p.costAuthorityFeesAed
+			row.costCommunityFeesAed += p.costCommunityFeesAed
+			row.costContingencyAed += p.costContingencyAed
+			row.costVatAed += p.costVatAed
+			row.landDrawAed += p.landDrawAed
+			row.constructionDrawAed += p.constructionDrawAed
+			row.costPaidFromEscrowAed += p.costPaidFromEscrowAed ?? 0
+			row.vatRefundInflowsAed += p.vatRefundInflowsAed ?? 0
+			row.unleveredNetCashFlowAed += p.unleveredNetCashFlowAed
+			row.debtDrawAed += p.debtDrawAed
+			row.debtRepaymentAed += p.debtRepaymentAed
+			row.interestPaidAed += p.interestPaidAed
+			row.commitmentFeePaidAed += p.commitmentFeePaidAed
+			row.equityContributionAed += p.equityContributionAed
+			row.equityDistributionAed += p.equityDistributionAed
+			row.leveredNetCashFlowAed += p.leveredNetCashFlowAed
+			// balance rows: year-end closing = last period in year
+			row.debtBalanceAed = p.debtBalanceAed
+			row.landLoanBalanceAed = p.landLoanBalanceAed
+			row.constructionLoanBalanceAed = p.constructionLoanBalanceAed
+			row.escrowBalanceAed = p.escrowBalanceAed
+		}
+		return Array.from(byYear.values()).sort((a, b) => a.year - b.year)
+	})()
+)
+
+const totals: AnnualRow = $derived(
+	(() => {
+		const rows = annualRows
+		const last = rows.at(-1)
+		return {
+			year: 0,
+			revenueInflowsAed: rows.reduce((s, r) => s + r.revenueInflowsAed, 0),
+			depositInflowsAed: rows.reduce((s, r) => s + r.depositInflowsAed, 0),
+			preHandoverInflowsAed: rows.reduce((s, r) => s + r.preHandoverInflowsAed, 0),
+			handoverInflowsAed: rows.reduce((s, r) => s + r.handoverInflowsAed, 0),
+			operatingOutflowsAed: rows.reduce((s, r) => s + r.operatingOutflowsAed, 0),
+			costLandAed: rows.reduce((s, r) => s + r.costLandAed, 0),
+			costConstructionAed: rows.reduce((s, r) => s + r.costConstructionAed, 0),
+			costProfessionalFeesAed: rows.reduce((s, r) => s + r.costProfessionalFeesAed, 0),
+			costMarketingAed: rows.reduce((s, r) => s + r.costMarketingAed, 0),
+			costSalesAgentAed: rows.reduce((s, r) => s + r.costSalesAgentAed, 0),
+			costInfrastructureAed: rows.reduce((s, r) => s + r.costInfrastructureAed, 0),
+			costAuthorityFeesAed: rows.reduce((s, r) => s + r.costAuthorityFeesAed, 0),
+			costCommunityFeesAed: rows.reduce((s, r) => s + r.costCommunityFeesAed, 0),
+			costContingencyAed: rows.reduce((s, r) => s + r.costContingencyAed, 0),
+			costVatAed: rows.reduce((s, r) => s + r.costVatAed, 0),
+			landDrawAed: rows.reduce((s, r) => s + r.landDrawAed, 0),
+			constructionDrawAed: rows.reduce((s, r) => s + r.constructionDrawAed, 0),
+			costPaidFromEscrowAed: rows.reduce((s, r) => s + r.costPaidFromEscrowAed, 0),
+			vatRefundInflowsAed: rows.reduce((s, r) => s + r.vatRefundInflowsAed, 0),
+			unleveredNetCashFlowAed: rows.reduce((s, r) => s + r.unleveredNetCashFlowAed, 0),
+			debtDrawAed: rows.reduce((s, r) => s + r.debtDrawAed, 0),
+			debtRepaymentAed: rows.reduce((s, r) => s + r.debtRepaymentAed, 0),
+			interestPaidAed: rows.reduce((s, r) => s + r.interestPaidAed, 0),
+			commitmentFeePaidAed: rows.reduce((s, r) => s + r.commitmentFeePaidAed, 0),
+			equityContributionAed: rows.reduce((s, r) => s + r.equityContributionAed, 0),
+			equityDistributionAed: rows.reduce((s, r) => s + r.equityDistributionAed, 0),
+			leveredNetCashFlowAed: rows.reduce((s, r) => s + r.leveredNetCashFlowAed, 0),
+			debtBalanceAed: last?.debtBalanceAed ?? 0,
+			landLoanBalanceAed: last?.landLoanBalanceAed ?? 0,
+			constructionLoanBalanceAed: last?.constructionLoanBalanceAed ?? 0,
+			escrowBalanceAed: last?.escrowBalanceAed ?? 0
+		}
+	})()
+)
+
+// Style helpers
+const TH =
+	'px-3 py-[5px] text-right text-[10px] font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap'
+const TH_L =
+	'px-3 py-[5px] text-left text-[10px] font-semibold text-slate-500 uppercase tracking-wider'
+const TD = 'px-3 py-[4px] text-right text-[11px] tabular-nums text-slate-600 whitespace-nowrap'
+const TD_TOT =
+	'px-3 py-[4px] text-right text-[11px] tabular-nums font-semibold text-slate-800 whitespace-nowrap'
+const TD_NEG = 'px-3 py-[4px] text-right text-[11px] tabular-nums text-amber-700 whitespace-nowrap'
+const TD_NEG_TOT =
+	'px-3 py-[4px] text-right text-[11px] tabular-nums font-semibold text-amber-700 whitespace-nowrap'
+const TD_L = 'px-3 py-[4px] text-left text-[11px] text-slate-700 whitespace-nowrap'
+const TD_L_SUB = 'pl-7 pr-3 py-[4px] text-left text-[11px] text-slate-400 whitespace-nowrap'
+const HDR = 'bg-slate-100 border-t-2 border-slate-300'
+const HDR_SUB = 'bg-slate-50 border-t border-slate-200'
+const ROW = 'border-t border-slate-100 hover:bg-slate-50/60'
 </script>
 
-<div class="overflow-auto flex-1">
-	<div class="px-2 py-0.5 text-[10px] text-right text-slate-400 italic border-b border-slate-200">
-		AED '000 unless stated
+{#if !draftCashFlow}
+	<div class="h-full flex items-center justify-center px-6 text-sm text-slate-400">
+		Generate an HBU study to build the cash-flow view.
 	</div>
-	<table class="border-collapse text-[11px]" style="min-width: max-content;">
-		<thead class="sticky top-0 z-10">
-			<tr class="bg-slate-100 border-b-2 border-slate-300">
-				<th
-					class="border-r border-slate-300 text-left px-2 py-1.5 text-slate-600 font-semibold sticky left-0 bg-slate-100 z-20 w-36"
-					>Line Item</th
-				>
-				{#each cf as p (`header-${p.q}`)}
-					<th
-						class="border-r border-slate-200 text-right px-1.5 py-1.5 text-slate-600 font-semibold w-14"
-						>Q{p.q + 1}</th
-					>
-				{/each}
-				{#if s.totalQ > 20}
-					<th class="border-r border-slate-200 text-center px-2 py-1.5 text-slate-400 font-normal"
-						>…</th
-					>
+{:else}
+	<div class="h-full overflow-auto">
+		<table class="w-full border-collapse text-xs min-w-[700px]">
+			<!-- Header -->
+			<thead class="sticky top-0 z-10 bg-white shadow-sm">
+				<tr class="border-b-2 border-slate-300">
+					<th class="{TH_L} w-44">Line item</th>
+					{#each annualRows as row}
+						<th class={TH}>{row.year}</th>
+					{/each}
+					<th class="{TH} bg-slate-50">Total</th>
+				</tr>
+			</thead>
+
+			<tbody>
+				<!-- ── REVENUE ── -->
+				<tr class={HDR}>
+					<td class="px-3 py-[5px] text-[10px] font-semibold text-slate-700 uppercase tracking-wider" colspan={annualRows.length + 2}>
+						Revenue inflows
+					</td>
+				</tr>
+				<tr class={ROW}>
+					<td class={TD_L}>Gross sales receipts</td>
+					{#each annualRows as row}
+						<td class={TD}>{fmt(row.revenueInflowsAed)}</td>
+					{/each}
+					<td class="{TD_TOT} bg-slate-50">{fmt(totals.revenueInflowsAed)}</td>
+				</tr>
+				{#if hasBreakdown}
+					<tr class={ROW}>
+						<td class={TD_L_SUB}>↳ Deposits (S-curve)</td>
+						{#each annualRows as row}
+							<td class="{TD} text-slate-400">{fmt(row.depositInflowsAed)}</td>
+						{/each}
+						<td class="{TD_TOT} bg-slate-50 text-slate-400">{fmt(totals.depositInflowsAed)}</td>
+					</tr>
+					<tr class={ROW}>
+						<td class={TD_L_SUB}>↳ Pre-handover milestone</td>
+						{#each annualRows as row}
+							<td class="{TD} text-slate-400">{fmt(row.preHandoverInflowsAed)}</td>
+						{/each}
+						<td class="{TD_TOT} bg-slate-50 text-slate-400">{fmt(totals.preHandoverInflowsAed)}</td>
+					</tr>
+					<tr class={ROW}>
+						<td class={TD_L_SUB}>↳ Handover proceeds</td>
+						{#each annualRows as row}
+							<td class="{TD} text-slate-400">{fmt(row.handoverInflowsAed)}</td>
+						{/each}
+						<td class="{TD_TOT} bg-slate-50 text-slate-400">{fmt(totals.handoverInflowsAed)}</td>
+					</tr>
 				{/if}
-				<th class="text-right px-2 py-1.5 text-slate-600 font-semibold w-16">Total</th>
-			</tr>
-		</thead>
-		<tbody>
-			<!-- INFLOWS -->
-			<tr class={sectionRow}>
-				<td class={sectionCell} colspan={cf.length + 3}>Inflows</td>
-			</tr>
 
-			<tr class="border-b border-slate-100 hover:bg-slate-50/60">
-				<td class="border-r border-slate-200 px-2 py-1.5 text-slate-600 sticky left-0 bg-white"
-					>Equity Draw</td
-				>
-				{#each cf as p (`equity-${p.q}`)}
-					{@const draw = p.q < s.cq ? s.equityRequired / s.cq : 0}
-					<td class="border-r border-slate-100 px-1.5 py-1.5 text-right tabular-nums text-slate-900"
-						>{inflow(draw)}</td
-					>
-				{/each}
-				{#if s.totalQ > 20}<td class="border-r border-slate-100"></td>{/if}
-				<td class="px-2 py-1.5 text-right tabular-nums text-slate-900 font-semibold"
-					>{inflow(s.equityRequired)}</td
-				>
-			</tr>
+				<!-- ── SALES PROCEEDS FUNDING COSTS ── -->
+				{#if annualRows.some(r => r.costPaidFromEscrowAed > 0)}
+					<tr class={ROW}>
+						<td class="{TD_L} text-teal-700 font-medium">↳ Sales proceeds fund costs (escrow)</td>
+						{#each annualRows as row}
+							<td class="px-3 py-[4px] text-right text-[11px] tabular-nums text-teal-700 whitespace-nowrap">
+								{row.costPaidFromEscrowAed > 0 ? fmt(row.costPaidFromEscrowAed) : '—'}
+							</td>
+						{/each}
+						<td class="px-3 py-[4px] text-right text-[11px] tabular-nums font-semibold text-teal-700 bg-slate-50 whitespace-nowrap">{fmt(totals.costPaidFromEscrowAed)}</td>
+					</tr>
+				{/if}
 
-			<tr class="border-b border-slate-100 hover:bg-slate-50/60">
-				<td class="border-r border-slate-200 px-2 py-1.5 text-slate-600 sticky left-0 bg-white"
-					>Debt Draw</td
-				>
-				{#each cf as p (`debt-${p.q}`)}
-					{@const draw = p.q < s.cq ? s.debtAmount / s.cq : 0}
-					<td class="border-r border-slate-100 px-1.5 py-1.5 text-right tabular-nums text-slate-900"
-						>{inflow(draw)}</td
-					>
-				{/each}
-				{#if s.totalQ > 20}<td class="border-r border-slate-100"></td>{/if}
-				<td class="px-2 py-1.5 text-right tabular-nums text-slate-900 font-semibold"
-					>{inflow(s.debtAmount)}</td
-				>
-			</tr>
-
-			<tr class="border-b border-slate-100 hover:bg-slate-50/60">
-				<td class="border-r border-slate-200 px-2 py-1.5 text-slate-600 sticky left-0 bg-white">
-					{useEscrow ? 'Escrow Releases' : 'Sales Revenue'}
-				</td>
-				{#each cf as p (`revenue-${p.q}`)}
-					<td class="border-r border-slate-100 px-1.5 py-1.5 text-right tabular-nums text-slate-900"
-						>{inflow(p.revenue)}</td
-					>
-				{/each}
-				{#if s.totalQ > 20}<td class="border-r border-slate-100"></td>{/if}
-				<td class="px-2 py-1.5 text-right tabular-nums text-slate-900 font-semibold"
-					>{inflow(cf.reduce((sum, p) => sum + p.revenue, 0))}</td
-				>
-			</tr>
-
-			<!-- ESCROW SECTION (when enabled) -->
-			{#if useEscrow}
-				<tr class="bg-blue-900/80 border-b border-blue-700">
-					<td
-						class="px-2 py-1.5 text-[10px] font-bold text-blue-100 uppercase tracking-wider sticky left-0 bg-blue-900/80"
-						colspan={cf.length + 3}
-					>
-						Escrow Detail
-						<span class="ml-2 text-[9px] font-normal text-blue-300 normal-case"
-							>IRR shown is after RERA release timing</span
-						>
-					</td>
-				</tr>
-				<tr class="border-b border-blue-100 bg-blue-50/40">
-					<td
-						class="border-r border-blue-100 px-2 py-1.5 text-blue-700 pl-4 sticky left-0 bg-blue-50"
-						>Buyer Receipts</td
-					>
-					{#each escrow as e (`receipt-${e.q}`)}
-						<td class="border-r border-blue-50 px-1.5 py-1.5 text-right tabular-nums text-blue-800"
-							>{e.receipt > 0 ? inflow(e.receipt) : '—'}</td
-						>
+				<!-- ── VAT REFUND ── -->
+			{#if annualRows.some(r => r.vatRefundInflowsAed > 0)}
+				<tr class={ROW}>
+					<td class="{TD_L} text-emerald-700 font-medium">↳ VAT refund (recovered at handover)</td>
+					{#each annualRows as row}
+						<td class="px-3 py-[4px] text-right text-[11px] tabular-nums text-emerald-700 whitespace-nowrap">
+							{row.vatRefundInflowsAed > 0 ? fmt(row.vatRefundInflowsAed) : '—'}
+						</td>
 					{/each}
-					{#if s.totalQ > 20}<td class="border-r border-blue-50"></td>{/if}
-					<td class="px-2 py-1.5 text-right tabular-nums text-blue-800 font-semibold"
-						>{inflow(escrow.reduce((sum, e) => sum + e.receipt, 0))}</td
-					>
-				</tr>
-				<tr class="border-b border-blue-100 bg-blue-50/40">
-					<td
-						class="border-r border-blue-100 px-2 py-1.5 text-blue-700 pl-4 sticky left-0 bg-blue-50"
-						>Developer Releases</td
-					>
-					{#each escrow as e (`release-${e.q}`)}
-						<td class="border-r border-blue-50 px-1.5 py-1.5 text-right tabular-nums text-blue-800"
-							>{e.release > 0 ? inflow(e.release) : '—'}</td
-						>
-					{/each}
-					{#if s.totalQ > 20}<td class="border-r border-blue-50"></td>{/if}
-					<td class="px-2 py-1.5 text-right tabular-nums text-blue-800 font-semibold"
-						>{inflow(escrow.reduce((sum, e) => sum + e.release, 0))}</td
-					>
-				</tr>
-				<tr class="border-b border-blue-200 bg-blue-50/40">
-					<td
-						class="border-r border-blue-100 px-2 py-1.5 text-blue-600 pl-4 italic sticky left-0 bg-blue-50"
-						>Escrow Float</td
-					>
-					{#each escrow as e (`float-${e.q}`)}
-						<td
-							class="border-r border-blue-50 px-1.5 py-1.5 text-right tabular-nums text-blue-600 italic"
-							>{e.float !== 0 ? fmtK(e.float) : '—'}</td
-						>
-					{/each}
-					{#if s.totalQ > 20}<td class="border-r border-blue-50"></td>{/if}
-					<td></td>
+					<td class="px-3 py-[4px] text-right text-[11px] tabular-nums font-semibold text-emerald-700 bg-slate-50 whitespace-nowrap">{fmt(totals.vatRefundInflowsAed)}</td>
 				</tr>
 			{/if}
 
-			<!-- OUTFLOWS -->
-			<tr class={sectionRow}>
-				<td class={sectionCell} colspan={cf.length + 3}>Outflows</td>
-			</tr>
-
-			{#each [{ label: 'Land', key: 'land' as const }, { label: 'Construction', key: 'construction' as const }, { label: 'Soft Costs', key: 'soft' as const }, { label: 'Selling & Mkt', key: 'marketing' as const }] as row (row.key)}
-				<tr class="border-b border-slate-100 hover:bg-slate-50/60">
-					<td class="border-r border-slate-200 px-2 py-1.5 text-slate-600 sticky left-0 bg-white"
-						>{row.label}</td
-					>
-					{#each cf as p (`${row.key}-${p.q}`)}
-						<td
-							class="border-r border-slate-100 px-1.5 py-1.5 text-right tabular-nums text-slate-900"
-							>{outflow(p[row.key])}</td
-						>
-					{/each}
-					{#if s.totalQ > 20}<td class="border-r border-slate-100"></td>{/if}
-					<td class="px-2 py-1.5 text-right tabular-nums text-slate-900 font-semibold"
-						>{outflow(cf.reduce((sum, p) => sum + p[row.key], 0))}</td
-					>
-				</tr>
-			{/each}
-
-			<tr class="border-b border-slate-100 hover:bg-slate-50/60">
-				<td class="border-r border-slate-200 px-2 py-1.5 text-slate-600 sticky left-0 bg-white"
-					>Interest</td
-				>
-				{#each cf as p (`interest-${p.q}`)}
-					{@const interest =
-						p.q < s.cq ? (s.debtAmount * s.assumptions.financeRatePct) / 100 / 4 : 0}
-					<td class="border-r border-slate-100 px-1.5 py-1.5 text-right tabular-nums text-slate-900"
-						>{outflow(interest)}</td
-					>
-				{/each}
-				{#if s.totalQ > 20}<td class="border-r border-slate-100"></td>{/if}
-				<td class="px-2 py-1.5 text-right tabular-nums text-slate-900 font-semibold"
-					>{outflow(s.totalInterest)}</td
-				>
-			</tr>
-
-			<tr class="border-t-2 border-slate-300">
-				<td
-					class="border-r border-slate-200 px-2 py-1.5 font-bold text-slate-700 sticky left-0 bg-white"
-					>Total Outflows</td
-				>
-				{#each cf as p (`total-outflows-${p.q}`)}
-					<td
-						class="border-r border-slate-100 px-1.5 py-1.5 text-right font-semibold tabular-nums text-slate-900"
-						>{outflow(p.costs)}</td
-					>
-				{/each}
-				{#if s.totalQ > 20}<td class="border-r border-slate-100"></td>{/if}
-				<td class="px-2 py-1.5 text-right font-bold tabular-nums text-slate-900"
-					>{outflow(cf.reduce((sum, p) => sum + p.costs, 0))}</td
-				>
-			</tr>
-
-			<!-- NET & CUMULATIVE -->
-			<tr class={sectionRow}>
-				<td class={sectionCell} colspan={cf.length + 3}>Summary</td>
-			</tr>
-
-			<tr class="border-b border-slate-200">
-				<td
-					class="border-r border-slate-200 px-2 py-1.5 font-semibold text-slate-700 sticky left-0 bg-white"
-					>Net Cash Flow</td
-				>
-				{#each cf as p (`net-${p.q}`)}
-					<td
-						class="border-r border-slate-100 px-1.5 py-1.5 text-right font-semibold tabular-nums text-slate-900"
-						>{fmtK(p.net)}</td
-					>
-				{/each}
-				{#if s.totalQ > 20}<td class="border-r border-slate-100"></td>{/if}
-				<td class="px-2 py-1.5 text-right font-bold tabular-nums text-slate-900"
-					>{fmtK(s.grossProfit)}</td
-				>
-			</tr>
-
-			<tr class="border-b border-slate-100">
-				<td class="border-r border-slate-200 px-2 py-1.5 text-slate-600 sticky left-0 bg-white"
-					>Cumulative</td
-				>
-				{#each cf as p (`cum-${p.q}`)}
-					<td
-						class="border-r border-slate-100 px-1.5 py-1.5 text-right tabular-nums
-						{p.cum < 0 ? 'text-red-600' : 'text-slate-900'}">{fmtK(p.cum)}</td
-					>
-				{/each}
-				{#if s.totalQ > 20}<td class="border-r border-slate-100"></td>{/if}
-				<td></td>
-			</tr>
-
-			<!-- DEBT BALANCE -->
-			<tr class="border-b border-slate-100">
-				<td class="border-r border-slate-200 px-2 py-1.5 text-slate-500 sticky left-0 bg-white"
-					>Debt Balance</td
-				>
-				{#each cf as p (`debt-balance-${p.q}`)}
-					{@const bal = p.q < s.cq ? s.debtAmount * ((p.q + 1) / s.cq) : 0}
-					<td
-						class="border-r border-slate-100 px-1.5 py-1.5 text-right tabular-nums text-slate-900"
-					>
-						{bal > 0 ? Math.round(bal / 1000).toLocaleString('en-AE') : '—'}
+			<!-- ── COSTS ── -->
+				<tr class={HDR}>
+					<td class="px-3 py-[5px] text-[10px] font-semibold text-slate-700 uppercase tracking-wider" colspan={annualRows.length + 2}>
+						Project costs
 					</td>
-				{/each}
-				{#if s.totalQ > 20}<td class="border-r border-slate-100"></td>{/if}
-				<td></td>
-			</tr>
+				</tr>
+				<tr class={ROW}>
+					<td class={TD_L_SUB}>Land acquisition</td>
+					{#each annualRows as row}
+						<td class={TD}>({fmt(row.costLandAed)})</td>
+					{/each}
+					<td class="{TD_TOT} bg-slate-50">({fmt(totals.costLandAed)})</td>
+				</tr>
+				<tr class={ROW}>
+					<td class={TD_L_SUB}>Construction</td>
+					{#each annualRows as row}
+						<td class={TD}>({fmt(row.costConstructionAed)})</td>
+					{/each}
+					<td class="{TD_TOT} bg-slate-50">({fmt(totals.costConstructionAed)})</td>
+				</tr>
+				<tr class={ROW}>
+					<td class={TD_L_SUB}>Design &amp; supervision</td>
+					{#each annualRows as row}
+						<td class={TD}>({fmt(row.costProfessionalFeesAed)})</td>
+					{/each}
+					<td class="{TD_TOT} bg-slate-50">({fmt(totals.costProfessionalFeesAed)})</td>
+				</tr>
+				<tr class={ROW}>
+					<td class={TD_L_SUB}>Marketing</td>
+					{#each annualRows as row}
+						<td class={TD}>({fmt(row.costMarketingAed)})</td>
+					{/each}
+					<td class="{TD_TOT} bg-slate-50">({fmt(totals.costMarketingAed)})</td>
+				</tr>
+				<tr class={ROW}>
+					<td class={TD_L_SUB}>Sales agent fees</td>
+					{#each annualRows as row}
+						<td class={TD}>({fmt(row.costSalesAgentAed)})</td>
+					{/each}
+					<td class="{TD_TOT} bg-slate-50">({fmt(totals.costSalesAgentAed)})</td>
+				</tr>
+				<tr class={ROW}>
+					<td class={TD_L_SUB}>Infrastructure &amp; utilities</td>
+					{#each annualRows as row}
+						<td class={TD}>({fmt(row.costInfrastructureAed)})</td>
+					{/each}
+					<td class="{TD_TOT} bg-slate-50">({fmt(totals.costInfrastructureAed)})</td>
+				</tr>
+				<tr class={ROW}>
+					<td class={TD_L_SUB}>Authority &amp; connection fees</td>
+					{#each annualRows as row}
+						<td class={TD}>({fmt(row.costAuthorityFeesAed)})</td>
+					{/each}
+					<td class="{TD_TOT} bg-slate-50">({fmt(totals.costAuthorityFeesAed)})</td>
+				</tr>
+				<tr class={ROW}>
+					<td class={TD_L_SUB}>Master community fees</td>
+					{#each annualRows as row}
+						<td class={TD}>({fmt(row.costCommunityFeesAed)})</td>
+					{/each}
+					<td class="{TD_TOT} bg-slate-50">({fmt(totals.costCommunityFeesAed)})</td>
+				</tr>
+				<tr class={ROW}>
+					<td class={TD_L_SUB}>Contingency</td>
+					{#each annualRows as row}
+						<td class={TD}>({fmt(row.costContingencyAed)})</td>
+					{/each}
+					<td class="{TD_TOT} bg-slate-50">({fmt(totals.costContingencyAed)})</td>
+				</tr>
+				<tr class={ROW}>
+					<td class={TD_L_SUB}>VAT (net)</td>
+					{#each annualRows as row}
+						<td class={TD}>({fmt(row.costVatAed)})</td>
+					{/each}
+					<td class="{TD_TOT} bg-slate-50">({fmt(totals.costVatAed)})</td>
+				</tr>
+				<tr class="{ROW} font-semibold border-t border-slate-300">
+					<td class={TD_L}>Total project costs</td>
+					{#each annualRows as row}
+						<td class={TD}>({fmt(row.operatingOutflowsAed)})</td>
+					{/each}
+					<td class="{TD_TOT} bg-slate-50">({fmt(totals.operatingOutflowsAed)})</td>
+				</tr>
 
-			<!-- LEVERED SECTION (collapsible) -->
-			<tr
-				class="bg-slate-700 border-b border-slate-500 cursor-pointer select-none"
-				onclick={() => (leveredOpen = !leveredOpen)}
-			>
-				<td
-					class="px-2 py-1.5 text-[10px] font-bold text-slate-200 uppercase tracking-wider sticky left-0 bg-slate-700"
-					colspan={cf.length + 3}
-				>
-					{leveredOpen ? '▼' : '▶'} Equity / Levered View (after debt service)
-				</td>
-			</tr>
-			{#if leveredOpen}
-				{@const quarterlyRate = s.assumptions.financeRatePct / 100 / 4}
-				{@const equityRatio = 1 - s.assumptions.debtToCostRatio}
-				<tr class="border-b border-slate-100 bg-slate-50/30">
-					<td
-						class="border-r border-slate-200 px-2 py-1.5 text-slate-600 pl-4 sticky left-0 bg-slate-50"
-						>Equity Cost Share</td
-					>
-					{#each cf as p (`equity-share-${p.q}`)}
-						<td
-							class="border-r border-slate-100 px-1.5 py-1.5 text-right tabular-nums text-slate-900"
-							>{outflow(p.costs * equityRatio)}</td
-						>
-					{/each}
-					{#if s.totalQ > 20}<td class="border-r border-slate-100"></td>{/if}
-					<td class="px-2 py-1.5 text-right tabular-nums text-slate-900 font-semibold"
-						>{outflow(cf.reduce((sum, p) => sum + p.costs * equityRatio, 0))}</td
-					>
+				<!-- ── UNLEVERED CF ── -->
+				<tr class={HDR}>
+					<td class="px-3 py-[5px] text-[10px] font-semibold text-slate-700 uppercase tracking-wider" colspan={annualRows.length + 2}>
+						Unlevered cash flow
+					</td>
 				</tr>
-				<tr class="border-b border-slate-100 bg-slate-50/30">
-					<td
-						class="border-r border-slate-200 px-2 py-1.5 text-slate-600 pl-4 sticky left-0 bg-slate-50"
-						>Interest Expense</td
-					>
-					{#each cf as p (`interest-expense-${p.q}`)}
-						{@const interest = p.q < s.cq ? s.debtAmount * quarterlyRate : 0}
-						<td
-							class="border-r border-slate-100 px-1.5 py-1.5 text-right tabular-nums text-slate-900"
-							>{outflow(interest)}</td
-						>
+				<tr class={ROW}>
+					<td class="{TD_L} font-semibold text-slate-800">Unlevered net CF</td>
+					{#each annualRows as row}
+						<td class={row.unleveredNetCashFlowAed < 0 ? TD_NEG : TD}>
+							{row.unleveredNetCashFlowAed < 0 ? '(' : ''}{fmt(Math.abs(row.unleveredNetCashFlowAed))}{row.unleveredNetCashFlowAed < 0 ? ')' : ''}
+						</td>
 					{/each}
-					{#if s.totalQ > 20}<td class="border-r border-slate-100"></td>{/if}
-					<td class="px-2 py-1.5 text-right tabular-nums text-slate-900 font-semibold"
-						>{outflow(s.totalInterest)}</td
-					>
+					<td class="{totals.unleveredNetCashFlowAed < 0 ? TD_NEG_TOT : TD_TOT} bg-slate-50">
+						{totals.unleveredNetCashFlowAed < 0 ? '(' : ''}{fmt(Math.abs(totals.unleveredNetCashFlowAed))}{totals.unleveredNetCashFlowAed < 0 ? ')' : ''}
+					</td>
 				</tr>
-				<tr class="border-b border-slate-100 bg-slate-50/30">
-					<td
-						class="border-r border-slate-200 px-2 py-1.5 text-slate-600 pl-4 sticky left-0 bg-slate-50"
-						>Debt Repayment</td
-					>
-					{#each cf as p (`repay-${p.q}`)}
-						{@const repay = p.q === s.cq ? s.debtAmount : 0}
-						<td
-							class="border-r border-slate-100 px-1.5 py-1.5 text-right tabular-nums text-slate-900"
-							>{outflow(repay)}</td
-						>
-					{/each}
-					{#if s.totalQ > 20}<td class="border-r border-slate-100"></td>{/if}
-					<td class="px-2 py-1.5 text-right tabular-nums text-slate-900 font-semibold"
-						>{outflow(s.debtAmount)}</td
-					>
-				</tr>
-				<tr class="border-b border-slate-200 bg-slate-50/30">
-					<td
-						class="border-r border-slate-200 px-2 py-1.5 font-semibold text-slate-700 sticky left-0 bg-slate-50"
-						>Levered Net CF</td
-					>
-					{#each cf as p (`levered-${p.q}`)}
-						{@const interest = p.q < s.cq ? s.debtAmount * quarterlyRate : 0}
-						{@const repay = p.q === s.cq ? s.debtAmount : 0}
-						{@const levNet = p.revenue - p.costs * equityRatio - interest - repay}
-						<td
-							class="border-r border-slate-100 px-1.5 py-1.5 text-right font-semibold tabular-nums {levNet <
-							0
-								? 'text-red-600'
-								: 'text-slate-900'}">{fmtK(levNet)}</td
-						>
-					{/each}
-					{#if s.totalQ > 20}<td class="border-r border-slate-100"></td>{/if}
-					<td class="px-2 py-1.5 text-right font-bold tabular-nums text-slate-900"
-						>{fmtK(s.leveredProfit)}</td
-					>
-				</tr>
-			{/if}
-		</tbody>
-	</table>
 
-	<!-- Summary stats -->
-	<div class="flex flex-wrap gap-6 px-3 py-2.5 border-t-2 border-slate-300 bg-slate-50 text-[11px]">
-		<div>
-			<span class="text-slate-500">Peak Funding:</span>
-			<span class="font-semibold text-slate-900 ml-1"
-				>{Math.round(s.peakFunding / 1000).toLocaleString('en-AE')}</span
-			>
-		</div>
-		<div>
-			<span class="text-slate-500">Cash Breakeven:</span>
-			<span class="font-semibold text-slate-900 ml-1"
-				>{s.cashBreakevenQuarter >= 0 ? `Q${s.cashBreakevenQuarter + 1}` : '—'}</span
-			>
-		</div>
-		<div>
-			<span class="text-slate-500">Total Interest:</span>
-			<span class="font-semibold text-slate-900 ml-1">{outflow(s.totalInterest)}</span>
-		</div>
-		{#if useEscrow}
-			<div class="text-blue-600">
-				<span>Escrow model active</span>
-				<span class="ml-1 text-[10px] text-blue-400">— revenue timing tied to RERA milestones</span>
-			</div>
-		{/if}
+				<!-- ── DEBT ── -->
+				<tr class={HDR}>
+					<td class="px-3 py-[5px] text-[10px] font-semibold text-slate-700 uppercase tracking-wider" colspan={annualRows.length + 2}>
+						Debt (flows)
+					</td>
+				</tr>
+				<tr class={ROW}>
+					<td class={TD_L_SUB}>↳ Land loan draws</td>
+					{#each annualRows as row}
+						<td class="{TD} text-slate-400">{fmt(row.landDrawAed)}</td>
+					{/each}
+					<td class="{TD_TOT} bg-slate-50 text-slate-400">{fmt(totals.landDrawAed)}</td>
+				</tr>
+				<tr class={ROW}>
+					<td class={TD_L_SUB}>↳ Construction loan draws</td>
+					{#each annualRows as row}
+						<td class="{TD} text-slate-400">{fmt(row.constructionDrawAed)}</td>
+					{/each}
+					<td class="{TD_TOT} bg-slate-50 text-slate-400">{fmt(totals.constructionDrawAed)}</td>
+				</tr>
+				<tr class="{ROW} font-semibold">
+					<td class={TD_L}>Total debt draws</td>
+					{#each annualRows as row}
+						<td class={TD}>{fmt(row.debtDrawAed)}</td>
+					{/each}
+					<td class="{TD_TOT} bg-slate-50">{fmt(totals.debtDrawAed)}</td>
+				</tr>
+				<tr class={ROW}>
+					<td class={TD_L}>Debt repayments</td>
+					{#each annualRows as row}
+						<td class={TD}>({fmt(row.debtRepaymentAed)})</td>
+					{/each}
+					<td class="{TD_TOT} bg-slate-50">({fmt(totals.debtRepaymentAed)})</td>
+				</tr>
+				<tr class={ROW}>
+					<td class={TD_L}>Interest (capitalised)</td>
+					{#each annualRows as row}
+						<td class={TD}>({fmt(row.interestPaidAed)})</td>
+					{/each}
+					<td class="{TD_TOT} bg-slate-50">({fmt(totals.interestPaidAed)})</td>
+				</tr>
+				<tr class={ROW}>
+					<td class={TD_L}>Commitment fees</td>
+					{#each annualRows as row}
+						<td class={TD}>({fmt(row.commitmentFeePaidAed)})</td>
+					{/each}
+					<td class="{TD_TOT} bg-slate-50">({fmt(totals.commitmentFeePaidAed)})</td>
+				</tr>
+
+				<!-- ── DEBT BALANCES ── -->
+				<tr class={HDR_SUB}>
+					<td class="px-3 py-[5px] text-[10px] font-semibold text-slate-600 uppercase tracking-wider" colspan={annualRows.length + 2}>
+						Debt (year-end closing balances)
+					</td>
+				</tr>
+				<tr class={ROW}>
+					<td class={TD_L}>Total debt balance</td>
+					{#each annualRows as row}
+						<td class={TD}>{fmt(row.debtBalanceAed)}</td>
+					{/each}
+					<td class="{TD_TOT} bg-slate-50">{fmt(totals.debtBalanceAed)}</td>
+				</tr>
+				{#if hasTranche}
+					<tr class={ROW}>
+						<td class={TD_L_SUB}>↳ Land loan</td>
+						{#each annualRows as row}
+							<td class="{TD} text-slate-400">{fmt(row.landLoanBalanceAed)}</td>
+						{/each}
+						<td class="{TD_TOT} bg-slate-50 text-slate-400">{fmt(totals.landLoanBalanceAed)}</td>
+					</tr>
+					<tr class={ROW}>
+						<td class={TD_L_SUB}>↳ Construction loan</td>
+						{#each annualRows as row}
+							<td class="{TD} text-slate-400">{fmt(row.constructionLoanBalanceAed)}</td>
+						{/each}
+						<td class="{TD_TOT} bg-slate-50 text-slate-400">{fmt(totals.constructionLoanBalanceAed)}</td>
+					</tr>
+				{/if}
+				<tr class={ROW}>
+					<td class={TD_L}>Escrow balance</td>
+					{#each annualRows as row}
+						<td class={TD}>{fmt(row.escrowBalanceAed)}</td>
+					{/each}
+					<td class="{TD_TOT} bg-slate-50">{fmt(totals.escrowBalanceAed)}</td>
+				</tr>
+
+				<!-- ── EQUITY ── -->
+				<tr class={HDR}>
+					<td class="px-3 py-[5px] text-[10px] font-semibold text-slate-700 uppercase tracking-wider" colspan={annualRows.length + 2}>
+						Equity
+					</td>
+				</tr>
+				<tr class={ROW}>
+					<td class={TD_L}>Equity contributions</td>
+					{#each annualRows as row}
+						<td class={TD}>({fmt(row.equityContributionAed)})</td>
+					{/each}
+					<td class="{TD_TOT} bg-slate-50">({fmt(totals.equityContributionAed)})</td>
+				</tr>
+				<tr class={ROW}>
+					<td class={TD_L}>Equity distributions</td>
+					{#each annualRows as row}
+						<td class={TD}>{fmt(row.equityDistributionAed)}</td>
+					{/each}
+					<td class="{TD_TOT} bg-slate-50">{fmt(totals.equityDistributionAed)}</td>
+				</tr>
+
+				<!-- ── LEVERED CF ── -->
+				<tr class={HDR}>
+					<td class="px-3 py-[5px] text-[10px] font-semibold text-slate-700 uppercase tracking-wider" colspan={annualRows.length + 2}>
+						Levered (equity) cash flow
+					</td>
+				</tr>
+				<tr class={ROW}>
+					<td class="{TD_L} font-semibold text-slate-800">Levered net CF</td>
+					{#each annualRows as row}
+						<td class={row.leveredNetCashFlowAed < 0 ? TD_NEG : TD}>
+							{row.leveredNetCashFlowAed < 0 ? '(' : ''}{fmt(Math.abs(row.leveredNetCashFlowAed))}{row.leveredNetCashFlowAed < 0 ? ')' : ''}
+						</td>
+					{/each}
+					<td class="{totals.leveredNetCashFlowAed < 0 ? TD_NEG_TOT : TD_TOT} bg-slate-50">
+						{totals.leveredNetCashFlowAed < 0 ? '(' : ''}{fmt(Math.abs(totals.leveredNetCashFlowAed))}{totals.leveredNetCashFlowAed < 0 ? ')' : ''}
+					</td>
+				</tr>
+
+				<!-- ── RETURNS ── -->
+				<tr class="border-t-2 border-slate-300 bg-slate-100">
+					<td class="px-3 py-[5px] text-[10px] font-semibold text-slate-700 uppercase tracking-wider" colspan={annualRows.length + 2}>
+						Returns summary
+					</td>
+				</tr>
+				<tr class={ROW}>
+					<td class={TD_L}>Project IRR</td>
+					<td class="px-3 py-[4px] text-[11px] text-slate-600" colspan={annualRows.length}>
+						{fmtPct(returns?.projectIrrPct)}
+					</td>
+					<td class="{TD_TOT} bg-slate-50">{fmtPct(returns?.projectIrrPct)}</td>
+				</tr>
+				<tr class={ROW}>
+					<td class={TD_L}>Project MoIC</td>
+					<td class="px-3 py-[4px] text-[11px] text-slate-600" colspan={annualRows.length}>
+						{fmtMoic(returns?.projectMoic)}
+					</td>
+					<td class="{TD_TOT} bg-slate-50">{fmtMoic(returns?.projectMoic)}</td>
+				</tr>
+				<tr class={ROW}>
+					<td class={TD_L}>Equity IRR</td>
+					<td class="px-3 py-[4px] text-[11px] text-slate-600" colspan={annualRows.length}>
+						{fmtPct(returns?.equityIrrPct)}
+					</td>
+					<td class="{TD_TOT} bg-slate-50">{fmtPct(returns?.equityIrrPct)}</td>
+				</tr>
+				<tr class={ROW}>
+					<td class={TD_L}>Equity MoIC</td>
+					<td class="px-3 py-[4px] text-[11px] text-slate-600" colspan={annualRows.length}>
+						{fmtMoic(returns?.equityMoic)}
+					</td>
+					<td class="{TD_TOT} bg-slate-50">{fmtMoic(returns?.equityMoic)}</td>
+				</tr>
+				<tr class={ROW}>
+					<td class={TD_L}>Gross margin</td>
+					<td class="px-3 py-[4px] text-[11px] text-slate-600" colspan={annualRows.length}>
+						{fmtPct(returns?.grossMarginPct)}
+					</td>
+					<td class="{TD_TOT} bg-slate-50">{fmtPct(returns?.grossMarginPct)}</td>
+				</tr>
+			</tbody>
+		</table>
 	</div>
-</div>
+{/if}
