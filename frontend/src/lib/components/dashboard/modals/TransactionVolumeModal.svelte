@@ -8,8 +8,10 @@ function formatNumber(value: number): string {
 	return value.toLocaleString()
 }
 
-function getTrend(pct: number | null): { value: string; direction: 'up' | 'down' } | null {
-	if (pct === null) return null
+function getTrend(
+	pct: number | null | undefined
+): { value: string; direction: 'up' | 'down' } | null {
+	if (pct == null) return null
 	return {
 		value: `${Math.abs(pct).toFixed(1)}% vs prev period`,
 		direction: pct >= 0 ? 'up' : 'down'

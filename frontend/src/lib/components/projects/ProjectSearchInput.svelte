@@ -129,6 +129,8 @@ function getProjectResultKey(result: ProjectSearchResult, index: number): string
 		{#if showDropdown && hasResults}
 			<div
 				onmousedown={(e) => e.preventDefault()}
+				role="listbox"
+				tabindex="-1"
 				class="absolute z-50 w-full mt-1 bg-white rounded-xl shadow-2xl border border-slate-200 max-h-80 overflow-y-auto"
 			>
 				<!-- Master projects first -->

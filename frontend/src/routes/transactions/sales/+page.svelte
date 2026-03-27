@@ -278,8 +278,6 @@ async function handleExport() {
 			<div class="flex flex-col gap-2">
 				<label for="sales-project" class="block text-sm text-slate-900">Project</label>
 				<ProjectSelector
-					id="sales-project"
-					ariaLabel="Project"
 					bind:value={selectedProject}
 					placeholder="Search project..."
 					onSelect={() => {

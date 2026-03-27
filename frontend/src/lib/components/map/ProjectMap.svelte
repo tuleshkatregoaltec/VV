@@ -139,6 +139,8 @@ function addBuildingMarkers(pins: GeoPin[]) {
 	buildingMarkers = []
 
 	pins.forEach((pin) => {
+		const currentMap = map
+		if (!currentMap) return
 		const markerEl = document.createElement('div')
 		markerEl.style.cssText =
 			'cursor: pointer; display: flex; flex-direction: column; align-items: center;'
@@ -161,10 +163,10 @@ function addBuildingMarkers(pins: GeoPin[]) {
 
 		const marker = new maplibregl.Marker({ element: markerEl })
 			.setLngLat([pin.longitude, pin.latitude])
-			.addTo(map)
+			.addTo(currentMap)
 
 		markerEl.addEventListener('mouseenter', () =>
-			popup.addTo(map).setLngLat([pin.longitude, pin.latitude])
+			popup.addTo(currentMap).setLngLat([pin.longitude, pin.latitude])
 		)
 		markerEl.addEventListener('mouseleave', () => popup.remove())
 		markerEl.addEventListener('click', () => onBuildingPinClick?.(pin))
@@ -281,7 +283,7 @@ export function flyToProject(
 	// Add main project marker
 	addProjectMarker(projectId, projectName, latitude, longitude)
 
-	if (areaPolygon?.coordinates?.length > 0) {
+	if ((areaPolygon?.coordinates?.length ?? 0) > 0 && areaPolygon) {
 		drawAreaPolygon(areaPolygon)
 	}
 

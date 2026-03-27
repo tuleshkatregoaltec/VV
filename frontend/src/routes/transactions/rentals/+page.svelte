@@ -204,9 +204,9 @@ function transformRental(r: RentalContractResponseOutput): TransformedRental {
 		area: r.actual_area ?? 0,
 		annualRent: r.annual_amount ?? 0,
 		registration: r.contract_reg_type_en ?? '-',
-		contractAmount: r.contract_amount,
-		numProperties: r.no_of_prop,
-		freehold: r.is_free_hold === null ? '-' : r.is_free_hold ? 'Yes' : 'No',
+		contractAmount: r.contract_amount ?? null,
+		numProperties: r.no_of_prop ?? null,
+		freehold: r.is_free_hold == null ? '-' : r.is_free_hold ? 'Yes' : 'No',
 		landmark: r.nearest_landmark_en ?? '-',
 		metro: r.nearest_metro_en ?? '-',
 		mall: r.nearest_mall_en ?? '-'
@@ -325,8 +325,6 @@ async function handleExport() {
 			<div class="flex flex-col gap-2">
 				<label for="rentals-project" class="block text-sm text-slate-900">Project</label>
 				<ProjectSelector
-					id="rentals-project"
-					ariaLabel="Project"
 					bind:value={selectedProject}
 					placeholder="Search project..."
 					onSelect={() => {

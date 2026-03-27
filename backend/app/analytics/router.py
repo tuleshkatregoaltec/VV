@@ -12,13 +12,20 @@ from app.analytics.models import (
     MarketTrendPoint,
     MarketTrendResponse,
     ProjectAnalyticsResponse,
+    ProjectForecastResponse,
+    ProjectPipelineResponse,
+    ProjectPriceDistributionResponse,
     ProjectSearchResponse,
     ProjectTrendsResponse,
     RentalAnalyticsResponse,
     RentalSummary,
     SubProjectsResponse,
 )
+from app.analytics.queries import ProjectFilterType
 from app.analytics.service import (
+    get_project_forecast,
+    get_project_pipeline,
+    get_project_price_distribution,
     get_project_search,
     get_project_summary,
     get_project_trends,
@@ -34,6 +41,21 @@ from app.clickhouse.queries import (
 from app.core.dependencies import AuthContext, require_active_subscription
 
 router = APIRouter(prefix="/api/v1/analytics", tags=["analytics"])
+
+
+def _resolve_project_scope(
+    *,
+    master_project: Optional[str],
+    project: Optional[str],
+    filter_type: ProjectFilterType,
+) -> tuple[str, ProjectFilterType]:
+    from fastapi import HTTPException
+
+    if project:
+        return project, "project"
+    if master_project:
+        return master_project, filter_type
+    raise HTTPException(status_code=422, detail="Either master_project or project is required")
 
 
 @router.get("/sales", response_model=AnalyticsResponse)
@@ -112,7 +134,7 @@ async def get_sales_analytics(
         if not start_date:
             from datetime import timedelta
 
-            start_date = date.today() - timedelta(days=30)  # Default 30 days
+            start_date = date.today() - timedelta(days=180)  # Default 6 months
         if not end_date:
             end_date = date.today()
 
@@ -255,7 +277,7 @@ async def get_rental_analytics(
         if not start_date:
             from datetime import timedelta
 
-            start_date = date.today() - timedelta(days=90)  # Default 90 days for rentals
+            start_date = date.today() - timedelta(days=180)  # Default 6 months
         if not end_date:
             end_date = date.today()
 
@@ -472,7 +494,9 @@ async def search_projects_endpoint(
 async def get_sub_projects_endpoint(
     context: AuthContext = Depends(require_active_subscription),
     master_project: str = Query(description="Master project name"),
-    filter_type: str = Query(default="master", description="Filter type: master or virtual_master"),
+    filter_type: ProjectFilterType = Query(
+        default="master", description="Filter type: master or virtual_master"
+    ),
 ):
     """List sub-projects within a master or virtual master, sorted by transaction count."""
     return await get_sub_project_list(master_project=master_project, filter_type=filter_type)
@@ -483,7 +507,7 @@ async def get_project_summary_endpoint(
     context: AuthContext = Depends(require_active_subscription),
     master_project: Optional[str] = Query(default=None, description="Master project name"),
     project: Optional[str] = Query(default=None, description="Sub-project name (project_name_en)"),
-    filter_type: str = Query(
+    filter_type: ProjectFilterType = Query(
         default="project", description="Filter type: master, virtual_master, or project"
     ),
 ):
@@ -492,15 +516,14 @@ async def get_project_summary_endpoint(
     Pass master_project with filter_type=master/virtual_master to aggregate the whole development,
     or project with filter_type=project for a specific sub-project.
     """
-    from fastapi import HTTPException
-
-    if project:
-        return await get_project_summary(
-            project_name=project, filter_type="project", master_project=master_project
-        )
-    if master_project:
-        return await get_project_summary(project_name=master_project, filter_type=filter_type)
-    raise HTTPException(status_code=422, detail="Either master_project or project is required")
+    project_name, resolved_filter_type = _resolve_project_scope(
+        master_project=master_project, project=project, filter_type=filter_type
+    )
+    return await get_project_summary(
+        project_name=project_name,
+        filter_type=resolved_filter_type,
+        master_project=master_project,
+    )
 
 
 @router.get("/project/trends", response_model=ProjectTrendsResponse)
@@ -508,18 +531,74 @@ async def get_project_trends_endpoint(
     context: AuthContext = Depends(require_active_subscription),
     master_project: Optional[str] = Query(default=None, description="Master project name"),
     project: Optional[str] = Query(default=None, description="Sub-project name (project_name_en)"),
-    filter_type: str = Query(
+    filter_type: ProjectFilterType = Query(
         default="project", description="Filter type: master, virtual_master, or project"
     ),
     days: int = Query(default=365, description="Number of days to look back"),
 ):
     """Sales price trend time series for a project, master, or virtual master."""
-    from fastapi import HTTPException
+    project_name, resolved_filter_type = _resolve_project_scope(
+        master_project=master_project, project=project, filter_type=filter_type
+    )
+    return await get_project_trends(
+        project_name=project_name, days=days, filter_type=resolved_filter_type
+    )
 
-    if project:
-        return await get_project_trends(project_name=project, days=days, filter_type="project")
-    if master_project:
-        return await get_project_trends(
-            project_name=master_project, days=days, filter_type=filter_type
-        )
-    raise HTTPException(status_code=422, detail="Either master_project or project is required")
+
+@router.get("/project/forecast", response_model=ProjectForecastResponse)
+async def get_project_forecast_endpoint(
+    context: AuthContext = Depends(require_active_subscription),
+    master_project: Optional[str] = Query(default=None, description="Master project name"),
+    project: Optional[str] = Query(default=None, description="Sub-project name (project_name_en)"),
+    filter_type: ProjectFilterType = Query(
+        default="project", description="Filter type: master, virtual_master, or project"
+    ),
+    days: int = Query(default=365, description="Number of days to look back"),
+):
+    project_name, resolved_filter_type = _resolve_project_scope(
+        master_project=master_project, project=project, filter_type=filter_type
+    )
+    return await get_project_forecast(
+        project_name=project_name, days=days, filter_type=resolved_filter_type
+    )
+
+
+@router.get("/project/pipeline", response_model=ProjectPipelineResponse)
+async def get_project_pipeline_endpoint(
+    context: AuthContext = Depends(require_active_subscription),
+    master_project: Optional[str] = Query(default=None, description="Master project name"),
+    project: Optional[str] = Query(default=None, description="Sub-project name (project_name_en)"),
+    filter_type: ProjectFilterType = Query(
+        default="project", description="Filter type: master, virtual_master, or project"
+    ),
+):
+    project_name, resolved_filter_type = _resolve_project_scope(
+        master_project=master_project, project=project, filter_type=filter_type
+    )
+    return await get_project_pipeline(project_name=project_name, filter_type=resolved_filter_type)
+
+
+@router.get(
+    "/project/price-distribution",
+    response_model=ProjectPriceDistributionResponse,
+)
+async def get_project_price_distribution_endpoint(
+    context: AuthContext = Depends(require_active_subscription),
+    master_project: Optional[str] = Query(default=None, description="Master project name"),
+    project: Optional[str] = Query(default=None, description="Sub-project name (project_name_en)"),
+    filter_type: ProjectFilterType = Query(
+        default="project", description="Filter type: master, virtual_master, or project"
+    ),
+    reg_type: Optional[str] = Query(
+        default=None,
+        description="Optional registration type filter (e.g. 'Off-Plan Properties')",
+    ),
+):
+    project_name, resolved_filter_type = _resolve_project_scope(
+        master_project=master_project, project=project, filter_type=filter_type
+    )
+    return await get_project_price_distribution(
+        project_name=project_name,
+        filter_type=resolved_filter_type,
+        reg_type=reg_type,
+    )

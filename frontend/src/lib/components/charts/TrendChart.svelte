@@ -12,7 +12,7 @@ interface Props {
 
 let { data, title = 'Trend', metric = 'volume', height = 300 }: Props = $props()
 
-let canvasElement: HTMLCanvasElement
+let canvasElement = $state<HTMLCanvasElement | undefined>()
 let chart: Chart | null = null
 
 // Register Chart.js components
@@ -126,7 +126,8 @@ function createChart() {
 					mode: 'index',
 					intersect: false,
 					callbacks: {
-						label: (context) => `${context.dataset.label}: ${formatter(context.parsed.y)}`
+						label: (context) =>
+							`${context.dataset.label}: ${formatter(Number(context.parsed.y ?? 0))}`
 					}
 				}
 			},

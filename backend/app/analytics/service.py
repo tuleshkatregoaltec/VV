@@ -2,12 +2,19 @@
 
 import asyncio
 from datetime import date, timedelta
-from typing import Optional
+from typing import Literal, Optional
 
 from app.analytics.models import (
     AnalyticsUnitComposition,
+    PriceDistributionBucket,
     ProjectAnalyticsResponse,
+    ProjectConfigurationRow,
+    ProjectForecastPoint,
+    ProjectForecastResponse,
     ProjectMeta,
+    ProjectPipelinePoint,
+    ProjectPipelineResponse,
+    ProjectPriceDistributionResponse,
     ProjectRentalSummary,
     ProjectSalesSummary,
     ProjectSearchItem,
@@ -20,11 +27,16 @@ from app.analytics.models import (
     SubProjectItem,
     SubProjectsResponse,
 )
-from app.clickhouse.client import query
-from app.clickhouse.queries import (
+from app.analytics.queries import (
+    ProjectFilterType,
+    TrendInterval,
+    area_supply_projects,
+    project_configuration_sales,
     project_meta_by_master,
     project_meta_by_name,
     project_meta_by_virtual_master,
+    project_offplan_price_curve,
+    project_price_distribution,
     project_price_trends,
     project_rentals_by_rooms,
     project_rentals_summary,
@@ -36,6 +48,7 @@ from app.clickhouse.queries import (
     search_projects,
     search_sub_projects,
 )
+from app.clickhouse.client import query
 
 # Room sort order: Studio first, then numeric bedrooms, then anything else
 _ROOM_ORDER = {"Studio": 0}
@@ -52,6 +65,21 @@ def _room_sort_key(rooms: str) -> tuple:
         return (2, rooms)
 
 
+def _coalesce_delivery_date(row: dict) -> Optional[date]:
+    return row.get("completion_date") or row.get("project_end_date")
+
+
+def _quarter_start(dt: date) -> date:
+    month = ((dt.month - 1) // 3) * 3 + 1
+    return date(dt.year, month, 1)
+
+
+def _add_months(dt: date, months: int) -> date:
+    year = dt.year + (dt.month - 1 + months) // 12
+    month = (dt.month - 1 + months) % 12 + 1
+    return date(year, month, 1)
+
+
 async def get_project_search(search: str, limit: int = 50) -> ProjectSearchResponse:
     """Return matching projects for the dropdown selector."""
     pattern = f"%{search.lower()}%" if search.strip() else "%"
@@ -65,7 +93,7 @@ async def get_project_search(search: str, limit: int = 50) -> ProjectSearchRespo
 
 
 async def get_sub_project_list(
-    master_project: str, filter_type: str = "master"
+    master_project: str, filter_type: ProjectFilterType = "master"
 ) -> SubProjectsResponse:
     """Return sub-projects for a given master/virtual_master, sorted by transaction volume."""
     param = master_project + " - %" if filter_type == "virtual_master" else master_project
@@ -83,7 +111,7 @@ async def get_sub_project_list(
 
 async def get_project_summary(
     project_name: str,
-    filter_type: str = "project",
+    filter_type: ProjectFilterType = "project",
     master_project: Optional[str] = None,
 ) -> ProjectAnalyticsResponse:
     """
@@ -117,6 +145,7 @@ async def get_project_summary(
     )
 
     existing_params = {**params, "reg_type_en": "Existing Properties"}
+    offplan_params = {**params, "reg_type_en": "Off-Plan Properties"}
 
     # project_rentals_by_rooms uses {project_name} for both rent and units filters
     rent_rooms_params = params
@@ -126,6 +155,9 @@ async def get_project_summary(
         sales_sum_existing_rows,
         sales_rooms_rows,
         sales_rooms_existing_rows,
+        config_all_rows,
+        config_offplan_rows,
+        config_secondary_rows,
         sales_type_rows,
         sales_reg_rows,
         rent_sum_rows,
@@ -143,6 +175,15 @@ async def get_project_summary(
             project_sales_by_rooms(filter_type, reg_type="Existing Properties"),
             existing_params,
         ),
+        query(project_configuration_sales(filter_type), params),
+        query(
+            project_configuration_sales(filter_type, reg_type="Off-Plan Properties"),
+            offplan_params,
+        ),
+        query(
+            project_configuration_sales(filter_type, reg_type="Existing Properties"),
+            existing_params,
+        ),
         query(project_sales_by_property_type(filter_type), params),
         query(project_sales_by_reg_type(filter_type), params),
         query(project_rentals_summary(filter_type), params),
@@ -156,13 +197,18 @@ async def get_project_summary(
     if meta_rows:
         m = meta_rows[0]
         if filter_type in ("master", "virtual_master"):
+            raw_devs = m.get("developer_names") or []
+            developer_names = sorted([dev for dev in raw_devs if dev]) if raw_devs else []
             project = ProjectMeta(
                 project_name=project_name,
                 area_name=m.get("area_name_en") or None,
                 developer_name=m.get("developer_name_en") or None,
-                project_status=None,
-                completion_date=None,
-                percent_completed=None,
+                developer_names=developer_names,
+                project_status=m.get("project_status") or None,
+                completion_date=m.get("completion_date") or None,
+                percent_completed=float(m["percent_completed"])
+                if m.get("percent_completed") is not None
+                else None,
                 no_of_units=int(m["no_of_units"]) if m.get("no_of_units") is not None else None,
                 no_of_buildings=int(m["no_of_buildings"])
                 if m.get("no_of_buildings") is not None
@@ -277,10 +323,83 @@ async def get_project_summary(
             rooms=row["rooms_en"],
             count=int(row["unit_count"]),
             pct_of_total=round(int(row["unit_count"]) / total_units * 100, 1),
+            avg_unit_size_sqm=float(row.get("avg_unit_size_sqm", 0) or 0),
         )
         for row in units_rows
     ]
     unit_composition.sort(key=lambda x: _room_sort_key(x.rooms))
+
+    unit_rows_by_room = {row["rooms_en"]: row for row in units_rows}
+
+    def _pct_change(current: float, previous: float) -> Optional[float]:
+        if previous <= 0:
+            return None
+        return round((current - previous) / previous * 100, 1)
+
+    def _build_configuration_rows(
+        segment: Literal["all", "off_plan", "secondary"], sales_rows: list[dict]
+    ) -> list[ProjectConfigurationRow]:
+        sales_lookup = {row["rooms_en"]: row for row in sales_rows}
+        room_keys = set(unit_rows_by_room)
+        rows: list[ProjectConfigurationRow] = []
+
+        for rooms in room_keys:
+            sale_row = sales_lookup.get(rooms, {})
+            unit_row = unit_rows_by_room.get(rooms, {})
+            rent_row = rent_by_room.get(rooms, {}) if segment != "off_plan" else {}
+
+            stock_units = int(unit_row.get("unit_count", 0) or 0)
+            sales_last_12m = int(sale_row.get("sales_last_12m", 0) or 0)
+            median_sale_price = float(sale_row.get("median_sale_price", 0) or 0)
+            median_annual_rent = float(rent_row.get("median_annual_rent", 0) or 0)
+
+            gross_yield_pct: Optional[float] = None
+            if segment != "off_plan" and median_sale_price > 0 and median_annual_rent > 0:
+                gross_yield_pct = round(median_annual_rent / median_sale_price * 100, 2)
+
+            absorption_rate_pct: Optional[float] = None
+            if stock_units > 0:
+                absorption_rate_pct = round(sales_last_12m / stock_units * 100, 1)
+
+            rows.append(
+                ProjectConfigurationRow(
+                    market_segment=segment,
+                    rooms=rooms,
+                    stock_units=stock_units,
+                    sale_count=int(sale_row.get("sale_count", 0) or 0),
+                    sales_last_12m=sales_last_12m,
+                    avg_sale_price=float(sale_row.get("avg_sale_price", 0) or 0),
+                    median_sale_price=median_sale_price,
+                    avg_sale_price_sqm=float(sale_row.get("avg_sale_price_sqm", 0) or 0),
+                    avg_unit_size_sqm=float(unit_row.get("avg_unit_size_sqm", 0) or 0),
+                    rental_count=int(rent_row.get("rental_count", 0) or 0),
+                    median_annual_rent=median_annual_rent,
+                    median_rent_sqm=float(rent_row.get("median_rent_sqm", 0) or 0),
+                    gross_yield_pct=gross_yield_pct,
+                    price_change_yoy_pct=_pct_change(
+                        float(sale_row.get("avg_price_sqm_last_12m", 0) or 0),
+                        float(sale_row.get("avg_price_sqm_prev_12m", 0) or 0),
+                    ),
+                    sales_momentum_pct=_pct_change(
+                        int(sale_row.get("sales_last_90d", 0) or 0),
+                        int(sale_row.get("sales_prev_90d", 0) or 0),
+                    ),
+                    absorption_rate_pct=absorption_rate_pct,
+                    price_p25=float(sale_row.get("price_p25", 0) or 0),
+                    price_p50=float(sale_row.get("price_p50", 0) or 0),
+                    price_p75=float(sale_row.get("price_p75", 0) or 0),
+                )
+            )
+
+        rows = [row for row in rows if row.stock_units > 0]
+        rows.sort(key=lambda x: _room_sort_key(x.rooms))
+        return rows
+
+    configuration_analysis = [
+        *_build_configuration_rows("all", config_all_rows),
+        *_build_configuration_rows("off_plan", config_offplan_rows),
+        *_build_configuration_rows("secondary", config_secondary_rows),
+    ]
 
     return ProjectAnalyticsResponse(
         project=project,
@@ -291,22 +410,17 @@ async def get_project_summary(
         by_property_type=by_property_type,
         by_reg_type=by_reg_type,
         unit_composition=unit_composition,
+        configuration_analysis=configuration_analysis,
     )
 
 
 async def get_project_trends(
-    project_name: str, days: int, filter_type: str = "project"
+    project_name: str, days: int, filter_type: ProjectFilterType = "project"
 ) -> ProjectTrendsResponse:
     """Price trend time series for a project over the given number of days."""
     end_dt = date.today()
     start_dt = end_dt - timedelta(days=days)
-
-    if days <= 30:
-        interval = "day"
-    elif days <= 180:
-        interval = "week"
-    else:
-        interval = "month"
+    interval = _trend_interval_for_days(days)
 
     like_name = project_name + " - %" if filter_type == "virtual_master" else project_name
     rows = await query(
@@ -328,3 +442,246 @@ async def get_project_trends(
         for row in rows
     ]
     return ProjectTrendsResponse(data=data)
+
+
+async def get_project_forecast(
+    project_name: str, days: int, filter_type: ProjectFilterType = "project"
+) -> ProjectForecastResponse:
+    """Build a project-level forward price path from historical trend and off-plan curve data."""
+    end_dt = date.today()
+    start_dt = end_dt - timedelta(days=days)
+    interval = _trend_interval_for_days(days)
+
+    like_name = project_name + " - %" if filter_type == "virtual_master" else project_name
+    params = {
+        "project_name": like_name,
+        "start_date": start_dt.isoformat(),
+        "end_date": end_dt.isoformat(),
+    }
+    trend_rows, offplan_rows = await asyncio.gather(
+        query(project_price_trends(interval, filter_type), params),
+        query(project_offplan_price_curve(interval, filter_type), params),
+    )
+
+    historical = [
+        ProjectForecastPoint(
+            date=row["period"],
+            avg_price=float(row["avg_price"] or 0),
+            avg_price_sqm=float(row["avg_price_sqm"] or 0),
+            series="historical",
+        )
+        for row in trend_rows
+        if float(row.get("avg_price") or 0) > 0
+    ]
+
+    summary = await get_project_summary(project_name=project_name, filter_type=filter_type)
+    delivery_date = summary.project.completion_date if summary.project else None
+
+    if not historical:
+        historical = [
+            ProjectForecastPoint(
+                date=row["period"],
+                avg_price=float(row["avg_price"] or 0),
+                avg_price_sqm=float(row["avg_price_sqm"] or 0),
+                series="historical",
+            )
+            for row in offplan_rows
+            if float(row.get("avg_price") or 0) > 0
+        ]
+
+    if not historical:
+        return ProjectForecastResponse(
+            data=[],
+            delivery_date=delivery_date,
+            methodology="No residential sales history was available to construct a project-level forecast.",
+        )
+
+    monthly_growth_rates: list[float] = []
+    for prev, curr in zip(historical, historical[1:]):
+        prev_price = float(prev.avg_price_sqm or 0)
+        curr_price = float(curr.avg_price_sqm or 0)
+        if prev_price > 0 and curr_price > 0:
+            monthly_growth_rates.append((curr_price / prev_price) - 1)
+
+    delivery_curve_rates: list[float] = []
+    for prev, curr in zip(offplan_rows, offplan_rows[1:]):
+        prev_price = float(prev.get("avg_price_sqm") or 0)
+        curr_price = float(curr.get("avg_price_sqm") or 0)
+        prev_months = float(prev.get("avg_months_to_delivery") or 0)
+        curr_months = float(curr.get("avg_months_to_delivery") or 0)
+        delivery_step = prev_months - curr_months
+        if prev_price > 0 and curr_price > 0 and delivery_step > 0:
+            delivery_curve_rates.append(((curr_price / prev_price) - 1) / delivery_step)
+
+    recent_growth = (
+        sum(monthly_growth_rates[-3:]) / len(monthly_growth_rates[-3:])
+        if monthly_growth_rates[-3:]
+        else 0.0
+    )
+    delivery_curve = (
+        sum(delivery_curve_rates[-4:]) / len(delivery_curve_rates[-4:])
+        if delivery_curve_rates[-4:]
+        else 0.0
+    )
+    monthly_growth = max(-0.01, min(0.018, recent_growth * 0.7 + delivery_curve * 0.3))
+
+    last_point = historical[-1]
+    forecast_points: list[ProjectForecastPoint] = []
+    if delivery_date and delivery_date > last_point.date:
+        horizon_months = max(
+            1,
+            min(
+                12,
+                (delivery_date.year - last_point.date.year) * 12
+                + (delivery_date.month - last_point.date.month),
+            ),
+        )
+    else:
+        horizon_months = 6
+
+    next_date = _add_months(last_point.date, 1)
+    next_price = last_point.avg_price
+    next_price_sqm = last_point.avg_price_sqm
+
+    for _ in range(horizon_months):
+        next_price *= 1 + monthly_growth
+        next_price_sqm *= 1 + monthly_growth
+        forecast_points.append(
+            ProjectForecastPoint(
+                date=next_date,
+                avg_price=round(next_price, 2),
+                avg_price_sqm=round(next_price_sqm, 2),
+                series="forecast",
+            )
+        )
+        next_date = _add_months(next_date, 1)
+
+    return ProjectForecastResponse(
+        data=[*historical, *forecast_points],
+        delivery_date=delivery_date,
+        methodology=(
+            "Forecast extends the recorded residential project trend, then blends recent "
+            "price/sqm movement with the off-plan delivery curve where delivery-dated launches exist."
+        ),
+    )
+
+
+async def get_project_pipeline(
+    project_name: str, filter_type: ProjectFilterType = "project"
+) -> ProjectPipelineResponse:
+    """Area-level delivery pipeline grouped by quarter around the selected project."""
+    summary = await get_project_summary(project_name=project_name, filter_type=filter_type)
+    area_name = summary.project.area_name if summary.project else None
+    developer_name = summary.project.developer_name if summary.project else None
+
+    if not area_name:
+        return ProjectPipelineResponse(area_name=None, developer_name=developer_name, data=[])
+
+    rows = await query(area_supply_projects(), {"area_name": area_name})
+    if not rows:
+        return ProjectPipelineResponse(area_name=area_name, developer_name=developer_name, data=[])
+
+    today = date.today()
+    start_quarter = _quarter_start(date(today.year - 1, 1, 1))
+    periods = [_add_months(start_quarter, quarter_index * 3) for quarter_index in range(16)]
+
+    completed_by_quarter: dict[date, int] = {}
+    pipeline_by_quarter: dict[date, int] = {}
+
+    for row in rows:
+        units = int(row.get("no_of_units") or 0)
+        if units <= 0:
+            continue
+
+        completion_dt = _coalesce_delivery_date(row)
+        if completion_dt:
+            quarter = _quarter_start(completion_dt)
+            if completion_dt <= today:
+                completed_by_quarter[quarter] = completed_by_quarter.get(quarter, 0) + units
+            else:
+                pipeline_by_quarter[quarter] = pipeline_by_quarter.get(quarter, 0) + units
+
+    cumulative_existing = sum(units for q, units in completed_by_quarter.items() if q < periods[0])
+    cumulative_future = 0
+
+    data: list[ProjectPipelinePoint] = []
+    today_quarter = _quarter_start(today)
+    for period in periods:
+        if period < today_quarter:
+            cumulative_existing += completed_by_quarter.get(period, 0)
+            data.append(
+                ProjectPipelinePoint(
+                    period=period,
+                    existing_stock_units=cumulative_existing,
+                    carried_stock_units=0,
+                    new_pipeline_units=0,
+                )
+            )
+            continue
+
+        new_pipeline_units = pipeline_by_quarter.get(period, 0)
+        carried_stock_units = cumulative_existing + cumulative_future
+        cumulative_future += new_pipeline_units
+        data.append(
+            ProjectPipelinePoint(
+                period=period,
+                existing_stock_units=0,
+                carried_stock_units=carried_stock_units,
+                new_pipeline_units=new_pipeline_units,
+            )
+        )
+
+    return ProjectPipelineResponse(
+        area_name=area_name,
+        developer_name=developer_name,
+        data=data,
+    )
+
+
+async def get_project_price_distribution(
+    project_name: str,
+    filter_type: ProjectFilterType = "project",
+    reg_type: Optional[str] = None,
+) -> ProjectPriceDistributionResponse:
+    """Price distribution statistics per bedroom type for bell-curve style visualisation."""
+    like_name = project_name + " - %" if filter_type == "virtual_master" else project_name
+    params: dict = {"project_name": like_name}
+    if reg_type:
+        params["reg_type_en"] = reg_type
+
+    rows = await query(project_price_distribution(filter_type, reg_type), params)
+
+    all_bucket: Optional[PriceDistributionBucket] = None
+    by_rooms: list[PriceDistributionBucket] = []
+
+    for row in rows:
+        bucket = PriceDistributionBucket(
+            rooms=row["rooms_en"],
+            sale_count=int(row["sale_count"]),
+            mean_price=float(row["mean_price"] or 0),
+            std_price=float(row["std_price"] or 0),
+            log_mean_price=float(row["log_mean_price"] or 0),
+            log_std_price=float(row["log_std_price"] or 0),
+            p05_price=float(row["p05_price"] or 0),
+            p25_price=float(row["p25_price"] or 0),
+            p50_price=float(row["p50_price"] or 0),
+            p75_price=float(row["p75_price"] or 0),
+            p95_price=float(row["p95_price"] or 0),
+            mean_price_sqm=float(row["mean_price_sqm"] or 0),
+            std_price_sqm=float(row["std_price_sqm"] or 0),
+        )
+        if row["rooms_en"] == "__all__":
+            all_bucket = bucket
+        else:
+            by_rooms.append(bucket)
+
+    by_rooms.sort(key=lambda x: _room_sort_key(x.rooms))
+    return ProjectPriceDistributionResponse(all=all_bucket, by_rooms=by_rooms)
+
+
+def _trend_interval_for_days(days: int) -> TrendInterval:
+    if days <= 30:
+        return "day"
+    if days <= 180:
+        return "week"
+    return "month"

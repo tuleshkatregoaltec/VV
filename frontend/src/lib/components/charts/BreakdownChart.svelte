@@ -13,7 +13,7 @@ interface Props {
 
 let { data, title = 'Breakdown', metric = 'volume', height = 350, maxItems = 10 }: Props = $props()
 
-let canvasElement: HTMLCanvasElement
+let canvasElement = $state<HTMLCanvasElement | undefined>()
 let chart: Chart | null = null
 
 Chart.register(...registerables)
@@ -99,7 +99,7 @@ function createChart() {
 					callbacks: {
 						label: (context) => {
 							const item = chartData[context.dataIndex]
-							const value = formatter(context.parsed.x)
+							const value = formatter(Number(context.parsed.x ?? 0))
 							const pct = item.pct_of_total ? ` (${item.pct_of_total}%)` : ''
 							return `${getMetricLabel()}: ${value}${pct}`
 						}

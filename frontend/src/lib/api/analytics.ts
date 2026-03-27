@@ -7,8 +7,15 @@ import type {
 	AnalyticsUnitComposition,
 	DimensionBreakdown,
 	MarketTrendResponse,
+	PriceDistributionBucket,
 	ProjectAnalyticsResponse,
+	ProjectConfigurationRow,
+	ProjectForecastPoint,
+	ProjectForecastResponse,
 	ProjectMeta,
+	ProjectPipelinePoint,
+	ProjectPipelineResponse,
+	ProjectPriceDistributionResponse,
 	ProjectRentalSummary,
 	ProjectSalesSummary,
 	ProjectSearchItem,
@@ -31,7 +38,15 @@ export type SalesAnalyticsResponse = AnalyticsResponse
 export type {
 	AnalyticsSummary,
 	DimensionBreakdown,
+	PriceDistributionBucket,
+	ProjectAnalyticsResponse,
 	ProjectMeta,
+	ProjectConfigurationRow,
+	ProjectForecastPoint,
+	ProjectForecastResponse,
+	ProjectPipelinePoint,
+	ProjectPipelineResponse,
+	ProjectPriceDistributionResponse,
 	ProjectRentalSummary,
 	ProjectSalesSummary,
 	ProjectSearchItem,
@@ -94,6 +109,41 @@ export const analytics = {
 				project: params.project,
 				master_project: params.masterProject,
 				filter_type: params.filterType
+			})
+		),
+
+	projectForecast: (
+		params: { masterProject?: string; project?: string; filterType?: string },
+		days = 365
+	) =>
+		client.get<ProjectForecastResponse>(
+			client.withQuery('/api/v1/analytics/project/forecast', {
+				days,
+				project: params.project,
+				master_project: params.masterProject,
+				filter_type: params.filterType
+			})
+		),
+
+	projectPipeline: (params: { masterProject?: string; project?: string; filterType?: string }) =>
+		client.get<ProjectPipelineResponse>(
+			client.withQuery('/api/v1/analytics/project/pipeline', {
+				project: params.project,
+				master_project: params.masterProject,
+				filter_type: params.filterType
+			})
+		),
+
+	projectPriceDistribution: (
+		params: { masterProject?: string; project?: string; filterType?: string },
+		regType?: string
+	) =>
+		client.get<ProjectPriceDistributionResponse>(
+			client.withQuery('/api/v1/analytics/project/price-distribution', {
+				project: params.project,
+				master_project: params.masterProject,
+				filter_type: params.filterType,
+				reg_type: regType
 			})
 		)
 }

@@ -8,7 +8,7 @@ const LIMIT = 20
 
 const newsQuery = createInfiniteQuery(() => newsQueries.listInfinite('feed', LIMIT))
 
-let sentinel: HTMLDivElement
+let sentinel = $state<HTMLDivElement | undefined>()
 
 onMount(() => {
 	const observer = new IntersectionObserver((entries) => {

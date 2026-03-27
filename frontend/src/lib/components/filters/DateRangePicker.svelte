@@ -35,7 +35,7 @@ const today = new Date().toISOString().split('T')[0]
 <div class="date-range-picker">
 	{#if label}
 		<label class="label">
-			<Calendar class="icon" size={16} />
+			<Calendar size={16} color="var(--text-tertiary, #9ca3af)" />
 			<span>{label}</span>
 		</label>
 	{/if}
@@ -88,10 +88,6 @@ const today = new Date().toISOString().split('T')[0]
 		font-size: 0.875rem;
 		font-weight: 500;
 		color: var(--text-secondary, #6b7280);
-	}
-
-	.icon {
-		color: var(--text-tertiary, #9ca3af);
 	}
 
 	.inputs-container {
