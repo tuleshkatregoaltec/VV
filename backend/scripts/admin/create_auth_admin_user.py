@@ -11,12 +11,37 @@ def _headers() -> dict[str, str]:
     }
 
 
+def _list_auth_users() -> list[dict]:
+    users: list[dict] = []
+    page = 1
+    per_page = 200
+
+    while True:
+        response = requests.get(
+            f"{settings.AUTH_URL}/admin/users?page={page}&per_page={per_page}",
+            headers=_headers(),
+            timeout=10,
+        )
+        response.raise_for_status()
+        page_users = response.json().get("users", [])
+        users.extend(page_users)
+        if len(page_users) < per_page:
+            break
+        page += 1
+
+    return users
+
+
 def _payload() -> dict:
     return {
         "email": settings.FIRST_SUPERUSER,
         "password": settings.FIRST_SUPERUSER_PASSWORD,
         "email_confirm": True,
         "role": "supabase_admin",
+        "user_metadata": {
+            "first_name": "Admin",
+            "last_name": "User",
+        },
         "app_metadata": {
             "is_admin": True,
             "daily_token_limit": 500000,
@@ -42,13 +67,7 @@ def create_user():
         return
 
     if response.status_code in {400, 422}:
-        users_response = requests.get(
-            f"{settings.AUTH_URL}/admin/users?page=1&per_page=200",
-            headers=_headers(),
-            timeout=10,
-        )
-        users_response.raise_for_status()
-        users = users_response.json().get("users", [])
+        users = _list_auth_users()
         existing_user = next(
             (user for user in users if user.get("email") == settings.FIRST_SUPERUSER), None
         )

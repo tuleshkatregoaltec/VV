@@ -95,8 +95,9 @@ async function submit() {
 		<!-- Name row -->
 		<div class="grid grid-cols-2 gap-3">
 			<div>
-				<label class="block text-xs font-medium text-gray-500 mb-1">First Name</label>
+				<label for="create-user-first-name" class="block text-xs font-medium text-gray-500 mb-1">First Name</label>
 				<input
+					id="create-user-first-name"
 					type="text"
 					bind:value={firstName}
 					placeholder="Jane"
@@ -104,8 +105,9 @@ async function submit() {
 				/>
 			</div>
 			<div>
-				<label class="block text-xs font-medium text-gray-500 mb-1">Last Name</label>
+				<label for="create-user-last-name" class="block text-xs font-medium text-gray-500 mb-1">Last Name</label>
 				<input
+					id="create-user-last-name"
 					type="text"
 					bind:value={lastName}
 					placeholder="Smith"
@@ -116,8 +118,9 @@ async function submit() {
 
 		<!-- Email -->
 		<div>
-			<label class="block text-xs font-medium text-gray-500 mb-1">Email</label>
+			<label for="create-user-email" class="block text-xs font-medium text-gray-500 mb-1">Email</label>
 			<input
+				id="create-user-email"
 				type="email"
 				bind:value={email}
 				placeholder="jane@example.com"
@@ -127,8 +130,9 @@ async function submit() {
 
 		<!-- Password -->
 		<div>
-			<label class="block text-xs font-medium text-gray-500 mb-1">Password</label>
+			<label for="create-user-password" class="block text-xs font-medium text-gray-500 mb-1">Password</label>
 			<input
+				id="create-user-password"
 				type="password"
 				bind:value={password}
 				placeholder="Temporary password"
@@ -138,7 +142,7 @@ async function submit() {
 
 		<!-- Org mode toggle -->
 		<div>
-			<label class="block text-xs font-medium text-gray-500 mb-2">Organization</label>
+			<label for={orgMode === 'new' ? 'create-user-new-org' : 'create-user-existing-org'} class="block text-xs font-medium text-gray-500 mb-2">Organization</label>
 			<div class="flex gap-2 mb-3">
 				<button
 					type="button"
@@ -164,6 +168,7 @@ async function submit() {
 
 			{#if orgMode === 'new'}
 				<input
+					id="create-user-new-org"
 					type="text"
 					bind:value={newOrgName}
 					placeholder="Organization name"
@@ -172,6 +177,7 @@ async function submit() {
 				<p class="text-xs text-gray-400 mt-1">Subscription will be set to active automatically.</p>
 			{:else}
 				<select
+					id="create-user-existing-org"
 					bind:value={existingOrgId}
 					class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
 				>
@@ -185,8 +191,9 @@ async function submit() {
 
 		<!-- Token limit -->
 		<div>
-			<label class="block text-xs font-medium text-gray-500 mb-1">Daily Token Limit</label>
+			<label for="create-user-token-limit" class="block text-xs font-medium text-gray-500 mb-1">Daily Token Limit</label>
 			<input
+				id="create-user-token-limit"
 				type="number"
 				bind:value={tokenLimit}
 				min="0"

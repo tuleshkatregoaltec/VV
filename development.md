@@ -27,15 +27,13 @@ Fresh clone quick start:
 
 ```sh
 just setup
-just up
 uv tool install prek
 prek install
 ```
 
 What these do:
 
-- `just setup` installs frontend and e2e dependencies with Bun, installs the local Playwright Chromium browser, and syncs the backend environment with `uv`
-- `just up` starts the external services stack
+- `just setup` installs frontend and e2e dependencies with Bun, installs the local Playwright Chromium browser, syncs the backend environment with `uv`, starts the local external services stack, applies migrations, and seeds the local bootstrap admin with an active organization and subscription
 - `prek install` enables the repo hooks locally
 
 ## Running The App
@@ -46,6 +44,18 @@ Run the app on the host:
 just dev-backend
 just dev-frontend
 ```
+
+Or start the full local stack in one command:
+
+```sh
+just dev
+```
+
+What this does:
+
+- `just dev` starts the external services with Docker Compose, then runs the backend and frontend together on the host
+- `just dev-app` runs the backend and frontend together on the host when services are already running
+- `just up` remains services-only for cases where you only want the dependency stack
 
 Main local endpoints:
 
@@ -67,6 +77,8 @@ Common follow-up commands:
 
 ```sh
 just check-all
+just dev
+just dev-app
 just test-backend
 just test-frontend
 just lint-backend
@@ -134,6 +146,40 @@ Cross-platform note:
 - The host-first workflow is the supported way to develop on Linux and macOS.
 - Docker Compose is the supported way to boot local dependencies on Linux and macOS.
 - Playwright runs on the host and targets the local app URLs directly.
+
+### macOS Prerequisites
+
+Install prerequisites via [Homebrew](https://brew.sh). If Homebrew is not installed:
+
+```sh
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+```
+
+Install Xcode command-line tools (required for native build dependencies):
+
+```sh
+xcode-select --install
+```
+
+Install the runtime prerequisites:
+
+```sh
+brew install just
+brew install uv
+brew install oven-sh/bun/bun
+```
+
+Install Docker Desktop from [docker.com/products/docker-desktop](https://www.docker.com/products/docker-desktop). Docker Compose is bundled with Docker Desktop. **Docker Desktop must be open and running before `just up` or `just dev`.**
+
+After all prerequisites are installed, run the standard setup:
+
+```sh
+just setup
+uv tool install prek
+prek install
+```
+
+Note: follow any post-install instructions that `brew` prints for `uv` and `bun` (they may require adding entries to your shell profile `~/.zshrc`).
 
 ## Checks And Tests
 

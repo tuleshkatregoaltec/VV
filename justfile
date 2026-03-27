@@ -7,6 +7,8 @@ setup:
 	cd frontend && bun install
 	cd e2e && bun install && bunx --bun playwright install chromium
 	cd backend && uv sync
+	just up
+	set -a && source .env.dev && set +a && cd backend && uv run alembic upgrade head && uv run python -m scripts.admin.create_auth_admin_user && uv run python -m scripts.admin.bootstrap_local_admin_state
 
 up:
 	docker compose up --build -d postgres auth-db-init auth inbucket clickhouse redis minio minio-setup
@@ -25,6 +27,32 @@ dev-backend:
 
 dev-frontend:
 	set -a && source .env.dev && set +a && cd frontend && bun install && bun run dev -- --host 0.0.0.0 --port 5173
+
+dev-app:
+	set -a && source .env.dev && set +a && \
+		for port in 8000 5173; do \
+			pid=$(lsof -t -nP -iTCP:$port -sTCP:LISTEN 2>/dev/null | head -n 1); \
+			if [ -n "$pid" ]; then \
+				echo "Port $port is already in use by PID $pid:"; \
+				ps -p "$pid" -o pid=,ppid=,cmd=; \
+				echo "Stop the existing process or use the running app directly."; \
+				exit 1; \
+			fi; \
+		done; \
+		(cd backend && uv sync && scripts/lifecycle/prestart.sh && uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload) & \
+		backend_pid=$!; \
+		(cd frontend && bun install && bun run dev -- --host 0.0.0.0 --port 5173) & \
+		frontend_pid=$!; \
+		trap 'kill $backend_pid $frontend_pid 2>/dev/null || true' EXIT INT TERM; \
+		wait -n $backend_pid $frontend_pid; \
+		exit_code=$?; \
+		kill $backend_pid $frontend_pid 2>/dev/null || true; \
+		wait $backend_pid $frontend_pid 2>/dev/null || true; \
+		exit $exit_code
+
+dev:
+	just up
+	just dev-app
 
 test-backend:
 	set -a && source .env.dev && set +a && cd backend && scripts/lifecycle/tests-start.sh

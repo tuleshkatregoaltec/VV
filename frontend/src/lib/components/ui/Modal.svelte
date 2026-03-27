@@ -1,16 +1,18 @@
 <script lang="ts">
-import { onMount } from 'svelte'
+import type { Snippet } from 'svelte'
 
 let {
 	open = false,
 	onClose,
 	title,
-	size = 'lg'
+	size = 'lg',
+	children
 }: {
 	open: boolean
 	onClose: () => void
 	title: string
 	size?: 'md' | 'lg' | 'xl'
+	children?: Snippet
 } = $props()
 
 // Handle ESC key
@@ -86,7 +88,7 @@ const sizeClasses = {
 
 			<!-- Content -->
 			<div class="overflow-y-auto max-h-[calc(90vh-80px)] px-6 py-6">
-				<slot />
+				{@render children?.()}
 			</div>
 		</div>
 	</div>

@@ -834,11 +834,6 @@ onMount(() => {
 			transform 420ms ease;
 	}
 
-	.preview-row.is-visible .media-badge {
-		opacity: 1;
-		transform: translateY(0);
-	}
-
 	.media-badge-a {
 		top: 0.9rem;
 		right: 1rem;

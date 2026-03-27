@@ -1,7 +1,6 @@
 <script lang="ts">
 import { cubicOut } from 'svelte/easing'
 import { fly } from 'svelte/transition'
-import { resolve } from '$app/paths'
 import { storeSelectedTier } from '$lib/utils/onboarding'
 
 function handleTierClick(tier: 'tier1' | 'tier2') {
@@ -162,7 +161,7 @@ const tiers = [
 						</button>
 					{:else}
 						<a
-							href={resolve(tier.href)}
+							href={tier.href}
 							onclick={() => tier.tier && handleTierClick(tier.tier)}
 							class="block w-full text-center px-6 py-3 rounded-lg font-semibold transition-all bg-slate-900 text-white hover:bg-slate-800 hover:scale-105"
 						>
