@@ -1,29 +1,32 @@
 import json
 import logging
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 
 from app.core.dependencies import AuthContext, require_active_subscription
-from app.feasibility.agent import generate_agent_hbu_study, stream_feasibility_response
+from app.feasibility.chat_agent import stream_feasibility_response
+from app.feasibility.hbu_agent import generate_hbu_study
 from app.feasibility.models import (
     ComparableData,
     FeasibilityChatRequest,
-    GISPlotDossier,
-    GISPlotSummary,
-    HBUStudy,
+    GenerateStudyResponse,
     LandSaleEvidence,
+    Plot,
+    PlotDetails,
+    PlotResearch,
+    StudyContext,
 )
-from app.feasibility.normalization import Usage
-from app.feasibility.service import (
+from app.feasibility.queries import (
+    Usage,
     get_areas,
     get_comparable_data,
-    get_gis_plot_dossier,
     get_land_plots,
     get_land_sale_evidence,
-    list_plot_communities,
-    search_gis_plots,
+    get_plot_details,
+    list_communities,
     search_land_plots,
+    search_plots,
 )
 
 logger = logging.getLogger(__name__)
@@ -44,10 +47,10 @@ async def communities_endpoint(
     _: AuthContext = Depends(require_active_subscription),
 ):
     """Get GIS plot communities ordered by activity."""
-    return await list_plot_communities()
+    return await list_communities()
 
 
-@router.get("/plots", response_model=list[GISPlotSummary])
+@router.get("/plots", response_model=list[Plot])
 async def plots_endpoint(
     q: str = Query(default=""),
     community: str = Query(default=""),
@@ -58,7 +61,7 @@ async def plots_endpoint(
     _: AuthContext = Depends(require_active_subscription),
 ):
     """Search GIS plots by plot number, project, community, and plot area."""
-    return await search_gis_plots(
+    return await search_plots(
         q=q,
         community=community,
         min_plot_area_sqm=min_plot_area_sqm,
@@ -68,31 +71,27 @@ async def plots_endpoint(
     )
 
 
-@router.get("/plots/{plot_number}", response_model=GISPlotDossier)
-async def plot_dossier_endpoint(
+@router.get("/plots/{plot_number}", response_model=PlotDetails)
+async def plot_details_endpoint(
     plot_number: str,
     _: AuthContext = Depends(require_active_subscription),
 ):
-    """Get full GIS-backed plot dossier for feasibility and HBU analysis."""
-    dossier = await get_gis_plot_dossier(plot_number)
-    if dossier is None:
-        from fastapi import HTTPException
-
+    """Get full GIS-backed plot data for feasibility and HBU analysis."""
+    plot = await get_plot_details(plot_number)
+    if plot is None:
         raise HTTPException(status_code=404, detail="GIS plot not found")
-    return dossier
+    return plot
 
 
-@router.post("/hbu/{plot_number}", response_model=HBUStudy)
+@router.post("/hbu/{plot_number}", response_model=PlotResearch)
 async def generate_hbu_endpoint(
     plot_number: str,
     usage_override: Usage | None = Query(default=None),
     _: AuthContext = Depends(require_active_subscription),
 ):
     """Generate an agent-authored initial HBU study for the selected GIS plot."""
-    study = await generate_agent_hbu_study(plot_number, usage_override=usage_override)
+    study = await generate_hbu_study(plot_number, usage_override=usage_override)
     if study is None:
-        from fastapi import HTTPException
-
         raise HTTPException(status_code=404, detail="GIS plot not found")
     return study
 
@@ -105,20 +104,18 @@ async def plot_land_sales_endpoint(
     _: AuthContext = Depends(require_active_subscription),
 ):
     """Get recent land sale evidence for the selected GIS plot area."""
-    dossier = await get_gis_plot_dossier(plot_number)
-    if dossier is None:
-        from fastapi import HTTPException
-
+    plot = await get_plot_details(plot_number)
+    if plot is None:
         raise HTTPException(status_code=404, detail="GIS plot not found")
     return await get_land_sale_evidence(
-        area_name=dossier.community_name,
-        plot_area_sqm=dossier.plot_area_sqm,
+        area_name=plot.community_name,
+        plot_area_sqm=plot.plot_area_sqm,
         days=days,
         limit=limit,
     )
 
 
-@router.get("/land", response_model=list[GISPlotSummary])
+@router.get("/land", response_model=list[Plot])
 async def land_endpoint(
     area: str = Query(...),
     size_sqm: float = Query(...),
@@ -129,7 +126,7 @@ async def land_endpoint(
     return await get_land_plots(area, size_sqm, tolerance)
 
 
-@router.get("/land/search", response_model=list[GISPlotSummary])
+@router.get("/land/search", response_model=list[Plot])
 async def land_search_endpoint(
     area: str = Query(...),
     q: str = Query(..., min_length=1),
@@ -148,10 +145,35 @@ async def comparable_endpoint(
     ids = [int(x.strip()) for x in project_ids.split(",") if x.strip().isdigit()]
     result = await get_comparable_data(ids)
     if result is None:
-        from fastapi import HTTPException
-
         raise HTTPException(status_code=404, detail="No data found for given project IDs")
     return result
+
+
+@router.post("/generate-study", response_model=GenerateStudyResponse)
+async def generate_study_endpoint(
+    plot_number: str,
+    usage_override: Usage | None = None,
+    _: AuthContext = Depends(require_active_subscription),
+):
+    """Generate an initial feasibility study for the selected GIS plot."""
+    study = await generate_hbu_study(plot_number, usage_override=usage_override)
+    if study is None:
+        raise HTTPException(status_code=404, detail="GIS plot not found")
+    plot = await get_plot_details(plot_number)
+    if plot is None:
+        raise HTTPException(status_code=404, detail="GIS plot not found")
+    context = StudyContext(
+        headline=study.headline,
+        project_tier="premium",
+        summary_points=list(study.summary),
+        market_summary=", ".join(study.constraints) if study.constraints else "",
+    )
+    return GenerateStudyResponse(
+        plot_data=plot,
+        assumptions=study.assumptions,
+        research=study,
+        study_context=context,
+    )
 
 
 @router.post(
@@ -167,7 +189,11 @@ async def chat_stream_endpoint(
     async def event_stream():
         try:
             async for chunk in stream_feasibility_response(
-                request.messages, request.context, request.history_json
+                request.messages,
+                request.plot_data,
+                request.assumptions,
+                request.research,
+                request.history_json,
             ):
                 yield chunk
         except Exception:

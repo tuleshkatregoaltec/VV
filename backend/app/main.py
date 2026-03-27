@@ -32,6 +32,8 @@ from app.transaction.router import router as transaction_router
 from app.upload.router import health_router
 from app.upload.router import router as upload_router
 
+logfire.configure(send_to_logfire=bool(settings.LOGFIRE_TOKEN))
+logfire.instrument_pydantic_ai()
 logging.config.dictConfig(LOGGING_CONFIG)
 
 
@@ -47,9 +49,6 @@ async def lifespan(app: FastAPI):
     await close_clickhouse()
     await close_postgres()
 
-
-logfire.configure(send_to_logfire=bool(settings.LOGFIRE_TOKEN))
-logfire.instrument_pydantic_ai()
 
 app = FastAPI(
     title=settings.PROJECT_NAME,

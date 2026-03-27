@@ -1,35 +1,307 @@
 import json
 import logging
-from typing import Any
+import re
+from datetime import datetime, timezone
+from typing import Any, Literal
 
 from app.clickhouse.client import query
 from app.feasibility.models import (
     ComparableData,
     ComparableProject,
     GISLandUse,
-    GISPlotDossier,
-    GISPlotSummary,
-    HBUProductOption,
-    HBUStudy,
-    HBUUnitRecommendation,
     LandSaleEvidence,
     MarketPricingRow,
+    OffPlanPricingConfidence,
+    OffPlanPricingRow,
+    OffPlanUnitPricingBenchmark,
+    Plot,
+    PlotDetails,
     UnitTypeData,
-)
-from app.feasibility.normalization import (
-    Stage,
     Usage,
-    canonical_unit_type_case_sql,
-    infer_usage_from_plot,
-    normalize_project_stage,
-    transaction_stage_clause,
-    transaction_usage_clause,
 )
 
 logger = logging.getLogger(__name__)
 
+Stage = Literal["existing", "off_plan", "upcoming", "all"]
+
 RESIDENTIAL_TYPES = ["studio", "1br", "2br", "3br", "4br", "4br+", "villa", "townhouse"]
 COMMERCIAL_TYPES = ["office", "retail", "industrial", "hospitality"]
+
+
+def normalize_whitespace(value: str) -> str:
+    return " ".join((value or "").strip().split())
+
+
+def normalize_unit_type(value: str) -> str:
+    raw = normalize_whitespace(value).lower()
+    if not raw or raw in {"na", "n/a", "unknown"}:
+        return "other"
+
+    patterns = [
+        (r"^studio$", "studio"),
+        (r"^(1|one)\s*(b\/r|br|bed(room)?s?\+?hall?)$", "1br"),
+        (r"^(2|two)\s*(b\/r|br|bed(room)?s?\+?hall?)$", "2br"),
+        (r"^(3|three)\s*(b\/r|br|bed(room)?s?\+?hall?)$", "3br"),
+        (r"^(4|four)\s*(b\/r|br|bed(room)?s?\+?hall?)$", "4br"),
+        (r"^(5|six|7|8|9|10|\d+)\s*(b\/r|br|bed(room)?s?\+?hall?)$", "4br+"),
+        (r"penthouse", "4br+"),
+        (r"villa", "villa"),
+        (r"townhouse", "townhouse"),
+        (r"office", "office"),
+        (r"shop|retail|store|showroom|kiosk|restaurant", "retail"),
+        (
+            r"warehouse|workshop|industrial|factory|labor camp|staff accommod",
+            "industrial",
+        ),
+        (r"hotel", "hospitality"),
+    ]
+    normalized = re.sub(r"[\s\-_/]+", "", raw)
+    for pattern, canonical in patterns:
+        if re.search(pattern, raw) or re.search(pattern, normalized):
+            return canonical
+    return "other"
+
+
+def infer_usage_from_plot(
+    land_use_values: list[str], gfa_type: str, general_notes: list[str]
+) -> Usage:
+    haystack = " ".join(
+        [
+            *(land_use_values or []),
+            gfa_type or "",
+            *(general_notes or []),
+        ]
+    ).lower()
+    has_res = any(
+        token in haystack
+        for token in ["residential", "villa", "apartment", "townhouse", "dwelling"]
+    )
+    has_com = any(
+        token in haystack
+        for token in [
+            "commercial",
+            "office",
+            "retail",
+            "shopping center",
+            "shop",
+            "hotel",
+            "hospitality",
+            "warehouse",
+            "industrial",
+        ]
+    )
+    if has_res and has_com:
+        return "mixed_use"
+    if has_res:
+        return "residential"
+    if has_com:
+        return "commercial"
+    return "unknown"
+
+
+def normalize_project_stage(value: str) -> Stage:
+    raw = normalize_whitespace(value).upper()
+    if raw in {"FINISHED"}:
+        return "existing"
+    if raw in {"ACTIVE"}:
+        return "off_plan"
+    if raw in {"NOT_STARTED", "PENDING", "CONDITIONAL_ACTIVATING"}:
+        return "upcoming"
+    return "all"
+
+
+def transaction_usage_clause(usage: Usage, column: str = "property_usage_en") -> str:
+    if usage == "residential":
+        return f"({column} IN ('Residential', 'Hospitality ', 'Hospitality'))"
+    if usage == "commercial":
+        return f"({column} IN ('Commercial', 'Industrial', 'Storage'))"
+    if usage == "mixed_use":
+        return f"({column} IN ('Residential / Commercial', 'Multi-Use', 'Industrial / Commercial', 'Industrial / Commercial / Residential'))"
+    return "1 = 1"
+
+
+def transaction_stage_clause(stage: Stage, column: str = "reg_type_en") -> str:
+    if stage == "existing":
+        return f"{column} = 'Existing Properties'"
+    if stage == "off_plan":
+        return f"{column} = 'Off-Plan Properties'"
+    return "1 = 1"
+
+
+def canonical_unit_type_case_sql(column: str = "rooms_en") -> str:
+    return f"""
+    multiIf(
+        match(lowerUTF8(trimBoth({column})), '^studio$'), 'studio',
+        match(lowerUTF8(trimBoth({column})), '^(1|one)\\s*(b/r|br|bed(room)?s?\\+?hall?)$'), '1br',
+        match(lowerUTF8(trimBoth({column})), '^(2|two)\\s*(b/r|br|bed(room)?s?\\+?hall?)$'), '2br',
+        match(lowerUTF8(trimBoth({column})), '^(3|three)\\s*(b/r|br|bed(room)?s?\\+?hall?)$'), '3br',
+        match(lowerUTF8(trimBoth({column})), '^(4|four)\\s*(b/r|br|bed(room)?s?\\+?hall?)$'), '4br',
+        match(lowerUTF8(trimBoth({column})), '^(5|6|7|8|9|10|\\d+)\\s*(b/r|br|bed(room)?s?\\+?hall?)$'), '4br+',
+        match(lowerUTF8(trimBoth({column})), 'penthouse'), '4br+',
+        match(lowerUTF8(trimBoth({column})), 'villa'), 'villa',
+        match(lowerUTF8(trimBoth({column})), 'townhouse'), 'townhouse',
+        match(lowerUTF8(trimBoth({column})), 'office'), 'office',
+        match(lowerUTF8(trimBoth({column})), 'shop|retail|store|showroom|kiosk|restaurant'), 'retail',
+        match(lowerUTF8(trimBoth({column})), 'warehouse|workshop|industrial|factory|labor camp|staff accommod'), 'industrial',
+        match(lowerUTF8(trimBoth({column})), 'hotel'), 'hospitality',
+        'other'
+    )
+    """
+
+
+def months_between(start: datetime, end: datetime) -> int:
+    return max((end.year - start.year) * 12 + (end.month - start.month), 0)
+
+
+def _label_confidence(score: float) -> str:
+    if score >= 75:
+        return "high"
+    if score >= 45:
+        return "medium"
+    return "low"
+
+
+def _parse_date(raw: str | None) -> datetime | None:
+    if not raw:
+        return None
+    try:
+        return datetime.fromisoformat(raw).replace(tzinfo=timezone.utc)
+    except ValueError:
+        return None
+
+
+def score_off_plan_row(
+    row: OffPlanPricingRow,
+    target_horizon_months: int,
+    *,
+    now: datetime | None = None,
+) -> dict[str, float]:
+    valuation_date = now or datetime.now(timezone.utc)
+    horizon_distance = abs(row.avg_months_to_completion - target_horizon_months)
+    sample_score = min(row.transaction_count / 15, 1.0)
+    horizon_score = max(0.0, 1 - (horizon_distance / 24))
+    last_transaction = _parse_date(row.last_transaction_date)
+    if last_transaction is None:
+        recency_score = 0.25
+    else:
+        months_since_trade = months_between(last_transaction, valuation_date)
+        recency_score = max(0.0, 1 - (months_since_trade / 24))
+    confidence_score = round(
+        ((sample_score * 0.45) + (horizon_score * 0.35) + (recency_score * 0.20)) * 100,
+        1,
+    )
+    return {
+        "sample_score": round(sample_score * 100, 1),
+        "horizon_score": round(horizon_score * 100, 1),
+        "recency_score": round(recency_score * 100, 1),
+        "confidence_score": confidence_score,
+    }
+
+
+def build_off_plan_pricing_confidence(
+    rows: list[OffPlanPricingRow],
+    target_horizon_months: int,
+    *,
+    now: datetime | None = None,
+) -> OffPlanPricingConfidence | None:
+    if not rows:
+        return None
+    scored_rows = [(row, score_off_plan_row(row, target_horizon_months, now=now)) for row in rows]
+    scored_rows.sort(key=lambda item: (-item[1]["confidence_score"], -item[0].transaction_count))
+    top_rows = scored_rows[: min(3, len(scored_rows))]
+    weight_total = sum(max(row.transaction_count, 1) for row, _ in top_rows)
+    sample_score = round(
+        sum(scores["sample_score"] * max(row.transaction_count, 1) for row, scores in top_rows)
+        / weight_total,
+        1,
+    )
+    horizon_score = round(
+        sum(scores["horizon_score"] * max(row.transaction_count, 1) for row, scores in top_rows)
+        / weight_total,
+        1,
+    )
+    recency_score = round(
+        sum(scores["recency_score"] * max(row.transaction_count, 1) for row, scores in top_rows)
+        / weight_total,
+        1,
+    )
+    confidence_score = round(
+        sum(scores["confidence_score"] * max(row.transaction_count, 1) for row, scores in top_rows)
+        / weight_total,
+        1,
+    )
+    matched_transactions = sum(row.transaction_count for row, _ in top_rows)
+    return OffPlanPricingConfidence(
+        target_horizon_months=target_horizon_months,
+        matched_transactions=matched_transactions,
+        confidence_score=confidence_score,
+        confidence_label=_label_confidence(confidence_score),  # type: ignore[arg-type]
+        sample_score=sample_score,
+        horizon_score=horizon_score,
+        recency_score=recency_score,
+        note=(
+            f"Best off-plan evidence covers {matched_transactions} transactions across "
+            f"{len(top_rows)} bucket(s)."
+        ),
+    )
+
+
+def build_off_plan_unit_benchmarks(
+    rows: list[OffPlanPricingRow],
+    target_horizon_months: int,
+    fallback_prices: dict[str, float],
+    *,
+    now: datetime | None = None,
+) -> list[OffPlanUnitPricingBenchmark]:
+    benchmarks: list[OffPlanUnitPricingBenchmark] = []
+    unit_types = sorted({row.unit_type for row in rows} | set(fallback_prices.keys()))
+    for unit_type in unit_types:
+        unit_rows = [row for row in rows if row.unit_type == unit_type]
+        if unit_rows:
+            scored = [
+                (row, score_off_plan_row(row, target_horizon_months, now=now)) for row in unit_rows
+            ]
+            scored.sort(key=lambda item: (-item[1]["confidence_score"], -item[0].transaction_count))
+            selected, scores = scored[0]
+            benchmarks.append(
+                OffPlanUnitPricingBenchmark(
+                    unit_type=unit_type,
+                    selected_horizon_bucket=selected.horizon_bucket,
+                    avg_months_to_completion=selected.avg_months_to_completion,
+                    transaction_count=selected.transaction_count,
+                    selected_price_sqm=selected.median_price_sqm,
+                    fallback_used=False,
+                    confidence_score=scores["confidence_score"],
+                    confidence_label=_label_confidence(scores["confidence_score"]),  # type: ignore[arg-type]
+                    sample_score=scores["sample_score"],
+                    horizon_score=scores["horizon_score"],
+                    recency_score=scores["recency_score"],
+                    last_transaction_date=selected.last_transaction_date,
+                    note=(
+                        f"Selected {selected.horizon_bucket} for {unit_type} with "
+                        f"{selected.transaction_count} transactions."
+                    ),
+                )
+            )
+        elif unit_type in fallback_prices:
+            benchmarks.append(
+                OffPlanUnitPricingBenchmark(
+                    unit_type=unit_type,
+                    selected_horizon_bucket="fallback",
+                    avg_months_to_completion=float(target_horizon_months),
+                    transaction_count=0,
+                    selected_price_sqm=fallback_prices[unit_type],
+                    fallback_used=True,
+                    confidence_score=20.0,
+                    confidence_label="low",
+                    sample_score=0.0,
+                    horizon_score=0.0,
+                    recency_score=0.0,
+                    last_transaction_date=None,
+                    note="No matching off-plan transactions for this unit type; existing-sales fallback was used.",
+                )
+            )
+    return benchmarks
 
 
 def _parse_land_use(raw: str) -> list[GISLandUse]:
@@ -136,14 +408,14 @@ async def resolve_market_area(name: str) -> str:
     return rows[0]["area_name_en"] if rows else name
 
 
-async def search_gis_plots(
+async def search_plots(
     q: str = "",
     community: str = "",
     min_plot_area_sqm: float | None = None,
     max_plot_area_sqm: float | None = None,
     offset: int = 0,
     limit: int = 30,
-) -> list[GISPlotSummary]:
+) -> list[Plot]:
     where = ["plot_number != ''"]
     params: dict[str, Any] = {"limit": limit, "offset": offset}
     if q:
@@ -182,11 +454,11 @@ async def search_gis_plots(
     OFFSET {{offset:UInt32}}
     """
     rows = await query(sql, params)
-    plots: list[GISPlotSummary] = []
+    plots: list[Plot] = []
     for row in rows:
         land_use = _parse_land_use(row.get("land_use", ""))
         plots.append(
-            GISPlotSummary(
+            Plot(
                 plot_number=row["plot_number"],
                 community_name=row.get("community_name") or "",
                 project_name=row.get("project_name") or "",
@@ -202,7 +474,7 @@ async def search_gis_plots(
     return plots
 
 
-async def list_plot_communities(limit: int = 5000) -> list[str]:
+async def list_communities(limit: int = 5000) -> list[str]:
     sql = """
     SELECT community_name
     FROM ch_gis_land_plots FINAL
@@ -215,7 +487,7 @@ async def list_plot_communities(limit: int = 5000) -> list[str]:
     return [r["community_name"] for r in rows]
 
 
-async def get_gis_plot_dossier(plot_number: str) -> GISPlotDossier | None:
+async def get_plot_details(plot_number: str) -> PlotDetails | None:
     sql = """
     SELECT *
     FROM ch_gis_land_plots FINAL
@@ -237,7 +509,7 @@ async def get_gis_plot_dossier(plot_number: str) -> GISPlotDossier | None:
         str(row.get("gfa_type") or ""),
         notes,
     )
-    return GISPlotDossier(
+    return PlotDetails(
         plot_number=row["plot_number"],
         community_name=row.get("community_name") or "",
         project_name=row.get("project_name") or "",
@@ -276,7 +548,7 @@ async def get_market_pricing(
     where = [
         "trans_group_en = 'Sales'",
         "meter_sale_price > 0",
-        "area_name_en = {area_name:String}",
+        "lower(area_name_en) = lower({area_name:String})",
         transaction_usage_clause(usage),
         transaction_stage_clause(stage),
         "instance_date >= today() - {days:Int32}",
@@ -305,6 +577,83 @@ async def get_market_pricing(
     ]
 
 
+async def get_off_plan_pricing_curve(
+    area_name: str,
+    usage: Usage,
+    target_handover_date: str | None,
+    days: int = 1095,
+) -> list[OffPlanPricingRow]:
+    now = datetime.now(timezone.utc)
+    try:
+        target_handover = (
+            datetime.fromisoformat(target_handover_date).replace(tzinfo=timezone.utc)
+            if target_handover_date
+            else now
+        )
+    except ValueError:
+        target_handover = now
+    target_horizon_months = max(months_between(now, target_handover), 0)
+    canonical_unit_sql = canonical_unit_type_case_sql("t.rooms_en")
+    sql = f"""
+    SELECT
+        {canonical_unit_sql} AS unit_type,
+        multiIf(
+            months_to_completion <= 12, '0-12m',
+            months_to_completion <= 24, '13-24m',
+            months_to_completion <= 36, '25-36m',
+            '37m+'
+        ) AS horizon_bucket,
+        round(avg(months_to_completion), 1) AS avg_months_to_completion,
+        count() AS transaction_count,
+        round(median(t.meter_sale_price), 0) AS median_price_sqm,
+        round(avg(t.procedure_area), 0) AS avg_area_sqm,
+        toString(max(toDate(t.instance_date))) AS last_transaction_date
+    FROM (
+        SELECT
+            t.*,
+            greatest(
+                dateDiff('month', toDate(t.instance_date), toDate(p.completion_date)),
+                0
+            ) AS months_to_completion
+        FROM ch_transactions t
+        INNER JOIN ch_projects p
+            ON lowerUTF8(trimBoth(p.project_name_en)) = lowerUTF8(trimBoth(t.project_name_en))
+        WHERE t.trans_group_en = 'Sales'
+          AND t.meter_sale_price > 0
+          AND lower(t.area_name_en) = lower({{area_name:String}})
+          AND {transaction_usage_clause(usage, "t.property_usage_en")}
+          AND {transaction_stage_clause("off_plan", "t.reg_type_en")}
+          AND t.instance_date >= today() - {{days:Int32}}
+          AND p.completion_date IS NOT NULL
+    ) t
+    GROUP BY unit_type, horizon_bucket
+    HAVING unit_type != 'other'
+    ORDER BY
+        abs(avg_months_to_completion - {{target_horizon_months:Int32}}) ASC,
+        transaction_count DESC
+    """
+    rows = await query(
+        sql,
+        {
+            "area_name": area_name,
+            "days": days,
+            "target_horizon_months": target_horizon_months,
+        },
+    )
+    return [
+        OffPlanPricingRow(
+            unit_type=row["unit_type"],
+            horizon_bucket=row["horizon_bucket"],
+            avg_months_to_completion=float(row.get("avg_months_to_completion") or 0),
+            transaction_count=int(row["transaction_count"]),
+            median_price_sqm=float(row["median_price_sqm"]),
+            avg_area_sqm=float(row["avg_area_sqm"]) if row.get("avg_area_sqm") else None,
+            last_transaction_date=row.get("last_transaction_date"),
+        )
+        for row in rows
+    ]
+
+
 async def get_land_sale_evidence(
     area_name: str,
     plot_area_sqm: float | None = None,
@@ -316,7 +665,7 @@ async def get_land_sale_evidence(
         "property_type_en = 'Land'",
         "actual_worth > 0",
         "procedure_area > 0",
-        "area_name_en = {area_name:String}",
+        "lower(area_name_en) = lower({area_name:String})",
         "instance_date >= today() - {days:Int32}",
     ]
     if plot_area_sqm and plot_area_sqm > 0:
@@ -399,12 +748,12 @@ async def _project_unit_mix(project_ids: list[int]) -> dict[int, list[dict[str, 
 
 
 async def rank_plot_comparables(
-    dossier: GISPlotDossier,
+    plot: PlotDetails,
     usage: Usage,
     comparison_type: str,
     limit: int = 5,
 ) -> list[ComparableProject]:
-    market_area = await resolve_market_area(dossier.community_name)
+    market_area = await resolve_market_area(plot.community_name)
     params = {"market_area": market_area}
     sql = """
     WITH land AS (
@@ -465,7 +814,7 @@ async def rank_plot_comparables(
             dominant_type_by_project[int(row["project_id"])] = row.get("dominant_unit_type") or ""
 
     scored: list[ComparableProject] = []
-    target_area = dossier.plot_area_sqm
+    target_area = plot.plot_area_sqm
     for row in project_rows:
         project_id = int(row["project_id"])
         total_land_area = (
@@ -530,381 +879,10 @@ async def rank_plot_comparables(
     return scored[:limit]
 
 
-def _pick_price(pricing: list[MarketPricingRow], unit_type: str, fallback: float) -> float:
-    for row in pricing:
-        if row.unit_type == unit_type:
-            return row.median_price_sqm
-    return fallback
-
-
-def _weighted_average(values: list[tuple[float, float]]) -> float | None:
-    total_weight = sum(weight for _, weight in values if weight > 0)
-    if total_weight <= 0:
-        return None
-    return sum(value * weight for value, weight in values if weight > 0) / total_weight
-
-
-def _evidence_defaults_for_usage(usage: Usage) -> list[tuple[str, float, float]]:
-    if usage == "commercial":
-        return [("office", 0.65, 120), ("retail", 0.25, 95), ("hospitality", 0.10, 80)]
-    return [
-        ("studio", 0.18, 44),
-        ("1br", 0.34, 76),
-        ("2br", 0.30, 122),
-        ("3br", 0.18, 178),
-    ]
-
-
-def _build_product_options(
-    dossier: GISPlotDossier,
-    usage: Usage,
-    weighted_prices: dict[str, float],
-    adjusted_shares: dict[str, float],
-    pipeline_pressure: dict[str, float],
-) -> list[HBUProductOption]:
-    dominant_type = max(adjusted_shares, key=adjusted_shares.get) if adjusted_shares else None
-    blended_price = (
-        _weighted_average(
-            [
-                (price, adjusted_shares.get(unit_type, 0))
-                for unit_type, price in weighted_prices.items()
-            ]
-        )
-        or 0
-    )
-    high_pipeline_types = [
-        unit_type for unit_type, pressure in pipeline_pressure.items() if pressure > 0.35
-    ]
-
-    if usage == "commercial":
-        primary = "Office-led commercial"
-        positioning = "Office floors with selective retail support"
-        rationale = [
-            "Weighted comparable evidence points to a commercial-led product stack.",
-            f"Blended commercial pricing is about {round(blended_price):,} AED/sqm."
-            if blended_price > 0
-            else "Commercial pricing evidence is limited.",
-        ]
-        if high_pipeline_types:
-            rationale.append(
-                f"Pipeline pressure is highest in {', '.join(high_pipeline_types[:2])}, so keep the scheme selective."
-            )
-        secondary = HBUProductOption(
-            name="Mixed commercial stack",
-            positioning="Balanced office and retail mix with tighter floorplate control",
-            fit_score=76,
-            rationale=[
-                "Useful if frontage, parking, and access conditions support a broader commercial program."
-            ],
-        )
-        return [
-            HBUProductOption(
-                name=primary, positioning=positioning, fit_score=89, rationale=rationale
-            ),
-            secondary,
-        ]
-
-    if blended_price >= 22000:
-        name = "Luxury residential"
-        positioning = "Larger 1BR/2BR/3BR product with limited studio exposure"
-    elif blended_price >= 17000:
-        name = "Upper-mid residential"
-        positioning = "Balanced end-user residential with family-weighted mix"
-    else:
-        name = "Mid-market residential"
-        positioning = "Broad apartment mix optimized for liquidity"
-
-    rationale = [
-        f"Weighted pricing evidence centers around {round(blended_price):,} AED/sqm."
-        if blended_price > 0
-        else "Pricing evidence is thin, so confidence is lower.",
-        f"Dominant evidence-backed unit type is {dominant_type}."
-        if dominant_type
-        else "Comparable evidence did not produce a dominant unit type.",
-    ]
-    if high_pipeline_types:
-        rationale.append(
-            f"Pipeline pressure is elevated in {', '.join(high_pipeline_types[:2])}, so those types were de-emphasized."
-        )
-    if dossier.far and dossier.far <= 1.5:
-        rationale.append(
-            "Lower plotted density supports a lower-density or family-led residential outcome."
-        )
-
-    return [
-        HBUProductOption(
-            name=name,
-            positioning=positioning,
-            fit_score=91 if blended_price >= 22000 else 86,
-            rationale=rationale,
-        ),
-        HBUProductOption(
-            name="Defensive alternative",
-            positioning="Slightly more family-weighted mix with less exposure to saturated unit types",
-            fit_score=78,
-            rationale=[
-                "Provides a safer fallback if current pipeline launches crowd the primary mix."
-            ],
-        ),
-    ]
-
-
-def _build_constraints_and_summary(
-    dossier: GISPlotDossier,
-    usage: Usage,
-    pricing_evidence: list[ComparableProject],
-    competition_evidence: list[ComparableProject],
-    weighted_prices: dict[str, float],
-) -> tuple[list[str], list[str]]:
-    constraints = [
-        f"Plot area {round(dossier.plot_area_sqm):,} sqm.",
-        f"Maximum GFA {round(dossier.max_gfa_sqm):,} sqm."
-        if dossier.max_gfa_sqm > 0
-        else "Maximum GFA missing from GIS.",
-        f"Maximum height: {dossier.max_height or 'Unknown'}.",
-    ]
-    if dossier.max_coverage:
-        constraints.append(f"Maximum coverage: {dossier.max_coverage}.")
-    if dossier.site_plan_expiry_date:
-        constraints.append(f"Site plan expiry date: {dossier.site_plan_expiry_date}.")
-
-    summary = [
-        f"HBU uses {len(pricing_evidence)} pricing comparables and {len(competition_evidence)} pipeline comparables.",
-        f"Segmented pricing is treated as {usage} only; commercial and residential evidence are not blended.",
-    ]
-    if weighted_prices:
-        strongest = max(weighted_prices, key=weighted_prices.get)
-        summary.append(f"Highest evidence-backed rate is currently in {strongest}.")
-    if dossier.warnings:
-        summary.append(
-            "GIS notes and warnings still need manual review before treating this as investment-grade underwriting."
-        )
-    return constraints, summary
-
-
-def _derive_assumptions_patch(
-    dossier: GISPlotDossier, usage: Usage
-) -> dict[str, float | bool | str]:
-    loss_factor = 18.0 if usage == "commercial" else 15.0
-    build_efficiency = 78.0 if usage == "commercial" else 82.0
-    return {
-        "siteAreaSqm": round(dossier.plot_area_sqm, 2),
-        "plotRatioFAR": round(dossier.far or 0, 2),
-        "lossFactorGFAtoNSA": loss_factor,
-        "buaEfficiencyPct": build_efficiency,
-        "hasAncillaryRetail": usage in {"commercial", "mixed_use"},
-    }
-
-
-def _build_evidence_weighted_mix(
-    dossier: GISPlotDossier,
-    usage: Usage,
-    market_pricing: list[MarketPricingRow],
-    pricing_evidence: list[ComparableProject],
-    competition_evidence: list[ComparableProject],
-    pricing_unit_mix_by_project: dict[int, list[dict[str, Any]]],
-    pipeline_unit_mix_by_project: dict[int, list[dict[str, Any]]],
-) -> tuple[
-    list[HBUProductOption],
-    list[HBUUnitRecommendation],
-    dict[str, float],
-    dict[str, float | bool | str],
-    list[str],
-    list[str],
-]:
-    base_mix: dict[str, float] = {}
-    size_evidence: dict[str, list[tuple[float, float]]] = {}
-    pipeline_mix: dict[str, float] = {}
-
-    total_pricing_weight = 0.0
-    for comp in pricing_evidence:
-        weight = max(comp.score, 1) / 100
-        rows = pricing_unit_mix_by_project.get(comp.project_id, [])
-        row_total = sum(float(row["cnt"]) for row in rows)
-        if row_total <= 0:
-            continue
-        total_pricing_weight += weight
-        for row in rows:
-            unit_type = str(row["unit_type"])
-            share = float(row["cnt"]) / row_total
-            base_mix[unit_type] = base_mix.get(unit_type, 0) + share * weight
-            size_evidence.setdefault(unit_type, []).append(
-                (float(row["avg_area_sqm"]), share * weight)
-            )
-
-    total_pipeline_weight = 0.0
-    for comp in competition_evidence:
-        weight = max(comp.score, 1) / 100
-        rows = pipeline_unit_mix_by_project.get(comp.project_id, [])
-        row_total = sum(float(row["cnt"]) for row in rows)
-        if row_total <= 0:
-            continue
-        total_pipeline_weight += weight
-        for row in rows:
-            unit_type = str(row["unit_type"])
-            share = float(row["cnt"]) / row_total
-            pipeline_mix[unit_type] = pipeline_mix.get(unit_type, 0) + share * weight
-
-    if total_pricing_weight > 0:
-        base_mix = {
-            unit_type: value / total_pricing_weight for unit_type, value in base_mix.items()
-        }
-    if total_pipeline_weight > 0:
-        pipeline_mix = {
-            unit_type: value / total_pipeline_weight for unit_type, value in pipeline_mix.items()
-        }
-
-    if not base_mix:
-        base_mix = {unit_type: share for unit_type, share, _ in _evidence_defaults_for_usage(usage)}
-        for unit_type, _, avg_size in _evidence_defaults_for_usage(usage):
-            size_evidence.setdefault(unit_type, []).append((avg_size, 1))
-
-    adjusted_mix: dict[str, float] = {}
-    for unit_type, share in base_mix.items():
-        pressure = pipeline_mix.get(unit_type, 0)
-        adjusted_mix[unit_type] = share * max(0.6, 1 - pressure * 0.45)
-
-    if usage == "residential" and dossier.far and dossier.far <= 1.5:
-        adjusted_mix["3br"] = adjusted_mix.get("3br", 0) * 1.15
-        adjusted_mix["4br+"] = adjusted_mix.get("4br+", 0.04) * 1.35
-        adjusted_mix["studio"] = adjusted_mix.get("studio", 0) * 0.6
-    if usage == "commercial":
-        adjusted_mix["office"] = adjusted_mix.get("office", 0.4) * 1.1
-        adjusted_mix["retail"] = adjusted_mix.get("retail", 0.2) * 0.95
-
-    mix_total = sum(adjusted_mix.values()) or 1.0
-    adjusted_shares = {
-        unit_type: value / mix_total for unit_type, value in adjusted_mix.items() if value > 0
-    }
-
-    weighted_prices: dict[str, float] = {}
-    weighted_sizes: dict[str, float] = {}
-    blended_price = _weighted_average(
-        [(row.median_price_sqm, row.transaction_count) for row in market_pricing]
-    ) or (11000 if usage == "commercial" else 15000)
-    for unit_type, share in sorted(adjusted_shares.items(), key=lambda item: item[1], reverse=True):
-        price = _pick_price(market_pricing, unit_type, blended_price)
-        size = _weighted_average(size_evidence.get(unit_type, []))
-        if size is None:
-            default_size = next(
-                (
-                    avg_size
-                    for t, _, avg_size in _evidence_defaults_for_usage(usage)
-                    if t == unit_type
-                ),
-                80,
-            )
-            size = default_size
-        weighted_prices[unit_type] = round(price, 0)
-        weighted_sizes[unit_type] = round(size, 1)
-
-    sellable_area = (
-        dossier.max_gfa_sqm
-        * (1 - (_derive_assumptions_patch(dossier, usage)["lossFactorGFAtoNSA"] / 100))
-        if dossier.max_gfa_sqm > 0
-        else dossier.plot_area_sqm * 1.2
-    )
-    recommended_mix: list[HBUUnitRecommendation] = []
-    for unit_type, share in sorted(adjusted_shares.items(), key=lambda item: item[1], reverse=True):
-        avg_size_sqm = weighted_sizes[unit_type]
-        target_nsa = sellable_area * share
-        suggested_units = max(1, round(target_nsa / max(avg_size_sqm, 1)))
-        recommended_mix.append(
-            HBUUnitRecommendation(
-                unit_type=unit_type,
-                share_pct=round(share * 100, 1),
-                avg_size_sqm=avg_size_sqm,
-                price_sqm=weighted_prices[unit_type],
-                suggested_units=suggested_units,
-            )
-        )
-
-    product_options = _build_product_options(
-        dossier, usage, weighted_prices, adjusted_shares, pipeline_mix
-    )
-    assumptions_patch = _derive_assumptions_patch(dossier, usage)
-    constraints, summary = _build_constraints_and_summary(
-        dossier, usage, pricing_evidence, competition_evidence, weighted_prices
-    )
-    return (
-        product_options,
-        recommended_mix,
-        weighted_prices,
-        assumptions_patch,
-        constraints,
-        summary,
-    )
-
-
-async def generate_hbu_study(
-    plot_number: str, usage_override: Usage | None = None
-) -> HBUStudy | None:
-    dossier = await get_gis_plot_dossier(plot_number)
-    if dossier is None:
-        return None
-
-    usage = usage_override or dossier.inferred_usage
-    market_area = await resolve_market_area(dossier.community_name)
-    market_pricing = await get_market_pricing(market_area, usage, stage="existing")
-    pricing_evidence = await rank_plot_comparables(dossier, usage, "pricing")
-    competition_evidence = await rank_plot_comparables(dossier, usage, "pipeline")
-    pricing_unit_mix_by_project = await _project_unit_mix(
-        [comp.project_id for comp in pricing_evidence]
-    )
-    pipeline_unit_mix_by_project = await _project_unit_mix(
-        [comp.project_id for comp in competition_evidence]
-    )
-
-    (
-        product_options,
-        recommended_mix,
-        price_per_sqm_by_type,
-        assumptions_patch,
-        constraints,
-        summary,
-    ) = _build_evidence_weighted_mix(
-        dossier,
-        usage,
-        market_pricing,
-        pricing_evidence,
-        competition_evidence,
-        pricing_unit_mix_by_project,
-        pipeline_unit_mix_by_project,
-    )
-
-    headline = (
-        f"Initial HBU: {product_options[0].positioning} on plot {dossier.plot_number}"
-        if product_options
-        else f"Initial HBU study for plot {dossier.plot_number}"
-    )
-    warnings = list(dossier.warnings)
-    if not market_pricing:
-        warnings.append("No segmented transaction pricing was found for the resolved market area.")
-
-    return HBUStudy(
-        plot_number=dossier.plot_number,
-        usage=usage,
-        market_area=market_area,
-        headline=headline,
-        summary=summary,
-        constraints=constraints,
-        pricing_evidence=pricing_evidence,
-        competition_evidence=competition_evidence,
-        market_pricing=market_pricing,
-        product_options=product_options,
-        recommended_mix=recommended_mix,
-        price_per_sqm_by_type=price_per_sqm_by_type,
-        assumptions_patch=assumptions_patch,
-        warnings=warnings,
-    )
-
-
-async def get_land_plots(
-    area: str, size_sqm: float, tolerance: float = 0.25
-) -> list[GISPlotSummary]:
+async def get_land_plots(area: str, size_sqm: float, tolerance: float = 0.25) -> list[Plot]:
     min_plot_area_sqm = size_sqm * (1 - tolerance)
     max_plot_area_sqm = size_sqm * (1 + tolerance)
-    return await search_gis_plots(
+    return await search_plots(
         community=area,
         min_plot_area_sqm=min_plot_area_sqm,
         max_plot_area_sqm=max_plot_area_sqm,
@@ -912,8 +890,8 @@ async def get_land_plots(
     )
 
 
-async def search_land_plots(area: str, q: str, limit: int = 30) -> list[GISPlotSummary]:
-    return await search_gis_plots(q=q, community=area, limit=limit)
+async def search_land_plots(area: str, q: str, limit: int = 30) -> list[Plot]:
+    return await search_plots(q=q, community=area, limit=limit)
 
 
 async def get_comparable_data(project_ids: list[int]) -> ComparableData | None:
