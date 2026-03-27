@@ -1,17 +1,13 @@
 <script lang="ts">
 import { createQuery } from '@tanstack/svelte-query'
-import { feasibility } from '$lib/api/feasibility'
 import type { Plot } from '$lib/api/generated/hey-api/types.gen'
-import { feasibilityStudy } from '$lib/stores/feasibilityStudy.svelte'
+import { feasibilityQueries } from '$lib/queries/feasibility'
+import { workbookStore } from '$lib/stores/workbookStore.svelte'
 
 type UsageFilter = 'all' | 'residential' | 'commercial' | 'mixed'
 type SortKey = 'verified' | 'largest' | 'highest_gfa'
 
-const communitiesQuery = createQuery(() => ({
-	queryKey: ['feasibility-communities'],
-	queryFn: () => feasibility.getCommunities(),
-	staleTime: Infinity
-}))
+const communitiesQuery = createQuery(() => feasibilityQueries.communities())
 
 let communitySearch = $state('')
 let selectedCommunity = $state('')
@@ -19,12 +15,12 @@ let plotSearch = $state('')
 let usageFilter = $state<UsageFilter>('all')
 let verifiedOnly = $state(false)
 let minPlotArea = $state('')
-let loading = $state(false)
-let searchError = $state('')
-let plots = $state<Plot[]>([])
 let sortBy = $state<SortKey>('verified')
 
 const pageSize = 100
+const communityPlotsQuery = createQuery(() =>
+	feasibilityQueries.communityPlots(selectedCommunity || null, pageSize)
+)
 
 function inferUsage(plot: Plot): UsageFilter {
 	const haystack = `${plot.gfa_type} ${(plot.land_use_summary ?? []).join(' ')}`.toLowerCase()
@@ -47,6 +43,7 @@ const filteredCommunities = $derived(
 )
 
 const visiblePlots = $derived.by(() => {
+	const plots = communityPlotsQuery.data ?? []
 	const q = plotSearch.trim().toLowerCase()
 	const minAreaValue = Number(minPlotArea)
 	let rows = plots.filter((plot) => {
@@ -75,34 +72,12 @@ const visiblePlots = $derived.by(() => {
 	return rows
 })
 
-async function loadCommunityPlots(community: string) {
+function loadCommunityPlots(community: string) {
 	selectedCommunity = community
-	loading = true
-	searchError = ''
-	plots = []
-	try {
-		const allPlots: Plot[] = []
-		let offset = 0
-		while (true) {
-			const page = await feasibility.searchPlots({
-				community,
-				offset,
-				limit: pageSize
-			})
-			allPlots.push(...page)
-			if (page.length < pageSize) break
-			offset += page.length
-		}
-		plots = allPlots
-	} catch (error) {
-		searchError = error instanceof Error ? error.message : 'Failed to load plots.'
-	} finally {
-		loading = false
-	}
 }
 
 async function choosePlot(plot: Plot) {
-	await feasibilityStudy.selectPlot(plot)
+	await workbookStore.selectPlot(plot)
 }
 </script>
 
@@ -186,11 +161,15 @@ async function choosePlot(plot: Plot) {
 					Verified plots only
 				</label>
 			</div>
-			{#if searchError}
-				<p class="px-5 py-3 text-sm text-rose-600">{searchError}</p>
+			{#if communityPlotsQuery.error}
+				<p class="px-5 py-3 text-sm text-rose-600">
+					{communityPlotsQuery.error instanceof Error
+						? communityPlotsQuery.error.message
+						: 'Failed to load plots.'}
+				</p>
 			{/if}
 			<div class="min-h-0 flex-1 overflow-auto">
-				{#if loading}
+				{#if communityPlotsQuery.isPending}
 					<p class="px-5 py-8 text-sm text-slate-500">Loading plots…</p>
 				{:else if visiblePlots.length === 0}
 					<p class="px-5 py-8 text-sm text-slate-500">
@@ -232,52 +211,43 @@ async function choosePlot(plot: Plot) {
 
 		<div class="min-h-0 overflow-auto rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
 			<p class="text-sm font-semibold text-slate-900">Selected raw plot data</p>
-			{#if feasibilityStudy.plotData}
+			{#if workbookStore.plotData}
 				<div class="mt-4 grid gap-3 text-sm text-slate-600">
 					<div>
 						<p class="text-xs uppercase tracking-[0.18em] text-slate-400">Project</p>
-						<p class="mt-1 font-medium text-slate-900">{feasibilityStudy.plotData.project_name}</p>
+						<p class="mt-1 font-medium text-slate-900">{workbookStore.plotData.project_name}</p>
 					</div>
 					<div class="grid grid-cols-2 gap-3">
 						<div>
 							<p class="text-xs uppercase tracking-[0.18em] text-slate-400">Community</p>
-							<p class="mt-1">{feasibilityStudy.plotData.community_name}</p>
+							<p class="mt-1">{workbookStore.plotData.community_name}</p>
 						</div>
 						<div>
 							<p class="text-xs uppercase tracking-[0.18em] text-slate-400">Usage</p>
-							<p class="mt-1">{feasibilityStudy.plotData.inferred_usage.replaceAll('_', ' ')}</p>
+							<p class="mt-1">{workbookStore.plotData.inferred_usage.replaceAll('_', ' ')}</p>
 						</div>
 						<div>
 							<p class="text-xs uppercase tracking-[0.18em] text-slate-400">Plot Area</p>
-							<p class="mt-1">{feasibilityStudy.plotData.plot_area_sqm.toLocaleString('en-AE', { maximumFractionDigits: 0 })} sqm</p>
+							<p class="mt-1">{workbookStore.plotData.plot_area_sqm.toLocaleString('en-AE', { maximumFractionDigits: 0 })} sqm</p>
 						</div>
 						<div>
 							<p class="text-xs uppercase tracking-[0.18em] text-slate-400">Max GFA</p>
-							<p class="mt-1">{feasibilityStudy.plotData.max_gfa_sqm.toLocaleString('en-AE', { maximumFractionDigits: 0 })} sqm</p>
+							<p class="mt-1">{workbookStore.plotData.max_gfa_sqm.toLocaleString('en-AE', { maximumFractionDigits: 0 })} sqm</p>
 						</div>
 					</div>
 					<button
 						type="button"
 						class="mt-2 h-11 rounded-2xl bg-teal-600 px-4 text-sm font-medium text-white transition hover:bg-teal-700"
-						onclick={() => void feasibilityStudy.generateStudy()}
+						onclick={() => void workbookStore.generateStudy()}
 					>
 						Generate Study
 					</button>
-					{#if import.meta.env.DEV}
-						<button
-							type="button"
-							class="h-11 rounded-2xl border border-dashed border-slate-300 px-4 text-sm font-medium text-slate-600 transition hover:border-sky-400 hover:text-sky-700"
-							onclick={() => feasibilityStudy.openEmptyWorkbookForDev()}
-						>
-							Open Empty Workbook
-						</button>
-					{/if}
 				</div>
 			{:else}
 				<p class="mt-4 text-sm text-slate-500">Choose a plot to inspect the raw GIS-backed facts before generation.</p>
 			{/if}
-			{#if feasibilityStudy.error}
-				<p class="mt-3 text-sm text-rose-600">{feasibilityStudy.error}</p>
+			{#if workbookStore.error}
+				<p class="mt-3 text-sm text-rose-600">{workbookStore.error}</p>
 			{/if}
 		</div>
 	</div>

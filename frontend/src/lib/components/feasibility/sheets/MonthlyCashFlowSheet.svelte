@@ -1,8 +1,9 @@
 <script lang="ts">
 import type { CashFlowPeriod } from '$lib/feasibility/workbook/engine'
-import { workbookStore } from '$lib/feasibility/workbook/store.svelte'
+import { workbookStore } from '$lib/stores/workbookStore.svelte'
 
-const periods = $derived(workbookStore.workbook?.cashFlow?.periods ?? ([] as CashFlowPeriod[]))
+const outputs = $derived(workbookStore.outputs)
+const periods = $derived(outputs?.cashFlow?.periods ?? ([] as CashFlowPeriod[]))
 
 type NumericPeriodField =
 	| 'revenueInflowsAed'
@@ -45,7 +46,7 @@ function fmt(v: number): string {
 
 function fmtOut(v: number): string {
 	if (v === 0) return '—'
-	return '(' + Math.round(v).toLocaleString('en-AE') + ')'
+	return `(${Math.round(v).toLocaleString('en-AE')})`
 }
 
 function periodValue(period: CashFlowPeriod, field: NumericPeriodField): number {

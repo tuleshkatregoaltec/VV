@@ -1,5 +1,5 @@
 <script lang="ts">
-import { workbookStore } from '$lib/feasibility/workbook/store.svelte'
+import { workbookStore } from '$lib/stores/workbookStore.svelte'
 
 function fmt(value: number, digits = 0) {
 	return value.toLocaleString('en-AE', {
@@ -8,11 +8,12 @@ function fmt(value: number, digits = 0) {
 	})
 }
 
-const workbook = $derived(workbookStore.workbook ?? null)
-const draftFinancing = $derived(workbook?.financing ?? null)
-const sourcesUses = $derived(workbook?.sourcesUses ?? null)
+const outputs = $derived(workbookStore.outputs)
+const assumptions = $derived(workbookStore.assumptions)
+const draftFinancing = $derived(outputs?.financing ?? null)
+const sourcesUses = $derived(outputs?.sourcesUses ?? null)
 const validation = $derived(workbookStore.validation ?? null)
-const cashFlowPeriods = $derived(workbook?.cashFlow?.periods ?? [])
+const cashFlowPeriods = $derived(outputs?.cashFlow?.periods ?? [])
 
 function issuePresent(code: string) {
 	return (validation?.issues ?? []).some((issue) => issue.code === code)
@@ -289,7 +290,7 @@ const lenderTests = $derived([
 				<th colspan="3" class="px-2 py-[4px] text-right text-[9px] font-semibold text-slate-600 uppercase tracking-wider">Value</th>
 			</tr>
 			{#each [
-				{ label: 'Repayment mode', value: workbookStore.inputs.debtRepaymentMode ?? 'bullet_at_handover' },
+				{ label: 'Repayment mode', value: assumptions.debtRepaymentMode ?? 'bullet_at_handover' },
 				{ label: 'First repayment period', value: firstSweepPeriod ? `${firstSweepPeriod.periodLabel} (AED ${fmt(firstSweepPeriod.debtRepaymentAed)})` : 'No repayment in current draft' },
 				{ label: 'Total finance costs', value: 'AED ' + fmt(draftFinancing.totalFinanceCostsAed) },
 				{ label: 'Equity in / out', value: `AED ${fmt(draftFinancing.equityContributedAed)} / ${fmt(draftFinancing.equityDistributedAed)}` },

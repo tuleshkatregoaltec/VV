@@ -1,23 +1,15 @@
 <script lang="ts">
-import { workbookStore } from '$lib/feasibility/workbook/store.svelte'
+import { formatFeasibilityNumber } from '$lib/feasibility/format'
+import { buildChecksModel } from '$lib/feasibility/view-models'
+import { workbookStore } from '$lib/stores/workbookStore.svelte'
 
 function fmt(value: number | null | undefined, digits = 0) {
-	if (value === null || value === undefined || !Number.isFinite(value)) return '0'
-	return value.toLocaleString('en-AE', {
-		minimumFractionDigits: digits,
-		maximumFractionDigits: digits
-	})
+	return formatFeasibilityNumber(value ?? 0, digits)
 }
 
 const outputs = $derived(workbookStore.outputs)
 const validation = $derived(workbookStore.validation)
-const hardFailures = $derived(validation?.hardFailures ?? 0)
-const warnings = $derived(validation?.warnings ?? 0)
-const missingEvidence = $derived(validation?.missingEvidence ?? 0)
-
-function hasIssue(code: string) {
-	return (validation?.issues ?? []).some((issue) => issue.code === code)
-}
+const validationSummary = $derived(workbookStore.validationSummary)
 
 type CheckStatus = 'within_range' | 'warning' | 'outlier' | 'missing'
 
@@ -28,52 +20,14 @@ function pill(status: CheckStatus) {
 	return 'bg-emerald-100 text-emerald-700'
 }
 
-const modelChecks = $derived([
-	{
-		label: 'Sources vs uses',
-		value: outputs ? `Gap AED ${fmt(outputs.funding.gapAed)}` : 'N/A',
-		status: !outputs ? 'missing' : hasIssue('funding_gap') ? 'warning' : 'within_range',
-		note: 'Model should reconcile tightly before sign-off across funding and uses summaries'
-	},
-	{
-		label: 'Total costs',
-		value: outputs ? `AED ${fmt(outputs.costs.totalCostsInclVatAed)}` : 'N/A',
-		status: !outputs ? 'missing' : 'within_range',
-		note: 'Total project costs including VAT'
-	},
-	{
-		label: 'Gross margin',
-		value: outputs ? `${fmt(outputs.returns.grossMarginPct, 1)}%` : 'N/A',
-		status: !outputs
-			? 'missing'
-			: outputs.returns.grossMarginPct < 0
-				? 'outlier'
-				: outputs.returns.grossMarginPct < 10
-					? 'warning'
-					: 'within_range',
-		note: 'Gross margin should be positive and reasonable'
-	},
-	{
-		label: 'Project IRR',
-		value:
-			outputs?.returns?.projectIrrPct != null ? `${fmt(outputs.returns.projectIrrPct, 1)}%` : 'N/A',
-		status:
-			outputs?.returns?.projectIrrPct == null
-				? 'missing'
-				: outputs.returns.projectIrrPct < 0
-					? 'outlier'
-					: outputs.returns.projectIrrPct > 30
-						? 'warning'
-						: 'within_range',
-		note: 'Check for implausible or broken timed cash flows'
-	},
-	{
-		label: 'Unit count',
-		value: outputs ? `${fmt(outputs.program.totalUnits)} units` : 'N/A',
-		status: !outputs ? 'missing' : outputs.program.totalUnits === 0 ? 'warning' : 'within_range',
-		note: 'At least one unit type should be configured'
-	}
-] satisfies Array<{ label: string; value: string; status: CheckStatus; note: string }>)
+const modelChecks = $derived(
+	buildChecksModel(outputs, validation, (value, digits = 0) => fmt(value, digits)) satisfies Array<{
+		label: string
+		value: string
+		status: CheckStatus
+		note: string
+	}>
+)
 </script>
 
 {#if !outputs || !validation}
@@ -91,15 +45,15 @@ Generate an HBU study to build the draft checks view.
 </div>
 <div class="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3">
 <p class="text-[11px] uppercase tracking-[0.12em] text-rose-500">Hard fails</p>
-<p class="text-base font-semibold text-rose-700 mt-1">{fmt(hardFailures)}</p>
+<p class="text-base font-semibold text-rose-700 mt-1">{fmt(validationSummary?.hardFailures ?? 0)}</p>
 </div>
 <div class="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
 <p class="text-[11px] uppercase tracking-[0.12em] text-amber-500">Warnings</p>
-<p class="text-base font-semibold text-amber-700 mt-1">{fmt(warnings)}</p>
+<p class="text-base font-semibold text-amber-700 mt-1">{fmt(validationSummary?.warnings ?? 0)}</p>
 </div>
 <div class="rounded-xl border border-slate-200 px-4 py-3">
 <p class="text-[11px] uppercase tracking-[0.12em] text-slate-400">Missing evidence</p>
-<p class="text-base font-semibold text-slate-900 mt-1">{fmt(missingEvidence)}</p>
+<p class="text-base font-semibold text-slate-900 mt-1">{fmt(validationSummary?.missingEvidence ?? 0)}</p>
 </div>
 </div>
 

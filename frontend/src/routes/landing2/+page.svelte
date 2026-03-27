@@ -48,8 +48,8 @@ function animateCount(el: HTMLElement) {
 		const p = Math.min(1, (now - start) / duration)
 		const eased = 1 - (1 - p) ** 3
 		const v = Math.round(eased * target)
-		if (target >= 1_000_000) el.textContent = Math.round(v / 1_000_000) + 'M+'
-		else if (target >= 1_000) el.textContent = (v / 1_000).toFixed(0) + ',000+'
+		if (target >= 1_000_000) el.textContent = `${Math.round(v / 1_000_000)}M+`
+		else if (target >= 1_000) el.textContent = `${(v / 1_000).toFixed(0)},000+`
 		else el.textContent = String(v)
 		if (p < 1) requestAnimationFrame(tick)
 		else el.textContent = final

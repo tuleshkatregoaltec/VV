@@ -1,6 +1,6 @@
 <script lang="ts">
 import { onMount } from 'svelte'
-import { type FeasibilitySheetTab, workbookStore } from '$lib/feasibility/workbook/store.svelte'
+import { type FeasibilitySheetTab, workbookStore } from '$lib/stores/workbookStore.svelte'
 import BlankSheet from './sheets/BlankSheet.svelte'
 import BudgetSheet from './sheets/BudgetSheet.svelte'
 import CashFlowSheet from './sheets/CashFlowSheet.svelte'

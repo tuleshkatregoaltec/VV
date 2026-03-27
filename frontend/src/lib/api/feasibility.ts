@@ -31,6 +31,22 @@ export const feasibility = {
 		)
 	},
 
+	async searchAllCommunityPlots(community: string, pageSize = 100): Promise<Plot[]> {
+		const allPlots: Plot[] = []
+		let offset = 0
+		while (true) {
+			const page = await this.searchPlots({
+				community,
+				offset,
+				limit: pageSize
+			})
+			allPlots.push(...page)
+			if (page.length < pageSize) break
+			offset += page.length
+		}
+		return allPlots
+	},
+
 	getPlotData(plotNumber: string): Promise<PlotDataResponse> {
 		return client.get(`/api/v1/feasibility/plots/${encodeURIComponent(plotNumber)}`)
 	},

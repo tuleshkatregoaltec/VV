@@ -1,5 +1,6 @@
 <script lang="ts">
-import { workbookStore } from '$lib/feasibility/workbook/store.svelte'
+import { buildAnnualCashFlowRows, sumAnnualCashFlowRows } from '$lib/feasibility/view-models'
+import { workbookStore } from '$lib/stores/workbookStore.svelte'
 
 function fmt(value: number, digits = 0): string {
 	return value.toLocaleString('en-AE', {
@@ -10,55 +11,17 @@ function fmt(value: number, digits = 0): string {
 
 function fmtPct(value: number | null | undefined): string {
 	if (value == null) return '—'
-	return value.toFixed(1) + '%'
+	return `${value.toFixed(1)}%`
 }
 
 function fmtMoic(value: number | null | undefined): string {
 	if (value == null) return '—'
-	return value.toFixed(2) + 'x'
+	return `${value.toFixed(2)}x`
 }
 
-type AnnualRow = {
-	year: number
-	revenueInflowsAed: number
-	depositInflowsAed: number
-	preHandoverInflowsAed: number
-	handoverInflowsAed: number
-	operatingOutflowsAed: number
-	costLandAed: number
-	costConstructionAed: number
-	costProfessionalFeesAed: number
-	costMarketingAed: number
-	costSalesAgentAed: number
-	costInfrastructureAed: number
-	costAuthorityFeesAed: number
-	costCommunityFeesAed: number
-	costContingencyAed: number
-	costVatAed: number
-	unleveredNetCashFlowAed: number
-	debtDrawAed: number
-	debtRepaymentAed: number
-	interestPaidAed: number
-	commitmentFeePaidAed: number
-	equityContributionAed: number
-	equityDistributionAed: number
-	leveredNetCashFlowAed: number
-	// per-period draw breakdown
-	landDrawAed: number
-	constructionDrawAed: number
-	// sales proceeds that funded costs (shows presales coverage of construction)
-	costPaidFromEscrowAed: number
-	// VAT refund inflow (non-zero in handover year)
-	vatRefundInflowsAed: number
-	// year-end closing balances (last period of that year)
-	debtBalanceAed: number
-	landLoanBalanceAed: number
-	constructionLoanBalanceAed: number
-	escrowBalanceAed: number
-}
-
-const draftCashFlow = $derived(workbookStore.workbook?.cashFlow ?? null)
-const returns = $derived(workbookStore.workbook?.returns ?? null)
+const outputs = $derived(workbookStore.outputs)
+const draftCashFlow = $derived(outputs?.cashFlow ?? null)
+const returns = $derived(outputs?.returns ?? null)
 
 const hasBreakdown = $derived(
 	(draftCashFlow?.periods ?? []).some(
@@ -72,128 +35,8 @@ const hasTranche = $derived(
 	)
 )
 
-const annualRows: AnnualRow[] = $derived(
-	(() => {
-		if (!draftCashFlow) return []
-		const byYear = new Map<number, AnnualRow>()
-		for (const p of draftCashFlow.periods) {
-			const year = parseInt(p.periodEndDate.slice(0, 4), 10)
-			if (!byYear.has(year)) {
-				byYear.set(year, {
-					year,
-					revenueInflowsAed: 0,
-					depositInflowsAed: 0,
-					preHandoverInflowsAed: 0,
-					handoverInflowsAed: 0,
-					operatingOutflowsAed: 0,
-					costLandAed: 0,
-					costConstructionAed: 0,
-					costProfessionalFeesAed: 0,
-					costMarketingAed: 0,
-					costSalesAgentAed: 0,
-					costInfrastructureAed: 0,
-					costAuthorityFeesAed: 0,
-					costCommunityFeesAed: 0,
-					costContingencyAed: 0,
-					costVatAed: 0,
-					unleveredNetCashFlowAed: 0,
-					debtDrawAed: 0,
-					debtRepaymentAed: 0,
-					interestPaidAed: 0,
-					commitmentFeePaidAed: 0,
-					equityContributionAed: 0,
-					equityDistributionAed: 0,
-					leveredNetCashFlowAed: 0,
-					landDrawAed: 0,
-					constructionDrawAed: 0,
-					costPaidFromEscrowAed: 0,
-					vatRefundInflowsAed: 0,
-					// balances overwritten each period (year-end closing = last period's value)
-					debtBalanceAed: 0,
-					landLoanBalanceAed: 0,
-					constructionLoanBalanceAed: 0,
-					escrowBalanceAed: 0
-				})
-			}
-			const row = byYear.get(year)!
-			// flow rows: sum
-			row.revenueInflowsAed += p.revenueInflowsAed
-			row.depositInflowsAed += p.depositInflowsAed
-			row.preHandoverInflowsAed += p.preHandoverInflowsAed
-			row.handoverInflowsAed += p.handoverInflowsAed
-			row.operatingOutflowsAed += p.operatingOutflowsAed
-			row.costLandAed += p.costLandAed
-			row.costConstructionAed += p.costConstructionAed
-			row.costProfessionalFeesAed += p.costProfessionalFeesAed
-			row.costMarketingAed += p.costMarketingAed
-			row.costSalesAgentAed += p.costSalesAgentAed
-			row.costInfrastructureAed += p.costInfrastructureAed
-			row.costAuthorityFeesAed += p.costAuthorityFeesAed
-			row.costCommunityFeesAed += p.costCommunityFeesAed
-			row.costContingencyAed += p.costContingencyAed
-			row.costVatAed += p.costVatAed
-			row.landDrawAed += p.landDrawAed
-			row.constructionDrawAed += p.constructionDrawAed
-			row.costPaidFromEscrowAed += p.costPaidFromEscrowAed ?? 0
-			row.vatRefundInflowsAed += p.vatRefundInflowsAed ?? 0
-			row.unleveredNetCashFlowAed += p.unleveredNetCashFlowAed
-			row.debtDrawAed += p.debtDrawAed
-			row.debtRepaymentAed += p.debtRepaymentAed
-			row.interestPaidAed += p.interestPaidAed
-			row.commitmentFeePaidAed += p.commitmentFeePaidAed
-			row.equityContributionAed += p.equityContributionAed
-			row.equityDistributionAed += p.equityDistributionAed
-			row.leveredNetCashFlowAed += p.leveredNetCashFlowAed
-			// balance rows: year-end closing = last period in year
-			row.debtBalanceAed = p.debtBalanceAed
-			row.landLoanBalanceAed = p.landLoanBalanceAed
-			row.constructionLoanBalanceAed = p.constructionLoanBalanceAed
-			row.escrowBalanceAed = p.escrowBalanceAed
-		}
-		return Array.from(byYear.values()).sort((a, b) => a.year - b.year)
-	})()
-)
-
-const totals: AnnualRow = $derived(
-	(() => {
-		const rows = annualRows
-		const last = rows.at(-1)
-		return {
-			year: 0,
-			revenueInflowsAed: rows.reduce((s, r) => s + r.revenueInflowsAed, 0),
-			depositInflowsAed: rows.reduce((s, r) => s + r.depositInflowsAed, 0),
-			preHandoverInflowsAed: rows.reduce((s, r) => s + r.preHandoverInflowsAed, 0),
-			handoverInflowsAed: rows.reduce((s, r) => s + r.handoverInflowsAed, 0),
-			operatingOutflowsAed: rows.reduce((s, r) => s + r.operatingOutflowsAed, 0),
-			costLandAed: rows.reduce((s, r) => s + r.costLandAed, 0),
-			costConstructionAed: rows.reduce((s, r) => s + r.costConstructionAed, 0),
-			costProfessionalFeesAed: rows.reduce((s, r) => s + r.costProfessionalFeesAed, 0),
-			costMarketingAed: rows.reduce((s, r) => s + r.costMarketingAed, 0),
-			costSalesAgentAed: rows.reduce((s, r) => s + r.costSalesAgentAed, 0),
-			costInfrastructureAed: rows.reduce((s, r) => s + r.costInfrastructureAed, 0),
-			costAuthorityFeesAed: rows.reduce((s, r) => s + r.costAuthorityFeesAed, 0),
-			costCommunityFeesAed: rows.reduce((s, r) => s + r.costCommunityFeesAed, 0),
-			costContingencyAed: rows.reduce((s, r) => s + r.costContingencyAed, 0),
-			costVatAed: rows.reduce((s, r) => s + r.costVatAed, 0),
-			landDrawAed: rows.reduce((s, r) => s + r.landDrawAed, 0),
-			constructionDrawAed: rows.reduce((s, r) => s + r.constructionDrawAed, 0),
-			costPaidFromEscrowAed: rows.reduce((s, r) => s + r.costPaidFromEscrowAed, 0),
-			vatRefundInflowsAed: rows.reduce((s, r) => s + r.vatRefundInflowsAed, 0),
-			unleveredNetCashFlowAed: rows.reduce((s, r) => s + r.unleveredNetCashFlowAed, 0),
-			debtDrawAed: rows.reduce((s, r) => s + r.debtDrawAed, 0),
-			debtRepaymentAed: rows.reduce((s, r) => s + r.debtRepaymentAed, 0),
-			interestPaidAed: rows.reduce((s, r) => s + r.interestPaidAed, 0),
-			commitmentFeePaidAed: rows.reduce((s, r) => s + r.commitmentFeePaidAed, 0),
-			equityContributionAed: rows.reduce((s, r) => s + r.equityContributionAed, 0),
-			equityDistributionAed: rows.reduce((s, r) => s + r.equityDistributionAed, 0),
-			leveredNetCashFlowAed: rows.reduce((s, r) => s + r.leveredNetCashFlowAed, 0),
-			debtBalanceAed: last?.debtBalanceAed ?? 0,
-			landLoanBalanceAed: last?.landLoanBalanceAed ?? 0,
-			constructionLoanBalanceAed: last?.constructionLoanBalanceAed ?? 0,
-			escrowBalanceAed: last?.escrowBalanceAed ?? 0
-		}
-	})()
-)
+const annualRows = $derived(draftCashFlow ? buildAnnualCashFlowRows(draftCashFlow.periods) : [])
+const totals = $derived(sumAnnualCashFlowRows(annualRows))
 
 // Style helpers
 const TH =

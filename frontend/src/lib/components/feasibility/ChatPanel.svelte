@@ -1,52 +1,25 @@
 <script lang="ts">
-import { feasibility } from '$lib/api/feasibility'
-import { workbookStore } from '$lib/feasibility/workbook/store.svelte'
 import { titleCase } from '$lib/feasibility/workbook/utils'
 import { feasibilityWorkspace } from '$lib/stores/feasibilityWorkspace.svelte'
+import { workbookStore } from '$lib/stores/workbookStore.svelte'
 
 let draft = $state('')
 
 async function sendMessage() {
-	if (!draft.trim() || !workbookStore.plotData || feasibilityWorkspace.streaming) return
+	if (
+		!draft.trim() ||
+		!workbookStore.plotData ||
+		!workbookStore.research ||
+		feasibilityWorkspace.streaming
+	)
+		return
 	const content = draft.trim()
 	draft = ''
-	feasibilityWorkspace.pushMessage({ role: 'user', content })
-	const assistantIndex = feasibilityWorkspace.startAssistantMessage()
-	feasibilityWorkspace.setStreaming(true)
-
-	await feasibility.streamChat(
-		[{ role: 'user', content }],
-		{
-			plot_data: workbookStore.plotData!,
-			assumptions: workbookStore.inputs,
-			research: workbookStore.research!
-		},
-		(chunk) => {
-			try {
-				const parsed = JSON.parse(chunk)
-				if (parsed.type === 'text') {
-					feasibilityWorkspace.appendAssistantChunk(assistantIndex, parsed.content)
-				} else if (parsed.type === 'pending_action') {
-					feasibilityWorkspace.setPendingProposal({
-						action: parsed.action,
-						payload: parsed.payload
-					})
-				} else if (parsed.type === 'show_research') {
-					feasibilityWorkspace.setResearchEvent({
-						tab: parsed.tab,
-						data: parsed.data
-					})
-				} else if (parsed.type === 'done') {
-					feasibilityWorkspace.setStreaming(false)
-				} else if (parsed.type === 'error') {
-					feasibilityWorkspace.appendAssistantChunk(assistantIndex, `\n${parsed.error}`)
-					feasibilityWorkspace.setStreaming(false)
-				}
-			} catch {
-				feasibilityWorkspace.appendAssistantChunk(assistantIndex, chunk)
-			}
-		}
-	)
+	await feasibilityWorkspace.sendMessage(content, {
+		plotData: workbookStore.plotData,
+		assumptions: workbookStore.assumptions,
+		research: workbookStore.research
+	})
 }
 
 function acceptProposal() {

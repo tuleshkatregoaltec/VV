@@ -1,5 +1,5 @@
 <script lang="ts">
-import { workbookStore } from '$lib/feasibility/workbook/store.svelte'
+import { workbookStore } from '$lib/stores/workbookStore.svelte'
 
 function fmt(value: number, digits = 0) {
 	return value.toLocaleString('en-AE', {

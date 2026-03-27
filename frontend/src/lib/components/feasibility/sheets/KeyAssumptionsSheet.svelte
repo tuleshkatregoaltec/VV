@@ -1,46 +1,31 @@
 <script lang="ts">
-import { workbookStore } from '$lib/feasibility/workbook/store.svelte'
+import { dateToQuarter, formatFeasibilityNumber } from '$lib/feasibility/format'
+import { workbookStore } from '$lib/stores/workbookStore.svelte'
 import { toSqft } from '$lib/utils/units'
 
 function fmt(value: number, digits = 0): string {
-	return value.toLocaleString('en-AE', {
-		minimumFractionDigits: digits,
-		maximumFractionDigits: digits
-	})
+	return formatFeasibilityNumber(value, digits)
 }
 
 function fmtAed(value: number): string {
 	return fmt(Math.round(value))
 }
 
-function dateToQuarter(isoDate: string): string {
-	if (!isoDate) return '—'
-	const d = new Date(isoDate)
-	if (isNaN(d.getTime())) return isoDate
-	const q = Math.ceil((d.getMonth() + 1) / 3)
-	return `Q${q} ${d.getFullYear()}`
-}
-
-function setNumber<K extends keyof typeof workbookStore.inputs>(key: K, raw: string) {
+function setNumber<K extends keyof typeof workbookStore.assumptions>(key: K, raw: string) {
 	const v = Number(raw)
-	workbookStore.updateInputs({ [key]: Number.isFinite(v) ? v : 0 })
-}
-
-function setAed<K extends keyof typeof workbookStore.inputs>(key: K, raw: string) {
-	const v = Number(raw)
-	workbookStore.updateInputs({ [key]: Number.isFinite(v) ? v : 0 })
+	workbookStore.updateAssumptions({ [key]: Number.isFinite(v) ? v : 0 })
 }
 
 const s = workbookStore
-const workbook = $derived(s.workbook ?? null)
 const research = $derived(workbookStore.research)
 const offPlanConfidence = $derived(research?.off_plan_pricing_confidence ?? null)
 const offPlanBenchmarks = $derived(research?.off_plan_unit_benchmarks ?? [])
 const validation = $derived(s.validation)
+const validationSummary = $derived(s.validationSummary)
 
 // Derived display values
 const gfaSqft = $derived(toSqft(s.maxGfaSqm))
-const plotAreaSqft = $derived(toSqft(s.inputs.plotAreaSqm))
+const plotAreaSqft = $derived(toSqft(s.assumptions.plotAreaSqm))
 const buaSqft = $derived(toSqft(s.totalBuaSqm))
 
 const avgGsaPerUnit = $derived(
@@ -61,21 +46,21 @@ const devCostSubtotal = $derived(
 	s.designSupervisionCost +
 		s.demolitionCost +
 		s.constructionCostInclInflation +
-		s.inputs.infrastructureCostAed +
-		s.inputs.governmentFeesAed +
+		s.assumptions.infrastructureCostAed +
+		s.assumptions.governmentFeesAed +
 		s.marketingCost +
 		s.salesAgentFees +
-		s.inputs.masterCommunityFeesAed +
-		s.inputs.ffeOsePreopeningCostAed +
+		s.assumptions.masterCommunityFeesAed +
+		s.assumptions.ffeOsePreopeningCostAed +
 		s.contingencyCost
 )
 
-const moic = $derived(s.workbook?.returns?.projectMoic ?? s.revenueMultiple)
+const moic = $derived(s.outputs?.returns?.projectMoic ?? s.revenueMultiple)
 
 const constructionDurationMonths = $derived.by(() => {
-	const c = new Date(s.inputs.constructionDate)
-	const h = new Date(s.inputs.handoverDate)
-	if (isNaN(c.getTime()) || isNaN(h.getTime())) return null
+	const c = new Date(s.assumptions.constructionDate)
+	const h = new Date(s.assumptions.handoverDate)
+	if (Number.isNaN(c.getTime()) || Number.isNaN(h.getTime())) return null
 	return Math.max(0, (h.getFullYear() - c.getFullYear()) * 12 + (h.getMonth() - c.getMonth()))
 })
 
@@ -163,15 +148,15 @@ const UNIT = 'px-2 py-[3px] text-slate-500 whitespace-nowrap'
 					</div>
 					<div class="flex items-start justify-between gap-3">
 						<span class="text-slate-500">Hard fails</span>
-						<span class="font-medium {(validation?.hardFailures ?? 0) > 0 ? 'text-rose-700' : 'text-slate-800'}">{validation?.hardFailures ?? 0}</span>
+						<span class="font-medium {(validationSummary?.hardFailures ?? 0) > 0 ? 'text-rose-700' : 'text-slate-800'}">{validationSummary?.hardFailures ?? 0}</span>
 					</div>
 					<div class="flex items-start justify-between gap-3">
 						<span class="text-slate-500">Warnings</span>
-						<span class="font-medium {(validation?.warnings ?? 0) > 0 ? 'text-amber-700' : 'text-slate-800'}">{validation?.warnings ?? 0}</span>
+						<span class="font-medium {(validationSummary?.warnings ?? 0) > 0 ? 'text-amber-700' : 'text-slate-800'}">{validationSummary?.warnings ?? 0}</span>
 					</div>
 					<div class="flex items-start justify-between gap-3">
 						<span class="text-slate-500">Missing evidence</span>
-						<span class="font-medium {(validation?.missingEvidence ?? 0) > 0 ? 'text-sky-700' : 'text-slate-800'}">{validation?.missingEvidence ?? 0}</span>
+						<span class="font-medium {(validationSummary?.missingEvidence ?? 0) > 0 ? 'text-sky-700' : 'text-slate-800'}">{validationSummary?.missingEvidence ?? 0}</span>
 					</div>
 					{#if Object.keys(s.reviewDecisions).length > 0}
 					<div class="pt-2 border-t border-slate-100 space-y-1">
@@ -214,7 +199,7 @@ const UNIT = 'px-2 py-[3px] text-slate-500 whitespace-nowrap'
 				<td class="px-1 py-[3px] text-slate-400 text-[10px] text-center">a</td>
 				<td class={LABEL}>Location</td>
 				<td class={VALUE_BLUE}>
-					{s.plotDetails?.community_name ?? s.plot?.community_name ?? '—'}
+					{s.plotData?.community_name ?? s.selectedPlot?.community_name ?? '—'}
 				</td>
 				<td class={UNIT}></td>
 			</tr>
@@ -244,7 +229,7 @@ const UNIT = 'px-2 py-[3px] text-slate-500 whitespace-nowrap'
 						min="1.0"
 						max="2.0"
 						class={INPUT}
-						value={s.inputs.buaMultiplier}
+						value={s.assumptions.buaMultiplier}
 						oninput={(e) => setNumber('buaMultiplier', e.currentTarget.value)}
 					/>
 				</td>
@@ -403,14 +388,14 @@ const UNIT = 'px-2 py-[3px] text-slate-500 whitespace-nowrap'
 			</td>
 			<td class="p-0 relative cursor-pointer">
 				<div class="flex items-center justify-end px-2 py-[3px] pointer-events-none">
-					<span class="text-[#1565C0] tabular-nums">{dateToQuarter(s.inputs.salesCommencementDate)}</span>
+					<span class="text-[#1565C0] tabular-nums">{dateToQuarter(s.assumptions.salesCommencementDate)}</span>
 					<span class="ml-1 text-[9px] text-slate-400 border border-slate-200 rounded px-1">▾</span>
 				</div>
 				<input
 					type="date"
 					class="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-					value={s.inputs.salesCommencementDate}
-					oninput={(e) => s.updateInputs({ salesCommencementDate: e.currentTarget.value })}
+					value={s.assumptions.salesCommencementDate}
+					oninput={(e) => s.updateAssumptions({ salesCommencementDate: e.currentTarget.value })}
 				/>
 			</td>
 			<td class={UNIT}>Q &amp; Year</td>
@@ -425,7 +410,7 @@ const UNIT = 'px-2 py-[3px] text-slate-500 whitespace-nowrap'
 					type="number"
 					step="1"
 					class={INPUT}
-					value={s.inputs.salesPeriodMonths}
+					value={s.assumptions.salesPeriodMonths}
 					oninput={(e) => setNumber('salesPeriodMonths', e.currentTarget.value)}
 				/>
 			</td>
@@ -548,14 +533,14 @@ const UNIT = 'px-2 py-[3px] text-slate-500 whitespace-nowrap'
 			<td class={LABEL}>Land Acquisition</td>
 			<td class="p-0 relative cursor-pointer">
 				<div class="flex items-center justify-end px-2 py-[3px] pointer-events-none">
-					<span class="text-[#1565C0] tabular-nums">{dateToQuarter(s.inputs.landAcquisitionDate)}</span>
+					<span class="text-[#1565C0] tabular-nums">{dateToQuarter(s.assumptions.landAcquisitionDate)}</span>
 					<span class="ml-1 text-[9px] text-slate-400 border border-slate-200 rounded px-1">▾</span>
 				</div>
 				<input
 					type="date"
 					class="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-					value={s.inputs.landAcquisitionDate}
-					oninput={(e) => s.updateInputs({ landAcquisitionDate: e.currentTarget.value })}
+					value={s.assumptions.landAcquisitionDate}
+					oninput={(e) => s.updateAssumptions({ landAcquisitionDate: e.currentTarget.value })}
 				/>
 			</td>
 			<td class={UNIT}>Q &amp; Year</td>
@@ -565,14 +550,14 @@ const UNIT = 'px-2 py-[3px] text-slate-500 whitespace-nowrap'
 			<td class={LABEL}>Demolition / Enabling Works</td>
 			<td class="p-0 relative cursor-pointer">
 				<div class="flex items-center justify-end px-2 py-[3px] pointer-events-none">
-					<span class="text-[#1565C0] tabular-nums">{dateToQuarter(s.inputs.demolitionEnablingDate)}</span>
+					<span class="text-[#1565C0] tabular-nums">{dateToQuarter(s.assumptions.demolitionEnablingDate)}</span>
 					<span class="ml-1 text-[9px] text-slate-400 border border-slate-200 rounded px-1">▾</span>
 				</div>
 				<input
 					type="date"
 					class="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-					value={s.inputs.demolitionEnablingDate}
-					oninput={(e) => s.updateInputs({ demolitionEnablingDate: e.currentTarget.value })}
+					value={s.assumptions.demolitionEnablingDate}
+					oninput={(e) => s.updateAssumptions({ demolitionEnablingDate: e.currentTarget.value })}
 				/>
 			</td>
 			<td class={UNIT}>Q &amp; Year</td>
@@ -584,14 +569,14 @@ const UNIT = 'px-2 py-[3px] text-slate-500 whitespace-nowrap'
 			</td>
 			<td class="p-0 relative cursor-pointer">
 				<div class="flex items-center justify-end px-2 py-[3px] pointer-events-none">
-					<span class="text-[#1565C0] tabular-nums">{dateToQuarter(s.inputs.constructionDate)}</span>
+					<span class="text-[#1565C0] tabular-nums">{dateToQuarter(s.assumptions.constructionDate)}</span>
 					<span class="ml-1 text-[9px] text-slate-400 border border-slate-200 rounded px-1">▾</span>
 				</div>
 				<input
 					type="date"
 					class="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-					value={s.inputs.constructionDate}
-					oninput={(e) => s.updateInputs({ constructionDate: e.currentTarget.value })}
+					value={s.assumptions.constructionDate}
+					oninput={(e) => s.updateAssumptions({ constructionDate: e.currentTarget.value })}
 				/>
 			</td>
 			<td class={UNIT}>Q &amp; Year</td>
@@ -603,14 +588,14 @@ const UNIT = 'px-2 py-[3px] text-slate-500 whitespace-nowrap'
 			</td>
 			<td class="p-0 relative cursor-pointer">
 				<div class="flex items-center justify-end px-2 py-[3px] pointer-events-none">
-					<span class="text-[#1565C0] tabular-nums">{dateToQuarter(s.inputs.handoverDate)}</span>
+					<span class="text-[#1565C0] tabular-nums">{dateToQuarter(s.assumptions.handoverDate)}</span>
 					<span class="ml-1 text-[9px] text-slate-400 border border-slate-200 rounded px-1">▾</span>
 				</div>
 				<input
 					type="date"
 					class="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-					value={s.inputs.handoverDate}
-					oninput={(e) => s.updateInputs({ handoverDate: e.currentTarget.value })}
+					value={s.assumptions.handoverDate}
+					oninput={(e) => s.updateAssumptions({ handoverDate: e.currentTarget.value })}
 				/>
 			</td>
 			<td class={UNIT}>Q &amp; Year</td>
@@ -628,14 +613,14 @@ const UNIT = 'px-2 py-[3px] text-slate-500 whitespace-nowrap'
 			<td class={LABEL}>Pre-Handover Milestone</td>
 			<td class="p-0 relative cursor-pointer">
 				<div class="flex items-center justify-end px-2 py-[3px] pointer-events-none">
-					<span class="text-[#1565C0] tabular-nums">{dateToQuarter(s.inputs.preHandoverMilestoneDate)}</span>
+					<span class="text-[#1565C0] tabular-nums">{dateToQuarter(s.assumptions.preHandoverMilestoneDate)}</span>
 					<span class="ml-1 text-[9px] text-slate-400 border border-slate-200 rounded px-1">▾</span>
 				</div>
 				<input
 					type="date"
 					class="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-					value={s.inputs.preHandoverMilestoneDate}
-					oninput={(e) => s.updateInputs({ preHandoverMilestoneDate: e.currentTarget.value })}
+					value={s.assumptions.preHandoverMilestoneDate}
+					oninput={(e) => s.updateAssumptions({ preHandoverMilestoneDate: e.currentTarget.value })}
 				/>
 			</td>
 			<td class={UNIT}>Q &amp; Year</td>
@@ -660,13 +645,13 @@ const UNIT = 'px-2 py-[3px] text-slate-500 whitespace-nowrap'
 		<tr class={ROW_STD}>
 			<td class="px-1 py-[3px] text-slate-400 text-[10px] text-center">c</td>
 			<td class={LABEL}>Brokerage Fee</td>
-			<td class={VALUE_GREEN}>{fmtAed(s.inputs.brokerageFeeAed)}</td>
+			<td class={VALUE_GREEN}>{fmtAed(s.assumptions.brokerageFeeAed)}</td>
 			<td class="px-2 py-[3px] text-slate-400 text-[10px] whitespace-nowrap">↗ Budget</td>
 		</tr>
 		<tr class={ROW_STD}>
 			<td class="px-1 py-[3px] text-slate-400 text-[10px] text-center">d</td>
 			<td class={LABEL}>Legal / DD Cost</td>
-			<td class={VALUE_GREEN}>{fmtAed(s.inputs.legalDdCostAed)}</td>
+			<td class={VALUE_GREEN}>{fmtAed(s.assumptions.legalDdCostAed)}</td>
 			<td class="px-2 py-[3px] text-slate-400 text-[10px] whitespace-nowrap">↗ Budget</td>
 		</tr>
 		<tr class={ROW_TOTAL}>
@@ -691,7 +676,7 @@ const UNIT = 'px-2 py-[3px] text-slate-500 whitespace-nowrap'
 		<tr class={ROW_STD}>
 			<td class="px-1 py-[3px] text-slate-400 text-[10px] text-center">b</td>
 			<td class={LABEL}>Demolition</td>
-			<td class={VALUE_GREEN}>{fmtAed(s.inputs.demolitionCostAed)}</td>
+			<td class={VALUE_GREEN}>{fmtAed(s.assumptions.demolitionCostAed)}</td>
 			<td class="px-2 py-[3px] text-slate-400 text-[10px] whitespace-nowrap">↗ Budget</td>
 		</tr>
 		<tr class={ROW_STD}>
@@ -705,19 +690,19 @@ const UNIT = 'px-2 py-[3px] text-slate-500 whitespace-nowrap'
 		<tr class={ROW_INDENT}>
 			<td class="px-1 py-[3px]"></td>
 			<td class={LABEL_INDENT}>↳ Construction Cost Rate</td>
-			<td class={VALUE_GREEN}>{Math.round(s.inputs.constructionCostPsqmBua * 0.092903)}</td>
+			<td class={VALUE_GREEN}>{Math.round(s.assumptions.constructionCostPsqmBua * 0.092903)}</td>
 			<td class="px-2 py-[3px] text-slate-400 text-[10px] whitespace-nowrap">↗ Budget</td>
 		</tr>
 		<tr class={ROW_STD}>
 			<td class="px-1 py-[3px] text-slate-400 text-[10px] text-center">d</td>
 			<td class={LABEL}>Infrastructure, Utilities &amp; Landscaping</td>
-			<td class={VALUE_GREEN}>{fmtAed(s.inputs.infrastructureCostAed)}</td>
+			<td class={VALUE_GREEN}>{fmtAed(s.assumptions.infrastructureCostAed)}</td>
 			<td class="px-2 py-[3px] text-slate-400 text-[10px] whitespace-nowrap">↗ Budget</td>
 		</tr>
 		<tr class={ROW_STD}>
 			<td class="px-1 py-[3px] text-slate-400 text-[10px] text-center">e</td>
 			<td class={LABEL}>Authority &amp; Connection Fees</td>
-			<td class={VALUE_GREEN}>{fmtAed(s.inputs.governmentFeesAed)}</td>
+			<td class={VALUE_GREEN}>{fmtAed(s.assumptions.governmentFeesAed)}</td>
 			<td class="px-2 py-[3px] text-slate-400 text-[10px] whitespace-nowrap">↗ Budget</td>
 		</tr>
 		<tr class={ROW_STD}>
@@ -739,7 +724,7 @@ const UNIT = 'px-2 py-[3px] text-slate-500 whitespace-nowrap'
 		<tr class={ROW_STD}>
 			<td class="px-1 py-[3px] text-slate-400 text-[10px] text-center">h</td>
 			<td class={LABEL}>Master Community Fees</td>
-			<td class={VALUE_GREEN}>{fmtAed(s.inputs.masterCommunityFeesAed)}</td>
+			<td class={VALUE_GREEN}>{fmtAed(s.assumptions.masterCommunityFeesAed)}</td>
 			<td class="px-2 py-[3px] text-slate-400 text-[10px] whitespace-nowrap">↗ Budget</td>
 		</tr>
 		<tr class={ROW_STD}>
@@ -879,7 +864,7 @@ const UNIT = 'px-2 py-[3px] text-slate-500 whitespace-nowrap'
 			</td>
 			<td class="p-0 border-r border-[#E8E8E8]">
 				<input type="number" step="1" min="0" max="100" class={INPUT}
-					value={s.inputs.landLoanLtvPct}
+					value={s.assumptions.landLoanLtvPct}
 					oninput={(e) => setNumber('landLoanLtvPct', e.currentTarget.value)}
 				/>
 			</td>
@@ -953,7 +938,7 @@ const UNIT = 'px-2 py-[3px] text-slate-500 whitespace-nowrap'
 			</td>
 			<td class="p-0 border-r border-[#E8E8E8]">
 				<input type="number" step="0.01" min="0" max="1" class={INPUT}
-					value={s.inputs.debtToCostRatio}
+					value={s.assumptions.debtToCostRatio}
 					oninput={(e) => setNumber('debtToCostRatio', e.currentTarget.value)}
 				/>
 			</td>
@@ -966,7 +951,7 @@ const UNIT = 'px-2 py-[3px] text-slate-500 whitespace-nowrap'
 			</td>
 			<td class="p-0 border-r border-[#E8E8E8]">
 				<input type="number" step="1" min="0" max="100" class={INPUT}
-					value={s.inputs.presaleThresholdPct}
+					value={s.assumptions.presaleThresholdPct}
 					oninput={(e) => setNumber('presaleThresholdPct', e.currentTarget.value)}
 				/>
 			</td>
@@ -979,7 +964,7 @@ const UNIT = 'px-2 py-[3px] text-slate-500 whitespace-nowrap'
 			</td>
 			<td class="p-0 border-r border-[#E8E8E8]">
 				<input type="number" step="0.5" min="0" max="100" class={INPUT}
-					value={s.inputs.escrowRetentionPct}
+					value={s.assumptions.escrowRetentionPct}
 					oninput={(e) => setNumber('escrowRetentionPct', e.currentTarget.value)}
 				/>
 			</td>
@@ -992,7 +977,7 @@ const UNIT = 'px-2 py-[3px] text-slate-500 whitespace-nowrap'
 			</td>
 			<td class="p-0 border-r border-[#E8E8E8]">
 				<input type="number" step="0.1" min="0" max="10" class={INPUT}
-					value={s.inputs.arrangementFeePct}
+					value={s.assumptions.arrangementFeePct}
 					oninput={(e) => setNumber('arrangementFeePct', e.currentTarget.value)}
 				/>
 			</td>
@@ -1005,7 +990,7 @@ const UNIT = 'px-2 py-[3px] text-slate-500 whitespace-nowrap'
 			</td>
 			<td class="p-0 border-r border-[#E8E8E8]">
 				<input type="number" step="0.05" min="0" max="5" class={INPUT}
-					value={s.inputs.commitmentFeePct}
+					value={s.assumptions.commitmentFeePct}
 					oninput={(e) => setNumber('commitmentFeePct', e.currentTarget.value)}
 				/>
 			</td>
@@ -1020,8 +1005,8 @@ const UNIT = 'px-2 py-[3px] text-slate-500 whitespace-nowrap'
 			<td class="p-0 border-r border-[#E8E8E8]">
 				<select
 					class="w-full text-right px-1 py-0 text-[#1565C0] bg-transparent focus:outline-none text-[11px]"
-					value={s.inputs.debtRepaymentMode}
-					onchange={(e) => s.updateInputs({ debtRepaymentMode: e.currentTarget.value as 'bullet_at_handover' | 'sales_sweep' })}
+					value={s.assumptions.debtRepaymentMode}
+					onchange={(e) => s.updateAssumptions({ debtRepaymentMode: e.currentTarget.value as 'bullet_at_handover' | 'sales_sweep' })}
 				>
 					<option value="bullet_at_handover">Bullet at Handover</option>
 					<option value="sales_sweep">Sales Sweep</option>
@@ -1073,8 +1058,8 @@ const UNIT = 'px-2 py-[3px] text-slate-500 whitespace-nowrap'
 		<tr class={ROW_STD}>
 			<td class="px-1 py-[3px] text-slate-400 text-[10px] text-center">b</td>
 			<td class={LABEL}>IRR — Equity <span class="text-slate-400 font-normal italic">(levered, incl. interest)</span></td>
-			<td class="px-2 py-[3px] text-right tabular-nums font-semibold text-[12px] {s.workbook?.returns?.equityIrrPct != null ? 'text-slate-900' : 'text-slate-400'}">
-				{s.workbook?.returns?.equityIrrPct != null ? fmt(s.workbook.returns.equityIrrPct, 1) + '%' : s.workbook ? '—' : 'Run model'}
+			<td class="px-2 py-[3px] text-right tabular-nums font-semibold text-[12px] {s.outputs?.returns?.equityIrrPct != null ? 'text-slate-900' : 'text-slate-400'}">
+				{s.outputs?.returns?.equityIrrPct != null ? fmt(s.outputs.returns.equityIrrPct, 1) + '%' : s.outputs ? '—' : 'Run model'}
 			</td>
 			<td class={UNIT}>%</td>
 		</tr>

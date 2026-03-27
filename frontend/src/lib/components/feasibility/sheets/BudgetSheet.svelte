@@ -1,13 +1,16 @@
 <script lang="ts">
-import { workbookStore } from '$lib/feasibility/workbook/store.svelte'
+import {
+	dateToQuarter,
+	formatFeasibilityNumber,
+	formatFeasibilityPercent
+} from '$lib/feasibility/format'
+import { buildBudgetSummary } from '$lib/feasibility/view-models'
+import { workbookStore } from '$lib/stores/workbookStore.svelte'
 import { toSqft } from '$lib/utils/units'
 import AmountInput from '../AmountInput.svelte'
 
 function fmt(value: number, digits = 0): string {
-	return value.toLocaleString('en-AE', {
-		minimumFractionDigits: digits,
-		maximumFractionDigits: digits
-	})
+	return formatFeasibilityNumber(value, digits)
 }
 
 function fmtAed(value: number): string {
@@ -15,96 +18,41 @@ function fmtAed(value: number): string {
 }
 
 function fmtPct(value: number, digits = 1): string {
-	return fmt(value, digits) + '%'
+	return formatFeasibilityPercent(value, digits)
 }
 
-function dateToQuarter(isoDate: string): string {
-	if (!isoDate) return '—'
-	const d = new Date(isoDate)
-	if (isNaN(d.getTime())) return isoDate
-	const q = Math.ceil((d.getMonth() + 1) / 3)
-	return `Q${q} ${d.getFullYear()}`
-}
-
-function monthsBetween(startIso: string, endIso: string): number | null {
-	if (!startIso || !endIso) return null
-	const s = new Date(startIso)
-	const e = new Date(endIso)
-	if (isNaN(s.getTime()) || isNaN(e.getTime())) return null
-	return (e.getFullYear() - s.getFullYear()) * 12 + (e.getMonth() - s.getMonth())
-}
-
-function setNumber<K extends keyof typeof workbookStore.inputs>(key: K, raw: string) {
+function setNumber<K extends keyof typeof workbookStore.assumptions>(key: K, raw: string) {
 	const v = Number(raw)
-	workbookStore.updateInputs({ [key]: Number.isFinite(v) ? v : 0 })
+	workbookStore.updateAssumptions({ [key]: Number.isFinite(v) ? v : 0 })
 }
 
 const s = workbookStore
-const draftBudgetTiming = $derived(s.workbook?.budgetTiming ?? null)
-const draftSourcesUses = $derived(s.workbook?.sourcesUses ?? null)
+const draftBudgetTiming = $derived(s.outputs?.budgetTiming ?? null)
+const draftSourcesUses = $derived(s.outputs?.sourcesUses ?? null)
 
 // ── Derived metrics ──────────────────────────────────────────────────────────
 
-const constructionMonths = $derived(
-	monthsBetween(s.inputs.constructionDate, s.inputs.handoverDate) ?? 0
+const budgetSummary = $derived(
+	buildBudgetSummary(s.assumptions, s.outputs, {
+		totalLandCostAed: s.totalLandCostAed,
+		constructionCostInclInflation: s.constructionCostInclInflation,
+		designSupervisionCost: s.designSupervisionCost,
+		marketingCost: s.marketingCost,
+		salesAgentFees: s.salesAgentFees,
+		demolitionCost: s.demolitionCost,
+		contingencyCost: s.contingencyCost,
+		totalDebtCapacity: s.totalDebtCapacity,
+		totalUnits: s.totalUnits,
+		modelTotalCostsInclVat: s.modelTotalCostsInclVat,
+		totalBuaSqm: s.totalBuaSqm,
+		totalConfiguredRevenue: s.totalConfiguredRevenue,
+		projectIrrPct: s.projectIrrPct
+	})
 )
-
-// Finance costs — prefer draft case values when available
-const totalInterestPaid = $derived(s.workbook?.returns?.totalInterestPaidAed ?? 0)
-const totalCommitmentFees = $derived(s.workbook?.returns?.totalCommitmentFeesAed ?? 0)
-const arrangementFee = $derived(
-	s.workbook?.financing?.arrangementFeeAed ??
-		s.totalDebtCapacity * (s.inputs.arrangementFeePct / 100)
-)
-const totalFinanceCosts = $derived(totalInterestPaid + totalCommitmentFees + arrangementFee)
-
-// Cost base (pre-finance) — aligns with backend ordering
-const preFinanceCosts = $derived(
-	s.totalLandCostAed +
-		s.constructionCostInclInflation +
-		s.designSupervisionCost +
-		s.marketingCost +
-		s.salesAgentFees +
-		s.inputs.infrastructureCostAed +
-		s.inputs.governmentFeesAed +
-		s.inputs.masterCommunityFeesAed +
-		(s.inputs.demolitionEnabled ? s.demolitionCost : 0) +
-		s.inputs.ffeOsePreopeningCostAed +
-		s.contingencyCost
-)
-
-// Per-unit / per-sqft metrics
-const costPerUnitAed = $derived(s.totalUnits > 0 ? s.modelTotalCostsInclVat / s.totalUnits : 0)
-const costPerSqftBua = $derived(
-	s.totalBuaSqm > 0 ? s.modelTotalCostsInclVat / toSqft(s.totalBuaSqm) : 0
-)
-const revenuePerUnitAed = $derived(s.totalUnits > 0 ? s.totalConfiguredRevenue / s.totalUnits : 0)
-const profitPerUnitAed = $derived(revenuePerUnitAed - costPerUnitAed)
-const grossMarginPct = $derived(
-	s.totalConfiguredRevenue > 0
-		? ((s.totalConfiguredRevenue - s.modelTotalCostsInclVat) / s.totalConfiguredRevenue) * 100
-		: 0
-)
-
-// All-in margin (includes finance costs)
-const allInProfit = $derived(
-	s.workbook?.returns?.allInProjectProfitAed ??
-		s.totalConfiguredRevenue - s.modelTotalCostsInclVat - totalFinanceCosts
-)
-const allInMarginPct = $derived(
-	s.workbook?.returns?.allInMarginPct ??
-		(s.totalConfiguredRevenue > 0 ? (allInProfit / s.totalConfiguredRevenue) * 100 : 0)
-)
-
-// Returns
-const equityIrrPct = $derived(s.workbook?.returns?.equityIrrPct ?? null)
-const projectIrrPct = $derived(s.projectIrrPct)
 
 // Pct of total
 const pct = (amount: number) =>
 	s.modelTotalCostsInclVat > 0 ? (amount / s.modelTotalCostsInclVat) * 100 : 0
-const revPct = (amount: number) =>
-	s.totalConfiguredRevenue > 0 ? (amount / s.totalConfiguredRevenue) * 100 : 0
 
 // Styles — mirroring KeyAssumptionsSheet palette
 const INPUT =
@@ -145,17 +93,17 @@ const ROW_INDENT = 'border-b border-[#D9D9D9] bg-[#F9F9F9]'
 		</div>
 		<div class="px-3 py-2 border-r border-[#D9D9D9]">
 			<div class="text-[9px] uppercase tracking-wider text-slate-500 font-semibold">Gross Margin</div>
-			<div class="text-[13px] font-bold text-slate-900 tabular-nums mt-0.5">{fmtPct(grossMarginPct)}</div>
+				<div class="text-[13px] font-bold text-slate-900 tabular-nums mt-0.5">{fmtPct(budgetSummary.grossMarginPct)}</div>
 			<div class="text-[10px] text-slate-500">of gross revenue</div>
 		</div>
 		<div class="px-3 py-2 border-r border-[#D9D9D9]">
 			<div class="text-[9px] uppercase tracking-wider text-slate-500 font-semibold">All-in Margin</div>
-			<div class="text-[13px] font-bold {allInMarginPct < 10 ? 'text-rose-600' : allInMarginPct < 15 ? 'text-amber-600' : 'text-emerald-700'} tabular-nums mt-0.5">{fmtPct(allInMarginPct)}</div>
+				<div class="text-[13px] font-bold {budgetSummary.allInMarginPct < 10 ? 'text-rose-600' : budgetSummary.allInMarginPct < 15 ? 'text-amber-600' : 'text-emerald-700'} tabular-nums mt-0.5">{fmtPct(budgetSummary.allInMarginPct)}</div>
 			<div class="text-[10px] text-slate-500">after finance costs</div>
 		</div>
 		<div class="px-3 py-2">
 			<div class="text-[9px] uppercase tracking-wider text-slate-500 font-semibold">Construction Period</div>
-			<div class="text-[13px] font-bold text-slate-900 tabular-nums mt-0.5">{constructionMonths > 0 ? constructionMonths : '—'}</div>
+				<div class="text-[13px] font-bold text-slate-900 tabular-nums mt-0.5">{budgetSummary.constructionMonths > 0 ? budgetSummary.constructionMonths : '—'}</div>
 			<div class="text-[10px] text-slate-500">months</div>
 		</div>
 	</div>
@@ -259,24 +207,24 @@ const ROW_INDENT = 'border-b border-[#D9D9D9] bg-[#F9F9F9]'
 			<td class={LABEL}>Land Purchase Price</td>
 			<td class="p-0 relative">
 				<div class="flex items-center justify-center px-1 py-[3px] pointer-events-none">
-					<span class="text-[#1565C0] tabular-nums text-[10px]">{dateToQuarter(s.inputs.landAcquisitionDate)}</span>
+					<span class="text-[#1565C0] tabular-nums text-[10px]">{dateToQuarter(s.assumptions.landAcquisitionDate)}</span>
 					<span class="ml-0.5 text-[8px] text-slate-400 border border-slate-200 rounded px-0.5">▾</span>
 				</div>
 				<input type="date" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-					value={s.inputs.landAcquisitionDate}
-					oninput={(e) => s.updateInputs({ landAcquisitionDate: e.currentTarget.value })} />
+					value={s.assumptions.landAcquisitionDate}
+					oninput={(e) => s.updateAssumptions({ landAcquisitionDate: e.currentTarget.value })} />
 			</td>
 			<td class="p-0">
 				<AmountInput
 					value={s.plotAcquisitionCost}
-					oncommit={(v) => s.updateInputs({ landAcquisitionCostOverrideAed: v > 0 ? v : null })}
+					oncommit={(v) => s.updateAssumptions({ landAcquisitionCostOverrideAed: v > 0 ? v : null })}
 					class={INPUT}
 				/>
 			</td>
 			<td class="p-0">
 				<input type="number" step="100" class={INPUT}
-					value={Math.round(s.inputs.landPricePsqm ?? 0)}
-					oninput={(e) => s.updateInputs({ landPricePsqm: Number(e.currentTarget.value) || 0 })} />
+					value={Math.round(s.assumptions.landPricePsqm ?? 0)}
+					oninput={(e) => s.updateAssumptions({ landPricePsqm: Number(e.currentTarget.value) || 0 })} />
 			</td>
 			<td class={PCT_COL}>{fmtPct(pct(s.plotAcquisitionCost))}</td>
 			<td class={UNIT}>AED / sqm plot</td>
@@ -285,7 +233,7 @@ const ROW_INDENT = 'border-b border-[#D9D9D9] bg-[#F9F9F9]'
 		<tr class={ROW_INDENT}>
 			<td></td>
 			<td class={LABEL_INDENT}>↳ Transfer Fee (4% of purchase)</td>
-			<td class="px-2 py-[3px] text-center text-[10px] text-slate-400">{dateToQuarter(s.inputs.landAcquisitionDate)}</td>
+			<td class="px-2 py-[3px] text-center text-[10px] text-slate-400">{dateToQuarter(s.assumptions.landAcquisitionDate)}</td>
 			<td class={VALUE_BLACK}>{fmtAed(s.landTransferFeeAed)}</td>
 			<td class="px-2 py-[3px] text-right text-[10px] text-slate-400">4.0%</td>
 			<td class={PCT_COL}>{fmtPct(pct(s.landTransferFeeAed))}</td>
@@ -295,26 +243,26 @@ const ROW_INDENT = 'border-b border-[#D9D9D9] bg-[#F9F9F9]'
 		<tr class={ROW_STD}>
 			<td class="px-1 py-[3px] text-slate-400 text-[10px] text-center">2</td>
 			<td class={LABEL}>Brokerage Fee</td>
-			<td class="px-2 py-[3px] text-center text-[10px] text-slate-400">{dateToQuarter(s.inputs.landAcquisitionDate)}</td>
+			<td class="px-2 py-[3px] text-center text-[10px] text-slate-400">{dateToQuarter(s.assumptions.landAcquisitionDate)}</td>
 			<td class="p-0">
-				<AmountInput value={s.inputs.brokerageFeeAed}
-					oncommit={(v) => s.updateInputs({ brokerageFeeAed: v })} class={INPUT} />
+				<AmountInput value={s.assumptions.brokerageFeeAed}
+					oncommit={(v) => s.updateAssumptions({ brokerageFeeAed: v })} class={INPUT} />
 			</td>
 			<td class={PCT_COL}></td>
-			<td class={PCT_COL}>{fmtPct(pct(s.inputs.brokerageFeeAed))}</td>
+			<td class={PCT_COL}>{fmtPct(pct(s.assumptions.brokerageFeeAed))}</td>
 			<td class={UNIT}>fixed AED</td>
 		</tr>
 
 		<tr class={ROW_STD}>
 			<td class="px-1 py-[3px] text-slate-400 text-[10px] text-center">3</td>
 			<td class={LABEL}>Legal / Due Diligence</td>
-			<td class="px-2 py-[3px] text-center text-[10px] text-slate-400">{dateToQuarter(s.inputs.landAcquisitionDate)}</td>
+			<td class="px-2 py-[3px] text-center text-[10px] text-slate-400">{dateToQuarter(s.assumptions.landAcquisitionDate)}</td>
 			<td class="p-0">
-				<AmountInput value={s.inputs.legalDdCostAed}
-					oncommit={(v) => s.updateInputs({ legalDdCostAed: v })} class={INPUT} />
+				<AmountInput value={s.assumptions.legalDdCostAed}
+					oncommit={(v) => s.updateAssumptions({ legalDdCostAed: v })} class={INPUT} />
 			</td>
 			<td class={PCT_COL}></td>
-			<td class={PCT_COL}>{fmtPct(pct(s.inputs.legalDdCostAed))}</td>
+			<td class={PCT_COL}>{fmtPct(pct(s.assumptions.legalDdCostAed))}</td>
 			<td class={UNIT}>fixed AED</td>
 		</tr>
 
@@ -335,22 +283,22 @@ const ROW_INDENT = 'border-b border-[#D9D9D9] bg-[#F9F9F9]'
 			<td colspan="7" class="px-2 py-[4px] text-white font-bold text-[11px] tracking-wide">B. &nbsp; CONSTRUCTION</td>
 		</tr>
 
-		{#if s.inputs.demolitionEnabled}
+		{#if s.assumptions.demolitionEnabled}
 		<tr class={ROW_STD}>
 			<td class="px-1 py-[3px] text-slate-400 text-[10px] text-center">4</td>
 			<td class={LABEL}>Demolition / Enabling Works</td>
 			<td class="p-0 relative">
 				<div class="flex items-center justify-center px-1 py-[3px] pointer-events-none">
-					<span class="text-[#1565C0] tabular-nums text-[10px]">{dateToQuarter(s.inputs.demolitionEnablingDate)}</span>
+					<span class="text-[#1565C0] tabular-nums text-[10px]">{dateToQuarter(s.assumptions.demolitionEnablingDate)}</span>
 					<span class="ml-0.5 text-[8px] text-slate-400 border border-slate-200 rounded px-0.5">▾</span>
 				</div>
 				<input type="date" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-					value={s.inputs.demolitionEnablingDate}
-					oninput={(e) => s.updateInputs({ demolitionEnablingDate: e.currentTarget.value })} />
+					value={s.assumptions.demolitionEnablingDate}
+					oninput={(e) => s.updateAssumptions({ demolitionEnablingDate: e.currentTarget.value })} />
 			</td>
 			<td class="p-0">
-				<AmountInput value={s.inputs.demolitionCostAed}
-					oncommit={(v) => s.updateInputs({ demolitionCostAed: v })} class={INPUT} />
+				<AmountInput value={s.assumptions.demolitionCostAed}
+					oncommit={(v) => s.updateAssumptions({ demolitionCostAed: v })} class={INPUT} />
 			</td>
 			<td class={PCT_COL}></td>
 			<td class={PCT_COL}>{fmtPct(pct(s.demolitionCost))}</td>
@@ -363,18 +311,18 @@ const ROW_INDENT = 'border-b border-[#D9D9D9] bg-[#F9F9F9]'
 			<td class={LABEL}>Construction Cost <span class="text-slate-400 font-normal italic">(Rate × BUA)</span></td>
 			<td class="p-0 relative">
 				<div class="flex items-center justify-center px-1 py-[3px] pointer-events-none">
-					<span class="text-[#1565C0] tabular-nums text-[10px]">{dateToQuarter(s.inputs.constructionDate)}</span>
+					<span class="text-[#1565C0] tabular-nums text-[10px]">{dateToQuarter(s.assumptions.constructionDate)}</span>
 					<span class="ml-0.5 text-[8px] text-slate-400 border border-slate-200 rounded px-0.5">▾</span>
 				</div>
 				<input type="date" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-					value={s.inputs.constructionDate}
-					oninput={(e) => s.updateInputs({ constructionDate: e.currentTarget.value })} />
+					value={s.assumptions.constructionDate}
+					oninput={(e) => s.updateAssumptions({ constructionDate: e.currentTarget.value })} />
 			</td>
 			<td class={VALUE_BLACK}>{fmtAed(s.constructionCostInclInflation)}</td>
 			<td class="p-0">
 				<input type="number" step="10" class={INPUT}
-					value={Math.round(s.inputs.constructionCostPsqmBua * 0.092903)}
-					oninput={(e) => s.updateInputs({ constructionCostPsqmBua: (Number(e.currentTarget.value) || 0) / 0.092903 })} />
+					value={Math.round(s.assumptions.constructionCostPsqmBua * 0.092903)}
+					oninput={(e) => s.updateAssumptions({ constructionCostPsqmBua: (Number(e.currentTarget.value) || 0) / 0.092903 })} />
 			</td>
 			<td class={PCT_COL}>{fmtPct(pct(s.constructionCostInclInflation))}</td>
 			<td class={UNIT}>AED / sqft BUA</td>
@@ -382,7 +330,7 @@ const ROW_INDENT = 'border-b border-[#D9D9D9] bg-[#F9F9F9]'
 
 		<tr class={ROW_INDENT}>
 			<td></td>
-			<td class={LABEL_INDENT}>↳ BUA ({fmt(toSqft(s.totalBuaSqm), 0)} sqft = GFA × {s.inputs.buaMultiplier}x + parking)</td>
+			<td class={LABEL_INDENT}>↳ BUA ({fmt(toSqft(s.totalBuaSqm), 0)} sqft = GFA × {s.assumptions.buaMultiplier}x + parking)</td>
 			<td></td>
 			<td class={VALUE_BLACK}></td>
 			<td class={PCT_COL}></td>
@@ -390,15 +338,15 @@ const ROW_INDENT = 'border-b border-[#D9D9D9] bg-[#F9F9F9]'
 			<td class={UNIT}></td>
 		</tr>
 
-		{#if s.inputs.midPointInflationPct > 0}
+		{#if s.assumptions.midPointInflationPct > 0}
 		<tr class={ROW_INDENT}>
 			<td></td>
-			<td class={LABEL_INDENT}>↳ Inflation adjustment ({fmt(s.inputs.midPointInflationPct, 1)}%)</td>
+			<td class={LABEL_INDENT}>↳ Inflation adjustment ({fmt(s.assumptions.midPointInflationPct, 1)}%)</td>
 			<td></td>
 			<td class={VALUE_BLACK}>{fmtAed(s.inflationCost)}</td>
 			<td class="p-0">
 				<input type="number" step="0.1" min="0" class={INPUT}
-					value={s.inputs.midPointInflationPct}
+					value={s.assumptions.midPointInflationPct}
 					oninput={(e) => setNumber('midPointInflationPct', e.currentTarget.value)} />
 			</td>
 			<td></td>
@@ -411,15 +359,15 @@ const ROW_INDENT = 'border-b border-[#D9D9D9] bg-[#F9F9F9]'
 			<td class={LABEL_SM}>Handover Date</td>
 			<td class="p-0 relative">
 				<div class="flex items-center justify-center px-1 py-[3px] pointer-events-none">
-					<span class="text-[#1565C0] tabular-nums text-[10px]">{dateToQuarter(s.inputs.handoverDate)}</span>
+					<span class="text-[#1565C0] tabular-nums text-[10px]">{dateToQuarter(s.assumptions.handoverDate)}</span>
 					<span class="ml-0.5 text-[8px] text-slate-400 border border-slate-200 rounded px-0.5">▾</span>
 				</div>
 				<input type="date" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-					value={s.inputs.handoverDate}
-					oninput={(e) => s.updateInputs({ handoverDate: e.currentTarget.value })} />
+					value={s.assumptions.handoverDate}
+					oninput={(e) => s.updateAssumptions({ handoverDate: e.currentTarget.value })} />
 			</td>
 			<td class="px-2 py-[3px] text-right text-[10px] text-slate-500">
-				{constructionMonths > 0 ? constructionMonths + ' month build' : '—'}
+				{budgetSummary.constructionMonths > 0 ? budgetSummary.constructionMonths + ' month build' : '—'}
 			</td>
 			<td></td>
 			<td></td>
@@ -439,12 +387,12 @@ const ROW_INDENT = 'border-b border-[#D9D9D9] bg-[#F9F9F9]'
 			<td class="px-2 py-[3px] text-center text-[10px] text-slate-400">Con→HO</td>
 			<td class="p-0">
 				<AmountInput value={s.designSupervisionCost}
-					oncommit={(v) => s.updateInputs({ designSupervisionCostOverrideAed: v > 0 ? v : null })}
+					oncommit={(v) => s.updateAssumptions({ designSupervisionCostOverrideAed: v > 0 ? v : null })}
 					class={INPUT} />
 			</td>
 			<td class="p-0">
 				<input type="number" step="0.5" min="0" class={INPUT}
-					value={s.inputs.designSupervisionPct}
+					value={s.assumptions.designSupervisionPct}
 					oninput={(e) => setNumber('designSupervisionPct', e.currentTarget.value)} />
 			</td>
 			<td class={PCT_COL}>{fmtPct(pct(s.designSupervisionCost))}</td>
@@ -457,12 +405,12 @@ const ROW_INDENT = 'border-b border-[#D9D9D9] bg-[#F9F9F9]'
 			<td class="px-2 py-[3px] text-center text-[10px] text-slate-400">Sales period</td>
 			<td class="p-0">
 				<AmountInput value={s.marketingCost}
-					oncommit={(v) => s.updateInputs({ marketingCostOverrideAed: v > 0 ? v : null })}
+					oncommit={(v) => s.updateAssumptions({ marketingCostOverrideAed: v > 0 ? v : null })}
 					class={INPUT} />
 			</td>
 			<td class="p-0">
 				<input type="number" step="0.1" min="0" class={INPUT}
-					value={s.inputs.marketingCostPct}
+					value={s.assumptions.marketingCostPct}
 					oninput={(e) => setNumber('marketingCostPct', e.currentTarget.value)} />
 			</td>
 			<td class={PCT_COL}>{fmtPct(pct(s.marketingCost))}</td>
@@ -475,12 +423,12 @@ const ROW_INDENT = 'border-b border-[#D9D9D9] bg-[#F9F9F9]'
 			<td class="px-2 py-[3px] text-center text-[10px] text-slate-400">Sales period</td>
 			<td class="p-0">
 				<AmountInput value={s.salesAgentFees}
-					oncommit={(v) => s.updateInputs({ salesAgentFeesOverrideAed: v > 0 ? v : null })}
+					oncommit={(v) => s.updateAssumptions({ salesAgentFeesOverrideAed: v > 0 ? v : null })}
 					class={INPUT} />
 			</td>
 			<td class="p-0">
 				<input type="number" step="0.1" min="0" class={INPUT}
-					value={s.inputs.salesAgentFeePct}
+					value={s.assumptions.salesAgentFeePct}
 					oninput={(e) => setNumber('salesAgentFeePct', e.currentTarget.value)} />
 			</td>
 			<td class={PCT_COL}>{fmtPct(pct(s.salesAgentFees))}</td>
@@ -493,12 +441,12 @@ const ROW_INDENT = 'border-b border-[#D9D9D9] bg-[#F9F9F9]'
 			<td class="px-2 py-[3px] text-center text-[10px] text-slate-400">Con→HO</td>
 			<td class="p-0">
 				<AmountInput value={s.contingencyCost}
-					oncommit={(v) => s.updateInputs({ contingencyCostOverrideAed: v > 0 ? v : null })}
+					oncommit={(v) => s.updateAssumptions({ contingencyCostOverrideAed: v > 0 ? v : null })}
 					class={INPUT} />
 			</td>
 			<td class="p-0">
 				<input type="number" step="0.5" min="0" class={INPUT}
-					value={s.inputs.contingencyPct}
+					value={s.assumptions.contingencyPct}
 					oninput={(e) => setNumber('contingencyPct', e.currentTarget.value)} />
 			</td>
 			<td class={PCT_COL}>{fmtPct(pct(s.contingencyCost))}</td>
@@ -517,13 +465,13 @@ const ROW_INDENT = 'border-b border-[#D9D9D9] bg-[#F9F9F9]'
 			<td class={LABEL}>Infrastructure, Utilities &amp; Landscaping</td>
 			<td class="px-2 py-[3px] text-center text-[10px] text-slate-400">Con→HO</td>
 			<td class="p-0">
-				<AmountInput value={s.inputs.infrastructureCostAed}
-					oncommit={(v) => s.updateInputs({ infrastructureCostAed: v })} class={INPUT} />
+				<AmountInput value={s.assumptions.infrastructureCostAed}
+					oncommit={(v) => s.updateAssumptions({ infrastructureCostAed: v })} class={INPUT} />
 			</td>
 			<td class="px-2 py-[3px] text-right text-[10px] text-slate-400">
-				{s.inputs.plotAreaSqm > 0 ? fmt(s.inputs.infrastructureCostAed / toSqft(s.inputs.plotAreaSqm), 0) : '—'}
+				{s.assumptions.plotAreaSqm > 0 ? fmt(s.assumptions.infrastructureCostAed / toSqft(s.assumptions.plotAreaSqm), 0) : '—'}
 			</td>
-			<td class={PCT_COL}>{fmtPct(pct(s.inputs.infrastructureCostAed))}</td>
+			<td class={PCT_COL}>{fmtPct(pct(s.assumptions.infrastructureCostAed))}</td>
 			<td class={UNIT}>AED / sqft plot</td>
 		</tr>
 
@@ -532,13 +480,13 @@ const ROW_INDENT = 'border-b border-[#D9D9D9] bg-[#F9F9F9]'
 			<td class={LABEL}>Authority &amp; Connection Fees</td>
 			<td class="px-2 py-[3px] text-center text-[10px] text-slate-400">Pre-con</td>
 			<td class="p-0">
-				<AmountInput value={s.inputs.governmentFeesAed}
-					oncommit={(v) => s.updateInputs({ governmentFeesAed: v })} class={INPUT} />
+				<AmountInput value={s.assumptions.governmentFeesAed}
+					oncommit={(v) => s.updateAssumptions({ governmentFeesAed: v })} class={INPUT} />
 			</td>
 			<td class="px-2 py-[3px] text-right text-[10px] text-slate-400">
-				{s.maxGfaSqm > 0 ? fmt(s.inputs.governmentFeesAed / toSqft(s.maxGfaSqm), 0) : '—'}
+				{s.maxGfaSqm > 0 ? fmt(s.assumptions.governmentFeesAed / toSqft(s.maxGfaSqm), 0) : '—'}
 			</td>
-			<td class={PCT_COL}>{fmtPct(pct(s.inputs.governmentFeesAed))}</td>
+			<td class={PCT_COL}>{fmtPct(pct(s.assumptions.governmentFeesAed))}</td>
 			<td class={UNIT}>AED / sqft GFA</td>
 		</tr>
 
@@ -547,27 +495,27 @@ const ROW_INDENT = 'border-b border-[#D9D9D9] bg-[#F9F9F9]'
 			<td class={LABEL}>Master Community Fees</td>
 			<td class="px-2 py-[3px] text-center text-[10px] text-slate-400">Pre-HO</td>
 			<td class="p-0">
-				<AmountInput value={s.inputs.masterCommunityFeesAed}
-					oncommit={(v) => s.updateInputs({ masterCommunityFeesAed: v })} class={INPUT} />
+				<AmountInput value={s.assumptions.masterCommunityFeesAed}
+					oncommit={(v) => s.updateAssumptions({ masterCommunityFeesAed: v })} class={INPUT} />
 			</td>
 			<td class="px-2 py-[3px] text-right text-[10px] text-slate-400">
-				{s.inputs.plotAreaSqm > 0 ? fmt(s.inputs.masterCommunityFeesAed / toSqft(s.inputs.plotAreaSqm), 0) : '—'}
+				{s.assumptions.plotAreaSqm > 0 ? fmt(s.assumptions.masterCommunityFeesAed / toSqft(s.assumptions.plotAreaSqm), 0) : '—'}
 			</td>
-			<td class={PCT_COL}>{fmtPct(pct(s.inputs.masterCommunityFeesAed))}</td>
+			<td class={PCT_COL}>{fmtPct(pct(s.assumptions.masterCommunityFeesAed))}</td>
 			<td class={UNIT}>AED / sqft plot</td>
 		</tr>
 
-		{#if s.inputs.ffeOsePreopeningCostAed > 0}
+		{#if s.assumptions.ffeOsePreopeningCostAed > 0}
 		<tr class={ROW_STD}>
 			<td class="px-1 py-[3px] text-slate-400 text-[10px] text-center">13</td>
 			<td class={LABEL}>FF&amp;E / Pre-Opening</td>
 			<td class="px-2 py-[3px] text-center text-[10px] text-slate-400">Pre-HO</td>
 			<td class="p-0">
-				<AmountInput value={s.inputs.ffeOsePreopeningCostAed}
-					oncommit={(v) => s.updateInputs({ ffeOsePreopeningCostAed: v })} class={INPUT} />
+				<AmountInput value={s.assumptions.ffeOsePreopeningCostAed}
+					oncommit={(v) => s.updateAssumptions({ ffeOsePreopeningCostAed: v })} class={INPUT} />
 			</td>
 			<td class={PCT_COL}></td>
-			<td class={PCT_COL}>{fmtPct(pct(s.inputs.ffeOsePreopeningCostAed))}</td>
+			<td class={PCT_COL}>{fmtPct(pct(s.assumptions.ffeOsePreopeningCostAed))}</td>
 			<td class={UNIT}>fixed AED</td>
 		</tr>
 		{/if}
@@ -577,9 +525,9 @@ const ROW_INDENT = 'border-b border-[#D9D9D9] bg-[#F9F9F9]'
 			<td></td>
 			<td class="px-2 py-[3px] font-semibold text-slate-700">Pre-Finance Cost Sub-Total</td>
 			<td></td>
-			<td class={VALUE_BOLD}>{fmtAed(preFinanceCosts)}</td>
+				<td class={VALUE_BOLD}>{fmtAed(budgetSummary.preFinanceCosts)}</td>
 			<td></td>
-			<td class="px-2 py-[3px] text-right tabular-nums text-slate-500 text-[10px] font-semibold">{fmtPct(pct(preFinanceCosts))}</td>
+				<td class="px-2 py-[3px] text-right tabular-nums text-slate-500 text-[10px] font-semibold">{fmtPct(pct(budgetSummary.preFinanceCosts))}</td>
 			<td class={UNIT}>AED</td>
 		</tr>
 
@@ -594,13 +542,13 @@ const ROW_INDENT = 'border-b border-[#D9D9D9] bg-[#F9F9F9]'
 			<td class="px-1 py-[3px] text-slate-400 text-[10px] text-center">14</td>
 			<td class={LABEL}>Arrangement Fee</td>
 			<td class="px-2 py-[3px] text-center text-[10px] text-slate-400">Financial close</td>
-			<td class={VALUE_BLACK}>{fmtAed(arrangementFee)}</td>
+				<td class={VALUE_BLACK}>{fmtAed(budgetSummary.arrangementFee)}</td>
 			<td class="p-0">
 				<input type="number" step="0.1" min="0" class={INPUT}
-					value={s.inputs.arrangementFeePct}
+					value={s.assumptions.arrangementFeePct}
 					oninput={(e) => setNumber('arrangementFeePct', e.currentTarget.value)} />
 			</td>
-			<td class={PCT_COL}>{fmtPct(pct(arrangementFee))}</td>
+				<td class={PCT_COL}>{fmtPct(pct(budgetSummary.arrangementFee))}</td>
 			<td class={UNIT}>% of debt</td>
 		</tr>
 
@@ -608,13 +556,13 @@ const ROW_INDENT = 'border-b border-[#D9D9D9] bg-[#F9F9F9]'
 			<td class="px-1 py-[3px] text-slate-400 text-[10px] text-center">15</td>
 			<td class={LABEL}>Undrawn Commitment Fee</td>
 			<td class="px-2 py-[3px] text-center text-[10px] text-slate-400">Pre-draw</td>
-			<td class={VALUE_BLACK}>{totalCommitmentFees > 0 ? fmtAed(totalCommitmentFees) : '—'}</td>
+				<td class={VALUE_BLACK}>{budgetSummary.totalCommitmentFees > 0 ? fmtAed(budgetSummary.totalCommitmentFees) : '—'}</td>
 			<td class="p-0">
 				<input type="number" step="0.1" min="0" class={INPUT}
-					value={s.inputs.commitmentFeePct}
+					value={s.assumptions.commitmentFeePct}
 					oninput={(e) => setNumber('commitmentFeePct', e.currentTarget.value)} />
 			</td>
-			<td class={PCT_COL}>{totalCommitmentFees > 0 ? fmtPct(pct(totalCommitmentFees)) : '—'}</td>
+				<td class={PCT_COL}>{budgetSummary.totalCommitmentFees > 0 ? fmtPct(pct(budgetSummary.totalCommitmentFees)) : '—'}</td>
 			<td class={UNIT}>% p.a. on undrawn</td>
 		</tr>
 
@@ -622,12 +570,12 @@ const ROW_INDENT = 'border-b border-[#D9D9D9] bg-[#F9F9F9]'
 			<td class="px-1 py-[3px] text-slate-400 text-[10px] text-center">16</td>
 			<td class={LABEL}>
 				Interest Carry
-				{#if !s.workbook}
+				{#if !s.outputs}
 					<span class="text-amber-600 text-[9px] font-normal italic ml-1">(run model for accurate figure)</span>
 				{/if}
 			</td>
 			<td class="px-2 py-[3px] text-center text-[10px] text-slate-400">Con→HO</td>
-			<td class={VALUE_BLACK}>{totalInterestPaid > 0 ? fmtAed(totalInterestPaid) : '—'}</td>
+				<td class={VALUE_BLACK}>{budgetSummary.totalInterestPaid > 0 ? fmtAed(budgetSummary.totalInterestPaid) : '—'}</td>
 			<td class="px-2 py-[3px] relative">
 				<!-- Land and construction rates — derived from EIBOR sheet -->
 				<div class="flex flex-col gap-0 text-right tabular-nums text-[10px]">
@@ -635,7 +583,7 @@ const ROW_INDENT = 'border-b border-[#D9D9D9] bg-[#F9F9F9]'
 					<span class="text-emerald-700 pt-[1px]" title="Construction loan rate (EIBOR + spread)">{fmtPct(s.constructionLoanRatePct, 2)}</span>
 				</div>
 			</td>
-			<td class={PCT_COL}>{totalInterestPaid > 0 ? fmtPct(pct(totalInterestPaid)) : '—'}</td>
+				<td class={PCT_COL}>{budgetSummary.totalInterestPaid > 0 ? fmtPct(pct(budgetSummary.totalInterestPaid)) : '—'}</td>
 			<td class="px-2 py-[3px] text-slate-400 text-[10px] whitespace-nowrap">↗ EIBOR sheet</td>
 		</tr>
 
@@ -643,9 +591,9 @@ const ROW_INDENT = 'border-b border-[#D9D9D9] bg-[#F9F9F9]'
 			<td></td>
 			<td class="px-2 py-[3px] font-semibold text-slate-700">Total Finance Costs</td>
 			<td></td>
-			<td class={VALUE_BOLD}>{totalFinanceCosts > 0 ? fmtAed(totalFinanceCosts) : '—'}</td>
+				<td class={VALUE_BOLD}>{budgetSummary.totalFinanceCosts > 0 ? fmtAed(budgetSummary.totalFinanceCosts) : '—'}</td>
 			<td></td>
-			<td class="px-2 py-[3px] text-right tabular-nums text-slate-500 text-[10px] font-semibold">{totalFinanceCosts > 0 ? fmtPct(pct(totalFinanceCosts)) : '—'}</td>
+				<td class="px-2 py-[3px] text-right tabular-nums text-slate-500 text-[10px] font-semibold">{budgetSummary.totalFinanceCosts > 0 ? fmtPct(pct(budgetSummary.totalFinanceCosts)) : '—'}</td>
 			<td class={UNIT}>AED</td>
 		</tr>
 
@@ -663,7 +611,7 @@ const ROW_INDENT = 'border-b border-[#D9D9D9] bg-[#F9F9F9]'
 			<td class={VALUE_BLACK}>{fmtAed(s.vatAmount)}</td>
 			<td class="p-0">
 				<input type="number" step="0.5" min="0" class={INPUT}
-					value={s.inputs.vatPct}
+					value={s.assumptions.vatPct}
 					oninput={(e) => setNumber('vatPct', e.currentTarget.value)} />
 			</td>
 			<td class={PCT_COL}>{fmtPct(pct(s.vatAmount))}</td>
@@ -697,22 +645,22 @@ const ROW_INDENT = 'border-b border-[#D9D9D9] bg-[#F9F9F9]'
 		<div class="grid grid-cols-5 divide-x divide-[#D9D9D9]">
 			<div class="px-3 py-2">
 				<div class="text-[9px] text-slate-500 uppercase tracking-wider">Cost / Unit</div>
-				<div class="text-[12px] font-bold text-slate-900 tabular-nums mt-0.5">{s.totalUnits > 0 ? fmtAed(costPerUnitAed) : '—'}</div>
+					<div class="text-[12px] font-bold text-slate-900 tabular-nums mt-0.5">{s.totalUnits > 0 ? fmtAed(budgetSummary.costPerUnitAed) : '—'}</div>
 				<div class="text-[9px] text-slate-400">AED</div>
 			</div>
 			<div class="px-3 py-2">
 				<div class="text-[9px] text-slate-500 uppercase tracking-wider">Revenue / Unit</div>
-				<div class="text-[12px] font-bold text-slate-900 tabular-nums mt-0.5">{s.totalUnits > 0 ? fmtAed(revenuePerUnitAed) : '—'}</div>
+					<div class="text-[12px] font-bold text-slate-900 tabular-nums mt-0.5">{s.totalUnits > 0 ? fmtAed(budgetSummary.revenuePerUnitAed) : '—'}</div>
 				<div class="text-[9px] text-slate-400">AED</div>
 			</div>
 			<div class="px-3 py-2">
 				<div class="text-[9px] text-slate-500 uppercase tracking-wider">Profit / Unit</div>
-				<div class="text-[12px] font-bold {profitPerUnitAed < 0 ? 'text-rose-600' : 'text-emerald-700'} tabular-nums mt-0.5">{s.totalUnits > 0 ? fmtAed(profitPerUnitAed) : '—'}</div>
+					<div class="text-[12px] font-bold {budgetSummary.profitPerUnitAed < 0 ? 'text-rose-600' : 'text-emerald-700'} tabular-nums mt-0.5">{s.totalUnits > 0 ? fmtAed(budgetSummary.profitPerUnitAed) : '—'}</div>
 				<div class="text-[9px] text-slate-400">AED</div>
 			</div>
 			<div class="px-3 py-2">
 				<div class="text-[9px] text-slate-500 uppercase tracking-wider">All-in Cost / sqft BUA</div>
-				<div class="text-[12px] font-bold text-slate-900 tabular-nums mt-0.5">{s.totalBuaSqm > 0 ? fmt(costPerSqftBua, 0) : '—'}</div>
+					<div class="text-[12px] font-bold text-slate-900 tabular-nums mt-0.5">{s.totalBuaSqm > 0 ? fmt(budgetSummary.costPerSqftBua, 0) : '—'}</div>
 				<div class="text-[9px] text-slate-400">AED / sqft</div>
 			</div>
 			<div class="px-3 py-2">
@@ -750,19 +698,19 @@ const ROW_INDENT = 'border-b border-[#D9D9D9] bg-[#F9F9F9]'
 			<tr class="border-b border-[#D9D9D9]">
 				<td class="px-1 py-[3px] text-slate-400 text-[10px] text-center">c</td>
 				<td class="px-2 py-[3px] text-slate-800">Finance Costs <span class="text-slate-400 font-normal italic">(interest + fees)</span></td>
-				<td class="px-2 py-[3px] text-right tabular-nums text-slate-900">{totalFinanceCosts > 0 ? fmtAed(totalFinanceCosts) : s.workbook ? '0' : '—'}</td>
+					<td class="px-2 py-[3px] text-right tabular-nums text-slate-900">{budgetSummary.totalFinanceCosts > 0 ? fmtAed(budgetSummary.totalFinanceCosts) : s.outputs ? '0' : '—'}</td>
 				<td class="px-2 py-[3px] text-right text-slate-400 text-[10px]">AED</td>
 			</tr>
 			<tr class="border-b border-[#D9D9D9] border-t border-[#1F3864]">
 				<td class="px-1 py-[3px]"></td>
 				<td class="px-2 py-[3px] text-slate-900 font-semibold">All-in Profit</td>
-				<td class="px-2 py-[3px] text-right tabular-nums text-slate-900 font-semibold">{fmtAed(allInProfit)}</td>
+					<td class="px-2 py-[3px] text-right tabular-nums text-slate-900 font-semibold">{fmtAed(budgetSummary.allInProfit)}</td>
 				<td class="px-2 py-[3px] text-right text-slate-400 text-[10px]">AED</td>
 			</tr>
 			<tr class="border-b border-[#D9D9D9]">
 				<td class="px-1 py-[3px]"></td>
 				<td class="px-2 py-[3px] text-slate-700">All-in Margin</td>
-				<td class="px-2 py-[3px] text-right tabular-nums font-semibold {allInMarginPct < 10 ? 'text-rose-600' : allInMarginPct < 15 ? 'text-amber-600' : 'text-emerald-700'}">{fmtPct(allInMarginPct)}</td>
+					<td class="px-2 py-[3px] text-right tabular-nums font-semibold {budgetSummary.allInMarginPct < 10 ? 'text-rose-600' : budgetSummary.allInMarginPct < 15 ? 'text-amber-600' : 'text-emerald-700'}">{fmtPct(budgetSummary.allInMarginPct)}</td>
 				<td class="px-2 py-[3px] text-right text-slate-400 text-[10px]">of gross revenue</td>
 			</tr>
 
@@ -778,8 +726,8 @@ const ROW_INDENT = 'border-b border-[#D9D9D9] bg-[#F9F9F9]'
 					Project IRR
 					<span class="ml-1 text-[9px] text-slate-400 font-normal italic">unlevered — excl. financing</span>
 				</td>
-				<td class="px-2 py-[3px] text-right tabular-nums font-bold text-[13px] {projectIrrPct != null && projectIrrPct < 10 ? 'text-rose-600' : projectIrrPct != null && projectIrrPct < 15 ? 'text-amber-600' : 'text-emerald-700'}">
-					{projectIrrPct != null ? fmt(projectIrrPct, 1) + '%' : '—'}
+					<td class="px-2 py-[3px] text-right tabular-nums font-bold text-[13px] {budgetSummary.projectIrrPct != null && budgetSummary.projectIrrPct < 10 ? 'text-rose-600' : budgetSummary.projectIrrPct != null && budgetSummary.projectIrrPct < 15 ? 'text-amber-600' : 'text-emerald-700'}">
+						{budgetSummary.projectIrrPct != null ? fmt(budgetSummary.projectIrrPct, 1) + '%' : '—'}
 				</td>
 				<td class="px-2 py-[3px] text-right text-slate-400 text-[10px]">% p.a.</td>
 			</tr>
@@ -789,16 +737,16 @@ const ROW_INDENT = 'border-b border-[#D9D9D9] bg-[#F9F9F9]'
 					Equity IRR
 					<span class="ml-1 text-[9px] text-slate-400 font-normal italic">levered — incl. interest carry</span>
 				</td>
-				<td class="px-2 py-[3px] text-right tabular-nums font-bold text-[13px] {equityIrrPct === null ? 'text-slate-400' : equityIrrPct < 12 ? 'text-rose-600' : equityIrrPct < 18 ? 'text-amber-600' : 'text-emerald-700'}">
-					{equityIrrPct != null ? fmt(equityIrrPct, 1) + '%' : s.workbook ? '—' : 'Run model'}
+					<td class="px-2 py-[3px] text-right tabular-nums font-bold text-[13px] {budgetSummary.equityIrrPct === null ? 'text-slate-400' : budgetSummary.equityIrrPct < 12 ? 'text-rose-600' : budgetSummary.equityIrrPct < 18 ? 'text-amber-600' : 'text-emerald-700'}">
+						{budgetSummary.equityIrrPct != null ? fmt(budgetSummary.equityIrrPct, 1) + '%' : s.outputs ? '—' : 'Run model'}
 				</td>
-				<td class="px-2 py-[3px] text-right text-slate-400 text-[10px]">{!s.workbook ? '(requires model run)' : '% p.a.'}</td>
+				<td class="px-2 py-[3px] text-right text-slate-400 text-[10px]">{!s.outputs ? '(requires model run)' : '% p.a.'}</td>
 			</tr>
 			<tr class="border-b border-[#D9D9D9]">
 				<td class="px-1 py-[3px] text-slate-400 text-[10px] text-center">f</td>
 				<td class="px-2 py-[3px] text-slate-800">MoIC</td>
 				<td class="px-2 py-[3px] text-right tabular-nums font-bold text-[12px] text-slate-900">
-					{fmt(s.workbook?.returns?.projectMoic ?? s.revenueMultiple, 2)}x
+					{fmt(s.outputs?.returns?.projectMoic ?? s.revenueMultiple, 2)}x
 				</td>
 				<td class="px-2 py-[3px] text-right text-slate-400 text-[10px]">revenue / cost</td>
 			</tr>

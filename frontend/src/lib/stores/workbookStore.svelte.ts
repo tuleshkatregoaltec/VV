@@ -1,40 +1,29 @@
-// ══════════════════════════════════════════════════════════════════════════════
-// Workbook Store — workbook-first state management
-// ══════════════════════════════════════════════════════════════════════════════
-// Shape: { assumptions, context, research, outputs, validation }
-// - assumptions: canonical mutable inputs
-// - outputs: derived via engine.ts computeWorkbook(assumptions)
-// - validation: derived via engine.ts validateWorkbook(assumptions, outputs)
-// - context/research: secondary display data
-// ══════════════════════════════════════════════════════════════════════════════
-
-import type { PlotResearch, StudyContext } from '$lib/api/generated/hey-api/types.gen'
+import { feasibility } from '$lib/api/feasibility'
+import type {
+	Plot,
+	PlotDetails,
+	PlotResearch,
+	StudyContext
+} from '$lib/api/generated/hey-api/types.gen'
+import {
+	buildPricingEvidenceStudy,
+	buildResearchSnapshot,
+	buildStudyContextCard,
+	buildValidationSummary
+} from '$lib/feasibility/view-models'
 import {
 	computeWorkbook as computeWorkbookOutputs,
 	type WorkbookOutputs
 } from '$lib/feasibility/workbook/engine'
 import type {
 	FeasibilityAssumptions,
-	Plot,
-	PlotDetails,
+	FeasibilityStudy,
 	UnitConfig
 } from '$lib/feasibility/workbook/models'
 import { type ValidationResult, validateWorkbook } from '$lib/feasibility/workbook/validation'
-
 import { toSqft } from '$lib/utils/units'
 
-// ── Types ────────────────────────────────────────────────────────────────────
-
-export type WorkbookPhase = 'empty' | 'loading' | 'ready' | 'error'
-
-export type ReviewDecisionType = 'accepted' | 'review_later' | 'needs_evidence'
-
-export interface ReviewDecision {
-	code: string
-	decision: ReviewDecisionType
-	timestamp: string
-}
-
+type StudyPhase = 'search' | 'generating' | 'ready' | 'error'
 export type FeasibilitySheetTab =
 	| 'key_assumptions'
 	| 'sales_collections'
@@ -47,16 +36,23 @@ export type FeasibilitySheetTab =
 	| 'pricing_evidence'
 	| 'eibor'
 
-export interface WorkbookState {
-	phase: WorkbookPhase
+export type ReviewDecisionType = 'accepted' | 'review_later' | 'needs_evidence'
+
+export interface ReviewDecision {
+	code: string
+	decision: ReviewDecisionType
+	timestamp: string
+}
+
+interface FeasibilityStudyState {
+	phase: StudyPhase
+	selectedPlot: Plot | null
 	plotData: PlotDetails | null
 	assumptions: FeasibilityAssumptions | null
 	study_context: StudyContext | null
 	research: PlotResearch | null
-	error: string | null
+	error: string
 }
-
-// ── Dirty tracking sets ──────────────────────────────────────────────────────
 
 const UNIT_MIX_IMPACT_SHEETS: FeasibilitySheetTab[] = [
 	'key_assumptions',
@@ -131,8 +127,6 @@ const BUDGET_IMPACT_SHEETS: FeasibilitySheetTab[] = [
 	'checks'
 ]
 
-// ── Default Assumptions ──────────────────────────────────────────────────────
-
 function todayIsoDate(): string {
 	return new Date().toISOString().slice(0, 10)
 }
@@ -199,46 +193,29 @@ function createDefaultAssumptions(): FeasibilityAssumptions {
 	}
 }
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
-
-function parseMaxStoreys(maxHeight: string | null | undefined): number | null {
-	if (!maxHeight) return null
-	const matches = maxHeight.match(/(\d+)/g)
-	if (!matches?.length) return null
-	const storeys = Number(matches[matches.length - 1])
-	return Number.isFinite(storeys) && storeys > 0 ? storeys : null
-}
-
-function parseMaxCoverage(maxCoverage: string | null | undefined): number | null {
-	if (!maxCoverage) return null
-	const match = maxCoverage.match(/(\d+(?:\.\d+)?)/)
-	if (!match) return null
-	const value = Number(match[1])
-	return Number.isFinite(value) ? value : null
-}
-
-function seedAssumptionsFromPlot(plotData: PlotDetails): FeasibilityAssumptions {
-	const base = createDefaultAssumptions()
+function adaptBackendStudy(raw: Record<string, unknown>): FeasibilityStudy {
+	const plot_data = raw.plot_data as PlotDetails
+	const assumptions = raw.assumptions as FeasibilityAssumptions
+	const study_context = raw.study_context as StudyContext
+	const research = raw.research as PlotResearch
 	return {
-		...base,
-		usage: plotData.inferred_usage ?? 'unknown',
-		plotAreaSqm: plotData.plot_area_sqm,
-		maxGfaSqm: plotData.max_gfa_sqm ?? 0,
-		maxCoveragePct: parseMaxCoverage(plotData.max_coverage),
-		maxStoreys: parseMaxStoreys(plotData.max_height),
-		maxFar: plotData.far ?? 0
+		status: 'ready',
+		plot_data,
+		assumptions,
+		study_context,
+		research,
+		chat: (raw.chat as FeasibilityStudy['chat']) ?? { history: [] }
 	}
 }
 
-// ── Store ────────────────────────────────────────────────────────────────────
-
-const state = $state<WorkbookState>({
-	phase: 'empty',
+const state = $state<FeasibilityStudyState>({
+	phase: 'search',
+	selectedPlot: null,
 	plotData: null,
 	assumptions: null,
 	study_context: null,
 	research: null,
-	error: null
+	error: ''
 })
 
 const sheetDirty = $state<Record<FeasibilitySheetTab, boolean>>({
@@ -261,14 +238,49 @@ const activeSheet = $state<{ value: FeasibilitySheetTab }>({
 const reviewDecisions = $state<Record<string, ReviewDecision>>({})
 
 const inputs = $derived<FeasibilityAssumptions>(state.assumptions ?? createDefaultAssumptions())
-
 const outputs = $derived<WorkbookOutputs | null>(
 	state.assumptions ? computeWorkbookOutputs(state.assumptions) : null
 )
-
 const validation = $derived<ValidationResult | null>(
 	state.assumptions && outputs ? validateWorkbook(state.assumptions, outputs) : null
 )
+const studyContextCard = $derived(buildStudyContextCard(state.plotData, state.study_context))
+const researchSnapshot = $derived(buildResearchSnapshot(state.research))
+const validationSummary = $derived(buildValidationSummary(validation))
+const pricingEvidenceStudy = $derived(
+	buildPricingEvidenceStudy(state.research, state.study_context)
+)
+const study = $derived<FeasibilityStudy | null>(
+	state.plotData && state.assumptions && state.study_context && state.research
+		? {
+				status: 'ready',
+				plot_data: state.plotData,
+				assumptions: state.assumptions,
+				study_context: state.study_context,
+				research: state.research,
+				chat: { history: [] }
+			}
+		: null
+)
+
+function resetSheetDirty(): void {
+	sheetDirty.key_assumptions = false
+	sheetDirty.sales_collections = false
+	sheetDirty.budget = false
+	sheetDirty.financing = false
+	sheetDirty.cashflow = false
+	sheetDirty.monthly_cf = false
+	sheetDirty.returns = false
+	sheetDirty.checks = false
+	sheetDirty.pricing_evidence = false
+	sheetDirty.eibor = false
+}
+
+function resetReviewDecisions(): void {
+	for (const key of Object.keys(reviewDecisions)) {
+		delete reviewDecisions[key]
+	}
+}
 
 function markSheetsDirty(tabs: FeasibilitySheetTab[]): void {
 	for (const tab of tabs) {
@@ -624,66 +636,23 @@ function applyPaymentPlanPatch(patch: Partial<FeasibilityAssumptions['paymentPla
 	}
 }
 
-// ── Actions ──────────────────────────────────────────────────────────────────
-
-function initFromPlot(plotData: PlotDetails): void {
-	state.phase = 'ready'
-	state.plotData = plotData
-	state.assumptions = seedAssumptionsFromPlot(plotData)
-	state.study_context = {
-		headline: plotData.project_name,
-		project_tier: 'premium',
-		positioning: 'Seeded study pending generation',
-		summary_points: [],
-		unit_mix_rationale: '',
-		pricing_rationale: '',
-		cost_rationale: '',
-		timing_rationale: '',
-		financing_rationale: '',
-		market_summary: ''
-	}
-	state.research = {
-		plot_number: plotData.plot_number,
-		usage: plotData.inferred_usage ?? 'unknown',
-		market_area: plotData.community_name,
-		headline: plotData.project_name,
-		summary: [],
-		constraints: [],
-		warnings: [],
-		pricing_evidence: [],
-		competition_evidence: [],
-		land_sales_evidence: [],
-		market_pricing: [],
-		off_plan_market_pricing: [],
-		off_plan_pricing_confidence: null,
-		off_plan_unit_benchmarks: [],
-		assumptions: seedAssumptionsFromPlot(plotData) as never,
-		land_cost_estimate_aed_low: null,
-		land_cost_estimate_aed_mid: null,
-		land_cost_estimate_aed_high: null
-	}
-	state.error = null
+function normalizeKey(v: string) {
+	return v.trim().toLowerCase().replaceAll(/\s+/g, '').replaceAll('/', '')
 }
 
-function loadStudy(data: {
-	plotData: PlotDetails
-	assumptions: FeasibilityAssumptions
-	study_context: StudyContext
-	research: PlotResearch
-}): void {
+function loadStudy(nextStudy: FeasibilityStudy): void {
 	state.phase = 'ready'
-	state.plotData = data.plotData
-	state.assumptions = data.assumptions
-	state.study_context = data.study_context
-	state.research = data.research
-	state.error = null
+	state.plotData = nextStudy.plot_data
+	state.assumptions = nextStudy.assumptions
+	state.study_context = nextStudy.study_context
+	state.research = nextStudy.research
+	state.error = ''
+	activeSheet.value = 'key_assumptions'
+	resetSheetDirty()
+	resetReviewDecisions()
 }
 
 function updateAssumptions(patch: Partial<FeasibilityAssumptions>): void {
-	applyAssumptionsPatch(patch)
-}
-
-function updateInputs(patch: Partial<FeasibilityAssumptions>): void {
 	const impactedTabs = new Set<FeasibilitySheetTab>(['key_assumptions'])
 	for (const key of Object.keys(patch) as Array<keyof FeasibilityAssumptions>) {
 		if (EIBOR_IMPACT_KEYS.has(key)) {
@@ -741,22 +710,19 @@ function updatePaymentPlan(patch: Partial<FeasibilityAssumptions['paymentPlan']>
 	applyPaymentPlanPatch(patch)
 }
 
-function normalizeKey(v: string) {
-	return v.trim().toLowerCase().replaceAll(/\s+/g, '').replaceAll('/', '')
-}
-
 function applyProposal(proposal: { action: string; payload: unknown }): boolean {
 	if (!state.assumptions) return false
 	const { action, payload } = proposal
 	if (action === 'set_assumptions' && payload && typeof payload === 'object') {
-		updateInputs(payload as Partial<FeasibilityAssumptions>)
+		updateAssumptions(payload as Partial<FeasibilityAssumptions>)
 		return true
 	}
 	if (action === 'set_price_per_sqm' && payload && typeof payload === 'object') {
 		for (const [key, price] of Object.entries(payload as Record<string, number>)) {
 			const match = state.assumptions.unitConfigs?.find(
-				(r) =>
-					normalizeKey(r.id) === normalizeKey(key) || normalizeKey(r.label) === normalizeKey(key)
+				(row) =>
+					normalizeKey(row.id) === normalizeKey(key) ||
+					normalizeKey(row.label) === normalizeKey(key)
 			)
 			if (match) updateUnitConfig(match.id, { sellingRatePsqm: price })
 		}
@@ -766,10 +732,11 @@ function applyProposal(proposal: { action: string; payload: unknown }): boolean 
 		for (const row of payload as Array<Record<string, unknown>>) {
 			const key = String(row.type ?? '')
 			const match = state.assumptions.unitConfigs?.find(
-				(r) =>
-					normalizeKey(r.id) === normalizeKey(key) || normalizeKey(r.label) === normalizeKey(key)
+				(item) =>
+					normalizeKey(item.id) === normalizeKey(key) ||
+					normalizeKey(item.label) === normalizeKey(key)
 			)
-			if (match)
+			if (match) {
 				updateUnitConfig(match.id, {
 					units: typeof row.count === 'number' ? row.count : match.units,
 					avgSizeSqm: typeof row.avgSizeSqm === 'number' ? row.avgSizeSqm : match.avgSizeSqm,
@@ -777,6 +744,7 @@ function applyProposal(proposal: { action: string; payload: unknown }): boolean 
 						typeof row.price_sqm === 'number' ? row.price_sqm : match.sellingRatePsqm,
 					parkingRatio: typeof row.parkingRatio === 'number' ? row.parkingRatio : match.parkingRatio
 				})
+			}
 		}
 		return true
 	}
@@ -792,76 +760,23 @@ function applyProposal(proposal: { action: string; payload: unknown }): boolean 
 	return false
 }
 
-function setError(message: string): void {
-	state.phase = 'error'
-	state.error = message
-}
-
-function reset(): void {
-	state.phase = 'empty'
-	state.plotData = null
-	state.assumptions = null
-	state.study_context = null
-	state.research = null
-	state.error = null
-	activeSheet.value = 'key_assumptions'
-}
-
-function clearSheetDirty(tab: FeasibilitySheetTab): void {
-	sheetDirty[tab] = false
-}
-
-function markSheetDirty(tab: FeasibilitySheetTab): void {
-	sheetDirty[tab] = true
-}
-
-function setActiveSheet(tab: FeasibilitySheetTab): void {
-	activeSheet.value = tab
-	clearSheetDirty(tab)
-}
-
-function currentPlot(): Plot | null {
-	const plotData = state.plotData
-	if (!plotData) return null
-	return {
-		plot_number: plotData.plot_number,
-		community_name: plotData.community_name,
-		project_name: plotData.project_name,
-		plot_area_sqm: plotData.plot_area_sqm,
-		max_gfa_sqm: plotData.max_gfa_sqm,
-		max_height: plotData.max_height,
-		max_coverage: plotData.max_coverage,
-		gfa_type: plotData.gfa_type,
-		is_verified: plotData.is_verified,
-		land_use_summary: (plotData.land_use ?? [])
-			.map((item) => `${item.type}: ${item.use}`)
-			.slice(0, 3)
-	}
-}
-
-// ── Exports ──────────────────────────────────────────────────────────────────
-
 export const workbookStore = {
-	// State
 	get phase() {
 		return state.phase
+	},
+	get selectedPlot() {
+		return state.selectedPlot
 	},
 	get plotData() {
 		return state.plotData
 	},
-	get plotDetails() {
-		return state.plotData
-	},
-	get plot() {
-		return currentPlot()
+	get study() {
+		return study
 	},
 	get assumptions() {
-		return state.assumptions
-	},
-	get inputs() {
 		return inputs
 	},
-	get study_context() {
+	get studyContext() {
 		return state.study_context
 	},
 	get research() {
@@ -876,19 +791,24 @@ export const workbookStore = {
 	get sheetDirty() {
 		return sheetDirty
 	},
-
-	// Rich workbook + clean outputs
-	get workbook() {
-		return outputs
-	},
 	get outputs() {
 		return outputs
 	},
 	get validation() {
 		return validation
 	},
-
-	// Compatibility numeric surfaces used by sheets
+	get studyContextCard() {
+		return studyContextCard
+	},
+	get researchSnapshot() {
+		return researchSnapshot
+	},
+	get validationSummary() {
+		return validationSummary
+	},
+	get pricingEvidenceStudy() {
+		return pricingEvidenceStudy
+	},
 	get unitConfigs() {
 		return inputs.unitConfigs ?? []
 	},
@@ -1039,25 +959,76 @@ export const workbookStore = {
 	get hasDraftCase() {
 		return hasDraftCaseValue()
 	},
-
-	// Review decisions used by assumptions sheet
 	get reviewDecisions() {
 		return reviewDecisions
 	},
 	setReviewDecision,
 	getReviewDecision,
-
-	// Actions
-	initFromPlot,
+	async selectPlot(plot: Plot) {
+		state.selectedPlot = plot
+		state.phase = 'search'
+		state.error = ''
+		state.plotData = null
+		state.assumptions = null
+		state.study_context = null
+		state.research = null
+		activeSheet.value = 'key_assumptions'
+		resetSheetDirty()
+		resetReviewDecisions()
+		try {
+			const response = await feasibility.getPlotData(plot.plot_number)
+			state.plotData = response.plot_data
+		} catch (err) {
+			state.selectedPlot = null
+			state.phase = 'error'
+			state.error = err instanceof Error ? err.message : 'Failed to load plot data.'
+		}
+	},
+	async generateStudy() {
+		const plot = state.selectedPlot
+		if (!plot) return
+		state.phase = 'generating'
+		state.error = ''
+		try {
+			const next = await feasibility.generateStudy({
+				plot_number: plot.plot_number,
+				usage_override: state.plotData?.inferred_usage ?? undefined
+			})
+			loadStudy(adaptBackendStudy(next as unknown as Record<string, unknown>))
+		} catch (err) {
+			state.phase = 'error'
+			state.error = err instanceof Error ? err.message : 'Failed to generate feasibility study.'
+		}
+	},
 	loadStudy,
 	updateAssumptions,
-	updateInputs,
 	updateUnitConfig,
 	updatePaymentPlan,
 	applyProposal,
-	setError,
-	reset,
-	clearSheetDirty,
-	markSheetDirty,
-	setActiveSheet
+	setError(message: string): void {
+		state.phase = 'error'
+		state.error = message
+	},
+	clearSheetDirty(tab: FeasibilitySheetTab): void {
+		sheetDirty[tab] = false
+	},
+	markSheetDirty(tab: FeasibilitySheetTab): void {
+		sheetDirty[tab] = true
+	},
+	setActiveSheet(tab: FeasibilitySheetTab): void {
+		activeSheet.value = tab
+		sheetDirty[tab] = false
+	},
+	reset() {
+		state.phase = 'search'
+		state.selectedPlot = null
+		state.plotData = null
+		state.assumptions = null
+		state.study_context = null
+		state.research = null
+		state.error = ''
+		activeSheet.value = 'key_assumptions'
+		resetSheetDirty()
+		resetReviewDecisions()
+	}
 }

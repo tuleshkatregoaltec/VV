@@ -230,13 +230,6 @@ function parseIsoDate(s: string, fallback: Date): Date {
 	return Number.isNaN(parsed.getTime()) ? fallback : parsed
 }
 
-function monthsBetween(a: Date, b: Date): number {
-	return Math.max(
-		(b.getUTCFullYear() - a.getUTCFullYear()) * 12 + (b.getUTCMonth() - a.getUTCMonth()),
-		0
-	)
-}
-
 function addMonths(dt: Date, months: number): Date {
 	return new Date(Date.UTC(dt.getUTCFullYear(), dt.getUTCMonth() + months, 1))
 }
@@ -266,10 +259,10 @@ function periodicIrr(cashFlows: number[], periodsPerYear: number): number | null
 	for (let i = 0; i < 100; i++) {
 		const n = npv(rate)
 		const dn = cashFlows.reduce((sum, cf, idx) => sum - (idx * cf) / (1 + rate) ** (idx + 1), 0)
-		if (!isFinite(n) || !isFinite(dn)) break
+		if (!Number.isFinite(n) || !Number.isFinite(dn)) break
 		if (Math.abs(dn) < 1e-10) break
 		let nextRate = rate - n / dn
-		if (!isFinite(nextRate)) break
+		if (!Number.isFinite(nextRate)) break
 		nextRate = Math.max(Math.min(nextRate, maxRate), minRate)
 		if (Math.abs(nextRate - rate) < 1e-7) {
 			rate = nextRate
@@ -278,15 +271,15 @@ function periodicIrr(cashFlows: number[], periodsPerYear: number): number | null
 		}
 		rate = nextRate
 	}
-	if (newtonConverged && rate > minRate && rate < maxRate && isFinite(rate)) {
+	if (newtonConverged && rate > minRate && rate < maxRate && Number.isFinite(rate)) {
 		const annualised = ((1 + rate) ** periodsPerYear - 1) * 100
-		if (isFinite(annualised)) return annualised
+		if (Number.isFinite(annualised)) return annualised
 	}
 	let lo = -0.999
 	let hi = 5.0
 	let npvLo = npv(lo)
 	let npvHi = npv(hi)
-	if (!isFinite(npvLo) || !isFinite(npvHi)) return null
+	if (!Number.isFinite(npvLo) || !Number.isFinite(npvHi)) return null
 	if (npvLo * npvHi > 0) return null
 	for (let i = 0; i < 200; i++) {
 		const mid = (lo + hi) / 2
@@ -304,7 +297,7 @@ function periodicIrr(cashFlows: number[], periodsPerYear: number): number | null
 		}
 	}
 	const annualised = ((1 + rate) ** periodsPerYear - 1) * 100
-	return isFinite(annualised) ? annualised : null
+	return Number.isFinite(annualised) ? annualised : null
 }
 
 type PeriodRevenue = { deposit: number; preHandover: number; handover: number }
@@ -419,7 +412,8 @@ function revenueByPeriod(
 	const dPH = round(preHandoverRevenue - totPH)
 	const dHO = round(handoverRevenue - totHO)
 	if (result.has(handoverKey) && (dDep || dPH || dHO)) {
-		const prev = result.get(handoverKey)!
+		const prev = result.get(handoverKey)
+		if (!prev) return result
 		result.set(handoverKey, {
 			deposit: round(prev.deposit + dDep),
 			preHandover: round(prev.preHandover + dPH),

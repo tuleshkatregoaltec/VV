@@ -1,33 +1,14 @@
 <script lang="ts">
-import { workbookStore } from '$lib/feasibility/workbook/store.svelte'
+import { areaSqmToSqft, formatFeasibilityNumber, ratePerSqmToSqft } from '$lib/feasibility/format'
+import { workbookStore } from '$lib/stores/workbookStore.svelte'
 
-const study = $derived(
-	workbookStore.research
-		? {
-				market_area: workbookStore.research.market_area,
-				usage: workbookStore.research.usage,
-				headline: workbookStore.study_context?.headline || workbookStore.research.headline,
-				off_plan_unit_benchmarks: workbookStore.research.off_plan_unit_benchmarks,
-				market_pricing: workbookStore.research.market_pricing,
-				pricing_evidence: workbookStore.research.pricing_evidence,
-				competition_evidence: workbookStore.research.competition_evidence,
-				land_sales_evidence: workbookStore.research.land_sales_evidence
-			}
-		: null
-)
-
+const study = $derived(workbookStore.pricingEvidenceStudy)
 const outputs = $derived(workbookStore.outputs)
 const assumptions = $derived(workbookStore.assumptions)
 const programRows = $derived(outputs?.program.rows ?? [])
 
 function fmt(n: number, digits = 0): string {
-	return n.toLocaleString('en-AE', { minimumFractionDigits: digits, maximumFractionDigits: digits })
-}
-function rateToSqft(aedPerSqm: number) {
-	return aedPerSqm * 0.092903
-}
-function toSqft(sqm: number) {
-	return sqm / 0.092903
+	return formatFeasibilityNumber(n, digits)
 }
 
 const confidenceBadge: Record<string, string> = {
@@ -83,7 +64,7 @@ const TD_LEFT = 'px-2 py-[3px] text-left text-slate-800 border-b border-[#EBEBEB
 				</tr>
 				<tr>
 					<td class="{TD_LEFT} font-semibold text-slate-500 text-[10px] uppercase tracking-wide border-r border-[#E8E8E8]">Plot Area (sqm)</td>
-					<td class="{TD_LEFT} border-r border-[#E8E8E8]">{outputs ? fmt(outputs.area.plotAreaSqm) : fmt(assumptions?.plotAreaSqm ?? 0)}</td>
+						<td class="{TD_LEFT} border-r border-[#E8E8E8]">{outputs ? fmt(outputs.area.plotAreaSqm) : fmt(assumptions?.plotAreaSqm ?? 0)}</td>
 					<td class="{TD_LEFT} font-semibold text-slate-500 text-[10px] uppercase tracking-wide border-r border-[#E8E8E8]">Max GFA (sqm)</td>
 					<td class={TD_LEFT}>{outputs ? fmt(outputs.area.maxGfaSqm) : '—'}</td>
 				</tr>
@@ -95,9 +76,9 @@ const TD_LEFT = 'px-2 py-[3px] text-left text-slate-800 border-b border-[#EBEBEB
 				</tr>
 				<tr>
 					<td class="{TD_LEFT} font-semibold text-slate-500 text-[10px] uppercase tracking-wide border-r border-[#E8E8E8]">Wtd. Avg Price (AED/sqft)</td>
-					<td class="{TD_LEFT} border-r border-[#E8E8E8] font-medium text-[#1565C0]">
-						{outputs ? fmt(rateToSqft(outputs.program.weightedAvgSalesRatePsqm)) : '—'}
-					</td>
+						<td class="{TD_LEFT} border-r border-[#E8E8E8] font-medium text-[#1565C0]">
+						{outputs ? fmt(ratePerSqmToSqft(outputs.program.weightedAvgSalesRatePsqm)) : '—'}
+						</td>
 					<td class="{TD_LEFT} font-semibold text-slate-500 text-[10px] uppercase tracking-wide border-r border-[#E8E8E8]">Gross Revenue (AED)</td>
 					<td class="{TD_LEFT} font-medium">{outputs ? fmt(outputs.program.grossRevenueAed) : '0'}</td>
 				</tr>
@@ -135,8 +116,8 @@ const TD_LEFT = 'px-2 py-[3px] text-left text-slate-800 border-b border-[#EBEBEB
 						<td class="{TD_LEFT} font-medium border-r border-[#E8E8E8]">{row.label}</td>
 						<td class="{TD} border-r border-[#E8E8E8]">{fmt(row.units)}</td>
 						<td class="{TD} border-r border-[#E8E8E8]">{outputs.program.totalUnits > 0 ? ((row.units / outputs.program.totalUnits) * 100).toFixed(1) : '0.0'}%</td>
-						<td class="{TD} border-r border-[#E8E8E8]">{fmt(toSqft(row.avgSizeSqm))}</td>
-						<td class="{TD} border-r border-[#E8E8E8] text-[#1565C0] font-semibold">{fmt(rateToSqft(row.sellingRatePsqm))}</td>
+						<td class="{TD} border-r border-[#E8E8E8]">{fmt(areaSqmToSqft(row.avgSizeSqm))}</td>
+						<td class="{TD} border-r border-[#E8E8E8] text-[#1565C0] font-semibold">{fmt(ratePerSqmToSqft(row.sellingRatePsqm))}</td>
 						<td class={TD}>{fmt(row.revenueAed)}</td>
 					</tr>
 				{/each}
@@ -182,7 +163,7 @@ const TD_LEFT = 'px-2 py-[3px] text-left text-slate-800 border-b border-[#EBEBEB
 						<td class="{TD} border-r border-[#E8E8E8]">{fmt(b.avg_months_to_completion, 0)}</td>
 						<td class="{TD} border-r border-[#E8E8E8]">{fmt(b.transaction_count)}</td>
 						<td class="{TD} border-r border-[#E8E8E8] font-semibold">{fmt(b.selected_price_sqm)}</td>
-						<td class="{TD} border-r border-[#E8E8E8] font-semibold text-[#1565C0]">{fmt(rateToSqft(b.selected_price_sqm))}</td>
+						<td class="{TD} border-r border-[#E8E8E8] font-semibold text-[#1565C0]">{fmt(ratePerSqmToSqft(b.selected_price_sqm))}</td>
 						<td class="px-2 py-[3px] border-r border-[#E8E8E8] border-b border-[#EBEBEB]">
 							<span class="px-1.5 py-0.5 rounded text-[9px] font-semibold uppercase tracking-wide {confidenceBadge[b.confidence_label] ?? ''}">
 								{b.confidence_label}
@@ -226,7 +207,7 @@ const TD_LEFT = 'px-2 py-[3px] text-left text-slate-800 border-b border-[#EBEBEB
 						<td class="{TD} border-r border-[#E8E8E8]">{fmt(row.transaction_count)}</td>
 						<td class="{TD} border-r border-[#E8E8E8]">{fmt(row.median_price_sqm)}</td>
 						<td class="{TD} border-r border-[#E8E8E8] font-semibold text-[#1565C0]">{fmt(rateToSqft(row.median_price_sqm))}</td>
-						<td class={TD}>{row.avg_area_sqm ? fmt(toSqft(row.avg_area_sqm)) : '—'}</td>
+						<td class={TD}>{row.avg_area_sqm ? fmt(areaSqmToSqft(row.avg_area_sqm)) : '—'}</td>
 					</tr>
 				{/each}
 			</tbody>
