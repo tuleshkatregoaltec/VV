@@ -1,3 +1,4 @@
+from functools import lru_cache
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
@@ -5,7 +6,13 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 
 from app.core.dependencies import AuthContext, require_active_subscription
-from app.main import app
+
+
+@lru_cache(maxsize=1)
+def get_app():
+    from app.main import app
+
+    return app
 
 
 def make_mock_auth_context() -> AuthContext:
@@ -43,6 +50,7 @@ def make_current_user(**overrides):
 @pytest.fixture
 def mock_auth():
     """Override require_active_subscription with a mock auth context."""
+    app = get_app()
     app.dependency_overrides[require_active_subscription] = lambda: make_mock_auth_context()
     yield
     app.dependency_overrides.clear()
@@ -51,6 +59,7 @@ def mock_auth():
 @pytest.fixture
 async def client(mock_auth):
     """Authenticated AsyncClient for router tests."""
+    app = get_app()
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
         yield c
 
@@ -58,5 +67,6 @@ async def client(mock_auth):
 @pytest.fixture
 async def client_no_auth():
     """Unauthenticated AsyncClient for testing auth enforcement."""
+    app = get_app()
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
         yield c

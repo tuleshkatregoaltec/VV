@@ -206,7 +206,7 @@ const TD_LEFT = 'px-2 py-[3px] text-left text-slate-800 border-b border-[#EBEBEB
 						<td class="{TD_LEFT} font-medium border-r border-[#E8E8E8]">{row.unit_type}</td>
 						<td class="{TD} border-r border-[#E8E8E8]">{fmt(row.transaction_count)}</td>
 						<td class="{TD} border-r border-[#E8E8E8]">{fmt(row.median_price_sqm)}</td>
-						<td class="{TD} border-r border-[#E8E8E8] font-semibold text-[#1565C0]">{fmt(rateToSqft(row.median_price_sqm))}</td>
+						<td class="{TD} border-r border-[#E8E8E8] font-semibold text-[#1565C0]">{fmt(ratePerSqmToSqft(row.median_price_sqm))}</td>
 						<td class={TD}>{row.avg_area_sqm ? fmt(areaSqmToSqft(row.avg_area_sqm)) : '—'}</td>
 					</tr>
 				{/each}
@@ -250,7 +250,7 @@ const TD_LEFT = 'px-2 py-[3px] text-left text-slate-800 border-b border-[#EBEBEB
 						<td class="{TD} border-r border-[#E8E8E8]">{comp.no_of_buildings ?? '—'}</td>
 						<td class="{TD} border-r border-[#E8E8E8]">{comp.no_of_units != null ? fmt(comp.no_of_units) : '—'}</td>
 						<td class="{TD} border-r border-[#E8E8E8] font-semibold text-[#1565C0]">
-							{comp.median_price_sqm != null ? fmt(rateToSqft(comp.median_price_sqm)) : '—'}
+							{comp.median_price_sqm != null ? fmt(ratePerSqmToSqft(comp.median_price_sqm)) : '—'}
 						</td>
 						<td class="{TD_LEFT} text-slate-600 border-r border-[#E8E8E8]">{comp.dominant_unit_type ?? '—'}</td>
 						<td class="px-2 py-[3px] text-slate-500 border-b border-[#EBEBEB] text-[9px] leading-relaxed">
