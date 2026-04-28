@@ -11,6 +11,7 @@ from pydantic_ai.providers.openrouter import OpenRouterProvider
 from pydantic_ai.usage import UsageLimits
 
 from app.config import settings
+from app.feasibility.engine import compute_feasibility_summary, compute_feasibility_workbook
 from app.feasibility.models import (
     FeasibilityAssumptions,
     FeasibilityPaymentPlan,
@@ -27,13 +28,12 @@ from app.feasibility.queries import (
     rank_plot_comparables,
 )
 from app.feasibility.queries import get_plot_details as fetch_plot_details
-from app.feasibility.workbook import compute_feasibility_summary, compute_feasibility_workbook
 
 logger = logging.getLogger(__name__)
 
 
 def _parse_max_storeys(max_height: str | None) -> int | None:
-    if not max_height:
+    if not max_height or "UNLIMITED" in max_height.upper():
         return None
     matches = re.findall(r"\d+", max_height)
     if not matches:
@@ -193,7 +193,7 @@ _SYSTEM_PROMPT = """\
 You are a Dubai real estate development advisor producing an initial highest-and-best-use (HBU) \
 feasibility study for a specific GIS plot. Your output seeds a developer's financial workbook.
 
-The plot plot data and a default assumption scaffold are included in the user message. \
+The plot data and a default assumption scaffold are included in the user message. \
 Use them as your starting point — you do not need tools to retrieve them.
 
 ━━━ PHASE 1 — RESEARCH ━━━
@@ -204,31 +204,70 @@ Call all five research tools in a single parallel batch:
   • get_pipeline_comparables      — planned/under-construction projects in the same area (supply risk)
   • get_plot_land_sales           — recent land transactions near this plot size (land cost anchor)
 
-━━━ PHASE 2 — FORM ASSUMPTIONS ━━━
-Using the research evidence, decide on the best set of assumptions for this plot. You have full \
-freedom over every assumption — use the scaffold as a starting point and override anything where \
-the evidence or your judgement supports a better estimate.
+━━━ PHASE 2 — PROJECT CONCEPT & UNIT MIX ━━━
+Before touching any cost or funding input, lock in the revenue side of the model.
 
-Key things to reason through:
-  • Land cost: anchor to comparable land sales; flag as critical warning if no evidence exists.
-  • Project tier and unit mix: match the scale and product type to what the location and GFA support.
-    Design the unit mix to maximise GFA utilisation and appeal to the likely buyer profile.
-    Consider supply pipeline when choosing unit types to avoid saturated segments.
-  • Selling rates: off-plan pricing is primary; existing stock sets a floor. Apply a conservative
-    haircut to reflect launch uncertainty.
-  • Construction cost: scale to tower height and product complexity.
-  • Timeline: be realistic about land-to-launch lead time, presale threshold, build period, and
-    site plan expiry. Flag renewal risk if handover is close to expiry.
-  • Funding: set debtFundingAed and equityFundingAed to whatever capital structure makes sense
-    given the cost base and off-plan proceeds profile. Ensure sources cover uses.
+  1. Project tier: classify the plot as standard / premium / ultra-premium based on location,
+     the pricing comp set, and achievable selling rates. This determines product quality and
+     acceptable cost levels.
 
-━━━ PHASE 3 — VERIFY & ITERATE ━━━
-Call compute_workbook with your assumptions. Review the result:
-  • Check modeled_gfa_sqm fits within the zoning cap.
-  • Check the funding gap — adjust debtFundingAed and equityFundingAed until sources cover uses.
-  • If the returns or programme look off, revise the assumptions that are driving the issue and
-    call compute_workbook again. Iterate as many times as needed to reach a coherent result.
-  • If the workbook validation has unresolved issues after your final call, include them in warnings.
+  2. Unit mix: design a mix that maximises gross saleable area (GSA) within the zoning cap.
+     Target GSA ≈ maxGfaSqm × nsaEfficiencyPct. Treat leaving GFA on the table as an
+     opportunity cost that must be justified. Apply these rules:
+       - Favour unit types with strong off-plan demand and thin pipeline saturation.
+       - Avoid unit types that dominate the current pipeline (supply risk).
+       - Match typical unit sizes to what the area's comparable projects deliver.
+       - Use integer unit counts; ensure total NSA ≈ target GSA.
+
+  3. Selling rates: select the off-plan horizon bucket closest to your projected handover date.
+     Apply a 5–10% haircut to those benchmarks to reflect launch uncertainty. Never exceed the
+     top-of-range comparable without a specific justification. Existing stock prices are a floor —
+     off-plan benchmarks are primary.
+
+  4. Timeline: set realistic dates for construction start, handover, and sales commencement.
+     Flag renewal risk if handover is within 12 months of site plan expiry.
+
+━━━ PHASE 3 — COSTS ━━━
+With the unit mix and revenue locked, size the cost stack.
+
+  1. Land cost (landPricePsqm): anchor strictly to the land sales data.
+       - Discard any transaction where price_sqm is 0 or price_aed < 500,000 (government
+         transfers and nominal conveyances — not arm's-length market evidence).
+       - From the remaining arm's-length transactions, use the most recent comparable as the
+         primary reference. Apply a recency premium only if price trends in the data justify it.
+       - If the only valid transactions are older than 24 months, flag land cost as a critical
+         warning and note the staleness.
+       - If no valid arm's-length transactions exist at all, set landPricePsqm = 0 and raise a
+         hard warning — do not invent a number.
+
+  2. Construction cost (constructionCostPsqmBua): scale to tower height and product tier.
+       - Standard residential (≤20 floors): AED 3,500–4,500/sqm BUA
+       - Mid-rise (21–40 floors): AED 4,000–5,000/sqm BUA
+       - High-rise (41–60 floors): AED 4,800–5,500/sqm BUA
+       - Super-tall (61+ floors): AED 5,500–7,000/sqm BUA
+     Add 10–15% for premium/ultra-premium product tier.
+
+  3. Other costs: keep infrastructure, government fees, and master community fees at the scaffold
+     defaults unless you have a specific reason to deviate. Flag deviations.
+
+━━━ PHASE 4 — VERIFY & FINANCE ━━━
+Call compute_workbook with debtFundingAed = 0 and equityFundingAed = 0 first to read the
+unlevered cash position, then size financing to cover only the timing gap.
+
+  After each compute_workbook call:
+    • Check modeled_gfa_sqm ≤ maxGfaSqm. If over the cap, reduce unit count or sizes.
+    • Read peak_debt_aed: set debtFundingAed = round up to the nearest AED 10M. This is the
+      minimum debt facility needed to avoid an overdraw during construction.
+    • Read funding_gap_aed (= total_costs − total_sources):
+        - Negative gap means sources exceed uses (surplus) — acceptable.
+        - Positive gap means a shortfall — hard failure. Increase equityFundingAed to close it.
+      If gap > 0: set equityFundingAed += round_up(gap × 1.05, 10M) to close the deficit with a
+      small buffer. If gap ≤ 0, leave equityFundingAed at 0 unless IRR calculations require it.
+    • Call compute_workbook again with the sized facilities. The funding_gap should now be ≤ 0
+      (a small surplus is fine). If a hard funding gap remains, iterate once more.
+    • If returns or margin look wrong after financing, revisit the assumptions driving the issue
+      and call compute_workbook again. Iterate as many times as needed.
+    • Leave any unresolved validation warnings in the output warnings list.
 
 ━━━ OUTPUT ━━━
   headline:    one-line project description
@@ -352,10 +391,18 @@ async def compute_workbook(
 ) -> dict:
     """Run the financial model against the provided assumptions and return a summary.
 
-    Returns: {success, summary} where summary contains gross_revenue_aed, total_costs_incl_vat_aed,
-    gross_profit_aed, gross_margin_pct, off_plan_proceeds_aed, project_irr_pct, equity_irr_pct,
-    modeled_gfa_sqm, total_units, funding_gap_aed, and a validation object.
-    Use total_costs_incl_vat_aed and off_plan_proceeds_aed to set debt and equity funding amounts.
+    Returns: {success, summary} where summary contains:
+      gross_revenue_aed, total_costs_incl_vat_aed, gross_profit_aed, gross_margin_pct,
+      off_plan_proceeds_aed, project_irr_pct, equity_irr_pct, modeled_gfa_sqm, total_units,
+      peak_debt_aed, funding_gap_aed, and a validation object.
+
+    Key fields for financing:
+      peak_debt_aed     — maximum debt drawn at any single point in time. Set debtFundingAed
+                          to at least this value (rounded up) or the loan will overdraw.
+      funding_gap_aed   — (total_costs_incl_vat) minus (off_plan_proceeds + debt + equity +
+                          vat_refunds). Negative = surplus (OK). Positive = hard deficit.
+      off_plan_proceeds_aed — total presale cash collected over the sales period. This is the
+                          primary funding source; size debt and equity around what it doesn't cover.
     """
     workbook = compute_feasibility_workbook(ctx.deps.plot_details, assumptions, study=None)
     summary = compute_feasibility_summary(workbook)

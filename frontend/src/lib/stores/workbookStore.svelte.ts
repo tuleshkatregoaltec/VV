@@ -977,7 +977,7 @@ export const workbookStore = {
 		resetReviewDecisions()
 		try {
 			const response = await feasibility.getPlotData(plot.plot_number)
-			state.plotData = response.plot_data
+			state.plotData = response
 		} catch (err) {
 			state.selectedPlot = null
 			state.phase = 'error'

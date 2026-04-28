@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 Usage = Literal["residential", "commercial", "mixed_use", "unknown"]
 
@@ -517,12 +517,32 @@ class GenerateStudyResponse(BaseModel):
     assumptions: FeasibilityAssumptions
     research: PlotResearch
     study_context: StudyContext
-    chat: dict = Field(default_factory=lambda: {"history": []})
+    chat: "FeasibilityChatState" = Field(default_factory=lambda: FeasibilityChatState(history=[]))
+
+
+class GenerateStudyRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    plot_number: str
+    usage_override: Usage | None = None
+
+
+class FeasibilityChatMessage(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    role: Literal["system", "user", "assistant"]
+    content: str
+
+
+class FeasibilityChatState(BaseModel):
+    history: list[FeasibilityChatMessage] = Field(default_factory=list)
 
 
 class FeasibilityChatRequest(BaseModel):
-    messages: list[dict]
+    model_config = ConfigDict(extra="forbid")
+
+    messages: list[FeasibilityChatMessage]
     plot_data: PlotDetails
     assumptions: FeasibilityAssumptions
-    research: dict | None = None
+    research: PlotResearch | None = None
     history_json: str | None = None

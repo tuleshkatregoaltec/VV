@@ -1,6 +1,11 @@
-import type { FeasibilityStudy, PlotDataResponse } from '$lib/feasibility/workbook/models'
+import type { FeasibilityStudy } from '$lib/feasibility/workbook/models'
 import { client } from './client'
-import type { FeasibilityAssumptions, Plot, PlotResearch } from './generated/hey-api/types.gen'
+import type {
+	FeasibilityAssumptions,
+	Plot,
+	PlotDetails,
+	PlotResearch
+} from './generated/hey-api/types.gen'
 
 export const feasibility = {
 	getAreas(): Promise<string[]> {
@@ -47,7 +52,7 @@ export const feasibility = {
 		return allPlots
 	},
 
-	getPlotData(plotNumber: string): Promise<PlotDataResponse> {
+	getPlotData(plotNumber: string): Promise<PlotDetails> {
 		return client.get(`/api/v1/feasibility/plots/${encodeURIComponent(plotNumber)}`)
 	},
 
