@@ -1,439 +1,519 @@
-"""DXBI extraction logic local to the DXBI source."""
-
 from __future__ import annotations
 
+import hashlib
 import json
 import re
-from dataclasses import asdict, dataclass
-from decimal import Decimal, InvalidOperation
-from pathlib import Path
+from collections.abc import Callable, Iterable
 from datetime import datetime
+from pathlib import Path
+from urllib.parse import parse_qs, urlparse
 
-from bs4 import BeautifulSoup
+from playwright.sync_api import BrowserContext, Page, Playwright, TimeoutError, sync_playwright
+from twocaptcha import TwoCaptcha
 
-from holocron.framework.csv_utils import write_csv
-from holocron.framework.models import DownloadResult, utc_now_sql
-from holocron.scrape.diagnostics import DiagnosticsCollector
+from holocron.contracts import RawFile, RawRelease
+from holocron.platform.execution import build_raw_file, build_raw_release, new_run_id, utc_now
+from holocron.sources.dxbi.source import DXBI_BASE_URL, DateSlice, DxbiConfig, SOURCE, build_date_slices
 
-DXBI_BASE_URL = "https://dxbinteract.com"
-LOCATION_LOV_URL = f"{DXBI_BASE_URL}/property/website/DLDLOV?RETURN_COLUMN=LOCATION_URL"
-DEVELOPER_LOV_URL = f"{DXBI_BASE_URL}/property/dxb/lov-fam-developer"
-
-_DEFAULT_HEADERS = {
-    "User-Agent": (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36"
-    ),
-    "Accept": "application/json,text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-    "Accept-Language": "en-US,en;q=0.9",
-}
-
-
-@dataclass(frozen=True)
-class LocationRow:
-    run_id: str
-    location_id: int
-    location_name: str
-    location_slug: str
-    location_flag: str
-    is_featured: int
-    seq: int | None
-    scraped_at: str
+SALE_REGION_SELECTOR = "#soldhistory"
+RENTAL_REGION_SELECTOR = "#rentHistory"
+SALE_TABLE_SELECTOR = "#report_table_soldhistory"
+RENTAL_TABLE_SELECTOR = "#report_table_rentHistory"
+PAGINATION_SELECTOR = ".t-Report-paginationText"
+PAGINATION_CALL_PATTERN = re.compile(
+    r"apex\.widget\.report\.paginate\('(?P<region_id>[^']+)',\s*'(?P<checksum>[^']+)',\s*\{"
+    r"min:(?P<min>\d+),max:(?P<max>\d+),fetched:(?P<fetched>\d+)\}\);"
+)
 
 
-@dataclass(frozen=True)
-class DeveloperRow:
-    run_id: str
-    developer_id: int
-    developer_name: str
-    is_hot: int
-    scraped_at: str
+def load_page_urls(*, page_urls_text: str, page_urls_file: str, max_pages: int | None = None) -> list[str]:
+    urls: list[str] = []
+    for raw_line in page_urls_text.splitlines():
+        line = raw_line.strip()
+        if line:
+            urls.append(line)
+    if page_urls_file.strip():
+        for raw_line in Path(page_urls_file).read_text().splitlines():
+            line = raw_line.strip()
+            if line:
+                urls.append(line)
+    if not urls:
+        urls.append(DXBI_BASE_URL)
+
+    deduped = list(dict.fromkeys(urls))
+    if max_pages is not None:
+        return deduped[:max_pages]
+    return deduped
 
 
-@dataclass(frozen=True)
-class RankedAreaRow:
-    run_id: str
-    source_page: str
-    scope_slug: str
-    item_rank: int
-    location_name: str
-    location_slug: str
-    transaction_count: int
-    metric_label: str
-    scraped_at: str
-
-
-@dataclass(frozen=True)
-class SaleTransactionRow:
-    run_id: str
-    source_page: str
-    scope_slug: str
-    listing_rank: int
-    location_path: str
-    status_text: str
-    price_aed: str
-    capital_gain_text: str
-    price_per_sqft_aed: str
-    transaction_size_sqft: str
-    bua_sqft: str
-    bedrooms_label: str
-    transaction_date: str
-    seller_type: str
-    unit_is_locked: int
-    scraped_at: str
-    filters_json: str
-
-
-@dataclass(frozen=True)
-class RentalTransactionRow:
-    run_id: str
-    source_page: str
-    scope_slug: str
-    listing_rank: int
-    location_path: str
-    status_text: str
-    bedrooms_label: str
-    size_sqft: str
-    annual_rent_aed: str
-    rental_yield_pct: str
-    lease_start_date: str
-    lease_end_date: str
-    duration_text: str
-    purchase_price_aed: str
-    unit_is_locked: int
-    scraped_at: str
-    filters_json: str
-
-
-_now_iso = utc_now_sql
-
-
-def _fetch_json(
-    http,
-    url: str,
+def extract_release(
+    output_dir: str | Path,
     *,
-    proxy: str,
-    diagnostics: DiagnosticsCollector | None,
-    failure_label: str,
-) -> dict:
-    response = http.get(
-        url,
-        headers=_DEFAULT_HEADERS,
-        proxy=proxy,
-        diagnostics=diagnostics,
-        failure_label=failure_label,
-        timeout=60,
+    config: DxbiConfig | dict,
+    now: datetime | None = None,
+    page_scraper: Callable[..., list[dict]] | None = None,
+    playwright_factory: Callable[[], object] = sync_playwright,
+) -> RawRelease:
+    parsed_config = config if isinstance(config, DxbiConfig) else DxbiConfig.model_validate(config)
+    current_time = now or utc_now()
+    run_id = new_run_id(current_time)
+    output_path = Path(output_dir)
+    output_path.mkdir(parents=True, exist_ok=True)
+    slices = build_date_slices(parsed_config, today=current_time.date())
+    urls = load_page_urls(
+        page_urls_text=parsed_config.page_urls,
+        page_urls_file=parsed_config.page_urls_file,
+        max_pages=parsed_config.max_pages,
     )
-    response.raise_for_status()
-    return response.json()
 
-
-def fetch_location_rows(
-    run_id: str,
-    *,
-    http,
-    proxy: str,
-    diagnostics: DiagnosticsCollector | None,
-) -> list[LocationRow]:
-    payload = _fetch_json(
-        http,
-        LOCATION_LOV_URL,
-        proxy=proxy,
-        diagnostics=diagnostics,
-        failure_label="dxbi_locations_lookup",
+    files = (
+        _extract_with_scraper(
+            output_path=output_path,
+            run_id=run_id,
+            current_time=current_time,
+            urls=urls,
+            date_slices=slices,
+            page_scraper=page_scraper,
+            config=parsed_config,
+        )
+        if page_scraper is not None
+        else _extract_with_playwright(
+            output_path=output_path,
+            run_id=run_id,
+            current_time=current_time,
+            urls=urls,
+            date_slices=slices,
+            config=parsed_config,
+            playwright_factory=playwright_factory,
+        )
     )
-    scraped_at = _now_iso()
-    rows = []
-    for item in payload.get("items", []):
-        rows.append(
-            LocationRow(
-                run_id=run_id,
-                location_id=int(item.get("id", 0)),
-                location_name=str(item.get("dv", "")).strip(),
-                location_slug=str(item.get("rv", "")).strip(),
-                location_flag=str(item.get("flag", "")).strip(),
-                is_featured=1 if str(item.get("is_featured", "N")).upper() == "Y" else 0,
-                seq=int(item["seq"]) if item.get("seq") is not None else None,
-                scraped_at=scraped_at,
-            )
-        )
-    return rows
-
-
-def fetch_developer_rows(
-    run_id: str,
-    *,
-    http,
-    proxy: str,
-    diagnostics: DiagnosticsCollector | None,
-) -> list[DeveloperRow]:
-    payload = _fetch_json(
-        http,
-        DEVELOPER_LOV_URL,
-        proxy=proxy,
-        diagnostics=diagnostics,
-        failure_label="dxbi_developers_lookup",
+    return build_raw_release(
+        source=SOURCE,
+        files=files,
+        run_id=run_id,
+        now=current_time,
+        metadata={"config": parsed_config.model_dump(mode="json"), "slice_count": len(slices)},
     )
-    scraped_at = _now_iso()
-    rows = []
-    for item in payload.get("items", []):
-        rows.append(
-            DeveloperRow(
-                run_id=run_id,
-                developer_id=int(item.get("id", 0)),
-                developer_name=str(item.get("developer", "")).strip(),
-                is_hot=1 if str(item.get("is_hot", "N")).upper() == "Y" else 0,
-                scraped_at=scraped_at,
-            )
-        )
-    return rows
 
 
-def parse_ranked_area_media_list(
-    html: str,
+def _collect_all_slices(
     *,
+    output_path: Path,
+    urls: list[str],
+    date_slices: Iterable[DateSlice],
+    collect_rows: Callable[[str, DateSlice], list[dict]],
+) -> tuple[RawFile, ...]:
+    files = []
+    for date_slice in date_slices:
+        rows: list[dict] = []
+        for url in urls:
+            rows.extend(collect_rows(url, date_slice))
+        files.append(_write_slice_file(output_path=output_path, date_slice=date_slice, rows=rows))
+    return tuple(files)
+
+
+def _extract_with_scraper(
+    *,
+    output_path: Path,
     run_id: str,
-    source_page: str,
-    scope_slug: str,
-    metric_label_default: str = "",
-) -> list[RankedAreaRow]:
-    soup = BeautifulSoup(html, "html.parser")
-    scraped_at = _now_iso()
-    rows: list[RankedAreaRow] = []
-    for index, anchor in enumerate(soup.select("h3.t-MediaList-title a"), start=1):
-        href = str(anchor.get("href", "")).strip()
-        label = anchor.get_text(" ", strip=True)
-        match = re.match(
-            r"^(?P<name>.+?)\s+\((?P<count>[\d,]+)(?:\s+(?P<metric>[A-Za-z]+))?\)$",
-            label,
-        )
-        if match:
-            location_name = match.group("name").strip()
-            transaction_count = int(match.group("count").replace(",", ""))
-            metric_label = (match.group("metric") or metric_label_default).strip()
-        else:
-            location_name = label
-            transaction_count = 0
-            metric_label = metric_label_default
-        rows.append(
-            RankedAreaRow(
-                run_id=run_id,
-                source_page=source_page,
-                scope_slug=scope_slug,
-                item_rank=index,
-                location_name=location_name,
-                location_slug=href.rstrip("/").split("/")[-1] if href else "",
-                transaction_count=transaction_count,
-                metric_label=metric_label,
-                scraped_at=scraped_at,
-            )
-        )
-    return rows
+    current_time: datetime,
+    urls: list[str],
+    date_slices: Iterable[DateSlice],
+    page_scraper: Callable[..., list[dict]],
+    config: DxbiConfig,
+) -> tuple[RawFile, ...]:
+    scraped_at = current_time.isoformat()
+
+    def collect(url: str, date_slice: DateSlice) -> list[dict]:
+        return page_scraper(url=url, date_slice=date_slice, run_id=run_id, config=config, scraped_at=scraped_at)
+
+    return _collect_all_slices(output_path=output_path, urls=urls, date_slices=date_slices, collect_rows=collect)
 
 
-def _extract_decimal(text: str) -> str:
-    cleaned = text.replace(",", "")
-    match = re.search(r"-?\d+(?:\.\d+)?", cleaned)
-    if not match:
-        return ""
-    try:
-        return str(Decimal(match.group(0)))
-    except InvalidOperation:
-        return ""
-
-
-def _extract_date(text: str) -> str:
-    cleaned = text.replace(",", "").strip()
-    for fmt in ("%d %b %Y", "%d %B %Y"):
+def _extract_with_playwright(
+    *,
+    output_path: Path,
+    run_id: str,
+    current_time: datetime,
+    urls: list[str],
+    date_slices: Iterable[DateSlice],
+    config: DxbiConfig,
+    playwright_factory: Callable[[], object],
+) -> tuple[RawFile, ...]:
+    scraped_at = current_time.isoformat()
+    with playwright_factory() as playwright:
+        browser_context = _new_context(playwright=playwright, config=config)
         try:
-            return datetime.strptime(cleaned, fmt).strftime("%Y-%m-%d")
-        except ValueError:
-            continue
-    return ""
+            def collect(url: str, date_slice: DateSlice) -> list[dict]:
+                return _scrape_url_slice(
+                    context=browser_context,
+                    url=url,
+                    date_slice=date_slice,
+                    run_id=run_id,
+                    scraped_at=scraped_at,
+                    config=config,
+                )
+
+            return _collect_all_slices(output_path=output_path, urls=urls, date_slices=date_slices, collect_rows=collect)
+        finally:
+            browser_context.browser.close()
 
 
-def _extract_sale_row(cells: list) -> dict[str, str]:
-    location = cells[0].select_one(".bold-title")
-    status = cells[0].select_one("p")
-    price_block = cells[1].get_text("\n", strip=True)
-    specs_block = cells[2].get_text("\n", strip=True)
-    date_block = cells[3].get_text("\n", strip=True)
+_USER_AGENT = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36"
+)
 
-    size_match = re.search(r"([\d,]+)\s*sqft", specs_block, flags=re.IGNORECASE)
-    bua_matches = re.findall(r"([\d,]+)\s*sqft", specs_block, flags=re.IGNORECASE)
-    bed_match = re.search(r"(Studio|\d+\s*Beds?|\d+\s*Bed)", specs_block, flags=re.IGNORECASE)
-    ppsf_match = re.search(r"AED\s*([\d,]+(?:\.\d+)?)\s*/sqft", price_block, flags=re.IGNORECASE)
-    date_match = re.search(r"(\d{1,2},?\s+[A-Za-z]{3,9}\s+\d{4})", date_block)
 
-    return {
-        "location_path": location.get_text(" ", strip=True) if location else "",
-        "status_text": status.get_text(" ", strip=True) if status else "",
-        "price_aed": _extract_decimal(price_block),
-        "capital_gain_text": re.search(r"\(([^)]+)\)", price_block).group(1)
-        if "(" in price_block
-        else "",
-        "price_per_sqft_aed": _extract_decimal(ppsf_match.group(1)) if ppsf_match else "",
-        "transaction_size_sqft": _extract_decimal(size_match.group(1)) if size_match else "",
-        "bua_sqft": _extract_decimal(bua_matches[1]) if len(bua_matches) > 1 else "",
-        "bedrooms_label": bed_match.group(1).strip() if bed_match else "",
-        "transaction_date": _extract_date(date_match.group(1)) if date_match else "",
-        "seller_type": date_block.splitlines()[-1].strip() if date_block else "",
-        "unit_is_locked": 1 if cells[0].select_one(".lock-access") else 0,
+def _new_context(*, playwright: Playwright, config: DxbiConfig) -> BrowserContext:
+    launch_kwargs: dict = {
+        "headless": config.headless,
+        "args": ["--disable-blink-features=AutomationControlled", "--no-sandbox"],
     }
+    if config.chrome_path.strip():
+        launch_kwargs["executable_path"] = config.chrome_path
+    browser = playwright.chromium.launch(**launch_kwargs)
+    context_kwargs: dict = {"user_agent": _USER_AGENT}
+    if config.storage_state_path.strip():
+        context_kwargs["storage_state"] = config.storage_state_path
+    return browser.new_context(**context_kwargs)
 
 
-def parse_sales_transactions_html(
-    html: str,
+def _scrape_url_slice(
     *,
+    context: BrowserContext,
+    url: str,
+    date_slice: DateSlice,
     run_id: str,
-    source_page: str,
-    scope_slug: str,
-    filters: dict | None = None,
-) -> list[SaleTransactionRow]:
-    soup = BeautifulSoup(html, "html.parser")
-    scraped_at = _now_iso()
-    rows: list[SaleTransactionRow] = []
-    for index, tr in enumerate(soup.select("#report_table_soldhistory tbody tr"), start=1):
-        cells = tr.find_all("td")
-        if len(cells) != 4:
-            continue
-        extracted = _extract_sale_row(cells)
-        rows.append(
-            SaleTransactionRow(
+    scraped_at: str,
+    config: DxbiConfig,
+) -> list[dict]:
+    page = context.new_page()
+    try:
+        page.goto(url, wait_until="domcontentloaded", timeout=120000)
+        try:
+            page.wait_for_load_state("networkidle", timeout=15000)
+        except TimeoutError:
+            page.wait_for_timeout(3000)
+        _maybe_solve_captcha(page=page, api_key=config.twocaptcha_api_key)
+        _maybe_accept_terms(page)
+        _apply_date_slice(page=page, date_slice=date_slice)
+        _maybe_solve_captcha(page=page, api_key=config.twocaptcha_api_key)
+        try:
+            page.wait_for_selector(f"{SALE_TABLE_SELECTOR} tbody tr", timeout=15000)
+        except TimeoutError:
+            pass
+        rows = []
+        rows.extend(
+            _collect_table_pages(
+                page=page,
+                url=url,
                 run_id=run_id,
-                source_page=source_page,
-                scope_slug=scope_slug,
-                listing_rank=index,
                 scraped_at=scraped_at,
-                filters_json=json.dumps(filters or {}, sort_keys=True),
-                **extracted,
+                date_slice=date_slice,
+                table_selector=SALE_TABLE_SELECTOR,
+                table_name="sales",
+                region_selector=SALE_REGION_SELECTOR,
+            )
+        )
+        rows.extend(
+            _collect_table_pages(
+                page=page,
+                url=url,
+                run_id=run_id,
+                scraped_at=scraped_at,
+                date_slice=date_slice,
+                table_selector=RENTAL_TABLE_SELECTOR,
+                table_name="rentals",
+                region_selector=RENTAL_REGION_SELECTOR,
+            )
+        )
+        return rows
+    finally:
+        page.close()
+
+
+def _collect_table_pages(
+    *,
+    page: Page,
+    url: str,
+    run_id: str,
+    scraped_at: str,
+    date_slice: DateSlice,
+    table_selector: str,
+    table_name: str,
+    region_selector: str,
+) -> list[dict]:
+    rows = _extract_table_rows(
+        page=page,
+        table_selector=table_selector,
+        table_name=table_name,
+        page_number=1,
+        url=url,
+        run_id=run_id,
+        scraped_at=scraped_at,
+        date_slice=date_slice,
+    )
+    for page_number, call in enumerate(_extract_pagination_calls(page=page, region_selector=region_selector), start=2):
+        _paginate_report(page=page, table_selector=table_selector, call=call)
+        rows.extend(
+            _extract_table_rows(
+                page=page,
+                table_selector=table_selector,
+                table_name=table_name,
+                page_number=page_number,
+                url=url,
+                run_id=run_id,
+                scraped_at=scraped_at,
+                date_slice=date_slice,
             )
         )
     return rows
 
 
-def parse_rental_transactions_html(
-    html: str,
+def _extract_table_rows(
     *,
+    page: Page,
+    table_selector: str,
+    table_name: str,
+    page_number: int,
+    url: str,
     run_id: str,
-    source_page: str,
-    scope_slug: str,
-    filters: dict | None = None,
-) -> list[RentalTransactionRow]:
-    soup = BeautifulSoup(html, "html.parser")
-    scraped_at = _now_iso()
-    rows: list[RentalTransactionRow] = []
-    for index, tr in enumerate(soup.select("#report_table_rentHistory tbody tr"), start=1):
-        cells = tr.find_all("td")
-        if len(cells) != 5:
+    scraped_at: str,
+    date_slice: DateSlice,
+) -> list[dict]:
+    # Extract all cell text in one JS call to avoid per-element locator timeouts
+    # when APEX re-renders the table mid-iteration.
+    raw_rows: list[list[str]] = page.evaluate(
+        """
+        selector => {
+            const tbody = document.querySelector(selector + ' tbody');
+            if (!tbody) return [];
+            return Array.from(tbody.querySelectorAll('tr')).map(tr =>
+                Array.from(tr.querySelectorAll('td')).map(td => td.innerText ?? '')
+            );
+        }
+        """,
+        table_selector,
+    )
+    rows = []
+    for row_index, cell_values in enumerate(raw_rows):
+        normalized = [_normalize_cell_text(v) for v in cell_values]
+        if not any(normalized):
             continue
-        location = cells[0].select_one(".bold-title")
-        status = cells[0].select_one("p")
-        specs = cells[1].get_text("\n", strip=True)
-        rent_block = cells[2].get_text("\n", strip=True)
-        duration_block = cells[3].get_text("\n", strip=True)
-        purchase_block = cells[4].get_text("\n", strip=True)
-        dates = re.findall(r"\d{1,2}\s+[A-Za-z]{3,9},?\s+\d{4}", duration_block)
-        duration_text = duration_block.splitlines()[-1].strip() if duration_block else ""
-        bed_match = re.search(r"(Studio|\d+\s*Beds?|\d+\s*Bed)", specs, re.IGNORECASE)
         rows.append(
-            RentalTransactionRow(
-                run_id=run_id,
-                source_page=source_page,
-                scope_slug=scope_slug,
-                listing_rank=index,
-                location_path=location.get_text(" ", strip=True) if location else "",
-                status_text=status.get_text(" ", strip=True) if status else "",
-                bedrooms_label=bed_match.group(1).strip() if bed_match else "",
-                size_sqft=_extract_decimal(specs),
-                annual_rent_aed=_extract_decimal(rent_block),
-                rental_yield_pct=_extract_decimal(
-                    rent_block.splitlines()[1] if len(rent_block.splitlines()) > 1 else ""
-                ),
-                lease_start_date=_extract_date(dates[0]) if dates else "",
-                lease_end_date=_extract_date(dates[1]) if len(dates) > 1 else "",
-                duration_text=duration_text,
-                purchase_price_aed=_extract_decimal(purchase_block),
-                unit_is_locked=1 if cells[0].select_one(".lock-access") else 0,
-                scraped_at=scraped_at,
-                filters_json=json.dumps(filters or {}, sort_keys=True),
-            )
+            {
+                "table": table_name,
+                "cells": normalized,
+                "_run_id": run_id,
+                "_scraped_at": scraped_at,
+                "_slice_start_date": date_slice.start_date.isoformat(),
+                "_slice_end_date": date_slice.end_date.isoformat(),
+                "_source_url": url,
+                "_page_number": page_number,
+                "_row_number": row_index + 1,
+            }
         )
     return rows
 
 
-def _write_dataclass_csv(path: Path, rows: list, row_cls) -> Path:
-    write_csv(path, list(row_cls.__dataclass_fields__.keys()), (asdict(row) for row in rows))
-    return path
+def _normalize_cell_text(value: str) -> str:
+    return " ".join(part.strip() for part in value.splitlines() if part.strip())
 
 
-def write_locations_csv(path: Path, rows: list[LocationRow]) -> Path:
-    return _write_dataclass_csv(path, rows, LocationRow)
-
-
-def write_developers_csv(path: Path, rows: list[DeveloperRow]) -> Path:
-    return _write_dataclass_csv(path, rows, DeveloperRow)
-
-
-def write_ranked_areas_csv(path: Path, rows: list[RankedAreaRow]) -> Path:
-    return _write_dataclass_csv(path, rows, RankedAreaRow)
-
-
-def write_sales_transactions_csv(path: Path, rows: list[SaleTransactionRow]) -> Path:
-    return _write_dataclass_csv(path, rows, SaleTransactionRow)
-
-
-def write_rental_transactions_csv(path: Path, rows: list[RentalTransactionRow]) -> Path:
-    return _write_dataclass_csv(path, rows, RentalTransactionRow)
-
-
-def download_all(
-    dest_dir: Path,
-    run_id: str,
-    *,
-    http,
-    proxy: str = "",
-    diagnostics_dir: str = "",
-) -> list[DownloadResult]:
-    diagnostics = DiagnosticsCollector(
-        root_dir=diagnostics_dir,
-        source_name="dxbi_lookups",
-        release_id=run_id,
+def _apply_date_slice(*, page: Page, date_slice: DateSlice) -> None:
+    # Use the jQuery daterangepicker JS API to set dates directly — the preset list
+    # and calendar navigation are APEX-rendered and not reliable CSS targets.
+    start_str = date_slice.start_date.isoformat()
+    end_str = date_slice.end_date.isoformat()
+    result = page.evaluate(
+        """
+        ([startDate, endDate]) => {
+            const $ = window.apex?.jQuery || window.jQuery;
+            const input = document.querySelector('#P1_CUSTOM_DATE, input.pretius_date_range');
+            if (!input) return 'no-input';
+            const drp = $(input).data('daterangepicker');
+            if (!drp) return 'no-drp';
+            drp.setStartDate(startDate);
+            drp.setEndDate(endDate);
+            drp.show();
+            return 'ok';
+        }
+        """,
+        [start_str, end_str],
     )
-    locations_path = dest_dir / "locations.csv"
-    developers_path = dest_dir / "developers.csv"
+    if result != "ok":
+        raise RuntimeError(f"DXBI daterangepicker not ready: {result}")
 
-    write_locations_csv(
-        locations_path,
-        fetch_location_rows(run_id, http=http, proxy=proxy, diagnostics=diagnostics),
+    # Fire click via JS to bypass any modal overlay intercepting pointer events.
+    page.evaluate("document.querySelector('.daterangepicker .applyBtn')?.click()")
+    try:
+        page.wait_for_load_state("networkidle", timeout=15000)
+    except TimeoutError:
+        page.wait_for_timeout(3000)
+
+
+def _extract_pagination_calls(*, page: Page, region_selector: str) -> list[dict]:
+    links = page.locator(f"{region_selector} {PAGINATION_SELECTOR} a[href]")
+    calls = []
+    seen: set[int] = set()
+    for link_index in range(links.count()):
+        href = links.nth(link_index).get_attribute("href") or ""
+        match = PAGINATION_CALL_PATTERN.search(href)
+        if match is None:
+            continue
+        min_value = int(match.group("min"))
+        if min_value in seen:
+            continue
+        seen.add(min_value)
+        calls.append(
+            {
+                "region_id": match.group("region_id"),
+                "checksum": match.group("checksum"),
+                "options": {
+                    "min": min_value,
+                    "max": int(match.group("max")),
+                    "fetched": int(match.group("fetched")),
+                },
+            }
+        )
+    return sorted(calls, key=lambda call: call["options"]["min"])
+
+
+def _paginate_report(*, page: Page, table_selector: str, call: dict) -> None:
+    previous_html = page.evaluate(f"document.querySelector('{table_selector} tbody')?.innerHTML ?? ''")
+    page.evaluate(
+        """
+        ({ regionId, checksum, options }) => {
+            apex.widget.report.paginate(regionId, checksum, options);
+        }
+        """,
+        {"regionId": call["region_id"], "checksum": call["checksum"], "options": call["options"]},
     )
-    write_developers_csv(
-        developers_path,
-        fetch_developer_rows(run_id, http=http, proxy=proxy, diagnostics=diagnostics),
+    try:
+        page.wait_for_function(
+            """
+            ({ selector, previousHtml }) => {
+                const node = document.querySelector(selector);
+                return !!node && node.innerHTML !== previousHtml;
+            }
+            """,
+            arg={"selector": f"{table_selector} tbody", "previousHtml": previous_html},
+            timeout=15000,
+        )
+    except TimeoutError:
+        page.wait_for_timeout(2000)
+
+
+def _maybe_solve_captcha(*, page: Page, api_key: str) -> None:
+    challenge = _detect_captcha(page)
+    if challenge is None:
+        return
+    if not api_key:
+        raise RuntimeError("DXBI captcha detected but twocaptcha_api_key is not configured")
+    solver = TwoCaptcha(api_key)
+    if challenge["kind"] == "turnstile":
+        result = solver.turnstile(sitekey=challenge["sitekey"], url=page.url)
+    else:
+        result = solver.hcaptcha(sitekey=challenge["sitekey"], url=page.url)
+    token = result["code"]
+    _inject_captcha_token(page=page, token=token)
+    try:
+        page.wait_for_load_state("networkidle", timeout=15000)
+    except TimeoutError:
+        page.wait_for_timeout(3000)
+
+
+def _maybe_accept_terms(page: Page) -> None:
+    try:
+        checkbox = page.locator("dialog input[type='checkbox'], .a-Dialog input[type='checkbox']").first
+        if checkbox.is_visible(timeout=3000):
+            checkbox.check()
+            page.locator("dialog button:has-text('Submit'), .a-Dialog button:has-text('Submit')").first.click()
+            page.wait_for_timeout(1000)
+    except TimeoutError:
+        pass
+
+
+def _detect_captcha(page: Page) -> dict | None:
+    turnstile = page.locator("iframe[src*='challenges.cloudflare.com'], div.cf-turnstile[data-sitekey]")
+    if turnstile.count():
+        sitekey = _sitekey_from_locator(page, "div.cf-turnstile[data-sitekey]") or _sitekey_from_iframe(
+            turnstile.first.get_attribute("src") or ""
+        )
+        if sitekey:
+            return {"kind": "turnstile", "sitekey": sitekey}
+    hcaptcha = page.locator("[data-sitekey], iframe[src*='hcaptcha']")
+    if hcaptcha.count():
+        sitekey = _sitekey_from_locator(page, "[data-sitekey]") or _sitekey_from_iframe(
+            hcaptcha.first.get_attribute("src") or ""
+        )
+        if sitekey:
+            return {"kind": "hcaptcha", "sitekey": sitekey}
+    return None
+
+
+def _sitekey_from_locator(page: Page, selector: str) -> str:
+    locator = page.locator(selector)
+    if not locator.count():
+        return ""
+    return locator.first.get_attribute("data-sitekey") or ""
+
+
+def _sitekey_from_iframe(src: str) -> str:
+    if not src:
+        return ""
+    return parse_qs(urlparse(src).query).get("sitekey", [""])[0]
+
+
+def _inject_captcha_token(*, page: Page, token: str) -> None:
+    page.evaluate(
+        """
+        value => {
+            for (const selector of [
+                'textarea[name="h-captcha-response"]',
+                'textarea[name="g-recaptcha-response"]',
+                'input[name="cf-turnstile-response"]',
+                'textarea[name="cf-turnstile-response"]'
+            ]) {
+                for (const node of document.querySelectorAll(selector)) {
+                    node.value = value;
+                    node.innerHTML = value;
+                    node.dispatchEvent(new Event('input', { bubbles: true }));
+                    node.dispatchEvent(new Event('change', { bubbles: true }));
+                }
+            }
+            for (const form of document.forms) {
+                const submit = form.querySelector('[type="submit"]');
+                if (submit) {
+                    submit.click();
+                    return;
+                }
+            }
+        }
+        """,
+        token,
     )
 
-    return [
-        DownloadResult(canonical_name="locations.csv", local_path=locations_path),
-        DownloadResult(canonical_name="developers.csv", local_path=developers_path),
-    ]
 
-
-def capture_root_page_regions(*args, **kwargs):
-    raise NotImplementedError(
-        "Root-page APEX region capture requires a browser session that has already passed "
-        "Cloudflare and a pagination strategy that avoids triggering challenges."
-    )
-
-
-def paginate_sales_transactions(*args, **kwargs):
-    raise NotImplementedError(
-        "Sales pagination is intentionally stubbed until we settle on a Cloudflare-safe "
-        "browser/session strategy."
-    )
-
-
-def paginate_rental_transactions(*args, **kwargs):
-    raise NotImplementedError(
-        "Rental pagination is intentionally stubbed until we settle on a Cloudflare-safe "
-        "browser/session strategy."
+def _write_slice_file(*, output_path: Path, date_slice: DateSlice, rows: list[dict]) -> RawFile:
+    path = output_path / f"slice_{date_slice.key}.jsonl"
+    hasher = hashlib.sha256()
+    size = 0
+    with path.open("wb") as handle:
+        for row in rows:
+            line = (json.dumps(row, sort_keys=True) + "\n").encode()
+            handle.write(line)
+            hasher.update(line)
+            size += len(line)
+    return build_raw_file(
+        path=path,
+        sha256=hasher.hexdigest(),
+        size_bytes=size,
+        row_count=len(rows),
+        content_type="application/x-ndjson",
+        metadata={
+            "slice_start_date": date_slice.start_date.isoformat(),
+            "slice_end_date": date_slice.end_date.isoformat(),
+        },
     )

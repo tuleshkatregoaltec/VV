@@ -1,87 +1,49 @@
 # Architecture
 
-## Release Model
+Holocron is being rebuilt around four concerns:
 
-Each ingestion run stages files locally first, then promotes them into a durable raw release.
+- `sources/`: one package per source connector
+- `platform/`: shared S3, ClickHouse, manifest, config, and runtime helpers
+- `orchestration/`: Dagster definitions only
+- `domain/`: cross-source and business-facing outputs
 
-The staged local release and the raw S3 release both use typed manifests carrying:
+## Data Flow
 
-- dataset
-- release ID
-- mode
-- source
-- checksums
-- row counts
+The intended flow is:
 
-## Publish Model
+```text
+source connector
+  -> immutable raw release in S3
+  -> bronze ClickHouse table(s)
+  -> silver ClickHouse table(s)
+  -> optional domain outputs
+```
 
-Raw data lands in object storage first. ClickHouse publishing depends on the table strategy declared by each table:
+Dagster sits beside the pipeline as the control plane for:
 
-- `full_swap`: load to staging, then `EXCHANGE TABLES`
-- `append`: load to staging, then append into target
+- asset catalog and lineage
+- schedules and sensors
+- checks and metadata
+- retries and backfills
 
-This keeps raw history immutable while letting each dataset publish according to its own semantics.
+## Boundaries
 
-## Dagster Model
+The important ownership rules are:
 
-Holocron uses Dagster to model durable warehouse outputs:
+- a source owns its extraction logic, raw release shape, and source-conformed bronze and silver tables
+- shared platform code must stay source-agnostic
+- domain outputs may depend on many sources
+- one source must not depend on another source's code
+- Dagster must not contain source-specific scraping or parsing logic
 
-- one local release asset per source
-- one raw release asset per source
-- one asset per final ClickHouse table
-- one cleanup job per source for removing staged local files by release ID
-- asset checks for data quality and source-specific assertions
-- Dagster asset groups are provider-level, not dataset-level
-- ingest jobs select the exact source-owned asset set explicitly rather than selecting an entire group
+## Current Core Types
 
-Most Dagster assets are generated from source metadata rather than hand-written per-table
-orchestration modules. Hand-written downstream assets are reserved for derived tables such as
-`pf_location_hierarchy`.
+The new package starts with a deliberately small contract surface:
 
-## Source Contract
+- `SourceSpec`
+- `RawFile`
+- `RawRelease`
+- `BronzeTable`
+- `SilverTable`
 
-Every source is defined locally under `holocron/sources/<source>/`.
-
-A source is a dataset-level operational boundary, not a whole website or provider.
-For example:
-
-- `pf_locations` is one Property Finder dataset
-- `bay_transactions` is one Bay dataset
-- `dda_planning_layers` is one DDA dataset
-
-Each source may declare a separate `provider` used for Dagster grouping and catalog metadata.
-
-`source.py` owns:
-
-- source metadata
-- provider metadata
-- table declarations
-- config schema and defaults
-- optional extra checks
-- the extract function for simple sources that have not been split yet
-
-`extract.py` normally owns:
-
-- source-specific scraping or download logic
-- writing one or more CSV files for the release
-
-## Code Layout
-
-- `holocron/assets`: handwritten downstream assets derived from published tables
-- `holocron/framework`: release models, validation, Dagster factory, storage helpers
-- `holocron/resources`: S3, ClickHouse, and HTTP resources
-- `holocron/sources`: source-local contracts and extraction code
-- `holocron/scripts`: operator tooling
-
-## Adding a Source
-
-Adding a new source should normally require:
-
-1. adding `holocron/sources/<name>/source.py`
-2. adding `holocron/sources/<name>/extract.py`
-3. registering the source in `holocron/sources/__init__.py`
-4. optionally adding new ClickHouse tables in `holocron/lib/sql/clickhouse_schema.sql`
-
-Some older/simple sources still keep extraction inline in `source.py`, but new source-specific
-logic should remain local to the source package rather than being reintroduced through shared
-top-level registries or orchestration modules.
+These are enough to define a source, shape immutable raw releases, and generate orchestration later without baking source internals into the control plane.

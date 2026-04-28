@@ -7,8 +7,6 @@ services:
     command: dagster-webserver -h 0.0.0.0 -p 3000 -w /app/workspace.yaml
     ports:
       - "3000:3000"
-    volumes:
-      - .:/app
     environment:
       DAGSTER_HOME: /app
     env_file:
@@ -24,8 +22,6 @@ services:
       context: .
       dockerfile: Dockerfile
     command: dagster-daemon run -w /app/workspace.yaml
-    volumes:
-      - .:/app
     environment:
       DAGSTER_HOME: /app
     env_file:
