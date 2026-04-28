@@ -1,5 +1,7 @@
 services:
   dagster-webserver:
+    volumes:
+      - .:/app
     depends_on:
       dagster-daemon:
         condition: service_started
@@ -11,6 +13,8 @@ services:
         condition: service_completed_successfully
 
   dagster-daemon:
+    volumes:
+      - .:/app
     depends_on:
       postgres:
         condition: service_healthy

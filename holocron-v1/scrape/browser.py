@@ -47,4 +47,3 @@ def browser_context_kwargs(
     if storage_state_path.strip():
         kwargs["storage_state"] = storage_state_path
     return kwargs
-

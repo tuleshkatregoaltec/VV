@@ -219,4 +219,3 @@ def rental_row(
         has_kpi_value=bool_int(hit.get("has_kpi_value")),
         previous_sale_transaction_date=string(hit.get("date_previous_sale_transaction_nk")),
     )
-

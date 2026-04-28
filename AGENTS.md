@@ -49,6 +49,16 @@ Small legacy/simple sources may still inline extraction in `source.py`, but new 
 
 ## Tooling
 
+**Task runner:** `just`
+
+- Prefer `just` recipes for the normal dev loop instead of retyping raw commands
+- List commands: `just --list`
+- Install deps: `just sync`
+- Run the full verification pass: `just check`
+- Start the local stack: `just local-up`
+- Stop the local stack: `just local-down`
+- Prepare local env file: `just env-local`
+
 **Package manager:** `uv`
 
 - Install deps: `uv sync`
@@ -67,6 +77,8 @@ Small legacy/simple sources may still inline extraction in `source.py`, but new 
 
 - Run all tests: `uv run pytest`
 - Run a specific file: `uv run pytest tests/test_holocron_definitions.py`
+
+For VPS-oriented replication and deploy work, prefer the repo recipes such as `just env-vps`, `just vps-up`, and `just deploy`.
 
 ## Migration Note
 
