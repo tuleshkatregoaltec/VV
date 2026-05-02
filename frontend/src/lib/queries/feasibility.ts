@@ -12,8 +12,6 @@ export const feasibilityKeys = {
 		offset?: number
 		limit?: number
 	}) => [...feasibilityKeys.all, 'searchPlots', params] as const,
-	communityPlots: (community: string, pageSize: number) =>
-		[...feasibilityKeys.all, 'communityPlots', community, pageSize] as const,
 	plotData: (plotNumber: string) => [...feasibilityKeys.all, 'plotData', plotNumber] as const,
 	generateStudy: (plotNumber: string, usageOverride?: string) =>
 		[...feasibilityKeys.all, 'generateStudy', plotNumber, usageOverride] as const
@@ -42,21 +40,9 @@ export const feasibilityQueries = {
 		queryFn: () => feasibility.searchPlots(params),
 		staleTime: 5 * 60 * 1000
 	}),
-	communityPlots: (community: string | null, pageSize = 100) => ({
-		queryKey: feasibilityKeys.communityPlots(community ?? '', pageSize),
-		queryFn: () => {
-			if (!community) throw new Error('community is required')
-			return feasibility.searchAllCommunityPlots(community, pageSize)
-		},
-		enabled: Boolean(community),
-		staleTime: 5 * 60 * 1000
-	}),
 	plotData: (plotNumber: string | null) => ({
 		queryKey: feasibilityKeys.plotData(plotNumber ?? ''),
-		queryFn: () => {
-			if (!plotNumber) throw new Error('plotNumber is required')
-			return feasibility.getPlotData(plotNumber)
-		},
+		queryFn: () => feasibility.getPlotData(plotNumber!),
 		enabled: Boolean(plotNumber),
 		staleTime: Infinity
 	}),
@@ -65,10 +51,8 @@ export const feasibilityQueries = {
 		usageOverride?: 'residential' | 'commercial' | 'mixed_use' | 'unknown'
 	) => ({
 		queryKey: feasibilityKeys.generateStudy(plotNumber ?? '', usageOverride),
-		queryFn: () => {
-			if (!plotNumber) throw new Error('plotNumber is required')
-			return feasibility.generateStudy({ plot_number: plotNumber, usage_override: usageOverride })
-		},
+		queryFn: () =>
+			feasibility.generateStudy({ plot_number: plotNumber!, usage_override: usageOverride }),
 		enabled: Boolean(plotNumber),
 		staleTime: Infinity
 	})

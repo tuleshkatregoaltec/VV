@@ -1,11 +1,16 @@
-import type { FeasibilityStudy } from '$lib/feasibility/workbook/models'
-import { client } from './client'
 import type {
-	FeasibilityAssumptions,
-	Plot,
-	PlotDetails,
-	PlotResearch
-} from './generated/hey-api/types.gen'
+	FeasibilityStudy,
+	PlotDataResponse,
+	FeasibilityAssumptions as WorkbookFeasibilityAssumptions
+} from '$lib/feasibility/workbook/models'
+import { client } from './client'
+import type { Plot, PlotDetails, PlotResearch } from './generated/hey-api/types.gen'
+
+export function normalizePlotDataResponse(
+	response: PlotDataResponse | PlotDetails
+): PlotDataResponse {
+	return 'plot_data' in response ? response : { plot_data: response }
+}
 
 export const feasibility = {
 	getAreas(): Promise<string[]> {
@@ -36,29 +41,20 @@ export const feasibility = {
 		)
 	},
 
-	async searchAllCommunityPlots(community: string, pageSize = 100): Promise<Plot[]> {
-		const allPlots: Plot[] = []
-		let offset = 0
-		while (true) {
-			const page = await this.searchPlots({
-				community,
-				offset,
-				limit: pageSize
-			})
-			allPlots.push(...page)
-			if (page.length < pageSize) break
-			offset += page.length
-		}
-		return allPlots
-	},
-
-	getPlotData(plotNumber: string): Promise<PlotDetails> {
-		return client.get(`/api/v1/feasibility/plots/${encodeURIComponent(plotNumber)}`)
+	async getPlotData(plotNumber: string): Promise<PlotDataResponse> {
+		const response = await client.get<PlotDataResponse | PlotDetails>(
+			`/api/v1/feasibility/plots/${encodeURIComponent(plotNumber)}`
+		)
+		return normalizePlotDataResponse(response)
 	},
 
 	generateStudy(params: {
 		plot_number: string
 		usage_override?: 'residential' | 'commercial' | 'mixed_use' | 'unknown'
+		development_model?:
+			| 'build_to_sell_residential'
+			| 'build_to_rent_residential'
+			| 'build_to_lease_commercial'
 	}): Promise<FeasibilityStudy> {
 		return client.post('/api/v1/feasibility/generate-study', params)
 	},
@@ -67,7 +63,7 @@ export const feasibility = {
 		messages: Array<{ role: string; content: string }>,
 		params: {
 			plot_data: FeasibilityStudy['plot_data']
-			assumptions: FeasibilityAssumptions
+			assumptions: WorkbookFeasibilityAssumptions
 			research: PlotResearch
 		},
 		onChunk: (data: string) => void

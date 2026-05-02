@@ -1,5 +1,5 @@
 <script lang="ts">
-import { workbookStore } from '$lib/stores/workbookStore.svelte'
+import { workbookStore } from '$lib/feasibility/workbook/store.svelte'
 
 function fmt(value: number, digits = 0) {
 	return value.toLocaleString('en-AE', {
@@ -51,26 +51,22 @@ Generate an HBU study to build the draft sales and collections view.
 </div>
 
 <!-- Summary bar -->
-<div class="grid grid-cols-4 border-b border-[#B8C4CE] bg-[#EEF2F7]">
-<div class="px-3 py-2 border-r border-[#D9D9D9]">
+<div class="flex border-b border-[#B8C4CE] bg-[#EEF2F7] divide-x divide-[#D9D9D9]">
+<div class="px-2 py-1.5 flex-1">
 <div class="text-[9px] uppercase tracking-wider text-slate-500 font-semibold">Gross Revenue</div>
-<div class="text-[13px] font-bold text-slate-900 tabular-nums mt-0.5">{fmt(outputs.program.grossRevenueAed)}</div>
-<div class="text-[10px] text-slate-500">AED</div>
+<div class="text-[11px] font-bold text-slate-900 tabular-nums">AED {fmt(outputs.program.grossRevenueAed)}</div>
 </div>
-<div class="px-3 py-2 border-r border-[#D9D9D9]">
+<div class="px-2 py-1.5 flex-1">
 <div class="text-[9px] uppercase tracking-wider text-slate-500 font-semibold">Off-plan Proceeds</div>
-<div class="text-[13px] font-bold text-slate-900 tabular-nums mt-0.5">{fmt(outputs.funding.offPlanProceedsAed)}</div>
-<div class="text-[10px] text-slate-500">AED deposit + pre-handover</div>
+<div class="text-[11px] font-bold text-slate-900 tabular-nums">AED {fmt(outputs.funding.offPlanProceedsAed)}</div>
 </div>
-<div class="px-3 py-2 border-r border-[#D9D9D9]">
+<div class="px-2 py-1.5 flex-1">
 <div class="text-[9px] uppercase tracking-wider text-slate-500 font-semibold">Total Units</div>
-<div class="text-[13px] font-bold text-slate-900 tabular-nums mt-0.5">{fmt(outputs.program.totalUnits)}</div>
-<div class="text-[10px] text-slate-500">units configured</div>
+<div class="text-[11px] font-bold text-slate-900 tabular-nums">{fmt(outputs.program.totalUnits)}</div>
 </div>
-<div class="px-3 py-2">
+<div class="px-2 py-1.5 flex-1">
 <div class="text-[9px] uppercase tracking-wider text-slate-500 font-semibold">Avg Rate</div>
-<div class="text-[13px] font-bold text-slate-900 tabular-nums mt-0.5">{fmt(outputs.program.weightedAvgSalesRatePsqm)}</div>
-<div class="text-[10px] text-slate-500">AED/sqm</div>
+<div class="text-[11px] font-bold text-slate-900 tabular-nums">AED {fmt(outputs.program.weightedAvgSalesRatePsqm)} /sqm</div>
 </div>
 </div>
 

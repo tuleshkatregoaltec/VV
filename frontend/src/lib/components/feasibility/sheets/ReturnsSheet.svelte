@@ -1,5 +1,5 @@
 <script lang="ts">
-import { workbookStore } from '$lib/stores/workbookStore.svelte'
+import { workbookStore } from '$lib/feasibility/workbook/store.svelte'
 
 function fmt(value: number, digits = 0) {
 	return value.toLocaleString('en-AE', {
@@ -52,13 +52,12 @@ const totalCostsInclVatAed = $derived(outputs?.costs.totalCostsInclVatAed ?? 0)
 const projectIrrPct = $derived(outputs?.returns.projectIrrPct ?? 0)
 const projectMoic = $derived(outputs?.returns.projectMoic ?? 0)
 const offPlanProceedsAed = $derived(outputs?.funding.offPlanProceedsAed ?? 0)
-const debtFundingAed = $derived(assumptions?.debtFundingAed ?? outputs?.funding.debtFundingAed ?? 0)
-const equityFundingAed = $derived(
-	assumptions?.equityFundingAed ?? outputs?.funding.equityFundingAed ?? 0
-)
+const debtFundingAed = $derived(outputs?.funding.debtFundingAed ?? 0)
+const equityFundingAed = $derived(outputs?.funding.equityFundingAed ?? 0)
 const vatRefundsAed = $derived(outputs?.funding.vatRefundsAed ?? 0)
-const totalSourcesAed = $derived(outputs?.funding.totalSourcesAed ?? 0)
-const totalUsesAed = $derived(outputs?.funding.totalUsesAed ?? 0)
+const totalSourcesAed = $derived(outputs?.funding.cashReconSourcesAed ?? 0)
+const totalUsesAed = $derived(outputs?.funding.cashReconUsesAed ?? 0)
+const peakNetSponsorCapitalAed = $derived(outputs?.returns.peakEquityAed ?? 0)
 const returnOnCostPct = $derived(
 	totalCostsInclVatAed > 0
 		? ((grossRevenueAed - totalCostsInclVatAed) / totalCostsInclVatAed) * 100
@@ -72,7 +71,7 @@ const draftRevenue = $derived(outputs?.program.grossRevenueAed ?? 0)
 const draftCostsInclVat = $derived(outputs?.costs.totalCostsInclVatAed ?? 0)
 const draftProfit = $derived(outputs?.returns.grossProfitAed ?? 0)
 const draftMarginPct = $derived(outputs?.returns.grossMarginPct ?? 0)
-const fundingGap = $derived(outputs?.funding.gapAed ?? totalSourcesAed - totalUsesAed)
+const fundingGap = $derived(outputs?.funding.cashReconGapAed ?? totalSourcesAed - totalUsesAed)
 const localProfit = $derived(grossRevenueAed - totalCostsInclVatAed)
 const localMarginPct = $derived(grossRevenueAed > 0 ? (localProfit / grossRevenueAed) * 100 : 0)
 const profitGap = $derived(localProfit - draftProfit)
@@ -186,19 +185,19 @@ const sourcesUsesRows = $derived([
 	},
 	{
 		label: 'Total sources',
-		draft: outputs?.funding.totalSourcesAed ?? 0,
+		draft: outputs?.funding.cashReconSourcesAed ?? 0,
 		local: totalSourcesAed,
 		basis: 'Backend sources-and-uses'
 	},
 	{
 		label: 'Total uses',
-		draft: outputs?.funding.totalUsesAed ?? 0,
+		draft: outputs?.funding.cashReconUsesAed ?? 0,
 		local: totalUsesAed,
 		basis: 'Backend sources-and-uses'
 	},
 	{
 		label: 'Funding gap',
-		draft: outputs?.funding.gapAed ?? 0,
+		draft: outputs?.funding.cashReconGapAed ?? 0,
 		local: fundingGap,
 		basis: 'Backend sources-and-uses gap'
 	}
@@ -219,26 +218,22 @@ const sourcesUsesRows = $derived([
 		</div>
 
 		<!-- Summary bar -->
-		<div class="grid grid-cols-4 border-b border-[#B8C4CE] bg-[#EEF2F7]">
-			<div class="px-3 py-2 border-r border-[#D9D9D9]">
+		<div class="flex border-b border-[#B8C4CE] bg-[#EEF2F7] divide-x divide-[#D9D9D9]">
+			<div class="px-2 py-1.5 flex-1">
 				<div class="text-[9px] uppercase tracking-wider text-slate-500 font-semibold">Local Profit</div>
-				<div class="text-[13px] font-bold text-slate-900 tabular-nums mt-0.5">{fmt(localProfit)}</div>
-				<div class="text-[10px] text-slate-500">AED</div>
+				<div class="text-[11px] font-bold text-slate-900 tabular-nums">AED {fmt(localProfit)}</div>
 			</div>
-			<div class="px-3 py-2 border-r border-[#D9D9D9]">
-				<div class="text-[9px] uppercase tracking-wider text-slate-500 font-semibold">Draft Profit</div>
-				<div class="text-[13px] font-bold text-slate-900 tabular-nums mt-0.5">{fmt(draftProfit)}</div>
-				<div class="text-[10px] text-slate-500">AED</div>
+			<div class="px-2 py-1.5 flex-1">
+				<div class="text-[9px] uppercase tracking-wider text-slate-500 font-semibold">Equity IRR</div>
+				<div class="text-[11px] font-bold text-slate-900 tabular-nums">{outputs?.returns.equityIrrPct != null ? fmt(outputs.returns.equityIrrPct, 1) + '%' : 'N/A'}</div>
 			</div>
-			<div class="px-3 py-2 border-r border-[#D9D9D9]">
-				<div class="text-[9px] uppercase tracking-wider text-slate-500 font-semibold">Margin Gap</div>
-				<div class="text-[13px] font-bold {Math.abs(marginGap) >= 5 ? 'text-amber-700' : 'text-slate-900'} tabular-nums mt-0.5">{fmt(marginGap, 1)} pts</div>
-				<div class="text-[10px] text-slate-500">local {fmt(localMarginPct, 1)}% vs draft {fmt(draftMarginPct, 1)}%</div>
+			<div class="px-2 py-1.5 flex-1">
+				<div class="text-[9px] uppercase tracking-wider text-slate-500 font-semibold">Equity MOIC</div>
+				<div class="text-[11px] font-bold text-slate-900 tabular-nums">{outputs?.returns.equityMoic != null ? fmt(outputs.returns.equityMoic, 2) + 'x' : 'N/A'}</div>
 			</div>
-			<div class="px-3 py-2">
+			<div class="px-2 py-1.5 flex-1">
 				<div class="text-[9px] uppercase tracking-wider text-slate-500 font-semibold">Funding Gap</div>
-				<div class="text-[13px] font-bold {Math.abs(fundingGap) > 1_000_000 ? 'text-amber-700' : 'text-slate-900'} tabular-nums mt-0.5">{fmt(fundingGap)}</div>
-				<div class="text-[10px] text-slate-500">AED sources minus uses</div>
+				<div class="text-[11px] font-bold {Math.abs(fundingGap) > 1_000_000 ? 'text-amber-700' : 'text-slate-900'} tabular-nums">AED {fmt(fundingGap)}</div>
 			</div>
 		</div>
 
@@ -288,7 +283,7 @@ const sourcesUsesRows = $derived([
 			<tr class="border-b border-[#D9D9D9] hover:bg-slate-50/60">
 				<td class="px-1 py-[3px] text-center text-[9px] text-slate-400">a</td>
 				<td class="px-2 py-[3px] text-left text-[10px] text-slate-900 font-semibold">Project IRR</td>
-				<td class="px-2 py-[3px] text-right tabular-nums text-[10px] font-bold {outputs?.returns.projectIrrPct != null && outputs.returns.projectIrrPct < 10 ? 'text-rose-600' : outputs?.returns.projectIrrPct != null && outputs.returns.projectIrrPct < 15 ? 'text-amber-600' : 'text-emerald-700'}">
+				<td class="px-2 py-[3px] text-right tabular-nums text-[10px] font-bold text-emerald-700">
 					{outputs?.returns.projectIrrPct != null ? fmt(outputs.returns.projectIrrPct, 1) + '%' : 'N/A'}
 				</td>
 				<td class="px-2 py-[3px] text-left text-[9px] text-slate-500">Backend timed cash-flow IRR</td>
@@ -296,7 +291,7 @@ const sourcesUsesRows = $derived([
 			<tr class="border-b border-[#D9D9D9] hover:bg-slate-50/60">
 				<td class="px-1 py-[3px] text-center text-[9px] text-slate-400">b</td>
 				<td class="px-2 py-[3px] text-left text-[10px] text-slate-900 font-semibold">Equity IRR</td>
-				<td class="px-2 py-[3px] text-right tabular-nums text-[10px] font-bold {outputs?.returns.equityIrrPct === null || outputs?.returns.equityIrrPct === undefined ? 'text-slate-400' : outputs.returns.equityIrrPct < 12 ? 'text-rose-600' : outputs.returns.equityIrrPct < 18 ? 'text-amber-600' : 'text-emerald-700'}">
+				<td class="px-2 py-[3px] text-right tabular-nums text-[10px] font-bold text-emerald-700">
 					{outputs?.returns.equityIrrPct != null ? fmt(outputs.returns.equityIrrPct, 1) + '%' : 'N/A'}
 				</td>
 				<td class="px-2 py-[3px] text-left text-[9px] text-slate-500">Sponsor cash flows after debt cleanup</td>
@@ -345,9 +340,9 @@ const sourcesUsesRows = $derived([
 			</tr>
 			<tr class="border-b border-[#D9D9D9] hover:bg-slate-50/60">
 				<td class="px-1 py-[3px] text-center text-[9px] text-slate-400">j</td>
-				<td class="px-2 py-[3px] text-left text-[10px] text-slate-800">Peak equity</td>
-				<td class="px-2 py-[3px] text-right tabular-nums text-slate-900 text-[10px]">{outputs?.funding.equityFundingAed != null ? 'AED ' + fmt(outputs.funding.equityFundingAed) : 'N/A'}</td>
-				<td class="px-2 py-[3px] text-left text-[9px] text-slate-500">Backend monthly financing path</td>
+				<td class="px-2 py-[3px] text-left text-[10px] text-slate-800">Peak net sponsor capital</td>
+				<td class="px-2 py-[3px] text-right tabular-nums text-slate-900 text-[10px]">AED {fmt(peakNetSponsorCapitalAed)}</td>
+				<td class="px-2 py-[3px] text-left text-[9px] text-slate-500">Maximum cumulative equity in less distributions out</td>
 			</tr>
 			<tr class="border-b border-[#D9D9D9] hover:bg-slate-50/60">
 				<td class="px-1 py-[3px] text-center text-[9px] text-slate-400">k</td>
@@ -357,9 +352,11 @@ const sourcesUsesRows = $derived([
 			</tr>
 			<tr class="border-b border-[#D9D9D9] hover:bg-slate-50/60">
 				<td class="px-1 py-[3px] text-center text-[9px] text-slate-400">l</td>
-				<td class="px-2 py-[3px] text-left text-[10px] text-slate-800">Commitment fees</td>
-				<td class="px-2 py-[3px] text-right tabular-nums text-slate-900 text-[10px]">{outputs?.returns.totalCommitmentFeesAed != null ? 'AED ' + fmt(outputs.returns.totalCommitmentFeesAed) : 'N/A'}</td>
-				<td class="px-2 py-[3px] text-left text-[9px] text-slate-500">Undrawn debt commitment fee carry</td>
+				<td class="px-2 py-[3px] text-left text-[10px] text-slate-800">Financing / exit fees</td>
+				<td class="px-2 py-[3px] text-right tabular-nums text-slate-900 text-[10px]">
+					{outputs?.returns != null ? 'AED ' + fmt((outputs.returns.financingFeeAed ?? 0) + (outputs.returns.exitFeeAed ?? 0)) : 'N/A'}
+				</td>
+				<td class="px-2 py-[3px] text-left text-[9px] text-slate-500">Upfront financing fee plus handover exit fee</td>
 			</tr>
 			<tr class="border-b border-[#D9D9D9] hover:bg-slate-50/60">
 				<td class="px-1 py-[3px] text-center text-[9px] text-slate-400">m</td>
@@ -372,6 +369,48 @@ const sourcesUsesRows = $derived([
 				<td class="px-2 py-[3px] text-left text-[10px] text-slate-800">Debt / equity funding</td>
 				<td class="px-2 py-[3px] text-right tabular-nums text-slate-900 text-[10px]">AED {fmt(debtFundingAed)} / {fmt(equityFundingAed)}</td>
 				<td class="px-2 py-[3px] text-left text-[9px] text-slate-500">Workbook funding inputs</td>
+			</tr>
+			<tr class="border-b border-[#D9D9D9] hover:bg-slate-50/60">
+				<td class="px-1 py-[3px] text-center text-[9px] text-slate-400">o</td>
+				<td class="px-2 py-[3px] text-left text-[10px] text-slate-800">Break-even Sale Rate</td>
+				<td class="px-2 py-[3px] text-right tabular-nums text-slate-900 text-[10px]">{outputs?.returns.breakEvenSaleRateAedSqft != null ? fmt(outputs.returns.breakEvenSaleRateAedSqft) + ' AED/sqft' : 'N/A'}</td>
+				<td class="px-2 py-[3px] text-left text-[9px] text-slate-500">Total cost / sellable area</td>
+			</tr>
+			<tr class="border-b border-[#D9D9D9] hover:bg-slate-50/60">
+				<td class="px-1 py-[3px] text-center text-[9px] text-slate-400">p</td>
+				<td class="px-2 py-[3px] text-left text-[10px] text-slate-800">Levered Margin on Equity</td>
+				<td class="px-2 py-[3px] text-right tabular-nums text-slate-900 text-[10px]">{outputs?.returns.leveredMarginOnEquityPct != null ? fmt(outputs.returns.leveredMarginOnEquityPct, 1) + '%' : 'N/A'}</td>
+				<td class="px-2 py-[3px] text-left text-[9px] text-slate-500">Levered profit / total equity</td>
+			</tr>
+			<tr class="border-b border-[#D9D9D9] hover:bg-slate-50/60">
+				<td class="px-1 py-[3px] text-center text-[9px] text-slate-400">q</td>
+				<td class="px-2 py-[3px] text-left text-[10px] text-slate-800">Debt as % of Cost</td>
+				<td class="px-2 py-[3px] text-right tabular-nums text-emerald-700 text-[10px]">{outputs?.returns.debtAsPctOfCost != null ? fmt(outputs.returns.debtAsPctOfCost, 1) + '%' : 'N/A'}</td>
+				<td class="px-2 py-[3px] text-left text-[9px] text-slate-500">Peak debt / total cost</td>
+			</tr>
+			<tr class="border-b border-[#D9D9D9] hover:bg-slate-50/60">
+				<td class="px-1 py-[3px] text-center text-[9px] text-slate-400">r</td>
+				<td class="px-2 py-[3px] text-left text-[10px] text-slate-800">Average Debt Outstanding</td>
+				<td class="px-2 py-[3px] text-right tabular-nums text-emerald-700 text-[10px]">{outputs?.returns.averageDebtOutstandingAed != null ? 'AED ' + fmt(outputs.returns.averageDebtOutstandingAed) : 'N/A'}</td>
+				<td class="px-2 py-[3px] text-left text-[9px] text-slate-500">Time-weighted average</td>
+			</tr>
+			<tr class="border-b border-[#D9D9D9] hover:bg-slate-50/60">
+				<td class="px-1 py-[3px] text-center text-[9px] text-slate-400">s</td>
+				<td class="px-2 py-[3px] text-left text-[10px] text-slate-800">Financing Fee</td>
+				<td class="px-2 py-[3px] text-right tabular-nums text-emerald-700 text-[10px]">{outputs?.returns.financingFeeAed != null ? 'AED ' + fmt(outputs.returns.financingFeeAed) : 'N/A'}</td>
+				<td class="px-2 py-[3px] text-left text-[9px] text-slate-500">1% of total debt commitment</td>
+			</tr>
+			<tr class="border-b border-[#D9D9D9] hover:bg-slate-50/60">
+				<td class="px-1 py-[3px] text-center text-[9px] text-slate-400">t</td>
+				<td class="px-2 py-[3px] text-left text-[10px] text-slate-800">Exit Fee</td>
+				<td class="px-2 py-[3px] text-right tabular-nums text-emerald-700 text-[10px]">{outputs?.returns.exitFeeAed != null ? 'AED ' + fmt(outputs.returns.exitFeeAed) : 'N/A'}</td>
+				<td class="px-2 py-[3px] text-left text-[9px] text-slate-500">1% of opening debt at handover</td>
+			</tr>
+			<tr class="border-b border-[#D9D9D9] hover:bg-slate-50/60">
+				<td class="px-1 py-[3px] text-center text-[9px] text-slate-400">u</td>
+				<td class="px-2 py-[3px] text-left text-[10px] text-slate-800 font-semibold">Total Financing Costs</td>
+				<td class="px-2 py-[3px] text-right tabular-nums text-emerald-700 text-[10px] font-bold">{outputs?.returns.totalFinancingCostsAed != null ? 'AED ' + fmt(outputs.returns.totalFinancingCostsAed) : 'N/A'}</td>
+				<td class="px-2 py-[3px] text-left text-[9px] text-slate-500">Interest + fees</td>
 			</tr>
 			</tbody>
 		</table>

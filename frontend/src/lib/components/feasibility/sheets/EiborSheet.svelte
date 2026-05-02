@@ -1,5 +1,5 @@
 <script lang="ts">
-import { workbookStore } from '$lib/stores/workbookStore.svelte'
+import { workbookStore } from '$lib/feasibility/workbook/store.svelte'
 
 function fmt(v: number, d = 0) {
 	return v.toLocaleString('en-AE', { minimumFractionDigits: d, maximumFractionDigits: d })
@@ -15,8 +15,10 @@ const outputs = $derived(workbookStore.outputs)
 const eiborRate = $derived(assumptions?.eiborRatePct ?? 0)
 const landSpreadPct = $derived((assumptions?.landLoanSpreadBps ?? 0) / 100)
 const conSpreadPct = $derived((assumptions?.constructionLoanSpreadBps ?? 0) / 100)
+const permSpreadPct = $derived((assumptions?.btrPermDebtSpreadBps ?? 165) / 100)
 const effectiveLandRate = $derived(outputs?.funding.landLoanRatePct ?? 0)
 const effectiveConRate = $derived(outputs?.funding.constructionLoanRatePct ?? 0)
+const effectivePermRate = $derived(eiborRate + permSpreadPct)
 const totalDebtCapacity = $derived(outputs?.funding.totalDebtCapacityAed ?? 0)
 const landLoanCapacity = $derived(outputs?.funding.landLoanCapacityAed ?? 0)
 const blendedRate = $derived(
@@ -53,21 +55,18 @@ const ROW = 'border-b border-[#D9D9D9]'
 	</div>
 
 	<!-- Effective rate summary -->
-	<div class="grid grid-cols-3 border-b border-[#B8C4CE] bg-[#EEF2F7]">
-		<div class="px-3 py-2 border-r border-[#D9D9D9]">
+	<div class="flex border-b border-[#B8C4CE] bg-[#EEF2F7] divide-x divide-[#D9D9D9]">
+		<div class="px-2 py-1.5 flex-1">
 			<div class="text-[9px] uppercase tracking-wider text-slate-500 font-semibold">EIBOR Base Rate</div>
-			<div class="text-[16px] font-bold text-[#1565C0] tabular-nums mt-0.5">{fmt(eiborRate, 2)}%</div>
-			<div class="text-[10px] text-slate-500">user-defined reference rate</div>
+			<div class="text-[11px] font-bold text-[#1565C0] tabular-nums">{fmt(eiborRate, 2)}%</div>
 		</div>
-		<div class="px-3 py-2 border-r border-[#D9D9D9]">
+		<div class="px-2 py-1.5 flex-1">
 			<div class="text-[9px] uppercase tracking-wider text-slate-500 font-semibold">Land Loan Rate</div>
-			<div class="text-[16px] font-bold text-slate-900 tabular-nums mt-0.5">{fmt(effectiveLandRate, 2)}%</div>
-			<div class="text-[10px] text-slate-500">EIBOR + {fmt(landSpreadPct, 2)}% ({assumptions?.landLoanSpreadBps ?? 0} bps)</div>
+			<div class="text-[11px] font-bold text-slate-900 tabular-nums">{fmt(effectiveLandRate, 2)}%</div>
 		</div>
-		<div class="px-3 py-2">
+		<div class="px-2 py-1.5 flex-1">
 			<div class="text-[9px] uppercase tracking-wider text-slate-500 font-semibold">Construction Loan Rate</div>
-			<div class="text-[16px] font-bold text-slate-900 tabular-nums mt-0.5">{fmt(effectiveConRate, 2)}%</div>
-			<div class="text-[10px] text-slate-500">EIBOR + {fmt(conSpreadPct, 2)}% ({assumptions?.constructionLoanSpreadBps ?? 0} bps)</div>
+			<div class="text-[11px] font-bold text-slate-900 tabular-nums">{fmt(effectiveConRate, 2)}%</div>
 		</div>
 	</div>
 
@@ -154,6 +153,17 @@ const ROW = 'border-b border-[#D9D9D9]'
 			<td class={UNIT}>bps</td>
 			<td class="px-2 py-[3px] text-right text-[10px] text-slate-500">{fmt(conSpreadPct, 2)}%</td>
 		</tr>
+		<tr class={ROW}>
+			<td class="px-1 py-[3px] text-slate-400 text-[10px] text-center">4</td>
+			<td class={LABEL}>Permanent Loan Spread <span class="text-slate-400 font-normal italic">(BTR refi)</span></td>
+			<td class="p-0">
+				<input type="number" step="5" min="0" class={INPUT}
+					value={assumptions?.btrPermDebtSpreadBps ?? 165}
+					oninput={(e) => setNumber('btrPermDebtSpreadBps', e.currentTarget.value)} />
+			</td>
+			<td class={UNIT}>bps</td>
+			<td class="px-2 py-[3px] text-right text-[10px] text-slate-500">{fmt(permSpreadPct, 2)}%</td>
+		</tr>
 
 		<!-- SECTION C: Effective Rates -->
 		<tr class="bg-[#1F3864]">
@@ -175,10 +185,17 @@ const ROW = 'border-b border-[#D9D9D9]'
 		</tr>
 		<tr class="border-b border-[#D9D9D9] bg-[#E8F5E9]">
 			<td class="px-1 py-[3px] text-slate-400 text-[10px] text-center">→</td>
-			<td class="px-2 py-[3px] text-slate-700">Blended Rate (debt-weighted)</td>
-			<td class="px-2 py-[3px] text-right tabular-nums text-slate-900 font-semibold">{fmt(blendedRate, 2)}%</td>
+			<td class="px-2 py-[3px] text-slate-800 font-medium">Permanent Loan Effective Rate</td>
+			<td class="px-2 py-[3px] text-right tabular-nums text-slate-900 font-bold text-[13px]">{fmt(effectivePermRate, 2)}%</td>
+			<td class={UNIT}>= EIBOR + permanent spread</td>
+			<td class="px-2 py-[3px] text-right text-[10px] text-slate-500">{fmt(eiborRate,2)} + {fmt(permSpreadPct,2)}</td>
+		</tr>
+		<tr class="border-b border-[#D9D9D9] bg-[#E8F5E9]">
+			<td class="px-1 py-[3px] text-slate-400 text-[10px] text-center">→</td>
+			<td class="px-2 py-[3px] text-slate-800 font-medium">Blended Dev Debt Rate</td>
+			<td class="px-2 py-[3px] text-right tabular-nums text-slate-900 font-bold text-[13px]">{fmt(blendedRate, 2)}%</td>
 			<td class={UNIT}>weighted by tranche size</td>
-			<td></td>
+			<td class="px-2 py-[3px] text-right text-[10px] text-slate-500">land / construction mix</td>
 		</tr>
 
 		<!-- SECTION D: Rate Sensitivity -->
