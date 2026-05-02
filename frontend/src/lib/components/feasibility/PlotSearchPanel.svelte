@@ -24,7 +24,7 @@ let searchError = $state('')
 let plots = $state<Plot[]>([])
 let sortBy = $state<SortKey>('verified')
 
-const pageSize = 500
+const pageSize = 100
 
 function inferUsage(plot: Plot): UsageFilter {
 	const haystack = `${plot.gfa_type} ${(plot.land_use_summary ?? []).join(' ')}`.toLowerCase()
@@ -106,9 +106,9 @@ async function choosePlot(plot: Plot) {
 }
 </script>
 
-<div class="mx-auto flex h-full w-full max-w-7xl min-h-0 flex-col gap-6 overflow-hidden px-6 py-6">
+<div class="mx-auto flex h-full w-full max-w-7xl min-h-0 flex-col gap-6 overflow-hidden bg-background px-6 py-6">
 	<div class="max-w-3xl flex-shrink-0">
-		<p class="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">Feasibility</p>
+		<p class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Feasibility</p>
 		<h1 class="mt-2 text-3xl font-semibold text-slate-900">Seed a study directly from the plot</h1>
 		<p class="mt-3 text-sm text-slate-600">
 			Pick an area, load the community plot inventory, filter it down, then confirm the raw plot facts before generation.
@@ -116,7 +116,7 @@ async function choosePlot(plot: Plot) {
 	</div>
 
 	<div class="grid min-h-0 flex-1 gap-6 xl:grid-cols-[320px_minmax(0,1fr)_360px]">
-		<div class="flex min-h-0 flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+		<div class="flex min-h-0 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
 			<div class="border-b border-slate-200 px-5 py-4">
 				<p class="text-sm font-semibold text-slate-900">Areas</p>
 				<p class="mt-1 text-xs text-slate-500">Load all plots in a community first, then filter the inventory.</p>
@@ -125,7 +125,7 @@ async function choosePlot(plot: Plot) {
 				<input
 					bind:value={communitySearch}
 					placeholder="Filter areas"
-					class="h-11 w-full rounded-2xl border border-slate-300 px-4 text-sm text-slate-900 outline-none transition focus:border-teal-500"
+					class="h-11 w-full rounded-md border border-slate-300 px-4 text-sm text-slate-900 outline-none transition focus:border-navy focus:ring-2 focus:ring-navy/10"
 				/>
 			</div>
 			<div class="min-h-0 flex-1 overflow-auto border-t border-slate-100">
@@ -137,7 +137,7 @@ async function choosePlot(plot: Plot) {
 					{#each filteredCommunities as community}
 						<button
 							type="button"
-							class="flex w-full items-center justify-between border-b border-slate-100 px-5 py-3 text-left transition {selectedCommunity === community ? 'bg-teal-50 text-teal-700' : 'hover:bg-slate-50'}"
+							class="flex w-full items-center justify-between border-b border-slate-100 px-5 py-3 text-left transition {selectedCommunity === community ? 'bg-blue-50 text-navy' : 'hover:bg-slate-50'}"
 							onclick={() => void loadCommunityPlots(community)}
 						>
 							<span class="text-sm font-medium">{community}</span>
@@ -150,7 +150,7 @@ async function choosePlot(plot: Plot) {
 			</div>
 		</div>
 
-		<div class="flex min-h-0 flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+		<div class="flex min-h-0 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
 			<div class="border-b border-slate-200 px-5 py-4">
 				<p class="text-sm font-semibold text-slate-900">Plots</p>
 				<p class="mt-1 text-xs text-slate-500">
@@ -161,9 +161,9 @@ async function choosePlot(plot: Plot) {
 				<input
 					bind:value={plotSearch}
 					placeholder="Search loaded plots"
-					class="h-11 rounded-2xl border border-slate-300 px-4 text-sm text-slate-900 outline-none transition focus:border-teal-500"
+					class="h-11 rounded-md border border-slate-300 px-4 text-sm text-slate-900 outline-none transition focus:border-navy focus:ring-2 focus:ring-navy/10"
 				/>
-				<select bind:value={usageFilter} class="h-11 rounded-2xl border border-slate-300 px-4 text-sm text-slate-900 outline-none transition focus:border-teal-500">
+				<select bind:value={usageFilter} class="h-11 rounded-md border border-slate-300 px-4 text-sm text-slate-900 outline-none transition focus:border-navy focus:ring-2 focus:ring-navy/10">
 					<option value="all">All uses</option>
 					<option value="residential">Residential</option>
 					<option value="commercial">Commercial</option>
@@ -174,15 +174,15 @@ async function choosePlot(plot: Plot) {
 					type="number"
 					min="0"
 					placeholder="Min plot area sqm"
-					class="h-11 rounded-2xl border border-slate-300 px-4 text-sm text-slate-900 outline-none transition focus:border-teal-500"
+					class="h-11 rounded-md border border-slate-300 px-4 text-sm text-slate-900 outline-none transition focus:border-navy focus:ring-2 focus:ring-navy/10"
 				/>
-				<select bind:value={sortBy} class="h-11 rounded-2xl border border-slate-300 px-4 text-sm text-slate-900 outline-none transition focus:border-teal-500">
+				<select bind:value={sortBy} class="h-11 rounded-md border border-slate-300 px-4 text-sm text-slate-900 outline-none transition focus:border-navy focus:ring-2 focus:ring-navy/10">
 					<option value="verified">Verified first</option>
 					<option value="largest">Largest plot</option>
 					<option value="highest_gfa">Highest GFA</option>
 				</select>
-				<label class="flex items-center gap-2 rounded-2xl border border-slate-200 px-4 text-sm text-slate-700 md:col-span-2 xl:col-span-4">
-					<input bind:checked={verifiedOnly} type="checkbox" class="h-4 w-4 rounded border-slate-300 text-teal-600" />
+				<label class="flex items-center gap-2 rounded-md border border-slate-200 px-4 text-sm text-slate-700 md:col-span-2 xl:col-span-4">
+					<input bind:checked={verifiedOnly} type="checkbox" class="h-4 w-4 rounded border-slate-300 text-navy" />
 					Verified plots only
 				</label>
 			</div>
@@ -208,11 +208,11 @@ async function choosePlot(plot: Plot) {
 									<span class="text-sm font-semibold text-slate-900">{plot.project_name}</span>
 									<div class="flex items-center gap-2">
 										{#if plot.is_verified}
-											<span class="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-emerald-700">
+											<span class="rounded-md bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-emerald-700">
 												Verified
 											</span>
 										{/if}
-										<span class="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600">
+										<span class="rounded-md bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600">
 											{plot.plot_number}
 										</span>
 									</div>
@@ -230,7 +230,7 @@ async function choosePlot(plot: Plot) {
 			</div>
 		</div>
 
-		<div class="min-h-0 overflow-auto rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+		<div class="min-h-0 overflow-auto rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
 			<p class="text-sm font-semibold text-slate-900">Selected raw plot data</p>
 			{#if feasibilityStudy.plotData}
 				<div class="mt-4 grid gap-3 text-sm text-slate-600">
@@ -257,7 +257,7 @@ async function choosePlot(plot: Plot) {
 						</div>
 					</div>
 					{#if feasibilityStudy.developmentModelSelectorVisible}
-						<div class="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+						<div class="rounded-lg border border-slate-200 bg-slate-50 p-4">
 							<div class="flex items-start justify-between gap-3">
 								<div>
 									<p class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Development Model</p>
@@ -270,9 +270,9 @@ async function choosePlot(plot: Plot) {
 								{#each feasibilityStudy.developmentModelOptions as option (option.id)}
 									<button
 										type="button"
-										class="rounded-2xl border px-4 py-3 text-left transition {feasibilityStudy.developmentModel === option.id
+										class="rounded-md border px-4 py-3 text-left transition {feasibilityStudy.developmentModel === option.id
 											? option.available
-												? 'border-teal-300 bg-teal-50 shadow-sm'
+												? 'border-navy bg-blue-50 shadow-sm'
 												: 'border-amber-300 bg-amber-50 shadow-sm'
 											: 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50'}"
 										onclick={() => feasibilityStudy.setDevelopmentModel(option.id)}
@@ -282,7 +282,7 @@ async function choosePlot(plot: Plot) {
 												<p class="text-sm font-semibold text-slate-900">{option.label}</p>
 												<p class="mt-1 text-[11px] uppercase tracking-[0.14em] text-slate-400">{option.descriptor}</p>
 											</div>
-											<span class="rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] {option.available ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}">
+											<span class="rounded-md px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] {option.available ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}">
 												{option.available ? 'Live now' : 'Next'}
 											</span>
 										</div>
@@ -297,7 +297,7 @@ async function choosePlot(plot: Plot) {
 					{/if}
 					<button
 						type="button"
-						class="mt-2 h-11 rounded-2xl px-4 text-sm font-medium text-white transition {feasibilityStudy.canGenerateSelectedModel ? 'bg-teal-600 hover:bg-teal-700' : 'bg-slate-300 cursor-not-allowed'}"
+						class="mt-2 h-11 rounded-md px-4 text-sm font-medium text-bone transition {feasibilityStudy.canGenerateSelectedModel ? 'bg-navy hover:bg-primary-light' : 'bg-slate-300 cursor-not-allowed'}"
 						disabled={!feasibilityStudy.canGenerateSelectedModel}
 						onclick={() => void feasibilityStudy.generateStudy()}
 					>
@@ -306,7 +306,7 @@ async function choosePlot(plot: Plot) {
 					{#if import.meta.env.DEV}
 						<button
 							type="button"
-							class="h-11 rounded-2xl border border-dashed border-slate-300 px-4 text-sm font-medium text-slate-600 transition hover:border-sky-400 hover:text-sky-700"
+							class="h-11 rounded-md border border-dashed border-slate-300 px-4 text-sm font-medium text-slate-600 transition hover:border-navy hover:text-navy"
 							onclick={() => feasibilityStudy.openEmptyWorkbookForDev()}
 						>
 							Open Empty Workbook

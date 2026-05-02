@@ -156,7 +156,7 @@ async def stream_chat_events(request: FeasibilityChatRequest) -> AsyncGenerator[
             request.messages,
             request.plot_data,
             request.assumptions,
-            request.research.model_dump(mode="json") if request.research else None,
+            request.research,
             request.history_json,
         ):
             yield chunk

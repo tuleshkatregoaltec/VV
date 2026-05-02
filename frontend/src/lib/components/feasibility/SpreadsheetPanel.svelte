@@ -91,8 +91,8 @@ function exportWorkbook() {
 }
 </script>
 
-<div class="h-full flex flex-col overflow-hidden bg-white border-r border-slate-200">
-	<div class="flex items-center justify-between px-3 py-2 border-b border-slate-300 flex-shrink-0 bg-slate-50">
+<div class="h-full flex flex-col overflow-hidden bg-white">
+	<div class="flex items-center justify-between px-4 py-3 border-b border-slate-200 flex-shrink-0 bg-white">
 		<div class="flex items-center gap-2">
 			<span class="text-xs font-semibold text-slate-700">Feasibility Model</span>
 			{#if exportError}
@@ -103,7 +103,7 @@ function exportWorkbook() {
 			<ColorLegend />
 			<button
 				type="button"
-				class="rounded-full border border-slate-300 bg-white px-3 py-1 text-[10px] font-semibold text-slate-600 shadow-sm transition hover:border-teal-400 hover:text-teal-700 disabled:cursor-not-allowed disabled:opacity-50"
+				class="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-[10px] font-semibold text-slate-600 shadow-sm transition hover:border-navy hover:text-navy disabled:cursor-not-allowed disabled:opacity-50"
 				disabled={!workbookStore.outputs || !isBtr}
 				title={isBtr ? 'Export BTR workbook to Excel' : 'BTR Excel export is currently available for build-to-rent studies'}
 				onclick={exportWorkbook}
@@ -111,7 +111,7 @@ function exportWorkbook() {
 				Export Excel
 			</button>
 			{#if validation}
-				<span class="text-[10px] px-2 py-0.5 rounded-full font-medium uppercase tracking-[0.12em] {validation.status === 'invalid'
+				<span class="text-[10px] px-2 py-0.5 rounded-md font-medium uppercase tracking-[0.12em] {validation.status === 'invalid'
 					? 'bg-rose-100 text-rose-700'
 					: validation.status === 'needs_review'
 						? 'bg-amber-100 text-amber-700'

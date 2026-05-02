@@ -17,7 +17,7 @@ $effect(() => {
 </script>
 
 <AppShell>
-	<div class="h-[calc(100vh-5rem)] overflow-hidden">
+	<div class="h-[calc(100vh-5rem)] overflow-hidden bg-background">
 		{#if feasibilityStudy.phase === 'generating'}
 			<LoadingState />
 		{:else if feasibilityStudy.phase === 'ready'}
