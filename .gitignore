@@ -266,3 +266,12 @@ AGENTS.md
 CLAUDE.md
 
 .env.dev
+
+fonts/
+
+# Dev review screenshots
+screenshot-*.png
+projects-*.png
+
+# Firecrawl local cache
+.firecrawl/
