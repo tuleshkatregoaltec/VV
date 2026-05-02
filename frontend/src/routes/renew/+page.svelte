@@ -65,7 +65,7 @@ async function handleManageSubscription() {
 
 	<svelte:fragment slot="side">
 		<div class="space-y-4 rounded-[1.6rem] border border-white/10 bg-white/5 p-6">
-			<div class="rounded-3xl border border-white/10 bg-slate-900/60 p-5">
+			<div class="rounded-xl border border-white/10 bg-slate-900/60 p-5">
 				<p class="text-xs font-semibold uppercase tracking-[0.22em] text-slate-400">Organization</p>
 				<p class="mt-3 text-2xl font-semibold text-white">
 					{user?.organization_name || 'Workspace'}
@@ -75,7 +75,7 @@ async function handleManageSubscription() {
 				</p>
 			</div>
 			<div
-				class="rounded-2xl border border-white/10 bg-white/5 px-4 py-4 text-sm leading-6 text-slate-200"
+				class="rounded-lg border border-white/10 bg-white/5 px-4 py-4 text-sm leading-6 text-slate-200"
 			>
 				{#if user?.is_owner}
 					{getOwnerActionMessage()}
@@ -88,7 +88,7 @@ async function handleManageSubscription() {
 	</svelte:fragment>
 
 	{#if error}
-		<div class="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+		<div class="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
 			{error}
 		</div>
 	{/if}
@@ -106,7 +106,7 @@ async function handleManageSubscription() {
 						type="button"
 						onclick={handleManageSubscription}
 						disabled={processingRenewal}
-						class="flex-1 rounded-2xl bg-slate-950 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+						class="flex-1 rounded-lg bg-slate-950 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
 					>
 						{processingRenewal ? 'Opening billing portal...' : 'Manage subscription'}
 					</button>
@@ -114,14 +114,14 @@ async function handleManageSubscription() {
 					<button
 						type="button"
 						onclick={() => goto(resolve('/setup'))}
-						class="flex-1 rounded-2xl bg-slate-950 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
+						class="flex-1 rounded-lg bg-slate-950 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
 					>
 						Complete organization setup
 					</button>
 				{/if}
 				<a
 					href="mailto:contact@vitevue.com"
-					class="rounded-2xl border border-slate-300 px-5 py-3 text-center text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+					class="rounded-lg border border-slate-300 px-5 py-3 text-center text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
 				>
 					Contact support
 				</a>

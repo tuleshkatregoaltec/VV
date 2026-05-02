@@ -57,7 +57,7 @@ function handleBuildingClick(pin: {
 	<!-- Header -->
 	<div class="border-b border-slate-200 pb-4">
 		<div class="flex items-start justify-between gap-2 mb-1">
-			<h2 class="text-xl font-bold text-slate-900 leading-tight">{project.project_name}</h2>
+			<h2 class="text-xl font-semibold text-[var(--color-fg-1)] leading-tight">{project.project_name}</h2>
 			{#if project.project_status}
 				<span
 					class="flex-shrink-0 text-[10px] font-medium px-2 py-0.5 rounded-full {statusColor(
@@ -98,25 +98,25 @@ function handleBuildingClick(pin: {
 		{#if project.no_of_buildings}
 			<div class="bg-slate-50 rounded-xl p-3 border border-slate-100">
 				<div class="text-xs text-slate-500 mb-1">Buildings</div>
-				<div class="text-2xl font-bold text-slate-900">{project.no_of_buildings}</div>
+				<div class="font-display text-2xl font-normal tracking-tight text-[var(--color-fg-1)]">{project.no_of_buildings}</div>
 			</div>
 		{/if}
 		{#if project.no_of_units}
 			<div class="bg-slate-50 rounded-xl p-3 border border-slate-100">
 				<div class="text-xs text-slate-500 mb-1">Units</div>
-				<div class="text-2xl font-bold text-slate-900">{project.no_of_units.toLocaleString()}</div>
+				<div class="font-display text-2xl font-normal tracking-tight text-[var(--color-fg-1)]">{project.no_of_units.toLocaleString()}</div>
 			</div>
 		{/if}
 		{#if project.no_of_villas}
 			<div class="bg-slate-50 rounded-xl p-3 border border-slate-100">
 				<div class="text-xs text-slate-500 mb-1">Villas</div>
-				<div class="text-2xl font-bold text-slate-900">{project.no_of_villas}</div>
+				<div class="font-display text-2xl font-normal tracking-tight text-[var(--color-fg-1)]">{project.no_of_villas}</div>
 			</div>
 		{/if}
 		{#if project.no_of_lands}
 			<div class="bg-slate-50 rounded-xl p-3 border border-slate-100">
 				<div class="text-xs text-slate-500 mb-1">Plots</div>
-				<div class="text-2xl font-bold text-slate-900">{project.no_of_lands}</div>
+				<div class="font-display text-2xl font-normal tracking-tight text-[var(--color-fg-1)]">{project.no_of_lands}</div>
 			</div>
 		{/if}
 	</div>
@@ -125,15 +125,15 @@ function handleBuildingClick(pin: {
 	{#if analytics}
 		<div class="grid grid-cols-2 gap-3">
 			{#if analytics.avg_price}
-				<div class="bg-teal-50 rounded-xl p-3 border border-teal-100">
-					<div class="text-xs text-teal-600 mb-1">Avg Sale Price</div>
-					<div class="text-xl font-bold text-teal-800">{formatCurrency(analytics.avg_price)}</div>
+				<div class="bg-slate-50 rounded-xl p-3 border border-[var(--color-border)]">
+					<div class="text-xs text-[var(--color-fg-4)] mb-1">Avg Sale Price</div>
+					<div class="font-display text-xl font-normal tracking-tight text-[var(--color-fg-1)]">{formatCurrency(analytics.avg_price)}</div>
 				</div>
 			{/if}
 			{#if analytics.gross_yield_pct != null}
-				<div class="bg-teal-50 rounded-xl p-3 border border-teal-100">
-					<div class="text-xs text-teal-600 mb-1">Gross Yield</div>
-					<div class="text-xl font-bold text-teal-800">{analytics.gross_yield_pct.toFixed(1)}%</div>
+				<div class="bg-slate-50 rounded-xl p-3 border border-[var(--color-border)]">
+					<div class="text-xs text-[var(--color-fg-4)] mb-1">Gross Yield</div>
+					<div class="font-display text-xl font-normal tracking-tight text-[var(--color-fg-1)]">{analytics.gross_yield_pct.toFixed(1)}%</div>
 				</div>
 			{/if}
 		</div>
@@ -154,7 +154,7 @@ function handleBuildingClick(pin: {
 						</div>
 						<div class="w-full bg-slate-200 rounded-full h-1.5">
 							<div
-								class="bg-gradient-to-r from-teal-500 to-cyan-500 h-1.5 rounded-full"
+								class="bg-primary h-1.5 rounded-full"
 								style="width: {unit_type.percentage}%"
 							></div>
 						</div>
@@ -174,10 +174,10 @@ function handleBuildingClick(pin: {
 				{#each project.geo_pins as pin, i (pin.property_id ?? pin.building_name ?? i)}
 					<button
 						onclick={() => handleBuildingClick(pin)}
-						class="w-full flex items-center gap-3 bg-slate-50 rounded-lg px-3 py-2 border border-slate-100 hover:bg-teal-50 hover:border-teal-200 transition-colors text-left"
+						class="w-full flex items-center gap-3 bg-slate-50 rounded-lg px-3 py-2 border border-[var(--color-border)] hover:bg-slate-100 hover:border-slate-300 transition-colors text-left"
 					>
 						<span
-							class="w-5 h-5 bg-teal-600 rounded-full flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0"
+							class="w-5 h-5 bg-primary rounded-full flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0"
 						>
 							{i + 1}
 						</span>
@@ -187,7 +187,7 @@ function handleBuildingClick(pin: {
 							</div>
 						</div>
 						<svg
-							class="w-4 h-4 {pin.property_id ? 'text-teal-500' : 'text-slate-300'} flex-shrink-0"
+							class="w-4 h-4 {pin.property_id ? 'text-[var(--color-navy-700)]' : 'text-slate-300'} flex-shrink-0"
 							fill="none"
 							stroke="currentColor"
 							viewBox="0 0 24 24"
@@ -234,11 +234,11 @@ function handleBuildingClick(pin: {
 					<div class="pt-1">
 						<div class="flex justify-between text-xs mb-1.5">
 							<span class="text-slate-500">Progress</span>
-							<span class="font-semibold text-teal-700">{project.percent_completed}%</span>
+							<span class="font-semibold text-[var(--color-fg-1)]">{project.percent_completed}%</span>
 						</div>
 						<div class="w-full bg-slate-200 rounded-full h-1.5">
 							<div
-								class="bg-gradient-to-r from-teal-500 to-cyan-500 h-1.5 rounded-full"
+								class="bg-primary h-1.5 rounded-full"
 								style="width: {project.percent_completed}%"
 							></div>
 						</div>

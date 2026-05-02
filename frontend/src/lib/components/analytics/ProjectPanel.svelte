@@ -149,14 +149,14 @@ function getMarketSplit(summary: ProjectAnalyticsResponse | null) {
 				label: 'Off-Plan',
 				count: offPlan,
 				pct: total > 0 ? (offPlan / total) * 100 : 0,
-				color: '#14b8a6'
+				color: '#1c344a'
 			},
 			{
 				key: 'secondary',
 				label: 'Secondary',
 				count: secondary,
 				pct: total > 0 ? (secondary / total) * 100 : 0,
-				color: '#0f172a'
+				color: '#64748b'
 			}
 		]
 	}
@@ -198,15 +198,16 @@ function stripPrefix(name: string): string {
 function statusBadgeClass(status: string): string {
 	const s = (status ?? '').toLowerCase()
 	if (s.includes('complet') || s.includes('handov') || s.includes('deliver'))
-		return 'bg-teal-50 text-teal-700 ring-1 ring-teal-200'
+		return 'bg-[var(--color-success-bg)] text-[var(--color-success)] ring-1 ring-[rgba(17,122,72,0.2)]'
 	if (
 		s.includes('construct') ||
 		s.includes('progress') ||
 		s.includes('active') ||
 		s.includes('plan')
 	)
-		return 'bg-amber-50 text-amber-700 ring-1 ring-amber-200'
-	if (s.includes('cancel')) return 'bg-rose-50 text-rose-700 ring-1 ring-rose-200'
+		return 'bg-[var(--color-warning-bg)] text-[var(--color-warning)] ring-1 ring-[rgba(165,90,19,0.2)]'
+	if (s.includes('cancel'))
+		return 'bg-[var(--color-error-bg)] text-[var(--color-error)] ring-1 ring-[rgba(163,36,36,0.2)]'
 	return 'bg-slate-100 text-slate-600 ring-1 ring-slate-200'
 }
 
@@ -251,15 +252,15 @@ function fmtPsf(pricePerSqm: number | null | undefined): string {
 
 function pctTone(value: number | null | undefined) {
 	if (value == null || !Number.isFinite(value)) return 'text-slate-400'
-	if (value >= 7) return 'text-teal-600'
-	if (value >= 5) return 'text-amber-600'
-	return 'text-rose-600'
+	if (value >= 7) return 'text-[var(--color-success)]'
+	if (value >= 5) return 'text-[var(--color-warning)]'
+	return 'text-[var(--color-error)]'
 }
 
 function deltaTone(value: number | null | undefined) {
 	if (value == null || !Number.isFinite(value)) return 'text-slate-400'
-	if (value > 0) return 'text-teal-600'
-	if (value < 0) return 'text-rose-600'
+	if (value > 0) return 'text-[var(--color-success)]'
+	if (value < 0) return 'text-[var(--color-error)]'
 	return 'text-slate-500'
 }
 
@@ -301,8 +302,8 @@ function buildTrendChart() {
 	if (!ctx) return
 
 	const gradient = ctx.createLinearGradient(0, 0, 0, 280)
-	gradient.addColorStop(0, 'rgba(0,189,165,0.18)')
-	gradient.addColorStop(1, 'rgba(0,189,165,0)')
+	gradient.addColorStop(0, 'rgba(28,52,74,0.18)')
+	gradient.addColorStop(1, 'rgba(28,52,74,0)')
 
 	const labels = forecastSeries.length > 0 ? forecastSeries : chartSeries
 	const historicalValues =
@@ -339,7 +340,7 @@ function buildTrendChart() {
 				{
 					label: 'Historical',
 					data: forecastSeries.length > 0 ? historicalValues : fallbackHistoricalValues,
-					borderColor: '#00BDA5',
+					borderColor: '#1c344a',
 					backgroundColor: gradient,
 					fill: true,
 					tension: 0.34,
@@ -352,7 +353,7 @@ function buildTrendChart() {
 							{
 								label: 'Forecast',
 								data: forecastValues,
-								borderColor: '#00BDA5',
+								borderColor: '#3a8fad',
 								backgroundColor: 'transparent',
 								fill: false,
 								tension: 0.34,
@@ -450,8 +451,8 @@ function buildBellChart() {
 	}
 
 	const gradient = ctx.createLinearGradient(0, 0, 0, 240)
-	gradient.addColorStop(0, 'rgba(0,189,165,0.20)')
-	gradient.addColorStop(1, 'rgba(0,189,165,0.01)')
+	gradient.addColorStop(0, 'rgba(28,52,74,0.2)')
+	gradient.addColorStop(1, 'rgba(28,52,74,0.01)')
 
 	// Decile lookup for hover tooltip
 	const decileMap: [number, string][] = [
@@ -474,7 +475,7 @@ function buildBellChart() {
 			datasets: [
 				{
 					data: curvePoints,
-					borderColor: '#00BDA5',
+					borderColor: '#1c344a',
 					backgroundColor: gradient,
 					fill: true,
 					tension: 0.3,
@@ -545,7 +546,7 @@ function buildBellChart() {
 						c.save()
 						c.beginPath()
 						c.setLineDash(dash)
-						c.strokeStyle = `rgba(0,189,165,${alpha})`
+						c.strokeStyle = `rgba(28,52,74,${alpha})`
 						c.lineWidth = 1.5
 						c.moveTo(px, yScale.top)
 						c.lineTo(px, yScale.bottom)
@@ -581,7 +582,7 @@ function buildPipelineChart() {
 					data: pipelineData.map((p) =>
 						new Date(p.period).getTime() < todayMs ? p.existing_stock_units : null
 					),
-					backgroundColor: '#00BDA5',
+					backgroundColor: '#1c344a',
 					borderRadius: 3,
 					stack: 'a'
 				},
@@ -590,7 +591,7 @@ function buildPipelineChart() {
 					data: pipelineData.map((p) =>
 						new Date(p.period).getTime() >= todayMs ? p.carried_stock_units : null
 					),
-					backgroundColor: 'rgba(0,189,165,0.22)',
+					backgroundColor: 'rgba(42,70,96,0.24)',
 					borderRadius: 0,
 					stack: 'b'
 				},
@@ -599,7 +600,7 @@ function buildPipelineChart() {
 					data: pipelineData.map((p) =>
 						new Date(p.period).getTime() >= todayMs ? p.new_pipeline_units : null
 					),
-					backgroundColor: '#f59e0b',
+					backgroundColor: '#a55a13',
 					borderRadius: 3,
 					stack: 'b'
 				}
@@ -774,13 +775,13 @@ onMount(() => {
 
 {#if summaryQuery.isLoading}
 	<div class="grid gap-6">
-		<div class="h-36 animate-pulse rounded-2xl border border-slate-200 bg-white"></div>
+		<div class="h-36 animate-pulse rounded-lg border border-slate-200 bg-white"></div>
 		<div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
 			{#each [0, 1, 2, 3] as item (item)}
-				<div class="h-28 animate-pulse rounded-2xl border border-slate-200 bg-white"></div>
+				<div class="h-28 animate-pulse rounded-lg border border-slate-200 bg-white"></div>
 			{/each}
 		</div>
-		<div class="h-[480px] animate-pulse rounded-2xl border border-slate-200 bg-white"></div>
+		<div class="h-[480px] animate-pulse rounded-lg border border-slate-200 bg-white"></div>
 	</div>
 {:else if getSummary()}
 	{@const summary = getSummary()!}
@@ -798,7 +799,7 @@ onMount(() => {
 	<div class="space-y-5">
 
 		<!-- ── Project header ────────────────────────────────────────── -->
-		<section class="rounded-2xl border border-slate-200 bg-white p-5">
+		<section class="rounded-lg border border-slate-200 bg-white p-5">
 			<div class="flex flex-wrap items-start justify-between gap-4">
 				<div class="min-w-0">
 					<p class="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">
@@ -817,7 +818,7 @@ onMount(() => {
 				<div class="flex items-center gap-3">
 					{#if summary.project?.project_status}
 						<span
-							class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold {statusBadgeClass(summary.project.project_status)}"
+							class="inline-flex items-center rounded-sm px-2.5 py-1 text-xs font-semibold {statusBadgeClass(summary.project.project_status)}"
 						>
 							{summary.project.project_status}
 						</span>
@@ -831,7 +832,7 @@ onMount(() => {
 									subDropdownOpen = !subDropdownOpen;
 									subSearch = '';
 								}}
-								class="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-700 transition-colors hover:border-teal-400 hover:text-teal-700"
+								class="inline-flex items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-700 transition-colors hover:border-[var(--color-navy-600)] hover:text-[var(--color-navy-700)]"
 							>
 								<span
 									>{subProject
@@ -849,7 +850,7 @@ onMount(() => {
 									<div class="border-b border-slate-100 p-2">
 										<input
 											type="text"
-											class="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-teal-500 focus:outline-none focus:ring-2 focus:ring-teal-500/20"
+											class="w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-[var(--color-navy-700)] focus:outline-none focus:ring-2 focus:ring-[rgba(11,27,43,0.12)]"
 											placeholder="Filter sub-projects..."
 											bind:value={subSearch}
 											onkeydown={handleSubKeydown}
@@ -858,7 +859,7 @@ onMount(() => {
 									<div class="max-h-64 overflow-y-auto p-2">
 										<button
 											type="button"
-											class="w-full rounded-lg px-3 py-2 text-left text-sm transition-colors {subProject === null ? 'bg-teal-50 text-teal-700' : 'text-slate-700 hover:bg-slate-50'}"
+											class="w-full rounded-md px-3 py-2 text-left text-sm transition-colors {subProject === null ? 'bg-[var(--color-navy-50)] text-[var(--color-navy-900)]' : 'text-slate-700 hover:bg-slate-50'}"
 											onmousedown={() => {
 												subProject = null;
 												closeSubDropdown();
@@ -869,7 +870,7 @@ onMount(() => {
 										{#each filteredSubProjects as sp (sp.name)}
 											<button
 												type="button"
-												class="mt-0.5 w-full rounded-lg px-3 py-2 text-left text-sm transition-colors {subProject === sp.name ? 'bg-teal-50 text-teal-700' : 'text-slate-700 hover:bg-slate-50'}"
+												class="mt-0.5 w-full rounded-md px-3 py-2 text-left text-sm transition-colors {subProject === sp.name ? 'bg-[var(--color-navy-50)] text-[var(--color-navy-900)]' : 'text-slate-700 hover:bg-slate-50'}"
 												onmousedown={() => {
 													subProject = sp.name;
 													closeSubDropdown();
@@ -926,7 +927,7 @@ onMount(() => {
 					{#if summary.project?.percent_completed != null}
 						<div class="mt-1.5 h-1.5 w-full max-w-[140px] rounded-full bg-slate-100">
 							<div
-								class="h-1.5 rounded-full bg-teal-500"
+								class="h-1.5 rounded-full bg-[var(--color-navy-700)]"
 								style="width: {Math.min(100, summary.project.percent_completed)}%"
 							></div>
 						</div>
@@ -948,21 +949,21 @@ onMount(() => {
 
 		<!-- ── KPI cards ──────────────────────────────────────────────── -->
 		<section class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-			<div class="rounded-2xl border border-slate-200 bg-white px-5 py-4">
+			<div class="rounded-lg border border-slate-200 bg-white px-5 py-4">
 				<p class="text-[11px] uppercase tracking-[0.18em] text-slate-400">Total Sales</p>
 				<p class="mt-2.5 text-3xl font-semibold text-slate-900">
 					{fmtNumber(summary.sales.transaction_count)}
 				</p>
 				<p class="mt-1.5 text-sm text-slate-400">transactions</p>
 			</div>
-			<div class="rounded-2xl border border-slate-200 bg-white px-5 py-4">
+			<div class="rounded-lg border border-slate-200 bg-white px-5 py-4">
 				<p class="text-[11px] uppercase tracking-[0.18em] text-slate-400">Avg Sale Price</p>
 				<p class="mt-2.5 text-3xl font-semibold text-slate-900">
 					{fmtCurrency(summary.sales.avg_price)}
 				</p>
 				<p class="mt-1.5 text-sm text-slate-400">{fmtCurrency(summary.sales.avg_price_sqm)}/sqm</p>
 			</div>
-			<div class="rounded-2xl border border-slate-200 bg-white px-5 py-4">
+			<div class="rounded-lg border border-slate-200 bg-white px-5 py-4">
 				<p class="text-[11px] uppercase tracking-[0.18em] text-slate-400">Median Annual Rent</p>
 				<p class="mt-2.5 text-3xl font-semibold text-slate-900">
 					{fmtCurrency(summary.rentals.median_annual_rent)}
@@ -971,17 +972,17 @@ onMount(() => {
 					{fmtNumber(summary.rentals.contract_count)} contracts
 				</p>
 			</div>
-			<div class="rounded-2xl border border-teal-200 bg-white px-5 py-4">
-				<p class="text-[11px] uppercase tracking-[0.18em] text-teal-600">Gross Yield</p>
-				<p class="mt-2.5 text-3xl font-semibold text-teal-600">
+			<div class="rounded-lg border border-[var(--color-border)] bg-white px-5 py-4">
+				<p class="text-[11px] uppercase tracking-[0.18em] text-[var(--color-navy-700)]">Gross Yield</p>
+				<p class="mt-2.5 text-3xl font-semibold text-[var(--color-navy-900)]">
 					{fmtPct(summary.overall_gross_yield_pct)}
 				</p>
-				<p class="mt-1.5 text-sm text-teal-500">median rent ÷ median sale</p>
+				<p class="mt-1.5 text-sm text-[var(--color-navy-700)]">median rent ÷ median sale</p>
 			</div>
 		</section>
 
 		<section class="grid gap-5 xl:grid-cols-[minmax(0,1.1fr)_360px]">
-			<section class="rounded-2xl border border-slate-200 bg-white p-5">
+			<section class="rounded-lg border border-slate-200 bg-white p-5">
 				<div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
 					<div>
 						<p class="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">
@@ -1021,7 +1022,7 @@ onMount(() => {
 				</div>
 				{#if forecast?.delivery_date}
 					<div class="mt-3 flex items-center gap-2 text-xs text-slate-500">
-						<span class="inline-block h-1.5 w-1.5 rounded-full bg-teal-400"></span>
+						<span class="inline-block h-1.5 w-1.5 rounded-full bg-[var(--color-navy-700)]"></span>
 						Delivery anchor:
 						<span class="font-medium text-slate-700">
 							{new Date(forecast.delivery_date).toLocaleDateString('en-GB', {
@@ -1033,7 +1034,7 @@ onMount(() => {
 				{/if}
 			</section>
 
-			<section class="rounded-2xl border border-slate-200 bg-white p-5">
+			<section class="rounded-lg border border-slate-200 bg-white p-5">
 				<p class="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">
 					Market Split
 				</p>
@@ -1079,7 +1080,7 @@ onMount(() => {
 		</section>
 
 		<!-- ── Configuration Analysis ─────────────────────────────────── -->
-		<section class="rounded-2xl border border-slate-200 bg-white p-5">
+		<section class="rounded-lg border border-slate-200 bg-white p-5">
 			<div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
 				<div class="flex items-center gap-3">
 					<h3 class="text-base font-semibold text-slate-900">Configuration Analysis</h3>
@@ -1114,7 +1115,7 @@ onMount(() => {
 					<div class="inline-flex rounded-xl border border-slate-200 bg-slate-50 p-0.5">
 						<button
 							type="button"
-							class="rounded-lg px-3.5 py-1.5 text-sm font-medium transition-colors {configSegment === 'all' ? 'bg-teal-500 text-white shadow-sm' : 'text-slate-500 hover:text-slate-700'}"
+							class="rounded-lg px-3.5 py-1.5 text-sm font-medium transition-colors {configSegment === 'all' ? 'bg-[var(--color-navy-900)] text-[var(--color-fg-on-navy)] shadow-sm' : 'text-slate-500 hover:text-slate-700'}"
 							onclick={() => (configSegment = 'all')}
 						>
 							All
@@ -1158,8 +1159,8 @@ onMount(() => {
 								<th class="border-b border-slate-100 pb-2.5 pr-6 text-right text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">
 									Price Δ YoY<br /><span class="font-normal normal-case tracking-normal text-slate-300">% change</span>
 								</th>
-								<th class="border-b border-slate-100 pb-2.5 text-right text-[11px] font-semibold uppercase tracking-[0.14em] text-teal-500">
-									Absorption<br /><span class="font-normal normal-case tracking-normal text-teal-400">% / year</span>
+								<th class="border-b border-slate-100 pb-2.5 text-right text-[11px] font-semibold uppercase tracking-[0.14em] text-primary">
+									Absorption<br /><span class="font-normal normal-case tracking-normal text-[var(--color-navy-700)]">% / year</span>
 								</th>
 							</tr>
 						</thead>
@@ -1189,11 +1190,11 @@ onMount(() => {
 												— {fmtSignedPct(row.sales_momentum_pct)}
 											</span>
 										{:else if row.sales_momentum_pct > 0}
-											<span class="inline-flex items-center gap-0.5 rounded-full bg-teal-50 px-2 py-0.5 text-xs font-semibold text-teal-700 ring-1 ring-teal-200">
+											<span class="inline-flex items-center gap-0.5 rounded-sm bg-[var(--color-navy-50)] px-2 py-0.5 text-xs font-semibold text-[var(--color-navy-900)] ring-1 ring-[var(--color-navy-100)]">
 												▲ {fmtPct(row.sales_momentum_pct)}
 											</span>
 										{:else}
-											<span class="inline-flex items-center gap-0.5 rounded-full bg-rose-50 px-2 py-0.5 text-xs font-semibold text-rose-600 ring-1 ring-rose-200">
+											<span class="inline-flex items-center gap-0.5 rounded-sm bg-[var(--color-error-bg)] px-2 py-0.5 text-xs font-semibold text-[var(--color-error)] ring-1 ring-[rgba(163,36,36,0.2)]">
 												▼ {fmtPct(Math.abs(row.sales_momentum_pct))}
 											</span>
 										{/if}
@@ -1238,7 +1239,7 @@ onMount(() => {
 								<th class="border-b border-slate-100 pb-2.5 pr-6 text-right text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">Contracts</th>
 								<th class="border-b border-slate-100 pb-2.5 pr-6 text-right text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">Median Rent</th>
 								<th class="border-b border-slate-100 pb-2.5 pr-6 text-right text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">Rent / sqm</th>
-								<th class="border-b border-slate-100 pb-2.5 text-right text-[11px] font-semibold uppercase tracking-[0.14em] text-teal-500">Gross Yield</th>
+								<th class="border-b border-slate-100 pb-2.5 text-right text-[11px] font-semibold uppercase tracking-[0.14em] text-primary">Gross Yield</th>
 							</tr>
 						</thead>
 						<tbody>
@@ -1267,7 +1268,7 @@ onMount(() => {
 		</section>
 
 		<!-- ── Price Distribution ─────────────────────────────────────── -->
-		<section class="rounded-2xl border border-slate-200 bg-white p-5">
+		<section class="rounded-lg border border-slate-200 bg-white p-5">
 			<div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
 				<h3 class="text-base font-semibold text-slate-900">Price Distribution</h3>
 				<div class="inline-flex rounded-xl border border-slate-200 bg-slate-50 p-0.5">
@@ -1294,7 +1295,7 @@ onMount(() => {
 					<button
 						type="button"
 						onclick={() => (distroRooms = 'All')}
-						class="rounded-full px-3 py-1 text-xs font-medium transition-colors {distroRooms === 'All' ? 'bg-teal-500 text-white' : 'border border-slate-200 bg-white text-slate-600 hover:border-teal-300 hover:text-teal-600'}"
+						class="rounded-md px-3 py-1 text-xs font-medium transition-colors {distroRooms === 'All' ? 'bg-[var(--color-navy-700)] text-white' : 'border border-[var(--color-border)] bg-white text-[var(--color-fg-2)] hover:border-slate-300'}"
 					>
 						All
 					</button>
@@ -1302,7 +1303,7 @@ onMount(() => {
 						<button
 							type="button"
 							onclick={() => (distroRooms = room)}
-							class="rounded-full px-3 py-1 text-xs font-medium transition-colors {distroRooms === room ? 'bg-teal-500 text-white' : 'border border-slate-200 bg-white text-slate-600 hover:border-teal-300 hover:text-teal-600'}"
+							class="rounded-md px-3 py-1 text-xs font-medium transition-colors {distroRooms === room ? 'bg-[var(--color-navy-700)] text-white' : 'border border-[var(--color-border)] bg-white text-[var(--color-fg-2)] hover:border-slate-300'}"
 						>
 							{room}
 						</button>
@@ -1317,7 +1318,7 @@ onMount(() => {
 						<p class="flex items-center gap-1 text-[11px] font-medium uppercase tracking-[0.14em] text-slate-400">
 							<span class="font-serif text-base text-slate-500">μ</span> Mean Price
 						</p>
-						<p class="mt-1 text-lg font-semibold text-teal-600">{fmtCurrency(distroBucket.mean_price)}</p>
+						<p class="mt-1 text-lg font-semibold text-primary">{fmtCurrency(distroBucket.mean_price)}</p>
 					</div>
 					<div>
 						<p class="flex items-center gap-1 text-[11px] font-medium uppercase tracking-[0.14em] text-slate-400">
@@ -1353,7 +1354,7 @@ onMount(() => {
 		</section>
 
 		<!-- ── Stock Timeline ─────────────────────────────────────────── -->
-		<section class="rounded-2xl border border-slate-200 bg-white p-5">
+		<section class="rounded-lg border border-slate-200 bg-white p-5">
 			<div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
 				<h3 class="text-base font-semibold text-slate-900">
 					Stock Timeline
@@ -1369,7 +1370,7 @@ onMount(() => {
 					<button
 						type="button"
 						onclick={() => (pipelineRooms = null)}
-						class="rounded-full px-3 py-1 text-xs font-medium transition-colors {pipelineRooms === null ? 'bg-teal-500 text-white' : 'border border-slate-200 bg-white text-slate-600 hover:border-teal-300 hover:text-teal-600'}"
+						class="rounded-md px-3 py-1 text-xs font-medium transition-colors {pipelineRooms === null ? 'bg-[var(--color-navy-700)] text-white' : 'border border-[var(--color-border)] bg-white text-[var(--color-fg-2)] hover:border-slate-300'}"
 					>
 						All
 					</button>
@@ -1377,7 +1378,7 @@ onMount(() => {
 						<button
 							type="button"
 							onclick={() => (pipelineRooms = room)}
-							class="rounded-full px-3 py-1 text-xs font-medium transition-colors {pipelineRooms === room ? 'bg-teal-500 text-white' : 'border border-slate-200 bg-white text-slate-600 hover:border-teal-300 hover:text-teal-600'}"
+							class="rounded-md px-3 py-1 text-xs font-medium transition-colors {pipelineRooms === room ? 'bg-[var(--color-navy-700)] text-white' : 'border border-[var(--color-border)] bg-white text-[var(--color-fg-2)] hover:border-slate-300'}"
 						>
 							{room}
 						</button>
@@ -1400,7 +1401,7 @@ onMount(() => {
 
 	</div>
 {:else if summaryQuery.isError}
-	<div class="rounded-2xl border border-rose-200 bg-rose-50 px-8 py-16 text-center text-sm text-rose-700">
+	<div class="rounded-lg border border-rose-200 bg-rose-50 px-8 py-16 text-center text-sm text-rose-700">
 		Failed to load analytics for this project.
 	</div>
 {/if}

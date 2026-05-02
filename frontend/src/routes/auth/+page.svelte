@@ -363,28 +363,68 @@ async function handleResendForgotPasswordOTP() {
 	bodyClass="min-h-[23.5rem]"
 >
 	<svelte:fragment slot="side">
-		<div class="space-y-4 rounded-[1.6rem] border border-white/10 bg-white/5 p-6">
+		<div class="space-y-6">
 			{#if selectedTierName}
-				<div class="rounded-3xl border border-emerald-300/20 bg-emerald-300/10 p-5">
-					<p class="text-xs font-semibold uppercase tracking-[0.22em] text-emerald-200">
+				<div class="rounded-lg border border-[rgba(246,241,231,0.16)] bg-[color:rgba(246,241,231,0.06)] p-5">
+					<p
+						class="font-mono text-[10px] font-medium uppercase tracking-[0.16em] text-[var(--color-fg-on-navy-muted)]"
+					>
 						Selected plan
 					</p>
-					<p class="mt-3 text-2xl font-semibold text-white">{selectedTierName}</p>
-					<p class="mt-2 text-sm leading-6 text-slate-300">
-						We’ll keep this choice through signup and send you straight into workspace setup.
+					<p class="mt-3 font-display text-4xl font-normal text-[var(--color-fg-on-navy)]">
+						{selectedTierName}
+					</p>
+					<p class="mt-2 text-sm leading-6 text-[var(--color-fg-on-navy-muted)]">
+						We will keep this choice through signup and send you straight into workspace setup.
 					</p>
 				</div>
 			{/if}
 
-			<div class="grid gap-3">
-				<div class="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-200">
-					Transactions, market context, and commercial signals in one workspace
+			<div class="grid grid-cols-3 gap-3">
+				<div class="rounded-lg border border-[rgba(246,241,231,0.12)] bg-[color:rgba(246,241,231,0.04)] p-4">
+					<p class="font-display text-3xl font-normal tracking-[var(--tracking-display)] text-[var(--color-fg-on-navy)]">
+						10M+
+					</p>
+					<p class="mt-2 font-mono text-[10px] uppercase tracking-[0.08em] text-[var(--color-fg-on-navy-muted)]">
+						Transactions
+					</p>
 				</div>
-				<div class="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-200">
-					Feasibility workflows that stay structured instead of drifting into spreadsheet sprawl
+				<div class="rounded-lg border border-[rgba(246,241,231,0.12)] bg-[color:rgba(246,241,231,0.04)] p-4">
+					<p class="font-display text-3xl font-normal tracking-[var(--tracking-display)] text-[var(--color-fg-on-navy)]">
+						AED
+					</p>
+					<p class="mt-2 font-mono text-[10px] uppercase tracking-[0.08em] text-[var(--color-fg-on-navy-muted)]">
+						Market signal
+					</p>
 				</div>
-				<div class="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-200">
-					Clear ownership, team access, and billing from the moment the workspace goes live
+				<div class="rounded-lg border border-[rgba(246,241,231,0.12)] bg-[color:rgba(246,241,231,0.04)] p-4">
+					<p class="font-display text-3xl font-normal tracking-[var(--tracking-display)] text-[var(--color-fg-on-navy)]">
+						24/7
+					</p>
+					<p class="mt-2 font-mono text-[10px] uppercase tracking-[0.08em] text-[var(--color-fg-on-navy-muted)]">
+						Workspace
+					</p>
+				</div>
+			</div>
+
+			<div class="divide-y divide-[rgba(246,241,231,0.12)] border-y border-[rgba(246,241,231,0.12)]">
+				<div class="grid grid-cols-[2.5rem_1fr] gap-4 py-4">
+					<span class="font-mono text-[11px] text-[var(--color-fg-on-navy-muted)]">/ 01</span>
+					<p class="text-sm leading-6 text-[var(--color-fg-on-navy-muted)]">
+						Transactions, market context, and commercial signals stay in one workspace.
+					</p>
+				</div>
+				<div class="grid grid-cols-[2.5rem_1fr] gap-4 py-4">
+					<span class="font-mono text-[11px] text-[var(--color-fg-on-navy-muted)]">/ 02</span>
+					<p class="text-sm leading-6 text-[var(--color-fg-on-navy-muted)]">
+						Feasibility workflows stay structured instead of drifting into spreadsheet sprawl.
+					</p>
+				</div>
+				<div class="grid grid-cols-[2.5rem_1fr] gap-4 py-4">
+					<span class="font-mono text-[11px] text-[var(--color-fg-on-navy-muted)]">/ 03</span>
+					<p class="text-sm leading-6 text-[var(--color-fg-on-navy-muted)]">
+						Ownership, team access, and billing are clear from the moment the workspace goes live.
+					</p>
 				</div>
 			</div>
 		</div>
@@ -392,24 +432,24 @@ async function handleResendForgotPasswordOTP() {
 
 	<div class="flex min-h-[23.5rem] flex-col gap-4">
 		{#if currentView === 'login' || currentView === 'signup'}
-			<div class="grid grid-cols-2 rounded-2xl bg-slate-100 p-1">
+			<div class="grid grid-cols-2 rounded-lg border border-[var(--color-border)] bg-white p-1">
 				<button
 					type="button"
 					onclick={() => setView('login')}
-					class="rounded-[1rem] px-4 py-2.5 text-sm font-semibold transition {currentView ===
+					class="rounded-md border px-4 py-2.5 text-sm font-medium transition {currentView ===
 					'login'
-						? 'bg-white text-slate-950 shadow-sm'
-						: 'text-slate-500 hover:text-slate-800'}"
+						? 'border-[var(--color-navy-900)] bg-[var(--color-navy-900)] text-[var(--color-fg-on-navy)] shadow-xs'
+						: 'border-transparent text-[var(--color-fg-3)] hover:border-[var(--color-border-strong)] hover:bg-slate-50 hover:text-[var(--color-fg-1)]'}"
 				>
 					Sign in
 				</button>
 				<button
 					type="button"
 					onclick={() => setView('signup')}
-					class="rounded-[1rem] px-4 py-2.5 text-sm font-semibold transition {currentView ===
+					class="rounded-md border px-4 py-2.5 text-sm font-medium transition {currentView ===
 					'signup'
-						? 'bg-white text-slate-950 shadow-sm'
-						: 'text-slate-500 hover:text-slate-800'}"
+						? 'border-[var(--color-navy-900)] bg-[var(--color-navy-900)] text-[var(--color-fg-on-navy)] shadow-xs'
+						: 'border-transparent text-[var(--color-fg-3)] hover:border-[var(--color-border-strong)] hover:bg-slate-50 hover:text-[var(--color-fg-1)]'}"
 				>
 					Create account
 				</button>
@@ -418,15 +458,24 @@ async function handleResendForgotPasswordOTP() {
 			<button
 				type="button"
 				onclick={goBack}
-				class="inline-flex items-center gap-2 text-sm font-medium text-slate-600 transition hover:text-slate-950"
+				class="inline-flex items-center gap-2 text-sm font-medium text-[var(--color-fg-3)] transition hover:text-[var(--color-fg-1)]"
 			>
-				<span aria-hidden="true">←</span>
+				<svg
+					class="h-4 w-4"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="2"
+					viewBox="0 0 24 24"
+					aria-hidden="true"
+				>
+					<path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" />
+				</svg>
 				Back to sign in
 			</button>
 		{/if}
 
 		{#if error}
-			<div class="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+			<div class="rounded-lg border border-[rgba(163,36,36,0.2)] bg-[var(--color-error-bg)] px-4 py-3 text-sm text-[var(--color-error)]">
 				{error}
 			</div>
 		{/if}
@@ -461,7 +510,7 @@ async function handleResendForgotPasswordOTP() {
 					<button
 						type="button"
 						onclick={() => setView('forgot-password')}
-						class="text-sm font-medium text-slate-500 transition hover:text-slate-900"
+						class="text-sm font-medium text-[var(--color-fg-4)] transition hover:text-[var(--color-fg-1)]"
 					>
 						Forgot password?
 					</button>
@@ -470,7 +519,7 @@ async function handleResendForgotPasswordOTP() {
 				<button
 					type="submit"
 					disabled={loading}
-					class="w-full rounded-2xl bg-slate-950 px-4 py-3.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+					class="w-full rounded-md bg-[var(--color-navy-900)] px-4 py-3.5 text-sm font-semibold text-[var(--color-fg-on-navy)] transition hover:bg-[var(--color-navy-800)] disabled:cursor-not-allowed disabled:opacity-50"
 				>
 					{loading ? 'Signing in...' : 'Sign in'}
 				</button>
@@ -478,7 +527,7 @@ async function handleResendForgotPasswordOTP() {
 				<button
 					type="button"
 					onclick={() => setView('email-auth')}
-					class="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:border-slate-400 hover:bg-slate-50"
+					class="w-full rounded-md border border-[var(--color-border)] bg-white px-4 py-3 text-sm font-medium text-[var(--color-fg-2)] transition hover:border-[var(--color-navy-600)] hover:bg-slate-50 hover:text-[var(--color-navy-900)]"
 				>
 					Sign in with email code instead
 				</button>
@@ -491,9 +540,7 @@ async function handleResendForgotPasswordOTP() {
 				}}
 				class="space-y-4"
 			>
-				<div
-					class="rounded-[1.4rem] border border-sky-200 bg-sky-50 px-4 py-3 text-sm leading-6 text-sky-900"
-				>
+				<div class="rounded-lg border border-[rgba(28,52,74,0.2)] bg-[var(--color-navy-50)] px-4 py-3 text-sm leading-6 text-[var(--color-navy-800)]">
 					We’ll send a code and magic link to your email.
 				</div>
 
@@ -511,14 +558,14 @@ async function handleResendForgotPasswordOTP() {
 					<button
 						type="button"
 						onclick={() => setView('forgot-password')}
-						class="text-sm font-medium text-slate-500 transition hover:text-slate-900"
+						class="text-sm font-medium text-[var(--color-fg-4)] transition hover:text-[var(--color-fg-1)]"
 					>
 						Need a password reset?
 					</button>
 					<button
 						type="button"
 						onclick={() => setView('login')}
-						class="text-sm font-medium text-slate-500 transition hover:text-slate-900"
+						class="text-sm font-medium text-[var(--color-fg-4)] transition hover:text-[var(--color-fg-1)]"
 					>
 						Use password instead
 					</button>
@@ -527,7 +574,7 @@ async function handleResendForgotPasswordOTP() {
 				<button
 					type="submit"
 					disabled={loading}
-					class="w-full rounded-2xl bg-slate-950 px-4 py-3.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+					class="w-full rounded-md bg-[var(--color-navy-900)] px-4 py-3.5 text-sm font-semibold text-[var(--color-fg-on-navy)] transition hover:bg-[var(--color-navy-800)] disabled:cursor-not-allowed disabled:opacity-50"
 				>
 					{loading ? 'Sending code...' : 'Send sign-in code'}
 				</button>
@@ -570,20 +617,20 @@ async function handleResendForgotPasswordOTP() {
 				/>
 
 				<label
-					class="flex items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600"
+					class="flex items-start gap-3 rounded-md border border-[var(--color-border)] bg-slate-50 px-4 py-3 text-sm text-[var(--color-fg-3)]"
 				>
 					<input
 						type="checkbox"
 						id="terms"
 						bind:checked={termsAccepted}
-						class="mt-1 h-4 w-4 rounded border-slate-300 text-slate-950 focus:ring-slate-950"
+						class="mt-1 h-4 w-4 rounded-sm border-[var(--color-border-strong)] accent-[var(--color-navy-900)] text-[var(--color-navy-900)] focus:ring-2 focus:ring-[rgba(11,27,43,0.12)]"
 					/>
 					<span>
 							I agree to the
 							<a
 								href="/terms"
 								target="_blank"
-							class="font-medium text-slate-950 underline-offset-2 hover:underline"
+							class="font-medium text-[var(--color-fg-1)] underline-offset-2 hover:underline"
 						>
 							Terms of Service
 						</a>
@@ -591,7 +638,7 @@ async function handleResendForgotPasswordOTP() {
 							<a
 								href="/privacy"
 								target="_blank"
-							class="font-medium text-slate-950 underline-offset-2 hover:underline"
+							class="font-medium text-[var(--color-fg-1)] underline-offset-2 hover:underline"
 						>
 							Privacy Policy
 						</a>
@@ -601,7 +648,7 @@ async function handleResendForgotPasswordOTP() {
 				<button
 					type="submit"
 					disabled={loading}
-					class="w-full rounded-2xl bg-slate-950 px-4 py-3.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+					class="w-full rounded-md bg-[var(--color-navy-900)] px-4 py-3.5 text-sm font-semibold text-[var(--color-fg-on-navy)] transition hover:bg-[var(--color-navy-800)] disabled:cursor-not-allowed disabled:opacity-50"
 				>
 					{loading ? 'Creating account...' : 'Create account'}
 				</button>
@@ -627,13 +674,13 @@ async function handleResendForgotPasswordOTP() {
 							? handleEmailAuthOTP
 							: handleForgotPasswordOTP}
 					disabled={loading || otpCode.length !== 6}
-					class="w-full rounded-2xl bg-slate-950 px-4 py-3.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+					class="w-full rounded-md bg-[var(--color-navy-900)] px-4 py-3.5 text-sm font-semibold text-[var(--color-fg-on-navy)] transition hover:bg-[var(--color-navy-800)] disabled:cursor-not-allowed disabled:opacity-50"
 				>
 					{loading ? 'Verifying...' : 'Verify code'}
 				</button>
 
 				<div
-					class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600"
+					class="rounded-md border border-[var(--color-border)] bg-slate-50 px-4 py-3 text-sm text-[var(--color-fg-3)]"
 				>
 					{#if resendCountdown > 0}
 						Resend code in {resendCountdown}s
@@ -642,7 +689,7 @@ async function handleResendForgotPasswordOTP() {
 							type="button"
 							onclick={handleResendOTP}
 							disabled={loading}
-							class="font-medium text-slate-950 transition hover:text-slate-700 disabled:opacity-50"
+							class="font-medium text-[var(--color-fg-1)] transition hover:text-[var(--color-navy-700)] disabled:opacity-50"
 						>
 							Resend code
 						</button>
@@ -651,7 +698,7 @@ async function handleResendForgotPasswordOTP() {
 							type="button"
 							onclick={handleResendEmailAuthOTP}
 							disabled={loading}
-							class="font-medium text-slate-950 transition hover:text-slate-700 disabled:opacity-50"
+							class="font-medium text-[var(--color-fg-1)] transition hover:text-[var(--color-navy-700)] disabled:opacity-50"
 						>
 							Resend code
 						</button>
@@ -660,7 +707,7 @@ async function handleResendForgotPasswordOTP() {
 							type="button"
 							onclick={handleResendForgotPasswordOTP}
 							disabled={loading}
-							class="font-medium text-slate-950 transition hover:text-slate-700 disabled:opacity-50"
+							class="font-medium text-[var(--color-fg-1)] transition hover:text-[var(--color-navy-700)] disabled:opacity-50"
 						>
 							Resend code
 						</button>
@@ -688,7 +735,7 @@ async function handleResendForgotPasswordOTP() {
 				<button
 					type="submit"
 					disabled={loading}
-					class="w-full rounded-2xl bg-slate-950 px-4 py-3.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+					class="w-full rounded-md bg-[var(--color-navy-900)] px-4 py-3.5 text-sm font-semibold text-[var(--color-fg-on-navy)] transition hover:bg-[var(--color-navy-800)] disabled:cursor-not-allowed disabled:opacity-50"
 				>
 					{loading ? 'Sending reset email...' : 'Send reset email'}
 				</button>

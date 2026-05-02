@@ -21,6 +21,7 @@ let mapComponent = $state<any>()
 let selectedMasterName = $state<string | null>(null)
 let selectedProjectId = $state<number | null>(null)
 let selectedBuildingId = $state<number | null>(null)
+let ddaPlotsVisible = $state(true)
 
 const allProjectsQuery = createQuery(() => projectQueries.list())
 const masterDetailsQuery = createQuery(() =>
@@ -34,54 +35,21 @@ const buildingDetailsQuery = createQuery(() =>
 )
 
 let allProjects = $derived(allProjectsQuery.data ?? [])
-
-// Hardcoded JVC (Jumeirah Village Circle) boundary polygon [lng, lat]
-const JVC_POLYGON: Array<[number, number]> = [
-	[55.188, 25.074],
-	[55.202, 25.079],
-	[55.218, 25.0785],
-	[55.232, 25.07],
-	[55.239, 25.057],
-	[55.236, 25.043],
-	[55.224, 25.034],
-	[55.206, 25.03],
-	[55.19, 25.034],
-	[55.177, 25.044],
-	[55.174, 25.058],
-	[55.181, 25.07],
-	[55.188, 25.074]
-]
-
-const JVC_ANALYTICS = { avg_price: 975000, gross_yield_pct: 7.2 }
-
-function withJvcOverrides(details: ProjectDetailResponse): {
-	project: ProjectDetailResponse
-	analytics: { avg_price: number; gross_yield_pct: number | null } | null
-} {
-	if (!isJVCProject(details.area_name, details.project_name)) {
-		return { project: details, analytics: null }
-	}
-
-	return {
-		project: {
-			...details,
-			latitude: 25.0565,
-			longitude: 55.2065,
-			area_polygon: { coordinates: JVC_POLYGON }
-		},
-		analytics: JVC_ANALYTICS
-	}
-}
-
 const masterDetails = $derived<MasterProjectResponse | null>(masterDetailsQuery.data ?? null)
-const projectState = $derived(
-	projectDetailsQuery.data
-		? withJvcOverrides(projectDetailsQuery.data)
-		: { project: null, analytics: null }
-)
-const projectDetails = $derived<ProjectDetailResponse | null>(projectState.project)
-const projectAnalytics = $derived(projectState.analytics)
+const projectDetails = $derived<ProjectDetailResponse | null>(projectDetailsQuery.data ?? null)
 const buildingDetails = $derived<BuildingDetailResponse | null>(buildingDetailsQuery.data ?? null)
+
+const ddaAreaName = $derived<string | null>(
+	panelView === 'project' && projectDetails
+		? projectDetails.area_name
+		: panelView === 'master' && masterDetails
+			? masterDetails.area_name
+			: null
+)
+
+const ddaPlotsQuery = createQuery(() => projectQueries.ddaPlots(ddaAreaName))
+const ddaPlots = $derived(ddaPlotsQuery.data ?? [])
+
 const isLoading = $derived.by(() => {
 	if (panelView === 'master') return masterDetailsQuery.isPending || masterDetailsQuery.isFetching
 	if (panelView === 'project')
@@ -91,16 +59,6 @@ const isLoading = $derived.by(() => {
 	}
 	return allProjectsQuery.isPending
 })
-
-function isJVCProject(areaName: string, projectName: string): boolean {
-	const a = areaName.toLowerCase()
-	const p = projectName.toLowerCase()
-	return (
-		a.includes('al barsha south fourth') ||
-		a.includes('jumeirah village circle') ||
-		p.includes('jumeirah village circle')
-	)
-}
 
 function handleSearchSelect(sel: SearchSelection) {
 	if (sel.type === 'master') {
@@ -171,6 +129,15 @@ $effect(() => {
 		13
 	)
 })
+
+$effect(() => {
+	if (!mapComponent) return
+	if (ddaPlotsVisible && ddaPlots.length > 0) {
+		mapComponent.showDDAPlots(ddaPlots)
+	} else {
+		mapComponent.hideDDAPlots()
+	}
+})
 </script>
 
 <AppShell showFilters={false}>
@@ -184,6 +151,29 @@ $effect(() => {
 			/>
 		</div>
 
+		<!-- DDA Plots layer toggle — bottom-right of map -->
+		{#if ddaAreaName}
+			<div class="absolute bottom-6 right-4 z-10">
+				<button
+					type="button"
+					onclick={() => (ddaPlotsVisible = !ddaPlotsVisible)}
+					class="flex items-center gap-2 rounded-lg border bg-white px-3 py-2 text-xs font-medium shadow-md transition-colors {ddaPlotsVisible
+						? 'border-amber-300 text-amber-800'
+						: 'border-[var(--color-border)] text-[var(--color-fg-3)]'}"
+				>
+					<span
+						class="inline-block h-2.5 w-2.5 flex-shrink-0 rounded-sm {ddaPlotsVisible
+							? 'bg-amber-400'
+							: 'bg-slate-300'}"
+					></span>
+					DDA plots
+					{#if ddaPlots.length > 0}
+						<span class="text-[10px] text-[var(--color-fg-4)]">({ddaPlots.length})</span>
+					{/if}
+				</button>
+			</div>
+		{/if}
+
 		<!-- Floating Left Overlay Panel -->
 		<div
 			class="absolute transition-all duration-300 ease-in-out z-10 {isMinimized
@@ -191,7 +181,7 @@ $effect(() => {
 				: 'left-4 right-4 top-4 bottom-4 sm:right-auto sm:w-96 bottom-4'}"
 		>
 			<div
-				class="bg-white/95 backdrop-blur-md shadow-2xl rounded-2xl border border-slate-200/50 {isMinimized
+				class="bg-white shadow-lg rounded-lg border border-[var(--color-border)] {isMinimized
 					? ''
 					: 'h-full flex flex-col'}"
 			>
@@ -227,7 +217,7 @@ $effect(() => {
 							class="flex items-center justify-between px-5 py-4 border-b border-slate-200 flex-shrink-0"
 						>
 							<div>
-								<h1 class="text-lg font-bold text-slate-900">Projects</h1>
+								<h1 class="text-lg font-semibold text-[var(--color-fg-1)]">Projects</h1>
 								{#if allProjects.length > 0}
 									<p class="text-xs text-slate-500">
 										{allProjects.length.toLocaleString()} projects
@@ -299,7 +289,7 @@ $effect(() => {
 									class="flex flex-col items-center justify-center h-full px-6 py-12 text-center"
 								>
 									<div
-										class="w-14 h-14 bg-slate-100 rounded-2xl flex items-center justify-center mb-4"
+										class="w-14 h-14 bg-slate-100 rounded-lg flex items-center justify-center mb-4"
 									>
 										<svg
 											class="w-7 h-7 text-slate-400"

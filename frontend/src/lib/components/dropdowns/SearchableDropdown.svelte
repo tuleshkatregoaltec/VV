@@ -72,10 +72,10 @@ let displayedOptions = $derived(filteredOptions.slice(0, visibleCount))
 
 <BaseDropdown {id} {ariaLabel} displayValue={value} {onOpen} {onClose}>
 	{#snippet children({ close })}
-		<div class="p-2">
+		<div class="p-1.5">
 			<input
 				type="text"
-				class="w-full px-3 py-2 mb-2 rounded bg-gray-50 border border-gray-200 text-gray-900 placeholder-gray-400 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
+				class="mb-2 w-full rounded-md border border-[var(--color-border)] bg-slate-50 px-3 py-2 text-sm text-[var(--color-fg-1)] placeholder-[var(--color-fg-5)] transition-all focus:border-[var(--color-navy-900)] focus:outline-none focus:ring-2 focus:ring-[rgba(11,27,43,0.12)]"
 				placeholder="Search..."
 				bind:value={searchQuery}
 				aria-label={`Search options for ${ariaLabel}`}
@@ -85,10 +85,10 @@ let displayedOptions = $derived(filteredOptions.slice(0, visibleCount))
 					<li>
 						<button
 							type="button"
-							class="w-full text-left px-3 py-2 rounded hover:bg-gray-100 transition-colors {option ===
+							class="w-full rounded-md px-3 py-2 text-left text-sm transition-colors {option ===
 							value
-								? 'bg-primary/10 font-semibold text-primary'
-								: 'text-gray-900'}"
+								? 'bg-[var(--color-navy-50)] font-medium text-[var(--color-navy-900)]'
+								: 'text-[var(--color-fg-2)] hover:bg-slate-50 hover:text-[var(--color-fg-1)]'}"
 							onclick={() => select(option, close)}
 						>
 							{option}
@@ -96,7 +96,7 @@ let displayedOptions = $derived(filteredOptions.slice(0, visibleCount))
 					</li>
 				{/each}
 				{#if filteredOptions.length === 0}
-					<li class="px-3 py-2 text-gray-400 text-sm">No results found</li>
+					<li class="px-3 py-2 text-sm text-[var(--color-fg-5)]">No results found</li>
 				{/if}
 			</ul>
 		</div>

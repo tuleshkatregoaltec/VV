@@ -197,7 +197,7 @@ function formatDate(dateString: string): string {
 		{:else if conversations.length === 0}
 			<div class="p-6 text-center">
 				<div
-					class="w-16 h-16 bg-slate-100 rounded-2xl flex items-center justify-center mx-auto mb-4"
+					class="w-16 h-16 bg-slate-100 rounded-lg flex items-center justify-center mx-auto mb-4"
 				>
 					<svg class="w-8 h-8 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 						<path

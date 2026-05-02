@@ -55,18 +55,18 @@ function handleCancel() {
 
 <div class="min-h-screen bg-slate-50">
 	<div class="max-w-2xl mx-auto px-4 py-8">
-		<h1 class="text-3xl font-bold text-slate-900 mb-8">Profile</h1>
+		<h1 class="text-3xl font-semibold text-[var(--color-fg-1)] mb-8">Profile</h1>
 
 		<div class="space-y-6">
 			<!-- Account Details Section -->
-			<div class="bg-white/80 backdrop-blur-sm shadow-sm rounded-lg p-6 border border-slate-200">
+			<div class="bg-white rounded-lg p-6 border border-[var(--color-border)]">
 				<div class="flex items-center justify-between mb-4">
 					<h2 class="text-lg font-semibold text-slate-900">Account Details</h2>
 					{#if !editingName}
 						<button
 							type="button"
 							onclick={() => (editingName = true)}
-							class="text-sm text-primary hover:text-primary/80 font-medium transition-colors"
+							class="text-sm text-[var(--color-navy-700)] hover:text-[var(--color-fg-1)] font-medium transition-colors"
 						>
 							Edit Name
 						</button>
@@ -142,7 +142,7 @@ function handleCancel() {
 			</div>
 
 			<!-- Notifications Section -->
-			<div class="bg-white/80 backdrop-blur-sm shadow-sm rounded-lg p-6 border border-slate-200">
+			<div class="bg-white rounded-lg p-6 border border-[var(--color-border)]">
 				<h2 class="text-lg font-semibold text-slate-900 mb-4">Notifications</h2>
 				<div class="space-y-4">
 					<label class="flex items-center justify-between">
@@ -150,7 +150,7 @@ function handleCancel() {
 						<input
 							type="checkbox"
 							checked
-							class="w-5 h-5 text-primary rounded focus:ring-primary"
+							class="w-5 h-5 text-[var(--color-navy-700)] rounded"
 							disabled
 						/>
 					</label>
@@ -158,7 +158,7 @@ function handleCancel() {
 						<span class="text-slate-700">Weekly digest</span>
 						<input
 							type="checkbox"
-							class="w-5 h-5 text-primary rounded focus:ring-primary"
+							class="w-5 h-5 text-[var(--color-navy-700)] rounded"
 							disabled
 						/>
 					</label>
@@ -167,7 +167,7 @@ function handleCancel() {
 			</div>
 
 			<!-- Preferences Section -->
-			<div class="bg-white/80 backdrop-blur-sm shadow-sm rounded-lg p-6 border border-slate-200">
+			<div class="bg-white rounded-lg p-6 border border-[var(--color-border)]">
 				<h2 class="text-lg font-semibold text-slate-900 mb-4">Preferences</h2>
 				<div class="space-y-4">
 					<div class="flex items-center justify-between">
@@ -202,7 +202,7 @@ function handleCancel() {
 			</div>
 
 			<!-- Account Actions Section -->
-			<div class="bg-white/80 backdrop-blur-sm shadow-sm rounded-lg p-6 border border-slate-200">
+			<div class="bg-white rounded-lg p-6 border border-[var(--color-border)]">
 				<button
 					type="button"
 					onclick={() => logout()}

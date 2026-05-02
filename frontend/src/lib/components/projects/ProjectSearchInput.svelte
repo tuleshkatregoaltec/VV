@@ -101,9 +101,9 @@ function getProjectResultKey(result: ProjectSearchResult, index: number): string
 <div class="w-full">
 	<div class="relative">
 		<div
-			class="relative bg-white border rounded-2xl transition-all duration-200 {isFocused
-				? 'border-teal-500 shadow-md'
-				: 'border-slate-300 shadow-sm hover:border-slate-400'}"
+			class="relative bg-white border rounded-lg transition-all duration-200 {isFocused
+				? 'border-[var(--color-navy-700)]'
+				: 'border-[var(--color-border)] hover:border-slate-300'}"
 		>
 			<input
 				type="text"
@@ -112,7 +112,7 @@ function getProjectResultKey(result: ProjectSearchResult, index: number): string
 				onfocus={handleFocus}
 				onblur={handleBlur}
 				placeholder="Search projects, areas, developers..."
-				class="w-full px-4 py-3 bg-transparent outline-none text-slate-800 placeholder-slate-400 rounded-2xl pr-10 text-sm"
+				class="w-full px-4 py-3 bg-transparent outline-none text-slate-800 placeholder-slate-400 rounded-lg pr-10 text-sm"
 			/>
 			<div class="absolute right-3 top-1/2 -translate-y-1/2">
 				<svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -137,7 +137,7 @@ function getProjectResultKey(result: ProjectSearchResult, index: number): string
 				{#each searchResults.masters as master (master.name)}
 					<button
 						onclick={() => selectMaster(master.name)}
-						class="w-full text-left px-4 py-2.5 hover:bg-teal-50 transition-colors border-b border-slate-100"
+						class="w-full text-left px-4 py-2.5 hover:bg-slate-50 transition-colors border-b border-slate-100"
 					>
 						<div class="flex items-start justify-between gap-2">
 							<div class="min-w-0">
@@ -146,7 +146,7 @@ function getProjectResultKey(result: ProjectSearchResult, index: number): string
 							</div>
 							<div class="flex flex-col items-end gap-1 flex-shrink-0">
 								<span
-									class="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-violet-100 text-violet-700"
+									class="text-[10px] font-medium px-1.5 py-0.5 rounded-sm bg-slate-100 text-[var(--color-fg-4)]"
 								>
 									Master
 								</span>
@@ -160,7 +160,7 @@ function getProjectResultKey(result: ProjectSearchResult, index: number): string
 				{#each searchResults.projects as result, index (getProjectResultKey(result, index))}
 					<button
 						onclick={() => selectProject(result.project_id)}
-						class="w-full text-left px-4 py-2.5 hover:bg-teal-50 transition-colors border-b border-slate-100 last:border-b-0"
+						class="w-full text-left px-4 py-2.5 hover:bg-slate-50 transition-colors border-b border-slate-100 last:border-b-0"
 					>
 						<div class="flex items-start justify-between gap-2">
 							<div class="min-w-0">
@@ -175,7 +175,7 @@ function getProjectResultKey(result: ProjectSearchResult, index: number): string
 								</div>
 							</div>
 							<span
-								class="flex-shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-teal-100 text-teal-700 mt-0.5"
+								class="flex-shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded-sm bg-slate-100 text-[var(--color-fg-4)] mt-0.5"
 							>
 								Project
 							</span>

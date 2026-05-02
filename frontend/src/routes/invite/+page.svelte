@@ -211,20 +211,20 @@ function getConflictMessage(conflict: InviteConflictResponse): string {
 	<svelte:fragment slot="side">
 		<div class="space-y-4 rounded-[1.6rem] border border-white/10 bg-white/5 p-6">
 			{#if inviteDetails}
-				<div class="rounded-3xl border border-white/10 bg-slate-900/60 p-5">
+				<div class="rounded-xl border border-white/10 bg-slate-900/60 p-5">
 					<p class="text-xs font-semibold uppercase tracking-[0.22em] text-slate-400">Invitation</p>
 					<p class="mt-3 text-2xl font-semibold text-white">{inviteDetails.organization_name}</p>
 					<p class="mt-2 text-sm leading-6 text-slate-300">Invited email: {inviteDetails.email}</p>
 				</div>
 			{/if}
 			<div class="grid gap-3">
-				<div class="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-200">
+				<div class="rounded-lg border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-200">
 					Authenticate with the invited account first
 				</div>
-				<div class="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-200">
+				<div class="rounded-lg border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-200">
 					Add your name only if it is still missing
 				</div>
-				<div class="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-200">
+				<div class="rounded-lg border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-200">
 					Join the workspace and let the normal guard flow take over
 				</div>
 			</div>
@@ -232,13 +232,13 @@ function getConflictMessage(conflict: InviteConflictResponse): string {
 	</svelte:fragment>
 
 	{#if error && step !== 'error'}
-		<div class="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+		<div class="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
 			{error}
 		</div>
 	{/if}
 
 	{#if conflictMessage}
-		<div class="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+		<div class="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
 			{conflictMessage}
 		</div>
 	{/if}
@@ -259,7 +259,7 @@ function getConflictMessage(conflict: InviteConflictResponse): string {
 			</div>
 			<a
 				href={resolve('/auth')}
-				class="inline-flex rounded-2xl bg-slate-950 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
+				class="inline-flex rounded-lg bg-slate-950 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
 			>
 				Return to sign in
 			</a>
@@ -277,13 +277,13 @@ function getConflictMessage(conflict: InviteConflictResponse): string {
 				<button
 					type="button"
 					onclick={switchAccount}
-					class="flex-1 rounded-2xl bg-slate-950 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
+					class="flex-1 rounded-lg bg-slate-950 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
 				>
 					Use the invited account instead
 				</button>
 				<a
 					href={resolve('/dashboard')}
-					class="rounded-2xl border border-slate-300 px-5 py-3 text-center text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+					class="rounded-lg border border-slate-300 px-5 py-3 text-center text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
 				>
 					Go to current workspace
 				</a>
@@ -316,7 +316,7 @@ function getConflictMessage(conflict: InviteConflictResponse): string {
 			<button
 				type="submit"
 				disabled={loading}
-				class="w-full rounded-2xl bg-slate-950 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+				class="w-full rounded-lg bg-slate-950 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
 			>
 				{loading ? 'Joining organization...' : `Join ${inviteDetails?.organization_name}`}
 			</button>
@@ -333,7 +333,7 @@ function getConflictMessage(conflict: InviteConflictResponse): string {
 				type="button"
 				onclick={joinOrganization}
 				disabled={loading}
-				class="w-full rounded-2xl bg-slate-950 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+				class="w-full rounded-lg bg-slate-950 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
 			>
 				{loading ? 'Joining organization...' : `Join ${inviteDetails?.organization_name}`}
 			</button>

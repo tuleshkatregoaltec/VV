@@ -259,12 +259,12 @@ async function handleExport() {
 </script>
 
 {#if transactionsQuery.isError}
-	<div class="bg-red-50 border border-red-200 rounded-lg p-6 text-center mb-6 shadow-sm">
-		<p class="text-red-800 font-semibold">Error loading data</p>
-		<p class="text-red-600 mt-2">{transactionsQuery.error?.message ?? 'Unknown error'}</p>
+	<div class="mb-6 rounded-lg border border-[rgba(163,36,36,0.2)] bg-[var(--color-error-bg)] p-6 text-center">
+		<p class="font-semibold text-[var(--color-error)]">Error loading data</p>
+		<p class="mt-2 text-[var(--color-error)]">{transactionsQuery.error?.message ?? 'Unknown error'}</p>
 		<button
 			onclick={() => transactionsQuery.refetch()}
-			class="mt-4 px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary-dark transition-colors shadow-sm"
+			class="mt-4 rounded-md border border-[var(--color-navy-900)] bg-[var(--color-navy-900)] px-4 py-2 text-sm font-medium text-[var(--color-fg-on-navy)] transition-colors hover:bg-[var(--color-navy-800)]"
 		>
 			Retry
 		</button>
@@ -272,11 +272,11 @@ async function handleExport() {
 {/if}
 
 <div
-	class="relative z-20 bg-white/80 backdrop-blur-sm rounded-xl shadow-sm border border-slate-200 px-6 pt-6 pb-4 mb-2"
+	class="relative z-20 mb-2 rounded-lg border border-[var(--color-border)] bg-white px-4 py-4 sm:px-5"
 >
 	<div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
 			<div class="flex flex-col gap-2">
-				<label for="sales-project" class="block text-sm text-slate-900">Project</label>
+				<label for="sales-project" class="block text-sm font-medium text-[var(--color-fg-1)]">Project</label>
 				<ProjectSelector
 					bind:value={selectedProject}
 					placeholder="Search project..."
@@ -288,7 +288,7 @@ async function handleExport() {
 		</div>
 			{#if selectedProject && selectedProject.filter_type !== 'project'}
 				<div class="flex flex-col gap-2">
-					<label for="sales-sub-project-button" class="block text-sm text-slate-900">
+					<label for="sales-sub-project-button" class="block text-sm font-medium text-[var(--color-fg-1)]">
 						Sub-project
 					</label>
 					<SearchableDropdown

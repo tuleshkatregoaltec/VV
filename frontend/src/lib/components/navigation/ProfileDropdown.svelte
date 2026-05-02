@@ -55,7 +55,7 @@ let nextId = 0
 
 <div class="relative" role="navigation" onmouseenter={handleEnter} onmouseleave={handleLeave}>
 	<button
-		class="w-8 h-8 rounded-lg bg-primary flex items-center justify-center text-white font-semibold text-sm hover:bg-primary/90 transition-colors"
+		class="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-sm font-semibold tracking-[0.02em] text-bone transition-colors hover:bg-primary-light"
 		aria-label="Profile menu"
 		aria-haspopup="true"
 		aria-expanded={isOpen}
@@ -65,26 +65,26 @@ let nextId = 0
 
 	{#if isOpen}
 		<div
-			class="absolute right-0 mt-1 w-44 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50"
+			class="absolute right-0 z-50 mt-1 w-44 rounded-lg border border-slate-200 bg-white py-1 shadow-[var(--shadow-md)]"
 			in:fly={{ y: -10, duration: 200, easing: quintOut }}
 			out:fade={{ duration: 150 }}
 		>
 			<a
 				href="/profile"
-				class="block px-3 py-2 text-sm text-gray-700 hover:text-primary hover:bg-gray-50 transition-colors"
+				class="block px-3 py-2 text-sm text-[var(--color-fg-3)] transition-colors hover:bg-slate-50 hover:text-[var(--color-fg-1)]"
 			>
 				My Profile
 			</a>
 			<a
 				href="/settings/organization"
-				class="block px-3 py-2 text-sm text-gray-700 hover:text-primary hover:bg-gray-50 transition-colors"
+				class="block px-3 py-2 text-sm text-[var(--color-fg-3)] transition-colors hover:bg-slate-50 hover:text-[var(--color-fg-1)]"
 			>
 				Organization
 			</a>
-			<div class="my-1 h-px bg-gray-200"></div>
+			<div class="my-1 h-px bg-slate-200"></div>
 			<button
 				onclick={handleLogout}
-				class="block w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
+				class="block w-full px-3 py-2 text-left text-sm text-error transition-colors hover:bg-[var(--color-error-bg)]"
 			>
 				Sign Out
 			</button>

@@ -24,15 +24,15 @@ function select(option: string, close: () => void) {
 
 <BaseDropdown {id} {ariaLabel} displayValue={value}>
 	{#snippet children({ close })}
-		<ul class="max-h-60 overflow-y-auto p-2">
+		<ul class="max-h-60 overflow-y-auto p-1.5">
 			{#each options as option (option)}
 				<li>
 					<button
 						type="button"
-						class="w-full text-left px-3 py-2 rounded hover:bg-gray-100 transition-colors {option ===
+						class="w-full rounded-md px-3 py-2 text-left text-sm transition-colors {option ===
 						value
-							? 'bg-primary/10 font-semibold text-primary'
-							: 'text-gray-900'}"
+							? 'bg-[var(--color-navy-50)] font-medium text-[var(--color-navy-900)]'
+							: 'text-[var(--color-fg-2)] hover:bg-slate-50 hover:text-[var(--color-fg-1)]'}"
 						onclick={() => select(option, close)}
 					>
 						{option}

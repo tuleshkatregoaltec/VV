@@ -21,7 +21,7 @@ import Footer from '$lib/components/layout/Footer.svelte'
 	</style>
 </svelte:head>
 
-<div class="min-h-screen bg-background">
+<div class="min-h-screen bg-bone">
 	<FloatingNavbar />
 	<HeroSection />
 	<PreviewSection />

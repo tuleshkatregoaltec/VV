@@ -65,15 +65,15 @@ async function deleteOrg() {
 function statusBadge(status: string) {
 	switch (status) {
 		case 'active':
-			return 'bg-green-100 text-green-800'
+			return 'bg-[var(--color-success-bg)] text-[var(--color-success)]'
 		case 'trialing':
-			return 'bg-blue-100 text-blue-800'
+			return 'bg-[var(--color-navy-50)] text-[var(--color-navy-900)]'
 		case 'past_due':
-			return 'bg-orange-100 text-orange-800'
+			return 'bg-[var(--color-warning-bg)] text-[var(--color-warning)]'
 		case 'canceled':
-			return 'bg-red-100 text-red-800'
+			return 'bg-[var(--color-error-bg)] text-[var(--color-error)]'
 		default:
-			return 'bg-gray-100 text-gray-600'
+			return 'bg-[var(--color-bone-100)] text-[var(--color-fg-3)]'
 	}
 }
 
@@ -88,89 +88,89 @@ function formatDate(d: string) {
 
 <div class="max-w-7xl mx-auto px-4 py-6">
 	<div class="flex justify-between items-center mb-6">
-		<h1 class="text-2xl font-bold text-gray-900">Organizations</h1>
+		<h1 class="text-2xl font-bold text-[var(--color-fg-1)]">Organizations</h1>
 		<button
 			onclick={() => (showCreateUser = true)}
-			class="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
+			class="rounded-md bg-[var(--color-navy-900)] px-4 py-2 text-sm font-medium text-[var(--color-fg-on-navy)] transition-colors hover:bg-[var(--color-navy-800)]"
 		>
 			+ Create User
 		</button>
 	</div>
 
 	{#if organizationsQuery.isPending}
-		<div class="text-center py-16 text-gray-400">Loading...</div>
+		<div class="py-16 text-center text-[var(--color-fg-4)]">Loading...</div>
 	{:else if error}
-		<div class="bg-red-50 border border-red-200 rounded-lg p-4 text-red-700 text-sm">{error}</div>
+		<div class="rounded-lg border border-[rgba(163,36,36,0.2)] bg-[var(--color-error-bg)] p-4 text-sm text-[var(--color-error)]">{error}</div>
 	{:else if orgs.length === 0}
-		<div class="text-center py-16 text-gray-400">No organizations yet.</div>
+		<div class="py-16 text-center text-[var(--color-fg-4)]">No organizations yet.</div>
 	{:else}
-		<div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
-			<table class="min-w-full divide-y divide-gray-100">
+		<div class="overflow-hidden rounded-xl border border-[var(--color-border)] bg-white">
+			<table class="min-w-full divide-y divide-[var(--color-border)]">
 				<thead>
-					<tr class="bg-gray-50">
+					<tr class="bg-slate-50">
 						<th
-							class="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider"
+							class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-[var(--color-fg-4)]"
 							>Organization</th
 						>
 						<th
-							class="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider"
+							class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-[var(--color-fg-4)]"
 							>Owner</th
 						>
 						<th
-							class="px-5 py-3 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider"
+							class="px-5 py-3 text-center text-xs font-semibold uppercase tracking-wider text-[var(--color-fg-4)]"
 							>Members</th
 						>
 						<th
-							class="px-5 py-3 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider"
+							class="px-5 py-3 text-center text-xs font-semibold uppercase tracking-wider text-[var(--color-fg-4)]"
 							>Subscription</th
 						>
 						<th
-							class="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider"
+							class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-[var(--color-fg-4)]"
 							>Created</th
 						>
 						<th class="px-5 py-3"></th>
 					</tr>
 				</thead>
-				<tbody class="divide-y divide-gray-100">
+				<tbody class="divide-y divide-[var(--color-border)]">
 					{#each orgs as org (org.id)}
-						<tr class="hover:bg-gray-50 transition-colors">
+						<tr class="transition-colors hover:bg-slate-50">
 							<td class="px-5 py-4">
-								<span class="font-medium text-gray-900 text-sm">{org.name}</span>
+								<span class="text-sm font-medium text-[var(--color-fg-1)]">{org.name}</span>
 							</td>
-							<td class="px-5 py-4 text-sm text-gray-500">{org.owner_email}</td>
-							<td class="px-5 py-4 text-center text-sm text-gray-600">
+							<td class="px-5 py-4 text-sm text-[var(--color-fg-3)]">{org.owner_email}</td>
+							<td class="px-5 py-4 text-center text-sm text-[var(--color-fg-3)]">
 								{org.user_count} / {org.max_users}
 							</td>
 							<td class="px-5 py-4 text-center">
 								<span
-									class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold {statusBadge(
+									class="inline-flex items-center rounded-sm px-2.5 py-0.5 text-xs font-semibold {statusBadge(
 										org.subscription_status
 									)}"
 								>
 									{org.subscription_status}
 								</span>
 							</td>
-							<td class="px-5 py-4 text-sm text-gray-400">{formatDate(org.created_at)}</td>
+							<td class="px-5 py-4 text-sm text-[var(--color-fg-4)]">{formatDate(org.created_at)}</td>
 							<td class="px-5 py-4">
 								<div class="flex items-center justify-end gap-2">
 									{#if org.subscription_status !== 'active'}
 										<button
 											onclick={() => activateOrg(org)}
 											disabled={activatingOrgId === org.id}
-											class="text-xs font-medium text-green-700 bg-green-50 hover:bg-green-100 border border-green-200 px-2.5 py-1 rounded-md transition-colors disabled:opacity-50"
+											class="rounded-md border border-[rgba(17,122,72,0.2)] bg-[var(--color-success-bg)] px-2.5 py-1 text-xs font-medium text-[var(--color-success)] transition-colors hover:opacity-90 disabled:opacity-50"
 										>
 											{activatingOrgId === org.id ? '...' : 'Activate'}
 										</button>
 									{/if}
 									<button
 										onclick={() => goto(`/admin/organizations/${org.id}`)}
-										class="text-xs font-medium text-blue-600 hover:text-blue-800 px-2.5 py-1 rounded-md hover:bg-blue-50 transition-colors"
+										class="rounded-md px-2.5 py-1 text-xs font-medium text-[var(--color-navy-700)] transition-colors hover:bg-[var(--color-navy-50)] hover:text-[var(--color-navy-900)]"
 									>
 										View →
 									</button>
 									<button
 										onclick={() => (confirmDeleteOrg = org)}
-										class="text-xs font-medium text-red-500 hover:text-red-700 px-2.5 py-1 rounded-md hover:bg-red-50 transition-colors"
+										class="rounded-md px-2.5 py-1 text-xs font-medium text-[var(--color-error)] transition-colors hover:bg-[var(--color-error-bg)] hover:opacity-90"
 									>
 										Delete
 									</button>

@@ -37,14 +37,14 @@ function setFilterValue(id: string, value: any) {
 </script>
 
 <div
-	class="relative z-10 bg-white/80 backdrop-blur-sm rounded-xl shadow-sm border border-slate-200 p-6 mb-6"
+	class="relative z-10 mb-6 rounded-lg border border-[var(--color-border)] bg-white p-4 sm:p-5"
 >
-	<div class="flex items-center justify-between mb-6">
-		<div class="flex items-center gap-4">
-			<h2 class="text-xl font-bold text-slate-900">Filters</h2>
+	<div class="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+		<div class="flex flex-wrap items-center gap-3">
+			<h2 class="font-mono text-[10px] font-medium uppercase tracking-[0.08em] text-[var(--color-fg-4)]">Filters</h2>
 			{#if selectedCount > 0}
 				<div
-					class="flex items-center gap-2 px-3 py-1 bg-primary/10 text-primary rounded-lg text-sm font-medium"
+					class="flex items-center gap-2 rounded-sm border border-[var(--color-navy-100)] bg-[var(--color-navy-50)] px-2.5 py-1 text-xs font-medium text-[var(--color-navy-900)]"
 				>
 					<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 						<path
@@ -57,7 +57,7 @@ function setFilterValue(id: string, value: any) {
 					<span>{selectedCount} selected</span>
 					<button
 						onclick={onClearSelection}
-						class="ml-1 hover:text-primary-dark transition-colors"
+						class="ml-1 transition-colors hover:text-[var(--color-fg-1)]"
 						aria-label="Clear selection"
 					>
 						<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -75,14 +75,14 @@ function setFilterValue(id: string, value: any) {
 		<div class="flex items-center gap-2">
 			<button
 				onclick={resetFilters}
-				class="text-sm px-3 py-1 rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-50 transition-colors"
+				class="rounded-md border border-[var(--color-border)] px-3 py-2 text-sm font-medium text-[var(--color-fg-2)] transition-colors hover:border-[var(--color-border-strong)] hover:bg-slate-50 hover:text-[var(--color-fg-1)]"
 			>
 				Reset
 			</button>
 
 			<button
 				onclick={onExport}
-				class="inline-flex items-center gap-2 text-sm px-3 py-1 rounded-lg bg-green-600 text-white hover:bg-green-700 transition-colors shadow-sm"
+				class="inline-flex items-center gap-2 rounded-md border border-[var(--color-navy-900)] bg-[var(--color-navy-900)] px-3 py-2 text-sm font-medium text-[var(--color-fg-on-navy)] transition-colors hover:bg-[var(--color-navy-800)]"
 			>
 				<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 					<path
@@ -97,11 +97,11 @@ function setFilterValue(id: string, value: any) {
 		</div>
 	</div>
 
-	<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
+	<div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
 		{#each filterDefinitions as filter (filter.id)}
 			<div class="flex flex-col gap-2">
 				<!-- Reverted back to <label> tag -->
-				<label for="{filter.id}-input" class="block text-sm text-slate-900">
+				<label for="{filter.id}-input" class="block text-sm font-medium text-[var(--color-fg-1)]">
 					{filter.label}
 				</label>
 

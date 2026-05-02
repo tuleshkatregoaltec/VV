@@ -5,13 +5,13 @@ export let trend: { value: string; direction: 'up' | 'down' } | null = null
 </script>
 
 <div
-	class="bg-white/80 backdrop-blur-sm rounded-xl shadow-sm border border-slate-200 hover:shadow-md hover:border-teal-100 transition-all duration-300 p-5 sm:p-6 flex flex-col group"
+	class="bg-white rounded-lg border border-[var(--color-border)] hover:border-slate-300 transition-colors p-5 sm:p-6 flex flex-col group"
 >
 	<!-- Header with icon and title -->
 	<div class="flex items-center justify-between mb-3">
-		<h2 class="text-base font-semibold text-slate-700">{title}</h2>
+		<h2 class="text-base font-semibold text-[var(--color-fg-1)]">{title}</h2>
 		<div
-			class="h-6 w-6 text-primary opacity-70 group-hover:opacity-100 transition-opacity duration-300"
+			class="h-5 w-5 text-[var(--color-fg-4)]"
 		>
 			<slot name="icon" />
 		</div>
@@ -19,14 +19,14 @@ export let trend: { value: string; direction: 'up' | 'down' } | null = null
 
 	<!-- Value -->
 	{#if value}
-		<p class="text-3xl sm:text-4xl font-bold text-slate-900 mb-auto">{value}</p>
+		<p class="font-display text-3xl sm:text-4xl font-normal leading-none tracking-[-0.025em] text-[var(--color-fg-1)] mb-auto tabular-nums">{value}</p>
 	{/if}
 	<!-- Trend indicator -->
 	{#if trend}
 		<div
-			class="mt-4 text-sm font-medium flex items-center {trend.direction === 'up'
-				? 'text-green-600'
-				: 'text-red-600'}"
+			class="mt-4 font-mono text-xs flex items-center {trend.direction === 'up'
+				? 'text-[var(--color-trend-up)]'
+				: 'text-[var(--color-trend-down)]'}"
 		>
 			<svg
 				xmlns="http://www.w3.org/2000/svg"

@@ -8,9 +8,9 @@ const isActive = $derived(page.url.pathname === href || page.url.pathname.starts
 
 <a
 	{href}
-	class="px-3 py-2 text-base font-medium rounded-xl transition-all {isActive
-		? 'bg-gradient-to-r from-teal-600/80 to-cyan-600/80 text-white shadow-sm'
-		: 'text-gray-700 hover:text-slate-900 hover:bg-slate-50'}"
+	class="rounded-md px-3 py-2 text-sm font-medium transition-colors duration-150 {isActive
+		? 'bg-slate-100 text-[var(--color-fg-1)] font-semibold'
+		: 'text-[var(--color-fg-3)] hover:bg-slate-100 hover:text-[var(--color-fg-1)]'}"
 	aria-current={isActive ? 'page' : undefined}
 >
 	{label}

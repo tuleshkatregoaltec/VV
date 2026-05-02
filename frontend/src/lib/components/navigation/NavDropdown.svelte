@@ -59,9 +59,9 @@ let nextId = 0
 
 <div class="relative" role="navigation" onmouseenter={handleEnter} onmouseleave={handleLeave}>
 	<button
-		class="px-3 py-2 text-base font-medium rounded-xl transition-all flex items-center gap-1 {isActive
-			? 'bg-gradient-to-r from-teal-600/80 to-cyan-600/80 text-white shadow-sm'
-			: 'text-gray-700 hover:text-slate-900 hover:bg-slate-50'}"
+		class="flex items-center gap-1 rounded-md px-3 py-2 text-sm font-medium transition-colors duration-150 {isActive
+			? 'bg-slate-100 text-[var(--color-fg-1)] font-semibold'
+			: 'text-[var(--color-fg-3)] hover:bg-slate-100 hover:text-[var(--color-fg-1)]'}"
 		aria-haspopup="true"
 		aria-expanded={isOpen}
 	>
@@ -73,14 +73,14 @@ let nextId = 0
 
 	{#if isOpen}
 		<div
-			class="absolute left-0 mt-1 w-44 bg-white rounded-lg shadow-lg border border-gray-200 py-1"
+			class="absolute left-0 mt-1 w-44 rounded-lg border border-slate-200 bg-white py-1 shadow-[var(--shadow-md)]"
 			in:fly={{ y: -10, duration: 200, easing: quintOut }}
 			out:fade={{ duration: 150 }}
 		>
 			{#each items as item (item.href)}
 				<a
 					href={item.href}
-					class="block px-3 py-2 text-sm text-gray-700 hover:text-primary hover:bg-gray-50 transition-colors"
+					class="block px-3 py-2 text-sm text-[var(--color-fg-3)] transition-colors hover:bg-slate-50 hover:text-[var(--color-fg-1)]"
 				>
 					{item.label}
 				</a>

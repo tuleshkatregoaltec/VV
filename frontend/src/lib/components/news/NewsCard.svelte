@@ -38,7 +38,7 @@ const sourceLabel = $derived.by(() => {
 	href={article.url}
 	target="_blank"
 	rel="noopener noreferrer"
-	class="group flex gap-4 p-5 bg-white border border-slate-200 rounded-lg no-underline text-inherit hover:border-slate-300 hover:shadow-md transition-all duration-300"
+	class="group flex gap-4 p-5 bg-white border border-[var(--color-border)] rounded-lg no-underline text-inherit hover:border-slate-300 transition-colors duration-200"
 >
 	<img
 		src={imageSrc}
@@ -54,13 +54,13 @@ const sourceLabel = $derived.by(() => {
 			<time>{relativeTime}</time>
 		</div>
 		<h3
-			class="text-base font-semibold text-slate-900 group-hover:text-teal-600 line-clamp-2 transition-colors duration-300"
+			class="text-base font-semibold text-[var(--color-fg-1)] group-hover:text-[var(--color-navy-700)] line-clamp-2 transition-colors duration-200"
 		>
 			{article.headline}
 		</h3>
 	</div>
-	<div class="flex items-center opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-		<svg class="w-5 h-5 text-teal-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+	<div class="flex items-center opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+		<svg class="w-5 h-5 text-[var(--color-fg-3)]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
 			<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
 		</svg>
 	</div>

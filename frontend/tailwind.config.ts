@@ -5,18 +5,18 @@ export default {
 		extend: {
 			fontFamily: {
 				sans: [
-					'Inter',
+					'General Sans',
 					'ui-sans-serif',
 					'system-ui',
 					'-apple-system',
-					'BlinkMacSystemFont',
 					'Segoe UI',
 					'Roboto',
 					'Helvetica Neue',
 					'Arial',
 					'Noto Sans',
 					'sans-serif'
-				]
+				],
+				display: ['Fraunces', 'General Sans', 'ui-serif', 'Georgia', 'serif']
 			},
 			animation: {
 				float: 'float 8s ease-in-out infinite',

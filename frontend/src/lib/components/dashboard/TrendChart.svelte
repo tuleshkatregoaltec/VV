@@ -53,11 +53,11 @@ const areaPath = $derived(
 <div class="mt-4">
 	<!-- Percentage change badge -->
 	<div class="flex items-center justify-between mb-2">
-		<span class="text-sm text-gray-600">Last 30 days</span>
+		<span class="text-sm text-[var(--color-fg-4)]">Last 30 days</span>
 		<div
 			class="flex items-center text-sm font-semibold {isPositive
-				? 'text-green-600'
-				: 'text-red-600'}"
+				? 'text-[var(--color-trend-up)]'
+				: 'text-[var(--color-trend-down)]'}"
 		>
 			{#if isPositive}
 				<svg class="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
@@ -90,8 +90,16 @@ const areaPath = $derived(
 		>
 			<defs>
 				<linearGradient id="trendGradient" x1="0" x2="0" y1="0" y2="1">
-					<stop offset="0%" stop-color={isPositive ? '#10b981' : '#ef4444'} stop-opacity="0.3" />
-					<stop offset="100%" stop-color={isPositive ? '#10b981' : '#ef4444'} stop-opacity="0.05" />
+					<stop
+						offset="0%"
+						stop-color={isPositive ? 'var(--color-trend-up)' : 'var(--color-trend-down)'}
+						stop-opacity="0.3"
+					/>
+					<stop
+						offset="100%"
+						stop-color={isPositive ? 'var(--color-trend-up)' : 'var(--color-trend-down)'}
+						stop-opacity="0.05"
+					/>
 				</linearGradient>
 			</defs>
 
@@ -105,7 +113,7 @@ const areaPath = $derived(
 				<path
 					d={linePath}
 					fill="none"
-					stroke={isPositive ? '#10b981' : '#ef4444'}
+					stroke={isPositive ? 'var(--color-trend-up)' : 'var(--color-trend-down)'}
 					stroke-width="2.5"
 					stroke-linecap="round"
 					stroke-linejoin="round"

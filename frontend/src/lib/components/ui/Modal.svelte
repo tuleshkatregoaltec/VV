@@ -53,12 +53,12 @@ const sizeClasses = {
 
 {#if open}
 	<div
-		class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in"
+		class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50  animate-fade-in"
 		onclick={handleBackdropClick}
 		role="presentation"
 	>
 		<div
-			class="bg-white/90 backdrop-blur-xl rounded-2xl shadow-2xl border border-primary-pale w-full {sizeClasses[
+			class="bg-white rounded-lg border border-[var(--color-border)] shadow-xl w-full {sizeClasses[
 				size
 			]} max-h-[90vh] overflow-hidden animate-scale-in"
 			role="dialog"
@@ -67,15 +67,15 @@ const sizeClasses = {
 		>
 			<!-- Header -->
 			<div
-				class="flex items-center justify-between px-6 py-4 border-b border-primary-pale bg-white/50"
+				class="flex items-center justify-between px-6 py-4 border-b border-[var(--color-border)] bg-white"
 			>
-				<h2 id="modal-title" class="text-2xl font-bold text-gray-900">{title}</h2>
+				<h2 id="modal-title" class="text-2xl font-semibold text-[var(--color-fg-1)]">{title}</h2>
 				<button
 					onclick={onClose}
-					class="p-2 rounded-lg hover:bg-gray-100 transition-colors"
+					class="p-2 rounded-lg hover:bg-slate-100 transition-colors"
 					aria-label="Close modal"
 				>
-					<svg class="w-6 h-6 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+					<svg class="w-6 h-6 text-[var(--color-fg-3)]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
 						<path
 							stroke-linecap="round"
 							stroke-linejoin="round"

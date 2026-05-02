@@ -6,14 +6,14 @@ import { propertyType, timeframe } from './globalFilters.svelte'
 const timeframes = ['Last Week', 'Last Month', 'Last 3 Months', 'Last 6 Months', 'Last Year']
 </script>
 
-<div class="max-w-7xl mx-auto px-0 sm:px-1 lg:px-1">
-	<div class="flex flex-col sm:flex-row items-start sm:items-center gap-4 sm:gap-6 pt-2 sm:pt-4">
+<div class="mx-auto max-w-7xl px-3 sm:px-4 lg:px-1">
+	<div class="flex flex-col items-start gap-3 border-b border-[var(--color-border)] py-3 sm:flex-row sm:items-center">
 		<div class="flex-shrink-0">
 			<FilterToggle options={['Residential', 'Commercial']} bind:selected={propertyType.current} />
 		</div>
 
-		<div class="flex flex-col sm:flex-row gap-4 ml-auto">
-			<div class="w-48">
+		<div class="flex w-full flex-col gap-3 sm:ml-auto sm:w-auto sm:flex-row">
+			<div class="w-full sm:w-48">
 				<StandardDropdown
 					id="filterbar-timeframe"
 					ariaLabel="Timeframe"

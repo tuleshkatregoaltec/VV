@@ -5,7 +5,8 @@ export const projectKeys = {
 	list: () => [...projectKeys.all, 'list'] as const,
 	master: (name: string) => [...projectKeys.all, 'master', name] as const,
 	detail: (id: number) => [...projectKeys.all, 'detail', id] as const,
-	building: (propertyId: number) => [...projectKeys.all, 'building', propertyId] as const
+	building: (propertyId: number) => [...projectKeys.all, 'building', propertyId] as const,
+	ddaPlots: (area: string) => [...projectKeys.all, 'dda-plots', area] as const
 }
 
 export const projectQueries = {
@@ -31,5 +32,11 @@ export const projectQueries = {
 		queryFn: () => projects.getBuilding(propertyId ?? 0),
 		enabled: propertyId !== null,
 		staleTime: 10 * 60 * 1000
+	}),
+	ddaPlots: (area: string | null) => ({
+		queryKey: projectKeys.ddaPlots(area ?? ''),
+		queryFn: () => projects.ddaPlots(area ?? ''),
+		enabled: Boolean(area),
+		staleTime: 60 * 60 * 1000
 	})
 }

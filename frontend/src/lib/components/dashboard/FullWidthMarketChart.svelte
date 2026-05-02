@@ -44,7 +44,7 @@ const PERIOD_LABEL: Record<TimeRange, string> = {
 }
 
 const metricLabel = $derived(
-	selectedMetric === 'price_sqm' ? 'Price per sq.m' : 'Average Transaction Price'
+	selectedMetric === 'price_sqm' ? 'Price per sq.m' : 'Average transaction price'
 )
 const metricUnit = $derived(selectedMetric === 'price_sqm' ? 'AED/sq.m' : 'AED')
 
@@ -56,7 +56,6 @@ const innerHeight = chartHeight - padding.top - padding.bottom
 
 function generatePath(data: typeof chartData): string {
 	if (data.length < 2) return ''
-
 	const points = data.map((point, i) => {
 		const x = padding.left + (i / (data.length - 1)) * innerWidth
 		const value = selectedMetric === 'price_sqm' ? point.avg_price_sqm : point.avg_price
@@ -64,7 +63,6 @@ function generatePath(data: typeof chartData): string {
 		const y = padding.top + (1 - normalizedValue) * innerHeight
 		return { x, y }
 	})
-
 	let path = `M ${points[0].x} ${points[0].y}`
 	for (let i = 1; i < points.length; i++) {
 		const prev = points[i - 1]
@@ -108,181 +106,152 @@ function formatNumber(num: number): string {
 }
 </script>
 
-<div class="bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg border border-teal-100 p-4 sm:p-6">
-	<!-- Header -->
-	<div class="flex flex-col sm:flex-row sm:items-start sm:justify-between mb-6 gap-4">
-		<div>
-			<h2 class="text-xl font-bold text-slate-900 mb-2">Dubai Market Trend</h2>
-			{#if trendQuery.isLoading}
-				<div class="h-9 w-40 bg-slate-200 rounded animate-pulse mb-2"></div>
-				<div class="h-6 w-20 bg-slate-200 rounded animate-pulse"></div>
-			{:else}
-				<div class="flex items-baseline gap-2">
-					<span class="text-3xl font-bold text-slate-900">{formatNumber(currentValue)}</span>
-					<span class="text-sm text-slate-500">{metricUnit}</span>
-				</div>
-				{#if percentChange() != null}
-					<div
-						class="mt-2 inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold {isPositive
-							? 'bg-green-100 text-green-800'
-							: 'bg-red-100 text-red-800'}"
-					>
-						{#if isPositive}
-							<svg class="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
-								<path
-									fill-rule="evenodd"
-									d="M5.293 9.707a1 1 0 010-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 01-1.414 1.414L11 7.414V15a1 1 0 11-2 0V7.414L6.707 9.707a1 1 0 01-1.414 0z"
-									clip-rule="evenodd"
-								/>
-							</svg>
-						{:else}
-							<svg class="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
-								<path
-									fill-rule="evenodd"
-									d="M14.707 10.293a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 111.414-1.414L9 12.586V5a1 1 0 012 0v7.586l2.293-2.293a1 1 0 011.414 0z"
-									clip-rule="evenodd"
-								/>
-							</svg>
-						{/if}
-						<span>{isPositive ? '+' : ''}{percentChange()}% vs {PERIOD_LABEL[selectedRange]}</span>
-					</div>
-				{/if}
-			{/if}
-		</div>
-
-		<!-- Controls -->
-		<div class="flex flex-col gap-2">
-			<div class="flex gap-2 bg-slate-100 p-1 rounded-lg">
-				<button
-					class="px-3 py-1.5 rounded-md text-xs font-medium transition-all {selectedMetric ===
-					'price_sqm'
-						? 'bg-white text-slate-900 shadow-sm'
-						: 'text-slate-600 hover:text-slate-900'}"
-					onclick={() => (selectedMetric = 'price_sqm')}
-				>
-					Price/sq.m
-				</button>
-				<button
-					class="px-3 py-1.5 rounded-md text-xs font-medium transition-all {selectedMetric ===
-					'avg_price'
-						? 'bg-white text-slate-900 shadow-sm'
-						: 'text-slate-600 hover:text-slate-900'}"
-					onclick={() => (selectedMetric = 'avg_price')}
-				>
-					Avg Price
-				</button>
-			</div>
-
-			<div class="flex gap-2 bg-slate-100 p-1 rounded-lg">
-				{#each [{ label: '30D', value: '30d' }, { label: '90D', value: '90d' }, { label: '6M', value: '6mo' }, { label: '1Y', value: '1yr' }] as range (range.value)}
-					<button
-						class="px-3 py-1.5 rounded-md text-xs font-medium transition-all {selectedRange ===
-						range.value
-							? 'bg-white text-slate-900 shadow-sm'
-							: 'text-slate-600 hover:text-slate-900'}"
-						onclick={() => (selectedRange = range.value as TimeRange)}
-					>
-						{range.label}
-					</button>
-				{/each}
-			</div>
-		</div>
-	</div>
-
-	<!-- Chart -->
-	<div class="w-full overflow-x-auto">
+<!-- Card header -->
+<div class="flex flex-col gap-4 mb-[18px] sm:flex-row sm:items-start sm:justify-between">
+	<div>
+		<h3 class="text-sm font-semibold tracking-[-0.005em] text-[var(--color-fg-1)]">
+			{metricLabel}
+		</h3>
 		{#if trendQuery.isLoading}
-			<div
-				class="w-full min-w-[600px] bg-slate-100 rounded animate-pulse"
-				style="height: {chartHeight}px"
-			></div>
-		{:else if trendQuery.isError || chartData.length === 0}
-			<div
-				class="w-full min-w-[600px] flex items-center justify-center text-slate-400 text-sm"
-				style="height: {chartHeight}px"
-			>
-				No data available for this period
-			</div>
+			<div class="mt-2 h-8 w-36 animate-pulse rounded bg-slate-100"></div>
 		{:else}
-			<svg
-				class="w-full min-w-[600px]"
-				viewBox="0 0 {chartWidth} {chartHeight}"
-				preserveAspectRatio="xMidYMid meet"
-				xmlns="http://www.w3.org/2000/svg"
-			>
-				<defs>
-					<linearGradient id="areaGradient" x1="0" x2="0" y1="0" y2="1">
-						<stop offset="0%" stop-color={isPositive ? '#10b981' : '#ef4444'} stop-opacity="0.3" />
-						<stop
-							offset="100%"
-							stop-color={isPositive ? '#10b981' : '#ef4444'}
-							stop-opacity="0.05"
-						/>
-					</linearGradient>
-				</defs>
-
-				{#each yAxisTicks as tick (`grid-${tick.value}`)}
-					<line
-						x1={padding.left}
-						y1={tick.y}
-						x2={padding.left + innerWidth}
-						y2={tick.y}
-						stroke="#e5e7eb"
-						stroke-width="1"
-						stroke-dasharray="4 4"
-					/>
-				{/each}
-
-				<path d={areaPath} fill="url(#areaGradient)" />
-
-				<path
-					d={linePath}
-					fill="none"
-					stroke={isPositive ? '#10b981' : '#ef4444'}
-					stroke-width="3"
-					stroke-linecap="round"
-					stroke-linejoin="round"
-				/>
-
-				{#each yAxisTicks as tick (`label-${tick.value}`)}
-					<text
-						x={padding.left - 10}
-						y={tick.y}
-						text-anchor="end"
-						dominant-baseline="middle"
-						class="text-xs fill-slate-500"
-					>
-						{formatNumber(tick.value)}
-					</text>
-				{/each}
-
-				{#each xAxisTicks as tick (tick.label)}
-					<text x={tick.x} y={chartHeight - 10} text-anchor="middle" class="text-xs fill-slate-500">
-						{tick.label}
-					</text>
-				{/each}
-			</svg>
+			<div class="mt-1 flex items-baseline gap-2">
+				<span class="font-display text-4xl font-normal leading-none tracking-[-0.025em] text-[var(--color-fg-1)] tabular-nums">
+					{formatNumber(currentValue)}
+				</span>
+				<span class="text-sm text-[var(--color-fg-4)]">{metricUnit}</span>
+			</div>
+			{#if percentChange() != null}
+				<p class="mt-1 font-mono text-xs {isPositive ? 'text-[var(--color-trend-up)]' : 'text-[var(--color-trend-down)]'}">
+					{isPositive ? '▲' : '▼'} {isPositive ? '+' : ''}{percentChange()}% vs {PERIOD_LABEL[selectedRange]}
+				</p>
+			{/if}
 		{/if}
 	</div>
 
-	<!-- Legend/Info -->
-	<div class="mt-4 pt-3 border-t border-slate-200 flex flex-wrap gap-4 text-xs text-slate-600">
-		<div class="flex items-center gap-2">
-			<div class="w-2.5 h-2.5 rounded-full bg-green-500"></div>
-			<span>{metricLabel}</span>
+	<!-- Controls -->
+	<div class="flex gap-2">
+		<div class="inline-flex rounded-md bg-slate-100 p-0.5">
+			<button
+				class="rounded px-3 py-[5px] text-xs font-medium transition-all {selectedMetric === 'price_sqm' ? 'bg-white text-[var(--color-fg-1)] shadow-[var(--shadow-xs)]' : 'text-[var(--color-fg-3)] hover:text-[var(--color-fg-1)]'}"
+				onclick={() => (selectedMetric = 'price_sqm')}
+			>
+				Price/sq.m
+			</button>
+			<button
+				class="rounded px-3 py-[5px] text-xs font-medium transition-all {selectedMetric === 'avg_price' ? 'bg-white text-[var(--color-fg-1)] shadow-[var(--shadow-xs)]' : 'text-[var(--color-fg-3)] hover:text-[var(--color-fg-1)]'}"
+				onclick={() => (selectedMetric = 'avg_price')}
+			>
+				Avg price
+			</button>
 		</div>
-		<div class="flex items-center gap-2">
-			<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-				<path
-					stroke-linecap="round"
-					stroke-linejoin="round"
-					stroke-width="2"
-					d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-				/>
-			</svg>
-			<span>
-				Based on {formatNumber(trendQuery.data?.total_transactions ?? 0)} transactions
-			</span>
+
+		<div class="inline-flex rounded-md bg-slate-100 p-0.5">
+			{#each [{ label: '30D', value: '30d' }, { label: '90D', value: '90d' }, { label: '6M', value: '6mo' }, { label: '1Y', value: '1yr' }] as range (range.value)}
+				<button
+					class="rounded px-3 py-[5px] text-xs font-medium transition-all {selectedRange === range.value ? 'bg-white text-[var(--color-fg-1)] shadow-[var(--shadow-xs)]' : 'text-[var(--color-fg-3)] hover:text-[var(--color-fg-1)]'}"
+					onclick={() => (selectedRange = range.value as TimeRange)}
+				>
+					{range.label}
+				</button>
+			{/each}
 		</div>
 	</div>
+</div>
+
+<!-- Chart -->
+<div class="w-full overflow-x-auto">
+	{#if trendQuery.isLoading}
+		<div
+			class="w-full min-w-[500px] animate-pulse rounded bg-slate-100"
+			style="height: {chartHeight}px"
+		></div>
+	{:else if trendQuery.isError || chartData.length === 0}
+		<div
+			class="flex w-full min-w-[500px] items-center justify-center text-sm text-[var(--color-fg-4)]"
+			style="height: {chartHeight}px"
+		>
+			No data available for this period
+		</div>
+	{:else}
+		<svg
+			class="w-full min-w-[500px]"
+			viewBox="0 0 {chartWidth} {chartHeight}"
+			preserveAspectRatio="xMidYMid meet"
+			xmlns="http://www.w3.org/2000/svg"
+		>
+			<defs>
+				<linearGradient id="areaGradient" x1="0" x2="0" y1="0" y2="1">
+					<stop offset="0%" stop-color="#0b1b2b" stop-opacity="0.10" />
+					<stop offset="100%" stop-color="#0b1b2b" stop-opacity="0" />
+				</linearGradient>
+			</defs>
+
+			{#each yAxisTicks as tick (`grid-${tick.value}`)}
+				<line
+					x1={padding.left}
+					y1={tick.y}
+					x2={padding.left + innerWidth}
+					y2={tick.y}
+					stroke="#e2e8f0"
+					stroke-width="1"
+					stroke-dasharray="2 3"
+				/>
+			{/each}
+
+			<line
+				x1={padding.left}
+				y1={padding.top + innerHeight}
+				x2={padding.left + innerWidth}
+				y2={padding.top + innerHeight}
+				stroke="#cbd5e1"
+				stroke-width="1"
+			/>
+
+			<path d={areaPath} fill="url(#areaGradient)" />
+
+			<path
+				d={linePath}
+				fill="none"
+				stroke="#0b1b2b"
+				stroke-width="1.75"
+				stroke-linecap="round"
+				stroke-linejoin="round"
+			/>
+
+			{#each yAxisTicks as tick (`label-${tick.value}`)}
+				<text
+					x={padding.left - 8}
+					y={tick.y}
+					text-anchor="end"
+					dominant-baseline="middle"
+					fill="#94a3b8"
+					font-size="10"
+					font-family="ui-monospace, monospace"
+				>
+					{formatNumber(tick.value)}
+				</text>
+			{/each}
+
+			{#each xAxisTicks as tick (tick.label)}
+				<text
+					x={tick.x}
+					y={chartHeight - 8}
+					text-anchor="middle"
+					fill="#94a3b8"
+					font-size="10"
+					font-family="ui-monospace, monospace"
+				>
+					{tick.label}
+				</text>
+			{/each}
+		</svg>
+	{/if}
+</div>
+
+<!-- Footer -->
+<div class="mt-4 border-t border-[var(--color-border)] pt-3">
+	<p class="font-mono text-[10px] uppercase tracking-[0.06em] text-[var(--color-fg-4)]">
+		Based on {formatNumber(trendQuery.data?.total_transactions ?? 0)} transactions
+	</p>
 </div>

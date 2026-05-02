@@ -140,11 +140,9 @@ function getRenderKey(row: any, index: number): string {
 }
 </script>
 
-<div
-	class="bg-white/80 backdrop-blur-sm rounded-xl shadow-sm border border-slate-200 overflow-hidden"
->
+<div class="overflow-hidden rounded-lg border border-[var(--color-border)] bg-white">
 	<!-- Column settings dropdown in upper right -->
-	<div class="flex items-center justify-end px-4 py-2 bg-slate-50 border-b border-slate-200">
+	<div class="flex items-center justify-end border-b border-[var(--color-border)] bg-white px-4 py-2">
 		<ColumnSettingsDropdown
 			id="column-visibility"
 			ariaLabel="Column Settings"
@@ -155,17 +153,17 @@ function getRenderKey(row: any, index: number): string {
 
 	<div class="overflow-x-auto">
 		<table class="w-full">
-			<thead class="bg-slate-50 border-b border-slate-200">
+			<thead class="border-b border-[var(--color-border)] bg-slate-50">
 				<tr>
 					{#if selectable}
-						<th class="px-6 py-3 w-12">
+						<th class="w-12 px-4 py-3">
 							{#if inSelectionMode}
 								<input
 									type="checkbox"
 									checked={allSelected}
 									indeterminate={someSelected}
 									onchange={toggleSelectAll}
-									class="w-4 h-4 text-primary border-slate-300 rounded focus:ring-primary cursor-pointer"
+									class="h-4 w-4 cursor-pointer rounded-sm border-[var(--color-border-strong)] accent-[var(--color-navy-900)] text-[var(--color-navy-900)] focus:ring-2 focus:ring-[rgba(11,27,43,0.12)]"
 									aria-label="Select all transactions on this page"
 								/>
 							{/if}
@@ -173,15 +171,15 @@ function getRenderKey(row: any, index: number): string {
 					{/if}
 					{#each visibleColumns as column (column.id)}
 						<th
-							class="px-6 py-3 text-{column.align ||
-								'left'} text-xs font-medium text-slate-600 uppercase tracking-wider whitespace-nowrap"
+							class="whitespace-nowrap px-4 py-3 text-{column.align ||
+								'left'} font-mono text-[10px] font-medium uppercase tracking-[0.08em] text-[var(--color-fg-4)]"
 						>
 							{column.label}
 						</th>
 					{/each}
 				</tr>
 			</thead>
-			<tbody class="divide-y divide-slate-200">
+			<tbody class="divide-y divide-slate-100">
 				{#if loading}
 					<tr>
 						<td
@@ -190,9 +188,9 @@ function getRenderKey(row: any, index: number): string {
 						>
 							<div class="flex flex-col items-center gap-3">
 								<div
-									class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-primary"
+									class="inline-block h-8 w-8 animate-spin rounded-full border-b-2 border-[var(--color-navy-900)]"
 								></div>
-								<span class="text-slate-500 text-sm">Loading...</span>
+								<span class="text-sm text-[var(--color-fg-4)]">Loading...</span>
 							</div>
 						</td>
 					</tr>
@@ -200,7 +198,7 @@ function getRenderKey(row: any, index: number): string {
 					<tr>
 						<td
 							colspan={visibleColumns.length + (selectable ? 1 : 0)}
-							class="px-6 py-12 text-center text-slate-500"
+							class="px-6 py-12 text-center text-sm text-[var(--color-fg-4)]"
 						>
 							{emptyMessage}
 						</td>
@@ -215,12 +213,12 @@ function getRenderKey(row: any, index: number): string {
 								if (selectable) hoveredRowId = null;
 							}}
 							onclick={() => handleRowClick(row)}
-							class="hover:bg-slate-50 transition-colors cursor-pointer {isRowSelected(row)
-								? 'bg-primary/5'
+							class="cursor-pointer transition-colors hover:bg-slate-50 {isRowSelected(row)
+								? 'bg-[var(--color-navy-50)]'
 								: ''}"
 						>
 							{#if selectable}
-								<td class="px-6 py-4 w-12">
+								<td class="w-12 px-4 py-3.5">
 									<div
 										class="flex items-center justify-center transition-opacity duration-150 {showCheckbox(
 											row
@@ -233,7 +231,7 @@ function getRenderKey(row: any, index: number): string {
 											checked={isRowSelected(row)}
 											onchange={(e) => toggleRow(row, e)}
 											onclick={(e) => e.stopPropagation()}
-											class="w-4 h-4 text-primary border-slate-300 rounded focus:ring-primary cursor-pointer"
+											class="h-4 w-4 cursor-pointer rounded-sm border-[var(--color-border-strong)] accent-[var(--color-navy-900)] text-[var(--color-navy-900)] focus:ring-2 focus:ring-[rgba(11,27,43,0.12)]"
 											aria-label="Select transaction"
 										/>
 									</div>
@@ -241,14 +239,14 @@ function getRenderKey(row: any, index: number): string {
 							{/if}
 							{#each visibleColumns as column (column.id)}
 								<td
-									class="px-6 py-4 whitespace-nowrap text-{column.align ||
-										'left'} text-sm {column.highlighted
-										? 'text-primary font-semibold'
-										: 'text-gray-900'}"
+									class="whitespace-nowrap px-4 py-3.5 text-{column.align ||
+										'left'} text-[13px] tabular-nums {column.highlighted
+										? 'font-semibold text-[var(--color-navy-900)]'
+										: 'text-[var(--color-fg-1)]'}"
 								>
 									{#if column.badge}
 										<span
-											class="px-3 py-1 rounded-full bg-gray-100 text-gray-700 text-xs font-medium"
+											class="inline-flex rounded-sm bg-slate-100 px-2.5 py-1 font-mono text-[11px] font-medium tracking-[0.02em] text-[var(--color-fg-2)]"
 										>
 											{column.format ? column.format(row[column.id], row) : row[column.id]}
 										</span>

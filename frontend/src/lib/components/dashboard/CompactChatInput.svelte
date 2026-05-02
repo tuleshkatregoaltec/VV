@@ -61,13 +61,12 @@ function handleKeyDown(e: KeyboardEvent) {
 }
 </script>
 
-<div class="w-full flex justify-center px-4 animate-fade-in">
-	<div class="w-full max-w-2xl">
-		<div class="relative transition-all duration-300 ease-in-out">
+<div class="w-full">
+	<div class="relative transition-all duration-200 ease-in-out">
 			<div
-				class="relative bg-white border rounded-2xl transition-all duration-300 {isFocused
-					? 'border-teal-600/40 shadow-lg'
-					: 'border-slate-300 shadow-sm hover:shadow-md hover:border-slate-400'}"
+				class="relative bg-white border rounded-lg transition-all duration-200 {isFocused
+					? 'border-[var(--color-navy-700)]'
+					: 'border-[var(--color-border)] hover:border-slate-300'}"
 			>
 				<textarea
 					bind:this={textareaRef}
@@ -79,7 +78,7 @@ function handleKeyDown(e: KeyboardEvent) {
 					{placeholder}
 					disabled={disabled || isSubmitting}
 					rows="1"
-					class="w-full px-5 py-3.5 bg-transparent resize-none outline-none text-slate-800 placeholder-slate-400 rounded-2xl pr-14 flex items-center"
+					class="w-full px-5 py-3.5 bg-transparent resize-none outline-none text-slate-800 placeholder-slate-400 rounded-lg pr-14 flex items-center"
 					style="min-height: 52px; max-height: 200px; line-height: 1.5;"
 				></textarea>
 
@@ -90,8 +89,8 @@ function handleKeyDown(e: KeyboardEvent) {
 					class="absolute right-3 top-1/2 -translate-y-1/2 p-2.5 rounded-full transition-all duration-200 {inputValue.trim() &&
 					!disabled &&
 					!isSubmitting
-						? 'bg-primary text-white hover:bg-primary-dark shadow-md opacity-100'
-						: 'bg-slate-200 text-slate-400 opacity-50 cursor-not-allowed'}"
+						? 'bg-[var(--color-navy-700)] text-white hover:bg-[#0b1b2b] opacity-100'
+						: 'bg-slate-100 text-slate-400 opacity-50 cursor-not-allowed'}"
 					aria-label="Send message"
 				>
 					{#if isSubmitting}
@@ -119,14 +118,13 @@ function handleKeyDown(e: KeyboardEvent) {
 			</div>
 
 			<!-- Error Message -->
-			{#if error}
-				<div
-					class="mt-2 px-4 py-2 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm animate-fade-in"
-				>
-					{error}
-				</div>
-			{/if}
-		</div>
+		{#if error}
+			<div
+				class="mt-2 px-4 py-2 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm"
+			>
+				{error}
+			</div>
+		{/if}
 	</div>
 </div>
 

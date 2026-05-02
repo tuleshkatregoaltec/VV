@@ -41,11 +41,11 @@ function getProjectKey(project: MasterProjectResponse['projects'][number], index
 	<div class="border-b border-slate-200 pb-4">
 		<div class="flex items-center gap-2 mb-1">
 			<span
-				class="text-[10px] font-semibold uppercase tracking-wider text-violet-600 bg-violet-50 px-2 py-0.5 rounded-full"
+				class="text-[10px] font-semibold uppercase tracking-wider text-[var(--color-fg-4)] bg-slate-100 px-2 py-0.5 rounded-sm"
 				>Master Project</span
 			>
 		</div>
-		<h2 class="text-xl font-bold text-slate-900 leading-tight">{master.master_name}</h2>
+		<h2 class="text-xl font-semibold text-[var(--color-fg-1)] leading-tight">{master.master_name}</h2>
 		<div class="flex flex-wrap items-center gap-x-2 gap-y-1 mt-2 text-sm text-slate-500">
 			<span class="flex items-center gap-1">
 				<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -75,15 +75,15 @@ function getProjectKey(project: MasterProjectResponse['projects'][number], index
 	<div class="grid grid-cols-3 gap-3">
 		<div class="bg-slate-50 rounded-xl p-3 border border-slate-100 text-center">
 			<div class="text-xs text-slate-500 mb-1">Projects</div>
-			<div class="text-2xl font-bold text-slate-900">{master.total_projects}</div>
+			<div class="font-display text-2xl font-normal tracking-tight text-[var(--color-fg-1)]">{master.total_projects}</div>
 		</div>
 		<div class="bg-slate-50 rounded-xl p-3 border border-slate-100 text-center">
 			<div class="text-xs text-slate-500 mb-1">Buildings</div>
-			<div class="text-2xl font-bold text-slate-900">{master.total_buildings.toLocaleString()}</div>
+			<div class="font-display text-2xl font-normal tracking-tight text-[var(--color-fg-1)]">{master.total_buildings.toLocaleString()}</div>
 		</div>
 		<div class="bg-slate-50 rounded-xl p-3 border border-slate-100 text-center">
 			<div class="text-xs text-slate-500 mb-1">Units</div>
-			<div class="text-2xl font-bold text-slate-900">{master.total_units.toLocaleString()}</div>
+			<div class="font-display text-2xl font-normal tracking-tight text-[var(--color-fg-1)]">{master.total_units.toLocaleString()}</div>
 		</div>
 	</div>
 
@@ -102,7 +102,7 @@ function getProjectKey(project: MasterProjectResponse['projects'][number], index
 						</div>
 						<div class="w-full bg-slate-200 rounded-full h-1.5">
 							<div
-								class="bg-gradient-to-r from-violet-500 to-purple-500 h-1.5 rounded-full"
+								class="bg-[var(--color-navy-700)] h-1.5 rounded-full"
 								style="width: {unit.percentage}%"
 							></div>
 						</div>
@@ -121,7 +121,7 @@ function getProjectKey(project: MasterProjectResponse['projects'][number], index
 			{#each master.projects as project, index (getProjectKey(project, index))}
 				<button
 					onclick={() => onProjectSelect(project.project_id)}
-					class="w-full text-left bg-slate-50 rounded-lg px-3 py-2.5 border border-slate-100 hover:bg-teal-50 hover:border-teal-200 transition-colors"
+					class="w-full text-left bg-slate-50 rounded-lg px-3 py-2.5 border border-[var(--color-border)] hover:bg-slate-100 hover:border-slate-300 transition-colors"
 				>
 					<div class="flex items-start justify-between gap-2">
 						<div class="min-w-0 flex-1">

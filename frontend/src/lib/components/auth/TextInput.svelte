@@ -25,10 +25,10 @@ let {
 </script>
 
 <div class="w-full">
-	<label for={id} class="block text-sm font-medium text-gray-700 mb-2">
+	<label for={id} class="mb-2 block text-sm font-medium text-[var(--color-fg-1)]">
 		{label}
 		{#if required}
-			<span class="text-red-500">*</span>
+			<span class="text-[var(--color-error)]">*</span>
 		{/if}
 	</label>
 	<input
@@ -39,12 +39,14 @@ let {
 		{disabled}
 		{required}
 		{autocomplete}
-		class="w-full px-4 py-3 bg-gray-50 border rounded-lg transition-all
-               focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20
-               disabled:bg-gray-100 disabled:cursor-not-allowed
-               {error ? 'border-red-300 bg-red-50' : 'border-gray-200'}"
+		class="w-full rounded-md border bg-white px-3.5 py-3 text-sm text-[var(--color-fg-1)] placeholder-[var(--color-fg-5)] transition-all
+               focus:outline-none focus:border-[var(--color-navy-900)] focus:ring-2 focus:ring-[rgba(11,27,43,0.12)]
+               disabled:cursor-not-allowed disabled:bg-slate-100
+               {error
+			? 'border-[var(--color-error)] bg-[var(--color-error-bg)]'
+			: 'border-[var(--color-border)]'}"
 	/>
 	{#if error}
-		<p class="mt-2 text-sm text-red-600">{error}</p>
+		<p class="mt-2 text-sm text-[var(--color-error)]">{error}</p>
 	{/if}
 </div>

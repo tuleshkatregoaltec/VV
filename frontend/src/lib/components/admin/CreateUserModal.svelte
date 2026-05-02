@@ -95,72 +95,72 @@ async function submit() {
 		<!-- Name row -->
 		<div class="grid grid-cols-2 gap-3">
 			<div>
-				<label for="create-user-first-name" class="block text-xs font-medium text-gray-500 mb-1">First Name</label>
+				<label for="create-user-first-name" class="mb-1 block text-xs font-medium text-[var(--color-fg-4)]">First Name</label>
 				<input
 					id="create-user-first-name"
 					type="text"
 					bind:value={firstName}
 					placeholder="Jane"
-					class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+					class="w-full rounded-md border border-[var(--color-border)] px-3 py-2 text-sm text-[var(--color-fg-1)] focus:outline-none focus:ring-2 focus:ring-[rgba(11,27,43,0.12)]"
 				/>
 			</div>
 			<div>
-				<label for="create-user-last-name" class="block text-xs font-medium text-gray-500 mb-1">Last Name</label>
+				<label for="create-user-last-name" class="mb-1 block text-xs font-medium text-[var(--color-fg-4)]">Last Name</label>
 				<input
 					id="create-user-last-name"
 					type="text"
 					bind:value={lastName}
 					placeholder="Smith"
-					class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+					class="w-full rounded-md border border-[var(--color-border)] px-3 py-2 text-sm text-[var(--color-fg-1)] focus:outline-none focus:ring-2 focus:ring-[rgba(11,27,43,0.12)]"
 				/>
 			</div>
 		</div>
 
 		<!-- Email -->
 		<div>
-			<label for="create-user-email" class="block text-xs font-medium text-gray-500 mb-1">Email</label>
+			<label for="create-user-email" class="mb-1 block text-xs font-medium text-[var(--color-fg-4)]">Email</label>
 			<input
 				id="create-user-email"
 				type="email"
 				bind:value={email}
 				placeholder="jane@example.com"
-				class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+				class="w-full rounded-md border border-[var(--color-border)] px-3 py-2 text-sm text-[var(--color-fg-1)] focus:outline-none focus:ring-2 focus:ring-[rgba(11,27,43,0.12)]"
 			/>
 		</div>
 
 		<!-- Password -->
 		<div>
-			<label for="create-user-password" class="block text-xs font-medium text-gray-500 mb-1">Password</label>
+			<label for="create-user-password" class="mb-1 block text-xs font-medium text-[var(--color-fg-4)]">Password</label>
 			<input
 				id="create-user-password"
 				type="password"
 				bind:value={password}
 				placeholder="Temporary password"
-				class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+				class="w-full rounded-md border border-[var(--color-border)] px-3 py-2 text-sm text-[var(--color-fg-1)] focus:outline-none focus:ring-2 focus:ring-[rgba(11,27,43,0.12)]"
 			/>
 		</div>
 
 		<!-- Org mode toggle -->
 		<div>
-			<label for={orgMode === 'new' ? 'create-user-new-org' : 'create-user-existing-org'} class="block text-xs font-medium text-gray-500 mb-2">Organization</label>
+			<label for={orgMode === 'new' ? 'create-user-new-org' : 'create-user-existing-org'} class="mb-2 block text-xs font-medium text-[var(--color-fg-4)]">Organization</label>
 			<div class="flex gap-2 mb-3">
 				<button
 					type="button"
 					onclick={() => (orgMode = 'new')}
-					class="flex-1 py-1.5 text-sm rounded-lg border transition-colors
+					class="flex-1 rounded-md border py-1.5 text-sm transition-colors
                         {orgMode === 'new'
-						? 'bg-blue-600 text-white border-blue-600'
-						: 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'}"
+						? 'border-[var(--color-navy-900)] bg-[var(--color-navy-900)] text-[var(--color-fg-on-navy)]'
+						: 'border-[var(--color-border)] bg-white text-[var(--color-fg-3)] hover:bg-slate-50'}"
 				>
 					New org
 				</button>
 				<button
 					type="button"
 					onclick={() => (orgMode = 'existing')}
-					class="flex-1 py-1.5 text-sm rounded-lg border transition-colors
+					class="flex-1 rounded-md border py-1.5 text-sm transition-colors
                         {orgMode === 'existing'
-						? 'bg-blue-600 text-white border-blue-600'
-						: 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'}"
+						? 'border-[var(--color-navy-900)] bg-[var(--color-navy-900)] text-[var(--color-fg-on-navy)]'
+						: 'border-[var(--color-border)] bg-white text-[var(--color-fg-3)] hover:bg-slate-50'}"
 				>
 					Existing org
 				</button>
@@ -172,43 +172,43 @@ async function submit() {
 					type="text"
 					bind:value={newOrgName}
 					placeholder="Organization name"
-					class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+					class="w-full rounded-md border border-[var(--color-border)] px-3 py-2 text-sm text-[var(--color-fg-1)] focus:outline-none focus:ring-2 focus:ring-[rgba(11,27,43,0.12)]"
 				/>
-				<p class="text-xs text-gray-400 mt-1">Subscription will be set to active automatically.</p>
+				<p class="mt-1 text-xs text-[var(--color-fg-4)]">Subscription will be set to active automatically.</p>
 			{:else}
 				<select
 					id="create-user-existing-org"
 					bind:value={existingOrgId}
-					class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+					class="w-full rounded-md border border-[var(--color-border)] px-3 py-2 text-sm text-[var(--color-fg-1)] focus:outline-none focus:ring-2 focus:ring-[rgba(11,27,43,0.12)]"
 				>
 					{#each orgs as org (org.id)}
 						<option value={org.id}>{org.name} ({org.subscription_status})</option>
 					{/each}
 				</select>
-				<p class="text-xs text-gray-400 mt-1">User will be added as a member.</p>
+				<p class="mt-1 text-xs text-[var(--color-fg-4)]">User will be added as a member.</p>
 			{/if}
 		</div>
 
 		<!-- Token limit -->
 		<div>
-			<label for="create-user-token-limit" class="block text-xs font-medium text-gray-500 mb-1">Daily Token Limit</label>
+			<label for="create-user-token-limit" class="mb-1 block text-xs font-medium text-[var(--color-fg-4)]">Daily Token Limit</label>
 			<input
 				id="create-user-token-limit"
 				type="number"
 				bind:value={tokenLimit}
 				min="0"
 				step="10000"
-				class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+				class="w-full rounded-md border border-[var(--color-border)] px-3 py-2 text-sm text-[var(--color-fg-1)] focus:outline-none focus:ring-2 focus:ring-[rgba(11,27,43,0.12)]"
 			/>
 		</div>
 
 		{#if error}
-			<p class="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+			<p class="rounded-lg border border-[rgba(163,36,36,0.2)] bg-[var(--color-error-bg)] px-3 py-2 text-sm text-[var(--color-error)]">
 				{error}
 			</p>
 		{/if}
 		{#if success}
-			<p class="text-sm text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2">
+			<p class="rounded-lg border border-[rgba(17,122,72,0.2)] bg-[var(--color-success-bg)] px-3 py-2 text-sm text-[var(--color-success)]">
 				{success}
 			</p>
 		{/if}
@@ -218,7 +218,7 @@ async function submit() {
 				type="button"
 				onclick={onClose}
 				disabled={submitting}
-				class="px-4 py-2 text-sm text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
+				class="rounded-md border border-[var(--color-border)] px-4 py-2 text-sm text-[var(--color-fg-2)] transition-colors hover:bg-slate-50 disabled:opacity-50"
 			>
 				Cancel
 			</button>
@@ -226,7 +226,7 @@ async function submit() {
 				type="button"
 				onclick={submit}
 				disabled={submitting}
-				class="px-4 py-2 text-sm font-medium bg-blue-600 hover:bg-blue-700 text-white rounded-lg disabled:opacity-50 transition-colors"
+				class="rounded-md bg-[var(--color-navy-900)] px-4 py-2 text-sm font-medium text-[var(--color-fg-on-navy)] transition-colors hover:bg-[var(--color-navy-800)] disabled:opacity-50"
 			>
 				{submitting ? 'Creating...' : 'Create User'}
 			</button>

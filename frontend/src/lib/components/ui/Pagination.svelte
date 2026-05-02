@@ -30,7 +30,7 @@ function next() {
 
 {#if totalItems > 0}
 	<nav class="flex items-center justify-between" aria-label="Pagination">
-		<p class="text-sm text-gray-600">
+		<p class="text-sm text-[var(--color-fg-3)]">
 			<span class="font-medium">{startItem.toLocaleString()}</span>–<span class="font-medium"
 				>{endItem.toLocaleString()}</span
 			>
@@ -44,7 +44,7 @@ function next() {
 					type="button"
 					onclick={() => (currentPage = 1)}
 					disabled={!canGoPrev}
-					class="p-1.5 rounded text-gray-400 hover:text-gray-600 disabled:opacity-30 disabled:pointer-events-none"
+					class="rounded-md p-1.5 text-[var(--color-fg-5)] transition-colors hover:bg-slate-100 hover:text-[var(--color-fg-2)] disabled:pointer-events-none disabled:opacity-30"
 					aria-label="First page"
 				>
 					<svg
@@ -66,7 +66,7 @@ function next() {
 					type="button"
 					onclick={prev}
 					disabled={!canGoPrev}
-					class="p-1.5 rounded text-gray-400 hover:text-gray-600 disabled:opacity-30 disabled:pointer-events-none"
+					class="rounded-md p-1.5 text-[var(--color-fg-5)] transition-colors hover:bg-slate-100 hover:text-[var(--color-fg-2)] disabled:pointer-events-none disabled:opacity-30"
 					aria-label="Previous page"
 				>
 					<svg
@@ -80,7 +80,7 @@ function next() {
 					</svg>
 				</button>
 
-				<span class="px-2 text-sm text-gray-500 tabular-nums">
+				<span class="px-2 font-mono text-xs tabular-nums text-[var(--color-fg-4)]">
 					{currentPage}/{totalPages}
 				</span>
 
@@ -88,7 +88,7 @@ function next() {
 					type="button"
 					onclick={next}
 					disabled={!canGoNext}
-					class="p-1.5 rounded text-gray-400 hover:text-gray-600 disabled:opacity-30 disabled:pointer-events-none"
+					class="rounded-md p-1.5 text-[var(--color-fg-5)] transition-colors hover:bg-slate-100 hover:text-[var(--color-fg-2)] disabled:pointer-events-none disabled:opacity-30"
 					aria-label="Next page"
 				>
 					<svg
@@ -106,7 +106,7 @@ function next() {
 					type="button"
 					onclick={() => (currentPage = totalPages)}
 					disabled={!canGoNext}
-					class="p-1.5 rounded text-gray-400 hover:text-gray-600 disabled:opacity-30 disabled:pointer-events-none"
+					class="rounded-md p-1.5 text-[var(--color-fg-5)] transition-colors hover:bg-slate-100 hover:text-[var(--color-fg-2)] disabled:pointer-events-none disabled:opacity-30"
 					aria-label="Last page"
 				>
 					<svg

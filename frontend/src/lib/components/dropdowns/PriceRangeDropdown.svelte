@@ -39,11 +39,11 @@ let displayValue = $derived(
 
 <BaseDropdown {id} {ariaLabel} {displayValue}>
 	{#snippet children({ close })}
-		<div class="p-4">
+		<div class="p-3">
 			<div class="flex gap-2">
 				<input
 					type="number"
-					class="w-1/2 px-3 py-2 rounded border border-gray-200 text-gray-900 placeholder-gray-400 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
+					class="w-1/2 rounded-md border border-[var(--color-border)] bg-white px-3 py-2 text-sm text-[var(--color-fg-1)] placeholder-[var(--color-fg-5)] transition-all focus:border-[var(--color-navy-900)] focus:outline-none focus:ring-2 focus:ring-[rgba(11,27,43,0.12)]"
 					placeholder={placeholderMin}
 					bind:value={localMin}
 					oninput={handleInput}
@@ -51,7 +51,7 @@ let displayValue = $derived(
 				/>
 				<input
 					type="number"
-					class="w-1/2 px-3 py-2 rounded border border-gray-200 text-gray-900 placeholder-gray-400 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
+					class="w-1/2 rounded-md border border-[var(--color-border)] bg-white px-3 py-2 text-sm text-[var(--color-fg-1)] placeholder-[var(--color-fg-5)] transition-all focus:border-[var(--color-navy-900)] focus:outline-none focus:ring-2 focus:ring-[rgba(11,27,43,0.12)]"
 					placeholder={placeholderMax}
 					bind:value={localMax}
 					oninput={handleInput}

@@ -1,175 +1,164 @@
 <script lang="ts">
-import { cubicOut } from 'svelte/easing'
-import { fly } from 'svelte/transition'
 import { storeSelectedTier } from '$lib/utils/onboarding'
 
-function handleTierClick(tier: 'tier1' | 'tier2') {
+type TierId = 'tier1' | 'tier2'
+type Tier = {
+	name: string
+	price: string
+	unit?: string
+	description: string
+	href: string
+	tier?: TierId
+	featured?: string
+	features: string[]
+}
+
+function handleTierClick(tier: TierId) {
 	storeSelectedTier(tier)
 }
 
-function contactSales() {
-	window.location.href = 'mailto:contact@vitevue.com'
-}
-
-const tiers = [
+const tiers: Tier[] = [
 	{
 		name: 'Starter',
 		price: '199',
-		originalPrice: '249',
+		unit: 'AED · seat / mo',
+		description: 'For independent brokers and analysts evaluating Dubai stock.',
 		tier: 'tier1' as const,
-		features: [
-			'Real-time transaction data',
-			'AI-powered market insights',
-			'Advanced analytics dashboard',
-			'Unlimited project tracking'
-		],
 		href: '/auth?view=signup&tier=tier1',
-		comingSoon: true
+		features: [
+			'Vitevue AI · 100 queries/mo',
+			'Transaction explorer',
+			'PDF evidence packs',
+			'Email support'
+		]
 	},
 	{
 		name: 'Professional',
 		price: '499',
-		originalPrice: '799',
+		unit: 'AED · seat / mo',
+		description: 'For producing teams running comps, pitches, and listings every week.',
 		tier: 'tier2' as const,
+		href: '/auth?view=signup&tier=tier2',
+		featured: 'Most popular · -60%',
 		features: [
 			'Everything in Starter',
-			'Automated deliverables',
-			'5x Vitevue AI usage',
-			'Industry-grade comparables',
-			'Priority support'
-		],
-		href: '/auth?view=signup&tier=tier2',
-		comingSoon: true
+			'5x Vitevue AI usage + automated deliverables',
+			'Auto comp-matching algorithm',
+			'Priority support, shared workspaces'
+		]
 	},
 	{
 		name: 'Enterprise',
 		price: 'Custom',
-		tier: null,
-		features: [
-			'Tailored to your organization',
-			'Early access to advanced features',
-			'Custom integrations',
-			'Bespoke product suite'
-		],
+		description: 'For developers, investors, and advisory firms with desk-wide needs.',
 		href: 'mailto:contact@vitevue.com',
-		isContact: true
+		features: [
+			'Everything in Professional',
+			'Unlimited Vitevue AI',
+			'API access + custom datasets',
+			'Dedicated success manager'
+		]
 	}
 ]
 </script>
 
-<section id="pricing" class="py-24 bg-gradient-to-b from-white via-slate-50 to-white relative">
-	<div class="max-w-6xl mx-auto px-6 lg:px-8">
-		<div class="text-center mb-16">
-			<h2 class="text-4xl sm:text-5xl font-bold text-slate-900 mb-4">Early bird pricing</h2>
-			<p class="text-xl text-slate-600 max-w-2xl mx-auto mb-4">
-				Lock in our launch pricing before rates increase
+<section id="pricing" class="bg-bone py-24 lg:py-28">
+	<div class="mx-auto max-w-7xl px-5 sm:px-8 lg:px-10">
+		<div class="max-w-3xl">
+			<span class="eyebrow">Pricing</span>
+			<h2 class="display-2 mt-6">
+				Lock in our <span class="display-italic">launch pricing.</span>
+			</h2>
+			<p class="mt-5 max-w-2xl text-lg leading-[1.6] text-[var(--color-fg-2)]">
+				Three plans, AED-priced, billed monthly per seat. Save 60% versus list during the early
+				bird window.
 			</p>
-			<div
-				class="inline-flex items-center gap-2 px-4 py-2 bg-teal-50 border border-teal-200 rounded-full"
-			>
-				<svg class="w-4 h-4 text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-					<path
-						stroke-linecap="round"
-						stroke-linejoin="round"
-						stroke-width="2"
-						d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-					></path>
-				</svg>
-				<span class="text-sm font-semibold text-teal-700">Limited time offer</span>
-			</div>
 		</div>
 
-		<div class="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-5xl mx-auto">
-			{#each tiers as tier, i (tier.name)}
-				<div
-					transition:fly={{ y: 20, duration: 600, delay: i * 100, easing: cubicOut }}
-					class="relative bg-white rounded-2xl shadow-sm border border-slate-200 p-8 flex flex-col hover:shadow-lg hover:border-slate-300 transition-all"
+		<div class="mt-16 grid gap-3 md:grid-cols-3">
+			{#each tiers as tier (tier.name)}
+				<article
+					class="relative flex min-h-[520px] flex-col gap-6 rounded-lg border bg-white p-8 {tier.featured
+						? 'border-2 border-primary'
+						: 'border-bone-border'}"
 				>
-					{#if tier.originalPrice}
-						<div
-							class="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-1 bg-gradient-to-r from-teal-600 to-cyan-600 text-white text-xs font-semibold rounded-full"
+					<div class="flex min-h-6 items-center justify-between gap-4">
+						<h3
+							class="text-[13px] font-semibold uppercase tracking-[0.06em] text-[var(--color-fg-1)]"
 						>
-							Early Bird
-						</div>
-					{/if}
-
-					<div class="flex-1">
-						<h3 class="text-2xl font-bold text-slate-900 mb-2">{tier.name}</h3>
-						<div class="mb-6">
-							{#if tier.price === 'Custom'}
-								<div class="text-4xl font-bold text-slate-900 mb-1">Custom</div>
-								<p class="text-sm text-slate-600">Contact us for pricing</p>
-							{:else}
-								<div class="mb-2">
-									{#if tier.originalPrice}
-										<div class="flex items-baseline gap-2 mb-1">
-											<span class="text-lg text-slate-400 line-through">{tier.originalPrice}</span>
-											<span
-												class="text-xs font-semibold text-teal-600 bg-teal-50 px-2 py-0.5 rounded"
-											>
-												Save {Math.round(
-													(1 - parseInt(tier.price) / parseInt(tier.originalPrice)) * 100
-												)}%
-											</span>
-										</div>
-									{/if}
-									<div class="flex items-baseline gap-2">
-										<span class="text-4xl font-bold text-slate-900">{tier.price}</span>
-										<span class="text-slate-600">AED/seat/month</span>
-									</div>
-								</div>
-							{/if}
-						</div>
-
-						<ul class="space-y-3 mb-8">
-							{#each tier.features as feature (feature)}
-								<li class="flex items-start gap-3">
-									<svg
-										class="w-5 h-5 text-slate-900 flex-shrink-0 mt-0.5"
-										fill="none"
-										stroke="currentColor"
-										viewBox="0 0 24 24"
-									>
-										<path
-											stroke-linecap="round"
-											stroke-linejoin="round"
-											stroke-width="2"
-											d="M5 13l4 4L19 7"
-										></path>
-									</svg>
-									<span class="text-slate-700">{feature}</span>
-								</li>
-							{/each}
-						</ul>
+							{tier.name}
+						</h3>
+						{#if tier.featured}
+							<span class="font-mono text-[10px] font-medium uppercase tracking-[0.08em] text-primary">
+								{tier.featured}
+							</span>
+						{/if}
 					</div>
 
-					{#if tier.comingSoon}
-						<button
-							type="button"
-							disabled
-							class="block w-full text-center px-6 py-3 rounded-lg font-semibold bg-slate-200 text-slate-400 cursor-not-allowed"
+					<p class="text-sm leading-[1.6] text-[var(--color-fg-3)]">{tier.description}</p>
+
+					<div class="flex items-baseline gap-2">
+						<span
+							class="font-display text-[clamp(3rem,5vw,3.5rem)] font-normal leading-none tracking-[-0.025em] text-[var(--color-fg-1)]"
 						>
-							Get Started
-						</button>
-					{:else if tier.isContact}
-						<button
-							type="button"
-							onclick={contactSales}
-							class="block w-full text-center px-6 py-3 rounded-lg font-semibold transition-all bg-slate-900 text-white hover:bg-slate-800 hover:scale-105"
-						>
-							Contact Sales
-						</button>
-					{:else}
+							{tier.price}
+						</span>
+						{#if tier.unit}
+							<span class="text-sm text-[var(--color-fg-4)]">{tier.unit}</span>
+						{/if}
+					</div>
+
+					<ul class="flex flex-1 flex-col gap-3">
+						{#each tier.features as feature (feature)}
+							<li class="flex items-start gap-3 text-sm leading-relaxed text-[var(--color-fg-2)]">
+								<svg
+									class="mt-0.5 h-3.5 w-3.5 flex-none text-primary"
+									fill="none"
+									stroke="currentColor"
+									viewBox="0 0 24 24"
+								>
+									<path
+										stroke-linecap="round"
+										stroke-linejoin="round"
+										stroke-width="2.5"
+										d="M5 13l4 4L19 7"
+									/>
+								</svg>
+								<span>{feature}</span>
+							</li>
+						{/each}
+					</ul>
+
+					{#if tier.tier}
 						<a
 							href={tier.href}
 							onclick={() => tier.tier && handleTierClick(tier.tier)}
-							class="block w-full text-center px-6 py-3 rounded-lg font-semibold transition-all bg-slate-900 text-white hover:bg-slate-800 hover:scale-105"
+							class="inline-flex justify-center rounded-md {tier.featured
+								? 'bg-primary text-bone hover:bg-primary-light'
+								: 'border border-primary text-primary hover:bg-primary hover:text-bone'} px-5 py-3 text-sm font-medium transition-colors duration-200"
 						>
-							Get Started
+							Start with {tier.name}
+						</a>
+					{:else}
+						<a
+							href={tier.href}
+							class="inline-flex justify-center rounded-md border border-primary px-5 py-3 text-sm font-medium text-primary transition-colors duration-200 hover:bg-primary hover:text-bone"
+						>
+							Contact sales
 						</a>
 					{/if}
-				</div>
+				</article>
 			{/each}
+		</div>
+
+		<div
+			class="mt-8 flex items-center justify-center gap-2 font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-[var(--color-warning)]"
+		>
+			<svg class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3" />
+				<circle cx="12" cy="12" r="9" stroke-width="2" fill="none" />
+			</svg>
+			Early bird - limited time
 		</div>
 	</div>
 </section>

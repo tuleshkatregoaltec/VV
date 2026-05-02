@@ -165,8 +165,8 @@ function roleLabel(role: string): string {
 	<div class="max-w-2xl mx-auto">
 		<!-- Header -->
 		<div class="mb-8">
-			<h1 class="text-3xl font-bold text-slate-900 mb-2">Organization Settings</h1>
-			<p class="text-slate-600">Manage your organization members and subscription</p>
+			<h1 class="text-3xl font-semibold text-[var(--color-fg-1)] mb-2">Organization Settings</h1>
+			<p class="text-[var(--color-fg-3)]">Manage your organization members and subscription</p>
 		</div>
 
 		{#if !isOwner}
@@ -220,10 +220,10 @@ function roleLabel(role: string): string {
 						</div>
 
 						{#if hasExcessUsers && withinPaidPeriod}
-							<div class="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-lg">
+							<div class="mb-6 rounded-lg border border-[rgba(165,90,19,0.2)] bg-[var(--color-warning-bg)] p-4">
 								<div class="flex items-start gap-3">
 									<svg
-										class="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5"
+										class="mt-0.5 h-5 w-5 flex-shrink-0 text-[var(--color-warning)]"
 										fill="none"
 										stroke="currentColor"
 										viewBox="0 0 24 24"
@@ -236,14 +236,14 @@ function roleLabel(role: string): string {
 										></path>
 									</svg>
 									<div>
-										<p class="font-medium text-amber-900 mb-1">
+										<p class="mb-1 font-medium text-[var(--color-warning)]">
 											Action Required After Billing Period
 										</p>
-										<p class="text-sm text-amber-800 mb-2">
+										<p class="mb-2 text-sm text-[var(--color-warning)]">
 											You have {subscription?.excess_users} too many users for your subscription ({subscription?.current_members}
 											users, {subscription?.seats} seats).
 										</p>
-										<p class="text-sm text-amber-800">
+										<p class="text-sm text-[var(--color-warning)]">
 											All users will remain active until {new Date(
 												subscription?.current_period_end || ''
 											).toLocaleDateString()}. After this date, you must either remove {subscription?.excess_users}
@@ -253,10 +253,10 @@ function roleLabel(role: string): string {
 								</div>
 							</div>
 						{:else if hasExcessUsers && !withinPaidPeriod}
-							<div class="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
+							<div class="mb-6 rounded-lg border border-[rgba(163,36,36,0.2)] bg-[var(--color-error-bg)] p-4">
 								<div class="flex items-start gap-3">
 									<svg
-										class="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5"
+										class="mt-0.5 h-5 w-5 flex-shrink-0 text-[var(--color-error)]"
 										fill="none"
 										stroke="currentColor"
 										viewBox="0 0 24 24"
@@ -269,12 +269,12 @@ function roleLabel(role: string): string {
 										></path>
 									</svg>
 									<div>
-										<p class="font-medium text-red-900 mb-1">Immediate Action Required</p>
-										<p class="text-sm text-red-800 mb-2">
+										<p class="mb-1 font-medium text-[var(--color-error)]">Immediate Action Required</p>
+										<p class="mb-2 text-sm text-[var(--color-error)]">
 											You have {subscription?.excess_users} too many users ({subscription?.current_members}
 											users, {subscription?.seats} seats). Your billing period has ended.
 										</p>
-										<p class="text-sm text-red-800">
+										<p class="text-sm text-[var(--color-error)]">
 											Please remove {subscription?.excess_users}
 											{subscription?.excess_users === 1 ? 'member' : 'members'} immediately or upgrade
 											your subscription to prevent service disruption.
@@ -283,10 +283,10 @@ function roleLabel(role: string): string {
 								</div>
 							</div>
 						{:else if availableSeats > 0}
-							<div class="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg">
+							<div class="mb-6 rounded-lg border border-[rgba(17,122,72,0.2)] bg-[var(--color-success-bg)] p-4">
 								<div class="flex items-center gap-3">
 									<svg
-										class="w-5 h-5 text-green-600"
+										class="h-5 w-5 text-[var(--color-success)]"
 										fill="none"
 										stroke="currentColor"
 										viewBox="0 0 24 24"
@@ -298,7 +298,7 @@ function roleLabel(role: string): string {
 											d="M5 13l4 4L19 7"
 										></path>
 									</svg>
-									<p class="text-sm text-green-800">
+									<p class="text-sm text-[var(--color-success)]">
 										You have {availableSeats} available {availableSeats === 1 ? 'seat' : 'seats'}.
 										Invite new members!
 									</p>
@@ -361,12 +361,12 @@ function roleLabel(role: string): string {
 									</div>
 									<div class="flex items-center gap-3">
 										<span
-											class="px-3 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800"
+											class="rounded-sm border border-[rgba(17,122,72,0.2)] bg-[var(--color-success-bg)] px-3 py-1 text-xs font-semibold text-[var(--color-success)]"
 										>
 											Active
 										</span>
 										<span
-											class="px-3 py-1 text-xs font-semibold rounded-full bg-slate-100 text-slate-700 capitalize"
+											class="rounded-sm border border-[var(--color-border)] bg-slate-100 px-3 py-1 text-xs font-semibold capitalize text-[var(--color-fg-3)]"
 										>
 											{roleLabel(member.role)}
 										</span>
@@ -375,8 +375,8 @@ function roleLabel(role: string): string {
 												onclick={() =>
 													handleRemoveMember(member.id, `${member.first_name} ${member.last_name}`)}
 												class="{hasExcessUsers && !withinPaidPeriod
-													? 'bg-red-100 text-red-700 hover:bg-red-200'
-													: 'text-red-600 hover:text-red-700'} text-sm font-medium px-3 py-1 rounded transition-colors"
+													? 'bg-[var(--color-error-bg)] text-[var(--color-error)] hover:opacity-90'
+													: 'text-[var(--color-error)] hover:opacity-80'} rounded-md px-3 py-1 text-sm font-medium transition-colors"
 											>
 												Remove
 											</button>
@@ -417,7 +417,7 @@ function roleLabel(role: string): string {
 									</div>
 									<div class="flex items-center gap-3">
 										<span
-											class="px-3 py-1 text-xs font-semibold rounded-full bg-amber-100 text-amber-800"
+											class="rounded-sm border border-[rgba(165,90,19,0.2)] bg-[var(--color-warning-bg)] px-3 py-1 text-xs font-semibold text-[var(--color-warning)]"
 										>
 											Pending
 										</span>
@@ -425,7 +425,7 @@ function roleLabel(role: string): string {
 											onclick={() => handleResendInvitation(invitation.email)}
 											disabled={resendingEmail === invitation.email ||
 												cancelingInvitationId === invitation.id}
-											class="text-sm text-blue-600 hover:text-blue-700 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+											class="text-sm font-medium text-[var(--color-navy-700)] hover:text-[var(--color-navy-900)] disabled:cursor-not-allowed disabled:opacity-50"
 										>
 											{resendingEmail === invitation.email ? 'Sending...' : 'Resend Invite'}
 										</button>
@@ -433,7 +433,7 @@ function roleLabel(role: string): string {
 											onclick={() => handleCancelInvitation(invitation.id, invitation.email)}
 											disabled={cancelingInvitationId === invitation.id ||
 												resendingEmail === invitation.email}
-											class="text-sm text-red-600 hover:text-red-700 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+											class="text-sm font-medium text-[var(--color-error)] hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-50"
 										>
 											{cancelingInvitationId === invitation.id ? 'Canceling...' : 'Cancel Invite'}
 										</button>
@@ -485,14 +485,14 @@ function roleLabel(role: string): string {
 			</div>
 
 			{#if inviteSuccess}
-				<div class="p-4 bg-green-50 border border-green-200 rounded-lg mb-4">
-					<p class="text-sm text-green-800">Invitation sent successfully!</p>
+				<div class="mb-4 rounded-lg border border-[rgba(17,122,72,0.2)] bg-[var(--color-success-bg)] p-4">
+					<p class="text-sm text-[var(--color-success)]">Invitation sent successfully!</p>
 				</div>
 			{/if}
 
 			{#if inviteError}
-				<div class="p-4 bg-red-50 border border-red-200 rounded-lg mb-4">
-					<p class="text-sm text-red-600">{inviteError}</p>
+				<div class="mb-4 rounded-lg border border-[rgba(163,36,36,0.2)] bg-[var(--color-error-bg)] p-4">
+					<p class="text-sm text-[var(--color-error)]">{inviteError}</p>
 				</div>
 			{/if}
 

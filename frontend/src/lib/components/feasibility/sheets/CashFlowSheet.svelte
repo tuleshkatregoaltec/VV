@@ -115,13 +115,13 @@ const ROW = 'border-t border-slate-100 hover:bg-slate-50/60'
 				<!-- ── SALES PROCEEDS FUNDING COSTS ── -->
 				{#if annualRows.some(r => r.costPaidFromEscrowAed > 0)}
 					<tr class={ROW}>
-						<td class="{TD_L} text-teal-700 font-medium">↳ Sales proceeds fund costs (escrow)</td>
+						<td class="{TD_L} text-[var(--color-navy-700)] font-medium">↳ Sales proceeds fund costs (escrow)</td>
 						{#each annualRows as row}
-							<td class="px-3 py-[4px] text-right text-[11px] tabular-nums text-teal-700 whitespace-nowrap">
+							<td class="px-3 py-[4px] text-right text-[11px] tabular-nums text-[var(--color-navy-700)] whitespace-nowrap">
 								{row.costPaidFromEscrowAed > 0 ? fmt(row.costPaidFromEscrowAed) : '—'}
 							</td>
 						{/each}
-						<td class="px-3 py-[4px] text-right text-[11px] tabular-nums font-semibold text-teal-700 bg-slate-50 whitespace-nowrap">{fmt(totals.costPaidFromEscrowAed)}</td>
+						<td class="px-3 py-[4px] text-right text-[11px] tabular-nums font-semibold text-[var(--color-navy-700)] bg-slate-50 whitespace-nowrap">{fmt(totals.costPaidFromEscrowAed)}</td>
 					</tr>
 				{/if}
 

@@ -27,7 +27,7 @@ setContext('openDropdownId', {
 <div class="h-screen flex flex-col bg-background">
 	<Navbar />
 
-	<div class="flex-1 overflow-auto pt-20">
+	<div class="flex-1 overflow-auto">
 		{#if showFilters}
 			<FilterBar />
 		{/if}

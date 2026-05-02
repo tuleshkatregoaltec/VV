@@ -5,7 +5,7 @@ export let label = ''
 </script>
 
 <div
-	class="inline-flex items-center gap-3 rounded-full border border-white/70 bg-white/80 px-4 py-2 text-xs font-medium uppercase tracking-[0.24em] text-slate-600 shadow-sm backdrop-blur"
+	class="inline-flex items-center gap-3 rounded-sm border border-[var(--color-border)] bg-slate-50 px-3 py-1.5 font-mono text-[10px] font-medium uppercase tracking-[0.08em] text-[var(--color-fg-4)]"
 >
 	<span
 		>Step {step}{#if total}

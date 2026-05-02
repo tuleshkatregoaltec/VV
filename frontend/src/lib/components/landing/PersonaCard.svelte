@@ -9,19 +9,20 @@ let { title, description, icon }: Props = $props()
 </script>
 
 <div
-	class="group bg-white/80 backdrop-blur-sm rounded-2xl p-6 shadow-lg border border-gray-200 hover:border-teal-600 hover:shadow-xl transition-all duration-300 h-full hover:-translate-y-2"
+	class="group h-full rounded-lg border border-bone-border bg-[var(--color-bg-card-warm)] p-6 transition-colors duration-200 hover:border-[var(--color-bone-300)]"
 >
-	<div class="text-5xl mb-5 group-hover:scale-110 transition-transform duration-300 inline-block">
+	<div class="mb-5 inline-block text-5xl transition-transform duration-200 group-hover:scale-105">
 		{icon}
 	</div>
-	<h3 class="text-xl font-black text-gray-900 mb-3 leading-tight">{title}</h3>
-	<p class="text-gray-600 leading-relaxed text-sm">{description}</p>
+	<h3 class="mb-3 font-display text-2xl font-normal leading-tight tracking-[-0.02em] text-[var(--color-fg-1)]">
+		{title}
+	</h3>
+	<p class="text-sm leading-relaxed text-[var(--color-fg-3)]">{description}</p>
 
-	<!-- Hover accent -->
 	<div
-		class="mt-4 pt-4 border-t border-gray-100 opacity-0 group-hover:opacity-100 transition-opacity duration-300"
+		class="mt-4 border-t border-bone-border pt-4 opacity-0 transition-opacity duration-200 group-hover:opacity-100"
 	>
-		<span class="text-teal-600 font-bold text-sm flex items-center gap-1">
+		<span class="flex items-center gap-1 text-sm font-medium text-primary">
 			Learn more
 			<svg
 				class="w-4 h-4 group-hover:translate-x-1 transition-transform"
@@ -29,8 +30,7 @@ let { title, description, icon }: Props = $props()
 				stroke="currentColor"
 				viewBox="0 0 24 24"
 			>
-				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"
-				></path>
+				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
 			</svg>
 		</span>
 	</div>

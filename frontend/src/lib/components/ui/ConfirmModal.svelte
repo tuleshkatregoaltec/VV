@@ -48,47 +48,47 @@ $effect(() => {
 
 const confirmButtonClasses =
 	confirmVariant === 'danger'
-		? 'bg-red-600 hover:bg-red-700 text-white'
-		: 'bg-primary hover:bg-primary-dark text-white'
+		? 'bg-[var(--color-error)] hover:bg-[#8a1f1f] text-[var(--color-fg-on-navy)]'
+		: 'bg-[var(--color-navy-900)] hover:bg-[var(--color-navy-800)] text-[var(--color-fg-on-navy)]'
 </script>
 
 <svelte:window onkeydown={handleKeydown} />
 
 {#if open}
 	<div
-		class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
+		class="fixed inset-0 z-50 flex items-center justify-center bg-[color:rgba(5,13,24,0.45)] p-4"
 		onclick={handleBackdropClick}
 		role="presentation"
 	>
 		<div
-			class="bg-white rounded-lg shadow-xl w-full max-w-md"
+			class="w-full max-w-md rounded-xl border border-[var(--color-border)] bg-white shadow-xl"
 			role="dialog"
 			aria-modal="true"
 			aria-labelledby="confirm-title"
 		>
 			<!-- Header -->
-			<div class="px-6 py-4 border-b border-gray-200">
-				<h3 id="confirm-title" class="text-lg font-semibold text-gray-900">{title}</h3>
+			<div class="border-b border-[var(--color-border)] px-6 py-4">
+				<h3 id="confirm-title" class="text-lg font-semibold text-[var(--color-fg-1)]">{title}</h3>
 			</div>
 
 			<!-- Content -->
 			<div class="px-6 py-4">
-				<p class="text-gray-600">{message}</p>
+				<p class="text-[var(--color-fg-3)]">{message}</p>
 			</div>
 
 			<!-- Actions -->
-			<div class="px-6 py-4 border-t border-gray-200 flex justify-end gap-3">
+			<div class="flex justify-end gap-3 border-t border-[var(--color-border)] px-6 py-4">
 				{#if cancelText}
 					<button
 						onclick={onCancel}
-						class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition"
+						class="rounded-md border border-[var(--color-border)] bg-white px-4 py-2 text-sm font-medium text-[var(--color-fg-2)] transition hover:bg-slate-50"
 					>
 						{cancelText}
 					</button>
 				{/if}
 				<button
 					onclick={onConfirm}
-					class="px-4 py-2 text-sm font-medium rounded-lg transition {confirmButtonClasses}"
+					class="rounded-md px-4 py-2 text-sm font-medium transition {confirmButtonClasses}"
 				>
 					{confirmText}
 				</button>

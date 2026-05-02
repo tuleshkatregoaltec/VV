@@ -20,39 +20,57 @@ export let bodyClass = ''
 	<meta name="viewport" content="width=device-width, initial-scale=1" />
 </svelte:head>
 
-<div
-	class="min-h-screen overflow-hidden bg-[radial-gradient(circle_at_top_left,_rgba(148,163,184,0.14),_transparent_32%),linear-gradient(180deg,#f8fafc_0%,#eef2ff_42%,#f8fafc_100%)] px-4 py-4 sm:px-6 lg:px-8"
->
-	<div class="mx-auto flex h-[calc(100vh-2rem)] max-w-7xl items-stretch gap-4">
+<div class="min-h-screen overflow-hidden bg-[var(--color-bg-marketing)] px-4 py-4 sm:px-6 lg:px-8">
+	<div class="mx-auto flex min-h-[calc(100vh-2rem)] max-w-7xl items-stretch gap-4">
 		<section
-			class="relative hidden flex-1 overflow-hidden rounded-[2rem] border border-slate-200/70 bg-slate-950 p-6 text-white shadow-[0_24px_80px_rgba(15,23,42,0.18)] lg:flex lg:flex-col lg:gap-8"
+			class="relative hidden flex-1 overflow-hidden rounded-lg border border-[rgba(246,241,231,0.16)] bg-[var(--color-navy-900)] p-8 text-[var(--color-fg-on-navy)] lg:flex lg:flex-col lg:justify-between lg:gap-8 xl:p-10"
 		>
-			<div
-				class="absolute inset-0 bg-[radial-gradient(circle_at_top_right,_rgba(59,130,246,0.28),_transparent_26%),radial-gradient(circle_at_bottom_left,_rgba(16,185,129,0.18),_transparent_34%)]"
-			></div>
+			<img
+				src="/logos/icon-bone.svg"
+				alt=""
+				class="pointer-events-none absolute -right-20 -top-16 h-72 w-72 opacity-[0.035]"
+				aria-hidden="true"
+			/>
 			<div class="relative">
-				<p class="text-xs font-semibold uppercase tracking-[0.32em] text-slate-300">{sideAccent}</p>
+				<p
+					class="inline-flex items-center gap-3 font-mono text-[10px] font-medium uppercase tracking-[0.16em] text-[var(--color-fg-on-navy-muted)] before:h-px before:w-7 before:bg-current"
+				>
+					{sideAccent}
+				</p>
 				{#if sideTitle}
-					<h2 class="mt-4 max-w-md text-[2rem] font-semibold leading-tight">{sideTitle}</h2>
+					<h2
+						class="mt-5 max-w-xl font-display text-[2.3rem] font-normal leading-[1.04] tracking-[var(--tracking-display)] xl:text-[2.7rem]"
+					>
+						{sideTitle}
+					</h2>
 				{/if}
 				{#if sideCopy}
-					<p class="mt-4 max-w-lg text-sm leading-6 text-slate-300">{sideCopy}</p>
+					<p class="mt-5 max-w-lg text-sm leading-6 text-[var(--color-fg-on-navy-muted)]">
+						{sideCopy}
+					</p>
 				{/if}
 			</div>
 
-			<div class="relative">
+			<div class="relative pb-1">
 				<slot name="side" />
 			</div>
 		</section>
 
 		<section class={`flex h-full w-full items-stretch justify-center ${sectionWidthClass}`}>
 			<div
-				class={`flex h-full w-full ${contentWidthClass} flex-col rounded-[2rem] border border-white/70 bg-white/88 p-6 shadow-[0_24px_70px_rgba(148,163,184,0.18)] backdrop-blur sm:p-6 lg:p-7 ${cardClass}`}
+				class={`flex min-h-[calc(100vh-2rem)] w-full ${contentWidthClass} flex-col rounded-lg border border-[var(--color-border-warm)] bg-white p-5 shadow-sm sm:p-6 lg:p-8 ${cardClass}`}
 			>
 				<div class="flex h-full flex-col gap-4">
 					<div class="flex flex-wrap items-center justify-between gap-4">
-						<div>
-							<p class="text-xs font-semibold uppercase tracking-[0.32em] text-slate-500">
+						<div class="space-y-5">
+							<img
+								src="/logos/vitevue-navbar-800@2x.png"
+								alt="Vitevue"
+								class="h-6 w-auto"
+							/>
+							<p
+								class="inline-flex items-center gap-3 font-mono text-[10px] font-medium uppercase tracking-[0.16em] text-[var(--color-fg-4)] before:h-px before:w-7 before:bg-current"
+							>
 								{eyebrow}
 							</p>
 						</div>
@@ -64,11 +82,13 @@ export let bodyClass = ''
 					<slot name="account" />
 
 					<div class="min-h-[4.75rem]">
-						<h1 class="max-w-2xl text-3xl font-semibold tracking-tight text-slate-950 sm:text-4xl">
+						<h1
+							class="max-w-2xl font-display text-[2.15rem] font-normal leading-[1.08] tracking-[var(--tracking-display)] text-[var(--color-fg-1)] sm:text-[2.55rem]"
+						>
 							{title}
 						</h1>
 						{#if description}
-							<p class="mt-2 max-w-2xl text-sm leading-6 text-slate-600 sm:text-base">
+							<p class="mt-2 max-w-2xl text-sm leading-6 text-[var(--color-fg-3)] sm:text-base">
 								{description}
 							</p>
 						{/if}

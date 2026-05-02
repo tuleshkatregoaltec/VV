@@ -28,14 +28,14 @@ function toggleOption(optionId: string) {
 	{#snippet button({ toggle, isOpen })}
 		<button
 			type="button"
-			class="p-2 rounded-lg hover:bg-gray-100 border border-gray-200 relative"
+			class="relative rounded-md border border-[var(--color-border)] bg-white p-2 transition-colors hover:border-[var(--color-border-strong)] hover:bg-slate-50"
 			onclick={toggle}
 			aria-label={`Toggle options for ${ariaLabel}`}
 			aria-haspopup="listbox"
 			aria-expanded={isOpen}
 		>
 			<svg
-				class="w-5 h-5 text-gray-600"
+				class="h-5 w-5 text-[var(--color-fg-3)]"
 				fill="none"
 				viewBox="0 0 24 24"
 				stroke="currentColor"
@@ -50,7 +50,7 @@ function toggleOption(optionId: string) {
 			</svg>
 			{#if selectedCount > 0}
 				<span
-					class="absolute -top-1 -right-1 bg-primary text-white text-xs rounded-full w-5 h-5 flex items-center justify-center font-medium"
+					class="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-sm bg-[var(--color-navy-900)] text-xs font-medium text-[var(--color-fg-on-navy)]"
 				>
 					{selectedCount}
 				</span>
@@ -59,10 +59,10 @@ function toggleOption(optionId: string) {
 	{/snippet}
 
 	{#snippet children({ close })}
-		<div class="p-2" role="listbox" aria-multiselectable="true" tabindex="-1">
+		<div class="p-1.5" role="listbox" aria-multiselectable="true" tabindex="-1">
 			{#each options as option (option.id)}
 				<label
-					class="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-gray-50 cursor-pointer transition-colors group"
+					class="group flex cursor-pointer items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors hover:bg-slate-50"
 				>
 					<div class="relative flex items-center">
 						<input
@@ -70,7 +70,7 @@ function toggleOption(optionId: string) {
 							id="{id}-{option.id}"
 							checked={selected[option.id] || false}
 							onchange={() => toggleOption(option.id)}
-							class="w-4 h-4 text-primary border-gray-300 rounded focus:ring-2 focus:ring-primary/20 cursor-pointer"
+							class="h-4 w-4 cursor-pointer rounded-sm border-[var(--color-border-strong)] accent-[var(--color-navy-900)] text-[var(--color-navy-900)] focus:ring-2 focus:ring-[rgba(11,27,43,0.12)]"
 							aria-checked={selected[option.id] ? 'true' : 'false'}
 							aria-labelledby="{id}-{option.id}-label"
 						/>
@@ -87,7 +87,7 @@ function toggleOption(optionId: string) {
 					</div>
 					<span
 						id="{id}-{option.id}-label"
-						class="text-sm text-gray-700 select-none group-hover:text-gray-900"
+						class="select-none text-[var(--color-fg-2)] group-hover:text-[var(--color-fg-1)]"
 					>
 						{option.label}
 					</span>

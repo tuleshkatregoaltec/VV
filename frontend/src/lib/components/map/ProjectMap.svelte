@@ -1,7 +1,7 @@
 <script lang="ts">
 import maplibregl from 'maplibre-gl'
 import { onMount } from 'svelte'
-import type { GeoPin, GeoPolygon } from '$lib/api/projects'
+import type { DdaPlotFeature, GeoPin, GeoPolygon } from '$lib/api/projects'
 
 interface ProjectPin {
 	projectId: number
@@ -193,7 +193,7 @@ export function addProjectMarker(
 	// Create marker element
 	const markerEl = document.createElement('div')
 	markerEl.className =
-		'w-10 h-10 bg-teal-600 rounded-full flex items-center justify-center shadow-lg border-2 border-white cursor-pointer hover:bg-teal-700 transition-colors'
+		'w-10 h-10 bg-[#1c344a] rounded-full flex items-center justify-center shadow-lg border-2 border-white cursor-pointer hover:bg-[#0b1b2b] transition-colors'
 	markerEl.innerHTML = `
 			<svg class="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 20 20">
 				<path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16z" clip-rule="evenodd" />
@@ -295,6 +295,93 @@ export function flyToProject(
 
 export function flyToLocation(lng: number, lat: number, zoom: number = 14) {
 	map?.flyTo({ center: [lng, lat], zoom })
+}
+
+function _removeDDALayers() {
+	if (!map) return
+	try {
+		if (map.getLayer('dda-plots-fill')) map.removeLayer('dda-plots-fill')
+		if (map.getLayer('dda-plots-outline')) map.removeLayer('dda-plots-outline')
+		if (map.getSource('dda-plots')) map.removeSource('dda-plots')
+	} catch (_e) {}
+}
+
+export function showDDAPlots(plots: DdaPlotFeature[]) {
+	if (!map) return
+
+	const render = () => {
+		if (!map) return
+		_removeDDALayers()
+		if (plots.length === 0) return
+
+		const geojson: GeoJSON.FeatureCollection = {
+			type: 'FeatureCollection',
+			features: plots.map((plot) => ({
+				type: 'Feature',
+				geometry: { type: 'Polygon', coordinates: [plot.coordinates] },
+				properties: {
+					plot_number: plot.plot_number,
+					plot_area_sqm: plot.plot_area_sqm,
+					community_name: plot.community_name
+				}
+			}))
+		}
+
+		map.addSource('dda-plots', { type: 'geojson', data: geojson })
+
+		const beforeId = map.getLayer('area-polygon-layer') ? 'area-polygon-layer' : undefined
+		map.addLayer(
+			{
+				id: 'dda-plots-fill',
+				type: 'fill',
+				source: 'dda-plots',
+				paint: { 'fill-color': '#f59e0b', 'fill-opacity': 0.12 }
+			},
+			beforeId
+		)
+		map.addLayer(
+			{
+				id: 'dda-plots-outline',
+				type: 'line',
+				source: 'dda-plots',
+				paint: { 'line-color': '#d97706', 'line-width': 1.5, 'line-opacity': 0.8 }
+			},
+			beforeId
+		)
+
+		map.on('click', 'dda-plots-fill', (e) => {
+			const props = e.features?.[0]?.properties
+			if (!props || !map) return
+			const areaSqm = Number(props.plot_area_sqm)
+			const areaLabel =
+				areaSqm >= 1000 ? `${(areaSqm / 1000).toFixed(1)}k sqm` : `${Math.round(areaSqm)} sqm`
+			new maplibregl.Popup()
+				.setLngLat(e.lngLat)
+				.setHTML(
+					`<div style="font-size:12px;line-height:1.6;">` +
+						`<div style="font-weight:700;color:#0f172a;">Plot ${props.plot_number}</div>` +
+						`<div style="color:#64748b;margin-top:2px;">${areaLabel} · ${props.community_name}</div>` +
+						`</div>`
+				)
+				.addTo(map)
+		})
+		map.on('mouseenter', 'dda-plots-fill', () => {
+			if (map) map.getCanvas().style.cursor = 'pointer'
+		})
+		map.on('mouseleave', 'dda-plots-fill', () => {
+			if (map) map.getCanvas().style.cursor = ''
+		})
+	}
+
+	if (map.isStyleLoaded()) {
+		render()
+	} else {
+		map.once('styledata', render)
+	}
+}
+
+export function hideDDAPlots() {
+	_removeDDALayers()
 }
 
 // Show all building pins for a master project and fit map to their bounds

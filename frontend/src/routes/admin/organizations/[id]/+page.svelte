@@ -162,37 +162,37 @@ function formatDate(d: string | null) {
 }
 
 function usageColor(pct: number) {
-	if (pct >= 90) return 'bg-red-500'
-	if (pct >= 70) return 'bg-yellow-500'
-	return 'bg-green-500'
+	if (pct >= 90) return 'bg-[var(--color-error)]'
+	if (pct >= 70) return 'bg-[var(--color-warning)]'
+	return 'bg-[var(--color-success)]'
 }
 
 function statusBadge(status: string) {
 	switch (status) {
 		case 'active':
-			return 'bg-green-100 text-green-800'
+			return 'bg-[var(--color-success-bg)] text-[var(--color-success)]'
 		case 'trialing':
-			return 'bg-blue-100 text-blue-800'
+			return 'bg-[var(--color-navy-50)] text-[var(--color-navy-900)]'
 		case 'past_due':
-			return 'bg-orange-100 text-orange-800'
+			return 'bg-[var(--color-warning-bg)] text-[var(--color-warning)]'
 		case 'canceled':
-			return 'bg-red-100 text-red-800'
+			return 'bg-[var(--color-error-bg)] text-[var(--color-error)]'
 		default:
-			return 'bg-gray-100 text-gray-600'
+			return 'bg-[var(--color-bone-100)] text-[var(--color-fg-3)]'
 	}
 }
 </script>
 
 <div class="max-w-7xl mx-auto px-4 py-6">
 	{#if orgQuery.isPending}
-		<div class="text-center py-16 text-gray-400">Loading...</div>
+		<div class="py-16 text-center text-[var(--color-fg-4)]">Loading...</div>
 	{:else if loadError && !org}
-		<div class="bg-red-50 border border-red-200 rounded-lg p-4 text-red-700 text-sm mb-4">
+		<div class="mb-4 rounded-lg border border-[rgba(163,36,36,0.2)] bg-[var(--color-error-bg)] p-4 text-sm text-[var(--color-error)]">
 			{loadError}
 		</div>
 		<button
 			onclick={() => goto('/admin/organizations')}
-			class="text-blue-600 hover:underline text-sm"
+			class="text-sm text-[var(--color-navy-700)] hover:underline"
 		>
 			← Back to Organizations
 		</button>
@@ -202,23 +202,23 @@ function statusBadge(status: string) {
 			<div>
 				<button
 					onclick={() => goto('/admin/organizations')}
-					class="text-sm text-gray-400 hover:text-gray-600 mb-2 flex items-center gap-1"
+					class="mb-2 flex items-center gap-1 text-sm text-[var(--color-fg-4)] hover:text-[var(--color-fg-2)]"
 				>
 					← Organizations
 				</button>
-				<h1 class="text-2xl font-bold text-gray-900">{org.name}</h1>
-				<p class="text-sm text-gray-400 mt-0.5">Owner: {org.owner_email}</p>
+				<h1 class="text-2xl font-bold text-[var(--color-fg-1)]">{org.name}</h1>
+				<p class="mt-0.5 text-sm text-[var(--color-fg-4)]">Owner: {org.owner_email}</p>
 			</div>
 			<button
 				onclick={() => (confirmDeleteOrg = true)}
-				class="text-sm font-medium text-red-600 hover:text-red-800 border border-red-200 hover:bg-red-50 px-3 py-1.5 rounded-lg transition-colors"
+				class="rounded-md border border-[rgba(163,36,36,0.2)] px-3 py-1.5 text-sm font-medium text-[var(--color-error)] transition-colors hover:bg-[var(--color-error-bg)]"
 			>
 				Delete Org
 			</button>
 		</div>
 
 		{#if error}
-			<div class="bg-red-50 border border-red-200 rounded-lg p-3 text-red-700 text-sm mb-4">
+			<div class="mb-4 rounded-lg border border-[rgba(163,36,36,0.2)] bg-[var(--color-error-bg)] p-3 text-sm text-[var(--color-error)]">
 				{error}
 			</div>
 		{/if}
@@ -226,11 +226,11 @@ function statusBadge(status: string) {
 		<!-- Settings row -->
 		<div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
 			<!-- Org settings -->
-			<div class="bg-white border border-gray-200 rounded-xl p-5">
-				<h2 class="text-sm font-semibold text-gray-700 uppercase tracking-wider mb-4">Settings</h2>
+			<div class="rounded-xl border border-[var(--color-border)] bg-white p-5">
+				<h2 class="mb-4 text-sm font-semibold uppercase tracking-wider text-[var(--color-fg-3)]">Settings</h2>
 				<div class="space-y-4">
 					<div>
-						<label for="org-max-users" class="block text-xs font-medium text-gray-500 mb-1">
+						<label for="org-max-users" class="mb-1 block text-xs font-medium text-[var(--color-fg-4)]">
 							Max Users
 						</label>
 						<input
@@ -238,13 +238,13 @@ function statusBadge(status: string) {
 							type="number"
 							bind:value={editMaxUsers}
 							min="1"
-							class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+							class="w-full rounded-md border border-[var(--color-border)] px-3 py-2 text-sm text-[var(--color-fg-1)] focus:outline-none focus:ring-2 focus:ring-[rgba(11,27,43,0.12)]"
 						/>
 					</div>
 					<button
 						onclick={saveSettings}
 						disabled={saving}
-						class="w-full bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium py-2 rounded-lg transition-colors disabled:opacity-50"
+						class="w-full rounded-md bg-[var(--color-navy-900)] py-2 text-sm font-medium text-[var(--color-fg-on-navy)] transition-colors hover:bg-[var(--color-navy-800)] disabled:opacity-50"
 					>
 						{saving ? 'Saving...' : 'Save Settings'}
 					</button>
@@ -252,15 +252,15 @@ function statusBadge(status: string) {
 			</div>
 
 			<!-- Subscription -->
-			<div class="bg-white border border-gray-200 rounded-xl p-5">
-				<h2 class="text-sm font-semibold text-gray-700 uppercase tracking-wider mb-4">
+			<div class="rounded-xl border border-[var(--color-border)] bg-white p-5">
+				<h2 class="mb-4 text-sm font-semibold uppercase tracking-wider text-[var(--color-fg-3)]">
 					Subscription
 				</h2>
 				<div class="space-y-4">
 					<div class="flex items-center gap-2">
-						<span class="text-xs text-gray-500">Current:</span>
+						<span class="text-xs text-[var(--color-fg-4)]">Current:</span>
 						<span
-							class="inline-flex px-2.5 py-0.5 rounded-full text-xs font-semibold {statusBadge(
+							class="inline-flex rounded-sm px-2.5 py-0.5 text-xs font-semibold {statusBadge(
 								org.subscription_status
 							)}"
 						>
@@ -268,13 +268,13 @@ function statusBadge(status: string) {
 						</span>
 					</div>
 					<div>
-						<label for="org-subscription-status" class="block text-xs font-medium text-gray-500 mb-1">
+						<label for="org-subscription-status" class="mb-1 block text-xs font-medium text-[var(--color-fg-4)]">
 							Set Status
 						</label>
 						<select
 							id="org-subscription-status"
 							bind:value={editSubscription}
-							class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+							class="w-full rounded-md border border-[var(--color-border)] px-3 py-2 text-sm text-[var(--color-fg-1)] focus:outline-none focus:ring-2 focus:ring-[rgba(11,27,43,0.12)]"
 						>
 							<option value="active">active</option>
 							<option value="trialing">trialing</option>
@@ -287,7 +287,7 @@ function statusBadge(status: string) {
 					<button
 						onclick={saveSubscription}
 						disabled={savingSubscription || editSubscription === org.subscription_status}
-						class="w-full bg-gray-800 hover:bg-gray-900 text-white text-sm font-medium py-2 rounded-lg transition-colors disabled:opacity-50"
+						class="w-full rounded-md bg-[var(--color-navy-900)] py-2 text-sm font-medium text-[var(--color-fg-on-navy)] transition-colors hover:bg-[var(--color-navy-800)] disabled:opacity-50"
 					>
 						{savingSubscription ? 'Updating...' : 'Update Subscription'}
 					</button>
@@ -296,60 +296,60 @@ function statusBadge(status: string) {
 		</div>
 
 		<!-- Users table -->
-		<div class="bg-white border border-gray-200 rounded-xl overflow-hidden">
-			<div class="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
-				<h2 class="text-sm font-semibold text-gray-700 uppercase tracking-wider">
+		<div class="overflow-hidden rounded-xl border border-[var(--color-border)] bg-white">
+			<div class="flex items-center justify-between border-b border-[var(--color-border)] px-5 py-4">
+				<h2 class="text-sm font-semibold uppercase tracking-wider text-[var(--color-fg-3)]">
 					Members ({org.users.length} / {org.max_users})
 				</h2>
 			</div>
 
 			{#if org.users.length === 0}
-				<div class="px-5 py-12 text-center text-sm text-gray-400">No members yet.</div>
+				<div class="px-5 py-12 text-center text-sm text-[var(--color-fg-4)]">No members yet.</div>
 			{:else}
-				<table class="min-w-full divide-y divide-gray-100">
+				<table class="min-w-full divide-y divide-[var(--color-border)]">
 					<thead>
-						<tr class="bg-gray-50">
+						<tr class="bg-slate-50">
 							<th
-								class="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider"
+								class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-[var(--color-fg-4)]"
 								>User</th
 							>
 							<th
-								class="px-5 py-3 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider"
+								class="px-5 py-3 text-center text-xs font-semibold uppercase tracking-wider text-[var(--color-fg-4)]"
 								>Role</th
 							>
 							<th
-								class="px-5 py-3 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider"
+								class="px-5 py-3 text-center text-xs font-semibold uppercase tracking-wider text-[var(--color-fg-4)]"
 								>Token Usage</th
 							>
 							<th
-								class="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider"
+								class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-[var(--color-fg-4)]"
 								>Last Login</th
 							>
 							<th class="px-5 py-3"></th>
 						</tr>
 					</thead>
-					<tbody class="divide-y divide-gray-100">
+					<tbody class="divide-y divide-[var(--color-border)]">
 						{#each org.users as user (user.id)}
-							<tr class="hover:bg-gray-50 transition-colors">
+							<tr class="transition-colors hover:bg-slate-50">
 								<td class="px-5 py-4">
-									<div class="font-medium text-sm text-gray-900">{fullName(user)}</div>
-									<div class="text-xs text-gray-400">{user.email}</div>
+									<div class="text-sm font-medium text-[var(--color-fg-1)]">{fullName(user)}</div>
+									<div class="text-xs text-[var(--color-fg-4)]">{user.email}</div>
 								</td>
 								<td class="px-5 py-4 text-center">
 									<span
-										class="text-xs font-medium px-2 py-0.5 rounded-full {user.role === 'owner'
-											? 'bg-purple-100 text-purple-700'
-											: 'bg-gray-100 text-gray-600'}"
+										class="rounded-sm px-2 py-0.5 text-xs font-medium {user.role === 'owner'
+											? 'bg-[var(--color-navy-50)] text-[var(--color-navy-900)]'
+											: 'bg-[var(--color-bone-100)] text-[var(--color-fg-3)]'}"
 									>
 										{user.role}
 									</span>
 								</td>
 								<td class="px-5 py-4">
 									<div class="flex flex-col items-center gap-1">
-										<span class="text-xs text-gray-500">
+										<span class="text-xs text-[var(--color-fg-4)]">
 											{user.tokens_used_today.toLocaleString()} / {user.daily_token_limit.toLocaleString()}
 										</span>
-										<div class="w-24 bg-gray-200 rounded-full h-1.5 overflow-hidden">
+										<div class="h-1.5 w-24 overflow-hidden rounded-full bg-slate-200">
 											<div
 												class="h-full {usageColor(user.usage_percentage)}"
 												style="width: {Math.min(user.usage_percentage, 100)}%"
@@ -357,18 +357,18 @@ function statusBadge(status: string) {
 										</div>
 									</div>
 								</td>
-								<td class="px-5 py-4 text-sm text-gray-400">{formatDate(user.last_login)}</td>
+								<td class="px-5 py-4 text-sm text-[var(--color-fg-4)]">{formatDate(user.last_login)}</td>
 								<td class="px-5 py-4">
 									<div class="flex items-center justify-end gap-2">
 										<button
 											onclick={() => openTokenModal(user)}
-											class="text-xs font-medium text-blue-600 hover:text-blue-800 px-2.5 py-1 rounded-md hover:bg-blue-50 transition-colors"
+											class="rounded-md px-2.5 py-1 text-xs font-medium text-[var(--color-navy-700)] transition-colors hover:bg-[var(--color-navy-50)] hover:text-[var(--color-navy-900)]"
 										>
 											Edit Limit
 										</button>
 										<button
 											onclick={() => (confirmDeleteUser = user)}
-											class="text-xs font-medium text-red-500 hover:text-red-700 px-2.5 py-1 rounded-md hover:bg-red-50 transition-colors"
+											class="rounded-md px-2.5 py-1 text-xs font-medium text-[var(--color-error)] transition-colors hover:bg-[var(--color-error-bg)] hover:opacity-90"
 										>
 											Delete
 										</button>
@@ -393,11 +393,11 @@ function statusBadge(status: string) {
 	{#if selectedUser}
 		<div class="space-y-4">
 			<div>
-				<p class="text-sm font-medium text-gray-800">{fullName(selectedUser)}</p>
-				<p class="text-xs text-gray-400">{selectedUser.email}</p>
+				<p class="text-sm font-medium text-[var(--color-fg-1)]">{fullName(selectedUser)}</p>
+				<p class="text-xs text-[var(--color-fg-4)]">{selectedUser.email}</p>
 			</div>
 			<div>
-				<label for="daily-token-limit" class="block text-xs font-medium text-gray-500 mb-1">
+				<label for="daily-token-limit" class="mb-1 block text-xs font-medium text-[var(--color-fg-4)]">
 					Daily Token Limit
 				</label>
 				<input
@@ -406,26 +406,26 @@ function statusBadge(status: string) {
 					bind:value={editedLimit}
 					min="0"
 					step="10000"
-					class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+					class="w-full rounded-md border border-[var(--color-border)] px-3 py-2 text-sm text-[var(--color-fg-1)] focus:outline-none focus:ring-2 focus:ring-[rgba(11,27,43,0.12)]"
 				/>
-				<p class="text-xs text-gray-400 mt-1">
+				<p class="mt-1 text-xs text-[var(--color-fg-4)]">
 					Current usage today: {selectedUser.tokens_used_today.toLocaleString()} tokens
 				</p>
 			</div>
 			{#if limitError}
-				<p class="text-sm text-red-600">{limitError}</p>
+				<p class="text-sm text-[var(--color-error)]">{limitError}</p>
 			{/if}
 			<div class="flex justify-end gap-3 pt-2">
 				<button
 					onclick={() => (showTokenModal = false)}
-					class="px-4 py-2 text-sm text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+					class="rounded-md border border-[var(--color-border)] px-4 py-2 text-sm text-[var(--color-fg-2)] transition-colors hover:bg-slate-50"
 				>
 					Cancel
 				</button>
 				<button
 					onclick={saveTokenLimit}
 					disabled={savingLimit || editedLimit === selectedUser.daily_token_limit}
-					class="px-4 py-2 text-sm font-medium bg-blue-600 hover:bg-blue-700 text-white rounded-lg disabled:opacity-50 transition-colors"
+					class="rounded-md bg-[var(--color-navy-900)] px-4 py-2 text-sm font-medium text-[var(--color-fg-on-navy)] transition-colors hover:bg-[var(--color-navy-800)] disabled:opacity-50"
 				>
 					{savingLimit ? 'Saving...' : 'Save'}
 				</button>

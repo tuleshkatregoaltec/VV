@@ -67,12 +67,12 @@ async function handleSubmit() {
 </script>
 
 <!-- Blocking modal overlay -->
-<div class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-	<div class="bg-white rounded-2xl shadow-2xl max-w-md w-full p-8">
+<div class="fixed inset-0 bg-black/50  z-50 flex items-center justify-center p-4">
+	<div class="bg-white rounded-lg shadow-2xl max-w-md w-full p-8">
 		<!-- Header -->
 		<div class="mb-6 text-center">
 			<div
-				class="w-16 h-16 bg-gradient-to-br from-teal-600 to-cyan-600 rounded-full flex items-center justify-center mx-auto mb-4"
+				class="w-16 h-16 bg-primary rounded-full flex items-center justify-center mx-auto mb-4"
 			>
 				<svg class="w-8 h-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
 					<path
@@ -122,7 +122,7 @@ async function handleSubmit() {
 			<button
 				type="submit"
 				disabled={loading}
-				class="w-full bg-gradient-to-r from-teal-600 to-cyan-600 hover:from-teal-700 hover:to-cyan-700 text-white rounded-lg px-4 py-3
+				class="w-full bg-primary hover:bg-primary-light text-white rounded-lg px-4 py-3
                        transition-all disabled:opacity-50 disabled:cursor-not-allowed font-medium shadow-lg hover:shadow-xl"
 			>
 				{loading ? 'Saving...' : 'Continue'}

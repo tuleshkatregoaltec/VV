@@ -18,11 +18,13 @@ async function handleLogout() {
 		class:rounded-xl={compact}
 		class:px-3={compact}
 		class:py-2.5={compact}
-		class="flex items-center justify-between gap-3 rounded-2xl border border-slate-200/80 bg-white/85 px-4 py-3 shadow-sm backdrop-blur"
+		class="flex items-center justify-between gap-3 rounded-md border border-[var(--color-border)] bg-slate-50 px-4 py-3"
 	>
 		<div class="min-w-0">
-			<p class="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">{label}</p>
-			<p class="truncate text-sm font-medium text-slate-900">{email}</p>
+			<p class="font-mono text-[10px] font-medium uppercase tracking-[0.08em] text-[var(--color-fg-4)]">
+				{label}
+			</p>
+			<p class="truncate text-sm font-medium text-[var(--color-fg-1)]">{email}</p>
 		</div>
 		<button
 			type="button"
@@ -31,7 +33,7 @@ async function handleLogout() {
 			class:text-xs={compact}
 			class:px-2.5={compact}
 			class:py-1={compact}
-			class="shrink-0 rounded-full border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 transition hover:border-slate-400 hover:bg-slate-50 disabled:opacity-60"
+			class="shrink-0 rounded-md border border-[var(--color-border)] bg-white px-3 py-1.5 text-sm font-medium text-[var(--color-fg-2)] transition hover:border-[var(--color-navy-600)] hover:text-[var(--color-navy-900)] disabled:opacity-60"
 		>
 			{loading ? 'Signing out...' : 'Use a different account'}
 		</button>

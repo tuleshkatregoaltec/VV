@@ -91,15 +91,17 @@ let nextId = 0
 			<button
 				id="{id}-button"
 				type="button"
-				class="w-full px-4 py-2 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 text-left flex items-center justify-between hover:border-gray-300 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
+				class="flex w-full items-center justify-between rounded-md border border-[var(--color-border)] bg-white px-3 py-2 text-left text-sm text-[var(--color-fg-1)] transition-all duration-150 hover:border-[var(--color-border-strong)] hover:bg-slate-50 focus:border-[var(--color-navy-900)] focus:outline-none focus:ring-2 focus:ring-[rgba(11,27,43,0.12)]"
 				onclick={toggle}
 				aria-label={ariaLabel}
 				aria-haspopup="true"
 				aria-expanded={isOpen}
 			>
-				<span class:text-gray-400={!displayValue}>{displayValue || 'Select...'}</span>
+				<span class={!displayValue ? 'text-[var(--color-fg-5)]' : ''}>
+					{displayValue || 'Select...'}
+				</span>
 				<svg
-					class="w-4 h-4 text-gray-400 transition-transform duration-200"
+					class="h-4 w-4 text-[var(--color-fg-4)] transition-transform duration-200"
 					class:rotate-180={isOpen}
 					fill="none"
 					stroke="currentColor"
@@ -113,7 +115,7 @@ let nextId = 0
 
 		{#if isOpen}
 			<div
-				class="absolute z-50 mt-2 bg-white border border-gray-200 rounded-lg shadow-lg {align ===
+				class="absolute z-50 mt-2 overflow-hidden rounded-lg border border-[var(--color-border)] bg-white shadow-lg {align ===
 				'right'
 					? 'right-0'
 					: 'left-0'}"

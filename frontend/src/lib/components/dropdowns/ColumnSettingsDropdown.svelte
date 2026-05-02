@@ -44,7 +44,7 @@ function hideAll() {
 	{#snippet button({ toggle, isOpen })}
 		<button
 			type="button"
-			class="p-2 rounded-lg hover:bg-gray-100 border border-gray-200 flex items-center gap-2 text-gray-600 hover:text-gray-800 transition-colors"
+			class="flex items-center gap-2 rounded-md border border-[var(--color-border)] bg-white p-2 text-[var(--color-fg-3)] transition-colors hover:border-[var(--color-border-strong)] hover:bg-slate-50 hover:text-[var(--color-fg-1)]"
 			onclick={toggle}
 			aria-label={ariaLabel}
 			aria-haspopup="listbox"
@@ -72,21 +72,21 @@ function hideAll() {
 	{#snippet children({ close })}
 		<div class="min-w-[200px]" role="listbox" aria-multiselectable="true" tabindex="-1">
 			<!-- Header with quick actions -->
-			<div class="flex items-center justify-between px-3 py-2 border-b border-gray-100">
-				<span class="text-xs font-medium text-gray-500 uppercase tracking-wide">Show Columns</span>
+			<div class="flex items-center justify-between border-b border-[var(--color-border)] px-3 py-2">
+				<span class="font-mono text-[10px] font-medium uppercase tracking-[0.08em] text-[var(--color-fg-4)]">Show Columns</span>
 				<div class="flex gap-2">
 					<button
 						type="button"
 						onclick={showAll}
-						class="text-xs text-primary hover:text-primary/80 font-medium"
+						class="text-xs font-medium text-[var(--color-navy-700)] hover:text-[var(--color-navy-900)]"
 					>
 						All
 					</button>
-					<span class="text-gray-300">|</span>
+					<span class="text-[var(--color-border-strong)]">|</span>
 					<button
 						type="button"
 						onclick={hideAll}
-						class="text-xs text-primary hover:text-primary/80 font-medium"
+						class="text-xs font-medium text-[var(--color-navy-700)] hover:text-[var(--color-navy-900)]"
 					>
 						None
 					</button>
@@ -94,10 +94,10 @@ function hideAll() {
 			</div>
 
 			<!-- Column checkboxes -->
-			<div class="p-2 max-h-[300px] overflow-y-auto">
+			<div class="max-h-[300px] overflow-y-auto p-1.5">
 				{#each options as option (option.id)}
 					<label
-						class="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-gray-50 cursor-pointer transition-colors group"
+						class="group flex cursor-pointer items-center gap-3 rounded-md px-3 py-2 transition-colors hover:bg-slate-50"
 					>
 						<div class="relative flex items-center">
 							<input
@@ -105,16 +105,16 @@ function hideAll() {
 								id="{id}-{option.id}"
 								checked={selected[option.id] || false}
 								onchange={() => toggleOption(option.id)}
-								class="w-4 h-4 text-primary border-gray-300 rounded focus:ring-2 focus:ring-primary/20 cursor-pointer"
+								class="h-4 w-4 cursor-pointer rounded-sm border-[var(--color-border-strong)] accent-[var(--color-navy-900)] text-[var(--color-navy-900)] focus:ring-2 focus:ring-[rgba(11,27,43,0.12)]"
 								aria-checked={selected[option.id] ? 'true' : 'false'}
 								aria-labelledby="{id}-{option.id}-label"
 							/>
 						</div>
 						<span
 							id="{id}-{option.id}-label"
-							class="text-sm select-none group-hover:text-gray-900 {selected[option.id]
-								? 'text-gray-900'
-								: 'text-gray-500'}"
+							class="select-none text-sm group-hover:text-[var(--color-fg-1)] {selected[option.id]
+								? 'text-[var(--color-fg-1)]'
+								: 'text-[var(--color-fg-4)]'}"
 						>
 							{option.label}
 						</span>

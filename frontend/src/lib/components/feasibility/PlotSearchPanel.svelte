@@ -91,7 +91,7 @@ async function choosePlot(plot: Plot) {
 	</div>
 
 	<div class="grid min-h-0 flex-1 gap-6 xl:grid-cols-[320px_minmax(0,1fr)_360px]">
-		<div class="flex min-h-0 flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+		<div class="flex min-h-0 flex-col overflow-hidden rounded-xl border border-[var(--color-border)] bg-white">
 			<div class="border-b border-slate-200 px-5 py-4">
 				<p class="text-sm font-semibold text-slate-900">Areas</p>
 				<p class="mt-1 text-xs text-slate-500">Load all plots in a community first, then filter the inventory.</p>
@@ -100,7 +100,7 @@ async function choosePlot(plot: Plot) {
 				<input
 					bind:value={communitySearch}
 					placeholder="Filter areas"
-					class="h-11 w-full rounded-2xl border border-slate-300 px-4 text-sm text-slate-900 outline-none transition focus:border-teal-500"
+					class="h-11 w-full rounded-lg border border-slate-300 px-4 text-sm text-slate-900 outline-none transition focus:border-primary"
 				/>
 			</div>
 			<div class="min-h-0 flex-1 overflow-auto border-t border-slate-100">
@@ -112,7 +112,7 @@ async function choosePlot(plot: Plot) {
 					{#each filteredCommunities as community}
 						<button
 							type="button"
-							class="flex w-full items-center justify-between border-b border-slate-100 px-5 py-3 text-left transition {selectedCommunity === community ? 'bg-teal-50 text-teal-700' : 'hover:bg-slate-50'}"
+							class="flex w-full items-center justify-between border-b border-slate-100 px-5 py-3 text-left transition {selectedCommunity === community ? 'bg-slate-100 text-[var(--color-fg-1)]' : 'hover:bg-slate-50'}"
 							onclick={() => void loadCommunityPlots(community)}
 						>
 							<span class="text-sm font-medium">{community}</span>
@@ -125,7 +125,7 @@ async function choosePlot(plot: Plot) {
 			</div>
 		</div>
 
-		<div class="flex min-h-0 flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+		<div class="flex min-h-0 flex-col overflow-hidden rounded-xl border border-[var(--color-border)] bg-white">
 			<div class="border-b border-slate-200 px-5 py-4">
 				<p class="text-sm font-semibold text-slate-900">Plots</p>
 				<p class="mt-1 text-xs text-slate-500">
@@ -136,9 +136,9 @@ async function choosePlot(plot: Plot) {
 				<input
 					bind:value={plotSearch}
 					placeholder="Search loaded plots"
-					class="h-11 rounded-2xl border border-slate-300 px-4 text-sm text-slate-900 outline-none transition focus:border-teal-500"
+					class="h-11 rounded-lg border border-slate-300 px-4 text-sm text-slate-900 outline-none transition focus:border-primary"
 				/>
-				<select bind:value={usageFilter} class="h-11 rounded-2xl border border-slate-300 px-4 text-sm text-slate-900 outline-none transition focus:border-teal-500">
+				<select bind:value={usageFilter} class="h-11 rounded-lg border border-slate-300 px-4 text-sm text-slate-900 outline-none transition focus:border-primary">
 					<option value="all">All uses</option>
 					<option value="residential">Residential</option>
 					<option value="commercial">Commercial</option>
@@ -149,15 +149,15 @@ async function choosePlot(plot: Plot) {
 					type="number"
 					min="0"
 					placeholder="Min plot area sqm"
-					class="h-11 rounded-2xl border border-slate-300 px-4 text-sm text-slate-900 outline-none transition focus:border-teal-500"
+					class="h-11 rounded-lg border border-slate-300 px-4 text-sm text-slate-900 outline-none transition focus:border-primary"
 				/>
-				<select bind:value={sortBy} class="h-11 rounded-2xl border border-slate-300 px-4 text-sm text-slate-900 outline-none transition focus:border-teal-500">
+				<select bind:value={sortBy} class="h-11 rounded-lg border border-slate-300 px-4 text-sm text-slate-900 outline-none transition focus:border-primary">
 					<option value="verified">Verified first</option>
 					<option value="largest">Largest plot</option>
 					<option value="highest_gfa">Highest GFA</option>
 				</select>
-				<label class="flex items-center gap-2 rounded-2xl border border-slate-200 px-4 text-sm text-slate-700 md:col-span-2 xl:col-span-4">
-					<input bind:checked={verifiedOnly} type="checkbox" class="h-4 w-4 rounded border-slate-300 text-teal-600" />
+				<label class="flex items-center gap-2 rounded-lg border border-slate-200 px-4 text-sm text-slate-700 md:col-span-2 xl:col-span-4">
+					<input bind:checked={verifiedOnly} type="checkbox" class="h-4 w-4 rounded border-slate-300 text-primary" />
 					Verified plots only
 				</label>
 			</div>
@@ -209,7 +209,7 @@ async function choosePlot(plot: Plot) {
 			</div>
 		</div>
 
-		<div class="min-h-0 overflow-auto rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+		<div class="min-h-0 overflow-auto rounded-xl border border-[var(--color-border)] bg-white p-5">
 			<p class="text-sm font-semibold text-slate-900">Selected raw plot data</p>
 			{#if workbookStore.plotData}
 				<div class="mt-4 grid gap-3 text-sm text-slate-600">
@@ -237,7 +237,7 @@ async function choosePlot(plot: Plot) {
 					</div>
 					<button
 						type="button"
-						class="mt-2 h-11 rounded-2xl bg-teal-600 px-4 text-sm font-medium text-white transition hover:bg-teal-700"
+						class="mt-2 h-11 rounded-lg bg-primary px-4 text-sm font-medium text-white transition hover:bg-primary"
 						onclick={() => void workbookStore.generateStudy()}
 					>
 						Generate Study

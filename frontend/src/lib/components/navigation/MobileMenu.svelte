@@ -13,25 +13,25 @@ function handleLogout() {
 </script>
 
 {#if show}
-	<div class="md:hidden border-t border-primary-pale py-4 space-y-1">
+	<div class="space-y-1 border-t border-slate-200 py-4 md:hidden">
 		<a
 			href="/dashboard"
-			class="block px-4 py-2.5 rounded-lg text-base font-medium text-gray-700 hover:text-primary hover:bg-primary-pale/30 transition-all duration-300"
+			class="block rounded-md px-4 py-2.5 text-base font-medium text-[var(--color-fg-3)] transition-colors hover:bg-slate-50 hover:text-[var(--color-fg-1)]"
 		>
 			Dashboard
 		</a>
 
 		<div class="space-y-1">
-			<div class="px-4 py-2.5 text-base font-medium text-gray-700">Transactions</div>
+			<div class="px-4 py-2.5 text-base font-medium text-[var(--color-fg-3)]">Transactions</div>
 			<a
 				href="/transactions/sales"
-				class="block pl-8 pr-4 py-2 rounded-lg text-sm text-gray-600 hover:text-primary hover:bg-primary-pale/30 transition-all duration-300"
+				class="block rounded-md py-2 pl-8 pr-4 text-sm text-[var(--color-fg-3)] transition-colors hover:bg-slate-50 hover:text-[var(--color-fg-1)]"
 			>
 				Sales
 			</a>
 			<a
 				href="/transactions/rentals"
-				class="block pl-8 pr-4 py-2 rounded-lg text-sm text-gray-600 hover:text-primary hover:bg-primary-pale/30 transition-all duration-300"
+				class="block rounded-md py-2 pl-8 pr-4 text-sm text-[var(--color-fg-3)] transition-colors hover:bg-slate-50 hover:text-[var(--color-fg-1)]"
 			>
 				Rentals
 			</a>
@@ -39,36 +39,36 @@ function handleLogout() {
 
 		<a
 			href="/analytics"
-			class="block px-4 py-2.5 rounded-lg text-base font-medium text-gray-700 hover:text-primary hover:bg-primary-pale/30 transition-all duration-300"
+			class="block rounded-md px-4 py-2.5 text-base font-medium text-[var(--color-fg-3)] transition-colors hover:bg-slate-50 hover:text-[var(--color-fg-1)]"
 		>
 			Analytics
 		</a>
 
 		<a
 			href="/projects"
-			class="block px-4 py-2.5 rounded-lg text-base font-medium text-gray-700 hover:text-primary hover:bg-primary-pale/30 transition-all duration-300"
+			class="block rounded-md px-4 py-2.5 text-base font-medium text-[var(--color-fg-3)] transition-colors hover:bg-slate-50 hover:text-[var(--color-fg-1)]"
 		>
 			Projects
 		</a>
 
 		<a
 			href="/feasibility"
-			class="block px-4 py-2.5 rounded-lg text-base font-medium text-gray-700 hover:text-primary hover:bg-primary-pale/30 transition-all duration-300"
+			class="block rounded-md px-4 py-2.5 text-base font-medium text-[var(--color-fg-3)] transition-colors hover:bg-slate-50 hover:text-[var(--color-fg-1)]"
 		>
 			Feasibility
 		</a>
 
-		<hr class="my-2 border-gray-200" />
+		<hr class="my-2 border-slate-200" />
 
 		<a
 			href="/profile"
-			class="block px-4 py-2.5 rounded-lg text-base font-medium text-gray-700 hover:text-primary hover:bg-primary-pale/30 transition-all duration-300"
+			class="block rounded-md px-4 py-2.5 text-base font-medium text-[var(--color-fg-3)] transition-colors hover:bg-slate-50 hover:text-[var(--color-fg-1)]"
 		>
 			My Profile
 		</a>
 		<button
 			onclick={handleLogout}
-			class="block w-full text-left px-4 py-2.5 rounded-lg text-base font-medium text-red-600 hover:bg-red-50 transition-all duration-300"
+			class="block w-full rounded-md px-4 py-2.5 text-left text-base font-medium text-error transition-colors hover:bg-[var(--color-error-bg)]"
 		>
 			Sign Out
 		</button>

@@ -89,15 +89,15 @@ function openTab(tab: FeasibilitySheetTab) {
 				<button
 					type="button"
 					class="relative z-10 px-3 py-1 text-[11px] font-medium rounded-t border border-b-0 border-slate-300 -mb-px whitespace-nowrap transition-colors {activeTab === tab.id
-						? 'bg-white text-teal-700 border-t-2 border-t-teal-500'
+						? 'bg-white text-[var(--color-navy-700)] border-t-2 border-t-[var(--color-navy-700)]'
 						: isTabDirty(tab.id)
-							? 'bg-teal-50/80 text-teal-600 hover:text-teal-700'
+							? 'bg-slate-50 text-[var(--color-navy-700)] hover:text-[var(--color-fg-1)]'
 							: 'bg-slate-100/80 text-slate-500 hover:text-slate-700'}"
 					onclick={() => openTab(tab.id)}
 				>
 					{tab.label}
 					{#if isTabDirty(tab.id) && activeTab !== tab.id}
-						<span class="ml-1 inline-block w-1.5 h-1.5 rounded-full bg-teal-400 align-middle -mt-0.5"></span>
+						<span class="ml-1 inline-block w-1.5 h-1.5 rounded-full bg-primary align-middle -mt-0.5"></span>
 					{/if}
 				</button>
 		{/each}

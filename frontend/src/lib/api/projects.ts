@@ -3,6 +3,7 @@ import type {
 	BuildingDetailResponse,
 	BuildingInfo,
 	BuildingUnitType,
+	DdaPlotFeature,
 	GeoPin,
 	GeoPolygon,
 	MasterProjectResponse,
@@ -16,6 +17,7 @@ export type {
 	BuildingDetailResponse,
 	BuildingInfo,
 	BuildingUnitType,
+	DdaPlotFeature,
 	GeoPin,
 	GeoPolygon,
 	MasterProjectResponse,
@@ -35,5 +37,7 @@ export const projects = {
 	getMaster: (name: string): Promise<MasterProjectResponse> =>
 		client.get(client.withQuery('/api/v1/projects/master', { name })),
 	getBuilding: (propertyId: number): Promise<BuildingDetailResponse> =>
-		client.get(`/api/v1/projects/building/${propertyId}`)
+		client.get(`/api/v1/projects/building/${propertyId}`),
+	ddaPlots: (area: string): Promise<DdaPlotFeature[]> =>
+		client.get(client.withQuery('/api/v1/projects/dda-plots', { area }))
 }

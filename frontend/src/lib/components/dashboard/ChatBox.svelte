@@ -296,10 +296,10 @@ function stopStreaming() {
 							in:fly={{ y: -20, duration: 500, delay: 100, easing: cubicOut }}
 						>
 							<div
-								class="absolute inset-0 bg-gradient-to-br from-teal-500/20 to-cyan-500/20 rounded-2xl blur-xl"
+								class="absolute inset-0 bg-primary/10 rounded-lg blur-xl"
 							></div>
 							<div
-								class="relative w-20 h-20 bg-slate-900 rounded-2xl flex items-center justify-center"
+								class="relative w-20 h-20 bg-slate-900 rounded-lg flex items-center justify-center"
 							>
 								<svg
 									class="w-10 h-10 text-white"
@@ -403,7 +403,7 @@ function stopStreaming() {
 					in:fly={{ y: 10, duration: 250, delay: Math.min(i * 30, 200), easing: cubicOut }}
 				>
 					<div
-						class="max-w-[80%] rounded-2xl p-4 {msg.role === 'user'
+						class="max-w-[80%] rounded-lg p-4 {msg.role === 'user'
 							? 'bg-slate-900 text-white shadow-lg'
 							: 'bg-white text-slate-800 shadow-md border border-slate-200 hover:shadow-lg transition-shadow'}"
 					>
@@ -427,7 +427,7 @@ function stopStreaming() {
 							</div>
 						{:else if msg.role === 'assistant'}
 							<div
-								class="leading-relaxed [&_p]:mb-2 [&_p:last-child]:mb-0 [&_strong]:font-semibold [&_em]:italic [&_a]:text-teal-600 [&_a]:underline [&_a:hover]:text-teal-700 [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:mb-2 [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:mb-2 [&_li]:mb-0.5 [&_blockquote]:border-l-4 [&_blockquote]:border-slate-300 [&_blockquote]:pl-3 [&_blockquote]:italic [&_blockquote]:text-slate-600 [&_blockquote]:my-2 [&_code]:bg-slate-100 [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded [&_code]:text-sm [&_code]:font-mono [&_pre]:bg-slate-100 [&_pre]:p-3 [&_pre]:rounded-lg [&_pre]:overflow-x-auto [&_pre]:my-2 [&_pre_code]:bg-transparent [&_pre_code]:p-0"
+								class="leading-relaxed [&_p]:mb-2 [&_p:last-child]:mb-0 [&_strong]:font-semibold [&_em]:italic [&_a]:text-[var(--color-navy-700)] [&_a]:underline [&_a:hover]:text-[var(--color-fg-1)] [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:mb-2 [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:mb-2 [&_li]:mb-0.5 [&_blockquote]:border-l-4 [&_blockquote]:border-slate-300 [&_blockquote]:pl-3 [&_blockquote]:italic [&_blockquote]:text-slate-600 [&_blockquote]:my-2 [&_code]:bg-slate-100 [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded [&_code]:text-sm [&_code]:font-mono [&_pre]:bg-slate-100 [&_pre]:p-3 [&_pre]:rounded-lg [&_pre]:overflow-x-auto [&_pre]:my-2 [&_pre_code]:bg-transparent [&_pre_code]:p-0"
 							>
 								{@html renderMarkdown(msg.content)}
 							</div>
@@ -467,7 +467,7 @@ function stopStreaming() {
 	</div>
 
 	<!-- Input Area -->
-	<div class="border-t border-slate-200 bg-white/80 backdrop-blur-sm p-6">
+	<div class="border-t border-slate-200 bg-white  p-6">
 		{#if error && messages.length > 0}
 			<div
 				class="mb-4 p-3 bg-red-50 border border-red-200 rounded-xl text-red-600 text-sm flex items-center gap-2"

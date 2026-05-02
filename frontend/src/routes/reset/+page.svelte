@@ -110,7 +110,7 @@ async function handleResetPassword() {
 
 	<svelte:fragment slot="side">
 		<div class="space-y-4 rounded-[1.6rem] border border-white/10 bg-white/5 p-6">
-			<div class="rounded-3xl border border-white/10 bg-slate-900/60 p-5">
+			<div class="rounded-xl border border-white/10 bg-slate-900/60 p-5">
 				<p class="text-xs font-semibold uppercase tracking-[0.22em] text-slate-400">
 					Recovery flow
 				</p>
@@ -136,14 +136,14 @@ async function handleResetPassword() {
 			</div>
 			<a
 				href={resolve('/auth')}
-				class="inline-flex rounded-2xl bg-slate-950 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
+				class="inline-flex rounded-lg bg-slate-950 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
 			>
 				Return to sign in
 			</a>
 		</div>
 	{:else}
 		{#if error}
-			<div class="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+			<div class="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
 				{error}
 			</div>
 		{/if}
@@ -177,7 +177,7 @@ async function handleResetPassword() {
 			<button
 				type="submit"
 				disabled={loading}
-				class="w-full rounded-2xl bg-slate-950 px-4 py-3.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+				class="w-full rounded-lg bg-slate-950 px-4 py-3.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
 			>
 				{loading ? 'Updating password...' : 'Update password'}
 			</button>
