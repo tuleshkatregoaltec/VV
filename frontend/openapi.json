@@ -1107,6 +1107,123 @@
 				}
 			}
 		},
+		"/api/v1/areas": {
+			"get": {
+				"tags": ["areas", "areas"],
+				"summary": "Areas List",
+				"operationId": "areas-areas_list",
+				"parameters": [
+					{
+						"name": "limit",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer",
+							"default": 50,
+							"title": "Limit"
+						}
+					},
+					{
+						"name": "offset",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer",
+							"default": 0,
+							"title": "Offset"
+						}
+					},
+					{
+						"name": "sort_by",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"default": "units",
+							"title": "Sort By"
+						}
+					},
+					{
+						"name": "search",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "string"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"title": "Search"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/AreaListResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/areas/{area_name}": {
+			"get": {
+				"tags": ["areas", "areas"],
+				"summary": "Area Detail",
+				"operationId": "areas-area_detail",
+				"parameters": [
+					{
+						"name": "area_name",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"title": "Area Name"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/AreaDetailResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
 		"/api/v1/chat/conversations": {
 			"post": {
 				"tags": ["chat", "chat"],
@@ -4406,7 +4523,7 @@
 						"content": {
 							"application/json": {
 								"schema": {
-									"$ref": "#/components/schemas/PlotResearch-Output"
+									"$ref": "#/components/schemas/PlotResearch"
 								}
 							}
 						}
@@ -4935,6 +5052,534 @@
 				"required": ["rooms", "count", "pct_of_total"],
 				"title": "AnalyticsUnitComposition"
 			},
+			"AreaDetailResponse": {
+				"properties": {
+					"area_name": {
+						"type": "string",
+						"title": "Area Name"
+					},
+					"area_id": {
+						"anyOf": [
+							{
+								"type": "integer"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Area Id"
+					},
+					"active_projects": {
+						"type": "integer",
+						"title": "Active Projects"
+					},
+					"completed_projects": {
+						"type": "integer",
+						"title": "Completed Projects"
+					},
+					"overdue_projects": {
+						"type": "integer",
+						"title": "Overdue Projects"
+					},
+					"pipeline_units": {
+						"type": "integer",
+						"title": "Pipeline Units"
+					},
+					"units_delivering_next_12_months": {
+						"type": "integer",
+						"title": "Units Delivering Next 12 Months"
+					},
+					"active_developers": {
+						"type": "integer",
+						"title": "Active Developers"
+					},
+					"avg_completion_pct": {
+						"anyOf": [
+							{
+								"type": "number"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Avg Completion Pct"
+					},
+					"avg_delivery_confidence": {
+						"anyOf": [
+							{
+								"type": "number"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Avg Delivery Confidence"
+					},
+					"sales_transaction_count_12m": {
+						"type": "integer",
+						"title": "Sales Transaction Count 12M"
+					},
+					"rental_contract_count_12m": {
+						"type": "integer",
+						"title": "Rental Contract Count 12M"
+					},
+					"total_sales_volume_12m": {
+						"type": "number",
+						"title": "Total Sales Volume 12M"
+					},
+					"median_sale_price": {
+						"anyOf": [
+							{
+								"type": "number"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Median Sale Price"
+					},
+					"median_annual_rent": {
+						"anyOf": [
+							{
+								"type": "number"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Median Annual Rent"
+					},
+					"avg_sale_price_sqm_12m": {
+						"anyOf": [
+							{
+								"type": "number"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Avg Sale Price Sqm 12M"
+					},
+					"avg_rent_price_sqm_12m": {
+						"anyOf": [
+							{
+								"type": "number"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Avg Rent Price Sqm 12M"
+					},
+					"gross_yield_pct": {
+						"anyOf": [
+							{
+								"type": "number"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Gross Yield Pct"
+					},
+					"top_developers": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"title": "Top Developers"
+					},
+					"top_master_projects": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"title": "Top Master Projects"
+					},
+					"developer_exposure": {
+						"items": {
+							"$ref": "#/components/schemas/AreaDeveloperExposure"
+						},
+						"type": "array",
+						"title": "Developer Exposure"
+					},
+					"projects": {
+						"items": {
+							"$ref": "#/components/schemas/AreaProjectSnapshot"
+						},
+						"type": "array",
+						"title": "Projects"
+					}
+				},
+				"type": "object",
+				"required": [
+					"area_name",
+					"area_id",
+					"active_projects",
+					"completed_projects",
+					"overdue_projects",
+					"pipeline_units",
+					"units_delivering_next_12_months",
+					"active_developers",
+					"avg_completion_pct",
+					"avg_delivery_confidence",
+					"sales_transaction_count_12m",
+					"rental_contract_count_12m",
+					"total_sales_volume_12m",
+					"median_sale_price",
+					"median_annual_rent",
+					"avg_sale_price_sqm_12m",
+					"avg_rent_price_sqm_12m",
+					"gross_yield_pct"
+				],
+				"title": "AreaDetailResponse"
+			},
+			"AreaDeveloperExposure": {
+				"properties": {
+					"developer_name": {
+						"type": "string",
+						"title": "Developer Name"
+					},
+					"project_count": {
+						"type": "integer",
+						"title": "Project Count"
+					},
+					"pipeline_units": {
+						"type": "integer",
+						"title": "Pipeline Units"
+					},
+					"total_sales_volume_12m": {
+						"type": "number",
+						"title": "Total Sales Volume 12M"
+					},
+					"avg_completion_pct": {
+						"anyOf": [
+							{
+								"type": "number"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Avg Completion Pct"
+					}
+				},
+				"type": "object",
+				"required": [
+					"developer_name",
+					"project_count",
+					"pipeline_units",
+					"total_sales_volume_12m",
+					"avg_completion_pct"
+				],
+				"title": "AreaDeveloperExposure"
+			},
+			"AreaListItem": {
+				"properties": {
+					"area_name": {
+						"type": "string",
+						"title": "Area Name"
+					},
+					"area_id": {
+						"anyOf": [
+							{
+								"type": "integer"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Area Id"
+					},
+					"active_projects": {
+						"type": "integer",
+						"title": "Active Projects"
+					},
+					"completed_projects": {
+						"type": "integer",
+						"title": "Completed Projects"
+					},
+					"overdue_projects": {
+						"type": "integer",
+						"title": "Overdue Projects"
+					},
+					"pipeline_units": {
+						"type": "integer",
+						"title": "Pipeline Units"
+					},
+					"units_delivering_next_12_months": {
+						"type": "integer",
+						"title": "Units Delivering Next 12 Months"
+					},
+					"active_developers": {
+						"type": "integer",
+						"title": "Active Developers"
+					},
+					"avg_completion_pct": {
+						"anyOf": [
+							{
+								"type": "number"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Avg Completion Pct"
+					},
+					"avg_delivery_confidence": {
+						"anyOf": [
+							{
+								"type": "number"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Avg Delivery Confidence"
+					},
+					"sales_transaction_count_12m": {
+						"type": "integer",
+						"title": "Sales Transaction Count 12M"
+					},
+					"rental_contract_count_12m": {
+						"type": "integer",
+						"title": "Rental Contract Count 12M"
+					},
+					"total_sales_volume_12m": {
+						"type": "number",
+						"title": "Total Sales Volume 12M"
+					},
+					"median_sale_price": {
+						"anyOf": [
+							{
+								"type": "number"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Median Sale Price"
+					},
+					"median_annual_rent": {
+						"anyOf": [
+							{
+								"type": "number"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Median Annual Rent"
+					},
+					"avg_sale_price_sqm_12m": {
+						"anyOf": [
+							{
+								"type": "number"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Avg Sale Price Sqm 12M"
+					},
+					"avg_rent_price_sqm_12m": {
+						"anyOf": [
+							{
+								"type": "number"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Avg Rent Price Sqm 12M"
+					},
+					"gross_yield_pct": {
+						"anyOf": [
+							{
+								"type": "number"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Gross Yield Pct"
+					},
+					"top_developers": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"title": "Top Developers"
+					}
+				},
+				"type": "object",
+				"required": [
+					"area_name",
+					"area_id",
+					"active_projects",
+					"completed_projects",
+					"overdue_projects",
+					"pipeline_units",
+					"units_delivering_next_12_months",
+					"active_developers",
+					"avg_completion_pct",
+					"avg_delivery_confidence",
+					"sales_transaction_count_12m",
+					"rental_contract_count_12m",
+					"total_sales_volume_12m",
+					"median_sale_price",
+					"median_annual_rent",
+					"avg_sale_price_sqm_12m",
+					"avg_rent_price_sqm_12m",
+					"gross_yield_pct"
+				],
+				"title": "AreaListItem"
+			},
+			"AreaListResponse": {
+				"properties": {
+					"areas": {
+						"items": {
+							"$ref": "#/components/schemas/AreaListItem"
+						},
+						"type": "array",
+						"title": "Areas"
+					},
+					"total": {
+						"type": "integer",
+						"title": "Total"
+					},
+					"limit": {
+						"type": "integer",
+						"title": "Limit"
+					},
+					"offset": {
+						"type": "integer",
+						"title": "Offset"
+					},
+					"sort_by": {
+						"type": "string",
+						"title": "Sort By"
+					}
+				},
+				"type": "object",
+				"required": ["areas", "total", "limit", "offset", "sort_by"],
+				"title": "AreaListResponse"
+			},
+			"AreaProjectSnapshot": {
+				"properties": {
+					"project_id": {
+						"type": "integer",
+						"title": "Project Id"
+					},
+					"project_name": {
+						"type": "string",
+						"title": "Project Name"
+					},
+					"developer_name": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Developer Name"
+					},
+					"master_project_en": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Master Project En"
+					},
+					"completion_status": {
+						"type": "string",
+						"title": "Completion Status"
+					},
+					"pipeline_status": {
+						"type": "string",
+						"title": "Pipeline Status"
+					},
+					"no_of_units": {
+						"type": "integer",
+						"title": "No Of Units"
+					},
+					"percent_completed": {
+						"anyOf": [
+							{
+								"type": "number"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Percent Completed"
+					},
+					"estimated_delivery_confidence": {
+						"type": "number",
+						"title": "Estimated Delivery Confidence"
+					},
+					"total_sales_volume_12m": {
+						"type": "number",
+						"title": "Total Sales Volume 12M"
+					},
+					"median_sale_price": {
+						"anyOf": [
+							{
+								"type": "number"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Median Sale Price"
+					},
+					"median_annual_rent": {
+						"anyOf": [
+							{
+								"type": "number"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Median Annual Rent"
+					},
+					"gross_yield_pct": {
+						"anyOf": [
+							{
+								"type": "number"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Gross Yield Pct"
+					}
+				},
+				"type": "object",
+				"required": [
+					"project_id",
+					"project_name",
+					"developer_name",
+					"master_project_en",
+					"completion_status",
+					"pipeline_status",
+					"no_of_units",
+					"percent_completed",
+					"estimated_delivery_confidence",
+					"total_sales_volume_12m",
+					"median_sale_price",
+					"median_annual_rent",
+					"gross_yield_pct"
+				],
+				"title": "AreaProjectSnapshot"
+			},
 			"AuthMeResponse": {
 				"properties": {
 					"id": {
@@ -5020,6 +5665,41 @@
 				"type": "object",
 				"required": ["chunk"],
 				"title": "Body_upload-upload_chunked"
+			},
+			"BtrUnitConfig": {
+				"properties": {
+					"id": {
+						"type": "string",
+						"title": "Id"
+					},
+					"label": {
+						"type": "string",
+						"title": "Label"
+					},
+					"units": {
+						"type": "integer",
+						"title": "Units",
+						"default": 0
+					},
+					"avgSizeSqm": {
+						"type": "number",
+						"title": "Avgsizesqm",
+						"default": 0.0
+					},
+					"monthlyRentAed": {
+						"type": "number",
+						"title": "Monthlyrentaed",
+						"default": 0.0
+					},
+					"parkingRatio": {
+						"type": "number",
+						"title": "Parkingratio",
+						"default": 0.0
+					}
+				},
+				"type": "object",
+				"required": ["id", "label"],
+				"title": "BtrUnitConfig"
 			},
 			"BuildingDetailResponse": {
 				"properties": {
@@ -5748,26 +6428,14 @@
 						"default": 0.0
 					},
 					"maxCoveragePct": {
-						"anyOf": [
-							{
-								"type": "number"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Maxcoveragepct"
+						"type": "number",
+						"title": "Maxcoveragepct",
+						"default": 0.0
 					},
 					"maxStoreys": {
-						"anyOf": [
-							{
-								"type": "integer"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Maxstoreys"
+						"type": "integer",
+						"title": "Maxstoreys",
+						"default": 0
 					},
 					"maxFar": {
 						"type": "number",
@@ -5874,37 +6542,19 @@
 						"title": "Handoverdate"
 					},
 					"landAcquisitionCostOverrideAed": {
-						"anyOf": [
-							{
-								"type": "number"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Landacquisitioncostoverrideaed"
+						"type": "number",
+						"title": "Landacquisitioncostoverrideaed",
+						"default": 0.0
 					},
 					"designSupervisionCostOverrideAed": {
-						"anyOf": [
-							{
-								"type": "number"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Designsupervisioncostoverrideaed"
+						"type": "number",
+						"title": "Designsupervisioncostoverrideaed",
+						"default": 0.0
 					},
 					"constructionCostOverrideAed": {
-						"anyOf": [
-							{
-								"type": "number"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Constructioncostoverrideaed"
+						"type": "number",
+						"title": "Constructioncostoverrideaed",
+						"default": 0.0
 					},
 					"demolitionCostAed": {
 						"type": "number",
@@ -5919,26 +6569,14 @@
 						"title": "Governmentfeesaed"
 					},
 					"marketingCostOverrideAed": {
-						"anyOf": [
-							{
-								"type": "number"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Marketingcostoverrideaed"
+						"type": "number",
+						"title": "Marketingcostoverrideaed",
+						"default": 0.0
 					},
 					"salesAgentFeesOverrideAed": {
-						"anyOf": [
-							{
-								"type": "number"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Salesagentfeesoverrideaed"
+						"type": "number",
+						"title": "Salesagentfeesoverrideaed",
+						"default": 0.0
 					},
 					"masterCommunityFeesAed": {
 						"type": "number",
@@ -5949,15 +6587,9 @@
 						"title": "Ffeosepreopeningcostaed"
 					},
 					"contingencyCostOverrideAed": {
-						"anyOf": [
-							{
-								"type": "number"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Contingencycostoverrideaed"
+						"type": "number",
+						"title": "Contingencycostoverrideaed",
+						"default": 0.0
 					},
 					"midPointInflationPct": {
 						"type": "number",
@@ -6021,6 +6653,213 @@
 					},
 					"paymentPlan": {
 						"$ref": "#/components/schemas/FeasibilityPaymentPlan"
+					},
+					"developmentModel": {
+						"type": "string",
+						"enum": [
+							"build_to_sell_residential",
+							"build_to_rent_residential",
+							"build_to_lease_commercial"
+						],
+						"title": "Developmentmodel",
+						"default": "build_to_sell_residential"
+					},
+					"btrUnitConfigs": {
+						"items": {
+							"$ref": "#/components/schemas/BtrUnitConfig"
+						},
+						"type": "array",
+						"title": "Btrunitconfigs"
+					},
+					"btrHoldPeriodYears": {
+						"type": "number",
+						"title": "Btrholdperiodyears",
+						"default": 0.0
+					},
+					"btrLeaseUpPaceUnitsPerMonth": {
+						"type": "number",
+						"title": "Btrleaseuppaceunitspermonth",
+						"default": 0.0
+					},
+					"btrStabilizedOccupancyPct": {
+						"type": "number",
+						"title": "Btrstabilizedoccupancypct",
+						"default": 0.0
+					},
+					"btrFreeRentMonths": {
+						"type": "number",
+						"title": "Btrfreerentmonths",
+						"default": 0.0
+					},
+					"btrAnnualRentGrowthPct": {
+						"type": "number",
+						"title": "Btrannualrentgrowthpct",
+						"default": 0.0
+					},
+					"btrMarketRentGrowthPct": {
+						"type": "number",
+						"title": "Btrmarketrentgrowthpct",
+						"default": 0.0
+					},
+					"btrRenewalRentGrowthPct": {
+						"type": "number",
+						"title": "Btrrenewalrentgrowthpct",
+						"default": 0.0
+					},
+					"btrGeneralVacancyPct": {
+						"type": "number",
+						"title": "Btrgeneralvacancypct",
+						"default": 0.0
+					},
+					"btrPropertyManagementPct": {
+						"type": "number",
+						"title": "Btrpropertymanagementpct",
+						"default": 0.0
+					},
+					"btrRepairsMaintenancePsqm": {
+						"type": "number",
+						"title": "Btrrepairsmaintenancepsqm",
+						"default": 0.0
+					},
+					"btrInsurancePsqm": {
+						"type": "number",
+						"title": "Btrinsurancepsqm",
+						"default": 0.0
+					},
+					"btrServiceChargePsqm": {
+						"type": "number",
+						"title": "Btrservicechargepsqm",
+						"default": 0.0
+					},
+					"btrUtilitiesPsqm": {
+						"type": "number",
+						"title": "Btrutilitiespsqm",
+						"default": 0.0
+					},
+					"btrMarketingLeasingPct": {
+						"type": "number",
+						"title": "Btrmarketingleasingpct",
+						"default": 0.0
+					},
+					"btrCapexReservePct": {
+						"type": "number",
+						"title": "Btrcapexreservepct",
+						"default": 0.0
+					},
+					"btrParkingIncomeAed": {
+						"type": "number",
+						"title": "Btrparkingincomeaed",
+						"default": 0.0
+					},
+					"btrAncillaryIncomeAed": {
+						"type": "number",
+						"title": "Btrancillaryincomeaed",
+						"default": 0.0
+					},
+					"btrAncillaryGrowthPct": {
+						"type": "number",
+						"title": "Btrancillarygrowthpct",
+						"default": 0.0
+					},
+					"btrStabilizedFreeRentMonths": {
+						"type": "number",
+						"title": "Btrstabilizedfreerentmonths",
+						"default": 0.0
+					},
+					"btrOpExGrowthPct": {
+						"type": "number",
+						"title": "Btropexgrowthpct",
+						"default": 0.0
+					},
+					"btrDevCostEscalationPct": {
+						"type": "number",
+						"title": "Btrdevcostescalationpct",
+						"default": 0.0
+					},
+					"btrTerminalGrowthPct": {
+						"type": "number",
+						"title": "Btrterminalgrowthpct",
+						"default": 0.0
+					},
+					"btrLeaseUpMarketingAed": {
+						"type": "number",
+						"title": "Btrleaseupmarketingaed",
+						"default": 0.0
+					},
+					"btrCreditLossPct": {
+						"type": "number",
+						"title": "Btrcreditlosspct",
+						"default": 0.0
+					},
+					"btrPayrollPsqm": {
+						"type": "number",
+						"title": "Btrpayrollpsqm",
+						"default": 0.0
+					},
+					"btrGeneralAdminPct": {
+						"type": "number",
+						"title": "Btrgeneraladminpct",
+						"default": 0.0
+					},
+					"btrContractServicesPsqm": {
+						"type": "number",
+						"title": "Btrcontractservicespsqm",
+						"default": 0.0
+					},
+					"btrModelUnits": {
+						"type": "number",
+						"title": "Btrmodelunits",
+						"default": 0.0
+					},
+					"btrExitCapRatePct": {
+						"type": "number",
+						"title": "Btrexitcapratepct",
+						"default": 0.0
+					},
+					"btrExitCostPct": {
+						"type": "number",
+						"title": "Btrexitcostpct",
+						"default": 0.0
+					},
+					"btrPermDebtLtvPct": {
+						"type": "number",
+						"title": "Btrpermdebtltvpct",
+						"default": 0.0
+					},
+					"btrPermDebtRatePct": {
+						"type": "number",
+						"title": "Btrpermdebtratepct",
+						"default": 0.0
+					},
+					"btrPermDebtSpreadBps": {
+						"type": "number",
+						"title": "Btrpermdebtspreadbps",
+						"default": 0.0
+					},
+					"btrPermDebtAmortYears": {
+						"type": "number",
+						"title": "Btrpermdebtamortyears",
+						"default": 0.0
+					},
+					"btrPermDebtPointsPct": {
+						"type": "number",
+						"title": "Btrpermdebtpointspct",
+						"default": 0.0
+					},
+					"btrPermDebtIoYears": {
+						"type": "number",
+						"title": "Btrpermdebtioyears",
+						"default": 0.0
+					},
+					"btrDscrMinimum": {
+						"type": "number",
+						"title": "Btrdscrminimum",
+						"default": 0.0
+					},
+					"btrRefiCapRatePct": {
+						"type": "number",
+						"title": "Btrreficapratepct",
+						"default": 0.0
 					}
 				},
 				"type": "object",
@@ -6073,28 +6912,12 @@
 				],
 				"title": "FeasibilityAssumptions"
 			},
-			"FeasibilityChatMessage": {
-				"properties": {
-					"role": {
-						"type": "string",
-						"enum": ["system", "user", "assistant"],
-						"title": "Role"
-					},
-					"content": {
-						"type": "string",
-						"title": "Content"
-					}
-				},
-				"additionalProperties": false,
-				"type": "object",
-				"required": ["role", "content"],
-				"title": "FeasibilityChatMessage"
-			},
 			"FeasibilityChatRequest": {
 				"properties": {
 					"messages": {
 						"items": {
-							"$ref": "#/components/schemas/FeasibilityChatMessage"
+							"additionalProperties": true,
+							"type": "object"
 						},
 						"type": "array",
 						"title": "Messages"
@@ -6108,12 +6931,14 @@
 					"research": {
 						"anyOf": [
 							{
-								"$ref": "#/components/schemas/PlotResearch-Input"
+								"additionalProperties": true,
+								"type": "object"
 							},
 							{
 								"type": "null"
 							}
-						]
+						],
+						"title": "Research"
 					},
 					"history_json": {
 						"anyOf": [
@@ -6127,23 +6952,9 @@
 						"title": "History Json"
 					}
 				},
-				"additionalProperties": false,
 				"type": "object",
 				"required": ["messages", "plot_data", "assumptions"],
 				"title": "FeasibilityChatRequest"
-			},
-			"FeasibilityChatState": {
-				"properties": {
-					"history": {
-						"items": {
-							"$ref": "#/components/schemas/FeasibilityChatMessage"
-						},
-						"type": "array",
-						"title": "History"
-					}
-				},
-				"type": "object",
-				"title": "FeasibilityChatState"
 			},
 			"FeasibilityPaymentPlan": {
 				"properties": {
@@ -6314,9 +7125,24 @@
 							}
 						],
 						"title": "Usage Override"
+					},
+					"development_model": {
+						"anyOf": [
+							{
+								"type": "string",
+								"enum": [
+									"build_to_sell_residential",
+									"build_to_rent_residential",
+									"build_to_lease_commercial"
+								]
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Development Model"
 					}
 				},
-				"additionalProperties": false,
 				"type": "object",
 				"required": ["plot_number"],
 				"title": "GenerateStudyRequest"
@@ -6335,13 +7161,15 @@
 						"$ref": "#/components/schemas/FeasibilityAssumptions"
 					},
 					"research": {
-						"$ref": "#/components/schemas/PlotResearch-Output"
+						"$ref": "#/components/schemas/PlotResearch"
 					},
 					"study_context": {
 						"$ref": "#/components/schemas/StudyContext"
 					},
 					"chat": {
-						"$ref": "#/components/schemas/FeasibilityChatState"
+						"additionalProperties": true,
+						"type": "object",
+						"title": "Chat"
 					}
 				},
 				"type": "object",
@@ -6491,6 +7319,17 @@
 					"price_sqm": {
 						"type": "number",
 						"title": "Price Sqm"
+					},
+					"price_per_gfa_sqm": {
+						"anyOf": [
+							{
+								"type": "number"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Price Per Gfa Sqm"
 					},
 					"nearest_landmark": {
 						"anyOf": [
@@ -7780,7 +8619,7 @@
 				],
 				"title": "PlotDetails"
 			},
-			"PlotResearch-Input": {
+			"PlotResearch": {
 				"properties": {
 					"plot_number": {
 						"type": "string",
@@ -7865,138 +8704,29 @@
 						"type": "array",
 						"title": "Off Plan Unit Benchmarks"
 					},
-					"assumptions": {
-						"$ref": "#/components/schemas/FeasibilityAssumptions"
-					},
-					"warnings": {
-						"items": {
-							"type": "string"
-						},
-						"type": "array",
-						"title": "Warnings"
-					},
-					"land_cost_estimate_aed_low": {
+					"rental_market_summary": {
 						"anyOf": [
 							{
-								"type": "number"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Land Cost Estimate Aed Low"
-					},
-					"land_cost_estimate_aed_mid": {
-						"anyOf": [
-							{
-								"type": "number"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Land Cost Estimate Aed Mid"
-					},
-					"land_cost_estimate_aed_high": {
-						"anyOf": [
-							{
-								"type": "number"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Land Cost Estimate Aed High"
-					}
-				},
-				"type": "object",
-				"required": ["plot_number", "usage", "market_area", "headline", "assumptions"],
-				"title": "PlotResearch"
-			},
-			"PlotResearch-Output": {
-				"properties": {
-					"plot_number": {
-						"type": "string",
-						"title": "Plot Number"
-					},
-					"usage": {
-						"type": "string",
-						"enum": ["residential", "commercial", "mixed_use", "unknown"],
-						"title": "Usage"
-					},
-					"market_area": {
-						"type": "string",
-						"title": "Market Area"
-					},
-					"headline": {
-						"type": "string",
-						"title": "Headline"
-					},
-					"summary": {
-						"items": {
-							"type": "string"
-						},
-						"type": "array",
-						"title": "Summary"
-					},
-					"constraints": {
-						"items": {
-							"type": "string"
-						},
-						"type": "array",
-						"title": "Constraints"
-					},
-					"pricing_evidence": {
-						"items": {
-							"$ref": "#/components/schemas/ComparableProject"
-						},
-						"type": "array",
-						"title": "Pricing Evidence"
-					},
-					"competition_evidence": {
-						"items": {
-							"$ref": "#/components/schemas/ComparableProject"
-						},
-						"type": "array",
-						"title": "Competition Evidence"
-					},
-					"land_sales_evidence": {
-						"items": {
-							"$ref": "#/components/schemas/LandSaleEvidence"
-						},
-						"type": "array",
-						"title": "Land Sales Evidence"
-					},
-					"market_pricing": {
-						"items": {
-							"$ref": "#/components/schemas/MarketPricingRow"
-						},
-						"type": "array",
-						"title": "Market Pricing"
-					},
-					"off_plan_market_pricing": {
-						"items": {
-							"$ref": "#/components/schemas/OffPlanPricingRow"
-						},
-						"type": "array",
-						"title": "Off Plan Market Pricing"
-					},
-					"off_plan_pricing_confidence": {
-						"anyOf": [
-							{
-								"$ref": "#/components/schemas/OffPlanPricingConfidence"
+								"$ref": "#/components/schemas/RentalMarketSummary"
 							},
 							{
 								"type": "null"
 							}
 						]
 					},
-					"off_plan_unit_benchmarks": {
+					"rental_comparables": {
 						"items": {
-							"$ref": "#/components/schemas/OffPlanUnitPricingBenchmark"
+							"$ref": "#/components/schemas/RentalComparableProject"
 						},
 						"type": "array",
-						"title": "Off Plan Unit Benchmarks"
+						"title": "Rental Comparables"
+					},
+					"rental_rates_by_size_band": {
+						"items": {
+							"$ref": "#/components/schemas/RentalRateBySizeBand"
+						},
+						"type": "array",
+						"title": "Rental Rates By Size Band"
 					},
 					"assumptions": {
 						"$ref": "#/components/schemas/FeasibilityAssumptions"
@@ -9141,6 +9871,107 @@
 				"title": "RentalAnalyticsResponse",
 				"description": "Complete rental analytics response for dashboard"
 			},
+			"RentalComparableProject": {
+				"properties": {
+					"project_id": {
+						"type": "integer",
+						"title": "Project Id"
+					},
+					"project_name": {
+						"type": "string",
+						"title": "Project Name"
+					},
+					"area_name": {
+						"type": "string",
+						"title": "Area Name"
+					},
+					"completion_status": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Completion Status"
+					},
+					"pipeline_status": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Pipeline Status"
+					},
+					"score": {
+						"type": "number",
+						"title": "Score"
+					},
+					"no_of_units": {
+						"anyOf": [
+							{
+								"type": "integer"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "No Of Units"
+					},
+					"rental_contract_count_12m": {
+						"type": "integer",
+						"title": "Rental Contract Count 12M",
+						"default": 0
+					},
+					"median_annual_rent": {
+						"anyOf": [
+							{
+								"type": "number"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Median Annual Rent"
+					},
+					"avg_rent_price_sqm_12m": {
+						"anyOf": [
+							{
+								"type": "number"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Avg Rent Price Sqm 12M"
+					},
+					"gross_yield_pct": {
+						"anyOf": [
+							{
+								"type": "number"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Gross Yield Pct"
+					},
+					"rationale": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"title": "Rationale"
+					}
+				},
+				"type": "object",
+				"required": ["project_id", "project_name", "area_name", "score"],
+				"title": "RentalComparableProject"
+			},
 			"RentalContractListResponse": {
 				"properties": {
 					"contracts": {
@@ -9390,6 +10221,101 @@
 				"required": ["dimension_value", "contract_count", "total_annual_value", "avg_rent_sqft"],
 				"title": "RentalDimensionBreakdown",
 				"description": "Breakdown by a specific dimension for rentals"
+			},
+			"RentalMarketSummary": {
+				"properties": {
+					"area_name": {
+						"type": "string",
+						"title": "Area Name"
+					},
+					"rental_contract_count_12m": {
+						"type": "integer",
+						"title": "Rental Contract Count 12M"
+					},
+					"median_annual_rent": {
+						"anyOf": [
+							{
+								"type": "number"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Median Annual Rent"
+					},
+					"avg_rent_price_sqm_12m": {
+						"anyOf": [
+							{
+								"type": "number"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Avg Rent Price Sqm 12M"
+					},
+					"gross_yield_pct": {
+						"anyOf": [
+							{
+								"type": "number"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Gross Yield Pct"
+					},
+					"top_developers": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"title": "Top Developers"
+					},
+					"top_master_projects": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"title": "Top Master Projects"
+					}
+				},
+				"type": "object",
+				"required": ["area_name", "rental_contract_count_12m"],
+				"title": "RentalMarketSummary"
+			},
+			"RentalRateBySizeBand": {
+				"properties": {
+					"unit_type_proxy": {
+						"type": "string",
+						"title": "Unit Type Proxy"
+					},
+					"size_band_label": {
+						"type": "string",
+						"title": "Size Band Label"
+					},
+					"median_rent_psm_annual": {
+						"type": "number",
+						"title": "Median Rent Psm Annual"
+					},
+					"median_annual_rent": {
+						"type": "number",
+						"title": "Median Annual Rent"
+					},
+					"contract_count": {
+						"type": "integer",
+						"title": "Contract Count"
+					}
+				},
+				"type": "object",
+				"required": [
+					"unit_type_proxy",
+					"size_band_label",
+					"median_rent_psm_annual",
+					"median_annual_rent",
+					"contract_count"
+				],
+				"title": "RentalRateBySizeBand"
 			},
 			"RentalSummary": {
 				"properties": {
