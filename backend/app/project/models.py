@@ -97,6 +97,17 @@ class BuildingDetailResponse(BaseModel):
     unit_composition: List[BuildingUnitType]
 
 
+class DDAPlotFeature(BaseModel):
+    """DDA GIS plot polygon for map overlay."""
+
+    plot_number: str
+    project_name: str
+    community_name: str
+    plot_area_sqm: float
+    coordinates: List[List[float]]  # closed ring [[lng, lat], ...]
+    land_use_summary: List[str] = []
+
+
 class ProjectDetailResponse(BaseModel):
     """Full project details for overlay"""
 

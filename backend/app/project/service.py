@@ -1,6 +1,7 @@
 """Project and building services - redesigned for ClickHouse from first principles."""
 
 import asyncio
+import json
 import logging
 import re
 from typing import List, Optional
@@ -10,6 +11,7 @@ from app.project.models import (
     BuildingDetailResponse,
     BuildingInfo,
     BuildingUnitType,
+    DDAPlotFeature,
     GeoPin,
     GeoPolygon,
     MasterProjectResponse,
@@ -380,3 +382,48 @@ async def get_building_details(property_id: int) -> Optional[BuildingDetailRespo
         total_units=total_units,
         unit_composition=unit_composition,
     )
+
+
+def _parse_plot_coordinates(raw: str) -> list[list[float]]:
+    if not raw:
+        return []
+    try:
+        parsed = json.loads(raw)
+        return [[float(p[0]), float(p[1])] for p in parsed if isinstance(p, list) and len(p) == 2]
+    except Exception:
+        return []
+
+
+async def get_dda_plots_for_area(area: str, limit: int = 300) -> list[DDAPlotFeature]:
+    """Return DDA GIS plot polygons for a given area/community name."""
+    sql = """
+    SELECT
+        plot_number,
+        project_name,
+        community_name,
+        plot_area_sqm,
+        coordinates
+    FROM ch_gis_land_plots FINAL
+    WHERE coordinates != ''
+      AND (
+          community_name ILIKE {area:String}
+          OR project_name ILIKE {area:String}
+      )
+    LIMIT {limit:UInt32}
+    """
+    rows = await query(sql, {"area": f"%{area}%", "limit": limit})
+    results: list[DDAPlotFeature] = []
+    for row in rows:
+        coords = _parse_plot_coordinates(row.get("coordinates", ""))
+        if len(coords) < 3:
+            continue
+        results.append(
+            DDAPlotFeature(
+                plot_number=row["plot_number"],
+                project_name=row.get("project_name") or "",
+                community_name=row.get("community_name") or "",
+                plot_area_sqm=float(row.get("plot_area_sqm") or 0),
+                coordinates=coords,
+            )
+        )
+    return results

@@ -6,12 +6,14 @@ from app.core.decorators import cached_endpoint
 from app.core.dependencies import AuthContext, require_active_subscription
 from app.project.models import (
     BuildingDetailResponse,
+    DDAPlotFeature,
     MasterProjectResponse,
     ProjectDetailResponse,
     ProjectSearchResult,
 )
 from app.project.service import (
     get_building_details,
+    get_dda_plots_for_area,
     get_master_project,
     get_project_details,
     list_all_projects,
@@ -50,6 +52,16 @@ async def building_details(
     if not building:
         raise HTTPException(status_code=404, detail="Building not found")
     return building
+
+
+@router.get("/dda-plots", response_model=List[DDAPlotFeature])
+@cached_endpoint(prefix="dda_plots", expire=3600)  # 1 hour — plot data changes rarely
+async def get_dda_plots(
+    area: str = Query(..., description="Area or community name to match against DDA plots"),
+    context: AuthContext = Depends(require_active_subscription),
+):
+    """Get DDA GIS plot polygons for a given area/community for map overlay."""
+    return await get_dda_plots_for_area(area)
 
 
 @router.get("/{project_id}", response_model=ProjectDetailResponse)
