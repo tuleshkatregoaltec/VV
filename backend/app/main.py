@@ -13,6 +13,7 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from app.admin.router import router as admin_router
 from app.analytics.router import router as analytics_router
+from app.area.router import router as area_router
 from app.auth.router import router as auth_router
 from app.billing.router import router as billing_router
 from app.billing.webhooks import router as billing_webhooks
@@ -75,6 +76,7 @@ app.add_middleware(
 
 app.include_router(auth_router, tags=["auth"])
 app.include_router(analytics_router, tags=["analytics"])
+app.include_router(area_router, tags=["areas"])
 app.include_router(chat_router, tags=["chat"])
 app.include_router(filters_router, tags=["filters"])
 app.include_router(news_router, tags=["news"])

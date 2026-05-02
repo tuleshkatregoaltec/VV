@@ -17,6 +17,7 @@ from app.project.models import (
     MasterProjectResponse,
     MasterProjectSummary,
     ProjectDetailResponse,
+    ProjectMarketSnapshotResponse,
     ProjectSearchResult,
     ProjectUnitComposition,
 )
@@ -392,6 +393,55 @@ def _parse_plot_coordinates(raw: str) -> list[list[float]]:
         return [[float(p[0]), float(p[1])] for p in parsed if isinstance(p, list) and len(p) == 2]
     except Exception:
         return []
+
+
+async def get_project_market_snapshot(project_id: int) -> Optional[ProjectMarketSnapshotResponse]:
+    result = await query(
+        """
+        SELECT
+            project_id,
+            project_name_en,
+            area_name_en,
+            developer_name,
+            master_project_en,
+            completion_status,
+            pipeline_status,
+            estimated_delivery_confidence,
+            sales_transaction_count_12m,
+            rental_contract_count_12m,
+            total_sales_volume_12m,
+            median_sale_price,
+            median_annual_rent,
+            gross_yield_pct,
+            avg_sale_price_sqm_12m,
+            avg_rent_price_sqm_12m
+        FROM ch_project_fact
+        WHERE project_id = {project_id:Int32}
+        LIMIT 1
+        """,
+        {"project_id": project_id},
+    )
+    if not result:
+        return None
+    row = result[0]
+    return ProjectMarketSnapshotResponse(
+        project_id=row["project_id"],
+        project_name=row.get("project_name_en") or f"Project {row['project_id']}",
+        area_name=row.get("area_name_en") or "Unknown",
+        developer_name=row.get("developer_name") or None,
+        master_project_en=row.get("master_project_en") or None,
+        completion_status=row.get("completion_status") or "planned",
+        pipeline_status=row.get("pipeline_status") or "unscheduled",
+        estimated_delivery_confidence=float(row.get("estimated_delivery_confidence") or 0),
+        sales_transaction_count_12m=row.get("sales_transaction_count_12m", 0),
+        rental_contract_count_12m=row.get("rental_contract_count_12m", 0),
+        total_sales_volume_12m=float(row.get("total_sales_volume_12m") or 0),
+        median_sale_price=row.get("median_sale_price"),
+        median_annual_rent=row.get("median_annual_rent"),
+        gross_yield_pct=row.get("gross_yield_pct"),
+        avg_sale_price_sqm_12m=row.get("avg_sale_price_sqm_12m"),
+        avg_rent_price_sqm_12m=row.get("avg_rent_price_sqm_12m"),
+    )
 
 
 async def get_dda_plots_for_area(area: str, limit: int = 300) -> list[DDAPlotFeature]:

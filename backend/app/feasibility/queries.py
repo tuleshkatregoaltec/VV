@@ -1,5 +1,6 @@
 import json
 import logging
+import math
 import re
 from datetime import datetime, timezone
 from typing import Any, Literal
@@ -16,6 +17,7 @@ from app.feasibility.models import (
     OffPlanUnitPricingBenchmark,
     Plot,
     PlotDetails,
+    RentalRateBySizeBand,
     UnitTypeData,
     Usage,
 )
@@ -117,6 +119,19 @@ def transaction_usage_clause(usage: Usage, column: str = "property_usage_en") ->
         return f"({column} IN ('Commercial', 'Industrial', 'Storage'))"
     if usage == "mixed_use":
         return f"({column} IN ('Residential / Commercial', 'Multi-Use', 'Industrial / Commercial', 'Industrial / Commercial / Residential'))"
+    return "1 = 1"
+
+
+def land_sale_usage_clause(usage: Usage, column: str = "property_usage_en") -> str:
+    if usage == "residential":
+        return f"{column} = 'Residential'"
+    if usage == "commercial":
+        return f"({column} IN ('Commercial', 'Industrial', 'Storage', 'Industrial / Commercial'))"
+    if usage == "mixed_use":
+        return (
+            f"({column} IN ('Residential / Commercial', 'Multi-Use', "
+            "'Industrial / Commercial', 'Industrial / Commercial / Residential'))"
+        )
     return "1 = 1"
 
 
@@ -327,18 +342,46 @@ def _parse_notes(raw: str) -> list[str]:
     return [part.strip() for part in raw.split(" | ") if part.strip()]
 
 
-def _parse_coordinates(raw: str) -> list[list[float]]:
-    if not raw:
-        return []
+def _coordinate_pair(raw: object) -> list[float] | None:
+    if not isinstance(raw, (list, tuple)) or len(raw) < 2:
+        return None
     try:
-        parsed = json.loads(raw)
-        coords: list[list[float]] = []
-        for pair in parsed:
-            if isinstance(pair, list) and len(pair) == 2:
-                coords.append([float(pair[0]), float(pair[1])])
-        return coords
-    except Exception:
+        x = float(raw[0])  # type: ignore[index]
+        y = float(raw[1])  # type: ignore[index]
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(x) or not math.isfinite(y):
+        return None
+    return [x, y]
+
+
+def _extract_coordinate_pairs(raw: object) -> list[list[float]]:
+    pair = _coordinate_pair(raw)
+    if pair is not None:
+        return [pair]
+    if not isinstance(raw, (list, tuple)):
         return []
+    coords: list[list[float]] = []
+    for item in raw:
+        coords.extend(_extract_coordinate_pairs(item))
+    return coords
+
+
+def _parse_coordinates(raw: object) -> list[list[float]]:
+    if raw in (None, "", "[]"):
+        return []
+    parsed: object = raw
+    if isinstance(raw, str):
+        try:
+            parsed = json.loads(raw)
+        except json.JSONDecodeError:
+            return []
+    if isinstance(parsed, dict):
+        parsed = parsed.get("coordinates", [])
+    coords = _extract_coordinate_pairs(parsed)
+    if len(coords) >= 2 and coords[0] == coords[-1]:
+        coords = coords[:-1]
+    return coords
 
 
 def _build_setbacks(row: dict[str, Any]) -> dict[str, str]:
@@ -414,7 +457,7 @@ async def search_plots(
     min_plot_area_sqm: float | None = None,
     max_plot_area_sqm: float | None = None,
     offset: int = 0,
-    limit: int = 30,
+    limit: int = 200,
 ) -> list[Plot]:
     where = ["plot_number != ''"]
     params: dict[str, Any] = {"limit": limit, "offset": offset}
@@ -447,7 +490,7 @@ async def search_plots(
         gfa_type,
         is_verified,
         land_use
-    FROM ch_gis_land_plots FINAL
+    FROM ch_gis_land_plots
     WHERE {" AND ".join(where)}
     ORDER BY is_verified DESC, plot_area_sqm DESC
     LIMIT {{limit:UInt32}}
@@ -477,7 +520,7 @@ async def search_plots(
 async def list_communities(limit: int = 5000) -> list[str]:
     sql = """
     SELECT community_name
-    FROM ch_gis_land_plots FINAL
+    FROM ch_gis_land_plots
     WHERE community_name != ''
     GROUP BY community_name
     ORDER BY count() DESC, community_name
@@ -490,7 +533,7 @@ async def list_communities(limit: int = 5000) -> list[str]:
 async def get_plot_details(plot_number: str) -> PlotDetails | None:
     sql = """
     SELECT *
-    FROM ch_gis_land_plots FINAL
+    FROM ch_gis_land_plots
     WHERE plot_number = {plot_number:String}
     LIMIT 1
     """
@@ -654,13 +697,56 @@ async def get_off_plan_pricing_curve(
     ]
 
 
+async def get_rental_rates_by_size_band(
+    area_name: str,
+    days: int = 365,
+) -> list[RentalRateBySizeBand]:
+    size_bands = [
+        ("studio", "< 55 sqm", 0, 55),
+        ("1br", "55–90 sqm", 55, 90),
+        ("2br", "90–140 sqm", 90, 140),
+        ("3br", "140–200 sqm", 140, 200),
+        ("4br+", "> 200 sqm", 200, 99999),
+    ]
+    results: list[RentalRateBySizeBand] = []
+    for unit_type, label, lo, hi in size_bands:
+        sql = """
+        SELECT
+            median(toFloat64(annual_amount) / greatest(toFloat64(actual_area), 1)) AS median_rent_psm_annual,
+            median(toFloat64(annual_amount)) AS median_annual_rent,
+            count() AS contract_count
+        FROM ch_rent_contracts
+        WHERE lower(area_name_en) = lower({area_name:String})
+          AND actual_area > {lo:Float64}
+          AND actual_area <= {hi:Float64}
+          AND annual_amount > 0
+          AND contract_start_date >= today() - {days:Int32}
+        """
+        rows = await query(
+            sql, {"area_name": area_name, "lo": float(lo), "hi": float(hi), "days": days}
+        )
+        if rows and int(rows[0].get("contract_count") or 0) >= 5:
+            results.append(
+                RentalRateBySizeBand(
+                    unit_type_proxy=unit_type,
+                    size_band_label=label,
+                    median_rent_psm_annual=float(rows[0]["median_rent_psm_annual"] or 0),
+                    median_annual_rent=float(rows[0]["median_annual_rent"] or 0),
+                    contract_count=int(rows[0]["contract_count"]),
+                )
+            )
+    return results
+
+
 async def get_land_sale_evidence(
     area_name: str,
     plot_area_sqm: float | None = None,
+    usage: Usage | None = None,
+    target_far: float | None = None,
     days: int = 1825,
     limit: int = 12,
 ) -> list[LandSaleEvidence]:
-    where = [
+    base_where = [
         "trans_group_en = 'Sales'",
         "property_type_en = 'Land'",
         "actual_worth > 0",
@@ -669,43 +755,56 @@ async def get_land_sale_evidence(
         "instance_date >= today() - {days:Int32}",
     ]
     if plot_area_sqm and plot_area_sqm > 0:
-        where.append("procedure_area BETWEEN {min_area:Float64} AND {max_area:Float64}")
-        min_area = plot_area_sqm * 0.5
-        max_area = plot_area_sqm * 1.75
+        base_where.append("procedure_area BETWEEN {min_area:Float64} AND {max_area:Float64}")
+        min_area = plot_area_sqm * 10.764 * 0.5
+        max_area = plot_area_sqm * 10.764 * 1.75
     else:
         min_area = None
         max_area = None
 
-    sql = f"""
-    SELECT
-        transaction_id,
-        instance_date,
-        area_name_en,
-        project_name_en,
-        procedure_name_en,
-        property_usage_en,
-        toFloat64(procedure_area) AS plot_area_sqm,
-        toFloat64(actual_worth) AS price_aed,
-        round(toFloat64(actual_worth) / greatest(toFloat64(procedure_area), 1), 0) AS price_sqm,
-        nullIf(nearest_landmark_en, '') AS nearest_landmark
-    FROM ch_transactions
-    WHERE {" AND ".join(where)}
-    ORDER BY
-        abs(toFloat64(procedure_area) - {{target_area:Float64}}) ASC,
-        instance_date DESC
-    LIMIT {{limit:Int32}}
-    """
     params: dict[str, Any] = {
         "area_name": area_name,
         "days": days,
         "limit": limit,
-        "target_area": plot_area_sqm or 0,
+        "target_area": (plot_area_sqm or 0) * 10.764,
     }
     if min_area is not None and max_area is not None:
         params["min_area"] = min_area
         params["max_area"] = max_area
 
-    rows = await query(sql, params)
+    async def fetch_rows(where: list[str]) -> list[dict[str, Any]]:
+        sql = f"""
+        SELECT
+            transaction_id,
+            instance_date,
+            area_name_en,
+            project_name_en,
+            procedure_name_en,
+            property_usage_en,
+            round(toFloat64(procedure_area) * 0.092903, 1) AS plot_area_sqm,
+            toFloat64(actual_worth) AS price_aed,
+            round(toFloat64(actual_worth) / greatest(toFloat64(procedure_area) * 0.092903, 1), 0) AS price_sqm,
+            nullIf(nearest_landmark_en, '') AS nearest_landmark
+        FROM ch_transactions
+        WHERE {" AND ".join(where)}
+        ORDER BY
+            abs(toFloat64(procedure_area) - {{target_area:Float64}}) ASC,
+            instance_date DESC
+        LIMIT {{limit:Int32}}
+        """
+        return await query(sql, params)
+
+    rows: list[dict[str, Any]] = []
+    if usage and usage != "unknown":
+        rows = await fetch_rows([*base_where, land_sale_usage_clause(usage)])
+    if not rows:
+        rows = await fetch_rows(base_where)
+
+    def _price_per_gfa(price_aed: float, comp_plot_sqm: float) -> float | None:
+        if target_far and target_far > 0 and comp_plot_sqm > 0 and price_aed > 0:
+            return round(price_aed / (comp_plot_sqm * target_far), 0)
+        return None
+
     return [
         LandSaleEvidence(
             transaction_id=row["transaction_id"],
@@ -717,6 +816,10 @@ async def get_land_sale_evidence(
             plot_area_sqm=float(row.get("plot_area_sqm") or 0),
             price_aed=float(row.get("price_aed") or 0),
             price_sqm=float(row.get("price_sqm") or 0),
+            price_per_gfa_sqm=_price_per_gfa(
+                float(row.get("price_aed") or 0),
+                float(row.get("plot_area_sqm") or 0),
+            ),
             nearest_landmark=row.get("nearest_landmark"),
         )
         for row in rows
@@ -758,11 +861,15 @@ async def rank_plot_comparables(
     sql = """
     WITH land AS (
         SELECT
-            project_id,
-            sum(toFloat64(actual_area)) AS total_land_area_sqm
-        FROM ch_land_registry
-        WHERE project_id > 0
-        GROUP BY project_id
+            p.project_id,
+            sum(toFloat64(t.procedure_area)) AS total_land_area_sqm
+        FROM ch_transactions t
+        INNER JOIN ch_projects p ON p.project_number = t.project_number
+        WHERE t.property_type_en = 'Land'
+          AND t.trans_group_en = 'Sales'
+          AND t.procedure_area > 0
+          AND t.project_number != ''
+        GROUP BY p.project_id
     )
     SELECT
         p.project_id,

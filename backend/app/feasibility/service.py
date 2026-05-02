@@ -8,6 +8,7 @@ from app.feasibility.chat_agent import stream_feasibility_response
 from app.feasibility.hbu_agent import generate_hbu_study
 from app.feasibility.models import (
     ComparableData,
+    DevelopmentModel,
     FeasibilityChatRequest,
     GenerateStudyRequest,
     GenerateStudyResponse,
@@ -86,8 +87,13 @@ async def get_plot_details_or_404(plot_number: str) -> PlotDetails:
 async def generate_hbu_for_plot(
     plot_number: str,
     usage_override: Usage | None = None,
+    development_model: DevelopmentModel | None = None,
 ) -> PlotResearch:
-    study = await generate_hbu_study(plot_number, usage_override=usage_override)
+    study = await generate_hbu_study(
+        plot_number,
+        usage_override=usage_override,
+        development_model=development_model,
+    )
     if study is None:
         raise _not_found("GIS plot not found")
     return study
@@ -124,10 +130,17 @@ async def get_comparable_or_404(project_ids: str) -> ComparableData:
 
 
 async def generate_seeded_study(request: GenerateStudyRequest) -> GenerateStudyResponse:
-    research = await generate_hbu_for_plot(
-        request.plot_number,
-        usage_override=request.usage_override,
-    )
+    try:
+        research = await generate_hbu_for_plot(
+            request.plot_number,
+            usage_override=request.usage_override,
+            development_model=request.development_model,
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("generate_hbu_study failed for plot %s: %s", request.plot_number, e)
+        raise HTTPException(status_code=500, detail=str(e)) from e
     plot = await get_plot_details_or_404(request.plot_number)
     return GenerateStudyResponse(
         plot_data=plot,
@@ -140,7 +153,7 @@ async def generate_seeded_study(request: GenerateStudyRequest) -> GenerateStudyR
 async def stream_chat_events(request: FeasibilityChatRequest) -> AsyncGenerator[str, None]:
     try:
         async for chunk in stream_feasibility_response(
-            [message.model_dump(mode="json") for message in request.messages],
+            request.messages,
             request.plot_data,
             request.assumptions,
             request.research.model_dump(mode="json") if request.research else None,

@@ -1,9 +1,14 @@
 from datetime import datetime
 from typing import Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, Field
 
 Usage = Literal["residential", "commercial", "mixed_use", "unknown"]
+DevelopmentModel = Literal[
+    "build_to_sell_residential",
+    "build_to_rent_residential",
+    "build_to_lease_commercial",
+]
 
 
 class GISLandUse(BaseModel):
@@ -59,6 +64,31 @@ class MarketPricingRow(BaseModel):
     avg_area_sqm: float | None = None
 
 
+class RentalMarketSummary(BaseModel):
+    area_name: str
+    rental_contract_count_12m: int
+    median_annual_rent: float | None = None
+    avg_rent_price_sqm_12m: float | None = None
+    gross_yield_pct: float | None = None
+    top_developers: list[str] = Field(default_factory=list)
+    top_master_projects: list[str] = Field(default_factory=list)
+
+
+class RentalComparableProject(BaseModel):
+    project_id: int
+    project_name: str
+    area_name: str
+    completion_status: str | None = None
+    pipeline_status: str | None = None
+    score: float
+    no_of_units: int | None = None
+    rental_contract_count_12m: int = 0
+    median_annual_rent: float | None = None
+    avg_rent_price_sqm_12m: float | None = None
+    gross_yield_pct: float | None = None
+    rationale: list[str] = Field(default_factory=list)
+
+
 class OffPlanPricingRow(BaseModel):
     unit_type: str
     horizon_bucket: str
@@ -106,7 +136,16 @@ class LandSaleEvidence(BaseModel):
     plot_area_sqm: float
     price_aed: float
     price_sqm: float
+    price_per_gfa_sqm: float | None = None
     nearest_landmark: str | None = None
+
+
+class RentalRateBySizeBand(BaseModel):
+    unit_type_proxy: str  # studio / 1br / 2br / 3br / 4br+
+    size_band_label: str  # e.g. "< 55 sqm"
+    median_rent_psm_annual: float
+    median_annual_rent: float
+    contract_count: int
 
 
 class ComparableProject(BaseModel):
@@ -157,6 +196,9 @@ class PlotResearch(BaseModel):
     off_plan_market_pricing: list[OffPlanPricingRow] = Field(default_factory=list)
     off_plan_pricing_confidence: OffPlanPricingConfidence | None = None
     off_plan_unit_benchmarks: list[OffPlanUnitPricingBenchmark] = Field(default_factory=list)
+    rental_market_summary: RentalMarketSummary | None = None
+    rental_comparables: list[RentalComparableProject] = Field(default_factory=list)
+    rental_rates_by_size_band: list[RentalRateBySizeBand] = Field(default_factory=list)
     assumptions: "FeasibilityAssumptions"
     warnings: list[str] = Field(default_factory=list)
     land_cost_estimate_aed_low: float | None = None
@@ -195,12 +237,21 @@ class FeasibilityPaymentPlan(BaseModel):
     handoverPct: float = 40.0
 
 
+class BtrUnitConfig(BaseModel):
+    id: str
+    label: str
+    units: int = 0
+    avgSizeSqm: float = 0.0
+    monthlyRentAed: float = 0.0
+    parkingRatio: float = 0.0
+
+
 class FeasibilityAssumptions(BaseModel):
     usage: Usage = "unknown"
     plotAreaSqm: float
     maxGfaSqm: float = 0.0
-    maxCoveragePct: float | None = None
-    maxStoreys: int | None = None
+    maxCoveragePct: float = 0.0
+    maxStoreys: int = 0
     maxFar: float
     numberOfTowers: int
     numberOfFloors: int
@@ -227,17 +278,17 @@ class FeasibilityAssumptions(BaseModel):
     demolitionEnablingDate: str
     constructionDate: str
     handoverDate: str
-    landAcquisitionCostOverrideAed: float | None = None
-    designSupervisionCostOverrideAed: float | None = None
-    constructionCostOverrideAed: float | None = None
+    landAcquisitionCostOverrideAed: float = 0.0
+    designSupervisionCostOverrideAed: float = 0.0
+    constructionCostOverrideAed: float = 0.0
     demolitionCostAed: float
     infrastructureCostAed: float
     governmentFeesAed: float
-    marketingCostOverrideAed: float | None = None
-    salesAgentFeesOverrideAed: float | None = None
+    marketingCostOverrideAed: float = 0.0
+    salesAgentFeesOverrideAed: float = 0.0
     masterCommunityFeesAed: float
     ffeOsePreopeningCostAed: float
-    contingencyCostOverrideAed: float | None = None
+    contingencyCostOverrideAed: float = 0.0
     midPointInflationPct: float
     vatPct: float
     debtFundingAed: float
@@ -253,6 +304,49 @@ class FeasibilityAssumptions(BaseModel):
     debtRepaymentMode: Literal["bullet_at_handover", "sales_sweep"]
     unitConfigs: list[FeasibilityUnitConfig] = Field(default_factory=list)
     paymentPlan: FeasibilityPaymentPlan = Field(default_factory=FeasibilityPaymentPlan)
+    developmentModel: DevelopmentModel = "build_to_sell_residential"
+    btrUnitConfigs: list[BtrUnitConfig] = Field(default_factory=list)
+    # All BTR scalar fields use 0.0 as "unset" sentinel — Pydantic schema cannot ship
+    # `anyOf:[number,null]` to Gemini's structured-output API. _ensure_btr_assumptions
+    # treats 0 as falsy and applies model defaults via `or` fallbacks.
+    btrHoldPeriodYears: float = 0.0
+    btrLeaseUpPaceUnitsPerMonth: float = 0.0
+    btrStabilizedOccupancyPct: float = 0.0
+    btrFreeRentMonths: float = 0.0
+    btrAnnualRentGrowthPct: float = 0.0
+    btrMarketRentGrowthPct: float = 0.0
+    btrRenewalRentGrowthPct: float = 0.0
+    btrGeneralVacancyPct: float = 0.0
+    btrPropertyManagementPct: float = 0.0
+    btrRepairsMaintenancePsqm: float = 0.0
+    btrInsurancePsqm: float = 0.0
+    btrServiceChargePsqm: float = 0.0
+    btrUtilitiesPsqm: float = 0.0
+    btrMarketingLeasingPct: float = 0.0
+    btrCapexReservePct: float = 0.0
+    btrParkingIncomeAed: float = 0.0
+    btrAncillaryIncomeAed: float = 0.0
+    btrAncillaryGrowthPct: float = 0.0
+    btrStabilizedFreeRentMonths: float = 0.0
+    btrOpExGrowthPct: float = 0.0
+    btrDevCostEscalationPct: float = 0.0
+    btrTerminalGrowthPct: float = 0.0
+    btrLeaseUpMarketingAed: float = 0.0
+    btrCreditLossPct: float = 0.0
+    btrPayrollPsqm: float = 0.0
+    btrGeneralAdminPct: float = 0.0
+    btrContractServicesPsqm: float = 0.0
+    btrModelUnits: float = 0.0
+    btrExitCapRatePct: float = 0.0
+    btrExitCostPct: float = 0.0
+    btrPermDebtLtvPct: float = 0.0
+    btrPermDebtRatePct: float = 0.0
+    btrPermDebtSpreadBps: float = 0.0
+    btrPermDebtAmortYears: float = 0.0
+    btrPermDebtPointsPct: float = 0.0
+    btrPermDebtIoYears: float = 0.0
+    btrDscrMinimum: float = 0.0
+    btrRefiCapRatePct: float = 0.0
 
 
 class FeasibilitySiteEnvelope(BaseModel):
@@ -511,38 +605,24 @@ class StudyContext(BaseModel):
     market_summary: str = ""
 
 
+class GenerateStudyRequest(BaseModel):
+    plot_number: str
+    usage_override: Usage | None = None
+    development_model: DevelopmentModel | None = None
+
+
 class GenerateStudyResponse(BaseModel):
     status: str = "ready"
     plot_data: PlotDetails
     assumptions: FeasibilityAssumptions
     research: PlotResearch
     study_context: StudyContext
-    chat: "FeasibilityChatState" = Field(default_factory=lambda: FeasibilityChatState(history=[]))
-
-
-class GenerateStudyRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    plot_number: str
-    usage_override: Usage | None = None
-
-
-class FeasibilityChatMessage(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    role: Literal["system", "user", "assistant"]
-    content: str
-
-
-class FeasibilityChatState(BaseModel):
-    history: list[FeasibilityChatMessage] = Field(default_factory=list)
+    chat: dict = Field(default_factory=lambda: {"history": []})
 
 
 class FeasibilityChatRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    messages: list[FeasibilityChatMessage]
+    messages: list[dict]
     plot_data: PlotDetails
     assumptions: FeasibilityAssumptions
-    research: PlotResearch | None = None
+    research: dict | None = None
     history_json: str | None = None

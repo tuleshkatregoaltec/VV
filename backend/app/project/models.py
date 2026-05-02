@@ -147,3 +147,22 @@ class ProjectDetailResponse(BaseModel):
     unit_composition: List[ProjectUnitComposition]
     buildings: List[BuildingInfo] = []
     geo_pins: List[GeoPin] = []
+
+
+class ProjectMarketSnapshotResponse(BaseModel):
+    project_id: int
+    project_name: str
+    area_name: str
+    developer_name: Optional[str]
+    master_project_en: Optional[str]
+    completion_status: str
+    pipeline_status: str
+    estimated_delivery_confidence: float
+    sales_transaction_count_12m: int
+    rental_contract_count_12m: int
+    total_sales_volume_12m: float
+    median_sale_price: Optional[float]
+    median_annual_rent: Optional[float]
+    gross_yield_pct: Optional[float]
+    avg_sale_price_sqm_12m: Optional[float]
+    avg_rent_price_sqm_12m: Optional[float]
