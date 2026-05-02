@@ -588,6 +588,38 @@ export type CustomerPortalResponse = {
 };
 
 /**
+ * DDAPlotFeature
+ *
+ * DDA GIS plot polygon for map overlay.
+ */
+export type DdaPlotFeature = {
+    /**
+     * Plot Number
+     */
+    plot_number: string;
+    /**
+     * Project Name
+     */
+    project_name: string;
+    /**
+     * Community Name
+     */
+    community_name: string;
+    /**
+     * Plot Area Sqm
+     */
+    plot_area_sqm: number;
+    /**
+     * Coordinates
+     */
+    coordinates: Array<Array<number>>;
+    /**
+     * Land Use Summary
+     */
+    land_use_summary?: Array<string>;
+};
+
+/**
  * DimensionBreakdown
  *
  * Breakdown by a specific dimension (property_type, rooms, etc.)
@@ -847,135 +879,17 @@ export type FeasibilityAssumptions = {
 };
 
 /**
- * FeasibilityCashFlowPeriod
+ * FeasibilityChatMessage
  */
-export type FeasibilityCashFlowPeriod = {
+export type FeasibilityChatMessage = {
     /**
-     * Period Label
+     * Role
      */
-    period_label: string;
+    role: 'system' | 'user' | 'assistant';
     /**
-     * Period End Date
+     * Content
      */
-    period_end_date: string;
-    /**
-     * Revenue Inflows Aed
-     */
-    revenue_inflows_aed: number;
-    /**
-     * Operating Outflows Aed
-     */
-    operating_outflows_aed: number;
-    /**
-     * Debt Draw Aed
-     */
-    debt_draw_aed: number;
-    /**
-     * Debt Repayment Aed
-     */
-    debt_repayment_aed: number;
-    /**
-     * Interest Paid Aed
-     */
-    interest_paid_aed: number;
-    /**
-     * Commitment Fee Paid Aed
-     */
-    commitment_fee_paid_aed: number;
-    /**
-     * Equity Contribution Aed
-     */
-    equity_contribution_aed: number;
-    /**
-     * Equity Distribution Aed
-     */
-    equity_distribution_aed: number;
-    /**
-     * Debt Balance Aed
-     */
-    debt_balance_aed: number;
-    /**
-     * Debt Headroom Aed
-     */
-    debt_headroom_aed: number;
-    /**
-     * Escrow Balance Aed
-     */
-    escrow_balance_aed: number;
-    /**
-     * Unlevered Net Cash Flow Aed
-     */
-    unlevered_net_cash_flow_aed: number;
-    /**
-     * Levered Net Cash Flow Aed
-     */
-    levered_net_cash_flow_aed: number;
-    /**
-     * Deposit Inflows Aed
-     */
-    deposit_inflows_aed?: number;
-    /**
-     * Pre Handover Inflows Aed
-     */
-    pre_handover_inflows_aed?: number;
-    /**
-     * Handover Inflows Aed
-     */
-    handover_inflows_aed?: number;
-    /**
-     * Land Loan Balance Aed
-     */
-    land_loan_balance_aed?: number;
-    /**
-     * Construction Loan Balance Aed
-     */
-    construction_loan_balance_aed?: number;
-    /**
-     * Cost Land Aed
-     */
-    cost_land_aed?: number;
-    /**
-     * Cost Construction Aed
-     */
-    cost_construction_aed?: number;
-    /**
-     * Cost Marketing Aed
-     */
-    cost_marketing_aed?: number;
-    /**
-     * Cost Sales Agent Aed
-     */
-    cost_sales_agent_aed?: number;
-    /**
-     * Cost Contingency Aed
-     */
-    cost_contingency_aed?: number;
-    /**
-     * Cost Vat Aed
-     */
-    cost_vat_aed?: number;
-    /**
-     * Land Draw Aed
-     */
-    land_draw_aed?: number;
-    /**
-     * Construction Draw Aed
-     */
-    construction_draw_aed?: number;
-    /**
-     * Vat Refund Inflows Aed
-     */
-    vat_refund_inflows_aed?: number;
-};
-
-/**
- * FeasibilityCashFlowSummary
- */
-export type FeasibilityCashFlowSummary = {
-    /**
-     * Periods
-     */
-    periods?: Array<FeasibilityCashFlowPeriod>;
+    content: string;
 };
 
 /**
@@ -985,24 +899,10 @@ export type FeasibilityChatRequest = {
     /**
      * Messages
      */
-    messages: Array<{
-        [key: string]: unknown;
-    }>;
+    messages: Array<FeasibilityChatMessage>;
     plot_data: PlotDetails;
     assumptions: FeasibilityAssumptions;
-    workbook: FeasibilityWorkbook;
-    /**
-     * Research
-     */
-    research?: {
-        [key: string]: unknown;
-    } | null;
-    /**
-     * Study Context
-     */
-    study_context?: {
-        [key: string]: unknown;
-    } | null;
+    research?: PlotResearchInput | null;
     /**
      * History Json
      */
@@ -1010,257 +910,13 @@ export type FeasibilityChatRequest = {
 };
 
 /**
- * FeasibilityCostLineItem
+ * FeasibilityChatState
  */
-export type FeasibilityCostLineItem = {
+export type FeasibilityChatState = {
     /**
-     * Code
+     * History
      */
-    code: string;
-    /**
-     * Label
-     */
-    label: string;
-    /**
-     * Amount Aed
-     */
-    amount_aed: number;
-    /**
-     * Basis
-     */
-    basis: string;
-    /**
-     * Basis Value
-     */
-    basis_value?: number | null;
-    /**
-     * Basis Unit
-     */
-    basis_unit?: string | null;
-    /**
-     * Source
-     */
-    source?: 'evidence' | 'heuristic' | 'derived' | 'input';
-    /**
-     * Timing Rule
-     */
-    timing_rule?: 'land_acquisition' | 'construction_straight_line' | 'sales_velocity' | 'non_cash_placeholder';
-    /**
-     * Timing Group
-     */
-    timing_group?: 'land' | 'hard_cost' | 'professional_fees' | 'authority_and_infrastructure' | 'selling_costs' | 'contingency' | 'financing_fees' | 'other';
-};
-
-/**
- * FeasibilityCostSummary
- */
-export type FeasibilityCostSummary = {
-    /**
-     * Total Costs Excl Vat Aed
-     */
-    total_costs_excl_vat_aed: number;
-    /**
-     * Vat Amount Aed
-     */
-    vat_amount_aed: number;
-    /**
-     * Total Costs Incl Vat Aed
-     */
-    total_costs_incl_vat_aed: number;
-    /**
-     * Cost To Revenue Pct
-     */
-    cost_to_revenue_pct: number;
-    /**
-     * Gross Profit Aed
-     */
-    gross_profit_aed: number;
-    /**
-     * Gross Margin Pct
-     */
-    gross_margin_pct: number;
-    /**
-     * Line Items
-     */
-    line_items?: Array<FeasibilityCostLineItem>;
-};
-
-/**
- * FeasibilityFinancingSummary
- */
-export type FeasibilityFinancingSummary = {
-    /**
-     * Base Project Cost Aed
-     */
-    base_project_cost_aed: number;
-    /**
-     * All In Project Cost Aed
-     */
-    all_in_project_cost_aed: number;
-    /**
-     * All In Cost To Revenue Pct
-     */
-    all_in_cost_to_revenue_pct: number;
-    /**
-     * Presale Coverage Pct At Construction
-     */
-    presale_coverage_pct_at_construction: number;
-    /**
-     * Required Completion Reserve Aed
-     */
-    required_completion_reserve_aed: number;
-    /**
-     * Completion Reserve Coverage Pct
-     */
-    completion_reserve_coverage_pct: number;
-    /**
-     * Sponsor Release Capacity Aed
-     */
-    sponsor_release_capacity_aed: number;
-    /**
-     * Debt Commitment Utilization Pct
-     */
-    debt_commitment_utilization_pct: number;
-    /**
-     * Debt Commitment Aed
-     */
-    debt_commitment_aed: number;
-    /**
-     * Peak Debt Aed
-     */
-    peak_debt_aed: number;
-    /**
-     * Min Debt Headroom Aed
-     */
-    min_debt_headroom_aed: number;
-    /**
-     * Arrangement Fee Aed
-     */
-    arrangement_fee_aed: number;
-    /**
-     * Initial Commitment Fee Aed
-     */
-    initial_commitment_fee_aed: number;
-    /**
-     * Capitalized Interest Aed
-     */
-    capitalized_interest_aed: number;
-    /**
-     * Commitment Fee Carry Aed
-     */
-    commitment_fee_carry_aed: number;
-    /**
-     * Total Finance Costs Aed
-     */
-    total_finance_costs_aed: number;
-    /**
-     * Equity Contributed Aed
-     */
-    equity_contributed_aed: number;
-    /**
-     * Equity Distributed Aed
-     */
-    equity_distributed_aed: number;
-    /**
-     * Closing Debt Balance Aed
-     */
-    closing_debt_balance_aed: number;
-    /**
-     * Closing Escrow Balance Aed
-     */
-    closing_escrow_balance_aed: number;
-};
-
-/**
- * FeasibilityFundingSource
- */
-export type FeasibilityFundingSource = {
-    /**
-     * Code
-     */
-    code: string;
-    /**
-     * Label
-     */
-    label: string;
-    /**
-     * Amount Aed
-     */
-    amount_aed: number;
-    /**
-     * Basis
-     */
-    basis: string;
-};
-
-/**
- * FeasibilityFundingSummary
- */
-export type FeasibilityFundingSummary = {
-    /**
-     * Deposit Pct
-     */
-    deposit_pct: number;
-    /**
-     * Pre Handover Pct
-     */
-    pre_handover_pct: number;
-    /**
-     * Handover Pct
-     */
-    handover_pct: number;
-    /**
-     * Presale Threshold Pct
-     */
-    presale_threshold_pct: number;
-    /**
-     * Presales At Construction Start Aed
-     */
-    presales_at_construction_start_aed: number;
-    /**
-     * Escrow Retention Pct
-     */
-    escrow_retention_pct: number;
-    /**
-     * Debt To Cost Ratio
-     */
-    debt_to_cost_ratio: number;
-    /**
-     * Debt Repayment Mode
-     */
-    debt_repayment_mode: 'bullet_at_handover' | 'sales_sweep';
-    /**
-     * Off Plan Proceeds Aed
-     */
-    off_plan_proceeds_aed: number;
-    /**
-     * Debt Funding Aed
-     */
-    debt_funding_aed: number;
-    /**
-     * Equity Funding Aed
-     */
-    equity_funding_aed: number;
-    /**
-     * Vat Refunds Aed
-     */
-    vat_refunds_aed: number;
-    /**
-     * Total Sources Aed
-     */
-    total_sources_aed: number;
-    /**
-     * Total Uses Aed
-     */
-    total_uses_aed: number;
-    /**
-     * Funding Gap Aed
-     */
-    funding_gap_aed: number;
-    /**
-     * Sources
-     */
-    sources?: Array<FeasibilityFundingSource>;
+    history?: Array<FeasibilityChatMessage>;
 };
 
 /**
@@ -1279,284 +935,6 @@ export type FeasibilityPaymentPlan = {
      * Handoverpct
      */
     handoverPct?: number;
-};
-
-/**
- * FeasibilityProgramRow
- */
-export type FeasibilityProgramRow = {
-    /**
-     * Unit Type
-     */
-    unit_type: string;
-    /**
-     * Share Pct
-     */
-    share_pct: number;
-    /**
-     * Suggested Units
-     */
-    suggested_units: number;
-    /**
-     * Avg Size Sqm
-     */
-    avg_size_sqm: number;
-    /**
-     * Saleable Area Sqm
-     */
-    saleable_area_sqm: number;
-    /**
-     * Sales Rate Aed Per Sqm
-     */
-    sales_rate_aed_per_sqm: number;
-    /**
-     * Gross Revenue Aed
-     */
-    gross_revenue_aed: number;
-    /**
-     * Parking Ratio
-     */
-    parking_ratio?: number;
-    /**
-     * Parking Spaces
-     */
-    parking_spaces?: number;
-};
-
-/**
- * FeasibilityProgramSummary
- */
-export type FeasibilityProgramSummary = {
-    /**
-     * Usage
-     */
-    usage: 'residential' | 'commercial' | 'mixed_use' | 'unknown';
-    /**
-     * Market Area
-     */
-    market_area: string;
-    /**
-     * Headline
-     */
-    headline: string;
-    /**
-     * Gfa Sqm
-     */
-    gfa_sqm: number;
-    /**
-     * Saleable Area Sqm
-     */
-    saleable_area_sqm: number;
-    /**
-     * Saleable Efficiency Pct
-     */
-    saleable_efficiency_pct: number;
-    /**
-     * Total Units
-     */
-    total_units: number;
-    /**
-     * Total Parking Spaces
-     */
-    total_parking_spaces?: number;
-    /**
-     * Weighted Avg Sales Rate Aed Per Sqm
-     */
-    weighted_avg_sales_rate_aed_per_sqm: number;
-    /**
-     * Gross Revenue Aed
-     */
-    gross_revenue_aed: number;
-    /**
-     * Rows
-     */
-    rows?: Array<FeasibilityProgramRow>;
-    /**
-     * Warnings
-     */
-    warnings?: Array<string>;
-};
-
-/**
- * FeasibilityReturnsSummary
- */
-export type FeasibilityReturnsSummary = {
-    /**
-     * Project Profit Aed
-     */
-    project_profit_aed: number;
-    /**
-     * Gross Margin Pct
-     */
-    gross_margin_pct: number;
-    /**
-     * All In Project Profit Aed
-     */
-    all_in_project_profit_aed?: number | null;
-    /**
-     * All In Margin Pct
-     */
-    all_in_margin_pct?: number | null;
-    /**
-     * Project Irr Pct
-     */
-    project_irr_pct?: number | null;
-    /**
-     * Project Moic
-     */
-    project_moic?: number | null;
-    /**
-     * Equity Irr Pct
-     */
-    equity_irr_pct?: number | null;
-    /**
-     * Equity Moic
-     */
-    equity_moic?: number | null;
-    /**
-     * Peak Debt Aed
-     */
-    peak_debt_aed?: number | null;
-    /**
-     * Peak Equity Aed
-     */
-    peak_equity_aed?: number | null;
-    /**
-     * Total Interest Paid Aed
-     */
-    total_interest_paid_aed?: number | null;
-    /**
-     * Total Commitment Fees Aed
-     */
-    total_commitment_fees_aed?: number | null;
-};
-
-/**
- * FeasibilityScheduleSummary
- */
-export type FeasibilityScheduleSummary = {
-    /**
-     * Sales Commencement Date
-     */
-    sales_commencement_date: string;
-    /**
-     * Construction Start Date
-     */
-    construction_start_date: string;
-    /**
-     * Handover Date
-     */
-    handover_date: string;
-    /**
-     * Sales Period Months
-     */
-    sales_period_months: number;
-    /**
-     * Construction Duration Months
-     */
-    construction_duration_months: number;
-    /**
-     * Sales To Handover Months
-     */
-    sales_to_handover_months: number;
-};
-
-/**
- * FeasibilitySiteEnvelope
- */
-export type FeasibilitySiteEnvelope = {
-    /**
-     * Plot Number
-     */
-    plot_number: string;
-    /**
-     * Community Name
-     */
-    community_name: string;
-    /**
-     * Project Name
-     */
-    project_name: string;
-    /**
-     * Permitted Use
-     */
-    permitted_use: 'residential' | 'commercial' | 'mixed_use' | 'unknown';
-    /**
-     * Plot Area Sqm
-     */
-    plot_area_sqm: number;
-    /**
-     * Max Gfa Sqm
-     */
-    max_gfa_sqm: number;
-    /**
-     * Max Storeys
-     */
-    max_storeys?: number | null;
-    /**
-     * Far
-     */
-    far?: number | null;
-    /**
-     * Applied Coverage Pct
-     */
-    applied_coverage_pct?: number | null;
-    /**
-     * Buildable Footprint Sqm
-     */
-    buildable_footprint_sqm?: number | null;
-    /**
-     * Built Up Area Sqm
-     */
-    built_up_area_sqm?: number | null;
-    /**
-     * Modeled Gfa Sqm
-     */
-    modeled_gfa_sqm?: number | null;
-    /**
-     * Gross Saleable Area Sqm
-     */
-    gross_saleable_area_sqm?: number | null;
-    /**
-     * Gfa From Bua Efficiency Pct
-     */
-    gfa_from_bua_efficiency_pct?: number | null;
-    /**
-     * Gsa From Gfa Efficiency Pct
-     */
-    gsa_from_gfa_efficiency_pct?: number | null;
-    /**
-     * Max Height
-     */
-    max_height: string;
-    /**
-     * Max Coverage
-     */
-    max_coverage: string;
-    /**
-     * Gfa Type
-     */
-    gfa_type: string;
-    /**
-     * Site Plan Issue Date
-     */
-    site_plan_issue_date?: string | null;
-    /**
-     * Site Plan Expiry Date
-     */
-    site_plan_expiry_date?: string | null;
-    /**
-     * Is Verified
-     */
-    is_verified: boolean;
-    /**
-     * Area Assumption Notes
-     */
-    area_assumption_notes?: Array<string>;
-    /**
-     * Warnings
-     */
-    warnings?: Array<string>;
 };
 
 /**
@@ -1591,29 +969,6 @@ export type FeasibilityUnitConfig = {
      * Parkingratio
      */
     parkingRatio?: number;
-};
-
-/**
- * FeasibilityWorkbook
- */
-export type FeasibilityWorkbook = {
-    /**
-     * Generated At
-     */
-    generated_at: string;
-    /**
-     * Plot Number
-     */
-    plot_number: string;
-    site: FeasibilitySiteEnvelope;
-    program: FeasibilityProgramSummary;
-    costs: FeasibilityCostSummary;
-    funding: FeasibilityFundingSummary;
-    schedule: FeasibilityScheduleSummary;
-    cash_flow: FeasibilityCashFlowSummary;
-    returns: FeasibilityReturnsSummary;
-    financing: FeasibilityFinancingSummary;
-    validation: ValidationSummary;
 };
 
 /**
@@ -1675,6 +1030,20 @@ export type GisLandUse = {
 };
 
 /**
+ * GenerateStudyRequest
+ */
+export type GenerateStudyRequest = {
+    /**
+     * Plot Number
+     */
+    plot_number: string;
+    /**
+     * Usage Override
+     */
+    usage_override?: 'residential' | 'commercial' | 'mixed_use' | 'unknown' | null;
+};
+
+/**
  * GenerateStudyResponse
  */
 export type GenerateStudyResponse = {
@@ -1684,14 +1053,9 @@ export type GenerateStudyResponse = {
     status?: string;
     plot_data: PlotDetails;
     assumptions: FeasibilityAssumptions;
-    research: PlotResearch;
+    research: PlotResearchOutput;
     study_context: StudyContext;
-    /**
-     * Chat
-     */
-    chat?: {
-        [key: string]: unknown;
-    };
+    chat?: FeasibilityChatState;
 };
 
 /**
@@ -2704,7 +2068,79 @@ export type PlotDetails = {
 /**
  * PlotResearch
  */
-export type PlotResearch = {
+export type PlotResearchInput = {
+    /**
+     * Plot Number
+     */
+    plot_number: string;
+    /**
+     * Usage
+     */
+    usage: 'residential' | 'commercial' | 'mixed_use' | 'unknown';
+    /**
+     * Market Area
+     */
+    market_area: string;
+    /**
+     * Headline
+     */
+    headline: string;
+    /**
+     * Summary
+     */
+    summary?: Array<string>;
+    /**
+     * Constraints
+     */
+    constraints?: Array<string>;
+    /**
+     * Pricing Evidence
+     */
+    pricing_evidence?: Array<ComparableProject>;
+    /**
+     * Competition Evidence
+     */
+    competition_evidence?: Array<ComparableProject>;
+    /**
+     * Land Sales Evidence
+     */
+    land_sales_evidence?: Array<LandSaleEvidence>;
+    /**
+     * Market Pricing
+     */
+    market_pricing?: Array<MarketPricingRow>;
+    /**
+     * Off Plan Market Pricing
+     */
+    off_plan_market_pricing?: Array<OffPlanPricingRow>;
+    off_plan_pricing_confidence?: OffPlanPricingConfidence | null;
+    /**
+     * Off Plan Unit Benchmarks
+     */
+    off_plan_unit_benchmarks?: Array<OffPlanUnitPricingBenchmark>;
+    assumptions: FeasibilityAssumptions;
+    /**
+     * Warnings
+     */
+    warnings?: Array<string>;
+    /**
+     * Land Cost Estimate Aed Low
+     */
+    land_cost_estimate_aed_low?: number | null;
+    /**
+     * Land Cost Estimate Aed Mid
+     */
+    land_cost_estimate_aed_mid?: number | null;
+    /**
+     * Land Cost Estimate Aed High
+     */
+    land_cost_estimate_aed_high?: number | null;
+};
+
+/**
+ * PlotResearch
+ */
+export type PlotResearchOutput = {
     /**
      * Plot Number
      */
@@ -4233,54 +3669,6 @@ export type ValidationError = {
      * Error Type
      */
     type: string;
-};
-
-/**
- * ValidationIssue
- */
-export type ValidationIssue = {
-    /**
-     * Code
-     */
-    code: string;
-    /**
-     * Severity
-     */
-    severity: 'hard_fail' | 'warning' | 'missing_evidence';
-    /**
-     * Message
-     */
-    message: string;
-    /**
-     * Field
-     */
-    field?: string | null;
-};
-
-/**
- * ValidationSummary
- */
-export type ValidationSummary = {
-    /**
-     * Status
-     */
-    status: 'ready' | 'needs_review' | 'invalid';
-    /**
-     * Hard Failures
-     */
-    hard_failures: number;
-    /**
-     * Warnings
-     */
-    warnings: number;
-    /**
-     * Missing Evidence
-     */
-    missing_evidence: number;
-    /**
-     * Issues
-     */
-    issues?: Array<ValidationIssue>;
 };
 
 /**
@@ -5838,6 +5226,40 @@ export type ProjectsBuildingDetailsResponses = {
 
 export type ProjectsBuildingDetailsResponse = ProjectsBuildingDetailsResponses[keyof ProjectsBuildingDetailsResponses];
 
+export type ProjectsGetDdaPlotsData = {
+    body?: never;
+    path?: never;
+    query: {
+        /**
+         * Area
+         *
+         * Area or community name to match against DDA plots
+         */
+        area: string;
+    };
+    url: '/api/v1/projects/dda-plots';
+};
+
+export type ProjectsGetDdaPlotsErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ProjectsGetDdaPlotsError = ProjectsGetDdaPlotsErrors[keyof ProjectsGetDdaPlotsErrors];
+
+export type ProjectsGetDdaPlotsResponses = {
+    /**
+     * Response Projects-Get Dda Plots
+     *
+     * Successful Response
+     */
+    200: Array<DdaPlotFeature>;
+};
+
+export type ProjectsGetDdaPlotsResponse = ProjectsGetDdaPlotsResponses[keyof ProjectsGetDdaPlotsResponses];
+
 export type ProjectsProjectDetailsData = {
     body?: never;
     path: {
@@ -6996,7 +6418,7 @@ export type FeasibilityGenerateHbuEndpointResponses = {
     /**
      * Successful Response
      */
-    200: PlotResearch;
+    200: PlotResearchOutput;
 };
 
 export type FeasibilityGenerateHbuEndpointResponse = FeasibilityGenerateHbuEndpointResponses[keyof FeasibilityGenerateHbuEndpointResponses];
@@ -7151,18 +6573,9 @@ export type FeasibilityComparableEndpointResponses = {
 export type FeasibilityComparableEndpointResponse = FeasibilityComparableEndpointResponses[keyof FeasibilityComparableEndpointResponses];
 
 export type FeasibilityGenerateStudyEndpointData = {
-    body?: never;
+    body: GenerateStudyRequest;
     path?: never;
-    query: {
-        /**
-         * Plot Number
-         */
-        plot_number: string;
-        /**
-         * Usage Override
-         */
-        usage_override?: 'residential' | 'commercial' | 'mixed_use' | 'unknown' | null;
-    };
+    query?: never;
     url: '/api/v1/feasibility/generate-study';
 };
 

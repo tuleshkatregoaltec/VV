@@ -2497,6 +2497,53 @@
 				}
 			}
 		},
+		"/api/v1/projects/dda-plots": {
+			"get": {
+				"tags": ["projects", "projects"],
+				"summary": "Get Dda Plots",
+				"description": "Get DDA GIS plot polygons for a given area/community for map overlay.",
+				"operationId": "projects-get_dda_plots",
+				"parameters": [
+					{
+						"name": "area",
+						"in": "query",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"description": "Area or community name to match against DDA plots",
+							"title": "Area"
+						},
+						"description": "Area or community name to match against DDA plots"
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "array",
+									"items": {
+										"$ref": "#/components/schemas/DDAPlotFeature"
+									},
+									"title": "Response Projects-Get Dda Plots"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
 		"/api/v1/projects/{project_id}": {
 			"get": {
 				"tags": ["projects", "projects"],
@@ -4359,7 +4406,7 @@
 						"content": {
 							"application/json": {
 								"schema": {
-									"$ref": "#/components/schemas/PlotResearch"
+									"$ref": "#/components/schemas/PlotResearch-Output"
 								}
 							}
 						}
@@ -4616,34 +4663,16 @@
 				"summary": "Generate Study Endpoint",
 				"description": "Generate an initial feasibility study for the selected GIS plot.",
 				"operationId": "feasibility-generate_study_endpoint",
-				"parameters": [
-					{
-						"name": "plot_number",
-						"in": "query",
-						"required": true,
-						"schema": {
-							"type": "string",
-							"title": "Plot Number"
+				"requestBody": {
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/GenerateStudyRequest"
+							}
 						}
 					},
-					{
-						"name": "usage_override",
-						"in": "query",
-						"required": false,
-						"schema": {
-							"anyOf": [
-								{
-									"enum": ["residential", "commercial", "mixed_use", "unknown"],
-									"type": "string"
-								},
-								{
-									"type": "null"
-								}
-							],
-							"title": "Usage Override"
-						}
-					}
-				],
+					"required": true
+				},
 				"responses": {
 					"200": {
 						"description": "Successful Response",
@@ -5618,6 +5647,54 @@
 				"title": "CustomerPortalResponse",
 				"description": "Response containing Stripe Customer Portal URL"
 			},
+			"DDAPlotFeature": {
+				"properties": {
+					"plot_number": {
+						"type": "string",
+						"title": "Plot Number"
+					},
+					"project_name": {
+						"type": "string",
+						"title": "Project Name"
+					},
+					"community_name": {
+						"type": "string",
+						"title": "Community Name"
+					},
+					"plot_area_sqm": {
+						"type": "number",
+						"title": "Plot Area Sqm"
+					},
+					"coordinates": {
+						"items": {
+							"items": {
+								"type": "number"
+							},
+							"type": "array"
+						},
+						"type": "array",
+						"title": "Coordinates"
+					},
+					"land_use_summary": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"title": "Land Use Summary",
+						"default": []
+					}
+				},
+				"type": "object",
+				"required": [
+					"plot_number",
+					"project_name",
+					"community_name",
+					"plot_area_sqm",
+					"coordinates"
+				],
+				"title": "DDAPlotFeature",
+				"description": "DDA GIS plot polygon for map overlay."
+			},
 			"DimensionBreakdown": {
 				"properties": {
 					"dimension_value": {
@@ -5996,178 +6073,28 @@
 				],
 				"title": "FeasibilityAssumptions"
 			},
-			"FeasibilityCashFlowPeriod": {
+			"FeasibilityChatMessage": {
 				"properties": {
-					"period_label": {
+					"role": {
 						"type": "string",
-						"title": "Period Label"
+						"enum": ["system", "user", "assistant"],
+						"title": "Role"
 					},
-					"period_end_date": {
+					"content": {
 						"type": "string",
-						"title": "Period End Date"
-					},
-					"revenue_inflows_aed": {
-						"type": "number",
-						"title": "Revenue Inflows Aed"
-					},
-					"operating_outflows_aed": {
-						"type": "number",
-						"title": "Operating Outflows Aed"
-					},
-					"debt_draw_aed": {
-						"type": "number",
-						"title": "Debt Draw Aed"
-					},
-					"debt_repayment_aed": {
-						"type": "number",
-						"title": "Debt Repayment Aed"
-					},
-					"interest_paid_aed": {
-						"type": "number",
-						"title": "Interest Paid Aed"
-					},
-					"commitment_fee_paid_aed": {
-						"type": "number",
-						"title": "Commitment Fee Paid Aed"
-					},
-					"equity_contribution_aed": {
-						"type": "number",
-						"title": "Equity Contribution Aed"
-					},
-					"equity_distribution_aed": {
-						"type": "number",
-						"title": "Equity Distribution Aed"
-					},
-					"debt_balance_aed": {
-						"type": "number",
-						"title": "Debt Balance Aed"
-					},
-					"debt_headroom_aed": {
-						"type": "number",
-						"title": "Debt Headroom Aed"
-					},
-					"escrow_balance_aed": {
-						"type": "number",
-						"title": "Escrow Balance Aed"
-					},
-					"unlevered_net_cash_flow_aed": {
-						"type": "number",
-						"title": "Unlevered Net Cash Flow Aed"
-					},
-					"levered_net_cash_flow_aed": {
-						"type": "number",
-						"title": "Levered Net Cash Flow Aed"
-					},
-					"deposit_inflows_aed": {
-						"type": "number",
-						"title": "Deposit Inflows Aed",
-						"default": 0.0
-					},
-					"pre_handover_inflows_aed": {
-						"type": "number",
-						"title": "Pre Handover Inflows Aed",
-						"default": 0.0
-					},
-					"handover_inflows_aed": {
-						"type": "number",
-						"title": "Handover Inflows Aed",
-						"default": 0.0
-					},
-					"land_loan_balance_aed": {
-						"type": "number",
-						"title": "Land Loan Balance Aed",
-						"default": 0.0
-					},
-					"construction_loan_balance_aed": {
-						"type": "number",
-						"title": "Construction Loan Balance Aed",
-						"default": 0.0
-					},
-					"cost_land_aed": {
-						"type": "number",
-						"title": "Cost Land Aed",
-						"default": 0.0
-					},
-					"cost_construction_aed": {
-						"type": "number",
-						"title": "Cost Construction Aed",
-						"default": 0.0
-					},
-					"cost_marketing_aed": {
-						"type": "number",
-						"title": "Cost Marketing Aed",
-						"default": 0.0
-					},
-					"cost_sales_agent_aed": {
-						"type": "number",
-						"title": "Cost Sales Agent Aed",
-						"default": 0.0
-					},
-					"cost_contingency_aed": {
-						"type": "number",
-						"title": "Cost Contingency Aed",
-						"default": 0.0
-					},
-					"cost_vat_aed": {
-						"type": "number",
-						"title": "Cost Vat Aed",
-						"default": 0.0
-					},
-					"land_draw_aed": {
-						"type": "number",
-						"title": "Land Draw Aed",
-						"default": 0.0
-					},
-					"construction_draw_aed": {
-						"type": "number",
-						"title": "Construction Draw Aed",
-						"default": 0.0
-					},
-					"vat_refund_inflows_aed": {
-						"type": "number",
-						"title": "Vat Refund Inflows Aed",
-						"default": 0.0
+						"title": "Content"
 					}
 				},
+				"additionalProperties": false,
 				"type": "object",
-				"required": [
-					"period_label",
-					"period_end_date",
-					"revenue_inflows_aed",
-					"operating_outflows_aed",
-					"debt_draw_aed",
-					"debt_repayment_aed",
-					"interest_paid_aed",
-					"commitment_fee_paid_aed",
-					"equity_contribution_aed",
-					"equity_distribution_aed",
-					"debt_balance_aed",
-					"debt_headroom_aed",
-					"escrow_balance_aed",
-					"unlevered_net_cash_flow_aed",
-					"levered_net_cash_flow_aed"
-				],
-				"title": "FeasibilityCashFlowPeriod"
-			},
-			"FeasibilityCashFlowSummary": {
-				"properties": {
-					"periods": {
-						"items": {
-							"$ref": "#/components/schemas/FeasibilityCashFlowPeriod"
-						},
-						"type": "array",
-						"title": "Periods"
-					}
-				},
-				"type": "object",
-				"title": "FeasibilityCashFlowSummary"
+				"required": ["role", "content"],
+				"title": "FeasibilityChatMessage"
 			},
 			"FeasibilityChatRequest": {
 				"properties": {
 					"messages": {
 						"items": {
-							"additionalProperties": true,
-							"type": "object"
+							"$ref": "#/components/schemas/FeasibilityChatMessage"
 						},
 						"type": "array",
 						"title": "Messages"
@@ -6178,32 +6105,15 @@
 					"assumptions": {
 						"$ref": "#/components/schemas/FeasibilityAssumptions"
 					},
-					"workbook": {
-						"$ref": "#/components/schemas/FeasibilityWorkbook"
-					},
 					"research": {
 						"anyOf": [
 							{
-								"additionalProperties": true,
-								"type": "object"
+								"$ref": "#/components/schemas/PlotResearch-Input"
 							},
 							{
 								"type": "null"
 							}
-						],
-						"title": "Research"
-					},
-					"study_context": {
-						"anyOf": [
-							{
-								"additionalProperties": true,
-								"type": "object"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Study Context"
+						]
 					},
 					"history_json": {
 						"anyOf": [
@@ -6217,353 +6127,23 @@
 						"title": "History Json"
 					}
 				},
+				"additionalProperties": false,
 				"type": "object",
-				"required": ["messages", "plot_data", "assumptions", "workbook"],
+				"required": ["messages", "plot_data", "assumptions"],
 				"title": "FeasibilityChatRequest"
 			},
-			"FeasibilityCostLineItem": {
+			"FeasibilityChatState": {
 				"properties": {
-					"code": {
-						"type": "string",
-						"title": "Code"
-					},
-					"label": {
-						"type": "string",
-						"title": "Label"
-					},
-					"amount_aed": {
-						"type": "number",
-						"title": "Amount Aed"
-					},
-					"basis": {
-						"type": "string",
-						"title": "Basis"
-					},
-					"basis_value": {
-						"anyOf": [
-							{
-								"type": "number"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Basis Value"
-					},
-					"basis_unit": {
-						"anyOf": [
-							{
-								"type": "string"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Basis Unit"
-					},
-					"source": {
-						"type": "string",
-						"enum": ["evidence", "heuristic", "derived", "input"],
-						"title": "Source",
-						"default": "derived"
-					},
-					"timing_rule": {
-						"type": "string",
-						"enum": [
-							"land_acquisition",
-							"construction_straight_line",
-							"sales_velocity",
-							"non_cash_placeholder"
-						],
-						"title": "Timing Rule",
-						"default": "construction_straight_line"
-					},
-					"timing_group": {
-						"type": "string",
-						"enum": [
-							"land",
-							"hard_cost",
-							"professional_fees",
-							"authority_and_infrastructure",
-							"selling_costs",
-							"contingency",
-							"financing_fees",
-							"other"
-						],
-						"title": "Timing Group",
-						"default": "other"
-					}
-				},
-				"type": "object",
-				"required": ["code", "label", "amount_aed", "basis"],
-				"title": "FeasibilityCostLineItem"
-			},
-			"FeasibilityCostSummary": {
-				"properties": {
-					"total_costs_excl_vat_aed": {
-						"type": "number",
-						"title": "Total Costs Excl Vat Aed"
-					},
-					"vat_amount_aed": {
-						"type": "number",
-						"title": "Vat Amount Aed"
-					},
-					"total_costs_incl_vat_aed": {
-						"type": "number",
-						"title": "Total Costs Incl Vat Aed"
-					},
-					"cost_to_revenue_pct": {
-						"type": "number",
-						"title": "Cost To Revenue Pct"
-					},
-					"gross_profit_aed": {
-						"type": "number",
-						"title": "Gross Profit Aed"
-					},
-					"gross_margin_pct": {
-						"type": "number",
-						"title": "Gross Margin Pct"
-					},
-					"line_items": {
+					"history": {
 						"items": {
-							"$ref": "#/components/schemas/FeasibilityCostLineItem"
+							"$ref": "#/components/schemas/FeasibilityChatMessage"
 						},
 						"type": "array",
-						"title": "Line Items"
+						"title": "History"
 					}
 				},
 				"type": "object",
-				"required": [
-					"total_costs_excl_vat_aed",
-					"vat_amount_aed",
-					"total_costs_incl_vat_aed",
-					"cost_to_revenue_pct",
-					"gross_profit_aed",
-					"gross_margin_pct"
-				],
-				"title": "FeasibilityCostSummary"
-			},
-			"FeasibilityFinancingSummary": {
-				"properties": {
-					"base_project_cost_aed": {
-						"type": "number",
-						"title": "Base Project Cost Aed"
-					},
-					"all_in_project_cost_aed": {
-						"type": "number",
-						"title": "All In Project Cost Aed"
-					},
-					"all_in_cost_to_revenue_pct": {
-						"type": "number",
-						"title": "All In Cost To Revenue Pct"
-					},
-					"presale_coverage_pct_at_construction": {
-						"type": "number",
-						"title": "Presale Coverage Pct At Construction"
-					},
-					"required_completion_reserve_aed": {
-						"type": "number",
-						"title": "Required Completion Reserve Aed"
-					},
-					"completion_reserve_coverage_pct": {
-						"type": "number",
-						"title": "Completion Reserve Coverage Pct"
-					},
-					"sponsor_release_capacity_aed": {
-						"type": "number",
-						"title": "Sponsor Release Capacity Aed"
-					},
-					"debt_commitment_utilization_pct": {
-						"type": "number",
-						"title": "Debt Commitment Utilization Pct"
-					},
-					"debt_commitment_aed": {
-						"type": "number",
-						"title": "Debt Commitment Aed"
-					},
-					"peak_debt_aed": {
-						"type": "number",
-						"title": "Peak Debt Aed"
-					},
-					"min_debt_headroom_aed": {
-						"type": "number",
-						"title": "Min Debt Headroom Aed"
-					},
-					"arrangement_fee_aed": {
-						"type": "number",
-						"title": "Arrangement Fee Aed"
-					},
-					"initial_commitment_fee_aed": {
-						"type": "number",
-						"title": "Initial Commitment Fee Aed"
-					},
-					"capitalized_interest_aed": {
-						"type": "number",
-						"title": "Capitalized Interest Aed"
-					},
-					"commitment_fee_carry_aed": {
-						"type": "number",
-						"title": "Commitment Fee Carry Aed"
-					},
-					"total_finance_costs_aed": {
-						"type": "number",
-						"title": "Total Finance Costs Aed"
-					},
-					"equity_contributed_aed": {
-						"type": "number",
-						"title": "Equity Contributed Aed"
-					},
-					"equity_distributed_aed": {
-						"type": "number",
-						"title": "Equity Distributed Aed"
-					},
-					"closing_debt_balance_aed": {
-						"type": "number",
-						"title": "Closing Debt Balance Aed"
-					},
-					"closing_escrow_balance_aed": {
-						"type": "number",
-						"title": "Closing Escrow Balance Aed"
-					}
-				},
-				"type": "object",
-				"required": [
-					"base_project_cost_aed",
-					"all_in_project_cost_aed",
-					"all_in_cost_to_revenue_pct",
-					"presale_coverage_pct_at_construction",
-					"required_completion_reserve_aed",
-					"completion_reserve_coverage_pct",
-					"sponsor_release_capacity_aed",
-					"debt_commitment_utilization_pct",
-					"debt_commitment_aed",
-					"peak_debt_aed",
-					"min_debt_headroom_aed",
-					"arrangement_fee_aed",
-					"initial_commitment_fee_aed",
-					"capitalized_interest_aed",
-					"commitment_fee_carry_aed",
-					"total_finance_costs_aed",
-					"equity_contributed_aed",
-					"equity_distributed_aed",
-					"closing_debt_balance_aed",
-					"closing_escrow_balance_aed"
-				],
-				"title": "FeasibilityFinancingSummary"
-			},
-			"FeasibilityFundingSource": {
-				"properties": {
-					"code": {
-						"type": "string",
-						"title": "Code"
-					},
-					"label": {
-						"type": "string",
-						"title": "Label"
-					},
-					"amount_aed": {
-						"type": "number",
-						"title": "Amount Aed"
-					},
-					"basis": {
-						"type": "string",
-						"title": "Basis"
-					}
-				},
-				"type": "object",
-				"required": ["code", "label", "amount_aed", "basis"],
-				"title": "FeasibilityFundingSource"
-			},
-			"FeasibilityFundingSummary": {
-				"properties": {
-					"deposit_pct": {
-						"type": "number",
-						"title": "Deposit Pct"
-					},
-					"pre_handover_pct": {
-						"type": "number",
-						"title": "Pre Handover Pct"
-					},
-					"handover_pct": {
-						"type": "number",
-						"title": "Handover Pct"
-					},
-					"presale_threshold_pct": {
-						"type": "number",
-						"title": "Presale Threshold Pct"
-					},
-					"presales_at_construction_start_aed": {
-						"type": "number",
-						"title": "Presales At Construction Start Aed"
-					},
-					"escrow_retention_pct": {
-						"type": "number",
-						"title": "Escrow Retention Pct"
-					},
-					"debt_to_cost_ratio": {
-						"type": "number",
-						"title": "Debt To Cost Ratio"
-					},
-					"debt_repayment_mode": {
-						"type": "string",
-						"enum": ["bullet_at_handover", "sales_sweep"],
-						"title": "Debt Repayment Mode"
-					},
-					"off_plan_proceeds_aed": {
-						"type": "number",
-						"title": "Off Plan Proceeds Aed"
-					},
-					"debt_funding_aed": {
-						"type": "number",
-						"title": "Debt Funding Aed"
-					},
-					"equity_funding_aed": {
-						"type": "number",
-						"title": "Equity Funding Aed"
-					},
-					"vat_refunds_aed": {
-						"type": "number",
-						"title": "Vat Refunds Aed"
-					},
-					"total_sources_aed": {
-						"type": "number",
-						"title": "Total Sources Aed"
-					},
-					"total_uses_aed": {
-						"type": "number",
-						"title": "Total Uses Aed"
-					},
-					"funding_gap_aed": {
-						"type": "number",
-						"title": "Funding Gap Aed"
-					},
-					"sources": {
-						"items": {
-							"$ref": "#/components/schemas/FeasibilityFundingSource"
-						},
-						"type": "array",
-						"title": "Sources"
-					}
-				},
-				"type": "object",
-				"required": [
-					"deposit_pct",
-					"pre_handover_pct",
-					"handover_pct",
-					"presale_threshold_pct",
-					"presales_at_construction_start_aed",
-					"escrow_retention_pct",
-					"debt_to_cost_ratio",
-					"debt_repayment_mode",
-					"off_plan_proceeds_aed",
-					"debt_funding_aed",
-					"equity_funding_aed",
-					"vat_refunds_aed",
-					"total_sources_aed",
-					"total_uses_aed",
-					"funding_gap_aed"
-				],
-				"title": "FeasibilityFundingSummary"
+				"title": "FeasibilityChatState"
 			},
 			"FeasibilityPaymentPlan": {
 				"properties": {
@@ -6585,489 +6165,6 @@
 				},
 				"type": "object",
 				"title": "FeasibilityPaymentPlan"
-			},
-			"FeasibilityProgramRow": {
-				"properties": {
-					"unit_type": {
-						"type": "string",
-						"title": "Unit Type"
-					},
-					"share_pct": {
-						"type": "number",
-						"title": "Share Pct"
-					},
-					"suggested_units": {
-						"type": "integer",
-						"title": "Suggested Units"
-					},
-					"avg_size_sqm": {
-						"type": "number",
-						"title": "Avg Size Sqm"
-					},
-					"saleable_area_sqm": {
-						"type": "number",
-						"title": "Saleable Area Sqm"
-					},
-					"sales_rate_aed_per_sqm": {
-						"type": "number",
-						"title": "Sales Rate Aed Per Sqm"
-					},
-					"gross_revenue_aed": {
-						"type": "number",
-						"title": "Gross Revenue Aed"
-					},
-					"parking_ratio": {
-						"type": "number",
-						"title": "Parking Ratio",
-						"default": 0.0
-					},
-					"parking_spaces": {
-						"type": "number",
-						"title": "Parking Spaces",
-						"default": 0.0
-					}
-				},
-				"type": "object",
-				"required": [
-					"unit_type",
-					"share_pct",
-					"suggested_units",
-					"avg_size_sqm",
-					"saleable_area_sqm",
-					"sales_rate_aed_per_sqm",
-					"gross_revenue_aed"
-				],
-				"title": "FeasibilityProgramRow"
-			},
-			"FeasibilityProgramSummary": {
-				"properties": {
-					"usage": {
-						"type": "string",
-						"enum": ["residential", "commercial", "mixed_use", "unknown"],
-						"title": "Usage"
-					},
-					"market_area": {
-						"type": "string",
-						"title": "Market Area"
-					},
-					"headline": {
-						"type": "string",
-						"title": "Headline"
-					},
-					"gfa_sqm": {
-						"type": "number",
-						"title": "Gfa Sqm"
-					},
-					"saleable_area_sqm": {
-						"type": "number",
-						"title": "Saleable Area Sqm"
-					},
-					"saleable_efficiency_pct": {
-						"type": "number",
-						"title": "Saleable Efficiency Pct"
-					},
-					"total_units": {
-						"type": "integer",
-						"title": "Total Units"
-					},
-					"total_parking_spaces": {
-						"type": "number",
-						"title": "Total Parking Spaces",
-						"default": 0.0
-					},
-					"weighted_avg_sales_rate_aed_per_sqm": {
-						"type": "number",
-						"title": "Weighted Avg Sales Rate Aed Per Sqm"
-					},
-					"gross_revenue_aed": {
-						"type": "number",
-						"title": "Gross Revenue Aed"
-					},
-					"rows": {
-						"items": {
-							"$ref": "#/components/schemas/FeasibilityProgramRow"
-						},
-						"type": "array",
-						"title": "Rows"
-					},
-					"warnings": {
-						"items": {
-							"type": "string"
-						},
-						"type": "array",
-						"title": "Warnings"
-					}
-				},
-				"type": "object",
-				"required": [
-					"usage",
-					"market_area",
-					"headline",
-					"gfa_sqm",
-					"saleable_area_sqm",
-					"saleable_efficiency_pct",
-					"total_units",
-					"weighted_avg_sales_rate_aed_per_sqm",
-					"gross_revenue_aed"
-				],
-				"title": "FeasibilityProgramSummary"
-			},
-			"FeasibilityReturnsSummary": {
-				"properties": {
-					"project_profit_aed": {
-						"type": "number",
-						"title": "Project Profit Aed"
-					},
-					"gross_margin_pct": {
-						"type": "number",
-						"title": "Gross Margin Pct"
-					},
-					"all_in_project_profit_aed": {
-						"anyOf": [
-							{
-								"type": "number"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "All In Project Profit Aed"
-					},
-					"all_in_margin_pct": {
-						"anyOf": [
-							{
-								"type": "number"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "All In Margin Pct"
-					},
-					"project_irr_pct": {
-						"anyOf": [
-							{
-								"type": "number"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Project Irr Pct"
-					},
-					"project_moic": {
-						"anyOf": [
-							{
-								"type": "number"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Project Moic"
-					},
-					"equity_irr_pct": {
-						"anyOf": [
-							{
-								"type": "number"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Equity Irr Pct"
-					},
-					"equity_moic": {
-						"anyOf": [
-							{
-								"type": "number"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Equity Moic"
-					},
-					"peak_debt_aed": {
-						"anyOf": [
-							{
-								"type": "number"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Peak Debt Aed"
-					},
-					"peak_equity_aed": {
-						"anyOf": [
-							{
-								"type": "number"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Peak Equity Aed"
-					},
-					"total_interest_paid_aed": {
-						"anyOf": [
-							{
-								"type": "number"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Total Interest Paid Aed"
-					},
-					"total_commitment_fees_aed": {
-						"anyOf": [
-							{
-								"type": "number"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Total Commitment Fees Aed"
-					}
-				},
-				"type": "object",
-				"required": ["project_profit_aed", "gross_margin_pct"],
-				"title": "FeasibilityReturnsSummary"
-			},
-			"FeasibilityScheduleSummary": {
-				"properties": {
-					"sales_commencement_date": {
-						"type": "string",
-						"title": "Sales Commencement Date"
-					},
-					"construction_start_date": {
-						"type": "string",
-						"title": "Construction Start Date"
-					},
-					"handover_date": {
-						"type": "string",
-						"title": "Handover Date"
-					},
-					"sales_period_months": {
-						"type": "integer",
-						"title": "Sales Period Months"
-					},
-					"construction_duration_months": {
-						"type": "integer",
-						"title": "Construction Duration Months"
-					},
-					"sales_to_handover_months": {
-						"type": "integer",
-						"title": "Sales To Handover Months"
-					}
-				},
-				"type": "object",
-				"required": [
-					"sales_commencement_date",
-					"construction_start_date",
-					"handover_date",
-					"sales_period_months",
-					"construction_duration_months",
-					"sales_to_handover_months"
-				],
-				"title": "FeasibilityScheduleSummary"
-			},
-			"FeasibilitySiteEnvelope": {
-				"properties": {
-					"plot_number": {
-						"type": "string",
-						"title": "Plot Number"
-					},
-					"community_name": {
-						"type": "string",
-						"title": "Community Name"
-					},
-					"project_name": {
-						"type": "string",
-						"title": "Project Name"
-					},
-					"permitted_use": {
-						"type": "string",
-						"enum": ["residential", "commercial", "mixed_use", "unknown"],
-						"title": "Permitted Use"
-					},
-					"plot_area_sqm": {
-						"type": "number",
-						"title": "Plot Area Sqm"
-					},
-					"max_gfa_sqm": {
-						"type": "number",
-						"title": "Max Gfa Sqm"
-					},
-					"max_storeys": {
-						"anyOf": [
-							{
-								"type": "integer"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Max Storeys"
-					},
-					"far": {
-						"anyOf": [
-							{
-								"type": "number"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Far"
-					},
-					"applied_coverage_pct": {
-						"anyOf": [
-							{
-								"type": "number"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Applied Coverage Pct"
-					},
-					"buildable_footprint_sqm": {
-						"anyOf": [
-							{
-								"type": "number"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Buildable Footprint Sqm"
-					},
-					"built_up_area_sqm": {
-						"anyOf": [
-							{
-								"type": "number"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Built Up Area Sqm"
-					},
-					"modeled_gfa_sqm": {
-						"anyOf": [
-							{
-								"type": "number"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Modeled Gfa Sqm"
-					},
-					"gross_saleable_area_sqm": {
-						"anyOf": [
-							{
-								"type": "number"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Gross Saleable Area Sqm"
-					},
-					"gfa_from_bua_efficiency_pct": {
-						"anyOf": [
-							{
-								"type": "number"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Gfa From Bua Efficiency Pct"
-					},
-					"gsa_from_gfa_efficiency_pct": {
-						"anyOf": [
-							{
-								"type": "number"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Gsa From Gfa Efficiency Pct"
-					},
-					"max_height": {
-						"type": "string",
-						"title": "Max Height"
-					},
-					"max_coverage": {
-						"type": "string",
-						"title": "Max Coverage"
-					},
-					"gfa_type": {
-						"type": "string",
-						"title": "Gfa Type"
-					},
-					"site_plan_issue_date": {
-						"anyOf": [
-							{
-								"type": "string"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Site Plan Issue Date"
-					},
-					"site_plan_expiry_date": {
-						"anyOf": [
-							{
-								"type": "string"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Site Plan Expiry Date"
-					},
-					"is_verified": {
-						"type": "boolean",
-						"title": "Is Verified"
-					},
-					"area_assumption_notes": {
-						"items": {
-							"type": "string"
-						},
-						"type": "array",
-						"title": "Area Assumption Notes"
-					},
-					"warnings": {
-						"items": {
-							"type": "string"
-						},
-						"type": "array",
-						"title": "Warnings"
-					}
-				},
-				"type": "object",
-				"required": [
-					"plot_number",
-					"community_name",
-					"project_name",
-					"permitted_use",
-					"plot_area_sqm",
-					"max_gfa_sqm",
-					"max_height",
-					"max_coverage",
-					"gfa_type",
-					"is_verified"
-				],
-				"title": "FeasibilitySiteEnvelope"
 			},
 			"FeasibilityUnitConfig": {
 				"properties": {
@@ -7105,61 +6202,6 @@
 				"type": "object",
 				"required": ["id", "label", "units", "avgSizeSqm", "sellingRatePsqm"],
 				"title": "FeasibilityUnitConfig"
-			},
-			"FeasibilityWorkbook": {
-				"properties": {
-					"generated_at": {
-						"type": "string",
-						"format": "date-time",
-						"title": "Generated At"
-					},
-					"plot_number": {
-						"type": "string",
-						"title": "Plot Number"
-					},
-					"site": {
-						"$ref": "#/components/schemas/FeasibilitySiteEnvelope"
-					},
-					"program": {
-						"$ref": "#/components/schemas/FeasibilityProgramSummary"
-					},
-					"costs": {
-						"$ref": "#/components/schemas/FeasibilityCostSummary"
-					},
-					"funding": {
-						"$ref": "#/components/schemas/FeasibilityFundingSummary"
-					},
-					"schedule": {
-						"$ref": "#/components/schemas/FeasibilityScheduleSummary"
-					},
-					"cash_flow": {
-						"$ref": "#/components/schemas/FeasibilityCashFlowSummary"
-					},
-					"returns": {
-						"$ref": "#/components/schemas/FeasibilityReturnsSummary"
-					},
-					"financing": {
-						"$ref": "#/components/schemas/FeasibilityFinancingSummary"
-					},
-					"validation": {
-						"$ref": "#/components/schemas/ValidationSummary"
-					}
-				},
-				"type": "object",
-				"required": [
-					"generated_at",
-					"plot_number",
-					"site",
-					"program",
-					"costs",
-					"funding",
-					"schedule",
-					"cash_flow",
-					"returns",
-					"financing",
-					"validation"
-				],
-				"title": "FeasibilityWorkbook"
 			},
 			"FilterOptionsResponse": {
 				"properties": {
@@ -7255,6 +6297,30 @@
 				"required": ["type", "use"],
 				"title": "GISLandUse"
 			},
+			"GenerateStudyRequest": {
+				"properties": {
+					"plot_number": {
+						"type": "string",
+						"title": "Plot Number"
+					},
+					"usage_override": {
+						"anyOf": [
+							{
+								"type": "string",
+								"enum": ["residential", "commercial", "mixed_use", "unknown"]
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Usage Override"
+					}
+				},
+				"additionalProperties": false,
+				"type": "object",
+				"required": ["plot_number"],
+				"title": "GenerateStudyRequest"
+			},
 			"GenerateStudyResponse": {
 				"properties": {
 					"status": {
@@ -7269,15 +6335,13 @@
 						"$ref": "#/components/schemas/FeasibilityAssumptions"
 					},
 					"research": {
-						"$ref": "#/components/schemas/PlotResearch"
+						"$ref": "#/components/schemas/PlotResearch-Output"
 					},
 					"study_context": {
 						"$ref": "#/components/schemas/StudyContext"
 					},
 					"chat": {
-						"additionalProperties": true,
-						"type": "object",
-						"title": "Chat"
+						"$ref": "#/components/schemas/FeasibilityChatState"
 					}
 				},
 				"type": "object",
@@ -8716,7 +7780,140 @@
 				],
 				"title": "PlotDetails"
 			},
-			"PlotResearch": {
+			"PlotResearch-Input": {
+				"properties": {
+					"plot_number": {
+						"type": "string",
+						"title": "Plot Number"
+					},
+					"usage": {
+						"type": "string",
+						"enum": ["residential", "commercial", "mixed_use", "unknown"],
+						"title": "Usage"
+					},
+					"market_area": {
+						"type": "string",
+						"title": "Market Area"
+					},
+					"headline": {
+						"type": "string",
+						"title": "Headline"
+					},
+					"summary": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"title": "Summary"
+					},
+					"constraints": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"title": "Constraints"
+					},
+					"pricing_evidence": {
+						"items": {
+							"$ref": "#/components/schemas/ComparableProject"
+						},
+						"type": "array",
+						"title": "Pricing Evidence"
+					},
+					"competition_evidence": {
+						"items": {
+							"$ref": "#/components/schemas/ComparableProject"
+						},
+						"type": "array",
+						"title": "Competition Evidence"
+					},
+					"land_sales_evidence": {
+						"items": {
+							"$ref": "#/components/schemas/LandSaleEvidence"
+						},
+						"type": "array",
+						"title": "Land Sales Evidence"
+					},
+					"market_pricing": {
+						"items": {
+							"$ref": "#/components/schemas/MarketPricingRow"
+						},
+						"type": "array",
+						"title": "Market Pricing"
+					},
+					"off_plan_market_pricing": {
+						"items": {
+							"$ref": "#/components/schemas/OffPlanPricingRow"
+						},
+						"type": "array",
+						"title": "Off Plan Market Pricing"
+					},
+					"off_plan_pricing_confidence": {
+						"anyOf": [
+							{
+								"$ref": "#/components/schemas/OffPlanPricingConfidence"
+							},
+							{
+								"type": "null"
+							}
+						]
+					},
+					"off_plan_unit_benchmarks": {
+						"items": {
+							"$ref": "#/components/schemas/OffPlanUnitPricingBenchmark"
+						},
+						"type": "array",
+						"title": "Off Plan Unit Benchmarks"
+					},
+					"assumptions": {
+						"$ref": "#/components/schemas/FeasibilityAssumptions"
+					},
+					"warnings": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"title": "Warnings"
+					},
+					"land_cost_estimate_aed_low": {
+						"anyOf": [
+							{
+								"type": "number"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Land Cost Estimate Aed Low"
+					},
+					"land_cost_estimate_aed_mid": {
+						"anyOf": [
+							{
+								"type": "number"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Land Cost Estimate Aed Mid"
+					},
+					"land_cost_estimate_aed_high": {
+						"anyOf": [
+							{
+								"type": "number"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Land Cost Estimate Aed High"
+					}
+				},
+				"type": "object",
+				"required": ["plot_number", "usage", "market_area", "headline", "assumptions"],
+				"title": "PlotResearch"
+			},
+			"PlotResearch-Output": {
 				"properties": {
 					"plot_number": {
 						"type": "string",
@@ -11206,68 +10403,6 @@
 				"type": "object",
 				"required": ["loc", "msg", "type"],
 				"title": "ValidationError"
-			},
-			"ValidationIssue": {
-				"properties": {
-					"code": {
-						"type": "string",
-						"title": "Code"
-					},
-					"severity": {
-						"type": "string",
-						"enum": ["hard_fail", "warning", "missing_evidence"],
-						"title": "Severity"
-					},
-					"message": {
-						"type": "string",
-						"title": "Message"
-					},
-					"field": {
-						"anyOf": [
-							{
-								"type": "string"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Field"
-					}
-				},
-				"type": "object",
-				"required": ["code", "severity", "message"],
-				"title": "ValidationIssue"
-			},
-			"ValidationSummary": {
-				"properties": {
-					"status": {
-						"type": "string",
-						"enum": ["ready", "needs_review", "invalid"],
-						"title": "Status"
-					},
-					"hard_failures": {
-						"type": "integer",
-						"title": "Hard Failures"
-					},
-					"warnings": {
-						"type": "integer",
-						"title": "Warnings"
-					},
-					"missing_evidence": {
-						"type": "integer",
-						"title": "Missing Evidence"
-					},
-					"issues": {
-						"items": {
-							"$ref": "#/components/schemas/ValidationIssue"
-						},
-						"type": "array",
-						"title": "Issues"
-					}
-				},
-				"type": "object",
-				"required": ["status", "hard_failures", "warnings", "missing_evidence"],
-				"title": "ValidationSummary"
 			},
 			"WebhookStatusResponse": {
 				"properties": {
