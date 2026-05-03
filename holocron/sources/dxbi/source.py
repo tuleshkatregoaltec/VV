@@ -80,10 +80,17 @@ def extract_release(*args, **kwargs):
     return run_extract_release(*args, **kwargs)
 
 
+def load_bronze(*args, **kwargs):
+    from holocron.sources.dxbi.bronze import load_release_to_clickhouse
+
+    return load_release_to_clickhouse(*args, **kwargs)
+
+
 SOURCE = SourceSpec(
     name=DXBI_SOURCE_NAME,
     provider=DXBI_PROVIDER,
     extractor=extract_release,
+    bronze_loader=load_bronze,
     bronze_tables=(BronzeTable(name="dxbi_transactions_bronze"),),
     checkpoint_strategy=DATE_SLICE_CHECKPOINT_STRATEGY,
     cadence="daily",

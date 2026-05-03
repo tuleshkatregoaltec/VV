@@ -1,6 +1,7 @@
 from datetime import UTC, datetime
 
-from holocron.contracts import BronzeTable, RawFile, SilverTable, SourceSpec
+from holocron.contracts import BronzeTable, RawFile, SourceSpec
+from holocron.platform.clickhouse import quote_clickhouse_identifier
 from holocron.platform.execution import build_raw_release
 
 
@@ -14,7 +15,6 @@ def test_build_raw_release_shapes_core_manifest_fields() -> None:
         provider="example",
         extractor=_extract,
         bronze_tables=(BronzeTable(name="example_bronze"),),
-        silver_tables=(SilverTable(name="example_silver"),),
     )
     release = build_raw_release(
         source=source,
@@ -26,3 +26,16 @@ def test_build_raw_release_shapes_core_manifest_fields() -> None:
     assert release.run_id == "2026-03-31T12-00-00Z"
     assert release.extract_date == "2026-03-31"
     assert release.files[0].path == "rows.jsonl"
+
+
+def test_quote_clickhouse_identifier_accepts_simple_identifiers() -> None:
+    assert quote_clickhouse_identifier("dda_land_plots") == "`dda_land_plots`"
+
+
+def test_quote_clickhouse_identifier_rejects_unsafe_identifiers() -> None:
+    try:
+        quote_clickhouse_identifier("dda_land_plots; DROP TABLE users")
+    except ValueError as exc:
+        assert "Invalid ClickHouse identifier" in str(exc)
+    else:
+        raise AssertionError("unsafe identifier should be rejected")

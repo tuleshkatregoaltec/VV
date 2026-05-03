@@ -8,9 +8,12 @@ def test_manifest_key_uses_source_scoped_raw_layout() -> None:
 
 
 def test_raw_file_key_uses_extract_date_and_run_id_partitioning() -> None:
-    assert raw_file_s3_key(
-        source="bay_transactions",
-        extract_date="2026-03-31",
-        run_id="run-1",
-        file_name="sales.csv",
-    ) == "raw/source=bay_transactions/extract_date=2026-03-31/run_id=run-1/sales.csv"
+    assert (
+        raw_file_s3_key(
+            source="bay_transactions",
+            extract_date="2026-03-31",
+            run_id="run-1",
+            file_name="sales.csv",
+        )
+        == "raw/source=bay_transactions/extract_date=2026-03-31/run_id=run-1/sales.csv"
+    )

@@ -6,9 +6,10 @@ services:
       dockerfile: Dockerfile
     command: dagster-webserver -h 0.0.0.0 -p 3000 -w /app/workspace.yaml
     ports:
-      - "3000:3000"
+      - "${DAGSTER_PORT:-3000}:3000"
     environment:
       DAGSTER_HOME: /app
+      PYTHONUNBUFFERED: "1"
     env_file:
       - ${ENV_FILE:-.env}
     restart: unless-stopped
@@ -24,6 +25,7 @@ services:
     command: dagster-daemon run -w /app/workspace.yaml
     environment:
       DAGSTER_HOME: /app
+      PYTHONUNBUFFERED: "1"
     env_file:
       - ${ENV_FILE:-.env}
     restart: unless-stopped

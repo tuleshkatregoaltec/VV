@@ -6,6 +6,7 @@ import logging
 import mimetypes
 import re
 import xml.etree.ElementTree as ET
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
@@ -343,16 +344,16 @@ def _guess_extension(url: str, content_type: str | None) -> str:
     return guessed or ".bin"
 
 
-def _resolve_cli_feed_urls(
+def resolve_feed_urls(
     *,
-    args: argparse.Namespace,
     settings: Settings,
+    cli_urls: Sequence[str] = (),
+    feed_urls_file: str = "",
 ) -> tuple[str, ...]:
     configured = parse_feed_urls(settings.news_feed_urls)
-    cli_urls = tuple(args.feed_url or [])
     file_urls: tuple[str, ...] = ()
-    if args.feed_urls_file:
-        file_urls = parse_feed_urls(Path(args.feed_urls_file).read_text(encoding="utf-8"))
+    if feed_urls_file:
+        file_urls = parse_feed_urls(Path(feed_urls_file).read_text(encoding="utf-8"))
 
     combined: list[str] = []
     seen: set[str] = set()
@@ -362,6 +363,18 @@ def _resolve_cli_feed_urls(
         seen.add(url)
         combined.append(url)
     return tuple(combined)
+
+
+def _resolve_cli_feed_urls(
+    *,
+    args: argparse.Namespace,
+    settings: Settings,
+) -> tuple[str, ...]:
+    return resolve_feed_urls(
+        settings=settings,
+        cli_urls=tuple(args.feed_url or ()),
+        feed_urls_file=str(args.feed_urls_file or ""),
+    )
 
 
 def build_arg_parser() -> argparse.ArgumentParser:

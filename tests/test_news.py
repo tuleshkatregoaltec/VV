@@ -1,4 +1,5 @@
 from datetime import UTC, datetime
+from pathlib import Path
 
 from holocron.domain.news import (
     clean_text,
@@ -6,7 +7,9 @@ from holocron.domain.news import (
     parse_feed,
     parse_feed_urls,
     parse_publish_date,
+    resolve_feed_urls,
 )
+from holocron.platform.settings import Settings
 
 
 def test_parse_feed_urls_ignores_comments_and_duplicates() -> None:
@@ -89,3 +92,37 @@ def test_parse_atom_feed_extracts_articles() -> None:
     assert articles[0].url == "https://example.com/article-2"
     assert articles[0].thumbnail_source_url == "https://example.com/atom.jpg"
     assert articles[0].publish_date == datetime(2026, 4, 28, 6, 30, tzinfo=UTC)
+
+
+def test_resolve_feed_urls_combines_cli_file_and_configured(tmp_path: Path) -> None:
+    feeds_file = tmp_path / "feeds.txt"
+    feeds_file.write_text(
+        "\n".join(
+            (
+                "https://example.com/file",
+                "# comment",
+                "https://example.com/cli",
+            )
+        ),
+        encoding="utf-8",
+    )
+    settings = Settings(
+        NEWS_FEED_URLS="\n".join(
+            (
+                "https://example.com/config",
+                "https://example.com/file",
+            )
+        )
+    )
+
+    urls = resolve_feed_urls(
+        settings=settings,
+        cli_urls=("https://example.com/cli", "https://example.com/file"),
+        feed_urls_file=str(feeds_file),
+    )
+
+    assert urls == (
+        "https://example.com/cli",
+        "https://example.com/file",
+        "https://example.com/config",
+    )

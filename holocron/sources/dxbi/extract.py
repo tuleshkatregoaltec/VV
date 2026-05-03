@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
+import shutil
 from collections.abc import Callable, Iterable
 from datetime import datetime
 from pathlib import Path
@@ -13,7 +15,14 @@ from twocaptcha import TwoCaptcha
 
 from holocron.contracts import RawFile, RawRelease
 from holocron.platform.execution import build_raw_file, build_raw_release, new_run_id, utc_now
-from holocron.sources.dxbi.source import DXBI_BASE_URL, DateSlice, DxbiConfig, SOURCE, build_date_slices
+from holocron.platform.metadata import safe_config_metadata
+from holocron.sources.dxbi.source import (
+    DXBI_BASE_URL,
+    DateSlice,
+    DxbiConfig,
+    SOURCE,
+    build_date_slices,
+)
 
 SALE_REGION_SELECTOR = "#soldhistory"
 RENTAL_REGION_SELECTOR = "#rentHistory"
@@ -26,7 +35,9 @@ PAGINATION_CALL_PATTERN = re.compile(
 )
 
 
-def load_page_urls(*, page_urls_text: str, page_urls_file: str, max_pages: int | None = None) -> list[str]:
+def load_page_urls(
+    *, page_urls_text: str, page_urls_file: str, max_pages: int | None = None
+) -> list[str]:
     urls: list[str] = []
     for raw_line in page_urls_text.splitlines():
         line = raw_line.strip()
@@ -55,6 +66,11 @@ def extract_release(
     playwright_factory: Callable[[], object] = sync_playwright,
 ) -> RawRelease:
     parsed_config = config if isinstance(config, DxbiConfig) else DxbiConfig.model_validate(config)
+    if (
+        parsed_config.storage_state_path.strip()
+        and not Path(parsed_config.storage_state_path).exists()
+    ):
+        raise FileNotFoundError(f"DXBI storage state not found: {parsed_config.storage_state_path}")
     current_time = now or utc_now()
     run_id = new_run_id(current_time)
     output_path = Path(output_dir)
@@ -92,7 +108,7 @@ def extract_release(
         files=files,
         run_id=run_id,
         now=current_time,
-        metadata={"config": parsed_config.model_dump(mode="json"), "slice_count": len(slices)},
+        metadata={"config": safe_config_metadata(parsed_config), "slice_count": len(slices)},
     )
 
 
@@ -125,9 +141,13 @@ def _extract_with_scraper(
     scraped_at = current_time.isoformat()
 
     def collect(url: str, date_slice: DateSlice) -> list[dict]:
-        return page_scraper(url=url, date_slice=date_slice, run_id=run_id, config=config, scraped_at=scraped_at)
+        return page_scraper(
+            url=url, date_slice=date_slice, run_id=run_id, config=config, scraped_at=scraped_at
+        )
 
-    return _collect_all_slices(output_path=output_path, urls=urls, date_slices=date_slices, collect_rows=collect)
+    return _collect_all_slices(
+        output_path=output_path, urls=urls, date_slices=date_slices, collect_rows=collect
+    )
 
 
 def _extract_with_playwright(
@@ -144,6 +164,7 @@ def _extract_with_playwright(
     with playwright_factory() as playwright:
         browser_context = _new_context(playwright=playwright, config=config)
         try:
+
             def collect(url: str, date_slice: DateSlice) -> list[dict]:
                 return _scrape_url_slice(
                     context=browser_context,
@@ -154,7 +175,9 @@ def _extract_with_playwright(
                     config=config,
                 )
 
-            return _collect_all_slices(output_path=output_path, urls=urls, date_slices=date_slices, collect_rows=collect)
+            return _collect_all_slices(
+                output_path=output_path, urls=urls, date_slices=date_slices, collect_rows=collect
+            )
         finally:
             browser_context.browser.close()
 
@@ -163,6 +186,40 @@ _USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36"
 )
+DEFAULT_CHROME_CANDIDATES = (
+    "google-chrome",
+    "google-chrome-stable",
+    "chromium",
+    "chromium-browser",
+)
+
+
+def _resolve_browser_executable(chrome_path: str) -> str | None:
+    candidate = chrome_path.strip()
+    if candidate:
+        resolved = shutil.which(candidate) if "/" not in candidate else candidate
+        if resolved and Path(resolved).exists():
+            return resolved
+        raise FileNotFoundError(f"DXBI browser executable not found: {chrome_path}")
+
+    for name in DEFAULT_CHROME_CANDIDATES:
+        resolved = shutil.which(name)
+        if resolved:
+            return resolved
+    return None
+
+
+def _raise_if_blocked_ajax(*, statuses: Iterable[int], url: str) -> None:
+    blocked = sorted({status for status in statuses if status >= 400})
+    if not blocked:
+        return
+    statuses_text = ", ".join(str(status) for status in blocked)
+    raise RuntimeError(
+        "DXBI APEX requests were blocked while scraping "
+        f"{url} (HTTP {statuses_text}). "
+        "Use a real Chrome executable via chrome_path (or ensure one is installed), "
+        "or provide a storage_state_path from a cleared browser session."
+    )
 
 
 def _new_context(*, playwright: Playwright, config: DxbiConfig) -> BrowserContext:
@@ -170,8 +227,9 @@ def _new_context(*, playwright: Playwright, config: DxbiConfig) -> BrowserContex
         "headless": config.headless,
         "args": ["--disable-blink-features=AutomationControlled", "--no-sandbox"],
     }
-    if config.chrome_path.strip():
-        launch_kwargs["executable_path"] = config.chrome_path
+    executable_path = _resolve_browser_executable(config.chrome_path)
+    if executable_path:
+        launch_kwargs["executable_path"] = executable_path
     browser = playwright.chromium.launch(**launch_kwargs)
     context_kwargs: dict = {"user_agent": _USER_AGENT}
     if config.storage_state_path.strip():
@@ -189,6 +247,18 @@ def _scrape_url_slice(
     config: DxbiConfig,
 ) -> list[dict]:
     page = context.new_page()
+    blocked_ajax_statuses: list[int] = []
+    ajax_request_count = 0
+
+    def handle_response(response) -> None:
+        nonlocal ajax_request_count
+        if "wwv_flow.ajax" not in response.url:
+            return
+        ajax_request_count += 1
+        if response.status >= 400:
+            blocked_ajax_statuses.append(response.status)
+
+    page.on("response", handle_response)
     try:
         page.goto(url, wait_until="domcontentloaded", timeout=120000)
         try:
@@ -228,6 +298,17 @@ def _scrape_url_slice(
                 region_selector=RENTAL_REGION_SELECTOR,
             )
         )
+        _raise_if_blocked_ajax(statuses=blocked_ajax_statuses, url=url)
+        if url.rstrip("/") == DXBI_BASE_URL.rstrip("/") and ajax_request_count == 0:
+            raise RuntimeError(
+                "DXBI root page did not emit any APEX ajax responses while scraping. "
+                "The session may be blocked or page behavior has changed."
+            )
+        if url.rstrip("/") == DXBI_BASE_URL.rstrip("/") and not rows:
+            raise RuntimeError(
+                "DXBI root page returned zero rows after date refresh; this usually means "
+                "Cloudflare blocked report ajax calls or the page contract changed."
+            )
         return rows
     finally:
         page.close()
@@ -254,7 +335,9 @@ def _collect_table_pages(
         scraped_at=scraped_at,
         date_slice=date_slice,
     )
-    for page_number, call in enumerate(_extract_pagination_calls(page=page, region_selector=region_selector), start=2):
+    for page_number, call in enumerate(
+        _extract_pagination_calls(page=page, region_selector=region_selector), start=2
+    ):
         _paginate_report(page=page, table_selector=table_selector, call=call)
         rows.extend(
             _extract_table_rows(
@@ -322,33 +405,98 @@ def _normalize_cell_text(value: str) -> str:
 
 
 def _apply_date_slice(*, page: Page, date_slice: DateSlice) -> None:
-    # Use the jQuery daterangepicker JS API to set dates directly — the preset list
-    # and calendar navigation are APEX-rendered and not reliable CSS targets.
     start_str = date_slice.start_date.isoformat()
     end_str = date_slice.end_date.isoformat()
     result = page.evaluate(
         """
         ([startDate, endDate]) => {
-            const $ = window.apex?.jQuery || window.jQuery;
-            const input = document.querySelector('#P1_CUSTOM_DATE, input.pretius_date_range');
-            if (!input) return 'no-input';
-            const drp = $(input).data('daterangepicker');
-            if (!drp) return 'no-drp';
-            drp.setStartDate(startDate);
-            drp.setEndDate(endDate);
-            drp.show();
-            return 'ok';
+            if (typeof window.$s !== 'function') return { status: 'no-$s' };
+            if (!document.querySelector('#P74_START_DATE') || !document.querySelector('#P74_END_DATE')) {
+                return { status: 'missing-date-items' };
+            }
+
+            const reportHtml = (regionSelector, tableSelector) => {
+                const catchNode = document.querySelector(`${regionSelector} [id^="report_"][id$="_catch"]`);
+                const bodyNode = document.querySelector(`${tableSelector} tbody`);
+                return [
+                    catchNode ? catchNode.innerHTML : '',
+                    bodyNode ? bodyNode.innerHTML : '',
+                ].join('\\n');
+            };
+            const token = `${startDate}:${endDate}:${Date.now()}`;
+            const state = {
+                token,
+                soldBefore: reportHtml('#soldhistory', '#report_table_soldhistory'),
+                rentBefore: reportHtml('#rentHistory', '#report_table_rentHistory'),
+                soldPresent: !!document.querySelector('#soldhistory'),
+                rentPresent: !!document.querySelector('#rentHistory'),
+                soldDone: false,
+                rentDone: false,
+            };
+            window.__holocronDxbiRefresh = state;
+
+            const jq = window.apex?.jQuery || window.jQuery;
+            if (typeof jq === 'function') {
+                if (state.soldPresent) {
+                    jq('#soldhistory').one('apexafterrefresh', () => { state.soldDone = true; });
+                }
+                if (state.rentPresent) {
+                    jq('#rentHistory').one('apexafterrefresh', () => { state.rentDone = true; });
+                }
+            }
+
+            $s('P74_START_DATE', startDate);
+            $s('P74_END_DATE', endDate);
+
+            try {
+                if (window.apex?.region) {
+                    apex.region('soldhistory').refresh();
+                    apex.region('rentHistory').refresh();
+                } else if (window.apex?.da?.refresh) {
+                    apex.da.refresh('.refresh');
+                } else {
+                    return { status: 'no-refresh-api' };
+                }
+            } catch (error) {
+                return { status: 'refresh-error', detail: String(error) };
+            }
+
+            return { status: 'ok', token };
         }
         """,
         [start_str, end_str],
     )
-    if result != "ok":
-        raise RuntimeError(f"DXBI daterangepicker not ready: {result}")
+    if result.get("status") != "ok":
+        detail = result.get("detail") or result.get("status")
+        raise RuntimeError(f"DXBI date refresh not ready: {detail}")
 
-    # Fire click via JS to bypass any modal overlay intercepting pointer events.
-    page.evaluate("document.querySelector('.daterangepicker .applyBtn')?.click()")
     try:
-        page.wait_for_load_state("networkidle", timeout=15000)
+        page.wait_for_function(
+            """
+            ({ token }) => {
+                const state = window.__holocronDxbiRefresh;
+                if (!state || state.token !== token) return false;
+
+                const reportHtml = (regionSelector, tableSelector) => {
+                    const catchNode = document.querySelector(`${regionSelector} [id^="report_"][id$="_catch"]`);
+                    const bodyNode = document.querySelector(`${tableSelector} tbody`);
+                    return [
+                        catchNode ? catchNode.innerHTML : '',
+                        bodyNode ? bodyNode.innerHTML : '',
+                    ].join('\\n');
+                };
+                const soldChanged = reportHtml('#soldhistory', '#report_table_soldhistory') !== state.soldBefore;
+                const rentChanged = reportHtml('#rentHistory', '#report_table_rentHistory') !== state.rentBefore;
+                const soldReady = !state.soldPresent || state.soldDone || soldChanged;
+                const rentReady = !state.rentPresent || state.rentDone || rentChanged;
+                return soldReady && rentReady;
+            }
+            """,
+            arg={
+                "token": result.get("token", ""),
+            },
+            timeout=20000,
+        )
     except TimeoutError:
         page.wait_for_timeout(3000)
 
@@ -381,7 +529,9 @@ def _extract_pagination_calls(*, page: Page, region_selector: str) -> list[dict]
 
 
 def _paginate_report(*, page: Page, table_selector: str, call: dict) -> None:
-    previous_html = page.evaluate(f"document.querySelector('{table_selector} tbody')?.innerHTML ?? ''")
+    previous_html = page.evaluate(
+        f"document.querySelector('{table_selector} tbody')?.innerHTML ?? ''"
+    )
     page.evaluate(
         """
         ({ regionId, checksum, options }) => {
@@ -409,9 +559,11 @@ def _maybe_solve_captcha(*, page: Page, api_key: str) -> None:
     challenge = _detect_captcha(page)
     if challenge is None:
         return
-    if not api_key:
+    resolved_api_key = api_key or os.environ.get("TWOCAPTCHA_API_KEY", "").strip()
+    resolved_api_key = resolved_api_key or os.environ.get("CAPTCHA_API_KEY", "").strip()
+    if not resolved_api_key:
         raise RuntimeError("DXBI captcha detected but twocaptcha_api_key is not configured")
-    solver = TwoCaptcha(api_key)
+    solver = TwoCaptcha(resolved_api_key)
     if challenge["kind"] == "turnstile":
         result = solver.turnstile(sitekey=challenge["sitekey"], url=page.url)
     else:
@@ -426,21 +578,27 @@ def _maybe_solve_captcha(*, page: Page, api_key: str) -> None:
 
 def _maybe_accept_terms(page: Page) -> None:
     try:
-        checkbox = page.locator("dialog input[type='checkbox'], .a-Dialog input[type='checkbox']").first
+        checkbox = page.locator(
+            "dialog input[type='checkbox'], .a-Dialog input[type='checkbox']"
+        ).first
         if checkbox.is_visible(timeout=3000):
             checkbox.check()
-            page.locator("dialog button:has-text('Submit'), .a-Dialog button:has-text('Submit')").first.click()
+            page.locator(
+                "dialog button:has-text('Submit'), .a-Dialog button:has-text('Submit')"
+            ).first.click()
             page.wait_for_timeout(1000)
     except TimeoutError:
         pass
 
 
 def _detect_captcha(page: Page) -> dict | None:
-    turnstile = page.locator("iframe[src*='challenges.cloudflare.com'], div.cf-turnstile[data-sitekey]")
+    turnstile = page.locator(
+        "iframe[src*='challenges.cloudflare.com'], div.cf-turnstile[data-sitekey]"
+    )
     if turnstile.count():
-        sitekey = _sitekey_from_locator(page, "div.cf-turnstile[data-sitekey]") or _sitekey_from_iframe(
-            turnstile.first.get_attribute("src") or ""
-        )
+        sitekey = _sitekey_from_locator(
+            page, "div.cf-turnstile[data-sitekey]"
+        ) or _sitekey_from_iframe(turnstile.first.get_attribute("src") or "")
         if sitekey:
             return {"kind": "turnstile", "sitekey": sitekey}
     hcaptcha = page.locator("[data-sitekey], iframe[src*='hcaptcha']")

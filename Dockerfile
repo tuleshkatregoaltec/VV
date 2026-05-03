@@ -32,3 +32,4 @@ COPY . .
 RUN pip install --no-cache-dir -e .
 
 ENV DAGSTER_HOME=/app
+ENV PYTHONUNBUFFERED=1

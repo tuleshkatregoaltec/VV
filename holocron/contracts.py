@@ -6,6 +6,7 @@ from typing import Any
 
 
 Extractor = Callable[..., Any]
+BronzeLoader = Callable[..., Mapping[str, Any]]
 Check = Callable[..., Any]
 
 
@@ -38,19 +39,13 @@ class BronzeTable:
 
 
 @dataclass(frozen=True, slots=True)
-class SilverTable:
-    name: str
-
-
-@dataclass(frozen=True, slots=True)
 class SourceSpec:
     name: str
     provider: str
     extractor: Extractor
+    bronze_loader: BronzeLoader | None = None
     bronze_tables: Sequence[BronzeTable] = ()
-    silver_tables: Sequence[SilverTable] = ()
     checks: Sequence[Check] = ()
     checkpoint_strategy: str = "full_refresh"
     cadence: str | None = None
     description: str | None = None
-
