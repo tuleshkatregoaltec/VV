@@ -23,19 +23,19 @@ const trend = $derived(getTrend(data.summary.count_change_pct))
 
 <div class="space-y-6">
 	<!-- Summary Stats -->
-	<div class="rounded-xl border border-[var(--color-navy-100)] bg-[var(--color-navy-50)] p-6">
+	<div class="rounded-xl border border-navy-pale bg-navy-pale p-6">
 		<div class="flex items-baseline justify-between">
 			<div>
-				<p class="mb-1 text-sm text-[var(--color-fg-4)]">Total Transactions</p>
-				<p class="text-4xl font-bold text-[var(--color-fg-1)]">
+				<p class="mb-1 text-sm text-fg-4">Total Transactions</p>
+				<p class="text-4xl font-bold text-fg-1">
 					{formatNumber(data.summary.transaction_count)}
 				</p>
 			</div>
 			{#if trend}
 				<div
 					class="flex items-center text-sm font-semibold {trend.direction === 'up'
-						? 'text-[var(--color-trend-up)]'
-						: 'text-[var(--color-trend-down)]'}"
+						? 'text-trend-up'
+						: 'text-trend-down'}"
 				>
 					<svg class="w-5 h-5 mr-1" fill="currentColor" viewBox="0 0 20 20">
 						{#if trend.direction === 'up'}
@@ -56,7 +56,7 @@ const trend = $derived(getTrend(data.summary.count_change_pct))
 				</div>
 			{/if}
 		</div>
-		<p class="mt-2 text-sm text-[var(--color-fg-4)]">Last {data.timeframe_days} days</p>
+		<p class="mt-2 text-sm text-fg-4">Last {data.timeframe_days} days</p>
 	</div>
 
 	<!-- Breakdowns -->

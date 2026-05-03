@@ -23,20 +23,20 @@ const avgPrice = $derived(
 <div class="space-y-6">
 	<!-- Summary Stats -->
 	<div class="grid grid-cols-3 gap-4">
-		<div class="rounded-xl border border-[var(--color-navy-100)] bg-[var(--color-navy-50)] p-4">
-			<p class="mb-1 text-sm text-[var(--color-fg-4)]">Average</p>
-			<p class="text-2xl font-bold text-[var(--color-fg-1)]">{formatCurrency(avgPrice)}</p>
-			<p class="mt-1 text-xs text-[var(--color-fg-4)]">per sq.m</p>
+		<div class="rounded-xl border border-navy-pale bg-navy-pale p-4">
+			<p class="mb-1 text-sm text-fg-4">Average</p>
+			<p class="text-2xl font-bold text-fg-1">{formatCurrency(avgPrice)}</p>
+			<p class="mt-1 text-xs text-fg-4">per sq.m</p>
 		</div>
-		<div class="rounded-xl border border-[rgba(17,122,72,0.2)] bg-[var(--color-success-bg)] p-4">
-			<p class="mb-1 text-sm text-[var(--color-fg-4)]">Highest</p>
-			<p class="text-2xl font-bold text-[var(--color-fg-1)]">{formatCurrency(maxPrice)}</p>
-			<p class="mt-1 text-xs text-[var(--color-fg-4)]">per sq.m</p>
+		<div class="rounded-xl border border-[rgba(17,122,72,0.2)] bg-success-bg p-4">
+			<p class="mb-1 text-sm text-fg-4">Highest</p>
+			<p class="text-2xl font-bold text-fg-1">{formatCurrency(maxPrice)}</p>
+			<p class="mt-1 text-xs text-fg-4">per sq.m</p>
 		</div>
-		<div class="rounded-xl border border-[rgba(165,90,19,0.2)] bg-[var(--color-warning-bg)] p-4">
-			<p class="mb-1 text-sm text-[var(--color-fg-4)]">Lowest</p>
-			<p class="text-2xl font-bold text-[var(--color-fg-1)]">{formatCurrency(minPrice)}</p>
-			<p class="mt-1 text-xs text-[var(--color-fg-4)]">per sq.m</p>
+		<div class="rounded-xl border border-[rgba(165,90,19,0.2)] bg-warning-bg p-4">
+			<p class="mb-1 text-sm text-fg-4">Lowest</p>
+			<p class="text-2xl font-bold text-fg-1">{formatCurrency(minPrice)}</p>
+			<p class="mt-1 text-xs text-fg-4">per sq.m</p>
 		</div>
 	</div>
 
@@ -51,25 +51,25 @@ const avgPrice = $derived(
 	</div>
 
 	<!-- Additional Info -->
-	<div class="rounded-xl border border-[var(--color-border)] bg-slate-50 p-4">
+	<div class="rounded-xl border border-border bg-slate-50 p-4">
 		<div class="grid grid-cols-2 gap-4 text-sm">
 			<div>
-				<p class="text-[var(--color-fg-4)]">Time Period</p>
-				<p class="font-semibold text-[var(--color-fg-1)]">Last {data.timeframe_days} days</p>
+				<p class="text-fg-4">Time Period</p>
+				<p class="font-semibold text-fg-1">Last {data.timeframe_days} days</p>
 			</div>
 			<div>
-				<p class="text-[var(--color-fg-4)]">Data Points</p>
-				<p class="font-semibold text-[var(--color-fg-1)]">{data.trends.length} days</p>
+				<p class="text-fg-4">Data Points</p>
+				<p class="font-semibold text-fg-1">{data.trends.length} days</p>
 			</div>
 			<div>
-				<p class="text-[var(--color-fg-4)]">Total Transactions</p>
-				<p class="font-semibold text-[var(--color-fg-1)]">
+				<p class="text-fg-4">Total Transactions</p>
+				<p class="font-semibold text-fg-1">
 					{data.summary.transaction_count.toLocaleString()}
 				</p>
 			</div>
 			<div>
-				<p class="text-[var(--color-fg-4)]">Total Volume</p>
-				<p class="font-semibold text-[var(--color-fg-1)]">{formatCurrency(data.summary.total_volume)}</p>
+				<p class="text-fg-4">Total Volume</p>
+				<p class="font-semibold text-fg-1">{formatCurrency(data.summary.total_volume)}</p>
 			</div>
 		</div>
 	</div>

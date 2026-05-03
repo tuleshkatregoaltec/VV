@@ -109,20 +109,20 @@ function formatNumber(num: number): string {
 <!-- Card header -->
 <div class="flex flex-col gap-4 mb-[18px] sm:flex-row sm:items-start sm:justify-between">
 	<div>
-		<h3 class="text-sm font-semibold tracking-[-0.005em] text-[var(--color-fg-1)]">
+		<h3 class="text-sm font-semibold tracking-normal text-fg-1">
 			{metricLabel}
 		</h3>
 		{#if trendQuery.isLoading}
-			<div class="mt-2 h-8 w-36 animate-pulse rounded bg-slate-100"></div>
+			<div class="mt-2 h-8 w-36 animate-pulse rounded bg-panel"></div>
 		{:else}
 			<div class="mt-1 flex items-baseline gap-2">
-				<span class="font-display text-4xl font-normal leading-none tracking-[-0.025em] text-[var(--color-fg-1)] tabular-nums">
+				<span class="font-display text-4xl font-normal leading-none tracking-normal text-fg-1 tabular-nums">
 					{formatNumber(currentValue)}
 				</span>
-				<span class="text-sm text-[var(--color-fg-4)]">{metricUnit}</span>
+				<span class="text-sm text-fg-4">{metricUnit}</span>
 			</div>
 			{#if percentChange() != null}
-				<p class="mt-1 font-mono text-xs {isPositive ? 'text-[var(--color-trend-up)]' : 'text-[var(--color-trend-down)]'}">
+				<p class="mt-1 font-mono text-xs {isPositive ? 'text-trend-up' : 'text-trend-down'}">
 					{isPositive ? '▲' : '▼'} {isPositive ? '+' : ''}{percentChange()}% vs {PERIOD_LABEL[selectedRange]}
 				</p>
 			{/if}
@@ -131,25 +131,25 @@ function formatNumber(num: number): string {
 
 	<!-- Controls -->
 	<div class="flex gap-2">
-		<div class="inline-flex rounded-md bg-slate-100 p-0.5">
+		<div class="inline-flex rounded-md bg-panel p-0.5">
 			<button
-				class="rounded px-3 py-[5px] text-xs font-medium transition-all {selectedMetric === 'price_sqm' ? 'bg-white text-[var(--color-fg-1)] shadow-[var(--shadow-xs)]' : 'text-[var(--color-fg-3)] hover:text-[var(--color-fg-1)]'}"
+				class="rounded px-3 py-[5px] text-xs font-medium transition-all {selectedMetric === 'price_sqm' ? 'bg-card text-fg-1 shadow-[var(--shadow-xs)]' : 'text-fg-3 hover:text-fg-1'}"
 				onclick={() => (selectedMetric = 'price_sqm')}
 			>
 				Price/sq.m
 			</button>
 			<button
-				class="rounded px-3 py-[5px] text-xs font-medium transition-all {selectedMetric === 'avg_price' ? 'bg-white text-[var(--color-fg-1)] shadow-[var(--shadow-xs)]' : 'text-[var(--color-fg-3)] hover:text-[var(--color-fg-1)]'}"
+				class="rounded px-3 py-[5px] text-xs font-medium transition-all {selectedMetric === 'avg_price' ? 'bg-card text-fg-1 shadow-[var(--shadow-xs)]' : 'text-fg-3 hover:text-fg-1'}"
 				onclick={() => (selectedMetric = 'avg_price')}
 			>
 				Avg price
 			</button>
 		</div>
 
-		<div class="inline-flex rounded-md bg-slate-100 p-0.5">
+		<div class="inline-flex rounded-md bg-panel p-0.5">
 			{#each [{ label: '30D', value: '30d' }, { label: '90D', value: '90d' }, { label: '6M', value: '6mo' }, { label: '1Y', value: '1yr' }] as range (range.value)}
 				<button
-					class="rounded px-3 py-[5px] text-xs font-medium transition-all {selectedRange === range.value ? 'bg-white text-[var(--color-fg-1)] shadow-[var(--shadow-xs)]' : 'text-[var(--color-fg-3)] hover:text-[var(--color-fg-1)]'}"
+					class="rounded px-3 py-[5px] text-xs font-medium transition-all {selectedRange === range.value ? 'bg-card text-fg-1 shadow-[var(--shadow-xs)]' : 'text-fg-3 hover:text-fg-1'}"
 					onclick={() => (selectedRange = range.value as TimeRange)}
 				>
 					{range.label}
@@ -163,12 +163,12 @@ function formatNumber(num: number): string {
 <div class="w-full overflow-x-auto">
 	{#if trendQuery.isLoading}
 		<div
-			class="w-full min-w-[500px] animate-pulse rounded bg-slate-100"
+			class="w-full min-w-[500px] animate-pulse rounded bg-panel"
 			style="height: {chartHeight}px"
 		></div>
 	{:else if trendQuery.isError || chartData.length === 0}
 		<div
-			class="flex w-full min-w-[500px] items-center justify-center text-sm text-[var(--color-fg-4)]"
+			class="flex w-full min-w-[500px] items-center justify-center text-sm text-fg-4"
 			style="height: {chartHeight}px"
 		>
 			No data available for this period
@@ -182,8 +182,8 @@ function formatNumber(num: number): string {
 		>
 			<defs>
 				<linearGradient id="areaGradient" x1="0" x2="0" y1="0" y2="1">
-					<stop offset="0%" stop-color="#0b1b2b" stop-opacity="0.10" />
-					<stop offset="100%" stop-color="#0b1b2b" stop-opacity="0" />
+					<stop offset="0%" stop-color="var(--color-chart-line)" stop-opacity="0.16" />
+					<stop offset="100%" stop-color="var(--color-chart-line)" stop-opacity="0" />
 				</linearGradient>
 			</defs>
 
@@ -193,7 +193,7 @@ function formatNumber(num: number): string {
 					y1={tick.y}
 					x2={padding.left + innerWidth}
 					y2={tick.y}
-					stroke="#e2e8f0"
+					stroke="var(--color-chart-grid)"
 					stroke-width="1"
 					stroke-dasharray="2 3"
 				/>
@@ -204,7 +204,7 @@ function formatNumber(num: number): string {
 				y1={padding.top + innerHeight}
 				x2={padding.left + innerWidth}
 				y2={padding.top + innerHeight}
-				stroke="#cbd5e1"
+				stroke="var(--color-chart-axis)"
 				stroke-width="1"
 			/>
 
@@ -213,7 +213,7 @@ function formatNumber(num: number): string {
 			<path
 				d={linePath}
 				fill="none"
-				stroke="#0b1b2b"
+				stroke="var(--color-chart-line)"
 				stroke-width="1.75"
 				stroke-linecap="round"
 				stroke-linejoin="round"
@@ -225,7 +225,7 @@ function formatNumber(num: number): string {
 					y={tick.y}
 					text-anchor="end"
 					dominant-baseline="middle"
-					fill="#94a3b8"
+					fill="var(--color-chart-muted)"
 					font-size="10"
 					font-family="ui-monospace, monospace"
 				>
@@ -238,7 +238,7 @@ function formatNumber(num: number): string {
 					x={tick.x}
 					y={chartHeight - 8}
 					text-anchor="middle"
-					fill="#94a3b8"
+					fill="var(--color-chart-muted)"
 					font-size="10"
 					font-family="ui-monospace, monospace"
 				>
@@ -250,8 +250,8 @@ function formatNumber(num: number): string {
 </div>
 
 <!-- Footer -->
-<div class="mt-4 border-t border-[var(--color-border)] pt-3">
-	<p class="font-mono text-[10px] uppercase tracking-[0.06em] text-[var(--color-fg-4)]">
+<div class="mt-4 border-t border-border pt-3">
+	<p class="font-mono text-[10px] uppercase tracking-[0.06em] text-fg-4">
 		Based on {formatNumber(trendQuery.data?.total_transactions ?? 0)} transactions
 	</p>
 </div>

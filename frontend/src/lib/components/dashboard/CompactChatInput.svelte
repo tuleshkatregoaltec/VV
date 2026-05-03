@@ -64,9 +64,9 @@ function handleKeyDown(e: KeyboardEvent) {
 <div class="w-full">
 	<div class="relative transition-all duration-200 ease-in-out">
 			<div
-				class="relative bg-white border rounded-lg transition-all duration-200 {isFocused
-					? 'border-[var(--color-navy-700)]'
-					: 'border-[var(--color-border)] hover:border-slate-300'}"
+				class="relative rounded-lg border bg-card transition-all duration-200 {isFocused
+					? 'border-primary-light'
+					: 'border-border hover:border-strong'}"
 			>
 				<textarea
 					bind:this={textareaRef}
@@ -78,7 +78,7 @@ function handleKeyDown(e: KeyboardEvent) {
 					{placeholder}
 					disabled={disabled || isSubmitting}
 					rows="1"
-					class="w-full px-5 py-3.5 bg-transparent resize-none outline-none text-slate-800 placeholder-slate-400 rounded-lg pr-14 flex items-center"
+					class="flex w-full resize-none items-center rounded-lg bg-transparent px-5 py-3.5 pr-14 text-fg-1 outline-none placeholder:text-fg-5"
 					style="min-height: 52px; max-height: 200px; line-height: 1.5;"
 				></textarea>
 
@@ -89,8 +89,8 @@ function handleKeyDown(e: KeyboardEvent) {
 					class="absolute right-3 top-1/2 -translate-y-1/2 p-2.5 rounded-full transition-all duration-200 {inputValue.trim() &&
 					!disabled &&
 					!isSubmitting
-						? 'bg-[var(--color-navy-700)] text-white hover:bg-[#0b1b2b] opacity-100'
-						: 'bg-slate-100 text-slate-400 opacity-50 cursor-not-allowed'}"
+						? 'bg-primary-light text-on-navy hover:bg-navy opacity-100'
+						: 'cursor-not-allowed bg-panel text-fg-5 opacity-50'}"
 					aria-label="Send message"
 				>
 					{#if isSubmitting}
@@ -120,7 +120,7 @@ function handleKeyDown(e: KeyboardEvent) {
 			<!-- Error Message -->
 		{#if error}
 			<div
-				class="mt-2 px-4 py-2 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm"
+				class="mt-2 rounded-lg border border-error/20 bg-error-bg px-4 py-2 text-sm text-error"
 			>
 				{error}
 			</div>
@@ -129,21 +129,6 @@ function handleKeyDown(e: KeyboardEvent) {
 </div>
 
 <style>
-	@keyframes fade-in {
-		from {
-			opacity: 0;
-			transform: translateY(10px);
-		}
-		to {
-			opacity: 1;
-			transform: translateY(0);
-		}
-	}
-
-	.animate-fade-in {
-		animation: fade-in 0.3s ease-out;
-	}
-
 	/* Ensure smooth scrollbar when content overflows */
 	textarea::-webkit-scrollbar {
 		width: 6px;

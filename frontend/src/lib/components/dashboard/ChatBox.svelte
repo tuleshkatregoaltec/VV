@@ -44,11 +44,13 @@ let {
 	conversationId = $bindable(null),
 	initialMessage = null,
 	autoSend = false,
+	showHeader = true,
 	onMessageSent = () => {}
 }: {
 	conversationId: number | null
 	initialMessage?: string | null
 	autoSend?: boolean
+	showHeader?: boolean
 	onMessageSent?: () => void
 } = $props()
 
@@ -238,25 +240,49 @@ function stopStreaming() {
 }
 </script>
 
-<div class="flex flex-col h-full bg-slate-50">
+<div class="flex h-full min-h-0 flex-col bg-white">
+	{#if showHeader}
+		<div
+			class="flex items-start justify-between gap-4 border-b border-border bg-white px-5 py-4"
+		>
+			<div>
+				<div class="flex items-center gap-2">
+					<img src="/icon.svg" alt="" class="h-3.5 w-3.5" />
+					<h1 class="text-sm font-semibold text-fg-1">Vitevue AI</h1>
+				</div>
+				<p class="mt-1 text-xs text-fg-4">
+					Ask about transactions, yields, pricing, projects, and feasibility context.
+				</p>
+			</div>
+			<div
+				class="mt-0.5 inline-flex items-center gap-1.5 font-mono text-[10px] font-medium uppercase tracking-[0.08em] text-success"
+			>
+				<span
+					class="h-1.5 w-1.5 rounded-full bg-success shadow-[0_0_0_3px_rgba(17,122,72,0.18)]"
+				></span>
+				Live
+			</div>
+		</div>
+	{/if}
+
 	<!-- Messages -->
-	<div class="flex-1 overflow-y-auto p-6 space-y-6">
+	<div class="flex-1 space-y-3 overflow-y-auto bg-white p-5">
 		{#if loading}
-			<div class="flex items-center justify-center h-full">
+			<div class="flex h-full items-center justify-center">
 				<div class="text-center">
 					<div
-						class="inline-block w-12 h-12 border-4 border-slate-200 border-t-primary rounded-full animate-spin mb-4"
+						class="mb-3 inline-block h-8 w-8 animate-spin rounded-full border-2 border-slate-200 border-t-navy"
 					></div>
-					<p class="text-slate-600 font-medium">Loading messages...</p>
+					<p class="text-sm font-medium text-fg-3">Loading messages...</p>
 				</div>
 			</div>
 		{:else if error && messages.length === 0}
-			<div class="flex items-center justify-center h-full">
-				<div class="text-center max-w-md">
+			<div class="flex h-full items-center justify-center">
+				<div class="max-w-md text-center">
 					<div
-						class="w-16 h-16 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-4"
+						class="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-lg bg-error-bg"
 					>
-						<svg class="w-8 h-8 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<svg class="h-6 w-6 text-error" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 							<path
 								stroke-linecap="round"
 								stroke-linejoin="round"
@@ -265,10 +291,10 @@ function stopStreaming() {
 							/>
 						</svg>
 					</div>
-					<p class="text-red-600 text-sm mb-4">{error}</p>
+					<p class="mb-4 text-sm text-error">{error}</p>
 					<button
 						onclick={loadMessages}
-						class="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-all"
+						class="rounded-md bg-error px-4 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90"
 					>
 						Try again
 					</button>
@@ -277,88 +303,67 @@ function stopStreaming() {
 		{:else if messages.length === 0 && conversationId}
 			{#if autoSend && initialMessage}
 				<!-- Don't show empty state if we're about to auto-send -->
-				<div class="flex items-center justify-center h-full">
+				<div class="flex h-full items-center justify-center">
 					<div class="text-center">
 						<div
-							class="inline-block w-12 h-12 border-4 border-slate-200 border-t-primary rounded-full animate-spin mb-4"
+							class="mb-3 inline-block h-8 w-8 animate-spin rounded-full border-2 border-slate-200 border-t-navy"
 						></div>
-						<p class="text-slate-600 font-medium">Starting conversation...</p>
+						<p class="text-sm font-medium text-fg-3">Starting conversation...</p>
 					</div>
 				</div>
 			{:else}
 				<div
-					class="flex items-center justify-center h-full"
+					class="flex h-full items-center justify-center"
 					in:fade={{ duration: 300, easing: cubicOut }}
 				>
-					<div class="text-center max-w-lg">
+					<div class="w-full max-w-2xl text-center">
 						<div
-							class="relative w-20 h-20 mx-auto mb-6"
+							class="mx-auto mb-5 flex h-12 w-12 items-center justify-center rounded-lg border border-border bg-white"
 							in:fly={{ y: -20, duration: 500, delay: 100, easing: cubicOut }}
 						>
-							<div
-								class="absolute inset-0 bg-primary/10 rounded-lg blur-xl"
-							></div>
-							<div
-								class="relative w-20 h-20 bg-slate-900 rounded-lg flex items-center justify-center"
-							>
-								<svg
-									class="w-10 h-10 text-white"
-									fill="none"
-									stroke="currentColor"
-									viewBox="0 0 24 24"
-								>
-									<path
-										stroke-linecap="round"
-										stroke-linejoin="round"
-										stroke-width="2"
-										d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
-									/>
-								</svg>
-							</div>
+							<img src="/icon.svg" alt="" class="h-5 w-5" />
 						</div>
 						<h3
-							class="text-2xl font-bold text-slate-900 mb-2"
+							class="mb-2 font-display text-3xl font-normal tracking-[var(--tracking-display)] text-fg-1"
 							in:fly={{ y: 20, duration: 500, delay: 200, easing: cubicOut }}
 						>
-							Welcome to Vitevue AI
+							Ask Vitevue AI.
 						</h3>
 						<p
-							class="text-slate-600 mb-6"
+							class="mx-auto mb-6 max-w-md text-sm leading-6 text-fg-3"
 							in:fly={{ y: 20, duration: 500, delay: 300, easing: cubicOut }}
 						>
-							Ask me anything about Dubai real estate data, market trends, or property analytics
+							Start with a market question, comp basket, pricing trend, or feasibility assumption.
 						</p>
 						<div
-							class="grid grid-cols-1 gap-2 text-sm"
+							class="mx-auto grid max-w-xl grid-cols-1 gap-2 text-[13px] sm:grid-cols-3"
 							in:fly={{ y: 20, duration: 500, delay: 400, easing: cubicOut }}
 						>
 							<button
 								onclick={() =>
 									startConversationWithPrompt(
-										'What are the average rental prices in Dubai Marina?'
+										'What changed in Dubai Marina 2BR yields this quarter?'
 									)}
-								class="px-4 py-3 bg-white border border-slate-200 rounded-lg text-left hover:border-slate-300 hover:bg-slate-50 transition-colors"
+								class="rounded-md border border-slate-200 bg-white px-3 py-2.5 text-left leading-5 text-slate-700 transition-colors hover:border-slate-300 hover:bg-slate-50"
 							>
-								<span class="text-slate-400 mr-2">→</span>
-								<span class="text-slate-700"
-									>"What are the average rental prices in Dubai Marina?"</span
-								>
+								<span class="mr-1 text-slate-400">→</span>
+								Dubai Marina 2BR yields
 							</button>
 							<button
 								onclick={() =>
-									startConversationWithPrompt('Show me sales trends for the past 3 months')}
-								class="px-4 py-3 bg-white border border-slate-200 rounded-lg text-left hover:border-slate-300 hover:bg-slate-50 transition-colors"
+									startConversationWithPrompt('Compare Dubai Marina pricing against JBR.')}
+								class="rounded-md border border-slate-200 bg-white px-3 py-2.5 text-left leading-5 text-slate-700 transition-colors hover:border-slate-300 hover:bg-slate-50"
 							>
-								<span class="text-slate-400 mr-2">→</span>
-								<span class="text-slate-700">"Show me sales trends for the past 3 months"</span>
+								<span class="mr-1 text-slate-400">→</span>
+								Compare to JBR
 							</button>
 							<button
 								onclick={() =>
-									startConversationWithPrompt('Compare property prices across different areas')}
-								class="px-4 py-3 bg-white border border-slate-200 rounded-lg text-left hover:border-slate-300 hover:bg-slate-50 transition-colors"
+									startConversationWithPrompt('Build a comp basket for Business Bay offices.')}
+								class="rounded-md border border-slate-200 bg-white px-3 py-2.5 text-left leading-5 text-slate-700 transition-colors hover:border-slate-300 hover:bg-slate-50"
 							>
-								<span class="text-slate-400 mr-2">→</span>
-								<span class="text-slate-700">"Compare property prices across different areas"</span>
+								<span class="mr-1 text-slate-400">→</span>
+								Build a comp basket
 							</button>
 						</div>
 					</div>
@@ -366,33 +371,21 @@ function stopStreaming() {
 			{/if}
 		{:else if !conversationId}
 			<div
-				class="flex items-center justify-center h-full"
+				class="flex h-full items-center justify-center"
 				in:fade={{ duration: 300, easing: cubicOut }}
 			>
-				<div class="text-center max-w-md">
+				<div class="max-w-md text-center">
 					<div
-						class="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4"
+						class="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-lg border border-border bg-white"
 						in:fly={{ y: -20, duration: 500, easing: cubicOut }}
 					>
-						<svg
-							class="w-8 h-8 text-slate-400"
-							fill="none"
-							stroke="currentColor"
-							viewBox="0 0 24 24"
-						>
-							<path
-								stroke-linecap="round"
-								stroke-linejoin="round"
-								stroke-width="2"
-								d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
-							/>
-						</svg>
+						<img src="/icon.svg" alt="" class="h-5 w-5" />
 					</div>
 					<p
-						class="text-slate-600 font-medium"
+						class="text-sm font-medium text-fg-3"
 						in:fly={{ y: 20, duration: 500, delay: 100, easing: cubicOut }}
 					>
-						Select or create a conversation to start chatting
+						Select or create a conversation to start.
 					</p>
 				</div>
 			</div>
@@ -403,9 +396,9 @@ function stopStreaming() {
 					in:fly={{ y: 10, duration: 250, delay: Math.min(i * 30, 200), easing: cubicOut }}
 				>
 					<div
-						class="max-w-[80%] rounded-lg p-4 {msg.role === 'user'
-							? 'bg-slate-900 text-white shadow-lg'
-							: 'bg-white text-slate-800 shadow-md border border-slate-200 hover:shadow-lg transition-shadow'}"
+						class="max-w-[min(720px,88%)] rounded-md px-3.5 py-2.5 text-[13px] leading-[1.55] {msg.role === 'user'
+							? 'bg-navy text-bone'
+							: 'border border-slate-200 bg-slate-50 text-fg-2'}"
 					>
 						{#if isThinking && i === messages.length - 1 && msg.role === 'assistant' && !msg.content}
 							<div class="flex items-center gap-2 text-slate-400">
@@ -427,7 +420,12 @@ function stopStreaming() {
 							</div>
 						{:else if msg.role === 'assistant'}
 							<div
-								class="leading-relaxed [&_p]:mb-2 [&_p:last-child]:mb-0 [&_strong]:font-semibold [&_em]:italic [&_a]:text-[var(--color-navy-700)] [&_a]:underline [&_a:hover]:text-[var(--color-fg-1)] [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:mb-2 [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:mb-2 [&_li]:mb-0.5 [&_blockquote]:border-l-4 [&_blockquote]:border-slate-300 [&_blockquote]:pl-3 [&_blockquote]:italic [&_blockquote]:text-slate-600 [&_blockquote]:my-2 [&_code]:bg-slate-100 [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded [&_code]:text-sm [&_code]:font-mono [&_pre]:bg-slate-100 [&_pre]:p-3 [&_pre]:rounded-lg [&_pre]:overflow-x-auto [&_pre]:my-2 [&_pre_code]:bg-transparent [&_pre_code]:p-0"
+								class="mb-1.5 font-mono text-[10px] font-medium uppercase tracking-[0.06em] text-fg-4"
+							>
+								Vitevue AI
+							</div>
+							<div
+								class="leading-relaxed [&_p]:mb-2 [&_p:last-child]:mb-0 [&_strong]:font-semibold [&_em]:italic [&_a]:text-primary-light [&_a]:underline [&_a:hover]:text-fg-1 [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:mb-2 [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:mb-2 [&_li]:mb-0.5 [&_blockquote]:border-l-4 [&_blockquote]:border-slate-300 [&_blockquote]:pl-3 [&_blockquote]:italic [&_blockquote]:text-slate-600 [&_blockquote]:my-2 [&_code]:bg-slate-100 [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded [&_code]:text-sm [&_code]:font-mono [&_pre]:bg-slate-100 [&_pre]:p-3 [&_pre]:rounded-lg [&_pre]:overflow-x-auto [&_pre]:my-2 [&_pre_code]:bg-transparent [&_pre_code]:p-0"
 							>
 								{@html renderMarkdown(msg.content)}
 							</div>
@@ -467,10 +465,10 @@ function stopStreaming() {
 	</div>
 
 	<!-- Input Area -->
-	<div class="border-t border-slate-200 bg-white  p-6">
+	<div class="border-t border-slate-200 bg-white p-4">
 		{#if error && messages.length > 0}
 			<div
-				class="mb-4 p-3 bg-red-50 border border-red-200 rounded-xl text-red-600 text-sm flex items-center gap-2"
+				class="mb-4 flex items-center gap-2 rounded-lg border border-[rgba(163,36,36,0.2)] bg-error-bg p-3 text-sm text-error"
 				in:fly={{ y: -10, duration: 300, easing: cubicOut }}
 			>
 				<svg class="w-4 h-4 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
@@ -484,11 +482,7 @@ function stopStreaming() {
 			</div>
 		{/if}
 
-		<!-- Input container with textarea and bottom bar -->
-		<div
-			class="border border-slate-300 rounded-xl bg-white overflow-hidden focus-within:ring-2 focus-within:ring-primary/20 focus-within:border-primary transition-all"
-		>
-			<!-- Textarea -->
+		<div class="relative">
 			<textarea
 				bind:this={textareaRef}
 				bind:value={inputValue}
@@ -500,61 +494,43 @@ function stopStreaming() {
 					}
 				}}
 				placeholder={conversationId
-					? 'Ask about sales, rentals, developers, projects...'
+					? 'Ask anything about Dubai real estate...'
 					: 'Select or create a conversation first'}
-				class="w-full px-4 pt-3 pb-2 resize-none focus:outline-none bg-white placeholder-slate-400"
+				class="min-h-11 w-full resize-none rounded-md border border-navy bg-white py-3 pl-4 pr-14 text-[13px] leading-5 text-fg-1 placeholder:text-fg-5 focus:outline-none focus:ring-2 focus:ring-navy/10"
 				rows="1"
 				readonly={!conversationId || streamController !== null}
-				style="min-height: 48px; max-height: 200px;"
+				style="max-height: 180px;"
 			></textarea>
 
-			<!-- Bottom bar with send button -->
-			<div class="flex items-center justify-between px-4 py-2">
-				<div class="text-xs text-slate-500">
-					{#if inputValue.trim() && conversationId && !streamController}
-						Press <kbd
-							class="px-1.5 py-0.5 bg-white border border-slate-300 rounded text-slate-700 font-mono text-xs"
-							>Enter</kbd
-						> to send
-					{:else}
-						&nbsp;
-					{/if}
-				</div>
-
-				<div class="flex items-center gap-2">
-					{#if streamController}
-						<button
-							onclick={stopStreaming}
-							class="px-3 py-1.5 bg-red-500 text-white text-sm font-medium rounded-lg hover:bg-red-600 transition-all flex items-center gap-1.5"
-							aria-label="Stop streaming"
-						>
-							<svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
-								<path
-									fill-rule="evenodd"
-									d="M10 18a8 8 0 100-16 8 8 0 000 16zM8 7a1 1 0 00-1 1v4a1 1 0 001 1h4a1 1 0 001-1V8a1 1 0 00-1-1H8z"
-									clip-rule="evenodd"
-								/>
-							</svg>
-							<span>Stop</span>
-						</button>
-					{:else}
-						<button
-							onclick={handleSubmit}
-							disabled={!inputValue.trim() || !conversationId}
-							class="px-3 py-1.5 text-sm font-medium rounded-lg transition-all flex items-center gap-1.5 {inputValue.trim() &&
-							conversationId
-								? 'bg-slate-900 text-white hover:bg-slate-800'
-								: 'bg-slate-200 text-slate-400 cursor-not-allowed'}"
-							aria-label="Send message"
-						>
-							<span>Send</span>
-							<svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
-								<path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" />
-							</svg>
-						</button>
-					{/if}
-				</div>
-			</div>
+			{#if streamController}
+				<button
+					onclick={stopStreaming}
+					class="absolute right-1.5 top-1.5 flex h-8 w-8 items-center justify-center rounded bg-error text-white transition-opacity hover:opacity-90"
+					aria-label="Stop streaming"
+				>
+					<svg class="h-3.5 w-3.5" fill="currentColor" viewBox="0 0 20 20">
+						<path
+							fill-rule="evenodd"
+							d="M10 18a8 8 0 100-16 8 8 0 000 16zM8 7a1 1 0 00-1 1v4a1 1 0 001 1h4a1 1 0 001-1V8a1 1 0 00-1-1H8z"
+							clip-rule="evenodd"
+						/>
+					</svg>
+				</button>
+			{:else}
+				<button
+					onclick={handleSubmit}
+					disabled={!inputValue.trim() || !conversationId}
+					class="absolute right-1.5 top-1.5 flex h-8 w-8 items-center justify-center rounded transition-colors {inputValue.trim() &&
+					conversationId
+						? 'bg-navy text-bone hover:bg-primary-light'
+						: 'cursor-not-allowed bg-slate-200 text-slate-400'}"
+					aria-label="Send message"
+				>
+					<svg class="h-3.5 w-3.5" fill="currentColor" viewBox="0 0 24 24">
+						<path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" />
+					</svg>
+				</button>
+			{/if}
 		</div>
 	</div>
 </div>
@@ -562,7 +538,7 @@ function stopStreaming() {
 <!-- Token Limit Exceeded Modal -->
 <ConfirmModal
 	open={tokenLimitModalOpen}
-	title="Daily Token Limit Exceeded"
+	title="Daily token limit exceeded"
 	message="You have reached your daily token usage limit. Please try again tomorrow or contact your organization owner to increase your limit."
 	confirmText="OK"
 	confirmVariant="primary"

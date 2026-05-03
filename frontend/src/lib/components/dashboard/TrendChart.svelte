@@ -53,11 +53,11 @@ const areaPath = $derived(
 <div class="mt-4">
 	<!-- Percentage change badge -->
 	<div class="flex items-center justify-between mb-2">
-		<span class="text-sm text-[var(--color-fg-4)]">Last 30 days</span>
+		<span class="text-sm text-fg-4">Last 30 days</span>
 		<div
 			class="flex items-center text-sm font-semibold {isPositive
-				? 'text-[var(--color-trend-up)]'
-				: 'text-[var(--color-trend-down)]'}"
+				? 'text-trend-up'
+				: 'text-trend-down'}"
 		>
 			{#if isPositive}
 				<svg class="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
