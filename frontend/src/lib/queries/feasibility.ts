@@ -3,6 +3,8 @@ import { feasibility } from '$lib/api/feasibility'
 export const feasibilityKeys = {
 	all: ['feasibility'] as const,
 	areas: () => [...feasibilityKeys.all, 'areas'] as const,
+	studies: () => [...feasibilityKeys.all, 'studies'] as const,
+	study: (studyId: number | string) => [...feasibilityKeys.all, 'study', studyId] as const,
 	communities: () => [...feasibilityKeys.all, 'communities'] as const,
 	searchPlots: (params: {
 		q?: string
@@ -22,6 +24,17 @@ export const feasibilityQueries = {
 		queryKey: feasibilityKeys.areas(),
 		queryFn: () => feasibility.getAreas(),
 		staleTime: Infinity
+	}),
+	studies: () => ({
+		queryKey: feasibilityKeys.studies(),
+		queryFn: () => feasibility.listStudies(),
+		staleTime: 30 * 1000
+	}),
+	study: (studyId: number | null) => ({
+		queryKey: feasibilityKeys.study(studyId ?? ''),
+		queryFn: () => feasibility.getStudy(studyId!),
+		enabled: Boolean(studyId),
+		staleTime: 30 * 1000
 	}),
 	communities: () => ({
 		queryKey: feasibilityKeys.communities(),

@@ -1,7 +1,10 @@
 from datetime import datetime
-from typing import Literal, Optional
+from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, Field
+from sqlalchemy import DateTime
+from sqlmodel import JSON, Column, SQLModel
+from sqlmodel import Field as SQLField
 
 Usage = Literal["residential", "commercial", "mixed_use", "unknown"]
 DevelopmentModel = Literal[
@@ -620,9 +623,79 @@ class GenerateStudyResponse(BaseModel):
     chat: dict = Field(default_factory=lambda: {"history": []})
 
 
+class FeasibilitySavedStudy(SQLModel, table=True):
+    __tablename__ = "feasibility_studies"
+
+    id: int | None = SQLField(default=None, primary_key=True)
+    user_id: str = SQLField(index=True)
+    organization_id: str = SQLField(index=True)
+    name: str
+    plot_number: str = SQLField(index=True)
+    development_model: str
+    assumptions: dict[str, Any] = SQLField(sa_column=Column(JSON, nullable=False))
+    plot_data: dict[str, Any] = SQLField(sa_column=Column(JSON, nullable=False))
+    research: dict[str, Any] = SQLField(sa_column=Column(JSON, nullable=False))
+    study_context: dict[str, Any] = SQLField(sa_column=Column(JSON, nullable=False))
+    chat_state: dict[str, Any] = SQLField(sa_column=Column(JSON, nullable=False))
+    created_at: datetime = SQLField(sa_column=Column(DateTime(timezone=True), nullable=False))
+    updated_at: datetime = SQLField(sa_column=Column(DateTime(timezone=True), nullable=False))
+
+
+class FeasibilityChatStateMessage(BaseModel):
+    role: Literal["user", "assistant", "system"]
+    content: str
+    created_at: str | None = None
+
+
+class FeasibilityChatState(BaseModel):
+    messages: list[FeasibilityChatStateMessage] = Field(default_factory=list)
+    history_json: str | None = None
+
+
+class FeasibilityStudyCreateRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=160)
+    plot_number: str = Field(min_length=1)
+    usage_override: Usage | None = None
+    development_model: DevelopmentModel = "build_to_sell_residential"
+
+
+class FeasibilityStudyUpdateRequest(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=160)
+    development_model: DevelopmentModel | None = None
+    assumptions: dict[str, Any] | None = None
+    plot_data: PlotDetails | None = None
+    research: PlotResearch | None = None
+    study_context: StudyContext | None = None
+    chat_state: FeasibilityChatState | None = None
+
+
+class FeasibilitySavedStudyResponse(BaseModel):
+    id: int
+    name: str
+    plot_number: str
+    development_model: DevelopmentModel
+    assumptions: dict[str, Any]
+    plot_data: PlotDetails
+    research: PlotResearch
+    study_context: StudyContext
+    chat_state: FeasibilityChatState
+    created_at: datetime
+    updated_at: datetime
+
+
+class FeasibilitySavedStudyListItem(BaseModel):
+    id: int
+    name: str
+    plot_number: str
+    development_model: DevelopmentModel
+    plot_data: PlotDetails
+    created_at: datetime
+    updated_at: datetime
+
+
 class FeasibilityChatRequest(BaseModel):
     messages: list[dict]
     plot_data: PlotDetails
-    assumptions: FeasibilityAssumptions
+    assumptions: dict[str, Any]
     research: dict | None = None
     history_json: str | None = None

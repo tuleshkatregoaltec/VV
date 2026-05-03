@@ -1,5 +1,8 @@
 import * as XLSX from 'xlsx'
-import type { PlotResearch, StudyContext } from '$lib/api/generated/hey-api/types.gen'
+import type {
+	PlotResearchOutput as PlotResearch,
+	StudyContext
+} from '$lib/api/generated/hey-api/types.gen'
 import type { WorkbookOutputs } from './engine'
 import type { FeasibilityAssumptions } from './models'
 import type { ValidationResult } from './validation'

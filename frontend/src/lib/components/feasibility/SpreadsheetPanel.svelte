@@ -1,4 +1,5 @@
 <script lang="ts">
+import { Info } from 'lucide-svelte'
 import { onMount } from 'svelte'
 import { downloadFeasibilityWorkbook } from '$lib/feasibility/workbook/excelExport'
 import { type FeasibilitySheetTab, workbookStore } from '$lib/feasibility/workbook/store.svelte'
@@ -92,18 +93,26 @@ function exportWorkbook() {
 </script>
 
 <div class="h-full flex flex-col overflow-hidden bg-white">
-	<div class="flex items-center justify-between px-4 py-3 border-b border-slate-200 flex-shrink-0 bg-white">
+	<div class="flex flex-shrink-0 items-center justify-between gap-3 border-b border-slate-200 bg-white px-4 py-2.5">
 		<div class="flex items-center gap-2">
 			<span class="text-xs font-semibold text-slate-700">Feasibility Model</span>
 			{#if exportError}
 				<span class="text-[10px] font-medium text-rose-600">{exportError}</span>
 			{/if}
 		</div>
-		<div class="flex items-center gap-3">
-			<ColorLegend />
+		<div class="flex items-center gap-2">
+			<details class="relative">
+				<summary class="flex h-8 cursor-pointer list-none items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 text-[11px] font-medium text-slate-600 transition hover:border-slate-300 hover:bg-slate-50 hover:text-slate-900">
+					<Info size={14} strokeWidth={1.8} />
+					Legend
+				</summary>
+				<div class="absolute right-0 top-10 z-40 w-max max-w-[calc(100vw-2rem)] rounded-md border border-slate-200 bg-white p-3 shadow-lg">
+					<ColorLegend />
+				</div>
+			</details>
 			<button
 				type="button"
-				class="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-[10px] font-semibold text-slate-600 shadow-sm transition hover:border-navy hover:text-navy disabled:cursor-not-allowed disabled:opacity-50"
+				class="h-8 rounded-md border border-slate-300 bg-white px-3 text-[10px] font-semibold text-slate-600 shadow-sm transition hover:border-navy hover:text-navy disabled:cursor-not-allowed disabled:opacity-50"
 				disabled={!workbookStore.outputs || !isBtr}
 				title={isBtr ? 'Export BTR workbook to Excel' : 'BTR Excel export is currently available for build-to-rent studies'}
 				onclick={exportWorkbook}

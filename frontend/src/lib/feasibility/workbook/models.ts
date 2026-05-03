@@ -1,7 +1,7 @@
 import type {
 	Plot,
 	PlotDetails,
-	PlotResearch,
+	PlotResearchOutput as PlotResearch,
 	StudyContext
 } from '$lib/api/generated/hey-api/types.gen'
 
@@ -258,6 +258,12 @@ export interface BtrUnitConfig {
 export interface FeasibilityChatMessage {
 	role: 'system' | 'user' | 'assistant'
 	content: string
+	created_at?: string
+}
+
+export interface FeasibilityChatState {
+	messages: FeasibilityChatMessage[]
+	history_json: string | null
 }
 
 // ── Workbook-first study shape ───────────────────────────────────────────────

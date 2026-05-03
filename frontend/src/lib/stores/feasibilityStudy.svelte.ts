@@ -3,12 +3,15 @@ import type { Plot } from '$lib/api/generated/hey-api/types.gen'
 import type {
 	DevelopmentModel,
 	FeasibilityAssumptions,
+	FeasibilityChatState,
 	FeasibilityStudy,
 	UsageType,
 	VatApplicability
 } from '$lib/feasibility/workbook/models'
+import { feasibilityWorkspace } from '$lib/stores/feasibilityWorkspace.svelte'
 
 type StudyPhase = 'search' | 'generating' | 'ready' | 'error'
+type SaveState = 'saved' | 'saving' | 'unsaved' | 'failed'
 export interface DevelopmentModelOption {
 	id: DevelopmentModel
 	label: string
@@ -20,7 +23,14 @@ export interface DevelopmentModelOption {
 const phase = $state({ value: 'search' as StudyPhase })
 const selectedPlot = $state({ value: null as Plot | null })
 const study = $state({ value: null as FeasibilityStudy | null })
+const savedStudyId = $state({ value: null as number | null })
+const savedStudyName = $state({ value: '' })
+const saveState = $state({ value: 'saved' as SaveState })
 const error = $state({ value: '' })
+let workbookSaveSequence = 0
+let auxSaveSequence = 0
+let dirtyVersion = 0
+let savedVersion = 0
 
 function todayIsoDate() {
 	return new Date().toISOString().slice(0, 10)
@@ -110,6 +120,35 @@ function defaultVatApplicability(): VatApplicability {
 		marketing: true,
 		salesAdmin: true
 	}
+}
+
+function emptyChatState(): FeasibilityChatState {
+	return { messages: [], history_json: null }
+}
+
+function normalizeChatState(raw: unknown): FeasibilityChatState {
+	if (!raw || typeof raw !== 'object') return emptyChatState()
+	const candidate = raw as Partial<FeasibilityChatState>
+	return {
+		messages: Array.isArray(candidate.messages) ? candidate.messages : [],
+		history_json: typeof candidate.history_json === 'string' ? candidate.history_json : null
+	}
+}
+
+function cloneAssumptions(assumptions: FeasibilityAssumptions): FeasibilityAssumptions {
+	return JSON.parse(JSON.stringify(assumptions)) as FeasibilityAssumptions
+}
+
+function resetSaveTracking() {
+	workbookSaveSequence = 0
+	auxSaveSequence = 0
+	dirtyVersion = 0
+	savedVersion = 0
+	saveState.value = 'saved'
+}
+
+function settleSaveState() {
+	saveState.value = dirtyVersion === savedVersion ? 'saved' : 'unsaved'
 }
 
 function createBaseAssumptions(
@@ -359,6 +398,7 @@ function adaptBackendStudy(
 	const plot_data = raw.plot_data as FeasibilityStudy['plot_data']
 	const research = raw.research as FeasibilityStudy['research']
 	const study_context = raw.study_context as FeasibilityStudy['study_context']
+	const chatState = normalizeChatState(raw.chat_state)
 	const assumptions = hydrateAssumptions(
 		raw.assumptions as Partial<FeasibilityAssumptions>,
 		plot_data,
@@ -373,7 +413,7 @@ function adaptBackendStudy(
 			: assumptions,
 		study_context,
 		research,
-		chat: (raw.chat as FeasibilityStudy['chat']) ?? { history: [] }
+		chat: { history: chatState.messages }
 	}
 }
 
@@ -392,6 +432,15 @@ export const feasibilityStudy = {
 	},
 	get study() {
 		return study.value
+	},
+	get savedStudyId() {
+		return savedStudyId.value
+	},
+	get savedStudyName() {
+		return savedStudyName.value
+	},
+	get saveState() {
+		return saveState.value
 	},
 	get error() {
 		return error.value
@@ -479,6 +528,117 @@ export const feasibilityStudy = {
 			error.value = err instanceof Error ? err.message : 'Failed to generate feasibility study.'
 		}
 	},
+	async createSavedStudy(params: {
+		name: string
+		plot_number: string
+		usage_override?: UsageType
+		development_model: DevelopmentModel
+	}) {
+		phase.value = 'generating'
+		error.value = ''
+		try {
+			const saved = await feasibility.createStudy(params)
+			savedStudyId.value = saved.id
+			savedStudyName.value = saved.name
+			resetSaveTracking()
+			feasibilityWorkspace.hydrate(
+				normalizeChatState((saved as unknown as Record<string, unknown>).chat_state)
+			)
+			mergeStudy(saved as unknown as Record<string, unknown>, saved.development_model)
+			return saved
+		} catch (err) {
+			phase.value = 'error'
+			error.value = err instanceof Error ? err.message : 'Failed to create feasibility study.'
+			throw err
+		}
+	},
+	async loadSavedStudy(studyId: number) {
+		phase.value = 'generating'
+		error.value = ''
+		try {
+			const saved = await feasibility.getStudy(studyId)
+			savedStudyId.value = saved.id
+			savedStudyName.value = saved.name
+			resetSaveTracking()
+			feasibilityWorkspace.hydrate(
+				normalizeChatState((saved as unknown as Record<string, unknown>).chat_state)
+			)
+			mergeStudy(saved as unknown as Record<string, unknown>, saved.development_model)
+			return saved
+		} catch (err) {
+			phase.value = 'error'
+			error.value = err instanceof Error ? err.message : 'Failed to load feasibility study.'
+			throw err
+		}
+	},
+	async renameSavedStudy(name: string) {
+		if (!savedStudyId.value) return
+		const trimmed = name.trim()
+		if (!trimmed) return
+		const sequence = ++auxSaveSequence
+		const wasClean = dirtyVersion === savedVersion
+		if (wasClean) saveState.value = 'saving'
+		try {
+			const saved = await feasibility.updateStudy(savedStudyId.value, { name: trimmed })
+			savedStudyName.value = saved.name
+			if (sequence === auxSaveSequence) settleSaveState()
+		} catch (err) {
+			if (sequence === auxSaveSequence) saveState.value = 'failed'
+			error.value = err instanceof Error ? err.message : 'Failed to rename feasibility study.'
+		}
+	},
+	async autosaveAssumptions(
+		assumptions: FeasibilityAssumptions,
+		options: { chatState?: FeasibilityChatState } = {}
+	) {
+		if (!savedStudyId.value) return
+		const sequence = ++workbookSaveSequence
+		const versionAtSave = dirtyVersion
+		const savedAssumptions = cloneAssumptions(assumptions)
+		saveState.value = 'saving'
+		try {
+			await feasibility.autosaveStudy(savedStudyId.value, {
+				assumptions: savedAssumptions,
+				development_model: savedAssumptions.developmentModel,
+				chat_state: options.chatState
+			})
+			if (sequence !== workbookSaveSequence) return
+			if (versionAtSave === dirtyVersion) {
+				savedVersion = versionAtSave
+				if (study.value) {
+					study.value = { ...study.value, assumptions: savedAssumptions }
+				}
+			}
+			settleSaveState()
+		} catch (err) {
+			if (sequence === workbookSaveSequence) saveState.value = 'failed'
+			error.value = err instanceof Error ? err.message : 'Failed to save feasibility study.'
+		}
+	},
+	async saveCurrentWorkbook(
+		assumptions: FeasibilityAssumptions | null | undefined,
+		options: { chatState?: FeasibilityChatState } = {}
+	) {
+		if (!assumptions) return
+		await feasibilityStudy.autosaveAssumptions(assumptions, options)
+	},
+	async persistChatState(chatState: FeasibilityChatState) {
+		if (!savedStudyId.value) return
+		const sequence = ++auxSaveSequence
+		saveState.value = 'saving'
+		try {
+			await feasibility.autosaveStudy(savedStudyId.value, { chat_state: chatState })
+			if (sequence === auxSaveSequence) settleSaveState()
+		} catch (err) {
+			if (sequence === auxSaveSequence) saveState.value = 'failed'
+			error.value = err instanceof Error ? err.message : 'Failed to save feasibility chat.'
+		}
+	},
+	markUnsaved() {
+		if (!savedStudyId.value) return
+		dirtyVersion += 1
+		saveState.value = 'unsaved'
+	},
 	setDevelopmentModel(model: DevelopmentModel) {
 		if (!study.value) return
 		study.value = {
@@ -493,6 +653,10 @@ export const feasibilityStudy = {
 		phase.value = 'search'
 		selectedPlot.value = null
 		study.value = null
+		savedStudyId.value = null
+		savedStudyName.value = ''
+		resetSaveTracking()
+		feasibilityWorkspace.reset()
 		error.value = ''
 	}
 }

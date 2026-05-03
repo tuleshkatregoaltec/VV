@@ -8,7 +8,10 @@
 // - context/research: secondary display data
 // ══════════════════════════════════════════════════════════════════════════════
 
-import type { PlotResearch, StudyContext } from '$lib/api/generated/hey-api/types.gen'
+import type {
+	PlotResearchOutput as PlotResearch,
+	StudyContext
+} from '$lib/api/generated/hey-api/types.gen'
 import {
 	computeWorkbook as computeWorkbookOutputs,
 	type WorkbookOutputs

@@ -13,7 +13,6 @@ from pydantic_ai.usage import UsageLimits
 from app.clickhouse.client import query as ch_query
 from app.config import settings
 from app.feasibility.models import (
-    FeasibilityAssumptions,
     FeasibilityPaymentPlan,
     PlotDetails,
     Usage,
@@ -225,6 +224,21 @@ def _extract_payload(part: ToolCallPart) -> Any:
     return None
 
 
+def _unit_type_keys_from_assumptions(assumptions: dict[str, Any]) -> list[str]:
+    unit_configs = assumptions.get("unitConfigs")
+    if not isinstance(unit_configs, list):
+        return []
+
+    keys: list[str] = []
+    for row in unit_configs:
+        if not isinstance(row, dict):
+            continue
+        unit_id = row.get("id")
+        if isinstance(unit_id, str):
+            keys.append(unit_id)
+    return keys
+
+
 async def _resolve_area(area: str) -> str:
     if not area:
         return area
@@ -329,7 +343,7 @@ async def _fetch_research_payload(tool_name: str, args: dict[str, Any]) -> dict[
 async def stream_feasibility_response(
     messages: list[dict],
     plot_data: PlotDetails,
-    assumptions: FeasibilityAssumptions,
+    assumptions: dict[str, Any],
     research: dict | None = None,
     history_json: str | None = None,
 ) -> AsyncGenerator[str, None]:
@@ -338,8 +352,8 @@ async def stream_feasibility_response(
         area_name=plot_data.community_name,
         plot=plot_data.model_dump(mode="json"),
         study=research,
-        assumptions=assumptions.model_dump(mode="json"),
-        unit_type_keys=[row.id for row in assumptions.unitConfigs],
+        assumptions=assumptions,
+        unit_type_keys=_unit_type_keys_from_assumptions(assumptions),
     )
 
     history: list[Any] = []

@@ -1365,7 +1365,12 @@ export type FeasibilityChatRequest = {
         [key: string]: unknown;
     }>;
     plot_data: PlotDetails;
-    assumptions: FeasibilityAssumptions;
+    /**
+     * Assumptions
+     */
+    assumptions: {
+        [key: string]: unknown;
+    };
     /**
      * Research
      */
@@ -1376,6 +1381,38 @@ export type FeasibilityChatRequest = {
      * History Json
      */
     history_json?: string | null;
+};
+
+/**
+ * FeasibilityChatState
+ */
+export type FeasibilityChatState = {
+    /**
+     * Messages
+     */
+    messages?: Array<FeasibilityChatStateMessage>;
+    /**
+     * History Json
+     */
+    history_json?: string | null;
+};
+
+/**
+ * FeasibilityChatStateMessage
+ */
+export type FeasibilityChatStateMessage = {
+    /**
+     * Role
+     */
+    role: 'user' | 'assistant' | 'system';
+    /**
+     * Content
+     */
+    content: string;
+    /**
+     * Created At
+     */
+    created_at?: string | null;
 };
 
 /**
@@ -1394,6 +1431,154 @@ export type FeasibilityPaymentPlan = {
      * Handoverpct
      */
     handoverPct?: number;
+};
+
+/**
+ * FeasibilitySavedStudyListItem
+ */
+export type FeasibilitySavedStudyListItemInput = {
+    /**
+     * Id
+     */
+    id: number;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Plot Number
+     */
+    plot_number: string;
+    /**
+     * Development Model
+     */
+    development_model: 'build_to_sell_residential' | 'build_to_rent_residential' | 'build_to_lease_commercial';
+    plot_data: PlotDetails;
+    /**
+     * Created At
+     */
+    created_at: string;
+    /**
+     * Updated At
+     */
+    updated_at: string;
+};
+
+/**
+ * FeasibilitySavedStudyListItem
+ */
+export type FeasibilitySavedStudyListItemOutput = {
+    /**
+     * Id
+     */
+    id: number;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Plot Number
+     */
+    plot_number: string;
+    /**
+     * Development Model
+     */
+    development_model: 'build_to_sell_residential' | 'build_to_rent_residential' | 'build_to_lease_commercial';
+    plot_data: PlotDetails;
+    /**
+     * Created At
+     */
+    created_at: string;
+    /**
+     * Updated At
+     */
+    updated_at: string;
+};
+
+/**
+ * FeasibilitySavedStudyResponse
+ */
+export type FeasibilitySavedStudyResponse = {
+    /**
+     * Id
+     */
+    id: number;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Plot Number
+     */
+    plot_number: string;
+    /**
+     * Development Model
+     */
+    development_model: 'build_to_sell_residential' | 'build_to_rent_residential' | 'build_to_lease_commercial';
+    /**
+     * Assumptions
+     */
+    assumptions: {
+        [key: string]: unknown;
+    };
+    plot_data: PlotDetails;
+    research: PlotResearchOutput;
+    study_context: StudyContext;
+    chat_state: FeasibilityChatState;
+    /**
+     * Created At
+     */
+    created_at: string;
+    /**
+     * Updated At
+     */
+    updated_at: string;
+};
+
+/**
+ * FeasibilityStudyCreateRequest
+ */
+export type FeasibilityStudyCreateRequest = {
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Plot Number
+     */
+    plot_number: string;
+    /**
+     * Usage Override
+     */
+    usage_override?: 'residential' | 'commercial' | 'mixed_use' | 'unknown' | null;
+    /**
+     * Development Model
+     */
+    development_model?: 'build_to_sell_residential' | 'build_to_rent_residential' | 'build_to_lease_commercial';
+};
+
+/**
+ * FeasibilityStudyUpdateRequest
+ */
+export type FeasibilityStudyUpdateRequest = {
+    /**
+     * Name
+     */
+    name?: string | null;
+    /**
+     * Development Model
+     */
+    development_model?: 'build_to_sell_residential' | 'build_to_rent_residential' | 'build_to_lease_commercial' | null;
+    /**
+     * Assumptions
+     */
+    assumptions?: {
+        [key: string]: unknown;
+    } | null;
+    plot_data?: PlotDetails | null;
+    research?: PlotResearchInput | null;
+    study_context?: StudyContext | null;
+    chat_state?: FeasibilityChatState | null;
 };
 
 /**
@@ -1516,7 +1701,7 @@ export type GenerateStudyResponse = {
     status?: string;
     plot_data: PlotDetails;
     assumptions: FeasibilityAssumptions;
-    research: PlotResearch;
+    research: PlotResearchOutput;
     study_context: StudyContext;
     /**
      * Chat
@@ -2540,7 +2725,88 @@ export type PlotDetails = {
 /**
  * PlotResearch
  */
-export type PlotResearch = {
+export type PlotResearchInput = {
+    /**
+     * Plot Number
+     */
+    plot_number: string;
+    /**
+     * Usage
+     */
+    usage: 'residential' | 'commercial' | 'mixed_use' | 'unknown';
+    /**
+     * Market Area
+     */
+    market_area: string;
+    /**
+     * Headline
+     */
+    headline: string;
+    /**
+     * Summary
+     */
+    summary?: Array<string>;
+    /**
+     * Constraints
+     */
+    constraints?: Array<string>;
+    /**
+     * Pricing Evidence
+     */
+    pricing_evidence?: Array<ComparableProject>;
+    /**
+     * Competition Evidence
+     */
+    competition_evidence?: Array<ComparableProject>;
+    /**
+     * Land Sales Evidence
+     */
+    land_sales_evidence?: Array<LandSaleEvidence>;
+    /**
+     * Market Pricing
+     */
+    market_pricing?: Array<MarketPricingRow>;
+    /**
+     * Off Plan Market Pricing
+     */
+    off_plan_market_pricing?: Array<OffPlanPricingRow>;
+    off_plan_pricing_confidence?: OffPlanPricingConfidence | null;
+    /**
+     * Off Plan Unit Benchmarks
+     */
+    off_plan_unit_benchmarks?: Array<OffPlanUnitPricingBenchmark>;
+    rental_market_summary?: RentalMarketSummary | null;
+    /**
+     * Rental Comparables
+     */
+    rental_comparables?: Array<RentalComparableProject>;
+    /**
+     * Rental Rates By Size Band
+     */
+    rental_rates_by_size_band?: Array<RentalRateBySizeBand>;
+    assumptions: FeasibilityAssumptions;
+    /**
+     * Warnings
+     */
+    warnings?: Array<string>;
+    /**
+     * Land Cost Estimate Aed Low
+     */
+    land_cost_estimate_aed_low?: number | null;
+    /**
+     * Land Cost Estimate Aed Mid
+     */
+    land_cost_estimate_aed_mid?: number | null;
+    /**
+     * Land Cost Estimate Aed High
+     */
+    land_cost_estimate_aed_high?: number | null;
+};
+
+/**
+ * PlotResearch
+ */
+export type PlotResearchOutput = {
     /**
      * Plot Number
      */
@@ -6901,6 +7167,139 @@ export type FeasibilityCommunitiesEndpointResponses = {
 
 export type FeasibilityCommunitiesEndpointResponse = FeasibilityCommunitiesEndpointResponses[keyof FeasibilityCommunitiesEndpointResponses];
 
+export type FeasibilityStudiesEndpointData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/feasibility/studies';
+};
+
+export type FeasibilityStudiesEndpointResponses = {
+    /**
+     * Response Feasibility-Studies Endpoint
+     *
+     * Successful Response
+     */
+    200: Array<FeasibilitySavedStudyListItemOutput>;
+};
+
+export type FeasibilityStudiesEndpointResponse = FeasibilityStudiesEndpointResponses[keyof FeasibilityStudiesEndpointResponses];
+
+export type FeasibilityCreateStudyEndpointData = {
+    body: FeasibilityStudyCreateRequest;
+    path?: never;
+    query?: never;
+    url: '/api/v1/feasibility/studies';
+};
+
+export type FeasibilityCreateStudyEndpointErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type FeasibilityCreateStudyEndpointError = FeasibilityCreateStudyEndpointErrors[keyof FeasibilityCreateStudyEndpointErrors];
+
+export type FeasibilityCreateStudyEndpointResponses = {
+    /**
+     * Successful Response
+     */
+    201: FeasibilitySavedStudyResponse;
+};
+
+export type FeasibilityCreateStudyEndpointResponse = FeasibilityCreateStudyEndpointResponses[keyof FeasibilityCreateStudyEndpointResponses];
+
+export type FeasibilityDeleteStudyEndpointData = {
+    body?: never;
+    path: {
+        /**
+         * Study Id
+         */
+        study_id: number;
+    };
+    query?: never;
+    url: '/api/v1/feasibility/studies/{study_id}';
+};
+
+export type FeasibilityDeleteStudyEndpointErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type FeasibilityDeleteStudyEndpointError = FeasibilityDeleteStudyEndpointErrors[keyof FeasibilityDeleteStudyEndpointErrors];
+
+export type FeasibilityDeleteStudyEndpointResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type FeasibilityDeleteStudyEndpointResponse = FeasibilityDeleteStudyEndpointResponses[keyof FeasibilityDeleteStudyEndpointResponses];
+
+export type FeasibilityGetStudyEndpointData = {
+    body?: never;
+    path: {
+        /**
+         * Study Id
+         */
+        study_id: number;
+    };
+    query?: never;
+    url: '/api/v1/feasibility/studies/{study_id}';
+};
+
+export type FeasibilityGetStudyEndpointErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type FeasibilityGetStudyEndpointError = FeasibilityGetStudyEndpointErrors[keyof FeasibilityGetStudyEndpointErrors];
+
+export type FeasibilityGetStudyEndpointResponses = {
+    /**
+     * Successful Response
+     */
+    200: FeasibilitySavedStudyResponse;
+};
+
+export type FeasibilityGetStudyEndpointResponse = FeasibilityGetStudyEndpointResponses[keyof FeasibilityGetStudyEndpointResponses];
+
+export type FeasibilityUpdateStudyEndpointData = {
+    body: FeasibilityStudyUpdateRequest;
+    path: {
+        /**
+         * Study Id
+         */
+        study_id: number;
+    };
+    query?: never;
+    url: '/api/v1/feasibility/studies/{study_id}';
+};
+
+export type FeasibilityUpdateStudyEndpointErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type FeasibilityUpdateStudyEndpointError = FeasibilityUpdateStudyEndpointErrors[keyof FeasibilityUpdateStudyEndpointErrors];
+
+export type FeasibilityUpdateStudyEndpointResponses = {
+    /**
+     * Successful Response
+     */
+    200: FeasibilitySavedStudyResponse;
+};
+
+export type FeasibilityUpdateStudyEndpointResponse = FeasibilityUpdateStudyEndpointResponses[keyof FeasibilityUpdateStudyEndpointResponses];
+
 export type FeasibilityPlotsEndpointData = {
     body?: never;
     path?: never;
@@ -7013,7 +7412,7 @@ export type FeasibilityGenerateHbuEndpointResponses = {
     /**
      * Successful Response
      */
-    200: PlotResearch;
+    200: PlotResearchOutput;
 };
 
 export type FeasibilityGenerateHbuEndpointResponse = FeasibilityGenerateHbuEndpointResponses[keyof FeasibilityGenerateHbuEndpointResponses];

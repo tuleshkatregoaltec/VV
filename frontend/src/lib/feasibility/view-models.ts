@@ -1,4 +1,7 @@
-import type { PlotResearch, StudyContext } from '$lib/api/generated/hey-api/types.gen'
+import type {
+	PlotResearchOutput as PlotResearch,
+	StudyContext
+} from '$lib/api/generated/hey-api/types.gen'
 import { monthsBetween } from '$lib/feasibility/format'
 import type { CashFlowPeriod, WorkbookOutputs } from '$lib/feasibility/workbook/engine'
 import type { FeasibilityAssumptions, PlotDetails } from '$lib/feasibility/workbook/models'
@@ -145,7 +148,7 @@ export function buildChecksModel(
 	return [
 		{
 			label: 'Sources vs uses',
-			value: outputs ? `Gap AED ${fmt(outputs.funding.gapAed)}` : 'N/A',
+			value: outputs ? `Gap AED ${fmt(outputs.sourcesUses.gapAed)}` : 'N/A',
 			status: !outputs ? 'missing' : hasIssue('funding_gap') ? 'warning' : 'within_range',
 			note: 'Model should reconcile tightly before sign-off across funding and uses summaries'
 		},

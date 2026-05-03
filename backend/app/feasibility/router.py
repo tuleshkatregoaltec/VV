@@ -1,10 +1,15 @@
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Response
 from fastapi.responses import StreamingResponse
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.dependencies import AuthContext, require_active_subscription
 from app.feasibility.models import (
     ComparableData,
     FeasibilityChatRequest,
+    FeasibilitySavedStudyListItem,
+    FeasibilitySavedStudyResponse,
+    FeasibilityStudyCreateRequest,
+    FeasibilityStudyUpdateRequest,
     GenerateStudyRequest,
     GenerateStudyResponse,
     LandSaleEvidence,
@@ -14,20 +19,30 @@ from app.feasibility.models import (
     Usage,
 )
 from app.feasibility.service import (
+    create_saved_study,
+    delete_saved_study,
     generate_hbu_for_plot,
     generate_seeded_study,
     get_comparable_or_404,
     get_plot_details_or_404,
     get_plot_land_sales_or_404,
+    get_saved_study,
     list_nearby_land_plots,
     list_plot_communities,
+    list_saved_studies,
     list_transaction_areas,
     search_gis_plots,
     search_nearby_land_plots,
     stream_chat_events,
+    update_saved_study,
 )
+from app.postgres import get_db_session
 
 router = APIRouter(prefix="/api/v1/feasibility", tags=["feasibility"])
+
+
+def _auth_ids(auth: AuthContext) -> tuple[str, str]:
+    return str(auth.user.id), str(auth.organization.id)
 
 
 @router.get("/areas", response_model=list[str])
@@ -44,6 +59,83 @@ async def communities_endpoint(
 ):
     """Get GIS plot communities ordered by activity."""
     return await list_plot_communities()
+
+
+@router.get("/studies", response_model=list[FeasibilitySavedStudyListItem])
+async def studies_endpoint(
+    auth: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """List saved feasibility studies for the authenticated user and organization."""
+    user_id, organization_id = _auth_ids(auth)
+    return await list_saved_studies(db, user_id=user_id, organization_id=organization_id)
+
+
+@router.post("/studies", response_model=FeasibilitySavedStudyResponse, status_code=201)
+async def create_study_endpoint(
+    request: FeasibilityStudyCreateRequest,
+    auth: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """Create a saved feasibility study from the selected plot and generated snapshots."""
+    user_id, organization_id = _auth_ids(auth)
+    return await create_saved_study(
+        db,
+        request=request,
+        user_id=user_id,
+        organization_id=organization_id,
+    )
+
+
+@router.get("/studies/{study_id}", response_model=FeasibilitySavedStudyResponse)
+async def get_study_endpoint(
+    study_id: int,
+    auth: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """Get a saved feasibility study owned by the current user and organization."""
+    user_id, organization_id = _auth_ids(auth)
+    return await get_saved_study(
+        db,
+        study_id=study_id,
+        user_id=user_id,
+        organization_id=organization_id,
+    )
+
+
+@router.patch("/studies/{study_id}", response_model=FeasibilitySavedStudyResponse)
+async def update_study_endpoint(
+    study_id: int,
+    request: FeasibilityStudyUpdateRequest,
+    auth: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """Patch saved feasibility study inputs and metadata."""
+    user_id, organization_id = _auth_ids(auth)
+    return await update_saved_study(
+        db,
+        study_id=study_id,
+        request=request,
+        user_id=user_id,
+        organization_id=organization_id,
+    )
+
+
+@router.delete("/studies/{study_id}", status_code=204)
+async def delete_study_endpoint(
+    study_id: int,
+    auth: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """Delete a saved feasibility study owned by the current user and organization."""
+    user_id, organization_id = _auth_ids(auth)
+    await delete_saved_study(
+        db,
+        study_id=study_id,
+        user_id=user_id,
+        organization_id=organization_id,
+    )
+    return Response(status_code=204)
 
 
 @router.get("/plots", response_model=list[Plot])

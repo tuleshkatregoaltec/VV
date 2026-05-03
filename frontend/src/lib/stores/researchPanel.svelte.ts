@@ -1,4 +1,10 @@
-export type ResearchTab = 'summary' | 'transactions' | 'analytics' | 'comparables' | 'map'
+export type ResearchTab =
+	| 'summary'
+	| 'transactions'
+	| 'analytics'
+	| 'comparables'
+	| 'map'
+	| 'plot_sandbox'
 
 const activeTab = $state({ value: 'summary' as ResearchTab })
 const agentTransactions = $state({ value: null as Record<string, unknown> | null })

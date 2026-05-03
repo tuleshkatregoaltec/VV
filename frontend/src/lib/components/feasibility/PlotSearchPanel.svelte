@@ -106,64 +106,31 @@ async function choosePlot(plot: Plot) {
 }
 </script>
 
-<div class="mx-auto flex h-full w-full max-w-7xl min-h-0 flex-col gap-6 overflow-hidden bg-background px-6 py-6">
-	<div class="max-w-3xl flex-shrink-0">
-		<p class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Feasibility</p>
-		<h1 class="mt-2 text-3xl font-semibold text-slate-900">Seed a study directly from the plot</h1>
-		<p class="mt-3 text-sm text-slate-600">
-			Pick an area, load the community plot inventory, filter it down, then confirm the raw plot facts before generation.
-		</p>
+<div class="mx-auto flex h-full w-full max-w-[1500px] min-h-0 flex-col gap-4 overflow-auto bg-app px-4 py-4 lg:overflow-hidden lg:px-6">
+	<div class="flex flex-shrink-0 flex-wrap items-end justify-between gap-3">
+		<div class="max-w-3xl">
+			<p class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Feasibility</p>
+			<h1 class="mt-1 text-2xl font-semibold text-slate-900">Seed a study from a plot</h1>
+			<p class="mt-2 text-sm text-slate-600">
+				Load a community, narrow the plot inventory, then confirm the facts before generation.
+			</p>
+		</div>
+		{#if selectedCommunity}
+			<div class="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 shadow-sm">
+				<span class="font-medium text-slate-900">{visiblePlots.length}</span> matching plots in {selectedCommunity}
+			</div>
+		{/if}
 	</div>
 
-	<div class="grid min-h-0 flex-1 gap-6 xl:grid-cols-[320px_minmax(0,1fr)_360px]">
-		<div class="flex min-h-0 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-			<div class="border-b border-slate-200 px-5 py-4">
-				<p class="text-sm font-semibold text-slate-900">Areas</p>
-				<p class="mt-1 text-xs text-slate-500">Load all plots in a community first, then filter the inventory.</p>
-			</div>
-			<div class="p-4">
-				<input
-					bind:value={communitySearch}
-					placeholder="Filter areas"
-					class="h-11 w-full rounded-md border border-slate-300 px-4 text-sm text-slate-900 outline-none transition focus:border-navy focus:ring-2 focus:ring-navy/10"
-				/>
-			</div>
-			<div class="min-h-0 flex-1 overflow-auto border-t border-slate-100">
-				{#if communitiesQuery.isPending}
-					<p class="px-5 py-8 text-sm text-slate-500">Loading areas…</p>
-				{:else if filteredCommunities.length === 0}
-					<p class="px-5 py-8 text-sm text-slate-500">No communities match that search.</p>
-				{:else}
-					{#each filteredCommunities as community}
-						<button
-							type="button"
-							class="flex w-full items-center justify-between border-b border-slate-100 px-5 py-3 text-left transition {selectedCommunity === community ? 'bg-blue-50 text-navy' : 'hover:bg-slate-50'}"
-							onclick={() => void loadCommunityPlots(community)}
-						>
-							<span class="text-sm font-medium">{community}</span>
-							{#if selectedCommunity === community}
-								<span class="text-[11px] uppercase tracking-[0.16em]">Loaded</span>
-							{/if}
-						</button>
-					{/each}
-				{/if}
-			</div>
-		</div>
-
-		<div class="flex min-h-0 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-			<div class="border-b border-slate-200 px-5 py-4">
-				<p class="text-sm font-semibold text-slate-900">Plots</p>
-				<p class="mt-1 text-xs text-slate-500">
-					{selectedCommunity ? `Showing ${visiblePlots.length} plots in ${selectedCommunity}` : 'Select an area to load its plot inventory.'}
-				</p>
-			</div>
-			<div class="grid gap-3 border-b border-slate-200 p-4 md:grid-cols-2 xl:grid-cols-4">
+	<div class="grid min-h-0 flex-1 gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
+		<section class="flex min-h-[560px] flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm lg:min-h-0">
+			<div class="grid gap-3 border-b border-slate-200 p-4 md:grid-cols-[minmax(220px,1fr)_repeat(3,minmax(140px,180px))]">
 				<input
 					bind:value={plotSearch}
 					placeholder="Search loaded plots"
-					class="h-11 rounded-md border border-slate-300 px-4 text-sm text-slate-900 outline-none transition focus:border-navy focus:ring-2 focus:ring-navy/10"
+					class="h-10 rounded-md border border-slate-300 px-3 text-sm text-slate-900 outline-none transition focus:border-navy focus:ring-2 focus:ring-navy/10"
 				/>
-				<select bind:value={usageFilter} class="h-11 rounded-md border border-slate-300 px-4 text-sm text-slate-900 outline-none transition focus:border-navy focus:ring-2 focus:ring-navy/10">
+				<select bind:value={usageFilter} class="h-10 rounded-md border border-slate-300 px-3 text-sm text-slate-900 outline-none transition focus:border-navy focus:ring-2 focus:ring-navy/10">
 					<option value="all">All uses</option>
 					<option value="residential">Residential</option>
 					<option value="commercial">Commercial</option>
@@ -173,65 +140,109 @@ async function choosePlot(plot: Plot) {
 					bind:value={minPlotArea}
 					type="number"
 					min="0"
-					placeholder="Min plot area sqm"
-					class="h-11 rounded-md border border-slate-300 px-4 text-sm text-slate-900 outline-none transition focus:border-navy focus:ring-2 focus:ring-navy/10"
+					placeholder="Min area sqm"
+					class="h-10 rounded-md border border-slate-300 px-3 text-sm text-slate-900 outline-none transition focus:border-navy focus:ring-2 focus:ring-navy/10"
 				/>
-				<select bind:value={sortBy} class="h-11 rounded-md border border-slate-300 px-4 text-sm text-slate-900 outline-none transition focus:border-navy focus:ring-2 focus:ring-navy/10">
+				<select bind:value={sortBy} class="h-10 rounded-md border border-slate-300 px-3 text-sm text-slate-900 outline-none transition focus:border-navy focus:ring-2 focus:ring-navy/10">
 					<option value="verified">Verified first</option>
 					<option value="largest">Largest plot</option>
 					<option value="highest_gfa">Highest GFA</option>
 				</select>
-				<label class="flex items-center gap-2 rounded-md border border-slate-200 px-4 text-sm text-slate-700 md:col-span-2 xl:col-span-4">
+				<label class="flex h-9 items-center gap-2 rounded-md border border-slate-200 px-3 text-sm text-slate-700 md:col-span-4">
 					<input bind:checked={verifiedOnly} type="checkbox" class="h-4 w-4 rounded border-slate-300 text-navy" />
 					Verified plots only
 				</label>
 			</div>
-			{#if searchError}
-				<p class="px-5 py-3 text-sm text-rose-600">{searchError}</p>
-			{/if}
-			<div class="min-h-0 flex-1 overflow-auto">
-				{#if loading}
-					<p class="px-5 py-8 text-sm text-slate-500">Loading plots…</p>
-				{:else if visiblePlots.length === 0}
-					<p class="px-5 py-8 text-sm text-slate-500">
-						{selectedCommunity ? 'No plots match the current filters.' : 'Select an area to load all of its plots.'}
-					</p>
-				{:else}
-					<div class="divide-y divide-slate-100">
-						{#each visiblePlots as plot}
-							<button
-								type="button"
-								class="flex w-full flex-col gap-1 px-5 py-4 text-left transition hover:bg-slate-50"
-								onclick={() => void choosePlot(plot)}
-							>
-								<div class="flex items-center justify-between gap-3">
-									<span class="text-sm font-semibold text-slate-900">{plot.project_name}</span>
-									<div class="flex items-center gap-2">
-										{#if plot.is_verified}
-											<span class="rounded-md bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-emerald-700">
-												Verified
-											</span>
-										{/if}
-										<span class="rounded-md bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600">
-											{plot.plot_number}
-										</span>
-									</div>
-								</div>
-								<p class="text-sm text-slate-600">{plot.community_name}</p>
-								<p class="text-xs text-slate-500">
-									{plot.plot_area_sqm.toLocaleString('en-AE', { maximumFractionDigits: 0 })} sqm plot
-									· {plot.max_gfa_sqm.toLocaleString('en-AE', { maximumFractionDigits: 0 })} sqm GFA
-									· {inferUsage(plot)}
-								</p>
-							</button>
-						{/each}
-					</div>
-				{/if}
-			</div>
-		</div>
 
-		<div class="min-h-0 overflow-auto rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-			<p class="text-sm font-semibold text-slate-900">Selected raw plot data</p>
+			<div class="grid min-h-0 flex-1 lg:grid-cols-[280px_minmax(0,1fr)]">
+				<div class="flex min-h-0 flex-col border-b border-slate-200 lg:border-b-0 lg:border-r">
+					<div class="border-b border-slate-200 p-4">
+						<p class="text-sm font-semibold text-slate-900">Communities</p>
+						<input
+							bind:value={communitySearch}
+							placeholder="Filter communities"
+							class="mt-3 h-10 w-full rounded-md border border-slate-300 px-3 text-sm text-slate-900 outline-none transition focus:border-navy focus:ring-2 focus:ring-navy/10"
+						/>
+					</div>
+					<div class="max-h-64 min-h-0 flex-1 overflow-auto lg:max-h-none">
+						{#if communitiesQuery.isPending}
+							<p class="px-4 py-8 text-sm text-slate-500">Loading communities…</p>
+						{:else if filteredCommunities.length === 0}
+							<p class="px-4 py-8 text-sm text-slate-500">No communities match that search.</p>
+						{:else}
+							{#each filteredCommunities as community}
+								<button
+									type="button"
+									class="flex w-full items-center justify-between gap-3 border-b border-slate-100 px-4 py-3 text-left transition {selectedCommunity === community ? 'bg-blue-50 text-navy' : 'hover:bg-slate-50'}"
+									onclick={() => void loadCommunityPlots(community)}
+								>
+									<span class="truncate text-sm font-medium">{community}</span>
+									{#if selectedCommunity === community}
+										<span class="text-[10px] font-semibold uppercase tracking-[0.12em]">Loaded</span>
+									{/if}
+								</button>
+							{/each}
+						{/if}
+					</div>
+				</div>
+
+				<div class="flex min-h-0 flex-col">
+					<div class="flex items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
+						<div>
+							<p class="text-sm font-semibold text-slate-900">Plots</p>
+							<p class="mt-0.5 text-xs text-slate-500">
+								{selectedCommunity ? `${visiblePlots.length} results` : 'Select a community to load plots.'}
+							</p>
+						</div>
+					</div>
+					{#if searchError}
+						<p class="px-4 py-3 text-sm text-rose-600">{searchError}</p>
+					{/if}
+					<div class="min-h-0 flex-1 overflow-auto">
+						{#if loading}
+							<p class="px-4 py-8 text-sm text-slate-500">Loading plots…</p>
+						{:else if visiblePlots.length === 0}
+							<p class="px-4 py-8 text-sm text-slate-500">
+								{selectedCommunity ? 'No plots match the current filters.' : 'Select a community to load all of its plots.'}
+							</p>
+						{:else}
+							<div class="divide-y divide-slate-100">
+								{#each visiblePlots as plot}
+									<button
+										type="button"
+										class="flex w-full flex-col gap-1 px-4 py-3 text-left transition {feasibilityStudy.plotData?.plot_number === plot.plot_number ? 'bg-blue-50' : 'hover:bg-slate-50'}"
+										onclick={() => void choosePlot(plot)}
+									>
+										<div class="flex items-start justify-between gap-3">
+											<span class="text-sm font-semibold text-slate-900">{plot.project_name}</span>
+											<div class="flex flex-shrink-0 items-center gap-2">
+												{#if plot.is_verified}
+													<span class="rounded-md bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-emerald-700">
+														Verified
+													</span>
+												{/if}
+												<span class="rounded-md bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600">
+													{plot.plot_number}
+												</span>
+											</div>
+										</div>
+										<p class="text-sm text-slate-600">{plot.community_name}</p>
+										<p class="text-xs text-slate-500">
+											{plot.plot_area_sqm.toLocaleString('en-AE', { maximumFractionDigits: 0 })} sqm plot
+											· {plot.max_gfa_sqm.toLocaleString('en-AE', { maximumFractionDigits: 0 })} sqm GFA
+											· {inferUsage(plot)}
+										</p>
+									</button>
+								{/each}
+							</div>
+						{/if}
+					</div>
+				</div>
+			</div>
+		</section>
+
+		<aside class="min-h-0 overflow-auto rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+			<p class="text-sm font-semibold text-slate-900">Selected plot</p>
 			{#if feasibilityStudy.plotData}
 				<div class="mt-4 grid gap-3 text-sm text-slate-600">
 					<div>
@@ -314,11 +325,11 @@ async function choosePlot(plot: Plot) {
 					{/if}
 				</div>
 			{:else}
-				<p class="mt-4 text-sm text-slate-500">Choose a plot to inspect the raw GIS-backed facts before generation.</p>
+				<p class="mt-4 text-sm text-slate-500">Choose a plot to inspect the raw GIS-backed facts and generate a workbook.</p>
 			{/if}
 			{#if feasibilityStudy.error}
 				<p class="mt-3 text-sm text-rose-600">{feasibilityStudy.error}</p>
 			{/if}
-		</div>
+		</aside>
 	</div>
 </div>
