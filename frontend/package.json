@@ -15,6 +15,7 @@
 		"biome:write": "biome check --write",
 		"format": "bun run biome:write -- .",
 		"lint": "bun run biome:check -- .",
+		"style:audit": "node scripts/style-audit.mjs",
 		"precommit": "bun ./scripts/precommit-biome.mjs",
 		"test": "vitest run",
 		"test:unit": "vitest run tests/unit src/lib",
