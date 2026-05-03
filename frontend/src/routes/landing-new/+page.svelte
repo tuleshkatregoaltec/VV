@@ -140,7 +140,7 @@ onMount(() => {
 	/>
 </svelte:head>
 
-<div class="landing-new">
+<div class="theme-light landing-new">
 	<div class="aurora" aria-hidden="true"></div>
 	<header class="site-header">
 		<a class="brand" href="/" aria-label="Vitevue home">

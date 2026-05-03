@@ -2,6 +2,7 @@
 import { Chart, registerables } from 'chart.js'
 import { onMount } from 'svelte'
 import type { DimensionBreakdown, RentalDimensionBreakdown } from '$lib/api/analytics'
+import { colorTheme } from '$lib/stores/preferences.svelte'
 
 interface Props {
 	data: DimensionBreakdown[] | RentalDimensionBreakdown[]
@@ -15,6 +16,7 @@ let { data, title = 'Breakdown', metric = 'volume', height = 350, maxItems = 10 
 
 let canvasElement = $state<HTMLCanvasElement | undefined>()
 let chart: Chart | null = null
+const resolvedTheme = $derived(colorTheme.resolved)
 
 Chart.register(...registerables)
 
@@ -59,6 +61,13 @@ function createChart() {
 	const labels = chartData.map((d) => d.dimension_value || 'Unknown')
 	const values = chartData.map(getMetricValue)
 	const formatter = getFormatter()
+	const styles = getComputedStyle(document.documentElement)
+	const chartLine = styles.getPropertyValue('--color-chart-line').trim() || 'rgb(59, 130, 246)'
+	const chartFill =
+		styles.getPropertyValue('--color-chart-fill').trim() || 'rgba(59, 130, 246, 0.8)'
+	const chartGrid = styles.getPropertyValue('--color-chart-grid').trim() || 'rgba(0, 0, 0, 0.05)'
+	const chartMuted = styles.getPropertyValue('--color-chart-muted').trim() || '#9ca3af'
+	const foreground = styles.getPropertyValue('--color-fg-1').trim() || '#111827'
 
 	chart = new Chart(ctx, {
 		type: 'bar',
@@ -68,11 +77,11 @@ function createChart() {
 				{
 					label: getMetricLabel(),
 					data: values,
-					backgroundColor: 'rgba(59, 130, 246, 0.8)',
-					borderColor: 'rgb(59, 130, 246)',
+					backgroundColor: chartFill,
+					borderColor: chartLine,
 					borderWidth: 1,
 					borderRadius: 4,
-					hoverBackgroundColor: 'rgba(59, 130, 246, 0.9)'
+					hoverBackgroundColor: chartLine
 				}
 			]
 		},
@@ -91,6 +100,7 @@ function createChart() {
 						size: 16,
 						weight: 'bold'
 					},
+					color: foreground,
 					padding: {
 						bottom: 20
 					}
@@ -110,15 +120,19 @@ function createChart() {
 				x: {
 					beginAtZero: true,
 					grid: {
-						color: 'rgba(0, 0, 0, 0.05)'
+						color: chartGrid
 					},
 					ticks: {
+						color: chartMuted,
 						callback: (value) => formatter(Number(value))
 					}
 				},
 				y: {
 					grid: {
 						display: false
+					},
+					ticks: {
+						color: chartMuted
 					}
 				}
 			}
@@ -136,7 +150,7 @@ onMount(() => {
 })
 
 $effect(() => {
-	if (data) {
+	if (resolvedTheme && data) {
 		createChart()
 	}
 })
@@ -156,7 +170,7 @@ $effect(() => {
 	.chart-container {
 		position: relative;
 		width: 100%;
-		background: var(--bg-primary, white);
+		background: var(--color-bg-card, white);
 		border-radius: 0.5rem;
 		padding: 1rem;
 	}
@@ -166,6 +180,6 @@ $effect(() => {
 		align-items: center;
 		justify-content: center;
 		height: 100%;
-		color: var(--text-tertiary, #9ca3af);
+		color: var(--color-fg-5, #9ca3af);
 	}
 </style>

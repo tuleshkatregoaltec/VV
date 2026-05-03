@@ -48,8 +48,8 @@ $effect(() => {
 
 const confirmButtonClasses =
 	confirmVariant === 'danger'
-		? 'bg-[var(--color-error)] hover:bg-[#8a1f1f] text-[var(--color-fg-on-navy)]'
-		: 'bg-[var(--color-navy-900)] hover:bg-[var(--color-navy-800)] text-[var(--color-fg-on-navy)]'
+		? 'bg-error hover:bg-[#8a1f1f] text-on-navy'
+		: 'bg-navy hover:bg-primary-hover text-on-navy'
 </script>
 
 <svelte:window onkeydown={handleKeydown} />
@@ -61,27 +61,27 @@ const confirmButtonClasses =
 		role="presentation"
 	>
 		<div
-			class="w-full max-w-md rounded-xl border border-[var(--color-border)] bg-white shadow-xl"
+			class="w-full max-w-md rounded-xl border border-border bg-white shadow-xl"
 			role="dialog"
 			aria-modal="true"
 			aria-labelledby="confirm-title"
 		>
 			<!-- Header -->
-			<div class="border-b border-[var(--color-border)] px-6 py-4">
-				<h3 id="confirm-title" class="text-lg font-semibold text-[var(--color-fg-1)]">{title}</h3>
+			<div class="border-b border-border px-6 py-4">
+				<h3 id="confirm-title" class="text-lg font-semibold text-fg-1">{title}</h3>
 			</div>
 
 			<!-- Content -->
 			<div class="px-6 py-4">
-				<p class="text-[var(--color-fg-3)]">{message}</p>
+				<p class="text-fg-3">{message}</p>
 			</div>
 
 			<!-- Actions -->
-			<div class="flex justify-end gap-3 border-t border-[var(--color-border)] px-6 py-4">
+			<div class="flex justify-end gap-3 border-t border-border px-6 py-4">
 				{#if cancelText}
 					<button
 						onclick={onCancel}
-						class="rounded-md border border-[var(--color-border)] bg-white px-4 py-2 text-sm font-medium text-[var(--color-fg-2)] transition hover:bg-slate-50"
+						class="rounded-md border border-border bg-white px-4 py-2 text-sm font-medium text-fg-2 transition hover:bg-slate-50"
 					>
 						{cancelText}
 					</button>

@@ -2,6 +2,7 @@
 import { Chart, registerables } from 'chart.js'
 import { onMount } from 'svelte'
 import type { TrendPoint } from '$lib/api/analytics'
+import { colorTheme } from '$lib/stores/preferences.svelte'
 
 interface Props {
 	data: TrendPoint[]
@@ -14,6 +15,7 @@ let { data, title = 'Trend', metric = 'volume', height = 300 }: Props = $props()
 
 let canvasElement = $state<HTMLCanvasElement | undefined>()
 let chart: Chart | null = null
+const resolvedTheme = $derived(colorTheme.resolved)
 
 // Register Chart.js components
 Chart.register(...registerables)
@@ -82,6 +84,13 @@ function createChart() {
 
 	const values = data.map(getMetricValue)
 	const formatter = getFormatter()
+	const styles = getComputedStyle(document.documentElement)
+	const chartLine = styles.getPropertyValue('--color-chart-line').trim() || 'rgb(59, 130, 246)'
+	const chartFill =
+		styles.getPropertyValue('--color-chart-fill').trim() || 'rgba(59, 130, 246, 0.1)'
+	const chartGrid = styles.getPropertyValue('--color-chart-grid').trim() || 'rgba(0, 0, 0, 0.05)'
+	const chartMuted = styles.getPropertyValue('--color-chart-muted').trim() || '#9ca3af'
+	const foreground = styles.getPropertyValue('--color-fg-1').trim() || '#111827'
 
 	chart = new Chart(ctx, {
 		type: 'line',
@@ -91,15 +100,15 @@ function createChart() {
 				{
 					label: getMetricLabel(),
 					data: values,
-					borderColor: 'rgb(59, 130, 246)',
-					backgroundColor: 'rgba(59, 130, 246, 0.1)',
+					borderColor: chartLine,
+					backgroundColor: chartFill,
 					borderWidth: 2,
 					fill: true,
 					tension: 0.3,
 					pointRadius: 3,
 					pointHoverRadius: 5,
-					pointBackgroundColor: 'rgb(59, 130, 246)',
-					pointBorderColor: '#fff',
+					pointBackgroundColor: chartLine,
+					pointBorderColor: foreground,
 					pointBorderWidth: 2
 				}
 			]
@@ -118,6 +127,7 @@ function createChart() {
 						size: 16,
 						weight: 'bold'
 					},
+					color: foreground,
 					padding: {
 						bottom: 20
 					}
@@ -137,6 +147,7 @@ function createChart() {
 						display: false
 					},
 					ticks: {
+						color: chartMuted,
 						maxRotation: 45,
 						minRotation: 0
 					}
@@ -144,9 +155,10 @@ function createChart() {
 				y: {
 					beginAtZero: true,
 					grid: {
-						color: 'rgba(0, 0, 0, 0.05)'
+						color: chartGrid
 					},
 					ticks: {
+						color: chartMuted,
 						callback: (value) => formatter(Number(value))
 					}
 				}
@@ -172,7 +184,7 @@ onMount(() => {
 
 // Recreate chart when data changes
 $effect(() => {
-	if (data) {
+	if (resolvedTheme && data) {
 		createChart()
 	}
 })
@@ -192,7 +204,7 @@ $effect(() => {
 	.chart-container {
 		position: relative;
 		width: 100%;
-		background: var(--bg-primary, white);
+		background: var(--color-bg-card, white);
 		border-radius: 0.5rem;
 		padding: 1rem;
 	}
@@ -202,6 +214,6 @@ $effect(() => {
 		align-items: center;
 		justify-content: center;
 		height: 100%;
-		color: var(--text-tertiary, #9ca3af);
+		color: var(--color-fg-5, #9ca3af);
 	}
 </style>

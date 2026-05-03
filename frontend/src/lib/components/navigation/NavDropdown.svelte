@@ -59,9 +59,9 @@ let nextId = 0
 
 <div class="relative" role="navigation" onmouseenter={handleEnter} onmouseleave={handleLeave}>
 	<button
-		class="flex items-center gap-1 rounded-md px-3 py-2 text-sm font-medium transition-colors duration-150 {isActive
-			? 'bg-slate-100 text-[var(--color-fg-1)] font-semibold'
-			: 'text-[var(--color-fg-3)] hover:bg-slate-100 hover:text-[var(--color-fg-1)]'}"
+		class="flex items-center gap-1 rounded-md px-3 py-2 text-[13px] font-medium transition-colors duration-150 {isActive
+			? 'bg-info-bg text-info font-semibold'
+			: 'text-fg-3 hover:bg-panel hover:text-fg-1'}"
 		aria-haspopup="true"
 		aria-expanded={isOpen}
 	>
@@ -73,14 +73,14 @@ let nextId = 0
 
 	{#if isOpen}
 		<div
-			class="absolute left-0 mt-1 w-44 rounded-lg border border-slate-200 bg-white py-1 shadow-[var(--shadow-md)]"
+			class="ui-menu absolute left-0 mt-1 w-44 py-1"
 			in:fly={{ y: -10, duration: 200, easing: quintOut }}
 			out:fade={{ duration: 150 }}
 		>
 			{#each items as item (item.href)}
 				<a
 					href={item.href}
-					class="block px-3 py-2 text-sm text-[var(--color-fg-3)] transition-colors hover:bg-slate-50 hover:text-[var(--color-fg-1)]"
+					class="block px-3 py-2 text-sm text-fg-3 transition-colors hover:bg-elevated hover:text-fg-1"
 				>
 					{item.label}
 				</a>

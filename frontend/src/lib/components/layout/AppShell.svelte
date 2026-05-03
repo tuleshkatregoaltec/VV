@@ -24,7 +24,7 @@ setContext('openDropdownId', {
 })
 </script>
 
-<div class="h-screen flex flex-col bg-background">
+<div class="theme-app h-screen flex flex-col bg-app text-fg-1">
 	<Navbar />
 
 	<div class="flex-1 overflow-auto">
