@@ -209,22 +209,22 @@ function getConflictMessage(conflict: InviteConflictResponse): string {
 	</svelte:fragment>
 
 	<svelte:fragment slot="side">
-		<div class="space-y-4 rounded-[1.6rem] border border-white/10 bg-white/5 p-6">
+		<div class="space-y-4 rounded-lg border border-[rgba(246,241,231,0.14)] bg-[color:rgba(246,241,231,0.05)] p-5">
 			{#if inviteDetails}
-				<div class="rounded-xl border border-white/10 bg-slate-900/60 p-5">
+				<div class="rounded-lg border border-[rgba(246,241,231,0.14)] bg-[color:rgba(246,241,231,0.05)] p-4">
 					<p class="text-xs font-semibold uppercase tracking-[0.22em] text-slate-400">Invitation</p>
 					<p class="mt-3 text-2xl font-semibold text-white">{inviteDetails.organization_name}</p>
 					<p class="mt-2 text-sm leading-6 text-slate-300">Invited email: {inviteDetails.email}</p>
 				</div>
 			{/if}
 			<div class="grid gap-3">
-				<div class="rounded-lg border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-200">
+				<div class="rounded-md border border-[rgba(246,241,231,0.12)] bg-[color:rgba(246,241,231,0.04)] px-4 py-3 text-sm text-slate-200">
 					Authenticate with the invited account first
 				</div>
-				<div class="rounded-lg border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-200">
+				<div class="rounded-md border border-[rgba(246,241,231,0.12)] bg-[color:rgba(246,241,231,0.04)] px-4 py-3 text-sm text-slate-200">
 					Add your name only if it is still missing
 				</div>
-				<div class="rounded-lg border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-200">
+				<div class="rounded-md border border-[rgba(246,241,231,0.12)] bg-[color:rgba(246,241,231,0.04)] px-4 py-3 text-sm text-slate-200">
 					Join the workspace and let the normal guard flow take over
 				</div>
 			</div>
@@ -244,31 +244,31 @@ function getConflictMessage(conflict: InviteConflictResponse): string {
 	{/if}
 
 	{#if step === 'loading'}
-		<div class="rounded-[1.8rem] border border-slate-200 bg-slate-50/80 p-8 text-center">
+		<div class="rounded-lg border border-slate-200 bg-slate-50/80 p-8 text-center">
 			<div
-				class="mx-auto h-14 w-14 animate-spin rounded-full border-4 border-slate-200 border-t-slate-950"
+				class="mx-auto h-14 w-14 animate-spin rounded-full border-4 border-slate-200 border-t-navy"
 			></div>
-			<p class="mt-6 text-lg font-semibold text-slate-950">Loading invitation</p>
+			<p class="mt-6 text-lg font-semibold text-fg-1">Loading invitation</p>
 			<p class="mt-2 text-sm text-slate-600">This should only take a moment.</p>
 		</div>
 	{:else if step === 'error'}
 		<div class="space-y-5">
-			<div class="rounded-[1.8rem] border border-rose-200 bg-rose-50 p-6">
-				<p class="text-sm font-semibold text-rose-900">Invitation unavailable</p>
-				<p class="mt-2 text-sm leading-6 text-rose-700">{error}</p>
+			<div class="rounded-lg border border-[rgba(163,36,36,0.2)] bg-error-bg p-6">
+				<p class="text-sm font-semibold text-error">Invitation unavailable</p>
+				<p class="mt-2 text-sm leading-6 text-error">{error}</p>
 			</div>
 			<a
 				href={resolve('/auth')}
-				class="inline-flex rounded-lg bg-slate-950 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
+				class="inline-flex rounded-md bg-navy px-5 py-3 text-sm font-semibold text-bone transition hover:bg-primary-light"
 			>
 				Return to sign in
 			</a>
 		</div>
 	{:else if step === 'mismatch'}
 		<div class="space-y-5">
-			<div class="rounded-[1.8rem] border border-amber-200 bg-amber-50 p-6">
-				<p class="text-sm font-semibold text-amber-900">Wrong account</p>
-				<p class="mt-2 text-sm leading-6 text-amber-800">
+			<div class="rounded-lg border border-[rgba(165,90,19,0.2)] bg-warning-bg p-6">
+				<p class="text-sm font-semibold text-warning">Wrong account</p>
+				<p class="mt-2 text-sm leading-6 text-warning">
 					You are signed in as <span class="font-semibold">{currentEmail}</span>, but this invite is
 					for <span class="font-semibold">{inviteDetails?.email}</span>.
 				</p>
@@ -277,13 +277,13 @@ function getConflictMessage(conflict: InviteConflictResponse): string {
 				<button
 					type="button"
 					onclick={switchAccount}
-					class="flex-1 rounded-lg bg-slate-950 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
+					class="flex-1 rounded-md bg-navy px-5 py-3 text-sm font-semibold text-bone transition hover:bg-primary-light"
 				>
 					Use the invited account instead
 				</button>
 				<a
 					href={resolve('/dashboard')}
-					class="rounded-lg border border-slate-300 px-5 py-3 text-center text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+					class="rounded-md border border-slate-300 px-5 py-3 text-center text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
 				>
 					Go to current workspace
 				</a>
@@ -316,14 +316,14 @@ function getConflictMessage(conflict: InviteConflictResponse): string {
 			<button
 				type="submit"
 				disabled={loading}
-				class="w-full rounded-lg bg-slate-950 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+				class="w-full rounded-md bg-navy px-5 py-3 text-sm font-semibold text-bone transition hover:bg-primary-light disabled:cursor-not-allowed disabled:opacity-50"
 			>
 				{loading ? 'Joining organization...' : `Join ${inviteDetails?.organization_name}`}
 			</button>
 		</form>
 	{:else}
 		<div class="space-y-5">
-			<div class="rounded-[1.8rem] border border-slate-200 bg-slate-50/80 p-6">
+			<div class="rounded-lg border border-slate-200 bg-slate-50/80 p-6">
 				<p class="text-sm font-semibold text-slate-900">Ready to join</p>
 				<p class="mt-2 text-sm leading-6 text-slate-600">
 					You are signed in as the invited user and your profile is complete.
@@ -333,7 +333,7 @@ function getConflictMessage(conflict: InviteConflictResponse): string {
 				type="button"
 				onclick={joinOrganization}
 				disabled={loading}
-				class="w-full rounded-lg bg-slate-950 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+				class="w-full rounded-md bg-navy px-5 py-3 text-sm font-semibold text-bone transition hover:bg-primary-light disabled:cursor-not-allowed disabled:opacity-50"
 			>
 				{loading ? 'Joining organization...' : `Join ${inviteDetails?.organization_name}`}
 			</button>

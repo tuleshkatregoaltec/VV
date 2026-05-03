@@ -181,22 +181,22 @@ async function handleOrganizationSubmit() {
 	</svelte:fragment>
 
 	<svelte:fragment slot="side">
-		<div class="space-y-4 rounded-xl border border-white/10 bg-white/5 p-6">
+		<div class="space-y-4 rounded-lg border border-[rgba(246,241,231,0.14)] bg-[color:rgba(246,241,231,0.05)] p-5">
 			{#if visibleStep === 'profile'}
 				<div class="grid gap-3">
-					<div class="rounded-lg border border-white/10 bg-white/5 px-4 py-3">
+					<div class="rounded-md border border-[rgba(246,241,231,0.12)] bg-[color:rgba(246,241,231,0.04)] px-4 py-3">
 						<p class="text-sm font-semibold text-white">Market clarity</p>
 						<p class="mt-1 text-sm leading-6 text-slate-300">
 							See transactions, pricing signals, and commercial context in one workspace.
 						</p>
 					</div>
-					<div class="rounded-lg border border-white/10 bg-white/5 px-4 py-3">
+					<div class="rounded-md border border-[rgba(246,241,231,0.12)] bg-[color:rgba(246,241,231,0.04)] px-4 py-3">
 						<p class="text-sm font-semibold text-white">Feasibility workflow</p>
 						<p class="mt-1 text-sm leading-6 text-slate-300">
 							Move from raw site inputs to structured analysis with less spreadsheet overhead.
 						</p>
 					</div>
-					<div class="rounded-lg border border-white/10 bg-white/5 px-4 py-3">
+					<div class="rounded-md border border-[rgba(246,241,231,0.12)] bg-[color:rgba(246,241,231,0.04)] px-4 py-3">
 						<p class="text-sm font-semibold text-white">Team coordination</p>
 						<p class="mt-1 text-sm leading-6 text-slate-300">
 							Keep ownership, access, and commercial decisions aligned from the start.
@@ -204,7 +204,7 @@ async function handleOrganizationSubmit() {
 					</div>
 				</div>
 			{:else}
-				<div class="rounded-xl border border-white/10 bg-white/5 p-5">
+				<div class="rounded-lg border border-[rgba(246,241,231,0.14)] bg-[color:rgba(246,241,231,0.05)] p-5">
 					<p class="text-xs font-semibold uppercase tracking-[0.22em] text-bone/70">
 						Vitevue workspace
 					</p>
@@ -260,7 +260,7 @@ async function handleOrganizationSubmit() {
 			<button
 				type="submit"
 				disabled={loading}
-				class="w-full rounded-lg bg-slate-950 px-6 py-3.5 text-base font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+				class="w-full rounded-md bg-navy px-6 py-3.5 text-base font-semibold text-bone transition hover:bg-primary-light disabled:cursor-not-allowed disabled:opacity-50"
 			>
 				{loading ? 'Saving profile...' : 'Continue'}
 			</button>
@@ -279,7 +279,7 @@ async function handleOrganizationSubmit() {
 			}}
 			class="space-y-2"
 		>
-			<div class="rounded-xl border border-slate-200 bg-white p-4">
+			<div class="rounded-lg border border-slate-200 bg-white p-4">
 				<div class="space-y-4">
 					<div class="flex items-center justify-between gap-4">
 						<p class="text-sm font-semibold text-slate-900">Workspace details</p>
@@ -301,8 +301,8 @@ async function handleOrganizationSubmit() {
 							id="orgName"
 							type="text"
 							bind:value={organizationName}
-							placeholder="Your Company Name"
-							class="mt-2 w-full rounded-lg border border-slate-300 bg-white px-4 py-3 text-slate-900 shadow-sm focus:border-slate-950 focus:outline-none focus:ring-2 focus:ring-slate-950/10"
+							placeholder="Your company name"
+							class="mt-2 w-full rounded-md border border-slate-300 bg-white px-4 py-3 text-slate-900 shadow-sm focus:border-navy focus:outline-none focus:ring-2 focus:ring-navy/10"
 							required
 						/>
 					</div>
@@ -325,9 +325,9 @@ async function handleOrganizationSubmit() {
 									<button
 										type="button"
 										onclick={() => (selectedTier = tier as PlanTier)}
-										class="rounded-lg border px-4 py-2.5 text-left transition {selectedTier ===
+										class="rounded-md border px-4 py-2.5 text-left transition {selectedTier ===
 										tier
-											? 'border-slate-950 bg-slate-950 text-white shadow-lg'
+											? 'border-navy bg-navy text-bone shadow-sm'
 											: 'border-slate-200 bg-slate-50 text-slate-800 hover:border-slate-300'}"
 									>
 										<div class="flex items-center justify-between gap-3">
@@ -353,7 +353,7 @@ async function handleOrganizationSubmit() {
 									updateSeatCount(
 										parseInt((event.currentTarget as HTMLInputElement).value || '1', 10)
 									)}
-								class="mt-2 w-full rounded-lg border border-slate-300 bg-white px-4 py-3 text-lg font-semibold text-slate-900 shadow-sm focus:border-slate-950 focus:outline-none focus:ring-2 focus:ring-slate-950/10"
+								class="mt-2 w-full rounded-md border border-slate-300 bg-white px-4 py-3 text-lg font-semibold text-slate-900 shadow-sm focus:border-navy focus:outline-none focus:ring-2 focus:ring-navy/10"
 								aria-label="Seat count"
 							/>
 							<p class="mt-2 text-xs leading-5 text-slate-500">You can change seats later.</p>
@@ -368,7 +368,7 @@ async function handleOrganizationSubmit() {
 								Monthly total
 							</p>
 							<div class="mt-1 flex flex-wrap items-baseline gap-x-3 gap-y-1">
-								<p class="text-[2rem] font-semibold tracking-tight text-slate-950">
+								<p class="text-[2rem] font-semibold tracking-tight text-fg-1">
 									{totalMonthly} AED
 								</p>
 								<p class="text-sm text-slate-500">
@@ -384,7 +384,7 @@ async function handleOrganizationSubmit() {
 						<button
 							type="submit"
 							disabled={loading}
-							class="shrink-0 rounded-lg bg-slate-950 px-6 py-3 text-base font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+							class="shrink-0 rounded-md bg-navy px-6 py-3 text-base font-semibold text-bone transition hover:bg-primary-light disabled:cursor-not-allowed disabled:opacity-50"
 						>
 							{#if loading}
 								{loadingStep === 'organization'

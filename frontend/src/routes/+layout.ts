@@ -45,6 +45,10 @@ export const load: LayoutLoad = async ({ url }) => {
 	})
 
 	if (decision.action === 'redirect') {
+		if (decision.location === '/auth') {
+			const next = `${url.pathname}${url.search}`
+			throw redirect(302, `/auth?next=${encodeURIComponent(next)}`)
+		}
 		throw redirect(302, decision.location)
 	}
 

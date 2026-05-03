@@ -56,16 +56,16 @@ async function handleManageSubscription() {
 	description={getStatusMessage()}
 	eyebrow="Billing recovery"
 	sideAccent="Recovery flow"
-	sideTitle="This page should explain the state clearly, not leave users guessing why access changed."
-	sideCopy="Owners can recover billing here. Members get a clear explanation and an easy way to switch accounts if they landed in the wrong session."
+	sideTitle="Restore access without losing the workspace context."
+	sideCopy="Owners can recover billing here. Members can see why access changed and switch accounts if they landed in the wrong session."
 >
 	<svelte:fragment slot="account">
 		<AccountContextBar email={user?.email} redirectTo="/auth" />
 	</svelte:fragment>
 
 	<svelte:fragment slot="side">
-		<div class="space-y-4 rounded-[1.6rem] border border-white/10 bg-white/5 p-6">
-			<div class="rounded-xl border border-white/10 bg-slate-900/60 p-5">
+		<div class="space-y-4 rounded-lg border border-[rgba(246,241,231,0.14)] bg-[color:rgba(246,241,231,0.05)] p-5">
+			<div class="rounded-lg border border-[rgba(246,241,231,0.14)] bg-[color:rgba(246,241,231,0.05)] p-4">
 				<p class="text-xs font-semibold uppercase tracking-[0.22em] text-slate-400">Organization</p>
 				<p class="mt-3 text-2xl font-semibold text-white">
 					{user?.organization_name || 'Workspace'}
@@ -75,7 +75,7 @@ async function handleManageSubscription() {
 				</p>
 			</div>
 			<div
-				class="rounded-lg border border-white/10 bg-white/5 px-4 py-4 text-sm leading-6 text-slate-200"
+				class="rounded-md border border-[rgba(246,241,231,0.12)] bg-[color:rgba(246,241,231,0.04)] px-4 py-4 text-sm leading-6 text-slate-200"
 			>
 				{#if user?.is_owner}
 					{getOwnerActionMessage()}
@@ -94,7 +94,7 @@ async function handleManageSubscription() {
 	{/if}
 
 	<div class="space-y-5">
-		<div class="rounded-[1.8rem] border border-slate-200 bg-slate-50/80 p-6">
+		<div class="rounded-lg border border-slate-200 bg-slate-50/80 p-6">
 			<p class="text-sm font-semibold text-slate-900">Current status</p>
 			<p class="mt-2 text-sm leading-6 text-slate-600">{getStatusMessage()}</p>
 		</div>
@@ -106,7 +106,7 @@ async function handleManageSubscription() {
 						type="button"
 						onclick={handleManageSubscription}
 						disabled={processingRenewal}
-						class="flex-1 rounded-lg bg-slate-950 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+						class="flex-1 rounded-md bg-navy px-5 py-3 text-sm font-semibold text-bone transition hover:bg-primary-light disabled:cursor-not-allowed disabled:opacity-50"
 					>
 						{processingRenewal ? 'Opening billing portal...' : 'Manage subscription'}
 					</button>
@@ -114,22 +114,22 @@ async function handleManageSubscription() {
 					<button
 						type="button"
 						onclick={() => goto(resolve('/setup'))}
-						class="flex-1 rounded-lg bg-slate-950 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
+						class="flex-1 rounded-md bg-navy px-5 py-3 text-sm font-semibold text-bone transition hover:bg-primary-light"
 					>
 						Complete organization setup
 					</button>
 				{/if}
 				<a
 					href="mailto:contact@vitevue.com"
-					class="rounded-lg border border-slate-300 px-5 py-3 text-center text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+					class="rounded-md border border-slate-300 px-5 py-3 text-center text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
 				>
 					Contact support
 				</a>
 			</div>
 		{:else}
-			<div class="rounded-[1.8rem] border border-sky-200 bg-sky-50 p-6">
-				<p class="text-sm font-semibold text-sky-900">Contact your organization owner</p>
-				<p class="mt-2 text-sm leading-6 text-sky-800">
+			<div class="rounded-lg border border-navy-pale bg-navy-pale p-6">
+				<p class="text-sm font-semibold text-navy">Contact your organization owner</p>
+				<p class="mt-2 text-sm leading-6 text-primary-light">
 					Only the organization owner can restore billing. Once the subscription is active again,
 					your normal access will return automatically.
 				</p>

@@ -91,16 +91,16 @@ function handlePaste(event: ClipboardEvent) {
 				oninput={(e) => handleInput(i, e)}
 				onkeydown={(e) => handleKeyDown(i, e)}
 				onpaste={i === 0 ? handlePaste : undefined}
-				class="h-14 w-12 rounded-md border bg-white text-center font-mono text-2xl font-medium text-[var(--color-fg-1)]
-                       transition-all focus:outline-none focus:border-[var(--color-navy-900)] focus:ring-2 focus:ring-[rgba(11,27,43,0.12)]
+				class="h-14 w-12 rounded-md border bg-white text-center font-mono text-2xl font-medium text-fg-1
+                       transition-all focus:outline-none focus:border-navy focus:ring-2 focus:ring-focus
                        disabled:cursor-not-allowed disabled:bg-slate-100
                        {error
-					? 'border-[var(--color-error)] bg-[var(--color-error-bg)]'
-					: 'border-[var(--color-border)]'}"
+					? 'border-[var(--color-error)] bg-error-bg'
+					: 'border-border'}"
 			/>
 		{/each}
 	</div>
 	{#if error}
-		<p class="mt-3 text-center text-sm text-[var(--color-error)]">{error}</p>
+		<p class="mt-3 text-center text-sm text-error">{error}</p>
 	{/if}
 </div>

@@ -137,8 +137,8 @@ async function handleSendInvitations() {
 	</svelte:fragment>
 
 	<svelte:fragment slot="side">
-		<div class="space-y-4 rounded-xl border border-white/10 bg-white/5 p-6">
-			<div class="rounded-xl border border-emerald-400/20 bg-emerald-400/10 p-5">
+		<div class="space-y-4 rounded-lg border border-[rgba(246,241,231,0.14)] bg-[color:rgba(246,241,231,0.05)] p-5">
+			<div class="rounded-lg border border-[rgba(17,122,72,0.2)] bg-[rgba(17,122,72,0.12)] p-5">
 				<p class="text-xs font-semibold uppercase tracking-[0.22em] text-emerald-200">
 					Workspace ready
 				</p>
@@ -156,33 +156,33 @@ async function handleSendInvitations() {
 	</svelte:fragment>
 
 	{#if status === 'syncing'}
-		<div class="rounded-xl border border-slate-200 bg-slate-50/80 p-8 text-center">
+		<div class="rounded-lg border border-slate-200 bg-slate-50/80 p-8 text-center">
 			<div
-				class="mx-auto h-14 w-14 animate-spin rounded-full border-4 border-slate-200 border-t-slate-950"
+				class="mx-auto h-14 w-14 animate-spin rounded-full border-4 border-slate-200 border-t-navy"
 			></div>
-			<p class="mt-6 text-lg font-semibold text-slate-950">Confirming payment</p>
+			<p class="mt-6 text-lg font-semibold text-fg-1">Confirming payment</p>
 			<p class="mt-2 text-sm text-slate-600">This usually takes only a moment.</p>
 		</div>
 	{:else if status === 'failed'}
 		<div class="space-y-5">
-			<div class="rounded-xl border border-rose-200 bg-rose-50 p-6">
-				<p class="text-sm font-semibold text-rose-900">
+			<div class="rounded-lg border border-[rgba(163,36,36,0.2)] bg-error-bg p-6">
+				<p class="text-sm font-semibold text-error">
 					Setup could not be completed automatically
 				</p>
-				<p class="mt-2 text-sm leading-6 text-rose-700">
+				<p class="mt-2 text-sm leading-6 text-error">
 					{error || 'Something went wrong with your payment return.'}
 				</p>
 			</div>
 			<div class="flex flex-col gap-3 sm:flex-row">
 				<a
 					href={resolve('/setup')}
-					class="flex-1 rounded-lg bg-slate-950 px-5 py-3 text-center text-sm font-semibold text-white transition hover:bg-slate-800"
+					class="flex-1 rounded-md bg-navy px-5 py-3 text-center text-sm font-semibold text-bone transition hover:bg-primary-light"
 				>
 					Return to setup
 				</a>
 				<a
 					href="mailto:contact@vitevue.com"
-					class="rounded-lg border border-slate-300 px-5 py-3 text-center text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+					class="rounded-md border border-slate-300 px-5 py-3 text-center text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
 				>
 					Contact support
 				</a>
@@ -200,7 +200,7 @@ async function handleSendInvitations() {
 			</div>
 		{/if}
 
-		<div class="rounded-xl border border-slate-200 bg-white p-5">
+		<div class="rounded-lg border border-slate-200 bg-white p-5">
 			<div class="flex items-center justify-between gap-4">
 				<div>
 					<p class="text-sm font-semibold text-slate-900">Invite teammates</p>
@@ -209,7 +209,7 @@ async function handleSendInvitations() {
 					</p>
 				</div>
 				<div
-					class="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-slate-600"
+					class="rounded-md bg-slate-100 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-slate-600"
 				>
 					Optional
 				</div>
@@ -223,14 +223,14 @@ async function handleSendInvitations() {
 							bind:value={inviteEmails[index]}
 							placeholder={index === 0 ? 'colleague@company.com' : `Invite ${index + 1}`}
 							aria-label={`Invite email ${index + 1}${email ? `: ${email}` : ''}`}
-							class="flex-1 rounded-lg border border-slate-300 px-4 py-3 focus:border-slate-950 focus:outline-none focus:ring-2 focus:ring-slate-950/10"
+							class="flex-1 rounded-md border border-slate-300 px-4 py-3 focus:border-navy focus:outline-none focus:ring-2 focus:ring-navy/10"
 						/>
 						{#if inviteEmails.length > 1}
 							<button
 								type="button"
 								onclick={() => removeEmailField(index)}
 								aria-label="Remove email field"
-								class="rounded-lg border border-slate-300 px-3 py-3 text-slate-500 transition hover:bg-slate-50 hover:text-rose-600"
+								class="rounded-md border border-slate-300 px-3 py-3 text-slate-500 transition hover:bg-slate-50 hover:text-error"
 							>
 								Remove
 							</button>
@@ -253,7 +253,7 @@ async function handleSendInvitations() {
 				type="button"
 				onclick={handleSendInvitations}
 				disabled={sendingInvites}
-				class="flex-1 rounded-lg bg-slate-950 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+				class="flex-1 rounded-md bg-navy px-5 py-3 text-sm font-semibold text-bone transition hover:bg-primary-light disabled:cursor-not-allowed disabled:opacity-50"
 			>
 				{sendingInvites ? 'Sending invitations...' : 'Send invitations'}
 			</button>
@@ -261,7 +261,7 @@ async function handleSendInvitations() {
 				type="button"
 				onclick={() => goto(resolve('/dashboard'))}
 				disabled={sendingInvites}
-				class="rounded-lg border border-slate-300 px-5 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+				class="rounded-md border border-slate-300 px-5 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
 			>
 				Skip for now
 			</button>

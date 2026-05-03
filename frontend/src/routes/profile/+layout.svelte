@@ -1,10 +1,13 @@
 <script lang="ts">
 import type { Snippet } from 'svelte'
-import AppShell from '$lib/components/layout/AppShell.svelte'
+import AppFrame from '$lib/components/layout/AppFrame.svelte'
+import PageContainer from '$lib/components/layout/PageContainer.svelte'
 
 let { children }: { children: Snippet } = $props()
 </script>
 
-<AppShell showFilters={false}>
-	{@render children()}
-</AppShell>
+<AppFrame stableScrollGutter>
+	<PageContainer variant="focused">
+		{@render children()}
+	</PageContainer>
+</AppFrame>

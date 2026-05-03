@@ -65,15 +65,15 @@ async function deleteOrg() {
 function statusBadge(status: string) {
 	switch (status) {
 		case 'active':
-			return 'bg-[var(--color-success-bg)] text-[var(--color-success)]'
+			return 'bg-success-bg text-success'
 		case 'trialing':
-			return 'bg-[var(--color-navy-50)] text-[var(--color-navy-900)]'
+			return 'bg-navy-pale text-navy'
 		case 'past_due':
-			return 'bg-[var(--color-warning-bg)] text-[var(--color-warning)]'
+			return 'bg-warning-bg text-warning'
 		case 'canceled':
-			return 'bg-[var(--color-error-bg)] text-[var(--color-error)]'
+			return 'bg-error-bg text-error'
 		default:
-			return 'bg-[var(--color-bone-100)] text-[var(--color-fg-3)]'
+			return 'bg-bone-muted text-fg-3'
 	}
 }
 
@@ -86,59 +86,69 @@ function formatDate(d: string) {
 }
 </script>
 
-<div class="max-w-7xl mx-auto px-4 py-6">
-	<div class="flex justify-between items-center mb-6">
-		<h1 class="text-2xl font-bold text-[var(--color-fg-1)]">Organizations</h1>
-		<button
-			onclick={() => (showCreateUser = true)}
-			class="rounded-md bg-[var(--color-navy-900)] px-4 py-2 text-sm font-medium text-[var(--color-fg-on-navy)] transition-colors hover:bg-[var(--color-navy-800)]"
-		>
-			+ Create User
-		</button>
-	</div>
+<div class="flex flex-col gap-5">
+	<section class="mb-5 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+		<div class="flex flex-col gap-4 bg-navy px-5 py-5 text-bone sm:flex-row sm:items-end sm:justify-between">
+			<div>
+				<p class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Admin</p>
+				<h1 class="mt-2 font-display text-3xl leading-tight tracking-[var(--tracking-display)] text-bone">
+					Organizations
+				</h1>
+				<p class="mt-2 max-w-2xl text-sm leading-6 text-slate-300">
+					Review workspace owners, subscription state, member capacity, and admin actions.
+				</p>
+			</div>
+			<button
+				onclick={() => (showCreateUser = true)}
+				class="inline-flex h-10 items-center justify-center rounded-md bg-bone px-4 text-sm font-semibold text-navy transition-colors hover:bg-white"
+			>
+				Create user
+			</button>
+		</div>
+	</section>
 
 	{#if organizationsQuery.isPending}
-		<div class="py-16 text-center text-[var(--color-fg-4)]">Loading...</div>
+		<div class="py-16 text-center text-fg-4">Loading...</div>
 	{:else if error}
-		<div class="rounded-lg border border-[rgba(163,36,36,0.2)] bg-[var(--color-error-bg)] p-4 text-sm text-[var(--color-error)]">{error}</div>
+		<div class="rounded-lg border border-[rgba(163,36,36,0.2)] bg-error-bg p-4 text-sm text-error">{error}</div>
 	{:else if orgs.length === 0}
-		<div class="py-16 text-center text-[var(--color-fg-4)]">No organizations yet.</div>
+		<div class="py-16 text-center text-fg-4">No organizations yet.</div>
 	{:else}
-		<div class="overflow-hidden rounded-xl border border-[var(--color-border)] bg-white">
-			<table class="min-w-full divide-y divide-[var(--color-border)]">
+		<div class="overflow-hidden rounded-lg border border-border bg-white shadow-sm">
+			<table class="min-w-full divide-y divide-border">
 				<thead>
 					<tr class="bg-slate-50">
 						<th
-							class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-[var(--color-fg-4)]"
+							class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-fg-4"
 							>Organization</th
 						>
 						<th
-							class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-[var(--color-fg-4)]"
+							class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-fg-4"
 							>Owner</th
 						>
 						<th
-							class="px-5 py-3 text-center text-xs font-semibold uppercase tracking-wider text-[var(--color-fg-4)]"
+							class="px-5 py-3 text-center text-xs font-semibold uppercase tracking-wider text-fg-4"
 							>Members</th
 						>
 						<th
-							class="px-5 py-3 text-center text-xs font-semibold uppercase tracking-wider text-[var(--color-fg-4)]"
+							class="px-5 py-3 text-center text-xs font-semibold uppercase tracking-wider text-fg-4"
 							>Subscription</th
 						>
 						<th
-							class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-[var(--color-fg-4)]"
+							class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-fg-4"
 							>Created</th
 						>
 						<th class="px-5 py-3"></th>
 					</tr>
 				</thead>
-				<tbody class="divide-y divide-[var(--color-border)]">
+				<tbody class="divide-y divide-border">
 					{#each orgs as org (org.id)}
 						<tr class="transition-colors hover:bg-slate-50">
 							<td class="px-5 py-4">
-								<span class="text-sm font-medium text-[var(--color-fg-1)]">{org.name}</span>
+								<span class="text-sm font-medium text-fg-1">{org.name}</span>
 							</td>
-							<td class="px-5 py-4 text-sm text-[var(--color-fg-3)]">{org.owner_email}</td>
-							<td class="px-5 py-4 text-center text-sm text-[var(--color-fg-3)]">
+							<td class="px-5 py-4 text-sm text-fg-3">{org.owner_email}</td>
+							<td class="px-5 py-4 text-center text-sm text-fg-3">
 								{org.user_count} / {org.max_users}
 							</td>
 							<td class="px-5 py-4 text-center">
@@ -150,27 +160,27 @@ function formatDate(d: string) {
 									{org.subscription_status}
 								</span>
 							</td>
-							<td class="px-5 py-4 text-sm text-[var(--color-fg-4)]">{formatDate(org.created_at)}</td>
+							<td class="px-5 py-4 text-sm text-fg-4">{formatDate(org.created_at)}</td>
 							<td class="px-5 py-4">
 								<div class="flex items-center justify-end gap-2">
 									{#if org.subscription_status !== 'active'}
 										<button
 											onclick={() => activateOrg(org)}
 											disabled={activatingOrgId === org.id}
-											class="rounded-md border border-[rgba(17,122,72,0.2)] bg-[var(--color-success-bg)] px-2.5 py-1 text-xs font-medium text-[var(--color-success)] transition-colors hover:opacity-90 disabled:opacity-50"
+											class="rounded-md border border-[rgba(17,122,72,0.2)] bg-success-bg px-2.5 py-1 text-xs font-medium text-success transition-colors hover:opacity-90 disabled:opacity-50"
 										>
 											{activatingOrgId === org.id ? '...' : 'Activate'}
 										</button>
 									{/if}
 									<button
 										onclick={() => goto(`/admin/organizations/${org.id}`)}
-										class="rounded-md px-2.5 py-1 text-xs font-medium text-[var(--color-navy-700)] transition-colors hover:bg-[var(--color-navy-50)] hover:text-[var(--color-navy-900)]"
+										class="rounded-md px-2.5 py-1 text-xs font-medium text-primary-light transition-colors hover:bg-navy-pale hover:text-navy"
 									>
 										View →
 									</button>
 									<button
 										onclick={() => (confirmDeleteOrg = org)}
-										class="rounded-md px-2.5 py-1 text-xs font-medium text-[var(--color-error)] transition-colors hover:bg-[var(--color-error-bg)] hover:opacity-90"
+										class="rounded-md px-2.5 py-1 text-xs font-medium text-error transition-colors hover:bg-error-bg hover:opacity-90"
 									>
 										Delete
 									</button>
@@ -193,7 +203,7 @@ function formatDate(d: string) {
 
 <ConfirmModal
 	open={confirmDeleteOrg !== null}
-	title="Delete Organization"
+	title="Delete organization"
 	message={`Delete '${confirmDeleteOrg?.name}'? This removes the org and all its data. Users will lose access.`}
 	confirmText={deletingOrgId ? 'Deleting...' : 'Delete'}
 	confirmVariant="danger"

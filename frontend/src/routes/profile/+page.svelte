@@ -1,5 +1,6 @@
 <script lang="ts">
 import { logout, update_user_profile } from '$lib/api/auth'
+import ThemePreferenceControl from '$lib/components/preferences/ThemePreferenceControl.svelte'
 import { areaUnit } from '$lib/stores/preferences.svelte'
 import { currentUser, refreshUser } from '$lib/stores/user.svelte'
 
@@ -53,22 +54,30 @@ function handleCancel() {
 }
 </script>
 
-<div class="min-h-screen bg-slate-50">
-	<div class="max-w-2xl mx-auto px-4 py-8">
-		<h1 class="text-3xl font-semibold text-[var(--color-fg-1)] mb-8">Profile</h1>
+		<section class="ui-surface mb-5 overflow-hidden">
+			<div class="bg-navy px-5 py-5 text-bone">
+				<p class="text-xs font-semibold uppercase tracking-[0.18em] text-on-navy-muted">Account</p>
+				<h1 class="mt-2 font-display text-3xl leading-tight tracking-[var(--tracking-display)] text-bone">
+					Profile
+				</h1>
+				<p class="mt-2 max-w-2xl text-sm leading-6 text-on-navy-muted">
+					Manage your personal details, display preferences, and account access.
+				</p>
+			</div>
+		</section>
 
 		<div class="space-y-6">
 			<!-- Account Details Section -->
-			<div class="bg-white rounded-lg p-6 border border-[var(--color-border)]">
+			<div class="ui-surface p-6">
 				<div class="flex items-center justify-between mb-4">
-					<h2 class="text-lg font-semibold text-slate-900">Account Details</h2>
+					<h2 class="text-lg font-semibold text-fg-1">Account details</h2>
 					{#if !editingName}
 						<button
 							type="button"
 							onclick={() => (editingName = true)}
-							class="text-sm text-[var(--color-navy-700)] hover:text-[var(--color-fg-1)] font-medium transition-colors"
+							class="text-sm text-info hover:text-fg-1 font-medium transition-colors"
 						>
-							Edit Name
+							Edit name
 						</button>
 					{/if}
 				</div>
@@ -76,40 +85,42 @@ function handleCancel() {
 				{#if editingName}
 					<div class="space-y-4">
 						<div>
-							<label for="profile-first-name" class="block text-sm font-medium text-slate-700 mb-1">First Name</label>
+							<label for="profile-first-name" class="block text-sm font-medium text-fg-2 mb-1">First name</label>
 							<input
 								id="profile-first-name"
 								type="text"
 								bind:value={firstName}
-								class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50"
+								class="ui-field w-full px-3 py-2"
 							/>
 						</div>
 						<div>
-							<label for="profile-last-name" class="block text-sm font-medium text-slate-700 mb-1">Last Name</label>
+							<label for="profile-last-name" class="block text-sm font-medium text-fg-2 mb-1">Last name</label>
 							<input
 								id="profile-last-name"
 								type="text"
 								bind:value={lastName}
-								class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50"
+								class="ui-field w-full px-3 py-2"
 							/>
 						</div>
 
 						{#if editError}
-							<p class="text-sm text-red-600">{editError}</p>
+							<p class="text-sm text-error">{editError}</p>
 						{/if}
 
 						<div class="flex gap-2 pt-2">
 							<button
 								type="button"
 								onclick={handleNameEdit}
-								class="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors text-sm font-medium"
+								data-variant="primary"
+								class="ui-button px-4 py-2 text-sm"
 							>
 								Save
 							</button>
 							<button
 								type="button"
 								onclick={handleCancel}
-								class="px-4 py-2 bg-slate-200 text-slate-700 rounded-lg hover:bg-slate-300 transition-colors text-sm font-medium"
+								data-variant="secondary"
+								class="ui-button px-4 py-2 text-sm"
 							>
 								Cancel
 							</button>
@@ -118,99 +129,100 @@ function handleCancel() {
 				{:else if currentUser.data}
 					<div class="space-y-3 text-sm">
 						<div class="flex justify-between">
-							<span class="text-slate-500">Full Name</span>
-							<span class="text-slate-900"
+							<span class="text-fg-4">Full name</span>
+							<span class="text-fg-1"
 								>{currentUser.data.first_name} {currentUser.data.last_name}</span
 							>
 						</div>
 						<div class="flex justify-between">
-							<span class="text-slate-500">Email</span>
-							<span class="text-slate-900">{currentUser.data.email}</span>
+							<span class="text-fg-4">Email</span>
+							<span class="text-fg-1">{currentUser.data.email}</span>
 						</div>
 						<div class="flex justify-between">
-							<span class="text-slate-500">Organization</span>
-							<span class="text-slate-900">{currentUser.data.organization_name}</span>
+							<span class="text-fg-4">Organization</span>
+							<span class="text-fg-1">{currentUser.data.organization_name}</span>
 						</div>
 					</div>
 				{:else}
-					<p class="text-slate-500">Loading...</p>
+					<p class="text-fg-4">Loading...</p>
 				{/if}
 
 				{#if editSuccess}
-					<p class="text-sm text-green-600 mt-3">{editSuccess}</p>
+					<p class="mt-3 text-sm text-success">{editSuccess}</p>
 				{/if}
 			</div>
 
 			<!-- Notifications Section -->
-			<div class="bg-white rounded-lg p-6 border border-[var(--color-border)]">
-				<h2 class="text-lg font-semibold text-slate-900 mb-4">Notifications</h2>
+			<div class="ui-surface p-6">
+				<h2 class="text-lg font-semibold text-fg-1 mb-4">Notifications</h2>
 				<div class="space-y-4">
 					<label class="flex items-center justify-between">
-						<span class="text-slate-700">Email notifications</span>
+						<span class="text-fg-2">Email notifications</span>
 						<input
 							type="checkbox"
 							checked
-							class="w-5 h-5 text-[var(--color-navy-700)] rounded"
+							class="w-5 h-5 accent-info rounded"
 							disabled
 						/>
 					</label>
 					<label class="flex items-center justify-between">
-						<span class="text-slate-700">Weekly digest</span>
+						<span class="text-fg-2">Weekly digest</span>
 						<input
 							type="checkbox"
-							class="w-5 h-5 text-[var(--color-navy-700)] rounded"
+							class="w-5 h-5 accent-info rounded"
 							disabled
 						/>
 					</label>
 				</div>
-				<p class="text-sm text-slate-500 mt-4">Notification settings coming soon.</p>
+				<p class="text-sm text-fg-4 mt-4">Notification settings coming soon.</p>
 			</div>
 
 			<!-- Preferences Section -->
-			<div class="bg-white rounded-lg p-6 border border-[var(--color-border)]">
-				<h2 class="text-lg font-semibold text-slate-900 mb-4">Preferences</h2>
+			<div class="ui-surface p-6">
+				<h2 class="text-lg font-semibold text-fg-1 mb-4">Preferences</h2>
 				<div class="space-y-4">
 					<div class="flex items-center justify-between">
 						<div>
-							<span class="text-slate-700">Area unit</span>
-							<p class="text-xs text-slate-500">Display areas in square meters or square feet</p>
+							<span class="text-fg-2">Area unit</span>
+							<p class="text-xs text-fg-4">Display areas in square meters or square feet</p>
 						</div>
-						<div class="flex items-center gap-2">
+						<div class="ui-segmented flex items-center gap-1">
 							<button
 								type="button"
 								onclick={() => (areaUnit.current = 'sqm')}
-								class="px-3 py-1.5 text-sm font-medium rounded-lg transition-colors {areaUnit.current ===
-								'sqm'
-									? 'bg-primary text-white'
-									: 'bg-slate-100 text-slate-600 hover:bg-slate-200'}"
+								data-active={areaUnit.current === 'sqm'}
+								class="ui-segmented-item px-3 py-1.5 text-sm"
 							>
 								sq.m
 							</button>
 							<button
 								type="button"
 								onclick={() => (areaUnit.current = 'sqft')}
-								class="px-3 py-1.5 text-sm font-medium rounded-lg transition-colors {areaUnit.current ===
-								'sqft'
-									? 'bg-primary text-white'
-									: 'bg-slate-100 text-slate-600 hover:bg-slate-200'}"
+								data-active={areaUnit.current === 'sqft'}
+								class="ui-segmented-item px-3 py-1.5 text-sm"
 							>
 								sq.ft
 							</button>
 						</div>
 					</div>
+					<div class="flex items-center justify-between gap-4">
+						<div>
+							<span class="text-fg-2">Theme</span>
+							<p class="text-xs text-fg-4">Use your device setting or choose a fixed mode</p>
+						</div>
+						<ThemePreferenceControl />
+					</div>
 				</div>
 			</div>
 
 			<!-- Account Actions Section -->
-			<div class="bg-white rounded-lg p-6 border border-[var(--color-border)]">
+			<div class="ui-surface p-6">
 				<button
 					type="button"
 					onclick={() => logout()}
-					class="text-red-600 hover:text-red-700 font-medium text-sm"
+					class="rounded-md border border-[rgba(163,36,36,0.2)] px-4 py-2 text-sm font-medium text-error transition hover:bg-error-bg"
 				>
 					Sign out of your account
 				</button>
 			</div>
 		</div>
-	</div>
-</div>

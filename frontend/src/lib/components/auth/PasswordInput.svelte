@@ -30,11 +30,11 @@ let showPassword = $state(false)
 
 const strengthLevels = ['Very Weak', 'Weak', 'Fair', 'Good', 'Strong']
 const strengthColors = [
-	'bg-[var(--color-error)]',
-	'bg-[var(--color-warning)]',
+	'bg-error',
+	'bg-warning',
 	'bg-[var(--color-slate-400)]',
 	'bg-[var(--color-navy-600)]',
-	'bg-[var(--color-success)]'
+	'bg-success'
 ]
 
 function calculatePasswordStrength(password: string): number {
@@ -53,10 +53,10 @@ let strength = $derived(showStrength ? calculatePasswordStrength(value) : 0)
 </script>
 
 <div class="w-full">
-	<label for={id} class="mb-2 block text-sm font-medium text-[var(--color-fg-1)]">
+	<label for={id} class="mb-2 block text-sm font-medium text-fg-1">
 		{label}
 		{#if required}
-			<span class="text-[var(--color-error)]">*</span>
+			<span class="text-error">*</span>
 		{/if}
 	</label>
 	<div class="relative">
@@ -68,17 +68,17 @@ let strength = $derived(showStrength ? calculatePasswordStrength(value) : 0)
 			{disabled}
 			{required}
 			{autocomplete}
-			class="w-full rounded-md border bg-white px-3.5 py-3 pr-12 text-sm text-[var(--color-fg-1)] placeholder-[var(--color-fg-5)] transition-all
-                   focus:outline-none focus:border-[var(--color-navy-900)] focus:ring-2 focus:ring-[rgba(11,27,43,0.12)]
+			class="w-full rounded-md border bg-white px-3.5 py-3 pr-12 text-sm text-fg-1 placeholder-fg-5 transition-all
+                   focus:outline-none focus:border-navy focus:ring-2 focus:ring-focus
                    disabled:cursor-not-allowed disabled:bg-slate-100
                    {error
-				? 'border-[var(--color-error)] bg-[var(--color-error-bg)]'
-				: 'border-[var(--color-border)]'}"
+				? 'border-[var(--color-error)] bg-error-bg'
+				: 'border-border'}"
 		/>
 		<button
 			type="button"
 			onclick={() => (showPassword = !showPassword)}
-			class="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--color-fg-4)] transition-colors hover:text-[var(--color-fg-2)]"
+			class="absolute right-3 top-1/2 -translate-y-1/2 text-fg-4 transition-colors hover:text-fg-2"
 			tabindex="-1"
 		>
 			{#if showPassword}
@@ -133,7 +133,7 @@ let strength = $derived(showStrength ? calculatePasswordStrength(value) : 0)
 				{/each}
 			</div>
 			{#if strength > 0}
-				<p class="text-xs text-[var(--color-fg-4)]">
+				<p class="text-xs text-fg-4">
 					Strength: <span class="font-medium">{strengthLevels[strength - 1]}</span>
 				</p>
 			{/if}
@@ -141,6 +141,6 @@ let strength = $derived(showStrength ? calculatePasswordStrength(value) : 0)
 	{/if}
 
 	{#if error}
-		<p class="mt-2 text-sm text-[var(--color-error)]">{error}</p>
+		<p class="mt-2 text-sm text-error">{error}</p>
 	{/if}
 </div>

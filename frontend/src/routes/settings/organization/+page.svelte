@@ -161,18 +161,23 @@ function roleLabel(role: string): string {
 	<title>Organization Settings - Vitevue</title>
 </svelte:head>
 
-<div class="bg-slate-50 p-6 min-h-full">
-	<div class="max-w-2xl mx-auto">
 		<!-- Header -->
-		<div class="mb-8">
-			<h1 class="text-3xl font-semibold text-[var(--color-fg-1)] mb-2">Organization Settings</h1>
-			<p class="text-[var(--color-fg-3)]">Manage your organization members and subscription</p>
-		</div>
+		<section class="mb-5 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+			<div class="bg-navy px-5 py-5 text-bone">
+				<p class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Settings</p>
+				<h1 class="mt-2 font-display text-3xl leading-tight tracking-[var(--tracking-display)] text-bone">
+					Organization settings
+				</h1>
+				<p class="mt-2 max-w-2xl text-sm leading-6 text-slate-300">
+					Manage workspace seats, billing access, members, and pending invitations.
+				</p>
+			</div>
+		</section>
 
 		{#if !isOwner}
-			<div class="bg-white rounded-lg shadow p-8 text-center">
+			<div class="rounded-lg border border-border bg-white p-8 text-center shadow-sm">
 				<svg
-					class="w-16 h-16 text-slate-300 mx-auto mb-4"
+					class="mx-auto mb-4 h-14 w-14 text-slate-300"
 					fill="none"
 					stroke="currentColor"
 					viewBox="0 0 24 24"
@@ -184,16 +189,16 @@ function roleLabel(role: string): string {
 						d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
 					></path>
 				</svg>
-				<h2 class="text-xl font-semibold text-slate-900 mb-2">Access Restricted</h2>
+				<h2 class="mb-2 text-xl font-semibold text-slate-900">Access restricted</h2>
 				<p class="text-slate-600">Only the organization owner can access these settings.</p>
 			</div>
 		{:else}
 			<!-- Subscription Info -->
-			<div class="bg-white rounded-lg shadow mb-6">
-				<div class="p-6 border-b border-slate-200">
+			<div class="mb-5 rounded-lg border border-border bg-white shadow-sm">
+				<div class="border-b border-slate-200 p-5">
 					<h2 class="text-xl font-semibold text-slate-900">Subscription</h2>
 				</div>
-				<div class="p-6">
+				<div class="p-5">
 					{#if subscriptionQuery.isLoading}
 						<div class="animate-pulse space-y-3">
 							<div class="h-4 bg-slate-200 rounded w-1/3"></div>
@@ -206,13 +211,13 @@ function roleLabel(role: string): string {
 								<p class="text-lg font-semibold text-slate-900 capitalize">{subscription.status}</p>
 							</div>
 							<div>
-								<p class="text-sm text-slate-600 mb-1">Seats Used</p>
+								<p class="text-sm text-slate-600 mb-1">Seats used</p>
 								<p class="text-lg font-semibold text-slate-900">
 									{subscription.current_members} / {subscription.seats} used
 								</p>
 							</div>
 							<div>
-								<p class="text-sm text-slate-600 mb-1">Billing Period Ends</p>
+								<p class="text-sm text-slate-600 mb-1">Billing period ends</p>
 								<p class="text-lg font-semibold text-slate-900">
 									{formatDate(subscription.current_period_end)}
 								</p>
@@ -220,10 +225,10 @@ function roleLabel(role: string): string {
 						</div>
 
 						{#if hasExcessUsers && withinPaidPeriod}
-							<div class="mb-6 rounded-lg border border-[rgba(165,90,19,0.2)] bg-[var(--color-warning-bg)] p-4">
+							<div class="mb-6 rounded-lg border border-[rgba(165,90,19,0.2)] bg-warning-bg p-4">
 								<div class="flex items-start gap-3">
 									<svg
-										class="mt-0.5 h-5 w-5 flex-shrink-0 text-[var(--color-warning)]"
+										class="mt-0.5 h-5 w-5 flex-shrink-0 text-warning"
 										fill="none"
 										stroke="currentColor"
 										viewBox="0 0 24 24"
@@ -236,14 +241,14 @@ function roleLabel(role: string): string {
 										></path>
 									</svg>
 									<div>
-										<p class="mb-1 font-medium text-[var(--color-warning)]">
-											Action Required After Billing Period
+										<p class="mb-1 font-medium text-warning">
+											Action required after billing period
 										</p>
-										<p class="mb-2 text-sm text-[var(--color-warning)]">
+										<p class="mb-2 text-sm text-warning">
 											You have {subscription?.excess_users} too many users for your subscription ({subscription?.current_members}
 											users, {subscription?.seats} seats).
 										</p>
-										<p class="text-sm text-[var(--color-warning)]">
+										<p class="text-sm text-warning">
 											All users will remain active until {new Date(
 												subscription?.current_period_end || ''
 											).toLocaleDateString()}. After this date, you must either remove {subscription?.excess_users}
@@ -253,10 +258,10 @@ function roleLabel(role: string): string {
 								</div>
 							</div>
 						{:else if hasExcessUsers && !withinPaidPeriod}
-							<div class="mb-6 rounded-lg border border-[rgba(163,36,36,0.2)] bg-[var(--color-error-bg)] p-4">
+							<div class="mb-6 rounded-lg border border-[rgba(163,36,36,0.2)] bg-error-bg p-4">
 								<div class="flex items-start gap-3">
 									<svg
-										class="mt-0.5 h-5 w-5 flex-shrink-0 text-[var(--color-error)]"
+										class="mt-0.5 h-5 w-5 flex-shrink-0 text-error"
 										fill="none"
 										stroke="currentColor"
 										viewBox="0 0 24 24"
@@ -269,12 +274,12 @@ function roleLabel(role: string): string {
 										></path>
 									</svg>
 									<div>
-										<p class="mb-1 font-medium text-[var(--color-error)]">Immediate Action Required</p>
-										<p class="mb-2 text-sm text-[var(--color-error)]">
+										<p class="mb-1 font-medium text-error">Immediate action required</p>
+										<p class="mb-2 text-sm text-error">
 											You have {subscription?.excess_users} too many users ({subscription?.current_members}
 											users, {subscription?.seats} seats). Your billing period has ended.
 										</p>
-										<p class="text-sm text-[var(--color-error)]">
+										<p class="text-sm text-error">
 											Please remove {subscription?.excess_users}
 											{subscription?.excess_users === 1 ? 'member' : 'members'} immediately or upgrade
 											your subscription to prevent service disruption.
@@ -283,10 +288,10 @@ function roleLabel(role: string): string {
 								</div>
 							</div>
 						{:else if availableSeats > 0}
-							<div class="mb-6 rounded-lg border border-[rgba(17,122,72,0.2)] bg-[var(--color-success-bg)] p-4">
+							<div class="mb-6 rounded-lg border border-[rgba(17,122,72,0.2)] bg-success-bg p-4">
 								<div class="flex items-center gap-3">
 									<svg
-										class="h-5 w-5 text-[var(--color-success)]"
+										class="h-5 w-5 text-success"
 										fill="none"
 										stroke="currentColor"
 										viewBox="0 0 24 24"
@@ -298,7 +303,7 @@ function roleLabel(role: string): string {
 											d="M5 13l4 4L19 7"
 										></path>
 									</svg>
-									<p class="text-sm text-[var(--color-success)]">
+									<p class="text-sm text-success">
 										You have {availableSeats} available {availableSeats === 1 ? 'seat' : 'seats'}.
 										Invite new members!
 									</p>
@@ -308,9 +313,9 @@ function roleLabel(role: string): string {
 
 						<button
 							onclick={handleManageSubscription}
-							class="px-6 py-2 bg-slate-900 text-white font-semibold rounded-lg hover:bg-slate-800 transition-colors"
+							class="rounded-md bg-navy px-5 py-2.5 text-sm font-semibold text-bone transition-colors hover:bg-primary-light"
 						>
-							Manage Subscription
+							Manage subscription
 						</button>
 					{:else}
 						<p class="text-slate-600">No subscription information available</p>
@@ -319,18 +324,18 @@ function roleLabel(role: string): string {
 			</div>
 
 			<!-- Team Members -->
-			<div class="bg-white rounded-lg shadow">
-				<div class="p-6 border-b border-slate-200 flex items-center justify-between">
-					<h2 class="text-xl font-semibold text-slate-900">Team Members</h2>
+			<div class="rounded-lg border border-border bg-white shadow-sm">
+				<div class="flex items-center justify-between border-b border-slate-200 p-5">
+					<h2 class="text-xl font-semibold text-slate-900">Team members</h2>
 					<button
 						onclick={() => (showInviteModal = true)}
 						disabled={subscription !== undefined && availableSeats <= 0}
-						class="px-4 py-2 bg-slate-900 text-white font-semibold rounded-lg hover:bg-slate-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+						class="rounded-md bg-navy px-4 py-2 text-sm font-semibold text-bone transition-colors hover:bg-primary-light disabled:cursor-not-allowed disabled:opacity-50"
 					>
-						Invite Member
+						Invite member
 					</button>
 				</div>
-				<div class="p-6">
+				<div class="p-5">
 					{#if membersQuery.isLoading}
 						<div class="animate-pulse space-y-4">
 							{#each [1, 2, 3] as skeleton (skeleton)}
@@ -341,13 +346,13 @@ function roleLabel(role: string): string {
 						<div class="space-y-3">
 							{#each members as member (member.id)}
 								<div
-									class="flex items-center justify-between p-4 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
+									class="flex items-center justify-between rounded-lg border border-slate-200 p-4 transition-colors hover:bg-slate-50"
 								>
 									<div class="flex items-center gap-4">
 										<div
-											class="w-10 h-10 rounded-full bg-slate-200 flex items-center justify-center"
+											class="flex h-10 w-10 items-center justify-center rounded-md bg-info-bg"
 										>
-											<span class="text-slate-700 font-semibold">
+											<span class="font-semibold text-info">
 												{member.first_name?.[0]}{member.last_name?.[0]}
 											</span>
 										</div>
@@ -361,12 +366,12 @@ function roleLabel(role: string): string {
 									</div>
 									<div class="flex items-center gap-3">
 										<span
-											class="rounded-sm border border-[rgba(17,122,72,0.2)] bg-[var(--color-success-bg)] px-3 py-1 text-xs font-semibold text-[var(--color-success)]"
+											class="rounded-sm border border-[rgba(17,122,72,0.2)] bg-success-bg px-3 py-1 text-xs font-semibold text-success"
 										>
 											Active
 										</span>
 										<span
-											class="rounded-sm border border-[var(--color-border)] bg-slate-100 px-3 py-1 text-xs font-semibold capitalize text-[var(--color-fg-3)]"
+											class="rounded-sm border border-border bg-slate-100 px-3 py-1 text-xs font-semibold capitalize text-fg-3"
 										>
 											{roleLabel(member.role)}
 										</span>
@@ -375,8 +380,8 @@ function roleLabel(role: string): string {
 												onclick={() =>
 													handleRemoveMember(member.id, `${member.first_name} ${member.last_name}`)}
 												class="{hasExcessUsers && !withinPaidPeriod
-													? 'bg-[var(--color-error-bg)] text-[var(--color-error)] hover:opacity-90'
-													: 'text-[var(--color-error)] hover:opacity-80'} rounded-md px-3 py-1 text-sm font-medium transition-colors"
+													? 'bg-error-bg text-error hover:opacity-90'
+													: 'text-error hover:opacity-80'} rounded-md px-3 py-1 text-sm font-medium transition-colors"
 											>
 												Remove
 											</button>
@@ -392,11 +397,11 @@ function roleLabel(role: string): string {
 			</div>
 
 			<!-- Pending Invitations -->
-			<div class="bg-white rounded-lg shadow mt-6">
-				<div class="p-6 border-b border-slate-200">
-					<h2 class="text-xl font-semibold text-slate-900">Pending Invitations</h2>
+			<div class="mt-5 rounded-lg border border-border bg-white shadow-sm">
+				<div class="border-b border-slate-200 p-5">
+					<h2 class="text-xl font-semibold text-slate-900">Pending invitations</h2>
 				</div>
-				<div class="p-6">
+				<div class="p-5">
 					{#if invitationsQuery.isLoading}
 						<div class="animate-pulse space-y-4">
 							{#each [1, 2] as skeleton (skeleton)}
@@ -407,7 +412,7 @@ function roleLabel(role: string): string {
 						<div class="space-y-3">
 							{#each invitations as invitation (invitation.id)}
 								<div
-									class="flex items-center justify-between p-4 border border-slate-200 rounded-lg"
+									class="flex items-center justify-between rounded-lg border border-slate-200 p-4"
 								>
 									<div>
 										<p class="font-medium text-slate-900">{invitation.email}</p>
@@ -417,7 +422,7 @@ function roleLabel(role: string): string {
 									</div>
 									<div class="flex items-center gap-3">
 										<span
-											class="rounded-sm border border-[rgba(165,90,19,0.2)] bg-[var(--color-warning-bg)] px-3 py-1 text-xs font-semibold text-[var(--color-warning)]"
+											class="rounded-sm border border-[rgba(165,90,19,0.2)] bg-warning-bg px-3 py-1 text-xs font-semibold text-warning"
 										>
 											Pending
 										</span>
@@ -425,17 +430,17 @@ function roleLabel(role: string): string {
 											onclick={() => handleResendInvitation(invitation.email)}
 											disabled={resendingEmail === invitation.email ||
 												cancelingInvitationId === invitation.id}
-											class="text-sm font-medium text-[var(--color-navy-700)] hover:text-[var(--color-navy-900)] disabled:cursor-not-allowed disabled:opacity-50"
+											class="text-sm font-medium text-info hover:text-fg-1 disabled:cursor-not-allowed disabled:opacity-50"
 										>
-											{resendingEmail === invitation.email ? 'Sending...' : 'Resend Invite'}
+											{resendingEmail === invitation.email ? 'Sending...' : 'Resend invite'}
 										</button>
 										<button
 											onclick={() => handleCancelInvitation(invitation.id, invitation.email)}
 											disabled={cancelingInvitationId === invitation.id ||
 												resendingEmail === invitation.email}
-											class="text-sm font-medium text-[var(--color-error)] hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-50"
+											class="text-sm font-medium text-error hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-50"
 										>
-											{cancelingInvitationId === invitation.id ? 'Canceling...' : 'Cancel Invite'}
+											{cancelingInvitationId === invitation.id ? 'Canceling...' : 'Cancel invite'}
 										</button>
 									</div>
 								</div>
@@ -447,19 +452,17 @@ function roleLabel(role: string): string {
 				</div>
 			</div>
 		{/if}
-	</div>
-</div>
 
 <!-- Invite Modal -->
 {#if showInviteModal}
 	<div
-		class="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50"
+		class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4"
 		role="presentation"
 		onkeydown={(e) => e.key === 'Escape' && (showInviteModal = false)}
 		onclick={() => (showInviteModal = false)}
 	>
 		<div
-			class="bg-white rounded-lg shadow-xl max-w-md w-full p-6"
+			class="w-full max-w-md rounded-lg border border-border bg-white p-6 shadow-xl"
 			role="dialog"
 			aria-modal="true"
 			tabindex="-1"
@@ -467,11 +470,11 @@ function roleLabel(role: string): string {
 			onclick={(e) => e.stopPropagation()}
 		>
 			<div class="flex items-center justify-between mb-4">
-				<h3 class="text-xl font-semibold text-slate-900">Invite Team Member</h3>
+				<h3 class="text-xl font-semibold text-slate-900">Invite team member</h3>
 				<button
 					onclick={() => (showInviteModal = false)}
 					aria-label="Close invite modal"
-					class="text-slate-400 hover:text-slate-600"
+					class="rounded-md p-1 text-slate-400 transition hover:bg-slate-50 hover:text-slate-600"
 				>
 					<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 						<path
@@ -485,14 +488,14 @@ function roleLabel(role: string): string {
 			</div>
 
 			{#if inviteSuccess}
-				<div class="mb-4 rounded-lg border border-[rgba(17,122,72,0.2)] bg-[var(--color-success-bg)] p-4">
-					<p class="text-sm text-[var(--color-success)]">Invitation sent successfully!</p>
+				<div class="mb-4 rounded-lg border border-[rgba(17,122,72,0.2)] bg-success-bg p-4">
+					<p class="text-sm text-success">Invitation sent successfully!</p>
 				</div>
 			{/if}
 
 			{#if inviteError}
-				<div class="mb-4 rounded-lg border border-[rgba(163,36,36,0.2)] bg-[var(--color-error-bg)] p-4">
-					<p class="text-sm text-[var(--color-error)]">{inviteError}</p>
+				<div class="mb-4 rounded-lg border border-[rgba(163,36,36,0.2)] bg-error-bg p-4">
+					<p class="text-sm text-error">{inviteError}</p>
 				</div>
 			{/if}
 
@@ -503,15 +506,15 @@ function roleLabel(role: string): string {
 				}}
 			>
 				<div class="mb-4">
-					<label for="inviteEmail" class="block text-sm font-medium text-slate-700 mb-2">
-						Email Address
+					<label for="inviteEmail" class="mb-2 block text-sm font-medium text-slate-700">
+						Email address
 					</label>
 					<input
 						id="inviteEmail"
 						type="email"
 						bind:value={inviteEmail}
 						placeholder="colleague@company.com"
-						class="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-900 focus:border-transparent"
+						class="w-full rounded-md border border-slate-300 px-4 py-2 focus:border-navy focus:outline-none focus:ring-2 focus:ring-navy/10"
 						required
 					/>
 				</div>
@@ -520,14 +523,14 @@ function roleLabel(role: string): string {
 					<button
 						type="submit"
 						disabled={inviteLoading}
-						class="flex-1 bg-slate-900 hover:bg-slate-800 text-white font-semibold rounded-lg px-4 py-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+						class="flex-1 rounded-md bg-navy px-4 py-2 font-semibold text-bone transition-colors hover:bg-primary-light disabled:cursor-not-allowed disabled:opacity-50"
 					>
-						{inviteLoading ? 'Sending...' : 'Send Invitation'}
+						{inviteLoading ? 'Sending...' : 'Send invitation'}
 					</button>
 					<button
 						type="button"
 						onclick={() => (showInviteModal = false)}
-						class="px-4 py-2 border border-slate-300 text-slate-700 font-semibold rounded-lg hover:bg-slate-50 transition-colors"
+						class="rounded-md border border-slate-300 px-4 py-2 font-semibold text-slate-700 transition-colors hover:bg-slate-50"
 					>
 						Cancel
 					</button>

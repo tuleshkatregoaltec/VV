@@ -31,15 +31,15 @@ function formatNumber(num: number): string {
 }
 
 function getUsageColor(percentage: number): string {
-	if (percentage >= 90) return 'bg-[var(--color-error)]'
-	if (percentage >= 70) return 'bg-[var(--color-warning)]'
-	return 'bg-[var(--color-success)]'
+	if (percentage >= 90) return 'bg-error'
+	if (percentage >= 70) return 'bg-warning'
+	return 'bg-success'
 }
 
 function getUsageTextColor(percentage: number): string {
-	if (percentage >= 90) return 'text-[var(--color-error)]'
-	if (percentage >= 70) return 'text-[var(--color-warning)]'
-	return 'text-[var(--color-success)]'
+	if (percentage >= 90) return 'text-error'
+	if (percentage >= 70) return 'text-warning'
+	return 'text-success'
 }
 
 async function saveLimit() {
@@ -69,17 +69,17 @@ function fullName(u: OrgUserResponse): string {
 }
 </script>
 
-<Modal {open} {onClose} title="User Token Usage" size="lg">
+<Modal {open} {onClose} title="User token usage" size="lg">
 	{#if user}
 		<!-- User Info -->
 		<div class="mb-6">
-			<h3 class="mb-2 text-lg font-semibold text-[var(--color-fg-1)]">{fullName(user)}</h3>
-			<p class="text-sm text-[var(--color-fg-3)]">{user.email}</p>
+			<h3 class="mb-2 text-lg font-semibold text-fg-1">{fullName(user)}</h3>
+			<p class="text-sm text-fg-3">{user.email}</p>
 		</div>
 
 		<!-- Token Usage Stats -->
-		<div class="mb-6 rounded-lg border border-[var(--color-border)] bg-slate-50 p-4">
-			<h4 class="mb-3 text-sm font-medium text-[var(--color-fg-2)]">Today's Usage</h4>
+		<div class="mb-6 rounded-lg border border-border bg-slate-50 p-4">
+			<h4 class="mb-3 text-sm font-medium text-fg-2">Today's usage</h4>
 
 			<!-- Progress Bar -->
 			<div class="mb-4">
@@ -102,14 +102,14 @@ function fullName(u: OrgUserResponse): string {
 			<!-- Stats Grid -->
 			<div class="grid grid-cols-2 gap-4">
 				<div>
-					<p class="text-xs text-[var(--color-fg-4)]">Remaining Today</p>
-					<p class="text-lg font-semibold text-[var(--color-fg-1)]">
+					<p class="text-xs text-fg-4">Remaining today</p>
+					<p class="text-lg font-semibold text-fg-1">
 						{formatNumber(Math.max(0, user.daily_token_limit - user.tokens_used_today))}
 					</p>
 				</div>
 				<div>
-					<p class="text-xs text-[var(--color-fg-4)]">Daily Limit</p>
-					<p class="text-lg font-semibold text-[var(--color-fg-1)]">
+					<p class="text-xs text-fg-4">Daily limit</p>
+					<p class="text-lg font-semibold text-fg-1">
 						{formatNumber(user.daily_token_limit)}
 					</p>
 				</div>
@@ -118,11 +118,11 @@ function fullName(u: OrgUserResponse): string {
 
 		<!-- Edit Token Limit -->
 		<div class="border-t pt-4">
-			<h4 class="mb-3 text-sm font-medium text-[var(--color-fg-2)]">Configure Daily Limit</h4>
+			<h4 class="mb-3 text-sm font-medium text-fg-2">Configure daily limit</h4>
 
 			<div class="mb-4">
-				<label for="token-limit-input" class="mb-2 block text-sm font-medium text-[var(--color-fg-2)]">
-					Daily Token Limit
+				<label for="token-limit-input" class="mb-2 block text-sm font-medium text-fg-2">
+					Daily token limit
 				</label>
 				<input
 					id="token-limit-input"
@@ -130,14 +130,14 @@ function fullName(u: OrgUserResponse): string {
 					bind:value={editedLimit}
 					min="0"
 					step="1000"
-					class="w-full rounded-md border border-[var(--color-border)] px-3 py-2 text-[var(--color-fg-1)] shadow-sm focus:outline-none focus:ring-2 focus:ring-[rgba(11,27,43,0.12)]"
+					class="w-full rounded-md border border-border px-3 py-2 text-fg-1 shadow-sm focus:outline-none focus:ring-2 focus:ring-focus"
 				/>
-				<p class="mt-1 text-xs text-[var(--color-fg-4)]">Set to 0 for unlimited usage (not recommended)</p>
+				<p class="mt-1 text-xs text-fg-4">Set to 0 for unlimited usage (not recommended)</p>
 			</div>
 
 			{#if error}
-				<div class="mb-4 rounded border border-[rgba(163,36,36,0.2)] bg-[var(--color-error-bg)] p-3">
-					<p class="text-sm text-[var(--color-error)]">{error}</p>
+				<div class="mb-4 rounded border border-[rgba(163,36,36,0.2)] bg-error-bg p-3">
+					<p class="text-sm text-error">{error}</p>
 				</div>
 			{/if}
 
@@ -145,16 +145,16 @@ function fullName(u: OrgUserResponse): string {
 				<button
 					onclick={onClose}
 					disabled={saving}
-					class="rounded-md border border-[var(--color-border)] bg-white px-4 py-2 text-[var(--color-fg-2)] transition-colors hover:bg-slate-50 disabled:opacity-50"
+					class="rounded-md border border-border bg-white px-4 py-2 text-fg-2 transition-colors hover:bg-slate-50 disabled:opacity-50"
 				>
 					Cancel
 				</button>
 				<button
 					onclick={saveLimit}
 					disabled={saving || editedLimit === user.daily_token_limit}
-					class="rounded-md bg-[var(--color-navy-900)] px-4 py-2 text-[var(--color-fg-on-navy)] transition-colors hover:bg-[var(--color-navy-800)] disabled:opacity-50"
+					class="rounded-md bg-navy px-4 py-2 text-on-navy transition-colors hover:bg-primary-hover disabled:opacity-50"
 				>
-					{saving ? 'Saving...' : 'Save Changes'}
+					{saving ? 'Saving...' : 'Save changes'}
 				</button>
 			</div>
 		</div>

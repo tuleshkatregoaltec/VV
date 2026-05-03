@@ -67,7 +67,8 @@ async function request<T>(endpoint: string, options: RequestOptions = {}): Promi
 		if (browser && res.status === 401) {
 			const { clearUser } = await import('$lib/stores/user.svelte')
 			clearUser()
-			window.location.href = '/auth'
+			const next = `${window.location.pathname}${window.location.search}`
+			window.location.href = `/auth?next=${encodeURIComponent(next)}`
 			throw new ApiError('Session expired', 401)
 		}
 

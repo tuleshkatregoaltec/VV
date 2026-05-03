@@ -99,8 +99,8 @@ async function handleResetPassword() {
 			: error}
 	eyebrow="Password recovery"
 	sideAccent="Account recovery"
-	sideTitle="Recovery should be short, explicit, and easy to trust."
-	sideCopy="We only ask for a new password once the recovery session is valid. After that, the normal user state machine takes over again."
+	sideTitle="Secure account recovery for the same workspace flow."
+	sideCopy="Choose a new password once the recovery session is valid, then return to the guarded workspace."
 >
 	<svelte:fragment slot="account">
 		{#if email}
@@ -109,8 +109,8 @@ async function handleResetPassword() {
 	</svelte:fragment>
 
 	<svelte:fragment slot="side">
-		<div class="space-y-4 rounded-[1.6rem] border border-white/10 bg-white/5 p-6">
-			<div class="rounded-xl border border-white/10 bg-slate-900/60 p-5">
+		<div class="space-y-4 rounded-lg border border-[rgba(246,241,231,0.14)] bg-[color:rgba(246,241,231,0.05)] p-5">
+			<div class="rounded-lg border border-[rgba(246,241,231,0.14)] bg-[color:rgba(246,241,231,0.05)] p-4">
 				<p class="text-xs font-semibold uppercase tracking-[0.22em] text-slate-400">
 					Recovery flow
 				</p>
@@ -124,19 +124,19 @@ async function handleResetPassword() {
 	</svelte:fragment>
 
 	{#if success}
-		<div class="rounded-[1.8rem] border border-emerald-200 bg-emerald-50 p-6 text-center">
-			<p class="text-lg font-semibold text-emerald-900">Password updated successfully</p>
-			<p class="mt-2 text-sm text-emerald-700">Redirecting you to the dashboard now.</p>
+		<div class="rounded-lg border border-[rgba(17,122,72,0.2)] bg-success-bg p-6 text-center">
+			<p class="text-lg font-semibold text-success">Password updated successfully</p>
+			<p class="mt-2 text-sm text-success">Redirecting you to the dashboard now.</p>
 		</div>
 	{:else if !hasValidSession && error}
 		<div class="space-y-5">
-			<div class="rounded-[1.8rem] border border-rose-200 bg-rose-50 p-6">
-				<p class="text-sm font-semibold text-rose-900">Reset link is no longer valid</p>
-				<p class="mt-2 text-sm leading-6 text-rose-700">{error}</p>
+			<div class="rounded-lg border border-[rgba(163,36,36,0.2)] bg-error-bg p-6">
+				<p class="text-sm font-semibold text-error">Reset link is no longer valid</p>
+				<p class="mt-2 text-sm leading-6 text-error">{error}</p>
 			</div>
 			<a
 				href={resolve('/auth')}
-				class="inline-flex rounded-lg bg-slate-950 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
+				class="inline-flex rounded-md bg-navy px-5 py-3 text-sm font-semibold text-bone transition hover:bg-primary-light"
 			>
 				Return to sign in
 			</a>
@@ -177,7 +177,7 @@ async function handleResetPassword() {
 			<button
 				type="submit"
 				disabled={loading}
-				class="w-full rounded-lg bg-slate-950 px-4 py-3.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+				class="w-full rounded-md bg-navy px-4 py-3.5 text-sm font-semibold text-bone transition hover:bg-primary-light disabled:cursor-not-allowed disabled:opacity-50"
 			>
 				{loading ? 'Updating password...' : 'Update password'}
 			</button>
