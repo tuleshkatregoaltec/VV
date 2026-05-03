@@ -1,5 +1,6 @@
 <script lang="ts">
 import { createQuery } from '@tanstack/svelte-query'
+import { RotateCcw } from 'lucide-svelte'
 import type { ProjectSearchItem } from '$lib/api/analytics'
 import { type TransactionResponseOutput, transactions } from '$lib/api/transactions'
 import ProjectSelector from '$lib/components/analytics/ProjectSelector.svelte'
@@ -81,41 +82,55 @@ function buildApiFilters() {
 
 const salesApiFilters = $derived(buildApiFilters())
 
-const salesFilterParams = $derived.by(() => {
+function buildFacetFilterParams(localFilterOverrides: Partial<SalesLocalFilters> = {}) {
 	return buildSalesFilterParams({
 		propertyUsage: propertyType.current,
 		timeframe: timeframe.current,
 		selectedProject,
 		selectedSubProject,
-		localFilters
+		localFilters: { ...localFilters, ...localFilterOverrides }
 	})
-})
+}
 
 // Main transactions query
 const transactionsQuery = createQuery(() => transactionQueries.sales(salesApiFilters))
 
-const filterOptionsQuery = createQuery(() =>
-	transactionQueries.salesFilterOptions(salesFilterParams)
+const buildingOptionsQuery = createQuery(() =>
+	transactionQueries.salesFilterOptions(buildFacetFilterParams({ selectedBuilding: 'All' }))
+)
+const propertyTypeOptionsQuery = createQuery(() =>
+	transactionQueries.salesFilterOptions(buildFacetFilterParams({ selectedPropertyType: 'All' }))
+)
+const bedroomsOrSubTypeOptionsQuery = createQuery(() =>
+	transactionQueries.salesFilterOptions(
+		buildFacetFilterParams({ selectedBedroomsOrSubType: 'All' })
+	)
+)
+const registrationOptionsQuery = createQuery(() =>
+	transactionQueries.salesFilterOptions(buildFacetFilterParams({ selectedRegistration: 'All' }))
 )
 
 let columns = $derived(
 	propertyType.current === PROPERTY_USAGE.RESIDENTIAL ? RESIDENTIAL_COLUMNS : COMMERCIAL_COLUMNS
 )
 
-const opts = $derived(filterOptionsQuery.data)
+const buildingOptions = $derived(buildingOptionsQuery.data)
+const propertyTypeOptions = $derived(propertyTypeOptionsQuery.data)
+const bedroomsOrSubTypeOptions = $derived(bedroomsOrSubTypeOptionsQuery.data)
+const registrationOptions = $derived(registrationOptionsQuery.data)
 
 let filterDefinitions = $derived<FilterDefinition[]>([
 	{
 		id: 'selectedBuilding',
 		label: 'Building',
 		type: 'searchable',
-		options: ['All', ...(opts?.buildings ?? [])]
+		options: ['All', ...(buildingOptions?.buildings ?? [])]
 	},
 	{
 		id: 'selectedPropertyType',
 		label: 'Property Type',
 		type: 'standard',
-		options: ['All', ...(opts?.property_types ?? [])]
+		options: ['All', ...(propertyTypeOptions?.property_types ?? [])]
 	},
 	{
 		id: 'selectedBedroomsOrSubType',
@@ -124,15 +139,15 @@ let filterDefinitions = $derived<FilterDefinition[]>([
 		options: [
 			'All',
 			...(propertyType.current === PROPERTY_USAGE.RESIDENTIAL
-				? (opts?.rooms ?? [])
-				: (opts?.property_sub_types ?? []))
+				? (bedroomsOrSubTypeOptions?.rooms ?? [])
+				: (bedroomsOrSubTypeOptions?.property_sub_types ?? []))
 		]
 	},
 	{
 		id: 'selectedRegistration',
 		label: 'Registration',
 		type: 'standard',
-		options: ['All', ...(opts?.registration_types ?? [])]
+		options: ['All', ...(registrationOptions?.registration_types ?? [])]
 	},
 	{
 		id: 'areaRange',
@@ -259,41 +274,89 @@ async function handleExport() {
 </script>
 
 {#if transactionsQuery.isError}
-	<div class="mb-6 rounded-lg border border-[rgba(163,36,36,0.2)] bg-[var(--color-error-bg)] p-6 text-center">
-		<p class="font-semibold text-[var(--color-error)]">Error loading data</p>
-		<p class="mt-2 text-[var(--color-error)]">{transactionsQuery.error?.message ?? 'Unknown error'}</p>
+	<div class="mb-6 rounded-lg border border-[rgba(163,36,36,0.2)] bg-error-bg p-6 text-center">
+		<p class="font-semibold text-error">Error loading data</p>
+		<p class="mt-2 text-error">{transactionsQuery.error?.message ?? 'Unknown error'}</p>
 		<button
 			onclick={() => transactionsQuery.refetch()}
-			class="mt-4 rounded-md border border-[var(--color-navy-900)] bg-[var(--color-navy-900)] px-4 py-2 text-sm font-medium text-[var(--color-fg-on-navy)] transition-colors hover:bg-[var(--color-navy-800)]"
+			class="mt-4 rounded-md border border-navy bg-navy px-4 py-2 text-sm font-medium text-on-navy transition-colors hover:bg-primary-hover"
 		>
 			Retry
 		</button>
 	</div>
 {/if}
 
-<div
-	class="relative z-20 mb-2 rounded-lg border border-[var(--color-border)] bg-white px-4 py-4 sm:px-5"
->
-	<div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-			<div class="flex flex-col gap-2">
-				<label for="sales-project" class="block text-sm font-medium text-[var(--color-fg-1)]">Project</label>
-				<ProjectSelector
-					bind:value={selectedProject}
-					placeholder="Search project..."
-					onSelect={() => {
+{#snippet desktopProjectControls()}
+	<div class="flex flex-col gap-2">
+		<label for="sales-project-desktop" class="block text-sm font-medium text-fg-1">Project</label>
+		<ProjectSelector
+			bind:value={selectedProject}
+			placeholder="Search project..."
+			onSelect={() => {
+				selectedSubProject = null;
+				currentPage = 1;
+			}}
+		/>
+	</div>
+	{#if selectedProject && selectedProject.filter_type !== 'project'}
+		<div class="flex flex-col gap-2">
+			<label for="sales-sub-project-desktop-button" class="block text-sm font-medium text-fg-1">
+				Sub-project
+			</label>
+			<SearchableDropdown
+				id="sales-sub-project-desktop"
+				ariaLabel="Sub-project"
+				options={['All', ...subProjectOptions]}
+				value={selectedSubProject ?? 'All'}
+				onchange={(v) => {
+					selectedSubProject = v === 'All' ? null : v;
+					currentPage = 1;
+				}}
+			/>
+		</div>
+	{/if}
+{/snippet}
+
+<div class="ui-surface relative z-20 p-4 sm:p-5">
+	<div class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+		<div>
+			<p class="text-xs font-semibold uppercase tracking-[0.18em] text-fg-4">
+				Market controls
+			</p>
+			<p class="mt-1 text-sm text-fg-3">
+				Scope the dataset and apply local transaction filters.
+			</p>
+		</div>
+		<button
+			type="button"
+			onclick={resetFilters}
+			data-variant="secondary"
+			class="ui-button h-9 w-fit shrink-0 gap-2 px-3 text-xs font-medium sm:h-10 sm:text-sm"
+		>
+			<RotateCcw size={15} strokeWidth={1.8} />
+			Reset filters
+		</button>
+	</div>
+	<div class="mb-4 grid grid-cols-1 gap-3 border-b border-border pb-4 sm:grid-cols-2 lg:hidden">
+		<div class="flex flex-col gap-2">
+			<label for="sales-project" class="block text-sm font-medium text-fg-1">Project</label>
+			<ProjectSelector
+				bind:value={selectedProject}
+				placeholder="Search project..."
+				onSelect={() => {
 					selectedSubProject = null;
 					currentPage = 1;
 				}}
 			/>
 		</div>
-			{#if selectedProject && selectedProject.filter_type !== 'project'}
-				<div class="flex flex-col gap-2">
-					<label for="sales-sub-project-button" class="block text-sm font-medium text-[var(--color-fg-1)]">
-						Sub-project
-					</label>
-					<SearchableDropdown
-						id="sales-sub-project"
-						ariaLabel="Sub-project"
+		{#if selectedProject && selectedProject.filter_type !== 'project'}
+			<div class="flex flex-col gap-2">
+				<label for="sales-sub-project-button" class="block text-sm font-medium text-fg-1">
+					Sub-project
+				</label>
+				<SearchableDropdown
+					id="sales-sub-project"
+					ariaLabel="Sub-project"
 					options={['All', ...subProjectOptions]}
 					value={selectedSubProject ?? 'All'}
 					onchange={(v) => {
@@ -304,28 +367,52 @@ async function handleExport() {
 			</div>
 		{/if}
 	</div>
+	<div class="hidden lg:block">
+		<FilterPanel
+			{filterDefinitions}
+			bind:filters={localFilters}
+			onReset={resetFilters}
+			embedded={true}
+			showHeader={false}
+			idPrefix="sales-filters-desktop"
+			prefix={desktopProjectControls}
+		/>
+	</div>
+	<details class="ui-panel overflow-hidden lg:hidden">
+		<summary class="cursor-pointer px-3 py-2.5 text-sm font-semibold text-fg-1">
+			Local filters
+		</summary>
+		<div class="border-t border-border bg-card p-3">
+			<FilterPanel
+				{filterDefinitions}
+				bind:filters={localFilters}
+				onReset={resetFilters}
+				embedded={true}
+				showHeader={false}
+				idPrefix="sales-filters-mobile"
+			/>
+		</div>
+	</details>
 </div>
 
-<FilterPanel
-	{filterDefinitions}
-	bind:filters={localFilters}
-	onReset={resetFilters}
-	onExport={handleExport}
-	selectedCount={selectedTransactionIds.size}
-	onClearSelection={() => (selectedTransactionIds = new Set())}
-/>
-
 <DataPanel
+	title="Sales records"
+	description="Transaction rows reflect the selected global and local filter context."
+	onExport={handleExport}
+	exportLabel={selectedTransactionIds.size > 0
+		? `Export selected (${selectedTransactionIds.size})`
+		: 'Export filtered (100 max)'}
+	exportDisabled={isExporting}
 	{columns}
 	data={displayData}
 	onrowclick={handleRowClick}
-	loading={transactionsQuery.isPending || transactionsQuery.isFetching}
+	loading={transactionsQuery.isPending && displayData.length === 0}
 	selectable={true}
 	bind:selectedIds={selectedTransactionIds}
 	{getRowId}
 />
 
-<div class="mt-6">
+<div class="mt-2 px-1">
 	<Pagination
 		bind:currentPage
 		{totalPages}

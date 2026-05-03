@@ -43,7 +43,7 @@ let displayValue = $derived(
 			<div class="flex gap-2">
 				<input
 					type="number"
-					class="w-1/2 rounded-md border border-[var(--color-border)] bg-white px-3 py-2 text-sm text-[var(--color-fg-1)] placeholder-[var(--color-fg-5)] transition-all focus:border-[var(--color-navy-900)] focus:outline-none focus:ring-2 focus:ring-[rgba(11,27,43,0.12)]"
+					class="ui-field w-1/2 px-3 py-2 text-sm placeholder-fg-5"
 					placeholder={placeholderMin}
 					bind:value={localMin}
 					oninput={handleInput}
@@ -51,7 +51,7 @@ let displayValue = $derived(
 				/>
 				<input
 					type="number"
-					class="w-1/2 rounded-md border border-[var(--color-border)] bg-white px-3 py-2 text-sm text-[var(--color-fg-1)] placeholder-[var(--color-fg-5)] transition-all focus:border-[var(--color-navy-900)] focus:outline-none focus:ring-2 focus:ring-[rgba(11,27,43,0.12)]"
+					class="ui-field w-1/2 px-3 py-2 text-sm placeholder-fg-5"
 					placeholder={placeholderMax}
 					bind:value={localMax}
 					oninput={handleInput}

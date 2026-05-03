@@ -1,5 +1,6 @@
 <script lang="ts">
 import { createQuery } from '@tanstack/svelte-query'
+import { RotateCcw } from 'lucide-svelte'
 import type { ProjectSearchItem } from '$lib/api/analytics'
 import { type RentalContractResponseOutput, transactions } from '$lib/api/transactions'
 import ProjectSelector from '$lib/components/analytics/ProjectSelector.svelte'
@@ -131,51 +132,62 @@ const rentalsApiFilters = $derived(buildApiFilters())
 // Main rentals query
 const rentalsQuery = createQuery(() => transactionQueries.rentals(rentalsApiFilters))
 
-const rentalFilterParams = $derived.by(() => {
+function buildFacetFilterParams(localFilterOverrides: Partial<RentalsLocalFilters> = {}) {
 	return buildRentalsFilterParams({
 		propertyUsage: propertyType.current,
 		timeframe: timeframe.current,
 		selectedProject,
 		selectedSubProject,
-		localFilters
+		localFilters: { ...localFilters, ...localFilterOverrides }
 	})
-})
+}
 
-// Filter options query
-const filterOptionsQuery = createQuery(() =>
-	transactionQueries.rentalFilterOptions(rentalFilterParams)
+const propertyTypeOptionsQuery = createQuery(() =>
+	transactionQueries.rentalFilterOptions(buildFacetFilterParams({ selectedPropertyType: 'All' }))
+)
+const propertySubTypeOptionsQuery = createQuery(() =>
+	transactionQueries.rentalFilterOptions(buildFacetFilterParams({ selectedPropertySubType: 'All' }))
+)
+const tenantTypeOptionsQuery = createQuery(() =>
+	transactionQueries.rentalFilterOptions(buildFacetFilterParams({ selectedTenantType: 'All' }))
+)
+const registrationOptionsQuery = createQuery(() =>
+	transactionQueries.rentalFilterOptions(buildFacetFilterParams({ selectedRegistration: 'All' }))
 )
 
 // ========================================
 // Derived Values
 // ========================================
 
-const opts = $derived(filterOptionsQuery.data)
+const propertyTypeOptions = $derived(propertyTypeOptionsQuery.data)
+const propertySubTypeOptions = $derived(propertySubTypeOptionsQuery.data)
+const tenantTypeOptions = $derived(tenantTypeOptionsQuery.data)
+const registrationOptions = $derived(registrationOptionsQuery.data)
 
 let filterDefinitions = $derived<FilterDefinition[]>([
 	{
 		id: 'selectedPropertyType',
 		label: 'Property Type',
 		type: 'standard',
-		options: ['All', ...(opts?.property_types ?? [])]
+		options: ['All', ...(propertyTypeOptions?.property_types ?? [])]
 	},
 	{
 		id: 'selectedPropertySubType',
 		label: 'Sub Type',
 		type: 'standard',
-		options: ['All', ...(opts?.property_sub_types ?? [])]
+		options: ['All', ...(propertySubTypeOptions?.property_sub_types ?? [])]
 	},
 	{
 		id: 'selectedTenantType',
 		label: 'Tenant Type',
 		type: 'standard',
-		options: ['All', ...(opts?.tenant_types ?? [])]
+		options: ['All', ...(tenantTypeOptions?.tenant_types ?? [])]
 	},
 	{
 		id: 'selectedRegistration',
 		label: 'Reg Type',
 		type: 'standard',
-		options: ['All', ...(opts?.contract_reg_types ?? [])]
+		options: ['All', ...(registrationOptions?.contract_reg_types ?? [])]
 	},
 	{
 		id: 'areaRange',
@@ -233,10 +245,6 @@ function resetFilters() {
 	selectedSubProject = null
 	localFilters = { ...DEFAULT_RENTALS_LOCAL_FILTERS }
 	currentPage = 1
-}
-
-function handleRowClick(row: TransformedRental) {
-	console.log('Contract clicked:', row)
 }
 
 // ========================================
@@ -306,41 +314,89 @@ async function handleExport() {
 </script>
 
 {#if rentalsQuery.isError}
-	<div class="mb-6 rounded-lg border border-[rgba(163,36,36,0.2)] bg-[var(--color-error-bg)] p-6 text-center">
-		<p class="font-semibold text-[var(--color-error)]">Error loading data</p>
-		<p class="mt-2 text-[var(--color-error)]">{rentalsQuery.error?.message ?? 'Unknown error'}</p>
+	<div class="mb-6 rounded-lg border border-[rgba(163,36,36,0.2)] bg-error-bg p-6 text-center">
+		<p class="font-semibold text-error">Error loading data</p>
+		<p class="mt-2 text-error">{rentalsQuery.error?.message ?? 'Unknown error'}</p>
 		<button
 			onclick={() => rentalsQuery.refetch()}
-			class="mt-4 rounded-md border border-[var(--color-navy-900)] bg-[var(--color-navy-900)] px-4 py-2 text-sm font-medium text-[var(--color-fg-on-navy)] transition-colors hover:bg-[var(--color-navy-800)]"
+			class="mt-4 rounded-md border border-navy bg-navy px-4 py-2 text-sm font-medium text-on-navy transition-colors hover:bg-primary-hover"
 		>
 			Retry
 		</button>
 	</div>
 {/if}
 
-<div
-	class="relative z-20 mb-2 rounded-lg border border-[var(--color-border)] bg-white px-4 py-4 sm:px-5"
->
-	<div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-			<div class="flex flex-col gap-2">
-				<label for="rentals-project" class="block text-sm font-medium text-[var(--color-fg-1)]">Project</label>
-				<ProjectSelector
-					bind:value={selectedProject}
-					placeholder="Search project..."
-					onSelect={() => {
+{#snippet desktopProjectControls()}
+	<div class="flex flex-col gap-2">
+		<label for="rentals-project-desktop" class="block text-sm font-medium text-fg-1">Project</label>
+		<ProjectSelector
+			bind:value={selectedProject}
+			placeholder="Search project..."
+			onSelect={() => {
+				selectedSubProject = null;
+				currentPage = 1;
+			}}
+		/>
+	</div>
+	{#if selectedProject && selectedProject.filter_type !== 'project'}
+		<div class="flex flex-col gap-2">
+			<label for="rentals-sub-project-desktop-button" class="block text-sm font-medium text-fg-1">
+				Sub-project
+			</label>
+			<SearchableDropdown
+				id="rentals-sub-project-desktop"
+				ariaLabel="Sub-project"
+				options={['All', ...subProjectOptions]}
+				value={selectedSubProject ?? 'All'}
+				onchange={(v) => {
+					selectedSubProject = v === 'All' ? null : v;
+					currentPage = 1;
+				}}
+			/>
+		</div>
+	{/if}
+{/snippet}
+
+<div class="ui-surface relative z-20 p-4 sm:p-5">
+	<div class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+		<div>
+			<p class="text-xs font-semibold uppercase tracking-[0.18em] text-fg-4">
+				Market controls
+			</p>
+			<p class="mt-1 text-sm text-fg-3">
+				Scope the dataset and apply local rental filters.
+			</p>
+		</div>
+		<button
+			type="button"
+			onclick={resetFilters}
+			data-variant="secondary"
+			class="ui-button h-9 w-fit shrink-0 gap-2 px-3 text-xs font-medium sm:h-10 sm:text-sm"
+		>
+			<RotateCcw size={15} strokeWidth={1.8} />
+			Reset filters
+		</button>
+	</div>
+	<div class="mb-4 grid grid-cols-1 gap-3 border-b border-border pb-4 sm:grid-cols-2 lg:hidden">
+		<div class="flex flex-col gap-2">
+			<label for="rentals-project" class="block text-sm font-medium text-fg-1">Project</label>
+			<ProjectSelector
+				bind:value={selectedProject}
+				placeholder="Search project..."
+				onSelect={() => {
 					selectedSubProject = null;
 					currentPage = 1;
 				}}
 			/>
 		</div>
-			{#if selectedProject && selectedProject.filter_type !== 'project'}
-				<div class="flex flex-col gap-2">
-					<label for="rentals-sub-project-button" class="block text-sm font-medium text-[var(--color-fg-1)]">
-						Sub-project
-					</label>
-					<SearchableDropdown
-						id="rentals-sub-project"
-						ariaLabel="Sub-project"
+		{#if selectedProject && selectedProject.filter_type !== 'project'}
+			<div class="flex flex-col gap-2">
+				<label for="rentals-sub-project-button" class="block text-sm font-medium text-fg-1">
+					Sub-project
+				</label>
+				<SearchableDropdown
+					id="rentals-sub-project"
+					ariaLabel="Sub-project"
 					options={['All', ...subProjectOptions]}
 					value={selectedSubProject ?? 'All'}
 					onchange={(v) => {
@@ -351,28 +407,51 @@ async function handleExport() {
 			</div>
 		{/if}
 	</div>
+	<div class="hidden lg:block">
+		<FilterPanel
+			{filterDefinitions}
+			bind:filters={localFilters}
+			onReset={resetFilters}
+			embedded={true}
+			showHeader={false}
+			idPrefix="rentals-filters-desktop"
+			prefix={desktopProjectControls}
+		/>
+	</div>
+	<details class="ui-panel overflow-hidden lg:hidden">
+		<summary class="cursor-pointer px-3 py-2.5 text-sm font-semibold text-fg-1">
+			Local filters
+		</summary>
+		<div class="border-t border-border bg-card p-3">
+			<FilterPanel
+				{filterDefinitions}
+				bind:filters={localFilters}
+				onReset={resetFilters}
+				embedded={true}
+				showHeader={false}
+				idPrefix="rentals-filters-mobile"
+			/>
+		</div>
+	</details>
 </div>
 
-<FilterPanel
-	{filterDefinitions}
-	bind:filters={localFilters}
-	onReset={resetFilters}
-	onExport={handleExport}
-	selectedCount={selectedContractIds.size}
-	onClearSelection={() => (selectedContractIds = new Set())}
-/>
-
 <DataPanel
+	title="Rental contracts"
+	description="Contract rows reflect the selected global and local filter context."
+	onExport={handleExport}
+	exportLabel={selectedContractIds.size > 0
+		? `Export selected (${selectedContractIds.size})`
+		: 'Export filtered (100 max)'}
+	exportDisabled={isExporting}
 	{columns}
 	data={displayData}
-	onrowclick={handleRowClick}
-	loading={rentalsQuery.isPending || rentalsQuery.isFetching}
+	loading={rentalsQuery.isPending && displayData.length === 0}
 	selectable={true}
 	bind:selectedIds={selectedContractIds}
 	{getRowId}
 />
 
-<div class="mt-6">
+<div class="mt-2 px-1">
 	<Pagination
 		bind:currentPage
 		{totalPages}

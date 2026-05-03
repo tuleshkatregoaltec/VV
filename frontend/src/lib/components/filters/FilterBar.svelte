@@ -7,7 +7,7 @@ const timeframes = ['Last Week', 'Last Month', 'Last 3 Months', 'Last 6 Months',
 </script>
 
 <div class="mx-auto max-w-7xl px-3 sm:px-4 lg:px-1">
-	<div class="flex flex-col items-start gap-3 border-b border-[var(--color-border)] py-3 sm:flex-row sm:items-center">
+	<div class="flex flex-col items-start gap-3 border-b border-border py-3 sm:flex-row sm:items-center">
 		<div class="flex-shrink-0">
 			<FilterToggle options={['Residential', 'Commercial']} bind:selected={propertyType.current} />
 		</div>

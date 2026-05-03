@@ -16,7 +16,7 @@ function toggleOption(option: string) {
 </script>
 
 <div
-	class="inline-flex items-center gap-2 rounded-lg border border-[var(--color-border)] bg-white p-1"
+	class="inline-flex items-center gap-2 rounded-lg border border-border bg-card p-1"
 	role="group"
 	aria-label="Property usage"
 >
@@ -27,8 +27,8 @@ function toggleOption(option: string) {
 			aria-pressed={selected === option}
 			class="inline-flex min-w-[104px] items-center justify-center rounded-md border px-3 py-1.5 text-xs font-medium transition-all duration-150
 				{selected === option
-				? 'border-[var(--color-navy-900)] bg-[var(--color-navy-900)] text-[var(--color-fg-on-navy)] shadow-xs'
-				: 'border-transparent bg-white text-[var(--color-fg-2)] hover:border-[var(--color-border-strong)] hover:bg-slate-50 hover:text-[var(--color-fg-1)]'}"
+				? 'border-navy bg-navy text-on-navy shadow-xs'
+				: 'border-transparent bg-card text-fg-2 hover:border-strong hover:bg-panel hover:text-fg-1'}"
 		>
 			{option}
 		</button>
