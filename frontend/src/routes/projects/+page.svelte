@@ -7,7 +7,8 @@ import type {
 	ProjectDetailResponse,
 	SearchSelection
 } from '$lib/api/projects'
-import AppShell from '$lib/components/layout/AppShell.svelte'
+import AppFrame from '$lib/components/layout/AppFrame.svelte'
+import PageContainer from '$lib/components/layout/PageContainer.svelte'
 import ProjectMap from '$lib/components/map/ProjectMap.svelte'
 import BuildingDetails from '$lib/components/projects/BuildingDetails.svelte'
 import MasterProjectPanel from '$lib/components/projects/MasterProjectPanel.svelte'
@@ -140,8 +141,9 @@ $effect(() => {
 })
 </script>
 
-<AppShell showFilters={false}>
-	<div class="relative h-[calc(100vh-64px)] overflow-hidden">
+<AppFrame>
+	<PageContainer variant="fullBleed" class="h-full overflow-hidden">
+		<div class="relative h-full overflow-hidden">
 		<!-- Map (full screen) -->
 		<div class="absolute inset-0">
 			<ProjectMap
@@ -159,7 +161,7 @@ $effect(() => {
 					onclick={() => (ddaPlotsVisible = !ddaPlotsVisible)}
 					class="flex items-center gap-2 rounded-lg border bg-white px-3 py-2 text-xs font-medium shadow-md transition-colors {ddaPlotsVisible
 						? 'border-amber-300 text-amber-800'
-						: 'border-[var(--color-border)] text-[var(--color-fg-3)]'}"
+						: 'border-border text-fg-3'}"
 				>
 					<span
 						class="inline-block h-2.5 w-2.5 flex-shrink-0 rounded-sm {ddaPlotsVisible
@@ -168,7 +170,7 @@ $effect(() => {
 					></span>
 					DDA plots
 					{#if ddaPlots.length > 0}
-						<span class="text-[10px] text-[var(--color-fg-4)]">({ddaPlots.length})</span>
+						<span class="text-[10px] text-fg-4">({ddaPlots.length})</span>
 					{/if}
 				</button>
 			</div>
@@ -181,7 +183,7 @@ $effect(() => {
 				: 'left-4 right-4 top-4 bottom-4 sm:right-auto sm:w-96 bottom-4'}"
 		>
 			<div
-				class="bg-white shadow-lg rounded-lg border border-[var(--color-border)] {isMinimized
+				class="bg-white shadow-lg rounded-lg border border-border {isMinimized
 					? ''
 					: 'h-full flex flex-col'}"
 			>
@@ -217,7 +219,7 @@ $effect(() => {
 							class="flex items-center justify-between px-5 py-4 border-b border-slate-200 flex-shrink-0"
 						>
 							<div>
-								<h1 class="text-lg font-semibold text-[var(--color-fg-1)]">Projects</h1>
+								<h1 class="text-lg font-semibold text-fg-1">Projects</h1>
 								{#if allProjects.length > 0}
 									<p class="text-xs text-slate-500">
 										{allProjects.length.toLocaleString()} projects
@@ -278,7 +280,6 @@ $effect(() => {
 							{:else if panelView === 'project' && projectDetails}
 								<ProjectDetails
 									project={projectDetails}
-									analytics={projectAnalytics}
 									onBuildingSelect={handleBuildingSelect}
 									onGeoPinSelect={handleGeoPinSelect}
 								/>
@@ -314,5 +315,6 @@ $effect(() => {
 				{/if}
 			</div>
 		</div>
-	</div>
-</AppShell>
+		</div>
+	</PageContainer>
+</AppFrame>

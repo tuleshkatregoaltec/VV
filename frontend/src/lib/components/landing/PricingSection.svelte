@@ -69,7 +69,7 @@ const tiers: Tier[] = [
 			<h2 class="display-2 mt-6">
 				Lock in our <span class="display-italic">launch pricing.</span>
 			</h2>
-			<p class="mt-5 max-w-2xl text-lg leading-[1.6] text-[var(--color-fg-2)]">
+			<p class="mt-5 max-w-2xl text-lg leading-[1.6] text-fg-2">
 				Three plans, AED-priced, billed monthly per seat. Save 60% versus list during the early
 				bird window.
 			</p>
@@ -84,7 +84,7 @@ const tiers: Tier[] = [
 				>
 					<div class="flex min-h-6 items-center justify-between gap-4">
 						<h3
-							class="text-[13px] font-semibold uppercase tracking-[0.06em] text-[var(--color-fg-1)]"
+							class="text-[13px] font-semibold uppercase tracking-[0.06em] text-fg-1"
 						>
 							{tier.name}
 						</h3>
@@ -95,22 +95,22 @@ const tiers: Tier[] = [
 						{/if}
 					</div>
 
-					<p class="text-sm leading-[1.6] text-[var(--color-fg-3)]">{tier.description}</p>
+					<p class="text-sm leading-[1.6] text-fg-3">{tier.description}</p>
 
 					<div class="flex items-baseline gap-2">
 						<span
-							class="font-display text-[clamp(3rem,5vw,3.5rem)] font-normal leading-none tracking-[-0.025em] text-[var(--color-fg-1)]"
+							class="font-display text-[clamp(3rem,5vw,3.5rem)] font-normal leading-none tracking-[-0.025em] text-fg-1"
 						>
 							{tier.price}
 						</span>
 						{#if tier.unit}
-							<span class="text-sm text-[var(--color-fg-4)]">{tier.unit}</span>
+							<span class="text-sm text-fg-4">{tier.unit}</span>
 						{/if}
 					</div>
 
 					<ul class="flex flex-1 flex-col gap-3">
 						{#each tier.features as feature (feature)}
-							<li class="flex items-start gap-3 text-sm leading-relaxed text-[var(--color-fg-2)]">
+							<li class="flex items-start gap-3 text-sm leading-relaxed text-fg-2">
 								<svg
 									class="mt-0.5 h-3.5 w-3.5 flex-none text-primary"
 									fill="none"
@@ -152,7 +152,7 @@ const tiers: Tier[] = [
 		</div>
 
 		<div
-			class="mt-8 flex items-center justify-center gap-2 font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-[var(--color-warning)]"
+			class="mt-8 flex items-center justify-center gap-2 font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-warning"
 		>
 			<svg class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3" />

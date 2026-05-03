@@ -2,6 +2,10 @@
 import maplibregl from 'maplibre-gl'
 import { onMount } from 'svelte'
 import type { DdaPlotFeature, GeoPin, GeoPolygon } from '$lib/api/projects'
+import { colorTheme } from '$lib/stores/preferences.svelte'
+
+const LIGHT_MAP_STYLE = 'https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json'
+const DARK_MAP_STYLE = 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json'
 
 interface ProjectPin {
 	projectId: number
@@ -10,6 +14,8 @@ interface ProjectPin {
 	longitude: number
 	marker?: maplibregl.Marker
 }
+
+type ProjectMarkerInput = Omit<ProjectPin, 'marker'>
 
 let {
 	onProjectSelect,
@@ -26,6 +32,17 @@ let currentMarker = $state<maplibregl.Marker | null>(null)
 let buildingMarkers = $state<maplibregl.Marker[]>([])
 let buildingPopups = $state<maplibregl.Popup[]>([])
 let areaPolygonLayer = $state<string | null>(null)
+let currentMapStyle = $state<string | null>(null)
+let currentProjectMarkerInput = $state<ProjectMarkerInput | null>(null)
+let currentAreaPolygon = $state<GeoPolygon | null>(null)
+let currentBuildingPins = $state<GeoPin[]>([])
+let currentDDAPlots = $state<DdaPlotFeature[]>([])
+let currentFitBoundsPins = $state<GeoPin[]>([])
+const resolvedTheme = $derived(colorTheme.resolved)
+
+function getMapStyle(theme: 'light' | 'dark') {
+	return theme === 'dark' ? DARK_MAP_STYLE : LIGHT_MAP_STYLE
+}
 
 onMount(() => {
 	if (!mapContainer) {
@@ -34,9 +51,10 @@ onMount(() => {
 	}
 
 	// Initialize MapLibre
+	currentMapStyle = getMapStyle(resolvedTheme)
 	map = new maplibregl.Map({
 		container: mapContainer,
-		style: 'https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json', // Carto Voyager (accept font CORS warnings)
+		style: currentMapStyle, // Carto basemaps accept font CORS warnings.
 		center: [55.2708, 25.2048], // Dubai [lng, lat]
 		zoom: 11
 	})
@@ -53,25 +71,128 @@ onMount(() => {
 	}
 })
 
+$effect(() => {
+	const currentMap = map
+	const nextStyle = getMapStyle(resolvedTheme)
+	if (!currentMap || currentMapStyle === nextStyle) return
+
+	currentMapStyle = nextStyle
+	_unbindDDAHandlers()
+	areaPolygonLayer = null
+	currentMap.setStyle(nextStyle)
+	currentMap.once('style.load', () => {
+		if (currentMapStyle !== nextStyle) return
+		replayCurrentOverlays()
+	})
+})
+
+function _removeAreaPolygon() {
+	if (!map) return
+	try {
+		if (areaPolygonLayer && map.getLayer(areaPolygonLayer)) map.removeLayer(areaPolygonLayer)
+		if (areaPolygonLayer && map.getLayer(`${areaPolygonLayer}-outline`)) {
+			map.removeLayer(`${areaPolygonLayer}-outline`)
+		}
+		if (map.getSource('area-polygon')) map.removeSource('area-polygon')
+	} catch (_e) {
+		// Layer or source might not exist during a style reload.
+	}
+	areaPolygonLayer = null
+}
+
+function _clearProjectMarkers() {
+	if (currentMarker) {
+		currentMarker.remove()
+		currentMarker = null
+	}
+	projectMarkers.forEach((pin) => {
+		pin.marker?.remove()
+	})
+	projectMarkers.clear()
+}
+
+function _clearBuildingMarkers() {
+	buildingPopups.forEach((p) => {
+		p.remove()
+	})
+	buildingPopups = []
+	buildingMarkers.forEach((marker) => {
+		marker.remove()
+	})
+	buildingMarkers = []
+}
+
+function _clearRenderedOverlays() {
+	_clearProjectMarkers()
+	_clearBuildingMarkers()
+	_removeAreaPolygon()
+	_removeDDALayers()
+}
+
+function fitMapToPins(pins: GeoPin[], duration?: number) {
+	if (!map || pins.length === 0) return
+	const lats = pins.map((p) => p.latitude)
+	const lngs = pins.map((p) => p.longitude)
+	const options = duration === undefined ? { padding: 60 } : { padding: 60, duration }
+	map.fitBounds(
+		[
+			[Math.min(...lngs), Math.min(...lats)],
+			[Math.max(...lngs), Math.max(...lats)]
+		],
+		options
+	)
+}
+
+function replayCurrentOverlays() {
+	if (!map) return
+	if (!map.isStyleLoaded()) {
+		map.once('style.load', replayCurrentOverlays)
+		return
+	}
+
+	const projectMarker = currentProjectMarkerInput
+	const areaPolygon = currentAreaPolygon
+	const buildingPins = [...currentBuildingPins]
+	const ddaPlots = [...currentDDAPlots]
+	const fitBoundsPins = [...currentFitBoundsPins]
+
+	_clearRenderedOverlays()
+
+	if (projectMarker) {
+		addProjectMarker(
+			projectMarker.projectId,
+			projectMarker.projectName,
+			projectMarker.latitude,
+			projectMarker.longitude
+		)
+	}
+	if ((areaPolygon?.coordinates?.length ?? 0) > 0 && areaPolygon) {
+		drawAreaPolygon(areaPolygon)
+	}
+	if (buildingPins.length > 0) {
+		addBuildingMarkers(buildingPins)
+	}
+	if (ddaPlots.length > 0) {
+		showDDAPlots(ddaPlots)
+	}
+	if (fitBoundsPins.length > 0) {
+		fitMapToPins(fitBoundsPins, 0)
+	}
+}
+
 // Draw area polygon on map
 function drawAreaPolygon(polygon: GeoPolygon) {
 	if (!map) {
 		console.error('Map not initialized')
 		return
 	}
+	currentAreaPolygon = polygon
 
 	const drawPolygon = () => {
 		if (!map) return
+		if (currentAreaPolygon !== polygon) return
 		try {
-			if (areaPolygonLayer) {
-				try {
-					map.removeLayer(areaPolygonLayer)
-					map.removeLayer(`${areaPolygonLayer}-outline`)
-					map.removeSource('area-polygon')
-				} catch (e) {
-					// layers may not exist yet
-				}
-			}
+			_removeAreaPolygon()
 
 			const sourceId = 'area-polygon'
 			const layerId = 'area-polygon-layer'
@@ -129,14 +250,8 @@ function drawAreaPolygon(polygon: GeoPolygon) {
 function addBuildingMarkers(pins: GeoPin[]) {
 	if (!map) return
 
-	buildingPopups.forEach((p) => {
-		p.remove()
-	})
-	buildingPopups = []
-	buildingMarkers.forEach((marker) => {
-		marker.remove()
-	})
-	buildingMarkers = []
+	currentBuildingPins = [...pins]
+	_clearBuildingMarkers()
 
 	pins.forEach((pin) => {
 		const currentMap = map
@@ -158,7 +273,7 @@ function addBuildingMarkers(pins: GeoPin[]) {
 			closeOnClick: false,
 			className: 'building-popup'
 		}).setHTML(
-			`<div style="font-size:13px;font-weight:600;color:#0f172a;white-space:nowrap;padding:2px 0;">${label}</div>`
+			`<div style="font-size:13px;font-weight:600;color:var(--color-map-popup-fg);white-space:nowrap;padding:2px 0;">${label}</div>`
 		)
 
 		const marker = new maplibregl.Marker({ element: markerEl })
@@ -184,6 +299,7 @@ export function addProjectMarker(
 	longitude: number
 ) {
 	if (!map) return
+	currentProjectMarkerInput = { projectId, projectName, latitude, longitude }
 
 	// Remove previous marker if exists
 	if (currentMarker) {
@@ -206,8 +322,8 @@ export function addProjectMarker(
 		.addTo(map)
 
 	// Create popup
-	const popup = new maplibregl.Popup({ offset: 25 }).setHTML(
-		`<div class="font-semibold text-sm">${projectName}</div>`
+	const popup = new maplibregl.Popup({ offset: 25, className: 'building-popup' }).setHTML(
+		`<div style="font-size:13px;font-weight:600;color:var(--color-map-popup-fg);">${projectName}</div>`
 	)
 
 	marker.setPopup(popup)
@@ -227,36 +343,13 @@ export function addProjectMarker(
 
 // Clear all markers and polygon
 export function clearMarkers() {
-	if (currentMarker) {
-		currentMarker.remove()
-		currentMarker = null
-	}
-	projectMarkers.forEach((pin) => {
-		pin.marker?.remove()
-	})
-	projectMarkers.clear()
-
-	// Clear building markers and popups
-	buildingPopups.forEach((p) => {
-		p.remove()
-	})
-	buildingPopups = []
-	buildingMarkers.forEach((marker) => {
-		marker.remove()
-	})
-	buildingMarkers = []
-
-	// Clear area polygon
-	if (areaPolygonLayer && map) {
-		try {
-			map.removeLayer(areaPolygonLayer)
-			map.removeLayer(`${areaPolygonLayer}-outline`)
-			map.removeSource('area-polygon')
-		} catch (e) {
-			// Layer or source might not exist
-		}
-		areaPolygonLayer = null
-	}
+	currentProjectMarkerInput = null
+	currentAreaPolygon = null
+	currentBuildingPins = []
+	currentFitBoundsPins = []
+	_clearProjectMarkers()
+	_clearBuildingMarkers()
+	_removeAreaPolygon()
 }
 
 // Fly to project and display area + buildings
@@ -297,9 +390,54 @@ export function flyToLocation(lng: number, lat: number, zoom: number = 14) {
 	map?.flyTo({ center: [lng, lat], zoom })
 }
 
+function handleDDAPlotClick(e: maplibregl.MapLayerMouseEvent) {
+	const props = e.features?.[0]?.properties
+	if (!props || !map) return
+	const areaSqm = Number(props.plot_area_sqm)
+	const areaLabel =
+		areaSqm >= 1000 ? `${(areaSqm / 1000).toFixed(1)}k sqm` : `${Math.round(areaSqm)} sqm`
+	new maplibregl.Popup({ className: 'building-popup' })
+		.setLngLat(e.lngLat)
+		.setHTML(
+			`<div style="font-size:12px;line-height:1.6;">` +
+				`<div style="font-weight:700;color:var(--color-map-popup-fg);">Plot ${props.plot_number}</div>` +
+				`<div style="color:var(--color-map-popup-muted);margin-top:2px;">${areaLabel} · ${props.community_name}</div>` +
+				`</div>`
+		)
+		.addTo(map)
+}
+
+function handleDDAPlotMouseEnter() {
+	if (map) map.getCanvas().style.cursor = 'pointer'
+}
+
+function handleDDAPlotMouseLeave() {
+	if (map) map.getCanvas().style.cursor = ''
+}
+
+function _unbindDDAHandlers() {
+	if (!map) return
+	try {
+		map.off('click', 'dda-plots-fill', handleDDAPlotClick)
+		map.off('mouseenter', 'dda-plots-fill', handleDDAPlotMouseEnter)
+		map.off('mouseleave', 'dda-plots-fill', handleDDAPlotMouseLeave)
+	} catch (_e) {
+		// Handlers may not be bound yet.
+	}
+}
+
+function _bindDDAHandlers() {
+	if (!map) return
+	_unbindDDAHandlers()
+	map.on('click', 'dda-plots-fill', handleDDAPlotClick)
+	map.on('mouseenter', 'dda-plots-fill', handleDDAPlotMouseEnter)
+	map.on('mouseleave', 'dda-plots-fill', handleDDAPlotMouseLeave)
+}
+
 function _removeDDALayers() {
 	if (!map) return
 	try {
+		_unbindDDAHandlers()
 		if (map.getLayer('dda-plots-fill')) map.removeLayer('dda-plots-fill')
 		if (map.getLayer('dda-plots-outline')) map.removeLayer('dda-plots-outline')
 		if (map.getSource('dda-plots')) map.removeSource('dda-plots')
@@ -308,15 +446,18 @@ function _removeDDALayers() {
 
 export function showDDAPlots(plots: DdaPlotFeature[]) {
 	if (!map) return
+	const requestedPlots = [...plots]
+	currentDDAPlots = requestedPlots
 
 	const render = () => {
 		if (!map) return
+		if (currentDDAPlots !== requestedPlots) return
 		_removeDDALayers()
-		if (plots.length === 0) return
+		if (requestedPlots.length === 0) return
 
 		const geojson: GeoJSON.FeatureCollection = {
 			type: 'FeatureCollection',
-			features: plots.map((plot) => ({
+			features: requestedPlots.map((plot) => ({
 				type: 'Feature',
 				geometry: { type: 'Polygon', coordinates: [plot.coordinates] },
 				properties: {
@@ -349,28 +490,7 @@ export function showDDAPlots(plots: DdaPlotFeature[]) {
 			beforeId
 		)
 
-		map.on('click', 'dda-plots-fill', (e) => {
-			const props = e.features?.[0]?.properties
-			if (!props || !map) return
-			const areaSqm = Number(props.plot_area_sqm)
-			const areaLabel =
-				areaSqm >= 1000 ? `${(areaSqm / 1000).toFixed(1)}k sqm` : `${Math.round(areaSqm)} sqm`
-			new maplibregl.Popup()
-				.setLngLat(e.lngLat)
-				.setHTML(
-					`<div style="font-size:12px;line-height:1.6;">` +
-						`<div style="font-weight:700;color:#0f172a;">Plot ${props.plot_number}</div>` +
-						`<div style="color:#64748b;margin-top:2px;">${areaLabel} · ${props.community_name}</div>` +
-						`</div>`
-				)
-				.addTo(map)
-		})
-		map.on('mouseenter', 'dda-plots-fill', () => {
-			if (map) map.getCanvas().style.cursor = 'pointer'
-		})
-		map.on('mouseleave', 'dda-plots-fill', () => {
-			if (map) map.getCanvas().style.cursor = ''
-		})
+		_bindDDAHandlers()
 	}
 
 	if (map.isStyleLoaded()) {
@@ -381,6 +501,7 @@ export function showDDAPlots(plots: DdaPlotFeature[]) {
 }
 
 export function hideDDAPlots() {
+	currentDDAPlots = []
 	_removeDDALayers()
 }
 
@@ -388,16 +509,9 @@ export function hideDDAPlots() {
 export function fitBounds(pins: GeoPin[]) {
 	if (!map || pins.length === 0) return
 	clearMarkers()
+	currentFitBoundsPins = [...pins]
 	addBuildingMarkers(pins)
-	const lats = pins.map((p) => p.latitude)
-	const lngs = pins.map((p) => p.longitude)
-	map.fitBounds(
-		[
-			[Math.min(...lngs), Math.min(...lats)],
-			[Math.max(...lngs), Math.max(...lats)]
-		],
-		{ padding: 60 }
-	)
+	fitMapToPins(pins)
 }
 </script>
 

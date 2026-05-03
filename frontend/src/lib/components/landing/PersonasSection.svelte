@@ -30,7 +30,7 @@ const personas = [
 			<h2 class="display-2 mt-6">
 				Be the tip <span class="display-italic">of the spear.</span>
 			</h2>
-			<p class="mt-5 max-w-2xl text-lg leading-[1.6] text-[var(--color-fg-2)]">
+			<p class="mt-5 max-w-2xl text-lg leading-[1.6] text-fg-2">
 				Equipping Dubai's elite real estate professionals, from advisory desks to development
 				boards.
 			</p>
@@ -39,20 +39,20 @@ const personas = [
 		<div class="mt-16 grid gap-6 md:grid-cols-3">
 			{#each personas as persona (persona.number)}
 				<article
-					class="flex min-h-[260px] flex-col gap-4 rounded-lg border border-bone-border bg-[var(--color-bg-card-warm)] p-8 transition-colors duration-200 hover:border-[var(--color-bone-300)]"
+					class="flex min-h-[260px] flex-col gap-4 rounded-lg border border-bone-border bg-card-warm p-8 transition-colors duration-200 hover:border-[var(--color-bone-300)]"
 				>
-					<span class="font-mono text-[11px] font-medium tracking-[0.06em] text-[var(--color-fg-4)]">
+					<span class="font-mono text-[11px] font-medium tracking-[0.06em] text-fg-4">
 						{persona.number}
 					</span>
 					<h3
-						class="font-display text-[2rem] font-normal leading-[1.05] tracking-[-0.02em] text-[var(--color-fg-1)]"
+						class="font-display text-[2rem] font-normal leading-[1.05] tracking-[-0.02em] text-fg-1"
 					>
 						{persona.title}
 						{#if persona.accent}
 							<span class="display-italic">{persona.accent}</span>
 						{/if}
 					</h3>
-					<p class="text-[15px] leading-[1.6] text-[var(--color-fg-3)]">{persona.description}</p>
+					<p class="text-[15px] leading-[1.6] text-fg-3">{persona.description}</p>
 				</article>
 			{/each}
 		</div>

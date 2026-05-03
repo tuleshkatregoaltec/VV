@@ -2,12 +2,13 @@
 const navItems = [
 	{ label: 'Platform', href: '#preview' },
 	{ label: 'Personas', href: '#personas' },
-	{ label: 'Pricing', href: '#pricing' }
+	{ label: 'Pricing', href: '#pricing' },
+	{ label: 'Contact', href: '#contact' }
 ]
 </script>
 
 <nav class="sticky top-0 z-50 border-b border-bone-border bg-bone">
-	<div class="mx-auto max-w-7xl px-5 py-[18px] sm:px-8 lg:px-10">
+	<div class="mx-auto max-w-[1440px] px-5 py-[18px] sm:px-8">
 		<div class="flex items-center justify-between">
 			<a href="/" aria-label="Vitevue home">
 				<img
@@ -22,7 +23,7 @@ const navItems = [
 				{#each navItems as item (item.href)}
 					<a
 						href={item.href}
-						class="border-b border-transparent py-1 text-sm font-medium text-[var(--color-fg-1)] transition-colors duration-150 hover:border-primary"
+						class="border-b border-transparent py-1 text-sm font-medium text-fg-1 transition-colors duration-150 hover:border-primary"
 					>
 						{item.label}
 					</a>

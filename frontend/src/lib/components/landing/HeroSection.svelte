@@ -13,7 +13,7 @@ function scrollToPreview() {
 					Real estate intelligence,<br />
 					<span class="display-italic">made for Dubai.</span>
 				</h1>
-				<p class="mt-7 max-w-xl text-lg leading-[1.6] text-[var(--color-fg-2)] sm:text-xl">
+				<p class="mt-7 max-w-xl text-lg leading-[1.6] text-fg-2 sm:text-xl">
 					Operate with an edge; shorter cycles, sharper pitches, more deals. Vitevue reads
 					decades of macro data and 10M+ transactions so you do not have to.
 				</p>
@@ -62,22 +62,22 @@ function scrollToPreview() {
 
 		<div class="mt-20 grid border-y border-bone-border sm:grid-cols-3">
 			<div class="border-b border-bone-border py-8 sm:border-b-0 sm:border-r sm:pr-8">
-				<div class="font-display text-5xl leading-none tracking-[-0.025em] text-[var(--color-fg-1)]">
+				<div class="font-display text-5xl leading-none tracking-[-0.025em] text-fg-1">
 					10M+
 				</div>
-				<div class="mt-2 text-sm text-[var(--color-fg-3)]">Transactions analysed</div>
+				<div class="mt-2 text-sm text-fg-3">Transactions analysed</div>
 			</div>
 			<div class="border-b border-bone-border py-8 sm:border-b-0 sm:border-r sm:px-8">
-				<div class="font-display text-5xl leading-none tracking-[-0.025em] text-[var(--color-fg-1)]">
+				<div class="font-display text-5xl leading-none tracking-[-0.025em] text-fg-1">
 					3,000<span class="text-3xl">+</span>
 				</div>
-				<div class="mt-2 text-sm text-[var(--color-fg-3)]">Projects tracked</div>
+				<div class="mt-2 text-sm text-fg-3">Projects tracked</div>
 			</div>
 			<div class="py-8 sm:pl-8">
-				<div class="font-display text-5xl leading-none tracking-[-0.025em] text-[var(--color-fg-1)]">
+				<div class="font-display text-5xl leading-none tracking-[-0.025em] text-fg-1">
 					15<span class="ml-1 text-2xl">yrs</span>
 				</div>
-				<div class="mt-2 text-sm text-[var(--color-fg-3)]">Macro data depth</div>
+				<div class="mt-2 text-sm text-fg-3">Macro data depth</div>
 			</div>
 		</div>
 	</div>

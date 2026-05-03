@@ -9,15 +9,15 @@ let { title, description, icon }: Props = $props()
 </script>
 
 <div
-	class="group h-full rounded-lg border border-bone-border bg-[var(--color-bg-card-warm)] p-6 transition-colors duration-200 hover:border-[var(--color-bone-300)]"
+	class="group h-full rounded-lg border border-bone-border bg-card-warm p-6 transition-colors duration-200 hover:border-[var(--color-bone-300)]"
 >
 	<div class="mb-5 inline-block text-5xl transition-transform duration-200 group-hover:scale-105">
 		{icon}
 	</div>
-	<h3 class="mb-3 font-display text-2xl font-normal leading-tight tracking-[-0.02em] text-[var(--color-fg-1)]">
+	<h3 class="mb-3 font-display text-2xl font-normal leading-tight tracking-[-0.02em] text-fg-1">
 		{title}
 	</h3>
-	<p class="text-sm leading-relaxed text-[var(--color-fg-3)]">{description}</p>
+	<p class="text-sm leading-relaxed text-fg-3">{description}</p>
 
 	<div
 		class="mt-4 border-t border-bone-border pt-4 opacity-0 transition-opacity duration-200 group-hover:opacity-100"

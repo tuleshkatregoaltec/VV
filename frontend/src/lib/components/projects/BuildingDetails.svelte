@@ -15,7 +15,7 @@ let {
 	<div class="border-b border-slate-200 pb-4">
 		<button
 			onclick={onBack}
-			class="flex items-center gap-1.5 text-xs text-slate-500 hover:text-[var(--color-fg-1)] transition-colors mb-3"
+			class="flex items-center gap-1.5 text-xs text-slate-500 hover:text-fg-1 transition-colors mb-3"
 		>
 			<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"
@@ -26,7 +26,7 @@ let {
 
 		<div class="flex items-start gap-2">
 			<div
-				class="w-8 h-8 bg-[var(--color-navy-700)] rounded-md flex items-center justify-center flex-shrink-0 mt-0.5"
+				class="w-8 h-8 bg-primary-light rounded-md flex items-center justify-center flex-shrink-0 mt-0.5"
 			>
 				<svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 					<path
@@ -38,7 +38,7 @@ let {
 				</svg>
 			</div>
 			<div>
-				<h2 class="text-xl font-semibold text-[var(--color-fg-1)] leading-tight">
+				<h2 class="text-xl font-semibold text-fg-1 leading-tight">
 					{building.building_number ? `Building ${building.building_number}` : 'Building'}
 				</h2>
 				<p class="text-sm text-slate-500 mt-0.5">{building.project_name}</p>
@@ -51,13 +51,13 @@ let {
 		{#if building.floors}
 			<div class="bg-slate-50 rounded-xl p-3 border border-slate-100">
 				<div class="text-xs text-slate-500 mb-1">Floors</div>
-				<div class="font-display text-2xl font-normal tracking-tight text-[var(--color-fg-1)]">{building.floors}</div>
+				<div class="font-display text-2xl font-normal tracking-normal text-fg-1">{building.floors}</div>
 			</div>
 		{/if}
 		{#if building.total_units > 0}
 			<div class="bg-slate-50 rounded-xl p-3 border border-slate-100">
 				<div class="text-xs text-slate-500 mb-1">Registered Units</div>
-				<div class="font-display text-2xl font-normal tracking-tight text-[var(--color-fg-1)]">{building.total_units.toLocaleString()}</div>
+				<div class="font-display text-2xl font-normal tracking-normal text-fg-1">{building.total_units.toLocaleString()}</div>
 			</div>
 		{/if}
 	</div>
@@ -80,7 +80,7 @@ let {
 						</div>
 						<div class="w-full bg-slate-200 rounded-full h-1.5">
 							<div
-								class="bg-[var(--color-navy-700)] h-1.5 rounded-full"
+								class="bg-primary-light h-1.5 rounded-full"
 								style="width: {unit.percentage}%"
 							></div>
 						</div>

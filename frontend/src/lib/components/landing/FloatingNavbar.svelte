@@ -3,38 +3,39 @@ const navItems = [
 	{ label: 'Platform', href: '#preview' },
 	{ label: 'Projects', href: '/projects' },
 	{ label: 'Personas', href: '#personas' },
-	{ label: 'Pricing', href: '#pricing' }
+	{ label: 'Pricing', href: '#pricing' },
+	{ label: 'Contact', href: '#contact' }
 ]
 </script>
 
 <nav class="sticky top-0 z-50 border-b border-bone-border bg-bone">
-	<div class="mx-auto flex max-w-7xl items-center justify-between px-5 py-[18px] sm:px-8 lg:px-10">
-		<a href="/" aria-label="Vitevue home">
+	<div class="mx-auto flex max-w-[1440px] items-center justify-between gap-3 px-4 py-3.5 sm:px-8 sm:py-[18px]">
+		<a href="/" aria-label="Vitevue home" class="shrink-0">
 			<img
 				src="/logos/vitevue-navbar-400.png"
 				srcset="/logos/vitevue-navbar-800@2x.png 2x"
 				alt="Vitevue"
-				class="h-[22px] w-auto"
+				class="h-5 w-auto max-w-[126px] sm:h-[22px] sm:max-w-none"
 			/>
 		</a>
 
-		<div class="flex items-center gap-6">
+		<div class="flex min-w-0 items-center gap-3 sm:gap-6">
 			<div class="hidden items-center gap-8 sm:flex">
 				{#each navItems as item (item.href)}
 					<a
 						href={item.href}
-						class="border-b border-transparent py-1 text-sm font-medium text-[var(--color-fg-1)] transition-colors duration-150 hover:border-primary"
+						class="border-b border-transparent py-1 text-sm font-medium text-fg-1 transition-colors duration-150 hover:border-primary"
 					>
 						{item.label}
 					</a>
 				{/each}
 			</div>
-			<a href="/auth" class="hidden text-sm font-medium text-[var(--color-fg-1)] transition-colors hover:text-primary sm:inline">
+			<a href="/auth" class="hidden text-sm font-medium text-fg-1 transition-colors hover:text-primary sm:inline">
 				Login
 			</a>
 			<a
 				href="/auth"
-				class="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-bone transition-colors duration-200 hover:bg-primary-light"
+				class="inline-flex shrink-0 items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-[13px] font-medium text-bone transition-colors duration-200 hover:bg-primary-light sm:gap-2 sm:px-4 sm:py-2 sm:text-sm"
 			>
 				Get started
 				<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

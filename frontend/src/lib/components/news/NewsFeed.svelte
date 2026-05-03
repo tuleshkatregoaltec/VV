@@ -26,9 +26,9 @@ const allArticles = $derived(newsQuery.data?.pages.flatMap((page) => page.articl
 
 <div class="flex flex-col gap-4">
 	{#if newsQuery.isPending}
-		<div class="text-[var(--color-fg-4)]">Loading news...</div>
+		<div class="text-fg-4">Loading news...</div>
 	{:else if newsQuery.isError}
-		<div class="text-[var(--color-error)]">Error loading news</div>
+		<div class="text-error">Error loading news</div>
 	{:else}
 		{#each allArticles as article (article.id)}
 			<NewsCard {article} />
@@ -37,7 +37,7 @@ const allArticles = $derived(newsQuery.data?.pages.flatMap((page) => page.articl
 		<div bind:this={sentinel}></div>
 
 		{#if newsQuery.isFetchingNextPage}
-			<div class="py-4 text-center text-[var(--color-fg-4)]">Loading more...</div>
+			<div class="py-4 text-center text-fg-4">Loading more...</div>
 		{/if}
 	{/if}
 </div>

@@ -60,17 +60,17 @@ const features = [
 					<div class={feature.reverse ? 'lg:order-2' : ''}>
 						<span class="eyebrow">{feature.eyebrow}</span>
 						<h3
-							class="mt-4 font-display text-[clamp(2.5rem,5vw,3.75rem)] font-normal leading-[1.05] tracking-[-0.025em] text-[var(--color-fg-1)]"
+							class="mt-4 font-display text-[clamp(2.5rem,5vw,3.75rem)] font-normal leading-[1.05] tracking-[-0.025em] text-fg-1"
 						>
 							{feature.title}
 							<span class="display-italic">{feature.accent}</span>
 						</h3>
-						<p class="mt-5 max-w-xl text-[17px] leading-[1.65] text-[var(--color-fg-2)]">
+						<p class="mt-5 max-w-xl text-[17px] leading-[1.65] text-fg-2">
 							{feature.copy}
 						</p>
 						<ul class="mt-6 space-y-3">
 							{#each feature.bullets as bullet (bullet)}
-								<li class="flex items-start gap-3 text-[15px] leading-relaxed text-[var(--color-fg-2)]">
+								<li class="flex items-start gap-3 text-[15px] leading-relaxed text-fg-2">
 									<svg
 										class="mt-1 h-4 w-4 flex-none text-primary"
 										fill="none"
