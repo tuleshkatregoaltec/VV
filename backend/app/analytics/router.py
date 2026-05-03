@@ -21,7 +21,7 @@ from app.analytics.models import (
     RentalSummary,
     SubProjectsResponse,
 )
-from app.analytics.queries import ProjectFilterType
+from app.analytics.queries import ProjectFilterType, ProjectScopeType
 from app.analytics.service import (
     get_project_forecast,
     get_project_pipeline,
@@ -48,14 +48,12 @@ def _resolve_project_scope(
     master_project: Optional[str],
     project: Optional[str],
     filter_type: ProjectFilterType,
-) -> tuple[str, ProjectFilterType]:
-    from fastapi import HTTPException
-
+) -> tuple[str, ProjectScopeType]:
     if project:
         return project, "project"
     if master_project:
         return master_project, filter_type
-    raise HTTPException(status_code=422, detail="Either master_project or project is required")
+    return "Dubai", "market"
 
 
 @router.get("/sales", response_model=AnalyticsResponse)

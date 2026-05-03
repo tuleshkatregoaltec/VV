@@ -65,13 +65,13 @@ function handleKeydown(e: KeyboardEvent) {
 <div class="relative" use:clickOutside={() => (isOpen = false)}>
 	<div class="relative">
 		<div class="pointer-events-none absolute inset-y-0 left-3 flex items-center">
-			<svg class="h-4 w-4 text-[var(--color-fg-5)]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+			<svg class="h-4 w-4 text-fg-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
 				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
 			</svg>
 		</div>
 		<input
 			type="text"
-			class="w-full rounded-md border border-[var(--color-border)] bg-white py-2 pl-9 pr-8 text-sm text-[var(--color-fg-1)] placeholder-[var(--color-fg-5)] transition-all focus:border-[var(--color-navy-900)] focus:outline-none focus:ring-2 focus:ring-[rgba(11,27,43,0.12)]"
+			class="w-full rounded-md border border-border bg-white py-2 pl-9 pr-8 text-sm text-fg-1 placeholder-fg-5 transition-all focus:border-navy focus:outline-none focus:ring-2 focus:ring-focus"
 			{placeholder}
 			bind:value={inputValue}
 			oninput={() => (isOpen = true)}
@@ -81,7 +81,7 @@ function handleKeydown(e: KeyboardEvent) {
 		{#if value}
 			<button
 				type="button"
-				class="absolute inset-y-0 right-2 flex items-center px-1 text-[var(--color-fg-5)] hover:text-[var(--color-fg-2)]"
+				class="absolute inset-y-0 right-2 flex items-center px-1 text-fg-5 hover:text-fg-2"
 				onclick={clear}
 				aria-label="Clear selection"
 			>
@@ -93,21 +93,21 @@ function handleKeydown(e: KeyboardEvent) {
 	</div>
 
 	{#if isOpen}
-		<div class="absolute z-50 mt-2 max-h-72 w-full overflow-y-auto rounded-lg border border-[var(--color-border)] bg-white p-1.5 shadow-lg">
+		<div class="absolute z-50 mt-2 max-h-72 w-full overflow-y-auto rounded-lg border border-border bg-white p-1.5 shadow-lg">
 			{#if projectsQuery.isLoading}
-				<div class="px-3 py-2 text-sm text-[var(--color-fg-5)]">Loading...</div>
+				<div class="px-3 py-2 text-sm text-fg-5">Loading...</div>
 			{:else if projectsQuery.isError}
-				<div class="px-3 py-2 text-sm text-[var(--color-error)]">Failed to load projects</div>
+				<div class="px-3 py-2 text-sm text-error">Failed to load projects</div>
 			{:else if filtered.length === 0}
-				<div class="px-3 py-2 text-sm text-[var(--color-fg-5)]">No projects found</div>
+				<div class="px-3 py-2 text-sm text-fg-5">No projects found</div>
 			{:else}
 				{#each filtered as project}
 					<button
 						type="button"
 						class="w-full rounded-md px-3 py-2 text-left text-sm transition-colors {project.name ===
 						value?.name
-							? 'bg-[var(--color-navy-50)] font-medium text-[var(--color-navy-900)]'
-							: 'text-[var(--color-fg-2)] hover:bg-slate-50 hover:text-[var(--color-fg-1)]'}"
+							? 'bg-info-bg font-medium text-info'
+							: 'text-fg-2 hover:bg-slate-50 hover:text-fg-1'}"
 						onmousedown={() => select(project)}
 					>
 						{project.name}

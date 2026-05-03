@@ -1,6 +1,6 @@
 from typing import Literal, Optional
 
-from app.clickhouse.queries import ProjectFilterType, _project_filter
+from app.clickhouse.queries import ProjectFilterType, ProjectScopeType, _project_filter
 
 TrendInterval = Literal["day", "week", "month"]
 
@@ -70,7 +70,7 @@ def search_sub_projects(filter_type: ProjectFilterType = "master") -> str:
 
 
 def project_sales_summary(
-    filter_type: ProjectFilterType = "project", reg_type: Optional[str] = None
+    filter_type: ProjectScopeType = "project", reg_type: Optional[str] = None
 ) -> str:
     reg_filter = "AND reg_type_en = {reg_type_en:String}" if reg_type else ""
     return f"""
@@ -91,7 +91,7 @@ def project_sales_summary(
 
 
 def project_sales_by_rooms(
-    filter_type: ProjectFilterType = "project", reg_type: Optional[str] = None
+    filter_type: ProjectScopeType = "project", reg_type: Optional[str] = None
 ) -> str:
     reg_filter = "AND reg_type_en = {reg_type_en:String}" if reg_type else ""
     return f"""
@@ -115,18 +115,41 @@ def project_sales_by_rooms(
 
 
 def project_configuration_sales(
-    filter_type: ProjectFilterType = "project", reg_type: Optional[str] = None
+    filter_type: ProjectScopeType = "project", reg_type: Optional[str] = None
 ) -> str:
     reg_filter = "AND reg_type_en = {reg_type_en:String}" if reg_type else ""
     return f"""
+        WITH scoped_sales AS (
+            SELECT
+                rooms_en,
+                instance_date,
+                actual_worth,
+                meter_sale_price
+            FROM ch_transactions
+            WHERE {_project_filter(filter_type)}
+              AND trans_group_en = 'Sales'
+              AND property_type_en IN ('Unit', 'Villa')
+              AND property_usage_en = 'Residential'
+              AND rooms_en IS NOT NULL
+              AND actual_worth > 0
+              {reg_filter}
+        ),
+        anchor AS (
+            SELECT max(instance_date) AS latest_sale_date
+            FROM scoped_sales
+        )
         SELECT
             rooms_en,
             count() AS sale_count,
-            countIf(instance_date >= addYears(today(), -1)) AS sales_last_12m,
-            countIf(instance_date >= addDays(today(), -90)) AS sales_last_90d,
+            countIf(instance_date >= addYears(latest_sale_date, -1)) AS sales_last_12m,
             countIf(
-                instance_date >= addDays(today(), -180)
-                AND instance_date < addDays(today(), -90)
+                instance_date >= addYears(latest_sale_date, -2)
+                AND instance_date < addYears(latest_sale_date, -1)
+            ) AS sales_prev_12m,
+            countIf(instance_date >= addDays(latest_sale_date, -90)) AS sales_last_90d,
+            countIf(
+                instance_date >= addDays(latest_sale_date, -180)
+                AND instance_date < addDays(latest_sale_date, -90)
             ) AS sales_prev_90d,
             round(avg(actual_worth), 2) AS avg_sale_price,
             round(median(actual_worth), 2) AS median_sale_price,
@@ -134,29 +157,23 @@ def project_configuration_sales(
             round(quantile(0.25)(actual_worth), 2) AS price_p25,
             round(median(actual_worth), 2) AS price_p50,
             round(quantile(0.75)(actual_worth), 2) AS price_p75,
-            round(avgIf(meter_sale_price, instance_date >= addYears(today(), -1)), 2) AS avg_price_sqm_last_12m,
+            round(avgIf(meter_sale_price, instance_date >= addYears(latest_sale_date, -1)), 2) AS avg_price_sqm_last_12m,
             round(
                 avgIf(
                     meter_sale_price,
-                    instance_date >= addYears(today(), -2)
-                    AND instance_date < addYears(today(), -1)
+                    instance_date >= addYears(latest_sale_date, -2)
+                    AND instance_date < addYears(latest_sale_date, -1)
                 ),
                 2
             ) AS avg_price_sqm_prev_12m
-        FROM ch_transactions
-        WHERE {_project_filter(filter_type)}
-          AND trans_group_en = 'Sales'
-          AND property_type_en IN ('Unit', 'Villa')
-          AND property_usage_en = 'Residential'
-          AND rooms_en IS NOT NULL
-          AND actual_worth > 0
-          {reg_filter}
-        GROUP BY rooms_en
+        FROM scoped_sales
+        CROSS JOIN anchor
+        GROUP BY rooms_en, latest_sale_date
         ORDER BY sale_count DESC
     """
 
 
-def project_sales_by_property_type(filter_type: ProjectFilterType = "project") -> str:
+def project_sales_by_property_type(filter_type: ProjectScopeType = "project") -> str:
     return f"""
         SELECT
             property_type_en,
@@ -172,7 +189,7 @@ def project_sales_by_property_type(filter_type: ProjectFilterType = "project") -
     """
 
 
-def project_sales_by_reg_type(filter_type: ProjectFilterType = "project") -> str:
+def project_sales_by_reg_type(filter_type: ProjectScopeType = "project") -> str:
     return f"""
         SELECT
             reg_type_en,
@@ -189,7 +206,7 @@ def project_sales_by_reg_type(filter_type: ProjectFilterType = "project") -> str
     """
 
 
-def project_rentals_summary(filter_type: ProjectFilterType = "project") -> str:
+def project_rentals_summary(filter_type: ProjectScopeType = "project") -> str:
     return f"""
         SELECT
             count() as contract_count,
@@ -203,8 +220,10 @@ def project_rentals_summary(filter_type: ProjectFilterType = "project") -> str:
     """
 
 
-def project_rentals_by_rooms(filter_type: ProjectFilterType = "project") -> str:
-    if filter_type == "virtual_master":
+def project_rentals_by_rooms(filter_type: ProjectScopeType = "project") -> str:
+    if filter_type == "market":
+        unit_filter = "1 = 1"
+    elif filter_type == "virtual_master":
         unit_filter = "project_name_en LIKE {project_name:String}"
     elif filter_type == "master":
         unit_filter = """(master_project_en = {project_name:String}
@@ -249,8 +268,10 @@ def project_rentals_by_rooms(filter_type: ProjectFilterType = "project") -> str:
     """
 
 
-def project_units_composition(filter_type: ProjectFilterType = "project") -> str:
-    if filter_type == "virtual_master":
+def project_units_composition(filter_type: ProjectScopeType = "project") -> str:
+    if filter_type == "market":
+        where = "1 = 1"
+    elif filter_type == "virtual_master":
         where = "project_name_en LIKE {project_name:String}"
     elif filter_type == "master":
         where = """(master_project_en = {project_name:String}
@@ -340,18 +361,23 @@ def project_meta_by_master() -> str:
             toNullable(round(sumWithOverflow(p.percent_completed * coalesce(p.no_of_units, 0)) / nullIf(sumWithOverflow(coalesce(p.no_of_units, 0)), 0), 1)) as percent_completed,
             toNullable(toInt64(sum(p.no_of_units))) as no_of_units,
             toNullable(toInt64(sum(p.no_of_buildings))) as no_of_buildings,
-            arraySort(
-                arrayFilter(
-                    x -> notEmpty(x),
-                    groupUniqArray(
-                        coalesce(
-                            nullIf(d.developer_name_en, ''),
-                            nullIf(dn.developer_name_en, ''),
-                            nullIf(md.developer_name_en, ''),
-                            nullIf(mdn.developer_name_en, ''),
-                            nullIf(p.developer_name, ''),
-                            nullIf(p.master_developer_name, '')
-                        )
+            arrayMap(
+                x -> tupleElement(x, 2),
+                arrayReverseSort(
+                    x -> tupleElement(x, 1),
+                    arrayFilter(
+                        x -> notEmpty(tupleElement(x, 2)),
+                        groupArray((
+                            coalesce(p.no_of_units, 0),
+                            coalesce(
+                                nullIf(d.developer_name_en, ''),
+                                nullIf(dn.developer_name_en, ''),
+                                nullIf(md.developer_name_en, ''),
+                                nullIf(mdn.developer_name_en, ''),
+                                nullIf(p.developer_name, ''),
+                                nullIf(p.master_developer_name, '')
+                            )
+                        ))
                     )
                 )
             ) as developer_names
@@ -406,18 +432,23 @@ def project_meta_by_virtual_master() -> str:
             toNullable(round(sumWithOverflow(p.percent_completed * coalesce(p.no_of_units, 0)) / nullIf(sumWithOverflow(coalesce(p.no_of_units, 0)), 0), 1)) as percent_completed,
             toNullable(toInt64(sum(p.no_of_units))) as no_of_units,
             toNullable(toInt64(sum(p.no_of_buildings))) as no_of_buildings,
-            arraySort(
-                arrayFilter(
-                    x -> notEmpty(x),
-                    groupUniqArray(
-                        coalesce(
-                            nullIf(d.developer_name_en, ''),
-                            nullIf(dn.developer_name_en, ''),
-                            nullIf(md.developer_name_en, ''),
-                            nullIf(mdn.developer_name_en, ''),
-                            nullIf(p.developer_name, ''),
-                            nullIf(p.master_developer_name, '')
-                        )
+            arrayMap(
+                x -> tupleElement(x, 2),
+                arrayReverseSort(
+                    x -> tupleElement(x, 1),
+                    arrayFilter(
+                        x -> notEmpty(tupleElement(x, 2)),
+                        groupArray((
+                            coalesce(p.no_of_units, 0),
+                            coalesce(
+                                nullIf(d.developer_name_en, ''),
+                                nullIf(dn.developer_name_en, ''),
+                                nullIf(md.developer_name_en, ''),
+                                nullIf(mdn.developer_name_en, ''),
+                                nullIf(p.developer_name, ''),
+                                nullIf(p.master_developer_name, '')
+                            )
+                        ))
                     )
                 )
             ) as developer_names
@@ -434,8 +465,53 @@ def project_meta_by_virtual_master() -> str:
     """
 
 
+def project_developers_by_scope(filter_type: ProjectFilterType = "master") -> str:
+    if filter_type == "virtual_master":
+        where = "p.project_name_en LIKE {project_name:String}"
+    else:
+        where = """(p.master_project_en = {project_name:String}
+            OR lower(p.project_name_en) LIKE concat(lower({project_name:String}), ' - %'))"""
+
+    return f"""
+        SELECT
+            developer_name_en,
+            toInt64(sum(unit_count)) AS unit_count,
+            count() AS development_count
+        FROM (
+            SELECT
+                replaceRegexpAll(
+                    trim(BOTH ' ' FROM coalesce(
+                        nullIf(d.developer_name_en, ''),
+                        nullIf(dn.developer_name_en, ''),
+                        nullIf(md.developer_name_en, ''),
+                        nullIf(mdn.developer_name_en, ''),
+                        nullIf(p.developer_name, ''),
+                        nullIf(p.master_developer_name, ''),
+                        ''
+                    )),
+                    '\\s+',
+                    ' '
+                ) AS developer_name_en,
+                coalesce(p.no_of_units, 0) AS unit_count
+            FROM ch_projects p
+            LEFT JOIN ch_developers d ON p.developer_id = d.developer_id
+            LEFT JOIN ch_developers dn
+                ON replaceRegexpAll(trim(BOTH ' ' FROM ifNull(p.developer_name, '')), '\\s+', ' ')
+                = replaceRegexpAll(trim(BOTH ' ' FROM ifNull(dn.developer_name_ar, '')), '\\s+', ' ')
+            LEFT JOIN ch_developers md ON p.master_developer_id = md.developer_id
+            LEFT JOIN ch_developers mdn
+                ON replaceRegexpAll(trim(BOTH ' ' FROM ifNull(p.master_developer_name, '')), '\\s+', ' ')
+                = replaceRegexpAll(trim(BOTH ' ' FROM ifNull(mdn.developer_name_ar, '')), '\\s+', ' ')
+            WHERE {where}
+        )
+        WHERE developer_name_en <> ''
+        GROUP BY developer_name_en
+        ORDER BY unit_count DESC, development_count DESC, developer_name_en ASC
+    """
+
+
 def project_price_distribution(
-    filter_type: ProjectFilterType = "project", reg_type: Optional[str] = None
+    filter_type: ProjectScopeType = "project", reg_type: Optional[str] = None
 ) -> str:
     reg_filter = "AND reg_type_en = {reg_type_en:String}" if reg_type else ""
     project_filter = _project_filter(filter_type)
@@ -489,7 +565,7 @@ def project_price_distribution(
 
 
 def project_price_trends(
-    interval: TrendInterval = "month", filter_type: ProjectFilterType = "project"
+    interval: TrendInterval = "month", filter_type: ProjectScopeType = "project"
 ) -> str:
     if interval not in ("day", "week", "month"):
         raise ValueError("interval must be 'day', 'week', or 'month'")
@@ -520,7 +596,7 @@ def project_price_trends(
 
 
 def project_offplan_price_curve(
-    interval: TrendInterval = "month", filter_type: ProjectFilterType = "project"
+    interval: TrendInterval = "month", filter_type: ProjectScopeType = "project"
 ) -> str:
     if interval not in ("day", "week", "month"):
         raise ValueError("interval must be 'day', 'week', or 'month'")
@@ -564,8 +640,9 @@ def project_offplan_price_curve(
     """
 
 
-def area_supply_projects() -> str:
-    return """
+def area_supply_projects(filter_by_area: bool = True) -> str:
+    area_filter = "p.area_name_en = {area_name:String} AND" if filter_by_area else ""
+    return f"""
         SELECT
             p.project_name_en,
             coalesce(
@@ -592,7 +669,7 @@ def area_supply_projects() -> str:
         LEFT JOIN ch_developers mdn
             ON replaceRegexpAll(trim(BOTH ' ' FROM ifNull(p.master_developer_name, '')), '\\s+', ' ')
             = replaceRegexpAll(trim(BOTH ' ' FROM ifNull(mdn.developer_name_ar, '')), '\\s+', ' ')
-        WHERE p.area_name_en = {area_name:String}
-          AND coalesce(p.no_of_units, 0) > 0
+        WHERE {area_filter}
+          coalesce(p.no_of_units, 0) > 0
           AND p.cancellation_date IS NULL
     """

@@ -1,6 +1,8 @@
 """Business logic for project analytics — merges parallel ClickHouse results."""
 
 import asyncio
+import math
+import re
 from datetime import date, timedelta
 from typing import Literal, Optional
 
@@ -29,9 +31,11 @@ from app.analytics.models import (
 )
 from app.analytics.queries import (
     ProjectFilterType,
+    ProjectScopeType,
     TrendInterval,
     area_supply_projects,
     project_configuration_sales,
+    project_developers_by_scope,
     project_meta_by_master,
     project_meta_by_name,
     project_meta_by_virtual_master,
@@ -52,6 +56,9 @@ from app.clickhouse.client import query
 
 # Room sort order: Studio first, then numeric bedrooms, then anything else
 _ROOM_ORDER = {"Studio": 0}
+_CONFIG_PRICE_MIN_SAMPLE_SIZE = 3
+_CONFIG_MOMENTUM_MIN_SAMPLE_SIZE = 20
+_BEDROOM_RE = re.compile(r"^\d+\s+B/R$", re.IGNORECASE)
 
 
 def _room_sort_key(rooms: str) -> tuple:
@@ -63,6 +70,68 @@ def _room_sort_key(rooms: str) -> tuple:
         return (1, int(parts[0]))
     except (ValueError, IndexError):
         return (2, rooms)
+
+
+def _normalize_label(value: object) -> Optional[str]:
+    label = " ".join(str(value).split()) if value is not None else ""
+    return label or None
+
+
+def _unique_normalized_labels(values: list[object]) -> list[str]:
+    seen: set[str] = set()
+    labels: list[str] = []
+    for value in values:
+        label = _normalize_label(value)
+        if label is None:
+            continue
+        key = label.casefold()
+        if key in seen:
+            continue
+        seen.add(key)
+        labels.append(label)
+    return labels
+
+
+def _is_residential_config_room(rooms: Optional[str]) -> bool:
+    label = _normalize_label(rooms)
+    if label is None:
+        return False
+
+    upper = label.upper()
+    if upper in {"NA", "N/A", "NONE", "NULL"}:
+        return False
+    if upper == "STUDIO":
+        return True
+    if _BEDROOM_RE.match(label):
+        return True
+    return "PENTHOUSE" in upper
+
+
+def _positive_float(value: object) -> Optional[float]:
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(number) or number <= 0:
+        return None
+    return number
+
+
+def _pct_change(current: object, previous: object) -> Optional[float]:
+    current_number = _positive_float(current)
+    previous_number = _positive_float(previous)
+    if current_number is None or previous_number is None:
+        return None
+    return round((current_number - previous_number) / previous_number * 100, 1)
+
+
+def _sampled_count_pct_change(current: int, previous: int) -> Optional[float]:
+    if current < _CONFIG_MOMENTUM_MIN_SAMPLE_SIZE or previous < _CONFIG_MOMENTUM_MIN_SAMPLE_SIZE:
+        return None
+    denominator = (current + previous) / 2
+    if denominator <= 0:
+        return None
+    return round((current - previous) / denominator * 100, 1)
 
 
 def _coalesce_delivery_date(row: dict) -> Optional[date]:
@@ -111,38 +180,49 @@ async def get_sub_project_list(
 
 async def get_project_summary(
     project_name: str,
-    filter_type: ProjectFilterType = "project",
+    filter_type: ProjectScopeType = "project",
     master_project: Optional[str] = None,
 ) -> ProjectAnalyticsResponse:
     """
-    Run 10 ClickHouse queries in parallel and merge into a single response.
-    filter_type controls the WHERE clause: 'master', 'virtual_master', or 'project'.
+    Run ClickHouse queries in parallel and merge into a single response.
+    filter_type controls the WHERE clause: 'master', 'virtual_master', 'project', or 'market'.
     For virtual_master, project_name is used as a LIKE prefix (suffix ' - %' appended here).
     """
     # For LIKE queries the param needs the wildcard appended
     like_name = project_name + " - %" if filter_type == "virtual_master" else project_name
-    params = {"project_name": like_name}
+    params = {} if filter_type == "market" else {"project_name": like_name}
 
     # Unit composition: master/project use master_project_en equality;
     # virtual_master uses project_name_en LIKE (ch_units also lacks master_project_en for orphans)
-    if filter_type == "virtual_master":
+    if filter_type == "market":
+        units_params = {}
+    elif filter_type == "virtual_master":
         units_params = {"project_name": like_name}
     elif filter_type == "master":
         units_params = {"project_name": project_name}
     else:
         units_params = {"project_name": master_project or project_name}
 
-    meta_fn = {
-        "master": project_meta_by_master,
-        "virtual_master": project_meta_by_virtual_master,
-        "project": project_meta_by_name,
-    }[filter_type]
-    # meta for master/virtual_master uses the like_name for virtual (LIKE) or plain name
-    meta_params = (
-        {"project_name": like_name}
-        if filter_type == "virtual_master"
-        else {"project_name": project_name}
-    )
+    if filter_type == "market":
+        meta_task = asyncio.sleep(0, result=[])
+    else:
+        meta_fn = {
+            "master": project_meta_by_master,
+            "virtual_master": project_meta_by_virtual_master,
+            "project": project_meta_by_name,
+        }[filter_type]
+        # meta for master/virtual_master uses the like_name for virtual (LIKE) or plain name
+        meta_params = (
+            {"project_name": like_name}
+            if filter_type == "virtual_master"
+            else {"project_name": project_name}
+        )
+        meta_task = query(meta_fn(), meta_params)
+
+    if filter_type in ("master", "virtual_master"):
+        developer_task = query(project_developers_by_scope(filter_type), meta_params)
+    else:
+        developer_task = asyncio.sleep(0, result=[])
 
     existing_params = {**params, "reg_type_en": "Existing Properties"}
     offplan_params = {**params, "reg_type_en": "Off-Plan Properties"}
@@ -164,6 +244,7 @@ async def get_project_summary(
         rent_rooms_rows,
         units_rows,
         meta_rows,
+        developer_rows,
     ) = await asyncio.gather(
         query(project_sales_summary(filter_type), params),
         query(
@@ -189,20 +270,34 @@ async def get_project_summary(
         query(project_rentals_summary(filter_type), params),
         query(project_rentals_by_rooms(filter_type), rent_rooms_params),
         query(project_units_composition(filter_type), units_params),
-        query(meta_fn(), meta_params),
+        meta_task,
+        developer_task,
     )
 
     # --- Project metadata ---
     project: Optional[ProjectMeta] = None
-    if meta_rows:
+    if filter_type == "market":
+        project = ProjectMeta(
+            project_name=project_name,
+            area_name="Dubai",
+            developer_name="All developers",
+        )
+    elif meta_rows:
         m = meta_rows[0]
         if filter_type in ("master", "virtual_master"):
             raw_devs = m.get("developer_names") or []
-            developer_names = sorted([dev for dev in raw_devs if dev]) if raw_devs else []
+            developer_names = _unique_normalized_labels(
+                [row.get("developer_name_en") for row in developer_rows]
+            )
+            if not developer_names:
+                developer_names = _unique_normalized_labels(raw_devs) if raw_devs else []
+            top_developer = _normalize_label(m.get("developer_name_en"))
+            if not developer_names and top_developer:
+                developer_names = [top_developer, *developer_names]
             project = ProjectMeta(
                 project_name=project_name,
                 area_name=m.get("area_name_en") or None,
-                developer_name=m.get("developer_name_en") or None,
+                developer_name=developer_names[0] if developer_names else top_developer,
                 developer_names=developer_names,
                 project_status=m.get("project_status") or None,
                 completion_date=m.get("completion_date") or None,
@@ -218,7 +313,7 @@ async def get_project_summary(
             project = ProjectMeta(
                 project_name=m.get("project_name_en", project_name),
                 area_name=m.get("area_name_en") or None,
-                developer_name=m.get("developer_name_en") or None,
+                developer_name=_normalize_label(m.get("developer_name_en")),
                 project_status=m.get("project_status") or None,
                 completion_date=m.get("completion_date") or None,
                 percent_completed=float(m["percent_completed"])
@@ -317,30 +412,42 @@ async def get_project_summary(
     ]
 
     # --- Unit composition ---
-    total_units = sum(int(row["unit_count"]) for row in units_rows) or 1
+    unit_count_total = sum(int(row["unit_count"]) for row in units_rows)
+    if filter_type == "market" and project is not None:
+        project.no_of_units = unit_count_total if unit_count_total > 0 else None
+
+    total_units = unit_count_total or 1
     unit_composition = [
         AnalyticsUnitComposition(
-            rooms=row["rooms_en"],
+            rooms=room,
             count=int(row["unit_count"]),
             pct_of_total=round(int(row["unit_count"]) / total_units * 100, 1),
             avg_unit_size_sqm=float(row.get("avg_unit_size_sqm", 0) or 0),
         )
         for row in units_rows
+        if (room := _normalize_label(row.get("rooms_en"))) is not None
     ]
     unit_composition.sort(key=lambda x: _room_sort_key(x.rooms))
 
-    unit_rows_by_room = {row["rooms_en"]: row for row in units_rows}
-
-    def _pct_change(current: float, previous: float) -> Optional[float]:
-        if previous <= 0:
-            return None
-        return round((current - previous) / previous * 100, 1)
+    unit_rows_by_room = {
+        room: row
+        for row in units_rows
+        if (room := _normalize_label(row.get("rooms_en"))) is not None
+    }
 
     def _build_configuration_rows(
         segment: Literal["all", "off_plan", "secondary"], sales_rows: list[dict]
     ) -> list[ProjectConfigurationRow]:
-        sales_lookup = {row["rooms_en"]: row for row in sales_rows}
-        room_keys = set(unit_rows_by_room)
+        sales_lookup = {
+            room: row
+            for row in sales_rows
+            if (room := _normalize_label(row.get("rooms_en"))) is not None
+        }
+        room_keys = {
+            room
+            for room in set(unit_rows_by_room) | set(sales_lookup)
+            if _is_residential_config_room(room)
+        }
         rows: list[ProjectConfigurationRow] = []
 
         for rooms in room_keys:
@@ -350,8 +457,21 @@ async def get_project_summary(
 
             stock_units = int(unit_row.get("unit_count", 0) or 0)
             sales_last_12m = int(sale_row.get("sales_last_12m", 0) or 0)
+            sales_prev_12m = int(sale_row.get("sales_prev_12m", 0) or 0)
+            sales_last_90d = int(sale_row.get("sales_last_90d", 0) or 0)
+            sales_prev_90d = int(sale_row.get("sales_prev_90d", 0) or 0)
+            sale_count = int(sale_row.get("sale_count", 0) or 0)
             median_sale_price = float(sale_row.get("median_sale_price", 0) or 0)
             median_annual_rent = float(rent_row.get("median_annual_rent", 0) or 0)
+
+            if (
+                stock_units <= 0
+                and sale_count <= 0
+                and int(rent_row.get("rental_count", 0) or 0) <= 0
+            ):
+                continue
+            if sales_last_12m < _CONFIG_PRICE_MIN_SAMPLE_SIZE:
+                continue
 
             gross_yield_pct: Optional[float] = None
             if segment != "off_plan" and median_sale_price > 0 and median_annual_rent > 0:
@@ -366,7 +486,7 @@ async def get_project_summary(
                     market_segment=segment,
                     rooms=rooms,
                     stock_units=stock_units,
-                    sale_count=int(sale_row.get("sale_count", 0) or 0),
+                    sale_count=sale_count,
                     sales_last_12m=sales_last_12m,
                     avg_sale_price=float(sale_row.get("avg_sale_price", 0) or 0),
                     median_sale_price=median_sale_price,
@@ -377,13 +497,13 @@ async def get_project_summary(
                     median_rent_sqm=float(rent_row.get("median_rent_sqm", 0) or 0),
                     gross_yield_pct=gross_yield_pct,
                     price_change_yoy_pct=_pct_change(
-                        float(sale_row.get("avg_price_sqm_last_12m", 0) or 0),
-                        float(sale_row.get("avg_price_sqm_prev_12m", 0) or 0),
-                    ),
-                    sales_momentum_pct=_pct_change(
-                        int(sale_row.get("sales_last_90d", 0) or 0),
-                        int(sale_row.get("sales_prev_90d", 0) or 0),
-                    ),
+                        sale_row.get("avg_price_sqm_last_12m"),
+                        sale_row.get("avg_price_sqm_prev_12m"),
+                    )
+                    if sales_last_12m >= _CONFIG_PRICE_MIN_SAMPLE_SIZE
+                    and sales_prev_12m >= _CONFIG_PRICE_MIN_SAMPLE_SIZE
+                    else None,
+                    sales_momentum_pct=_sampled_count_pct_change(sales_last_90d, sales_prev_90d),
                     absorption_rate_pct=absorption_rate_pct,
                     price_p25=float(sale_row.get("price_p25", 0) or 0),
                     price_p50=float(sale_row.get("price_p50", 0) or 0),
@@ -391,7 +511,6 @@ async def get_project_summary(
                 )
             )
 
-        rows = [row for row in rows if row.stock_units > 0]
         rows.sort(key=lambda x: _room_sort_key(x.rooms))
         return rows
 
@@ -415,7 +534,7 @@ async def get_project_summary(
 
 
 async def get_project_trends(
-    project_name: str, days: int, filter_type: ProjectFilterType = "project"
+    project_name: str, days: int, filter_type: ProjectScopeType = "project"
 ) -> ProjectTrendsResponse:
     """Price trend time series for a project over the given number of days."""
     end_dt = date.today()
@@ -423,13 +542,16 @@ async def get_project_trends(
     interval = _trend_interval_for_days(days)
 
     like_name = project_name + " - %" if filter_type == "virtual_master" else project_name
+    params = {
+        "start_date": start_dt.isoformat(),
+        "end_date": end_dt.isoformat(),
+    }
+    if filter_type != "market":
+        params["project_name"] = like_name
+
     rows = await query(
         project_price_trends(interval, filter_type),
-        {
-            "project_name": like_name,
-            "start_date": start_dt.isoformat(),
-            "end_date": end_dt.isoformat(),
-        },
+        params,
     )
 
     data = [
@@ -445,9 +567,15 @@ async def get_project_trends(
 
 
 async def get_project_forecast(
-    project_name: str, days: int, filter_type: ProjectFilterType = "project"
+    project_name: str, days: int, filter_type: ProjectScopeType = "project"
 ) -> ProjectForecastResponse:
     """Build a project-level forward price path from historical trend and off-plan curve data."""
+    if filter_type == "market":
+        return ProjectForecastResponse(
+            data=[],
+            methodology="Citywide Dubai forecasts are not generated from project delivery curves.",
+        )
+
     end_dt = date.today()
     start_dt = end_dt - timedelta(days=days)
     interval = _trend_interval_for_days(days)
@@ -567,17 +695,23 @@ async def get_project_forecast(
 
 
 async def get_project_pipeline(
-    project_name: str, filter_type: ProjectFilterType = "project"
+    project_name: str, filter_type: ProjectScopeType = "project"
 ) -> ProjectPipelineResponse:
     """Area-level delivery pipeline grouped by quarter around the selected project."""
-    summary = await get_project_summary(project_name=project_name, filter_type=filter_type)
-    area_name = summary.project.area_name if summary.project else None
-    developer_name = summary.project.developer_name if summary.project else None
+    if filter_type == "market":
+        area_name = "Dubai"
+        developer_name = None
+        rows = await query(area_supply_projects(filter_by_area=False), {})
+    else:
+        summary = await get_project_summary(project_name=project_name, filter_type=filter_type)
+        area_name = summary.project.area_name if summary.project else None
+        developer_name = summary.project.developer_name if summary.project else None
 
-    if not area_name:
-        return ProjectPipelineResponse(area_name=None, developer_name=developer_name, data=[])
+        if not area_name:
+            return ProjectPipelineResponse(area_name=None, developer_name=developer_name, data=[])
 
-    rows = await query(area_supply_projects(), {"area_name": area_name})
+        rows = await query(area_supply_projects(), {"area_name": area_name})
+
     if not rows:
         return ProjectPipelineResponse(area_name=area_name, developer_name=developer_name, data=[])
 
@@ -640,12 +774,12 @@ async def get_project_pipeline(
 
 async def get_project_price_distribution(
     project_name: str,
-    filter_type: ProjectFilterType = "project",
+    filter_type: ProjectScopeType = "project",
     reg_type: Optional[str] = None,
 ) -> ProjectPriceDistributionResponse:
     """Price distribution statistics per bedroom type for bell-curve style visualisation."""
     like_name = project_name + " - %" if filter_type == "virtual_master" else project_name
-    params: dict = {"project_name": like_name}
+    params: dict = {} if filter_type == "market" else {"project_name": like_name}
     if reg_type:
         params["reg_type_en"] = reg_type
 

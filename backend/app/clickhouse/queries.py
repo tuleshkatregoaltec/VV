@@ -1,6 +1,7 @@
 from typing import Literal, Optional
 
 ProjectFilterType = Literal["project", "master", "virtual_master"]
+ProjectScopeType = Literal["project", "master", "virtual_master", "market"]
 
 # Server-side market type filters — frontend passes market_type, never raw predicates.
 # See analytics_architecture.md for taxonomy rationale.
@@ -201,12 +202,14 @@ def rentals_summary(
     """
 
 
-def _project_filter(filter_type: ProjectFilterType) -> str:
+def _project_filter(filter_type: ProjectScopeType) -> str:
     """WHERE clause condition for a given filter type.
 
     master: matches rows with master_project_en = X OR orphaned rows whose
     project_name_en starts with X + ' - ' (absorbs inconsistently-linked sub-projects).
     """
+    if filter_type == "market":
+        return "1 = 1"
     if filter_type == "master":
         return """(master_project_en = {project_name:String}
             OR (lower(project_name_en) LIKE concat(lower({project_name:String}), ' - %')

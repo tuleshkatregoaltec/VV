@@ -40,7 +40,7 @@ export const analyticsQueries = {
 	subProjects: (masterProject: string | null, filterType: string | null) => ({
 		queryKey: analyticsKeys.subProjects(masterProject ?? '', filterType ?? ''),
 		queryFn: () => analytics.subProjects(masterProject ?? '', filterType ?? 'master'),
-		enabled: Boolean(masterProject && filterType && filterType !== 'project'),
+		enabled: Boolean(masterProject && filterType && !['project', 'market'].includes(filterType)),
 		staleTime: Infinity
 	}),
 	projectSummary: (params: { masterProject?: string; project?: string; filterType?: string }) => ({

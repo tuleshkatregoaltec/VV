@@ -49,6 +49,7 @@ describe('shared query builders', () => {
 		await subProjectsQuery.queryFn()
 		expect(subProjectsSpy).toHaveBeenCalledWith('Downtown', 'master')
 		expect(analyticsQueries.subProjects(null, null).enabled).toBe(false)
+		expect(analyticsQueries.subProjects('Dubai', 'market').enabled).toBe(false)
 	})
 
 	it('builds transaction query options with typed placeholder data and filter keys', async () => {

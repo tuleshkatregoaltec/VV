@@ -1,15 +1,21 @@
 <script lang="ts">
+import { Building2, GitCompare } from 'lucide-svelte'
 import { onMount } from 'svelte'
 import type { ProjectSearchItem } from '$lib/api/analytics'
 import type { ProjectSearchResult, SearchSelection } from '$lib/api/projects'
 import { projects as projectsAPI } from '$lib/api/projects'
+import AnalyticsCompareView from '$lib/components/analytics/AnalyticsCompareView.svelte'
 import ProjectPanel from '$lib/components/analytics/ProjectPanel.svelte'
+import PageContainer from '$lib/components/layout/PageContainer.svelte'
 import ProjectSearchInput from '$lib/components/projects/ProjectSearchInput.svelte'
 
-let projectA = $state<ProjectSearchItem | null>(null)
+const DUBAI_MARKET_SELECTION: ProjectSearchItem = { name: 'Dubai', filter_type: 'market' }
+
+let projectA = $state<ProjectSearchItem | null>({ ...DUBAI_MARKET_SELECTION })
 let projectB = $state<ProjectSearchItem | null>(null)
 let comparing = $state(false)
 let allProjects = $state<ProjectSearchResult[]>([])
+let isDubaiMarketSelected = $derived(projectA?.filter_type === 'market')
 
 onMount(async () => {
 	try {
@@ -41,14 +47,59 @@ function handleSearchSelectA(sel: SearchSelection) {
 function handleSearchSelectB(sel: SearchSelection) {
 	projectB = toAnalyticsSelection(sel)
 }
+
+function selectDubaiMarket() {
+	projectA = { ...DUBAI_MARKET_SELECTION }
+}
 </script>
 
-<div class="min-h-screen bg-background">
-	<div class="mx-auto flex w-full max-w-[1480px] flex-col gap-6 px-4 py-6 sm:px-6 lg:px-8">
-		<section class="rounded-xl border border-[var(--color-border)] bg-white p-4 sm:p-5">
+<PageContainer variant="standard" class="gap-4">
+		<section class="ui-surface relative z-30 overflow-visible">
+			<div class="ui-page-header grid px-5 py-4 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-center">
+				<div>
+					<p class="text-xs font-semibold uppercase tracking-[0.18em] text-on-navy-muted">
+						Analytics
+					</p>
+					<h1 class="mt-1 font-display text-2xl leading-tight tracking-[var(--tracking-display)] text-bone">
+						Dubai market analytics
+					</h1>
+				</div>
+
+				<button
+					type="button"
+					onclick={toggleCompare}
+					data-variant={comparing ? 'primary' : 'secondary'}
+					class="ui-button h-10 px-4 text-sm"
+				>
+					<GitCompare size={16} strokeWidth={1.8} />
+					{comparing ? 'Exit compare' : 'Compare'}
+				</button>
+			</div>
+		</section>
+
+		<section class="ui-surface p-4 sm:p-5">
+			<div class="mb-4 flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
+				<div>
+					<p class="text-xs font-semibold uppercase tracking-[0.18em] text-fg-4">
+						Project scope
+					</p>
+					<p class="mt-1 text-sm text-fg-3">
+						Dubai is loaded by default. Search a project or master community to narrow the view.
+					</p>
+				</div>
+				<button
+					type="button"
+					onclick={selectDubaiMarket}
+					data-variant={isDubaiMarketSelected ? 'primary' : 'secondary'}
+					class="ui-button h-9 px-3 text-sm"
+				>
+					<Building2 size={15} strokeWidth={1.8} />
+					Dubai market
+				</button>
+			</div>
 			<div class="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
 				<div class="flex-1">
-					<div class="grid gap-3 {comparing ? 'xl:grid-cols-2' : 'max-w-xl'}">
+					<div class="grid gap-3 {comparing ? 'xl:grid-cols-2' : ''}">
 						<ProjectSearchInput allProjects={allProjects} onSelect={handleSearchSelectA} />
 						{#if comparing}
 							<ProjectSearchInput allProjects={allProjects} onSelect={handleSearchSelectB} />
@@ -56,85 +107,48 @@ function handleSearchSelectB(sel: SearchSelection) {
 					</div>
 				</div>
 
-				<div class="flex items-center gap-3">
-					<button
-						type="button"
-						onclick={toggleCompare}
-						class="inline-flex items-center gap-2 rounded-md border px-4 py-3 text-sm font-medium transition-colors {comparing
-							? 'border-[var(--color-navy-900)] bg-[var(--color-navy-900)] text-[var(--color-fg-on-navy)] hover:bg-[var(--color-navy-800)]'
-							: 'border-slate-200 bg-white text-slate-700 hover:border-[var(--color-navy-600)] hover:text-[var(--color-navy-700)]'}"
-					>
-						<svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-						</svg>
-						{comparing ? 'Exit compare' : 'Compare'}
-					</button>
-				</div>
+				<div class="hidden xl:block"></div>
 			</div>
 		</section>
 
-		{#if comparing && projectA && projectB}
-			<section class="rounded-xl border border-slate-200 bg-slate-50/70 px-5 py-4">
-				<div class="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-					<div>
-						<p class="text-[11px] font-semibold uppercase tracking-[0.22em] text-[var(--color-fg-4)]">Compare mode</p>
-						<h2 class="mt-2 text-lg font-semibold text-slate-900">{projectA.name} vs {projectB.name}</h2>
-						<p class="mt-1 text-sm text-slate-600">
-							Both panels use the same live analytics endpoints so pricing, yield, and mix differences stay comparable.
-						</p>
-					</div>
-
-					<div class="grid gap-3 sm:grid-cols-3">
-						<div class="rounded-lg border border-slate-200 bg-white px-4 py-3">
-							<p class="text-[11px] uppercase tracking-[0.18em] text-slate-400">Project A</p>
-							<p class="mt-2 text-sm font-semibold text-slate-900">{projectA.filter_type}</p>
-						</div>
-						<div class="rounded-lg border border-slate-200 bg-white px-4 py-3">
-							<p class="text-[11px] uppercase tracking-[0.18em] text-slate-400">Project B</p>
-							<p class="mt-2 text-sm font-semibold text-slate-900">{projectB.filter_type}</p>
-						</div>
-						<div class="rounded-lg border border-slate-200 bg-white px-4 py-3">
-							<p class="text-[11px] uppercase tracking-[0.18em] text-slate-400">Method</p>
-							<p class="mt-2 text-sm font-semibold text-slate-900">Actual signals only</p>
-						</div>
-					</div>
-				</div>
-			</section>
-		{/if}
-
 		{#if comparing}
-			<div class="grid grid-cols-1 gap-6 xl:grid-cols-2">
-				<div>
+			{#if projectA && projectB}
+				<AnalyticsCompareView {projectA} {projectB} {allProjects} />
+			{:else}
+				<div class="grid grid-cols-1 gap-6 xl:grid-cols-2">
 					{#if projectA}
-						<ProjectPanel selection={projectA} />
+						<div class="ui-surface p-5">
+							<p class="text-xs font-semibold uppercase tracking-[0.18em] text-fg-4">Project A</p>
+							<p class="mt-2 text-lg font-semibold text-fg-1">{projectA.name}</p>
+							<p class="mt-1 text-sm text-fg-3">Select Project B to start comparison.</p>
+						</div>
 					{:else}
 						{@render EmptyState('Project A')}
 					{/if}
-				</div>
-				<div>
 					{#if projectB}
-						<ProjectPanel selection={projectB} />
+						<div class="ui-surface p-5">
+							<p class="text-xs font-semibold uppercase tracking-[0.18em] text-fg-4">Project B</p>
+							<p class="mt-2 text-lg font-semibold text-fg-1">{projectB.name}</p>
+							<p class="mt-1 text-sm text-fg-3">Select Project A to start comparison.</p>
+						</div>
 					{:else}
 						{@render EmptyState('Project B')}
 					{/if}
 				</div>
-			</div>
+			{/if}
 		{:else if projectA}
 			<ProjectPanel selection={projectA} />
 		{:else}
 			{@render EmptyState('Analytics')}
 		{/if}
-	</div>
-</div>
+</PageContainer>
 
 {#snippet EmptyState(label: string)}
-	<div class="rounded-xl border border-dashed border-slate-300 bg-white px-8 py-20 text-center">
-		<div class="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-xl bg-[var(--color-navy-50)]">
-			<svg class="h-8 w-8 text-[var(--color-navy-700)]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-			</svg>
+	<div class="rounded-lg border border-dashed border-strong bg-card px-8 py-20 text-center shadow-sm">
+		<div class="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-md bg-navy-pale text-primary-light">
+			<Building2 size={28} strokeWidth={1.5} />
 		</div>
-		<p class="text-base font-semibold text-slate-800">{label} is waiting for a project.</p>
-		<p class="mt-2 text-sm text-slate-500">Search above to load live transaction-backed analytics.</p>
+		<p class="text-base font-semibold text-fg-1">{label} is waiting for a project.</p>
+		<p class="mt-2 text-sm text-fg-4">Search above to load live transaction-backed analytics.</p>
 	</div>
 {/snippet}
