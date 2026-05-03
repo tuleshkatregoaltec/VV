@@ -95,4 +95,7 @@ generate-client:
 	./scripts/generate-client.sh
 
 load-clickhouse-local:
-	set -a && source .env.dev && set +a && cd backend && uv run scripts/data/insert/load_local_clickhouse.py
+	set -a && source .env.dev && set +a && cd backend && uv run scripts/data/insert/load_local_clickhouse.py && uv run python -m scripts.clickhouse.build_fact_tables
+
+build-clickhouse-facts:
+	set -a && source .env.dev && set +a && cd backend && uv run python -m scripts.clickhouse.build_fact_tables
