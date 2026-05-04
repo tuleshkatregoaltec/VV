@@ -31,6 +31,9 @@ def test_definitions_expose_source_assets_and_news_sync() -> None:
         "dld_transactions_bronze",
         "dxbi_transactions_raw",
         "dxbi_transactions_bronze",
+        "news_feeds_raw",
+        "news_thumbnail_assets",
+        "news_publish",
         "pf_locations_raw",
         "pf_listings_raw",
         "pf_listing_media_assets",
@@ -58,10 +61,14 @@ def test_definitions_expose_named_operational_jobs() -> None:
         "pf_listings_plan_snapshot",
         "pf_listings_search_chunk",
         "pf_listings_detail_chunk",
-        "pf_listing_media_assets_backfill",
+        "news_feeds_poll_and_publish",
+        "news_feeds_manual_poll",
+        "news_thumbnail_assets_backfill",
+        "news_publish_backfill",
         "reelly_supply_archive_chunk",
         "reelly_supply_document_assets_backfill",
         "reelly_supply_project_media_assets_backfill",
+        "pf_listing_media_assets_backfill",
         "news_sync_pipeline",
     }
 
@@ -106,6 +113,12 @@ def test_definitions_expose_only_recurring_operational_schedules() -> None:
             "Asia/Dubai",
             DefaultScheduleStatus.STOPPED,
         ),
+        "news_feeds_poll_and_publish_schedule": (
+            "news_feeds_poll_and_publish",
+            "*/15 * * * *",
+            "Asia/Dubai",
+            DefaultScheduleStatus.STOPPED,
+        ),
     }
 
 
@@ -125,6 +138,11 @@ def test_scheduled_source_jobs_select_raw_and_bronze_assets() -> None:
     assert _selected_assets("dxbi_transactions_daily_incremental") == {
         "dxbi_transactions_raw",
         "dxbi_transactions_bronze",
+    }
+    assert _selected_assets("news_feeds_poll_and_publish") == {
+        "news_feeds_raw",
+        "news_thumbnail_assets",
+        "news_publish",
     }
     assert _selected_assets("dda_planning_layers_weekly_full_refresh") == {
         "dda_planning_layers_raw",
@@ -147,6 +165,12 @@ def test_manual_one_shot_jobs_select_expected_assets_without_schedules() -> None
     assert _selected_assets("pf_listings_search_chunk") == {"pf_listings_raw"}
     assert _selected_assets("pf_listings_detail_chunk") == {"pf_listings_raw"}
     assert _selected_assets("pf_listing_media_assets_backfill") == {"pf_listing_media_assets"}
+    assert _selected_assets("news_feeds_manual_poll") == {"news_feeds_raw"}
+    assert _selected_assets("news_thumbnail_assets_backfill") == {"news_thumbnail_assets"}
+    assert _selected_assets("news_publish_backfill") == {
+        "news_thumbnail_assets",
+        "news_publish",
+    }
     assert _selected_assets("reelly_supply_archive_chunk") == {"reelly_supply_raw"}
     assert _selected_assets("reelly_supply_document_assets_backfill") == {
         "reelly_supply_document_assets"
@@ -168,6 +192,9 @@ def test_manual_one_shot_jobs_select_expected_assets_without_schedules() -> None
             "pf_listings_search_chunk",
             "pf_listings_detail_chunk",
             "pf_listing_media_assets_backfill",
+            "news_feeds_manual_poll",
+            "news_thumbnail_assets_backfill",
+            "news_publish_backfill",
             "reelly_supply_archive_chunk",
             "reelly_supply_document_assets_backfill",
             "reelly_supply_project_media_assets_backfill",
@@ -311,6 +338,37 @@ def test_manual_one_shot_jobs_default_raw_config() -> None:
     assert pf_media_config["include_detail_media"] is True
     assert pf_media_config["max_concurrent_downloads"] == 8
     assert "static.shared.propertyfinder.ae" in pf_media_config["allowed_media_hosts"]
+
+    news_thumbnail_config = validate_run_config(
+        defs.resolve_job_def("news_thumbnail_assets_backfill"),
+        {},
+    )["ops"]["news_thumbnail_assets"]["config"]
+    assert news_thumbnail_config["manifest_prefix"] == "raw/source=news_feeds/manifests/"
+    assert news_thumbnail_config["target_prefix"] == "media/news/thumbnails"
+    assert news_thumbnail_config["inventory_prefix"] == (
+        "raw/source=news_feeds/thumbnail_asset_manifests"
+    )
+    assert news_thumbnail_config["inventory_file_name"] == "news_thumbnail_assets.jsonl"
+    assert news_thumbnail_config["lookback_days"] == 3
+    assert news_thumbnail_config["max_assets_per_run"] == 1000
+    assert news_thumbnail_config["overwrite_existing"] is False
+    assert news_thumbnail_config["max_concurrent_downloads"] == 8
+
+    news_publish_config = validate_run_config(
+        defs.resolve_job_def("news_publish_backfill"),
+        {},
+    )
+    assert news_publish_config["ops"]["news_thumbnail_assets"]["config"]["lookback_days"] == 3
+    assert news_publish_config["ops"]["news_publish"]["config"]["manifest_prefix"] == (
+        "raw/source=news_feeds/manifests/"
+    )
+    assert news_publish_config["ops"]["news_publish"]["config"]["thumbnail_inventory_prefix"] == (
+        "raw/source=news_feeds/thumbnail_asset_manifests"
+    )
+    assert news_publish_config["ops"]["news_publish"]["config"]["lookback_days"] == 3
+    assert news_publish_config["ops"]["news_publish"]["config"]["max_articles_per_run"] == 1000
+    assert news_publish_config["ops"]["news_publish"]["config"]["ensure_schema"] is True
+    assert news_publish_config["ops"]["news_publish"]["config"]["dry_run"] is False
 
 
 def test_bronze_loader_routes_through_source_metadata() -> None:

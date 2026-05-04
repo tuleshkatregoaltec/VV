@@ -32,6 +32,12 @@ from holocron.sources.pf_listings.media_assets import (
     PropertyFinderListingMediaHydrationConfig,
     hydrate_pf_listing_media_assets,
 )
+from holocron.sources.news_feeds.assets import (
+    NewsPublishConfig,
+    NewsThumbnailHydrationConfig,
+    hydrate_news_thumbnail_assets,
+    publish_news_to_platform,
+)
 from holocron.sources.reelly_supply.document_assets import (
     ReellyDocumentAssetHydrationConfig,
     hydrate_reelly_document_assets,
@@ -336,6 +342,7 @@ def _run_raw_extractor(
         if source.name in {
             "reelly_supply",
             "dxbi_transactions",
+            "news_feeds",
             "pf_locations",
             "pf_listings",
         }:
@@ -514,6 +521,7 @@ def build_assets_for_source(source: SourceSpec) -> list[AssetsDefinition]:
 
     return [raw_asset, bronze_asset]
 
+
 _REELLY_PROJECT_MEDIA_DEFAULTS = {
     "target_prefix": "media/reelly_supply/project_media",
     "inventory_prefix": "raw/source=reelly_supply/project_media_asset_manifests",
@@ -638,6 +646,78 @@ def build_pf_listing_media_assets() -> list[AssetsDefinition]:
     return [pf_listing_media_assets]
 
 
+def build_news_feed_assets() -> list[AssetsDefinition]:
+    @asset(
+        name="news_thumbnail_assets",
+        group_name="news_feeds",
+        deps=["news_feeds_raw"],
+        config_schema=Permissive(),
+    )
+    def news_thumbnail_assets(
+        context: AssetExecutionContext,
+        s3: S3Resource,
+    ) -> MaterializeResult:
+        result = hydrate_news_thumbnail_assets(
+            s3=s3.client(),
+            config=_resolve_source_config(context),
+            progress_log=context.log,
+        )
+        return MaterializeResult(
+            metadata={
+                "source": "news_feeds",
+                "stage": "thumbnail_assets",
+                "status": "materialized",
+                "run_id": result["run_id"],
+                "discovered": result["discovered"],
+                "attempted": result["attempted"],
+                "downloaded": result["downloaded"],
+                "already_existing": result["already_existing"],
+                "errors": result["errors"],
+                "total_bytes": result["total_bytes"],
+                "source_manifest_count": result["source_manifest_count"],
+                "source_row_count": result["source_row_count"],
+                "max_concurrent_downloads": result["max_concurrent_downloads"],
+                "inventory_manifest_key": result["inventory_manifest_key"],
+                "status_counts": MetadataValue.json(result["status_counts"]),
+            }
+        )
+
+    @asset(
+        name="news_publish",
+        group_name="news_feeds",
+        deps=["news_thumbnail_assets"],
+        config_schema=Permissive(),
+    )
+    def news_publish(
+        context: AssetExecutionContext,
+        s3: S3Resource,
+    ) -> MaterializeResult:
+        result = publish_news_to_platform(
+            s3=s3.client(),
+            config=_resolve_source_config(context),
+            progress_log=context.log,
+        )
+        return MaterializeResult(
+            metadata={
+                "source": "news_feeds",
+                "stage": "platform_publish",
+                "status": "materialized",
+                "source_manifest_count": result["source_manifest_count"],
+                "source_row_count": result["source_row_count"],
+                "selected": result["selected"],
+                "skipped": result["skipped"],
+                "published": result["published"],
+                "created": result["created"],
+                "updated": result["updated"],
+                "failed": result["failed"],
+                "dry_run": result["dry_run"],
+                "writer_result": MetadataValue.json(result["writer_result"]),
+            }
+        )
+
+    return [news_thumbnail_assets, news_publish]
+
+
 def build_operational_jobs(sources: Mapping[str, SourceSpec]) -> list[JobDefinition]:
     return [
         _build_source_asset_job(
@@ -749,6 +829,29 @@ def build_operational_jobs(sources: Mapping[str, SourceSpec]) -> list[JobDefinit
             config=_reelly_archive_config_mapping(sources["reelly_supply"]),
         ),
         define_asset_job(
+            name="news_feeds_poll_and_publish",
+            selection=["news_feeds_raw", "news_thumbnail_assets", "news_publish"],
+        ),
+        _build_source_asset_job(
+            source=sources["news_feeds"],
+            name="news_feeds_manual_poll",
+            raw_only=True,
+        ),
+        define_asset_job(
+            name="news_thumbnail_assets_backfill",
+            selection=["news_thumbnail_assets"],
+            config=_news_thumbnail_asset_config_mapping(
+                defaults=NewsThumbnailHydrationConfig(),
+            ),
+        ),
+        define_asset_job(
+            name="news_publish_backfill",
+            selection=["news_thumbnail_assets", "news_publish"],
+            config=_news_publish_config_mapping(
+                defaults=NewsPublishConfig(ensure_schema=True),
+            ),
+        ),
+        define_asset_job(
             name="reelly_supply_document_assets_backfill",
             selection=["reelly_supply_document_assets"],
             config=_reelly_document_asset_config_mapping(
@@ -785,6 +888,7 @@ def build_operational_schedules(
         "dxbi_transactions_daily_incremental": "0 6 * * *",
         "bay_listings_daily_incremental": "30 6 * * *",
         "dda_planning_layers_weekly_full_refresh": "0 6 * * 0",
+        "news_feeds_poll_and_publish": "*/15 * * * *",
     }
     return [
         ScheduleDefinition(
@@ -1161,6 +1265,265 @@ def _pf_listing_media_asset_config_mapping(
                     default_value=list(defaults.asset_type_allowlist),
                     is_required=False,
                     description="Optional list of Property Finder media asset_type values to hydrate.",
+                ),
+            }
+        ),
+        receive_processed_config_values=True,
+    )
+
+
+def _news_thumbnail_asset_config_mapping(
+    *,
+    defaults: NewsThumbnailHydrationConfig,
+) -> ConfigMapping:
+    def _map_news_thumbnail_asset_config(config: Mapping[str, Any]) -> dict[str, Any]:
+        return {
+            "ops": {
+                "news_thumbnail_assets": {
+                    "config": dict(config),
+                }
+            }
+        }
+
+    return ConfigMapping(
+        config_fn=_map_news_thumbnail_asset_config,
+        config_schema=Permissive(
+            {
+                "manifest_prefix": Field(
+                    StringSource,
+                    default_value=defaults.manifest_prefix,
+                    is_required=False,
+                    description="R2 prefix containing news raw manifests.",
+                ),
+                "target_prefix": Field(
+                    StringSource,
+                    default_value=defaults.target_prefix,
+                    is_required=False,
+                    description="R2 prefix for mirrored news thumbnails.",
+                ),
+                "inventory_prefix": Field(
+                    StringSource,
+                    default_value=defaults.inventory_prefix,
+                    is_required=False,
+                    description="R2 prefix for news thumbnail inventory manifests.",
+                ),
+                "inventory_file_name": Field(
+                    StringSource,
+                    default_value=defaults.inventory_file_name,
+                    is_required=False,
+                    description="Inventory manifest JSONL file name.",
+                ),
+                "lookback_days": Field(
+                    int,
+                    default_value=defaults.lookback_days,
+                    is_required=False,
+                    description="Only hydrate article thumbnails discovered or published recently.",
+                ),
+                "max_assets_per_run": Field(
+                    int,
+                    default_value=defaults.max_assets_per_run,
+                    is_required=False,
+                    description="Maximum thumbnail candidates to process in one run.",
+                ),
+                "overwrite_existing": Field(
+                    bool,
+                    default_value=defaults.overwrite_existing,
+                    is_required=False,
+                    description="Re-download and replace thumbnails that already exist.",
+                ),
+                "allowed_thumbnail_hosts": Field(
+                    [str],
+                    default_value=list(defaults.allowed_thumbnail_hosts),
+                    is_required=False,
+                    description="Optional allowlist for thumbnail hosts.",
+                ),
+                "max_thumbnail_mb": Field(
+                    int,
+                    default_value=defaults.max_thumbnail_mb,
+                    is_required=False,
+                    description="Maximum single thumbnail download size in MiB.",
+                ),
+                "request_pause_seconds": Field(
+                    float,
+                    default_value=defaults.request_pause_seconds,
+                    is_required=False,
+                    description="Pause between thumbnail download attempts.",
+                ),
+                "timeout_seconds": Field(
+                    float,
+                    default_value=defaults.timeout_seconds,
+                    is_required=False,
+                    description="HTTP timeout for thumbnail downloads.",
+                ),
+                "max_concurrent_downloads": Field(
+                    int,
+                    default_value=defaults.max_concurrent_downloads,
+                    is_required=False,
+                    description="Maximum concurrent thumbnail downloads.",
+                ),
+            }
+        ),
+        receive_processed_config_values=True,
+    )
+
+
+def _news_publish_config_mapping(
+    *,
+    defaults: NewsPublishConfig,
+) -> ConfigMapping:
+    thumbnail_defaults = NewsThumbnailHydrationConfig()
+
+    def _map_news_publish_config(config: Mapping[str, Any]) -> dict[str, Any]:
+        thumbnail_config = {
+            key: config[key]
+            for key in (
+                "manifest_prefix",
+                "target_prefix",
+                "inventory_prefix",
+                "inventory_file_name",
+                "lookback_days",
+                "max_assets_per_run",
+                "overwrite_existing",
+                "allowed_thumbnail_hosts",
+                "max_thumbnail_mb",
+                "request_pause_seconds",
+                "timeout_seconds",
+                "max_concurrent_downloads",
+            )
+            if key in config
+        }
+        publish_config = {
+            key: config[key]
+            for key in (
+                "manifest_prefix",
+                "lookback_days",
+                "max_articles_per_run",
+                "platform_postgres_url",
+                "ensure_schema",
+                "dry_run",
+            )
+            if key in config
+        }
+        if "inventory_prefix" in config:
+            publish_config["thumbnail_inventory_prefix"] = config["inventory_prefix"]
+        elif "thumbnail_inventory_prefix" in config:
+            publish_config["thumbnail_inventory_prefix"] = config["thumbnail_inventory_prefix"]
+        return {
+            "ops": {
+                "news_thumbnail_assets": {
+                    "config": thumbnail_config,
+                },
+                "news_publish": {
+                    "config": publish_config,
+                },
+            }
+        }
+
+    return ConfigMapping(
+        config_fn=_map_news_publish_config,
+        config_schema=Permissive(
+            {
+                "manifest_prefix": Field(
+                    StringSource,
+                    default_value=defaults.manifest_prefix,
+                    is_required=False,
+                    description="R2 prefix containing news raw manifests.",
+                ),
+                "thumbnail_inventory_prefix": Field(
+                    StringSource,
+                    default_value=defaults.thumbnail_inventory_prefix,
+                    is_required=False,
+                    description="R2 prefix containing news thumbnail inventory manifests.",
+                ),
+                "lookback_days": Field(
+                    int,
+                    default_value=defaults.lookback_days,
+                    is_required=False,
+                    description="Only publish articles discovered or published recently.",
+                ),
+                "max_articles_per_run": Field(
+                    int,
+                    default_value=defaults.max_articles_per_run,
+                    is_required=False,
+                    description="Maximum article rows to upsert in one run.",
+                ),
+                "target_prefix": Field(
+                    StringSource,
+                    default_value=thumbnail_defaults.target_prefix,
+                    is_required=False,
+                    description="R2 prefix for mirrored news thumbnails.",
+                ),
+                "inventory_prefix": Field(
+                    StringSource,
+                    default_value=thumbnail_defaults.inventory_prefix,
+                    is_required=False,
+                    description="R2 prefix for news thumbnail inventory manifests.",
+                ),
+                "inventory_file_name": Field(
+                    StringSource,
+                    default_value=thumbnail_defaults.inventory_file_name,
+                    is_required=False,
+                    description="Inventory manifest JSONL file name.",
+                ),
+                "max_assets_per_run": Field(
+                    int,
+                    default_value=thumbnail_defaults.max_assets_per_run,
+                    is_required=False,
+                    description="Maximum thumbnail candidates to process in one run.",
+                ),
+                "overwrite_existing": Field(
+                    bool,
+                    default_value=thumbnail_defaults.overwrite_existing,
+                    is_required=False,
+                    description="Re-download and replace thumbnails that already exist.",
+                ),
+                "allowed_thumbnail_hosts": Field(
+                    [str],
+                    default_value=list(thumbnail_defaults.allowed_thumbnail_hosts),
+                    is_required=False,
+                    description="Optional allowlist for thumbnail hosts.",
+                ),
+                "max_thumbnail_mb": Field(
+                    int,
+                    default_value=thumbnail_defaults.max_thumbnail_mb,
+                    is_required=False,
+                    description="Maximum single thumbnail download size in MiB.",
+                ),
+                "request_pause_seconds": Field(
+                    float,
+                    default_value=thumbnail_defaults.request_pause_seconds,
+                    is_required=False,
+                    description="Pause between thumbnail download attempts.",
+                ),
+                "timeout_seconds": Field(
+                    float,
+                    default_value=thumbnail_defaults.timeout_seconds,
+                    is_required=False,
+                    description="HTTP timeout for thumbnail downloads.",
+                ),
+                "max_concurrent_downloads": Field(
+                    int,
+                    default_value=thumbnail_defaults.max_concurrent_downloads,
+                    is_required=False,
+                    description="Maximum concurrent thumbnail downloads.",
+                ),
+                "platform_postgres_url": Field(
+                    StringSource,
+                    default_value=defaults.platform_postgres_url,
+                    is_required=False,
+                    description="Override PLATFORM_POSTGRES_URL for this publish run.",
+                ),
+                "ensure_schema": Field(
+                    bool,
+                    default_value=defaults.ensure_schema,
+                    is_required=False,
+                    description="Create or update news_articles columns before publishing.",
+                ),
+                "dry_run": Field(
+                    bool,
+                    default_value=defaults.dry_run,
+                    is_required=False,
+                    description="Build article payloads without writing to Postgres.",
                 ),
             }
         ),
