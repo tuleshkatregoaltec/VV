@@ -150,6 +150,8 @@ def load_release_to_clickhouse(
                 file_entry=file_entry,
                 source_label="DXBI",
             ):
+                if not raw_row.get("table") and not raw_row.get("cells"):
+                    continue
                 table_rows.append(_row_tuple(raw_row, fallback_run_id=run_id))
 
     ensure_schema(clickhouse=clickhouse)

@@ -3,6 +3,7 @@ from __future__ import annotations
 import csv
 import hashlib
 import json
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -103,6 +104,7 @@ def read_csv_manifest_rows(
     file_entry: dict[str, Any],
     source_label: str,
 ) -> list[dict[str, str]]:
+    _allow_large_csv_fields()
     with path.open(encoding="utf-8", newline="") as handle:
         rows = list(csv.DictReader(handle))
     validate_manifest_row_count(
@@ -115,8 +117,19 @@ def read_csv_manifest_rows(
 
 
 def count_csv_rows(path: Path) -> int:
+    _allow_large_csv_fields()
     with path.open(encoding="utf-8", newline="") as handle:
         return sum(1 for _ in csv.DictReader(handle))
+
+
+def _allow_large_csv_fields() -> None:
+    limit = sys.maxsize
+    while True:
+        try:
+            csv.field_size_limit(limit)
+            return
+        except OverflowError:
+            limit //= 10
 
 
 def validate_manifest_row_count(

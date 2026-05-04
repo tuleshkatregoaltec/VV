@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from holocron.contracts import BronzeTable, SourceSpec
 
@@ -11,6 +11,8 @@ DATE_SLICE_CHECKPOINT_STRATEGY = "date_window"
 DXBI_SOURCE_NAME = "dxbi_transactions"
 DXBI_PROVIDER = "dxbinteract"
 DXBI_BASE_URL = "https://dxbinteract.com/"
+DXBI_DEFAULT_HEATMAP_PROPERTY_TYPES = ("Apartment", "Villa", "Plot", "Commercial")
+DXBI_DEFAULT_HEATMAP_BEDROOMS = ("0", "1", "2", "3", "4", "5", "6", "7", "8", "9")
 
 
 @dataclass(frozen=True, slots=True)
@@ -26,6 +28,7 @@ class DateSlice:
 class DxbiConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    scrape_mode: str = "comprehensive"
     mode: str = "incremental"
     start_date: date | None = None
     end_date: date | None = None
@@ -34,13 +37,32 @@ class DxbiConfig(BaseModel):
     page_urls: str = ""
     page_urls_file: str = ""
     max_pages: int | None = Field(default=None, ge=1)
-    headless: bool = True
+    headless: bool = False
     chrome_path: str = ""
     storage_state_path: str = ""
     twocaptcha_api_key: str = ""
+    heatmap_property_types: tuple[str, ...] = DXBI_DEFAULT_HEATMAP_PROPERTY_TYPES
+    heatmap_bedrooms: tuple[str, ...] = DXBI_DEFAULT_HEATMAP_BEDROOMS
+    max_heatmap_buildings: int | None = Field(default=None, ge=1)
+    include_heatmap_building_details: bool = True
+    include_heatmap_building_status: bool = True
+    include_heatmap_chessboard: bool = True
+    include_fam_map_buildings: bool = True
+    heatmap_request_pause_seconds: float = Field(default=0.5, ge=0)
+    heatmap_fetch_timeout_seconds: float = Field(default=30, ge=1)
+    heatmap_progress_interval: int = Field(default=100, ge=1)
+
+    @field_validator("heatmap_property_types", "heatmap_bedrooms", mode="before")
+    @classmethod
+    def coerce_tuple_config(cls, value: object) -> object:
+        if isinstance(value, str):
+            return tuple(part.strip() for part in value.split(",") if part.strip())
+        return value
 
     @model_validator(mode="after")
     def validate_dates(self) -> "DxbiConfig":
+        if self.scrape_mode not in {"comprehensive", "report_tables", "both"}:
+            raise ValueError("scrape_mode must be 'comprehensive', 'report_tables', or 'both'")
         if self.mode not in {"incremental", "backfill"}:
             raise ValueError("mode must be 'incremental' or 'backfill'")
         if self.mode == "backfill":
@@ -48,6 +70,10 @@ class DxbiConfig(BaseModel):
                 raise ValueError("backfill mode requires start_date and end_date")
         if self.start_date and self.end_date and self.start_date > self.end_date:
             raise ValueError("start_date must be on or before end_date")
+        if not self.heatmap_property_types:
+            raise ValueError("heatmap_property_types must include at least one property type")
+        if not self.heatmap_bedrooms:
+            raise ValueError("heatmap_bedrooms must include at least one bedroom value")
         return self
 
 

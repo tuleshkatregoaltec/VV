@@ -333,7 +333,12 @@ def _run_raw_extractor(
 
     with TemporaryDirectory(prefix=f"holocron-{source.name}-") as scratch_dir:
         extractor_kwargs: dict[str, Any] = {"config": source_config}
-        if source.name in {"reelly_supply", "pf_locations", "pf_listings"}:
+        if source.name in {
+            "reelly_supply",
+            "dxbi_transactions",
+            "pf_locations",
+            "pf_listings",
+        }:
             extractor_kwargs["progress_log"] = context.log
         if source.name == "pf_listings":
             extractor_kwargs["state_store"] = s3_client

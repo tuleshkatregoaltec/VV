@@ -104,6 +104,38 @@ def test_load_release_to_clickhouse_loads_rows_and_clears_incremental_window() -
     assert len(insert_call["rows"]) == 2
 
 
+def test_load_release_to_clickhouse_ignores_comprehensive_heatmap_rows() -> None:
+    raw_rows = [
+        {
+            "endpoint": "heatmap_chessboard",
+            "location_id": "1",
+            "payload": {"Chessboard": {"Floors": []}},
+            "_run_id": "raw-run-1",
+            "_scraped_at": "2026-05-04T16:00:00+00:00",
+        }
+    ]
+    s3 = _FakeS3({"s3://raw/heatmap.jsonl": _jsonl_payload(raw_rows)})
+    clickhouse = _FakeClickHouse()
+
+    result = load_release_to_clickhouse(
+        raw_release={
+            "source": "dxbi_transactions",
+            "run_id": "release-run-1",
+            "files": [
+                {"path": "dxbi_heatmap_chessboards.jsonl", "s3_key": "s3://raw/heatmap.jsonl"}
+            ],
+        },
+        s3=s3,  # type: ignore[arg-type]
+        clickhouse=clickhouse,  # type: ignore[arg-type]
+    )
+
+    assert result["total_rows"] == 0
+    assert not any(
+        "ALTER TABLE dxbi_transactions_bronze DELETE WHERE" in sql for sql in clickhouse.commands
+    )
+    assert not clickhouse.insert_calls
+
+
 def test_load_release_to_clickhouse_rejects_checksum_mismatch_before_mutation() -> None:
     payload = _jsonl_payload([])
     clickhouse = _FakeClickHouse()
