@@ -14,6 +14,7 @@ from holocron.platform.settings import Settings
 class S3Client:
     def __init__(self, settings: Settings) -> None:
         self._bucket = settings.s3_bucket
+        self._public_url_base = settings.s3_public_url_base.strip()
         session_kwargs: dict[str, Any] = {"region_name": settings.s3_region}
         if settings.r2_access_key_id and settings.r2_secret_access_key:
             session_kwargs.update(
@@ -64,6 +65,38 @@ class S3Client:
         if content_type:
             extra_args["ContentType"] = content_type
         self._client.put_object(Bucket=self._bucket, Key=key, Body=payload, **extra_args)
+
+    def list_keys(self, *, prefix: str) -> list[str]:
+        paginator = self._client.get_paginator("list_objects_v2")
+        keys: list[str] = []
+        for page in paginator.paginate(Bucket=self._bucket, Prefix=prefix):
+            for item in page.get("Contents", []):
+                key = item.get("Key")
+                if isinstance(key, str):
+                    keys.append(key)
+        return keys
+
+    def read_bytes(self, *, key: str) -> bytes:
+        response = self._client.get_object(Bucket=self._bucket, Key=key)
+        return response["Body"].read()
+
+    def read_text(self, *, key: str, encoding: str = "utf-8") -> str:
+        return self.read_bytes(key=key).decode(encoding)
+
+    def object_exists(self, *, key: str) -> bool:
+        try:
+            self._client.head_object(Bucket=self._bucket, Key=key)
+        except ClientError as exc:
+            error_code = exc.response.get("Error", {}).get("Code")
+            if error_code in {"404", "NoSuchKey", "NotFound"}:
+                return False
+            raise
+        return True
+
+    def public_url(self, *, key: str) -> str | None:
+        if not self._public_url_base:
+            return None
+        return f"{self._public_url_base.rstrip('/')}/{key}"
 
     def download_file(self, *, key: str, path: str | Path) -> None:
         destination = Path(path)

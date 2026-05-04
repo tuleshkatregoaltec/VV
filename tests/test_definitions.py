@@ -32,6 +32,8 @@ def test_definitions_expose_source_assets_and_news_sync() -> None:
         "dxbi_transactions_raw",
         "dxbi_transactions_bronze",
         "reelly_supply_raw",
+        "reelly_supply_document_assets",
+        "reelly_supply_project_media_assets",
         "news_sync",
     }
 
@@ -49,6 +51,8 @@ def test_definitions_expose_named_operational_jobs() -> None:
         "dxbi_transactions_manual_backfill",
         "dda_planning_layers_manual_full_refresh",
         "reelly_supply_archive_chunk",
+        "reelly_supply_document_assets_backfill",
+        "reelly_supply_project_media_assets_backfill",
         "news_sync_pipeline",
     }
 
@@ -129,6 +133,12 @@ def test_manual_one_shot_jobs_select_expected_assets_without_schedules() -> None
         "dda_planning_layers_bronze",
     }
     assert _selected_assets("reelly_supply_archive_chunk") == {"reelly_supply_raw"}
+    assert _selected_assets("reelly_supply_document_assets_backfill") == {
+        "reelly_supply_document_assets"
+    }
+    assert _selected_assets("reelly_supply_project_media_assets_backfill") == {
+        "reelly_supply_project_media_assets"
+    }
     scheduled_jobs = {schedule.job_name for schedule in defs.schedules}
     assert (
         not {
@@ -138,6 +148,8 @@ def test_manual_one_shot_jobs_select_expected_assets_without_schedules() -> None
             "dxbi_transactions_manual_backfill",
             "dda_planning_layers_manual_full_refresh",
             "reelly_supply_archive_chunk",
+            "reelly_supply_document_assets_backfill",
+            "reelly_supply_project_media_assets_backfill",
         }
         & scheduled_jobs
     )
@@ -191,8 +203,41 @@ def test_manual_one_shot_jobs_default_raw_config() -> None:
     )["ops"]["reelly_supply_raw"]["config"]
     assert reelly_config["pages_per_run"] == 5
     assert reelly_config["page_cursor"] == 7
-    assert reelly_config["download_documents"] is True
+    assert reelly_config["download_documents"] is False
     assert reelly_config["download_all_project_docs"] is True
+
+    reelly_document_config = validate_run_config(
+        defs.resolve_job_def("reelly_supply_document_assets_backfill"),
+        {},
+    )["ops"]["reelly_supply_document_assets"]["config"]
+    assert reelly_document_config["manifest_prefix"] == "raw/source=reelly_supply/manifests/"
+    assert reelly_document_config["target_prefix"] == "media/reelly_supply/documents"
+    assert reelly_document_config["max_assets_per_run"] == 500
+    assert reelly_document_config["overwrite_existing"] is False
+    assert reelly_document_config["include_project_documents"] is True
+    assert reelly_document_config["include_project_detail_media"] is False
+    assert reelly_document_config["structured_target_keys"] is False
+    assert reelly_document_config["max_concurrent_downloads"] == 1
+
+    reelly_media_config = validate_run_config(
+        defs.resolve_job_def("reelly_supply_project_media_assets_backfill"),
+        {},
+    )["ops"]["reelly_supply_project_media_assets"]["config"]
+    assert reelly_media_config["manifest_prefix"] == "raw/source=reelly_supply/manifests/"
+    assert reelly_media_config["target_prefix"] == "media/reelly_supply/project_media"
+    assert reelly_media_config["inventory_prefix"] == (
+        "raw/source=reelly_supply/project_media_asset_manifests"
+    )
+    assert reelly_media_config["inventory_file_name"] == "reelly_supply_project_media_assets.jsonl"
+    assert reelly_media_config["include_project_documents"] is False
+    assert reelly_media_config["include_project_detail_media"] is True
+    assert reelly_media_config["structured_target_keys"] is True
+    assert reelly_media_config["max_concurrent_downloads"] == 8
+    assert "brochure" not in reelly_media_config["asset_type_allowlist"]
+    assert "profile_image" not in reelly_media_config["asset_type_allowlist"]
+    assert {"cover_image", "developer_logo", "floorplan"} <= set(
+        reelly_media_config["asset_type_allowlist"]
+    )
 
 
 def test_bronze_loader_routes_through_source_metadata() -> None:

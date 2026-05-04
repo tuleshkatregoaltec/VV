@@ -127,7 +127,9 @@ def test_reelly_supply_config_defaults_to_bounded_daily_batch() -> None:
     assert config.download_documents is True
     assert config.download_all_project_docs is True
     assert config.max_document_mb == 100
+    assert "api.reelly.io" in config.allowed_document_hosts
     assert "drive.google.com" in config.allowed_document_hosts
+    assert "storage.googleapis.com" in config.allowed_document_hosts
     assert config.try_matrix_availability is True
 
 
@@ -388,6 +390,7 @@ def test_reelly_supply_discovers_and_downloads_project_documents(tmp_path: Path)
             password="secret",
             pages_per_run=1,
             allowed_document_hosts=(
+                "api.reelly.io",
                 "drive.google.com",
                 "vault.reelly.test",
                 "docs.reelly.test",

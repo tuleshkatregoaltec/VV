@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import ipaddress
 import json
+import logging
 import os
 import re
 import time
@@ -21,6 +22,8 @@ from holocron.contracts import RawFile, RawRelease
 from holocron.platform.execution import build_raw_file, build_raw_release, new_run_id, utc_now
 from holocron.platform.metadata import safe_config_metadata
 from holocron.sources.reelly_supply.source import ReellySupplyConfig, SOURCE
+
+logger = logging.getLogger(__name__)
 
 _DOCUMENT_HINTS = (
     "brochure",
@@ -69,6 +72,10 @@ class DocumentDownload:
     content: bytes
     content_type: str | None
     final_url: str
+
+
+class DocumentTooLargeError(RuntimeError):
+    """Raised when a document download exceeds the configured byte limit."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -213,7 +220,7 @@ class ReellySupplyApiClient:
             for chunk in response.iter_bytes():
                 size += len(chunk)
                 if size > max_bytes:
-                    raise RuntimeError(f"document exceeds max size of {max_bytes} bytes")
+                    raise DocumentTooLargeError(f"document exceeds max size of {max_bytes} bytes")
                 chunks.append(chunk)
             return DocumentDownload(
                 content=b"".join(chunks),
@@ -243,6 +250,7 @@ def extract_release(
     config: ReellySupplyConfig | dict,
     now: datetime | None = None,
     api_client: ReellySupplyApi | None = None,
+    progress_log: Any | None = None,
 ) -> RawRelease:
     parsed_config = (
         config
@@ -254,6 +262,19 @@ def extract_release(
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
     email, password = _resolve_credentials(parsed_config, required=api_client is None)
+    log = progress_log or logger
+    _log_info(
+        log,
+        (
+            "reelly_supply: starting raw extraction run_id=%s start_page=%s "
+            "pages_per_run=%s download_documents=%s try_matrix_availability=%s"
+        ),
+        run_id,
+        parsed_config.resolved_start_page,
+        parsed_config.pages_per_run,
+        parsed_config.download_documents,
+        parsed_config.try_matrix_availability,
+    )
 
     if api_client is None:
         with httpx.Client(timeout=parsed_config.timeout_seconds, follow_redirects=True) as client:
@@ -271,6 +292,7 @@ def extract_release(
                 scraped_at=current_time.isoformat(),
                 email=email,
                 password=password,
+                progress_log=log,
             )
     else:
         files, metadata = _extract_files(
@@ -280,18 +302,33 @@ def extract_release(
             scraped_at=current_time.isoformat(),
             email=email,
             password=password,
+            progress_log=log,
         )
 
     if not files:
         raise RuntimeError("Reelly supply extraction produced no raw files")
 
-    return build_raw_release(
+    release = build_raw_release(
         source=SOURCE,
         files=files,
         run_id=run_id,
         now=current_time,
         metadata={"config": safe_config_metadata(parsed_config), **metadata},
     )
+    _log_info(
+        log,
+        (
+            "reelly_supply: completed raw extraction run_id=%s files=%s total_size=%s "
+            "projects=%s documents=%s matrix_rows=%s"
+        ),
+        run_id,
+        len(files),
+        _format_bytes(sum(raw_file.size_bytes for raw_file in files)),
+        metadata.get("project_detail_count"),
+        metadata.get("document_count"),
+        metadata.get("matrix_attempt_count"),
+    )
+    return release
 
 
 def _extract_files(
@@ -302,11 +339,15 @@ def _extract_files(
     scraped_at: str,
     email: str,
     password: str,
+    progress_log: Any,
 ) -> tuple[tuple[RawFile, ...], dict[str, Any]]:
+    started_at = time.monotonic()
+    _log_info(progress_log, "reelly_supply: authenticating")
     auth_payload = api_client.authenticate(email=email, password=password)
     _pause(config)
     user_payload = api_client.current_user()
     user_id = _extract_user_id(user_payload)
+    _log_info(progress_log, "reelly_supply: authenticated user_id=%s", user_id)
     _pause(config)
 
     list_page_rows, project_items, batch_metadata = _fetch_project_batch(
@@ -314,6 +355,7 @@ def _extract_files(
         api_client=api_client,
         scraped_at=scraped_at,
         user_id=user_id,
+        progress_log=progress_log,
     )
     project_details = _fetch_project_details(
         config=config,
@@ -321,6 +363,7 @@ def _extract_files(
         scraped_at=scraped_at,
         user_id=user_id,
         project_items=project_items,
+        progress_log=progress_log,
     )
     document_rows, document_files = _collect_project_documents(
         output_path=output_path,
@@ -328,12 +371,14 @@ def _extract_files(
         api_client=api_client,
         scraped_at=scraped_at,
         project_details=project_details,
+        progress_log=progress_log,
     )
     matrix_rows = _collect_matrix_availability(
         config=config,
         api_client=api_client,
         scraped_at=scraped_at,
         project_details=project_details,
+        progress_log=progress_log,
     )
 
     raw_files = [
@@ -354,6 +399,18 @@ def _extract_files(
         ),
     ]
     raw_files.extend(document_files)
+    jsonl_files = [raw_file for raw_file in raw_files if raw_file.row_count is not None]
+    _log_info(
+        progress_log,
+        (
+            "reelly_supply: wrote local raw files jsonl_files=%s document_files=%s "
+            "total_size=%s elapsed=%.1fs"
+        ),
+        len(jsonl_files),
+        len(document_files),
+        _format_bytes(sum(raw_file.size_bytes for raw_file in raw_files)),
+        time.monotonic() - started_at,
+    )
 
     return tuple(raw_files), {
         **batch_metadata,
@@ -372,10 +429,19 @@ def _fetch_project_batch(
     api_client: ReellySupplyApi,
     scraped_at: str,
     user_id: Any | None,
+    progress_log: Any,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]]:
+    started_at = time.monotonic()
     start_page = config.resolved_start_page
     if config.max_pages is not None and start_page > config.max_pages:
         start_page = 1
+    _log_info(
+        progress_log,
+        "reelly_supply: fetching project list start_page=%s pages_per_run=%s max_pages=%s",
+        start_page,
+        config.pages_per_run,
+        config.max_pages,
+    )
 
     rows: list[dict[str, Any]] = []
     projects: list[dict[str, Any]] = []
@@ -420,6 +486,18 @@ def _fetch_project_batch(
         )
         projects.extend(items)
         end_page = page
+        _log_info(
+            progress_log,
+            (
+                "reelly_supply: fetched list page=%s items=%s page_total=%s "
+                "items_total=%s accumulated_projects=%s"
+            ),
+            page,
+            len(items),
+            page_total,
+            items_total,
+            len(projects),
+        )
         if not items and page_total is None:
             break
         _pause(config)
@@ -443,6 +521,19 @@ def _fetch_project_batch(
         "pages_fetched": len(rows),
         "batch_completed_result_set": completed,
     }
+    _log_info(
+        progress_log,
+        (
+            "reelly_supply: completed project list pages=%s start_page=%s end_page=%s "
+            "next_page=%s projects=%s elapsed=%.1fs"
+        ),
+        len(rows),
+        start_page,
+        end_page if rows else None,
+        next_page,
+        len(projects),
+        time.monotonic() - started_at,
+    )
     return rows, projects, metadata
 
 
@@ -453,9 +544,18 @@ def _fetch_project_details(
     scraped_at: str,
     user_id: Any | None,
     project_items: Sequence[Mapping[str, Any]],
+    progress_log: Any,
 ) -> list[dict[str, Any]]:
+    started_at = time.monotonic()
+    unique_projects = list(_unique_projects(project_items))
+    total_projects = len(unique_projects)
+    _log_info(
+        progress_log,
+        "reelly_supply: fetching project details unique_projects=%s",
+        total_projects,
+    )
     details: list[dict[str, Any]] = []
-    for project_id, list_item in _unique_projects(project_items):
+    for index, (project_id, list_item) in enumerate(unique_projects, start=1):
         payload = api_client.fetch_project_detail(project_id=project_id, user_id=user_id)
         row = {
             "endpoint": "projects",
@@ -467,7 +567,21 @@ def _fetch_project_details(
         details.append(
             {"project_id": project_id, "list_item": list_item, "raw": payload, "row": row}
         )
+        if _should_log_progress(index, total_projects, interval=25):
+            _log_info(
+                progress_log,
+                "reelly_supply: fetched project details progress=%s/%s project_id=%s",
+                index,
+                total_projects,
+                project_id,
+            )
         _pause(config)
+    _log_info(
+        progress_log,
+        "reelly_supply: completed project details rows=%s elapsed=%.1fs",
+        len(details),
+        time.monotonic() - started_at,
+    )
     return details
 
 
@@ -478,12 +592,30 @@ def _collect_project_documents(
     api_client: ReellySupplyApi,
     scraped_at: str,
     project_details: Sequence[dict[str, Any]],
+    progress_log: Any,
 ) -> tuple[list[dict[str, Any]], list[RawFile]]:
+    started_at = time.monotonic()
     rows: list[dict[str, Any]] = []
     raw_files: list[RawFile] = []
     max_bytes = config.max_document_mb * 1024 * 1024
+    total_projects = len(project_details)
+    downloaded_count = 0
+    skipped_count = 0
+    error_count = 0
+    discovery_error_count = 0
+    downloaded_bytes = 0
+    _log_info(
+        progress_log,
+        (
+            "reelly_supply: collecting project documents projects=%s "
+            "download_documents=%s max_document_mb=%s"
+        ),
+        total_projects,
+        config.download_documents,
+        config.max_document_mb,
+    )
 
-    for detail in project_details:
+    for project_index, detail in enumerate(project_details, start=1):
         project_id = detail["project_id"]
         documents = list(
             _discover_documents(
@@ -507,6 +639,13 @@ def _collect_project_documents(
             )
             _pause(config)
         except Exception as exc:  # noqa: BLE001
+            discovery_error_count += 1
+            _log_warning(
+                progress_log,
+                "reelly_supply: document discovery failed project_id=%s error=%s",
+                project_id,
+                exc,
+            )
             rows.append(
                 {
                     "endpoint": "links_docs",
@@ -522,8 +661,10 @@ def _collect_project_documents(
             if not config.download_documents:
                 row["status"] = "download_skipped"
                 rows.append(row)
+                skipped_count += 1
                 continue
             try:
+                document_started_at = time.monotonic()
                 download = api_client.download_document(
                     document.normalized_url, max_bytes=max_bytes
                 )
@@ -544,6 +685,20 @@ def _collect_project_documents(
                     },
                 )
                 raw_files.append(raw_file)
+                downloaded_count += 1
+                downloaded_bytes += raw_file.size_bytes
+                _log_info(
+                    progress_log,
+                    (
+                        "reelly_supply: downloaded document project_id=%s index=%s "
+                        "size=%s content_type=%s elapsed=%.1fs"
+                    ),
+                    project_id,
+                    index,
+                    _format_bytes(raw_file.size_bytes),
+                    download.content_type,
+                    time.monotonic() - document_started_at,
+                )
                 row.update(
                     {
                         "status": "downloaded",
@@ -555,9 +710,47 @@ def _collect_project_documents(
                     }
                 )
             except Exception as exc:  # noqa: BLE001
+                error_count += 1
+                _log_warning(
+                    progress_log,
+                    "reelly_supply: document download failed project_id=%s index=%s error=%s",
+                    project_id,
+                    index,
+                    exc,
+                )
                 row.update({"status": "download_error", "error": str(exc)})
             rows.append(row)
+        if _should_log_progress(project_index, total_projects, interval=25):
+            _log_info(
+                progress_log,
+                (
+                    "reelly_supply: document progress projects=%s/%s rows=%s "
+                    "downloaded=%s skipped=%s errors=%s discovery_errors=%s bytes=%s"
+                ),
+                project_index,
+                total_projects,
+                len(rows),
+                downloaded_count,
+                skipped_count,
+                error_count,
+                discovery_error_count,
+                _format_bytes(downloaded_bytes),
+            )
 
+    _log_info(
+        progress_log,
+        (
+            "reelly_supply: completed documents rows=%s downloaded=%s skipped=%s "
+            "errors=%s discovery_errors=%s bytes=%s elapsed=%.1fs"
+        ),
+        len(rows),
+        downloaded_count,
+        skipped_count,
+        error_count,
+        discovery_error_count,
+        _format_bytes(downloaded_bytes),
+        time.monotonic() - started_at,
+    )
     return rows, raw_files
 
 
@@ -567,15 +760,43 @@ def _collect_matrix_availability(
     api_client: ReellySupplyApi,
     scraped_at: str,
     project_details: Sequence[dict[str, Any]],
+    progress_log: Any,
 ) -> list[dict[str, Any]]:
     if not config.try_matrix_availability:
+        _log_info(progress_log, "reelly_supply: matrix availability disabled")
         return []
 
+    started_at = time.monotonic()
     rows: list[dict[str, Any]] = []
-    for detail in project_details:
+    success_count = 0
+    error_count = 0
+    skipped_no_signal = 0
+    total_projects = len(project_details)
+    _log_info(
+        progress_log,
+        "reelly_supply: collecting matrix availability projects=%s endpoints=%s",
+        total_projects,
+        ",".join(config.matrix_endpoints),
+    )
+    for project_index, detail in enumerate(project_details, start=1):
         raw = detail["raw"]
         project_id = detail["project_id"]
         if not _has_matrix_signal(raw):
+            skipped_no_signal += 1
+            if _should_log_progress(project_index, total_projects, interval=25):
+                _log_info(
+                    progress_log,
+                    (
+                        "reelly_supply: matrix progress projects=%s/%s rows=%s "
+                        "success=%s errors=%s skipped_no_signal=%s"
+                    ),
+                    project_index,
+                    total_projects,
+                    len(rows),
+                    success_count,
+                    error_count,
+                    skipped_no_signal,
+                )
             continue
         candidates = _matrix_candidates(project_id=project_id, project=raw)
         for endpoint in config.matrix_endpoints:
@@ -593,12 +814,40 @@ def _collect_matrix_availability(
                     )
                     row.update({"status": "success", "raw": payload})
                     rows.append(row)
+                    success_count += 1
                     _pause(config)
                     break
                 except Exception as exc:  # noqa: BLE001
                     row.update({"status": "error", "error": str(exc)})
                     rows.append(row)
+                    error_count += 1
                     _pause(config)
+        if _should_log_progress(project_index, total_projects, interval=25):
+            _log_info(
+                progress_log,
+                (
+                    "reelly_supply: matrix progress projects=%s/%s rows=%s "
+                    "success=%s errors=%s skipped_no_signal=%s"
+                ),
+                project_index,
+                total_projects,
+                len(rows),
+                success_count,
+                error_count,
+                skipped_no_signal,
+            )
+    _log_info(
+        progress_log,
+        (
+            "reelly_supply: completed matrix availability rows=%s success=%s "
+            "errors=%s skipped_no_signal=%s elapsed=%.1fs"
+        ),
+        len(rows),
+        success_count,
+        error_count,
+        skipped_no_signal,
+        time.monotonic() - started_at,
+    )
     return rows
 
 
@@ -1016,3 +1265,26 @@ def _build_raw_file(
 def _pause(config: ReellySupplyConfig) -> None:
     if config.request_pause_seconds:
         time.sleep(config.request_pause_seconds)
+
+
+def _should_log_progress(index: int, total: int, *, interval: int) -> bool:
+    return index == 1 or index == total or index % interval == 0
+
+
+def _format_bytes(size_bytes: float | int) -> str:
+    size = float(size_bytes)
+    for unit in ("B", "KiB", "MiB", "GiB", "TiB"):
+        if size < 1024 or unit == "TiB":
+            if unit == "B":
+                return f"{int(size)} B"
+            return f"{size:.1f} {unit}"
+        size /= 1024
+    return f"{size:.1f} TiB"
+
+
+def _log_info(progress_log: Any, message: str, *args: Any) -> None:
+    progress_log.info(message, *args)
+
+
+def _log_warning(progress_log: Any, message: str, *args: Any) -> None:
+    progress_log.warning(message, *args)

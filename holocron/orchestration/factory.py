@@ -28,6 +28,10 @@ from holocron.platform.execution import utc_now
 from holocron.platform.manifests import manifest_s3_key, raw_file_s3_key
 from holocron.platform.resources import ClickHouseResource, S3Resource
 from holocron.sources.bay_locations.source import DEFAULT_DUBAI_LOCATION_QUERIES
+from holocron.sources.reelly_supply.document_assets import (
+    ReellyDocumentAssetHydrationConfig,
+    hydrate_reelly_document_assets,
+)
 
 _DUBAI_TIMEZONE = "Asia/Dubai"
 _REELLY_ARCHIVE_OPERATION = "archive_chunk"
@@ -40,7 +44,7 @@ _BAY_LOCATIONS_FULL_FETCH_DEFAULTS = {
 }
 _REELLY_ARCHIVE_CHUNK_DEFAULTS = {
     "pages_per_run": 5,
-    "download_documents": True,
+    "download_documents": False,
     "download_all_project_docs": True,
 }
 
@@ -148,7 +152,10 @@ def _run_raw_extractor(
     )
 
     with TemporaryDirectory(prefix=f"holocron-{source.name}-") as scratch_dir:
-        raw_release = source.extractor(scratch_dir, config=source_config)
+        extractor_kwargs: dict[str, Any] = {"config": source_config}
+        if source.name == "reelly_supply":
+            extractor_kwargs["progress_log"] = context.log
+        raw_release = source.extractor(scratch_dir, **extractor_kwargs)
         if not isinstance(raw_release, RawRelease):
             raise TypeError(
                 f"Extractor for source={source.name} must return RawRelease, got {type(raw_release)!r}"
@@ -314,6 +321,93 @@ def build_assets_for_source(source: SourceSpec) -> list[AssetsDefinition]:
 
     return [raw_asset, bronze_asset]
 
+_REELLY_PROJECT_MEDIA_DEFAULTS = {
+    "target_prefix": "media/reelly_supply/project_media",
+    "inventory_prefix": "raw/source=reelly_supply/project_media_asset_manifests",
+    "inventory_file_name": "reelly_supply_project_media_assets.jsonl",
+    "include_project_documents": False,
+    "include_project_detail_media": True,
+    "structured_target_keys": True,
+    "max_concurrent_downloads": 8,
+    "asset_type_allowlist": (
+        "cover_image",
+        "developer_logo",
+        "building_image",
+        "interior_image",
+        "facility_image",
+        "master_plan",
+        "floorplan",
+        "unit_image",
+        "project_image",
+    ),
+}
+
+
+def build_reelly_document_assets() -> list[AssetsDefinition]:
+    @asset(
+        name="reelly_supply_document_assets", group_name="reelly_supply", config_schema=Permissive()
+    )
+    def reelly_supply_document_assets(
+        context: AssetExecutionContext,
+        s3: S3Resource,
+    ) -> MaterializeResult:
+        result = hydrate_reelly_document_assets(
+            s3=s3.client(),
+            config=_resolve_source_config(context),
+            progress_log=context.log,
+        )
+        return MaterializeResult(
+            metadata={
+                "source": "reelly_supply",
+                "stage": "document_assets",
+                "status": "materialized",
+                "run_id": result["run_id"],
+                "discovered": result["discovered"],
+                "attempted": result["attempted"],
+                "downloaded": result["downloaded"],
+                "already_existing": result["already_existing"],
+                "errors": result["errors"],
+                "total_bytes": result["total_bytes"],
+                "max_concurrent_downloads": result["max_concurrent_downloads"],
+                "inventory_manifest_key": result["inventory_manifest_key"],
+                "status_counts": MetadataValue.json(result["status_counts"]),
+            }
+        )
+
+    @asset(
+        name="reelly_supply_project_media_assets",
+        group_name="reelly_supply",
+        config_schema=Permissive(),
+    )
+    def reelly_supply_project_media_assets(
+        context: AssetExecutionContext,
+        s3: S3Resource,
+    ) -> MaterializeResult:
+        result = hydrate_reelly_document_assets(
+            s3=s3.client(),
+            config={**_REELLY_PROJECT_MEDIA_DEFAULTS, **_resolve_source_config(context)},
+            progress_log=context.log,
+        )
+        return MaterializeResult(
+            metadata={
+                "source": "reelly_supply",
+                "stage": "project_media_assets",
+                "status": "materialized",
+                "run_id": result["run_id"],
+                "discovered": result["discovered"],
+                "attempted": result["attempted"],
+                "downloaded": result["downloaded"],
+                "already_existing": result["already_existing"],
+                "errors": result["errors"],
+                "total_bytes": result["total_bytes"],
+                "max_concurrent_downloads": result["max_concurrent_downloads"],
+                "inventory_manifest_key": result["inventory_manifest_key"],
+                "status_counts": MetadataValue.json(result["status_counts"]),
+            }
+        )
+
+    return [reelly_supply_document_assets, reelly_supply_project_media_assets]
+
 
 def build_operational_jobs(sources: Mapping[str, SourceSpec]) -> list[JobDefinition]:
     return [
@@ -383,6 +477,24 @@ def build_operational_jobs(sources: Mapping[str, SourceSpec]) -> list[JobDefinit
             name="reelly_supply_archive_chunk",
             raw_only=True,
             config=_reelly_archive_config_mapping(sources["reelly_supply"]),
+        ),
+        define_asset_job(
+            name="reelly_supply_document_assets_backfill",
+            selection=["reelly_supply_document_assets"],
+            config=_reelly_document_asset_config_mapping(
+                asset_name="reelly_supply_document_assets",
+                defaults=ReellyDocumentAssetHydrationConfig(),
+            ),
+        ),
+        define_asset_job(
+            name="reelly_supply_project_media_assets_backfill",
+            selection=["reelly_supply_project_media_assets"],
+            config=_reelly_document_asset_config_mapping(
+                asset_name="reelly_supply_project_media_assets",
+                defaults=ReellyDocumentAssetHydrationConfig.model_validate(
+                    _REELLY_PROJECT_MEDIA_DEFAULTS
+                ),
+            ),
         ),
     ]
 
@@ -517,6 +629,120 @@ def _reelly_archive_config_mapping(source: SourceSpec) -> ConfigMapping:
                     default_value={},
                     is_required=False,
                     description="Optional Reelly raw asset config overrides.",
+                ),
+            }
+        ),
+        receive_processed_config_values=True,
+    )
+
+
+def _reelly_document_asset_config_mapping(
+    *,
+    asset_name: str,
+    defaults: ReellyDocumentAssetHydrationConfig,
+) -> ConfigMapping:
+    def _map_reelly_document_asset_config(config: Mapping[str, Any]) -> dict[str, Any]:
+        return {
+            "ops": {
+                asset_name: {
+                    "config": dict(config),
+                }
+            }
+        }
+
+    return ConfigMapping(
+        config_fn=_map_reelly_document_asset_config,
+        config_schema=Permissive(
+            {
+                "manifest_prefix": Field(
+                    StringSource,
+                    default_value=defaults.manifest_prefix,
+                    is_required=False,
+                    description="R2 prefix containing Reelly raw manifests.",
+                ),
+                "target_prefix": Field(
+                    StringSource,
+                    default_value=defaults.target_prefix,
+                    is_required=False,
+                    description="R2 prefix for hydrated Reelly document assets.",
+                ),
+                "inventory_prefix": Field(
+                    StringSource,
+                    default_value=defaults.inventory_prefix,
+                    is_required=False,
+                    description="R2 prefix for document asset inventory manifests.",
+                ),
+                "max_assets_per_run": Field(
+                    int,
+                    default_value=defaults.max_assets_per_run,
+                    is_required=False,
+                    description="Maximum document rows to process in one run.",
+                ),
+                "overwrite_existing": Field(
+                    bool,
+                    default_value=defaults.overwrite_existing,
+                    is_required=False,
+                    description="Re-download and replace objects that already exist.",
+                ),
+                "allowed_document_hosts": Field(
+                    [str],
+                    default_value=list(defaults.allowed_document_hosts),
+                    is_required=False,
+                    description="Allowlisted HTTPS hosts for document downloads.",
+                ),
+                "max_document_mb": Field(
+                    int,
+                    default_value=defaults.max_document_mb,
+                    is_required=False,
+                    description="Maximum single document download size in MiB.",
+                ),
+                "request_pause_seconds": Field(
+                    float,
+                    default_value=defaults.request_pause_seconds,
+                    is_required=False,
+                    description="Pause between document download attempts.",
+                ),
+                "timeout_seconds": Field(
+                    float,
+                    default_value=defaults.timeout_seconds,
+                    is_required=False,
+                    description="HTTP timeout for document downloads.",
+                ),
+                "max_concurrent_downloads": Field(
+                    int,
+                    default_value=defaults.max_concurrent_downloads,
+                    is_required=False,
+                    description="Maximum concurrent document downloads.",
+                ),
+                "include_project_documents": Field(
+                    bool,
+                    default_value=defaults.include_project_documents,
+                    is_required=False,
+                    description="Read media rows from reelly_supply_project_documents.jsonl.",
+                ),
+                "include_project_detail_media": Field(
+                    bool,
+                    default_value=defaults.include_project_detail_media,
+                    is_required=False,
+                    description="Discover media URLs from reelly_supply_project_details.jsonl.",
+                ),
+                "structured_target_keys": Field(
+                    bool,
+                    default_value=defaults.structured_target_keys,
+                    is_required=False,
+                    description="Include asset_type and field_path segments in R2 target keys.",
+                ),
+                "inventory_file_name": Field(
+                    StringSource,
+                    default_value=defaults.inventory_file_name,
+                    is_required=False,
+                    description="Inventory manifest JSONL file name.",
+                ),
+                "asset_type_allowlist": Field(
+                    [str],
+                    default_value=list(defaults.asset_type_allowlist),
+                    is_required=False,
+                    description="Optional list of asset_type values to hydrate.",
                 ),
             }
         ),

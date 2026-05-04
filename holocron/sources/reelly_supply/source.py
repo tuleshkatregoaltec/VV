@@ -12,9 +12,11 @@ REELLY_AVAILABILITY_BASE_URL = "https://xdil-qda0-zofk.m2.xano.io/api:ukkgO6DN"
 REELLY_DEFAULT_REGION = "2"
 REELLY_DEFAULT_SALE_STATUSES = ("start_of_sales", "on_sale", "out_of_stock")
 REELLY_DEFAULT_ALLOWED_DOCUMENT_HOSTS = (
+    "api.reelly.io",
     "drive.google.com",
     "drive.usercontent.google.com",
     ".googleusercontent.com",
+    "storage.googleapis.com",
     "xdil-qda0-zofk.m2.xano.io",
 )
 
