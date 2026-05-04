@@ -31,6 +31,9 @@ def test_definitions_expose_source_assets_and_news_sync() -> None:
         "dld_transactions_bronze",
         "dxbi_transactions_raw",
         "dxbi_transactions_bronze",
+        "pf_locations_raw",
+        "pf_listings_raw",
+        "pf_listing_media_assets",
         "reelly_supply_raw",
         "reelly_supply_document_assets",
         "reelly_supply_project_media_assets",
@@ -50,6 +53,12 @@ def test_definitions_expose_named_operational_jobs() -> None:
         "dld_transactions_manual_backfill",
         "dxbi_transactions_manual_backfill",
         "dda_planning_layers_manual_full_refresh",
+        "pf_locations_manual_full_fetch",
+        "pf_listings_manual_snapshot",
+        "pf_listings_plan_snapshot",
+        "pf_listings_search_chunk",
+        "pf_listings_detail_chunk",
+        "pf_listing_media_assets_backfill",
         "reelly_supply_archive_chunk",
         "reelly_supply_document_assets_backfill",
         "reelly_supply_project_media_assets_backfill",
@@ -132,6 +141,12 @@ def test_manual_one_shot_jobs_select_expected_assets_without_schedules() -> None
         "dda_planning_layers_raw",
         "dda_planning_layers_bronze",
     }
+    assert _selected_assets("pf_locations_manual_full_fetch") == {"pf_locations_raw"}
+    assert _selected_assets("pf_listings_manual_snapshot") == {"pf_listings_raw"}
+    assert _selected_assets("pf_listings_plan_snapshot") == {"pf_listings_raw"}
+    assert _selected_assets("pf_listings_search_chunk") == {"pf_listings_raw"}
+    assert _selected_assets("pf_listings_detail_chunk") == {"pf_listings_raw"}
+    assert _selected_assets("pf_listing_media_assets_backfill") == {"pf_listing_media_assets"}
     assert _selected_assets("reelly_supply_archive_chunk") == {"reelly_supply_raw"}
     assert _selected_assets("reelly_supply_document_assets_backfill") == {
         "reelly_supply_document_assets"
@@ -147,6 +162,12 @@ def test_manual_one_shot_jobs_select_expected_assets_without_schedules() -> None
             "dld_transactions_manual_backfill",
             "dxbi_transactions_manual_backfill",
             "dda_planning_layers_manual_full_refresh",
+            "pf_locations_manual_full_fetch",
+            "pf_listings_manual_snapshot",
+            "pf_listings_plan_snapshot",
+            "pf_listings_search_chunk",
+            "pf_listings_detail_chunk",
+            "pf_listing_media_assets_backfill",
             "reelly_supply_archive_chunk",
             "reelly_supply_document_assets_backfill",
             "reelly_supply_project_media_assets_backfill",
@@ -238,6 +259,58 @@ def test_manual_one_shot_jobs_default_raw_config() -> None:
     assert {"cover_image", "developer_logo", "floorplan"} <= set(
         reelly_media_config["asset_type_allowlist"]
     )
+
+    pf_listings_config = validate_run_config(
+        defs.resolve_job_def("pf_listings_manual_snapshot"),
+        {},
+    )["ops"]["pf_listings_raw"]["config"]
+    assert pf_listings_config["mode"] == "snapshot"
+    assert pf_listings_config["max_planned_queries"] == 12000
+    assert pf_listings_config["max_search_pages_per_run"] == 50000
+    assert pf_listings_config["max_details_per_run"] == 100000
+    assert pf_listings_config["fetch_details"] is True
+    assert pf_listings_config["split_by_location"] is True
+
+    pf_plan_config = validate_run_config(
+        defs.resolve_job_def("pf_listings_plan_snapshot"),
+        {},
+    )["ops"]["pf_listings_raw"]["config"]
+    assert pf_plan_config["mode"] == "plan"
+    assert pf_plan_config["max_planned_queries"] == 25000
+    assert pf_plan_config["max_results_per_query"] == 750
+    assert pf_plan_config["max_partition_depth"] == 10
+
+    pf_search_config = validate_run_config(
+        defs.resolve_job_def("pf_listings_search_chunk"),
+        {},
+    )["ops"]["pf_listings_raw"]["config"]
+    assert pf_search_config["mode"] == "search"
+    assert pf_search_config["max_search_pages_per_run"] == 10000
+    assert pf_search_config["fetch_details"] is False
+
+    pf_detail_config = validate_run_config(
+        defs.resolve_job_def("pf_listings_detail_chunk"),
+        {},
+    )["ops"]["pf_listings_raw"]["config"]
+    assert pf_detail_config["mode"] == "details"
+    assert pf_detail_config["max_details_per_run"] == 25000
+
+    pf_media_config = validate_run_config(
+        defs.resolve_job_def("pf_listing_media_assets_backfill"),
+        {},
+    )["ops"]["pf_listing_media_assets"]["config"]
+    assert pf_media_config["manifest_prefix"] == "raw/source=pf_listings/manifests/"
+    assert pf_media_config["target_prefix"] == "media/pf_listings/listing_media"
+    assert pf_media_config["inventory_prefix"] == (
+        "raw/source=pf_listings/listing_media_asset_manifests"
+    )
+    assert pf_media_config["inventory_file_name"] == "pf_listing_media_assets.jsonl"
+    assert pf_media_config["max_assets_per_run"] == 100000
+    assert pf_media_config["overwrite_existing"] is False
+    assert pf_media_config["include_search_listing_media"] is True
+    assert pf_media_config["include_detail_media"] is True
+    assert pf_media_config["max_concurrent_downloads"] == 8
+    assert "static.shared.propertyfinder.ae" in pf_media_config["allowed_media_hosts"]
 
 
 def test_bronze_loader_routes_through_source_metadata() -> None:
