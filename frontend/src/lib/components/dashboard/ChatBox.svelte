@@ -1,11 +1,15 @@
 <script lang="ts">
+import { createQuery, useQueryClient } from '@tanstack/svelte-query'
 import DOMPurify from 'dompurify'
 import { marked } from 'marked'
 import { cubicOut } from 'svelte/easing'
 import { fade, fly } from 'svelte/transition'
 import { browser } from '$app/environment'
 import { chat, type MessageResponse } from '$lib/api/chat'
+import { artifactSortValue, type ChatArtifact, isChatArtifact } from '$lib/chat/artifacts'
+import ChatArtifactBubble from '$lib/components/chat/ChatArtifactBubble.svelte'
 import ConfirmModal from '$lib/components/ui/ConfirmModal.svelte'
+import { chatKeys, chatQueries } from '$lib/queries/chat'
 
 // Add target="_blank" rel="noopener noreferrer" to all links
 marked.use({
@@ -60,21 +64,151 @@ function startConversationWithPrompt(prompt: string) {
 }
 
 interface DisplayMessage {
+	id: string
 	role: string
 	content: string
 	toolCalls?: string[]
+	artifacts?: ChatArtifact[]
 }
+
+type ToolCallState = 'start' | 'done'
 
 let inputValue = $state('')
 let messages = $state<DisplayMessage[]>([])
 let streamController: { close: () => void } | null = $state(null)
 let isThinking = $state(false)
-let loading = $state(false)
 let error = $state<string | null>(null)
 let textareaRef = $state<HTMLTextAreaElement>()
 let messagesEndRef = $state<HTMLDivElement>()
 let activeStreamConversationId: number | null = $state(null)
 let tokenLimitModalOpen = $state(false)
+let localMessageSequence = 0
+const queryClient = useQueryClient()
+const messagesQuery = createQuery(() => chatQueries.messages(conversationId))
+let loading = $derived(messagesQuery.isLoading)
+let displayError = $derived(error ?? (messagesQuery.isError ? 'Failed to load messages' : null))
+const scrollSignal = $derived(
+	`${messages.length}:${messages.at(-1)?.content.length ?? 0}:${messages.at(-1)?.toolCalls?.length ?? 0}:${messages.at(-1)?.artifacts?.length ?? 0}:${isThinking}:${streamController ? 'streaming' : 'idle'}`
+)
+
+function toDisplayMessages(loadedMessages: MessageResponse[]): DisplayMessage[] {
+	return loadedMessages.map((m) => ({
+		id: String(m.id),
+		role: m.role,
+		content: m.content,
+		toolCalls: [],
+		artifacts: artifactsFromMessage(m)
+	}))
+}
+
+function nextLocalMessageId(role: string): string {
+	localMessageSequence += 1
+	return `local:${role}:${Date.now()}:${localMessageSequence}`
+}
+
+function artifactSignature(artifacts?: ChatArtifact[]): string {
+	return (artifacts ?? [])
+		.map((artifact) => `${artifact.id}:${artifact.status}:${artifactSortValue(artifact)}`)
+		.join('|')
+}
+
+function messagesHaveSameVisibleContent(
+	currentMessages: DisplayMessage[],
+	nextMessages: DisplayMessage[]
+): boolean {
+	if (currentMessages.length !== nextMessages.length) return false
+
+	return currentMessages.every((message, index) => {
+		const nextMessage = nextMessages[index]
+		return (
+			message.role === nextMessage.role &&
+			message.content === nextMessage.content &&
+			artifactSignature(message.artifacts) === artifactSignature(nextMessage.artifacts)
+		)
+	})
+}
+
+function preserveVisibleMessageIds(nextMessages: DisplayMessage[]): DisplayMessage[] {
+	return nextMessages.map((message, index) => {
+		const currentMessage = messages[index]
+		if (currentMessage && currentMessage.role === message.role) {
+			return { ...message, id: currentMessage.id }
+		}
+		return message
+	})
+}
+
+function replaceMessagesIfChanged(nextMessages: DisplayMessage[]) {
+	if (messagesHaveSameVisibleContent(messages, nextMessages)) return
+	messages = preserveVisibleMessageIds(nextMessages)
+}
+
+function artifactsFromMessage(message: MessageResponse): ChatArtifact[] | undefined {
+	const metadata = message.meta_data as { artifacts?: unknown[] } | null | undefined
+	if (!Array.isArray(metadata?.artifacts)) return undefined
+	const artifacts = metadata.artifacts.filter(isChatArtifact)
+	if (artifacts.length === 0) return undefined
+
+	return artifacts.sort((a, b) => artifactSortValue(a) - artifactSortValue(b))
+}
+
+function mergeArtifact(artifacts: ChatArtifact[], artifact: ChatArtifact): ChatArtifact[] {
+	return [...artifacts.filter((item) => item.id !== artifact.id), artifact].sort(
+		(a, b) => artifactSortValue(a) - artifactSortValue(b)
+	)
+}
+
+function toolDisplayLabel(tool: string | undefined, state: ToolCallState, cached = false): string {
+	const labels: Record<string, { start: string; done: string }> = {
+		show_listings: {
+			start: 'Searching matching records',
+			done: 'Matched records ready'
+		},
+		show_market_trend: {
+			start: 'Building market view',
+			done: 'Market view ready'
+		},
+		get_area_snapshot: {
+			start: 'Reading area snapshot',
+			done: 'Area snapshot ready'
+		},
+		compare_areas: {
+			start: 'Comparing areas',
+			done: 'Comparison ready'
+		},
+		get_rental_market_pulse: {
+			start: 'Checking rental market',
+			done: 'Rental market ready'
+		},
+		get_market_pulse: {
+			start: 'Checking market pulse',
+			done: 'Market pulse ready'
+		},
+		rank_areas: {
+			start: 'Ranking areas',
+			done: 'Area ranking ready'
+		},
+		rank_upcoming_project_areas: {
+			start: 'Reading project pipeline',
+			done: 'Project pipeline ready'
+		},
+		search_development_projects: {
+			start: 'Searching projects',
+			done: 'Project matches ready'
+		},
+		get_developer_pipeline: {
+			start: 'Reading developer pipeline',
+			done: 'Developer pipeline ready'
+		},
+		get_price_trends: {
+			start: 'Reading price history',
+			done: 'Price history ready'
+		}
+	}
+	const fallback = tool ? tool.replaceAll('_', ' ') : 'Working'
+	const label = labels[tool ?? '']?.[state] ?? (state === 'done' ? `${fallback} ready` : fallback)
+	return state === 'done' ? `✓ ${label}${cached ? ' (cached)' : ''}` : `${label}...`
+}
 
 // Load messages when conversation changes
 let previousConversationId = $state<number | null>(null)
@@ -88,21 +222,25 @@ $effect(() => {
 			activeStreamConversationId = null
 		}
 
-		if (conversationId) {
-			loadMessages()
-		} else {
-			messages = []
-		}
+		messages = []
+		error = null
 
 		previousConversationId = conversationId
 	}
 })
 
+$effect(() => {
+	const loadedMessages = messagesQuery.data
+	if (!conversationId || !loadedMessages || activeStreamConversationId === conversationId) return
+	replaceMessagesIfChanged(toDisplayMessages(loadedMessages))
+})
+
 // Auto-scroll to bottom when messages change
 $effect(() => {
+	scrollSignal
 	if (messages.length > 0 && messagesEndRef) {
 		setTimeout(() => {
-			messagesEndRef?.scrollIntoView({ behavior: 'smooth' })
+			messagesEndRef?.scrollIntoView({ behavior: streamController ? 'auto' : 'smooth' })
 		}, 100)
 	}
 })
@@ -121,22 +259,20 @@ $effect(() => {
 	}
 })
 
-async function loadMessages() {
-	if (!conversationId) return
-	loading = true
+async function retryLoadMessages() {
 	error = null
+	await messagesQuery.refetch()
+}
+
+async function refreshMessagesAfterStream(conversationIdToRefresh: number) {
 	try {
-		const msgs = await chat.getMessages(conversationId)
-		messages = msgs.map((m: MessageResponse) => ({
-			role: m.role,
-			content: m.content,
-			toolCalls: []
-		}))
+		const loadedMessages = await chat.getMessages(conversationIdToRefresh)
+		queryClient.setQueryData(chatKeys.messages(conversationIdToRefresh), loadedMessages)
+		if (conversationId === conversationIdToRefresh) {
+			replaceMessagesIfChanged(toDisplayMessages(loadedMessages))
+		}
 	} catch (err) {
-		console.error('Failed to load messages:', err)
-		error = 'Failed to load messages'
-	} finally {
-		loading = false
+		console.error('Failed to refresh streamed messages:', err)
 	}
 }
 
@@ -150,14 +286,15 @@ async function handleSubmit() {
 	const streamConversationId = conversationId
 	activeStreamConversationId = streamConversationId
 
-	// Add user message
-	messages = [...messages, { role: 'user', content: text }]
+	messages = [...messages, { id: nextLocalMessageId('user'), role: 'user', content: text }]
 	inputValue = ''
 	if (textareaRef) textareaRef.style.height = 'auto'
 
 	// Start streaming
 	let currentAssistantMessage = ''
 	let currentToolCalls: string[] = []
+	let currentArtifacts: ChatArtifact[] = []
+	const toolCallIndexes = new Map<string, number>()
 
 	streamController = await chat.sendMessage(streamConversationId, text, (rawChunk) => {
 		// Only update messages if we're still viewing the same conversation
@@ -172,23 +309,56 @@ async function handleSubmit() {
 			if (data.type === 'thinking') {
 				isThinking = true
 				if (messages[messages.length - 1]?.role !== 'assistant') {
-					messages = [...messages, { role: 'assistant', content: '' }]
+					messages = [
+						...messages,
+						{ id: nextLocalMessageId('assistant'), role: 'assistant', content: '' }
+					]
 				}
 			} else if (data.type === 'content') {
 				isThinking = false
 				currentAssistantMessage += data.content
 				updateLastMessage('assistant', currentAssistantMessage, currentToolCalls)
 			} else if (data.type === 'tool_call_start') {
-				currentToolCalls.push(`Calling ${data.tool}...`)
-				updateLastMessage('assistant', currentAssistantMessage, currentToolCalls)
+				isThinking = false
+				const toolCallId = typeof data.tool_call_id === 'string' ? data.tool_call_id : data.tool
+				toolCallIndexes.set(toolCallId, currentToolCalls.length)
+				currentToolCalls.push(toolDisplayLabel(data.tool, 'start'))
+				updateLastMessage('assistant', currentAssistantMessage, currentToolCalls, currentArtifacts)
 			} else if (data.type === 'tool_call_result') {
-				const cached = data.cached ? ' (cached)' : ''
-				currentToolCalls[currentToolCalls.length - 1] = `✓ ${data.tool}${cached}`
-				updateLastMessage('assistant', currentAssistantMessage, currentToolCalls)
+				isThinking = false
+				const toolCallId = typeof data.tool_call_id === 'string' ? data.tool_call_id : data.tool
+				const index = toolCallIndexes.get(toolCallId) ?? currentToolCalls.length - 1
+				currentToolCalls[index] = toolDisplayLabel(data.tool, 'done', Boolean(data.cached))
+				updateLastMessage('assistant', currentAssistantMessage, currentToolCalls, currentArtifacts)
+			} else if (
+				(data.type === 'artifact_opened' || data.type === 'artifact_updated') &&
+				isChatArtifact(data.artifact)
+			) {
+				isThinking = false
+				currentArtifacts = mergeArtifact(currentArtifacts, data.artifact)
+				updateLastMessage('assistant', currentAssistantMessage, currentToolCalls, currentArtifacts)
 			} else if (data.type === 'done') {
 				isThinking = false
+				if (currentToolCalls.some((toolCall) => toolCall.endsWith('...'))) {
+					currentToolCalls = currentToolCalls.map((toolCall) =>
+						toolCall.endsWith('...') ? `✓ ${toolCall.slice(0, -3)} complete` : toolCall
+					)
+					updateLastMessage(
+						'assistant',
+						currentAssistantMessage,
+						currentToolCalls,
+						currentArtifacts
+					)
+				}
 				streamController = null
-				activeStreamConversationId = null
+				void queryClient.invalidateQueries({
+					queryKey: chatKeys.conversations()
+				})
+				void refreshMessagesAfterStream(streamConversationId).finally(() => {
+					if (activeStreamConversationId === streamConversationId) {
+						activeStreamConversationId = null
+					}
+				})
 				setTimeout(() => textareaRef?.focus(), 100)
 			} else if (data.type === 'error') {
 				console.error('Stream error:', data.error)
@@ -207,19 +377,38 @@ async function handleSubmit() {
 	})
 }
 
-function updateLastMessage(role: string, content: string, toolCalls: string[]) {
+function updateLastMessage(
+	role: string,
+	content: string,
+	toolCalls: string[],
+	artifacts?: ChatArtifact[]
+) {
 	const lastMsg = messages[messages.length - 1]
+	const nextArtifacts =
+		artifacts && artifacts.length > 0
+			? [...artifacts]
+			: lastMsg?.role === role
+				? lastMsg.artifacts
+				: undefined
 	if (lastMsg?.role === role) {
 		messages[messages.length - 1] = {
+			id: lastMsg.id,
 			role,
 			content,
-			toolCalls: toolCalls.length > 0 ? [...toolCalls] : undefined
+			toolCalls: toolCalls.length > 0 ? [...toolCalls] : undefined,
+			artifacts: nextArtifacts
 		}
 		messages = [...messages]
 	} else {
 		messages = [
 			...messages,
-			{ role, content, toolCalls: toolCalls.length > 0 ? [...toolCalls] : undefined }
+			{
+				id: nextLocalMessageId(role),
+				role,
+				content,
+				toolCalls: toolCalls.length > 0 ? [...toolCalls] : undefined,
+				artifacts: nextArtifacts
+			}
 		]
 	}
 }
@@ -276,7 +465,7 @@ function stopStreaming() {
 					<p class="text-sm font-medium text-fg-3">Loading messages...</p>
 				</div>
 			</div>
-		{:else if error && messages.length === 0}
+		{:else if displayError && messages.length === 0}
 			<div class="flex h-full items-center justify-center">
 				<div class="max-w-md text-center">
 					<div
@@ -291,9 +480,9 @@ function stopStreaming() {
 							/>
 						</svg>
 					</div>
-					<p class="mb-4 text-sm text-error">{error}</p>
+					<p class="mb-4 text-sm text-error">{displayError}</p>
 					<button
-						onclick={loadMessages}
+						onclick={() => void retryLoadMessages()}
 						class="rounded-md bg-error px-4 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90"
 					>
 						Try again
@@ -390,17 +579,22 @@ function stopStreaming() {
 				</div>
 			</div>
 		{:else}
-			{#each messages as msg, i (i)}
+			{#each messages as msg, i (msg.id)}
 				<div
 					class="flex {msg.role === 'user' ? 'justify-end' : 'justify-start'}"
 					in:fly={{ y: 10, duration: 250, delay: Math.min(i * 30, 200), easing: cubicOut }}
 				>
 					<div
-						class="max-w-[min(720px,88%)] rounded-md px-3.5 py-2.5 text-[13px] leading-[1.55] {msg.role === 'user'
+						class="{msg.role === 'assistant' && msg.artifacts?.length
+							? 'w-[min(860px,94%)]'
+							: 'max-w-[min(720px,88%)]'} rounded-md px-3.5 py-2.5 text-[13px] leading-[1.55] {msg.role ===
+						'user'
 							? 'bg-navy text-bone'
-							: 'border border-slate-200 bg-slate-50 text-fg-2'}"
+							: msg.artifacts?.length
+								? 'bg-transparent text-fg-2'
+								: 'border border-slate-200 bg-slate-50 text-fg-2'}"
 					>
-						{#if isThinking && i === messages.length - 1 && msg.role === 'assistant' && !msg.content}
+						{#if isThinking && i === messages.length - 1 && msg.role === 'assistant' && !msg.content && !msg.toolCalls?.length && !msg.artifacts?.length}
 							<div class="flex items-center gap-2 text-slate-400">
 								<div class="flex gap-1 items-center">
 									<div
@@ -421,20 +615,48 @@ function stopStreaming() {
 						{:else if msg.role === 'assistant'}
 							<div
 								class="mb-1.5 font-mono text-[10px] font-medium uppercase tracking-[0.06em] text-fg-4"
-							>
-								Vitevue AI
-							</div>
-							<div
-								class="leading-relaxed [&_p]:mb-2 [&_p:last-child]:mb-0 [&_strong]:font-semibold [&_em]:italic [&_a]:text-primary-light [&_a]:underline [&_a:hover]:text-fg-1 [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:mb-2 [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:mb-2 [&_li]:mb-0.5 [&_blockquote]:border-l-4 [&_blockquote]:border-slate-300 [&_blockquote]:pl-3 [&_blockquote]:italic [&_blockquote]:text-slate-600 [&_blockquote]:my-2 [&_code]:bg-slate-100 [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded [&_code]:text-sm [&_code]:font-mono [&_pre]:bg-slate-100 [&_pre]:p-3 [&_pre]:rounded-lg [&_pre]:overflow-x-auto [&_pre]:my-2 [&_pre_code]:bg-transparent [&_pre_code]:p-0"
-							>
-								{@html renderMarkdown(msg.content)}
-							</div>
-						{:else}
-							<div class="whitespace-pre-wrap leading-relaxed">{msg.content}</div>
-						{/if}
-						{#if msg.toolCalls && msg.toolCalls.length > 0}
-							<div
-								class="mt-3 pt-3 border-t {msg.role === 'user'
+								>
+									Vitevue AI
+								</div>
+									{#if msg.toolCalls && msg.toolCalls.length > 0}
+										<div
+											class="{msg.content || msg.artifacts?.length ? 'mb-3 border-b border-slate-200 pb-3' : ''} space-y-2 text-xs text-slate-600"
+										>
+											{#each msg.toolCalls as toolCall (toolCall)}
+												<div class="flex items-center gap-2">
+												<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+													<path
+														stroke-linecap="round"
+														stroke-linejoin="round"
+														stroke-width="2"
+														d="M13 10V3L4 14h7v7l9-11h-7z"
+													/>
+												</svg>
+												<span class="font-medium">{toolCall}</span>
+											</div>
+											{/each}
+										</div>
+									{/if}
+									{#if msg.artifacts?.length}
+										<div class="{msg.content ? 'mb-3' : ''} space-y-3">
+											{#each msg.artifacts as artifact (artifact.id)}
+												<ChatArtifactBubble {artifact} />
+											{/each}
+										</div>
+									{/if}
+									{#if msg.content}
+										<div
+											class="leading-relaxed [&_p]:mb-2 [&_p:last-child]:mb-0 [&_strong]:font-semibold [&_em]:italic [&_a]:text-primary-light [&_a]:underline [&_a:hover]:text-fg-1 [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:mb-2 [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:mb-2 [&_li]:mb-0.5 [&_blockquote]:border-l-4 [&_blockquote]:border-slate-300 [&_blockquote]:pl-3 [&_blockquote]:italic [&_blockquote]:text-slate-600 [&_blockquote]:my-2 [&_code]:bg-slate-100 [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded [&_code]:text-sm [&_code]:font-mono [&_pre]:bg-slate-100 [&_pre]:p-3 [&_pre]:rounded-lg [&_pre]:overflow-x-auto [&_pre]:my-2 [&_pre_code]:bg-transparent [&_pre_code]:p-0"
+								>
+									{@html renderMarkdown(msg.content)}
+								</div>
+							{/if}
+							{:else}
+								<div class="whitespace-pre-wrap leading-relaxed">{msg.content}</div>
+							{/if}
+							{#if msg.role !== 'assistant' && msg.toolCalls && msg.toolCalls.length > 0}
+								<div
+									class="mt-3 pt-3 border-t {msg.role === 'user'
 									? 'border-slate-700'
 									: 'border-slate-200'} text-xs space-y-2"
 							>
@@ -457,7 +679,7 @@ function stopStreaming() {
 								{/each}
 							</div>
 						{/if}
-					</div>
+						</div>
 				</div>
 			{/each}
 			<div bind:this={messagesEndRef}></div>
@@ -466,7 +688,7 @@ function stopStreaming() {
 
 	<!-- Input Area -->
 	<div class="border-t border-slate-200 bg-white p-4">
-		{#if error && messages.length > 0}
+		{#if displayError && messages.length > 0}
 			<div
 				class="mb-4 flex items-center gap-2 rounded-lg border border-[rgba(163,36,36,0.2)] bg-error-bg p-3 text-sm text-error"
 				in:fly={{ y: -10, duration: 300, easing: cubicOut }}
@@ -478,7 +700,7 @@ function stopStreaming() {
 						clip-rule="evenodd"
 					/>
 				</svg>
-				<span>{error}</span>
+				<span>{displayError}</span>
 			</div>
 		{/if}
 

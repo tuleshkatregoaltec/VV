@@ -9,6 +9,23 @@ let firstName = $state('')
 let lastName = $state('')
 let editError = $state('')
 let editSuccess = $state('')
+let failedAvatarUrl = $state<string | null>(null)
+let displayName = $derived(
+	currentUser.data
+		? `${currentUser.data.first_name ?? ''} ${currentUser.data.last_name ?? ''}`.trim() ||
+				currentUser.data.email
+		: ''
+)
+let initials = $derived(
+	currentUser.data
+		? `${currentUser.data.first_name?.[0] ?? ''}${currentUser.data.last_name?.[0] ?? ''}`.toUpperCase()
+		: ''
+)
+let avatarUrl = $derived(
+	currentUser.data?.avatar_url && currentUser.data.avatar_url !== failedAvatarUrl
+		? currentUser.data.avatar_url
+		: ''
+)
 
 $effect(() => {
 	if (currentUser.data && !editingName) {
@@ -51,6 +68,10 @@ function handleCancel() {
 		firstName = currentUser.data.first_name || ''
 		lastName = currentUser.data.last_name || ''
 	}
+}
+
+function handleAvatarError() {
+	failedAvatarUrl = currentUser.data?.avatar_url ?? null
 }
 </script>
 
@@ -127,6 +148,21 @@ function handleCancel() {
 						</div>
 					</div>
 				{:else if currentUser.data}
+					<div class="mb-5 flex items-center gap-4">
+						<div
+							class="flex h-16 w-16 flex-shrink-0 items-center justify-center overflow-hidden rounded-full bg-navy text-lg font-semibold text-bone"
+						>
+							{#if avatarUrl}
+								<img src={avatarUrl} alt="" class="h-full w-full object-cover" onerror={handleAvatarError} />
+							{:else}
+								{initials}
+							{/if}
+						</div>
+						<div class="min-w-0">
+							<p class="truncate text-base font-semibold text-fg-1">{displayName}</p>
+							<p class="mt-0.5 truncate text-sm text-fg-4">{currentUser.data.email}</p>
+						</div>
+					</div>
 					<div class="space-y-3 text-sm">
 						<div class="flex justify-between">
 							<span class="text-fg-4">Full name</span>

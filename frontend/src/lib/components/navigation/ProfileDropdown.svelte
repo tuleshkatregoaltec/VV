@@ -24,6 +24,13 @@ let displayName = $derived(
 	})()
 )
 let displayMeta = $derived(currentUser.data?.email ?? currentUser.data?.organization_name ?? 'Workspace')
+let failedAvatarUrl = $state<string | null>(null)
+let avatarUrl = $derived(
+	(() => {
+		const url = currentUser.data?.avatar_url
+		return url && url !== failedAvatarUrl ? url : ''
+	})()
+)
 
 const HOVER_DELAY = 150
 
@@ -60,16 +67,24 @@ function handleLogout() {
 	openDropdownIdContext.value = null
 	logout()
 }
+
+function handleAvatarError() {
+	failedAvatarUrl = currentUser.data?.avatar_url ?? null
+}
 </script>
 
 <div class="relative" role="navigation" onmouseenter={handleEnter} onmouseleave={handleLeave}>
 	<button
-		class="flex h-[34px] w-[34px] items-center justify-center rounded-full bg-navy text-xs font-semibold tracking-[0.02em] text-bone transition-colors hover:bg-primary-light"
+		class="flex h-[34px] w-[34px] items-center justify-center overflow-hidden rounded-full bg-navy text-xs font-semibold tracking-[0.02em] text-bone transition-colors hover:bg-primary-light"
 		aria-label="Profile menu"
 		aria-haspopup="true"
 		aria-expanded={isOpen}
 	>
-		{initials}
+		{#if avatarUrl}
+			<img src={avatarUrl} alt="" class="h-full w-full object-cover" onerror={handleAvatarError} />
+		{:else}
+			{initials}
+		{/if}
 	</button>
 
 	{#if isOpen}
@@ -81,9 +96,13 @@ function handleLogout() {
 			<div class="border-b border-border bg-panel px-3 py-3">
 				<div class="flex items-center gap-3">
 					<div
-						class="flex h-9 w-9 items-center justify-center rounded-full bg-navy text-xs font-semibold tracking-[0.02em] text-bone"
+						class="flex h-9 w-9 items-center justify-center overflow-hidden rounded-full bg-navy text-xs font-semibold tracking-[0.02em] text-bone"
 					>
-						{initials}
+						{#if avatarUrl}
+							<img src={avatarUrl} alt="" class="h-full w-full object-cover" onerror={handleAvatarError} />
+						{:else}
+							{initials}
+						{/if}
 					</div>
 					<div class="min-w-0">
 						<p class="truncate text-sm font-semibold text-fg-1">{displayName}</p>

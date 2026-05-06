@@ -788,8 +788,8 @@ async def get_land_sale_evidence(
         FROM ch_transactions
         WHERE {" AND ".join(where)}
         ORDER BY
-            abs(toFloat64(procedure_area) - {{target_area:Float64}}) ASC,
-            instance_date DESC
+            instance_date DESC,
+            abs(toFloat64(procedure_area) - {{target_area:Float64}}) ASC
         LIMIT {{limit:Int32}}
         """
         return await query(sql, params)

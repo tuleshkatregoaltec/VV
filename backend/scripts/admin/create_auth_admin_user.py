@@ -32,16 +32,35 @@ def _list_auth_users() -> list[dict]:
     return users
 
 
+def _candidate_emails() -> list[str]:
+    emails = [str(settings.FIRST_SUPERUSER)]
+    if settings.FIRST_SUPERUSER_RENAME_FROM:
+        emails.append(str(settings.FIRST_SUPERUSER_RENAME_FROM))
+    return list(dict.fromkeys(emails))
+
+
+def _find_existing_admin_user(users: list[dict]) -> dict | None:
+    candidate_emails = set(_candidate_emails())
+    return next((user for user in users if user.get("email") in candidate_emails), None)
+
+
+def _user_metadata() -> dict:
+    metadata = {
+        "first_name": settings.FIRST_SUPERUSER_FIRST_NAME,
+        "last_name": settings.FIRST_SUPERUSER_LAST_NAME,
+    }
+    if settings.FIRST_SUPERUSER_AVATAR_URL:
+        metadata["avatar_url"] = settings.FIRST_SUPERUSER_AVATAR_URL
+    return metadata
+
+
 def _payload() -> dict:
     return {
         "email": settings.FIRST_SUPERUSER,
         "password": settings.FIRST_SUPERUSER_PASSWORD,
         "email_confirm": True,
         "role": "supabase_admin",
-        "user_metadata": {
-            "first_name": "Admin",
-            "last_name": "User",
-        },
+        "user_metadata": _user_metadata(),
         "app_metadata": {
             "is_admin": True,
             "daily_token_limit": 500000,
@@ -49,9 +68,31 @@ def _payload() -> dict:
     }
 
 
+def _update_user(existing_user: dict) -> None:
+    update_response = requests.put(
+        f"{settings.AUTH_URL}/admin/users/{existing_user['id']}",
+        headers=_headers(),
+        json=_payload(),
+        timeout=10,
+    )
+    if update_response.status_code in {200, 201}:
+        print("Admin user updated.")
+        print(f"email: '{settings.FIRST_SUPERUSER}'")
+        print(update_response.json())
+        return
+    print(f"Failed to update existing admin: {update_response.status_code}")
+    print(update_response.text)
+    raise SystemExit(1)
+
+
 def create_user():
     if not settings.bootstrap_superuser_enabled:
         raise RuntimeError("FIRST_SUPERUSER and FIRST_SUPERUSER_PASSWORD must be configured")
+
+    existing_user = _find_existing_admin_user(_list_auth_users())
+    if existing_user:
+        _update_user(existing_user)
+        return
 
     response = requests.post(
         f"{settings.AUTH_URL}/admin/users",
@@ -67,30 +108,15 @@ def create_user():
         return
 
     if response.status_code in {400, 422}:
-        users = _list_auth_users()
-        existing_user = next(
-            (user for user in users if user.get("email") == settings.FIRST_SUPERUSER), None
-        )
+        existing_user = _find_existing_admin_user(_list_auth_users())
 
         if existing_user:
-            update_response = requests.put(
-                f"{settings.AUTH_URL}/admin/users/{existing_user['id']}",
-                headers=_headers(),
-                json=_payload(),
-                timeout=10,
-            )
-            if update_response.status_code in {200, 201}:
-                print("Admin user updated.")
-                print(f"email: '{settings.FIRST_SUPERUSER}'")
-                print(update_response.json())
-                return
-            print(f"Failed to update existing admin: {update_response.status_code}")
-            print(update_response.text)
-            raise SystemExit(1)
-    else:
-        print(f"Failed: {response.status_code}")
-        print(response.text)
-        raise SystemExit(1)
+            _update_user(existing_user)
+            return
+
+    print(f"Failed: {response.status_code}")
+    print(response.text)
+    raise SystemExit(1)
 
 
 if __name__ == "__main__":

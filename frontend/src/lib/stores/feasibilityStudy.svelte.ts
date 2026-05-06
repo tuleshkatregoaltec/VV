@@ -1,12 +1,12 @@
 import { feasibility } from '$lib/api/feasibility'
-import type { Plot } from '$lib/api/generated/hey-api/types.gen'
+import type { FeasibilitySavedStudyResponse, Plot } from '$lib/api/generated/hey-api/types.gen'
+import { createAssumptionsFromPlot, hydrateAssumptions } from '$lib/feasibility/workbook/defaults'
 import type {
 	DevelopmentModel,
 	FeasibilityAssumptions,
 	FeasibilityChatState,
 	FeasibilityStudy,
-	UsageType,
-	VatApplicability
+	UsageType
 } from '$lib/feasibility/workbook/models'
 import { feasibilityWorkspace } from '$lib/stores/feasibilityWorkspace.svelte'
 
@@ -31,32 +31,6 @@ let workbookSaveSequence = 0
 let auxSaveSequence = 0
 let dirtyVersion = 0
 let savedVersion = 0
-
-function todayIsoDate() {
-	return new Date().toISOString().slice(0, 10)
-}
-
-// Parse max_height string (e.g. "G+12" or "12 storeys") into a number
-function parseMaxStoreys(maxHeight: string | null | undefined): number | null {
-	if (!maxHeight) return null
-	const matches = maxHeight.match(/(\d+)/g)
-	if (!matches?.length) return null
-	const storeys = Number(matches[matches.length - 1])
-	return Number.isFinite(storeys) && storeys > 0 ? storeys : null
-}
-
-// Parse max_coverage string (e.g. "60%" or "60") into a percentage number
-function parseMaxCoverage(maxCoverage: string | null | undefined): number | null {
-	if (!maxCoverage) return null
-	const match = maxCoverage.match(/(\d+(?:\.\d+)?)/)
-	if (!match) return null
-	const value = Number(match[1])
-	return Number.isFinite(value) ? value : null
-}
-
-function defaultDevelopmentModel(usage: UsageType): DevelopmentModel | undefined {
-	return usage === 'residential' || usage === 'mixed_use' ? 'build_to_sell_residential' : undefined
-}
 
 function developmentModelOptions(usage: UsageType): DevelopmentModelOption[] {
 	if (usage === 'residential') {
@@ -110,18 +84,6 @@ function developmentModelOptions(usage: UsageType): DevelopmentModelOption[] {
 	return []
 }
 
-function defaultVatApplicability(): VatApplicability {
-	return {
-		land: true,
-		hardCosts: true,
-		softCosts: true,
-		permitFees: true,
-		contingency: true,
-		marketing: true,
-		salesAdmin: true
-	}
-}
-
 function emptyChatState(): FeasibilityChatState {
 	return { messages: [], history_json: null }
 }
@@ -151,199 +113,8 @@ function settleSaveState() {
 	saveState.value = dirtyVersion === savedVersion ? 'saved' : 'unsaved'
 }
 
-function createBaseAssumptions(
-	plot_data: NonNullable<FeasibilityStudy['plot_data']>
-): FeasibilityAssumptions {
-	const usage = plot_data.inferred_usage ?? 'unknown'
-
-	return {
-		// usage seeded from plot inference; user/agent can override
-		usage,
-
-		// Plot / area — seeded from plot data
-		plotAreaSqm: plot_data.plot_area_sqm,
-		maxGfaSqm: plot_data.max_gfa_sqm ?? 0,
-		maxCoveragePct: parseMaxCoverage(plot_data.max_coverage),
-		maxStoreys: parseMaxStoreys(plot_data.max_height),
-		maxFar: plot_data.far ?? 0,
-		plotNumber: plot_data.plot_number,
-		communityName: plot_data.community_name,
-		projectName: plot_data.project_name,
-		gfaType: plot_data.gfa_type,
-		sitePlanIssueDate: plot_data.site_plan_issue_date,
-		sitePlanExpiryDate: plot_data.site_plan_expiry_date,
-		plotWarnings: [...(plot_data.warnings ?? [])],
-		numberOfTowers: 1,
-		numberOfFloors: 1,
-		buaMultiplier: 1.1,
-		nsaEfficiencyPct: 80,
-
-		// Unit mix
-		unitConfigs: [],
-		paymentPlan: { depositPct: 10, constructionPct: 30, handoverPct: 60 },
-
-		// Parking
-		standardParkingRatio: 1,
-		largeUnitThresholdSqm: 140,
-		largeUnitParkingRatio: 2,
-
-		// Land costs
-		landPricePsqm: 0,
-		landAcquisitionCostOverrideAed: null,
-		brokerageFeeAed: 0,
-		legalDdCostAed: 0,
-
-		// Construction
-		constructionCostPsqmBua: 0,
-		constructionCostOverrideAed: null,
-		midPointInflationPct: 0,
-
-		// Professional fees
-		designSupervisionPct: 0,
-		designSupervisionCostOverrideAed: null,
-
-		// Selling costs
-		marketingCostPct: 0,
-		marketingCostOverrideAed: null,
-		salesAgentFeePct: 0,
-		salesAgentFeesOverrideAed: null,
-
-		// Other direct costs
-		infrastructureCostAed: 0,
-		governmentFeesAed: 0,
-		masterCommunityFeesAed: 0,
-		ffeOsePreopeningCostAed: 0,
-		contingencyPct: 0,
-		contingencyCostOverrideAed: null,
-		demolitionEnabled: false,
-		demolitionCostAed: 0,
-		vatPct: 5,
-
-		// Financing
-		debtToCostRatio: 0.7,
-		landLoanLtvPct: 70,
-		eiborRatePct: 4.85,
-		landLoanSpreadBps: 200,
-		constructionLoanSpreadBps: 200,
-		arrangementFeePct: 1,
-		commitmentFeePct: 0.5,
-		presaleThresholdPct: 35,
-		escrowRetentionPct: 5,
-		debtRepaymentMode: 'bullet_at_handover',
-		debtFundingAed: 0,
-		equityFundingAed: 0,
-		financeRatePct: 0,
-
-		// Schedule
-		landAcquisitionDate: todayIsoDate(),
-		demolitionEnablingDate: todayIsoDate(),
-		salesCommencementDate: todayIsoDate(),
-		salesPeriodMonths: 24,
-		constructionDate: todayIsoDate(),
-		handoverDate: todayIsoDate(),
-		preHandoverMilestoneDate: todayIsoDate(),
-
-		// Template-aligned workbook fields
-		basementParkingFloors: 4,
-		podiumFloors: 5,
-		residentialFloors: 30,
-		amenityRoofFloors: 1,
-		parkingAreaPerSpaceSqm: 30,
-		aboveGradeBuaFactor: 1.1,
-		serviceBohPlantPct: 0.03,
-		podiumParkingFloorsOutsideGfa: 0,
-		landTransferFeePct: 0.04,
-		brokeragePct: 0.01,
-		legalDdPct: 0.005,
-		permitFeesPct: 0.02,
-		softCostPct: 0.15,
-		acquisitionDebtLtv: 0.7,
-		constructionDebtLtc: 0.7,
-		debtSpreadPa: 0.02,
-		financingFeePct: 0.01,
-		exitFeePct: 0.01,
-		preferredReturnPa: 0.08,
-		sponsorPromotePct: 0.2,
-		projectYears: 5,
-		constructionCurveSteepness: 8,
-		salesCurveSteepness: 8,
-		vatAppliesTo: defaultVatApplicability(),
-		vatRefundLagMonths: 6,
-		selectedScenario: 'base',
-		developmentModel: defaultDevelopmentModel(usage)
-	}
-}
-
-function normalizeFinancingFields(assumptions: FeasibilityAssumptions): FeasibilityAssumptions {
-	const acquisitionDebtLtv = assumptions.acquisitionDebtLtv ?? assumptions.landLoanLtvPct / 100
-	const debtSpreadPa =
-		assumptions.debtSpreadPa ??
-		(assumptions.constructionLoanSpreadBps > 0
-			? assumptions.constructionLoanSpreadBps / 10_000
-			: assumptions.landLoanSpreadBps / 10_000)
-
-	return {
-		...assumptions,
-		acquisitionDebtLtv,
-		landLoanLtvPct: Math.round(acquisitionDebtLtv * 100),
-		debtSpreadPa,
-		landLoanSpreadBps: Math.round(debtSpreadPa * 10_000),
-		constructionLoanSpreadBps: Math.round(debtSpreadPa * 10_000)
-	}
-}
-
-function hydrateAssumptions(
-	rawAssumptions: Partial<FeasibilityAssumptions> | undefined,
-	plot_data: NonNullable<FeasibilityStudy['plot_data']>,
-	research?: FeasibilityStudy['research'],
-	selectedDevelopmentModel?: DevelopmentModel
-): FeasibilityAssumptions {
-	const base = createBaseAssumptions(plot_data)
-	const merged: FeasibilityAssumptions = {
-		...base,
-		...(rawAssumptions ?? {}),
-		paymentPlan: {
-			...base.paymentPlan,
-			...(rawAssumptions?.paymentPlan ?? {})
-		},
-		vatAppliesTo: {
-			...base.vatAppliesTo,
-			...(rawAssumptions?.vatAppliesTo ?? {})
-		} as VatApplicability,
-		unitConfigs: rawAssumptions?.unitConfigs ?? base.unitConfigs,
-		plotNumber: plot_data.plot_number,
-		communityName: plot_data.community_name,
-		projectName: plot_data.project_name,
-		gfaType: plot_data.gfa_type,
-		sitePlanIssueDate: plot_data.site_plan_issue_date,
-		sitePlanExpiryDate: plot_data.site_plan_expiry_date,
-		plotWarnings: [...(plot_data.warnings ?? [])],
-		developmentModel:
-			rawAssumptions?.developmentModel ??
-			selectedDevelopmentModel ??
-			defaultDevelopmentModel(rawAssumptions?.usage ?? base.usage)
-	}
-
-	const normalized = normalizeFinancingFields(merged)
-	const lowLandCost = research?.land_cost_estimate_aed_low ?? null
-	const midLandCost = research?.land_cost_estimate_aed_mid ?? null
-	const currentLandCost =
-		normalized.landAcquisitionCostOverrideAed ??
-		(normalized.plotAreaSqm > 0 ? normalized.plotAreaSqm * normalized.landPricePsqm : 0)
-
-	if (midLandCost && lowLandCost && currentLandCost > 0 && currentLandCost < lowLandCost) {
-		return {
-			...normalized,
-			landAcquisitionCostOverrideAed: midLandCost,
-			landPricePsqm: normalized.plotAreaSqm > 0 ? midLandCost / normalized.plotAreaSqm : 0
-		}
-	}
-
-	return normalized
-}
-
 function createBaseStudy(plot_data: NonNullable<FeasibilityStudy['plot_data']>): FeasibilityStudy {
-	const assumptions = createBaseAssumptions(plot_data)
+	const assumptions = createAssumptionsFromPlot(plot_data)
 
 	const study_context = {
 		headline: plot_data.project_name,
@@ -393,7 +164,8 @@ function createBaseStudy(plot_data: NonNullable<FeasibilityStudy['plot_data']>):
 
 function adaptBackendStudy(
 	raw: Record<string, unknown>,
-	selectedDevelopmentModel?: DevelopmentModel
+	selectedDevelopmentModel?: DevelopmentModel,
+	hydrationMode: 'saved' | 'generated' = 'saved'
 ): FeasibilityStudy {
 	const plot_data = raw.plot_data as FeasibilityStudy['plot_data']
 	const research = raw.research as FeasibilityStudy['research']
@@ -403,7 +175,8 @@ function adaptBackendStudy(
 		raw.assumptions as Partial<FeasibilityAssumptions>,
 		plot_data,
 		research,
-		selectedDevelopmentModel
+		selectedDevelopmentModel,
+		{ mode: hydrationMode }
 	)
 	return {
 		status: 'ready',
@@ -417,10 +190,25 @@ function adaptBackendStudy(
 	}
 }
 
-function mergeStudy(raw: Record<string, unknown>, selectedDevelopmentModel?: DevelopmentModel) {
-	study.value = adaptBackendStudy(raw, selectedDevelopmentModel)
+function mergeStudy(
+	raw: Record<string, unknown>,
+	selectedDevelopmentModel?: DevelopmentModel,
+	hydrationMode: 'saved' | 'generated' = 'saved'
+) {
+	study.value = adaptBackendStudy(raw, selectedDevelopmentModel, hydrationMode)
 	phase.value = 'ready'
 	error.value = ''
+}
+
+function hydrateSavedStudyRecord(saved: FeasibilitySavedStudyResponse) {
+	savedStudyId.value = saved.id
+	savedStudyName.value = saved.name
+	resetSaveTracking()
+	feasibilityWorkspace.hydrate(
+		normalizeChatState((saved as unknown as Record<string, unknown>).chat_state)
+	)
+	mergeStudy(saved as unknown as Record<string, unknown>, saved.development_model, 'saved')
+	return saved
 }
 
 export const feasibilityStudy = {
@@ -522,7 +310,7 @@ export const feasibilityStudy = {
 				usage_override: study.value?.assumptions.usage,
 				development_model: current
 			})
-			mergeStudy(next as unknown as Record<string, unknown>, current)
+			mergeStudy(next as unknown as Record<string, unknown>, current, 'generated')
 		} catch (err) {
 			phase.value = 'error'
 			error.value = err instanceof Error ? err.message : 'Failed to generate feasibility study.'
@@ -538,33 +326,22 @@ export const feasibilityStudy = {
 		error.value = ''
 		try {
 			const saved = await feasibility.createStudy(params)
-			savedStudyId.value = saved.id
-			savedStudyName.value = saved.name
-			resetSaveTracking()
-			feasibilityWorkspace.hydrate(
-				normalizeChatState((saved as unknown as Record<string, unknown>).chat_state)
-			)
-			mergeStudy(saved as unknown as Record<string, unknown>, saved.development_model)
-			return saved
+			return hydrateSavedStudyRecord(saved)
 		} catch (err) {
 			phase.value = 'error'
 			error.value = err instanceof Error ? err.message : 'Failed to create feasibility study.'
 			throw err
 		}
 	},
+	hydrateSavedStudy(saved: FeasibilitySavedStudyResponse) {
+		return hydrateSavedStudyRecord(saved)
+	},
 	async loadSavedStudy(studyId: number) {
 		phase.value = 'generating'
 		error.value = ''
 		try {
 			const saved = await feasibility.getStudy(studyId)
-			savedStudyId.value = saved.id
-			savedStudyName.value = saved.name
-			resetSaveTracking()
-			feasibilityWorkspace.hydrate(
-				normalizeChatState((saved as unknown as Record<string, unknown>).chat_state)
-			)
-			mergeStudy(saved as unknown as Record<string, unknown>, saved.development_model)
-			return saved
+			return hydrateSavedStudyRecord(saved)
 		} catch (err) {
 			phase.value = 'error'
 			error.value = err instanceof Error ? err.message : 'Failed to load feasibility study.'

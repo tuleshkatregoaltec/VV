@@ -8,13 +8,30 @@ import type {
 	UpdateConversationRequest
 } from './generated/hey-api/types.gen'
 
-export type { ConversationResponse, CreateConversationRequest, MessageResponse }
+export type {
+	ConversationListResponse,
+	ConversationResponse,
+	CreateConversationRequest,
+	MessageResponse
+}
+
+export interface ConversationListParams {
+	limit?: number
+	offset?: number
+}
+
+export interface MessageListParams {
+	limit?: number
+}
 
 export const chat = {
 	createConversation: (data: CreateConversationRequest = {}) =>
 		client.post<ConversationResponse>('/api/v1/chat/conversations', data),
 
-	getConversations: () => client.get<ConversationListResponse>('/api/v1/chat/conversations'),
+	getConversations: ({ limit = 50, offset = 0 }: ConversationListParams = {}) =>
+		client.get<ConversationListResponse>(
+			client.withQuery('/api/v1/chat/conversations', { limit, offset })
+		),
 
 	updateConversation: (conversationId: number, title: string) =>
 		client.patch<ConversationResponse, UpdateConversationRequest>(
@@ -25,8 +42,10 @@ export const chat = {
 	deleteConversation: (conversationId: number) =>
 		client.delete(`/api/v1/chat/conversations/${conversationId}`),
 
-	getMessages: (conversationId: number) =>
-		client.get<MessageResponse[]>(`/api/v1/chat/conversations/${conversationId}/messages`),
+	getMessages: (conversationId: number, { limit = 100 }: MessageListParams = {}) =>
+		client.get<MessageResponse[]>(
+			client.withQuery(`/api/v1/chat/conversations/${conversationId}/messages`, { limit })
+		),
 
 	/** Streams AI response chunks via Server-Sent Events */
 	sendMessage: (conversationId: number, message: string, onChunk: StreamCallback) =>

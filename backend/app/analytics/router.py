@@ -38,6 +38,7 @@ from app.clickhouse.queries import (
     rentals_summary,
     sales_summary,
 )
+from app.core.decorators import cached_endpoint
 from app.core.dependencies import AuthContext, require_active_subscription
 
 router = APIRouter(prefix="/api/v1/analytics", tags=["analytics"])
@@ -501,6 +502,7 @@ async def get_sub_projects_endpoint(
 
 
 @router.get("/project/summary", response_model=ProjectAnalyticsResponse)
+@cached_endpoint(prefix="analytics:project_summary", expire=900)
 async def get_project_summary_endpoint(
     context: AuthContext = Depends(require_active_subscription),
     master_project: Optional[str] = Query(default=None, description="Master project name"),

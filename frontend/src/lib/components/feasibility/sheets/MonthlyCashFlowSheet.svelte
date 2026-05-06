@@ -328,13 +328,13 @@ function round(v: number): number {
 				</tr>
 				<tr class="border-t-2 border-[#1F3864] bg-[#E8F0FE]">
 					<td class="px-2 py-[4px] text-left text-[10px] font-bold text-slate-900 sticky left-0 bg-[#E8F0FE] z-10 border-r border-slate-200 whitespace-nowrap">Unlevered Cash Flow</td>
-					{#each btrAnnualRows as row}<td class="px-2 py-[4px] text-right text-[10px] tabular-nums font-semibold whitespace-nowrap {row.unleveredCfAed >= 0 ? 'text-emerald-700' : 'text-rose-700'}">{fmtSigned(row.unleveredCfAed)}</td>{/each}
-					<td class="px-2 py-[4px] text-right text-[10px] tabular-nums font-bold sticky right-0 border-l border-slate-300 bg-slate-100 {sumBtrAnnual('unleveredCfAed') >= 0 ? 'text-emerald-700' : 'text-rose-700'}">{fmtSigned(sumBtrAnnual('unleveredCfAed'))}</td>
+					{#each btrAnnualRows as row}<td class="px-2 py-[4px] text-right text-[10px] tabular-nums font-semibold whitespace-nowrap text-slate-900">{fmtSigned(row.unleveredCfAed)}</td>{/each}
+					<td class="px-2 py-[4px] text-right text-[10px] tabular-nums font-bold sticky right-0 border-l border-slate-300 bg-slate-100 text-slate-900">{fmtSigned(sumBtrAnnual('unleveredCfAed'))}</td>
 				</tr>
 				<tr class="border-t border-slate-300 bg-[#D6E4FF]">
 					<td class="px-2 py-[4px] text-left text-[10px] font-bold text-slate-900 sticky left-0 bg-[#D6E4FF] z-10 border-r border-slate-200 whitespace-nowrap">Levered Equity Cash Flow</td>
-					{#each btrAnnualRows as row}<td class="px-2 py-[4px] text-right text-[10px] tabular-nums font-semibold whitespace-nowrap {row.leveredCfAed >= 0 ? 'text-emerald-700' : 'text-rose-700'}">{fmtSigned(row.leveredCfAed)}</td>{/each}
-					<td class="px-2 py-[4px] text-right text-[10px] tabular-nums font-bold sticky right-0 border-l border-slate-300 bg-slate-100 {sumBtrAnnual('leveredCfAed') >= 0 ? 'text-emerald-700' : 'text-rose-700'}">{fmtSigned(sumBtrAnnual('leveredCfAed'))}</td>
+					{#each btrAnnualRows as row}<td class="px-2 py-[4px] text-right text-[10px] tabular-nums font-semibold whitespace-nowrap text-slate-900">{fmtSigned(row.leveredCfAed)}</td>{/each}
+					<td class="px-2 py-[4px] text-right text-[10px] tabular-nums font-bold sticky right-0 border-l border-slate-300 bg-slate-100 text-slate-900">{fmtSigned(sumBtrAnnual('leveredCfAed'))}</td>
 				</tr>
 			</tbody>
 		</table>

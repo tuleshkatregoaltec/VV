@@ -446,6 +446,10 @@ export type AuthMeResponse = {
      */
     last_name: string;
     /**
+     * Avatar Url
+     */
+    avatar_url?: string | null;
+    /**
      * Organization Id
      */
     organization_id: string | null;
@@ -904,6 +908,42 @@ export type CustomerPortalResponse = {
 };
 
 /**
+ * DDAOutlineFeature
+ *
+ * Coarse DDA planning outline for low-zoom map overlay.
+ */
+export type DdaOutlineFeature = {
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Kind
+     */
+    kind: string;
+    /**
+     * Plot Count
+     */
+    plot_count: number;
+    /**
+     * Total Plot Area Sqm
+     */
+    total_plot_area_sqm: number;
+    /**
+     * Total Gfa Sqm
+     */
+    total_gfa_sqm: number;
+    /**
+     * Coordinates
+     */
+    coordinates: Array<Array<number>>;
+    /**
+     * Land Use Summary
+     */
+    land_use_summary?: Array<string>;
+};
+
+/**
  * DDAPlotFeature
  *
  * DDA GIS plot polygon for map overlay.
@@ -933,6 +973,30 @@ export type DdaPlotFeature = {
      * Land Use Summary
      */
     land_use_summary?: Array<string>;
+    /**
+     * Max Gfa Sqm
+     */
+    max_gfa_sqm?: number | null;
+    /**
+     * Max Height
+     */
+    max_height?: string | null;
+    /**
+     * Max Coverage
+     */
+    max_coverage?: string | null;
+    /**
+     * Land Use
+     */
+    land_use?: string | null;
+    /**
+     * Gfa Type
+     */
+    gfa_type?: string | null;
+    /**
+     * Is Verified
+     */
+    is_verified?: boolean;
 };
 
 /**
@@ -1196,6 +1260,139 @@ export type FeasibilityAssumptions = {
      * Developmentmodel
      */
     developmentModel?: 'build_to_sell_residential' | 'build_to_rent_residential' | 'build_to_lease_commercial';
+    /**
+     * Basementparkingfloors
+     */
+    basementParkingFloors?: number;
+    /**
+     * Podiumfloors
+     */
+    podiumFloors?: number;
+    /**
+     * Residentialfloors
+     */
+    residentialFloors?: number;
+    /**
+     * Amenityrooffloors
+     */
+    amenityRoofFloors?: number;
+    /**
+     * Parkingareaperspacesqm
+     */
+    parkingAreaPerSpaceSqm?: number;
+    /**
+     * Abovegradebuafactor
+     */
+    aboveGradeBuaFactor?: number;
+    /**
+     * Servicebohplantpct
+     */
+    serviceBohPlantPct?: number;
+    /**
+     * Podiumparkingfloorsoutsidegfa
+     */
+    podiumParkingFloorsOutsideGfa?: number;
+    /**
+     * Targetcoveragepct
+     */
+    targetCoveragePct?: number;
+    /**
+     * Targetbuildingcount
+     */
+    targetBuildingCount?: number;
+    /**
+     * Maxefficienttowerfloorplatesqm
+     */
+    maxEfficientTowerFloorplateSqm?: number;
+    /**
+     * Minefficienttowerfloorplatesqm
+     */
+    minEfficientTowerFloorplateSqm?: number;
+    /**
+     * Floortofloorheightm
+     */
+    floorToFloorHeightM?: number;
+    /**
+     * Podiumfloortofloorheightm
+     */
+    podiumFloorToFloorHeightM?: number;
+    /**
+     * Groundfloorheightm
+     */
+    groundFloorHeightM?: number;
+    /**
+     * Roofplantallowancem
+     */
+    roofPlantAllowanceM?: number;
+    /**
+     * Landtransferfeepct
+     */
+    landTransferFeePct?: number;
+    /**
+     * Brokeragepct
+     */
+    brokeragePct?: number;
+    /**
+     * Legalddpct
+     */
+    legalDdPct?: number;
+    /**
+     * Permitfeespct
+     */
+    permitFeesPct?: number;
+    /**
+     * Softcostpct
+     */
+    softCostPct?: number;
+    /**
+     * Acquisitiondebtltv
+     */
+    acquisitionDebtLtv?: number;
+    /**
+     * Constructiondebtltc
+     */
+    constructionDebtLtc?: number;
+    /**
+     * Debtspreadpa
+     */
+    debtSpreadPa?: number;
+    /**
+     * Financingfeepct
+     */
+    financingFeePct?: number;
+    /**
+     * Exitfeepct
+     */
+    exitFeePct?: number;
+    /**
+     * Preferredreturnpa
+     */
+    preferredReturnPa?: number;
+    /**
+     * Sponsorpromotepct
+     */
+    sponsorPromotePct?: number;
+    /**
+     * Projectyears
+     */
+    projectYears?: number;
+    /**
+     * Constructioncurvesteepness
+     */
+    constructionCurveSteepness?: number;
+    /**
+     * Salescurvesteepness
+     */
+    salesCurveSteepness?: number;
+    vatAppliesTo?: FeasibilityVatApplicability;
+    /**
+     * Vatrefundlagmonths
+     */
+    vatRefundLagMonths?: number;
+    /**
+     * Selectedscenario
+     */
+    selectedScenario?: 'base' | 'conservative' | 'optimistic';
     /**
      * Btrunitconfigs
      */
@@ -1616,6 +1813,40 @@ export type FeasibilityUnitConfig = {
 };
 
 /**
+ * FeasibilityVatApplicability
+ */
+export type FeasibilityVatApplicability = {
+    /**
+     * Land
+     */
+    land?: boolean;
+    /**
+     * Hardcosts
+     */
+    hardCosts?: boolean;
+    /**
+     * Softcosts
+     */
+    softCosts?: boolean;
+    /**
+     * Permitfees
+     */
+    permitFees?: boolean;
+    /**
+     * Contingency
+     */
+    contingency?: boolean;
+    /**
+     * Marketing
+     */
+    marketing?: boolean;
+    /**
+     * Salesadmin
+     */
+    salesAdmin?: boolean;
+};
+
+/**
  * FilterOptionsResponse
  *
  * Filter options for transactions and rentals - dynamically narrowed by selections.
@@ -1850,6 +2081,498 @@ export type LandSaleEvidence = {
 };
 
 /**
+ * ListingCardResponse
+ */
+export type ListingCardResponse = {
+    /**
+     * Listing Id
+     */
+    listing_id: string;
+    /**
+     * Listing Mode
+     */
+    listing_mode: 'sale' | 'rent';
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Reference
+     */
+    reference?: string | null;
+    /**
+     * Property Type
+     */
+    property_type?: string | null;
+    /**
+     * Price Value
+     */
+    price_value?: number | null;
+    /**
+     * Price Currency
+     */
+    price_currency?: string | null;
+    /**
+     * Price Period
+     */
+    price_period?: string | null;
+    /**
+     * Size Value
+     */
+    size_value?: number | null;
+    /**
+     * Size Unit
+     */
+    size_unit?: string | null;
+    /**
+     * Bedrooms
+     */
+    bedrooms?: string | null;
+    /**
+     * Bathrooms
+     */
+    bathrooms?: string | null;
+    /**
+     * City Name
+     */
+    city_name?: string | null;
+    /**
+     * Area Name
+     */
+    area_name?: string | null;
+    /**
+     * Subcommunity Name
+     */
+    subcommunity_name?: string | null;
+    /**
+     * Tower Name
+     */
+    tower_name?: string | null;
+    /**
+     * Location Name
+     */
+    location_name?: string | null;
+    /**
+     * Latitude
+     */
+    latitude?: number | null;
+    /**
+     * Longitude
+     */
+    longitude?: number | null;
+    /**
+     * Primary Image Url
+     */
+    primary_image_url?: string | null;
+    /**
+     * Image Count
+     */
+    image_count?: number;
+    /**
+     * Floorplan Count
+     */
+    floorplan_count?: number;
+    /**
+     * Agent Name
+     */
+    agent_name?: string | null;
+    /**
+     * Agent Image Url
+     */
+    agent_image_url?: string | null;
+    /**
+     * Broker Name
+     */
+    broker_name?: string | null;
+    /**
+     * Broker Logo Url
+     */
+    broker_logo_url?: string | null;
+    /**
+     * Listed Date
+     */
+    listed_date?: string | null;
+    /**
+     * Is Available
+     */
+    is_available?: boolean | null;
+    /**
+     * Is Verified
+     */
+    is_verified?: boolean | null;
+    /**
+     * Is Featured
+     */
+    is_featured?: boolean | null;
+    /**
+     * Is Premium
+     */
+    is_premium?: boolean | null;
+    /**
+     * Share Url
+     */
+    share_url?: string | null;
+};
+
+/**
+ * ListingDetailResponse
+ */
+export type ListingDetailResponse = {
+    /**
+     * Listing Id
+     */
+    listing_id: string;
+    /**
+     * Listing Mode
+     */
+    listing_mode: 'sale' | 'rent';
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Reference
+     */
+    reference?: string | null;
+    /**
+     * Property Type
+     */
+    property_type?: string | null;
+    /**
+     * Price Value
+     */
+    price_value?: number | null;
+    /**
+     * Price Currency
+     */
+    price_currency?: string | null;
+    /**
+     * Price Period
+     */
+    price_period?: string | null;
+    /**
+     * Size Value
+     */
+    size_value?: number | null;
+    /**
+     * Size Unit
+     */
+    size_unit?: string | null;
+    /**
+     * Bedrooms
+     */
+    bedrooms?: string | null;
+    /**
+     * Bathrooms
+     */
+    bathrooms?: string | null;
+    /**
+     * City Name
+     */
+    city_name?: string | null;
+    /**
+     * Area Name
+     */
+    area_name?: string | null;
+    /**
+     * Subcommunity Name
+     */
+    subcommunity_name?: string | null;
+    /**
+     * Tower Name
+     */
+    tower_name?: string | null;
+    /**
+     * Location Name
+     */
+    location_name?: string | null;
+    /**
+     * Latitude
+     */
+    latitude?: number | null;
+    /**
+     * Longitude
+     */
+    longitude?: number | null;
+    /**
+     * Primary Image Url
+     */
+    primary_image_url?: string | null;
+    /**
+     * Image Count
+     */
+    image_count?: number;
+    /**
+     * Floorplan Count
+     */
+    floorplan_count?: number;
+    /**
+     * Agent Name
+     */
+    agent_name?: string | null;
+    /**
+     * Agent Image Url
+     */
+    agent_image_url?: string | null;
+    /**
+     * Broker Name
+     */
+    broker_name?: string | null;
+    /**
+     * Broker Logo Url
+     */
+    broker_logo_url?: string | null;
+    /**
+     * Listed Date
+     */
+    listed_date?: string | null;
+    /**
+     * Is Available
+     */
+    is_available?: boolean | null;
+    /**
+     * Is Verified
+     */
+    is_verified?: boolean | null;
+    /**
+     * Is Featured
+     */
+    is_featured?: boolean | null;
+    /**
+     * Is Premium
+     */
+    is_premium?: boolean | null;
+    /**
+     * Share Url
+     */
+    share_url?: string | null;
+    /**
+     * Description
+     */
+    description?: string | null;
+    /**
+     * Amenities
+     */
+    amenities?: Array<string>;
+    /**
+     * Images
+     */
+    images?: Array<ListingImageResponse>;
+    /**
+     * Floorplans
+     */
+    floorplans?: Array<ListingFloorPlanResponse>;
+    agent?: ListingPartyResponse | null;
+    broker?: ListingPartyResponse | null;
+    client?: ListingPartyResponse | null;
+    /**
+     * Furnished
+     */
+    furnished?: string | null;
+    /**
+     * Completion Status
+     */
+    completion_status?: string | null;
+    /**
+     * Rera
+     */
+    rera?: string | null;
+    /**
+     * Number Of Cheques
+     */
+    number_of_cheques?: number | null;
+    /**
+     * Payment Method
+     */
+    payment_method?: Array<string>;
+    /**
+     * Video Url
+     */
+    video_url?: string | null;
+    /**
+     * View 360 Url
+     */
+    view_360_url?: string | null;
+    /**
+     * Source Run Id
+     */
+    source_run_id?: string | null;
+    /**
+     * Source Manifest Key
+     */
+    source_manifest_key?: string | null;
+    /**
+     * Scraped At
+     */
+    scraped_at?: string | null;
+    /**
+     * Demo Metadata
+     */
+    demo_metadata?: {
+        [key: string]: unknown;
+    };
+};
+
+/**
+ * ListingFiltersResponse
+ */
+export type ListingFiltersResponse = {
+    /**
+     * Modes
+     */
+    modes?: Array<'sale' | 'rent'>;
+    /**
+     * Areas
+     */
+    areas?: Array<string>;
+    /**
+     * Property Types
+     */
+    property_types?: Array<string>;
+    /**
+     * Bedrooms
+     */
+    bedrooms?: Array<string>;
+    /**
+     * Price Min
+     */
+    price_min?: number | null;
+    /**
+     * Price Max
+     */
+    price_max?: number | null;
+};
+
+/**
+ * ListingFloorPlanResponse
+ */
+export type ListingFloorPlanResponse = {
+    /**
+     * Title
+     */
+    title?: string | null;
+    /**
+     * Image Url
+     */
+    image_url?: string | null;
+    /**
+     * Area Sqft
+     */
+    area_sqft?: number | null;
+    /**
+     * Floor Number
+     */
+    floor_number?: number | null;
+    /**
+     * Unit Number
+     */
+    unit_number?: string | null;
+    /**
+     * Dimension
+     */
+    dimension?: string | null;
+};
+
+/**
+ * ListingImageResponse
+ */
+export type ListingImageResponse = {
+    /**
+     * Small Url
+     */
+    small_url?: string | null;
+    /**
+     * Medium Url
+     */
+    medium_url?: string | null;
+    /**
+     * Original Url
+     */
+    original_url?: string | null;
+    /**
+     * Url
+     */
+    url?: string | null;
+    /**
+     * Label
+     */
+    label?: string | null;
+};
+
+/**
+ * ListingListResponse
+ */
+export type ListingListResponse = {
+    /**
+     * Listings
+     */
+    listings: Array<ListingCardResponse>;
+    /**
+     * Total
+     */
+    total: number;
+    /**
+     * Limit
+     */
+    limit: number;
+    /**
+     * Offset
+     */
+    offset: number;
+    filters?: ListingFiltersResponse;
+};
+
+/**
+ * ListingPartyResponse
+ */
+export type ListingPartyResponse = {
+    /**
+     * Id
+     */
+    id?: string | null;
+    /**
+     * Name
+     */
+    name?: string | null;
+    /**
+     * Email
+     */
+    email?: string | null;
+    /**
+     * Phone
+     */
+    phone?: string | null;
+    /**
+     * Whatsapp
+     */
+    whatsapp?: string | null;
+    /**
+     * Image Url
+     */
+    image_url?: string | null;
+    /**
+     * Logo Url
+     */
+    logo_url?: string | null;
+    /**
+     * Address
+     */
+    address?: string | null;
+    /**
+     * Slug
+     */
+    slug?: string | null;
+    /**
+     * Is Super Agent
+     */
+    is_super_agent?: boolean | null;
+    /**
+     * Languages
+     */
+    languages?: Array<string>;
+};
+
+/**
  * MarketPricingRow
  */
 export type MarketPricingRow = {
@@ -2018,6 +2741,12 @@ export type MessageResponse = {
      */
     content: string;
     /**
+     * Meta Data
+     */
+    meta_data?: {
+        [key: string]: unknown;
+    } | null;
+    /**
      * Created At
      */
     created_at: string;
@@ -2121,6 +2850,36 @@ export type NewsListResponse = {
      * Offset
      */
     offset: number;
+};
+
+/**
+ * NewsSummaryResponse
+ */
+export type NewsSummaryResponse = {
+    macro: NewsSummarySection;
+    real_estate: NewsSummarySection;
+    /**
+     * Generated At
+     */
+    generated_at: string;
+    /**
+     * Article Count
+     */
+    article_count: number;
+};
+
+/**
+ * NewsSummarySection
+ */
+export type NewsSummarySection = {
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Bullets
+     */
+    bullets?: Array<string>;
 };
 
 /**
@@ -3308,6 +4067,291 @@ export type ProjectPriceDistributionResponse = {
 };
 
 /**
+ * ProjectRadarArea
+ *
+ * Area-level bubble with supply, demand, and DDA planning context.
+ */
+export type ProjectRadarArea = {
+    /**
+     * Area Id
+     */
+    area_id: number;
+    /**
+     * Area Name
+     */
+    area_name: string;
+    /**
+     * Latitude
+     */
+    latitude: number | null;
+    /**
+     * Longitude
+     */
+    longitude: number | null;
+    /**
+     * Mapped Projects
+     */
+    mapped_projects: number;
+    /**
+     * Active Projects
+     */
+    active_projects: number;
+    /**
+     * Completed Projects
+     */
+    completed_projects: number;
+    /**
+     * Overdue Projects
+     */
+    overdue_projects: number;
+    /**
+     * Pipeline Units
+     */
+    pipeline_units: number;
+    /**
+     * Units Delivering Next 12 Months
+     */
+    units_delivering_next_12_months: number;
+    /**
+     * Active Developers
+     */
+    active_developers: number;
+    /**
+     * Avg Completion Pct
+     */
+    avg_completion_pct: number;
+    /**
+     * Avg Delivery Confidence
+     */
+    avg_delivery_confidence: number;
+    /**
+     * Sales Transaction Count 12M
+     */
+    sales_transaction_count_12m: number;
+    /**
+     * Rental Contract Count 12M
+     */
+    rental_contract_count_12m: number;
+    /**
+     * Total Sales Volume 12M
+     */
+    total_sales_volume_12m: number;
+    /**
+     * Median Sale Price
+     */
+    median_sale_price: number | null;
+    /**
+     * Median Annual Rent
+     */
+    median_annual_rent: number | null;
+    /**
+     * Gross Yield Pct
+     */
+    gross_yield_pct: number | null;
+    /**
+     * Top Developers
+     */
+    top_developers: Array<string>;
+    /**
+     * Top Master Projects
+     */
+    top_master_projects: Array<string>;
+    /**
+     * Dda Plot Count
+     */
+    dda_plot_count: number;
+    /**
+     * Dda Total Plot Area Sqm
+     */
+    dda_total_plot_area_sqm: number;
+    /**
+     * Dda Total Gfa Sqm
+     */
+    dda_total_gfa_sqm: number;
+    /**
+     * Dda Dominant Land Uses
+     */
+    dda_dominant_land_uses: Array<string>;
+};
+
+/**
+ * ProjectRadarProject
+ *
+ * Mapped project pin with market and delivery signals.
+ */
+export type ProjectRadarProject = {
+    /**
+     * Project Id
+     */
+    project_id: number;
+    /**
+     * Project Name
+     */
+    project_name: string;
+    /**
+     * Area Name
+     */
+    area_name: string;
+    /**
+     * Developer Name
+     */
+    developer_name: string | null;
+    /**
+     * Master Project En
+     */
+    master_project_en: string | null;
+    /**
+     * Latitude
+     */
+    latitude: number;
+    /**
+     * Longitude
+     */
+    longitude: number;
+    /**
+     * Geo Pin Count
+     */
+    geo_pin_count: number;
+    /**
+     * Completion Status
+     */
+    completion_status: string;
+    /**
+     * Pipeline Status
+     */
+    pipeline_status: string;
+    /**
+     * Project Status
+     */
+    project_status: string | null;
+    /**
+     * No Of Units
+     */
+    no_of_units: number;
+    /**
+     * No Of Buildings
+     */
+    no_of_buildings: number;
+    /**
+     * Percent Completed
+     */
+    percent_completed: number | null;
+    /**
+     * Delivery Confidence
+     */
+    delivery_confidence: number;
+    /**
+     * Sales Transaction Count 12M
+     */
+    sales_transaction_count_12m: number;
+    /**
+     * Rental Contract Count 12M
+     */
+    rental_contract_count_12m: number;
+    /**
+     * Total Sales Volume 12M
+     */
+    total_sales_volume_12m: number;
+    /**
+     * Median Sale Price
+     */
+    median_sale_price: number | null;
+    /**
+     * Median Annual Rent
+     */
+    median_annual_rent: number | null;
+    /**
+     * Gross Yield Pct
+     */
+    gross_yield_pct: number | null;
+    /**
+     * Avg Sale Price Sqm 12M
+     */
+    avg_sale_price_sqm_12m: number | null;
+    /**
+     * Avg Rent Price Sqm 12M
+     */
+    avg_rent_price_sqm_12m: number | null;
+};
+
+/**
+ * ProjectRadarResponse
+ *
+ * Complete payload for the projects radar map.
+ */
+export type ProjectRadarResponse = {
+    stats: ProjectRadarStats;
+    /**
+     * Projects
+     */
+    projects: Array<ProjectRadarProject>;
+    /**
+     * Areas
+     */
+    areas: Array<ProjectRadarArea>;
+    /**
+     * Source Notes
+     */
+    source_notes: Array<string>;
+};
+
+/**
+ * ProjectRadarStats
+ *
+ * Top-level metrics for the projects radar map.
+ */
+export type ProjectRadarStats = {
+    /**
+     * Total Projects
+     */
+    total_projects: number;
+    /**
+     * Mapped Projects
+     */
+    mapped_projects: number;
+    /**
+     * Active Projects
+     */
+    active_projects: number;
+    /**
+     * Finished Projects
+     */
+    finished_projects: number;
+    /**
+     * Pipeline Units
+     */
+    pipeline_units: number;
+    /**
+     * Units Delivering Next 12 Months
+     */
+    units_delivering_next_12_months: number;
+    /**
+     * Sales Transaction Count 12M
+     */
+    sales_transaction_count_12m: number;
+    /**
+     * Rental Contract Count 12M
+     */
+    rental_contract_count_12m: number;
+    /**
+     * Total Sales Volume 12M
+     */
+    total_sales_volume_12m: number;
+    /**
+     * Dda Plot Count
+     */
+    dda_plot_count: number;
+    /**
+     * Dda Total Plot Area Sqm
+     */
+    dda_total_plot_area_sqm: number;
+    /**
+     * Dda Total Gfa Sqm
+     */
+    dda_total_gfa_sqm: number;
+};
+
+/**
  * ProjectRentalSummary
  */
 export type ProjectRentalSummary = {
@@ -3990,6 +5034,374 @@ export type SubscriptionResponse = {
      * Within Paid Period
      */
     within_paid_period: boolean;
+};
+
+/**
+ * SupplyCatalogueAssetResponse
+ */
+export type SupplyCatalogueAssetResponse = {
+    /**
+     * Id
+     */
+    id: number;
+    /**
+     * Asset Type
+     */
+    asset_type: string;
+    /**
+     * Name
+     */
+    name?: string | null;
+    /**
+     * Url
+     */
+    url: string;
+    /**
+     * Download Url
+     */
+    download_url?: string | null;
+    /**
+     * Content Type
+     */
+    content_type?: string | null;
+    /**
+     * Size Bytes
+     */
+    size_bytes?: number | null;
+};
+
+/**
+ * SupplyCatalogueBuildingResponse
+ */
+export type SupplyCatalogueBuildingResponse = {
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Description
+     */
+    description?: string | null;
+};
+
+/**
+ * SupplyCatalogueNearbyPointResponse
+ */
+export type SupplyCatalogueNearbyPointResponse = {
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Distance Km
+     */
+    distance_km?: number | null;
+    /**
+     * Time Min
+     */
+    time_min?: number | null;
+};
+
+/**
+ * SupplyCataloguePaymentStepResponse
+ */
+export type SupplyCataloguePaymentStepResponse = {
+    /**
+     * Label
+     */
+    label: string;
+    /**
+     * Percent
+     */
+    percent?: string | null;
+    /**
+     * Order
+     */
+    order?: number | null;
+};
+
+/**
+ * SupplyCatalogueProjectCardResponse
+ */
+export type SupplyCatalogueProjectCardResponse = {
+    /**
+     * Project Id
+     */
+    project_id: number;
+    /**
+     * Project Name
+     */
+    project_name: string;
+    /**
+     * Developer Name
+     */
+    developer_name: string;
+    /**
+     * Developer Id
+     */
+    developer_id?: number | null;
+    /**
+     * Area Name
+     */
+    area_name?: string | null;
+    /**
+     * Region
+     */
+    region?: string | null;
+    /**
+     * Status
+     */
+    status?: string | null;
+    /**
+     * Sale Status
+     */
+    sale_status?: string | null;
+    /**
+     * Completion Date
+     */
+    completion_date?: string | null;
+    /**
+     * Min Price Aed
+     */
+    min_price_aed?: number | null;
+    /**
+     * Max Price Aed
+     */
+    max_price_aed?: number | null;
+    /**
+     * Units In Sale
+     */
+    units_in_sale?: number | null;
+    /**
+     * Unit Types
+     */
+    unit_types?: Array<string>;
+    /**
+     * Overview Excerpt
+     */
+    overview_excerpt?: string | null;
+    /**
+     * Cover Image Url
+     */
+    cover_image_url?: string | null;
+    /**
+     * Developer Logo Url
+     */
+    developer_logo_url?: string | null;
+    /**
+     * Image Count
+     */
+    image_count?: number;
+    /**
+     * Floorplan Count
+     */
+    floorplan_count?: number;
+    /**
+     * Brochure Count
+     */
+    brochure_count?: number;
+};
+
+/**
+ * SupplyCatalogueProjectDetailResponse
+ */
+export type SupplyCatalogueProjectDetailResponse = {
+    /**
+     * Project Id
+     */
+    project_id: number;
+    /**
+     * Project Name
+     */
+    project_name: string;
+    /**
+     * Developer Name
+     */
+    developer_name: string;
+    /**
+     * Developer Id
+     */
+    developer_id?: number | null;
+    /**
+     * Area Name
+     */
+    area_name?: string | null;
+    /**
+     * Region
+     */
+    region?: string | null;
+    /**
+     * Status
+     */
+    status?: string | null;
+    /**
+     * Sale Status
+     */
+    sale_status?: string | null;
+    /**
+     * Completion Date
+     */
+    completion_date?: string | null;
+    /**
+     * Min Price Aed
+     */
+    min_price_aed?: number | null;
+    /**
+     * Max Price Aed
+     */
+    max_price_aed?: number | null;
+    /**
+     * Units In Sale
+     */
+    units_in_sale?: number | null;
+    /**
+     * Unit Types
+     */
+    unit_types?: Array<string>;
+    /**
+     * Overview Excerpt
+     */
+    overview_excerpt?: string | null;
+    /**
+     * Cover Image Url
+     */
+    cover_image_url?: string | null;
+    /**
+     * Developer Logo Url
+     */
+    developer_logo_url?: string | null;
+    /**
+     * Image Count
+     */
+    image_count?: number;
+    /**
+     * Floorplan Count
+     */
+    floorplan_count?: number;
+    /**
+     * Brochure Count
+     */
+    brochure_count?: number;
+    /**
+     * Overview
+     */
+    overview?: string | null;
+    /**
+     * Coordinates
+     */
+    coordinates?: {
+        [key: string]: number;
+    } | null;
+    /**
+     * Units
+     */
+    units?: Array<SupplyCatalogueUnitResponse>;
+    /**
+     * Payment Plan
+     */
+    payment_plan?: Array<SupplyCataloguePaymentStepResponse>;
+    /**
+     * Facilities
+     */
+    facilities?: Array<string>;
+    /**
+     * Buildings
+     */
+    buildings?: Array<SupplyCatalogueBuildingResponse>;
+    /**
+     * Nearby Points
+     */
+    nearby_points?: Array<SupplyCatalogueNearbyPointResponse>;
+    /**
+     * Gallery
+     */
+    gallery?: Array<SupplyCatalogueAssetResponse>;
+    /**
+     * Floorplans
+     */
+    floorplans?: Array<SupplyCatalogueAssetResponse>;
+    /**
+     * Brochures
+     */
+    brochures?: Array<SupplyCatalogueAssetResponse>;
+    /**
+     * Master Plans
+     */
+    master_plans?: Array<SupplyCatalogueAssetResponse>;
+    /**
+     * Demo Metadata
+     */
+    demo_metadata?: {
+        [key: string]: unknown;
+    };
+};
+
+/**
+ * SupplyCatalogueProjectsResponse
+ */
+export type SupplyCatalogueProjectsResponse = {
+    /**
+     * Projects
+     */
+    projects: Array<SupplyCatalogueProjectCardResponse>;
+    /**
+     * Total
+     */
+    total: number;
+    /**
+     * Limit
+     */
+    limit: number;
+    /**
+     * Offset
+     */
+    offset: number;
+    /**
+     * Areas
+     */
+    areas?: Array<string>;
+    /**
+     * Statuses
+     */
+    statuses?: Array<string>;
+};
+
+/**
+ * SupplyCatalogueUnitResponse
+ */
+export type SupplyCatalogueUnitResponse = {
+    /**
+     * Label
+     */
+    label: string;
+    /**
+     * Unit Type
+     */
+    unit_type?: string | null;
+    /**
+     * Bedrooms
+     */
+    bedrooms?: string | null;
+    /**
+     * Price From Aed
+     */
+    price_from_aed?: number | null;
+    /**
+     * Price To Aed
+     */
+    price_to_aed?: number | null;
+    /**
+     * Area From Sqft
+     */
+    area_from_sqft?: number | null;
+    /**
+     * Area To Sqft
+     */
+    area_to_sqft?: number | null;
+    /**
+     * Units Amount
+     */
+    units_amount?: number | null;
 };
 
 /**
@@ -5577,6 +6989,98 @@ export type FiltersGetRentalFilterOptionsResponses = {
 
 export type FiltersGetRentalFilterOptionsResponse = FiltersGetRentalFilterOptionsResponses[keyof FiltersGetRentalFilterOptionsResponses];
 
+export type ListingsListListingsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Mode
+         */
+        mode?: 'sale' | 'rent';
+        /**
+         * Limit
+         */
+        limit?: number;
+        /**
+         * Offset
+         */
+        offset?: number;
+        /**
+         * Search
+         */
+        search?: string | null;
+        /**
+         * Area
+         */
+        area?: string | null;
+        /**
+         * Property Type
+         */
+        property_type?: string | null;
+        /**
+         * Bedrooms
+         */
+        bedrooms?: string | null;
+        /**
+         * Price Min
+         */
+        price_min?: number | null;
+        /**
+         * Price Max
+         */
+        price_max?: number | null;
+    };
+    url: '/api/v1/listings';
+};
+
+export type ListingsListListingsErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListingsListListingsError = ListingsListListingsErrors[keyof ListingsListListingsErrors];
+
+export type ListingsListListingsResponses = {
+    /**
+     * Successful Response
+     */
+    200: ListingListResponse;
+};
+
+export type ListingsListListingsResponse = ListingsListListingsResponses[keyof ListingsListListingsResponses];
+
+export type ListingsGetListingData = {
+    body?: never;
+    path: {
+        /**
+         * Listing Id
+         */
+        listing_id: string;
+    };
+    query?: never;
+    url: '/api/v1/listings/{listing_id}';
+};
+
+export type ListingsGetListingErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListingsGetListingError = ListingsGetListingErrors[keyof ListingsGetListingErrors];
+
+export type ListingsGetListingResponses = {
+    /**
+     * Successful Response
+     */
+    200: ListingDetailResponse;
+};
+
+export type ListingsGetListingResponse = ListingsGetListingResponses[keyof ListingsGetListingResponses];
+
 export type NewsGetNewsData = {
     body?: never;
     path?: never;
@@ -5610,6 +7114,50 @@ export type NewsGetNewsResponses = {
 };
 
 export type NewsGetNewsResponse = NewsGetNewsResponses[keyof NewsGetNewsResponses];
+
+export type NewsGetNewsSummaryData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/news/summary';
+};
+
+export type NewsGetNewsSummaryResponses = {
+    /**
+     * Successful Response
+     */
+    200: NewsSummaryResponse;
+};
+
+export type NewsGetNewsSummaryResponse = NewsGetNewsSummaryResponses[keyof NewsGetNewsSummaryResponses];
+
+export type NewsGetNewsThumbnailData = {
+    body?: never;
+    path: {
+        /**
+         * Article Id
+         */
+        article_id: number;
+    };
+    query?: never;
+    url: '/api/v1/news/articles/{article_id}/thumbnail';
+};
+
+export type NewsGetNewsThumbnailErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type NewsGetNewsThumbnailError = NewsGetNewsThumbnailErrors[keyof NewsGetNewsThumbnailErrors];
+
+export type NewsGetNewsThumbnailResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
 
 export type OrganizationCreateOwnerOrganizationData = {
     body: OwnerOrganizationCreateRequest;
@@ -6025,6 +7573,38 @@ export type ProjectsListProjectsResponses = {
 
 export type ProjectsListProjectsResponse = ProjectsListProjectsResponses[keyof ProjectsListProjectsResponses];
 
+export type ProjectsProjectRadarData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Limit
+         *
+         * Maximum mapped projects
+         */
+        limit?: number;
+    };
+    url: '/api/v1/projects/radar';
+};
+
+export type ProjectsProjectRadarErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ProjectsProjectRadarError = ProjectsProjectRadarErrors[keyof ProjectsProjectRadarErrors];
+
+export type ProjectsProjectRadarResponses = {
+    /**
+     * Successful Response
+     */
+    200: ProjectRadarResponse;
+};
+
+export type ProjectsProjectRadarResponse = ProjectsProjectRadarResponses[keyof ProjectsProjectRadarResponses];
+
 export type ProjectsMasterProjectData = {
     body?: never;
     path?: never;
@@ -6090,13 +7670,43 @@ export type ProjectsBuildingDetailsResponse = ProjectsBuildingDetailsResponses[k
 export type ProjectsGetDdaPlotsData = {
     body?: never;
     path?: never;
-    query: {
+    query?: {
         /**
          * Area
          *
          * Area or community name to match against DDA plots
          */
-        area: string;
+        area?: string | null;
+        /**
+         * West
+         *
+         * Viewport west longitude
+         */
+        west?: number | null;
+        /**
+         * South
+         *
+         * Viewport south latitude
+         */
+        south?: number | null;
+        /**
+         * East
+         *
+         * Viewport east longitude
+         */
+        east?: number | null;
+        /**
+         * North
+         *
+         * Viewport north latitude
+         */
+        north?: number | null;
+        /**
+         * Limit
+         *
+         * Maximum DDA plots to return
+         */
+        limit?: number;
     };
     url: '/api/v1/projects/dda-plots';
 };
@@ -6120,6 +7730,70 @@ export type ProjectsGetDdaPlotsResponses = {
 };
 
 export type ProjectsGetDdaPlotsResponse = ProjectsGetDdaPlotsResponses[keyof ProjectsGetDdaPlotsResponses];
+
+export type ProjectsGetDdaOutlinesData = {
+    body?: never;
+    path?: never;
+    query: {
+        /**
+         * West
+         *
+         * Viewport west longitude
+         */
+        west: number;
+        /**
+         * South
+         *
+         * Viewport south latitude
+         */
+        south: number;
+        /**
+         * East
+         *
+         * Viewport east longitude
+         */
+        east: number;
+        /**
+         * North
+         *
+         * Viewport north latitude
+         */
+        north: number;
+        /**
+         * Zoom
+         *
+         * Current map zoom
+         */
+        zoom: number;
+        /**
+         * Limit
+         *
+         * Maximum outlines to return
+         */
+        limit?: number;
+    };
+    url: '/api/v1/projects/dda-outlines';
+};
+
+export type ProjectsGetDdaOutlinesErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ProjectsGetDdaOutlinesError = ProjectsGetDdaOutlinesErrors[keyof ProjectsGetDdaOutlinesErrors];
+
+export type ProjectsGetDdaOutlinesResponses = {
+    /**
+     * Response Projects-Get Dda Outlines
+     *
+     * Successful Response
+     */
+    200: Array<DdaOutlineFeature>;
+};
+
+export type ProjectsGetDdaOutlinesResponse = ProjectsGetDdaOutlinesResponses[keyof ProjectsGetDdaOutlinesResponses];
 
 export type ProjectsProjectDetailsData = {
     body?: never;
@@ -6166,6 +7840,115 @@ export type SupplyListUpcomingProjectsResponses = {
 };
 
 export type SupplyListUpcomingProjectsResponse = SupplyListUpcomingProjectsResponses[keyof SupplyListUpcomingProjectsResponses];
+
+export type SupplyListCatalogueProjectsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Limit
+         */
+        limit?: number;
+        /**
+         * Offset
+         */
+        offset?: number;
+        /**
+         * Search
+         */
+        search?: string | null;
+        /**
+         * Area
+         */
+        area?: string | null;
+        /**
+         * Status
+         */
+        status?: string | null;
+    };
+    url: '/api/v1/supply/catalogue/projects';
+};
+
+export type SupplyListCatalogueProjectsErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type SupplyListCatalogueProjectsError = SupplyListCatalogueProjectsErrors[keyof SupplyListCatalogueProjectsErrors];
+
+export type SupplyListCatalogueProjectsResponses = {
+    /**
+     * Successful Response
+     */
+    200: SupplyCatalogueProjectsResponse;
+};
+
+export type SupplyListCatalogueProjectsResponse = SupplyListCatalogueProjectsResponses[keyof SupplyListCatalogueProjectsResponses];
+
+export type SupplyGetCatalogueProjectData = {
+    body?: never;
+    path: {
+        /**
+         * Project Id
+         */
+        project_id: number;
+    };
+    query?: never;
+    url: '/api/v1/supply/catalogue/projects/{project_id}';
+};
+
+export type SupplyGetCatalogueProjectErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type SupplyGetCatalogueProjectError = SupplyGetCatalogueProjectErrors[keyof SupplyGetCatalogueProjectErrors];
+
+export type SupplyGetCatalogueProjectResponses = {
+    /**
+     * Successful Response
+     */
+    200: SupplyCatalogueProjectDetailResponse;
+};
+
+export type SupplyGetCatalogueProjectResponse = SupplyGetCatalogueProjectResponses[keyof SupplyGetCatalogueProjectResponses];
+
+export type SupplyGetCatalogueAssetData = {
+    body?: never;
+    path: {
+        /**
+         * Asset Id
+         */
+        asset_id: number;
+    };
+    query?: {
+        /**
+         * Download
+         */
+        download?: boolean;
+    };
+    url: '/api/v1/supply/catalogue/assets/{asset_id}';
+};
+
+export type SupplyGetCatalogueAssetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type SupplyGetCatalogueAssetError = SupplyGetCatalogueAssetErrors[keyof SupplyGetCatalogueAssetErrors];
+
+export type SupplyGetCatalogueAssetResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
 
 export type TransactionsGetSalesTransactionsData = {
     body?: never;

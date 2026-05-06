@@ -1,10 +1,29 @@
 <script lang="ts">
-import { Building2, Check, Home, Landmark, Search, X } from 'lucide-svelte'
+import { createQuery } from '@tanstack/svelte-query'
+import {
+	Bot,
+	Building2,
+	Check,
+	FileSpreadsheet,
+	Home,
+	Landmark,
+	LoaderCircle,
+	Search,
+	X
+} from 'lucide-svelte'
 import { goto } from '$app/navigation'
-import { feasibility } from '$lib/api/feasibility'
 import type { Plot } from '$lib/api/generated/hey-api/types.gen'
+import type { DdaPlotFeature } from '$lib/api/projects'
 import type { DevelopmentModel } from '$lib/feasibility/workbook/models'
+import { getQueryClient } from '$lib/queries/client'
+import {
+	feasibilityKeys,
+	feasibilityQueries,
+	type PlotSearchParams
+} from '$lib/queries/feasibility'
+import { projectQueries } from '$lib/queries/projects'
 import { feasibilityStudy } from '$lib/stores/feasibilityStudy.svelte'
+import PlotParcelMap from './PlotParcelMap.svelte'
 
 type UsageFilter = 'all' | 'residential' | 'commercial' | 'mixed'
 type SortKey = 'verified' | 'largest' | 'highest_gfa'
@@ -21,10 +40,26 @@ let usageFilter = $state<UsageFilter>('all')
 let verifiedOnly = $state(false)
 let minPlotArea = $state('')
 let sortBy = $state<SortKey>('verified')
-let loading = $state(false)
 let creating = $state(false)
+let creationStepIndex = $state(0)
 let error = $state('')
-let plots = $state<Plot[]>([])
+let plotSearchParams = $state<PlotSearchParams | null>(null)
+
+const queryClient = getQueryClient()
+const inactivePlotSearchParams: PlotSearchParams = { limit: 100 }
+const plotsQuery = createQuery(() => ({
+	...feasibilityQueries.searchPlots(plotSearchParams ?? inactivePlotSearchParams),
+	enabled: Boolean(plotSearchParams)
+}))
+const loading = $derived(plotsQuery.isFetching)
+const plotSearchError = $derived(
+	plotsQuery.isError
+		? plotsQuery.error instanceof Error
+			? plotsQuery.error.message
+			: 'Failed to search plots.'
+		: ''
+)
+const plots = $derived<Plot[]>(plotsQuery.data ?? [])
 
 const modelOptions: Array<{
 	id: DevelopmentModel
@@ -74,6 +109,25 @@ const sortOptions: Array<{ id: SortKey; label: string }> = [
 	{ id: 'highest_gfa', label: 'Highest GFA' }
 ]
 
+const creationSteps = [
+	'Reading the selected plot and zoning envelope',
+	'Generating market-backed starting assumptions',
+	'Building the workbook tabs and formulas',
+	'Saving the study workspace',
+	'Opening the editable model'
+]
+
+$effect(() => {
+	if (!creating) {
+		creationStepIndex = 0
+		return
+	}
+	const timer = setInterval(() => {
+		creationStepIndex = Math.min(creationStepIndex + 1, creationSteps.length - 1)
+	}, 1300)
+	return () => clearInterval(timer)
+})
+
 function inferUsage(plot: Plot): UsageFilter {
 	const haystack = `${plot.gfa_type} ${(plot.land_use_summary ?? []).join(' ')}`.toLowerCase()
 	const residential = ['residential', 'apartment', 'villa', 'townhouse'].some((token) =>
@@ -106,22 +160,37 @@ const visiblePlots = $derived.by(() => {
 	})
 	return rows
 })
+const visiblePlotNumbers = $derived(new Set(visiblePlots.map((plot) => plot.plot_number)))
+const availablePlotNumbers = $derived(new Set(plots.map((plot) => plot.plot_number)))
+const plotsByNumber = $derived(new Map(plots.map((plot) => [plot.plot_number, plot])))
+const selectedPlotNumber = $derived(selectedPlot?.plot_number ?? null)
+const mapCommunity = $derived.by(() => {
+	const explicitCommunity = community.trim()
+	if (explicitCommunity) return explicitCommunity
+	if (selectedPlot?.community_name) return selectedPlot.community_name
+	const communities = [...new Set(visiblePlots.map((plot) => plot.community_name).filter(Boolean))]
+	return communities.length === 1 ? communities[0] : ''
+})
+const ddaQueryParams = $derived(mapCommunity ? { area: mapCommunity, limit: 5000 } : null)
+const ddaPlotsQuery = createQuery(() => projectQueries.ddaPlots(ddaQueryParams))
+const ddaPlots = $derived<DdaPlotFeature[]>(ddaQueryParams ? (ddaPlotsQuery.data ?? []) : [])
 
-async function searchPlots() {
-	loading = true
+function searchPlots() {
 	error = ''
-	try {
-		plots = await feasibility.searchPlots({
-			q: plotSearch,
-			community,
-			minPlotAreaSqm: Number(minPlotArea) || undefined,
-			limit: 100
-		})
-	} catch (err) {
-		error = err instanceof Error ? err.message : 'Failed to search plots.'
-	} finally {
-		loading = false
+	const minPlotAreaSqm = Number(minPlotArea)
+	plotSearchParams = {
+		q: plotSearch.trim() || undefined,
+		community: community.trim() || undefined,
+		minPlotAreaSqm:
+			Number.isFinite(minPlotAreaSqm) && minPlotAreaSqm > 0 ? minPlotAreaSqm : undefined,
+		limit: 100
 	}
+}
+
+function chooseDdaPlot(plot: DdaPlotFeature) {
+	const match = plotsByNumber.get(plot.plot_number)
+	if (!match) return
+	selectedPlot = match
 }
 
 async function createStudy() {
@@ -134,6 +203,7 @@ async function createStudy() {
 			plot_number: selectedPlot.plot_number,
 			development_model: developmentModel
 		})
+		await queryClient.invalidateQueries({ queryKey: feasibilityKeys.studies() })
 		await goto(`/feasibility/${saved.id}`)
 	} catch (err) {
 		error = err instanceof Error ? err.message : 'Failed to create study.'
@@ -144,6 +214,95 @@ async function createStudy() {
 </script>
 
 <div class="flex flex-col gap-5">
+	{#if creating}
+		<div class="ui-surface overflow-hidden">
+			<div class="grid gap-5 border-b border-border bg-navy px-5 py-5 text-bone lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
+				<div>
+					<p class="text-xs font-semibold uppercase tracking-[0.18em] text-on-navy-muted">
+						Agent workspace
+					</p>
+					<h1 class="mt-2 font-display text-3xl leading-tight tracking-[var(--tracking-display)] text-bone">
+						Creating your feasibility study
+					</h1>
+					<p class="mt-2 max-w-3xl text-sm leading-6 text-on-navy-muted">
+						The agent is turning your plot selection into a saved workbook with seeded assumptions, model tabs, and an editable first pass.
+					</p>
+				</div>
+				<div class="inline-flex items-center gap-2 rounded-md border border-bone/20 bg-bone/10 px-3 py-2 text-sm font-semibold text-bone">
+					<LoaderCircle size={16} class="animate-spin" />
+					Working
+				</div>
+			</div>
+
+			<div class="grid gap-5 p-5 lg:grid-cols-[minmax(0,1fr)_320px] lg:p-6">
+				<div class="rounded-lg border border-border bg-card p-5">
+					<div class="flex items-start gap-4">
+						<div class="grid h-11 w-11 shrink-0 place-items-center rounded-md bg-info-bg text-info">
+							<Bot size={22} strokeWidth={1.8} />
+						</div>
+						<div class="min-w-0">
+							<p class="text-base font-semibold text-fg-1">The feasibility agent is working</p>
+							<p class="mt-1 text-sm leading-6 text-fg-3">
+								This usually takes a moment while the backend creates the study record and prepares the workbook state.
+							</p>
+						</div>
+					</div>
+
+					<div class="mt-6 space-y-3">
+						{#each creationSteps as step, index (step)}
+							<div
+								class="flex items-center gap-3 rounded-md border px-3 py-3 transition {index <=
+								creationStepIndex
+									? 'border-info bg-info-bg text-info'
+									: 'border-border bg-panel text-fg-4'}"
+							>
+								<span
+									class="grid h-6 w-6 shrink-0 place-items-center rounded-full {index < creationStepIndex
+										? 'bg-info text-bone'
+										: index === creationStepIndex
+											? 'bg-info text-bone'
+											: 'bg-card text-fg-5'}"
+								>
+									{#if index < creationStepIndex}
+										<Check size={13} strokeWidth={2.4} />
+									{:else if index === creationStepIndex}
+										<LoaderCircle size={13} class="animate-spin" />
+									{:else}
+										<span class="h-1.5 w-1.5 rounded-full bg-current"></span>
+									{/if}
+								</span>
+								<span class="text-sm font-medium">{step}</span>
+							</div>
+						{/each}
+					</div>
+				</div>
+
+				<aside class="rounded-lg border border-border bg-panel p-5">
+					<div class="flex items-center gap-2 text-sm font-semibold text-fg-1">
+						<FileSpreadsheet size={16} strokeWidth={2} />
+						Study being created
+					</div>
+					<div class="mt-4 grid gap-3 text-sm">
+						<div class="rounded-md bg-card p-3">
+							<p class="text-xs uppercase tracking-[0.14em] text-fg-4">Study</p>
+							<p class="mt-1 font-semibold text-fg-1">{name.trim()}</p>
+						</div>
+						<div class="rounded-md bg-card p-3">
+							<p class="text-xs uppercase tracking-[0.14em] text-fg-4">Model</p>
+							<p class="mt-1 font-semibold text-fg-1">{modelOptions.find((option) => option.id === developmentModel)?.label}</p>
+						</div>
+						{#if selectedPlot}
+							<div class="rounded-md bg-card p-3">
+								<p class="text-xs uppercase tracking-[0.14em] text-fg-4">Plot</p>
+								<p class="mt-1 font-semibold text-fg-1">{selectedPlot.plot_number}</p>
+								<p class="mt-1 text-xs text-fg-4">{selectedPlot.community_name}</p>
+							</div>
+						{/if}
+					</div>
+				</aside>
+			</div>
+		</div>
+	{:else}
 	<div class="ui-surface overflow-hidden">
 		<div class="grid gap-5 border-b border-border bg-navy px-5 py-5 text-bone lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
 			<div>
@@ -274,6 +433,7 @@ async function createStudy() {
 			</aside>
 		</section>
 	</div>
+	{/if}
 </div>
 
 {#if pickerOpen}
@@ -303,41 +463,53 @@ async function createStudy() {
 							</button>
 						{/each}
 					</div>
-					<div class="flex flex-wrap gap-2">
-						{#each sortOptions as option}
-							<button type="button" class="h-8 shrink-0 rounded-md border px-3 text-xs font-medium transition {sortBy === option.id ? 'border-navy bg-navy text-bone' : 'border-border bg-card text-fg-3 hover:border-strong'}" onclick={() => (sortBy = option.id)}>
-								{option.label}
-							</button>
-						{/each}
-						<button type="button" class="h-8 shrink-0 rounded-md border px-3 text-xs font-medium transition {verifiedOnly ? 'border-navy bg-navy text-bone' : 'border-border bg-card text-fg-3 hover:border-strong'}" aria-pressed={verifiedOnly} onclick={() => (verifiedOnly = !verifiedOnly)}>
-							Verified only
-						</button>
-					</div>
-				</div>
-			</div>
-			<div class="grid min-h-0 flex-1 md:grid-cols-[minmax(0,1fr)_320px]">
-				<div class="min-h-0 overflow-auto">
-					{#if loading}
-						<p class="p-5 text-sm text-fg-4">Searching plots...</p>
-					{:else if visiblePlots.length === 0}
-						<p class="p-5 text-sm text-fg-4">Search by plot number, project, or community.</p>
-					{:else}
-						<div class="divide-y divide-slate-100">
-							{#each visiblePlots as plot}
-								<button type="button" class="flex w-full flex-col gap-1 px-5 py-3 text-left hover:bg-elevated {selectedPlot?.plot_number === plot.plot_number ? 'bg-info-bg' : ''}" onclick={() => (selectedPlot = plot)}>
-									<div class="flex items-center justify-between gap-3">
-										<span class="text-sm font-semibold text-fg-1">{plot.project_name}</span>
-										<span class="rounded-md bg-panel px-2 py-0.5 text-xs text-fg-3">{plot.plot_number}</span>
-									</div>
-									<p class="text-sm text-fg-3">{plot.community_name}</p>
-									<p class="text-xs text-fg-4">{plot.plot_area_sqm.toLocaleString('en-AE', { maximumFractionDigits: 0 })} sqm · {plot.max_gfa_sqm.toLocaleString('en-AE', { maximumFractionDigits: 0 })} sqm GFA · {inferUsage(plot)}</p>
+						<div class="flex flex-wrap gap-2">
+							{#each sortOptions as option}
+								<button type="button" class="h-8 shrink-0 rounded-md border px-3 text-xs font-medium transition {sortBy === option.id ? 'border-navy bg-navy text-bone' : 'border-border bg-card text-fg-3 hover:border-strong'}" onclick={() => (sortBy = option.id)}>
+									{option.label}
 								</button>
 							{/each}
+							<button type="button" class="h-8 shrink-0 rounded-md border px-3 text-xs font-medium transition {verifiedOnly ? 'border-navy bg-navy text-bone' : 'border-border bg-card text-fg-3 hover:border-strong'}" aria-pressed={verifiedOnly} onclick={() => (verifiedOnly = !verifiedOnly)}>
+								Verified only
+							</button>
 						</div>
-					{/if}
+					</div>
 				</div>
+				{#if plotSearchError}
+					<p class="border-b border-border px-4 py-3 text-sm text-rose-600">{plotSearchError}</p>
+				{/if}
+				<div class="grid min-h-0 flex-1 md:grid-cols-[minmax(0,1fr)_320px]">
+					<div class="min-h-0 overflow-auto">
+							{#if loading}
+								<p class="p-5 text-sm text-fg-4">Searching plots...</p>
+							{:else if visiblePlots.length === 0}
+								<p class="p-5 text-sm text-fg-4">Search by plot number, project, or community.</p>
+							{:else}
+								<div class="divide-y divide-slate-100">
+									{#each visiblePlots as plot}
+										<button type="button" class="flex w-full flex-col gap-1 px-5 py-3 text-left hover:bg-elevated {selectedPlot?.plot_number === plot.plot_number ? 'bg-info-bg' : ''}" onclick={() => (selectedPlot = plot)}>
+											<div class="flex items-center justify-between gap-3">
+												<span class="text-sm font-semibold text-fg-1">{plot.project_name}</span>
+												<span class="rounded-md bg-panel px-2 py-0.5 text-xs text-fg-3">{plot.plot_number}</span>
+											</div>
+											<p class="text-sm text-fg-3">{plot.community_name}</p>
+											<p class="text-xs text-fg-4">{plot.plot_area_sqm.toLocaleString('en-AE', { maximumFractionDigits: 0 })} sqm · {plot.max_gfa_sqm.toLocaleString('en-AE', { maximumFractionDigits: 0 })} sqm GFA · {inferUsage(plot)}</p>
+										</button>
+									{/each}
+								</div>
+							{/if}
+						</div>
 				<aside class="border-t border-border p-5 md:border-l md:border-t-0">
-					<p class="text-sm font-semibold text-fg-1">Preview</p>
+					<PlotParcelMap
+						plots={ddaPlots}
+						{selectedPlotNumber}
+						{visiblePlotNumbers}
+						{availablePlotNumbers}
+						loading={ddaPlotsQuery.isFetching}
+						onPlotSelect={chooseDdaPlot}
+						className="h-64"
+					/>
+					<p class="mt-4 text-sm font-semibold text-fg-1">Preview</p>
 					{#if selectedPlot}
 						<div class="mt-4 grid gap-2 text-sm text-fg-3">
 							<p class="font-medium text-fg-1">{selectedPlot.project_name}</p>

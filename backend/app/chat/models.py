@@ -90,4 +90,5 @@ class MessageResponse(BaseModel):
     conversation_id: int
     role: str
     content: str
+    meta_data: Optional[Dict[str, Any]] = None
     created_at: datetime

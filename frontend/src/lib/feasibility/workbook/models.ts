@@ -192,11 +192,11 @@ export interface FeasibilityAssumptions {
 	btrUnitConfigs?: BtrUnitConfig[]
 	btrHoldPeriodYears?: number // default 10
 	btrLeaseUpPaceUnitsPerMonth?: number // default 20
-	btrStabilizedOccupancyPct?: number // default 95
-	btrFreeRentMonths?: number // default 2
-	btrAnnualRentGrowthPct?: number // default 3
-	btrMarketRentGrowthPct?: number // default 3 (new leases / market rent growth)
-	btrRenewalRentGrowthPct?: number // default 3 (renewal rent growth)
+	btrStabilizedOccupancyPct?: number // default 97
+	btrFreeRentMonths?: number // default 0
+	btrAnnualRentGrowthPct?: number // default 5
+	btrMarketRentGrowthPct?: number // default 5 (new leases / market rent growth)
+	btrRenewalRentGrowthPct?: number // default 5 (renewal rent growth)
 	btrGeneralVacancyPct?: number // default 5
 
 	// BTR operating expenses (AED/yr or % of EGR)
@@ -219,7 +219,7 @@ export interface FeasibilityAssumptions {
 	// BTR OpEx escalation
 	btrOpExGrowthPct?: number // default 3 (annual OpEx escalation %)
 	btrDevCostEscalationPct?: number // default 4 (annual development cost escalation %)
-	btrTerminalGrowthPct?: number // default 3 (forward NOI growth for terminal valuation)
+	btrTerminalGrowthPct?: number // default 4 (forward NOI growth for terminal valuation)
 
 	// BTR lease-up costs (replaces GDV-based marketing/sales-admin)
 	btrLeaseUpMarketingAed?: number // default 0 (flat budget)
@@ -232,7 +232,7 @@ export interface FeasibilityAssumptions {
 	btrModelUnits?: number // default 1 (non-revenue show/model unit)
 
 	// BTR exit / valuation
-	btrExitCapRatePct?: number // default 7
+	btrExitCapRatePct?: number // default 5.5
 	btrExitCostPct?: number // default 6 (4% DLD + 1% broker + 1% legal)
 
 	// BTR permanent debt (refi at stabilization)
@@ -243,7 +243,7 @@ export interface FeasibilityAssumptions {
 	btrPermDebtPointsPct?: number // default 1 (points/fees on perm loan)
 	btrPermDebtIoYears?: number // default 1 (interest-only period)
 	btrDscrMinimum?: number // default 1.25
-	btrRefiCapRatePct?: number // default 7 (valuation cap at refi)
+	btrRefiCapRatePct?: number // default 5.5 (valuation cap at refi)
 }
 
 export interface BtrUnitConfig {

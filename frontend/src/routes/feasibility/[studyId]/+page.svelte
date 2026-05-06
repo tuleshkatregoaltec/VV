@@ -1,28 +1,47 @@
 <script lang="ts">
+import { createQuery } from '@tanstack/svelte-query'
 import { page } from '$app/state'
 import LoadingState from '$lib/components/feasibility/LoadingState.svelte'
 import Workspace from '$lib/components/feasibility/Workspace.svelte'
 import AppFrame from '$lib/components/layout/AppFrame.svelte'
 import PageContainer from '$lib/components/layout/PageContainer.svelte'
+import { feasibilityQueries } from '$lib/queries/feasibility'
 import { feasibilityStudy } from '$lib/stores/feasibilityStudy.svelte'
 
-let loadedId = $state<number | null>(null)
+let hydratedId = $state<number | null>(null)
 let showLoading = $state(false)
 const routeStudyId = $derived(Number(page.params.studyId))
+const normalizedStudyId = $derived(
+	Number.isFinite(routeStudyId) && routeStudyId > 0 ? routeStudyId : null
+)
+const studyQuery = createQuery(() => feasibilityQueries.study(normalizedStudyId))
 const isCurrentStudyReady = $derived(
 	feasibilityStudy.phase === 'ready' &&
 		feasibilityStudy.savedStudyId === routeStudyId &&
 		Boolean(feasibilityStudy.study)
 )
-
-$effect(() => {
-	if (!Number.isFinite(routeStudyId) || routeStudyId <= 0 || loadedId === routeStudyId) return
-	loadedId = routeStudyId
-	void feasibilityStudy.loadSavedStudy(routeStudyId)
+const loadError = $derived.by(() => {
+	if (normalizedStudyId === null) return 'Invalid feasibility study ID.'
+	if (studyQuery.isError) {
+		return studyQuery.error instanceof Error
+			? studyQuery.error.message
+			: 'Failed to load feasibility study.'
+	}
+	if (feasibilityStudy.phase === 'error') {
+		return feasibilityStudy.error || 'Failed to load feasibility study.'
+	}
+	return ''
 })
 
 $effect(() => {
-	if (isCurrentStudyReady || feasibilityStudy.phase === 'error') {
+	const saved = studyQuery.data
+	if (!saved || hydratedId === saved.id) return
+	hydratedId = saved.id
+	feasibilityStudy.hydrateSavedStudy(saved)
+})
+
+$effect(() => {
+	if (isCurrentStudyReady || loadError) {
 		showLoading = false
 		return
 	}
@@ -39,10 +58,10 @@ $effect(() => {
 	<PageContainer variant="fullBleed" class="h-full overflow-hidden">
 		{#if isCurrentStudyReady}
 			<Workspace />
-		{:else if feasibilityStudy.phase === 'error'}
+		{:else if loadError}
 			<div class="grid h-full place-items-center p-6">
 				<div class="max-w-md rounded-lg border border-rose-200 bg-card p-5 text-sm text-rose-700 shadow-sm">
-					{feasibilityStudy.error || 'Failed to load feasibility study.'}
+					{loadError}
 				</div>
 			</div>
 		{:else if showLoading}

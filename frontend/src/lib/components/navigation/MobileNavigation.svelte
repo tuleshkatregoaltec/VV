@@ -1,8 +1,10 @@
 <script lang="ts">
 import {
 	BarChart3,
+	Building2,
 	Calculator,
 	FolderOpen,
+	Home,
 	LayoutDashboard,
 	LogOut,
 	MessageSquare,
@@ -86,7 +88,17 @@ function handleLogout() {
 
 			<a href="/projects" onclick={onNavigate} class={linkClass('/projects')} aria-current={isActive('/projects') ? 'page' : undefined}>
 				<FolderOpen size={16} strokeWidth={2} aria-hidden="true" />
-				<span>Projects</span>
+				<span>Radar</span>
+			</a>
+
+			<a href="/upcoming" onclick={onNavigate} class={linkClass('/upcoming')} aria-current={isActive('/upcoming') ? 'page' : undefined}>
+				<Building2 size={16} strokeWidth={2} aria-hidden="true" />
+				<span>Upcoming</span>
+			</a>
+
+			<a href="/listings" onclick={onNavigate} class={linkClass('/listings')} aria-current={isActive('/listings') ? 'page' : undefined}>
+				<Home size={16} strokeWidth={2} aria-hidden="true" />
+				<span>Listings</span>
 			</a>
 
 			<a href="/feasibility" onclick={onNavigate} class={linkClass('/feasibility')} aria-current={isActive('/feasibility') ? 'page' : undefined}>

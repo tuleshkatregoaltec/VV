@@ -1,17 +1,16 @@
 <script lang="ts">
 import { createQuery } from '@tanstack/svelte-query'
-import { feasibility } from '$lib/api/feasibility'
 import type { Plot } from '$lib/api/generated/hey-api/types.gen'
+import type { DdaPlotFeature } from '$lib/api/projects'
+import { feasibilityQueries } from '$lib/queries/feasibility'
+import { projectQueries } from '$lib/queries/projects'
 import { feasibilityStudy } from '$lib/stores/feasibilityStudy.svelte'
+import PlotParcelMap from './PlotParcelMap.svelte'
 
 type UsageFilter = 'all' | 'residential' | 'commercial' | 'mixed'
 type SortKey = 'verified' | 'largest' | 'highest_gfa'
 
-const communitiesQuery = createQuery(() => ({
-	queryKey: ['feasibility-communities'],
-	queryFn: () => feasibility.getCommunities(),
-	staleTime: Infinity
-}))
+const communitiesQuery = createQuery(() => feasibilityQueries.communities())
 
 let communitySearch = $state('')
 let selectedCommunity = $state('')
@@ -19,12 +18,24 @@ let plotSearch = $state('')
 let usageFilter = $state<UsageFilter>('all')
 let verifiedOnly = $state(false)
 let minPlotArea = $state('')
-let loading = $state(false)
-let searchError = $state('')
-let plots = $state<Plot[]>([])
 let sortBy = $state<SortKey>('verified')
 
 const pageSize = 100
+const communityPlotsQuery = createQuery(() =>
+	feasibilityQueries.communityPlots(selectedCommunity || null, pageSize)
+)
+const ddaQueryParams = $derived(selectedCommunity ? { area: selectedCommunity, limit: 5000 } : null)
+const ddaPlotsQuery = createQuery(() => projectQueries.ddaPlots(ddaQueryParams))
+const loading = $derived(communityPlotsQuery.isFetching)
+const searchError = $derived(
+	communityPlotsQuery.isError
+		? communityPlotsQuery.error instanceof Error
+			? communityPlotsQuery.error.message
+			: 'Failed to load plots.'
+		: ''
+)
+const plots = $derived<Plot[]>(communityPlotsQuery.data ?? [])
+const ddaPlots = $derived<DdaPlotFeature[]>(selectedCommunity ? (ddaPlotsQuery.data ?? []) : [])
 
 function inferUsage(plot: Plot): UsageFilter {
 	const haystack = `${plot.gfa_type} ${(plot.land_use_summary ?? []).join(' ')}`.toLowerCase()
@@ -74,35 +85,25 @@ const visiblePlots = $derived.by(() => {
 
 	return rows
 })
+const visiblePlotNumbers = $derived(new Set(visiblePlots.map((plot) => plot.plot_number)))
+const availablePlotNumbers = $derived(new Set(plots.map((plot) => plot.plot_number)))
+const plotsByNumber = $derived(new Map(plots.map((plot) => [plot.plot_number, plot])))
+const selectedPlotNumber = $derived(
+	feasibilityStudy.selectedPlot?.plot_number ?? feasibilityStudy.plotData?.plot_number ?? null
+)
 
-async function loadCommunityPlots(community: string) {
+function loadCommunityPlots(community: string) {
 	selectedCommunity = community
-	loading = true
-	searchError = ''
-	plots = []
-	try {
-		const allPlots: Plot[] = []
-		let offset = 0
-		while (true) {
-			const page = await feasibility.searchPlots({
-				community,
-				offset,
-				limit: pageSize
-			})
-			allPlots.push(...page)
-			if (page.length < pageSize) break
-			offset += page.length
-		}
-		plots = allPlots
-	} catch (error) {
-		searchError = error instanceof Error ? error.message : 'Failed to load plots.'
-	} finally {
-		loading = false
-	}
 }
 
 async function choosePlot(plot: Plot) {
 	await feasibilityStudy.selectPlot(plot)
+}
+
+async function chooseDdaPlot(plot: DdaPlotFeature) {
+	const match = plotsByNumber.get(plot.plot_number)
+	if (!match) return
+	await choosePlot(match)
 }
 </script>
 
@@ -194,6 +195,17 @@ async function choosePlot(plot: Plot) {
 								{selectedCommunity ? `${visiblePlots.length} results` : 'Select a community to load plots.'}
 							</p>
 						</div>
+					</div>
+					<div class="border-b border-slate-200 p-3">
+						<PlotParcelMap
+							plots={ddaPlots}
+							{selectedPlotNumber}
+							{visiblePlotNumbers}
+							{availablePlotNumbers}
+							loading={ddaPlotsQuery.isFetching}
+							onPlotSelect={chooseDdaPlot}
+							className="h-72"
+						/>
 					</div>
 					{#if searchError}
 						<p class="px-4 py-3 text-sm text-rose-600">{searchError}</p>

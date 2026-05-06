@@ -15,13 +15,13 @@ function fmtAed(value: number): string {
 }
 
 function fmtPct(value: number, digits = 1): string {
-	return fmt(value, digits) + '%'
+	return `${fmt(value, digits)}%`
 }
 
 function dateToQuarter(isoDate: string): string {
 	if (!isoDate) return '—'
 	const d = new Date(isoDate)
-	if (isNaN(d.getTime())) return isoDate
+	if (Number.isNaN(d.getTime())) return isoDate
 	const q = Math.ceil((d.getMonth() + 1) / 3)
 	return `Q${q} ${d.getFullYear()}`
 }
@@ -30,7 +30,7 @@ function monthsBetween(startIso: string, endIso: string): number | null {
 	if (!startIso || !endIso) return null
 	const s = new Date(startIso)
 	const e = new Date(endIso)
-	if (isNaN(s.getTime()) || isNaN(e.getTime())) return null
+	if (Number.isNaN(s.getTime()) || Number.isNaN(e.getTime())) return null
 	return (e.getFullYear() - s.getFullYear()) * 12 + (e.getMonth() - s.getMonth())
 }
 
@@ -131,10 +131,50 @@ const VALUE_BLUE = 'px-2 py-[3px] text-right tabular-nums text-[#1565C0] font-no
 const PCT_COL = 'px-2 py-[3px] text-right tabular-nums text-slate-400 text-[10px]'
 const UNIT = 'px-2 py-[3px] text-slate-500 whitespace-nowrap text-[10px]'
 const ROW_INDENT = 'border-b border-[#D9D9D9] bg-[#F9F9F9]'
+
+let sheetScroller = $state<HTMLDivElement | null>(null)
+let lastHighlightSequence = $state(0)
+
+function fieldTokens(...fields: string[]): string {
+	return fields.join(' ')
+}
+
+function hasHighlightedField(...fields: string[]): boolean {
+	const active = s.highlightedFields
+	return fields.some((field) => active.includes(field))
+}
+
+function highlightClass(...fields: string[]): string {
+	return hasHighlightedField(...fields) ? 'feasibility-change-flash' : ''
+}
+
+function scrollToFirstHighlightedField(): void {
+	const fields = s.highlightedFields
+	if (!sheetScroller || fields.length === 0) return
+	const nodes = Array.from(sheetScroller.querySelectorAll<HTMLElement>('[data-feasibility-field]'))
+	const target = fields
+		.map((field) =>
+			nodes.find((node) => {
+				const tokens = node.dataset.feasibilityField?.split(/\s+/) ?? []
+				return tokens.includes(field)
+			})
+		)
+		.find(Boolean)
+	target?.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' })
+}
+
+$effect(() => {
+	if (!sheetScroller || s.highlightSequence === lastHighlightSequence) return
+	lastHighlightSequence = s.highlightSequence
+	setTimeout(scrollToFirstHighlightedField, 80)
+})
 </script>
 
 {#if isBtr && btr}
-<div class="overflow-auto flex-1 bg-white text-[11px] font-[Calibri,'Segoe_UI',Arial,sans-serif] select-none">
+<div
+	bind:this={sheetScroller}
+	class="overflow-auto flex-1 bg-white text-[11px] font-[Calibri,'Segoe_UI',Arial,sans-serif] select-none"
+>
 	<div class="bg-[#1F3864] text-white px-4 py-2.5 flex items-start justify-between gap-4">
 		<div>
 			<div class="text-[13px] font-bold tracking-wide">BTR DEVELOPMENT BUDGET</div>
@@ -464,7 +504,10 @@ const ROW_INDENT = 'border-b border-[#D9D9D9] bg-[#F9F9F9]'
 	</table>
 </div>
 {:else}
-<div class="overflow-auto flex-1 bg-white text-[11px] font-[Calibri,'Segoe_UI',Arial,sans-serif] select-none">
+<div
+	bind:this={sheetScroller}
+	class="overflow-auto flex-1 bg-white text-[11px] font-[Calibri,'Segoe_UI',Arial,sans-serif] select-none"
+>
 
 	<!-- Header -->
 	<div class="bg-[#1F3864] text-white px-4 py-2.5 flex items-start justify-between gap-4">
@@ -593,7 +636,10 @@ const ROW_INDENT = 'border-b border-[#D9D9D9] bg-[#F9F9F9]'
 		<tr class={ROW_STD}>
 			<td class="px-1 py-[3px] text-slate-400 text-[10px] text-center">1</td>
 			<td class={LABEL}>Land Purchase Price</td>
-			<td class="p-0 relative">
+			<td
+				class={`p-0 relative ${highlightClass('landAcquisitionDate')}`}
+				data-feasibility-field="landAcquisitionDate"
+			>
 				<div class="flex items-center justify-center px-1 py-[3px] pointer-events-none">
 					<span class="text-[#1565C0] tabular-nums text-[10px]">{dateToQuarter(s.inputs.landAcquisitionDate)}</span>
 					<span class="ml-0.5 text-[8px] text-slate-400 border border-slate-200 rounded px-0.5">▾</span>
@@ -602,7 +648,10 @@ const ROW_INDENT = 'border-b border-[#D9D9D9] bg-[#F9F9F9]'
 					value={s.inputs.landAcquisitionDate}
 					oninput={(e) => s.updateInputs({ landAcquisitionDate: e.currentTarget.value })} />
 			</td>
-			<td class="p-0">
+			<td
+				class={`p-0 ${highlightClass('landAcquisitionCostOverrideAed', 'landPricePsqm')}`}
+				data-feasibility-field={fieldTokens('landAcquisitionCostOverrideAed', 'landPricePsqm')}
+			>
 				<AmountInput
 					value={s.plotAcquisitionCost}
 					oncommit={(v) => s.updateInputs({ landAcquisitionCostOverrideAed: v > 0 ? v : null })}
@@ -630,7 +679,10 @@ const ROW_INDENT = 'border-b border-[#D9D9D9] bg-[#F9F9F9]'
 			<td class="px-1 py-[3px] text-slate-400 text-[10px] text-center">2</td>
 			<td class={LABEL}>Brokerage Fee</td>
 			<td class="px-2 py-[3px] text-center text-[10px] text-slate-400">{dateToQuarter(s.inputs.landAcquisitionDate)}</td>
-			<td class="p-0">
+			<td
+				class={`p-0 ${highlightClass('brokerageFeeAed')}`}
+				data-feasibility-field="brokerageFeeAed"
+			>
 				<AmountInput value={s.inputs.brokerageFeeAed}
 					oncommit={(v) => s.updateInputs({ brokerageFeeAed: v })} class={INPUT} />
 			</td>
@@ -644,7 +696,10 @@ const ROW_INDENT = 'border-b border-[#D9D9D9] bg-[#F9F9F9]'
 			<td class="px-1 py-[3px] text-slate-400 text-[10px] text-center">3</td>
 			<td class={LABEL}>Legal / Due Diligence</td>
 			<td class="px-2 py-[3px] text-center text-[10px] text-slate-400">{dateToQuarter(s.inputs.landAcquisitionDate)}</td>
-			<td class="p-0">
+			<td
+				class={`p-0 ${highlightClass('legalDdCostAed')}`}
+				data-feasibility-field="legalDdCostAed"
+			>
 				<AmountInput value={s.inputs.legalDdCostAed}
 					oncommit={(v) => s.updateInputs({ legalDdCostAed: v })} class={INPUT} />
 			</td>
@@ -676,7 +731,10 @@ const ROW_INDENT = 'border-b border-[#D9D9D9] bg-[#F9F9F9]'
 		<tr class={ROW_STD}>
 			<td class="px-1 py-[3px] text-slate-400 text-[10px] text-center">4</td>
 			<td class={LABEL}>Demolition / Enabling Works</td>
-			<td class="p-0 relative">
+			<td
+				class={`p-0 relative ${highlightClass('demolitionEnablingDate')}`}
+				data-feasibility-field="demolitionEnablingDate"
+			>
 				<div class="flex items-center justify-center px-1 py-[3px] pointer-events-none">
 					<span class="text-[#1565C0] tabular-nums text-[10px]">{dateToQuarter(s.inputs.demolitionEnablingDate)}</span>
 					<span class="ml-0.5 text-[8px] text-slate-400 border border-slate-200 rounded px-0.5">▾</span>
@@ -685,7 +743,10 @@ const ROW_INDENT = 'border-b border-[#D9D9D9] bg-[#F9F9F9]'
 					value={s.inputs.demolitionEnablingDate}
 					oninput={(e) => s.updateInputs({ demolitionEnablingDate: e.currentTarget.value })} />
 			</td>
-			<td class="p-0">
+			<td
+				class={`p-0 ${highlightClass('demolitionCostAed')}`}
+				data-feasibility-field="demolitionCostAed"
+			>
 				<AmountInput value={s.inputs.demolitionCostAed}
 					oncommit={(v) => s.updateInputs({ demolitionCostAed: v })} class={INPUT} />
 			</td>
@@ -699,7 +760,10 @@ const ROW_INDENT = 'border-b border-[#D9D9D9] bg-[#F9F9F9]'
 		<tr class={ROW_STD}>
 			<td class="px-1 py-[3px] text-slate-400 text-[10px] text-center">5</td>
 			<td class={LABEL}>Construction Cost <span class="text-slate-400 font-normal italic">(Rate × BUA)</span></td>
-			<td class="p-0 relative">
+			<td
+				class={`p-0 relative ${highlightClass('constructionDate')}`}
+				data-feasibility-field="constructionDate"
+			>
 				<div class="flex items-center justify-center px-1 py-[3px] pointer-events-none">
 					<span class="text-[#1565C0] tabular-nums text-[10px]">{dateToQuarter(s.inputs.constructionDate)}</span>
 					<span class="ml-0.5 text-[8px] text-slate-400 border border-slate-200 rounded px-0.5">▾</span>
@@ -709,7 +773,10 @@ const ROW_INDENT = 'border-b border-[#D9D9D9] bg-[#F9F9F9]'
 					oninput={(e) => s.updateInputs({ constructionDate: e.currentTarget.value })} />
 			</td>
 			<td class={VALUE_BLACK}>{fmtAed(s.constructionCostInclInflation)}</td>
-			<td class="p-0">
+			<td
+				class={`p-0 ${highlightClass('constructionCostPsqmBua', 'constructionCostOverrideAed')}`}
+				data-feasibility-field={fieldTokens('constructionCostPsqmBua', 'constructionCostOverrideAed')}
+			>
 				<input type="number" step="10" class={INPUT}
 					value={Math.round(s.inputs.constructionCostPsqmBua * 0.092903)}
 					oninput={(e) => s.updateInputs({ constructionCostPsqmBua: (Number(e.currentTarget.value) || 0) / 0.092903 })} />
@@ -736,7 +803,10 @@ const ROW_INDENT = 'border-b border-[#D9D9D9] bg-[#F9F9F9]'
 			<td class={LABEL_INDENT}>↳ Inflation adjustment ({fmt(s.inputs.midPointInflationPct, 1)}%)</td>
 			<td></td>
 			<td class={VALUE_BLACK}>{fmtAed(s.inflationCost)}</td>
-			<td class="p-0">
+			<td
+				class={`p-0 ${highlightClass('midPointInflationPct')}`}
+				data-feasibility-field="midPointInflationPct"
+			>
 				<input type="number" step="0.1" min="0" class={INPUT}
 					value={s.inputs.midPointInflationPct}
 					oninput={(e) => setNumber('midPointInflationPct', e.currentTarget.value)} />
@@ -750,7 +820,10 @@ const ROW_INDENT = 'border-b border-[#D9D9D9] bg-[#F9F9F9]'
 		<tr class={ROW_STD}>
 			<td class="px-1 py-[3px] text-slate-400 text-[10px] text-center">→</td>
 			<td class={LABEL_SM}>Handover Date</td>
-			<td class="p-0 relative">
+			<td
+				class={`p-0 relative ${highlightClass('handoverDate')}`}
+				data-feasibility-field="handoverDate"
+			>
 				<div class="flex items-center justify-center px-1 py-[3px] pointer-events-none">
 					<span class="text-[#1565C0] tabular-nums text-[10px]">{dateToQuarter(s.inputs.handoverDate)}</span>
 					<span class="ml-0.5 text-[8px] text-slate-400 border border-slate-200 rounded px-0.5">▾</span>
@@ -779,12 +852,18 @@ const ROW_INDENT = 'border-b border-[#D9D9D9] bg-[#F9F9F9]'
 			<td class="px-1 py-[3px] text-slate-400 text-[10px] text-center">6</td>
 			<td class={LABEL}>Design &amp; Supervision</td>
 			<td class="px-2 py-[3px] text-center text-[10px] text-slate-400">Con→HO</td>
-			<td class="p-0">
+			<td
+				class={`p-0 ${highlightClass('designSupervisionCostOverrideAed')}`}
+				data-feasibility-field="designSupervisionCostOverrideAed"
+			>
 				<AmountInput value={s.designSupervisionCost}
 					oncommit={(v) => s.updateInputs({ designSupervisionCostOverrideAed: v > 0 ? v : null })}
 					class={INPUT} />
 			</td>
-			<td class="p-0">
+			<td
+				class={`p-0 ${highlightClass('designSupervisionPct')}`}
+				data-feasibility-field="designSupervisionPct"
+			>
 				<input type="number" step="0.5" min="0" class={INPUT}
 					value={s.inputs.designSupervisionPct}
 					oninput={(e) => setNumber('designSupervisionPct', e.currentTarget.value)} />
@@ -798,12 +877,18 @@ const ROW_INDENT = 'border-b border-[#D9D9D9] bg-[#F9F9F9]'
 			<td class="px-1 py-[3px] text-slate-400 text-[10px] text-center">7</td>
 			<td class={LABEL}>Marketing</td>
 			<td class="px-2 py-[3px] text-center text-[10px] text-slate-400">Sales period</td>
-			<td class="p-0">
+			<td
+				class={`p-0 ${highlightClass('marketingCostOverrideAed')}`}
+				data-feasibility-field="marketingCostOverrideAed"
+			>
 				<AmountInput value={s.marketingCost}
 					oncommit={(v) => s.updateInputs({ marketingCostOverrideAed: v > 0 ? v : null })}
 					class={INPUT} />
 			</td>
-			<td class="p-0">
+			<td
+				class={`p-0 ${highlightClass('marketingCostPct')}`}
+				data-feasibility-field="marketingCostPct"
+			>
 				<input type="number" step="0.1" min="0" class={INPUT}
 					value={s.inputs.marketingCostPct}
 					oninput={(e) => setNumber('marketingCostPct', e.currentTarget.value)} />
@@ -817,12 +902,18 @@ const ROW_INDENT = 'border-b border-[#D9D9D9] bg-[#F9F9F9]'
 			<td class="px-1 py-[3px] text-slate-400 text-[10px] text-center">8</td>
 			<td class={LABEL}>Sales Agent Fees</td>
 			<td class="px-2 py-[3px] text-center text-[10px] text-slate-400">Sales period</td>
-			<td class="p-0">
+			<td
+				class={`p-0 ${highlightClass('salesAgentFeesOverrideAed')}`}
+				data-feasibility-field="salesAgentFeesOverrideAed"
+			>
 				<AmountInput value={s.salesAgentFees}
 					oncommit={(v) => s.updateInputs({ salesAgentFeesOverrideAed: v > 0 ? v : null })}
 					class={INPUT} />
 			</td>
-			<td class="p-0">
+			<td
+				class={`p-0 ${highlightClass('salesAgentFeePct')}`}
+				data-feasibility-field="salesAgentFeePct"
+			>
 				<input type="number" step="0.1" min="0" class={INPUT}
 					value={s.inputs.salesAgentFeePct}
 					oninput={(e) => setNumber('salesAgentFeePct', e.currentTarget.value)} />
@@ -836,12 +927,18 @@ const ROW_INDENT = 'border-b border-[#D9D9D9] bg-[#F9F9F9]'
 			<td class="px-1 py-[3px] text-slate-400 text-[10px] text-center">9</td>
 			<td class={LABEL}>Contingency</td>
 			<td class="px-2 py-[3px] text-center text-[10px] text-slate-400">Con→HO</td>
-			<td class="p-0">
+			<td
+				class={`p-0 ${highlightClass('contingencyCostOverrideAed')}`}
+				data-feasibility-field="contingencyCostOverrideAed"
+			>
 				<AmountInput value={s.contingencyCost}
 					oncommit={(v) => s.updateInputs({ contingencyCostOverrideAed: v > 0 ? v : null })}
 					class={INPUT} />
 			</td>
-			<td class="p-0">
+			<td
+				class={`p-0 ${highlightClass('contingencyPct')}`}
+				data-feasibility-field="contingencyPct"
+			>
 				<input type="number" step="0.5" min="0" class={INPUT}
 					value={s.inputs.contingencyPct}
 					oninput={(e) => setNumber('contingencyPct', e.currentTarget.value)} />
@@ -862,7 +959,10 @@ const ROW_INDENT = 'border-b border-[#D9D9D9] bg-[#F9F9F9]'
 			<td class="px-1 py-[3px] text-slate-400 text-[10px] text-center">10</td>
 			<td class={LABEL}>Infrastructure, Utilities &amp; Landscaping</td>
 			<td class="px-2 py-[3px] text-center text-[10px] text-slate-400">Con→HO</td>
-			<td class="p-0">
+			<td
+				class={`p-0 ${highlightClass('infrastructureCostAed')}`}
+				data-feasibility-field="infrastructureCostAed"
+			>
 				<AmountInput value={s.inputs.infrastructureCostAed}
 					oncommit={(v) => s.updateInputs({ infrastructureCostAed: v })} class={INPUT} />
 			</td>
@@ -878,7 +978,10 @@ const ROW_INDENT = 'border-b border-[#D9D9D9] bg-[#F9F9F9]'
 			<td class="px-1 py-[3px] text-slate-400 text-[10px] text-center">11</td>
 			<td class={LABEL}>Authority &amp; Connection Fees</td>
 			<td class="px-2 py-[3px] text-center text-[10px] text-slate-400">Pre-con</td>
-			<td class="p-0">
+			<td
+				class={`p-0 ${highlightClass('governmentFeesAed')}`}
+				data-feasibility-field="governmentFeesAed"
+			>
 				<AmountInput value={s.inputs.governmentFeesAed}
 					oncommit={(v) => s.updateInputs({ governmentFeesAed: v })} class={INPUT} />
 			</td>
@@ -894,7 +997,10 @@ const ROW_INDENT = 'border-b border-[#D9D9D9] bg-[#F9F9F9]'
 			<td class="px-1 py-[3px] text-slate-400 text-[10px] text-center">12</td>
 			<td class={LABEL}>Master Community Fees</td>
 			<td class="px-2 py-[3px] text-center text-[10px] text-slate-400">Pre-HO</td>
-			<td class="p-0">
+			<td
+				class={`p-0 ${highlightClass('masterCommunityFeesAed')}`}
+				data-feasibility-field="masterCommunityFeesAed"
+			>
 				<AmountInput value={s.inputs.masterCommunityFeesAed}
 					oncommit={(v) => s.updateInputs({ masterCommunityFeesAed: v })} class={INPUT} />
 			</td>
@@ -911,7 +1017,10 @@ const ROW_INDENT = 'border-b border-[#D9D9D9] bg-[#F9F9F9]'
 			<td class="px-1 py-[3px] text-slate-400 text-[10px] text-center">13</td>
 			<td class={LABEL}>FF&amp;E / Pre-Opening</td>
 			<td class="px-2 py-[3px] text-center text-[10px] text-slate-400">Pre-HO</td>
-			<td class="p-0">
+			<td
+				class={`p-0 ${highlightClass('ffeOsePreopeningCostAed')}`}
+				data-feasibility-field="ffeOsePreopeningCostAed"
+			>
 				<AmountInput value={s.inputs.ffeOsePreopeningCostAed}
 					oncommit={(v) => s.updateInputs({ ffeOsePreopeningCostAed: v })} class={INPUT} />
 			</td>
@@ -946,7 +1055,10 @@ const ROW_INDENT = 'border-b border-[#D9D9D9] bg-[#F9F9F9]'
 				<td class={LABEL}>Financing Fee</td>
 				<td class="px-2 py-[3px] text-center text-[10px] text-slate-400">Financial close</td>
 				<td class={VALUE_BLACK}>{financingFee > 0 ? fmtAed(financingFee) : '—'}</td>
-				<td class="p-0">
+				<td
+					class={`p-0 ${highlightClass('financingFeePct')}`}
+					data-feasibility-field="financingFeePct"
+				>
 					<input type="number" step="0.1" min="0" class={INPUT}
 						value={Math.round((s.inputs.financingFeePct ?? 0.01) * 10000) / 100}
 						oninput={(e) => s.updateInputs({ financingFeePct: (Number(e.currentTarget.value) || 0) / 100 })} />
@@ -961,7 +1073,10 @@ const ROW_INDENT = 'border-b border-[#D9D9D9] bg-[#F9F9F9]'
 				<td class={LABEL}>Exit Fee</td>
 				<td class="px-2 py-[3px] text-center text-[10px] text-slate-400">At handover</td>
 				<td class={VALUE_BLACK}>{exitFee > 0 ? fmtAed(exitFee) : '—'}</td>
-				<td class="p-0">
+				<td
+					class={`p-0 ${highlightClass('exitFeePct')}`}
+					data-feasibility-field="exitFeePct"
+				>
 					<input type="number" step="0.1" min="0" class={INPUT}
 						value={Math.round((s.inputs.exitFeePct ?? 0.01) * 10000) / 100}
 						oninput={(e) => s.updateInputs({ exitFeePct: (Number(e.currentTarget.value) || 0) / 100 })} />
@@ -1016,7 +1131,10 @@ const ROW_INDENT = 'border-b border-[#D9D9D9] bg-[#F9F9F9]'
 			<td class={LABEL}>VAT <span class="text-slate-400 font-normal italic">(refundable at handover)</span></td>
 			<td class="px-2 py-[3px] text-center text-[10px] text-slate-400">Con→HO</td>
 			<td class={VALUE_BLACK}>{fmtAed(s.vatAmount)}</td>
-			<td class="p-0">
+			<td
+				class={`p-0 ${highlightClass('vatPct')}`}
+				data-feasibility-field="vatPct"
+			>
 				<input type="number" step="0.5" min="0" class={INPUT}
 					value={s.inputs.vatPct}
 					oninput={(e) => setNumber('vatPct', e.currentTarget.value)} />
@@ -1165,3 +1283,37 @@ const ROW_INDENT = 'border-b border-[#D9D9D9] bg-[#F9F9F9]'
 
 </div>
 {/if}
+
+<style>
+	:global(.feasibility-change-flash) {
+		animation: feasibility-change-flash 2.4s ease-out;
+	}
+
+	@keyframes feasibility-change-flash {
+		0%,
+		100% {
+			background-color: transparent;
+			box-shadow: none;
+		}
+		12% {
+			background-color: rgba(34, 197, 94, 0.18);
+			box-shadow: inset 0 0 0 1px rgba(20, 184, 166, 0.35);
+		}
+		36% {
+			background-color: rgba(56, 189, 248, 0.16);
+			box-shadow: inset 0 0 0 1px rgba(14, 165, 233, 0.28);
+		}
+		68% {
+			background-color: rgba(34, 197, 94, 0.1);
+			box-shadow: inset 0 0 0 1px rgba(20, 184, 166, 0.18);
+		}
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		:global(.feasibility-change-flash) {
+			animation: none;
+			background-color: rgba(34, 197, 94, 0.14);
+			box-shadow: inset 0 0 0 1px rgba(20, 184, 166, 0.24);
+		}
+	}
+</style>

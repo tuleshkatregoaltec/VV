@@ -1,4 +1,5 @@
 <script lang="ts">
+import { createQuery, useQueryClient } from '@tanstack/svelte-query'
 import {
 	AlertCircle,
 	Clock3,
@@ -11,8 +12,9 @@ import {
 	Trash2
 } from 'lucide-svelte'
 import { onMount } from 'svelte'
-import { type ConversationResponse, chat } from '$lib/api/chat'
+import { type ConversationListResponse, type ConversationResponse, chat } from '$lib/api/chat'
 import ConfirmModal from '$lib/components/ui/ConfirmModal.svelte'
+import { chatKeys, chatQueries } from '$lib/queries/chat'
 
 let {
 	selectedId = $bindable(null),
@@ -22,8 +24,9 @@ let {
 	onSelect?: (id: number) => void
 } = $props()
 
-let conversations = $state<ConversationResponse[]>([])
-let loading = $state(true)
+const queryClient = useQueryClient()
+const conversationsQuery = createQuery(() => chatQueries.conversations())
+
 let creating = $state(false)
 let error = $state<string | null>(null)
 let openMenuId = $state<number | null>(null)
@@ -32,6 +35,11 @@ let renameValue = $state('')
 let searchValue = $state('')
 let deleteConfirmOpen = $state(false)
 let conversationToDelete = $state<number | null>(null)
+let conversations = $derived(conversationsQuery.data?.conversations ?? [])
+let loading = $derived(conversationsQuery.isLoading)
+let displayError = $derived(
+	error ?? (conversationsQuery.isError ? 'Failed to load conversations' : null)
+)
 let filteredConversations = $derived.by(() => {
 	const query = searchValue.trim().toLowerCase()
 	if (!query) return conversations
@@ -39,14 +47,24 @@ let filteredConversations = $derived.by(() => {
 })
 let conversationCount = $derived(conversations.length)
 
+function updateConversationCache(
+	updater: (conversations: ConversationResponse[]) => ConversationResponse[]
+) {
+	queryClient.setQueryData<ConversationListResponse>(chatKeys.conversations(), (current) => {
+		const nextConversations = updater(current?.conversations ?? [])
+		return {
+			conversations: nextConversations,
+			total: nextConversations.length
+		}
+	})
+}
+
 function displayTitle(title?: string | null): string {
 	if (!title || title === 'New Conversation') return 'New conversation'
 	return title
 }
 
 onMount(() => {
-	loadConversations()
-
 	// Close menu when clicking outside
 	const handleClickOutside = () => {
 		if (openMenuId !== null) {
@@ -60,30 +78,33 @@ onMount(() => {
 	}
 })
 
-async function loadConversations() {
-	loading = true
+async function retryLoadConversations() {
 	error = null
-	try {
-		const result = await chat.getConversations()
-		conversations = result.conversations
-		if (!selectedId && conversations.length > 0) {
-			selectedId = conversations[0].id
-			onSelect(selectedId)
-		}
-	} catch (err) {
-		console.error('Failed to load conversations:', err)
-		error = 'Failed to load conversations'
-	} finally {
-		loading = false
-	}
+	await conversationsQuery.refetch()
 }
+
+$effect(() => {
+	const firstConversation = conversations[0]
+	if (!selectedId && firstConversation) {
+		selectedId = firstConversation.id
+		onSelect(firstConversation.id)
+	}
+	if (firstConversation) {
+		void queryClient.prefetchQuery(chatQueries.messages(firstConversation.id))
+	}
+})
+
+$effect(() => {
+	if (conversationsQuery.isSuccess) error = null
+})
 
 async function createNew() {
 	creating = true
 	error = null
 	try {
 		const newConv = await chat.createConversation({})
-		conversations = [newConv, ...conversations]
+		updateConversationCache((current) => [newConv, ...current.filter((c) => c.id !== newConv.id)])
+		queryClient.setQueryData(chatKeys.messages(newConv.id), [])
 		selectedId = newConv.id
 		onSelect(newConv.id)
 		searchValue = ''
@@ -111,7 +132,7 @@ async function saveRename(conv: ConversationResponse) {
 
 	try {
 		const updated = await chat.updateConversation(conv.id, trimmed)
-		conversations = conversations.map((c) => (c.id === conv.id ? updated : c))
+		updateConversationCache((current) => current.map((c) => (c.id === conv.id ? updated : c)))
 		renamingId = null
 		renameValue = ''
 	} catch (err) {
@@ -143,12 +164,15 @@ async function confirmDelete() {
 
 	try {
 		await chat.deleteConversation(conversationToDelete)
-		conversations = conversations.filter((c) => c.id !== conversationToDelete)
+		const deletedId = conversationToDelete
+		const remainingConversations = conversations.filter((c) => c.id !== deletedId)
+		updateConversationCache(() => remainingConversations)
+		queryClient.removeQueries({ queryKey: chatKeys.messages(deletedId) })
 
 		// If deleted conversation was selected, select the first available one
-		if (selectedId === conversationToDelete) {
-			if (conversations.length > 0) {
-				selectedId = conversations[0].id
+		if (selectedId === deletedId) {
+			if (remainingConversations.length > 0) {
+				selectedId = remainingConversations[0].id
 				onSelect(selectedId)
 			} else {
 				selectedId = null
@@ -248,22 +272,22 @@ function formatDate(dateString: string): string {
 				/>
 				<p class="text-sm font-medium text-fg-3">Loading...</p>
 			</div>
-		{:else if error}
-			<div class="p-6 text-center">
-				<div
-					class="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-lg bg-error-bg"
-				>
-					<AlertCircle size={21} strokeWidth={1.8} class="text-error" />
+			{:else if displayError}
+				<div class="p-6 text-center">
+					<div
+						class="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-lg bg-error-bg"
+					>
+						<AlertCircle size={21} strokeWidth={1.8} class="text-error" />
+					</div>
+					<p class="mb-3 text-sm text-error">{displayError}</p>
+					<button
+						type="button"
+						onclick={() => void retryLoadConversations()}
+						class="rounded-md bg-error px-3 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90"
+					>
+						Try again
+					</button>
 				</div>
-				<p class="mb-3 text-sm text-error">{error}</p>
-				<button
-					type="button"
-					onclick={loadConversations}
-					class="rounded-md bg-error px-3 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90"
-				>
-					Try again
-				</button>
-			</div>
 		{:else if conversations.length === 0}
 			<div class="p-6 text-center">
 				<div
@@ -282,7 +306,9 @@ function formatDate(dateString: string): string {
 		{:else}
 			{#each filteredConversations as conv (conv.id)}
 				<div
-					class="group relative mb-1 w-full overflow-hidden rounded-md border transition-colors {selectedId === conv.id
+					class="group relative mb-1 w-full rounded-md border transition-colors {openMenuId === conv.id
+						? 'z-30 overflow-visible'
+						: 'overflow-hidden'} {selectedId === conv.id
 						? 'border-strong bg-card shadow-xs'
 						: 'border-transparent hover:border-border hover:bg-card'}"
 				>
@@ -334,22 +360,26 @@ function formatDate(dateString: string): string {
 							type="button"
 							onclick={(e) => toggleMenu(conv.id, e)}
 							class="absolute right-1.5 top-1.5 rounded-md p-1.5 text-fg-4 transition-colors hover:bg-elevated hover:text-fg-2 {selectedId ===
-							conv.id
-								? 'opacity-100'
-								: 'opacity-100 lg:opacity-0 lg:group-hover:opacity-100'}"
+									conv.id
+									? 'opacity-100'
+									: 'opacity-100 lg:opacity-0 lg:group-hover:opacity-100'}"
 							aria-label="Conversation options"
+							aria-haspopup="menu"
+							aria-expanded={openMenuId === conv.id}
 						>
 							<MoreHorizontal size={16} strokeWidth={2} />
 						</button>
 
 						{#if openMenuId === conv.id}
 							<div
-								class="absolute right-1.5 top-9 z-10 min-w-[152px] overflow-hidden rounded-lg border border-border bg-elevated shadow-md"
+								class="absolute right-1.5 top-9 z-50 min-w-[152px] overflow-hidden rounded-lg border border-border bg-elevated shadow-md"
+								role="menu"
 							>
 								<button
 									type="button"
 									onclick={() => startRename(conv)}
 									class="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm text-fg-2 transition-colors hover:bg-panel"
+									role="menuitem"
 								>
 									<Pencil size={15} strokeWidth={1.8} />
 									<span class="font-medium">Rename</span>
@@ -359,6 +389,7 @@ function formatDate(dateString: string): string {
 									type="button"
 									onclick={() => showDeleteConfirm(conv.id)}
 									class="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm text-error transition-colors hover:bg-error-bg"
+									role="menuitem"
 								>
 									<Trash2 size={15} strokeWidth={1.8} />
 									<span class="font-medium">Delete</span>

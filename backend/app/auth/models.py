@@ -17,6 +17,7 @@ class AuthMeResponse(BaseModel):
     email: str
     first_name: str
     last_name: str
+    avatar_url: str | None = None
     organization_id: str | None
     organization_name: str | None
     role: str

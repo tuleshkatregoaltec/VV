@@ -1,7 +1,8 @@
 <script lang="ts">
 import { createInfiniteQuery, createQuery } from '@tanstack/svelte-query'
+import { Activity, Building2, Sparkles } from 'lucide-svelte'
 import { goto } from '$app/navigation'
-import { chat } from '$lib/api/chat'
+import { type ConversationListResponse, chat } from '$lib/api/chat'
 import CompactChatInput from '$lib/components/dashboard/CompactChatInput.svelte'
 import CompleteProfileModal from '$lib/components/dashboard/CompleteProfileModal.svelte'
 import FullWidthMarketChart from '$lib/components/dashboard/FullWidthMarketChart.svelte'
@@ -9,8 +10,12 @@ import AppFrame from '$lib/components/layout/AppFrame.svelte'
 import PageContainer from '$lib/components/layout/PageContainer.svelte'
 import NewsCard from '$lib/components/news/NewsCard.svelte'
 import { analyticsQueries } from '$lib/queries/analytics'
+import { chatKeys } from '$lib/queries/chat'
+import { getQueryClient } from '$lib/queries/client'
 import { newsQueries } from '$lib/queries/news'
 import { currentUser } from '$lib/stores/user.svelte'
+
+const queryClient = getQueryClient()
 
 let username = $derived(currentUser.data?.first_name ?? '')
 let newsSection = $state<HTMLElement>()
@@ -20,11 +25,19 @@ let sentinel = $state<HTMLDivElement>()
 const LIMIT = 10
 
 const newsQuery = createInfiniteQuery(() => newsQueries.listInfinite('dashboard', LIMIT))
+const newsSummaryQuery = createQuery(() => newsQueries.summary())
 const newsArticles = $derived(newsQuery.data?.pages.flatMap((page) => page.articles) ?? [])
 
 async function handleChatSubmit(message: string) {
 	try {
 		const conversation = await chat.createConversation({ title: message.slice(0, 50) })
+		queryClient.setQueryData<ConversationListResponse>(chatKeys.conversations(), (current) => {
+			const conversations = [
+				conversation,
+				...(current?.conversations ?? []).filter((item) => item.id !== conversation.id)
+			]
+			return { conversations, total: conversations.length }
+		})
 		goto('/chat', {
 			state: { conversationId: conversation.id, initialMessage: message }
 		})
@@ -221,6 +234,113 @@ const SUGGESTIONS = [
 					<div>
 						<p class="font-mono text-[11px] uppercase tracking-[0.08em] text-fg-4">Latest news</p>
 						<h2 class="mt-1 text-2xl font-semibold text-fg-1">Dubai real estate</h2>
+					</div>
+				</div>
+
+				<div class="mb-4 overflow-hidden rounded-lg border border-border bg-card shadow-[var(--shadow-sm)]">
+					<div class="grid grid-cols-1 lg:grid-cols-[220px_1fr]">
+						<div
+							class="flex flex-row items-center justify-between gap-3 border-b border-border bg-panel px-4 py-3 lg:flex-col lg:items-start lg:justify-start lg:border-b-0 lg:border-r"
+						>
+							<div class="flex items-center gap-3">
+								<div class="flex h-8 w-8 items-center justify-center rounded-md bg-navy text-on-navy">
+									<Sparkles class="h-4 w-4" />
+								</div>
+								<div>
+									<p class="text-sm font-semibold text-fg-1">Market brief</p>
+									<p class="text-xs text-fg-4">AI-filtered signal</p>
+								</div>
+							</div>
+							{#if newsSummaryQuery.data}
+								<span
+									class="inline-flex items-center gap-1.5 rounded-md bg-card px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.08em] text-fg-4 ring-1 ring-border"
+								>
+									<span class="h-1.5 w-1.5 rounded-full bg-success"></span>
+									{newsSummaryQuery.data.article_count} headlines
+								</span>
+							{/if}
+						</div>
+
+						<div class="grid grid-cols-1 lg:grid-cols-2 lg:divide-x lg:divide-border">
+						{#if newsSummaryQuery.isPending}
+							<div class="p-4">
+								<div class="mb-4 flex items-center gap-3">
+									<div class="h-8 w-8 animate-pulse rounded-md bg-panel"></div>
+									<div class="h-3 w-20 animate-pulse rounded bg-panel"></div>
+								</div>
+								<div class="space-y-2">
+									<div class="h-3 w-full animate-pulse rounded bg-panel"></div>
+									<div class="h-3 w-11/12 animate-pulse rounded bg-panel"></div>
+									<div class="h-3 w-4/5 animate-pulse rounded bg-panel"></div>
+								</div>
+							</div>
+							<div class="border-t border-border p-4 lg:border-t-0">
+								<div class="mb-4 flex items-center gap-3">
+									<div class="h-8 w-8 animate-pulse rounded-md bg-panel"></div>
+									<div class="h-3 w-24 animate-pulse rounded bg-panel"></div>
+								</div>
+								<div class="space-y-2">
+									<div class="h-3 w-full animate-pulse rounded bg-panel"></div>
+									<div class="h-3 w-10/12 animate-pulse rounded bg-panel"></div>
+									<div class="h-3 w-5/6 animate-pulse rounded bg-panel"></div>
+								</div>
+							</div>
+						{:else if newsSummaryQuery.data}
+							{@const summary = newsSummaryQuery.data}
+							<section class="p-4">
+								<div class="mb-3 flex items-center gap-2.5">
+									<div
+										class="flex h-7 w-7 items-center justify-center rounded-md bg-info-bg text-info ring-1 ring-border"
+									>
+										<Activity class="h-3.5 w-3.5" />
+									</div>
+									<div>
+										<h3 class="text-sm font-semibold leading-none text-fg-1">
+											{summary.macro.title}
+										</h3>
+										<p class="mt-1 text-[11px] text-fg-4">Rates, oil, policy, capital flows</p>
+									</div>
+								</div>
+								<ul class="space-y-2">
+									{#each (summary.macro.bullets ?? []).slice(0, 3) as bullet (bullet)}
+										<li class="grid grid-cols-[auto_1fr] gap-2 text-[13px] leading-5 text-fg-2">
+											<span class="mt-2 h-1.5 w-1.5 rounded-full bg-mark"></span>
+											<span>{bullet}</span>
+										</li>
+									{/each}
+								</ul>
+							</section>
+							<section class="border-t border-border p-4 lg:border-t-0">
+								<div class="mb-3 flex items-center gap-2.5">
+									<div
+										class="flex h-7 w-7 items-center justify-center rounded-md bg-warning-bg text-warning ring-1 ring-border"
+									>
+										<Building2 class="h-3.5 w-3.5" />
+									</div>
+									<div>
+										<h3 class="text-sm font-semibold leading-none text-fg-1">
+											{summary.real_estate.title}
+										</h3>
+										<p class="mt-1 text-[11px] text-fg-4">Projects, sales, infrastructure</p>
+									</div>
+								</div>
+								<ul class="space-y-2">
+									{#each (summary.real_estate.bullets ?? []).slice(0, 3) as bullet (bullet)}
+										<li class="grid grid-cols-[auto_1fr] gap-2 text-[13px] leading-5 text-fg-2">
+											<span class="mt-2 h-1.5 w-1.5 rounded-full bg-warning"></span>
+											<span>{bullet}</span>
+										</li>
+									{/each}
+								</ul>
+							</section>
+						{:else if newsSummaryQuery.isError}
+							<div
+								class="border-dashed border-border p-4 text-sm text-fg-4 lg:col-span-2"
+							>
+								Market brief unavailable
+							</div>
+						{/if}
+						</div>
 					</div>
 				</div>
 

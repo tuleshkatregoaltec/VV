@@ -16,7 +16,7 @@ function fmtAed(value: number): string {
 function dateToQuarter(isoDate: string): string {
 	if (!isoDate) return '—'
 	const d = new Date(isoDate)
-	if (isNaN(d.getTime())) return isoDate
+	if (Number.isNaN(d.getTime())) return isoDate
 	const q = Math.ceil((d.getMonth() + 1) / 3)
 	return `Q${q} ${d.getFullYear()}`
 }
@@ -85,7 +85,7 @@ const moic = $derived(s.workbook?.returns?.projectMoic ?? s.revenueMultiple)
 const constructionDurationMonths = $derived.by(() => {
 	const c = new Date(s.inputs.constructionDate)
 	const h = new Date(s.inputs.handoverDate)
-	if (isNaN(c.getTime()) || isNaN(h.getTime())) return null
+	if (Number.isNaN(c.getTime()) || Number.isNaN(h.getTime())) return null
 	return Math.max(0, (h.getFullYear() - c.getFullYear()) * 12 + (h.getMonth() - c.getMonth()))
 })
 
@@ -111,6 +111,44 @@ const VALUE_GREEN = 'px-2 py-[3px] text-right tabular-nums text-emerald-700 font
 const VALUE_BOLD_GREEN = 'px-2 py-[3px] text-right tabular-nums text-emerald-700 font-semibold'
 const UNIT = 'px-2 py-[3px] text-slate-500 whitespace-nowrap'
 
+let sheetScroller = $state<HTMLDivElement | null>(null)
+let lastHighlightSequence = $state(0)
+
+function fieldTokens(...fields: string[]): string {
+	return fields.join(' ')
+}
+
+function hasHighlightedField(...fields: string[]): boolean {
+	const active = s.highlightedFields
+	return fields.some((field) => active.includes(field))
+}
+
+function highlightClass(...fields: string[]): string {
+	return hasHighlightedField(...fields) ? 'feasibility-change-flash' : ''
+}
+
+function scrollToFirstHighlightedField(): void {
+	const fields = s.highlightedFields
+	if (!sheetScroller || fields.length === 0) return
+	const nodes = Array.from(sheetScroller.querySelectorAll<HTMLElement>('[data-feasibility-field]'))
+	const priorityFields = [...fields.filter((field) => field !== 'assumptions'), 'assumptions']
+	const target = priorityFields
+		.map((field) =>
+			nodes.find((node) => {
+				const tokens = node.dataset.feasibilityField?.split(/\s+/) ?? []
+				return tokens.includes(field)
+			})
+		)
+		.find(Boolean)
+	target?.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' })
+}
+
+$effect(() => {
+	if (!sheetScroller || s.highlightSequence === lastHighlightSequence) return
+	lastHighlightSequence = s.highlightSequence
+	setTimeout(scrollToFirstHighlightedField, 80)
+})
+
 function updateBtrUnitConfig(id: string, patch: Record<string, number | string>) {
 	const updated = (s.inputs.btrUnitConfigs ?? []).map((c) => (c.id === id ? { ...c, ...patch } : c))
 	s.updateInputs({ btrUnitConfigs: updated } as any)
@@ -122,10 +160,16 @@ function setBtrNumber<K extends string>(key: K, raw: string) {
 }
 </script>
 
-<div class="overflow-auto flex-1 bg-white text-[11px] font-[Calibri,'Segoe_UI',Arial,sans-serif] select-none">
+<div
+	bind:this={sheetScroller}
+	class="overflow-auto flex-1 bg-white text-[11px] font-[Calibri,'Segoe_UI',Arial,sans-serif] select-none"
+>
 
 	<!-- Model Header -->
-	<div class="bg-[#1F3864] text-white px-4 py-2.5 flex items-start justify-between gap-4">
+	<div
+		class="bg-[#1F3864] text-white px-4 py-2.5 flex items-start justify-between gap-4 {highlightClass('assumptions')}"
+		data-feasibility-field="assumptions"
+	>
 		<div>
 			<div class="text-[13px] font-bold tracking-wide">KEY ASSUMPTIONS</div>
 			<div class="text-[10px] text-blue-200 mt-0.5">Feasibility 2 Model &mdash; All monetary values in AED unless stated</div>
@@ -311,7 +355,10 @@ function setBtrNumber<K extends string>(key: K, raw: string) {
 			<tr class={ROW_STD}>
 				<td class="px-1 py-[3px] text-slate-400 text-[10px] text-center">d</td>
 				<td class={LABEL}>BUA Multiple</td>
-				<td class="p-0">
+				<td
+					class={`p-0 ${highlightClass('buaMultiplier')}`}
+					data-feasibility-field="buaMultiplier"
+				>
 					<input
 						type="number"
 						step="0.01"
@@ -344,7 +391,10 @@ function setBtrNumber<K extends string>(key: K, raw: string) {
 			<tr class={ROW_STD}>
 				<td class="px-1 py-[3px] text-slate-400 text-[10px] text-center">a</td>
 				<td class={LABEL}>Regulatory Max Storeys <span class="text-slate-400 font-normal italic">(optional cap)</span></td>
-				<td class="p-0">
+				<td
+					class={`p-0 ${highlightClass('maxStoreys')}`}
+					data-feasibility-field="maxStoreys"
+				>
 					<input type="number" step="1" min="0" class={INPUT}
 						value={s.inputs.maxStoreys && s.inputs.maxStoreys > 0 ? s.inputs.maxStoreys : ''}
 						placeholder="No cap"
@@ -356,7 +406,10 @@ function setBtrNumber<K extends string>(key: K, raw: string) {
 			<tr class={ROW_STD}>
 				<td class="px-1 py-[3px] text-slate-400 text-[10px] text-center">b</td>
 				<td class={LABEL}>Basement Parking Floors</td>
-				<td class="p-0">
+				<td
+					class={`p-0 ${highlightClass('basementParkingFloors')}`}
+					data-feasibility-field="basementParkingFloors"
+				>
 					<input type="number" step="1" min="0" class={INPUT}
 						value={s.inputs.basementParkingFloors ?? 4}
 						oninput={(e) => setNumber('basementParkingFloors', e.currentTarget.value)}
@@ -367,7 +420,10 @@ function setBtrNumber<K extends string>(key: K, raw: string) {
 			<tr class={ROW_STD}>
 				<td class="px-1 py-[3px] text-slate-400 text-[10px] text-center">c</td>
 				<td class={LABEL}>Podium Floors</td>
-				<td class="p-0">
+				<td
+					class={`p-0 ${highlightClass('podiumFloors')}`}
+					data-feasibility-field="podiumFloors"
+				>
 					<input type="number" step="1" min="0" class={INPUT}
 						value={s.inputs.podiumFloors ?? 5}
 						oninput={(e) => setNumber('podiumFloors', e.currentTarget.value)}
@@ -378,7 +434,10 @@ function setBtrNumber<K extends string>(key: K, raw: string) {
 			<tr class={ROW_STD}>
 				<td class="px-1 py-[3px] text-slate-400 text-[10px] text-center">d</td>
 				<td class={LABEL}>{isBtr ? 'Selected Residential Floors' : 'Residential Floors'}</td>
-				<td class="p-0">
+				<td
+					class={`p-0 ${highlightClass('residentialFloors')}`}
+					data-feasibility-field="residentialFloors"
+				>
 					<input type="number" step="1" min="0" class={INPUT}
 						value={s.inputs.residentialFloors ?? 30}
 						oninput={(e) => setNumber('residentialFloors', e.currentTarget.value)}
@@ -409,7 +468,10 @@ function setBtrNumber<K extends string>(key: K, raw: string) {
 			<tr class={ROW_STD}>
 				<td class="px-1 py-[3px] text-slate-400 text-[10px] text-center">e</td>
 				<td class={LABEL}>Amenity / Roof Floors</td>
-				<td class="p-0">
+				<td
+					class={`p-0 ${highlightClass('amenityRoofFloors')}`}
+					data-feasibility-field="amenityRoofFloors"
+				>
 					<input type="number" step="1" min="0" class={INPUT}
 						value={s.inputs.amenityRoofFloors ?? 1}
 						oninput={(e) => setNumber('amenityRoofFloors', e.currentTarget.value)}
@@ -420,7 +482,10 @@ function setBtrNumber<K extends string>(key: K, raw: string) {
 			<tr class={ROW_STD}>
 				<td class="px-1 py-[3px] text-slate-400 text-[10px] text-center">f</td>
 				<td class={LABEL}>Parking Area per Space</td>
-				<td class="p-0">
+				<td
+					class={`p-0 ${highlightClass('parkingAreaPerSpaceSqm')}`}
+					data-feasibility-field="parkingAreaPerSpaceSqm"
+				>
 					<input type="number" step="1" min="0" class={INPUT}
 						value={s.inputs.parkingAreaPerSpaceSqm ?? 30}
 						oninput={(e) => setNumber('parkingAreaPerSpaceSqm', e.currentTarget.value)}
@@ -431,7 +496,10 @@ function setBtrNumber<K extends string>(key: K, raw: string) {
 			<tr class={ROW_STD}>
 				<td class="px-1 py-[3px] text-slate-400 text-[10px] text-center">g</td>
 				<td class={LABEL}>Above-grade BUA Factor</td>
-				<td class="p-0">
+				<td
+					class={`p-0 ${highlightClass('aboveGradeBuaFactor')}`}
+					data-feasibility-field="aboveGradeBuaFactor"
+				>
 					<input type="number" step="0.01" min="0" class={INPUT}
 						value={s.inputs.aboveGradeBuaFactor ?? 1.1}
 						oninput={(e) => setNumber('aboveGradeBuaFactor', e.currentTarget.value)}
@@ -442,7 +510,10 @@ function setBtrNumber<K extends string>(key: K, raw: string) {
 			<tr class={ROW_STD}>
 				<td class="px-1 py-[3px] text-slate-400 text-[10px] text-center">h</td>
 				<td class={LABEL}>Service / BOH / Plant %</td>
-				<td class="p-0">
+				<td
+					class={`p-0 ${highlightClass('serviceBohPlantPct')}`}
+					data-feasibility-field="serviceBohPlantPct"
+				>
 					<input type="number" step="0.01" min="0" max="100" class={INPUT}
 						value={Math.round((s.inputs.serviceBohPlantPct ?? 0.03) * 100)}
 						oninput={(e) => s.updateInputs({ serviceBohPlantPct: (Number(e.currentTarget.value) || 0) / 100 })}
@@ -571,13 +642,17 @@ function setBtrNumber<K extends string>(key: K, raw: string) {
 		</thead>
 		<tbody>
 			{#each s.unitConfigs as cfg (cfg.id)}
+				{@const unitConfigField = `unitConfig:${cfg.id}`}
 				{@const gsaSf = toSqft(cfg.avgSizeSqm)}
 				{@const ppsf = cfg.sellingRatePsqm * 0.092903}
 				{@const totalGsaSf = toSqft(cfg.units * cfg.avgSizeSqm)}
 				{@const totalRev = cfg.units * cfg.avgSizeSqm * cfg.sellingRatePsqm}
 				<tr class="border-b border-[#EBEBEB]">
 					<td class="px-2 py-[3px] text-slate-800 border-r border-[#E8E8E8]">{cfg.label}</td>
-					<td class="p-0 border-r border-[#E8E8E8]">
+					<td
+						class={`p-0 border-r border-[#E8E8E8] ${highlightClass(`${unitConfigField}:units`, 'unitMix')}`}
+						data-feasibility-field={fieldTokens(`${unitConfigField}:units`, 'unitMix')}
+					>
 						<input
 							type="number"
 							step="1"
@@ -586,7 +661,10 @@ function setBtrNumber<K extends string>(key: K, raw: string) {
 							oninput={(e) => s.updateUnitConfig(cfg.id, { units: Number(e.currentTarget.value) || 0 })}
 						/>
 					</td>
-					<td class="p-0 border-r border-[#E8E8E8]">
+					<td
+						class={`p-0 border-r border-[#E8E8E8] ${highlightClass(`${unitConfigField}:avgSizeSqm`, 'unitMix')}`}
+						data-feasibility-field={fieldTokens(`${unitConfigField}:avgSizeSqm`, 'unitMix')}
+					>
 						<input
 							type="number"
 							step="1"
@@ -595,7 +673,10 @@ function setBtrNumber<K extends string>(key: K, raw: string) {
 							oninput={(e) => s.updateUnitConfig(cfg.id, { avgSizeSqm: (Number(e.currentTarget.value) || 0) * 0.092903 })}
 						/>
 					</td>
-					<td class="p-0 border-r border-[#E8E8E8]">
+					<td
+						class={`p-0 border-r border-[#E8E8E8] ${highlightClass(`${unitConfigField}:sellingRatePsqm`, 'priceUpdate', 'unitMix')}`}
+						data-feasibility-field={fieldTokens(`${unitConfigField}:sellingRatePsqm`, 'priceUpdate', 'unitMix')}
+					>
 						<input
 							type="number"
 							step="1"
@@ -604,7 +685,10 @@ function setBtrNumber<K extends string>(key: K, raw: string) {
 							oninput={(e) => s.updateUnitConfig(cfg.id, { sellingRatePsqm: (Number(e.currentTarget.value) || 0) / 0.092903 })}
 						/>
 					</td>
-					<td class="p-0 border-r border-[#E8E8E8]">
+					<td
+						class={`p-0 border-r border-[#E8E8E8] ${highlightClass(`${unitConfigField}:parkingRatio`, 'unitMix')}`}
+						data-feasibility-field={fieldTokens(`${unitConfigField}:parkingRatio`, 'unitMix')}
+					>
 						<input
 							type="number"
 							step="0.5"
@@ -692,14 +776,14 @@ function setBtrNumber<K extends string>(key: K, raw: string) {
 		<tr class={ROW_STD}>
 			<td class="px-1 py-[3px] text-slate-400 text-[10px] text-center">c</td>
 			<td class={LABEL}>Stabilized Occupancy</td>
-			<td class="p-0"><input type="number" step="1" min="50" max="100" class={INPUT} value={s.inputs.btrStabilizedOccupancyPct ?? 95}
+			<td class="p-0"><input type="number" step="1" min="50" max="100" class={INPUT} value={s.inputs.btrStabilizedOccupancyPct ?? 97}
 				oninput={(e) => setBtrNumber('btrStabilizedOccupancyPct', e.currentTarget.value)} /></td>
 			<td class={UNIT}>%</td>
 		</tr>
 		<tr class={ROW_STD}>
 			<td class="px-1 py-[3px] text-slate-400 text-[10px] text-center">d</td>
 			<td class={LABEL}>Free Rent Concession</td>
-			<td class="p-0"><input type="number" step="1" min="0" class={INPUT} value={s.inputs.btrFreeRentMonths ?? 2}
+			<td class="p-0"><input type="number" step="1" min="0" class={INPUT} value={s.inputs.btrFreeRentMonths ?? 0}
 				oninput={(e) => setBtrNumber('btrFreeRentMonths', e.currentTarget.value)} /></td>
 			<td class={UNIT}>months</td>
 		</tr>
@@ -725,7 +809,7 @@ function setBtrNumber<K extends string>(key: K, raw: string) {
 		<tr class={ROW_STD}>
 			<td class="px-1 py-[3px] text-slate-400 text-[10px] text-center">a</td>
 			<td class={LABEL}>Market Rent Growth</td>
-			<td class="p-0"><input type="number" step="0.5" min="0" class={INPUT} value={s.inputs.btrMarketRentGrowthPct ?? s.inputs.btrAnnualRentGrowthPct ?? 3}
+			<td class="p-0"><input type="number" step="0.5" min="0" class={INPUT} value={s.inputs.btrMarketRentGrowthPct ?? s.inputs.btrAnnualRentGrowthPct ?? 5}
 				oninput={(e) => {
 					const value = Number(e.currentTarget.value) || 0
 					s.updateInputs({ btrMarketRentGrowthPct: value, btrAnnualRentGrowthPct: value })
@@ -735,7 +819,7 @@ function setBtrNumber<K extends string>(key: K, raw: string) {
 		<tr class={ROW_STD}>
 			<td class="px-1 py-[3px] text-slate-400 text-[10px] text-center">b</td>
 			<td class={LABEL}>Renewal Rent Growth</td>
-			<td class="p-0"><input type="number" step="0.5" min="0" class={INPUT} value={s.inputs.btrRenewalRentGrowthPct ?? 3}
+			<td class="p-0"><input type="number" step="0.5" min="0" class={INPUT} value={s.inputs.btrRenewalRentGrowthPct ?? 5}
 				oninput={(e) => setBtrNumber('btrRenewalRentGrowthPct', e.currentTarget.value)} /></td>
 			<td class={UNIT}>%</td>
 		</tr>
@@ -763,7 +847,7 @@ function setBtrNumber<K extends string>(key: K, raw: string) {
 		<tr class={ROW_STD}>
 			<td class="px-1 py-[3px] text-slate-400 text-[10px] text-center">f</td>
 			<td class={LABEL}>Terminal NOI Growth</td>
-			<td class="p-0"><input type="number" step="0.5" min="0" class={INPUT} value={s.inputs.btrTerminalGrowthPct ?? 3}
+			<td class="p-0"><input type="number" step="0.5" min="0" class={INPUT} value={s.inputs.btrTerminalGrowthPct ?? 4}
 				oninput={(e) => setBtrNumber('btrTerminalGrowthPct', e.currentTarget.value)} /></td>
 			<td class={UNIT}>%</td>
 		</tr>
@@ -864,7 +948,7 @@ function setBtrNumber<K extends string>(key: K, raw: string) {
 		<tr class={ROW_STD}>
 			<td class="px-1 py-[3px] text-slate-400 text-[10px] text-center">a</td>
 			<td class={LABEL}>Exit Cap Rate</td>
-			<td class="p-0"><input type="number" step="0.25" min="0" class={INPUT} value={s.inputs.btrExitCapRatePct ?? 7}
+			<td class="p-0"><input type="number" step="0.25" min="0" class={INPUT} value={s.inputs.btrExitCapRatePct ?? 5.5}
 				oninput={(e) => setBtrNumber('btrExitCapRatePct', e.currentTarget.value)} /></td>
 			<td class={UNIT}>%</td>
 		</tr>
@@ -878,7 +962,7 @@ function setBtrNumber<K extends string>(key: K, raw: string) {
 		<tr class={ROW_STD}>
 			<td class="px-1 py-[3px] text-slate-400 text-[10px] text-center">c</td>
 			<td class={LABEL}>Refi Valuation Cap Rate</td>
-			<td class="p-0"><input type="number" step="0.25" min="0" class={INPUT} value={s.inputs.btrRefiCapRatePct ?? 7}
+			<td class="p-0"><input type="number" step="0.25" min="0" class={INPUT} value={s.inputs.btrRefiCapRatePct ?? 5.5}
 				oninput={(e) => setBtrNumber('btrRefiCapRatePct', e.currentTarget.value)} /></td>
 			<td class={UNIT}>%</td>
 		</tr>
@@ -943,7 +1027,7 @@ function setBtrNumber<K extends string>(key: K, raw: string) {
 		<tr class={ROW_STD}>
 			<td class="px-1 py-[3px] text-slate-400 text-[10px] text-center">a</td>
 			<td class={LABEL}>Stabilized Free Rent (Renewals)</td>
-			<td class="p-0"><input type="number" step="1" min="0" class={INPUT} value={s.inputs.btrStabilizedFreeRentMonths ?? 2}
+			<td class="p-0"><input type="number" step="1" min="0" class={INPUT} value={s.inputs.btrStabilizedFreeRentMonths ?? 0}
 				oninput={(e) => setBtrNumber('btrStabilizedFreeRentMonths', e.currentTarget.value)} /></td>
 			<td class={UNIT}>months</td>
 		</tr>
@@ -998,7 +1082,10 @@ function setBtrNumber<K extends string>(key: K, raw: string) {
 			<td class={LABEL}>
 				Sales Period
 			</td>
-			<td class="p-0">
+			<td
+				class={`p-0 ${highlightClass('salesPeriodMonths')}`}
+				data-feasibility-field="salesPeriodMonths"
+			>
 				<input
 					type="number"
 					step="1"
@@ -1058,7 +1145,10 @@ function setBtrNumber<K extends string>(key: K, raw: string) {
 			<td class={LABEL}>
 				Deposit
 			</td>
-			<td class="p-0">
+			<td
+				class={`p-0 ${highlightClass('paymentPlan:depositPct', 'paymentPlan')}`}
+				data-feasibility-field={fieldTokens('paymentPlan:depositPct', 'paymentPlan')}
+			>
 				<input
 					type="number"
 					step="1"
@@ -1074,7 +1164,10 @@ function setBtrNumber<K extends string>(key: K, raw: string) {
 			<td class={LABEL}>
 				Pre-Handover
 			</td>
-			<td class="p-0">
+			<td
+				class={`p-0 ${highlightClass('paymentPlan:constructionPct', 'paymentPlan')}`}
+				data-feasibility-field={fieldTokens('paymentPlan:constructionPct', 'paymentPlan')}
+			>
 				<input
 					type="number"
 					step="1"
@@ -1090,7 +1183,10 @@ function setBtrNumber<K extends string>(key: K, raw: string) {
 			<td class={LABEL}>
 				At Handover
 			</td>
-			<td class="p-0">
+			<td
+				class={`p-0 ${highlightClass('paymentPlan:handoverPct', 'paymentPlan')}`}
+				data-feasibility-field={fieldTokens('paymentPlan:handoverPct', 'paymentPlan')}
+			>
 				<input
 					type="number"
 					step="1"
@@ -1835,3 +1931,37 @@ function setBtrNumber<K extends string>(key: K, raw: string) {
 		</tbody>
 	</table>
 </div>
+
+<style>
+	:global(.feasibility-change-flash) {
+		animation: feasibility-change-flash 2.4s ease-out;
+	}
+
+	@keyframes feasibility-change-flash {
+		0%,
+		100% {
+			background-color: transparent;
+			box-shadow: none;
+		}
+		12% {
+			background-color: rgba(34, 197, 94, 0.18);
+			box-shadow: inset 0 0 0 1px rgba(20, 184, 166, 0.35);
+		}
+		36% {
+			background-color: rgba(56, 189, 248, 0.16);
+			box-shadow: inset 0 0 0 1px rgba(14, 165, 233, 0.28);
+		}
+		68% {
+			background-color: rgba(34, 197, 94, 0.1);
+			box-shadow: inset 0 0 0 1px rgba(20, 184, 166, 0.18);
+		}
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		:global(.feasibility-change-flash) {
+			animation: none;
+			background-color: rgba(34, 197, 94, 0.14);
+			box-shadow: inset 0 0 0 1px rgba(20, 184, 166, 0.24);
+		}
+	}
+</style>

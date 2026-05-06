@@ -1,7 +1,14 @@
 <script lang="ts">
 import maplibregl from 'maplibre-gl'
 import { onMount } from 'svelte'
-import type { DdaPlotFeature, GeoPin, GeoPolygon } from '$lib/api/projects'
+import type {
+	DdaOutlineFeature,
+	DdaPlotFeature,
+	GeoPin,
+	GeoPolygon,
+	ProjectRadarArea,
+	ProjectRadarProject
+} from '$lib/api/projects'
 import { colorTheme } from '$lib/stores/preferences.svelte'
 
 const LIGHT_MAP_STYLE = 'https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json'
@@ -16,13 +23,41 @@ interface ProjectPin {
 }
 
 type ProjectMarkerInput = Omit<ProjectPin, 'marker'>
+type RadarOverlayMode = 'pipeline' | 'demand' | 'yield' | 'delivery'
+type DdaLayerMode = 'outlines' | 'parcels'
+type DdaMapFeature = DdaPlotFeature | DdaOutlineFeature
+interface MapViewport {
+	west: number
+	south: number
+	east: number
+	north: number
+	zoom: number
+}
 
 let {
 	onProjectSelect,
-	onBuildingPinClick
+	onBuildingPinClick,
+	onAreaSelect,
+	onViewportChange,
+	projectPins = [],
+	areaBubbles = [],
+	selectedProjectId = null,
+	selectedAreaName = null,
+	showProjectPins = true,
+	showAreaBubbles = true,
+	overlayMode = 'pipeline'
 }: {
 	onProjectSelect?: (projectId: number) => void
 	onBuildingPinClick?: (pin: GeoPin) => void
+	onAreaSelect?: (areaName: string) => void
+	onViewportChange?: (viewport: MapViewport) => void
+	projectPins?: ProjectRadarProject[]
+	areaBubbles?: ProjectRadarArea[]
+	selectedProjectId?: number | null
+	selectedAreaName?: string | null
+	showProjectPins?: boolean
+	showAreaBubbles?: boolean
+	overlayMode?: RadarOverlayMode
 } = $props()
 
 let mapContainer = $state<HTMLDivElement>()
@@ -36,12 +71,209 @@ let currentMapStyle = $state<string | null>(null)
 let currentProjectMarkerInput = $state<ProjectMarkerInput | null>(null)
 let currentAreaPolygon = $state<GeoPolygon | null>(null)
 let currentBuildingPins = $state<GeoPin[]>([])
-let currentDDAPlots = $state<DdaPlotFeature[]>([])
+let currentDDAFeatures = $state<DdaMapFeature[]>([])
+let currentDDAMode = $state<DdaLayerMode>('outlines')
 let currentFitBoundsPins = $state<GeoPin[]>([])
+let ddaRenderVersion = 0
 const resolvedTheme = $derived(colorTheme.resolved)
+const PROJECT_SOURCE_ID = 'radar-projects'
+const PROJECT_HALO_LAYER_ID = 'radar-project-halos'
+const PROJECT_LAYER_ID = 'radar-project-pins'
+const PROJECT_SELECTED_LAYER_ID = 'radar-project-selected'
+const AREA_SOURCE_ID = 'radar-areas'
+const AREA_LAYER_ID = 'radar-area-bubbles'
+const AREA_LABEL_LAYER_ID = 'radar-area-labels'
+const DDA_SOURCE_ID = 'dda-plots'
+const DDA_FILL_LAYER_ID = 'dda-plots-fill'
+const DDA_OUTLINE_LAYER_ID = 'dda-plots-outline'
+const DDA_OUTLINE_CORE_LAYER_ID = 'dda-plots-outline-core'
+let radarHandlersBound = false
+let ddaHandlersBound = false
+let hoverPopup: maplibregl.Popup | null = null
 
 function getMapStyle(theme: 'light' | 'dark') {
 	return theme === 'dark' ? DARK_MAP_STYLE : LIGHT_MAP_STYLE
+}
+
+function hasValidLngLat(longitude: number, latitude: number) {
+	return (
+		Number.isFinite(longitude) &&
+		Number.isFinite(latitude) &&
+		longitude >= -180 &&
+		longitude <= 180 &&
+		latitude >= -90 &&
+		latitude <= 90
+	)
+}
+
+function clamp(value: number, min: number, max: number) {
+	return Math.min(max, Math.max(min, value))
+}
+
+function projectStage(project: ProjectRadarProject) {
+	if (project.completion_status === 'FINISHED') return 'Finished'
+	if (project.pipeline_status === 'delivering_next_12_months') return 'Next 12m'
+	if (project.pipeline_status === 'future') return 'Future'
+	return 'Unscheduled'
+}
+
+function projectColor(project: ProjectRadarProject, mode: RadarOverlayMode) {
+	if (mode === 'demand') return '#2563eb'
+	if (mode === 'yield') {
+		const value = project.gross_yield_pct ?? 0
+		if (value >= 9) return '#059669'
+		if (value >= 6.5) return '#0d9488'
+		if (value > 0) return '#f59e0b'
+		return '#94a3b8'
+	}
+	if (mode === 'delivery') {
+		if (project.delivery_confidence >= 0.75) return '#059669'
+		if (project.delivery_confidence >= 0.5) return '#f59e0b'
+		return '#dc2626'
+	}
+	if (project.completion_status === 'FINISHED') return '#64748b'
+	if (project.pipeline_status === 'delivering_next_12_months') return '#0f766e'
+	if (project.pipeline_status === 'future') return '#0369a1'
+	return '#7c3aed'
+}
+
+function projectRadius(project: ProjectRadarProject, mode: RadarOverlayMode) {
+	if (mode === 'demand') {
+		return clamp(
+			5 + Math.sqrt(project.sales_transaction_count_12m + project.rental_contract_count_12m) / 5,
+			5,
+			24
+		)
+	}
+	if (mode === 'yield') {
+		return clamp(5 + (project.gross_yield_pct ?? 0) * 1.2, 5, 23)
+	}
+	if (mode === 'delivery') {
+		return clamp(5 + project.delivery_confidence * 15, 5, 22)
+	}
+	return clamp(5 + Math.sqrt(project.no_of_units || 0) / 4, 5, 24)
+}
+
+function areaRadius(area: ProjectRadarArea) {
+	return clamp(9 + Math.sqrt(area.pipeline_units || area.mapped_projects || 0) / 18, 10, 42)
+}
+
+function plotCategory(feature: DdaMapFeature) {
+	const label = (
+		feature.land_use_summary?.[0] ??
+		('gfa_type' in feature ? feature.gfa_type : '') ??
+		''
+	).toLowerCase()
+	if (label.includes('residential') || label.includes('villa') || label.includes('apartment')) {
+		return 'Residential'
+	}
+	if (label.includes('commercial') || label.includes('retail') || label.includes('office')) {
+		return 'Commercial'
+	}
+	if (label.includes('open space') || label.includes('landscape') || label.includes('park')) {
+		return 'Open Space'
+	}
+	if (label.includes('utilit')) return 'Utilities'
+	return 'Planning'
+}
+
+function plotColor(category: string) {
+	if (category === 'Residential') return '#0f766e'
+	if (category === 'Commercial') return '#2563eb'
+	if (category === 'Open Space') return '#65a30d'
+	if (category === 'Utilities') return '#64748b'
+	return '#f59e0b'
+}
+
+function isDDAOutlineFeature(feature: DdaMapFeature): feature is DdaOutlineFeature {
+	return 'kind' in feature && 'plot_count' in feature && !('plot_number' in feature)
+}
+
+function projectFeature(project: ProjectRadarProject): GeoJSON.Feature {
+	return {
+		type: 'Feature',
+		geometry: { type: 'Point', coordinates: [project.longitude, project.latitude] },
+		properties: {
+			project_id: project.project_id,
+			project_name: project.project_name,
+			area_name: project.area_name,
+			developer_name: project.developer_name ?? '',
+			stage: projectStage(project),
+			no_of_units: project.no_of_units,
+			sales_transaction_count_12m: project.sales_transaction_count_12m,
+			rental_contract_count_12m: project.rental_contract_count_12m,
+			gross_yield_pct: project.gross_yield_pct ?? 0,
+			radius: projectRadius(project, overlayMode),
+			color: projectColor(project, overlayMode)
+		}
+	}
+}
+
+function areaFeature(area: ProjectRadarArea, index: number): GeoJSON.Feature | null {
+	if (area.latitude == null || area.longitude == null) return null
+	if (!hasValidLngLat(area.longitude, area.latitude)) return null
+	return {
+		type: 'Feature',
+		geometry: { type: 'Point', coordinates: [area.longitude, area.latitude] },
+		properties: {
+			area_name: area.area_name,
+			active_projects: area.active_projects,
+			pipeline_units: area.pipeline_units,
+			sales_transaction_count_12m: area.sales_transaction_count_12m,
+			dda_plot_count: area.dda_plot_count,
+			radius: areaRadius(area),
+			show_label: index < 12
+		}
+	}
+}
+
+function featureCollection(features: GeoJSON.Feature[]): GeoJSON.FeatureCollection {
+	return { type: 'FeatureCollection', features }
+}
+
+function ddaFeatureCollection(features: DdaMapFeature[]): GeoJSON.FeatureCollection {
+	return featureCollection(
+		features.map((feature) => {
+			const isOutline = isDDAOutlineFeature(feature)
+			const category = plotCategory(feature)
+			return {
+				type: 'Feature',
+				geometry: { type: 'Polygon', coordinates: [feature.coordinates] },
+				properties: isOutline
+					? {
+							feature_type: 'outline',
+							name: feature.name,
+							kind: feature.kind,
+							plot_count: feature.plot_count,
+							total_plot_area_sqm: feature.total_plot_area_sqm,
+							total_gfa_sqm: feature.total_gfa_sqm,
+							category,
+							color: '#f59e0b'
+						}
+					: {
+							feature_type: 'parcel',
+							plot_number: feature.plot_number,
+							plot_area_sqm: feature.plot_area_sqm,
+							max_gfa_sqm: feature.max_gfa_sqm ?? 0,
+							community_name: feature.community_name,
+							category,
+							color: plotColor(category)
+						}
+			}
+		})
+	)
+}
+
+function notifyViewportChange() {
+	if (!map || !onViewportChange) return
+	const bounds = map.getBounds()
+	onViewportChange({
+		west: bounds.getWest(),
+		south: bounds.getSouth(),
+		east: bounds.getEast(),
+		north: bounds.getNorth(),
+		zoom: map.getZoom()
+	})
 }
 
 onMount(() => {
@@ -61,6 +293,12 @@ onMount(() => {
 
 	// Add navigation controls
 	map.addControl(new maplibregl.NavigationControl(), 'top-right')
+
+	map.on('load', () => {
+		syncRadarLayers()
+		notifyViewportChange()
+	})
+	map.on('moveend', notifyViewportChange)
 
 	map.on('error', (e) => {
 		console.error('Map error:', e)
@@ -82,8 +320,22 @@ $effect(() => {
 	currentMap.setStyle(nextStyle)
 	currentMap.once('style.load', () => {
 		if (currentMapStyle !== nextStyle) return
+		syncRadarLayers()
 		replayCurrentOverlays()
 	})
+})
+
+$effect(() => {
+	projectPins
+	areaBubbles
+	selectedProjectId
+	selectedAreaName
+	showProjectPins
+	showAreaBubbles
+	overlayMode
+	resolvedTheme
+	map
+	syncRadarLayers()
 })
 
 function _removeAreaPolygon() {
@@ -131,8 +383,10 @@ function _clearRenderedOverlays() {
 
 function fitMapToPins(pins: GeoPin[], duration?: number) {
 	if (!map || pins.length === 0) return
-	const lats = pins.map((p) => p.latitude)
-	const lngs = pins.map((p) => p.longitude)
+	const validPins = pins.filter((pin) => hasValidLngLat(pin.longitude, pin.latitude))
+	if (validPins.length === 0) return
+	const lats = validPins.map((p) => p.latitude)
+	const lngs = validPins.map((p) => p.longitude)
 	const options = duration === undefined ? { padding: 60 } : { padding: 60, duration }
 	map.fitBounds(
 		[
@@ -153,7 +407,8 @@ function replayCurrentOverlays() {
 	const projectMarker = currentProjectMarkerInput
 	const areaPolygon = currentAreaPolygon
 	const buildingPins = [...currentBuildingPins]
-	const ddaPlots = [...currentDDAPlots]
+	const ddaFeatures = [...currentDDAFeatures]
+	const ddaMode = currentDDAMode
 	const fitBoundsPins = [...currentFitBoundsPins]
 
 	_clearRenderedOverlays()
@@ -172,12 +427,181 @@ function replayCurrentOverlays() {
 	if (buildingPins.length > 0) {
 		addBuildingMarkers(buildingPins)
 	}
-	if (ddaPlots.length > 0) {
-		showDDAPlots(ddaPlots)
+	if (ddaFeatures.length > 0) {
+		showDDAFeatures(ddaFeatures, ddaMode)
 	}
 	if (fitBoundsPins.length > 0) {
 		fitMapToPins(fitBoundsPins, 0)
 	}
+}
+
+function setSourceData(sourceId: string, data: GeoJSON.FeatureCollection) {
+	if (!map) return
+	const source = map.getSource(sourceId) as maplibregl.GeoJSONSource | undefined
+	if (source) {
+		source.setData(data)
+	} else {
+		map.addSource(sourceId, { type: 'geojson', data })
+	}
+}
+
+function bindRadarHandlers() {
+	if (!map || radarHandlersBound) return
+	radarHandlersBound = true
+
+	map.on('click', PROJECT_LAYER_ID, (event) => {
+		const id = Number(event.features?.[0]?.properties?.project_id)
+		if (Number.isFinite(id)) onProjectSelect?.(id)
+	})
+
+	map.on('click', AREA_LAYER_ID, (event) => {
+		const areaName = event.features?.[0]?.properties?.area_name
+		if (typeof areaName === 'string' && areaName) onAreaSelect?.(areaName)
+	})
+
+	map.on('mouseenter', PROJECT_LAYER_ID, (event) => {
+		if (!map) return
+		map.getCanvas().style.cursor = 'pointer'
+		const props = event.features?.[0]?.properties
+		if (!props) return
+		hoverPopup?.remove()
+		hoverPopup = new maplibregl.Popup({
+			closeButton: false,
+			closeOnClick: false,
+			className: 'building-popup',
+			offset: 14
+		})
+			.setLngLat(event.lngLat)
+			.setHTML(
+				`<div style="min-width:180px;font-size:12px;line-height:1.45;">` +
+					`<div style="font-weight:700;color:var(--color-map-popup-fg);">${props.project_name}</div>` +
+					`<div style="color:var(--color-map-popup-muted);margin-top:2px;">${props.area_name} · ${props.stage}</div>` +
+					`<div style="color:var(--color-map-popup-muted);margin-top:6px;">${Number(
+						props.no_of_units || 0
+					).toLocaleString()} units · ${Number(
+						props.sales_transaction_count_12m || 0
+					).toLocaleString()} sales txns</div>` +
+					`</div>`
+			)
+			.addTo(map)
+	})
+
+	map.on('mouseleave', PROJECT_LAYER_ID, () => {
+		if (!map) return
+		map.getCanvas().style.cursor = ''
+		hoverPopup?.remove()
+		hoverPopup = null
+	})
+
+	map.on('mouseenter', AREA_LAYER_ID, () => {
+		if (map) map.getCanvas().style.cursor = 'pointer'
+	})
+	map.on('mouseleave', AREA_LAYER_ID, () => {
+		if (map) map.getCanvas().style.cursor = ''
+	})
+}
+
+function syncRadarLayers() {
+	if (!map || !map.isStyleLoaded()) return
+
+	const projectFeatures = showProjectPins
+		? projectPins
+				.filter((project) => hasValidLngLat(project.longitude, project.latitude))
+				.map((project) => projectFeature(project))
+		: []
+	const areaFeatures = showAreaBubbles
+		? areaBubbles
+				.map((area, index) => areaFeature(area, index))
+				.filter((feature): feature is GeoJSON.Feature => feature !== null)
+		: []
+
+	setSourceData(AREA_SOURCE_ID, featureCollection(areaFeatures))
+	setSourceData(PROJECT_SOURCE_ID, featureCollection(projectFeatures))
+
+	if (!map.getLayer(AREA_LAYER_ID)) {
+		map.addLayer({
+			id: AREA_LAYER_ID,
+			type: 'circle',
+			source: AREA_SOURCE_ID,
+			paint: {
+				'circle-radius': ['get', 'radius'],
+				'circle-color': '#0f766e',
+				'circle-opacity': 0.14,
+				'circle-stroke-color': '#0f766e',
+				'circle-stroke-width': 1.5,
+				'circle-stroke-opacity': 0.36
+			}
+		})
+	}
+	if (!map.getLayer(AREA_LABEL_LAYER_ID)) {
+		map.addLayer({
+			id: AREA_LABEL_LAYER_ID,
+			type: 'symbol',
+			source: AREA_SOURCE_ID,
+			filter: ['==', ['get', 'show_label'], true],
+			layout: {
+				'text-field': ['get', 'area_name'],
+				'text-size': 11,
+				'text-offset': [0, 1.8],
+				'text-anchor': 'top'
+			},
+			paint: {
+				'text-color': resolvedTheme === 'dark' ? '#e2e8f0' : '#0f172a',
+				'text-halo-color': resolvedTheme === 'dark' ? '#020617' : '#ffffff',
+				'text-halo-width': 1.2
+			}
+		})
+	}
+	if (!map.getLayer(PROJECT_HALO_LAYER_ID)) {
+		map.addLayer({
+			id: PROJECT_HALO_LAYER_ID,
+			type: 'circle',
+			source: PROJECT_SOURCE_ID,
+			paint: {
+				'circle-radius': ['+', ['get', 'radius'], 3],
+				'circle-color': ['get', 'color'],
+				'circle-opacity': 0.12
+			}
+		})
+	}
+	if (!map.getLayer(PROJECT_LAYER_ID)) {
+		map.addLayer({
+			id: PROJECT_LAYER_ID,
+			type: 'circle',
+			source: PROJECT_SOURCE_ID,
+			paint: {
+				'circle-radius': ['get', 'radius'],
+				'circle-color': ['get', 'color'],
+				'circle-opacity': 0.78,
+				'circle-stroke-color': resolvedTheme === 'dark' ? '#020617' : '#ffffff',
+				'circle-stroke-width': 1.6,
+				'circle-stroke-opacity': 0.92
+			}
+		})
+	}
+	if (!map.getLayer(PROJECT_SELECTED_LAYER_ID)) {
+		map.addLayer({
+			id: PROJECT_SELECTED_LAYER_ID,
+			type: 'circle',
+			source: PROJECT_SOURCE_ID,
+			filter: ['==', ['get', 'project_id'], selectedProjectId ?? -1],
+			paint: {
+				'circle-radius': ['+', ['get', 'radius'], 7],
+				'circle-color': 'rgba(255,255,255,0)',
+				'circle-stroke-color': '#f59e0b',
+				'circle-stroke-width': 3,
+				'circle-stroke-opacity': 0.95
+			}
+		})
+	}
+
+	map.setFilter(PROJECT_SELECTED_LAYER_ID, ['==', ['get', 'project_id'], selectedProjectId ?? -1])
+	map.setFilter(AREA_LABEL_LAYER_ID, [
+		'any',
+		['==', ['get', 'show_label'], true],
+		['==', ['get', 'area_name'], selectedAreaName ?? '']
+	])
+	bindRadarHandlers()
 }
 
 // Draw area polygon on map
@@ -254,6 +678,7 @@ function addBuildingMarkers(pins: GeoPin[]) {
 	_clearBuildingMarkers()
 
 	pins.forEach((pin) => {
+		if (!hasValidLngLat(pin.longitude, pin.latitude)) return
 		const currentMap = map
 		if (!currentMap) return
 		const markerEl = document.createElement('div')
@@ -299,6 +724,7 @@ export function addProjectMarker(
 	longitude: number
 ) {
 	if (!map) return
+	if (!hasValidLngLat(longitude, latitude)) return
 	currentProjectMarkerInput = { projectId, projectName, latitude, longitude }
 
 	// Remove previous marker if exists
@@ -370,11 +796,15 @@ export function flyToProject(
 	// Clear previous markers
 	clearMarkers()
 
-	// Fly to location
-	map.flyTo({ center: [longitude, latitude], zoom, duration: 2000 })
+	const hasProjectCoordinates = hasValidLngLat(longitude, latitude)
 
-	// Add main project marker
-	addProjectMarker(projectId, projectName, latitude, longitude)
+	if (hasProjectCoordinates) {
+		// Fly to location
+		map.flyTo({ center: [longitude, latitude], zoom, duration: 2000 })
+
+		// Add main project marker
+		addProjectMarker(projectId, projectName, latitude, longitude)
+	}
 
 	if ((areaPolygon?.coordinates?.length ?? 0) > 0 && areaPolygon) {
 		drawAreaPolygon(areaPolygon)
@@ -383,16 +813,32 @@ export function flyToProject(
 	// Add building pin markers if available
 	if (geoPins && geoPins.length > 0) {
 		addBuildingMarkers(geoPins)
+		if (!hasProjectCoordinates) fitMapToPins(geoPins)
 	}
 }
 
 export function flyToLocation(lng: number, lat: number, zoom: number = 14) {
+	if (!hasValidLngLat(lng, lat)) return
 	map?.flyTo({ center: [lng, lat], zoom })
 }
 
 function handleDDAPlotClick(e: maplibregl.MapLayerMouseEvent) {
 	const props = e.features?.[0]?.properties
 	if (!props || !map) return
+	if (props.feature_type === 'outline') {
+		new maplibregl.Popup({ className: 'building-popup' })
+			.setLngLat(e.lngLat)
+			.setHTML(
+				`<div style="font-size:12px;line-height:1.6;">` +
+					`<div style="font-weight:700;color:var(--color-map-popup-fg);">${props.name}</div>` +
+					`<div style="color:var(--color-map-popup-muted);margin-top:2px;">${Number(
+						props.plot_count || 0
+					).toLocaleString()} plots · ${props.kind}</div>` +
+					`</div>`
+			)
+			.addTo(map)
+		return
+	}
 	const areaSqm = Number(props.plot_area_sqm)
 	const areaLabel =
 		areaSqm >= 1000 ? `${(areaSqm / 1000).toFixed(1)}k sqm` : `${Math.round(areaSqm)} sqm`
@@ -418,79 +864,140 @@ function handleDDAPlotMouseLeave() {
 function _unbindDDAHandlers() {
 	if (!map) return
 	try {
-		map.off('click', 'dda-plots-fill', handleDDAPlotClick)
-		map.off('mouseenter', 'dda-plots-fill', handleDDAPlotMouseEnter)
-		map.off('mouseleave', 'dda-plots-fill', handleDDAPlotMouseLeave)
+		map.off('click', DDA_FILL_LAYER_ID, handleDDAPlotClick)
+		map.off('mouseenter', DDA_FILL_LAYER_ID, handleDDAPlotMouseEnter)
+		map.off('mouseleave', DDA_FILL_LAYER_ID, handleDDAPlotMouseLeave)
 	} catch (_e) {
 		// Handlers may not be bound yet.
 	}
+	ddaHandlersBound = false
 }
 
 function _bindDDAHandlers() {
-	if (!map) return
-	_unbindDDAHandlers()
-	map.on('click', 'dda-plots-fill', handleDDAPlotClick)
-	map.on('mouseenter', 'dda-plots-fill', handleDDAPlotMouseEnter)
-	map.on('mouseleave', 'dda-plots-fill', handleDDAPlotMouseLeave)
+	if (!map || ddaHandlersBound || !map.getLayer(DDA_FILL_LAYER_ID)) return
+	ddaHandlersBound = true
+	map.on('click', DDA_FILL_LAYER_ID, handleDDAPlotClick)
+	map.on('mouseenter', DDA_FILL_LAYER_ID, handleDDAPlotMouseEnter)
+	map.on('mouseleave', DDA_FILL_LAYER_ID, handleDDAPlotMouseLeave)
 }
 
 function _removeDDALayers() {
 	if (!map) return
 	try {
 		_unbindDDAHandlers()
-		if (map.getLayer('dda-plots-fill')) map.removeLayer('dda-plots-fill')
-		if (map.getLayer('dda-plots-outline')) map.removeLayer('dda-plots-outline')
-		if (map.getSource('dda-plots')) map.removeSource('dda-plots')
+		if (map.getLayer(DDA_OUTLINE_CORE_LAYER_ID)) map.removeLayer(DDA_OUTLINE_CORE_LAYER_ID)
+		if (map.getLayer(DDA_FILL_LAYER_ID)) map.removeLayer(DDA_FILL_LAYER_ID)
+		if (map.getLayer(DDA_OUTLINE_LAYER_ID)) map.removeLayer(DDA_OUTLINE_LAYER_ID)
+		if (map.getSource(DDA_SOURCE_ID)) map.removeSource(DDA_SOURCE_ID)
 	} catch (_e) {}
 }
 
-export function showDDAPlots(plots: DdaPlotFeature[]) {
+function ddaBeforeLayerId() {
+	if (!map) return undefined
+	if (map.getLayer(PROJECT_HALO_LAYER_ID)) return PROJECT_HALO_LAYER_ID
+	if (map.getLayer('area-polygon-layer')) return 'area-polygon-layer'
+	return undefined
+}
+
+function applyDDAPaint(mode: DdaLayerMode) {
 	if (!map) return
-	const requestedPlots = [...plots]
-	currentDDAPlots = requestedPlots
+	if (map.getLayer(DDA_FILL_LAYER_ID)) {
+		map.setPaintProperty(DDA_FILL_LAYER_ID, 'fill-opacity', mode === 'parcels' ? 0.3 : 0.045)
+	}
+	if (map.getLayer(DDA_OUTLINE_LAYER_ID)) {
+		map.setPaintProperty(DDA_OUTLINE_LAYER_ID, 'line-color', '#fff7ed')
+		map.setPaintProperty(DDA_OUTLINE_LAYER_ID, 'line-width', [
+			'interpolate',
+			['linear'],
+			['zoom'],
+			10,
+			mode === 'parcels' ? 1.4 : 1.7,
+			16,
+			mode === 'parcels' ? 4.4 : 2.8
+		])
+		map.setPaintProperty(DDA_OUTLINE_LAYER_ID, 'line-opacity', mode === 'parcels' ? 0.86 : 0.46)
+	}
+	if (map.getLayer(DDA_OUTLINE_CORE_LAYER_ID)) {
+		map.setPaintProperty(
+			DDA_OUTLINE_CORE_LAYER_ID,
+			'line-color',
+			mode === 'parcels' ? '#92400e' : '#d97706'
+		)
+		map.setPaintProperty(DDA_OUTLINE_CORE_LAYER_ID, 'line-width', [
+			'interpolate',
+			['linear'],
+			['zoom'],
+			10,
+			mode === 'parcels' ? 0.75 : 0.7,
+			16,
+			mode === 'parcels' ? 2.3 : 1.4
+		])
+		map.setPaintProperty(
+			DDA_OUTLINE_CORE_LAYER_ID,
+			'line-opacity',
+			mode === 'parcels' ? 0.94 : 0.58
+		)
+	}
+}
+
+function ensureDDALayers(mode: DdaLayerMode) {
+	if (!map) return
+	if (!map.getSource(DDA_SOURCE_ID)) {
+		map.addSource(DDA_SOURCE_ID, { type: 'geojson', data: featureCollection([]) })
+	}
+
+	const beforeId = ddaBeforeLayerId()
+	if (!map.getLayer(DDA_FILL_LAYER_ID)) {
+		map.addLayer(
+			{
+				id: DDA_FILL_LAYER_ID,
+				type: 'fill',
+				source: DDA_SOURCE_ID,
+				paint: { 'fill-color': ['get', 'color'], 'fill-opacity': 0 }
+			},
+			beforeId
+		)
+	}
+	if (!map.getLayer(DDA_OUTLINE_LAYER_ID)) {
+		map.addLayer(
+			{
+				id: DDA_OUTLINE_LAYER_ID,
+				type: 'line',
+				source: DDA_SOURCE_ID,
+				paint: { 'line-color': '#fff7ed', 'line-width': 1, 'line-opacity': 0 }
+			},
+			beforeId
+		)
+	}
+	if (!map.getLayer(DDA_OUTLINE_CORE_LAYER_ID)) {
+		map.addLayer(
+			{
+				id: DDA_OUTLINE_CORE_LAYER_ID,
+				type: 'line',
+				source: DDA_SOURCE_ID,
+				paint: { 'line-color': '#d97706', 'line-width': 1, 'line-opacity': 0 }
+			},
+			beforeId
+		)
+	}
+
+	applyDDAPaint(mode)
+	_bindDDAHandlers()
+}
+
+export function showDDAFeatures(features: DdaMapFeature[], mode: DdaLayerMode) {
+	if (!map) return
+	const requestedFeatures = [...features]
+	const renderVersion = ++ddaRenderVersion
+	currentDDAFeatures = requestedFeatures
+	currentDDAMode = mode
 
 	const render = () => {
 		if (!map) return
-		if (currentDDAPlots !== requestedPlots) return
-		_removeDDALayers()
-		if (requestedPlots.length === 0) return
-
-		const geojson: GeoJSON.FeatureCollection = {
-			type: 'FeatureCollection',
-			features: requestedPlots.map((plot) => ({
-				type: 'Feature',
-				geometry: { type: 'Polygon', coordinates: [plot.coordinates] },
-				properties: {
-					plot_number: plot.plot_number,
-					plot_area_sqm: plot.plot_area_sqm,
-					community_name: plot.community_name
-				}
-			}))
-		}
-
-		map.addSource('dda-plots', { type: 'geojson', data: geojson })
-
-		const beforeId = map.getLayer('area-polygon-layer') ? 'area-polygon-layer' : undefined
-		map.addLayer(
-			{
-				id: 'dda-plots-fill',
-				type: 'fill',
-				source: 'dda-plots',
-				paint: { 'fill-color': '#f59e0b', 'fill-opacity': 0.12 }
-			},
-			beforeId
-		)
-		map.addLayer(
-			{
-				id: 'dda-plots-outline',
-				type: 'line',
-				source: 'dda-plots',
-				paint: { 'line-color': '#d97706', 'line-width': 1.5, 'line-opacity': 0.8 }
-			},
-			beforeId
-		)
-
-		_bindDDAHandlers()
+		if (renderVersion !== ddaRenderVersion) return
+		ensureDDALayers(mode)
+		const source = map.getSource(DDA_SOURCE_ID) as maplibregl.GeoJSONSource | undefined
+		source?.setData(ddaFeatureCollection(requestedFeatures))
 	}
 
 	if (map.isStyleLoaded()) {
@@ -500,8 +1007,13 @@ export function showDDAPlots(plots: DdaPlotFeature[]) {
 	}
 }
 
+export function showDDAPlots(plots: DdaPlotFeature[]) {
+	showDDAFeatures(plots, 'parcels')
+}
+
 export function hideDDAPlots() {
-	currentDDAPlots = []
+	ddaRenderVersion += 1
+	currentDDAFeatures = []
 	_removeDDALayers()
 }
 

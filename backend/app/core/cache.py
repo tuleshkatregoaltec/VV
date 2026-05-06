@@ -66,7 +66,7 @@ class RedisCache:
             return
 
         try:
-            payload = json.dumps(value, default=self._json_default)
+            payload = json.dumps(value, default=self._json_default, allow_nan=False)
             await self.redis.set(key, payload, ex=self._resolve_expire(expire))
             logger.debug("Cache set for key: %s", key)
         except Exception as e:

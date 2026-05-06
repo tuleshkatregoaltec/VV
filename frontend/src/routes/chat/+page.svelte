@@ -58,7 +58,7 @@ $effect(() => {
 			>
 				<ConversationSidebar
 					bind:selectedId={selectedConversationId}
-					onSelect={(id) => (selectedConversationId = id)}
+					onSelect={selectConversation}
 				/>
 			</aside>
 

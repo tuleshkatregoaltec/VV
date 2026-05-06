@@ -1,29 +1,23 @@
 <script lang="ts">
+import { createQuery } from '@tanstack/svelte-query'
 import { Building2, GitCompare } from 'lucide-svelte'
-import { onMount } from 'svelte'
 import type { ProjectSearchItem } from '$lib/api/analytics'
-import type { ProjectSearchResult, SearchSelection } from '$lib/api/projects'
-import { projects as projectsAPI } from '$lib/api/projects'
+import type { SearchSelection } from '$lib/api/projects'
 import AnalyticsCompareView from '$lib/components/analytics/AnalyticsCompareView.svelte'
 import ProjectPanel from '$lib/components/analytics/ProjectPanel.svelte'
 import PageContainer from '$lib/components/layout/PageContainer.svelte'
 import ProjectSearchInput from '$lib/components/projects/ProjectSearchInput.svelte'
+import { projectQueries } from '$lib/queries/projects'
 
 const DUBAI_MARKET_SELECTION: ProjectSearchItem = { name: 'Dubai', filter_type: 'market' }
 
 let projectA = $state<ProjectSearchItem | null>({ ...DUBAI_MARKET_SELECTION })
 let projectB = $state<ProjectSearchItem | null>(null)
 let comparing = $state(false)
-let allProjects = $state<ProjectSearchResult[]>([])
 let isDubaiMarketSelected = $derived(projectA?.filter_type === 'market')
 
-onMount(async () => {
-	try {
-		allProjects = await projectsAPI.list()
-	} catch (error) {
-		console.error('Failed to load analytics project search list:', error)
-	}
-})
+const allProjectsQuery = createQuery(() => projectQueries.list())
+const allProjects = $derived(allProjectsQuery.data ?? [])
 
 function toggleCompare() {
 	comparing = !comparing

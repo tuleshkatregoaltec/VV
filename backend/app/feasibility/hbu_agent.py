@@ -1,23 +1,26 @@
 import asyncio
 import json
 import logging
+import math
 import re
 from dataclasses import dataclass
 from datetime import date
 
 from pydantic import BaseModel, Field
 from pydantic_ai import Agent, RunContext
-from pydantic_ai.models.openai import OpenAIChatModel
-from pydantic_ai.providers.openrouter import OpenRouterProvider
 from pydantic_ai.usage import UsageLimits
 
 from app.area.service import get_area_detail
-from app.config import settings
+from app.core.openrouter import create_openrouter_model
+from app.feasibility.assumption_defaults import (
+    deterministic_default_updates,
+    sanitize_generated_assumptions,
+)
 from app.feasibility.models import (
     BtrUnitConfig,
     DevelopmentModel,
     FeasibilityAssumptions,
-    FeasibilityPaymentPlan,
+    FeasibilityUnitConfig,
     PlotDetails,
     PlotResearch,
     RentalComparableProject,
@@ -28,15 +31,16 @@ from app.feasibility.models import (
 from app.feasibility.queries import (
     build_off_plan_pricing_confidence,
     build_off_plan_unit_benchmarks,
+    get_comparable_data,
     get_land_sale_evidence,
     get_market_pricing,
     get_off_plan_pricing_curve,
     get_rental_rates_by_size_band,
+    normalize_unit_type,
     rank_plot_comparables,
     resolve_market_area,
 )
 from app.feasibility.queries import get_plot_details as fetch_plot_details
-from app.feasibility.workbook import compute_feasibility_summary, compute_feasibility_workbook
 from app.project.service import get_project_market_snapshot
 
 logger = logging.getLogger(__name__)
@@ -60,6 +64,16 @@ def _parse_max_coverage(max_coverage: str | None) -> float | None:
         return float(digits) if digits else None
     except ValueError:
         return None
+
+
+def _parse_podium_floors(max_height: str | None) -> int | None:
+    if not max_height:
+        return None
+    match = re.search(r"(\d+)\s*p\b", max_height.lower())
+    if not match:
+        return None
+    podium_floors = int(match.group(1))
+    return podium_floors if podium_floors > 0 else None
 
 
 def _percentile(values: list[float], pct: float) -> float | None:
@@ -88,6 +102,7 @@ def _land_anchor_summary(
     land_sales_evidence: list,
     plot_area_sqm: float,
     area_name: str = "",
+    far: float = 0.0,
 ) -> str:
     p25, p50, p75 = _land_price_band_psqm(land_sales_evidence)
     if p25 is None or p50 is None or p75 is None:
@@ -103,6 +118,12 @@ def _land_anchor_summary(
         f"Dubai market sanity band ({area_name or 'default'}): AED {low_sqft:,.0f}-{high_sqft:,.0f}/sqft GFA "
         f"(base case ~AED {base_sqft:,.0f}/sqft GFA). Clip obvious outliers to this range."
     )
+    density_floor_sqft = _density_adjusted_gfa_floor_sqft(area_name, far)
+    if far >= 12 and density_floor_sqft > low_sqft:
+        lines.append(
+            f"High-density rights sanity floor: AED {density_floor_sqft:,.0f}/sqft GFA "
+            "because very high-FAR / unlimited-height plots should not price at the low end of the band."
+        )
 
     # GFA-normalised rates (if available)
     gfa_prices = sorted(
@@ -135,6 +156,12 @@ def _effective_land_price_psqm(assumptions: FeasibilityAssumptions, plot_area_sq
     return assumptions.landPricePsqm
 
 
+def _effective_land_acquisition_cost_aed(assumptions: FeasibilityAssumptions) -> float:
+    if assumptions.landAcquisitionCostOverrideAed and assumptions.landAcquisitionCostOverrideAed > 0:
+        return round(assumptions.landAcquisitionCostOverrideAed, 2)
+    return round(max(assumptions.plotAreaSqm, 0) * max(assumptions.landPricePsqm, 0), 2)
+
+
 # Dubai per-sqft-GFA market reference bands, used as sanity bounds rather than hard floors.
 _DUBAI_GFA_RATE_BANDS: list[tuple[list[str], tuple[float, float, float]]] = [
     (["downtown", "difc", "palm jumeirah", "palm"], (500.0, 700.0, 900.0)),
@@ -159,6 +186,60 @@ _DUBAI_GFA_RATE_BANDS: list[tuple[list[str], tuple[float, float, float]]] = [
 ]
 _DEFAULT_GFA_RATE_BAND_SQFT = (120.0, 180.0, 250.0)
 
+CONSTRUCTION_COST_BENCHMARKS_AED_PSQM_BUA: dict[Usage, tuple[tuple[int, float], ...]] = {
+    "residential": ((10, 4200.0), (20, 4700.0), (35, 5200.0), (999, 5600.0)),
+    "mixed_use": ((10, 4700.0), (20, 5200.0), (35, 5700.0), (999, 6200.0)),
+    "commercial": ((10, 5200.0), (20, 5700.0), (35, 6400.0), (999, 7000.0)),
+    "unknown": ((10, 4200.0), (20, 4700.0), (35, 5200.0), (999, 5600.0)),
+}
+
+CONSTRUCTION_COST_ADJUSTMENT_BANDS: dict[Usage, tuple[float, float, float]] = {
+    "residential": (0.9, 1.05, 1.15),
+    "mixed_use": (0.9, 1.08, 1.18),
+    "commercial": (0.9, 1.1, 1.2),
+    "unknown": (0.9, 1.05, 1.15),
+}
+BTS_TARGET_GSA_GFA_RATIO = 0.80
+BTS_MAX_GSA_GFA_RATIO = 0.82
+
+_MASSING_BENCHMARKS: dict[tuple[Usage, str], dict[str, float]] = {
+    ("residential", "low_rise"): {
+        "coverage_pct": 60.0,
+        "max_floorplate_sqm": 3500.0,
+        "min_floorplate_sqm": 1200.0,
+    },
+    ("residential", "mid_rise"): {
+        "coverage_pct": 45.0,
+        "max_floorplate_sqm": 2400.0,
+        "min_floorplate_sqm": 900.0,
+    },
+    ("residential", "tower"): {
+        "coverage_pct": 45.0,
+        "max_floorplate_sqm": 2000.0,
+        "min_floorplate_sqm": 700.0,
+    },
+    ("mixed_use", "mid_rise"): {
+        "coverage_pct": 44.0,
+        "max_floorplate_sqm": 2400.0,
+        "min_floorplate_sqm": 900.0,
+    },
+    ("mixed_use", "tower"): {
+        "coverage_pct": 44.0,
+        "max_floorplate_sqm": 2000.0,
+        "min_floorplate_sqm": 700.0,
+    },
+    ("commercial", "mid_rise"): {
+        "coverage_pct": 42.0,
+        "max_floorplate_sqm": 2400.0,
+        "min_floorplate_sqm": 900.0,
+    },
+    ("commercial", "tower"): {
+        "coverage_pct": 42.0,
+        "max_floorplate_sqm": 2000.0,
+        "min_floorplate_sqm": 700.0,
+    },
+}
+
 
 def _gfa_rate_band_sqft(area_name: str) -> tuple[float, float, float]:
     area_lower = (area_name or "").lower()
@@ -166,6 +247,15 @@ def _gfa_rate_band_sqft(area_name: str) -> tuple[float, float, float]:
         if any(kw in area_lower for kw in keywords):
             return band
     return _DEFAULT_GFA_RATE_BAND_SQFT
+
+
+def _density_adjusted_gfa_floor_sqft(area_name: str, far: float) -> float:
+    low_sqft, base_sqft, high_sqft = _gfa_rate_band_sqft(area_name)
+    if far >= 20:
+        return high_sqft
+    if far >= 12:
+        return base_sqft
+    return low_sqft
 
 
 def _gfa_sqft_to_plot_psqm(rate_sqft_gfa: float, far: float) -> float:
@@ -188,8 +278,9 @@ def _land_price_anchor_psqm(
     if far <= 0:
         return p50
 
-    low_sqft, base_sqft, high_sqft = _gfa_rate_band_sqft(area_name)
-    low_psqm = _gfa_sqft_to_plot_psqm(low_sqft, far)
+    _, base_sqft, high_sqft = _gfa_rate_band_sqft(area_name)
+    floor_sqft = _density_adjusted_gfa_floor_sqft(area_name, far)
+    low_psqm = _gfa_sqft_to_plot_psqm(floor_sqft, far)
     base_psqm = _gfa_sqft_to_plot_psqm(base_sqft, far)
     high_psqm = _gfa_sqft_to_plot_psqm(high_sqft, far)
 
@@ -208,9 +299,8 @@ def _land_price_anchor_psqm(
     if raw_anchor is None:
         return base_psqm
 
-    # Allow evidence to sit below the market band if DLD supports it, but do not allow high-FAR
-    # or commercial outliers to push the seed above the bracket high.
-    floor = min(low_psqm, p25 or low_psqm)
+    # Enforce both DLD evidence and the GFA-normalized market sanity floor.
+    floor = max(low_psqm, p25 or low_psqm)
     return round(min(max(raw_anchor, floor), high_psqm), 2)
 
 
@@ -222,13 +312,216 @@ def _gfa_rate_floor_psqm_plot(area_name: str, far: float) -> float | None:
     """
     if not far or far <= 0:
         return None
-    return _gfa_sqft_to_plot_psqm(_gfa_rate_band_sqft(area_name)[0], far)
+    return _gfa_sqft_to_plot_psqm(_density_adjusted_gfa_floor_sqft(area_name, far), far)
 
 
 def _gfa_rate_cap_psqm_plot(area_name: str, far: float) -> float | None:
     if not far or far <= 0:
         return None
     return _gfa_sqft_to_plot_psqm(_gfa_rate_band_sqft(area_name)[2], far)
+
+
+def _construction_cost_benchmark_psqm_bua(usage: Usage, max_storeys: int | None) -> float:
+    storeys = max(max_storeys or 0, 0)
+    for max_band_storeys, benchmark in CONSTRUCTION_COST_BENCHMARKS_AED_PSQM_BUA.get(
+        usage, CONSTRUCTION_COST_BENCHMARKS_AED_PSQM_BUA["unknown"]
+    ):
+        if storeys <= max_band_storeys:
+            return benchmark
+    return CONSTRUCTION_COST_BENCHMARKS_AED_PSQM_BUA["unknown"][-1][1]
+
+
+def _construction_cost_guidance(
+    usage: Usage,
+    max_storeys: int | None,
+) -> str:
+    benchmark = _construction_cost_benchmark_psqm_bua(usage, max_storeys)
+    low_factor, normal_high_factor, exceptional_high_factor = CONSTRUCTION_COST_ADJUSTMENT_BANDS.get(
+        usage, CONSTRUCTION_COST_ADJUSTMENT_BANDS["unknown"]
+    )
+    normal_low = round(benchmark * low_factor / 50) * 50
+    normal_high = round(benchmark * normal_high_factor / 50) * 50
+    exceptional_high = round(benchmark * exceptional_high_factor / 50) * 50
+    storey_label = f"{max_storeys} storeys" if max_storeys else "unknown height"
+    return (
+        f"Construction hard-cost anchor ({usage}, {storey_label}): "
+        f"AED {benchmark:,.0f}/sqm BUA scaffold benchmark. Treat this as the base-case final "
+        f"assumption unless the evidence or plot complexity says otherwise. A normal initial "
+        f"study should generally sit around AED {normal_low:,.0f}-{normal_high:,.0f}/sqm BUA. "
+        f"Only use up to roughly AED {exceptional_high:,.0f}/sqm BUA for clear premium, unusual "
+        f"basement/podium, superstructure, or mixed-use complexity."
+    )
+
+
+def _building_form(max_storeys: int | None) -> str:
+    storeys = max_storeys or 12
+    if storeys <= 8:
+        return "low_rise"
+    if storeys <= 20:
+        return "mid_rise"
+    return "tower"
+
+
+def _height_allows_unlimited(max_height: str | None) -> bool:
+    return "unlimited" in (max_height or "").lower()
+
+
+def _massing_benchmark(usage: Usage, max_storeys: int | None) -> dict[str, float]:
+    form = _building_form(max_storeys)
+    normalized_usage: Usage = (
+        usage if usage in {"residential", "commercial", "mixed_use"} else "residential"
+    )
+    return (
+        _MASSING_BENCHMARKS.get((normalized_usage, form))
+        or _MASSING_BENCHMARKS.get((normalized_usage, "mid_rise"))
+        or _MASSING_BENCHMARKS[("residential", "mid_rise")]
+    )
+
+
+def _inferred_storeys_from_gfa(plot: PlotDetails, usage: Usage) -> int | None:
+    if plot.plot_area_sqm <= 0 or plot.max_gfa_sqm <= 0:
+        return None
+    benchmark = _massing_benchmark(usage, None)
+    regulatory_coverage = _parse_max_coverage(plot.max_coverage)
+    target_coverage = min(
+        regulatory_coverage if regulatory_coverage and regulatory_coverage > 0 else benchmark["coverage_pct"],
+        benchmark["coverage_pct"],
+    )
+    if target_coverage <= 0:
+        return None
+    footprint = plot.plot_area_sqm * (target_coverage / 100)
+    return max(1, math.ceil(plot.max_gfa_sqm / footprint)) if footprint > 0 else None
+
+
+def _effective_storeys(plot: PlotDetails, usage: Usage) -> int | None:
+    parsed = _parse_max_storeys(plot.max_height)
+    if not _height_allows_unlimited(plot.max_height):
+        return parsed
+    inferred = _inferred_storeys_from_gfa(plot, usage)
+    if inferred is None:
+        return parsed
+    podium_floors = _parse_podium_floors(plot.max_height) or 5
+    amenity_floors = 1
+    return max(inferred + podium_floors + amenity_floors, parsed or 0)
+
+
+def _massing_scaffold_updates(plot: PlotDetails, usage: Usage) -> dict[str, float]:
+    max_storeys = _effective_storeys(plot, usage) or 0
+    benchmark = _massing_benchmark(usage, max_storeys)
+    regulatory_coverage = _parse_max_coverage(plot.max_coverage)
+    podium_floors = float(_parse_podium_floors(plot.max_height) or 5)
+    amenity_floors = 1.0
+    residential_floors = (
+        float(max(max_storeys - int(podium_floors) - int(amenity_floors), 1))
+        if max_storeys > 0
+        else 30.0
+    )
+    target_coverage = min(
+        regulatory_coverage if regulatory_coverage and regulatory_coverage > 0 else benchmark["coverage_pct"],
+        benchmark["coverage_pct"],
+    )
+    covered_footprint_sqm = max(plot.plot_area_sqm * (target_coverage / 100), 0)
+    building_count = max(
+        1,
+        math.ceil(covered_footprint_sqm / benchmark["max_floorplate_sqm"]),
+    )
+    return {
+        "targetCoveragePct": round(target_coverage, 1),
+        "targetBuildingCount": float(building_count),
+        "maxEfficientTowerFloorplateSqm": benchmark["max_floorplate_sqm"],
+        "minEfficientTowerFloorplateSqm": benchmark["min_floorplate_sqm"],
+        "podiumFloors": podium_floors,
+        "residentialFloors": residential_floors,
+        "amenityRoofFloors": amenity_floors,
+    }
+
+
+def _massing_guidance(plot: PlotDetails, usage: Usage) -> str:
+    updates = _massing_scaffold_updates(plot, usage)
+    max_storeys = _effective_storeys(plot, usage)
+    form = _building_form(max_storeys)
+    target_saleable_area_sqm = plot.max_gfa_sqm * 0.8 if plot.max_gfa_sqm > 0 else 0.0
+    typical_unit_count_low = (
+        math.floor(target_saleable_area_sqm / 90) if target_saleable_area_sqm > 0 else 0
+    )
+    typical_unit_count_high = (
+        math.ceil(target_saleable_area_sqm / 75) if target_saleable_area_sqm > 0 else 0
+    )
+    return (
+        f"Massing scaffold ({form}): target coverage {updates['targetCoveragePct']:,.1f}%, "
+        f"target building count {updates['targetBuildingCount']:,.0f}, efficient floorplate range "
+        f"{updates['minEfficientTowerFloorplateSqm']:,.0f}-{updates['maxEfficientTowerFloorplateSqm']:,.0f} sqm. "
+        f"At the default 80% NSA efficiency, unit config saleable area should target about "
+        f"{target_saleable_area_sqm:,.0f} sqm. A typical apartment mix implies roughly "
+        f"{typical_unit_count_low:,.0f}-{typical_unit_count_high:,.0f} total units before any "
+        "studio-heavy adjustment. Before returning, calculate sum(units × avgSizeSqm) across "
+        "unitConfigs or btrUnitConfigs and keep it within about 95-102% of this target; do not "
+        "exceed the target materially by adding too many small units. "
+        "Use these as a broad Dubai-wide test-fit starting point. Adjust only if the plot scale, "
+        "GIS coverage, max storeys, or comparable project scale supports it."
+    )
+
+
+def _comparable_unit_mix_summary(comparable_data) -> str:
+    if not comparable_data or not comparable_data.unit_mix:
+        return "No aggregate unit-mix comparable evidence was available."
+    lines = [
+        f"Aggregate comparable unit mix ({comparable_data.project_name}, {comparable_data.area_name}):"
+    ]
+    for row in comparable_data.unit_mix:
+        price = f", median AED {row.avg_price_sqm:,.0f}/sqm" if row.avg_price_sqm else ""
+        lines.append(
+            f"  {row.type}: {row.percentage:.1f}% mix, {row.count} units, "
+            f"avg size {row.avg_size_sqm:,.0f} sqm{price}"
+        )
+    return "\n".join(lines)
+
+
+def _bts_pricing_guidance(plot: PlotDetails, market_pricing, off_plan_benchmarks) -> str:
+    if not off_plan_benchmarks:
+        return "No off-plan unit benchmark evidence was available; use existing-stock medians conservatively."
+
+    existing_by_type = {
+        normalize_unit_type(row.unit_type): row.median_price_sqm for row in market_pricing or []
+    }
+    far = plot.far or (
+        plot.max_gfa_sqm / plot.plot_area_sqm if plot.plot_area_sqm > 0 else 0.0
+    )
+    if plot.max_gfa_sqm >= 150_000 or far >= 25:
+        scale_label = "very large high-FAR"
+        low_haircut, high_haircut = 0.10, 0.15
+    elif plot.max_gfa_sqm >= 75_000 or far >= 12:
+        scale_label = "large high-FAR"
+        low_haircut, high_haircut = 0.08, 0.12
+    else:
+        scale_label = "typical scale"
+        low_haircut, high_haircut = 0.05, 0.10
+
+    lines = [
+        f"BTS scale-adjusted pricing scaffold ({scale_label}): use roughly "
+        f"{low_haircut:.0%}-{high_haircut:.0%} below relevant off-plan benchmarks for "
+        "the highest-volume unit types, cross-checked against existing-stock medians.",
+        "Use the lower half of the band for the unit types with the deepest release volume; "
+        "scarcer large units can sit nearer the upper half when evidence supports it.",
+    ]
+    for benchmark in off_plan_benchmarks:
+        unit_type = normalize_unit_type(benchmark.unit_type)
+        if unit_type not in {"studio", "1br", "2br", "3br", "4br", "4br+"}:
+            continue
+        off_plan_rate = benchmark.selected_price_sqm
+        low_rate = off_plan_rate * (1 - high_haircut)
+        high_rate = off_plan_rate * (1 - low_haircut)
+        existing_rate = existing_by_type.get(unit_type)
+        existing_text = ""
+        if existing_rate:
+            low_rate = max(low_rate, existing_rate * 1.05)
+            high_rate = max(high_rate, low_rate)
+            existing_text = f", existing median AED {existing_rate:,.0f}/sqm"
+        lines.append(
+            f"  {unit_type}: off-plan benchmark AED {off_plan_rate:,.0f}/sqm{existing_text}; "
+            f"first-pass band AED {low_rate:,.0f}-{high_rate:,.0f}/sqm."
+        )
+    return "\n".join(lines)
 
 
 def _enforce_land_price_floor(
@@ -247,13 +540,13 @@ def _enforce_land_price_floor(
         return assumptions, None
 
     floor_candidates = [f for f in [p25, gfa_floor] if f is not None]
-    effective_floor = min(floor_candidates) if floor_candidates else None
+    effective_floor = max(floor_candidates) if floor_candidates else None
     effective_cap = gfa_cap
     bounded_price = current_land_price
     reason: str | None = None
 
     if effective_floor is not None and bounded_price < effective_floor:
-        bounded_price = p50 or effective_floor
+        bounded_price = max(p50 or effective_floor, effective_floor)
         reason = "below the supported land evidence / market sanity range"
     if effective_cap is not None and bounded_price > effective_cap:
         bounded_price = effective_cap
@@ -284,42 +577,6 @@ def _enforce_land_price_floor(
     )
 
 
-def _normalize_capital_stack(
-    plot: PlotDetails, assumptions: FeasibilityAssumptions
-) -> tuple[FeasibilityAssumptions, str | None]:
-    workbook = compute_feasibility_workbook(plot, assumptions, study=None)
-    required_uses = round(workbook.costs.total_costs_incl_vat_aed, 2)
-    requested_debt = max(assumptions.debtFundingAed, 0)
-    if requested_debt <= 0 and assumptions.debtToCostRatio > 0:
-        requested_debt = round(
-            required_uses * min(max(assumptions.debtToCostRatio, 0), 1),
-            2,
-        )
-
-    normalized_debt = round(min(requested_debt, required_uses), 2)
-    normalized_equity = round(max(required_uses - normalized_debt, 0), 2)
-
-    if (
-        abs((assumptions.debtFundingAed or 0) - normalized_debt) < 1
-        and abs((assumptions.equityFundingAed or 0) - normalized_equity) < 1
-    ):
-        return assumptions, None
-
-    warning = (
-        "Debt and sponsor equity were rebalanced to a non-negative capital stack so "
-        "sources cover uses in the underwriting view."
-    )
-    return (
-        assumptions.model_copy(
-            update={
-                "debtFundingAed": normalized_debt,
-                "equityFundingAed": normalized_equity,
-            }
-        ),
-        warning,
-    )
-
-
 def _annual_rent_to_monthly_rent(annual_rate_psqm: float | None, avg_size_sqm: float) -> int:
     if not annual_rate_psqm or annual_rate_psqm <= 0 or avg_size_sqm <= 0:
         return 0
@@ -332,15 +589,15 @@ def _mirror_btr_to_unit_configs(assumptions: FeasibilityAssumptions) -> Feasibil
         return assumptions
 
     unit_configs = [
-        {
-            "id": cfg.id or f"btr-{idx + 1}",
-            "label": cfg.label or f"Rental {idx + 1}",
-            "units": cfg.units,
-            "avgSizeSqm": cfg.avgSizeSqm,
-            "sellingRatePsqm": 0.0,
-            "typicalFloor": 0,
-            "parkingRatio": cfg.parkingRatio,
-        }
+        FeasibilityUnitConfig(
+            id=cfg.id or f"btr-{idx + 1}",
+            label=cfg.label or f"Rental {idx + 1}",
+            units=cfg.units,
+            avgSizeSqm=cfg.avgSizeSqm,
+            sellingRatePsqm=0.0,
+            typicalFloor=0,
+            parkingRatio=cfg.parkingRatio,
+        )
         for idx, cfg in enumerate(btr_unit_configs)
     ]
     return assumptions.model_copy(
@@ -456,15 +713,15 @@ def _ensure_btr_assumptions(
             "salesAgentFeesOverrideAed": 0,
             "btrHoldPeriodYears": assumptions.btrHoldPeriodYears or 10,
             "btrLeaseUpPaceUnitsPerMonth": assumptions.btrLeaseUpPaceUnitsPerMonth or 20,
-            "btrStabilizedOccupancyPct": assumptions.btrStabilizedOccupancyPct or 95,
-            "btrFreeRentMonths": assumptions.btrFreeRentMonths or 2,
-            "btrAnnualRentGrowthPct": assumptions.btrAnnualRentGrowthPct or 3,
+            "btrStabilizedOccupancyPct": assumptions.btrStabilizedOccupancyPct or 97,
+            "btrFreeRentMonths": assumptions.btrFreeRentMonths or 0,
+            "btrAnnualRentGrowthPct": assumptions.btrAnnualRentGrowthPct or 5,
             "btrMarketRentGrowthPct": assumptions.btrMarketRentGrowthPct
             or assumptions.btrAnnualRentGrowthPct
-            or 3,
+            or 5,
             "btrRenewalRentGrowthPct": assumptions.btrRenewalRentGrowthPct
             or assumptions.btrAnnualRentGrowthPct
-            or 3,
+            or 5,
             "btrGeneralVacancyPct": assumptions.btrGeneralVacancyPct or 5,
             "btrPropertyManagementPct": assumptions.btrPropertyManagementPct or 5,
             "btrRepairsMaintenancePsqm": assumptions.btrRepairsMaintenancePsqm or 50,
@@ -476,20 +733,18 @@ def _ensure_btr_assumptions(
             "btrParkingIncomeAed": assumptions.btrParkingIncomeAed or 0,
             "btrAncillaryIncomeAed": assumptions.btrAncillaryIncomeAed or 0,
             "btrAncillaryGrowthPct": assumptions.btrAncillaryGrowthPct or 3,
-            "btrStabilizedFreeRentMonths": assumptions.btrStabilizedFreeRentMonths or 2,
+            "btrStabilizedFreeRentMonths": assumptions.btrStabilizedFreeRentMonths or 0,
             "btrOpExGrowthPct": assumptions.btrOpExGrowthPct or 3,
             "btrDevCostEscalationPct": assumptions.btrDevCostEscalationPct
             or assumptions.midPointInflationPct
             or 4,
-            "btrTerminalGrowthPct": assumptions.btrTerminalGrowthPct
-            or assumptions.btrAnnualRentGrowthPct
-            or 3,
+            "btrTerminalGrowthPct": assumptions.btrTerminalGrowthPct or 4,
             "btrCreditLossPct": assumptions.btrCreditLossPct or 1,
             "btrPayrollPsqm": assumptions.btrPayrollPsqm or 40,
             "btrGeneralAdminPct": assumptions.btrGeneralAdminPct or 1,
             "btrContractServicesPsqm": assumptions.btrContractServicesPsqm or 25,
             "btrModelUnits": assumptions.btrModelUnits or 1,
-            "btrExitCapRatePct": assumptions.btrExitCapRatePct or 7,
+            "btrExitCapRatePct": assumptions.btrExitCapRatePct or 5.5,
             "btrExitCostPct": assumptions.btrExitCostPct or 6,
             "btrPermDebtLtvPct": assumptions.btrPermDebtLtvPct or 65,
             "btrPermDebtRatePct": assumptions.btrPermDebtRatePct or 6,
@@ -498,7 +753,7 @@ def _ensure_btr_assumptions(
             "btrPermDebtPointsPct": assumptions.btrPermDebtPointsPct or 1,
             "btrPermDebtIoYears": assumptions.btrPermDebtIoYears or 1,
             "btrDscrMinimum": assumptions.btrDscrMinimum or 1.25,
-            "btrRefiCapRatePct": assumptions.btrRefiCapRatePct or 7,
+            "btrRefiCapRatePct": assumptions.btrRefiCapRatePct or 5.5,
         }
     )
     return _mirror_btr_to_unit_configs(updated)
@@ -508,11 +763,104 @@ def _ensure_bts_assumptions(assumptions: FeasibilityAssumptions) -> FeasibilityA
     return assumptions.model_copy(update={"developmentModel": "build_to_sell_residential"})
 
 
+def _apply_bts_acquisition_cost_defaults(
+    assumptions: FeasibilityAssumptions,
+) -> FeasibilityAssumptions:
+    land_cost = _effective_land_acquisition_cost_aed(assumptions)
+    return assumptions.model_copy(
+        update={
+            "brokerageFeeAed": round(land_cost * assumptions.brokeragePct, 2),
+            "legalDdCostAed": round(land_cost * assumptions.legalDdPct, 2),
+        }
+    )
+
+
+def _bts_unit_config_area_sqm(unit_configs: list[FeasibilityUnitConfig]) -> float:
+    return sum(max(row.units, 0) * max(row.avgSizeSqm, 0) for row in unit_configs)
+
+
+def _normalize_bts_saleable_efficiency(
+    assumptions: FeasibilityAssumptions,
+) -> tuple[FeasibilityAssumptions, str | None]:
+    if assumptions.maxGfaSqm <= 0 or not assumptions.unitConfigs:
+        return assumptions, None
+
+    current_area = _bts_unit_config_area_sqm(assumptions.unitConfigs)
+    cap_area = assumptions.maxGfaSqm * BTS_MAX_GSA_GFA_RATIO
+    if current_area <= cap_area:
+        return assumptions, None
+
+    target_area = assumptions.maxGfaSqm * BTS_TARGET_GSA_GFA_RATIO
+    target_floor_area = assumptions.maxGfaSqm * 0.79
+    scale = target_area / current_area if current_area > 0 else 1.0
+    scaled_rows: list[FeasibilityUnitConfig] = []
+    fractional_remainders: dict[int, float] = {}
+
+    for index, row in enumerate(assumptions.unitConfigs):
+        if row.units <= 0 or row.avgSizeSqm <= 0:
+            scaled_rows.append(row)
+            continue
+        scaled_units = row.units * scale
+        units = max(1, math.floor(scaled_units))
+        fractional_remainders[index] = scaled_units - units
+        scaled_rows.append(row.model_copy(update={"units": units}))
+
+    scaled_area = _bts_unit_config_area_sqm(scaled_rows)
+
+    while scaled_area > cap_area:
+        candidates = sorted(
+            (
+                (index, row)
+                for index, row in enumerate(scaled_rows)
+                if row.units > 0 and row.avgSizeSqm > 0
+            ),
+            key=lambda item: item[1].avgSizeSqm,
+            reverse=True,
+        )
+        if not candidates:
+            break
+        index, row = candidates[0]
+        scaled_rows[index] = row.model_copy(update={"units": row.units - 1})
+        scaled_area = _bts_unit_config_area_sqm(scaled_rows)
+
+    add_order = sorted(
+        fractional_remainders,
+        key=lambda index: (
+            fractional_remainders[index],
+            scaled_rows[index].avgSizeSqm,
+        ),
+        reverse=True,
+    )
+    while scaled_area < target_area:
+        added = False
+        for index in add_order:
+            row = scaled_rows[index]
+            if scaled_area + row.avgSizeSqm <= target_area or (
+                scaled_area < target_floor_area and scaled_area + row.avgSizeSqm <= cap_area
+            ):
+                scaled_rows[index] = row.model_copy(update={"units": row.units + 1})
+                scaled_area += row.avgSizeSqm
+                added = True
+                if scaled_area >= target_area:
+                    break
+        if not added:
+            break
+
+    current_ratio = (current_area / assumptions.maxGfaSqm) * 100
+    normalized_ratio = (_bts_unit_config_area_sqm(scaled_rows) / assumptions.maxGfaSqm) * 100
+    warning = (
+        f"BTS unit mix was scaled from {current_ratio:.1f}% to {normalized_ratio:.1f}% "
+        "GSA/GFA. Generated BTS GSA/GFA must not exceed 82%; target is roughly 79-80%."
+    )
+    return assumptions.model_copy(update={"unitConfigs": scaled_rows}), warning
+
+
 def build_assumptions_scaffold(
     plot: PlotDetails,
     usage: Usage,
     land_price_anchor_psqm: float | None = None,
     development_model: DevelopmentModel = "build_to_sell_residential",
+    generation_date: date | None = None,
 ) -> FeasibilityAssumptions:
     inferred_far = (
         plot.far
@@ -530,68 +878,27 @@ def build_assumptions_scaffold(
         if plot.plot_area_sqm >= 8000 or plot.max_gfa_sqm >= 25000
         else 1
     )
-    default_construction_cost = (
-        5200 if usage == "commercial" else 4700 if usage == "mixed_use" else 4200
-    )
-    return FeasibilityAssumptions(
-        usage=usage,
-        plotAreaSqm=plot.plot_area_sqm,
-        maxGfaSqm=plot.max_gfa_sqm,
-        maxCoveragePct=_parse_max_coverage(plot.max_coverage) or 0.0,
-        maxStoreys=_parse_max_storeys(plot.max_height) or 0,
-        maxFar=round(inferred_far, 4),
-        numberOfTowers=tower_count,
-        numberOfFloors=_parse_max_storeys(plot.max_height) or 20,
-        buaMultiplier=1.3,
-        nsaEfficiencyPct=80,
-        landPricePsqm=round(land_price_anchor_psqm or 0, 2),
-        constructionCostPsqmBua=default_construction_cost,
-        designSupervisionPct=7 if usage == "commercial" else 6.5 if usage == "mixed_use" else 6,
-        salesAgentFeePct=0 if development_model == "build_to_rent_residential" else 5,
-        marketingCostPct=0 if development_model == "build_to_rent_residential" else 1,
-        contingencyPct=5,
-        financeRatePct=9,
-        arrangementFeePct=1,
-        commitmentFeePct=0.5,
-        debtToCostRatio=0.55,
-        presaleThresholdPct=35,
-        escrowRetentionPct=5,
-        standardParkingRatio=1,
-        largeUnitThresholdSqm=150,
-        largeUnitParkingRatio=2,
-        demolitionEnabled=False,
-        salesCommencementDate="2026-06-01",
-        salesPeriodMonths=18,
-        demolitionEnablingDate="2026-04-01",
-        constructionDate="2026-07-01",
-        handoverDate="2029-01-01",
-        landAcquisitionCostOverrideAed=0,
-        designSupervisionCostOverrideAed=0,
-        constructionCostOverrideAed=0,
-        demolitionCostAed=0,
-        infrastructureCostAed=8_000_000,
-        governmentFeesAed=5_000_000,
-        marketingCostOverrideAed=0,
-        salesAgentFeesOverrideAed=0,
-        masterCommunityFeesAed=3_500_000,
-        ffeOsePreopeningCostAed=0,
-        contingencyCostOverrideAed=0,
-        midPointInflationPct=4,
-        vatPct=5,
-        debtFundingAed=0,
-        equityFundingAed=0,
-        brokerageFeeAed=0,
-        legalDdCostAed=0,
-        landAcquisitionDate="2026-03-17",
-        landLoanLtvPct=65,
-        eiborRatePct=4.85,
-        landLoanSpreadBps=365,
-        constructionLoanSpreadBps=465,
-        preHandoverMilestoneDate="2028-07-01",
-        debtRepaymentMode="bullet_at_handover",
-        unitConfigs=[],
-        paymentPlan=FeasibilityPaymentPlan(depositPct=20, constructionPct=40, handoverPct=40),
-        developmentModel=development_model,
+    max_storeys = _effective_storeys(plot, usage) or 0
+    default_construction_cost = _construction_cost_benchmark_psqm_bua(usage, max_storeys)
+    massing_updates = _massing_scaffold_updates(plot, usage)
+    return FeasibilityAssumptions.model_validate(
+        {
+            **deterministic_default_updates(generation_date),
+            **massing_updates,
+            "usage": usage,
+            "plotAreaSqm": plot.plot_area_sqm,
+            "maxGfaSqm": plot.max_gfa_sqm,
+            "maxCoveragePct": _parse_max_coverage(plot.max_coverage) or 0.0,
+            "maxStoreys": max_storeys,
+            "maxFar": round(inferred_far, 4),
+            "numberOfTowers": tower_count,
+            "numberOfFloors": max_storeys or 20,
+            "landPricePsqm": round(land_price_anchor_psqm or 0, 2),
+            "constructionCostPsqmBua": default_construction_cost,
+            "constructionCostOverrideAed": 0,
+            "unitConfigs": [],
+            "developmentModel": development_model,
+        }
     )
 
 
@@ -656,10 +963,7 @@ def _tool_usage(ctx: RunContext[HBUSeedDeps], usage: Usage) -> Usage:
     )
 
 
-model = OpenAIChatModel(
-    model_name=settings.DEFAULT_CHAT_MODEL,
-    provider=OpenRouterProvider(api_key=settings.OPENROUTER_API_KEY),
-)
+model = create_openrouter_model()
 
 _SYSTEM_PROMPT = """\
 You are a Dubai real estate development advisor producing an initial highest-and-best-use (HBU) \
@@ -688,9 +992,12 @@ If the model is BTR, call these tools in one parallel batch:
   • get_plot_land_sales           — recent land transactions near this plot size (land cost anchor)
 
 ━━━ PHASE 2 — FORM ASSUMPTIONS ━━━
-Using the research evidence, decide on the best set of assumptions for this plot. You have full \
-freedom over every assumption — use the scaffold as a starting point and override anything where \
-the evidence or your judgement supports a better estimate.
+Using the research evidence, decide on the market and product assumptions for this plot. Use the \
+scaffold as context, but focus your judgement on land cost, hard-cost rate, unit mix, sales rates, \
+and BTR rents where applicable. Use the massing scaffold for target coverage, building count, and \
+efficient floorplate unless plot or comparable scale supports a better physical test-fit. The workbook \
+will control deterministic mechanics such as financing, fees, VAT, payment plan, and BTR operating \
+defaults after your draft.
 
 Key things to reason through:
   • Land cost: anchor to comparable land sales AND the per-GFA-sqm sanity check. The LAND COST ANCHOR
@@ -709,38 +1016,45 @@ Key things to reason through:
   • Project tier and unit mix: match the scale and product type to what the location and GFA support.
     Design the unit mix to maximise GFA utilisation and appeal to the likely buyer profile.
     Consider supply pipeline when choosing unit types to avoid saturated segments.
+  • BTS saleable efficiency: calculate GSA/GFA as sum(unitConfigs.units × avgSizeSqm) / maxGfaSqm.
+    A normal Dubai apartment feasibility should be roughly 79-80%. It cannot be above 82%.
+    Do not seed an 86%+ saleable/GFA ratio; reduce unit counts or increase average sizes instead.
   • For BTS selling rates: off-plan pricing is primary; existing stock sets a floor. Apply a conservative
-    haircut to reflect launch uncertainty.
+    haircut to reflect launch uncertainty, absorption depth, and the number of similar units released.
+    For large high-FAR schemes, the highest-volume unit types usually need a wider discount to the
+    selected off-plan benchmark than boutique schemes; do not mechanically copy the benchmark.
   • For BTR rents: use the size-band rental rates in the market context as your primary anchor — each band
     gives you a per-sqm/yr rate matched to unit size. Convert to monthly rent per config using:
     monthlyRentAed = median_rent_psm_annual × avgSizeSqm / 12. Fall back to the blended area rate only
-    if no band data exists. Do not use sales evidence, GDV, or gross sales to justify BTR pricing.
+    if no band data exists. For a new, professionally managed purpose-built rental product, a modest
+    5-15% premium to current-stock size-band medians can be reasonable when location and amenities
+    support it. Do not use sales evidence, GDV, or gross sales to justify BTR pricing.
   • BTR unit mix labels: always use standard Dubai unit type names — "Studio", "1BR", "2BR", "3BR", "4BR+".
     Never use generic names like "Rental 1". Every btrUnitConfig must have a non-zero avgSizeSqm and
     a non-zero units count — configs with zero units or zero size are invalid. Match avgSizeSqm to the
     typical Dubai size for that type: Studio ~42 sqm, 1BR ~70 sqm, 2BR ~110 sqm, 3BR ~160 sqm.
-  • Construction cost: scale to tower height and product complexity.
-  • Timeline: be realistic about land-to-launch lead time, presale threshold, build period, and
-    site plan expiry. Flag renewal risk if handover is close to expiry.
-  • Funding for BTS: set debtFundingAed and equityFundingAed to whatever capital structure makes sense
-    given the cost base and off-plan proceeds profile. Ensure sources cover uses.
+  • Construction cost: use the usage/storey scaffold rate and construction-cost guidance as the base-case
+    benchmark. Only adjust it when product complexity supports the adjustment. Do not inflate hard cost
+    to premium/luxury levels just because the plot is in a high-value area.
+  • Return sanity: do not force a result, but a normal initial residential BTS/BTR study should usually
+    land with unlevered and levered IRR in the broad 0–30% range. If returns would be much higher, the
+    usual problem is understated land or construction cost. If returns would be deeply negative, first
+    check that construction cost was not set above the guidance without a clear reason; sale/rent pricing
+    being too low is a less common cause.
+  • Timeline: flag schedule or site-plan-expiry risks in warnings, but do not tune workbook schedule dates.
+  • Funding for BTS: discuss funding risk in the summary/warnings when relevant. Do not tune debtFundingAed,
+    equityFundingAed, debt spreads, LTV/LTC, fees, VAT, or payment plan.
   • Funding for BTR: think like CRE underwriting. Focus on stabilized occupancy, rental rate, NOI, exit cap,
-    and permanent debt constraints. You may still set debtFundingAed and equityFundingAed, but do not use
-    sale proceeds or presales as the underwriting basis.
+    and permanent debt constraints in your narrative, but do not tune the workbook's BTR operating defaults,
+    permanent debt defaults, hold period, debtFundingAed, or equityFundingAed.
 
-━━━ PHASE 3 — VERIFY & ITERATE ━━━
-If the model is BTS, call compute_workbook with your assumptions. Review the result:
-  • Check modeled_gfa_sqm fits within the zoning cap.
-  • Check the funding gap — adjust debtFundingAed and equityFundingAed until sources cover uses.
-  • If the returns or programme look off, revise the assumptions that are driving the issue and
-    call compute_workbook again. Iterate as many times as needed to reach a coherent result.
-  • If the workbook validation has unresolved issues after your final call, include them in warnings.
-
-If the model is BTR, do not call compute_workbook. It is BTS-only. Instead:
-  • Verify the unit mix and monthly rents are internally coherent.
-  • Make sure the BTR assumptions are complete enough for a downstream rental operating model:
-    `btrUnitConfigs`, occupancy, lease-up, rent growth, vacancy, OpEx, cap rates, and perm debt metrics.
-  • Keep `unitConfigs` aligned with the BTR mix for area and parking math, but do not assign sales rates.
+━━━ PHASE 3 — SINGLE-PASS SANITY CHECK ━━━
+Before returning, check the draft once:
+  • Unit config saleable area should fit within the scaffold saleable-area target.
+  • Land and construction assumptions should sit inside the broad scaffold ranges unless evidence explains why.
+  • BTS unit pricing should be evidence-led and should not simply copy the highest off-plan benchmark.
+  • BTR rents should be internally coherent by unit size and backed by size-band rental evidence.
+  • Do not iterate with tools; return the best single-pass assumptions and flag unresolved risks in warnings.
 
 ━━━ OUTPUT ━━━
   headline:    one-line project description
@@ -768,9 +1082,9 @@ _BTS_PREFETCHED_SYSTEM_PROMPT = """\
 You are a Dubai real estate development advisor producing an initial build-to-sell (BTS) \
 feasibility study for a specific GIS plot. Your output seeds a developer's financial workbook.
 
-Use only the plot dossier, BTS market context, land cost anchor, and default assumption scaffold \
-included in the user message. Do not call tools; all required BTS context has already been \
-prefetched before this run.
+Use only the plot dossier, BTS market context, land cost anchor, construction cost anchor, and \
+default assumption scaffold included in the user message. Do not call tools; all required BTS \
+context has already been prefetched before this run.
 
 This is a Build-to-Sell residential model:
   • Use off-plan pricing as the primary sales-rate anchor.
@@ -778,9 +1092,27 @@ This is a Build-to-Sell residential model:
   • Use comparable projects to calibrate product tier, unit mix, and supply risk.
   • Anchor land cost to comparable land sales and the per-GFA-sqm sanity check.
   • Set a realistic residential unit mix that fits the max GFA and target buyer profile.
-  • Set construction cost, soft costs, timeline, payment plan, debt, and equity assumptions.
-  • Funding values should be coherent, but the server will run final workbook normalization after \
-    your draft.
+    Calculate GSA/GFA as sum(unitConfigs.units × avgSizeSqm) / maxGfaSqm. It should usually be
+    roughly 79-80% and must never exceed 82%. Do not seed an 86%+ saleable/GFA ratio.
+  • Use the massing scaffold for targetCoveragePct, targetBuildingCount, floor count, and efficient
+    floorplate assumptions. These are deterministic physical defaults; focus your judgement on unit
+    mix, pricing, land, and construction rate.
+  • Set the construction hard-cost rate from the construction-cost guidance. Treat the scaffold benchmark
+    as the base case, not a placeholder; use the upper normal range for high-FAR, unlimited-height,
+    deep-basement, heavy-podium, or otherwise complex tower schemes.
+  • Selling rates should usually sit below the selected off-plan benchmark for a first-pass feasibility
+    seed. A 5-10% launch/absorption haircut is normal for smaller schemes. For very large high-FAR
+    schemes, the highest-volume unit types often need roughly an 8-12% haircut to the relevant
+    off-plan benchmark, while still checking that pricing remains above existing-stock medians when a
+    new-build premium is justified. Do not haircut every unit type mechanically.
+  • Treat scaffold landPricePsqm as the bounded base-case anchor. For very high-FAR or unlimited-height
+    plots with sparse/conflicting land evidence, use the upper half of the Dubai GFA land band.
+  • Return sanity: do not force a result, but a normal initial residential BTS study should usually land
+    with project and equity IRR in the broad 0–30% range. If returns are too high, revisit land cost and
+    hard cost. If returns are too low, first check whether hard cost was set above the guidance without
+    a clear project-specific reason; do not inflate selling rates without evidence.
+  • Do not tune finance spreads, LTV/LTC, fees, VAT, payment plan, schedule dates, or debt/equity sizing;
+    deterministic workbook defaults will control those after your draft.
 
 Return:
   headline:    one-line project description
@@ -808,17 +1140,34 @@ _BTR_SYSTEM_PROMPT = """\
 You are a Dubai CRE build-to-rent underwriting advisor producing an initial HBU feasibility study \
 for a specific GIS plot.
 
-Use only the plot dossier, BTR rental market context, land cost anchor, and default assumption \
-scaffold included in the user message. Do not call tools; all required BTR context has already \
-been prefetched before this run.
+Use only the plot dossier, BTR rental market context, land cost anchor, construction cost anchor, \
+and default assumption scaffold included in the user message. Do not call tools; all required BTR \
+context has already been prefetched before this run.
 
 This is a Build-to-Rent model, not Build-to-Sell:
   • Do not use off-plan sales pricing, GDV, presales, or escrow logic to justify rental assumptions.
-  • Anchor rents to the rental size-band evidence when available.
+  • Anchor rents to the rental size-band evidence when available. The size-band median often reflects
+    heterogeneous current stock; for a new, professionally managed purpose-built rental product, use a
+    modest 5-15% premium where location, amenities, and comparable quality support it.
   • Every `btrUnitConfig` must use standard Dubai labels: "Studio", "1BR", "2BR", "3BR", "4BR+".
   • Every `btrUnitConfig` must have non-zero units, non-zero avgSizeSqm, and non-zero monthlyRentAed.
   • Keep `unitConfigs` aligned with `btrUnitConfigs` for area and parking math, but do not assign sales rates.
-  • Focus on stabilized occupancy, rent growth, vacancy, OpEx, cap rates, permanent debt, and hold-period return logic.
+    The sum of units × avgSizeSqm should be close to the scaffold saleable-area target, ideally
+    about 95-102% of max GFA × NSA efficiency, and must not materially exceed that target.
+  • Use the massing scaffold for targetCoveragePct, targetBuildingCount, floor count, and efficient
+    floorplate assumptions. These are deterministic physical defaults; focus your judgement on unit
+    mix, rents, land, and construction rate.
+  • Set the construction hard-cost rate from the construction-cost guidance. Treat the scaffold benchmark
+    as the base case, not a placeholder; use the upper normal range for high-FAR, unlimited-height,
+    deep-basement, heavy-podium, or otherwise complex tower schemes.
+  • Treat scaffold landPricePsqm as the bounded base-case anchor. For very high-FAR or unlimited-height
+    plots with sparse/conflicting land evidence, use the upper half of the Dubai GFA land band.
+  • Focus your judgement on unit mix and monthly rent. Discuss occupancy, OpEx, cap rates, permanent debt,
+    and hold-period risks in the narrative, but deterministic workbook defaults will control those inputs.
+  • Return sanity: do not force a result, but a normal initial residential BTR study should usually land
+    with unlevered and levered IRR in the broad 0–30% range. If returns are too high, the likely issue is
+    understated land or construction cost. If returns are deeply negative after land and hard cost are
+    inside guidance, rents are probably too conservative for a new managed product.
 
 Return:
   headline:    one-line project description
@@ -1014,35 +1363,13 @@ async def get_plot_land_sales(
     return [row.model_dump() for row in rows]
 
 
-@hbu_seed_agent.tool
-async def compute_workbook(
-    ctx: RunContext[HBUSeedDeps], assumptions: FeasibilityAssumptions
-) -> dict:
-    """Run the financial model against the provided assumptions and return a summary.
-
-    Returns: {success, summary} where summary contains gross_revenue_aed, total_costs_incl_vat_aed,
-    gross_profit_aed, gross_margin_pct, off_plan_proceeds_aed, project_irr_pct, equity_irr_pct,
-    modeled_gfa_sqm, total_units, funding_gap_aed, and a validation object.
-    Use total_costs_incl_vat_aed and off_plan_proceeds_aed to set debt and equity funding amounts.
-    """
-    if ctx.deps.development_model == "build_to_rent_residential":
-        return {
-            "success": False,
-            "error": "compute_workbook is BTS-only. Do not use it for build_to_rent_residential.",
-        }
-    workbook = compute_feasibility_workbook(ctx.deps.plot_details, assumptions, study=None)
-    summary = compute_feasibility_summary(workbook)
-    return {
-        "success": True,
-        "summary": summary.model_dump(mode="json"),
-    }
-
-
 async def generate_hbu_study(
     plot_number: str,
     usage_override: Usage | None = None,
     development_model: DevelopmentModel = "build_to_sell_residential",
 ) -> PlotResearch | None:
+    development_model = development_model or "build_to_sell_residential"
+    generation_date = date.today()
     details = await fetch_plot_details(plot_number)
     if details is None:
         return None
@@ -1081,6 +1408,7 @@ async def generate_hbu_study(
         usage,
         land_price_anchor_psqm=land_price_anchor,
         development_model=development_model,
+        generation_date=generation_date,
     )
 
     market_pricing = []
@@ -1091,6 +1419,7 @@ async def generate_hbu_study(
     rental_market_summary: RentalMarketSummary | None = None
     rental_comparables: list[RentalComparableProject] = []
     size_band_rates: list[RentalRateBySizeBand] = []
+    comparable_unit_mix = None
 
     if development_model == "build_to_rent_residential":
         # Fetch area summary, ranked comps, and size-band rates in parallel
@@ -1136,6 +1465,9 @@ async def generate_hbu_study(
                     rationale=list(row.rationale),
                 )
             )
+        comparable_project_ids = [row.project_id for row in ranked_rental_comps[:5]]
+        if comparable_project_ids:
+            comparable_unit_mix = await get_comparable_data(comparable_project_ids)
     else:
         market_pricing, pricing_evidence, off_plan_market_pricing = await asyncio.gather(
             get_market_pricing(market_area, usage, stage="existing"),
@@ -1152,6 +1484,9 @@ async def generate_hbu_study(
         off_plan_confidence = build_off_plan_pricing_confidence(
             off_plan_market_pricing, target_horizon_months
         )
+        comparable_project_ids = [row.project_id for row in pricing_evidence[:5]]
+        if comparable_project_ids:
+            comparable_unit_mix = await get_comparable_data(comparable_project_ids)
 
     market_context_block = (
         (
@@ -1222,6 +1557,12 @@ async def generate_hbu_study(
             )
         )
     )
+    bts_pricing_guidance_block = (
+        f"=== BTS PRICING GUIDANCE ===\n"
+        f"{_bts_pricing_guidance(details, market_pricing, off_plan_benchmarks)}\n\n"
+        if development_model != "build_to_rent_residential"
+        else ""
+    )
 
     prompt = (
         f"=== PLOT DOSSIER ===\n"
@@ -1231,12 +1572,22 @@ async def generate_hbu_study(
         f"=== MARKET AREA ===\n"
         f"Use {market_area} as the canonical transaction area for pricing and land evidence.\n\n"
         f"{market_context_block}\n\n"
+        f"{bts_pricing_guidance_block}"
         f"=== LAND COST ANCHOR ===\n"
-        f"{_land_anchor_summary(land_sales_evidence, details.plot_area_sqm, market_area)}\n\n"
+        f"{_land_anchor_summary(land_sales_evidence, details.plot_area_sqm, market_area, target_far or 0.0)}\n\n"
+        f"=== CONSTRUCTION COST ANCHOR ===\n"
+        f"{_construction_cost_guidance(usage, _effective_storeys(details, usage))}\n\n"
+        f"=== MASSING / UNIT MIX EVIDENCE ===\n"
+        f"{_massing_guidance(details, usage)}\n\n"
+        f"{_comparable_unit_mix_summary(comparable_unit_mix)}\n\n"
         f"=== DEFAULT ASSUMPTION SCAFFOLD ===\n"
         f"Computed from the plot's GFA, height, and inferred usage. "
-        f"Override any value where evidence supports a better estimate. "
-        f"Unit configs, BTR configs when applicable, and funding amounts must be set by you.\n"
+        f"Use it as context for market/product judgement. "
+        f"Seed unit configs, BTR configs when applicable, land cost, sales/rent rates, "
+        f"and construction hard-cost rate. Workbook defaults will reset financing, fees, VAT, "
+        f"payment plan, BTR operating defaults, and schedule dates. The backend will preserve "
+        f"the scaffolded physical test-fit assumptions for target coverage, building count, "
+        f"floor count, and efficient floorplate.\n"
         f"{json.dumps(scaffold.model_dump(mode='json'), indent=2)}\n\n"
         f"Research the market, form your assumptions, and return the HBU study for "
         f"plot {plot_number} (usage: {usage}, development model: {development_model})."
@@ -1268,6 +1619,17 @@ async def generate_hbu_study(
         if development_model == "build_to_rent_residential"
         else _ensure_bts_assumptions(draft.assumptions)
     )
+    draft.assumptions = sanitize_generated_assumptions(
+        draft.assumptions,
+        scaffold=scaffold,
+        generation_date=generation_date,
+        development_model=development_model,
+    )
+    saleable_efficiency_warning = None
+    if development_model != "build_to_rent_residential":
+        draft.assumptions, saleable_efficiency_warning = _normalize_bts_saleable_efficiency(
+            draft.assumptions
+        )
 
     draft.assumptions, land_floor_warning = _enforce_land_price_floor(
         draft.assumptions,
@@ -1276,18 +1638,15 @@ async def generate_hbu_study(
         area_name=market_area or "",
         far=target_far or 0.0,
     )
-    capital_stack_warning = None
     if development_model != "build_to_rent_residential":
-        draft.assumptions, capital_stack_warning = _normalize_capital_stack(
-            details, draft.assumptions
-        )
+        draft.assumptions = _apply_bts_acquisition_cost_defaults(draft.assumptions)
 
     warnings = list(details.warnings)
     warnings.extend(item for item in draft.warnings if item not in warnings)
     if land_floor_warning and land_floor_warning not in warnings:
         warnings.append(land_floor_warning)
-    if capital_stack_warning and capital_stack_warning not in warnings:
-        warnings.append(capital_stack_warning)
+    if saleable_efficiency_warning and saleable_efficiency_warning not in warnings:
+        warnings.append(saleable_efficiency_warning)
     if development_model != "build_to_rent_residential" and not market_pricing:
         warnings.append("No segmented existing transaction pricing was found for this plot area.")
     if development_model != "build_to_rent_residential" and not off_plan_market_pricing:

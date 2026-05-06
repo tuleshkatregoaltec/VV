@@ -71,6 +71,7 @@ async def test_me_returns_owner_subscription_context(api_client, monkeypatch):
         "email": "owner@example.com",
         "first_name": "Ada",
         "last_name": "Lovelace",
+        "avatar_url": None,
         "organization_id": "org-1",
         "organization_name": "Acme",
         "role": "owner",

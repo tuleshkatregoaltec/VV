@@ -13,6 +13,7 @@ class UserAppMetadata(BaseModel):
 class UserMetadata(BaseModel):
     first_name: str = Field(default="")
     last_name: str = Field(default="")
+    avatar_url: str | None = Field(default=None)
 
 
 class AuthenticatedUser(BaseUser):
@@ -53,6 +54,10 @@ class AuthenticatedUser(BaseUser):
     @property
     def last_name(self) -> str:
         return self._user_metadata.last_name
+
+    @property
+    def avatar_url(self) -> str | None:
+        return self._user_metadata.avatar_url
 
     @property
     def daily_token_limit(self) -> int:

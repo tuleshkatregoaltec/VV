@@ -1886,6 +1886,215 @@
 				}
 			}
 		},
+		"/api/v1/listings": {
+			"get": {
+				"tags": ["listings", "listings"],
+				"summary": "List Listings",
+				"description": "List locally imported PropertyFinder listings for the demo.",
+				"operationId": "listings-list_listings",
+				"parameters": [
+					{
+						"name": "mode",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"enum": ["sale", "rent"],
+							"type": "string",
+							"default": "rent",
+							"title": "Mode"
+						}
+					},
+					{
+						"name": "limit",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer",
+							"maximum": 120,
+							"minimum": 1,
+							"default": 48,
+							"title": "Limit"
+						}
+					},
+					{
+						"name": "offset",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer",
+							"minimum": 0,
+							"default": 0,
+							"title": "Offset"
+						}
+					},
+					{
+						"name": "search",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "string",
+									"maxLength": 160
+								},
+								{
+									"type": "null"
+								}
+							],
+							"title": "Search"
+						}
+					},
+					{
+						"name": "area",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "string",
+									"maxLength": 160
+								},
+								{
+									"type": "null"
+								}
+							],
+							"title": "Area"
+						}
+					},
+					{
+						"name": "property_type",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "string",
+									"maxLength": 120
+								},
+								{
+									"type": "null"
+								}
+							],
+							"title": "Property Type"
+						}
+					},
+					{
+						"name": "bedrooms",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "string",
+									"maxLength": 40
+								},
+								{
+									"type": "null"
+								}
+							],
+							"title": "Bedrooms"
+						}
+					},
+					{
+						"name": "price_min",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "integer",
+									"minimum": 0
+								},
+								{
+									"type": "null"
+								}
+							],
+							"title": "Price Min"
+						}
+					},
+					{
+						"name": "price_max",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "integer",
+									"minimum": 0
+								},
+								{
+									"type": "null"
+								}
+							],
+							"title": "Price Max"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/ListingListResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/listings/{listing_id}": {
+			"get": {
+				"tags": ["listings", "listings"],
+				"summary": "Get Listing",
+				"description": "Get one locally imported PropertyFinder listing for the demo.",
+				"operationId": "listings-get_listing",
+				"parameters": [
+					{
+						"name": "listing_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"title": "Listing Id"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/ListingDetailResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
 		"/api/v1/news/articles": {
 			"get": {
 				"tags": ["news", "news"],
@@ -1924,6 +2133,63 @@
 								"schema": {
 									"$ref": "#/components/schemas/NewsListResponse"
 								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/news/summary": {
+			"get": {
+				"tags": ["news", "news"],
+				"summary": "Get News Summary",
+				"operationId": "news-get_news_summary",
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/NewsSummaryResponse"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/news/articles/{article_id}/thumbnail": {
+			"get": {
+				"tags": ["news", "news"],
+				"summary": "Get News Thumbnail",
+				"operationId": "news-get_news_thumbnail",
+				"parameters": [
+					{
+						"name": "article_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "integer",
+							"title": "Article Id"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {}
 							}
 						}
 					},
@@ -2530,6 +2796,52 @@
 				}
 			}
 		},
+		"/api/v1/projects/radar": {
+			"get": {
+				"tags": ["projects", "projects"],
+				"summary": "Project Radar",
+				"description": "Get mapped project, area, and planning signals for the radar view.",
+				"operationId": "projects-project_radar",
+				"parameters": [
+					{
+						"name": "limit",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer",
+							"maximum": 3000,
+							"minimum": 100,
+							"description": "Maximum mapped projects",
+							"default": 1400,
+							"title": "Limit"
+						},
+						"description": "Maximum mapped projects"
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/ProjectRadarResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
 		"/api/v1/projects/master": {
 			"get": {
 				"tags": ["projects", "projects"],
@@ -2618,19 +2930,120 @@
 			"get": {
 				"tags": ["projects", "projects"],
 				"summary": "Get Dda Plots",
-				"description": "Get DDA GIS plot polygons for a given area/community for map overlay.",
+				"description": "Get DDA GIS plot polygons for a community or current map viewport.",
 				"operationId": "projects-get_dda_plots",
 				"parameters": [
 					{
 						"name": "area",
 						"in": "query",
-						"required": true,
+						"required": false,
 						"schema": {
-							"type": "string",
+							"anyOf": [
+								{
+									"type": "string"
+								},
+								{
+									"type": "null"
+								}
+							],
 							"description": "Area or community name to match against DDA plots",
 							"title": "Area"
 						},
 						"description": "Area or community name to match against DDA plots"
+					},
+					{
+						"name": "west",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "number",
+									"maximum": 57,
+									"minimum": 54
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "Viewport west longitude",
+							"title": "West"
+						},
+						"description": "Viewport west longitude"
+					},
+					{
+						"name": "south",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "number",
+									"maximum": 26,
+									"minimum": 24
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "Viewport south latitude",
+							"title": "South"
+						},
+						"description": "Viewport south latitude"
+					},
+					{
+						"name": "east",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "number",
+									"maximum": 57,
+									"minimum": 54
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "Viewport east longitude",
+							"title": "East"
+						},
+						"description": "Viewport east longitude"
+					},
+					{
+						"name": "north",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "number",
+									"maximum": 26,
+									"minimum": 24
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "Viewport north latitude",
+							"title": "North"
+						},
+						"description": "Viewport north latitude"
+					},
+					{
+						"name": "limit",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer",
+							"maximum": 5000,
+							"minimum": 100,
+							"description": "Maximum DDA plots to return",
+							"default": 1200,
+							"title": "Limit"
+						},
+						"description": "Maximum DDA plots to return"
 					}
 				],
 				"responses": {
@@ -2644,6 +3057,121 @@
 										"$ref": "#/components/schemas/DDAPlotFeature"
 									},
 									"title": "Response Projects-Get Dda Plots"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/projects/dda-outlines": {
+			"get": {
+				"tags": ["projects", "projects"],
+				"summary": "Get Dda Outlines",
+				"description": "Get coarse DDA planning outlines for low-zoom map context.",
+				"operationId": "projects-get_dda_outlines",
+				"parameters": [
+					{
+						"name": "west",
+						"in": "query",
+						"required": true,
+						"schema": {
+							"type": "number",
+							"maximum": 57,
+							"minimum": 54,
+							"description": "Viewport west longitude",
+							"title": "West"
+						},
+						"description": "Viewport west longitude"
+					},
+					{
+						"name": "south",
+						"in": "query",
+						"required": true,
+						"schema": {
+							"type": "number",
+							"maximum": 26,
+							"minimum": 24,
+							"description": "Viewport south latitude",
+							"title": "South"
+						},
+						"description": "Viewport south latitude"
+					},
+					{
+						"name": "east",
+						"in": "query",
+						"required": true,
+						"schema": {
+							"type": "number",
+							"maximum": 57,
+							"minimum": 54,
+							"description": "Viewport east longitude",
+							"title": "East"
+						},
+						"description": "Viewport east longitude"
+					},
+					{
+						"name": "north",
+						"in": "query",
+						"required": true,
+						"schema": {
+							"type": "number",
+							"maximum": 26,
+							"minimum": 24,
+							"description": "Viewport north latitude",
+							"title": "North"
+						},
+						"description": "Viewport north latitude"
+					},
+					{
+						"name": "zoom",
+						"in": "query",
+						"required": true,
+						"schema": {
+							"type": "number",
+							"maximum": 22,
+							"minimum": 1,
+							"description": "Current map zoom",
+							"title": "Zoom"
+						},
+						"description": "Current map zoom"
+					},
+					{
+						"name": "limit",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer",
+							"maximum": 500,
+							"minimum": 20,
+							"description": "Maximum outlines to return",
+							"default": 160,
+							"title": "Limit"
+						},
+						"description": "Maximum outlines to return"
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "array",
+									"items": {
+										"$ref": "#/components/schemas/DDAOutlineFeature"
+									},
+									"title": "Response Projects-Get Dda Outlines"
 								}
 							}
 						}
@@ -2715,6 +3243,202 @@
 							"application/json": {
 								"schema": {
 									"$ref": "#/components/schemas/UpcomingProjectsResponse"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/supply/catalogue/projects": {
+			"get": {
+				"tags": ["supply", "supply"],
+				"summary": "List Catalogue Projects",
+				"description": "List the demo-only supply catalogue.",
+				"operationId": "supply-list_catalogue_projects",
+				"parameters": [
+					{
+						"name": "limit",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer",
+							"maximum": 120,
+							"minimum": 1,
+							"default": 48,
+							"title": "Limit"
+						}
+					},
+					{
+						"name": "offset",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer",
+							"minimum": 0,
+							"default": 0,
+							"title": "Offset"
+						}
+					},
+					{
+						"name": "search",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "string",
+									"maxLength": 120
+								},
+								{
+									"type": "null"
+								}
+							],
+							"title": "Search"
+						}
+					},
+					{
+						"name": "area",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "string",
+									"maxLength": 120
+								},
+								{
+									"type": "null"
+								}
+							],
+							"title": "Area"
+						}
+					},
+					{
+						"name": "status",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "string",
+									"maxLength": 80
+								},
+								{
+									"type": "null"
+								}
+							],
+							"title": "Status"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/SupplyCatalogueProjectsResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/supply/catalogue/projects/{project_id}": {
+			"get": {
+				"tags": ["supply", "supply"],
+				"summary": "Get Catalogue Project",
+				"description": "Get one demo-only supply catalogue project.",
+				"operationId": "supply-get_catalogue_project",
+				"parameters": [
+					{
+						"name": "project_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "integer",
+							"title": "Project Id"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/SupplyCatalogueProjectDetailResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/supply/catalogue/assets/{asset_id}": {
+			"get": {
+				"tags": ["supply", "supply"],
+				"summary": "Get Catalogue Asset",
+				"description": "Serve locally cached supply catalogue demo assets, downloading from R2 on cache miss.\n\nDemo note: this is unauthenticated so browser image tags and brochure links work.\nReplace with signed URLs or a real media service before production use.",
+				"operationId": "supply-get_catalogue_asset",
+				"parameters": [
+					{
+						"name": "asset_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "integer",
+							"title": "Asset Id"
+						}
+					},
+					{
+						"name": "download",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "boolean",
+							"default": false,
+							"title": "Download"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
 								}
 							}
 						}
@@ -5782,6 +6506,17 @@
 						"type": "string",
 						"title": "Last Name"
 					},
+					"avatar_url": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Avatar Url"
+					},
 					"organization_id": {
 						"anyOf": [
 							{
@@ -6511,6 +7246,59 @@
 				"title": "CustomerPortalResponse",
 				"description": "Response containing Stripe Customer Portal URL"
 			},
+			"DDAOutlineFeature": {
+				"properties": {
+					"name": {
+						"type": "string",
+						"title": "Name"
+					},
+					"kind": {
+						"type": "string",
+						"title": "Kind"
+					},
+					"plot_count": {
+						"type": "integer",
+						"title": "Plot Count"
+					},
+					"total_plot_area_sqm": {
+						"type": "number",
+						"title": "Total Plot Area Sqm"
+					},
+					"total_gfa_sqm": {
+						"type": "number",
+						"title": "Total Gfa Sqm"
+					},
+					"coordinates": {
+						"items": {
+							"items": {
+								"type": "number"
+							},
+							"type": "array"
+						},
+						"type": "array",
+						"title": "Coordinates"
+					},
+					"land_use_summary": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"title": "Land Use Summary",
+						"default": []
+					}
+				},
+				"type": "object",
+				"required": [
+					"name",
+					"kind",
+					"plot_count",
+					"total_plot_area_sqm",
+					"total_gfa_sqm",
+					"coordinates"
+				],
+				"title": "DDAOutlineFeature",
+				"description": "Coarse DDA planning outline for low-zoom map overlay."
+			},
 			"DDAPlotFeature": {
 				"properties": {
 					"plot_number": {
@@ -6546,6 +7334,66 @@
 						"type": "array",
 						"title": "Land Use Summary",
 						"default": []
+					},
+					"max_gfa_sqm": {
+						"anyOf": [
+							{
+								"type": "number"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Max Gfa Sqm"
+					},
+					"max_height": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Max Height"
+					},
+					"max_coverage": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Max Coverage"
+					},
+					"land_use": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Land Use"
+					},
+					"gfa_type": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Gfa Type"
+					},
+					"is_verified": {
+						"type": "boolean",
+						"title": "Is Verified",
+						"default": false
 					}
 				},
 				"type": "object",
@@ -6847,6 +7695,175 @@
 						],
 						"title": "Developmentmodel",
 						"default": "build_to_sell_residential"
+					},
+					"basementParkingFloors": {
+						"type": "number",
+						"title": "Basementparkingfloors",
+						"default": 4.0
+					},
+					"podiumFloors": {
+						"type": "number",
+						"title": "Podiumfloors",
+						"default": 5.0
+					},
+					"residentialFloors": {
+						"type": "number",
+						"title": "Residentialfloors",
+						"default": 30.0
+					},
+					"amenityRoofFloors": {
+						"type": "number",
+						"title": "Amenityrooffloors",
+						"default": 1.0
+					},
+					"parkingAreaPerSpaceSqm": {
+						"type": "number",
+						"title": "Parkingareaperspacesqm",
+						"default": 30.0
+					},
+					"aboveGradeBuaFactor": {
+						"type": "number",
+						"title": "Abovegradebuafactor",
+						"default": 1.1
+					},
+					"serviceBohPlantPct": {
+						"type": "number",
+						"title": "Servicebohplantpct",
+						"default": 0.03
+					},
+					"podiumParkingFloorsOutsideGfa": {
+						"type": "number",
+						"title": "Podiumparkingfloorsoutsidegfa",
+						"default": 0.0
+					},
+					"targetCoveragePct": {
+						"type": "number",
+						"title": "Targetcoveragepct",
+						"default": 0.0
+					},
+					"targetBuildingCount": {
+						"type": "number",
+						"title": "Targetbuildingcount",
+						"default": 0.0
+					},
+					"maxEfficientTowerFloorplateSqm": {
+						"type": "number",
+						"title": "Maxefficienttowerfloorplatesqm",
+						"default": 0.0
+					},
+					"minEfficientTowerFloorplateSqm": {
+						"type": "number",
+						"title": "Minefficienttowerfloorplatesqm",
+						"default": 0.0
+					},
+					"floorToFloorHeightM": {
+						"type": "number",
+						"title": "Floortofloorheightm",
+						"default": 3.2
+					},
+					"podiumFloorToFloorHeightM": {
+						"type": "number",
+						"title": "Podiumfloortofloorheightm",
+						"default": 4.0
+					},
+					"groundFloorHeightM": {
+						"type": "number",
+						"title": "Groundfloorheightm",
+						"default": 5.0
+					},
+					"roofPlantAllowanceM": {
+						"type": "number",
+						"title": "Roofplantallowancem",
+						"default": 6.0
+					},
+					"landTransferFeePct": {
+						"type": "number",
+						"title": "Landtransferfeepct",
+						"default": 0.04
+					},
+					"brokeragePct": {
+						"type": "number",
+						"title": "Brokeragepct",
+						"default": 0.01
+					},
+					"legalDdPct": {
+						"type": "number",
+						"title": "Legalddpct",
+						"default": 0.005
+					},
+					"permitFeesPct": {
+						"type": "number",
+						"title": "Permitfeespct",
+						"default": 0.02
+					},
+					"softCostPct": {
+						"type": "number",
+						"title": "Softcostpct",
+						"default": 0.15
+					},
+					"acquisitionDebtLtv": {
+						"type": "number",
+						"title": "Acquisitiondebtltv",
+						"default": 0.7
+					},
+					"constructionDebtLtc": {
+						"type": "number",
+						"title": "Constructiondebtltc",
+						"default": 0.7
+					},
+					"debtSpreadPa": {
+						"type": "number",
+						"title": "Debtspreadpa",
+						"default": 0.02
+					},
+					"financingFeePct": {
+						"type": "number",
+						"title": "Financingfeepct",
+						"default": 0.01
+					},
+					"exitFeePct": {
+						"type": "number",
+						"title": "Exitfeepct",
+						"default": 0.01
+					},
+					"preferredReturnPa": {
+						"type": "number",
+						"title": "Preferredreturnpa",
+						"default": 0.08
+					},
+					"sponsorPromotePct": {
+						"type": "number",
+						"title": "Sponsorpromotepct",
+						"default": 0.2
+					},
+					"projectYears": {
+						"type": "number",
+						"title": "Projectyears",
+						"default": 5.0
+					},
+					"constructionCurveSteepness": {
+						"type": "number",
+						"title": "Constructioncurvesteepness",
+						"default": 8.0
+					},
+					"salesCurveSteepness": {
+						"type": "number",
+						"title": "Salescurvesteepness",
+						"default": 8.0
+					},
+					"vatAppliesTo": {
+						"$ref": "#/components/schemas/FeasibilityVatApplicability"
+					},
+					"vatRefundLagMonths": {
+						"type": "number",
+						"title": "Vatrefundlagmonths",
+						"default": 6.0
+					},
+					"selectedScenario": {
+						"type": "string",
+						"enum": ["base", "conservative", "optimistic"],
+						"title": "Selectedscenario",
+						"default": "base"
 					},
 					"btrUnitConfigs": {
 						"items": {
@@ -7198,17 +8215,17 @@
 					"depositPct": {
 						"type": "number",
 						"title": "Depositpct",
-						"default": 20.0
+						"default": 10.0
 					},
 					"constructionPct": {
 						"type": "number",
 						"title": "Constructionpct",
-						"default": 40.0
+						"default": 30.0
 					},
 					"handoverPct": {
 						"type": "number",
 						"title": "Handoverpct",
-						"default": 40.0
+						"default": 60.0
 					}
 				},
 				"type": "object",
@@ -7542,6 +8559,47 @@
 				"type": "object",
 				"required": ["id", "label", "units", "avgSizeSqm", "sellingRatePsqm"],
 				"title": "FeasibilityUnitConfig"
+			},
+			"FeasibilityVatApplicability": {
+				"properties": {
+					"land": {
+						"type": "boolean",
+						"title": "Land",
+						"default": true
+					},
+					"hardCosts": {
+						"type": "boolean",
+						"title": "Hardcosts",
+						"default": true
+					},
+					"softCosts": {
+						"type": "boolean",
+						"title": "Softcosts",
+						"default": true
+					},
+					"permitFees": {
+						"type": "boolean",
+						"title": "Permitfees",
+						"default": true
+					},
+					"contingency": {
+						"type": "boolean",
+						"title": "Contingency",
+						"default": true
+					},
+					"marketing": {
+						"type": "boolean",
+						"title": "Marketing",
+						"default": true
+					},
+					"salesAdmin": {
+						"type": "boolean",
+						"title": "Salesadmin",
+						"default": true
+					}
+				},
+				"type": "object",
+				"title": "FeasibilityVatApplicability"
 			},
 			"FilterOptionsResponse": {
 				"properties": {
@@ -7886,6 +8944,1178 @@
 				],
 				"title": "LandSaleEvidence"
 			},
+			"ListingCardResponse": {
+				"properties": {
+					"listing_id": {
+						"type": "string",
+						"title": "Listing Id"
+					},
+					"listing_mode": {
+						"type": "string",
+						"enum": ["sale", "rent"],
+						"title": "Listing Mode"
+					},
+					"title": {
+						"type": "string",
+						"title": "Title"
+					},
+					"reference": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Reference"
+					},
+					"property_type": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Property Type"
+					},
+					"price_value": {
+						"anyOf": [
+							{
+								"type": "integer"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Price Value"
+					},
+					"price_currency": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Price Currency"
+					},
+					"price_period": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Price Period"
+					},
+					"size_value": {
+						"anyOf": [
+							{
+								"type": "number"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Size Value"
+					},
+					"size_unit": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Size Unit"
+					},
+					"bedrooms": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Bedrooms"
+					},
+					"bathrooms": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Bathrooms"
+					},
+					"city_name": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "City Name"
+					},
+					"area_name": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Area Name"
+					},
+					"subcommunity_name": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Subcommunity Name"
+					},
+					"tower_name": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Tower Name"
+					},
+					"location_name": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Location Name"
+					},
+					"latitude": {
+						"anyOf": [
+							{
+								"type": "number"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Latitude"
+					},
+					"longitude": {
+						"anyOf": [
+							{
+								"type": "number"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Longitude"
+					},
+					"primary_image_url": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Primary Image Url"
+					},
+					"image_count": {
+						"type": "integer",
+						"title": "Image Count",
+						"default": 0
+					},
+					"floorplan_count": {
+						"type": "integer",
+						"title": "Floorplan Count",
+						"default": 0
+					},
+					"agent_name": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Agent Name"
+					},
+					"agent_image_url": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Agent Image Url"
+					},
+					"broker_name": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Broker Name"
+					},
+					"broker_logo_url": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Broker Logo Url"
+					},
+					"listed_date": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "date-time"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Listed Date"
+					},
+					"is_available": {
+						"anyOf": [
+							{
+								"type": "boolean"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Is Available"
+					},
+					"is_verified": {
+						"anyOf": [
+							{
+								"type": "boolean"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Is Verified"
+					},
+					"is_featured": {
+						"anyOf": [
+							{
+								"type": "boolean"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Is Featured"
+					},
+					"is_premium": {
+						"anyOf": [
+							{
+								"type": "boolean"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Is Premium"
+					},
+					"share_url": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Share Url"
+					}
+				},
+				"type": "object",
+				"required": ["listing_id", "listing_mode", "title"],
+				"title": "ListingCardResponse"
+			},
+			"ListingDetailResponse": {
+				"properties": {
+					"listing_id": {
+						"type": "string",
+						"title": "Listing Id"
+					},
+					"listing_mode": {
+						"type": "string",
+						"enum": ["sale", "rent"],
+						"title": "Listing Mode"
+					},
+					"title": {
+						"type": "string",
+						"title": "Title"
+					},
+					"reference": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Reference"
+					},
+					"property_type": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Property Type"
+					},
+					"price_value": {
+						"anyOf": [
+							{
+								"type": "integer"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Price Value"
+					},
+					"price_currency": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Price Currency"
+					},
+					"price_period": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Price Period"
+					},
+					"size_value": {
+						"anyOf": [
+							{
+								"type": "number"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Size Value"
+					},
+					"size_unit": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Size Unit"
+					},
+					"bedrooms": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Bedrooms"
+					},
+					"bathrooms": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Bathrooms"
+					},
+					"city_name": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "City Name"
+					},
+					"area_name": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Area Name"
+					},
+					"subcommunity_name": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Subcommunity Name"
+					},
+					"tower_name": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Tower Name"
+					},
+					"location_name": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Location Name"
+					},
+					"latitude": {
+						"anyOf": [
+							{
+								"type": "number"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Latitude"
+					},
+					"longitude": {
+						"anyOf": [
+							{
+								"type": "number"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Longitude"
+					},
+					"primary_image_url": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Primary Image Url"
+					},
+					"image_count": {
+						"type": "integer",
+						"title": "Image Count",
+						"default": 0
+					},
+					"floorplan_count": {
+						"type": "integer",
+						"title": "Floorplan Count",
+						"default": 0
+					},
+					"agent_name": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Agent Name"
+					},
+					"agent_image_url": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Agent Image Url"
+					},
+					"broker_name": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Broker Name"
+					},
+					"broker_logo_url": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Broker Logo Url"
+					},
+					"listed_date": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "date-time"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Listed Date"
+					},
+					"is_available": {
+						"anyOf": [
+							{
+								"type": "boolean"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Is Available"
+					},
+					"is_verified": {
+						"anyOf": [
+							{
+								"type": "boolean"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Is Verified"
+					},
+					"is_featured": {
+						"anyOf": [
+							{
+								"type": "boolean"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Is Featured"
+					},
+					"is_premium": {
+						"anyOf": [
+							{
+								"type": "boolean"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Is Premium"
+					},
+					"share_url": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Share Url"
+					},
+					"description": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Description"
+					},
+					"amenities": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"title": "Amenities"
+					},
+					"images": {
+						"items": {
+							"$ref": "#/components/schemas/ListingImageResponse"
+						},
+						"type": "array",
+						"title": "Images"
+					},
+					"floorplans": {
+						"items": {
+							"$ref": "#/components/schemas/ListingFloorPlanResponse"
+						},
+						"type": "array",
+						"title": "Floorplans"
+					},
+					"agent": {
+						"anyOf": [
+							{
+								"$ref": "#/components/schemas/ListingPartyResponse"
+							},
+							{
+								"type": "null"
+							}
+						]
+					},
+					"broker": {
+						"anyOf": [
+							{
+								"$ref": "#/components/schemas/ListingPartyResponse"
+							},
+							{
+								"type": "null"
+							}
+						]
+					},
+					"client": {
+						"anyOf": [
+							{
+								"$ref": "#/components/schemas/ListingPartyResponse"
+							},
+							{
+								"type": "null"
+							}
+						]
+					},
+					"furnished": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Furnished"
+					},
+					"completion_status": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Completion Status"
+					},
+					"rera": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Rera"
+					},
+					"number_of_cheques": {
+						"anyOf": [
+							{
+								"type": "integer"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Number Of Cheques"
+					},
+					"payment_method": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"title": "Payment Method"
+					},
+					"video_url": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Video Url"
+					},
+					"view_360_url": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "View 360 Url"
+					},
+					"source_run_id": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Source Run Id"
+					},
+					"source_manifest_key": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Source Manifest Key"
+					},
+					"scraped_at": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "date-time"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Scraped At"
+					},
+					"demo_metadata": {
+						"additionalProperties": true,
+						"type": "object",
+						"title": "Demo Metadata"
+					}
+				},
+				"type": "object",
+				"required": ["listing_id", "listing_mode", "title"],
+				"title": "ListingDetailResponse"
+			},
+			"ListingFiltersResponse": {
+				"properties": {
+					"modes": {
+						"items": {
+							"type": "string",
+							"enum": ["sale", "rent"]
+						},
+						"type": "array",
+						"title": "Modes"
+					},
+					"areas": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"title": "Areas"
+					},
+					"property_types": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"title": "Property Types"
+					},
+					"bedrooms": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"title": "Bedrooms"
+					},
+					"price_min": {
+						"anyOf": [
+							{
+								"type": "integer"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Price Min"
+					},
+					"price_max": {
+						"anyOf": [
+							{
+								"type": "integer"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Price Max"
+					}
+				},
+				"type": "object",
+				"title": "ListingFiltersResponse"
+			},
+			"ListingFloorPlanResponse": {
+				"properties": {
+					"title": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Title"
+					},
+					"image_url": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Image Url"
+					},
+					"area_sqft": {
+						"anyOf": [
+							{
+								"type": "number"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Area Sqft"
+					},
+					"floor_number": {
+						"anyOf": [
+							{
+								"type": "integer"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Floor Number"
+					},
+					"unit_number": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Unit Number"
+					},
+					"dimension": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Dimension"
+					}
+				},
+				"type": "object",
+				"title": "ListingFloorPlanResponse"
+			},
+			"ListingImageResponse": {
+				"properties": {
+					"small_url": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Small Url"
+					},
+					"medium_url": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Medium Url"
+					},
+					"original_url": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Original Url"
+					},
+					"url": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Url"
+					},
+					"label": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Label"
+					}
+				},
+				"type": "object",
+				"title": "ListingImageResponse"
+			},
+			"ListingListResponse": {
+				"properties": {
+					"listings": {
+						"items": {
+							"$ref": "#/components/schemas/ListingCardResponse"
+						},
+						"type": "array",
+						"title": "Listings"
+					},
+					"total": {
+						"type": "integer",
+						"title": "Total"
+					},
+					"limit": {
+						"type": "integer",
+						"title": "Limit"
+					},
+					"offset": {
+						"type": "integer",
+						"title": "Offset"
+					},
+					"filters": {
+						"$ref": "#/components/schemas/ListingFiltersResponse"
+					}
+				},
+				"type": "object",
+				"required": ["listings", "total", "limit", "offset"],
+				"title": "ListingListResponse"
+			},
+			"ListingPartyResponse": {
+				"properties": {
+					"id": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Id"
+					},
+					"name": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Name"
+					},
+					"email": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Email"
+					},
+					"phone": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Phone"
+					},
+					"whatsapp": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Whatsapp"
+					},
+					"image_url": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Image Url"
+					},
+					"logo_url": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Logo Url"
+					},
+					"address": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Address"
+					},
+					"slug": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Slug"
+					},
+					"is_super_agent": {
+						"anyOf": [
+							{
+								"type": "boolean"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Is Super Agent"
+					},
+					"languages": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"title": "Languages"
+					}
+				},
+				"type": "object",
+				"title": "ListingPartyResponse"
+			},
 			"MarketPricingRow": {
 				"properties": {
 					"unit_type": {
@@ -8137,6 +10367,18 @@
 						"type": "string",
 						"title": "Content"
 					},
+					"meta_data": {
+						"anyOf": [
+							{
+								"additionalProperties": true,
+								"type": "object"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Meta Data"
+					},
 					"created_at": {
 						"type": "string",
 						"format": "date-time",
@@ -8303,6 +10545,46 @@
 				"type": "object",
 				"required": ["articles", "total", "limit", "offset"],
 				"title": "NewsListResponse"
+			},
+			"NewsSummaryResponse": {
+				"properties": {
+					"macro": {
+						"$ref": "#/components/schemas/NewsSummarySection"
+					},
+					"real_estate": {
+						"$ref": "#/components/schemas/NewsSummarySection"
+					},
+					"generated_at": {
+						"type": "string",
+						"format": "date-time",
+						"title": "Generated At"
+					},
+					"article_count": {
+						"type": "integer",
+						"title": "Article Count"
+					}
+				},
+				"type": "object",
+				"required": ["macro", "real_estate", "generated_at", "article_count"],
+				"title": "NewsSummaryResponse"
+			},
+			"NewsSummarySection": {
+				"properties": {
+					"title": {
+						"type": "string",
+						"title": "Title"
+					},
+					"bullets": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"title": "Bullets"
+					}
+				},
+				"type": "object",
+				"required": ["title"],
+				"title": "NewsSummarySection"
 			},
 			"OffPlanPricingConfidence": {
 				"properties": {
@@ -10247,6 +12529,472 @@
 				"title": "ProjectPriceDistributionResponse",
 				"description": "Price distribution by bedroom type, including an all-rooms aggregate."
 			},
+			"ProjectRadarArea": {
+				"properties": {
+					"area_id": {
+						"type": "integer",
+						"title": "Area Id"
+					},
+					"area_name": {
+						"type": "string",
+						"title": "Area Name"
+					},
+					"latitude": {
+						"anyOf": [
+							{
+								"type": "number"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Latitude"
+					},
+					"longitude": {
+						"anyOf": [
+							{
+								"type": "number"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Longitude"
+					},
+					"mapped_projects": {
+						"type": "integer",
+						"title": "Mapped Projects"
+					},
+					"active_projects": {
+						"type": "integer",
+						"title": "Active Projects"
+					},
+					"completed_projects": {
+						"type": "integer",
+						"title": "Completed Projects"
+					},
+					"overdue_projects": {
+						"type": "integer",
+						"title": "Overdue Projects"
+					},
+					"pipeline_units": {
+						"type": "integer",
+						"title": "Pipeline Units"
+					},
+					"units_delivering_next_12_months": {
+						"type": "integer",
+						"title": "Units Delivering Next 12 Months"
+					},
+					"active_developers": {
+						"type": "integer",
+						"title": "Active Developers"
+					},
+					"avg_completion_pct": {
+						"type": "number",
+						"title": "Avg Completion Pct"
+					},
+					"avg_delivery_confidence": {
+						"type": "number",
+						"title": "Avg Delivery Confidence"
+					},
+					"sales_transaction_count_12m": {
+						"type": "integer",
+						"title": "Sales Transaction Count 12M"
+					},
+					"rental_contract_count_12m": {
+						"type": "integer",
+						"title": "Rental Contract Count 12M"
+					},
+					"total_sales_volume_12m": {
+						"type": "number",
+						"title": "Total Sales Volume 12M"
+					},
+					"median_sale_price": {
+						"anyOf": [
+							{
+								"type": "number"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Median Sale Price"
+					},
+					"median_annual_rent": {
+						"anyOf": [
+							{
+								"type": "number"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Median Annual Rent"
+					},
+					"gross_yield_pct": {
+						"anyOf": [
+							{
+								"type": "number"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Gross Yield Pct"
+					},
+					"top_developers": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"title": "Top Developers"
+					},
+					"top_master_projects": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"title": "Top Master Projects"
+					},
+					"dda_plot_count": {
+						"type": "integer",
+						"title": "Dda Plot Count"
+					},
+					"dda_total_plot_area_sqm": {
+						"type": "number",
+						"title": "Dda Total Plot Area Sqm"
+					},
+					"dda_total_gfa_sqm": {
+						"type": "number",
+						"title": "Dda Total Gfa Sqm"
+					},
+					"dda_dominant_land_uses": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"title": "Dda Dominant Land Uses"
+					}
+				},
+				"type": "object",
+				"required": [
+					"area_id",
+					"area_name",
+					"latitude",
+					"longitude",
+					"mapped_projects",
+					"active_projects",
+					"completed_projects",
+					"overdue_projects",
+					"pipeline_units",
+					"units_delivering_next_12_months",
+					"active_developers",
+					"avg_completion_pct",
+					"avg_delivery_confidence",
+					"sales_transaction_count_12m",
+					"rental_contract_count_12m",
+					"total_sales_volume_12m",
+					"median_sale_price",
+					"median_annual_rent",
+					"gross_yield_pct",
+					"top_developers",
+					"top_master_projects",
+					"dda_plot_count",
+					"dda_total_plot_area_sqm",
+					"dda_total_gfa_sqm",
+					"dda_dominant_land_uses"
+				],
+				"title": "ProjectRadarArea",
+				"description": "Area-level bubble with supply, demand, and DDA planning context."
+			},
+			"ProjectRadarProject": {
+				"properties": {
+					"project_id": {
+						"type": "integer",
+						"title": "Project Id"
+					},
+					"project_name": {
+						"type": "string",
+						"title": "Project Name"
+					},
+					"area_name": {
+						"type": "string",
+						"title": "Area Name"
+					},
+					"developer_name": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Developer Name"
+					},
+					"master_project_en": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Master Project En"
+					},
+					"latitude": {
+						"type": "number",
+						"title": "Latitude"
+					},
+					"longitude": {
+						"type": "number",
+						"title": "Longitude"
+					},
+					"geo_pin_count": {
+						"type": "integer",
+						"title": "Geo Pin Count"
+					},
+					"completion_status": {
+						"type": "string",
+						"title": "Completion Status"
+					},
+					"pipeline_status": {
+						"type": "string",
+						"title": "Pipeline Status"
+					},
+					"project_status": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Project Status"
+					},
+					"no_of_units": {
+						"type": "integer",
+						"title": "No Of Units"
+					},
+					"no_of_buildings": {
+						"type": "integer",
+						"title": "No Of Buildings"
+					},
+					"percent_completed": {
+						"anyOf": [
+							{
+								"type": "number"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Percent Completed"
+					},
+					"delivery_confidence": {
+						"type": "number",
+						"title": "Delivery Confidence"
+					},
+					"sales_transaction_count_12m": {
+						"type": "integer",
+						"title": "Sales Transaction Count 12M"
+					},
+					"rental_contract_count_12m": {
+						"type": "integer",
+						"title": "Rental Contract Count 12M"
+					},
+					"total_sales_volume_12m": {
+						"type": "number",
+						"title": "Total Sales Volume 12M"
+					},
+					"median_sale_price": {
+						"anyOf": [
+							{
+								"type": "number"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Median Sale Price"
+					},
+					"median_annual_rent": {
+						"anyOf": [
+							{
+								"type": "number"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Median Annual Rent"
+					},
+					"gross_yield_pct": {
+						"anyOf": [
+							{
+								"type": "number"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Gross Yield Pct"
+					},
+					"avg_sale_price_sqm_12m": {
+						"anyOf": [
+							{
+								"type": "number"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Avg Sale Price Sqm 12M"
+					},
+					"avg_rent_price_sqm_12m": {
+						"anyOf": [
+							{
+								"type": "number"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Avg Rent Price Sqm 12M"
+					}
+				},
+				"type": "object",
+				"required": [
+					"project_id",
+					"project_name",
+					"area_name",
+					"developer_name",
+					"master_project_en",
+					"latitude",
+					"longitude",
+					"geo_pin_count",
+					"completion_status",
+					"pipeline_status",
+					"project_status",
+					"no_of_units",
+					"no_of_buildings",
+					"percent_completed",
+					"delivery_confidence",
+					"sales_transaction_count_12m",
+					"rental_contract_count_12m",
+					"total_sales_volume_12m",
+					"median_sale_price",
+					"median_annual_rent",
+					"gross_yield_pct",
+					"avg_sale_price_sqm_12m",
+					"avg_rent_price_sqm_12m"
+				],
+				"title": "ProjectRadarProject",
+				"description": "Mapped project pin with market and delivery signals."
+			},
+			"ProjectRadarResponse": {
+				"properties": {
+					"stats": {
+						"$ref": "#/components/schemas/ProjectRadarStats"
+					},
+					"projects": {
+						"items": {
+							"$ref": "#/components/schemas/ProjectRadarProject"
+						},
+						"type": "array",
+						"title": "Projects"
+					},
+					"areas": {
+						"items": {
+							"$ref": "#/components/schemas/ProjectRadarArea"
+						},
+						"type": "array",
+						"title": "Areas"
+					},
+					"source_notes": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"title": "Source Notes"
+					}
+				},
+				"type": "object",
+				"required": ["stats", "projects", "areas", "source_notes"],
+				"title": "ProjectRadarResponse",
+				"description": "Complete payload for the projects radar map."
+			},
+			"ProjectRadarStats": {
+				"properties": {
+					"total_projects": {
+						"type": "integer",
+						"title": "Total Projects"
+					},
+					"mapped_projects": {
+						"type": "integer",
+						"title": "Mapped Projects"
+					},
+					"active_projects": {
+						"type": "integer",
+						"title": "Active Projects"
+					},
+					"finished_projects": {
+						"type": "integer",
+						"title": "Finished Projects"
+					},
+					"pipeline_units": {
+						"type": "integer",
+						"title": "Pipeline Units"
+					},
+					"units_delivering_next_12_months": {
+						"type": "integer",
+						"title": "Units Delivering Next 12 Months"
+					},
+					"sales_transaction_count_12m": {
+						"type": "integer",
+						"title": "Sales Transaction Count 12M"
+					},
+					"rental_contract_count_12m": {
+						"type": "integer",
+						"title": "Rental Contract Count 12M"
+					},
+					"total_sales_volume_12m": {
+						"type": "number",
+						"title": "Total Sales Volume 12M"
+					},
+					"dda_plot_count": {
+						"type": "integer",
+						"title": "Dda Plot Count"
+					},
+					"dda_total_plot_area_sqm": {
+						"type": "number",
+						"title": "Dda Total Plot Area Sqm"
+					},
+					"dda_total_gfa_sqm": {
+						"type": "number",
+						"title": "Dda Total Gfa Sqm"
+					}
+				},
+				"type": "object",
+				"required": [
+					"total_projects",
+					"mapped_projects",
+					"active_projects",
+					"finished_projects",
+					"pipeline_units",
+					"units_delivering_next_12_months",
+					"sales_transaction_count_12m",
+					"rental_contract_count_12m",
+					"total_sales_volume_12m",
+					"dda_plot_count",
+					"dda_total_plot_area_sqm",
+					"dda_total_gfa_sqm"
+				],
+				"title": "ProjectRadarStats",
+				"description": "Top-level metrics for the projects radar map."
+			},
 			"ProjectRentalSummary": {
 				"properties": {
 					"contract_count": {
@@ -11277,6 +14025,724 @@
 				],
 				"title": "SubscriptionResponse",
 				"description": "Response containing subscription details"
+			},
+			"SupplyCatalogueAssetResponse": {
+				"properties": {
+					"id": {
+						"type": "integer",
+						"title": "Id"
+					},
+					"asset_type": {
+						"type": "string",
+						"title": "Asset Type"
+					},
+					"name": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Name"
+					},
+					"url": {
+						"type": "string",
+						"title": "Url"
+					},
+					"download_url": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Download Url"
+					},
+					"content_type": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Content Type"
+					},
+					"size_bytes": {
+						"anyOf": [
+							{
+								"type": "integer"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Size Bytes"
+					}
+				},
+				"type": "object",
+				"required": ["id", "asset_type", "url"],
+				"title": "SupplyCatalogueAssetResponse"
+			},
+			"SupplyCatalogueBuildingResponse": {
+				"properties": {
+					"name": {
+						"type": "string",
+						"title": "Name"
+					},
+					"description": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Description"
+					}
+				},
+				"type": "object",
+				"required": ["name"],
+				"title": "SupplyCatalogueBuildingResponse"
+			},
+			"SupplyCatalogueNearbyPointResponse": {
+				"properties": {
+					"name": {
+						"type": "string",
+						"title": "Name"
+					},
+					"distance_km": {
+						"anyOf": [
+							{
+								"type": "number"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Distance Km"
+					},
+					"time_min": {
+						"anyOf": [
+							{
+								"type": "number"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Time Min"
+					}
+				},
+				"type": "object",
+				"required": ["name"],
+				"title": "SupplyCatalogueNearbyPointResponse"
+			},
+			"SupplyCataloguePaymentStepResponse": {
+				"properties": {
+					"label": {
+						"type": "string",
+						"title": "Label"
+					},
+					"percent": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Percent"
+					},
+					"order": {
+						"anyOf": [
+							{
+								"type": "integer"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Order"
+					}
+				},
+				"type": "object",
+				"required": ["label"],
+				"title": "SupplyCataloguePaymentStepResponse"
+			},
+			"SupplyCatalogueProjectCardResponse": {
+				"properties": {
+					"project_id": {
+						"type": "integer",
+						"title": "Project Id"
+					},
+					"project_name": {
+						"type": "string",
+						"title": "Project Name"
+					},
+					"developer_name": {
+						"type": "string",
+						"title": "Developer Name"
+					},
+					"developer_id": {
+						"anyOf": [
+							{
+								"type": "integer"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Developer Id"
+					},
+					"area_name": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Area Name"
+					},
+					"region": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Region"
+					},
+					"status": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Status"
+					},
+					"sale_status": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Sale Status"
+					},
+					"completion_date": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Completion Date"
+					},
+					"min_price_aed": {
+						"anyOf": [
+							{
+								"type": "integer"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Min Price Aed"
+					},
+					"max_price_aed": {
+						"anyOf": [
+							{
+								"type": "integer"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Max Price Aed"
+					},
+					"units_in_sale": {
+						"anyOf": [
+							{
+								"type": "integer"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Units In Sale"
+					},
+					"unit_types": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"title": "Unit Types"
+					},
+					"overview_excerpt": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Overview Excerpt"
+					},
+					"cover_image_url": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Cover Image Url"
+					},
+					"developer_logo_url": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Developer Logo Url"
+					},
+					"image_count": {
+						"type": "integer",
+						"title": "Image Count",
+						"default": 0
+					},
+					"floorplan_count": {
+						"type": "integer",
+						"title": "Floorplan Count",
+						"default": 0
+					},
+					"brochure_count": {
+						"type": "integer",
+						"title": "Brochure Count",
+						"default": 0
+					}
+				},
+				"type": "object",
+				"required": ["project_id", "project_name", "developer_name"],
+				"title": "SupplyCatalogueProjectCardResponse"
+			},
+			"SupplyCatalogueProjectDetailResponse": {
+				"properties": {
+					"project_id": {
+						"type": "integer",
+						"title": "Project Id"
+					},
+					"project_name": {
+						"type": "string",
+						"title": "Project Name"
+					},
+					"developer_name": {
+						"type": "string",
+						"title": "Developer Name"
+					},
+					"developer_id": {
+						"anyOf": [
+							{
+								"type": "integer"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Developer Id"
+					},
+					"area_name": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Area Name"
+					},
+					"region": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Region"
+					},
+					"status": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Status"
+					},
+					"sale_status": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Sale Status"
+					},
+					"completion_date": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Completion Date"
+					},
+					"min_price_aed": {
+						"anyOf": [
+							{
+								"type": "integer"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Min Price Aed"
+					},
+					"max_price_aed": {
+						"anyOf": [
+							{
+								"type": "integer"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Max Price Aed"
+					},
+					"units_in_sale": {
+						"anyOf": [
+							{
+								"type": "integer"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Units In Sale"
+					},
+					"unit_types": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"title": "Unit Types"
+					},
+					"overview_excerpt": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Overview Excerpt"
+					},
+					"cover_image_url": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Cover Image Url"
+					},
+					"developer_logo_url": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Developer Logo Url"
+					},
+					"image_count": {
+						"type": "integer",
+						"title": "Image Count",
+						"default": 0
+					},
+					"floorplan_count": {
+						"type": "integer",
+						"title": "Floorplan Count",
+						"default": 0
+					},
+					"brochure_count": {
+						"type": "integer",
+						"title": "Brochure Count",
+						"default": 0
+					},
+					"overview": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Overview"
+					},
+					"coordinates": {
+						"anyOf": [
+							{
+								"additionalProperties": {
+									"type": "number"
+								},
+								"type": "object"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Coordinates"
+					},
+					"units": {
+						"items": {
+							"$ref": "#/components/schemas/SupplyCatalogueUnitResponse"
+						},
+						"type": "array",
+						"title": "Units"
+					},
+					"payment_plan": {
+						"items": {
+							"$ref": "#/components/schemas/SupplyCataloguePaymentStepResponse"
+						},
+						"type": "array",
+						"title": "Payment Plan"
+					},
+					"facilities": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"title": "Facilities"
+					},
+					"buildings": {
+						"items": {
+							"$ref": "#/components/schemas/SupplyCatalogueBuildingResponse"
+						},
+						"type": "array",
+						"title": "Buildings"
+					},
+					"nearby_points": {
+						"items": {
+							"$ref": "#/components/schemas/SupplyCatalogueNearbyPointResponse"
+						},
+						"type": "array",
+						"title": "Nearby Points"
+					},
+					"gallery": {
+						"items": {
+							"$ref": "#/components/schemas/SupplyCatalogueAssetResponse"
+						},
+						"type": "array",
+						"title": "Gallery"
+					},
+					"floorplans": {
+						"items": {
+							"$ref": "#/components/schemas/SupplyCatalogueAssetResponse"
+						},
+						"type": "array",
+						"title": "Floorplans"
+					},
+					"brochures": {
+						"items": {
+							"$ref": "#/components/schemas/SupplyCatalogueAssetResponse"
+						},
+						"type": "array",
+						"title": "Brochures"
+					},
+					"master_plans": {
+						"items": {
+							"$ref": "#/components/schemas/SupplyCatalogueAssetResponse"
+						},
+						"type": "array",
+						"title": "Master Plans"
+					},
+					"demo_metadata": {
+						"additionalProperties": true,
+						"type": "object",
+						"title": "Demo Metadata"
+					}
+				},
+				"type": "object",
+				"required": ["project_id", "project_name", "developer_name"],
+				"title": "SupplyCatalogueProjectDetailResponse"
+			},
+			"SupplyCatalogueProjectsResponse": {
+				"properties": {
+					"projects": {
+						"items": {
+							"$ref": "#/components/schemas/SupplyCatalogueProjectCardResponse"
+						},
+						"type": "array",
+						"title": "Projects"
+					},
+					"total": {
+						"type": "integer",
+						"title": "Total"
+					},
+					"limit": {
+						"type": "integer",
+						"title": "Limit"
+					},
+					"offset": {
+						"type": "integer",
+						"title": "Offset"
+					},
+					"areas": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"title": "Areas"
+					},
+					"statuses": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"title": "Statuses"
+					}
+				},
+				"type": "object",
+				"required": ["projects", "total", "limit", "offset"],
+				"title": "SupplyCatalogueProjectsResponse"
+			},
+			"SupplyCatalogueUnitResponse": {
+				"properties": {
+					"label": {
+						"type": "string",
+						"title": "Label"
+					},
+					"unit_type": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Unit Type"
+					},
+					"bedrooms": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Bedrooms"
+					},
+					"price_from_aed": {
+						"anyOf": [
+							{
+								"type": "integer"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Price From Aed"
+					},
+					"price_to_aed": {
+						"anyOf": [
+							{
+								"type": "integer"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Price To Aed"
+					},
+					"area_from_sqft": {
+						"anyOf": [
+							{
+								"type": "number"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Area From Sqft"
+					},
+					"area_to_sqft": {
+						"anyOf": [
+							{
+								"type": "number"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Area To Sqft"
+					},
+					"units_amount": {
+						"anyOf": [
+							{
+								"type": "integer"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Units Amount"
+					}
+				},
+				"type": "object",
+				"required": ["label"],
+				"title": "SupplyCatalogueUnitResponse"
 			},
 			"SyncAfterCheckoutRequest": {
 				"properties": {

@@ -13,6 +13,11 @@ import type {
 	StudyContext
 } from '$lib/api/generated/hey-api/types.gen'
 import {
+	createAssumptionsFromPlot,
+	createDefaultAssumptions,
+	normalizeAssumptions
+} from '$lib/feasibility/workbook/defaults'
+import {
 	computeWorkbook as computeWorkbookOutputs,
 	type WorkbookOutputs
 } from '$lib/feasibility/workbook/engine'
@@ -225,266 +230,6 @@ const CURVE_IMPACT_KEYS = new Set<keyof FeasibilityAssumptions>([
 	'salesCurveSteepness'
 ])
 
-// ── Default Assumptions ──────────────────────────────────────────────────────
-
-function todayIsoDate(): string {
-	return new Date().toISOString().slice(0, 10)
-}
-
-function createDefaultAssumptions(): FeasibilityAssumptions {
-	return {
-		usage: 'unknown',
-		plotAreaSqm: 0,
-		maxGfaSqm: 0,
-		maxCoveragePct: null,
-		maxStoreys: null,
-		maxFar: 0,
-		buaMultiplier: 1,
-		nsaEfficiencyPct: 80,
-		numberOfTowers: 1,
-		numberOfFloors: 1,
-		unitConfigs: [],
-		paymentPlan: { depositPct: 10, constructionPct: 30, handoverPct: 60 },
-		standardParkingRatio: 1,
-		largeUnitThresholdSqm: 140,
-		largeUnitParkingRatio: 2,
-		landPricePsqm: 0,
-		landAcquisitionCostOverrideAed: null,
-		brokerageFeeAed: 0,
-		legalDdCostAed: 0,
-		constructionCostPsqmBua: 0,
-		constructionCostOverrideAed: null,
-		midPointInflationPct: 0,
-		designSupervisionPct: 0,
-		designSupervisionCostOverrideAed: null,
-		marketingCostPct: 0,
-		marketingCostOverrideAed: null,
-		salesAgentFeePct: 0,
-		salesAgentFeesOverrideAed: null,
-		infrastructureCostAed: 0,
-		governmentFeesAed: 0,
-		masterCommunityFeesAed: 0,
-		ffeOsePreopeningCostAed: 0,
-		contingencyPct: 0,
-		contingencyCostOverrideAed: null,
-		demolitionEnabled: false,
-		demolitionCostAed: 0,
-		vatPct: 5,
-		debtToCostRatio: 0,
-		landLoanLtvPct: 70,
-		eiborRatePct: 4.85,
-		landLoanSpreadBps: 200,
-		constructionLoanSpreadBps: 200,
-		arrangementFeePct: 1,
-		commitmentFeePct: 0.5,
-		presaleThresholdPct: 35,
-		escrowRetentionPct: 5,
-		debtRepaymentMode: 'bullet_at_handover',
-		debtFundingAed: 0,
-		equityFundingAed: 0,
-		financeRatePct: 0,
-		landAcquisitionDate: todayIsoDate(),
-		demolitionEnablingDate: todayIsoDate(),
-		salesCommencementDate: todayIsoDate(),
-		salesPeriodMonths: 24,
-		constructionDate: todayIsoDate(),
-		handoverDate: todayIsoDate(),
-		preHandoverMilestoneDate: todayIsoDate(),
-
-		// Building configuration (Area Bridge)
-		basementParkingFloors: 4,
-		podiumFloors: 5,
-		residentialFloors: 30,
-		amenityRoofFloors: 1,
-		parkingAreaPerSpaceSqm: 30,
-
-		// Area Bridge inputs
-		aboveGradeBuaFactor: 1.1,
-		serviceBohPlantPct: 0.03,
-		podiumParkingFloorsOutsideGfa: 0,
-
-		// Template-aligned cost percentages
-		landTransferFeePct: 0.04,
-		brokeragePct: 0.01,
-		legalDdPct: 0.005,
-		permitFeesPct: 0.02,
-		softCostPct: 0.15,
-
-		// Dual-tranche financing
-		acquisitionDebtLtv: 0.7,
-		constructionDebtLtc: 0.7,
-		debtSpreadPa: 0.02,
-		financingFeePct: 0.01,
-		exitFeePct: 0.01,
-
-		// Equity waterfall
-		preferredReturnPa: 0.08,
-		sponsorPromotePct: 0.2,
-		projectYears: 5,
-
-		// S-curve configuration
-		constructionCurveSteepness: 8,
-		salesCurveSteepness: 8,
-
-		// VAT per-category applicability
-		vatAppliesTo: {
-			land: true,
-			hardCosts: true,
-			softCosts: true,
-			permitFees: true,
-			contingency: true,
-			marketing: true,
-			salesAdmin: true
-		},
-		vatRefundLagMonths: 6,
-
-		// Scenario
-		selectedScenario: 'base',
-		developmentModel: 'build_to_sell_residential',
-		btrHoldPeriodYears: 10,
-		btrLeaseUpPaceUnitsPerMonth: 20,
-		btrStabilizedOccupancyPct: 95,
-		btrFreeRentMonths: 2,
-		btrAnnualRentGrowthPct: 3,
-		btrMarketRentGrowthPct: 3,
-		btrRenewalRentGrowthPct: 3,
-		btrGeneralVacancyPct: 5,
-		btrPropertyManagementPct: 5,
-		btrRepairsMaintenancePsqm: 50,
-		btrInsurancePsqm: 10,
-		btrServiceChargePsqm: 80,
-		btrUtilitiesPsqm: 30,
-		btrMarketingLeasingPct: 2,
-		btrCapexReservePct: 5,
-		btrParkingIncomeAed: 0,
-		btrAncillaryIncomeAed: 0,
-		btrAncillaryGrowthPct: 3,
-		btrStabilizedFreeRentMonths: 0,
-		btrOpExGrowthPct: 3,
-		btrDevCostEscalationPct: 4,
-		btrTerminalGrowthPct: 3,
-		btrLeaseUpMarketingAed: 0,
-		btrCreditLossPct: 1,
-		btrPayrollPsqm: 40,
-		btrGeneralAdminPct: 1,
-		btrContractServicesPsqm: 25,
-		btrModelUnits: 1,
-		btrExitCapRatePct: 7,
-		btrExitCostPct: 6,
-		btrPermDebtLtvPct: 65,
-		btrPermDebtSpreadBps: 165,
-		btrPermDebtAmortYears: 25,
-		btrPermDebtPointsPct: 1,
-		btrPermDebtIoYears: 1,
-		btrDscrMinimum: 1.25,
-		btrRefiCapRatePct: 7
-	}
-}
-
-function normalizeAssumptions(raw: FeasibilityAssumptions): FeasibilityAssumptions {
-	const defaults = createDefaultAssumptions()
-	const normalized: FeasibilityAssumptions = {
-		...defaults,
-		...raw,
-		paymentPlan: {
-			...defaults.paymentPlan,
-			...(raw.paymentPlan ?? {})
-		},
-		vatAppliesTo: {
-			...defaults.vatAppliesTo,
-			...(raw.vatAppliesTo ?? {})
-		} as FeasibilityAssumptions['vatAppliesTo']
-	}
-
-	if (
-		normalized.developmentModel === 'build_to_rent_residential' &&
-		(normalized.btrUnitConfigs?.length ?? 0) > 0
-	) {
-		normalized.unitConfigs = (normalized.btrUnitConfigs ?? []).map((cfg, index) => ({
-			id: cfg.id || `btr-${index + 1}`,
-			label: cfg.label || `Rental ${index + 1}`,
-			units: cfg.units,
-			avgSizeSqm: cfg.avgSizeSqm,
-			sellingRatePsqm: 0,
-			parkingRatio: cfg.parkingRatio
-		}))
-		normalized.marketingCostPct = 0
-		normalized.salesAgentFeePct = 0
-		normalized.marketingCostOverrideAed = 0
-		normalized.salesAgentFeesOverrideAed = 0
-	}
-
-	if (
-		(normalized.acquisitionDebtLtv === undefined || normalized.acquisitionDebtLtv === null) &&
-		Number.isFinite(normalized.landLoanLtvPct)
-	) {
-		normalized.acquisitionDebtLtv = normalized.landLoanLtvPct / 100
-	}
-
-	if (Number.isFinite(normalized.acquisitionDebtLtv)) {
-		normalized.landLoanLtvPct = Math.round((normalized.acquisitionDebtLtv ?? 0) * 100)
-	}
-
-	if (
-		(normalized.debtSpreadPa === undefined || normalized.debtSpreadPa === null) &&
-		Number.isFinite(normalized.constructionLoanSpreadBps)
-	) {
-		normalized.debtSpreadPa = normalized.constructionLoanSpreadBps / 10_000
-	}
-
-	if (
-		(normalized.landLoanSpreadBps === undefined || normalized.landLoanSpreadBps === null) &&
-		normalized.debtSpreadPa !== undefined &&
-		normalized.debtSpreadPa !== null
-	) {
-		const spreadBps = Math.round(normalized.debtSpreadPa * 10_000)
-		normalized.landLoanSpreadBps = spreadBps
-	}
-
-	if (
-		(normalized.constructionLoanSpreadBps === undefined ||
-			normalized.constructionLoanSpreadBps === null) &&
-		normalized.debtSpreadPa !== undefined &&
-		normalized.debtSpreadPa !== null
-	) {
-		const spreadBps = Math.round(normalized.debtSpreadPa * 10_000)
-		normalized.constructionLoanSpreadBps = spreadBps
-	}
-
-	return normalized
-}
-
-// ── Helpers ──────────────────────────────────────────────────────────────────
-
-function parseMaxStoreys(maxHeight: string | null | undefined): number | null {
-	if (!maxHeight) return null
-	const matches = maxHeight.match(/(\d+)/g)
-	if (!matches?.length) return null
-	const storeys = Number(matches[matches.length - 1])
-	return Number.isFinite(storeys) && storeys > 0 ? storeys : null
-}
-
-function parseMaxCoverage(maxCoverage: string | null | undefined): number | null {
-	if (!maxCoverage) return null
-	const match = maxCoverage.match(/(\d+(?:\.\d+)?)/)
-	if (!match) return null
-	const value = Number(match[1])
-	return Number.isFinite(value) ? value : null
-}
-
-function seedAssumptionsFromPlot(plotData: PlotDetails): FeasibilityAssumptions {
-	const base = createDefaultAssumptions()
-	return normalizeAssumptions({
-		...base,
-		usage: plotData.inferred_usage ?? 'unknown',
-		plotAreaSqm: plotData.plot_area_sqm,
-		maxGfaSqm: plotData.max_gfa_sqm ?? 0,
-		maxCoveragePct: parseMaxCoverage(plotData.max_coverage),
-		maxStoreys: parseMaxStoreys(plotData.max_height),
-		maxFar: plotData.far ?? 0
-	})
-}
-
 // ── Store ────────────────────────────────────────────────────────────────────
 
 const state = $state<WorkbookState>({
@@ -521,6 +266,8 @@ const activeSheet = $state<{ value: FeasibilitySheetTab }>({
 	value: 'key_assumptions'
 })
 
+const highlightedFields = $state<{ value: string[] }>({ value: [] })
+const highlightSequence = $state<{ value: number }>({ value: 0 })
 const reviewDecisions = $state<Record<string, ReviewDecision>>({})
 
 const inputs = $derived<FeasibilityAssumptions>(state.assumptions ?? createDefaultAssumptions())
@@ -536,11 +283,18 @@ const computedState = $state<{
 }>({ outputs: null, validation: null })
 
 let debounceTimer: ReturnType<typeof setTimeout> | null = null
+let clearHighlightTimer: ReturnType<typeof setTimeout> | null = null
 
 function clearPendingWorkbookRecompute(): void {
 	if (!debounceTimer) return
 	clearTimeout(debounceTimer)
 	debounceTimer = null
+}
+
+function clearPendingHighlight(): void {
+	if (!clearHighlightTimer) return
+	clearTimeout(clearHighlightTimer)
+	clearHighlightTimer = null
 }
 
 function clearComputedWorkbookState(): void {
@@ -973,7 +727,8 @@ function applyPaymentPlanPatch(patch: Partial<FeasibilityAssumptions['paymentPla
 function initFromPlot(plotData: PlotDetails): void {
 	state.phase = 'ready'
 	state.plotData = plotData
-	state.assumptions = seedAssumptionsFromPlot(plotData)
+	const assumptions = createAssumptionsFromPlot(plotData)
+	state.assumptions = assumptions
 	state.study_context = {
 		headline: plotData.project_name,
 		project_tier: 'premium',
@@ -1003,7 +758,7 @@ function initFromPlot(plotData: PlotDetails): void {
 		off_plan_unit_benchmarks: [],
 		rental_market_summary: null,
 		rental_comparables: [],
-		assumptions: seedAssumptionsFromPlot(plotData) as never,
+		assumptions: assumptions as never,
 		land_cost_estimate_aed_low: null,
 		land_cost_estimate_aed_mid: null,
 		land_cost_estimate_aed_high: null
@@ -1172,6 +927,7 @@ function setError(message: string): void {
 
 function reset(): void {
 	clearPendingWorkbookRecompute()
+	clearPendingHighlight()
 	state.phase = 'empty'
 	state.plotData = null
 	state.assumptions = null
@@ -1179,6 +935,7 @@ function reset(): void {
 	state.research = null
 	state.error = null
 	activeSheet.value = 'key_assumptions'
+	highlightedFields.value = []
 	clearComputedWorkbookState()
 }
 
@@ -1193,6 +950,17 @@ function markSheetDirty(tab: FeasibilitySheetTab): void {
 function setActiveSheet(tab: FeasibilitySheetTab): void {
 	activeSheet.value = tab
 	clearSheetDirty(tab)
+}
+
+function focusChangedFields(fields: string[], tab: FeasibilitySheetTab = 'key_assumptions'): void {
+	setActiveSheet(tab)
+	clearPendingHighlight()
+	highlightedFields.value = fields.length > 0 ? [...new Set(fields)] : []
+	highlightSequence.value += 1
+	clearHighlightTimer = setTimeout(() => {
+		highlightedFields.value = []
+		clearHighlightTimer = null
+	}, 2600)
 }
 
 function currentPlot(): Plot | null {
@@ -1250,6 +1018,12 @@ export const workbookStore = {
 	},
 	get sheetDirty() {
 		return sheetDirty
+	},
+	get highlightedFields() {
+		return highlightedFields.value
+	},
+	get highlightSequence() {
+		return highlightSequence.value
 	},
 
 	// Rich workbook + clean outputs
@@ -1435,5 +1209,6 @@ export const workbookStore = {
 	reset,
 	clearSheetDirty,
 	markSheetDirty,
-	setActiveSheet
+	setActiveSheet,
+	focusChangedFields
 }

@@ -9,45 +9,12 @@
 // with refund lag, area bridge, equity waterfall, annual CF rollup.
 // ══════════════════════════════════════════════════════════════════════════════
 
-import type { BtrUnitConfig, FeasibilityAssumptions, UsageType, VatApplicability } from './models'
+import { BTR_WORKBOOK_DEFAULTS, WORKBOOK_OPTION_DEFAULTS } from './defaults'
+import type { BtrUnitConfig, FeasibilityAssumptions, UsageType } from './models'
 
 // ── Defaults for optional assumption fields ─────────────────────────────────
 
-const DEFAULTS = {
-	basementParkingFloors: 4,
-	podiumFloors: 5,
-	residentialFloors: 30,
-	amenityRoofFloors: 1,
-	parkingAreaPerSpaceSqm: 30,
-	aboveGradeBuaFactor: 1.1,
-	serviceBohPlantPct: 0.03,
-	podiumParkingFloorsOutsideGfa: 0,
-	landTransferFeePct: 0.04,
-	brokeragePct: 0.01,
-	legalDdPct: 0.005,
-	permitFeesPct: 0.02,
-	softCostPct: 0.15,
-	acquisitionDebtLtv: 0.7,
-	constructionDebtLtc: 0.7,
-	debtSpreadPa: 0.02,
-	financingFeePct: 0.01,
-	exitFeePct: 0.01,
-	preferredReturnPa: 0.08,
-	sponsorPromotePct: 0.2,
-	projectYears: 5,
-	constructionCurveSteepness: 8,
-	salesCurveSteepness: 8,
-	vatAppliesTo: {
-		land: true,
-		hardCosts: true,
-		softCosts: true,
-		permitFees: true,
-		contingency: true,
-		marketing: true,
-		salesAdmin: true
-	} satisfies VatApplicability,
-	vatRefundLagMonths: 6
-} as const
+const DEFAULTS = WORKBOOK_OPTION_DEFAULTS
 
 function d<K extends keyof typeof DEFAULTS>(
 	a: FeasibilityAssumptions,
@@ -64,6 +31,15 @@ function positiveOverride(value: number | null | undefined): number | undefined 
 function assumptionNumber(a: FeasibilityAssumptions, key: string, fallback: number): number {
 	const value = (a as unknown as Record<string, unknown>)[key]
 	return typeof value === 'number' && Number.isFinite(value) ? value : fallback
+}
+
+function positiveAssumptionNumber(
+	a: FeasibilityAssumptions,
+	key: string,
+	fallback: number
+): number {
+	const value = assumptionNumber(a, key, fallback)
+	return value > 0 ? value : fallback
 }
 
 // ── Output Types ─────────────────────────────────────────────────────────────
@@ -1022,10 +998,16 @@ function computeArea(a: FeasibilityAssumptions): AreaBridgeOutputs {
 	const serviceBohPlantPct = d(a, 'serviceBohPlantPct')
 	const basementParkingFloors = d(a, 'basementParkingFloors')
 	const podiumParkingFloorsOutsideGfa = d(a, 'podiumParkingFloorsOutsideGfa')
+	const parkingAreaPerSpaceSqm = d(a, 'parkingAreaPerSpaceSqm')
 
 	// Area Bridge calculations
 	const aboveGradeCostableBua = round(maxGfa * aboveGradeBuaFactor)
-	const basementParkingBua = round(basementParkingFloors * a.plotAreaSqm)
+	const basementParkingCapacityBua = round(basementParkingFloors * a.plotAreaSqm)
+	const requiredParkingBua = round(targetParkingSpaces(a) * parkingAreaPerSpaceSqm)
+	const basementParkingBua =
+		requiredParkingBua > 0
+			? Math.min(basementParkingCapacityBua, requiredParkingBua)
+			: basementParkingCapacityBua
 	const podiumParkingBuaAddon = round(podiumParkingFloorsOutsideGfa * a.plotAreaSqm)
 	const serviceBohPlantAddon = round(aboveGradeCostableBua * serviceBohPlantPct)
 	const totalCostableBua = round(
@@ -1057,6 +1039,9 @@ function computeArea(a: FeasibilityAssumptions): AreaBridgeOutputs {
 		)
 	} else {
 		notes.push('GIS max coverage missing, benchmark footprint ratios applied.')
+	}
+	if (requiredParkingBua > 0 && basementParkingBua < basementParkingCapacityBua) {
+		notes.push('Basement parking BUA capped to modeled parking demand.')
 	}
 
 	return {
@@ -1102,7 +1087,9 @@ function massingBuildingType(buildingForm: BuildingForm): BuildingScheduleRow['b
 	return 'low_rise_block'
 }
 
-function getActiveUnitMix(a: FeasibilityAssumptions): Array<{ units: number; avgSizeSqm: number }> {
+function getActiveUnitConfigs(
+	a: FeasibilityAssumptions
+): Array<{ units: number; avgSizeSqm: number; parkingRatio?: number }> {
 	const btrConfigs =
 		a.developmentModel === 'build_to_rent_residential' && (a.btrUnitConfigs?.length ?? 0) > 0
 			? a.btrUnitConfigs
@@ -1110,7 +1097,30 @@ function getActiveUnitMix(a: FeasibilityAssumptions): Array<{ units: number; avg
 	const configs = btrConfigs ?? a.unitConfigs
 	return (configs ?? [])
 		.filter((row) => row.units > 0 && row.avgSizeSqm > 0)
-		.map((row) => ({ units: row.units, avgSizeSqm: row.avgSizeSqm }))
+		.map((row) => ({ units: row.units, avgSizeSqm: row.avgSizeSqm, parkingRatio: row.parkingRatio }))
+}
+
+function getActiveUnitMix(a: FeasibilityAssumptions): Array<{ units: number; avgSizeSqm: number }> {
+	return getActiveUnitConfigs(a).map((row) => ({
+		units: row.units,
+		avgSizeSqm: row.avgSizeSqm
+	}))
+}
+
+function targetParkingSpaces(a: FeasibilityAssumptions): number {
+	return round(
+		getActiveUnitConfigs(a).reduce((sum, row) => {
+			const fallbackRatio =
+				row.avgSizeSqm > a.largeUnitThresholdSqm
+					? a.largeUnitParkingRatio
+					: a.standardParkingRatio
+			const parkingRatio =
+				typeof row.parkingRatio === 'number' && Number.isFinite(row.parkingRatio)
+					? row.parkingRatio
+					: fallbackRatio
+			return sum + row.units * parkingRatio
+		}, 0)
+	)
 }
 
 function weightedAverageUnitSizeSqm(a: FeasibilityAssumptions): number {
@@ -1146,7 +1156,7 @@ function computeSiteMassing(
 	const benchmark = getBenchmark(a.usage, benchmarkStoreys)
 	const buildingForm = classifyBuildingForm(benchmarkStoreys)
 	const maxGfa = area.maxGfaSqm
-	const targetCoverage = assumptionNumber(
+	const targetCoverage = positiveAssumptionNumber(
 		a,
 		'targetCoveragePct',
 		benchmark.coverageRatio.base * 100
@@ -1165,12 +1175,12 @@ function computeSiteMassing(
 			? round((maxGfa / (a.plotAreaSqm * cappedTotalFloors)) * 100, 1)
 			: 0
 	const gfaShortfallSqm = round(Math.max(maxGfa - physicalMaxGfaSqm, 0))
-	const maxEfficientFloorplate = assumptionNumber(
+	const maxEfficientFloorplate = positiveAssumptionNumber(
 		a,
 		'maxEfficientTowerFloorplateSqm',
 		defaultMaxEfficientFloorplateSqm(buildingForm)
 	)
-	const minEfficientFloorplate = assumptionNumber(
+	const minEfficientFloorplate = positiveAssumptionNumber(
 		a,
 		'minEfficientTowerFloorplateSqm',
 		defaultMinEfficientFloorplateSqm(buildingForm)
@@ -1281,7 +1291,7 @@ function computeSiteMassing(
 			'Required unit-mix floors exceed selected / capped floors; increase residential floors, coverage, efficiency, or building count.'
 		)
 	}
-	if (coveredFootprintSqm > maxEfficientFloorplate) {
+	if (buildingCount === 1 && coveredFootprintSqm > maxEfficientFloorplate) {
 		warnings.push(
 			'Single-building floorplate is inefficient; multi-building massing is recommended.'
 		)
@@ -1293,7 +1303,7 @@ function computeSiteMassing(
 	}
 	if (targetUnits > 0) {
 		const variance = Math.abs(unitCapacityGap) / targetUnits
-		if (unitCapacityGap < 0) {
+		if (unitCapacityGap < 0 && variance > 0.1) {
 			warnings.push('Physical unit capacity is below the modeled unit count.')
 		} else if (variance > 0.1) {
 			warnings.push('Physical unit capacity exceeds the modeled unit mix by more than 10%.')
@@ -1399,10 +1409,7 @@ function computeCosts(
 	const permitFeesPct = a.permitFeesPct ?? DEFAULTS.permitFeesPct
 	const permitFeesAed = round(hardCostAed * permitFeesPct)
 
-	// Soft cost: use softCostPct if set, else fall back to designSupervisionPct
-	const softCostPctVal =
-		a.softCostPct ??
-		(a.designSupervisionPct > 0 ? a.designSupervisionPct / 100 : DEFAULTS.softCostPct)
+	const softCostPctVal = d(a, 'softCostPct')
 	const softCostAed =
 		positiveOverride(a.designSupervisionCostOverrideAed) ?? round(hardCostAed * softCostPctVal)
 
@@ -2530,46 +2537,7 @@ function computeAnnualCashFlow(periods: CashFlowPeriod[]): AnnualCashFlowOutputs
 // BTR adds: lease-up ramp, annual operating P&L, exit via cap rate, perm refi.
 // ══════════════════════════════════════════════════════════════════════════════
 
-const BTR_DEFAULTS = {
-	btrHoldPeriodYears: 10,
-	btrLeaseUpPaceUnitsPerMonth: 20,
-	btrStabilizedOccupancyPct: 95,
-	btrFreeRentMonths: 2,
-	btrAnnualRentGrowthPct: 3,
-	btrMarketRentGrowthPct: 3,
-	btrRenewalRentGrowthPct: 3,
-	btrGeneralVacancyPct: 5,
-	btrPropertyManagementPct: 5,
-	btrRepairsMaintenancePsqm: 50,
-	btrInsurancePsqm: 10,
-	btrServiceChargePsqm: 80,
-	btrUtilitiesPsqm: 30,
-	btrMarketingLeasingPct: 2,
-	btrCapexReservePct: 5,
-	btrParkingIncomeAed: 0,
-	btrAncillaryIncomeAed: 0,
-	btrAncillaryGrowthPct: 3,
-	btrStabilizedFreeRentMonths: 0, // free rent on renewal leases (0 = no blanket renewal concession)
-	btrOpExGrowthPct: 3, // annual OpEx escalation (Dubai norm)
-	btrDevCostEscalationPct: 4,
-	btrTerminalGrowthPct: 3,
-	btrLeaseUpMarketingAed: 0, // flat budget for lease-up marketing (replaces GDV-based)
-	btrCreditLossPct: 1, // credit loss as % of TPI (separate from vacancy)
-	btrPayrollPsqm: 40, // building staff AED/sqm/yr (manager, security, facilities)
-	btrGeneralAdminPct: 1, // G&A as % of EGR
-	btrContractServicesPsqm: 25, // cleaning, landscaping AED/sqm/yr
-	btrModelUnits: 1, // non-revenue show/model unit(s) deducted from GPR
-	btrExitCapRatePct: 7,
-	btrExitCostPct: 6, // 4% DLD transfer + 1% broker + 1% legal
-	btrPermDebtLtvPct: 65,
-	btrPermDebtRatePct: 6,
-	btrPermDebtSpreadBps: 165,
-	btrPermDebtAmortYears: 25,
-	btrPermDebtPointsPct: 1, // points/fees on perm loan (% of loan)
-	btrPermDebtIoYears: 1, // interest-only period before amortization
-	btrDscrMinimum: 1.25,
-	btrRefiCapRatePct: 7 // cap rate used for stabilized valuation at refi
-} as const
+const BTR_DEFAULTS = BTR_WORKBOOK_DEFAULTS
 
 function btr<K extends keyof typeof BTR_DEFAULTS>(a: FeasibilityAssumptions, key: K): number {
 	const v = (a as unknown as Record<string, unknown>)[key]

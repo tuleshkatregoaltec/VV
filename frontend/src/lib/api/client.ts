@@ -60,7 +60,17 @@ async function request<T>(endpoint: string, options: RequestOptions = {}): Promi
 		config.body = JSON.stringify(body)
 	}
 
-	const res = await fetch(`${env.PUBLIC_API_BASE_URL}${endpoint}`, config)
+	let res: Response
+	try {
+		res = await fetch(`${env.PUBLIC_API_BASE_URL}${endpoint}`, config)
+	} catch (err) {
+		throw new ApiError(
+			'Could not reach the API server. Check that the backend is running and try again.',
+			0,
+			'network_error',
+			err
+		)
+	}
 
 	if (!res.ok) {
 		// 401 = expired/invalid JWT — clear session and redirect to auth
@@ -120,7 +130,7 @@ async function stream(endpoint: string, onChunk: StreamCallback, options: Stream
 	const { method = 'GET', body } = options
 
 	const abortController = new AbortController()
-	let streamComplete = false
+	let terminalEventSeen = false
 
 	// if access token available, add auth header.
 	const access_token = await get_access_token()
@@ -191,8 +201,8 @@ async function stream(endpoint: string, onChunk: StreamCallback, options: Stream
 							// Check if stream is complete
 							try {
 								const parsed = JSON.parse(data)
-								if (parsed.type === 'done') {
-									streamComplete = true
+								if (parsed.type === 'done' || parsed.type === 'error') {
+									terminalEventSeen = true
 								}
 							} catch {
 								// Not JSON, ignore
@@ -203,6 +213,28 @@ async function stream(endpoint: string, onChunk: StreamCallback, options: Stream
 					}
 				}
 			}
+
+			if (buffer.trim()) {
+				const lines = buffer.split('\n')
+				for (const line of lines) {
+					if (line.startsWith('data: ')) {
+						const data = line.slice(6)
+						try {
+							const parsed = JSON.parse(data)
+							if (parsed.type === 'done' || parsed.type === 'error') {
+								terminalEventSeen = true
+							}
+						} catch {
+							// Not JSON, ignore
+						}
+						onChunk(data)
+					}
+				}
+			}
+
+			if (!terminalEventSeen) {
+				onChunk(JSON.stringify({ type: 'done' }))
+			}
 		})
 		.catch((error) => {
 			if (error.name === 'AbortError') {
@@ -212,7 +244,7 @@ async function stream(endpoint: string, onChunk: StreamCallback, options: Stream
 			console.error('Stream error:', error)
 
 			// Only send error if stream wasn't completed normally
-			if (!streamComplete) {
+			if (!terminalEventSeen) {
 				if (error.message.startsWith('TOKEN_LIMIT_EXCEEDED:')) {
 					onChunk(
 						JSON.stringify({ type: 'error', error: 'token_limit_exceeded', details: error.message })

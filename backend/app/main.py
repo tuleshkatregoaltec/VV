@@ -23,6 +23,7 @@ from app.config import settings
 from app.core.logging_config import LOGGING_CONFIG
 from app.feasibility.router import router as feasibility_router
 from app.filters.router import router as filters_router
+from app.listings.router import router as listings_router
 from app.news.router import router as news_router
 from app.organization.router import router as organization_router
 from app.postgres import close_postgres
@@ -79,6 +80,7 @@ app.include_router(analytics_router, tags=["analytics"])
 app.include_router(area_router, tags=["areas"])
 app.include_router(chat_router, tags=["chat"])
 app.include_router(filters_router, tags=["filters"])
+app.include_router(listings_router, tags=["listings"])
 app.include_router(news_router, tags=["news"])
 app.include_router(organization_router, tags=["organization"])
 app.include_router(project_router, tags=["projects"])

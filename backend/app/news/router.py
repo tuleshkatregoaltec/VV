@@ -1,10 +1,11 @@
 from fastapi import APIRouter, Depends, Query
+from fastapi.responses import FileResponse
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.decorators import cached_endpoint
 from app.core.dependencies import AuthContext, require_active_subscription
-from app.news.models import NewsListResponse
-from app.news.service import fetch_news_articles
+from app.news.models import NewsListResponse, NewsSummaryResponse
+from app.news.service import fetch_news_articles, fetch_news_summary, fetch_news_thumbnail
 from app.postgres import get_db_session
 
 router = APIRouter(prefix="/api/v1/news", tags=["news"])
@@ -19,3 +20,25 @@ async def get_news(
     db: AsyncSession = Depends(get_db_session),
 ):
     return await fetch_news_articles(db, limit, offset)
+
+
+@router.get("/summary", response_model=NewsSummaryResponse)
+@cached_endpoint(prefix="news_summary", expire=900)
+async def get_news_summary(
+    context: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
+):
+    return await fetch_news_summary(db)
+
+
+@router.get("/articles/{article_id}/thumbnail")
+async def get_news_thumbnail(
+    article_id: int,
+    db: AsyncSession = Depends(get_db_session),
+):
+    path, content_type = await fetch_news_thumbnail(db, article_id)
+    return FileResponse(
+        path,
+        media_type=content_type,
+        headers={"Cache-Control": "public, max-age=86400"},
+    )

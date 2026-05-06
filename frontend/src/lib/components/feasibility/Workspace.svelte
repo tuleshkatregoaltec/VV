@@ -9,7 +9,7 @@ import ChatPanel from './ChatPanel.svelte'
 import StudyContextPanel from './StudyContextPanel.svelte'
 import WorkbookPanel from './WorkbookPanel.svelte'
 
-let contextCollapsed = $state(false)
+let contextCollapsed = $state(true)
 let chatCollapsed = $state(false)
 let drawer = $state<'context' | 'chat' | null>(null)
 let isWide = $state(false)

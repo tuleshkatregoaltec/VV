@@ -2,6 +2,7 @@ from datetime import datetime
 from typing import LiteralString, Optional
 
 from pydantic import AwareDatetime, BaseModel
+from pydantic import Field as PydanticField
 from sqlalchemy import Column, DateTime
 from sqlmodel import Field, SQLModel
 
@@ -34,3 +35,18 @@ class NewsListResponse(BaseModel):
     total: int
     limit: int
     offset: int
+
+
+class NewsSummarySection(BaseModel):
+    title: str
+    bullets: list[str] = PydanticField(default_factory=list)
+
+
+class NewsSummaryDraft(BaseModel):
+    macro: NewsSummarySection
+    real_estate: NewsSummarySection
+
+
+class NewsSummaryResponse(NewsSummaryDraft):
+    generated_at: AwareDatetime
+    article_count: int

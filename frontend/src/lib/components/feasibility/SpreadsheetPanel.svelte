@@ -57,7 +57,6 @@ const btrTabs: { id: FeasibilitySheetTab; label: string }[] = [
 
 const tabs = $derived(isBtr ? btrTabs : btsTabs)
 
-const validation = $derived(workbookStore.validation)
 const activeTab = $derived(workbookStore.activeSheet)
 let exportError = $state<string | null>(null)
 
@@ -119,15 +118,6 @@ function exportWorkbook() {
 			>
 				Export Excel
 			</button>
-			{#if validation}
-				<span class="text-[10px] px-2 py-0.5 rounded-md font-medium uppercase tracking-[0.12em] {validation.status === 'invalid'
-					? 'bg-rose-100 text-rose-700'
-					: validation.status === 'needs_review'
-						? 'bg-amber-100 text-amber-700'
-						: 'bg-emerald-100 text-emerald-700'}">
-					{validation.status.replace('_', ' ')}
-				</span>
-			{/if}
 		</div>
 	</div>
 

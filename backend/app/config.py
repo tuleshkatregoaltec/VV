@@ -3,9 +3,11 @@ from functools import cached_property
 from typing import Annotated, Any, Literal
 
 from pydantic import (
+    AliasChoices,
     AnyUrl,
     BeforeValidator,
     EmailStr,
+    Field,
     PostgresDsn,
     computed_field,
     field_validator,
@@ -42,6 +44,7 @@ class Settings(BaseSettings):
     REDIS_PASSWORD: str  # Bitwarden Secrets
 
     FRONTEND_URL: AnyUrl  # configMap
+    PUBLIC_API_BASE_URL: AnyUrl | None = None
 
     # Security
     SESSION_SECRET: str  # Bitwarden Secrets
@@ -63,17 +66,29 @@ class Settings(BaseSettings):
     AUTH_SERVICE_ROLE_KEY: str  # Bitwarden Secrets
     FIRST_SUPERUSER: EmailStr | None = None
     FIRST_SUPERUSER_PASSWORD: str | None = None
+    FIRST_SUPERUSER_RENAME_FROM: EmailStr | None = None
+    FIRST_SUPERUSER_FIRST_NAME: str = "Admin"
+    FIRST_SUPERUSER_LAST_NAME: str = "User"
+    FIRST_SUPERUSER_AVATAR_URL: str | None = None
 
     # PostHog
     POSTHOG_API_KEY: str | None = None
     POSTHOG_HOST: AnyUrl | None = None
 
     # S3
-    S3_ENDPOINT_URL: AnyUrl  # configMap
-    S3_ACCESS_KEY_ID: str  # Bitwarden Secrets
-    S3_SECRET_ACCESS_KEY: str
-    S3_BUCKET_NAME: str  # configMap
-    S3_REGION: str  # configMap
+    S3_ENDPOINT_URL: AnyUrl = Field(
+        validation_alias=AliasChoices(
+            "AWS_ENDPOINT_URL", "S3_ENDPOINT_URL", "CLOUDFLARE_R2_ENDPOINT_URL"
+        )
+    )  # configMap
+    S3_ACCESS_KEY_ID: str = Field(
+        validation_alias=AliasChoices("AWS_ACCESS_KEY_ID", "S3_ACCESS_KEY_ID")
+    )  # Bitwarden Secrets
+    S3_SECRET_ACCESS_KEY: str = Field(
+        validation_alias=AliasChoices("AWS_SECRET_ACCESS_KEY", "S3_SECRET_ACCESS_KEY")
+    )
+    S3_BUCKET_NAME: str = Field(validation_alias=AliasChoices("S3_BUCKET_NAME", "S3_BUCKET"))
+    S3_REGION: str = Field(validation_alias=AliasChoices("AWS_REGION", "S3_REGION"))  # configMap
 
     # ClickHouse
     CLICKHOUSE_HOST: str  # configMap

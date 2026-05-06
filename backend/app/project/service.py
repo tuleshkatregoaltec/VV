@@ -3,14 +3,17 @@
 import asyncio
 import json
 import logging
+import math
 import re
-from typing import List, Optional
+import time
+from typing import Any, List, Optional
 
 from app.clickhouse.client import query
 from app.project.models import (
     BuildingDetailResponse,
     BuildingInfo,
     BuildingUnitType,
+    DDAOutlineFeature,
     DDAPlotFeature,
     GeoPin,
     GeoPolygon,
@@ -18,11 +21,18 @@ from app.project.models import (
     MasterProjectSummary,
     ProjectDetailResponse,
     ProjectMarketSnapshotResponse,
+    ProjectRadarArea,
+    ProjectRadarProject,
+    ProjectRadarResponse,
+    ProjectRadarStats,
     ProjectSearchResult,
     ProjectUnitComposition,
 )
 
 logger = logging.getLogger(__name__)
+
+DDA_GEOMETRY_CACHE_TTL_SECONDS = 60 * 60
+_dda_geometry_cache: tuple[float, list[dict[str, Any]]] | None = None
 
 
 def _room_sort_key(rooms: str) -> tuple:
@@ -33,6 +43,54 @@ def _room_sort_key(rooms: str) -> tuple:
     if match:
         return (1, int(match.group(1)), normalized)
     return (2, 0, normalized.lower())
+
+
+def _float_or_none(value: Any) -> float | None:
+    if value is None:
+        return None
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return None
+    return parsed if math.isfinite(parsed) else None
+
+
+def _land_use_labels(raw: Any, limit: int = 3) -> list[str]:
+    if raw in (None, "", []):
+        return []
+
+    if isinstance(raw, list):
+        labels: list[str] = []
+        for item in raw:
+            labels.extend(_land_use_labels(item, limit=limit))
+            if len(labels) >= limit:
+                break
+        return labels[:limit]
+
+    if not isinstance(raw, str):
+        return []
+
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError:
+        cleaned = raw.strip()
+        return [cleaned] if cleaned else []
+
+    labels = []
+    if isinstance(parsed, list):
+        for item in parsed:
+            if not isinstance(item, dict):
+                continue
+            label = " ".join(
+                str(item.get(key) or "").strip()
+                for key in ("type", "use")
+                if str(item.get(key) or "").strip()
+            )
+            if label and label not in labels:
+                labels.append(label)
+            if len(labels) >= limit:
+                break
+    return labels
 
 
 async def list_all_projects() -> List[ProjectSearchResult]:
@@ -328,6 +386,279 @@ async def get_master_project(master_name: str) -> Optional[MasterProjectResponse
     )
 
 
+async def get_project_radar(limit: int = 1400) -> ProjectRadarResponse:
+    """Return project and area map data for the radar view."""
+    project_sql = """
+        WITH geo_by_project AS (
+            SELECT
+                project_name_en,
+                avg(lat) AS latitude,
+                avg(lng) AS longitude,
+                count() AS geo_pin_count
+            FROM ch_geo_buildings
+            WHERE lat BETWEEN 20 AND 30
+              AND lng BETWEEN 50 AND 60
+              AND project_name_en != ''
+            GROUP BY project_name_en
+        )
+        SELECT
+            f.project_id AS project_id,
+            f.project_name_en AS project_name_en,
+            f.area_name_en AS area_name_en,
+            f.developer_name AS developer_name,
+            f.master_project_en AS master_project_en,
+            g.latitude AS latitude,
+            g.longitude AS longitude,
+            g.geo_pin_count AS geo_pin_count,
+            f.completion_status AS completion_status,
+            f.pipeline_status AS pipeline_status,
+            p.project_status AS project_status,
+            f.no_of_units AS no_of_units,
+            p.no_of_buildings AS no_of_buildings,
+            f.percent_completed AS percent_completed,
+            f.estimated_delivery_confidence AS estimated_delivery_confidence,
+            f.sales_transaction_count_12m AS sales_transaction_count_12m,
+            f.rental_contract_count_12m AS rental_contract_count_12m,
+            f.total_sales_volume_12m AS total_sales_volume_12m,
+            f.median_sale_price AS median_sale_price,
+            f.median_annual_rent AS median_annual_rent,
+            f.gross_yield_pct AS gross_yield_pct,
+            f.avg_sale_price_sqm_12m AS avg_sale_price_sqm_12m,
+            f.avg_rent_price_sqm_12m AS avg_rent_price_sqm_12m
+        FROM ch_project_fact f
+        INNER JOIN ch_projects p ON p.project_id = f.project_id
+        INNER JOIN geo_by_project g ON g.project_name_en = f.project_name_en
+        WHERE f.project_name_en != ''
+        ORDER BY
+            (f.pipeline_status = 'delivering_next_12_months') DESC,
+            f.no_of_units DESC,
+            f.total_sales_volume_12m DESC
+        LIMIT {limit:UInt32}
+    """
+
+    area_sql = """
+        WITH project_geo AS (
+            SELECT
+                project_name_en,
+                avg(lat) AS latitude,
+                avg(lng) AS longitude
+            FROM ch_geo_buildings
+            WHERE lat BETWEEN 20 AND 30
+              AND lng BETWEEN 50 AND 60
+              AND project_name_en != ''
+            GROUP BY project_name_en
+        ),
+        area_geo AS (
+            SELECT
+                p.area_name_en,
+                avg(g.latitude) AS latitude,
+                avg(g.longitude) AS longitude,
+                countDistinct(p.project_id) AS mapped_projects
+            FROM ch_projects p
+            INNER JOIN project_geo g ON g.project_name_en = p.project_name_en
+            WHERE p.area_name_en != ''
+            GROUP BY p.area_name_en
+        ),
+        dda_summary AS (
+            SELECT
+                community_name,
+                count() AS dda_plot_count,
+                sum(plot_area_sqm) AS dda_total_plot_area_sqm,
+                sum(max_gfa_sqm) AS dda_total_gfa_sqm,
+                arrayFilter(x -> x != '', topK(5)(land_use)) AS dda_dominant_land_uses
+            FROM ch_gis_land_plots FINAL
+            WHERE coordinates != ''
+              AND community_name != ''
+            GROUP BY community_name
+        )
+        SELECT
+            af.area_id AS area_id,
+            af.area_name_en AS area_name_en,
+            ag.latitude AS latitude,
+            ag.longitude AS longitude,
+            ifNull(ag.mapped_projects, 0) AS mapped_projects,
+            af.active_projects AS active_projects,
+            af.completed_projects AS completed_projects,
+            af.overdue_projects AS overdue_projects,
+            af.pipeline_units AS pipeline_units,
+            af.units_delivering_next_12_months AS units_delivering_next_12_months,
+            af.active_developers AS active_developers,
+            af.avg_completion_pct AS avg_completion_pct,
+            af.avg_delivery_confidence AS avg_delivery_confidence,
+            af.sales_transaction_count_12m AS sales_transaction_count_12m,
+            af.rental_contract_count_12m AS rental_contract_count_12m,
+            af.total_sales_volume_12m AS total_sales_volume_12m,
+            af.median_sale_price AS median_sale_price,
+            af.median_annual_rent AS median_annual_rent,
+            af.gross_yield_pct AS gross_yield_pct,
+            af.top_developers AS top_developers,
+            af.top_master_projects AS top_master_projects,
+            ifNull(ds.dda_plot_count, 0) AS dda_plot_count,
+            ifNull(ds.dda_total_plot_area_sqm, 0) AS dda_total_plot_area_sqm,
+            ifNull(ds.dda_total_gfa_sqm, 0) AS dda_total_gfa_sqm,
+            ifNull(ds.dda_dominant_land_uses, []) AS dda_dominant_land_uses
+        FROM ch_area_fact af
+        LEFT JOIN area_geo ag ON lower(ag.area_name_en) = lower(af.area_name_en)
+        LEFT JOIN dda_summary ds ON lower(ds.community_name) = lower(af.area_name_en)
+        WHERE af.area_name_en != ''
+          AND lower(af.area_name_en) != 'unknown'
+        ORDER BY af.pipeline_units DESC, af.sales_transaction_count_12m DESC
+        LIMIT 90
+    """
+
+    stats_sql = """
+        SELECT
+            count() AS total_projects,
+            (
+                SELECT count()
+                FROM (
+                    SELECT DISTINCT p.project_id
+                    FROM ch_projects p
+                    INNER JOIN (
+                        SELECT DISTINCT project_name_en
+                        FROM ch_geo_buildings
+                        WHERE lat BETWEEN 20 AND 30
+                          AND lng BETWEEN 50 AND 60
+                          AND project_name_en != ''
+                    ) g ON g.project_name_en = p.project_name_en
+                )
+            ) AS mapped_projects,
+            countIf(completion_status != 'FINISHED') AS active_projects,
+            countIf(completion_status = 'FINISHED') AS finished_projects,
+            sumIf(no_of_units, completion_status != 'FINISHED') AS pipeline_units,
+            sumIf(
+                no_of_units,
+                pipeline_status = 'delivering_next_12_months' AND completion_status != 'FINISHED'
+            )
+                AS units_delivering_next_12_months,
+            sum(sales_transaction_count_12m) AS sales_transaction_count_12m,
+            sum(rental_contract_count_12m) AS rental_contract_count_12m,
+            sum(total_sales_volume_12m) AS total_sales_volume_12m,
+            (
+                SELECT count()
+                FROM ch_gis_land_plots FINAL
+                WHERE coordinates != ''
+            ) AS dda_plot_count,
+            (
+                SELECT sum(plot_area_sqm)
+                FROM ch_gis_land_plots FINAL
+                WHERE coordinates != ''
+            ) AS dda_total_plot_area_sqm,
+            (
+                SELECT sum(max_gfa_sqm)
+                FROM ch_gis_land_plots FINAL
+                WHERE coordinates != ''
+            ) AS dda_total_gfa_sqm
+        FROM ch_project_fact
+    """
+
+    project_rows, area_rows, stats_rows = await asyncio.gather(
+        query(project_sql, {"limit": limit}),
+        query(area_sql, {}),
+        query(stats_sql, {}),
+    )
+
+    projects = [
+        ProjectRadarProject(
+            project_id=row["project_id"],
+            project_name=row["project_name_en"],
+            area_name=row.get("area_name_en") or "Unknown",
+            developer_name=row.get("developer_name") or None,
+            master_project_en=row.get("master_project_en") or None,
+            latitude=float(row["latitude"]),
+            longitude=float(row["longitude"]),
+            geo_pin_count=int(row.get("geo_pin_count") or 0),
+            completion_status=row.get("completion_status") or "",
+            pipeline_status=row.get("pipeline_status") or "",
+            project_status=row.get("project_status") or None,
+            no_of_units=int(row.get("no_of_units") or 0),
+            no_of_buildings=int(row.get("no_of_buildings") or 0),
+            percent_completed=_float_or_none(row.get("percent_completed")),
+            delivery_confidence=_float_or_none(row.get("estimated_delivery_confidence")) or 0.0,
+            sales_transaction_count_12m=int(row.get("sales_transaction_count_12m") or 0),
+            rental_contract_count_12m=int(row.get("rental_contract_count_12m") or 0),
+            total_sales_volume_12m=_float_or_none(row.get("total_sales_volume_12m")) or 0.0,
+            median_sale_price=_float_or_none(row.get("median_sale_price")),
+            median_annual_rent=_float_or_none(row.get("median_annual_rent")),
+            gross_yield_pct=_float_or_none(row.get("gross_yield_pct")),
+            avg_sale_price_sqm_12m=_float_or_none(row.get("avg_sale_price_sqm_12m")),
+            avg_rent_price_sqm_12m=_float_or_none(row.get("avg_rent_price_sqm_12m")),
+        )
+        for row in project_rows
+    ]
+
+    areas = [
+        ProjectRadarArea(
+            area_id=int(row.get("area_id") or 0),
+            area_name=row.get("area_name_en") or "Unknown",
+            latitude=_float_or_none(row.get("latitude")),
+            longitude=_float_or_none(row.get("longitude")),
+            mapped_projects=int(row.get("mapped_projects") or 0),
+            active_projects=int(row.get("active_projects") or 0),
+            completed_projects=int(row.get("completed_projects") or 0),
+            overdue_projects=int(row.get("overdue_projects") or 0),
+            pipeline_units=int(row.get("pipeline_units") or 0),
+            units_delivering_next_12_months=int(
+                row.get("units_delivering_next_12_months") or 0
+            ),
+            active_developers=int(row.get("active_developers") or 0),
+            avg_completion_pct=_float_or_none(row.get("avg_completion_pct")) or 0.0,
+            avg_delivery_confidence=_float_or_none(row.get("avg_delivery_confidence")) or 0.0,
+            sales_transaction_count_12m=int(row.get("sales_transaction_count_12m") or 0),
+            rental_contract_count_12m=int(row.get("rental_contract_count_12m") or 0),
+            total_sales_volume_12m=_float_or_none(row.get("total_sales_volume_12m")) or 0.0,
+            median_sale_price=_float_or_none(row.get("median_sale_price")),
+            median_annual_rent=_float_or_none(row.get("median_annual_rent")),
+            gross_yield_pct=_float_or_none(row.get("gross_yield_pct")),
+            top_developers=list(row.get("top_developers") or [])[:5],
+            top_master_projects=list(row.get("top_master_projects") or [])[:5],
+            dda_plot_count=int(row.get("dda_plot_count") or 0),
+            dda_total_plot_area_sqm=_float_or_none(row.get("dda_total_plot_area_sqm")) or 0.0,
+            dda_total_gfa_sqm=_float_or_none(row.get("dda_total_gfa_sqm")) or 0.0,
+            dda_dominant_land_uses=_land_use_labels(row.get("dda_dominant_land_uses"), limit=5),
+        )
+        for row in area_rows
+    ]
+    unique_areas: list[ProjectRadarArea] = []
+    seen_area_names: set[str] = set()
+    for area in areas:
+        area_key = area.area_name.strip().lower()
+        if area_key in seen_area_names:
+            continue
+        seen_area_names.add(area_key)
+        unique_areas.append(area)
+    areas = unique_areas
+
+    stats_row = stats_rows[0] if stats_rows else {}
+    stats = ProjectRadarStats(
+        total_projects=int(stats_row.get("total_projects") or 0),
+        mapped_projects=int(stats_row.get("mapped_projects") or 0),
+        active_projects=int(stats_row.get("active_projects") or 0),
+        finished_projects=int(stats_row.get("finished_projects") or 0),
+        pipeline_units=int(stats_row.get("pipeline_units") or 0),
+        units_delivering_next_12_months=int(
+            stats_row.get("units_delivering_next_12_months") or 0
+        ),
+        sales_transaction_count_12m=int(stats_row.get("sales_transaction_count_12m") or 0),
+        rental_contract_count_12m=int(stats_row.get("rental_contract_count_12m") or 0),
+        total_sales_volume_12m=_float_or_none(stats_row.get("total_sales_volume_12m")) or 0.0,
+        dda_plot_count=int(stats_row.get("dda_plot_count") or 0),
+        dda_total_plot_area_sqm=_float_or_none(stats_row.get("dda_total_plot_area_sqm")) or 0.0,
+        dda_total_gfa_sqm=_float_or_none(stats_row.get("dda_total_gfa_sqm")) or 0.0,
+    )
+
+    return ProjectRadarResponse(
+        stats=stats,
+        projects=projects,
+        areas=areas,
+        source_notes=[
+            "Project points are derived from geocoded building pins when available.",
+            "Area bubbles combine ch_area_fact metrics with DDA community planning summaries.",
+            "DDA outlines load at overview zoom; parcel polygons load only for the zoomed viewport.",
+        ],
+    )
+
+
 async def get_building_details(property_id: int) -> Optional[BuildingDetailResponse]:
     """Get building metadata and unit composition by bedroom type."""
     building_sql = """
@@ -385,14 +716,296 @@ async def get_building_details(property_id: int) -> Optional[BuildingDetailRespo
     )
 
 
+def _dubai_local_tm_to_lng_lat(easting: float, northing: float) -> list[float]:
+    """Convert Dubai Local Transverse Mercator coordinates to WGS84 lng/lat."""
+    semi_major_axis = 6378137.0
+    flattening = 1 / 298.257223563
+    scale_factor = 1.0
+    eccentricity_sq = flattening * (2 - flattening)
+    second_eccentricity_sq = eccentricity_sq / (1 - eccentricity_sq)
+
+    x = easting - 500000.0
+    y = northing
+    central_meridian = math.radians(55.3333333333333)
+
+    meridional_arc = y / scale_factor
+    mu = meridional_arc / (
+        semi_major_axis
+        * (
+            1
+            - eccentricity_sq / 4
+            - 3 * eccentricity_sq**2 / 64
+            - 5 * eccentricity_sq**3 / 256
+        )
+    )
+
+    e1 = (1 - math.sqrt(1 - eccentricity_sq)) / (1 + math.sqrt(1 - eccentricity_sq))
+    footprint_lat = (
+        mu
+        + (3 * e1 / 2 - 27 * e1**3 / 32) * math.sin(2 * mu)
+        + (21 * e1**2 / 16 - 55 * e1**4 / 32) * math.sin(4 * mu)
+        + (151 * e1**3 / 96) * math.sin(6 * mu)
+        + (1097 * e1**4 / 512) * math.sin(8 * mu)
+    )
+
+    sin_fp = math.sin(footprint_lat)
+    cos_fp = math.cos(footprint_lat)
+    tan_fp = math.tan(footprint_lat)
+
+    c1 = second_eccentricity_sq * cos_fp**2
+    t1 = tan_fp**2
+    n1 = semi_major_axis / math.sqrt(1 - eccentricity_sq * sin_fp**2)
+    r1 = (
+        semi_major_axis
+        * (1 - eccentricity_sq)
+        / (1 - eccentricity_sq * sin_fp**2) ** 1.5
+    )
+    d = x / (n1 * scale_factor)
+
+    lat = footprint_lat - (n1 * tan_fp / r1) * (
+        d**2 / 2
+        - (5 + 3 * t1 + 10 * c1 - 4 * c1**2 - 9 * second_eccentricity_sq) * d**4 / 24
+        + (
+            61
+            + 90 * t1
+            + 298 * c1
+            + 45 * t1**2
+            - 252 * second_eccentricity_sq
+            - 3 * c1**2
+        )
+        * d**6
+        / 720
+    )
+    lon = central_meridian + (
+        d
+        - (1 + 2 * t1 + c1) * d**3 / 6
+        + (
+            5
+            - 2 * c1
+            + 28 * t1
+            - 3 * c1**2
+            + 8 * second_eccentricity_sq
+            + 24 * t1**2
+        )
+        * d**5
+        / 120
+    ) / cos_fp
+
+    return [math.degrees(lon), math.degrees(lat)]
+
+
+def _normalize_plot_coordinate(pair: Any) -> list[float] | None:
+    if not isinstance(pair, list) or len(pair) != 2:
+        return None
+    try:
+        x = float(pair[0])
+        y = float(pair[1])
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(x) or not math.isfinite(y):
+        return None
+
+    if -180 <= x <= 180 and -90 <= y <= 90:
+        return [x, y]
+    if 100000 <= x <= 900000 and 0 <= y <= 10000000:
+        return _dubai_local_tm_to_lng_lat(x, y)
+    return None
+
+
 def _parse_plot_coordinates(raw: str) -> list[list[float]]:
     if not raw:
         return []
     try:
         parsed = json.loads(raw)
-        return [[float(p[0]), float(p[1])] for p in parsed if isinstance(p, list) and len(p) == 2]
+        coords = [
+            coordinate
+            for p in parsed
+            if (coordinate := _normalize_plot_coordinate(p)) is not None
+        ]
+        if len(coords) >= 3 and coords[0] != coords[-1]:
+            coords.append(coords[0])
+        return coords
     except Exception:
         return []
+
+
+def _coordinate_bounds(coordinates: list[list[float]]) -> tuple[float, float, float, float]:
+    lngs = [point[0] for point in coordinates]
+    lats = [point[1] for point in coordinates]
+    return min(lngs), min(lats), max(lngs), max(lats)
+
+
+def _bounds_intersects(
+    plot_bounds: tuple[float, float, float, float],
+    *,
+    west: float,
+    south: float,
+    east: float,
+    north: float,
+) -> bool:
+    plot_west, plot_south, plot_east, plot_north = plot_bounds
+    return plot_west <= east and plot_east >= west and plot_south <= north and plot_north >= south
+
+
+async def _get_dda_plot_geometries() -> list[dict[str, Any]]:
+    global _dda_geometry_cache
+
+    now = time.monotonic()
+    if _dda_geometry_cache and now - _dda_geometry_cache[0] < DDA_GEOMETRY_CACHE_TTL_SECONDS:
+        return _dda_geometry_cache[1]
+
+    sql = """
+    SELECT
+        plot_number,
+        project_name,
+        community_name,
+        plot_area_sqm,
+        max_gfa_sqm,
+        max_height,
+        max_coverage,
+        land_use,
+        gfa_type,
+        is_verified,
+        coordinates
+    FROM ch_gis_land_plots FINAL
+    WHERE coordinates != ''
+    LIMIT 100000
+    """
+    rows = await query(sql, {})
+    geometries: list[dict[str, Any]] = []
+    for row in rows:
+        coordinates = _parse_plot_coordinates(row.get("coordinates", ""))
+        if len(coordinates) < 3:
+            continue
+        geometries.append(
+            {
+                "plot_number": row.get("plot_number") or "",
+                "project_name": row.get("project_name") or "",
+                "community_name": row.get("community_name") or "",
+                "plot_area_sqm": _float_or_none(row.get("plot_area_sqm")) or 0.0,
+                "max_gfa_sqm": _float_or_none(row.get("max_gfa_sqm")),
+                "max_height": row.get("max_height") or None,
+                "max_coverage": row.get("max_coverage") or None,
+                "land_use": row.get("land_use") or None,
+                "gfa_type": row.get("gfa_type") or None,
+                "is_verified": bool(row.get("is_verified") or False),
+                "coordinates": coordinates,
+                "bounds": _coordinate_bounds(coordinates),
+                "land_use_summary": _land_use_labels(row.get("land_use"), limit=4),
+            }
+        )
+
+    _dda_geometry_cache = (now, geometries)
+    return geometries
+
+
+def _convex_hull(points: list[list[float]]) -> list[list[float]]:
+    unique_points = sorted({(round(point[0], 8), round(point[1], 8)) for point in points})
+    if len(unique_points) < 3:
+        return []
+
+    def cross(
+        origin: tuple[float, float],
+        point_a: tuple[float, float],
+        point_b: tuple[float, float],
+    ) -> float:
+        return (point_a[0] - origin[0]) * (point_b[1] - origin[1]) - (
+            point_a[1] - origin[1]
+        ) * (point_b[0] - origin[0])
+
+    lower: list[tuple[float, float]] = []
+    for point in unique_points:
+        while len(lower) >= 2 and cross(lower[-2], lower[-1], point) <= 0:
+            lower.pop()
+        lower.append(point)
+
+    upper: list[tuple[float, float]] = []
+    for point in reversed(unique_points):
+        while len(upper) >= 2 and cross(upper[-2], upper[-1], point) <= 0:
+            upper.pop()
+        upper.append(point)
+
+    hull = [[lng, lat] for lng, lat in lower[:-1] + upper[:-1]]
+    if len(hull) >= 3:
+        hull.append(hull[0])
+    return hull
+
+
+async def get_dda_outlines_for_bounds(
+    *,
+    west: float,
+    south: float,
+    east: float,
+    north: float,
+    zoom: float,
+    limit: int = 160,
+) -> list[DDAOutlineFeature]:
+    """Return coarse DDA outlines for low-zoom planning context."""
+    rows = await _get_dda_plot_geometries()
+    group_by_project = zoom >= 12
+    groups: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        coords = row["coordinates"]
+        if not _bounds_intersects(
+            row["bounds"],
+            west=west,
+            south=south,
+            east=east,
+            north=north,
+        ):
+            continue
+
+        project_name = str(row.get("project_name") or "").strip()
+        community_name = str(row.get("community_name") or "").strip()
+        name = project_name if group_by_project and project_name else community_name
+        if not name:
+            continue
+
+        group = groups.setdefault(
+            name,
+            {
+                "name": name,
+                "kind": "project" if group_by_project and project_name else "community",
+                "points": [],
+                "plot_count": 0,
+                "total_plot_area_sqm": 0.0,
+                "total_gfa_sqm": 0.0,
+                "land_uses": [],
+            },
+        )
+        group["points"].extend(coords[:-1] if coords[0] == coords[-1] else coords)
+        group["plot_count"] += 1
+        group["total_plot_area_sqm"] += row["plot_area_sqm"]
+        group["total_gfa_sqm"] += row["max_gfa_sqm"] or 0.0
+        group["land_uses"].extend(row["land_use_summary"][:2])
+
+    min_plot_count = 8 if zoom < 12 else 3
+    outlines: list[DDAOutlineFeature] = []
+    for group in sorted(
+        groups.values(),
+        key=lambda item: (item["plot_count"], item["total_plot_area_sqm"]),
+        reverse=True,
+    ):
+        if group["plot_count"] < min_plot_count:
+            continue
+        hull = _convex_hull(group["points"])
+        if len(hull) < 4:
+            continue
+        land_uses = list(dict.fromkeys(group["land_uses"]))[:4]
+        outlines.append(
+            DDAOutlineFeature(
+                name=group["name"],
+                kind=group["kind"],
+                plot_count=group["plot_count"],
+                total_plot_area_sqm=round(group["total_plot_area_sqm"], 2),
+                total_gfa_sqm=round(group["total_gfa_sqm"], 2),
+                coordinates=hull,
+                land_use_summary=land_uses,
+            )
+        )
+        if len(outlines) >= limit:
+            break
+    return outlines
 
 
 async def get_project_market_snapshot(project_id: int) -> Optional[ProjectMarketSnapshotResponse]:
@@ -444,36 +1057,63 @@ async def get_project_market_snapshot(project_id: int) -> Optional[ProjectMarket
     )
 
 
-async def get_dda_plots_for_area(area: str, limit: int = 300) -> list[DDAPlotFeature]:
-    """Return DDA GIS plot polygons for a given area/community name."""
-    sql = """
-    SELECT
-        plot_number,
-        project_name,
-        community_name,
-        plot_area_sqm,
-        coordinates
-    FROM ch_gis_land_plots FINAL
-    WHERE coordinates != ''
-      AND (
-          community_name ILIKE {area:String}
-          OR project_name ILIKE {area:String}
-      )
-    LIMIT {limit:UInt32}
-    """
-    rows = await query(sql, {"area": f"%{area}%", "limit": limit})
+def _plot_intersects_bounds(
+    coordinates: list[list[float]],
+    *,
+    west: float,
+    south: float,
+    east: float,
+    north: float,
+) -> bool:
+    if not coordinates:
+        return False
+    lngs = [point[0] for point in coordinates]
+    lats = [point[1] for point in coordinates]
+    return min(lngs) <= east and max(lngs) >= west and min(lats) <= north and max(lats) >= south
+
+
+async def get_dda_plots_for_area(
+    area: str | None = None,
+    limit: int = 300,
+    west: float | None = None,
+    south: float | None = None,
+    east: float | None = None,
+    north: float | None = None,
+) -> list[DDAPlotFeature]:
+    """Return DDA GIS plot polygons for a community or current map bounds."""
+    has_bounds = all(value is not None for value in (west, south, east, north))
+    area_query = area.strip().lower() if area else ""
+    rows = await _get_dda_plot_geometries()
     results: list[DDAPlotFeature] = []
     for row in rows:
-        coords = _parse_plot_coordinates(row.get("coordinates", ""))
-        if len(coords) < 3:
+        if area_query and area_query not in " ".join(
+            [row["community_name"], row["project_name"]]
+        ).lower():
+            continue
+        if has_bounds and not _bounds_intersects(
+            row["bounds"],
+            west=west or 0,
+            south=south or 0,
+            east=east or 0,
+            north=north or 0,
+        ):
             continue
         results.append(
             DDAPlotFeature(
                 plot_number=row["plot_number"],
-                project_name=row.get("project_name") or "",
-                community_name=row.get("community_name") or "",
-                plot_area_sqm=float(row.get("plot_area_sqm") or 0),
-                coordinates=coords,
+                project_name=row["project_name"],
+                community_name=row["community_name"],
+                plot_area_sqm=row["plot_area_sqm"],
+                coordinates=row["coordinates"],
+                land_use_summary=row["land_use_summary"],
+                max_gfa_sqm=row["max_gfa_sqm"],
+                max_height=row["max_height"],
+                max_coverage=row["max_coverage"],
+                land_use=row["land_use"],
+                gfa_type=row["gfa_type"],
+                is_verified=row["is_verified"],
             )
         )
+        if len(results) >= limit:
+            break
     return results

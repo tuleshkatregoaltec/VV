@@ -6,7 +6,7 @@ import { feasibility } from '$lib/api/feasibility'
 import NewStudySetup from '$lib/components/feasibility/NewStudySetup.svelte'
 import AppFrame from '$lib/components/layout/AppFrame.svelte'
 import PageContainer from '$lib/components/layout/PageContainer.svelte'
-import { feasibilityQueries } from '$lib/queries/feasibility'
+import { feasibilityKeys, feasibilityQueries } from '$lib/queries/feasibility'
 
 type PageMode = 'overview' | 'new'
 
@@ -45,7 +45,7 @@ async function deleteStudy(studyId: number) {
 	error = ''
 	try {
 		await feasibility.deleteStudy(studyId)
-		await queryClient.invalidateQueries({ queryKey: ['feasibility', 'studies'] })
+		await queryClient.invalidateQueries({ queryKey: feasibilityKeys.studies() })
 	} catch (err) {
 		error = err instanceof Error ? err.message : 'Failed to delete study.'
 	} finally {
@@ -80,7 +80,7 @@ async function renameStudy(study: (typeof studies)[number]) {
 	try {
 		await feasibility.updateStudy(study.id, { name: trimmed })
 		cancelRenameStudy()
-		await queryClient.invalidateQueries({ queryKey: ['feasibility', 'studies'] })
+		await queryClient.invalidateQueries({ queryKey: feasibilityKeys.studies() })
 	} catch (err) {
 		error = err instanceof Error ? err.message : 'Failed to rename study.'
 	}

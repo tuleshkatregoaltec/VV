@@ -1,9 +1,25 @@
 <script lang="ts">
+import { createQuery } from '@tanstack/svelte-query'
 import { untrack } from 'svelte'
+import type { DdaPlotFeature } from '$lib/api/projects'
 import { workbookStore } from '$lib/feasibility/workbook/store.svelte'
+import { projectQueries } from '$lib/queries/projects'
+import type { LngLatPoint, SvgPoint } from '$lib/utils/plotGeometry'
+import {
+	boundsCenterDistance,
+	boundsDistance,
+	clamp,
+	coordinateBounds,
+	createCoordinateProjector,
+	normalizeCoordinates,
+	pointBounds,
+	pointsToAttribute,
+	polygonArea
+} from '$lib/utils/plotGeometry'
 
-type Point = { x: number; y: number }
+type Point = SvgPoint
 type Placement = { x: number; y: number; w: number; h: number; rotation: number }
+type SurroundingPlot = { plot: DdaPlotFeature; edgeDistance: number; centerDistance: number }
 
 const WIDTH = 1000
 const HEIGHT = 680
@@ -17,6 +33,20 @@ let dragging = $state<{ id: string; dx: number; dy: number } | null>(null)
 const plotData = $derived(workbookStore.plotData)
 const massing = $derived(workbookStore.outputs?.siteMassing)
 const buildings = $derived(massing?.buildings ?? [])
+const ddaQueryParams = $derived(
+	plotData?.community_name ? { area: plotData.community_name, limit: 5000 } : null
+)
+const ddaPlotsQuery = createQuery(() => projectQueries.ddaPlots(ddaQueryParams))
+const ddaPlots = $derived<DdaPlotFeature[]>(ddaQueryParams ? (ddaPlotsQuery.data ?? []) : [])
+const selectedDdaPlot = $derived(
+	ddaPlots.find((plot) => plot.plot_number === plotData?.plot_number) ?? null
+)
+const savedPlotCoordinates = $derived(normalizeCoordinates(plotData?.coordinates))
+const selectedDdaCoordinates = $derived(normalizeCoordinates(selectedDdaPlot?.coordinates))
+const selectedCoordinates = $derived(
+	selectedDdaCoordinates.length >= 3 ? selectedDdaCoordinates : savedPlotCoordinates
+)
+const usingDdaGeometry = $derived(selectedDdaCoordinates.length >= 3)
 
 function fmt(value: number | null | undefined, digits = 0) {
 	if (value === null || value === undefined || !Number.isFinite(value)) return '-'
@@ -26,18 +56,45 @@ function fmt(value: number | null | undefined, digits = 0) {
 	})
 }
 
-function clamp(value: number, min: number, max: number) {
-	return Math.min(Math.max(value, min), max)
+function nearestSurroundingPlots(
+	plots: DdaPlotFeature[],
+	selected: LngLatPoint[],
+	selectedPlotNumber: string | null | undefined
+) {
+	const selectedBounds = coordinateBounds(selected)
+	if (!selectedBounds) return []
+	return plots
+		.filter((plot) => plot.plot_number !== selectedPlotNumber)
+		.map((plot): SurroundingPlot | null => {
+			const bounds = coordinateBounds(normalizeCoordinates(plot.coordinates))
+			if (!bounds) return null
+			return {
+				plot,
+				edgeDistance: boundsDistance(selectedBounds, bounds),
+				centerDistance: boundsCenterDistance(selectedBounds, bounds)
+			}
+		})
+		.filter((item) => item !== null)
+		.sort((a, b) => a.edgeDistance - b.edgeDistance || a.centerDistance - b.centerDistance)
+		.slice(0, 18)
+		.map((item) => item.plot)
 }
 
-function parseCoordinatePair(pair: number[]): { lng: number; lat: number } | null {
-	if (pair.length < 2) return null
-	const [a, b] = pair
-	if (!Number.isFinite(a) || !Number.isFinite(b)) return null
-	if (Math.abs(a) > 35 && Math.abs(b) <= 35) return { lng: a, lat: b }
-	if (Math.abs(b) > 35 && Math.abs(a) <= 35) return { lng: b, lat: a }
-	return { lng: a, lat: b }
-}
+const surroundingPlots = $derived(
+	nearestSurroundingPlots(
+		ddaPlots,
+		usingDdaGeometry ? selectedDdaCoordinates : [],
+		plotData?.plot_number
+	)
+)
+const coordinateProjector = $derived(
+	createCoordinateProjector(
+		selectedCoordinates.length >= 3 ? [selectedCoordinates] : [],
+		WIDTH,
+		HEIGHT,
+		PAD
+	)
+)
 
 function fallbackPolygon(): Point[] {
 	const plotArea = plotData?.plot_area_sqm ?? 0
@@ -56,61 +113,38 @@ function fallbackPolygon(): Point[] {
 }
 
 function projectedPolygon(): Point[] {
-	const raw = plotData?.coordinates ?? []
-	const parsed = raw.map(parseCoordinatePair).filter((point) => point !== null)
-	if (parsed.length < 3) return fallbackPolygon()
-
-	const lngs = parsed.map((point) => point.lng)
-	const lats = parsed.map((point) => point.lat)
-	const minLng = Math.min(...lngs)
-	const maxLng = Math.max(...lngs)
-	const minLat = Math.min(...lats)
-	const maxLat = Math.max(...lats)
-	const lngRange = maxLng - minLng || 1
-	const latRange = maxLat - minLat || 1
-	const scale = Math.min((WIDTH - PAD * 2) / lngRange, (HEIGHT - PAD * 2) / latRange)
-	const drawnW = lngRange * scale
-	const drawnH = latRange * scale
-	const offsetX = (WIDTH - drawnW) / 2
-	const offsetY = (HEIGHT - drawnH) / 2
-
-	return parsed.map((point) => ({
-		x: offsetX + (point.lng - minLng) * scale,
-		y: offsetY + (maxLat - point.lat) * scale
-	}))
+	if (selectedCoordinates.length < 3 || !coordinateProjector) return fallbackPolygon()
+	return selectedCoordinates.map(coordinateProjector)
 }
 
 const polygon = $derived(projectedPolygon())
-const polygonPoints = $derived(polygon.map((point) => `${point.x},${point.y}`).join(' '))
-const hasCoordinates = $derived((plotData?.coordinates?.length ?? 0) >= 3)
-
-function polygonArea(points: Point[]): number {
-	if (points.length < 3) return 0
-	let area = 0
-	for (let i = 0; i < points.length; i++) {
-		const current = points[i]
-		const next = points[(i + 1) % points.length]
-		area += current.x * next.y - next.x * current.y
-	}
-	return Math.abs(area) / 2
-}
-
-function polygonBounds(points: Point[]) {
-	const xs = points.map((point) => point.x)
-	const ys = points.map((point) => point.y)
-	const minX = Math.min(...xs)
-	const maxX = Math.max(...xs)
-	const minY = Math.min(...ys)
-	const maxY = Math.max(...ys)
-	return { minX, maxX, minY, maxY, w: maxX - minX, h: maxY - minY }
-}
+const polygonPoints = $derived(pointsToAttribute(polygon))
+const surroundingPolygons = $derived.by(() => {
+	if (!coordinateProjector) return []
+	return surroundingPlots
+		.map((plot) => ({
+			plot,
+			points: normalizeCoordinates(plot.coordinates).map(coordinateProjector)
+		}))
+		.filter((item) => {
+			if (item.points.length < 3) return false
+			const bounds = pointBounds(item.points)
+			return (
+				bounds.maxX >= -WIDTH * 0.5 &&
+				bounds.minX <= WIDTH * 1.5 &&
+				bounds.maxY >= -HEIGHT * 0.5 &&
+				bounds.minY <= HEIGHT * 1.5
+			)
+		})
+})
+const hasCoordinates = $derived(selectedCoordinates.length >= 3)
 
 function defaultPlacement(index: number, total: number, footprintSqm: number): Placement {
 	const cols = Math.max(1, Math.ceil(Math.sqrt(total)))
 	const rows = Math.max(1, Math.ceil(total / cols))
 	const col = index % cols
 	const row = Math.floor(index / cols)
-	const bounds = polygonBounds(polygon)
+	const bounds = pointBounds(polygon)
 	const gridPad = Math.min(28, Math.max(10, Math.min(bounds.w, bounds.h) * 0.08))
 	const cellW = Math.max((bounds.w - gridPad * 2) / cols, 1)
 	const cellH = Math.max((bounds.h - gridPad * 2) / rows, 1)
@@ -258,11 +292,37 @@ function resetPlacements() {
 					<filter id="building-shadow" x="-20%" y="-20%" width="140%" height="140%">
 						<feDropShadow dx="0" dy="8" stdDeviation="8" flood-color="#020617" flood-opacity="0.28" />
 					</filter>
+					<filter id="selected-plot-glow" x="-10%" y="-10%" width="120%" height="120%">
+						<feDropShadow dx="0" dy="0" stdDeviation="5" flood-color="#5eead4" flood-opacity="0.32" />
+					</filter>
 				</defs>
 				<rect width={WIDTH} height={HEIGHT} fill="#0f172a" />
 				<rect width={WIDTH} height={HEIGHT} fill="url(#sandbox-grid)" />
-				<polygon points={polygonPoints} fill="rgba(20,184,166,0.12)" stroke="#5eead4" stroke-width="4" />
-				<polygon points={polygonPoints} fill="none" stroke="rgba(255,255,255,0.45)" stroke-width="1" stroke-dasharray="8 10" />
+				{#each surroundingPolygons as surrounding (surrounding.plot.plot_number)}
+					<polygon
+						points={pointsToAttribute(surrounding.points)}
+						fill="rgba(148,163,184,0.16)"
+						stroke="rgba(226,232,240,0.32)"
+						stroke-width="1.5"
+						vector-effect="non-scaling-stroke"
+					/>
+				{/each}
+				<polygon
+					points={polygonPoints}
+					fill="rgba(20,184,166,0.22)"
+					stroke="#5eead4"
+					stroke-width="4"
+					vector-effect="non-scaling-stroke"
+					filter="url(#selected-plot-glow)"
+				/>
+				<polygon
+					points={polygonPoints}
+					fill="none"
+					stroke="rgba(255,255,255,0.52)"
+					stroke-width="1"
+					stroke-dasharray="8 10"
+					vector-effect="non-scaling-stroke"
+				/>
 
 				{#each buildings as building, index (building.id)}
 					{@const placement = placements[building.id]}
@@ -299,7 +359,14 @@ function resetPlacements() {
 
 		<div class="mt-3 rounded-2xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">
 			{#if hasCoordinates}
-				Using {plotData?.coordinates?.length ?? 0} GIS coordinate points from the plot file.
+				Using {selectedCoordinates.length} GIS coordinate points from the plot file
+				{#if surroundingPolygons.length > 0}
+					with {surroundingPolygons.length} surrounding parcels for context.
+				{:else if ddaPlotsQuery.isFetching}
+					while surrounding parcels load.
+				{:else}
+					without nearby parcel context.
+				{/if}
 			{:else}
 				No plot polygon coordinates were available, so the canvas is using a scaled placeholder outline.
 			{/if}

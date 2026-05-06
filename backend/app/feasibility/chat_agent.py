@@ -6,12 +6,10 @@ from typing import Any, AsyncGenerator
 from pydantic import BaseModel, Field
 from pydantic_ai import Agent, RunContext
 from pydantic_ai.messages import ModelMessagesTypeAdapter, ToolCallPart
-from pydantic_ai.models.openai import OpenAIChatModel
-from pydantic_ai.providers.openrouter import OpenRouterProvider
 from pydantic_ai.usage import UsageLimits
 
 from app.clickhouse.client import query as ch_query
-from app.config import settings
+from app.core.openrouter import create_openrouter_model
 from app.feasibility.models import (
     FeasibilityPaymentPlan,
     PlotDetails,
@@ -48,10 +46,7 @@ class WorkspaceUnitMixUpdate(BaseModel):
     parkingRatio: float | None = Field(default=None, ge=0)
 
 
-model = OpenAIChatModel(
-    model_name=settings.DEFAULT_CHAT_MODEL,
-    provider=OpenRouterProvider(api_key=settings.OPENROUTER_API_KEY),
-)
+model = create_openrouter_model()
 
 workspace_chat_agent = Agent(
     model,
@@ -61,7 +56,9 @@ workspace_chat_agent = Agent(
         "You are a Dubai real estate feasibility workspace assistant.\n\n"
         "The frontend owns the live workbook. You receive the current assumptions and workbook state each turn.\n"
         "Use tools for precise context or research, and use mutation tools when you want to suggest changes.\n"
-        "Keep suggestions compact, practical, and evidence-led."
+        "Keep suggestions compact, practical, and evidence-led.\n"
+        "When you call a mutation tool, do not write a long rationale. Use at most two short sentences "
+        "that explain what the proposed change is and why it is being staged for approval."
     ),
 )
 

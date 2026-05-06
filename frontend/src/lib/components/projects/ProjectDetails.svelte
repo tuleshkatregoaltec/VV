@@ -1,5 +1,5 @@
 <script lang="ts">
-import type { ProjectDetailResponse } from '$lib/api/projects'
+import type { GeoPin, ProjectDetailResponse } from '$lib/api/projects'
 
 let {
 	project,
@@ -50,6 +50,16 @@ function handleBuildingClick(pin: {
 	} else {
 		onGeoPinSelect?.(pin.latitude, pin.longitude)
 	}
+}
+
+function getGeoPinKey(pin: GeoPin, index: number): string {
+	return [
+		pin.property_id ?? 'pin',
+		pin.building_name || pin.project_name || 'unnamed',
+		pin.latitude,
+		pin.longitude,
+		index
+	].join(':')
 }
 </script>
 
@@ -171,7 +181,7 @@ function handleBuildingClick(pin: {
 				Buildings ({project.geo_pins.length})
 			</h3>
 			<div class="space-y-1.5 max-h-48 overflow-y-auto">
-				{#each project.geo_pins as pin, i (pin.property_id ?? pin.building_name ?? i)}
+				{#each project.geo_pins as pin, i (getGeoPinKey(pin, i))}
 					<button
 						onclick={() => handleBuildingClick(pin)}
 						class="w-full flex items-center gap-3 bg-slate-50 rounded-lg px-3 py-2 border border-border hover:bg-slate-100 hover:border-slate-300 transition-colors text-left"

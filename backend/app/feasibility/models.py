@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Any, Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import DateTime
 from sqlmodel import JSON, Column, SQLModel
 from sqlmodel import Field as SQLField
@@ -235,9 +235,19 @@ class FeasibilityUnitConfig(BaseModel):
 
 
 class FeasibilityPaymentPlan(BaseModel):
-    depositPct: float = 20.0
-    constructionPct: float = 40.0
-    handoverPct: float = 40.0
+    depositPct: float = 10.0
+    constructionPct: float = 30.0
+    handoverPct: float = 60.0
+
+
+class FeasibilityVatApplicability(BaseModel):
+    land: bool = True
+    hardCosts: bool = True
+    softCosts: bool = True
+    permitFees: bool = True
+    contingency: bool = True
+    marketing: bool = True
+    salesAdmin: bool = True
 
 
 class BtrUnitConfig(BaseModel):
@@ -308,6 +318,40 @@ class FeasibilityAssumptions(BaseModel):
     unitConfigs: list[FeasibilityUnitConfig] = Field(default_factory=list)
     paymentPlan: FeasibilityPaymentPlan = Field(default_factory=FeasibilityPaymentPlan)
     developmentModel: DevelopmentModel = "build_to_sell_residential"
+    basementParkingFloors: float = 4.0
+    podiumFloors: float = 5.0
+    residentialFloors: float = 30.0
+    amenityRoofFloors: float = 1.0
+    parkingAreaPerSpaceSqm: float = 30.0
+    aboveGradeBuaFactor: float = 1.1
+    serviceBohPlantPct: float = 0.03
+    podiumParkingFloorsOutsideGfa: float = 0.0
+    targetCoveragePct: float = 0.0
+    targetBuildingCount: float = 0.0
+    maxEfficientTowerFloorplateSqm: float = 0.0
+    minEfficientTowerFloorplateSqm: float = 0.0
+    floorToFloorHeightM: float = 3.2
+    podiumFloorToFloorHeightM: float = 4.0
+    groundFloorHeightM: float = 5.0
+    roofPlantAllowanceM: float = 6.0
+    landTransferFeePct: float = 0.04
+    brokeragePct: float = 0.01
+    legalDdPct: float = 0.005
+    permitFeesPct: float = 0.02
+    softCostPct: float = 0.15
+    acquisitionDebtLtv: float = 0.7
+    constructionDebtLtc: float = 0.7
+    debtSpreadPa: float = 0.02
+    financingFeePct: float = 0.01
+    exitFeePct: float = 0.01
+    preferredReturnPa: float = 0.08
+    sponsorPromotePct: float = 0.2
+    projectYears: float = 5.0
+    constructionCurveSteepness: float = 8.0
+    salesCurveSteepness: float = 8.0
+    vatAppliesTo: FeasibilityVatApplicability = Field(default_factory=FeasibilityVatApplicability)
+    vatRefundLagMonths: float = 6.0
+    selectedScenario: Literal["base", "conservative", "optimistic"] = "base"
     btrUnitConfigs: list[BtrUnitConfig] = Field(default_factory=list)
     # All BTR scalar fields use 0.0 as "unset" sentinel — Pydantic schema cannot ship
     # `anyOf:[number,null]` to Gemini's structured-output API. _ensure_btr_assumptions
@@ -350,6 +394,21 @@ class FeasibilityAssumptions(BaseModel):
     btrPermDebtIoYears: float = 0.0
     btrDscrMinimum: float = 0.0
     btrRefiCapRatePct: float = 0.0
+
+    @field_validator(
+        "maxCoveragePct",
+        "maxStoreys",
+        "landAcquisitionCostOverrideAed",
+        "designSupervisionCostOverrideAed",
+        "constructionCostOverrideAed",
+        "marketingCostOverrideAed",
+        "salesAgentFeesOverrideAed",
+        "contingencyCostOverrideAed",
+        mode="before",
+    )
+    @classmethod
+    def _none_numeric_unset_to_zero(cls, value):
+        return 0 if value is None else value
 
 
 class FeasibilitySiteEnvelope(BaseModel):
