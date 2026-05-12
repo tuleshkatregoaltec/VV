@@ -12,13 +12,30 @@ fmt:
 test:
     uv run pytest
 
+typecheck:
+    uv run ty check --error-on-warning
+
 check:
     uv run ruff format --check
     uv run ruff check
+    uv run ty check --error-on-warning
     uv run pytest
 
-news-sync args="":
-    uv run python -m holocron.domain.news {{args}}
+replay-bronze target source +args='':
+    @case "{{target}}" in \
+      prod) just _compose prod run --build --rm --no-deps dagster-webserver python -m holocron.platform.bronze_replay {{source}} {{args}} ;; \
+      r2) just _compose r2 run --build --rm --no-deps dagster-webserver python -m holocron.platform.bronze_replay {{source}} {{args}} ;; \
+      host) uv run python -m holocron.platform.bronze_replay {{source}} {{args}} ;; \
+      *) echo "Unknown replay target: {{target}}. Use prod, r2, or host." >&2; exit 2 ;; \
+    esac
+
+dataset-version target +args='':
+    @case "{{target}}" in \
+      prod) just _compose prod run --build --rm --no-deps dagster-webserver python -m holocron.platform.dataset_versions {{args}} ;; \
+      r2) just _compose r2 run --build --rm --no-deps dagster-webserver python -m holocron.platform.dataset_versions {{args}} ;; \
+      host) uv run python -m holocron.platform.dataset_versions {{args}} ;; \
+      *) echo "Unknown dataset-version target: {{target}}. Use prod, r2, or host." >&2; exit 2 ;; \
+    esac
 
 env target="prod" +args='':
     @case "{{target}}" in \

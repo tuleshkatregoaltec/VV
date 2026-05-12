@@ -2,6 +2,8 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
+COPY --from=ghcr.io/astral-sh/uv:0.9.16 /uv /uvx /usr/local/bin/
+
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     chromium \
@@ -29,7 +31,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 COPY . .
-RUN pip install --no-cache-dir -e .
+RUN uv sync --locked --no-dev --no-editable
 
 ENV DAGSTER_HOME=/app
+ENV PATH="/app/.venv/bin:${PATH}"
 ENV PYTHONUNBUFFERED=1

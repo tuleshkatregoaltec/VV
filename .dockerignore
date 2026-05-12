@@ -15,8 +15,10 @@ dagster_home/
 old/
 lkp/
 
-.env
-.env.local
+.env*
+!.env.example
+!.env.local.example
+!.env.r2.example
 .envrc
 
 *.py[codz]
