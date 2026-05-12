@@ -21,6 +21,7 @@ fetches, and media hydration.
 - `pf_listing_filter_settings.jsonl`
 - `pf_listing_location_partitions.jsonl`
 - `pf_listing_query_plan.jsonl`
+- `pf_listing_plan_state.jsonl`
 - `pf_listing_search_pages.jsonl`
 - `pf_listing_properties.jsonl`
 - `pf_listing_details.jsonl`
@@ -47,7 +48,7 @@ raw/source=pf_listings/manifests/<run_id>.json
 state/source=pf_listings/operation=plan_snapshot.json
 state/source=pf_listings/operation=search_chunk.json
 state/source=pf_listings/operation=detail_chunk.json
-raw/source=pf_listings/listing_media_asset_manifests/<run_id>/pf_listing_media_assets.jsonl
+raw/source=pf_listings/listing_media_asset_manifests/run_id=<run_id>/pf_listing_media_assets.jsonl
 ```
 
 ## Config Notes
@@ -59,6 +60,7 @@ Important knobs:
 - `max_pages_per_query`: Property Finder caps at 50.
 - `max_results_per_query`: planning threshold for partitioning.
 - `max_planned_queries`
+- `max_plan_queries_per_run`: planning work saved per durable plan chunk.
 - `max_search_pages_per_run`
 - `max_partition_depth`
 - `split_by_property_type`, `split_by_location`, `split_by_bedrooms`,
@@ -66,6 +68,9 @@ Important knobs:
 - `fetch_details`
 - `max_details_per_run`
 - `mode`: `snapshot`, `plan`, `search`, or `details`.
+- `manifest_keys`: optional exact raw manifest keys for media hydration.
+- `latest_manifest_count`: optional latest-manifest limit for media hydration;
+  the scheduled latest-delta job defaults this to `1`.
 - `plan_manifest_s3_key`: search chunks normally resolve this from the plan
   checkpoint.
 - `search_query_cursor`, `search_page_cursor`: normally resolved from the
@@ -78,15 +83,21 @@ Important knobs:
 
 The durable path is chunked:
 
-1. Run `pf_listings_plan_snapshot` to publish filter context, Dubai location
-   partitions, and the terminal query plan.
+1. Run `pf_listings_plan_snapshot` repeatedly. Each run publishes a query-plan
+   fragment plus `pf_listing_plan_state.jsonl`, then advances
+   `plan_snapshot`. When the checkpoint says `completed=true`, the accumulated
+   plan manifests are ready for search.
 2. Run `pf_listings_search_chunk` repeatedly. It reads the plan checkpoint,
    fetches up to the configured page budget, writes search/property rows, and
-   advances `search_chunk` only after the raw manifest exists.
+   advances `search_chunk` only after the raw manifest exists. The default page
+   budget is deliberately chunked so slow provider responses cannot waste hours
+   of in-memory progress.
 3. Run `pf_listings_detail_chunk` repeatedly. It reads property rows from prior
    raw manifests, fetches listing detail `__NEXT_DATA__`, and advances
    `detail_chunk` only after the raw manifest exists.
 4. Run `pf_listing_media_assets_backfill` to hydrate associated images/media.
+   The scheduled latest-delta job runs this hydration after the raw delta so
+   new listing media lands in R2 with the raw ingest.
 
 `pf_listings_manual_snapshot` remains available for bounded smoke tests, but it
 is intentionally not the preferred path for broad backfills because a single

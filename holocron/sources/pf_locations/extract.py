@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-import hashlib
-import json
+import contextlib
 import logging
 import time
 from collections.abc import Iterable
@@ -14,8 +13,9 @@ from typing import Any, Protocol
 import httpx
 
 from holocron.contracts import RawFile, RawRelease
-from holocron.platform.execution import build_raw_file, build_raw_release, new_run_id, utc_now
+from holocron.platform.execution import build_raw_release, new_run_id, utc_now
 from holocron.platform.metadata import safe_config_metadata
+from holocron.platform.raw_files import write_jsonl_raw_file as _write_jsonl_raw_file
 from holocron.sources.pf_locations.source import PropertyFinderLocationsConfig, SOURCE
 
 logger = logging.getLogger(__name__)
@@ -96,22 +96,17 @@ def extract_release(
     output_path.mkdir(parents=True, exist_ok=True)
     log = progress_log or logger
 
-    if api_client is None:
-        with httpx.Client(timeout=parsed_config.timeout_seconds, follow_redirects=True) as client:
+    with contextlib.ExitStack() as stack:
+        if api_client is None:
+            client = stack.enter_context(
+                httpx.Client(timeout=parsed_config.timeout_seconds, follow_redirects=True)
+            )
             api_client = PropertyFinderLocationsApiClient(
                 client=client,
                 base_url=parsed_config.base_url,
                 static_assets_base_url=parsed_config.static_assets_base_url,
                 country_code=parsed_config.country_code,
             )
-            files = _extract_files(
-                output_path=output_path,
-                config=parsed_config,
-                api_client=api_client,
-                scraped_at=current_time.isoformat(),
-                progress_log=log,
-            )
-    else:
         files = _extract_files(
             output_path=output_path,
             config=parsed_config,
@@ -356,28 +351,6 @@ def _headers() -> dict[str, str]:
 
 def _log_info(progress_log: Any, message: str, *args: Any) -> None:
     progress_log.info(message, *args)
-
-
-def _write_jsonl_raw_file(path: Path, rows: Iterable[dict[str, Any]]) -> RawFile:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    row_count = 0
-    with path.open("w", encoding="utf-8") as handle:
-        for row in rows:
-            handle.write(json.dumps(row, ensure_ascii=False, separators=(",", ":")))
-            handle.write("\n")
-            row_count += 1
-    return _build_raw_file(path, row_count=row_count)
-
-
-def _build_raw_file(path: Path, *, row_count: int) -> RawFile:
-    content = path.read_bytes()
-    return build_raw_file(
-        path=path,
-        sha256=hashlib.sha256(content).hexdigest(),
-        size_bytes=len(content),
-        row_count=row_count,
-        content_type="application/x-ndjson",
-    )
 
 
 def _string_value(value: object) -> str:

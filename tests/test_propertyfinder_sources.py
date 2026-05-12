@@ -2,15 +2,12 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 from holocron.contracts import RawRelease
-from holocron.orchestration.factory import (
-    _resolve_pf_listings_config,
-    _write_pf_listings_checkpoint,
-)
 from holocron.platform.checkpoints import checkpoint_s3_key
 from holocron.sources import PF_LISTINGS_SOURCE, PF_LOCATIONS_SOURCE, registry
 from holocron.sources.pf_listings.extract import extract_release as extract_listings_release
@@ -19,9 +16,14 @@ from holocron.sources.pf_listings.media_assets import (
     PropertyFinderListingMediaHydrationConfig,
     hydrate_pf_listing_media_assets,
 )
+from holocron.sources.pf_listings.orchestration import (
+    resolve_listings_config,
+    write_listings_checkpoint,
+)
 from holocron.sources.pf_listings.source import PropertyFinderListingsConfig
 from holocron.sources.pf_locations.extract import extract_release as extract_locations_release
 from holocron.sources.pf_locations.source import PropertyFinderLocationsConfig
+from tests.fakes import FakeS3, _jsonl_bytes
 
 
 class FakePropertyFinderLocationsApi:
@@ -277,7 +279,13 @@ class FakePropertyFinderChunkListingsClient:
         self.search_calls: list[dict[str, str]] = []
         self.detail_calls: list[str] = []
 
-    def fetch_search_page(self, *, params) -> dict[str, Any]:
+    def fetch_filter_settings(self, *, category: int, locale: str) -> dict[str, Any]:
+        raise AssertionError("filter settings should not be fetched")
+
+    def fetch_locations(self, *, page: int, limit: int, locale: str) -> dict[str, Any]:
+        raise AssertionError("locations should not be fetched")
+
+    def fetch_search_page(self, *, params: Sequence[tuple[str, str]]) -> dict[str, Any]:
         query = dict(params)
         self.search_calls.append(query)
         page = int(query["page"])
@@ -312,34 +320,45 @@ class FakePropertyFinderChunkListingsClient:
         }
 
 
-class FakeS3:
-    def __init__(self, *, public_url_base: str = "https://cdn.example.test") -> None:
-        self.objects: dict[str, bytes] = {}
-        self.json_objects: dict[str, dict[str, Any]] = {}
-        self.content_types: dict[str, str | None] = {}
-        self.public_url_base = public_url_base
+class FakePropertyFinderLatestDeltaClient:
+    def __init__(
+        self,
+        *,
+        pages: dict[int, list[dict[str, Any]]],
+        detail_failures: set[str] | None = None,
+    ) -> None:
+        self.pages = pages
+        self.detail_failures = detail_failures or set()
+        self.search_calls: list[dict[str, str]] = []
+        self.detail_calls: list[str] = []
 
-    def list_keys(self, *, prefix: str) -> list[str]:
-        return sorted(key for key in self.objects if key.startswith(prefix))
+    def fetch_filter_settings(self, *, category: int, locale: str) -> dict[str, Any]:
+        return _filter_settings(property_types=(("1", "Apartment"),))
 
-    def read_text(self, *, key: str, encoding: str = "utf-8") -> str:
-        return self.objects[key].decode(encoding)
+    def fetch_locations(self, *, page: int, limit: int, locale: str) -> dict[str, Any]:
+        return _locations_payload([])
 
-    def put_bytes(self, *, key: str, payload: bytes, content_type: str | None = None) -> None:
-        self.objects[key] = payload
-        self.content_types[key] = content_type
+    def fetch_search_page(self, *, params) -> dict[str, Any]:
+        query = dict(params)
+        self.search_calls.append(query)
+        page = int(query["page"])
+        listings = self.pages.get(page, [])
+        return _search_payload(total_count=len(listings), page_count=1, listings=listings)
 
-    def get_json(self, *, key: str) -> dict[str, Any] | None:
-        return self.json_objects.get(key)
-
-    def put_json(self, *, key: str, payload: dict[str, Any]) -> None:
-        self.json_objects[key] = payload
-
-    def object_exists(self, *, key: str) -> bool:
-        return key in self.objects
-
-    def public_url(self, *, key: str) -> str | None:
-        return f"{self.public_url_base.rstrip('/')}/{key}" if self.public_url_base else None
+    def fetch_detail(self, *, details_path: str) -> dict[str, Any]:
+        self.detail_calls.append(details_path)
+        if details_path in self.detail_failures:
+            raise RuntimeError(f"detail failed: {details_path}")
+        return {
+            "pageProps": {
+                "propertyResult": {
+                    "property": {
+                        "listing_id": details_path.rsplit("-", 1)[-1].replace(".html", ""),
+                        "images": {"property": []},
+                    }
+                }
+            }
+        }
 
 
 class FakeMediaDownloader:
@@ -500,10 +519,75 @@ def test_pf_listings_plan_mode_writes_durable_plan_only(tmp_path: Path) -> None:
     assert set(files_by_name) == {
         "pf_listing_filter_settings.jsonl",
         "pf_listing_location_partitions.jsonl",
+        "pf_listing_plan_state.jsonl",
         "pf_listing_query_plan.jsonl",
     }
     assert release.metadata["stage"] == "plan"
     assert release.metadata["terminal_query_count"] == 2
+    plan_state_rows = _read_jsonl(Path(files_by_name["pf_listing_plan_state.jsonl"].path))
+    assert plan_state_rows[0]["completed"] is True
+    assert plan_state_rows[0]["queue_count"] == 0
+
+
+def test_pf_listings_plan_mode_resumes_from_plan_state(tmp_path: Path) -> None:
+    s3 = FakeS3()
+    first_manifest_key = _put_pf_plan_manifest(
+        s3,
+        run_id="plan-1",
+        terminal_queries=[],
+        plan_state={
+            "completed": False,
+            "queue": [
+                {
+                    "category_id": 1,
+                    "location_id": "1",
+                    "property_type_id": 1,
+                    "depth": 1,
+                }
+            ],
+            "queue_count": 1,
+            "assessed_count": 1,
+            "terminal_count": 0,
+            "split_count": 1,
+            "fetch_error_count": 0,
+            "skipped_count": 0,
+        },
+    )
+    listing_client = FakePropertyFinderListingsClient()
+
+    release = extract_listings_release(
+        tmp_path,
+        config=PropertyFinderListingsConfig(
+            mode="plan",
+            categories=(1,),
+            max_results_per_query=2,
+            max_planned_queries=5,
+            max_plan_queries_per_run=1,
+            plan_state_manifest_s3_key=first_manifest_key,
+            plan_manifest_s3_keys=(first_manifest_key,),
+            fetch_details=False,
+        ),
+        now=datetime(2026, 5, 4, 12, 0, tzinfo=UTC),
+        listing_client=listing_client,
+        state_store=s3,
+    )
+
+    files_by_name = {Path(raw_file.path).name: raw_file for raw_file in release.files}
+    assert set(files_by_name) == {
+        "pf_listing_plan_state.jsonl",
+        "pf_listing_query_plan.jsonl",
+    }
+    plan_rows = _read_jsonl(Path(files_by_name["pf_listing_query_plan.jsonl"].path))
+    state_rows = _read_jsonl(Path(files_by_name["pf_listing_plan_state.jsonl"].path))
+
+    assert release.metadata["stage"] == "plan"
+    assert release.metadata["previous_plan_manifest_s3_keys"] == [first_manifest_key]
+    assert release.metadata["planned_query_count"] == 2
+    assert release.metadata["terminal_query_count_in_run"] == 1
+    assert plan_rows[0]["query"]["property_type_id"] == 1
+    assert plan_rows[0]["assessed_index"] == 2
+    assert state_rows[0]["completed"] is True
+    assert state_rows[0]["queue_count"] == 0
 
 
 def test_pf_listings_search_mode_resumes_from_plan_manifest(tmp_path: Path) -> None:
@@ -599,22 +683,34 @@ def test_pf_listings_detail_mode_resumes_through_property_manifests(tmp_path: Pa
 def test_pf_listings_search_checkpoint_resolves_plan_and_cursor() -> None:
     s3 = FakeS3()
     s3.json_objects[checkpoint_s3_key(source="pf_listings", operation="plan_snapshot")] = {
-        "last_manifest_s3_key": "raw/source=pf_listings/manifests/plan-1.json",
+        "last_manifest_s3_key": "raw/source=pf_listings/manifests/plan-2.json",
+        "plan_manifest_s3_keys": [
+            "raw/source=pf_listings/manifests/plan-1.json",
+            "raw/source=pf_listings/manifests/plan-2.json",
+        ],
         "completed": True,
     }
     s3.json_objects[checkpoint_s3_key(source="pf_listings", operation="search_chunk")] = {
-        "plan_manifest_s3_key": "raw/source=pf_listings/manifests/plan-1.json",
+        "plan_manifest_s3_keys": [
+            "raw/source=pf_listings/manifests/plan-1.json",
+            "raw/source=pf_listings/manifests/plan-2.json",
+        ],
+        "plan_manifest_s3_key": "raw/source=pf_listings/manifests/plan-2.json",
         "next_query_index": 12,
         "next_page": 3,
         "completed": False,
     }
 
-    config = _resolve_pf_listings_config(
+    config = resolve_listings_config(
         source_config={"mode": "search"},
         s3_client=s3,
     )
 
-    assert config["plan_manifest_s3_key"] == "raw/source=pf_listings/manifests/plan-1.json"
+    assert config["plan_manifest_s3_key"] == "raw/source=pf_listings/manifests/plan-2.json"
+    assert config["plan_manifest_s3_keys"] == [
+        "raw/source=pf_listings/manifests/plan-1.json",
+        "raw/source=pf_listings/manifests/plan-2.json",
+    ]
     assert config["search_query_cursor"] == 12
     assert config["search_page_cursor"] == 3
 
@@ -622,12 +718,13 @@ def test_pf_listings_search_checkpoint_resolves_plan_and_cursor() -> None:
 def test_pf_listings_checkpoint_write_records_stage_specific_cursor() -> None:
     s3 = FakeS3()
 
-    _write_pf_listings_checkpoint(
+    write_listings_checkpoint(
         raw_release=_raw_pf_release(
             run_id="search-1",
             metadata={
                 "stage": "search",
                 "plan_manifest_s3_key": "raw/source=pf_listings/manifests/plan-1.json",
+                "plan_manifest_s3_keys": ["raw/source=pf_listings/manifests/plan-1.json"],
                 "search_completed_result_set": False,
                 "next_query_index": 4,
                 "next_page": 9,
@@ -645,6 +742,196 @@ def test_pf_listings_checkpoint_write_records_stage_specific_cursor() -> None:
     assert checkpoint["next_query_index"] == 4
     assert checkpoint["next_page"] == 9
     assert checkpoint["last_manifest_s3_key"] == "raw/source=pf_listings/manifests/search-1.json"
+    assert checkpoint["plan_manifest_s3_keys"] == ["raw/source=pf_listings/manifests/plan-1.json"]
+
+
+def test_pf_listings_latest_delta_bootstrap_fetches_search_only(tmp_path: Path) -> None:
+    listing = _listing_wrapper(
+        listing_id="apt-1",
+        property_type="Apartment",
+        location_tree=[{"id": 1, "name": "Dubai", "type": "CITY"}],
+        details_path="/en/plp/buy/apartment-for-sale-dubai-example-apt-1.html",
+    )
+    listing["property"]["last_refreshed_at"] = "2026-05-02T10:00:00+00:00"
+    listing_client = FakePropertyFinderLatestDeltaClient(pages={1: [listing]})
+    s3 = FakeS3()
+
+    release = extract_listings_release(
+        tmp_path,
+        config=PropertyFinderListingsConfig(
+            mode="latest_delta",
+            categories=(1,),
+            location_ids=("1",),
+            max_pages_per_query=1,
+            max_search_pages_per_run=1,
+            latest_delta_bootstrap_details=False,
+        ),
+        now=datetime(2026, 5, 4, 12, 0, tzinfo=UTC),
+        listing_client=listing_client,
+        state_store=s3,
+    )
+
+    property_rows = _read_jsonl(tmp_path / "pf_listing_properties.jsonl")
+    state_update = release.metadata["_state_updates"][0]
+    state = json.loads(Path(state_update["path"]).read_text(encoding="utf-8"))
+
+    assert listing_client.detail_calls == []
+    assert release.metadata["stage"] == "latest_delta"
+    assert release.metadata["state_was_empty"] is True
+    assert property_rows[0]["delta_reason"] == "new"
+    assert property_rows[0]["selected_for_detail"] is False
+    assert "listing_id:apt-1" in state["listings"]
+
+
+def test_pf_listings_latest_delta_fetches_details_only_for_new_or_changed(
+    tmp_path: Path,
+) -> None:
+    unchanged = _listing_wrapper(
+        listing_id="apt-1",
+        property_type="Apartment",
+        location_tree=[{"id": 1, "name": "Dubai", "type": "CITY"}],
+        details_path="/en/plp/buy/apartment-for-sale-dubai-example-apt-1.html",
+    )
+    changed = _listing_wrapper(
+        listing_id="apt-2",
+        property_type="Apartment",
+        location_tree=[{"id": 1, "name": "Dubai", "type": "CITY"}],
+        details_path="/en/plp/buy/apartment-for-sale-dubai-example-apt-2.html",
+    )
+    s3 = FakeS3()
+    s3.json_objects[PropertyFinderListingsConfig().latest_delta_state_key] = {
+        "version": 1,
+        "listings": {
+            "listing_id:apt-1": {"property_fingerprint": _fingerprint(unchanged["property"])},
+            "listing_id:apt-2": {"property_fingerprint": "old"},
+        },
+    }
+    listing_client = FakePropertyFinderLatestDeltaClient(
+        pages={
+            1: [
+                unchanged,
+                changed,
+                _listing_wrapper(
+                    listing_id="apt-3",
+                    property_type="Apartment",
+                    location_tree=[{"id": 1, "name": "Dubai", "type": "CITY"}],
+                    details_path="/en/plp/buy/apartment-for-sale-dubai-example-apt-3.html",
+                ),
+            ]
+        }
+    )
+
+    release = extract_listings_release(
+        tmp_path,
+        config=PropertyFinderListingsConfig(
+            mode="latest_delta",
+            categories=(1,),
+            location_ids=("1",),
+            max_pages_per_query=1,
+            max_search_pages_per_run=1,
+            fetch_details=True,
+        ),
+        now=datetime(2026, 5, 4, 12, 0, tzinfo=UTC),
+        listing_client=listing_client,
+        state_store=s3,
+    )
+
+    property_rows = _read_jsonl(tmp_path / "pf_listing_properties.jsonl")
+
+    assert listing_client.detail_calls == [
+        "/en/plp/buy/apartment-for-sale-dubai-example-apt-2.html",
+        "/en/plp/buy/apartment-for-sale-dubai-example-apt-3.html",
+    ]
+    assert {row["listing_id"]: row["delta_reason"] for row in property_rows} == {
+        "apt-1": "unchanged",
+        "apt-2": "changed",
+        "apt-3": "new",
+    }
+    assert release.metadata["delta_reason_counts"] == {
+        "unchanged": 1,
+        "changed": 1,
+        "new": 1,
+    }
+
+
+def test_pf_listings_latest_delta_detail_errors_remain_retryable(tmp_path: Path) -> None:
+    existing = _listing_wrapper(
+        listing_id="apt-1",
+        property_type="Apartment",
+        location_tree=[{"id": 1, "name": "Dubai", "type": "CITY"}],
+        details_path="/en/plp/buy/apartment-for-sale-dubai-example-apt-1.html",
+    )
+    failed = _listing_wrapper(
+        listing_id="apt-2",
+        property_type="Apartment",
+        location_tree=[{"id": 1, "name": "Dubai", "type": "CITY"}],
+        details_path="/en/plp/buy/apartment-for-sale-dubai-example-apt-2.html",
+    )
+    failed_path = "/en/plp/buy/apartment-for-sale-dubai-example-apt-2.html"
+    s3 = FakeS3()
+    s3.json_objects[PropertyFinderListingsConfig().latest_delta_state_key] = {
+        "version": 1,
+        "listings": {
+            "listing_id:apt-1": {
+                "property_fingerprint": _fingerprint(existing["property"]),
+                "last_detail_scraped_at": "2026-05-01T00:00:00+00:00",
+            },
+        },
+    }
+    failing_client = FakePropertyFinderLatestDeltaClient(
+        pages={1: [failed, existing]},
+        detail_failures={failed_path},
+    )
+
+    first_release = extract_listings_release(
+        tmp_path / "first",
+        config=PropertyFinderListingsConfig(
+            mode="latest_delta",
+            categories=(1,),
+            location_ids=("1",),
+            max_pages_per_query=1,
+            max_search_pages_per_run=1,
+            fetch_details=True,
+        ),
+        now=datetime(2026, 5, 4, 12, 0, tzinfo=UTC),
+        listing_client=failing_client,
+        state_store=s3,
+    )
+
+    first_details = _read_jsonl(tmp_path / "first" / "pf_listing_details.jsonl")
+    first_state_update = first_release.metadata["_state_updates"][0]
+    first_state = json.loads(Path(first_state_update["path"]).read_text(encoding="utf-8"))
+    failed_state = first_state["listings"]["listing_id:apt-2"]
+
+    assert first_details[0]["status"] == "detail_error"
+    assert "last_detail_scraped_at" not in failed_state
+    assert "detail_fingerprint" not in failed_state
+
+    s3.json_objects[PropertyFinderListingsConfig().latest_delta_state_key] = first_state
+    retry_client = FakePropertyFinderLatestDeltaClient(pages={1: [failed, existing]})
+
+    extract_listings_release(
+        tmp_path / "retry",
+        config=PropertyFinderListingsConfig(
+            mode="latest_delta",
+            categories=(1,),
+            location_ids=("1",),
+            max_pages_per_query=1,
+            max_search_pages_per_run=1,
+            fetch_details=True,
+            latest_delta_detail_audit_limit=1,
+        ),
+        now=datetime(2026, 5, 5, 12, 0, tzinfo=UTC),
+        listing_client=retry_client,
+        state_store=s3,
+    )
+
+    retry_properties = _read_jsonl(tmp_path / "retry" / "pf_listing_properties.jsonl")
+    assert retry_client.detail_calls == [failed_path]
+    assert {row["listing_id"]: row["delta_reason"] for row in retry_properties} == {
+        "apt-2": "audit",
+        "apt-1": "unchanged",
+    }
 
 
 def test_pf_listing_media_asset_hydrates_detail_images() -> None:
@@ -807,11 +1094,16 @@ def _put_pf_plan_manifest(
     *,
     run_id: str,
     terminal_queries: list[dict[str, Any]],
+    plan_state: dict[str, Any] | None = None,
 ) -> str:
     manifest_key = f"raw/source=pf_listings/manifests/{run_id}.json"
     plan_key = (
         f"raw/source=pf_listings/extract_date=2026-05-04/run_id={run_id}/"
         "pf_listing_query_plan.jsonl"
+    )
+    state_key = (
+        f"raw/source=pf_listings/extract_date=2026-05-04/run_id={run_id}/"
+        "pf_listing_plan_state.jsonl"
     )
     plan_rows = [
         {
@@ -824,17 +1116,27 @@ def _put_pf_plan_manifest(
         for index, query in enumerate(terminal_queries)
     ]
     s3.objects[plan_key] = _jsonl_bytes(plan_rows)
+    manifest_files = [
+        {
+            "path": "pf_listing_query_plan.jsonl",
+            "s3_key": plan_key,
+            "row_count": len(plan_rows),
+        }
+    ]
+    if plan_state is not None:
+        s3.objects[state_key] = _jsonl_bytes([plan_state])
+        manifest_files.append(
+            {
+                "path": "pf_listing_plan_state.jsonl",
+                "s3_key": state_key,
+                "row_count": 1,
+            }
+        )
     s3.objects[manifest_key] = json.dumps(
         {
             "source": "pf_listings",
             "run_id": run_id,
-            "files": [
-                {
-                    "path": "pf_listing_query_plan.jsonl",
-                    "s3_key": plan_key,
-                    "row_count": len(plan_rows),
-                }
-            ],
+            "files": manifest_files,
         }
     ).encode("utf-8")
     return manifest_key
@@ -851,16 +1153,14 @@ def _raw_pf_release(*, run_id: str, metadata: dict[str, Any]) -> RawRelease:
     )
 
 
-def _jsonl_bytes(rows: list[dict[str, Any]]) -> bytes:
-    if not rows:
-        return b""
-    return ("\n".join(json.dumps(row, separators=(",", ":")) for row in rows) + "\n").encode(
-        "utf-8"
-    )
-
-
 def _read_jsonl(path: Path) -> list[dict[str, Any]]:
     return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line]
+
+
+def _fingerprint(value: Any) -> str:
+    return hashlib.sha256(
+        json.dumps(value, sort_keys=True, default=str, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
 
 
 def _inventory_rows(s3: FakeS3, key: str) -> list[dict[str, Any]]:

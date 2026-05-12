@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import logging
@@ -11,8 +12,8 @@ import shutil
 import subprocess
 import time
 from collections import Counter, deque
-from collections.abc import Callable, Iterable, Mapping, Sequence
-from contextlib import contextmanager
+from collections.abc import Callable, Iterator, Mapping, Sequence
+from contextlib import AbstractContextManager, contextmanager
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -23,8 +24,9 @@ import httpx
 from playwright.sync_api import BrowserContext, Page, Playwright, TimeoutError, sync_playwright
 
 from holocron.contracts import RawFile, RawRelease
-from holocron.platform.execution import build_raw_file, build_raw_release, new_run_id, utc_now
+from holocron.platform.execution import build_raw_release, new_run_id, utc_now
 from holocron.platform.metadata import safe_config_metadata
+from holocron.platform.raw_files import write_jsonl_raw_file as _write_jsonl_raw_file
 from holocron.sources.pf_listings.source import (
     PF_RESIDENTIAL_CATEGORY_IDS,
     PropertyFinderListingsConfig,
@@ -33,7 +35,9 @@ from holocron.sources.pf_listings.source import (
 
 logger = logging.getLogger(__name__)
 
+_FILTER_SETTINGS_FILE = "pf_listing_filter_settings.jsonl"
 _QUERY_PLAN_FILE = "pf_listing_query_plan.jsonl"
+_PLAN_STATE_FILE = "pf_listing_plan_state.jsonl"
 _LOCATION_PARTITIONS_FILE = "pf_listing_location_partitions.jsonl"
 _SEARCH_PAGES_FILE = "pf_listing_search_pages.jsonl"
 _PROPERTIES_FILE = "pf_listing_properties.jsonl"
@@ -54,6 +58,13 @@ _LOCATION_PAGE_LOG_INTERVAL = 5
 _QUERY_PLAN_LOG_INTERVAL = 100
 _SEARCH_PAGE_LOG_INTERVAL = 100
 _DETAIL_LOG_INTERVAL = 250
+_MAX_FETCH_ATTEMPTS = 3
+_HTTP_NOT_FOUND = 404
+_HTTP_GONE = 410
+_NETWORK_IDLE_TIMEOUT_MS = 15_000
+_BLOCKED_RESOURCE_TYPES = frozenset({"font", "image", "media"})
+_DETAILS_PATH_HTML_SUFFIX = ".html"
+_DETAILS_PATH_SEGMENTS = frozenset({"/plp/", "/property/", "/commercial-"})
 
 
 class PropertyFinderListingsClient(Protocol):
@@ -70,6 +81,8 @@ class PropertyFinderListingsStateStore(Protocol):
     def list_keys(self, *, prefix: str) -> list[str]: ...
 
     def read_text(self, *, key: str, encoding: str = "utf-8") -> str: ...
+
+    def get_json(self, *, key: str) -> dict[str, Any] | None: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -136,6 +149,19 @@ class DetailCollectionResult:
     source_property_row_count: int
 
 
+@dataclass(frozen=True, slots=True)
+class QueryPlanResult:
+    plan_rows: list[dict[str, Any]]
+    terminal_queries: list[ListingQuery]
+    queue: deque[ListingQuery]
+    assessed_count: int
+    terminal_count: int
+    split_count: int
+    fetch_error_count: int
+    skipped_count: int
+    completed: bool
+
+
 class PropertyFinderBrowserListingsClient:
     def __init__(
         self,
@@ -196,7 +222,7 @@ class PropertyFinderBrowserListingsClient:
             url, wait_until="domcontentloaded", timeout=int(self._config.timeout_seconds * 1000)
         )
         try:
-            page.wait_for_load_state("networkidle", timeout=15000)
+            page.wait_for_load_state("networkidle", timeout=_NETWORK_IDLE_TIMEOUT_MS)
         except TimeoutError:
             page.wait_for_timeout(3000)
         return _next_data_from_page(page=page, url=url)
@@ -214,7 +240,7 @@ class PropertyFinderBrowserListingsClient:
             timeout=int(self._config.timeout_seconds * 1000),
         )
         try:
-            page.wait_for_load_state("networkidle", timeout=15000)
+            page.wait_for_load_state("networkidle", timeout=_NETWORK_IDLE_TIMEOUT_MS)
         except TimeoutError:
             page.wait_for_timeout(3000)
         next_data = _next_data_from_page(page=page, url=bootstrap_url)
@@ -229,27 +255,34 @@ class PropertyFinderBrowserListingsClient:
 
     def _fetch_json(self, *, url: str, page: Page) -> dict[str, Any]:
         last_error = ""
-        for attempt in range(1, 4):
+        for attempt in range(1, _MAX_FETCH_ATTEMPTS + 1):
             try:
                 response = page.evaluate(
                     """
-                    async url => {
-                        const response = await fetch(url, {
-                            credentials: 'include',
-                            headers: { accept: 'application/json,text/plain,*/*' },
-                        });
-                        return {
-                            status: response.status,
-                            url: response.url,
-                            text: await response.text(),
-                        };
+                    async ({ url, timeoutMs }) => {
+                        const controller = new AbortController();
+                        const timeout = setTimeout(() => controller.abort(), timeoutMs);
+                        try {
+                            const response = await fetch(url, {
+                                credentials: 'include',
+                                headers: { accept: 'application/json,text/plain,*/*' },
+                                signal: controller.signal,
+                            });
+                            return {
+                                status: response.status,
+                                url: response.url,
+                                text: await response.text(),
+                            };
+                        } finally {
+                            clearTimeout(timeout);
+                        }
                     }
                     """,
-                    url,
+                    {"url": url, "timeoutMs": int(self._config.timeout_seconds * 1000)},
                 )
             except Exception as exc:  # noqa: BLE001
                 last_error = str(exc)
-                if attempt == 3:
+                if attempt == _MAX_FETCH_ATTEMPTS:
                     raise RuntimeError(
                         f"Property Finder browser fetch failed after retries url={url}: {last_error}"
                     ) from exc
@@ -257,7 +290,7 @@ class PropertyFinderBrowserListingsClient:
                 continue
             if not isinstance(response, dict):
                 last_error = "invalid browser fetch response"
-                if attempt == 3:
+                if attempt == _MAX_FETCH_ATTEMPTS:
                     raise RuntimeError(
                         f"Property Finder browser fetch returned invalid response: {url}"
                     )
@@ -265,9 +298,9 @@ class PropertyFinderBrowserListingsClient:
                 continue
             status = int(response.get("status") or 0)
             text = _string_value(response.get("text"))
-            if status in {404, 410}:
+            if status in {_HTTP_NOT_FOUND, _HTTP_GONE}:
                 return _empty_search_payload(http_status=status, url=url)
-            if status >= 500 and attempt < 3:
+            if status >= 500 and attempt < _MAX_FETCH_ATTEMPTS:
                 last_error = f"status={status}"
                 page.wait_for_timeout(1000 * attempt)
                 continue
@@ -278,7 +311,7 @@ class PropertyFinderBrowserListingsClient:
             except json.JSONDecodeError as exc:
                 snippet = re.sub(r"\s+", " ", text[:160]).strip()
                 last_error = f"non-JSON response snippet={snippet!r}"
-                if attempt == 3:
+                if attempt == _MAX_FETCH_ATTEMPTS:
                     raise RuntimeError(
                         f"Property Finder fetch returned non-JSON after retries "
                         f"url={url}: {last_error}"
@@ -287,7 +320,7 @@ class PropertyFinderBrowserListingsClient:
                 continue
             if not isinstance(payload, dict):
                 last_error = "JSON response was not an object"
-                if attempt == 3:
+                if attempt == _MAX_FETCH_ATTEMPTS:
                     raise ValueError(f"Property Finder JSON response must be an object: {url}")
                 page.wait_for_timeout(1000 * attempt)
                 continue
@@ -314,7 +347,7 @@ def extract_release(
     now: datetime | None = None,
     listing_client: PropertyFinderListingsClient | None = None,
     state_store: PropertyFinderListingsStateStore | None = None,
-    playwright_factory: Callable[[], object] = sync_playwright,
+    playwright_factory: Callable[[], AbstractContextManager[Playwright]] = sync_playwright,
     progress_log: Any | None = None,
 ) -> RawRelease:
     parsed_config = (
@@ -336,20 +369,11 @@ def extract_release(
     output_path.mkdir(parents=True, exist_ok=True)
     log = progress_log or logger
 
-    if listing_client is None:
-        with _browser_listing_client(
-            config=parsed_config,
-            playwright_factory=playwright_factory,
-        ) as client:
-            files, metadata = _extract_files(
-                output_path=output_path,
-                config=parsed_config,
-                listing_client=client,
-                state_store=state_store,
-                scraped_at=current_time.isoformat(),
-                progress_log=log,
+    with contextlib.ExitStack() as stack:
+        if listing_client is None:
+            listing_client = stack.enter_context(
+                _browser_listing_client(config=parsed_config, playwright_factory=playwright_factory)
             )
-    else:
         files, metadata = _extract_files(
             output_path=output_path,
             config=parsed_config,
@@ -393,6 +417,7 @@ def _extract_files(
             output_path=output_path,
             config=config,
             listing_client=listing_client,
+            state_store=state_store,
             scraped_at=scraped_at,
             progress_log=progress_log,
         )
@@ -400,6 +425,15 @@ def _extract_files(
         raise RuntimeError(f"Property Finder {config.mode} mode requires an R2/S3 state store")
     if config.mode == "search":
         return _extract_search_chunk_files(
+            output_path=output_path,
+            config=config,
+            listing_client=listing_client,
+            state_store=state_store,
+            scraped_at=scraped_at,
+            progress_log=progress_log,
+        )
+    if config.mode == "latest_delta":
+        return _extract_latest_delta_files(
             output_path=output_path,
             config=config,
             listing_client=listing_client,
@@ -482,9 +516,7 @@ def _extract_snapshot_files(
         for category, filter_settings in filter_settings_by_category.items()
     ]
     files = (
-        _write_jsonl_raw_file(
-            output_path / "pf_listing_filter_settings.jsonl", filter_setting_rows
-        ),
+        _write_jsonl_raw_file(output_path / _FILTER_SETTINGS_FILE, filter_setting_rows),
         _write_jsonl_raw_file(output_path / _LOCATION_PARTITIONS_FILE, location_partition_rows),
         _write_jsonl_raw_file(output_path / _QUERY_PLAN_FILE, plan_rows),
         _write_jsonl_raw_file(output_path / _SEARCH_PAGES_FILE, search_page_rows),
@@ -515,6 +547,7 @@ def _extract_plan_files(
     output_path: Path,
     config: PropertyFinderListingsConfig,
     listing_client: PropertyFinderListingsClient,
+    state_store: PropertyFinderListingsStateStore | None,
     scraped_at: str,
     progress_log: Any,
 ) -> tuple[tuple[RawFile, ...], dict[str, Any]]:
@@ -532,12 +565,45 @@ def _extract_plan_files(
         scraped_at=scraped_at,
         progress_log=progress_log,
     )
-    plan_rows, terminal_queries = _plan_queries(
+    previous_state = _load_plan_state(
+        state_store=state_store,
+        plan_state_manifest_s3_key=config.plan_state_manifest_s3_key,
+    )
+    if previous_state:
+        queue = deque(
+            _listing_query_from_payload(query_payload)
+            for query_payload in previous_state.get("queue", [])
+            if isinstance(query_payload, dict)
+        )
+        assessed_start = int(previous_state.get("assessed_count") or 0)
+        terminal_start = int(previous_state.get("terminal_count") or 0)
+        split_start = int(previous_state.get("split_count") or 0)
+        fetch_error_start = int(previous_state.get("fetch_error_count") or 0)
+        skipped_start = int(previous_state.get("skipped_count") or 0)
+    else:
+        queue = deque(
+            ListingQuery(category_id=category, location_id=location_id)
+            for category in config.categories
+            for location_id in config.location_ids
+        )
+        assessed_start = 0
+        terminal_start = 0
+        split_start = 0
+        fetch_error_start = 0
+        skipped_start = 0
+
+    plan_result = _plan_queries_chunk(
         config=config,
         listing_client=listing_client,
         filter_settings_by_category=filter_settings_by_category,
         property_type_choices=property_type_choices,
         location_children_by_parent=location_children_by_parent,
+        queue=queue,
+        assessed_start=assessed_start,
+        terminal_start=terminal_start,
+        split_start=split_start,
+        fetch_error_start=fetch_error_start,
+        skipped_start=skipped_start,
         scraped_at=scraped_at,
         progress_log=progress_log,
     )
@@ -547,19 +613,47 @@ def _extract_plan_files(
         property_type_choices=property_type_choices,
         scraped_at=scraped_at,
     )
-    files = (
-        _write_jsonl_raw_file(
-            output_path / "pf_listing_filter_settings.jsonl", filter_setting_rows
-        ),
-        _write_jsonl_raw_file(output_path / _LOCATION_PARTITIONS_FILE, location_partition_rows),
-        _write_jsonl_raw_file(output_path / _QUERY_PLAN_FILE, plan_rows),
+    plan_state_rows = [
+        {
+            "endpoint": "plan_state",
+            "scraped_at": scraped_at,
+            "completed": plan_result.completed,
+            "queue": [_query_payload(query) for query in plan_result.queue],
+            "queue_count": len(plan_result.queue),
+            "assessed_count": plan_result.assessed_count,
+            "terminal_count": plan_result.terminal_count,
+            "split_count": plan_result.split_count,
+            "fetch_error_count": plan_result.fetch_error_count,
+            "skipped_count": plan_result.skipped_count,
+            "max_planned_queries": config.max_planned_queries,
+            "max_plan_queries_per_run": config.max_plan_queries_per_run,
+        }
+    ]
+    files: tuple[RawFile, ...] = (
+        _write_jsonl_raw_file(output_path / _QUERY_PLAN_FILE, plan_result.plan_rows),
+        _write_jsonl_raw_file(output_path / _PLAN_STATE_FILE, plan_state_rows),
     )
+    if not previous_state:
+        files = (
+            _write_jsonl_raw_file(output_path / _FILTER_SETTINGS_FILE, filter_setting_rows),
+            _write_jsonl_raw_file(output_path / _LOCATION_PARTITIONS_FILE, location_partition_rows),
+            *files,
+        )
     metadata = {
         "stage": "plan",
-        "planned_query_count": len(plan_rows),
+        "planned_query_count": plan_result.assessed_count,
+        "plan_rows_in_run": len(plan_result.plan_rows),
         "location_partition_count": len(location_partition_rows),
         "location_partition_parent_count": len(location_children_by_parent),
-        "terminal_query_count": len(terminal_queries),
+        "terminal_query_count": plan_result.terminal_count,
+        "terminal_query_count_in_run": len(plan_result.terminal_queries),
+        "split_count": plan_result.split_count,
+        "fetch_error_count": plan_result.fetch_error_count,
+        "skipped_planning_limit_count": plan_result.skipped_count,
+        "plan_completed_result_set": plan_result.completed,
+        "queue_count": len(plan_result.queue),
+        "previous_plan_manifest_s3_keys": list(config.plan_manifest_s3_keys),
+        "previous_plan_state_manifest_s3_key": config.plan_state_manifest_s3_key,
         "categories": list(config.categories),
         "location_ids": list(config.location_ids),
     }
@@ -578,6 +672,7 @@ def _extract_search_chunk_files(
     terminal_queries = _load_terminal_queries_from_plan(
         state_store=state_store,
         plan_manifest_s3_key=config.plan_manifest_s3_key,
+        plan_manifest_s3_keys=config.plan_manifest_s3_keys,
     )
     listing_pages = _collect_listing_pages(
         config=config,
@@ -606,6 +701,7 @@ def _extract_search_chunk_files(
     metadata = {
         "stage": "search",
         "plan_manifest_s3_key": config.plan_manifest_s3_key,
+        "plan_manifest_s3_keys": list(config.plan_manifest_s3_keys),
         "terminal_query_count": len(terminal_queries),
         "query_start_index": config.search_query_cursor,
         "page_start": config.search_page_cursor,
@@ -618,6 +714,241 @@ def _extract_search_chunk_files(
         "search_error_count": listing_pages.search_error_count,
         "categories": list(config.categories),
         "location_ids": list(config.location_ids),
+    }
+    return files, metadata
+
+
+def _extract_latest_delta_files(
+    *,
+    output_path: Path,
+    config: PropertyFinderListingsConfig,
+    listing_client: PropertyFinderListingsClient,
+    state_store: PropertyFinderListingsStateStore,
+    scraped_at: str,
+    progress_log: Any,
+) -> tuple[tuple[RawFile, ...], dict[str, Any]]:
+    previous_state = _load_latest_delta_state(
+        state_store=state_store,
+        key=config.latest_delta_state_key,
+    )
+    state_listings = _latest_delta_listings(previous_state)
+    state_was_empty = not state_listings
+    queries = [
+        ListingQuery(category_id=category, location_id=location_id)
+        for category in config.categories
+        for location_id in config.location_ids
+    ]
+    search_page_rows: list[dict[str, Any]] = []
+    property_rows: list[dict[str, Any]] = []
+    detail_candidates: list[dict[str, Any]] = []
+    seen_properties: set[str] = set()
+    pages_remaining = config.max_search_pages_per_run
+    stopped_queries = 0
+    search_error_count = 0
+
+    _log_info(
+        progress_log,
+        (
+            "pf_listings: latest delta start queries=%s max_pages_per_query=%s "
+            "page_budget=%s state_empty=%s"
+        ),
+        len(queries),
+        config.max_pages_per_query,
+        config.max_search_pages_per_run,
+        state_was_empty,
+    )
+
+    for query_index, query in enumerate(queries):
+        if pages_remaining <= 0:
+            break
+        seen_pages_in_a_row = 0
+        page_count = config.max_pages_per_query
+        page = 1
+        while page <= min(page_count, config.max_pages_per_query) and pages_remaining > 0:
+            params = query.params(page=page, sort=config.sort)
+            try:
+                payload = listing_client.fetch_search_page(params=params)
+            except Exception as exc:  # noqa: BLE001
+                search_error_count += 1
+                pages_remaining -= 1
+                search_page_rows.append(
+                    {
+                        "endpoint": "latest_delta_search",
+                        "scraped_at": scraped_at,
+                        "query_signature": query.signature,
+                        "query_index": query_index,
+                        "query": _query_payload(query),
+                        "params": dict(params),
+                        "page": page,
+                        "status": "search_error",
+                        "listing_wrapper_count": 0,
+                        "total_count": None,
+                        "page_count": page_count,
+                        "meta": {},
+                        "error": str(exc),
+                    }
+                )
+                break
+
+            search_result = _search_result(payload)
+            meta = _search_meta(search_result)
+            wrappers = _listing_wrappers(search_result)
+            page_count = _page_count(search_result, fallback=page_count)
+            pages_remaining -= 1
+            page_new_or_changed = 0
+            page_property_count = 0
+
+            for wrapper_index, wrapper in enumerate(wrappers, start=1):
+                property_payload = _property_from_wrapper(wrapper)
+                if property_payload is None:
+                    continue
+                property_key = _property_key(wrapper=wrapper, property_payload=property_payload)
+                if property_key in seen_properties:
+                    continue
+                seen_properties.add(property_key)
+                row = _property_row(
+                    query=query,
+                    page=page,
+                    wrapper_index=wrapper_index,
+                    property_key=property_key,
+                    wrapper=wrapper,
+                    property_payload=property_payload,
+                    scraped_at=scraped_at,
+                )
+                identity = _latest_delta_listing_identity(row)
+                fingerprint = _fingerprint_payload(property_payload)
+                previous = state_listings.get(identity)
+                reason = "unchanged"
+                selected_for_detail = False
+                if previous is None:
+                    reason = "new"
+                    selected_for_detail = (
+                        not state_was_empty or config.latest_delta_bootstrap_details
+                    )
+                elif previous.get("property_fingerprint") != fingerprint:
+                    reason = "changed"
+                    selected_for_detail = True
+
+                if selected_for_detail and config.fetch_details:
+                    detail_candidates.append(row)
+                    page_new_or_changed += 1
+                elif reason in {"new", "changed"}:
+                    page_new_or_changed += 1
+
+                row.update(
+                    {
+                        "delta_reason": reason,
+                        "selected_for_detail": selected_for_detail and config.fetch_details,
+                        "property_fingerprint": fingerprint,
+                        "previous_property_fingerprint": previous.get("property_fingerprint")
+                        if previous
+                        else "",
+                    }
+                )
+                property_rows.append(row)
+                page_property_count += 1
+
+            if not state_was_empty and page_property_count and page_new_or_changed == 0:
+                seen_pages_in_a_row += 1
+            else:
+                seen_pages_in_a_row = 0
+
+            search_page_rows.append(
+                {
+                    "endpoint": "latest_delta_search",
+                    "scraped_at": scraped_at,
+                    "query_signature": query.signature,
+                    "query_index": query_index,
+                    "query": _query_payload(query),
+                    "params": dict(params),
+                    "page": page,
+                    "status": "ok",
+                    "listing_wrapper_count": len(wrappers),
+                    "property_row_count": page_property_count,
+                    "new_or_changed_count": page_new_or_changed,
+                    "seen_pages_in_a_row": seen_pages_in_a_row,
+                    "total_count": _total_count(search_result, fallback=len(wrappers)),
+                    "page_count": page_count,
+                    "meta": meta,
+                    "raw": search_result,
+                }
+            )
+
+            if not wrappers:
+                break
+            if (
+                not state_was_empty
+                and seen_pages_in_a_row >= config.latest_delta_stop_after_seen_pages
+            ):
+                stopped_queries += 1
+                break
+            page += 1
+            if config.request_pause_seconds:
+                time.sleep(config.request_pause_seconds)
+
+    if config.fetch_details and config.latest_delta_detail_audit_limit > 0 and not state_was_empty:
+        selected_ids = {_latest_delta_listing_identity(row) for row in detail_candidates}
+        audit_rows = sorted(
+            (
+                row
+                for row in property_rows
+                if row.get("delta_reason") == "unchanged"
+                and _latest_delta_listing_identity(row) not in selected_ids
+            ),
+            key=lambda row: str(
+                state_listings.get(_latest_delta_listing_identity(row), {}).get(
+                    "last_detail_scraped_at"
+                )
+                or ""
+            ),
+        )
+        for row in audit_rows[: config.latest_delta_detail_audit_limit]:
+            row["delta_reason"] = "audit"
+            row["selected_for_detail"] = True
+            detail_candidates.append(row)
+
+    detail_rows: list[dict[str, Any]] = []
+    if config.fetch_details and detail_candidates:
+        detail_rows = _collect_detail_rows(
+            config=config,
+            listing_client=listing_client,
+            property_rows=detail_candidates,
+            scraped_at=scraped_at,
+            progress_log=progress_log,
+        )
+
+    state_payload = _build_latest_delta_state_payload(
+        previous_state=previous_state,
+        property_rows=property_rows,
+        detail_rows=detail_rows,
+        scraped_at=scraped_at,
+    )
+    state_file = "pf_listing_latest_delta_state.json"
+    state_update = _write_state_update_file(
+        output_path, state_file, config.latest_delta_state_key, state_payload
+    )
+    files = (
+        _write_jsonl_raw_file(output_path / _SEARCH_PAGES_FILE, search_page_rows),
+        _write_jsonl_raw_file(output_path / _PROPERTIES_FILE, property_rows),
+        _write_jsonl_raw_file(output_path / _DETAILS_FILE, detail_rows),
+    )
+    reason_counts = dict(
+        Counter(str(row.get("delta_reason") or "unknown") for row in property_rows)
+    )
+    metadata = {
+        "stage": "latest_delta",
+        "query_count": len(queries),
+        "search_page_count": len(search_page_rows),
+        "property_row_count": len(property_rows),
+        "selected_detail_candidate_count": len(detail_candidates),
+        "detail_row_count": len(detail_rows),
+        "search_error_count": search_error_count,
+        "stopped_query_count": stopped_queries,
+        "state_was_empty": state_was_empty,
+        "delta_reason_counts": reason_counts,
+        "categories": list(config.categories),
+        "location_ids": list(config.location_ids),
+        "_state_updates": [state_update],
     }
     return files, metadata
 
@@ -654,6 +985,105 @@ def _extract_detail_chunk_files(
         "location_ids": list(config.location_ids),
     }
     return files, metadata
+
+
+def _load_latest_delta_state(
+    *, state_store: PropertyFinderListingsStateStore, key: str
+) -> dict[str, Any]:
+    payload = state_store.get_json(key=key)
+    if payload is not None and isinstance(payload.get("listings"), dict):
+        return dict(payload)
+    return {"version": 1, "listings": {}}
+
+
+def _latest_delta_listings(state: Mapping[str, Any]) -> dict[str, dict[str, Any]]:
+    listings = state.get("listings")
+    if not isinstance(listings, dict):
+        return {}
+    return {str(key): value for key, value in listings.items() if isinstance(value, dict)}
+
+
+def _latest_delta_listing_identity(row: Mapping[str, Any]) -> str:
+    listing_id = _string_value(row.get("listing_id"))
+    if listing_id:
+        return f"listing_id:{listing_id}"
+    property_key = _string_value(row.get("property_key"))
+    if property_key:
+        return property_key
+    details_path = _string_value(row.get("details_path"))
+    if details_path:
+        return f"path:{details_path}"
+    return "sha256:" + _fingerprint_payload(row)
+
+
+def _build_latest_delta_state_payload(
+    *,
+    previous_state: Mapping[str, Any],
+    property_rows: Sequence[Mapping[str, Any]],
+    detail_rows: Sequence[Mapping[str, Any]],
+    scraped_at: str,
+) -> dict[str, Any]:
+    listings = _latest_delta_listings(previous_state)
+    for row in property_rows:
+        identity = _latest_delta_listing_identity(row)
+        previous = listings.get(identity, {})
+        raw_property_value = row.get("raw_property")
+        raw_property = raw_property_value if isinstance(raw_property_value, Mapping) else {}
+        listings[identity] = {
+            **previous,
+            "listing_identity": identity,
+            "listing_id": row.get("listing_id"),
+            "property_key": row.get("property_key"),
+            "first_seen_at": previous.get("first_seen_at") or scraped_at,
+            "last_seen_at": scraped_at,
+            "property_fingerprint": row.get("property_fingerprint")
+            or _fingerprint_payload(raw_property),
+            "listed_date": raw_property.get("listed_date"),
+            "last_refreshed_at": raw_property.get("last_refreshed_at"),
+            "details_path": row.get("details_path"),
+            "share_url": row.get("share_url"),
+            "category_id": row.get("category_id"),
+            "location_id": row.get("location_id"),
+            "property_type_id": row.get("property_type_id"),
+        }
+
+    for row in detail_rows:
+        if row.get("status") != "ok":
+            continue
+        identity = _latest_delta_listing_identity(row)
+        listing_id = _string_value(row.get("listing_id"))
+        if not identity:
+            continue
+        previous = listings.get(identity, {})
+        detail_property = row.get("detail_property")
+        listings[identity] = {
+            **previous,
+            "listing_identity": identity,
+            "listing_id": listing_id,
+            "last_detail_scraped_at": scraped_at,
+            "detail_fingerprint": _fingerprint_payload(detail_property),
+        }
+
+    return {
+        "version": 1,
+        "updated_at": scraped_at,
+        "listing_count": len(listings),
+        "listings": listings,
+    }
+
+
+def _fingerprint_payload(value: Any) -> str:
+    return hashlib.sha256(
+        json.dumps(value, sort_keys=True, default=str, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+
+
+def _write_state_update_file(
+    output_path: Path, file_name: str, key: str, payload: Mapping[str, Any]
+) -> dict[str, str]:
+    path = output_path / file_name
+    path.write_text(json.dumps(payload, sort_keys=True, default=str), encoding="utf-8")
+    return {"key": key, "path": str(path)}
 
 
 def _filter_setting_rows(
@@ -772,6 +1202,29 @@ def _collect_location_partitions(
     return (deduped_children_by_parent, rows)
 
 
+def _load_plan_state(
+    *,
+    state_store: PropertyFinderListingsStateStore | None,
+    plan_state_manifest_s3_key: str,
+) -> dict[str, Any]:
+    if not plan_state_manifest_s3_key.strip():
+        return {}
+    if state_store is None:
+        raise RuntimeError("Property Finder plan resume requires an R2/S3 state store")
+    rows = _load_manifest_jsonl_rows(
+        state_store=state_store,
+        manifest=_read_manifest(
+            state_store=state_store,
+            manifest_key=plan_state_manifest_s3_key,
+        ),
+        manifest_key=plan_state_manifest_s3_key,
+        file_name=_PLAN_STATE_FILE,
+    )
+    if not rows:
+        return {}
+    return rows[-1]
+
+
 def _plan_queries(
     *,
     config: PropertyFinderListingsConfig,
@@ -787,31 +1240,83 @@ def _plan_queries(
         for category in config.categories
         for location_id in config.location_ids
     )
+    plan_result = _plan_queries_chunk(
+        config=config,
+        listing_client=listing_client,
+        filter_settings_by_category=filter_settings_by_category,
+        property_type_choices=property_type_choices,
+        location_children_by_parent=location_children_by_parent,
+        queue=queue,
+        assessed_start=0,
+        terminal_start=0,
+        split_start=0,
+        fetch_error_start=0,
+        skipped_start=0,
+        scraped_at=scraped_at,
+        progress_log=progress_log,
+        max_assessments=config.max_planned_queries,
+        include_assessed_index=False,
+    )
+    return plan_result.plan_rows, plan_result.terminal_queries
+
+
+def _plan_queries_chunk(
+    *,
+    config: PropertyFinderListingsConfig,
+    listing_client: PropertyFinderListingsClient,
+    filter_settings_by_category: Mapping[int, dict[str, Any]],
+    property_type_choices: Mapping[int, Sequence[dict[str, Any]]],
+    location_children_by_parent: Mapping[str, Sequence[str]],
+    queue: deque[ListingQuery],
+    assessed_start: int,
+    terminal_start: int,
+    split_start: int,
+    fetch_error_start: int,
+    skipped_start: int,
+    scraped_at: str,
+    progress_log: Any,
+    max_assessments: int | None = None,
+    include_assessed_index: bool = True,
+) -> QueryPlanResult:
     plan_rows: list[dict[str, Any]] = []
     terminal_queries: list[ListingQuery] = []
-    status_counts: Counter[str] = Counter()
-    assessed = 0
+    status_counts: Counter[str] = Counter(
+        {
+            "terminal": terminal_start,
+            "split": split_start,
+            "fetch_error": fetch_error_start,
+            "skipped_planning_limit": skipped_start,
+        }
+    )
+    assessed_total = assessed_start
+    assessed_this_run = 0
+    max_assessments = max_assessments or config.max_plan_queries_per_run
 
     _log_info(
         progress_log,
         (
-            "pf_listings: planning queries categories=%s locations=%s max_planned=%s "
-            "max_results_per_query=%s max_pages_per_query=%s max_depth=%s"
+            "pf_listings: planning query chunk start assessed_total=%s queue=%s "
+            "max_per_run=%s max_planned=%s max_results_per_query=%s max_depth=%s"
         ),
-        list(config.categories),
-        list(config.location_ids),
+        assessed_total,
+        len(queue),
+        max_assessments,
         config.max_planned_queries,
         config.max_results_per_query,
-        config.max_pages_per_query,
         config.max_partition_depth,
     )
-    while queue and assessed < config.max_planned_queries:
+    while (
+        queue
+        and assessed_this_run < max_assessments
+        and assessed_total < config.max_planned_queries
+    ):
         query = queue.popleft()
         params = query.params(page=1, sort=config.sort)
         try:
             payload = listing_client.fetch_search_page(params=params)
         except Exception as exc:  # noqa: BLE001
-            assessed += 1
+            assessed_total += 1
+            assessed_this_run += 1
             status_counts["fetch_error"] += 1
             plan_rows.append(
                 {
@@ -825,18 +1330,24 @@ def _plan_queries(
                     "needs_split": None,
                     "terminal": False,
                     "depth": query.depth,
+                    **({"assessed_index": assessed_total} if include_assessed_index else {}),
                     "error": str(exc),
                 }
             )
             _log_warning(
                 progress_log,
-                "pf_listings: query planning fetch error assessed=%s queue=%s query=%s error=%s",
-                assessed,
+                (
+                    "pf_listings: query planning fetch error assessed_total=%s "
+                    "assessed_run=%s queue=%s query=%s error=%s"
+                ),
+                assessed_total,
+                assessed_this_run,
                 len(queue),
                 query.signature,
                 exc,
             )
             continue
+
         search_result = _search_result(payload)
         meta = _search_meta(search_result)
         listings = _listing_wrappers(search_result)
@@ -863,7 +1374,8 @@ def _plan_queries(
         else:
             terminal_queries.append(query)
 
-        assessed += 1
+        assessed_total += 1
+        assessed_this_run += 1
         status_counts[status] += 1
         plan_rows.append(
             {
@@ -871,12 +1383,13 @@ def _plan_queries(
                 "scraped_at": scraped_at,
                 "query_signature": query.signature,
                 "query": _query_payload(query),
-                "params": dict(query.params(page=1, sort=config.sort)),
+                "params": dict(params),
                 "status": status,
                 "split_reason": split_reason,
                 "needs_split": needs_split,
                 "terminal": status == "terminal",
                 "depth": query.depth,
+                **({"assessed_index": assessed_total} if include_assessed_index else {}),
                 "total_count": total_count,
                 "page_count": page_count,
                 "listing_count_on_first_page": len(listings),
@@ -884,18 +1397,20 @@ def _plan_queries(
             }
         )
         if (
-            assessed <= 5
-            or assessed % _QUERY_PLAN_LOG_INTERVAL == 0
+            assessed_this_run <= 5
+            or assessed_this_run % _QUERY_PLAN_LOG_INTERVAL == 0
             or (status == "split" and query.depth <= 1)
         ):
             _log_info(
                 progress_log,
                 (
-                    "pf_listings: query planning progress assessed=%s queue=%s "
-                    "terminal=%s split=%s last_signature=%s last_status=%s "
-                    "last_split=%s last_total=%s last_pages=%s"
+                    "pf_listings: query planning chunk progress assessed_run=%s "
+                    "assessed_total=%s queue=%s terminal=%s split=%s "
+                    "last_signature=%s last_status=%s last_split=%s "
+                    "last_total=%s last_pages=%s"
                 ),
-                assessed,
+                assessed_this_run,
+                assessed_total,
                 len(queue),
                 status_counts["terminal"],
                 status_counts["split"],
@@ -908,37 +1423,54 @@ def _plan_queries(
         if config.request_pause_seconds:
             time.sleep(config.request_pause_seconds)
 
-    while queue:
-        query = queue.popleft()
-        plan_rows.append(
-            {
-                "endpoint": "search_plan",
-                "scraped_at": scraped_at,
-                "query_signature": query.signature,
-                "query": _query_payload(query),
-                "params": dict(query.params(page=1, sort=config.sort)),
-                "status": "skipped_planning_limit",
-                "split_reason": "max_planned_queries",
-                "needs_split": None,
-                "terminal": False,
-                "depth": query.depth,
-            }
-        )
-        status_counts["skipped_planning_limit"] += 1
+    if queue and assessed_total >= config.max_planned_queries:
+        while queue:
+            query = queue.popleft()
+            status_counts["skipped_planning_limit"] += 1
+            plan_rows.append(
+                {
+                    "endpoint": "search_plan",
+                    "scraped_at": scraped_at,
+                    "query_signature": query.signature,
+                    "query": _query_payload(query),
+                    "params": dict(query.params(page=1, sort=config.sort)),
+                    "status": "skipped_planning_limit",
+                    "split_reason": "max_planned_queries",
+                    "needs_split": None,
+                    "terminal": False,
+                    "depth": query.depth,
+                }
+            )
+
+    completed = not queue
     _log_info(
         progress_log,
         (
-            "pf_listings: completed query planning assessed=%s terminal=%s split=%s "
-            "fetch_error=%s skipped=%s plan_rows=%s"
+            "pf_listings: completed query planning chunk assessed_run=%s "
+            "assessed_total=%s queue=%s terminal=%s split=%s fetch_error=%s "
+            "skipped=%s plan_rows=%s completed=%s"
         ),
-        assessed,
+        assessed_this_run,
+        assessed_total,
+        len(queue),
         status_counts["terminal"],
         status_counts["split"],
         status_counts["fetch_error"],
         status_counts["skipped_planning_limit"],
         len(plan_rows),
+        completed,
     )
-    return plan_rows, terminal_queries
+    return QueryPlanResult(
+        plan_rows=plan_rows,
+        terminal_queries=terminal_queries,
+        queue=queue,
+        assessed_count=assessed_total,
+        terminal_count=status_counts["terminal"],
+        split_count=status_counts["split"],
+        fetch_error_count=status_counts["fetch_error"],
+        skipped_count=status_counts["skipped_planning_limit"],
+        completed=completed,
+    )
 
 
 def _collect_listing_pages(
@@ -1031,7 +1563,7 @@ def _collect_listing_pages(
                 "query_signature": query.signature,
                 "query_index": query_index,
                 "query": _query_payload(query),
-                "params": dict(query.params(page=page, sort=config.sort)),
+                "params": dict(params),
                 "page": page,
                 "status": "ok",
                 "listing_wrapper_count": len(wrappers),
@@ -1844,9 +2376,9 @@ def _normalize_details_path(value: str) -> str:
         path = parsed.path
     else:
         path = candidate
-    if ".html" not in path:
+    if _DETAILS_PATH_HTML_SUFFIX not in path:
         return ""
-    if "/plp/" not in path and "/property/" not in path and "/commercial-" not in path:
+    if not any(segment in path for segment in _DETAILS_PATH_SEGMENTS):
         return ""
     return path
 
@@ -1908,24 +2440,35 @@ def _load_terminal_queries_from_plan(
     *,
     state_store: PropertyFinderListingsStateStore,
     plan_manifest_s3_key: str,
+    plan_manifest_s3_keys: Sequence[str] = (),
 ) -> list[ListingQuery]:
-    manifest = _read_manifest(state_store=state_store, manifest_key=plan_manifest_s3_key)
-    plan_rows = _load_manifest_jsonl_rows(
-        state_store=state_store,
-        manifest=manifest,
-        manifest_key=plan_manifest_s3_key,
-        file_name=_QUERY_PLAN_FILE,
+    manifest_keys = tuple(
+        dict.fromkeys(
+            key.strip()
+            for key in (*plan_manifest_s3_keys, plan_manifest_s3_key)
+            if key and key.strip()
+        )
     )
+    if not manifest_keys:
+        raise ValueError("Property Finder search mode requires at least one plan manifest")
     terminal_queries: list[ListingQuery] = []
-    for row in plan_rows:
-        if row.get("terminal") is not True:
-            continue
-        query_payload = row.get("query")
-        if not isinstance(query_payload, dict):
-            raise ValueError(
-                f"Property Finder terminal plan row is missing query: {plan_manifest_s3_key}"
-            )
-        terminal_queries.append(_listing_query_from_payload(query_payload))
+    for manifest_key in manifest_keys:
+        manifest = _read_manifest(state_store=state_store, manifest_key=manifest_key)
+        plan_rows = _load_manifest_jsonl_rows(
+            state_store=state_store,
+            manifest=manifest,
+            manifest_key=manifest_key,
+            file_name=_QUERY_PLAN_FILE,
+        )
+        for row in plan_rows:
+            if row.get("terminal") is not True:
+                continue
+            query_payload = row.get("query")
+            if not isinstance(query_payload, dict):
+                raise ValueError(
+                    f"Property Finder terminal plan row is missing query: {manifest_key}"
+                )
+            terminal_queries.append(_listing_query_from_payload(query_payload))
     return terminal_queries
 
 
@@ -2001,7 +2544,7 @@ def _read_jsonl_dicts(*, text: str, source_key: str) -> list[dict[str, Any]]:
 
 
 def _next_data_from_page(*, page: Page, url: str) -> dict[str, Any]:
-    text = page.locator("#__NEXT_DATA__").text_content(timeout=15000)
+    text = page.locator("#__NEXT_DATA__").text_content(timeout=_NETWORK_IDLE_TIMEOUT_MS)
     if not text:
         raise RuntimeError(f"Property Finder page did not expose __NEXT_DATA__: {url}")
     try:
@@ -2046,14 +2589,16 @@ def _string_value(value: object) -> str:
 def _browser_listing_client(
     *,
     config: PropertyFinderListingsConfig,
-    playwright_factory: Callable[[], object],
+    playwright_factory: Callable[[], AbstractContextManager[Playwright]],
 ):
     with _virtual_display_if_needed(config), playwright_factory() as playwright:
         context = _new_context(playwright=playwright, config=config)
         try:
             yield PropertyFinderBrowserListingsClient(context=context, config=config)
         finally:
-            context.browser.close()
+            browser = context.browser
+            if browser is not None:
+                browser.close()
 
 
 def _new_context(*, playwright: Playwright, config: PropertyFinderListingsConfig) -> BrowserContext:
@@ -2074,7 +2619,7 @@ def _new_context(*, playwright: Playwright, config: PropertyFinderListingsConfig
             "**/*",
             lambda route, request: (
                 route.abort()
-                if request.resource_type in {"font", "image", "media"}
+                if request.resource_type in _BLOCKED_RESOURCE_TYPES
                 else route.continue_()
             ),
         )
@@ -2097,7 +2642,7 @@ def _resolve_browser_executable(chrome_path: str) -> str | None:
 
 
 @contextmanager
-def _virtual_display_if_needed(config: PropertyFinderListingsConfig):
+def _virtual_display_if_needed(config: PropertyFinderListingsConfig) -> Iterator[None]:
     if config.headless or os.environ.get("DISPLAY"):
         yield
         return
@@ -2159,25 +2704,3 @@ def _headers() -> dict[str, str]:
         "accept": "application/json,text/plain,*/*",
         "user-agent": _USER_AGENT,
     }
-
-
-def _write_jsonl_raw_file(path: Path, rows: Iterable[dict[str, Any]]) -> RawFile:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    row_count = 0
-    with path.open("w", encoding="utf-8") as handle:
-        for row in rows:
-            handle.write(json.dumps(row, ensure_ascii=False, separators=(",", ":")))
-            handle.write("\n")
-            row_count += 1
-    return _build_raw_file(path, row_count=row_count)
-
-
-def _build_raw_file(path: Path, *, row_count: int) -> RawFile:
-    content = path.read_bytes()
-    return build_raw_file(
-        path=path,
-        sha256=hashlib.sha256(content).hexdigest(),
-        size_bytes=len(content),
-        row_count=row_count,
-        content_type="application/x-ndjson",
-    )
