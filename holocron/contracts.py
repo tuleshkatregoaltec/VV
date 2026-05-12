@@ -2,11 +2,14 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import Any
+from pathlib import Path
+from typing import Any, Protocol
 
 
-Extractor = Callable[..., Any]
-BronzeLoader = Callable[..., Mapping[str, Any]]
+JsonObject = dict[str, Any]
+RawManifest = dict[str, Any]
+RawManifestFile = dict[str, Any]
+BronzeLoadResult = dict[str, Any]
 Check = Callable[..., Any]
 
 
@@ -30,6 +33,84 @@ class RawRelease:
     manifest_version: int = 1
     schema_version: int = 1
     metadata: Mapping[str, Any] = field(default_factory=dict)
+
+
+Extractor = Callable[..., RawRelease]
+
+
+class RawFileStore(Protocol):
+    def download_file(self, *, key: str, path: str | Path) -> None: ...
+
+
+class ObjectLister(Protocol):
+    def list_keys(self, *, prefix: str) -> list[str]: ...
+
+
+class JsonObjectStore(Protocol):
+    def get_json(self, *, key: str) -> JsonObject | None: ...
+
+
+class JsonObjectWriter(Protocol):
+    def put_json(self, *, key: str, payload: JsonObject) -> None: ...
+
+
+class JsonObjectReadWriter(JsonObjectStore, JsonObjectWriter, Protocol): ...
+
+
+class TextObjectStore(Protocol):
+    def read_text(self, *, key: str, encoding: str = "utf-8") -> str: ...
+
+
+class BytesObjectStore(Protocol):
+    def put_bytes(self, *, key: str, payload: bytes, content_type: str | None = None) -> None: ...
+
+
+class PublicUrlStore(Protocol):
+    def public_url(self, *, key: str) -> str | None: ...
+
+
+class ManifestStore(JsonObjectStore, ObjectLister, Protocol): ...
+
+
+class BronzeReplayStore(ManifestStore, RawFileStore, Protocol): ...
+
+
+class ClickHouseCommands(Protocol):
+    def command(self, sql: str) -> Any: ...
+
+
+class ClickHouseInserter(ClickHouseCommands, Protocol):
+    def insert_rows(
+        self,
+        *,
+        table: str,
+        rows: Sequence[tuple[Any, ...]],
+        column_names: Sequence[str],
+    ) -> None: ...
+
+
+class ClickHouseReplacer(ClickHouseCommands, Protocol):
+    def replace_table_rows(
+        self,
+        *,
+        table: str,
+        rows: Sequence[tuple[Any, ...]],
+        column_names: Sequence[str],
+        staging_suffix: str = "replace_rows",
+    ) -> int: ...
+
+
+class ClickHouseWriter(ClickHouseInserter, ClickHouseReplacer, Protocol): ...
+
+
+class BronzeLoader(Protocol):
+    def __call__(
+        self,
+        *,
+        raw_manifest: RawManifest,
+        s3: RawFileStore,
+        clickhouse: ClickHouseWriter,
+    ) -> BronzeLoadResult: ...
 
 
 @dataclass(frozen=True, slots=True)

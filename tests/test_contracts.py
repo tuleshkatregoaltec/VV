@@ -1,12 +1,18 @@
 from datetime import UTC, datetime
 
-from holocron.contracts import BronzeTable, RawFile, SourceSpec
+from holocron.contracts import BronzeTable, RawFile, RawRelease, SourceSpec
 from holocron.platform.clickhouse import quote_clickhouse_identifier
 from holocron.platform.execution import build_raw_release
 
 
-def _extract() -> None:
-    return None
+def _extract() -> RawRelease:
+    return RawRelease(
+        source="example_source",
+        run_id="run-1",
+        extract_date="2026-03-31",
+        created_at="2026-03-31T12:00:00+00:00",
+        files=(),
+    )
 
 
 def test_build_raw_release_shapes_core_manifest_fields() -> None:
