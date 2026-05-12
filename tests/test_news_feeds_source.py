@@ -2,8 +2,17 @@ import json
 from datetime import UTC, datetime
 from pathlib import Path
 
+import pytest
+
 from holocron.platform.settings import Settings
-from holocron.sources.news_feeds.extract import FeedDownload, extract_release, resolve_feed_urls
+from holocron.sources.news_feeds.extract import (
+    FeedDownload,
+    extract_release,
+    extract_thumbnail_url_from_html,
+    extract_thumbnail_url_from_raw_entry_xml,
+    parse_feed_entries,
+    resolve_feed_urls,
+)
 from holocron.sources.news_feeds.source import DEFAULT_NEWS_FEED_URLS, NewsFeedsConfig
 
 
@@ -24,6 +33,17 @@ class FakeFeedDownloader:
             final_url=url,
             content_type="application/rss+xml",
         )
+
+
+class FailingFeedDownloader:
+    def download_feed(
+        self,
+        url: str,
+        *,
+        timeout_seconds: float,
+        user_agent: str,
+    ) -> FeedDownload:
+        raise RuntimeError(f"feed unavailable: {url}")
 
 
 def test_news_feeds_extract_release_writes_poll_and_article_jsonl(tmp_path: Path) -> None:
@@ -88,6 +108,57 @@ def test_news_feeds_extract_release_writes_poll_and_article_jsonl(tmp_path: Path
     assert article_rows[0]["raw_entry_xml"]
     assert article_rows[1]["source_name"] == "Property Atom"
     assert release.metadata["article_count"] == 2
+
+
+def test_news_feeds_extract_release_fails_when_all_feeds_fail(tmp_path: Path) -> None:
+    with pytest.raises(RuntimeError, match="failed for every configured feed"):
+        extract_release(
+            tmp_path,
+            config=NewsFeedsConfig(feed_urls=("https://example.com/rss",)),
+            now=datetime(2026, 4, 30, 12, tzinfo=UTC),
+            downloader=FailingFeedDownloader(),
+        )
+
+
+def test_news_feeds_parse_entry_thumbnail_from_media_tags() -> None:
+    rss = """
+    <rss version="2.0" xmlns:media="http://search.yahoo.com/mrss/">
+      <channel>
+        <title>Dubai Wire</title>
+        <item>
+          <title>Archive story</title>
+          <guid>archive-1</guid>
+          <link>https://example.com/news/archive-1</link>
+          <media:content url="https://images.example.com/full.jpg" width="1200" />
+          <media:thumbnail url="https://images.example.com/thumb.jpg" width="280" />
+        </item>
+      </channel>
+    </rss>
+    """
+
+    entries = parse_feed_entries(rss, source_feed_url="https://example.com/rss")
+
+    assert entries[0].thumbnail_source_url == "https://images.example.com/thumb.jpg"
+    assert (
+        extract_thumbnail_url_from_raw_entry_xml(entries[0].raw_entry_xml)
+        == "https://images.example.com/thumb.jpg"
+    )
+
+
+def test_extract_thumbnail_url_from_html_prefers_page_metadata() -> None:
+    html = """
+    <html>
+      <head>
+        <meta property="og:image" content="/images/share.jpg" />
+      </head>
+      <body><img src="https://images.example.com/body.jpg" /></body>
+    </html>
+    """
+
+    assert (
+        extract_thumbnail_url_from_html(html, base_url="https://example.com/news/story")
+        == "https://example.com/images/share.jpg"
+    )
 
 
 def test_resolve_feed_urls_uses_curated_defaults_when_unconfigured() -> None:

@@ -10,31 +10,13 @@ from holocron.sources.news_feeds.assets import (
     hydrate_news_thumbnail_assets,
     publish_news_to_platform,
 )
-
-
-class FakeS3:
-    def __init__(self, objects: dict[str, bytes] | None = None) -> None:
-        self.objects = objects or {}
-
-    def list_keys(self, *, prefix: str) -> list[str]:
-        return sorted(key for key in self.objects if key.startswith(prefix))
-
-    def read_text(self, *, key: str, encoding: str = "utf-8") -> str:
-        return self.objects[key].decode(encoding)
-
-    def put_bytes(self, *, key: str, payload: bytes, content_type: str | None = None) -> None:
-        self.objects[key] = payload
-
-    def object_exists(self, *, key: str) -> bool:
-        return key in self.objects
-
-    def public_url(self, *, key: str) -> str | None:
-        return f"https://cdn.example.com/{key}"
+from tests.fakes import FakeS3, _jsonl_bytes
 
 
 class FakeThumbnailDownloader:
-    def __init__(self) -> None:
+    def __init__(self, page_thumbnails: dict[str, str] | None = None) -> None:
         self.downloaded: list[str] = []
+        self.page_thumbnails = page_thumbnails or {}
 
     def download_thumbnail(self, url: str, *, max_bytes: int) -> ThumbnailDownload:
         self.downloaded.append(url)
@@ -43,6 +25,9 @@ class FakeThumbnailDownloader:
             content_type="image/jpeg",
             final_url=url,
         )
+
+    def resolve_article_thumbnail_url(self, url: str) -> str | None:
+        return self.page_thumbnails.get(url)
 
 
 class FakeNewsWriter:
@@ -121,8 +106,108 @@ def test_news_thumbnail_hydration_writes_inventory_for_statuses() -> None:
     }
     assert downloader.downloaded == [hero_url]
     assert result["downloaded"] == 1
-    assert result["already_existing"] == 1
+    assert result["skipped_existing"] == 1
+    assert result["already_exists"] == 1
     assert result["errors"] == 2
+
+
+def test_news_thumbnail_hydration_uses_raw_entry_xml_fallback() -> None:
+    media_url = "https://images.example.com/archive-thumb.jpg"
+    s3 = FakeS3(
+        {
+            "raw/source=news_feeds/manifests/run_id=run-1/manifest.json": json.dumps(
+                {
+                    "run_id": "run-1",
+                    "files": [
+                        {
+                            "path": "news_feed_articles.jsonl",
+                            "s3_key": "raw/source=news_feeds/date=2026-04-30/run-1/news_feed_articles.jsonl",
+                            "row_count": 1,
+                        }
+                    ],
+                }
+            ).encode(),
+            "raw/source=news_feeds/date=2026-04-30/run-1/news_feed_articles.jsonl": _jsonl_bytes(
+                [
+                    _article_row(
+                        "a1",
+                        "Archive thumbnail",
+                        "",
+                        raw_entry_xml=(
+                            '<item xmlns:media="http://search.yahoo.com/mrss/">'
+                            "<title>Archive thumbnail</title>"
+                            f'<media:thumbnail url="{media_url}" width="280" />'
+                            "</item>"
+                        ),
+                    )
+                ]
+            ),
+        }
+    )
+    downloader = FakeThumbnailDownloader()
+
+    result = hydrate_news_thumbnail_assets(
+        s3=s3,
+        config=NewsThumbnailHydrationConfig(
+            lookback_days=10,
+            max_concurrent_downloads=1,
+        ),
+        now=datetime(2026, 5, 1, tzinfo=UTC),
+        download_client=downloader,
+    )
+
+    inventory_rows = [
+        json.loads(line)
+        for line in s3.objects[result["inventory_manifest_key"]].decode().splitlines()
+    ]
+    assert downloader.downloaded == [media_url]
+    assert inventory_rows[0]["status"] == "downloaded"
+    assert inventory_rows[0]["thumbnail_source_url"] == media_url
+
+
+def test_news_thumbnail_hydration_resolves_missing_thumbnail_from_article_page() -> None:
+    page_url = "https://example.com/news/a1"
+    media_url = "https://images.example.com/page-thumb.jpg"
+    s3 = FakeS3(
+        {
+            "raw/source=news_feeds/manifests/run_id=run-1/manifest.json": json.dumps(
+                {
+                    "run_id": "run-1",
+                    "files": [
+                        {
+                            "path": "news_feed_articles.jsonl",
+                            "s3_key": "raw/source=news_feeds/date=2026-04-30/run-1/news_feed_articles.jsonl",
+                            "row_count": 1,
+                        }
+                    ],
+                }
+            ).encode(),
+            "raw/source=news_feeds/date=2026-04-30/run-1/news_feed_articles.jsonl": _jsonl_bytes(
+                [_article_row("a1", "Page thumbnail", "", url=page_url)]
+            ),
+        }
+    )
+    downloader = FakeThumbnailDownloader(page_thumbnails={page_url: media_url})
+
+    result = hydrate_news_thumbnail_assets(
+        s3=s3,
+        config=NewsThumbnailHydrationConfig(
+            lookback_days=10,
+            max_concurrent_downloads=1,
+            resolve_missing_from_article_pages=True,
+        ),
+        now=datetime(2026, 5, 1, tzinfo=UTC),
+        download_client=downloader,
+    )
+
+    inventory_rows = [
+        json.loads(line)
+        for line in s3.objects[result["inventory_manifest_key"]].decode().splitlines()
+    ]
+    assert downloader.downloaded == [media_url]
+    assert inventory_rows[0]["status"] == "downloaded"
+    assert inventory_rows[0]["resolved_from_article_url"] == page_url
+    assert inventory_rows[0]["thumbnail_source_url"] == media_url
 
 
 def test_news_publish_reads_raw_and_thumbnail_inventory() -> None:
@@ -175,7 +260,15 @@ def test_news_publish_reads_raw_and_thumbnail_inventory() -> None:
     assert writer.articles[0]["raw_manifest_key"].endswith("manifest.json")
 
 
-def _article_row(article_key: str, headline: str, thumbnail_source_url: str) -> dict[str, Any]:
+def _article_row(
+    article_key: str,
+    headline: str,
+    thumbnail_source_url: str,
+    *,
+    raw_entry_xml: str = "",
+    url: str | None = None,
+) -> dict[str, Any]:
+    article_url = url or f"https://example.com/news/{article_key}"
     return {
         "endpoint": "feed_entry",
         "article_key": article_key,
@@ -183,20 +276,17 @@ def _article_row(article_key: str, headline: str, thumbnail_source_url: str) -> 
         "source_name": "Example News",
         "source_line_number": 1,
         "guid": article_key,
-        "url": f"https://example.com/news/{article_key}",
-        "canonical_url": f"https://example.com/news/{article_key}",
+        "url": article_url,
+        "canonical_url": article_url,
         "headline": headline,
         "summary": "Dubai real estate market summary",
         "publish_date": "2026-04-30T08:00:00+00:00",
         "thumbnail_source_url": thumbnail_source_url,
+        "raw_entry_xml": raw_entry_xml,
         "discovered_at": "2026-04-30T08:01:00+00:00",
         "_run_id": "run-1",
         "_scraped_at": "2026-04-30T08:01:00+00:00",
     }
-
-
-def _jsonl_bytes(rows: list[dict[str, Any]]) -> bytes:
-    return ("\n".join(json.dumps(row) for row in rows) + "\n").encode()
 
 
 def _thumbnail_target_key(url: str) -> str:

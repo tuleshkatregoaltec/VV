@@ -1,23 +1,23 @@
 from __future__ import annotations
 
 import hashlib
-import json
 import logging
 import re
 import xml.etree.ElementTree as ET
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
 from html import unescape
 from pathlib import Path
 from typing import Any, Protocol
-from urllib.parse import urlparse
+from urllib.parse import urljoin, urlparse
 from urllib.request import Request, urlopen
 
-from holocron.contracts import RawFile, RawRelease
-from holocron.platform.execution import build_raw_file, build_raw_release, new_run_id, utc_now
+from holocron.contracts import RawRelease
+from holocron.platform.execution import build_raw_release, new_run_id, utc_now
 from holocron.platform.metadata import safe_config_metadata
+from holocron.platform.raw_files import write_jsonl_raw_file
 from holocron.platform.settings import Settings
 from holocron.sources.news_feeds.source import DEFAULT_NEWS_FEED_URLS, NewsFeedsConfig, SOURCE
 
@@ -28,7 +28,21 @@ POLLS_FILE_NAME = "news_feed_polls.jsonl"
 TAG_PATTERN = re.compile(r"<[^>]+>")
 WHITESPACE_PATTERN = re.compile(r"\s+")
 IMG_TAG_PATTERN = re.compile(r"<img\b[^>]*>", re.IGNORECASE)
+META_TAG_PATTERN = re.compile(r"<meta\b[^>]*>", re.IGNORECASE)
+LINK_TAG_PATTERN = re.compile(r"<link\b[^>]*>", re.IGNORECASE)
 ATTR_PATTERN = re.compile(r"([:\w-]+)\s*=\s*(['\"])(.*?)\2", re.IGNORECASE | re.DOTALL)
+MEDIA_RSS_NAMESPACE = "http://search.yahoo.com/mrss/"
+IMAGE_URL_SUFFIXES = (".avif", ".gif", ".jpeg", ".jpg", ".png", ".svg", ".webp")
+IMAGE_META_KEYS = {
+    "image",
+    "og:image",
+    "og:image:secure_url",
+    "og:image:url",
+    "thumbnail",
+    "thumbnailurl",
+    "twitter:image",
+    "twitter:image:src",
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -162,9 +176,26 @@ def extract_release(
                 log, "news_feeds: failed feed index=%s url=%s error=%s", index, feed_url, exc
             )
 
+    if failed == len(feed_urls):
+        raise RuntimeError("news_feeds extraction failed for every configured feed")
+
     files = (
-        _write_jsonl_raw_file(output_path / POLLS_FILE_NAME, poll_rows),
-        _write_jsonl_raw_file(output_path / ARTICLES_FILE_NAME, article_rows),
+        write_jsonl_raw_file(
+            output_path / POLLS_FILE_NAME,
+            poll_rows,
+            ensure_ascii=True,
+            sort_keys=True,
+            default=str,
+            separators=None,
+        ),
+        write_jsonl_raw_file(
+            output_path / ARTICLES_FILE_NAME,
+            article_rows,
+            ensure_ascii=True,
+            sort_keys=True,
+            default=str,
+            separators=None,
+        ),
     )
     _log_info(
         log,
@@ -236,7 +267,8 @@ def _parse_rss_feed(root: ET.Element, *, source_feed_url: str) -> list[ParsedNew
                 headline=headline,
                 summary=clean_text(_first_child_text(item, "description")),
                 publish_date=publish_date,
-                thumbnail_source_url=extract_first_image_url(content_html) or "",
+                thumbnail_source_url=extract_entry_thumbnail_url(item, content_html=content_html)
+                or "",
                 raw_entry_xml=ET.tostring(item, encoding="unicode"),
             )
         )
@@ -266,7 +298,8 @@ def _parse_atom_feed(root: ET.Element, *, source_feed_url: str) -> list[ParsedNe
                 headline=headline,
                 summary=clean_text(_first_child_text(entry, "summary")),
                 publish_date=publish_date,
-                thumbnail_source_url=extract_first_image_url(content_html) or "",
+                thumbnail_source_url=extract_entry_thumbnail_url(entry, content_html=content_html)
+                or "",
                 raw_entry_xml=ET.tostring(entry, encoding="unicode"),
             )
         )
@@ -354,6 +387,124 @@ def extract_first_image_url(content_html: str | None) -> str | None:
     return first_image
 
 
+def extract_thumbnail_url_from_html(html: str | None, *, base_url: str = "") -> str | None:
+    if not html:
+        return None
+
+    for tag in META_TAG_PATTERN.findall(html):
+        attrs = _tag_attrs(tag)
+        key = (attrs.get("property") or attrs.get("name") or attrs.get("itemprop") or "").lower()
+        if key in IMAGE_META_KEYS:
+            url = attrs.get("content", "").strip()
+            if url:
+                return _absolutize_url(url, base_url=base_url)
+
+    for tag in LINK_TAG_PATTERN.findall(html):
+        attrs = _tag_attrs(tag)
+        rel_values = set(attrs.get("rel", "").lower().split())
+        href = attrs.get("href", "").strip()
+        if href and ("image_src" in rel_values or attrs.get("as", "").lower() == "image"):
+            return _absolutize_url(href, base_url=base_url)
+
+    embedded_image = extract_first_image_url(html)
+    if embedded_image:
+        return _absolutize_url(embedded_image, base_url=base_url)
+    return None
+
+
+def extract_entry_thumbnail_url(
+    entry: ET.Element,
+    *,
+    content_html: str | None = None,
+) -> str | None:
+    media_thumbnail = _first_media_url(entry, local_names={"thumbnail"})
+    if media_thumbnail:
+        return media_thumbnail
+
+    embedded_image = extract_first_image_url(content_html)
+    if embedded_image:
+        return embedded_image
+
+    return _first_media_url(entry, local_names={"image", "enclosure", "content", "link"})
+
+
+def extract_thumbnail_url_from_raw_entry_xml(raw_entry_xml: str | None) -> str | None:
+    if not raw_entry_xml:
+        return None
+    try:
+        entry = ET.fromstring(raw_entry_xml)
+    except ET.ParseError:
+        return None
+    content_html = _first_child_text(entry, "encoded") or _first_child_text(
+        entry, "content", "summary", "description"
+    )
+    return extract_entry_thumbnail_url(entry, content_html=content_html)
+
+
+def _first_media_url(entry: ET.Element, *, local_names: set[str]) -> str | None:
+    for element in entry.iter():
+        local_name = _local_name(element.tag)
+        if local_name not in local_names:
+            continue
+        candidate = _media_url_candidate(element, local_name=local_name)
+        if candidate:
+            return candidate
+    return None
+
+
+def _media_url_candidate(element: ET.Element, *, local_name: str) -> str | None:
+    attrs = {key.lower(): value.strip() for key, value in element.attrib.items()}
+    url = attrs.get("url") or attrs.get("href") or attrs.get("src")
+    if url:
+        if local_name in {"thumbnail", "image"}:
+            return url
+        if _element_describes_image(element, local_name=local_name, attrs=attrs, url=url):
+            return url
+
+    if local_name == "image":
+        nested_url = _first_child_text(element, "url")
+        if nested_url:
+            return nested_url.strip()
+    return None
+
+
+def _tag_attrs(tag: str) -> dict[str, str]:
+    return {name.lower(): val for name, _, val in ATTR_PATTERN.findall(tag)}
+
+
+def _absolutize_url(url: str, *, base_url: str) -> str:
+    if not base_url:
+        return url.strip()
+    return urljoin(base_url, url.strip())
+
+
+def _element_describes_image(
+    element: ET.Element,
+    *,
+    local_name: str,
+    attrs: Mapping[str, str],
+    url: str,
+) -> bool:
+    media_type = attrs.get("type", "").lower()
+    if media_type.startswith("image/"):
+        return True
+    if attrs.get("medium", "").lower() == "image":
+        return True
+    if local_name == "content" and _namespace_uri(element.tag).rstrip(
+        "/"
+    ) == MEDIA_RSS_NAMESPACE.rstrip("/"):
+        return True
+    if local_name == "link" and attrs.get("rel", "").lower() in {"enclosure", "image_src"}:
+        return True
+    return urlparse(url).path.lower().endswith(IMAGE_URL_SUFFIXES)
+
+
+def _namespace_uri(tag: str) -> str:
+    if tag.startswith("{") and "}" in tag:
+        return tag[1:].split("}", 1)[0]
+    return ""
+
+
 def _first_child_text(element: ET.Element, *names: str) -> str | None:
     wanted = set(names)
     for child in element:
@@ -414,26 +565,6 @@ def _dedupe_urls(urls: Sequence[str]) -> tuple[str, ...]:
         seen.add(cleaned)
         deduped.append(cleaned)
     return tuple(deduped)
-
-
-def _write_jsonl_raw_file(path: Path, rows: Iterable[dict[str, Any]]) -> RawFile:
-    hasher = hashlib.sha256()
-    row_count = 0
-    size = 0
-    with path.open("wb") as handle:
-        for row in rows:
-            line = (json.dumps(row, sort_keys=True, default=str) + "\n").encode("utf-8")
-            handle.write(line)
-            hasher.update(line)
-            size += len(line)
-            row_count += 1
-    return build_raw_file(
-        path=path,
-        sha256=hasher.hexdigest(),
-        size_bytes=size,
-        row_count=row_count,
-        content_type="application/x-ndjson",
-    )
 
 
 def _log_info(progress_log: Any, message: str, *args: Any) -> None:
