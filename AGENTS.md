@@ -43,8 +43,8 @@ Small legacy/simple sources may still inline extraction in `source.py`, but new 
 
 ## Naming
 
-- Prefer short, recognizable dataset ids for sources: `pf_locations`, `bay_transactions`, `dxbi_lookups`
-- Prefer provider-scoped warehouse table prefixes: `pf_*`, `bay_*`, `dld_*`, `dxbi_*`, `dda_*`
+- Prefer short, recognizable dataset ids for sources: `pf_locations`, `dxbi_transactions`, `dld_od_rents`
+- Prefer provider-scoped warehouse table prefixes: `pf_*`, `dld_*`, `dxbi_*`, `dda_*`
 - For DDA planning data, use `dda_*` rather than `gis_*`; GIS is the data type, not the provider
 
 ## Tooling
@@ -76,7 +76,7 @@ Small legacy/simple sources may still inline extraction in `source.py`, but new 
 **Tests:** `pytest`
 
 - Run all tests: `uv run pytest`
-- Run a specific file: `uv run pytest tests/test_holocron_definitions.py`
+- Run a specific file: `uv run pytest tests/test_definitions.py`
 
 For VPS-oriented replication and deploy work, prefer the repo recipes such as `just env prod`, `just up prod`, and `just deploy`.
 

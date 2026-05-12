@@ -1,8 +1,8 @@
 # Ingestion Patterns
 
 Holocron sources should make raw data durable before doing any modeling work.
-Bronze and downstream lineage docs are intentionally deferred until the raw
-sources are stable.
+This doc covers raw ingestion only. Bronze loading patterns are in
+`docs/bronze-patterns.md`.
 
 ## Durable Commit Point
 
@@ -42,7 +42,7 @@ The source should:
 - Advance the checkpoint only after upload succeeds.
 
 This is the preferred pattern for Reelly archive chunks, DLD daily slices,
-Bayut date windows, DDA full refreshes, and future DXBI map chunks.
+DDA full refreshes, and DXBI map chunks.
 
 ## Asset Hydration
 

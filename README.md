@@ -31,7 +31,6 @@ Common commands:
 
 - `just sync` installs Python dependencies with `uv`
 - `just check` runs format, lint, and tests
-- `just news-sync` runs the legacy direct platform news sync
 - `just env local` creates `.env.local` from `.env.local.example`
 - `just env prod` writes `.env` from Bitwarden Secrets Manager
 - `just env prod-manual` creates `.env` from `.env.example`
@@ -131,14 +130,18 @@ Raw ingestion standards and operational notes live under `docs/`:
 
 - `docs/ingestion-patterns.md` defines chunked raw scrapes, asset hydration,
   R2 manifests, checkpoints, and source naming guidance.
+- `docs/bronze-patterns.md` defines bronze loader structure, delete strategies,
+  and ClickHouse schema conventions.
 - `docs/logging.md` defines common progress and error logging expectations.
 - `docs/scraping-investigation.md` is the playbook for new or fragile scrapers.
 - `docs/runbooks/long-running-jobs.md` covers overnight job launch and status
   checks.
 
-Each active source package has a short `holocron/sources/<source>/README.md`
-covering raw files, config knobs, R2 layout, and current limitations. Bronze
-lineage docs are intentionally deferred until the raw source set is stable.
+Most active source packages have a short `holocron/sources/<source>/README.md`
+covering raw files, config knobs, R2 layout, and current limitations. The DLD
+open-data endpoint packages share `holocron/sources/dld_open_data.md` because
+they use one implementation and differ only by endpoint contract. Bronze lineage
+docs are intentionally deferred until the raw source set is stable.
 
 ## Status
 
@@ -153,50 +156,13 @@ The current MVP focus is:
 Silver layers are intentionally deferred until a few sources are producing real
 raw and bronze data and the cleaning requirements are clearer.
 
-## News Sync
+## News Feeds
 
-Holocron includes a raw-first news feed source at `holocron/sources/news_feeds/`.
-It polls RSS/Atom feeds, archives feed/article rows to R2, mirrors thumbnails to
-stable media keys, then upserts recent frontend-ready rows into platform
-Postgres `news_articles`.
-
-Required configuration:
-
-- `PLATFORM_POSTGRES_URL` for writes to `vitevue-platform`'s database
-
-Feed configuration:
-
-- Holocron ships with a curated default RSS/Atom list for property,
-  construction, logistics, Gulf business, MEED, World Property Journal, and
-  Bloomberg business feeds.
-- `NEWS_FEED_URLS` with one feed URL per line, `feed_urls`, or
-  `feed_urls_file` can be used to replace the curated defaults for a run.
-
-Optional configuration:
-
-- `S3_PUBLIC_URL_BASE` to publish mirrored thumbnail CDN URLs
-- `S3_BUCKET`/R2 settings for raw manifests and thumbnail media
-
-Dagster jobs:
-
-- `news_feeds_poll_and_publish`: 15-minute schedule, stopped by default until
-  feed URLs, R2, and Postgres are configured.
-- `news_publish_backfill`: hydrates thumbnails and publishes recent raw articles
-  to Postgres, defaulting to a 3-day lookback.
-- `news_thumbnail_assets_backfill`: thumbnail-only backfill.
-- `news_feeds_manual_poll`: raw feed polling only.
-
-Examples:
+News source details live in `holocron/sources/news_feeds/README.md`. Common
+manual commands:
 
 ```bash
 uv run dagster job execute -m holocron.definitions -j news_publish_backfill
-uv run dagster job execute -m holocron.definitions -j news_feeds_poll_and_publish
-```
-
-The older direct sync remains available for quick local checks:
-
-```bash
-just news-sync
-just news-sync --feed-url https://meconstructionnews.com/feed/atom
-just news-sync --skip-thumbnail-upload
+uv run dagster job execute -m holocron.definitions -j news_thumbnail_assets_backfill
+uv run dagster job execute -m holocron.definitions -j news_feeds_poll_and_hydrate
 ```

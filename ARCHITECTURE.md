@@ -15,7 +15,6 @@ The intended flow is:
 source connector
   -> immutable raw release in S3
   -> bronze ClickHouse table(s)
-  -> silver ClickHouse table(s)
   -> optional domain outputs
 ```
 
@@ -30,7 +29,7 @@ Dagster sits beside the pipeline as the control plane for:
 
 The important ownership rules are:
 
-- a source owns its extraction logic, raw release shape, and source-conformed bronze and silver tables
+- a source owns its extraction logic, raw release shape, and source-conformed bronze tables
 - shared platform code must stay source-agnostic
 - domain outputs may depend on many sources
 - one source must not depend on another source's code
@@ -44,6 +43,5 @@ The new package starts with a deliberately small contract surface:
 - `RawFile`
 - `RawRelease`
 - `BronzeTable`
-- `SilverTable`
 
-These are enough to define a source, shape immutable raw releases, and generate orchestration later without baking source internals into the control plane.
+These are enough to define a source, shape immutable raw releases, and generate orchestration later without baking source internals into the control plane. Silver/domain layers are intentionally deferred until the raw and bronze source set is stable.
