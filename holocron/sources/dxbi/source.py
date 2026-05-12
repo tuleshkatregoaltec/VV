@@ -3,14 +3,18 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from typing import Literal
+
+from pydantic import Field, model_validator
 
 from holocron.contracts import BronzeTable, SourceSpec
+from holocron.pydantic_helpers import CsvTuple, HolocronModel
+from holocron.sources.entrypoints import lazy_bronze_loader, lazy_extractor
 
-DATE_SLICE_CHECKPOINT_STRATEGY = "date_window"
 DXBI_SOURCE_NAME = "dxbi_transactions"
 DXBI_PROVIDER = "dxbinteract"
 DXBI_BASE_URL = "https://dxbinteract.com/"
+DATE_SLICE_CHECKPOINT_STRATEGY = "date_window"
 DXBI_DEFAULT_HEATMAP_PROPERTY_TYPES = ("Apartment", "Villa", "Plot", "Commercial")
 DXBI_DEFAULT_HEATMAP_BEDROOMS = ("0", "1", "2", "3", "4", "5", "6", "7", "8", "9")
 
@@ -25,11 +29,9 @@ class DateSlice:
         return f"{self.start_date.isoformat()}_{self.end_date.isoformat()}"
 
 
-class DxbiConfig(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    scrape_mode: str = "comprehensive"
-    mode: str = "incremental"
+class DxbiConfig(HolocronModel):
+    scrape_mode: Literal["comprehensive", "report_tables", "both"] = "comprehensive"
+    mode: Literal["incremental", "backfill"] = "incremental"
     start_date: date | None = None
     end_date: date | None = None
     lookback_days: int = Field(default=2, ge=1)
@@ -41,8 +43,8 @@ class DxbiConfig(BaseModel):
     chrome_path: str = ""
     storage_state_path: str = ""
     twocaptcha_api_key: str = ""
-    heatmap_property_types: tuple[str, ...] = DXBI_DEFAULT_HEATMAP_PROPERTY_TYPES
-    heatmap_bedrooms: tuple[str, ...] = DXBI_DEFAULT_HEATMAP_BEDROOMS
+    heatmap_property_types: CsvTuple = DXBI_DEFAULT_HEATMAP_PROPERTY_TYPES
+    heatmap_bedrooms: CsvTuple = DXBI_DEFAULT_HEATMAP_BEDROOMS
     max_heatmap_buildings: int | None = Field(default=None, ge=1)
     include_heatmap_building_details: bool = True
     include_heatmap_building_status: bool = True
@@ -52,19 +54,8 @@ class DxbiConfig(BaseModel):
     heatmap_fetch_timeout_seconds: float = Field(default=30, ge=1)
     heatmap_progress_interval: int = Field(default=100, ge=1)
 
-    @field_validator("heatmap_property_types", "heatmap_bedrooms", mode="before")
-    @classmethod
-    def coerce_tuple_config(cls, value: object) -> object:
-        if isinstance(value, str):
-            return tuple(part.strip() for part in value.split(",") if part.strip())
-        return value
-
     @model_validator(mode="after")
     def validate_dates(self) -> "DxbiConfig":
-        if self.scrape_mode not in {"comprehensive", "report_tables", "both"}:
-            raise ValueError("scrape_mode must be 'comprehensive', 'report_tables', or 'both'")
-        if self.mode not in {"incremental", "backfill"}:
-            raise ValueError("mode must be 'incremental' or 'backfill'")
         if self.mode == "backfill":
             if self.start_date is None or self.end_date is None:
                 raise ValueError("backfill mode requires start_date and end_date")
@@ -84,7 +75,9 @@ def utc_today(now: datetime | None = None) -> date:
 def resolve_date_window(config: DxbiConfig, *, today: date | None = None) -> tuple[date, date]:
     current_day = today or utc_today()
     if config.mode == "backfill":
-        return config.start_date, config.end_date  # type: ignore[return-value]
+        if config.start_date is None or config.end_date is None:
+            raise ValueError("backfill mode requires start_date and end_date")
+        return config.start_date, config.end_date
     start_date = current_day - timedelta(days=config.lookback_days)
     return start_date, current_day
 
@@ -100,16 +93,8 @@ def build_date_slices(config: DxbiConfig, *, today: date | None = None) -> tuple
     return tuple(slices)
 
 
-def extract_release(*args, **kwargs):
-    from holocron.sources.dxbi.extract import extract_release as run_extract_release
-
-    return run_extract_release(*args, **kwargs)
-
-
-def load_bronze(*args, **kwargs):
-    from holocron.sources.dxbi.bronze import load_release_to_clickhouse
-
-    return load_release_to_clickhouse(*args, **kwargs)
+extract_release = lazy_extractor(f"{__package__}.extract")
+load_bronze = lazy_bronze_loader(f"{__package__}.bronze")
 
 
 SOURCE = SourceSpec(

@@ -1,10 +1,12 @@
 import hashlib
 import json
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
 import pytest
 
+from holocron.contracts import ClickHouseInserter, RawFileStore
 from holocron.sources.dxbi.bronze import load_release_to_clickhouse
 
 
@@ -28,7 +30,11 @@ class _FakeClickHouse:
         self.commands.append(sql)
 
     def insert_rows(
-        self, *, table: str, rows: list[tuple], column_names: tuple[str, ...] | list[str]
+        self,
+        *,
+        table: str,
+        rows: Sequence[tuple[Any, ...]],
+        column_names: Sequence[str],
     ) -> None:
         self.insert_calls.append(
             {
@@ -37,6 +43,14 @@ class _FakeClickHouse:
                 "column_names": tuple(column_names),
             }
         )
+
+
+def _s3(fake: _FakeS3) -> RawFileStore:
+    return fake
+
+
+def _clickhouse(fake: _FakeClickHouse) -> ClickHouseInserter:
+    return fake
 
 
 def _jsonl_payload(rows: list[dict[str, Any]]) -> bytes:
@@ -72,15 +86,15 @@ def test_load_release_to_clickhouse_loads_rows_and_clears_incremental_window() -
     clickhouse = _FakeClickHouse()
 
     result = load_release_to_clickhouse(
-        raw_release={
+        raw_manifest={
             "source": "dxbi_transactions",
             "run_id": "release-run-1",
             "files": [
                 {"path": "slice_2026-04-29_2026-04-30.jsonl", "s3_key": "s3://raw/slice.jsonl"}
             ],
         },
-        s3=s3,  # type: ignore[arg-type]
-        clickhouse=clickhouse,  # type: ignore[arg-type]
+        s3=_s3(s3),
+        clickhouse=_clickhouse(clickhouse),
     )
 
     assert result["table_row_counts"] == {"dxbi_transactions_bronze": 2}
@@ -118,15 +132,15 @@ def test_load_release_to_clickhouse_ignores_comprehensive_heatmap_rows() -> None
     clickhouse = _FakeClickHouse()
 
     result = load_release_to_clickhouse(
-        raw_release={
+        raw_manifest={
             "source": "dxbi_transactions",
             "run_id": "release-run-1",
             "files": [
                 {"path": "dxbi_heatmap_chessboards.jsonl", "s3_key": "s3://raw/heatmap.jsonl"}
             ],
         },
-        s3=s3,  # type: ignore[arg-type]
-        clickhouse=clickhouse,  # type: ignore[arg-type]
+        s3=_s3(s3),
+        clickhouse=_clickhouse(clickhouse),
     )
 
     assert result["total_rows"] == 0
@@ -142,7 +156,7 @@ def test_load_release_to_clickhouse_rejects_checksum_mismatch_before_mutation() 
 
     with pytest.raises(ValueError, match="checksum mismatch"):
         load_release_to_clickhouse(
-            raw_release={
+            raw_manifest={
                 "source": "dxbi_transactions",
                 "run_id": "release-run-1",
                 "files": [
@@ -154,8 +168,8 @@ def test_load_release_to_clickhouse_rejects_checksum_mismatch_before_mutation() 
                     }
                 ],
             },
-            s3=_FakeS3({"s3://raw/slice.jsonl": payload}),  # type: ignore[arg-type]
-            clickhouse=clickhouse,  # type: ignore[arg-type]
+            s3=_s3(_FakeS3({"s3://raw/slice.jsonl": payload})),
+            clickhouse=_clickhouse(clickhouse),
         )
 
     assert not clickhouse.commands
@@ -177,7 +191,7 @@ def test_load_release_to_clickhouse_rejects_row_count_mismatch_before_mutation()
 
     with pytest.raises(ValueError, match="row_count mismatch"):
         load_release_to_clickhouse(
-            raw_release={
+            raw_manifest={
                 "source": "dxbi_transactions",
                 "run_id": "release-run-1",
                 "files": [
@@ -189,8 +203,8 @@ def test_load_release_to_clickhouse_rejects_row_count_mismatch_before_mutation()
                     }
                 ],
             },
-            s3=_FakeS3({"s3://raw/slice.jsonl": payload}),  # type: ignore[arg-type]
-            clickhouse=clickhouse,  # type: ignore[arg-type]
+            s3=_s3(_FakeS3({"s3://raw/slice.jsonl": payload})),
+            clickhouse=_clickhouse(clickhouse),
         )
 
     assert not clickhouse.commands
@@ -198,9 +212,9 @@ def test_load_release_to_clickhouse_rejects_row_count_mismatch_before_mutation()
 
 
 def test_load_release_to_clickhouse_rejects_non_dxbi_release() -> None:
-    with pytest.raises(ValueError, match="Expected raw_release.source=dxbi_transactions"):
+    with pytest.raises(ValueError, match="Expected raw_manifest.source=dxbi_transactions"):
         load_release_to_clickhouse(
-            raw_release={"source": "other_source", "run_id": "run-1", "files": []},
-            s3=_FakeS3({}),  # type: ignore[arg-type]
-            clickhouse=_FakeClickHouse(),  # type: ignore[arg-type]
+            raw_manifest={"source": "other_source", "run_id": "run-1", "files": []},
+            s3=_s3(_FakeS3({})),
+            clickhouse=_clickhouse(_FakeClickHouse()),
         )

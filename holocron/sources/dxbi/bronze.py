@@ -7,14 +7,20 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any
 
-from holocron.platform.clickhouse import ClickHouseClient
+from holocron.contracts import (
+    BronzeLoadResult,
+    ClickHouseInserter,
+    RawFileStore,
+    RawManifest,
+)
+from holocron.platform.bronze import bronze_load_result, coerce_int, validate_raw_manifest
+from holocron.platform.clickhouse_schema import ensure_schema
 from holocron.platform.raw_files import (
     download_manifest_file,
     manifest_files_by_name,
     read_jsonl_manifest_rows,
     string_value,
 )
-from holocron.platform.s3 import S3Client
 from holocron.sources.dxbi.source import DXBI_SOURCE_NAME
 
 _TABLE_NAME = "dxbi_transactions_bronze"
@@ -38,13 +44,7 @@ def _string(value: Any) -> str:
 
 
 def _int(value: Any) -> int:
-    parsed = _string(value)
-    if not parsed:
-        return 0
-    try:
-        return int(parsed)
-    except ValueError:
-        return int(float(parsed))
+    return coerce_int(value)
 
 
 def _date(value: Any, *, field_name: str) -> date:
@@ -52,22 +52,6 @@ def _date(value: Any, *, field_name: str) -> date:
     if not parsed:
         raise ValueError(f"DXBI row is missing required date field: {field_name}")
     return date.fromisoformat(parsed)
-
-
-def _schema_sql_path() -> Path:
-    return Path(__file__).resolve().parents[2] / "lib" / "sql" / "clickhouse_schema.sql"
-
-
-def _iter_sql_statements(sql: str) -> list[str]:
-    return [statement.strip() for statement in sql.split(";") if statement.strip()]
-
-
-def ensure_schema(*, clickhouse: ClickHouseClient) -> None:
-    sql_path = _schema_sql_path()
-    if not sql_path.exists():
-        raise FileNotFoundError(f"Missing ClickHouse schema file: {sql_path}")
-    for statement in _iter_sql_statements(sql_path.read_text(encoding="utf-8")):
-        clickhouse.command(statement)
 
 
 def _row_tuple(raw_row: dict[str, Any], *, fallback_run_id: str) -> tuple:
@@ -116,22 +100,16 @@ def _slice_delete_predicate(table_rows: list[tuple]) -> str:
 
 def load_release_to_clickhouse(
     *,
-    raw_release: dict[str, Any],
-    s3: S3Client,
-    clickhouse: ClickHouseClient,
-) -> dict[str, Any]:
-    source_name = _string(raw_release.get("source"))
-    if source_name != DXBI_SOURCE_NAME:
-        raise ValueError(f"Expected raw_release.source={DXBI_SOURCE_NAME}, got {source_name!r}")
+    raw_manifest: RawManifest,
+    s3: RawFileStore,
+    clickhouse: ClickHouseInserter,
+) -> BronzeLoadResult:
+    source_name, run_id = validate_raw_manifest(raw_manifest, expected_source=DXBI_SOURCE_NAME)
 
-    run_id = _string(raw_release.get("run_id"))
-    if not run_id:
-        raise ValueError("raw_release.run_id is required")
-
-    files_by_name = manifest_files_by_name(raw_release)
+    files_by_name = manifest_files_by_name(raw_manifest)
     jsonl_file_names = sorted(name for name in files_by_name if name.endswith(".jsonl"))
     if not jsonl_file_names:
-        raise ValueError("DXBI raw_release has no jsonl files")
+        raise ValueError("DXBI raw_manifest has no jsonl files")
 
     table_rows: list[tuple] = []
     with TemporaryDirectory(prefix=f"holocron-dxbi-bronze-{run_id}-") as scratch:
@@ -169,10 +147,4 @@ def load_release_to_clickhouse(
         )
 
     table_row_counts = {_TABLE_NAME: len(table_rows)}
-    return {
-        "source": source_name,
-        "run_id": run_id,
-        "table_row_counts": table_row_counts,
-        "table_count": len(table_row_counts),
-        "total_rows": sum(table_row_counts.values()),
-    }
+    return bronze_load_result(source=source_name, run_id=run_id, table_row_counts=table_row_counts)

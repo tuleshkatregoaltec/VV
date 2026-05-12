@@ -6,7 +6,19 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any
 
-from holocron.platform.clickhouse import ClickHouseClient
+from holocron.contracts import (
+    BronzeLoadResult,
+    ClickHouseReplacer,
+    RawFileStore,
+    RawManifest,
+)
+from holocron.platform.bronze import (
+    bronze_load_result,
+    coerce_float,
+    coerce_int,
+    validate_raw_manifest,
+)
+from holocron.platform.clickhouse_schema import ensure_schema
 from holocron.platform.raw_files import (
     download_manifest_file,
     manifest_files_by_name,
@@ -14,7 +26,6 @@ from holocron.platform.raw_files import (
     require_manifest_file,
     string_value,
 )
-from holocron.platform.s3 import S3Client
 from holocron.sources.dda.source import DDA_SOURCE_NAME
 
 
@@ -31,20 +42,11 @@ def _string(value: Any) -> str:
 
 
 def _int(value: Any) -> int:
-    parsed = _string(value)
-    if not parsed:
-        return 0
-    try:
-        return int(parsed)
-    except ValueError:
-        return int(float(parsed))
+    return coerce_int(value)
 
 
 def _float(value: Any) -> float:
-    parsed = _string(value).replace(",", "")
-    if not parsed:
-        return 0.0
-    return float(parsed)
+    return coerce_float(value)
 
 
 def _uint8(value: Any) -> int:
@@ -318,37 +320,15 @@ _TABLE_SPECS = (
 )
 
 
-def _schema_sql_path() -> Path:
-    return Path(__file__).resolve().parents[2] / "lib" / "sql" / "clickhouse_schema.sql"
-
-
-def _iter_sql_statements(sql: str) -> list[str]:
-    return [statement.strip() for statement in sql.split(";") if statement.strip()]
-
-
-def ensure_schema(*, clickhouse: ClickHouseClient) -> None:
-    sql_path = _schema_sql_path()
-    if not sql_path.exists():
-        raise FileNotFoundError(f"Missing ClickHouse schema file: {sql_path}")
-    for statement in _iter_sql_statements(sql_path.read_text(encoding="utf-8")):
-        clickhouse.command(statement)
-
-
 def load_release_to_clickhouse(
     *,
-    raw_release: dict[str, Any],
-    s3: S3Client,
-    clickhouse: ClickHouseClient,
-) -> dict[str, Any]:
-    source_name = _string(raw_release.get("source"))
-    if source_name != DDA_SOURCE_NAME:
-        raise ValueError(f"Expected raw_release.source={DDA_SOURCE_NAME}, got {source_name!r}")
+    raw_manifest: RawManifest,
+    s3: RawFileStore,
+    clickhouse: ClickHouseReplacer,
+) -> BronzeLoadResult:
+    source_name, run_id = validate_raw_manifest(raw_manifest, expected_source=DDA_SOURCE_NAME)
 
-    run_id = _string(raw_release.get("run_id"))
-    if not run_id:
-        raise ValueError("raw_release.run_id is required")
-
-    files_by_name = manifest_files_by_name(raw_release)
+    files_by_name = manifest_files_by_name(raw_manifest)
     table_row_counts: dict[str, int] = {}
     parsed_rows_by_table: dict[str, list[tuple]] = {}
 
@@ -381,10 +361,4 @@ def load_release_to_clickhouse(
         )
         table_row_counts[spec.table_name] = row_count
 
-    return {
-        "source": source_name,
-        "run_id": run_id,
-        "table_row_counts": table_row_counts,
-        "table_count": len(table_row_counts),
-        "total_rows": sum(table_row_counts.values()),
-    }
+    return bronze_load_result(source=source_name, run_id=run_id, table_row_counts=table_row_counts)

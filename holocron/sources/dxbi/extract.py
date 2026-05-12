@@ -10,8 +10,8 @@ import secrets
 import shutil
 import subprocess
 import time
-from collections.abc import Callable, Iterable
-from contextlib import contextmanager
+from collections.abc import Callable, Iterable, Iterator
+from contextlib import AbstractContextManager, contextmanager
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -84,7 +84,7 @@ def extract_release(
     config: DxbiConfig | dict,
     now: datetime | None = None,
     page_scraper: Callable[..., list[dict]] | None = None,
-    playwright_factory: Callable[[], object] = sync_playwright,
+    playwright_factory: Callable[[], AbstractContextManager[Playwright]] = sync_playwright,
     progress_log: Any | None = None,
 ) -> RawRelease:
     parsed_config = config if isinstance(config, DxbiConfig) else DxbiConfig.model_validate(config)
@@ -214,7 +214,7 @@ def _extract_with_playwright(
     urls: list[str],
     date_slices: Iterable[DateSlice],
     config: DxbiConfig,
-    playwright_factory: Callable[[], object],
+    playwright_factory: Callable[[], AbstractContextManager[Playwright]],
 ) -> tuple[RawFile, ...]:
     scraped_at = current_time.isoformat()
     with _virtual_display_if_needed(config), playwright_factory() as playwright:
@@ -235,7 +235,9 @@ def _extract_with_playwright(
                 output_path=output_path, urls=urls, date_slices=date_slices, collect_rows=collect
             )
         finally:
-            browser_context.browser.close()
+            browser = browser_context.browser
+            if browser is not None:
+                browser.close()
 
 
 def _extract_comprehensive_with_playwright(
@@ -244,7 +246,7 @@ def _extract_comprehensive_with_playwright(
     run_id: str,
     current_time: datetime,
     config: DxbiConfig,
-    playwright_factory: Callable[[], object],
+    playwright_factory: Callable[[], AbstractContextManager[Playwright]],
     progress_log: Any,
 ) -> tuple[tuple[RawFile, ...], dict[str, Any]]:
     scraped_at = current_time.isoformat()
@@ -269,7 +271,9 @@ def _extract_comprehensive_with_playwright(
             )
         finally:
             page.close()
-            browser_context.browser.close()
+            browser = browser_context.browser
+            if browser is not None:
+                browser.close()
 
 
 def _extract_heatmap_files(
@@ -675,7 +679,7 @@ def _resolve_browser_executable(chrome_path: str) -> str | None:
 
 
 @contextmanager
-def _virtual_display_if_needed(config: DxbiConfig):
+def _virtual_display_if_needed(config: DxbiConfig) -> Iterator[None]:
     if config.headless or os.environ.get("DISPLAY"):
         yield
         return
@@ -997,15 +1001,13 @@ def _build_column_payload(cell: dict) -> dict:
 
 
 def _detail_urls(links: list[dict]) -> list[str]:
-    urls = []
-    for link in links:
-        href = str(link.get("href") or "")
-        parsed = urlparse(href)
-        if parsed.netloc.lower() != "dxb.is":
-            continue
-        if href not in urls:
-            urls.append(href)
-    return urls
+    return list(
+        dict.fromkeys(
+            str(link.get("href") or "")
+            for link in links
+            if urlparse(str(link.get("href") or "")).netloc.lower() == "dxb.is"
+        )
+    )
 
 
 def _normalize_cell_text(value: str) -> str:
@@ -1131,7 +1133,8 @@ def _extract_pagination_calls(*, page: Page, region_selector: str) -> list[dict]
 
 def _paginate_report(*, page: Page, table_selector: str, call: dict) -> None:
     previous_html = page.evaluate(
-        f"document.querySelector('{table_selector} tbody')?.innerHTML ?? ''"
+        "(sel) => document.querySelector(sel + ' tbody')?.innerHTML ?? ''",
+        table_selector,
     )
     page.evaluate(
         """

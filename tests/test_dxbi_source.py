@@ -2,6 +2,7 @@ import json
 import os
 from datetime import UTC, date, datetime
 from pathlib import Path
+from typing import Any, cast
 
 import pytest
 
@@ -42,7 +43,9 @@ def test_backfill_requires_explicit_dates() -> None:
 
 
 def test_dxbi_config_coerces_comprehensive_query_lists() -> None:
-    config = DxbiConfig(heatmap_property_types="Apartment,Villa", heatmap_bedrooms="0,1,2")
+    config = DxbiConfig.model_validate(
+        {"heatmap_property_types": "Apartment,Villa", "heatmap_bedrooms": "0,1,2"}
+    )
 
     assert config.scrape_mode == "comprehensive"
     assert config.heatmap_property_types == ("Apartment", "Villa")
@@ -199,7 +202,7 @@ def test_apply_date_slice_waits_for_report_refresh_not_existing_rows() -> None:
     page = FakePage()
 
     _apply_date_slice(
-        page=page,  # type: ignore[arg-type]
+        page=cast(Any, page),
         date_slice=DateSlice(start_date=date(2026, 3, 1), end_date=date(2026, 3, 3)),
     )
 
@@ -252,7 +255,7 @@ def test_extract_table_rows_preserves_ordered_columns_links_and_html() -> None:
             }
 
     rows = _extract_table_rows(
-        page=FakePage(),  # type: ignore[arg-type]
+        page=cast(Any, FakePage()),
         table_selector="#report_table_soldhistory",
         table_name="sales",
         page_number=1,
@@ -421,7 +424,7 @@ def test_extract_heatmap_files_writes_deduped_building_payloads(tmp_path: Path) 
         output_path=tmp_path,
         run_id="run-1",
         scraped_at="2026-05-04T16:00:00+00:00",
-        page=FakePage(),  # type: ignore[arg-type]
+        page=cast(Any, FakePage()),
         config=DxbiConfig(
             heatmap_property_types=("Apartment",),
             heatmap_bedrooms=("1",),

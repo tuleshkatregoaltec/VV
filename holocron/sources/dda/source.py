@@ -1,30 +1,22 @@
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import Field
 
 from holocron.contracts import BronzeTable, SourceSpec
+from holocron.pydantic_helpers import HolocronModel
+from holocron.sources.entrypoints import lazy_bronze_loader, lazy_extractor
 
 DDA_SOURCE_NAME = "dda_planning_layers"
 DDA_PROVIDER = "dda"
 
 
-class DdaConfig(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
+class DdaConfig(HolocronModel):
     concurrency: int = Field(default=20, ge=1)
     max_plots: int | None = Field(default=None, ge=1)
 
 
-def extract_release(*args, **kwargs):
-    from holocron.sources.dda.extract import extract_release as run_extract_release
-
-    return run_extract_release(*args, **kwargs)
-
-
-def load_bronze(*args, **kwargs):
-    from holocron.sources.dda.bronze import load_release_to_clickhouse
-
-    return load_release_to_clickhouse(*args, **kwargs)
+extract_release = lazy_extractor(f"{__package__}.extract")
+load_bronze = lazy_bronze_loader(f"{__package__}.bronze")
 
 
 SOURCE = SourceSpec(

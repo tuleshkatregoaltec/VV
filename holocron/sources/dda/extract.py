@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import csv
-import hashlib
 import logging
 import re
 import time
@@ -16,9 +15,9 @@ from pathlib import Path
 import httpx
 
 from holocron.contracts import RawFile, RawRelease
-from holocron.platform.execution import build_raw_file, build_raw_release, new_run_id, utc_now
+from holocron.platform.execution import build_raw_release, new_run_id, utc_now
 from holocron.platform.metadata import safe_config_metadata
-from holocron.platform.raw_files import count_csv_rows
+from holocron.platform.raw_files import build_raw_file_from_path, count_csv_rows
 from holocron.sources.dda.parse import (
     BUILDING_LIMIT_CSV_FIELDS,
     FROZEN_PLOT_CSV_FIELDS,
@@ -51,6 +50,7 @@ _BASE_URL = "https://gis.dda.gov.ae"
 _PAGE_SIZE = 2000
 _MAX_RETRIES = 3
 _PLOTS_FILE = "dda_plots.csv"
+_PLOTS_LAYER_ID = 13
 
 _HEADERS = {
     "User-Agent": (
@@ -207,7 +207,6 @@ def _fetch_plot_info(client: httpx.Client, plot: dict) -> dict:
                 )
                 return base
             time.sleep(2**attempt)
-
     return base
 
 
@@ -298,17 +297,10 @@ def _write_csv(path: Path, *, fieldnames: list[str], rows: list[dict]) -> None:
         writer.writerows(rows)
 
 
-def _count_csv_rows(path: Path) -> int:
-    return count_csv_rows(path)
-
-
 def _build_raw_file(path: Path) -> RawFile:
-    content = path.read_bytes()
-    return build_raw_file(
+    return build_raw_file_from_path(
         path=path,
-        sha256=hashlib.sha256(content).hexdigest(),
-        size_bytes=len(content),
-        row_count=_count_csv_rows(path),
+        row_count=count_csv_rows(path),
         content_type="text/csv",
     )
 
@@ -334,7 +326,7 @@ def _scrape_plots(output: Path, *, concurrency: int, max_plots: int | None) -> N
         raw = _fetch_all_layer_features(
             client,
             token,
-            13,
+            _PLOTS_LAYER_ID,
             out_fields="PLOT_NUMBER,OLD_PLOT_NUMBERS,LANDUSE_SYMBOLS,GFA_TYPE,IS_VERIFIED,VERIFY_COMMENTS",
             out_sr=None,
             return_geometry=False,

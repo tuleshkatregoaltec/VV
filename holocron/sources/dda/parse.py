@@ -162,8 +162,8 @@ def parse_plot_info(html: str, plot_number: str) -> dict:
         row[f"side{side}_podium"] = match.group(3).strip()
 
     land_use = [
-        {"type": land_type.strip(), "use": land_use.strip()}
-        for land_type, land_use in re.findall(
+        {"type": land_type.strip(), "use": land_use_text.strip()}
+        for land_type, land_use_text in re.findall(
             r"<li>\s*<b>([^<]+)</b>:\s*([^<]+)</li>", html, re.IGNORECASE
         )
     ]
