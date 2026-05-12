@@ -9,11 +9,11 @@ function fmt(value: number, digits = 0) {
 }
 
 function fmtMoney(value: number | null | undefined) {
-	return value == null || !Number.isFinite(value) ? 'N/A' : `AED ${fmt(value)}`
+	return value == null || !Number.isFinite(value) ? '—' : `AED ${fmt(value)}`
 }
 
 function fmtPct(value: number | null | undefined, digits = 1) {
-	return value == null || !Number.isFinite(value) ? 'N/A' : `${fmt(value, digits)}%`
+	return value == null || !Number.isFinite(value) ? '—' : `${fmt(value, digits)}%`
 }
 
 const assumptions = $derived(workbookStore.assumptions)
@@ -21,7 +21,6 @@ const outputs = $derived(workbookStore.outputs)
 const research = $derived(workbookStore.research)
 
 const offPlanPricing = $derived(research?.off_plan_market_pricing ?? [])
-const offPlanConfidence = $derived(research?.off_plan_pricing_confidence ?? null)
 const offPlanBenchmarks = $derived(research?.off_plan_unit_benchmarks ?? [])
 
 const depositPct = $derived(outputs?.funding.depositPct ?? 0)
@@ -29,15 +28,15 @@ const preHandoverPct = $derived(outputs?.funding.preHandoverPct ?? 0)
 const handoverPct = $derived(outputs?.funding.handoverPct ?? 0)
 
 // Simple schedule dates from assumptions
-const salesCommencementDate = $derived(assumptions?.salesCommencementDate ?? 'N/A')
-const constructionDate = $derived(assumptions?.constructionDate ?? 'N/A')
-const handoverDate = $derived(assumptions?.handoverDate ?? 'N/A')
+const salesCommencementDate = $derived(assumptions?.salesCommencementDate ?? '—')
+const constructionDate = $derived(assumptions?.constructionDate ?? '—')
+const handoverDate = $derived(assumptions?.handoverDate ?? '—')
 const salesPeriodMonths = $derived(assumptions?.salesPeriodMonths ?? 0)
 </script>
 
 {#if !outputs || !assumptions}
 <div class="h-full flex items-center justify-center text-sm text-slate-400">
-Generate an HBU study to build the draft sales and collections view.
+No sales and collections data available.
 </div>
 {:else}
 <div class="overflow-auto flex-1 bg-white text-[11px] font-[Calibri,'Segoe_UI',Arial,sans-serif] select-none">
@@ -154,7 +153,7 @@ Generate an HBU study to build the draft sales and collections view.
 <table class="w-full border-collapse" style="border-spacing:0">
 <tbody>
 <tr class="bg-[#1F3864]">
-<td colspan="6" class="px-2 py-[4px] text-white font-bold text-[11px] tracking-wide">D.&nbsp;&nbsp;OFF-PLAN PRICING BASIS</td>
+<td colspan="5" class="px-2 py-[4px] text-white font-bold text-[11px] tracking-wide">D.&nbsp;&nbsp;OFF-PLAN PRICING BASIS</td>
 </tr>
 <tr class="bg-[#D6DCE4] border-b border-[#B8C4CE]">
 <th class="px-2 py-[4px] text-left text-[9px] font-semibold text-slate-600 uppercase tracking-wider">Unit Type</th>
@@ -162,7 +161,6 @@ Generate an HBU study to build the draft sales and collections view.
 <th class="px-2 py-[4px] text-right text-[9px] font-semibold text-slate-600 uppercase tracking-wider">Avg Months</th>
 <th class="px-2 py-[4px] text-right text-[9px] font-semibold text-slate-600 uppercase tracking-wider">Rate (AED/sqm)</th>
 <th class="px-2 py-[4px] text-right text-[9px] font-semibold text-slate-600 uppercase tracking-wider">Transactions</th>
-<th class="px-2 py-[4px] text-right text-[9px] font-semibold text-slate-600 uppercase tracking-wider">Last Trade</th>
 </tr>
 {#each offPlanPricing as row (`${row.unit_type}-${row.horizon_bucket}`)}
 <tr class="border-b border-[#D9D9D9] hover:bg-slate-50/60">
@@ -171,7 +169,6 @@ Generate an HBU study to build the draft sales and collections view.
 <td class="px-2 py-[3px] text-right tabular-nums text-slate-900 text-[10px]">{fmt(row.avg_months_to_completion, 1)}</td>
 <td class="px-2 py-[3px] text-right tabular-nums text-slate-900 text-[10px]">{fmt(row.median_price_sqm)}</td>
 <td class="px-2 py-[3px] text-right tabular-nums text-slate-500 text-[10px]">{fmt(row.transaction_count)}</td>
-<td class="px-2 py-[3px] text-right tabular-nums text-slate-500 text-[10px]">{row.last_transaction_date ?? 'N/A'}</td>
 </tr>
 {/each}
 </tbody>
@@ -183,43 +180,20 @@ Generate an HBU study to build the draft sales and collections view.
 <table class="w-full border-collapse" style="border-spacing:0">
 <tbody>
 <tr class="bg-[#1F3864]">
-<td colspan="5" class="px-2 py-[4px] text-white font-bold text-[11px] tracking-wide">E.&nbsp;&nbsp;UNIT BENCHMARKS</td>
+<td colspan="3" class="px-2 py-[4px] text-white font-bold text-[11px] tracking-wide">E.&nbsp;&nbsp;UNIT BENCHMARKS</td>
 </tr>
 <tr class="bg-[#D6DCE4] border-b border-[#B8C4CE]">
 <th class="px-2 py-[4px] text-left text-[9px] font-semibold text-slate-600 uppercase tracking-wider">Unit Type</th>
 <th class="px-2 py-[4px] text-right text-[9px] font-semibold text-slate-600 uppercase tracking-wider">Selected Rate</th>
-<th class="px-2 py-[4px] text-right text-[9px] font-semibold text-slate-600 uppercase tracking-wider">Confidence</th>
 <th class="px-2 py-[4px] text-right text-[9px] font-semibold text-slate-600 uppercase tracking-wider">Sample</th>
-<th class="px-2 py-[4px] text-right text-[9px] font-semibold text-slate-600 uppercase tracking-wider">Fallback?</th>
 </tr>
 {#each offPlanBenchmarks as row (`${row.unit_type}-${row.selected_horizon_bucket}`)}
 <tr class="border-b border-[#D9D9D9] hover:bg-slate-50/60">
 <td class="px-2 py-[3px] text-left text-[10px] text-slate-800">{row.unit_type}</td>
 <td class="px-2 py-[3px] text-right tabular-nums text-slate-900 text-[10px]">AED {fmt(row.selected_price_sqm)}/sqm</td>
-<td class="px-2 py-[3px] text-right">
-{#if row.confidence_label === 'high'}
-<span class="inline-block px-2 py-0.5 text-[9px] font-semibold uppercase rounded-sm bg-emerald-100 text-emerald-700">{row.confidence_label} · {fmt(row.confidence_score, 1)}</span>
-{:else if row.confidence_label === 'medium'}
-<span class="inline-block px-2 py-0.5 text-[9px] font-semibold uppercase rounded-sm bg-sky-100 text-sky-700">{row.confidence_label} · {fmt(row.confidence_score, 1)}</span>
-{:else}
-<span class="inline-block px-2 py-0.5 text-[9px] font-semibold uppercase rounded-sm bg-[#FFF2CC] text-[#7F6000]">{row.confidence_label} · {fmt(row.confidence_score, 1)}</span>
-{/if}
-</td>
 <td class="px-2 py-[3px] text-right tabular-nums text-slate-500 text-[10px]">{fmt(row.transaction_count)}</td>
-<td class="px-2 py-[3px] text-right tabular-nums text-slate-500 text-[10px]">{row.fallback_used ? 'Yes' : 'No'}</td>
 </tr>
 {/each}
-
-{#if offPlanConfidence}
-<tr class="border-b border-[#D9D9D9] bg-[#F9F9F9]">
-<td colspan="3" class="px-2 py-[3px] text-left text-[10px] text-slate-800">
-Overall confidence: <span class="font-semibold">{offPlanConfidence.confidence_label} · {fmt(offPlanConfidence.confidence_score, 1)} / 100</span>
-</td>
-<td colspan="2" class="pl-6 pr-2 py-[3px] text-left text-[9px] text-slate-500 italic">
-Sample {fmt(offPlanConfidence.sample_score, 1)} · Horizon {fmt(offPlanConfidence.horizon_score, 1)} · Recency {fmt(offPlanConfidence.recency_score, 1)}
-</td>
-</tr>
-{/if}
 
 </tbody>
 </table>

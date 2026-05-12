@@ -23,8 +23,8 @@ const netOk = $derived(Math.abs(vat?.netVatPosition ?? 0) < 1000)
 
 	<div class="bg-[#1F3864] border-b-2 border-[#1F3864] text-white px-4 py-2.5 flex items-center justify-between gap-4">
 		<div class="text-[13px] font-bold tracking-wide">VAT BRIDGE</div>
-		<div class="text-[10px] {netOk ? 'text-emerald-300' : 'text-rose-300'} shrink-0">
-			Net Position: {netOk ? 'OK' : 'MISMATCH'} (AED {fmt(vat.netVatPosition)})
+		<div class="text-[10px] {netOk ? 'text-blue-200' : 'text-rose-300'} shrink-0">
+			Net VAT position AED {fmt(vat.netVatPosition)}
 		</div>
 	</div>
 

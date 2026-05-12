@@ -21,10 +21,64 @@ const btr = $derived(outputs?.btr)
 
 const XREF = 'text-emerald-700'
 
-type KpiRow = { label: string; value: string; color?: string }
+type SummaryRow = { label: string; value: string; color?: string; bold?: boolean; neg?: boolean }
+type SummaryGroup = { title: string; rows: SummaryRow[]; span?: boolean }
+
+function rowsByLabels(rows: SummaryRow[], labels: string[]): SummaryRow[] {
+	const wanted = new Set(labels)
+	return rows.filter((row) => wanted.has(row.label))
+}
+
+const BTR_RETURN_LABELS = [
+	'Stabilized NOI',
+	'Dev Yield (NOI / Cost)',
+	'Gross Yield',
+	'Net Yield',
+	'Unlevered IRR',
+	'Levered IRR',
+	'Equity Multiple (MOIC)',
+	'Unlevered Multiple',
+	'Total Profit'
+]
+
+const BTR_CAPITAL_LABELS = [
+	'Total Dev Cost',
+	'Total Project Cost',
+	'Dev Debt Funded',
+	'Dev Equity Required',
+	'Perm Debt (Refi)',
+	'DSCR at Origination'
+]
+
+const BTR_PROGRAM_LABELS = [
+	'Exit Cap Rate',
+	'Terminal Sale Value',
+	'Total Units',
+	'Total Leasable Area (sqm)',
+	'Dev Spread (bps)'
+]
+
+const BTS_REVENUE_LABELS = [
+	'GDV (Revenue)',
+	'Total Dev Cost (excl. VAT)',
+	'Total Project Cost (incl. VAT)',
+	'Gross Profit',
+	'Gross Margin on GDV',
+	'Break-even Sale Rate'
+]
+
+const BTS_RETURN_LABELS = [
+	'Unlevered IRR',
+	'Levered IRR (Equity)',
+	'Equity Multiple (MOIC)',
+	'Levered Margin on Equity'
+]
+
+const BTS_CAPITAL_LABELS = ['Peak Debt', 'Peak Equity', 'Debt as % of Cost']
+const BTS_PROGRAM_LABELS = ['Total Units', 'Sellable Area (sqm)', 'Costable BUA (sqm)']
 
 // ── BTS KPIs ──
-const btsKpiRows = $derived<KpiRow[]>(
+const btsKpiRows = $derived<SummaryRow[]>(
 	!isBtr && outputs
 		? [
 				{
@@ -86,7 +140,7 @@ const btsKpiRows = $derived<KpiRow[]>(
 )
 
 // ── BTR KPIs ──
-const btrKpiRows = $derived<KpiRow[]>(
+const btrKpiRows = $derived<SummaryRow[]>(
 	isBtr && btr
 		? [
 				{ label: 'Stabilized NOI', value: `AED ${fmt(btr.returns.stabilizedNoiAed)}`, color: XREF },
@@ -157,7 +211,96 @@ const btrKpiRows = $derived<KpiRow[]>(
 		: []
 )
 
-const kpiRows = $derived(isBtr ? btrKpiRows : btsKpiRows)
+const kpiGroups = $derived<SummaryGroup[]>(
+	isBtr
+		? [
+				{ title: '1a. Returns & Yield', rows: rowsByLabels(btrKpiRows, BTR_RETURN_LABELS) },
+				{ title: '1b. Capital & Debt', rows: rowsByLabels(btrKpiRows, BTR_CAPITAL_LABELS) },
+				{
+					title: '1c. Program & Exit',
+					rows: rowsByLabels(btrKpiRows, BTR_PROGRAM_LABELS),
+					span: true
+				}
+			]
+		: [
+				{ title: '1a. Revenue & Cost', rows: rowsByLabels(btsKpiRows, BTS_REVENUE_LABELS) },
+				{ title: '1b. Returns', rows: rowsByLabels(btsKpiRows, BTS_RETURN_LABELS) },
+				{ title: '1c. Capital', rows: rowsByLabels(btsKpiRows, BTS_CAPITAL_LABELS) },
+				{ title: '1d. Program', rows: rowsByLabels(btsKpiRows, BTS_PROGRAM_LABELS) }
+			]
+)
+
+const btrFinanceRows = $derived<SummaryRow[]>(
+	isBtr && btr
+		? [
+				{ label: 'Dev Debt (LTC)', value: `AED ${fmt(btr.returns.devDebtFundedAed)}` },
+				{ label: 'Dev Equity', value: `AED ${fmt(btr.returns.devEquityFundedAed)}` },
+				{ label: 'Dev Interest Reserve', value: `AED ${fmt(btr.returns.devInterestReserveAed)}` },
+				{
+					label: 'Permanent Loan (Refi)',
+					value: `AED ${fmt(btr.permDebt.actualPermDebtAed)}`,
+					bold: true
+				},
+				{ label: 'Refi Points/Fees', value: `AED ${fmt(btr.permDebt.refiPointsCostAed)}` },
+				{
+					label: 'Net Refi Proceeds',
+					value: `AED ${fmt(btr.permDebt.refiProceedsAed)}`,
+					neg: btr.permDebt.refiProceedsAed < 0
+				},
+				{ label: 'Annual Debt Service', value: `AED ${fmt(btr.permDebt.annualDebtServiceAed)}` },
+				{ label: 'Loan Payoff at Exit', value: `AED ${fmt(btr.permDebt.loanPayoffAed)}` }
+			]
+		: []
+)
+
+const btrFinanceGroups = $derived<SummaryGroup[]>([
+	{
+		title: '2a. Development Financing',
+		rows: rowsByLabels(btrFinanceRows, ['Dev Debt (LTC)', 'Dev Equity', 'Dev Interest Reserve'])
+	},
+	{
+		title: '2b. Permanent Financing',
+		rows: rowsByLabels(btrFinanceRows, [
+			'Permanent Loan (Refi)',
+			'Refi Points/Fees',
+			'Net Refi Proceeds',
+			'Annual Debt Service',
+			'Loan Payoff at Exit'
+		])
+	}
+])
+
+const btsFinanceRows = $derived<SummaryRow[]>(
+	!isBtr && outputs
+		? [
+				{
+					label: 'Total Financing Costs',
+					value: `AED ${fmt(outputs.returns.totalFinancingCostsAed)}`
+				},
+				{ label: 'Financing Fee', value: `AED ${fmt(outputs.returns.financingFeeAed)}` },
+				{ label: 'Exit Fee', value: `AED ${fmt(outputs.returns.exitFeeAed)}` },
+				{ label: 'Total Interest Paid', value: `AED ${fmt(outputs.returns.totalInterestPaidAed)}` },
+				{
+					label: 'Average Debt Outstanding',
+					value: `AED ${fmt(outputs.returns.averageDebtOutstandingAed)}`
+				}
+			]
+		: []
+)
+
+const waterfallRows = $derived<SummaryRow[]>(
+	!isBtr && outputs?.waterfall
+		? [
+				{ label: 'Return of Capital', value: `AED ${fmt(outputs.waterfall.returnOfCapital)}` },
+				{
+					label: 'Preferred Return Paid',
+					value: `AED ${fmt(outputs.waterfall.preferredReturnPaid)}`
+				},
+				{ label: 'Residual to Equity', value: `AED ${fmt(outputs.waterfall.residualToEquity)}` },
+				{ label: 'Sponsor Promote', value: `AED ${fmt(outputs.waterfall.sponsorPromote)}` }
+			]
+		: []
+)
 
 const projectInfo = $derived([
 	{ label: 'Plot Number', value: assumptions?.plotNumber ?? '—' },
@@ -178,111 +321,123 @@ const projectInfo = $derived([
 	Generate an HBU study to view the summary dashboard.
 </div>
 {:else}
-<div class="overflow-auto flex-1 bg-white text-[11px] font-[Calibri,'Segoe_UI',Arial,sans-serif] select-none">
+<div class="@container overflow-auto flex-1 bg-white text-[11px] font-[Calibri,'Segoe_UI',Arial,sans-serif] select-none">
 
 	<!-- Title bar -->
-	<div class="bg-[#1F3864] border-b-2 border-[#1F3864] text-white px-4 py-2.5 flex items-center justify-between gap-4">
+	<div class="bg-[#1F3864] border-b-2 border-[#1F3864] text-white px-3 py-2 flex items-center justify-between gap-4">
 		<div class="text-[13px] font-bold tracking-wide">EXECUTIVE SUMMARY</div>
 		<div class="text-[10px] text-blue-200 shrink-0">{isBtr ? 'Build-to-Rent' : 'Build-to-Sell'}</div>
 	</div>
 
 	<!-- Project info row -->
-	<div class="flex border-b border-[#B8C4CE] bg-[#EEF2F7] divide-x divide-[#D9D9D9]">
+	<div class="grid grid-cols-2 border-b border-[#B8C4CE] bg-[#EEF2F7] @min-[700px]:grid-cols-4 @min-[1040px]:grid-cols-8">
 		{#each projectInfo as item (item.label)}
-			<div class="px-2 py-1.5 min-w-0">
+			<div class="min-w-0 border-r border-b border-[#D9D9D9] px-2 py-1.5 last:border-r-0 @min-[1040px]:border-b-0">
 				<div class="text-[9px] uppercase tracking-wider text-slate-500 font-semibold truncate">{item.label}</div>
 				<div class="text-[11px] font-medium text-slate-900 tabular-nums truncate">{item.value}</div>
 			</div>
 		{/each}
 	</div>
 
-	<!-- KPI table -->
-	<table class="w-full border-collapse" style="border-spacing:0">
-		<tbody>
-		<tr class="bg-[#1F3864]">
-			<td colspan="2" class="px-2 py-[4px] text-white font-bold text-[11px] tracking-wide">KEY PERFORMANCE INDICATORS</td>
-		</tr>
-		<tr class="bg-[#D6DCE4] border-b border-[#B8C4CE]">
-			<th class="px-2 py-[4px] text-left text-[9px] font-semibold text-slate-600 uppercase tracking-wider">Metric</th>
-			<th class="px-2 py-[4px] text-right text-[9px] font-semibold text-slate-600 uppercase tracking-wider">Value</th>
-		</tr>
-		{#each kpiRows as kpi (kpi.label)}
-			<tr class="border-b border-[#D9D9D9] hover:bg-slate-50/60">
-				<td class="px-2 py-[3px] text-left text-[10px] text-slate-800">{kpi.label}</td>
-				<td class="px-2 py-[3px] text-right tabular-nums text-[10px] font-medium {kpi.color ?? 'text-slate-900'}">{kpi.value}</td>
-			</tr>
-		{/each}
-		</tbody>
-	</table>
+	<div class="grid items-start gap-3 px-3 py-3 @min-[900px]:grid-cols-2">
+		<table class="@min-[900px]:col-span-2 min-w-0 w-full border-collapse border border-[#D9D9D9] bg-white" style="border-spacing:0">
+			<tbody>
+				<tr class="bg-[#1F3864]">
+					<td colspan="2" class="px-2 py-[4px] text-white font-bold text-[11px] tracking-wide">1. &nbsp; KEY PERFORMANCE INDICATORS</td>
+				</tr>
+			</tbody>
+		</table>
 
-	{#if isBtr && btr}
-	<!-- BTR Financing Summary -->
-	<table class="w-full border-collapse" style="border-spacing:0">
-		<tbody>
-		<tr class="bg-[#1F3864]">
-			<td colspan="2" class="px-2 py-[4px] text-white font-bold text-[11px] tracking-wide">DEVELOPMENT &amp; PERMANENT FINANCING</td>
-		</tr>
-		{#each [
-			{ label: 'Dev Debt (LTC)', value: `AED ${fmt(btr.returns.devDebtFundedAed)}` },
-			{ label: 'Dev Equity', value: `AED ${fmt(btr.returns.devEquityFundedAed)}` },
-			{ label: 'Dev Interest Reserve', value: `AED ${fmt(btr.returns.devInterestReserveAed)}` },
-			{ label: 'Permanent Loan (Refi)', value: `AED ${fmt(btr.permDebt.actualPermDebtAed)}`, bold: true },
-			{ label: 'Refi Points/Fees', value: `AED ${fmt(btr.permDebt.refiPointsCostAed)}` },
-			{ label: 'Net Refi Proceeds', value: `AED ${fmt(btr.permDebt.refiProceedsAed)}`, neg: btr.permDebt.refiProceedsAed < 0 },
-			{ label: 'Annual Debt Service', value: `AED ${fmt(btr.permDebt.annualDebtServiceAed)}` },
-			{ label: 'Loan Payoff at Exit', value: `AED ${fmt(btr.permDebt.loanPayoffAed)}` }
-		] as row (row.label)}
-			<tr class="border-b border-[#D9D9D9] {row.bold ? 'bg-[#EEF2F7] font-semibold' : ''} hover:bg-slate-50/60">
-				<td class="px-2 py-[3px] text-left text-[10px] text-slate-800">{row.label}</td>
-				<td class="px-2 py-[3px] text-right tabular-nums text-[10px] font-medium {row.neg ? 'text-rose-600' : 'text-emerald-700'}">{row.value}</td>
-			</tr>
+		{#each kpiGroups as group (group.title)}
+			<table class="{group.span ? '@min-[900px]:col-span-2' : ''} min-w-0 w-full border-collapse border border-[#D9D9D9] bg-white" style="border-spacing:0">
+				<colgroup>
+					<col style="width:58%">
+					<col style="width:42%">
+				</colgroup>
+				<tbody>
+					<tr class="bg-[#D6DCE4] border-b border-[#B8C4CE]">
+						<th colspan="2" class="px-2 py-[4px] text-left text-[9px] font-semibold text-slate-600 uppercase tracking-wider">{group.title}</th>
+					</tr>
+					{#each group.rows as row (row.label)}
+						<tr class="border-b border-[#D9D9D9] {row.bold ? 'bg-[#EEF2F7] font-semibold' : ''} hover:bg-slate-50/60">
+							<td class="px-2 py-[3px] text-left text-[10px] text-slate-800">{row.label}</td>
+							<td class="px-2 py-[3px] text-right tabular-nums text-[10px] font-medium {row.neg ? 'text-rose-600' : row.color ?? 'text-emerald-700'}">{row.value}</td>
+						</tr>
+					{/each}
+				</tbody>
+			</table>
 		{/each}
-		</tbody>
-	</table>
-	{:else}
-	<!-- BTS Financing summary -->
-	<table class="w-full border-collapse" style="border-spacing:0">
-		<tbody>
-		<tr class="bg-[#1F3864]">
-			<td colspan="2" class="px-2 py-[4px] text-white font-bold text-[11px] tracking-wide">FINANCING SUMMARY</td>
-		</tr>
-		{#each [
-			{ label: 'Total Financing Costs', value: `AED ${fmt(outputs.returns.totalFinancingCostsAed)}` },
-			{ label: 'Financing Fee', value: `AED ${fmt(outputs.returns.financingFeeAed)}` },
-			{ label: 'Exit Fee', value: `AED ${fmt(outputs.returns.exitFeeAed)}` },
-			{ label: 'Total Interest Paid', value: `AED ${fmt(outputs.returns.totalInterestPaidAed)}` },
-			{ label: 'Average Debt Outstanding', value: `AED ${fmt(outputs.returns.averageDebtOutstandingAed)}` }
-		] as row (row.label)}
-			<tr class="border-b border-[#D9D9D9] hover:bg-slate-50/60">
-				<td class="px-2 py-[3px] text-left text-[10px] text-slate-800">{row.label}</td>
-				<td class="px-2 py-[3px] text-right tabular-nums text-[10px] font-medium text-emerald-700">{row.value}</td>
-			</tr>
-		{/each}
-		</tbody>
-	</table>
 
-	<!-- BTS Waterfall summary -->
-	{#if outputs.waterfall}
-	<table class="w-full border-collapse" style="border-spacing:0">
-		<tbody>
-		<tr class="bg-[#1F3864]">
-			<td colspan="2" class="px-2 py-[4px] text-white font-bold text-[11px] tracking-wide">EQUITY WATERFALL</td>
-		</tr>
-		{#each [
-			{ label: 'Return of Capital', value: `AED ${fmt(outputs.waterfall.returnOfCapital)}` },
-			{ label: 'Preferred Return Paid', value: `AED ${fmt(outputs.waterfall.preferredReturnPaid)}` },
-			{ label: 'Residual to Equity', value: `AED ${fmt(outputs.waterfall.residualToEquity)}` },
-			{ label: 'Sponsor Promote', value: `AED ${fmt(outputs.waterfall.sponsorPromote)}` }
-		] as row (row.label)}
-			<tr class="border-b border-[#D9D9D9] hover:bg-slate-50/60">
-				<td class="px-2 py-[3px] text-left text-[10px] text-slate-800">{row.label}</td>
-				<td class="px-2 py-[3px] text-right tabular-nums text-[10px] font-medium text-emerald-700">{row.value}</td>
-			</tr>
-		{/each}
-		</tbody>
-	</table>
-	{/if}
-	{/if}
+		<table class="@min-[900px]:col-span-2 min-w-0 w-full border-collapse border border-[#D9D9D9] bg-white" style="border-spacing:0">
+			<tbody>
+				<tr class="bg-[#1F3864]">
+					<td colspan="2" class="px-2 py-[4px] text-white font-bold text-[11px] tracking-wide">
+						2. &nbsp; {isBtr ? 'DEVELOPMENT & PERMANENT FINANCING' : 'FINANCING SUMMARY'}
+					</td>
+				</tr>
+			</tbody>
+		</table>
+
+		{#if isBtr}
+			{#each btrFinanceGroups as group (group.title)}
+				<table class="min-w-0 w-full border-collapse border border-[#D9D9D9] bg-white" style="border-spacing:0">
+					<colgroup>
+						<col style="width:58%">
+						<col style="width:42%">
+					</colgroup>
+					<tbody>
+						<tr class="bg-[#D6DCE4] border-b border-[#B8C4CE]">
+							<th colspan="2" class="px-2 py-[4px] text-left text-[9px] font-semibold text-slate-600 uppercase tracking-wider">{group.title}</th>
+						</tr>
+						{#each group.rows as row (row.label)}
+							<tr class="border-b border-[#D9D9D9] {row.bold ? 'bg-[#EEF2F7] font-semibold' : ''} hover:bg-slate-50/60">
+								<td class="px-2 py-[3px] text-left text-[10px] text-slate-800">{row.label}</td>
+								<td class="px-2 py-[3px] text-right tabular-nums text-[10px] font-medium {row.neg ? 'text-rose-600' : 'text-emerald-700'}">{row.value}</td>
+							</tr>
+						{/each}
+					</tbody>
+				</table>
+			{/each}
+		{:else}
+			<table class="min-w-0 w-full border-collapse border border-[#D9D9D9] bg-white" style="border-spacing:0">
+				<colgroup>
+					<col style="width:58%">
+					<col style="width:42%">
+				</colgroup>
+				<tbody>
+					<tr class="bg-[#D6DCE4] border-b border-[#B8C4CE]">
+						<th colspan="2" class="px-2 py-[4px] text-left text-[9px] font-semibold text-slate-600 uppercase tracking-wider">2a. Financing Costs</th>
+					</tr>
+					{#each btsFinanceRows as row (row.label)}
+						<tr class="border-b border-[#D9D9D9] hover:bg-slate-50/60">
+							<td class="px-2 py-[3px] text-left text-[10px] text-slate-800">{row.label}</td>
+							<td class="px-2 py-[3px] text-right tabular-nums text-[10px] font-medium text-emerald-700">{row.value}</td>
+						</tr>
+					{/each}
+				</tbody>
+			</table>
+
+			{#if waterfallRows.length > 0}
+				<table class="min-w-0 w-full border-collapse border border-[#D9D9D9] bg-white" style="border-spacing:0">
+					<colgroup>
+						<col style="width:58%">
+						<col style="width:42%">
+					</colgroup>
+					<tbody>
+						<tr class="bg-[#D6DCE4] border-b border-[#B8C4CE]">
+							<th colspan="2" class="px-2 py-[4px] text-left text-[9px] font-semibold text-slate-600 uppercase tracking-wider">2b. Equity Waterfall</th>
+						</tr>
+						{#each waterfallRows as row (row.label)}
+							<tr class="border-b border-[#D9D9D9] hover:bg-slate-50/60">
+								<td class="px-2 py-[3px] text-left text-[10px] text-slate-800">{row.label}</td>
+								<td class="px-2 py-[3px] text-right tabular-nums text-[10px] font-medium text-emerald-700">{row.value}</td>
+							</tr>
+						{/each}
+					</tbody>
+				</table>
+			{/if}
+		{/if}
+	</div>
 
 	<div class="py-3"></div>
 </div>

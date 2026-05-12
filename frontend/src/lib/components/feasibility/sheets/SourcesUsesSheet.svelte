@@ -25,8 +25,8 @@ const btrGapOk = $derived(Math.abs(btrGapAed) < 1000)
 
 	<div class="bg-[#1F3864] border-b-2 border-[#1F3864] text-white px-4 py-2.5 flex items-center justify-between gap-4">
 		<div class="text-[13px] font-bold tracking-wide">BTR SOURCES &amp; USES OF FUNDS</div>
-		<div class="text-[10px] {btrGapOk ? 'text-emerald-300' : 'text-rose-300'} shrink-0">
-			Check: {btrGapOk ? 'OK' : 'MISMATCH'} (Gap AED {fmt(btrGapAed)})
+		<div class="text-[10px] {btrGapOk ? 'text-blue-200' : 'text-rose-300'} shrink-0">
+			Funding gap AED {fmt(btrGapAed)}
 		</div>
 	</div>
 
@@ -85,10 +85,10 @@ const btrGapOk = $derived(Math.abs(btrGapAed) < 1000)
 			<td class="px-2 py-[4px] text-right tabular-nums text-[10px] text-slate-900 font-bold">{fmt(btrSu.totalUsesAed)}</td>
 		</tr>
 
-		<!-- Balance check -->
+		<!-- Funding gap -->
 		<tr class="border-t-2 border-[#1F3864] {btrGapOk ? 'bg-[#E8F5E9]' : 'bg-[#FFF3F3]'}">
-			<td class="px-2 py-[4px] text-left text-[10px] font-bold {btrGapOk ? 'text-emerald-800' : 'text-rose-800'}">Sources - Uses Check</td>
-			<td class="px-2 py-[4px] text-left text-[9px] {btrGapOk ? 'text-emerald-600' : 'text-rose-600'}">{btrGapOk ? 'Balanced' : 'Mismatch — review capital structure'}</td>
+			<td class="px-2 py-[4px] text-left text-[10px] font-bold {btrGapOk ? 'text-emerald-800' : 'text-rose-800'}">Funding Gap</td>
+			<td class="px-2 py-[4px] text-left text-[9px] {btrGapOk ? 'text-emerald-600' : 'text-rose-600'}"></td>
 			<td class="px-2 py-[4px] text-right tabular-nums text-[10px] font-bold {btrGapOk ? 'text-emerald-700' : 'text-rose-700'}">AED {fmt(btrGapAed)}</td>
 		</tr>
 		</tbody>
@@ -105,8 +105,8 @@ const btrGapOk = $derived(Math.abs(btrGapAed) < 1000)
 
 	<div class="bg-[#1F3864] border-b-2 border-[#1F3864] text-white px-4 py-2.5 flex items-center justify-between gap-4">
 		<div class="text-[13px] font-bold tracking-wide">SOURCES &amp; USES OF FUNDS</div>
-		<div class="text-[10px] {gapOk ? 'text-emerald-300' : 'text-rose-300'} shrink-0">
-			Check: {gapOk ? 'OK' : 'MISMATCH'} (Gap AED {fmt(gapAed)})
+		<div class="text-[10px] {gapOk ? 'text-blue-200' : 'text-rose-300'} shrink-0">
+			Funding gap AED {fmt(gapAed)}
 		</div>
 	</div>
 
@@ -155,10 +155,10 @@ const btrGapOk = $derived(Math.abs(btrGapAed) < 1000)
 			<td class="px-2 py-[4px] text-right tabular-nums text-[10px] text-slate-900 font-bold">{fmt(su.totalUsesAed)}</td>
 		</tr>
 
-		<!-- Gap check row -->
+		<!-- Funding gap row -->
 		<tr class="border-t-2 border-[#1F3864] {gapOk ? 'bg-[#E8F5E9]' : 'bg-[#FFF3F3]'}">
-			<td class="px-2 py-[4px] text-left text-[10px] font-bold {gapOk ? 'text-emerald-800' : 'text-rose-800'}">Sources - Uses Check</td>
-			<td class="px-2 py-[4px] text-left text-[9px] {gapOk ? 'text-emerald-600' : 'text-rose-600'}">{gapOk ? 'Balanced' : 'Mismatch — review capital structure'}</td>
+			<td class="px-2 py-[4px] text-left text-[10px] font-bold {gapOk ? 'text-emerald-800' : 'text-rose-800'}">Funding Gap</td>
+			<td class="px-2 py-[4px] text-left text-[9px] {gapOk ? 'text-emerald-600' : 'text-rose-600'}"></td>
 			<td class="px-2 py-[4px] text-right tabular-nums text-[10px] font-bold {gapOk ? 'text-emerald-700' : 'text-rose-700'}">AED {fmt(gapAed)}</td>
 		</tr>
 

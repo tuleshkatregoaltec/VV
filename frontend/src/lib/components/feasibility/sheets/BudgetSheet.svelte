@@ -69,7 +69,7 @@ const exitFee = $derived(
 )
 const totalFinanceCosts = $derived(totalInterestPaid + financingFee + exitFee)
 
-// Cost base (pre-finance) — aligns with backend ordering
+// Cost base (pre-finance) — aligns with model ordering
 const preFinanceCosts = $derived(
 	s.totalLandCostAed +
 		s.constructionCostInclInflation +
@@ -178,7 +178,7 @@ $effect(() => {
 	<div class="bg-[#1F3864] text-white px-4 py-2.5 flex items-start justify-between gap-4">
 		<div>
 			<div class="text-[13px] font-bold tracking-wide">BTR DEVELOPMENT BUDGET</div>
-			<div class="text-[10px] text-blue-200 mt-0.5">CRE-style cost build-up for the rental development phase</div>
+			<div class="text-[10px] text-blue-200 mt-0.5">AED unless stated</div>
 		</div>
 	</div>
 
@@ -513,11 +513,7 @@ $effect(() => {
 	<div class="bg-[#1F3864] text-white px-4 py-2.5 flex items-start justify-between gap-4">
 		<div>
 			<div class="text-[13px] font-bold tracking-wide">DEVELOPMENT BUDGET</div>
-			<div class="text-[10px] text-blue-200 mt-0.5">Full cost build-up with input assumptions &amp; timings &mdash; AED unless stated</div>
-		</div>
-		<div class="text-right text-[10px] leading-5 mt-0.5 shrink-0">
-			<div><span class="text-[#90CAF9] font-semibold">■</span> <span class="text-[#90CAF9]">Blue</span> = Input</div>
-			<div><span class="text-white font-semibold">■</span> <span class="text-white">Black</span> = Derived</div>
+			<div class="text-[10px] text-blue-200 mt-0.5">AED unless stated</div>
 		</div>
 	</div>
 
@@ -569,7 +565,7 @@ $effect(() => {
 
 		<div class="border-b border-[#D9D9D9] bg-white">
 			<div class="px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500 bg-slate-50 border-b border-[#E5E7EB]">
-				Backend Timed Budget
+				Timed Budget
 			</div>
 			<div class="overflow-x-auto">
 				<table class="w-full border-collapse text-[10px]">
@@ -1086,14 +1082,9 @@ $effect(() => {
 				<td class={UNIT}>% of opening debt</td>
 			</tr>
 
-		<tr class={ROW_STD}>
-			<td class="px-1 py-[3px] text-slate-400 text-[10px] text-center">16</td>
-			<td class={LABEL}>
-				Interest Carry
-				{#if !s.workbook}
-					<span class="text-amber-600 text-[9px] font-normal italic ml-1">(run model for accurate figure)</span>
-				{/if}
-			</td>
+			<tr class={ROW_STD}>
+				<td class="px-1 py-[3px] text-slate-400 text-[10px] text-center">16</td>
+				<td class={LABEL}>Interest Carry</td>
 			<td class="px-2 py-[3px] text-center text-[10px] text-slate-400">Con→HO</td>
 			<td class={VALUE_BLACK}>{totalInterestPaid > 0 ? fmtAed(totalInterestPaid) : '—'}</td>
 			<td class="px-2 py-[3px] relative">
@@ -1193,9 +1184,9 @@ $effect(() => {
 		</div>
 	</div>
 
-	<!-- Returns summary (linked from Returns sheet) -->
+	<!-- Returns summary -->
 	<div class="bg-white border-b border-[#B8C4CE]">
-		<div class="px-3 py-1.5 text-[10px] font-semibold text-slate-600 uppercase tracking-wider border-b border-[#D9D9D9] bg-[#EEF2F7]">Returns Summary <span class="text-slate-400 font-normal normal-case italic">(linked from model)</span></div>
+		<div class="px-3 py-1.5 text-[10px] font-semibold text-slate-600 uppercase tracking-wider border-b border-[#D9D9D9] bg-[#EEF2F7]">Returns Summary</div>
 		<table class="w-full border-collapse" style="border-spacing:0">
 			<colgroup>
 				<col style="width:2.5%">
@@ -1236,12 +1227,6 @@ $effect(() => {
 				<td class="px-2 py-[3px] text-right text-slate-400 text-[10px]">of gross revenue</td>
 			</tr>
 
-			<!-- IRR section with explanation -->
-			<tr class="bg-[#F9F9F9] border-b border-[#E8E8E8]">
-				<td colspan="4" class="px-3 py-1.5 text-[9px] text-slate-500 italic">
-					IRR measures time-weighted return on invested capital. <strong class="text-slate-600">Project IRR</strong> is unlevered (ignores financing — independent of interest rate). <strong class="text-slate-600">Equity IRR</strong> is levered (higher interest rate → larger debt balance at handover → less escrow released → lower equity return).
-				</td>
-			</tr>
 			<tr class="border-b border-[#D9D9D9]">
 				<td class="px-1 py-[3px] text-slate-400 text-[10px] text-center">d</td>
 				<td class="px-2 py-[3px] text-slate-800">
@@ -1260,9 +1245,9 @@ $effect(() => {
 					<span class="ml-1 text-[9px] text-slate-400 font-normal italic">levered — incl. interest carry</span>
 				</td>
 				<td class="px-2 py-[3px] text-right tabular-nums font-bold text-[13px] text-slate-900">
-					{equityIrrPct != null ? fmt(equityIrrPct, 1) + '%' : s.workbook ? '—' : 'Run model'}
+					{equityIrrPct != null ? fmt(equityIrrPct, 1) + '%' : '—'}
 				</td>
-				<td class="px-2 py-[3px] text-right text-slate-400 text-[10px]">{!s.workbook ? '(requires model run)' : '% p.a.'}</td>
+				<td class="px-2 py-[3px] text-right text-slate-400 text-[10px]">% p.a.</td>
 			</tr>
 			<tr class="border-b border-[#D9D9D9]">
 				<td class="px-1 py-[3px] text-slate-400 text-[10px] text-center">f</td>

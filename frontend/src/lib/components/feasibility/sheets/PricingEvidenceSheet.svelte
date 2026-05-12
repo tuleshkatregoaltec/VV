@@ -66,16 +66,16 @@ const TD_LEFT = 'px-2 py-[3px] text-left text-slate-800 border-b border-[#EBEBEB
 			<div class="text-[10px] text-blue-200 mt-0.5">
 				{study
 					? isBtr
-						? `${study.market_area} — Rental evidence, master-community averages, and land anchors`
-						: `${study.market_area} — Off-plan & market pricing comparables`
-					: 'Load a plot to populate pricing evidence'}
+						? `${study.market_area} — Rental evidence`
+						: `${study.market_area} — Pricing comparables`
+					: 'Pricing evidence'}
 			</div>
 		</div>
 	</div>
 
 	{#if !study}
 		<div class="flex items-center justify-center h-40 text-slate-400 text-xs">
-			No HBU study loaded. Run a study from the chat assistant to populate this sheet.
+			No pricing evidence available.
 		</div>
 	{:else if isBtr}
 		<table class="w-full border-collapse" style="border-spacing:0">
@@ -108,19 +108,13 @@ const TD_LEFT = 'px-2 py-[3px] text-left text-slate-800 border-b border-[#EBEBEB
 					<td class="{TD_LEFT} font-semibold text-slate-500 text-[10px] uppercase tracking-wide border-r border-[#E8E8E8]">Gross Potential Rent (AED/yr)</td>
 					<td class="{TD_LEFT} font-medium">{fmt(outputs?.btr?.program.grossPotentialRentAed ?? 0)}</td>
 				</tr>
-				{#if study.headline}
-					<tr>
-						<td class="{TD_LEFT} font-semibold text-slate-500 text-[10px] uppercase tracking-wide border-r border-[#E8E8E8]">BTR Headline</td>
-						<td colspan="3" class="{TD_LEFT} italic text-slate-600">{study.headline}</td>
-					</tr>
-				{/if}
 			</tbody>
 		</table>
 
 		{#if (study.rental_rates_by_size_band?.length ?? 0) > 0}
 		<table class="w-full border-collapse mt-0" style="border-spacing:0">
 			<tbody>
-				<tr><td colspan="6" class={HEADER}>0. &nbsp; RENTAL RATES BY UNIT TYPE (Ejari size-band analysis)</td></tr>
+				<tr><td colspan="6" class={HEADER}>0. &nbsp; RENTAL RATES BY UNIT TYPE</td></tr>
 			</tbody>
 		</table>
 		<table class="w-full border-collapse border-b border-[#D9D9D9]" style="border-spacing:0">
@@ -307,12 +301,6 @@ const TD_LEFT = 'px-2 py-[3px] text-left text-slate-800 border-b border-[#EBEBEB
 					<td class="{TD_LEFT} font-semibold text-slate-500 text-[10px] uppercase tracking-wide border-r border-[#E8E8E8]">Gross Revenue (AED)</td>
 					<td class="{TD_LEFT} font-medium">{outputs ? fmt(outputs.program.grossRevenueAed) : '0'}</td>
 				</tr>
-				{#if study.headline}
-					<tr>
-						<td class="{TD_LEFT} font-semibold text-slate-500 text-[10px] uppercase tracking-wide border-r border-[#E8E8E8]">HBU Headline</td>
-						<td colspan="3" class="{TD_LEFT} italic text-slate-600">{study.headline}</td>
-					</tr>
-				{/if}
 			</tbody>
 		</table>
 
@@ -354,7 +342,7 @@ const TD_LEFT = 'px-2 py-[3px] text-left text-slate-800 border-b border-[#EBEBEB
 		{#if (study.off_plan_unit_benchmarks?.length ?? 0) > 0}
 		<table class="w-full border-collapse" style="border-spacing:0">
 			<tbody>
-				<tr><td colspan="8" class={HEADER}>1. &nbsp; OFF-PLAN PRICING BENCHMARKS <span class="text-blue-300 font-normal text-[10px]">(selected horizon per unit type)</span></td></tr>
+				<tr><td colspan="7" class={HEADER}>1. &nbsp; OFF-PLAN PRICING BENCHMARKS</td></tr>
 			</tbody>
 		</table>
 		<table class="w-full border-collapse border-b border-[#D9D9D9]" style="border-spacing:0">
@@ -365,8 +353,7 @@ const TD_LEFT = 'px-2 py-[3px] text-left text-slate-800 border-b border-[#EBEBEB
 				<col style="width:10%">
 				<col style="width:12%">
 				<col style="width:12%">
-				<col style="width:12%">
-				<col style="width:17%">
+				<col style="width:29%">
 			</colgroup>
 			<thead>
 				<tr>
@@ -376,8 +363,7 @@ const TD_LEFT = 'px-2 py-[3px] text-left text-slate-800 border-b border-[#EBEBEB
 					<th class="{TH} border-r border-[#D9D9D9]">Txn Count</th>
 					<th class="{TH} border-r border-[#D9D9D9]">Median AED/sqm</th>
 					<th class="{TH} border-r border-[#D9D9D9]">Median AED/sqft</th>
-					<th class="{TH} border-r border-[#D9D9D9]">Confidence</th>
-					<th class={TH}>Last Transaction</th>
+					<th class={TH}>Confidence</th>
 				</tr>
 			</thead>
 			<tbody>
@@ -389,12 +375,11 @@ const TD_LEFT = 'px-2 py-[3px] text-left text-slate-800 border-b border-[#EBEBEB
 						<td class="{TD} border-r border-[#E8E8E8]">{fmt(b.transaction_count)}</td>
 						<td class="{TD} border-r border-[#E8E8E8] font-semibold">{fmt(b.selected_price_sqm)}</td>
 						<td class="{TD} border-r border-[#E8E8E8] font-semibold text-[#1565C0]">{fmt(rateToSqft(b.selected_price_sqm))}</td>
-						<td class="px-2 py-[3px] border-r border-[#E8E8E8] border-b border-[#EBEBEB]">
+						<td class="px-2 py-[3px] border-b border-[#EBEBEB]">
 							<span class="px-1.5 py-0.5 rounded text-[9px] font-semibold uppercase tracking-wide {confidenceBadge[b.confidence_label] ?? ''}">
 								{b.confidence_label}
 							</span>
 						</td>
-						<td class="{TD} text-slate-500">{b.last_transaction_date?.slice(0, 10) ?? '—'}</td>
 					</tr>
 				{/each}
 			</tbody>
@@ -405,7 +390,7 @@ const TD_LEFT = 'px-2 py-[3px] text-left text-slate-800 border-b border-[#EBEBEB
 		{#if (study.market_pricing?.length ?? 0) > 0}
 		<table class="w-full border-collapse mt-0" style="border-spacing:0">
 			<tbody>
-				<tr><td colspan="5" class={HEADER}>2. &nbsp; MARKET PRICING <span class="text-blue-300 font-normal text-[10px]">(completed transaction medians)</span></td></tr>
+				<tr><td colspan="5" class={HEADER}>2. &nbsp; MARKET PRICING</td></tr>
 			</tbody>
 		</table>
 		<table class="w-full border-collapse border-b border-[#D9D9D9]" style="border-spacing:0">
@@ -443,7 +428,7 @@ const TD_LEFT = 'px-2 py-[3px] text-left text-slate-800 border-b border-[#EBEBEB
 		{#if btsComparableRows.length > 0}
 		<table class="w-full border-collapse mt-0" style="border-spacing:0">
 			<tbody>
-				<tr><td colspan="8" class={HEADER}>3. &nbsp; COMPARABLE PROJECTS <span class="text-blue-300 font-normal text-[10px]">(top 10 off-plan sales comps, removable)</span></td></tr>
+				<tr><td colspan="8" class={HEADER}>3. &nbsp; COMPARABLE PROJECTS</td></tr>
 			</tbody>
 		</table>
 		<table class="w-full border-collapse border-b border-[#D9D9D9]" style="border-spacing:0">
@@ -505,7 +490,7 @@ const TD_LEFT = 'px-2 py-[3px] text-left text-slate-800 border-b border-[#EBEBEB
 		{#if (study.competition_evidence?.length ?? 0) > 0}
 		<table class="w-full border-collapse mt-0" style="border-spacing:0">
 			<tbody>
-				<tr><td colspan="6" class={HEADER}>4. &nbsp; COMPETITION &amp; PIPELINE <span class="text-blue-300 font-normal text-[10px]">(comparable projects under development)</span></td></tr>
+				<tr><td colspan="6" class={HEADER}>4. &nbsp; COMPETITION &amp; PIPELINE</td></tr>
 			</tbody>
 		</table>
 		<table class="w-full border-collapse border-b border-[#D9D9D9]" style="border-spacing:0">
@@ -541,7 +526,7 @@ const TD_LEFT = 'px-2 py-[3px] text-left text-slate-800 border-b border-[#EBEBEB
 		{#if (study.land_sales_evidence?.length ?? 0) > 0}
 		<table class="w-full border-collapse mt-0" style="border-spacing:0">
 			<tbody>
-				<tr><td colspan="8" class={HEADER}>5. &nbsp; LAND MARKET EVIDENCE <span class="text-blue-300 font-normal text-[10px]">(registered land transactions)</span></td></tr>
+				<tr><td colspan="8" class={HEADER}>5. &nbsp; LAND MARKET EVIDENCE</td></tr>
 			</tbody>
 		</table>
 		<table class="w-full border-collapse border-b border-[#D9D9D9]" style="border-spacing:0">
@@ -581,7 +566,7 @@ const TD_LEFT = 'px-2 py-[3px] text-left text-slate-800 border-b border-[#EBEBEB
 
 		{#if (study.off_plan_unit_benchmarks?.length ?? 0) === 0 && (study.market_pricing?.length ?? 0) === 0 && (study.pricing_evidence?.length ?? 0) === 0}
 			<div class="flex items-center justify-center h-32 text-slate-400 text-xs">
-				No pricing evidence in this study. The agent may not have run pricing comparables yet.
+				No pricing evidence available.
 			</div>
 		{/if}
 

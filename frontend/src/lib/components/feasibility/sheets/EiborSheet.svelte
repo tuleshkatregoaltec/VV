@@ -46,11 +46,7 @@ const ROW = 'border-b border-[#D9D9D9]'
 	<div class="bg-[#1F3864] text-white px-4 py-2.5 flex items-start justify-between gap-4">
 		<div>
 			<div class="text-[13px] font-bold tracking-wide">EIBOR RATE CURVE &amp; FINANCING COSTS</div>
-			<div class="text-[10px] text-blue-200 mt-0.5">Emirates Interbank Offered Rate + spread — drives effective loan rates in the model</div>
-		</div>
-		<div class="text-right text-[10px] leading-5 mt-0.5 shrink-0">
-			<div><span class="text-[#90CAF9] font-semibold">■</span> <span class="text-[#90CAF9]">Blue</span> = Input</div>
-			<div><span class="text-white font-semibold">■</span> <span class="text-white">Black</span> = Derived</div>
+			<div class="text-[10px] text-blue-200 mt-0.5">Base rate and financing spreads</div>
 		</div>
 	</div>
 
@@ -84,14 +80,9 @@ const ROW = 'border-b border-[#D9D9D9]'
 		<tr class="bg-[#1F3864]">
 			<td colspan="5" class="px-2 py-[4px] text-white font-bold text-[11px] tracking-wide">A. &nbsp; EIBOR BASE RATE</td>
 		</tr>
-		<tr class="border-b border-[#EBEBEB] bg-[#FFFDE7]">
-			<td colspan="5" class="px-3 py-[4px] text-[9px] text-slate-500 italic">
-				Enter the current EIBOR fixing rate you wish to use as the floating base. In practice the rate resets periodically — for modelling purposes enter a single base rate here representing the expected average over the loan period. Typical UAE EIBOR range: 3.5%–5.5%.
-			</td>
-		</tr>
 		<tr class={ROW}>
 			<td class="px-1 py-[3px] text-slate-400 text-[10px] text-center">1</td>
-			<td class={LABEL}>EIBOR Reference Rate <span class="text-slate-400 font-normal italic">(current market fixing)</span></td>
+			<td class={LABEL}>EIBOR Reference Rate</td>
 			<td class="p-0">
 				<input type="number" step="0.01" min="0" max="20" class={INPUT}
 					value={assumptions?.eiborRatePct ?? 0}
@@ -101,22 +92,9 @@ const ROW = 'border-b border-[#D9D9D9]'
 			<td class="px-2 py-[3px] text-right text-[10px] text-slate-400"></td>
 		</tr>
 
-		<!-- EIBOR reference table (informational) -->
-		<tr class="bg-[#D6DCE4]">
-			<td colspan="5" class="px-2 py-[3px] text-slate-700 font-semibold text-[10px] tracking-wider uppercase">EIBOR Reference Tenors (informational)</td>
-		</tr>
-		{#each [['1-Month EIBOR', 'T+1M'], ['3-Month EIBOR', 'T+3M'], ['6-Month EIBOR', 'T+6M'], ['12-Month EIBOR', 'T+12M']] as [label, tenor]}
-		<tr class="border-b border-[#EBEBEB] bg-[#F9F9F9]">
-			<td></td>
-			<td class="px-2 py-[3px] text-slate-500 italic text-[10px]">{label}</td>
-			<td class="px-2 py-[3px] text-right text-[10px] text-slate-400">— enter manually</td>
-			<td class={UNIT}>{tenor}</td>
-			<td></td>
-		</tr>
-		{/each}
 		<tr class={ROW}>
 			<td class="px-1 py-[3px]"></td>
-			<td class="px-2 py-[3px] text-slate-600 font-medium">Selected base rate (used in model)</td>
+			<td class="px-2 py-[3px] text-slate-600 font-medium">Selected Base Rate</td>
 			<td class="px-2 py-[3px] text-right tabular-nums text-[#1565C0] font-semibold">{fmt(eiborRate, 2)}%</td>
 			<td class={UNIT}>% p.a.</td>
 			<td></td>
@@ -125,11 +103,6 @@ const ROW = 'border-b border-[#D9D9D9]'
 		<!-- SECTION B: Spreads -->
 		<tr class="bg-[#1F3864]">
 			<td colspan="5" class="px-2 py-[4px] text-white font-bold text-[11px] tracking-wide">B. &nbsp; LOAN SPREADS / MARGINS</td>
-		</tr>
-		<tr class="border-b border-[#EBEBEB] bg-[#FFFDE7]">
-			<td colspan="5" class="px-3 py-[4px] text-[9px] text-slate-500 italic">
-				Spread is the lender's margin above EIBOR, negotiated based on project risk, LTV, and borrower profile. Typical UAE development finance spreads: land loan 300–400 bps, construction loan 350–500 bps.
-			</td>
 		</tr>
 		<tr class={ROW}>
 			<td class="px-1 py-[3px] text-slate-400 text-[10px] text-center">2</td>
@@ -201,11 +174,6 @@ const ROW = 'border-b border-[#D9D9D9]'
 		<!-- SECTION D: Rate Sensitivity -->
 		<tr class="bg-[#1F3864]">
 			<td colspan="5" class="px-2 py-[4px] text-white font-bold text-[11px] tracking-wide">D. &nbsp; EIBOR SENSITIVITY — EFFECTIVE RATES</td>
-		</tr>
-		<tr class="border-b border-[#EBEBEB] bg-[#FFFDE7]">
-			<td colspan="5" class="px-3 py-[4px] text-[9px] text-slate-500 italic">
-				Illustrates effective rates at various EIBOR levels given current spreads. Re-run the model after changing the base rate to see the full impact on equity IRR and interest carry.
-			</td>
 		</tr>
 		<!-- sensitivity table header -->
 		<tr class="bg-[#D6DCE4] border-b border-[#B8C4CE]">

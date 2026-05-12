@@ -34,12 +34,6 @@ function setAed<K extends keyof typeof workbookStore.inputs>(key: K, raw: string
 const s = workbookStore
 const isBtr = $derived(s.inputs.developmentModel === 'build_to_rent_residential')
 const workbook = $derived(s.workbook ?? null)
-const research = $derived(workbookStore.research)
-const offPlanConfidence = $derived(research?.off_plan_pricing_confidence ?? null)
-const offPlanBenchmarks = $derived(research?.off_plan_unit_benchmarks ?? [])
-const rentalMarketSummary = $derived(research?.rental_market_summary ?? null)
-const rentalComparables = $derived(research?.rental_comparables ?? [])
-const validation = $derived(s.validation)
 const massing = $derived(workbook?.siteMassing ?? null)
 const btrConfigs = $derived(s.inputs.btrUnitConfigs ?? [])
 
@@ -63,9 +57,6 @@ const btrTotalGlaSqm = $derived(
 		btrConfigs.reduce((acc, config) => acc + config.units * config.avgSizeSqm, 0)
 )
 const btrGlaAsPctOfGfa = $derived(s.maxGfaSqm > 0 ? (btrTotalGlaSqm / s.maxGfaSqm) * 100 : 0)
-const constructionSqueezed = $derived(
-	s.totalDebtCapacity > 0 && s.constructionLoanCapacity / s.totalDebtCapacity < 0.2
-)
 
 const devCostSubtotal = $derived(
 	s.designSupervisionCost +
@@ -162,147 +153,17 @@ function setBtrNumber<K extends string>(key: K, raw: string) {
 
 <div
 	bind:this={sheetScroller}
-	class="overflow-auto flex-1 bg-white text-[11px] font-[Calibri,'Segoe_UI',Arial,sans-serif] select-none"
+	class="@container overflow-auto flex-1 bg-white text-[11px] font-[Calibri,'Segoe_UI',Arial,sans-serif] select-none"
 >
 
 	<!-- Model Header -->
 	<div
-		class="bg-[#1F3864] text-white px-4 py-2.5 flex items-start justify-between gap-4 {highlightClass('assumptions')}"
+		class="bg-[#1F3864] text-white px-3 py-2 flex items-start justify-between gap-4 {highlightClass('assumptions')}"
 		data-feasibility-field="assumptions"
 	>
 		<div>
 			<div class="text-[13px] font-bold tracking-wide">KEY ASSUMPTIONS</div>
-			<div class="text-[10px] text-blue-200 mt-0.5">Feasibility 2 Model &mdash; All monetary values in AED unless stated</div>
-		</div>
-		<div class="text-[10px] text-right leading-5 mt-0.5 shrink-0">
-			<div><span class="text-[#90CAF9] font-semibold">■</span> <span class="text-[#90CAF9]">Blue text</span> = Original Input / Hardcoded</div>
-			<div><span class="text-white font-semibold">■</span> <span class="text-white">Black text</span> = Formula / Derived Value</div>
-		</div>
-	</div>
-
-	<!-- Summary cards: Market Confidence + Model QA -->
-	<div class="px-4 py-3 border-b border-[#D9D9D9] bg-[#F8FAFC]">
-		<div class="grid gap-3 xl:grid-cols-3">
-			<div class="rounded-lg border border-slate-200 bg-white overflow-hidden">
-				<div class="px-3 py-2 bg-slate-50 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">
-					Market Confidence
-				</div>
-				<div class="px-3 py-3 space-y-2 text-[11px]">
-					{#if isBtr}
-						<div class="flex items-start justify-between gap-3">
-							<span class="text-slate-500">Area avg rent</span>
-							<span class="font-medium text-slate-800">
-								{rentalMarketSummary?.avg_rent_price_sqm_12m ? `AED ${fmt(rentalMarketSummary.avg_rent_price_sqm_12m)} /sqm/yr` : 'N/A'}
-							</span>
-						</div>
-						<div class="flex items-start justify-between gap-3">
-							<span class="text-slate-500">Rental contracts</span>
-							<span class="font-medium text-slate-800">{rentalMarketSummary?.rental_contract_count_12m ?? 0}</span>
-						</div>
-						<div class="flex items-start justify-between gap-3">
-							<span class="text-slate-500">Rental comparables</span>
-							<span class="font-medium text-slate-800">{rentalComparables.length}</span>
-						</div>
-						<div class="flex items-start justify-between gap-3">
-							<span class="text-slate-500">Gross yield anchor</span>
-							<span class="font-medium text-slate-800">
-								{rentalMarketSummary?.gross_yield_pct ? `${fmt(rentalMarketSummary.gross_yield_pct, 2)}%` : 'N/A'}
-							</span>
-						</div>
-					{:else}
-						<div class="flex items-start justify-between gap-3">
-							<span class="text-slate-500">Off-plan pricing confidence</span>
-							<span class="font-medium {offPlanConfidence?.confidence_label === 'low' ? 'text-amber-700' : offPlanConfidence?.confidence_label === 'medium' ? 'text-sky-700' : 'text-emerald-700'}">
-								{offPlanConfidence ? `${offPlanConfidence.confidence_label} · ${fmt(offPlanConfidence.confidence_score, 1)}` : 'N/A'}
-							</span>
-						</div>
-						<div class="flex items-start justify-between gap-3">
-							<span class="text-slate-500">Unit benchmarks</span>
-							<span class="font-medium text-slate-800">{offPlanBenchmarks.length}</span>
-						</div>
-						<div class="flex items-start justify-between gap-3">
-							<span class="text-slate-500">Fallback pricing rows</span>
-							<span class="font-medium text-slate-800">{offPlanBenchmarks.filter((row) => row.fallback_used).length}</span>
-						</div>
-						<div class="flex items-start justify-between gap-3">
-							<span class="text-slate-500">Low-confidence unit rows</span>
-							<span class="font-medium text-slate-800">{offPlanBenchmarks.filter((row) => row.confidence_label === 'low').length}</span>
-						</div>
-						{#if offPlanConfidence}
-							<div class="pt-2 border-t border-slate-100 text-slate-400 leading-4">
-								{offPlanConfidence.note}
-							</div>
-						{/if}
-					{/if}
-				</div>
-			</div>
-
-			<div class="rounded-lg border border-slate-200 bg-white overflow-hidden">
-				<div class="px-3 py-2 bg-slate-50 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">
-					Site Capacity
-				</div>
-				<div class="px-3 py-3 space-y-2 text-[11px]">
-					<div class="flex items-start justify-between gap-3">
-						<span class="text-slate-500">Applied coverage</span>
-						<span class="font-medium text-slate-800">{massing ? `${fmt(massing.appliedCoveragePct, 1)}%` : 'N/A'}</span>
-					</div>
-					<div class="flex items-start justify-between gap-3">
-						<span class="text-slate-500">Building count</span>
-						<span class="font-medium text-slate-800">{massing?.buildingCount ?? 'N/A'}</span>
-					</div>
-					<div class="flex items-start justify-between gap-3">
-						<span class="text-slate-500">Required floors</span>
-						<span class="font-medium {(massing?.gfaShortfallSqm ?? 0) > 0 || (massing?.unitCapacityGap ?? 0) < 0 ? 'text-rose-700' : 'text-slate-800'}">{massing ? fmt(Math.max(massing.requiredFloorsAtCoverage, massing.requiredTotalFloorsForProgram)) : 'N/A'}</span>
-					</div>
-					<div class="flex items-start justify-between gap-3">
-						<span class="text-slate-500">Unit capacity gap</span>
-						<span class="font-medium {(massing?.unitCapacityGap ?? 0) < 0 ? 'text-rose-700' : 'text-emerald-700'}">{massing ? fmt(massing.unitCapacityGap) : 'N/A'} units</span>
-					</div>
-					<div class="flex items-start justify-between gap-3">
-						<span class="text-slate-500">GFA shortfall</span>
-						<span class="font-medium {(massing?.gfaShortfallSqm ?? 0) > 0 ? 'text-rose-700' : 'text-emerald-700'}">{massing ? fmt(massing.gfaShortfallSqm) : 'N/A'} sqm</span>
-					</div>
-					<div class="pt-2 border-t border-slate-100 text-slate-400 leading-4">
-						Coverage × selected floors determines whether the paid-for GFA physically fits.
-					</div>
-				</div>
-			</div>
-
-			<div class="rounded-lg border border-slate-200 bg-white overflow-hidden">
-				<div class="px-3 py-2 bg-slate-50 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">
-					Model QA
-				</div>
-				<div class="px-3 py-3 space-y-2 text-[11px]">
-					<div class="flex items-start justify-between gap-3">
-						<span class="text-slate-500">Validation status</span>
-						<span class="font-medium {validation?.status === 'invalid' ? 'text-rose-700' : validation?.status === 'needs_review' ? 'text-amber-700' : 'text-emerald-700'}">
-							{validation ? validation.status.replace('_', ' ') : 'N/A'}
-						</span>
-					</div>
-					<div class="flex items-start justify-between gap-3">
-						<span class="text-slate-500">Hard fails</span>
-						<span class="font-medium {(validation?.hardFailures ?? 0) > 0 ? 'text-rose-700' : 'text-slate-800'}">{validation?.hardFailures ?? 0}</span>
-					</div>
-					<div class="flex items-start justify-between gap-3">
-						<span class="text-slate-500">Warnings</span>
-						<span class="font-medium {(validation?.warnings ?? 0) > 0 ? 'text-amber-700' : 'text-slate-800'}">{validation?.warnings ?? 0}</span>
-					</div>
-					<div class="flex items-start justify-between gap-3">
-						<span class="text-slate-500">Missing evidence</span>
-						<span class="font-medium {(validation?.missingEvidence ?? 0) > 0 ? 'text-sky-700' : 'text-slate-800'}">{validation?.missingEvidence ?? 0}</span>
-					</div>
-					{#if Object.keys(s.reviewDecisions).length > 0}
-					<div class="pt-2 border-t border-slate-100 space-y-1">
-						<div class="flex items-center justify-between gap-3"><span class="text-slate-500">✓ Accepted</span><span class="font-medium text-emerald-700">{Object.values(s.reviewDecisions).filter((r) => r.decision === 'accepted').length}</span></div>
-						<div class="flex items-center justify-between gap-3"><span class="text-slate-500">↻ Review later</span><span class="font-medium text-amber-700">{Object.values(s.reviewDecisions).filter((r) => r.decision === 'review_later').length}</span></div>
-						<div class="flex items-center justify-between gap-3"><span class="text-slate-500">? Needs evidence</span><span class="font-medium text-sky-700">{Object.values(s.reviewDecisions).filter((r) => r.decision === 'needs_evidence').length}</span></div>
-					</div>
-					{/if}
-					<div class="pt-2 border-t border-slate-100 text-slate-400 leading-4">
-						Use the Checks tab for reconciliation issues and final underwriting review.
-					</div>
-				</div>
-			</div>
+			<div class="text-[10px] text-blue-200 mt-0.5">All monetary values in AED unless stated</div>
 		</div>
 	</div>
 
@@ -600,22 +461,13 @@ function setBtrNumber<K extends string>(key: K, raw: string) {
 		</tbody>
 	</table>
 	<div class="px-3 py-1.5 text-[10px] bg-[#FFFDE7] border-b border-[#D9D9D9] text-slate-600">
-		<span class="font-medium">Efficiency check:</span>
+		<span class="font-medium">Efficiency:</span>
 		Total GLA {fmt(btrTotalGlaSqm, 0)} sqm ({fmt(toSqft(btrTotalGlaSqm), 0)} sf)
 		vs GFA {fmt(s.maxGfaSqm, 0)} sqm ({fmt(gfaSqft, 0)} sf)
-		&nbsp;→&nbsp;
+		&nbsp;=&nbsp;
 		<span class={btrGlaAsPctOfGfa > 100 ? 'text-rose-700 font-semibold' : btrGlaAsPctOfGfa >= 75 ? 'text-emerald-700 font-semibold' : 'text-amber-700 font-semibold'}>
 			{fmt(btrGlaAsPctOfGfa, 1)}% of GFA
 		</span>
-		&nbsp;<span class="text-slate-400">(target ~75-85%)</span>
-		&nbsp;·&nbsp;
-		{#if btrGlaAsPctOfGfa > 100}
-			<span class="text-rose-700 font-semibold">GLA exceeds GFA - impossible programme</span>
-		{:else if btrGlaAsPctOfGfa >= 75}
-			<span class="text-emerald-700">Within typical residential efficiency range</span>
-		{:else}
-			<span class="text-amber-700">Under-utilised GFA - review units, floors, or coverage</span>
-		{/if}
 	</div>
 	{:else}
 	<!-- BTS Sales Unit Config sub-table -->
@@ -718,42 +570,39 @@ function setBtrNumber<K extends string>(key: K, raw: string) {
 	</table>
 	<!-- GSA vs GFA constraint note -->
 	<div class="px-3 py-1.5 text-[10px] bg-[#FFFDE7] border-b border-[#D9D9D9] text-slate-600">
-		<span class="font-medium">Constraint check:</span>
+		<span class="font-medium">Saleable area:</span>
 		Total GSA {fmt(toSqft(s.totalConfiguredAreaSqm), 0)} sf
 		vs GFA {fmt(gfaSqft, 0)} sf
-		&nbsp;→&nbsp;
+		&nbsp;=&nbsp;
 		<span class={gsaAsPctOfGfa > 100 ? 'text-rose-700 font-semibold' : gsaAsPctOfGfa >= 75 ? 'text-emerald-700 font-semibold' : 'text-amber-700 font-semibold'}>
 			{fmt(gsaAsPctOfGfa, 1)}% of GFA
 		</span>
-		&nbsp;<span class="text-slate-400">(target ≈ 80%)</span>
-		&nbsp;·&nbsp;
-		{#if gsaAsPctOfGfa > 100}
-			<span class="text-rose-700 font-semibold">⚠ GSA exceeds GFA — review unit mix</span>
-		{:else if gsaAsPctOfGfa >= 75}
-			<span class="text-emerald-700">✓ Within acceptable range</span>
-		{:else}
-			<span class="text-amber-700">↑ Consider increasing unit count or sizes</span>
-		{/if}
 	</div>
 	{/if}
 
-	<!-- Resume main table -->
-	<table class="w-full border-collapse" style="border-spacing:0">
-		<colgroup>
-			<col style="width:2.5%">
-			<col style="width:44%">
-			<col style="width:28%">
-			<col style="width:13%">
-		</colgroup>
-		<tbody>
-
+	<!-- Dense worksheet matrix -->
+	<div class="grid gap-3 px-3 py-3">
 		{#if isBtr}
 		<!-- ═══════════════════════════════════════════════════════════
 		     SECTION 2 (BTR) — OPERATING ASSUMPTIONS
 		     ═══════════════════════════════════════════════════════════ -->
+		<table class="min-w-0 w-full border-collapse border border-[#D9D9D9] bg-white" style="border-spacing:0">
+			<tbody>
 		<tr class="bg-[#1F3864]">
 			<td colspan="4" class="px-2 py-[4px] text-white font-bold text-[11px] tracking-wide">2. &nbsp; BTR OPERATING ASSUMPTIONS</td>
 		</tr>
+			</tbody>
+		</table>
+
+		<div class="grid gap-3 @min-[900px]:grid-cols-2">
+		<table class="min-w-0 w-full border-collapse border border-[#D9D9D9] bg-white" style="border-spacing:0">
+			<colgroup>
+				<col style="width:4%">
+				<col style="width:49%">
+				<col style="width:27%">
+				<col style="width:20%">
+			</colgroup>
+			<tbody>
 
 		<!-- 2a. Lease-Up & Occupancy -->
 		<tr class="bg-[#D6DCE4]">
@@ -800,8 +649,18 @@ function setBtrNumber<K extends string>(key: K, raw: string) {
 			<td class="p-0"><input type="number" step="0.25" min="0" class={INPUT} value={s.inputs.btrCreditLossPct ?? 1}
 				oninput={(e) => setBtrNumber('btrCreditLossPct', e.currentTarget.value)} /></td>
 			<td class={UNIT}>%</td>
-		</tr>
+			</tr>
+				</tbody>
+			</table>
 
+			<table class="min-w-0 w-full border-collapse border border-[#D9D9D9] bg-white" style="border-spacing:0">
+			<colgroup>
+				<col style="width:4%">
+				<col style="width:49%">
+				<col style="width:27%">
+				<col style="width:20%">
+			</colgroup>
+			<tbody>
 		<!-- 2b. Growth & Other Income -->
 		<tr class="bg-[#D6DCE4]">
 			<td colspan="4" class="px-2 py-[3px] text-slate-700 font-semibold text-[10px] tracking-wider uppercase">2b. &nbsp; Growth, Escalation &amp; Other Income</td>
@@ -865,7 +724,17 @@ function setBtrNumber<K extends string>(key: K, raw: string) {
 				oninput={(e) => setBtrNumber('btrAncillaryIncomeAed', e.currentTarget.value)} /></td>
 			<td class={UNIT}>AED/yr</td>
 		</tr>
+			</tbody>
+		</table>
 
+		<table class="min-w-0 w-full border-collapse border border-[#D9D9D9] bg-white" style="border-spacing:0">
+			<colgroup>
+				<col style="width:4%">
+				<col style="width:49%">
+				<col style="width:27%">
+				<col style="width:20%">
+			</colgroup>
+			<tbody>
 		<!-- 2b. Operating Expenses -->
 		<tr class="bg-[#D6DCE4]">
 			<td colspan="4" class="px-2 py-[3px] text-slate-700 font-semibold text-[10px] tracking-wider uppercase">2c. &nbsp; Operating Expenses</td>
@@ -940,7 +809,18 @@ function setBtrNumber<K extends string>(key: K, raw: string) {
 				oninput={(e) => setBtrNumber('btrContractServicesPsqm', e.currentTarget.value)} /></td>
 			<td class={UNIT}>AED/sqm/yr</td>
 		</tr>
+			</tbody>
+		</table>
 
+		<div class="grid min-w-0 content-start gap-3">
+		<table class="min-w-0 w-full border-collapse border border-[#D9D9D9] bg-white" style="border-spacing:0">
+			<colgroup>
+				<col style="width:4%">
+				<col style="width:49%">
+				<col style="width:27%">
+				<col style="width:20%">
+			</colgroup>
+			<tbody>
 		<!-- 2c. Exit & Valuation -->
 		<tr class="bg-[#D6DCE4]">
 			<td colspan="4" class="px-2 py-[3px] text-slate-700 font-semibold text-[10px] tracking-wider uppercase">2d. &nbsp; Exit &amp; Valuation</td>
@@ -966,7 +846,16 @@ function setBtrNumber<K extends string>(key: K, raw: string) {
 				oninput={(e) => setBtrNumber('btrRefiCapRatePct', e.currentTarget.value)} /></td>
 			<td class={UNIT}>%</td>
 		</tr>
-
+			</tbody>
+		</table>
+			<table class="min-w-0 w-full border-collapse border border-[#D9D9D9] bg-white" style="border-spacing:0">
+			<colgroup>
+				<col style="width:4%">
+				<col style="width:49%">
+				<col style="width:27%">
+				<col style="width:20%">
+			</colgroup>
+			<tbody>
 		<!-- 2d. Permanent Debt -->
 		<tr class="bg-[#D6DCE4]">
 			<td colspan="4" class="px-2 py-[3px] text-slate-700 font-semibold text-[10px] tracking-wider uppercase">2e. &nbsp; Permanent Debt (Refi at Stabilization)</td>
@@ -987,7 +876,7 @@ function setBtrNumber<K extends string>(key: K, raw: string) {
 		</tr>
 		<tr class={ROW_STD}>
 			<td class="px-1 py-[3px] text-slate-400 text-[10px] text-center">c</td>
-			<td class={LABEL}>All-In Rate <span class="text-slate-400 font-normal italic">(derived)</span></td>
+			<td class={LABEL}>All-In Rate</td>
 			<td class={VALUE_BLACK}>{fmt((s.inputs.eiborRatePct ?? 0) + ((s.inputs.btrPermDebtSpreadBps ?? 165) / 100), 2)}</td>
 			<td class={UNIT}>%</td>
 		</tr>
@@ -1019,7 +908,17 @@ function setBtrNumber<K extends string>(key: K, raw: string) {
 				oninput={(e) => setBtrNumber('btrDscrMinimum', e.currentTarget.value)} /></td>
 			<td class={UNIT}>x</td>
 		</tr>
+			</tbody>
+		</table>
 
+		<table class="min-w-0 w-full border-collapse border border-[#D9D9D9] bg-white" style="border-spacing:0">
+			<colgroup>
+				<col style="width:4%">
+				<col style="width:49%">
+				<col style="width:27%">
+				<col style="width:20%">
+			</colgroup>
+			<tbody>
 		<!-- 2e. Additional Operating -->
 		<tr class="bg-[#D6DCE4]">
 			<td colspan="4" class="px-2 py-[3px] text-slate-700 font-semibold text-[10px] tracking-wider uppercase">2f. &nbsp; Additional Operating Assumptions</td>
@@ -1045,15 +944,32 @@ function setBtrNumber<K extends string>(key: K, raw: string) {
 				oninput={(e) => setBtrNumber('btrLeaseUpMarketingAed', e.currentTarget.value)} /></td>
 			<td class={UNIT}>AED</td>
 		</tr>
+			</tbody>
+		</table>
+		</div>
+		</div>
 
 		{:else}
 		<!-- ═══════════════════════════════════════════════════════════
 		     SECTION 2 (BTS) — REVENUE ASSUMPTIONS
 		     ═══════════════════════════════════════════════════════════ -->
+		<table class="min-w-0 w-full border-collapse border border-[#D9D9D9] bg-white" style="border-spacing:0">
+			<tbody>
 		<tr class="bg-[#1F3864]">
 			<td colspan="4" class="px-2 py-[4px] text-white font-bold text-[11px] tracking-wide">2. &nbsp; REVENUE ASSUMPTIONS</td>
 		</tr>
+			</tbody>
+		</table>
 
+		<div class="grid gap-3 @min-[900px]:grid-cols-2">
+		<table class="min-w-0 w-full border-collapse border border-[#D9D9D9] bg-white" style="border-spacing:0">
+			<colgroup>
+				<col style="width:4%">
+				<col style="width:49%">
+				<col style="width:27%">
+				<col style="width:20%">
+			</colgroup>
+			<tbody>
 		<!-- 2a. Sales Timeline -->
 		<tr class="bg-[#D6DCE4]">
 			<td colspan="4" class="px-2 py-[3px] text-slate-700 font-semibold text-[10px] tracking-wider uppercase">2a. &nbsp; Sales Timeline</td>
@@ -1096,14 +1012,24 @@ function setBtrNumber<K extends string>(key: K, raw: string) {
 			</td>
 			<td class={UNIT}>months</td>
 		</tr>
+			</tbody>
+		</table>
 
+		<table class="min-w-0 w-full border-collapse border border-[#D9D9D9] bg-white" style="border-spacing:0">
+			<colgroup>
+				<col style="width:4%">
+				<col style="width:49%">
+				<col style="width:27%">
+				<col style="width:20%">
+			</colgroup>
+			<tbody>
 		<!-- 2b. Sales Prices -->
 		<tr class="bg-[#D6DCE4]">
 			<td colspan="4" class="px-2 py-[3px] text-slate-700 font-semibold text-[10px] tracking-wider uppercase">2b. &nbsp; Sales Prices</td>
 		</tr>
 		<tr class={ROW_STD}>
 			<td class="px-1 py-[3px] text-slate-400 text-[10px] text-center">a</td>
-			<td class={LABEL}>Average GSA per Unit <span class="text-slate-400 font-normal italic">(derived)</span></td>
+			<td class={LABEL}>Average GSA per Unit</td>
 			<td class={VALUE_BLACK}>{s.totalUnits > 0 ? fmt(avgGsaPerUnit, 0) : '—'}</td>
 			<td class={UNIT}>sq ft</td>
 		</tr>
@@ -1116,7 +1042,7 @@ function setBtrNumber<K extends string>(key: K, raw: string) {
 		<tr class={ROW_INDENT}>
 			<td class="px-1 py-[3px]"></td>
 			<td class={LABEL_INDENT}>
-				↳ Weighted Avg Rate (model)
+				↳ Weighted Avg Rate
 			</td>
 			<td class={VALUE_BLACK}>{s.totalConfiguredAreaSqm > 0 ? fmt(s.totalConfiguredRevenue / s.totalConfiguredAreaSqm, 0) : '—'}</td>
 			<td class={UNIT}>AED/sqm</td>
@@ -1135,7 +1061,17 @@ function setBtrNumber<K extends string>(key: K, raw: string) {
 			<td class={VALUE_BOLD_BLACK}>{fmtAed(s.totalConfiguredRevenue)}</td>
 			<td class={UNIT}>AED</td>
 		</tr>
+			</tbody>
+		</table>
 
+		<table class="min-w-0 w-full border-collapse border border-[#D9D9D9] bg-white" style="border-spacing:0">
+			<colgroup>
+				<col style="width:4%">
+				<col style="width:49%">
+				<col style="width:27%">
+				<col style="width:20%">
+			</colgroup>
+			<tbody>
 		<!-- 2c. Payment Plan -->
 		<tr class="bg-[#D6DCE4]">
 			<td colspan="4" class="px-2 py-[3px] text-slate-700 font-semibold text-[10px] tracking-wider uppercase">2c. &nbsp; Residential Payment Plan</td>
@@ -1205,7 +1141,17 @@ function setBtrNumber<K extends string>(key: K, raw: string) {
 			</td>
 			<td class={UNIT}>%</td>
 		</tr>
+			</tbody>
+		</table>
 
+		<table class="min-w-0 w-full border-collapse border border-[#D9D9D9] bg-white" style="border-spacing:0">
+			<colgroup>
+				<col style="width:4%">
+				<col style="width:49%">
+				<col style="width:27%">
+				<col style="width:20%">
+			</colgroup>
+			<tbody>
 		<!-- 2d. S-Curve Configuration -->
 		<tr class="bg-[#D6DCE4]">
 			<td colspan="4" class="px-2 py-[3px] text-slate-700 font-semibold text-[10px] tracking-wider uppercase">2d. &nbsp; S-Curve Configuration</td>
@@ -1232,17 +1178,41 @@ function setBtrNumber<K extends string>(key: K, raw: string) {
 			</td>
 			<td class={UNIT}></td>
 		</tr>
+			</tbody>
+		</table>
+		</div>
 
 		{/if}
+
+		<div class="grid gap-3 @min-[900px]:grid-cols-2">
+		<table class="@min-[900px]:col-span-2 min-w-0 w-full border-collapse border border-[#D9D9D9] bg-white" style="border-spacing:0">
+		<colgroup>
+			<col style="width:4%">
+			<col style="width:49%">
+			<col style="width:27%">
+			<col style="width:20%">
+		</colgroup>
+		<tbody>
 
 		<!-- ═══════════════════════════════════════════════════════════
 		     SECTION 3 — DEVELOPMENT ASSUMPTIONS
 		     ═══════════════════════════════════════════════════════════ -->
-		<tr class="bg-[#1F3864]">
-			<td colspan="4" class="px-2 py-[4px] text-white font-bold text-[11px] tracking-wide">3. &nbsp; DEVELOPMENT ASSUMPTIONS</td>
-		</tr>
+			<tr class="bg-[#1F3864]">
+				<td colspan="4" class="px-2 py-[4px] text-white font-bold text-[11px] tracking-wide">3. &nbsp; DEVELOPMENT ASSUMPTIONS</td>
+			</tr>
+			</tbody>
+		</table>
 
-		<!-- 3a. Timelines -->
+		<table class="min-w-0 w-full border-collapse border border-[#D9D9D9] bg-white" style="border-spacing:0">
+			<colgroup>
+				<col style="width:4%">
+				<col style="width:49%">
+				<col style="width:27%">
+				<col style="width:20%">
+			</colgroup>
+			<tbody>
+
+			<!-- 3a. Timelines -->
 		<tr class="bg-[#D6DCE4]">
 			<td colspan="4" class="px-2 py-[3px] text-slate-700 font-semibold text-[10px] tracking-wider uppercase">3a. &nbsp; Timelines</td>
 		</tr>
@@ -1321,7 +1291,7 @@ function setBtrNumber<K extends string>(key: K, raw: string) {
 		<tr class={ROW_STD}>
 			<td class="px-1 py-[3px] text-slate-400 text-[10px] text-center">—</td>
 			<td class={LABEL}>
-				Construction Duration <span class="text-slate-400 font-normal italic">(derived)</span>
+				Construction Duration
 			</td>
 			<td class={VALUE_BLACK}>{constructionDurationMonths ?? '—'}</td>
 			<td class={UNIT}>months</td>
@@ -1342,9 +1312,21 @@ function setBtrNumber<K extends string>(key: K, raw: string) {
 				/>
 			</td>
 			<td class={UNIT}>Q &amp; Year</td>
-		</tr>
+			</tr>
 
-		<!-- 3b. Land Costs -->
+			</tbody>
+		</table>
+
+		<table class="min-w-0 w-full border-collapse border border-[#D9D9D9] bg-white" style="border-spacing:0">
+			<colgroup>
+				<col style="width:4%">
+				<col style="width:49%">
+				<col style="width:27%">
+				<col style="width:20%">
+			</colgroup>
+			<tbody>
+
+			<!-- 3b. Land Costs -->
 		<tr class="bg-[#D6DCE4]">
 			<td colspan="4" class="px-2 py-[3px] text-slate-700 font-semibold text-[10px] tracking-wider uppercase">3b. &nbsp; Land Costs</td>
 		</tr>
@@ -1383,9 +1365,21 @@ function setBtrNumber<K extends string>(key: K, raw: string) {
 			<td class="px-2 py-[3px] text-slate-900 font-semibold">Total Land Cost</td>
 			<td class={VALUE_BOLD_BLACK}>{fmtAed(s.totalLandCostAed)}</td>
 			<td class={UNIT}>AED</td>
-		</tr>
+			</tr>
 
-		<!-- 3c. Development Costs -->
+			</tbody>
+		</table>
+
+		<table class="@min-[900px]:col-span-2 min-w-0 w-full border-collapse border border-[#D9D9D9] bg-white" style="border-spacing:0">
+			<colgroup>
+				<col style="width:4%">
+				<col style="width:49%">
+				<col style="width:27%">
+				<col style="width:20%">
+			</colgroup>
+			<tbody>
+
+			<!-- 3c. Development Costs -->
 		<tr class="bg-[#D6DCE4]">
 			<td colspan="4" class="px-2 py-[3px] text-slate-700 font-semibold text-[10px] tracking-wider uppercase">3c. &nbsp; Development Costs</td>
 		</tr>
@@ -1495,21 +1489,43 @@ function setBtrNumber<K extends string>(key: K, raw: string) {
 			<td class="px-2 py-[4px] text-right tabular-nums text-slate-900 font-bold">{fmtAed(s.modelTotalCostsInclVat)}</td>
 			<td class={UNIT}>AED</td>
 		</tr>
-		<tr class={ROW_STD}>
-			<td class="px-1 py-[3px]"></td>
-			<td class={LABEL}>BUA Rate — All-in (incl. VAT)</td>
-			<td class={VALUE_BLACK}>{fmt(s.buaRateAllIn, 0)}</td>
-			<td class={UNIT}>AED / sqft</td>
-		</tr>
+			<tr class={ROW_STD}>
+				<td class="px-1 py-[3px]"></td>
+				<td class={LABEL}>BUA Rate — All-in (incl. VAT)</td>
+				<td class={VALUE_BLACK}>{fmt(s.buaRateAllIn, 0)}</td>
+				<td class={UNIT}>AED / sqft</td>
+			</tr>
+			</tbody>
+		</table>
+
+			<table class="@min-[900px]:col-span-2 min-w-0 w-full border-collapse border border-[#D9D9D9] bg-white" style="border-spacing:0">
+		<colgroup>
+			<col style="width:4%">
+			<col style="width:49%">
+			<col style="width:27%">
+			<col style="width:20%">
+		</colgroup>
+		<tbody>
 
 		<!-- ═══════════════════════════════════════════════════════════
 		     SECTION 4 — FUNDING & RETURNS
 		     ═══════════════════════════════════════════════════════════ -->
-		<tr class="bg-[#1F3864]">
-			<td colspan="4" class="px-2 py-[4px] text-white font-bold text-[11px] tracking-wide">4. &nbsp; FUNDING &amp; RETURNS</td>
-		</tr>
+			<tr class="bg-[#1F3864]">
+				<td colspan="4" class="px-2 py-[4px] text-white font-bold text-[11px] tracking-wide">4. &nbsp; FUNDING &amp; RETURNS</td>
+			</tr>
+			</tbody>
+		</table>
 
-		<!-- 4a. Sources of Funds -->
+		<table class="min-w-0 w-full border-collapse border border-[#D9D9D9] bg-white" style="border-spacing:0">
+			<colgroup>
+				<col style="width:4%">
+				<col style="width:49%">
+				<col style="width:27%">
+				<col style="width:20%">
+			</colgroup>
+			<tbody>
+
+			<!-- 4a. Sources of Funds -->
 		<tr class="bg-[#D6DCE4]">
 			<td colspan="4" class="px-2 py-[3px] text-slate-700 font-semibold text-[10px] tracking-wider uppercase">4a. &nbsp; Sources of Funds</td>
 		</tr>
@@ -1560,13 +1576,13 @@ function setBtrNumber<K extends string>(key: K, raw: string) {
 		</tr>
 		<tr class={ROW_STD}>
 			<td class="px-1 py-[3px] text-slate-400 text-[10px] text-center">b</td>
-			<td class={LABEL}>Debt <span class="text-slate-400 font-normal italic">{s.hasDraftCase ? "(Derived from model)" : "(Est. — build model to confirm)"}</span></td>
+			<td class={LABEL}>Debt</td>
 			<td class={VALUE_BLACK}>{fmtAed(s.fundingDebt)}</td>
 			<td class={UNIT}>AED</td>
 		</tr>
 		<tr class={ROW_STD}>
 			<td class="px-1 py-[3px] text-slate-400 text-[10px] text-center">c</td>
-			<td class={LABEL}>Equity <span class="text-slate-400 font-normal italic">{s.hasDraftCase ? "(Derived from model)" : "(Est. — build model to confirm)"}</span></td>
+			<td class={LABEL}>Equity</td>
 			<td class={VALUE_BLACK}>{fmtAed(s.fundingEquity)}</td>
 			<td class={UNIT}>AED</td>
 		</tr>
@@ -1587,10 +1603,22 @@ function setBtrNumber<K extends string>(key: K, raw: string) {
 			<td class="px-2 py-[3px] text-slate-700">Total Uses <span class="text-slate-400 font-normal italic">(= Total Cost incl. VAT)</span></td>
 			<td class={VALUE_BLACK}>{fmtAed(s.usesOfFundingTotal)}</td>
 			<td class={UNIT}>AED</td>
-		</tr>
-		{/if}
+			</tr>
+			{/if}
 
-		<!-- 4b. Debt Eligibility — aligned with engine tranche logic -->
+			</tbody>
+		</table>
+
+		<table class="min-w-0 w-full border-collapse border border-[#D9D9D9] bg-white" style="border-spacing:0">
+			<colgroup>
+				<col style="width:4%">
+				<col style="width:49%">
+				<col style="width:27%">
+				<col style="width:20%">
+			</colgroup>
+			<tbody>
+
+			<!-- 4b. Debt Eligibility — aligned with engine tranche logic -->
 		<tr class="bg-[#D6DCE4]">
 			<td colspan="4" class="px-2 py-[3px] text-slate-700 font-semibold text-[10px] tracking-wider uppercase">4b. &nbsp; Debt-Eligible Cost Allocation</td>
 		</tr>
@@ -1618,14 +1646,27 @@ function setBtrNumber<K extends string>(key: K, raw: string) {
 			<td class={VALUE_BLACK}>{fmtAed(s.debtDesignSupervision)}</td>
 			<td class={UNIT}>AED</td>
 		</tr>
-		<tr class={ROW_STD}>
-			<td class="px-1 py-[3px] text-slate-400 text-[10px] text-center">c</td>
-			<td class={LABEL}>Equity-only costs <span class="text-slate-400 font-normal italic">(marketing, sales, VAT, infra, govt)</span></td>
-			<td class={VALUE_BLACK}>{fmtAed(s.equityOtherCosts)}</td>
-			<td class={UNIT}>AED</td>
-		</tr>
-		<tr class="bg-[#D6DCE4]">
-			<td colspan="4" class="px-2 py-[3px] text-slate-700 font-semibold text-[10px] tracking-wider uppercase">4b-i. &nbsp; Debt Structure</td>
+			<tr class={ROW_STD}>
+				<td class="px-1 py-[3px] text-slate-400 text-[10px] text-center">c</td>
+				<td class={LABEL}>Equity-only costs <span class="text-slate-400 font-normal italic">(marketing, sales, VAT, infra, govt)</span></td>
+				<td class={VALUE_BLACK}>{fmtAed(s.equityOtherCosts)}</td>
+					<td class={UNIT}>AED</td>
+				</tr>
+
+				</tbody>
+			</table>
+
+			<table class="min-w-0 w-full border-collapse border border-[#D9D9D9] bg-white" style="border-spacing:0">
+			<colgroup>
+				<col style="width:4%">
+				<col style="width:49%">
+				<col style="width:27%">
+				<col style="width:20%">
+			</colgroup>
+			<tbody>
+
+			<tr class="bg-[#D6DCE4]">
+				<td colspan="4" class="px-2 py-[3px] text-slate-700 font-semibold text-[10px] tracking-wider uppercase">4b-i. &nbsp; Debt Structure</td>
 		</tr>
 		<tr class={ROW_STD}>
 			<td class="px-1 py-[3px] text-slate-400 text-[10px] text-center">a</td>
@@ -1682,21 +1723,33 @@ function setBtrNumber<K extends string>(key: K, raw: string) {
 			</td>
 			<td class={UNIT}>%</td>
 		</tr>
-		<tr class={ROW_STD}>
-			<td class="px-1 py-[3px] text-slate-400 text-[10px] text-center">f</td>
-			<td class={LABEL}>Exit Fee</td>
+			<tr class={ROW_STD}>
+				<td class="px-1 py-[3px] text-slate-400 text-[10px] text-center">f</td>
+				<td class={LABEL}>Exit Fee</td>
 			<td class="p-0">
 				<input type="number" step="0.01" min="0" max="100" class={INPUT}
 					value={Math.round((s.inputs.exitFeePct ?? 0.01) * 10000) / 100}
 					oninput={(e) => s.updateInputs({ exitFeePct: (Number(e.currentTarget.value) || 0) / 100 })}
 				/>
 			</td>
-			<td class={UNIT}>%</td>
-		</tr>
+				<td class={UNIT}>%</td>
+			</tr>
 
-		<!-- 4b-ii. Derived Debt Allocation -->
+			</tbody>
+		</table>
+
+		<table class="min-w-0 w-full border-collapse border border-[#D9D9D9] bg-white" style="border-spacing:0">
+			<colgroup>
+				<col style="width:4%">
+				<col style="width:49%">
+				<col style="width:27%">
+				<col style="width:20%">
+			</colgroup>
+			<tbody>
+
+			<!-- 4b-ii. Derived Debt Allocation -->
 		<tr class="bg-[#D6DCE4]">
-			<td colspan="4" class="px-2 py-[3px] text-slate-700 font-semibold text-[10px] tracking-wider uppercase">4b-ii. &nbsp; Debt Allocation <span class="text-slate-400 font-normal normal-case italic">(Derived)</span></td>
+			<td colspan="4" class="px-2 py-[3px] text-slate-700 font-semibold text-[10px] tracking-wider uppercase">4b-ii. &nbsp; Debt Allocation</td>
 		</tr>
 		<tr class={ROW_STD}>
 			<td class="px-1 py-[3px] text-slate-400 text-[10px] text-center">a</td>
@@ -1722,18 +1775,30 @@ function setBtrNumber<K extends string>(key: K, raw: string) {
 			<td class={VALUE_BLACK}>{fmtAed(s.constructionLoanCapacity)}</td>
 			<td class={UNIT}>AED</td>
 		</tr>
-		<tr class={ROW_TOTAL}>
-			<td class="px-1 py-[3px]"></td>
-			<td class="px-2 py-[3px] text-slate-900 font-semibold">Total Debt</td>
-			<td class={VALUE_BOLD_BLACK}>{fmtAed(s.fundingDebt)}</td>
-			<td class={UNIT}>AED</td>
-		</tr>
+			<tr class={ROW_TOTAL}>
+				<td class="px-1 py-[3px]"></td>
+				<td class="px-2 py-[3px] text-slate-900 font-semibold">Total Debt</td>
+				<td class={VALUE_BOLD_BLACK}>{fmtAed(s.fundingDebt)}</td>
+				<td class={UNIT}>AED</td>
+			</tr>
 
-			<!-- 4b-iv. Facility Controls -->
+			</tbody>
+		</table>
+
+			{#if !isBtr}
+			<table class="min-w-0 w-full border-collapse border border-[#D9D9D9] bg-white" style="border-spacing:0">
+				<colgroup>
+					<col style="width:4%">
+					<col style="width:49%">
+					<col style="width:27%">
+					<col style="width:20%">
+				</colgroup>
+				<tbody>
+
+					<!-- 4b-iv. Facility Controls -->
 			<tr class="bg-[#D6DCE4]">
 				<td colspan="4" class="px-2 py-[3px] text-slate-700 font-semibold text-[10px] tracking-wider uppercase">4b-iv. &nbsp; Facility Controls</td>
 			</tr>
-			{#if !isBtr}
 			<tr class={ROW_STD}>
 				<td class="px-1 py-[3px] text-slate-400 text-[10px] text-center">a</td>
 				<td class={LABEL}>Escrow Retention <span class="text-slate-400 font-normal italic">(BTS off-plan only)</span></td>
@@ -1745,20 +1810,8 @@ function setBtrNumber<K extends string>(key: K, raw: string) {
 				</td>
 				<td class={UNIT}>%</td>
 			</tr>
-			{/if}
-			<tr class={ROW_STD}>
-				<td class="px-1 py-[3px] text-slate-400 text-[10px] text-center">{isBtr ? 'a' : 'b'}</td>
-				<td colspan="3" class="px-2 py-[4px] text-[10px] text-slate-500 italic">
-					{#if isBtr}
-					Live BTR controls: acquisition LTV, construction LTC, debt spread, financing fee, exit fee, perm debt LTV/rate, exit cap rate. Escrow is not applicable — BTR has no off-plan sales (RERA escrow only applies to BTS).
-					{:else}
-					Live workbook controls are acquisition LTV, construction LTC, debt spread, financing fee, exit fee, and escrow retention. Legacy presale-threshold, debt-to-cost, commitment, arrangement, and sales-sweep toggles stay hidden until they are wired back into the active model.
-					{/if}
-				</td>
-			</tr>
 
-		<!-- 4c. Equity Waterfall (BTS only) -->
-		{#if !isBtr}
+			<!-- 4c. Equity Waterfall -->
 		<tr class="bg-[#D6DCE4]">
 			<td colspan="4" class="px-2 py-[3px] text-slate-700 font-semibold text-[10px] tracking-wider uppercase">4c. &nbsp; Equity Waterfall</td>
 		</tr>
@@ -1794,10 +1847,22 @@ function setBtrNumber<K extends string>(key: K, raw: string) {
 				/>
 			</td>
 			<td class={UNIT}>years</td>
-		</tr>
-		{/if}
+				</tr>
 
-		<!-- 4d. Equity Use -->
+				</tbody>
+			</table>
+			{/if}
+
+		<table class="min-w-0 w-full border-collapse border border-[#D9D9D9] bg-white" style="border-spacing:0">
+			<colgroup>
+				<col style="width:4%">
+				<col style="width:49%">
+				<col style="width:27%">
+				<col style="width:20%">
+			</colgroup>
+			<tbody>
+
+			<!-- 4d. Equity Use -->
 		<tr class="bg-[#D6DCE4]">
 			<td colspan="4" class="px-2 py-[3px] text-slate-700 font-semibold text-[10px] tracking-wider uppercase">4d. &nbsp; Equity Use</td>
 		</tr>
@@ -1839,20 +1904,27 @@ function setBtrNumber<K extends string>(key: K, raw: string) {
 			<td class="px-2 py-[3px] text-slate-900 font-semibold">Total Equity</td>
 			<td class={VALUE_BOLD_BLACK}>{fmtAed(s.fundingEquity)}</td>
 			<td class={UNIT}>AED</td>
-		</tr>
-		{/if}
+			</tr>
+			{/if}
 
-		<!-- 4e. Returns -->
+			</tbody>
+		</table>
+
+		<table class="@min-[900px]:col-span-2 min-w-0 w-full border-collapse border border-[#D9D9D9] bg-white" style="border-spacing:0">
+			<colgroup>
+				<col style="width:4%">
+				<col style="width:49%">
+				<col style="width:27%">
+				<col style="width:20%">
+			</colgroup>
+			<tbody>
+
+			<!-- 4e. Returns -->
 		<tr class="bg-[#D6DCE4]">
 			<td colspan="4" class="px-2 py-[3px] text-slate-700 font-semibold text-[10px] tracking-wider uppercase">4e. &nbsp; Returns</td>
 		</tr>
 		{#if isBtr && s.workbook?.btr?.returns}
 		{@const btrRet = s.workbook.btr.returns}
-		<tr class="border-b border-[#EBEBEB] bg-[#FFFDE7]">
-			<td colspan="4" class="px-3 py-[4px] text-[9px] text-slate-500 italic">
-				BTR returns: <strong class="text-slate-600">Yield on Cost</strong> = stabilized NOI ÷ total dev cost. <strong class="text-slate-600">IRR</strong> spans dev phase (equity out) through ops + exit (equity in). Unlevered excludes debt carry; Levered net of perm debt service and refi proceeds.
-			</td>
-		</tr>
 		<tr class={ROW_STD}>
 			<td class="px-1 py-[3px] text-slate-400 text-[10px] text-center">a</td>
 			<td class={LABEL}>Stabilized NOI</td>
@@ -1892,11 +1964,6 @@ function setBtrNumber<K extends string>(key: K, raw: string) {
 			<td class={UNIT}>x</td>
 		</tr>
 		{:else}
-		<tr class="border-b border-[#EBEBEB] bg-[#FFFDE7]">
-			<td colspan="4" class="px-3 py-[4px] text-[9px] text-slate-500 italic">
-				<strong class="text-slate-600">Project IRR</strong> is unlevered — independent of interest rate (see Budget sheet for Equity IRR which responds to financing costs).
-			</td>
-		</tr>
 		<tr class={ROW_STD}>
 			<td class="px-1 py-[3px] text-slate-400 text-[10px] text-center">a</td>
 			<td class={LABEL}>IRR — Project <span class="text-slate-400 font-normal italic">(unlevered)</span></td>
@@ -1909,7 +1976,7 @@ function setBtrNumber<K extends string>(key: K, raw: string) {
 			<td class="px-1 py-[3px] text-slate-400 text-[10px] text-center">b</td>
 			<td class={LABEL}>IRR — Equity <span class="text-slate-400 font-normal italic">(levered, incl. interest)</span></td>
 			<td class="px-2 py-[3px] text-right tabular-nums font-semibold text-[12px] {s.workbook?.returns?.equityIrrPct != null ? 'text-slate-900' : 'text-slate-400'}">
-				{s.workbook?.returns?.equityIrrPct != null ? fmt(s.workbook.returns.equityIrrPct, 1) + '%' : s.workbook ? '—' : 'Run model'}
+				{s.workbook?.returns?.equityIrrPct != null ? fmt(s.workbook.returns.equityIrrPct, 1) + '%' : '—'}
 			</td>
 			<td class={UNIT}>%</td>
 		</tr>
@@ -1929,8 +1996,10 @@ function setBtrNumber<K extends string>(key: K, raw: string) {
 		</tr>
 
 		</tbody>
-	</table>
-</div>
+		</table>
+			</div>
+		</div>
+	</div>
 
 <style>
 	:global(.feasibility-change-flash) {

@@ -14,10 +14,10 @@
 			</div>
 			<div class="relative mt-10 flex flex-col gap-3 sm:flex-row lg:mt-0 lg:min-w-52 lg:flex-col">
 				<a
-					href="/auth"
+					href="/auth?view=signup"
 					class="inline-flex items-center justify-center gap-2 rounded-md bg-bone px-7 py-4 text-sm font-medium text-primary transition-colors duration-200 hover:bg-white"
 				>
-					Get started
+					Get launch access
 					<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 						<path
 							stroke-linecap="round"
@@ -28,7 +28,7 @@
 					</svg>
 				</a>
 				<a
-					href="mailto:contact@vitevue.com"
+					href="mailto:contact@vitevue.com?subject=Vitevue%20platform%20demo"
 					class="inline-flex items-center justify-center rounded-md border border-bone px-7 py-4 text-sm font-medium text-bone transition-colors duration-200 hover:bg-bone hover:text-primary"
 				>
 					Book a demo

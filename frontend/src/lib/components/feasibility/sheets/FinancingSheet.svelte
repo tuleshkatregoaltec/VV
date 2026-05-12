@@ -39,6 +39,13 @@ function pill(status: TestStatus) {
 	return 'bg-emerald-100 text-emerald-700'
 }
 
+function statusLabel(status: TestStatus) {
+	if (status === 'fail') return 'Shortfall'
+	if (status === 'warning') return 'Watch'
+	if (status === 'missing') return '—'
+	return 'Met'
+}
+
 const peakPeriod = $derived.by(() => {
 	if (!cashFlowPeriods.length) return null
 	return cashFlowPeriods.reduce((maxPeriod, period) =>
@@ -72,14 +79,14 @@ const facilityLines = $derived([
 		label: 'Acquisition tranche',
 		source: sourcesUses?.sources.find((item) => item.code === 'land_loan') ?? null,
 		peakBalance: peakAcqPeriod?.closingAcqDebtAed ?? 0,
-		peakPeriodLabel: peakAcqPeriod?.periodLabel ?? 'N/A',
+		peakPeriodLabel: peakAcqPeriod?.periodLabel ?? '—',
 		assumption: null
 	},
 	{
 		label: 'Construction tranche',
 		source: sourcesUses?.sources.find((item) => item.code === 'construction_loan') ?? null,
 		peakBalance: peakConPeriod?.closingConDebtAed ?? 0,
-		peakPeriodLabel: peakConPeriod?.periodLabel ?? 'N/A',
+		peakPeriodLabel: peakConPeriod?.periodLabel ?? '—',
 		assumption: null
 	}
 ])
@@ -89,19 +96,19 @@ const lenderTests = $derived([
 		label: 'Presale threshold',
 		value: draftFinancing
 			? `${fmt(draftFinancing.presaleCoveragePctAtConstruction, 1)}% covered`
-			: 'N/A',
+			: '—',
 		target: 'No threshold',
 		status: !draftFinancing
 			? 'missing'
 			: draftFinancing.presaleCoveragePctAtConstruction < 100
 				? 'warning'
 				: 'pass',
-		note: 'Presales achieved at construction start versus the modeled threshold.'
+		note: 'Presales at construction start.'
 	},
 	{
 		label: 'Debt utilization',
-		value: draftFinancing ? `${fmt(draftFinancing.debtCommitmentUtilizationPct, 1)}%` : 'N/A',
-		target: draftFinancing ? 'Should remain within committed facilities' : 'N/A',
+		value: draftFinancing ? `${fmt(draftFinancing.debtCommitmentUtilizationPct, 1)}%` : '—',
+		target: draftFinancing ? 'Within committed facilities' : '—',
 		status: !draftFinancing
 			? 'missing'
 			: draftFinancing.debtCommitmentUtilizationPct > 100 ||
@@ -110,12 +117,12 @@ const lenderTests = $derived([
 				: draftFinancing.debtCommitmentUtilizationPct > 95
 					? 'warning'
 					: 'pass',
-		note: 'Peak debt versus modeled debt commitment envelope.'
+		note: 'Peak debt / commitment.'
 	},
 	{
 		label: 'Minimum debt headroom',
-		value: draftFinancing ? `AED ${fmt(draftFinancing.minDebtHeadroomAed)}` : 'N/A',
-		target: 'Positive headroom throughout the draw period',
+		value: draftFinancing ? `AED ${fmt(draftFinancing.minDebtHeadroomAed)}` : '—',
+		target: 'Positive headroom through draw period',
 		status: !draftFinancing
 			? 'missing'
 			: draftFinancing.minDebtHeadroomAed < 0 || issuePresent('peak_debt_exceeds_facility')
@@ -123,11 +130,11 @@ const lenderTests = $derived([
 				: draftFinancing.minDebtHeadroomAed < 5_000_000
 					? 'warning'
 					: 'pass',
-		note: 'Lowest residual facility capacity during the modeled cash flow.'
+		note: 'Lowest residual facility capacity.'
 	},
 	{
 		label: 'Completion reserve',
-		value: draftFinancing ? `${fmt(draftFinancing.completionReserveCoveragePct, 1)}%` : 'N/A',
+		value: draftFinancing ? `${fmt(draftFinancing.completionReserveCoveragePct, 1)}%` : '—',
 		target: 'At least 100% covered before sponsor release',
 		status: !draftFinancing
 			? 'missing'
@@ -137,29 +144,29 @@ const lenderTests = $derived([
 				: draftFinancing.completionReserveCoveragePct < 110
 					? 'warning'
 					: 'pass',
-		note: 'Escrow retained at terminal period versus the modeled reserve requirement.'
+		note: 'Terminal escrow / reserve requirement.'
 	},
 	{
 		label: 'Terminal debt',
-		value: draftFinancing ? `AED ${fmt(draftFinancing.closingDebtBalanceAed)}` : 'N/A',
-		target: 'Zero or fully explained residual balance',
+		value: draftFinancing ? `AED ${fmt(draftFinancing.closingDebtBalanceAed)}` : '—',
+		target: 'Zero residual balance',
 		status: !draftFinancing
 			? 'missing'
 			: draftFinancing.closingDebtBalanceAed > 0 || issuePresent('debt_balance_at_exit')
 				? 'warning'
 				: 'pass',
-		note: 'Debt balance remaining after handover and modeled repayment logic.'
+		note: 'Debt balance after handover.'
 	},
 	{
 		label: 'Debt roll-forward',
-		value: peakPeriod ? `Peak in ${peakPeriod.periodLabel}` : 'N/A',
-		target: 'Opening + draw + carry - repayment = closing',
+		value: peakPeriod ? `Peak in ${peakPeriod.periodLabel}` : '—',
+		target: 'Opening + draw + carry - repayment',
 		status: !draftFinancing
 			? 'missing'
 			: issuePresent('debt_rollforward_mismatch')
 				? 'fail'
 				: 'pass',
-		note: 'Balance integrity across draws, interest carry, and repayments.'
+		note: 'Draws, interest carry, and repayments.'
 	}
 ] satisfies Array<{
 	label: string
@@ -321,7 +328,7 @@ const lenderTests = $derived([
 	</div>
 {:else if !draftFinancing}
 	<div class="h-full flex items-center justify-center text-sm text-slate-400">
-		Generate an HBU study to build the draft financing view.
+		No financing data available.
 	</div>
 {:else}
 	<div class="overflow-auto flex-1 bg-white text-[11px] font-[Calibri,'Segoe_UI',Arial,sans-serif] select-none">
@@ -368,25 +375,25 @@ const lenderTests = $derived([
 			{#each facilityLines as row (row.label)}
 				<tr class="border-b border-[#D9D9D9] hover:bg-slate-50/60">
 					<td class="px-2 py-[3px] text-left text-[10px] text-slate-800 font-semibold">{row.label}</td>
-					<td class="px-2 py-[3px] text-right tabular-nums text-slate-900 text-[10px]">{row.source ? fmt(row.source.amountAed) : 'N/A'}</td>
+					<td class="px-2 py-[3px] text-right tabular-nums text-slate-900 text-[10px]">{row.source ? fmt(row.source.amountAed) : '—'}</td>
 					<td class="px-2 py-[3px] text-right tabular-nums text-slate-900 text-[10px]">{fmt(row.peakBalance)}</td>
 					<td class="px-2 py-[3px] text-right tabular-nums text-slate-500 text-[10px]">{row.peakPeriodLabel}</td>
 					<td class="px-2 py-[3px] text-left text-[9px] text-slate-500">
-						{row.source?.basis ?? 'No facility basis returned'}
+						{row.source?.basis ?? '—'}
 					</td>
 				</tr>
 			{/each}
 
-			<!-- Section B: Lender Tests -->
+			<!-- Section B: Credit Metrics -->
 			<tr class="bg-[#1F3864]">
-				<td colspan="5" class="px-2 py-[4px] text-white font-bold text-[11px] tracking-wide">B.&nbsp;&nbsp;LENDER TESTS</td>
+				<td colspan="5" class="px-2 py-[4px] text-white font-bold text-[11px] tracking-wide">B.&nbsp;&nbsp;CREDIT METRICS</td>
 			</tr>
 			<tr class="bg-[#D6DCE4] border-b border-[#B8C4CE]">
 				<th class="px-1 py-[4px] text-center text-[9px] font-semibold text-slate-500 uppercase tracking-wider">#</th>
 				<th class="px-2 py-[4px] text-left text-[9px] font-semibold text-slate-600 uppercase tracking-wider">Test</th>
 				<th class="px-2 py-[4px] text-right text-[9px] font-semibold text-slate-600 uppercase tracking-wider">Current / Target</th>
-				<th class="px-2 py-[4px] text-right text-[9px] font-semibold text-slate-600 uppercase tracking-wider">Status</th>
-				<th class="px-2 py-[4px] text-left text-[9px] font-semibold text-slate-600 uppercase tracking-wider">Comment</th>
+				<th class="px-2 py-[4px] text-right text-[9px] font-semibold text-slate-600 uppercase tracking-wider">Position</th>
+				<th class="px-2 py-[4px] text-left text-[9px] font-semibold text-slate-600 uppercase tracking-wider">Basis</th>
 			</tr>
 			{#each lenderTests as test, idx (test.label)}
 				<tr class="border-b border-[#D9D9D9] hover:bg-slate-50/60">
@@ -396,15 +403,7 @@ const lenderTests = $derived([
 						{test.value}<br /><span class="text-slate-400 text-[9px]">{test.target}</span>
 					</td>
 					<td class="px-2 py-[3px] text-right">
-						{#if test.status === 'fail'}
-							<span class="inline-block px-2 py-0.5 text-[9px] font-semibold uppercase rounded-sm bg-[#FCE4D6] text-[#843C0C]">{test.status}</span>
-						{:else if test.status === 'warning'}
-							<span class="inline-block px-2 py-0.5 text-[9px] font-semibold uppercase rounded-sm bg-[#FFF2CC] text-[#7F6000]">{test.status}</span>
-						{:else if test.status === 'missing'}
-							<span class="inline-block px-2 py-0.5 text-[9px] font-semibold uppercase rounded-sm bg-[#D9D9D9] text-[#595959]">{test.status}</span>
-						{:else}
-							<span class="inline-block px-2 py-0.5 text-[9px] font-semibold uppercase rounded-sm bg-[#E2F0D9] text-[#375623]">{test.status}</span>
-						{/if}
+						<span class="inline-block px-2 py-0.5 text-[9px] font-semibold uppercase rounded-sm {pill(test.status)}">{statusLabel(test.status)}</span>
 					</td>
 					<td class="px-2 py-[3px] text-left text-[9px] text-slate-500">{test.note}</td>
 				</tr>
@@ -426,9 +425,9 @@ const lenderTests = $derived([
 			] as row (row.label)}
 				<tr class="border-b border-[#D9D9D9] hover:bg-slate-50/60">
 					<td colspan="2" class="px-2 py-[3px] text-left text-[10px] text-slate-800">{row.label}</td>
-						<td colspan="3" class="px-2 py-[3px] text-right tabular-nums text-slate-900 text-[10px]">AED {fmt(row.amount)}</td>
-					</tr>
-				{/each}
+					<td colspan="3" class="px-2 py-[3px] text-right tabular-nums text-slate-900 text-[10px]">AED {fmt(row.amount)}</td>
+				</tr>
+			{/each}
 
 			<!-- Section D: Reserve & Release -->
 			<tr class="bg-[#1F3864]">
@@ -443,7 +442,7 @@ const lenderTests = $derived([
 			{#each [
 				{ label: 'Required completion reserve', amount: draftFinancing.requiredCompletionReserveAed, basis: 'Terminal reserve before sponsor release' },
 				{ label: 'Sponsor release capacity', amount: draftFinancing.sponsorReleaseCapacityAed, basis: 'Escrow available above required reserve' },
-				{ label: 'Closing escrow balance', amount: draftFinancing.closingEscrowBalanceAed, basis: 'Modeled terminal escrow after debt and equity flows' },
+				{ label: 'Closing escrow balance', amount: draftFinancing.closingEscrowBalanceAed, basis: 'Terminal escrow after debt and equity flows' },
 			] as row, idx (row.label)}
 				<tr class="border-b border-[#D9D9D9] hover:bg-slate-50/60">
 					<td class="px-1 py-[3px] text-center text-[9px] text-slate-400">{idx + 1}</td>
@@ -463,7 +462,7 @@ const lenderTests = $derived([
 			</tr>
 			{#each [
 				{ label: 'Repayment mode', value: workbookStore.inputs.debtRepaymentMode ?? 'bullet_at_handover' },
-				{ label: 'First repayment period', value: firstSweepPeriod ? `${firstSweepPeriod.periodLabel} (AED ${fmt(firstSweepPeriod.debtRepaymentAed)})` : 'No repayment in current draft' },
+				{ label: 'First repayment period', value: firstSweepPeriod ? `${firstSweepPeriod.periodLabel} (AED ${fmt(firstSweepPeriod.debtRepaymentAed)})` : '—' },
 				{ label: 'Total finance costs', value: 'AED ' + fmt(draftFinancing.totalFinanceCostsAed) },
 				{ label: 'Equity in / out', value: `AED ${fmt(draftFinancing.equityContributedAed)} / ${fmt(draftFinancing.equityDistributedAed)}` },
 				{ label: 'All-in cost / revenue', value: fmt(draftFinancing.allInCostToRevenuePct, 1) + '%' },

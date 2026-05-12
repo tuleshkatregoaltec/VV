@@ -4,15 +4,33 @@ const year = new Date().getFullYear()
 const groups = [
 	{
 		title: 'Platform',
-		links: ['Vitevue AI', 'Transactions', 'Analytics', 'Evidence packs']
+		links: [
+			{ label: 'Platform preview', href: '/#preview' },
+			{ label: 'Vitevue AI', href: '/#ai' },
+			{ label: 'Radar', href: '/#radar' },
+			{ label: 'Feasibility', href: '/#feasibility' },
+			{ label: 'Pricing', href: '/#pricing' },
+			{ label: 'Get launch access', href: '/auth?view=signup' }
+		]
 	},
 	{
 		title: 'Company',
-		links: ['About', 'Careers', 'Contact', 'Press']
+		links: [
+			{ label: 'Who it is for', href: '/#personas' },
+			{
+				label: 'Book a demo',
+				href: 'mailto:contact@vitevue.com?subject=Vitevue%20platform%20demo'
+			},
+			{ label: 'Contact', href: 'mailto:contact@vitevue.com' }
+		]
 	},
 	{
 		title: 'Legal',
-		links: ['Privacy', 'Terms', 'Data sources']
+		links: [
+			{ label: 'Privacy requests', href: 'mailto:contact@vitevue.com?subject=Privacy%20request' },
+			{ label: 'Terms requests', href: 'mailto:contact@vitevue.com?subject=Terms%20request' },
+			{ label: 'Data sources', href: 'mailto:contact@vitevue.com?subject=Data%20sources' }
+		]
 	}
 ]
 </script>
@@ -40,10 +58,10 @@ const groups = [
 						{group.title}
 					</h2>
 					<ul class="space-y-3">
-						{#each group.links as link (link)}
+						{#each group.links as link (link.label)}
 							<li>
-								<a href="/" class="text-sm text-fg-2 transition-colors hover:text-fg-1">
-									{link}
+								<a href={link.href} class="text-sm text-fg-2 transition-colors hover:text-fg-1">
+									{link.label}
 								</a>
 							</li>
 						{/each}

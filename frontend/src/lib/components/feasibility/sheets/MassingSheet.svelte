@@ -48,7 +48,7 @@ const UNIT = 'px-2 py-[3px] text-slate-500 whitespace-nowrap'
 
 {#if !outputs || !massing}
 <div class="h-full flex items-center justify-center px-6 text-sm text-slate-400">
-	Generate an HBU study to view the site massing test-fit.
+	No massing data available.
 </div>
 {:else}
 <div class="overflow-auto flex-1 bg-white text-[11px] font-[Calibri,'Segoe_UI',Arial,sans-serif] select-none">
@@ -220,16 +220,5 @@ const UNIT = 'px-2 py-[3px] text-slate-500 whitespace-nowrap'
 			{/each}
 		</tbody>
 	</table>
-
-	{#if massing.warnings.length > 0}
-		<div class="m-3 rounded-lg border border-amber-200 bg-amber-50 overflow-hidden">
-			<div class="px-3 py-2 bg-amber-100 text-[10px] font-semibold uppercase tracking-[0.12em] text-amber-700">
-				Massing Review Flags
-			</div>
-			{#each massing.warnings as warning}
-				<div class="px-3 py-2 border-t border-amber-200 text-[11px] text-amber-800">{warning}</div>
-			{/each}
-		</div>
-	{/if}
 </div>
 {/if}

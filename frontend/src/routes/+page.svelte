@@ -14,6 +14,13 @@ import Footer from '$lib/components/layout/Footer.svelte'
 		name="description"
 		content="Make faster, smarter decisions with AI-powered real estate intelligence. Trusted by brokers, investors, and consultants across Dubai."
 	/>
+	<meta property="og:title" content="Vitevue - Dubai Real Estate Intelligence Platform" />
+	<meta
+		property="og:description"
+		content="AI-native market intelligence, transaction analytics, and evidence packs for Dubai real estate teams."
+	/>
+	<meta property="og:image" content="/images/vitevue-og-image-1200x630.png" />
+	<meta name="twitter:image" content="/images/vitevue-twitter-card-1200x600.png" />
 	<style>
 		html {
 			scroll-behavior: smooth;

@@ -447,7 +447,7 @@ function round(v: number): number {
 	</div>
 {:else if periods.length === 0}
 	<div class="h-full flex items-center justify-center text-sm text-slate-400">
-		Run the model to generate monthly cash flows.
+		No cash flow data available.
 	</div>
 {:else}
 	<div class="h-full overflow-auto text-[10px] font-[Calibri,'Segoe_UI',Arial,sans-serif]">
@@ -648,9 +648,9 @@ function round(v: number): number {
 					<td class="px-2 py-[4px] text-right text-[10px] tabular-nums font-semibold whitespace-nowrap text-emerald-700">{fmt(periodSources(p))}</td>
 				{/each}
 			</tr>
-			<!-- Total Uses (check row) -->
+			<!-- Total Uses -->
 			<tr class="border-t border-slate-200 bg-slate-50/40">
-				<td class="px-2 py-[3px] text-left text-[10px] italic text-slate-500 sticky left-0 bg-slate-50/40 z-10 border-r border-slate-200 whitespace-nowrap">Total Uses (check)</td>
+				<td class="px-2 py-[3px] text-left text-[10px] italic text-slate-500 sticky left-0 bg-slate-50/40 z-10 border-r border-slate-200 whitespace-nowrap">Total Uses</td>
 				<td class="px-2 py-[3px] text-right text-[9px] tabular-nums italic text-slate-500 bg-slate-50 border-r border-slate-200 whitespace-nowrap">
 					{fmtOut(periods.reduce((s, p) => s + periodUses(p), 0))}
 				</td>
@@ -658,10 +658,10 @@ function round(v: number): number {
 					<td class="px-2 py-[3px] text-right text-[10px] tabular-nums italic text-slate-500 whitespace-nowrap">{periodUses(p) > 0 ? fmtOut(periodUses(p)) : '—'}</td>
 				{/each}
 			</tr>
-			<!-- Balance check -->
+			<!-- Funding gap -->
 			<tr class="border-t border-slate-200">
-				<td class="px-2 py-[3px] text-left text-[10px] font-semibold text-slate-700 sticky left-0 bg-white z-10 border-r border-slate-200 whitespace-nowrap">Balance (Sources − Uses)</td>
-				<td class="px-2 py-[3px] text-right text-[9px] tabular-nums font-semibold bg-slate-50 border-r border-slate-200 text-emerald-600 whitespace-nowrap">✓ 0</td>
+				<td class="px-2 py-[3px] text-left text-[10px] font-semibold text-slate-700 sticky left-0 bg-white z-10 border-r border-slate-200 whitespace-nowrap">Funding Gap</td>
+				<td class="px-2 py-[3px] text-right text-[9px] tabular-nums font-semibold bg-slate-50 border-r border-slate-200 text-emerald-600 whitespace-nowrap">0</td>
 				{#each periods as p}
 					{@const bal = periodSources(p) - periodUses(p)}
 					<td class="px-2 py-[3px] text-right text-[10px] tabular-nums font-semibold whitespace-nowrap {Math.abs(bal) < 1 ? 'text-emerald-600' : 'text-rose-600'}">
@@ -670,7 +670,7 @@ function round(v: number): number {
 				{/each}
 			</tr>
 
-			<!-- MONTHLY SOURCE ALLOCATION (waterfall: proceeds → acq debt → con debt → equity) -->
+			<!-- MONTHLY SOURCE ALLOCATION -->
 			<tr class={HDR_ROW}>
 				<td class="{TD_L_HDR} bg-[#1F3864]">MONTHLY SOURCE ALLOCATION</td>
 				<td class="bg-[#1F3864] min-w-[80px]"></td>
@@ -706,8 +706,8 @@ function round(v: number): number {
 				{#each periodAllocs as a}<td class={TD}>{a.equityAlloc > 0 ? fmt(a.equityAlloc) : '—'}</td>{/each}
 			</tr>
 			<tr class="border-t border-slate-200">
-				<td class="px-2 py-[3px] text-left text-[10px] font-semibold text-slate-700 sticky left-0 bg-white z-10 border-r border-slate-200 whitespace-nowrap">Allocation check (Σ sources − Σ outflow)</td>
-				<td class="px-2 py-[3px] text-right text-[9px] tabular-nums font-semibold bg-slate-50 border-r border-slate-200 text-emerald-600 whitespace-nowrap">✓ 0</td>
+				<td class="px-2 py-[3px] text-left text-[10px] font-semibold text-slate-700 sticky left-0 bg-white z-10 border-r border-slate-200 whitespace-nowrap">Allocation Gap</td>
+				<td class="px-2 py-[3px] text-right text-[9px] tabular-nums font-semibold bg-slate-50 border-r border-slate-200 text-emerald-600 whitespace-nowrap">0</td>
 				{#each periodAllocs as a}
 					{@const chk = round(a.proceedsAlloc + a.acqDebtAlloc + a.conDebtAlloc + a.equityAlloc - a.totalOutflow)}
 					<td class="px-2 py-[3px] text-right text-[10px] tabular-nums font-semibold whitespace-nowrap {Math.abs(chk) < 1 ? 'text-emerald-600' : 'text-rose-600'}">
@@ -716,7 +716,7 @@ function round(v: number): number {
 				{/each}
 			</tr>
 
-			<!-- CUMULATIVE SOURCE BALANCES (cumulative allocated per source from waterfall) -->
+			<!-- CUMULATIVE SOURCE BALANCES -->
 			<tr class={HDR_ROW}>
 				<td class="{TD_L_HDR} bg-[#1F3864]">CUMULATIVE SOURCE BALANCES</td>
 				<td class="bg-[#1F3864] min-w-[80px]"></td>
