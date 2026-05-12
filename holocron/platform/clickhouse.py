@@ -65,3 +65,7 @@ def quote_clickhouse_identifier(identifier: str) -> str:
     if not _CLICKHOUSE_IDENTIFIER_RE.fullmatch(identifier):
         raise ValueError(f"Invalid ClickHouse identifier: {identifier!r}")
     return f"`{identifier}`"
+
+
+def sql_string(value: str) -> str:
+    return "'" + value.replace("\\", "\\\\").replace("'", "''") + "'"
