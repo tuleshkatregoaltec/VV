@@ -2,25 +2,31 @@
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
-import ipaddress
 import json
 import logging
 import os
 import re
 import time
+from collections import Counter
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any, Protocol, cast
 from urllib.parse import parse_qs, unquote, urlparse
 
 import httpx
 
 from holocron.contracts import RawFile, RawRelease
-from holocron.platform.execution import build_raw_file, build_raw_release, new_run_id, utc_now
+from holocron.platform.execution import build_raw_release, new_run_id, utc_now
+from holocron.platform.http_download import normalize_external_url, validated_stream_get
 from holocron.platform.metadata import safe_config_metadata
+from holocron.platform.raw_files import (
+    build_raw_file_from_path,
+    write_jsonl_raw_file as _write_jsonl_raw_file,
+)
 from holocron.sources.reelly_supply.source import ReellySupplyConfig, SOURCE
 
 logger = logging.getLogger(__name__)
@@ -64,7 +70,7 @@ _DOCUMENT_NAME_KEYS = (
 )
 _PROJECT_ID_KEYS = ("id", "project_id", "projects_id", "Project_id", "ID")
 _PROJECT_NAME_KEYS = ("project_name", "Project_name", "name", "Name")
-_MATRIX_SIGNAL_KEYS = ("units_in_sale", "project_api", "project_availability_id")
+_MATRIX_SIGNAL_KEYS = ("project_availability_id",)
 
 
 @dataclass(frozen=True, slots=True)
@@ -87,6 +93,8 @@ class DiscoveredDocument:
     url: str
     normalized_url: str
     raw: Any
+    status: str = "discovered"
+    error: str = ""
 
 
 class ReellySupplyApi(Protocol):
@@ -122,6 +130,10 @@ class ReellySupplyApi(Protocol):
     def download_document(self, url: str, *, max_bytes: int) -> DocumentDownload: ...
 
 
+class ReellySupplyStateStore(Protocol):
+    def get_json(self, *, key: str) -> dict[str, Any] | None: ...
+
+
 class ReellySupplyApiClient:
     def __init__(
         self,
@@ -147,6 +159,8 @@ class ReellySupplyApiClient:
         )
         response.raise_for_status()
         payload = _json_payload(response)
+        if not isinstance(payload, dict):
+            raise ValueError("Reelly authentication response must be a JSON object")
         token = _auth_token(payload)
         if not token:
             raise RuntimeError("Reelly authentication response did not include authToken")
@@ -209,10 +223,16 @@ class ReellySupplyApiClient:
         )
 
     def download_document(self, url: str, *, max_bytes: int) -> DocumentDownload:
-        safe_url = _validate_document_url(url, allowed_hosts=self._allowed_document_hosts)
         chunks: list[bytes] = []
         size = 0
-        with self._client.stream("GET", safe_url) as response:
+        with validated_stream_get(
+            self._client,
+            url,
+            validate_url=lambda candidate: _validate_document_url(
+                candidate,
+                allowed_hosts=self._allowed_document_hosts,
+            ),
+        ) as response:
             response.raise_for_status()
             final_url = _validate_document_url(
                 str(response.url), allowed_hosts=self._allowed_document_hosts
@@ -250,6 +270,7 @@ def extract_release(
     config: ReellySupplyConfig | dict,
     now: datetime | None = None,
     api_client: ReellySupplyApi | None = None,
+    state_store: ReellySupplyStateStore | None = None,
     progress_log: Any | None = None,
 ) -> RawRelease:
     parsed_config = (
@@ -276,8 +297,11 @@ def extract_release(
         parsed_config.try_matrix_availability,
     )
 
-    if api_client is None:
-        with httpx.Client(timeout=parsed_config.timeout_seconds, follow_redirects=True) as client:
+    with contextlib.ExitStack() as stack:
+        if api_client is None:
+            client = stack.enter_context(
+                httpx.Client(timeout=parsed_config.timeout_seconds, follow_redirects=True)
+            )
             api_client = ReellySupplyApiClient(
                 client=client,
                 base_url=parsed_config.base_url,
@@ -285,16 +309,6 @@ def extract_release(
                 availability_base_url=parsed_config.availability_base_url,
                 allowed_document_hosts=parsed_config.allowed_document_hosts,
             )
-            files, metadata = _extract_files(
-                output_path,
-                config=parsed_config,
-                api_client=api_client,
-                scraped_at=current_time.isoformat(),
-                email=email,
-                password=password,
-                progress_log=log,
-            )
-    else:
         files, metadata = _extract_files(
             output_path,
             config=parsed_config,
@@ -302,6 +316,7 @@ def extract_release(
             scraped_at=current_time.isoformat(),
             email=email,
             password=password,
+            state_store=state_store,
             progress_log=log,
         )
 
@@ -339,6 +354,7 @@ def _extract_files(
     scraped_at: str,
     email: str,
     password: str,
+    state_store: ReellySupplyStateStore | None,
     progress_log: Any,
 ) -> tuple[tuple[RawFile, ...], dict[str, Any]]:
     started_at = time.monotonic()
@@ -350,6 +366,19 @@ def _extract_files(
     _log_info(progress_log, "reelly_supply: authenticated user_id=%s", user_id)
     _pause(config)
 
+    if config.mode == "availability_delta":
+        return _extract_availability_delta_files(
+            output_path=output_path,
+            config=config,
+            api_client=api_client,
+            scraped_at=scraped_at,
+            state_store=state_store,
+            auth_payload=auth_payload,
+            user_id=user_id,
+            progress_log=progress_log,
+            started_at=started_at,
+        )
+
     list_page_rows, project_items, batch_metadata = _fetch_project_batch(
         config=config,
         api_client=api_client,
@@ -357,6 +386,22 @@ def _extract_files(
         user_id=user_id,
         progress_log=progress_log,
     )
+    if config.mode == "catalog_delta":
+        return _extract_catalog_delta_files(
+            output_path=output_path,
+            config=config,
+            api_client=api_client,
+            scraped_at=scraped_at,
+            state_store=state_store,
+            auth_payload=auth_payload,
+            user_id=user_id,
+            list_page_rows=list_page_rows,
+            project_items=project_items,
+            batch_metadata=batch_metadata,
+            progress_log=progress_log,
+            started_at=started_at,
+        )
+
     project_details = _fetch_project_details(
         config=config,
         api_client=api_client,
@@ -399,6 +444,220 @@ def _extract_files(
         ),
     ]
     raw_files.extend(document_files)
+    _log_reelly_file_summary(
+        raw_files=raw_files,
+        document_files=document_files,
+        progress_log=progress_log,
+        started_at=started_at,
+    )
+
+    return tuple(raw_files), {
+        **batch_metadata,
+        "authenticated": bool(_auth_token(auth_payload)),
+        "user_id": user_id,
+        "project_count": len(project_items),
+        "project_detail_count": len(project_details),
+        "document_count": len(document_rows),
+        "matrix_attempt_count": len(matrix_rows),
+    }
+
+
+def _extract_catalog_delta_files(
+    *,
+    output_path: Path,
+    config: ReellySupplyConfig,
+    api_client: ReellySupplyApi,
+    scraped_at: str,
+    state_store: ReellySupplyStateStore | None,
+    auth_payload: Mapping[str, Any] | Sequence[Any],
+    user_id: Any | None,
+    list_page_rows: list[dict[str, Any]],
+    project_items: list[dict[str, Any]],
+    batch_metadata: dict[str, Any],
+    progress_log: Any,
+    started_at: float,
+) -> tuple[tuple[RawFile, ...], dict[str, Any]]:
+    previous_state = _load_catalog_state(state_store=state_store, key=config.catalog_state_key)
+    state_was_empty = not _catalog_projects(previous_state)
+    selected_projects, selection_rows = _select_catalog_delta_projects(
+        project_items=project_items,
+        previous_state=previous_state,
+        bootstrap_details=config.bootstrap_details,
+        detail_audit_limit=config.detail_audit_limit,
+    )
+    _log_info(
+        progress_log,
+        (
+            "reelly_supply: catalog delta selected details=%s projects=%s "
+            "state_empty=%s audit_limit=%s"
+        ),
+        len(selected_projects),
+        len(project_items),
+        state_was_empty,
+        config.detail_audit_limit,
+    )
+
+    project_details = _fetch_project_details(
+        config=config,
+        api_client=api_client,
+        scraped_at=scraped_at,
+        user_id=user_id,
+        project_items=[item for _, item, _ in selected_projects],
+        progress_log=progress_log,
+    )
+    detail_reason_by_id = {str(project_id): reason for project_id, _, reason in selected_projects}
+    for detail in project_details:
+        detail["row"]["delta_reason"] = detail_reason_by_id.get(str(detail["project_id"]), "")
+
+    if config.fetch_documents_for_delta:
+        document_rows, document_files = _collect_project_documents(
+            output_path=output_path,
+            config=config,
+            api_client=api_client,
+            scraped_at=scraped_at,
+            project_details=project_details,
+            progress_log=progress_log,
+        )
+    else:
+        document_rows, document_files = [], []
+
+    matrix_rows = (
+        _collect_matrix_availability(
+            config=config,
+            api_client=api_client,
+            scraped_at=scraped_at,
+            project_details=project_details,
+            progress_log=progress_log,
+        )
+        if config.try_matrix_availability
+        else []
+    )
+    state_payload = _build_catalog_state_payload(
+        previous_state=previous_state,
+        project_items=project_items,
+        project_details=project_details,
+        matrix_rows=matrix_rows,
+        scraped_at=scraped_at,
+        completed=bool(batch_metadata.get("batch_completed_result_set")),
+    )
+    state_update = _write_state_update_file(
+        output_path, "reelly_supply_catalog_state.json", config.catalog_state_key, state_payload
+    )
+
+    raw_files = [
+        _write_jsonl_raw_file(
+            output_path / "reelly_supply_project_list_pages.jsonl", list_page_rows
+        ),
+        _write_jsonl_raw_file(
+            output_path / "reelly_supply_project_delta_selection.jsonl", selection_rows
+        ),
+        _write_jsonl_raw_file(
+            output_path / "reelly_supply_project_details.jsonl",
+            [detail["row"] for detail in project_details],
+        ),
+        _write_jsonl_raw_file(
+            output_path / "reelly_supply_project_documents.jsonl",
+            document_rows,
+        ),
+        _write_jsonl_raw_file(
+            output_path / "reelly_supply_matrix_availability.jsonl",
+            matrix_rows,
+        ),
+    ]
+    raw_files.extend(document_files)
+    _log_reelly_file_summary(
+        raw_files=raw_files,
+        document_files=document_files,
+        progress_log=progress_log,
+        started_at=started_at,
+    )
+    status_counts = dict(
+        Counter(str(row.get("delta_reason") or "unknown") for row in selection_rows)
+    )
+    return tuple(raw_files), {
+        **batch_metadata,
+        "mode": "catalog_delta",
+        "authenticated": bool(_auth_token(auth_payload)),
+        "user_id": user_id,
+        "project_count": len(project_items),
+        "selected_project_count": len(selected_projects),
+        "project_detail_count": len(project_details),
+        "document_count": len(document_rows),
+        "matrix_attempt_count": len(matrix_rows),
+        "state_was_empty": state_was_empty,
+        "delta_reason_counts": status_counts,
+        "_state_updates": [state_update],
+    }
+
+
+def _extract_availability_delta_files(
+    *,
+    output_path: Path,
+    config: ReellySupplyConfig,
+    api_client: ReellySupplyApi,
+    scraped_at: str,
+    state_store: ReellySupplyStateStore | None,
+    auth_payload: Mapping[str, Any] | Sequence[Any],
+    user_id: Any | None,
+    progress_log: Any,
+    started_at: float,
+) -> tuple[tuple[RawFile, ...], dict[str, Any]]:
+    previous_state = _load_catalog_state(state_store=state_store, key=config.catalog_state_key)
+    project_details = _availability_project_details_from_state(
+        previous_state=previous_state,
+        limit=config.max_availability_projects_per_run,
+    )
+    matrix_rows = _collect_matrix_availability(
+        config=config,
+        api_client=api_client,
+        scraped_at=scraped_at,
+        project_details=project_details,
+        progress_log=progress_log,
+    )
+    state_payload = _build_catalog_state_payload(
+        previous_state=previous_state,
+        project_items=[],
+        project_details=[],
+        matrix_rows=matrix_rows,
+        scraped_at=scraped_at,
+        completed=False,
+    )
+    state_update = _write_state_update_file(
+        output_path, "reelly_supply_catalog_state.json", config.catalog_state_key, state_payload
+    )
+    raw_files = [
+        _write_jsonl_raw_file(
+            output_path / "reelly_supply_availability_candidates.jsonl",
+            [detail["row"] for detail in project_details],
+        ),
+        _write_jsonl_raw_file(
+            output_path / "reelly_supply_matrix_availability.jsonl",
+            matrix_rows,
+        ),
+    ]
+    _log_reelly_file_summary(
+        raw_files=raw_files,
+        document_files=[],
+        progress_log=progress_log,
+        started_at=started_at,
+    )
+    return tuple(raw_files), {
+        "mode": "availability_delta",
+        "authenticated": bool(_auth_token(auth_payload)),
+        "user_id": user_id,
+        "candidate_project_count": len(project_details),
+        "matrix_attempt_count": len(matrix_rows),
+        "_state_updates": [state_update],
+    }
+
+
+def _log_reelly_file_summary(
+    *,
+    raw_files: Sequence[RawFile],
+    document_files: Sequence[RawFile],
+    progress_log: Any,
+    started_at: float,
+) -> None:
     jsonl_files = [raw_file for raw_file in raw_files if raw_file.row_count is not None]
     _log_info(
         progress_log,
@@ -411,16 +670,6 @@ def _extract_files(
         _format_bytes(sum(raw_file.size_bytes for raw_file in raw_files)),
         time.monotonic() - started_at,
     )
-
-    return tuple(raw_files), {
-        **batch_metadata,
-        "authenticated": bool(_auth_token(auth_payload)),
-        "user_id": user_id,
-        "project_count": len(project_items),
-        "project_detail_count": len(project_details),
-        "document_count": len(document_rows),
-        "matrix_attempt_count": len(matrix_rows),
-    }
 
 
 def _fetch_project_batch(
@@ -658,6 +907,10 @@ def _collect_project_documents(
 
         for index, document in enumerate(_dedupe_documents(documents), start=1):
             row = _document_row(document=document, scraped_at=scraped_at)
+            if document.status != "discovered":
+                rows.append(row)
+                skipped_count += 1
+                continue
             if not config.download_documents:
                 row["status"] = "download_skipped"
                 rows.append(row)
@@ -812,6 +1065,13 @@ def _collect_matrix_availability(
                         endpoint=endpoint,
                         identifier=candidate,
                     )
+                    payload_error = _matrix_payload_error(payload)
+                    if payload_error:
+                        row.update({"status": "api_error", "error": payload_error, "raw": payload})
+                        rows.append(row)
+                        error_count += 1
+                        _pause(config)
+                        continue
                     row.update({"status": "success", "raw": payload})
                     rows.append(row)
                     success_count += 1
@@ -870,8 +1130,7 @@ def _discover_documents(
                 raw=value,
                 allowed_document_hosts=allowed_document_hosts,
             )
-            if document is not None:
-                yield document
+            yield document
         return
 
     if isinstance(value, list):
@@ -892,17 +1151,15 @@ def _discover_documents(
     url = _document_url_from_mapping(value)
     if url and (download_all_project_docs or _has_document_context(path)):
         name = _document_name_from_mapping(value) or _field_path(path) or "document"
-        normalized_url = _validate_document_url_or_none(url, allowed_hosts=allowed_document_hosts)
-        if normalized_url is not None:
-            yield DiscoveredDocument(
-                project_id=project_id,
-                source_endpoint=source_endpoint,
-                field_path=_field_path(path),
-                name=name,
-                url=url,
-                normalized_url=normalized_url,
-                raw=value,
-            )
+        yield _document_from_url(
+            project_id=project_id,
+            source_endpoint=source_endpoint,
+            field_path=_field_path(path),
+            url=url,
+            raw=value,
+            allowed_document_hosts=allowed_document_hosts,
+            name=name,
+        )
 
     for key, item in value.items():
         yield from _discover_documents(
@@ -919,7 +1176,10 @@ def _dedupe_documents(documents: Iterable[DiscoveredDocument]) -> list[Discovere
     seen: set[tuple[str, str]] = set()
     deduped: list[DiscoveredDocument] = []
     for document in documents:
-        key = (str(document.project_id), document.normalized_url)
+        key = (
+            str(document.project_id),
+            document.normalized_url or f"{document.field_path}:{document.url}",
+        )
         if key in seen:
             continue
         seen.add(key)
@@ -928,7 +1188,7 @@ def _dedupe_documents(documents: Iterable[DiscoveredDocument]) -> list[Discovere
 
 
 def _document_row(*, document: DiscoveredDocument, scraped_at: str) -> dict[str, Any]:
-    return {
+    row = {
         "endpoint": document.source_endpoint,
         "scraped_at": scraped_at,
         "project_id": document.project_id,
@@ -937,8 +1197,11 @@ def _document_row(*, document: DiscoveredDocument, scraped_at: str) -> dict[str,
         "url": document.url,
         "normalized_url": document.normalized_url,
         "raw": document.raw,
-        "status": "discovered",
+        "status": document.status,
     }
+    if document.error:
+        row["error"] = document.error
+    return row
 
 
 def _document_from_url(
@@ -949,18 +1212,26 @@ def _document_from_url(
     url: str,
     raw: Any,
     allowed_document_hosts: Sequence[str],
-) -> DiscoveredDocument | None:
-    normalized_url = _validate_document_url_or_none(url, allowed_hosts=allowed_document_hosts)
-    if normalized_url is None:
-        return None
+    name: str | None = None,
+) -> DiscoveredDocument:
+    status = "discovered"
+    error = ""
+    try:
+        normalized_url = _validate_document_url(url, allowed_hosts=allowed_document_hosts)
+    except ValueError as exc:
+        normalized_url = ""
+        status = "validation_error"
+        error = str(exc)
     return DiscoveredDocument(
         project_id=project_id,
         source_endpoint=source_endpoint,
         field_path=field_path,
-        name=_name_from_url_or_path(url, field_path),
+        name=name or _name_from_url_or_path(url, field_path),
         url=url,
         normalized_url=normalized_url,
         raw=raw,
+        status=status,
+        error=error,
     )
 
 
@@ -996,17 +1267,212 @@ def _unique_projects(
         yield project_id, item
 
 
+def _load_catalog_state(
+    *,
+    state_store: ReellySupplyStateStore | None,
+    key: str,
+) -> dict[str, Any]:
+    if state_store is None or (payload := state_store.get_json(key=key)) is None:
+        return {"version": 1, "projects": {}}
+    if isinstance(payload.get("projects"), dict):
+        return dict(payload)
+    return {"version": 1, "projects": {}}
+
+
+def _catalog_projects(state: Mapping[str, Any]) -> dict[str, dict[str, Any]]:
+    projects = state.get("projects")
+    if not isinstance(projects, dict):
+        return {}
+    return {str(key): value for key, value in projects.items() if isinstance(value, dict)}
+
+
+def _select_catalog_delta_projects(
+    *,
+    project_items: Sequence[Mapping[str, Any]],
+    previous_state: Mapping[str, Any],
+    bootstrap_details: bool,
+    detail_audit_limit: int,
+) -> tuple[list[tuple[Any, Mapping[str, Any], str]], list[dict[str, Any]]]:
+    state_projects = _catalog_projects(previous_state)
+    state_was_empty = not state_projects
+    selected: list[tuple[Any, Mapping[str, Any], str]] = []
+    selection_rows: list[dict[str, Any]] = []
+    unchanged_candidates: list[tuple[str, Any, Mapping[str, Any]]] = []
+
+    for project_id, item in _unique_projects(project_items):
+        project_key = str(project_id)
+        fingerprint = _fingerprint_payload(item)
+        previous = state_projects.get(project_key)
+        reason = "unchanged"
+        should_fetch = False
+        if previous is None:
+            reason = "new"
+            should_fetch = not state_was_empty or bootstrap_details
+        elif previous.get("list_fingerprint") != fingerprint:
+            reason = "list_changed"
+            should_fetch = True
+        else:
+            unchanged_candidates.append(
+                (str(previous.get("last_detail_scraped_at") or ""), project_id, item)
+            )
+
+        if should_fetch:
+            selected.append((project_id, item, reason))
+        selection_rows.append(
+            {
+                "project_id": project_id,
+                "delta_reason": reason,
+                "selected_for_detail": should_fetch,
+                "list_fingerprint": fingerprint,
+                "previous_list_fingerprint": previous.get("list_fingerprint") if previous else "",
+            }
+        )
+
+    if detail_audit_limit > 0 and not state_was_empty:
+        audited = 0
+        selected_ids = {str(project_id) for project_id, _, _ in selected}
+        for _, project_id, item in sorted(unchanged_candidates):
+            if audited >= detail_audit_limit:
+                break
+            if str(project_id) in selected_ids:
+                continue
+            selected.append((project_id, item, "audit"))
+            audited += 1
+            for row in selection_rows:
+                if str(row.get("project_id")) == str(project_id):
+                    row["delta_reason"] = "audit"
+                    row["selected_for_detail"] = True
+                    break
+    return selected, selection_rows
+
+
+def _availability_project_details_from_state(
+    *,
+    previous_state: Mapping[str, Any],
+    limit: int | None,
+) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    projects = _catalog_projects(previous_state)
+    sortable = sorted(
+        projects.items(),
+        key=lambda item: str(item[1].get("last_availability_scraped_at") or ""),
+    )
+    for project_id, record in sortable:
+        list_item = record.get("list_item")
+        if not isinstance(list_item, dict):
+            list_item = {}
+        candidate = record.get("project_availability_id") or _mapping_value(
+            list_item, ("project_availability_id",)
+        )
+        if _is_empty_matrix_value(candidate):
+            continue
+        raw = {**list_item, "project_availability_id": candidate}
+        row = {
+            "endpoint": "availability_candidate",
+            "project_id": project_id,
+            "project_availability_id": candidate,
+            "list_item": list_item,
+        }
+        rows.append({"project_id": project_id, "list_item": list_item, "raw": raw, "row": row})
+        if limit is not None and len(rows) >= limit:
+            break
+    return rows
+
+
+def _build_catalog_state_payload(
+    *,
+    previous_state: Mapping[str, Any],
+    project_items: Sequence[Mapping[str, Any]],
+    project_details: Sequence[dict[str, Any]],
+    matrix_rows: Sequence[Mapping[str, Any]],
+    scraped_at: str,
+    completed: bool,
+) -> dict[str, Any]:
+    projects = _catalog_projects(previous_state)
+    for project_id, item in _unique_projects(project_items):
+        project_key = str(project_id)
+        previous = projects.get(project_key, {})
+        projects[project_key] = {
+            **previous,
+            "project_id": project_id,
+            "first_seen_at": previous.get("first_seen_at") or scraped_at,
+            "last_seen_at": scraped_at,
+            "list_fingerprint": _fingerprint_payload(item),
+            "project_availability_id": _mapping_value(item, ("project_availability_id",)),
+            "sale_status": _mapping_value(item, ("sale_status", "Status")),
+            "list_item": dict(item),
+        }
+
+    for detail in project_details:
+        project_id = detail.get("project_id")
+        if project_id in (None, ""):
+            continue
+        project_key = str(project_id)
+        raw_value = detail.get("raw")
+        raw = raw_value if isinstance(raw_value, Mapping) else {}
+        previous = projects.get(project_key, {})
+        projects[project_key] = {
+            **previous,
+            "project_id": project_id,
+            "last_detail_scraped_at": scraped_at,
+            "detail_fingerprint": _fingerprint_payload(raw),
+            "last_modified": _mapping_value(raw, ("Last_Modified", "last_modified")),
+            "created_at": _mapping_value(raw, ("created_at", "Created_at")),
+            "project_availability_id": _mapping_value(raw, ("project_availability_id",))
+            or previous.get("project_availability_id"),
+        }
+
+    for row in matrix_rows:
+        project_id = row.get("project_id")
+        if project_id in (None, ""):
+            continue
+        project_key = str(project_id)
+        previous = projects.get(project_key, {})
+        availability = previous.get("availability")
+        if not isinstance(availability, dict):
+            availability = {}
+        endpoint = str(row.get("endpoint") or "")
+        availability[endpoint] = {
+            "last_scraped_at": scraped_at,
+            "status": row.get("status"),
+            "fingerprint": _fingerprint_payload(row.get("raw")),
+        }
+        projects[project_key] = {
+            **previous,
+            "project_id": project_id,
+            "last_availability_scraped_at": scraped_at,
+            "availability": availability,
+        }
+
+    return {
+        "version": 1,
+        "updated_at": scraped_at,
+        "completed_catalog_pass": completed,
+        "project_count": len(projects),
+        "projects": projects,
+    }
+
+
+def _fingerprint_payload(value: Any) -> str:
+    return hashlib.sha256(
+        json.dumps(value, sort_keys=True, default=str, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+
+
+def _write_state_update_file(
+    output_path: Path, file_name: str, key: str, payload: Mapping[str, Any]
+) -> dict[str, str]:
+    path = output_path / file_name
+    path.write_text(json.dumps(payload, sort_keys=True, default=str), encoding="utf-8")
+    return {"key": key, "path": str(path)}
+
+
 def _matrix_candidates(*, project_id: Any, project: Mapping[str, Any]) -> list[Any]:
-    candidates = [
-        _mapping_value(project, ("project_availability_id",)),
-        _mapping_value(project, ("project_api",)),
-        project_id,
-        _mapping_value(project, _PROJECT_NAME_KEYS),
-    ]
+    candidates = [_mapping_value(project, ("project_availability_id",))]
     deduped: list[Any] = []
     seen: set[str] = set()
     for candidate in candidates:
-        if candidate in (None, ""):
+        if _is_empty_matrix_value(candidate):
             continue
         key = str(candidate)
         if key in seen:
@@ -1018,14 +1484,44 @@ def _matrix_candidates(*, project_id: Any, project: Mapping[str, Any]) -> list[A
 
 def _has_matrix_signal(project: Mapping[str, Any]) -> bool:
     return any(
-        _mapping_value(project, (key,)) not in (None, "", 0, False) for key in _MATRIX_SIGNAL_KEYS
+        not _is_empty_matrix_value(_mapping_value(project, (key,))) for key in _MATRIX_SIGNAL_KEYS
+    )
+
+
+def _is_empty_matrix_value(value: Any) -> bool:
+    if value in (None, "", 0, False):
+        return True
+    if isinstance(value, str):
+        stripped = value.strip()
+        return stripped == "" or stripped in {"0", "0.0"}
+    return False
+
+
+def _matrix_payload_error(payload: Any) -> str:
+    if not isinstance(payload, Mapping):
+        return ""
+    errors: list[str] = []
+    for key in ("availability", "building"):
+        value = payload.get(key)
+        if isinstance(value, str) and _looks_like_matrix_api_error(value):
+            errors.append(f"{key}: {value}")
+    return "; ".join(errors)
+
+
+def _looks_like_matrix_api_error(value: str) -> bool:
+    normalized = value.lower()
+    return (
+        "[line " in normalized
+        or "cannot read properties" in normalized
+        or "not a function" in normalized
+        or "api error" in normalized
     )
 
 
 def _extract_user_id(payload: Mapping[str, Any]) -> Any | None:
     user = payload.get("user")
     if isinstance(user, Mapping):
-        return _mapping_value(user, ("id", "users_id", "user_id"))
+        return _mapping_value(cast(Mapping[str, Any], user), ("id", "users_id", "user_id"))
     return _mapping_value(payload, ("id", "users_id", "user_id"))
 
 
@@ -1039,7 +1535,7 @@ def _json_payload(response: httpx.Response) -> dict[str, Any] | list[Any]:
 def _auth_token(payload: Mapping[str, Any] | Sequence[Any]) -> str:
     if not isinstance(payload, Mapping):
         return ""
-    token = _mapping_value(payload, ("authToken", "auth_token", "token"))
+    token = _mapping_value(cast(Mapping[str, Any], payload), ("authToken", "auth_token", "token"))
     return str(token).strip() if token else ""
 
 
@@ -1129,57 +1625,23 @@ def _is_url(value: str) -> bool:
     return value.startswith(("http://", "https://", "//"))
 
 
-def _validate_document_url_or_none(url: str, *, allowed_hosts: Sequence[str]) -> str | None:
-    try:
-        return _validate_document_url(url, allowed_hosts=allowed_hosts)
-    except ValueError:
-        return None
-
-
 def _validate_document_url(url: str, *, allowed_hosts: Sequence[str]) -> str:
     normalized = f"https:{url}" if url.startswith("//") else url
     parsed = urlparse(normalized)
-    if parsed.scheme != "https":
-        raise ValueError("document URL must use https")
-    if parsed.username or parsed.password:
-        raise ValueError("document URL must not include embedded credentials")
     host = (parsed.hostname or "").lower()
-    if not host:
-        raise ValueError("document URL must include a host")
-    _raise_if_unsafe_ip_host(host)
-    if not _host_is_allowed(host, allowed_hosts):
-        raise ValueError(f"document host is not allowlisted: {host}")
-    return _normalize_document_url(normalized)
-
-
-def _raise_if_unsafe_ip_host(host: str) -> None:
-    try:
-        ip = ipaddress.ip_address(host)
-    except ValueError:
-        return
-    if (
-        ip.is_private
-        or ip.is_loopback
-        or ip.is_link_local
-        or ip.is_multicast
-        or ip.is_reserved
-        or ip.is_unspecified
-    ):
-        raise ValueError(f"document URL targets an unsafe IP address: {host}")
-
-
-def _host_is_allowed(host: str, allowed_hosts: Sequence[str]) -> bool:
-    for allowed_host in allowed_hosts:
-        normalized_allowed = allowed_host.strip().lower()
-        if not normalized_allowed:
-            continue
-        if normalized_allowed.startswith("."):
-            if host.endswith(normalized_allowed):
-                return True
-            continue
-        if host == normalized_allowed:
-            return True
-    return False
+    return _normalize_document_url(
+        normalize_external_url(
+            normalized,
+            allowed_hosts=tuple(allowed_hosts),
+            allow_subdomains=False,
+            allow_leading_dot_hosts=True,
+            allow_protocol_relative=True,
+            strip_fragment=False,
+            label="document URL",
+            host_not_allowed_message=f"document host is not allowlisted: {host}",
+            unsafe_host_message=f"document URL targets an unsafe IP address: {host}",
+        )
+    )
 
 
 def _normalize_document_url(url: str) -> str:
@@ -1233,17 +1695,6 @@ def _safe_path_segment(value: str) -> str:
     return normalized or "unknown"
 
 
-def _write_jsonl_raw_file(path: Path, rows: Iterable[dict[str, Any]]) -> RawFile:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    row_count = 0
-    with path.open("w", encoding="utf-8") as handle:
-        for row in rows:
-            handle.write(json.dumps(row, ensure_ascii=False, separators=(",", ":")))
-            handle.write("\n")
-            row_count += 1
-    return _build_raw_file(path, row_count=row_count, content_type="application/x-ndjson")
-
-
 def _build_raw_file(
     path: Path,
     *,
@@ -1251,11 +1702,8 @@ def _build_raw_file(
     content_type: str | None,
     metadata: Mapping[str, Any] | None = None,
 ) -> RawFile:
-    content = path.read_bytes()
-    return build_raw_file(
+    return build_raw_file_from_path(
         path=path,
-        sha256=hashlib.sha256(content).hexdigest(),
-        size_bytes=len(content),
         row_count=row_count,
         content_type=content_type,
         metadata=metadata,

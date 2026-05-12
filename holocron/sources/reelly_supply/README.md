@@ -56,7 +56,9 @@ Archive knobs:
 
 - `pages_per_run`: default chunk size.
 - `page_cursor`: usually resolved from checkpoint.
-- `download_documents`: disabled for archive chunks in the operational job.
+- `download_documents`: default `false`; raw extraction discovers document URLs
+  and leaves file transfer to the document/media hydrators unless this is
+  explicitly enabled.
 - `download_all_project_docs`
 - `try_matrix_availability`
 - `allowed_document_hosts`
@@ -65,6 +67,8 @@ Archive knobs:
 Hydration knobs:
 
 - `manifest_prefix`
+- `manifest_keys`
+- `latest_manifest_count`
 - `target_prefix`
 - `inventory_prefix`
 - `max_assets_per_run`
@@ -76,4 +80,7 @@ Hydration knobs:
 
 The archive scrape is chunked and checkpointed. The hydration jobs are
 idempotent and upload per asset, so they are better suited for long media
-backfills than source scrapes that only upload at the end.
+backfills than source scrapes that only upload at the end. The scheduled catalog
+delta runs raw extraction together with document and project-media hydration,
+limiting hydration to the latest raw manifest, then selecting missing assets
+before applying the per-run limit.

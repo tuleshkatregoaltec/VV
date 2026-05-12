@@ -9,15 +9,19 @@ import pytest
 from dagster import Failure
 
 from holocron.contracts import RawRelease
-from holocron.orchestration.factory import (
-    _raw_release_file_path,
-    _resolve_reelly_archive_config,
-    _write_reelly_archive_checkpoint,
-)
+from holocron.orchestration.factory import _raw_release_file_path
 from holocron.platform.checkpoints import checkpoint_s3_key
 from holocron.sources import REELLY_SUPPLY_SOURCE, registry
+from holocron.sources.reelly_supply.orchestration import (
+    resolve_archive_config,
+    write_archive_checkpoint,
+)
 from holocron.sources.reelly_supply.extract import (
     DocumentDownload,
+    _fingerprint_payload,
+    _has_matrix_signal,
+    _matrix_candidates,
+    _matrix_payload_error,
     _validate_document_url,
     extract_release,
 )
@@ -33,6 +37,7 @@ class FakeReellyApi:
         details: dict[Any, dict[str, Any]] | None = None,
         documents: dict[Any, dict[str, Any] | list[Any] | Exception] | None = None,
         downloads: dict[str, bytes | Exception] | None = None,
+        matrix_responses: dict[tuple[str, Any], dict[str, Any] | Exception] | None = None,
         matrix_errors: bool = False,
     ) -> None:
         self.page_total = page_total
@@ -40,6 +45,7 @@ class FakeReellyApi:
         self.details = details or {}
         self.documents = documents or {}
         self.downloads = downloads or {}
+        self.matrix_responses = matrix_responses or {}
         self.matrix_errors = matrix_errors
         self.auth_calls: list[tuple[str, str]] = []
         self.current_user_calls = 0
@@ -86,6 +92,11 @@ class FakeReellyApi:
         self.matrix_calls.append((endpoint, identifier))
         if self.matrix_errors:
             raise RuntimeError("matrix unavailable")
+        payload = self.matrix_responses.get((endpoint, identifier))
+        if isinstance(payload, Exception):
+            raise payload
+        if payload is not None:
+            return payload
         return {"endpoint": endpoint, "identifier": identifier, "units": []}
 
     def download_document(self, url: str, *, max_bytes: int) -> DocumentDownload:
@@ -124,7 +135,7 @@ def test_reelly_supply_config_defaults_to_bounded_daily_batch() -> None:
     assert config.start_page == 1
     assert config.page_cursor is None
     assert config.max_pages is None
-    assert config.download_documents is True
+    assert config.download_documents is False
     assert config.download_all_project_docs is True
     assert config.max_document_mb == 100
     assert "api.reelly.io" in config.allowed_document_hosts
@@ -134,7 +145,7 @@ def test_reelly_supply_config_defaults_to_bounded_daily_batch() -> None:
 
 
 def test_reelly_supply_config_accepts_comma_separated_sale_statuses() -> None:
-    config = ReellySupplyConfig(sale_statuses="start_of_sales,on_sale")
+    config = ReellySupplyConfig.model_validate({"sale_statuses": "start_of_sales,on_sale"})
 
     assert config.sale_statuses == ("start_of_sales", "on_sale")
 
@@ -200,7 +211,7 @@ def test_raw_release_file_path_preserves_document_subdirectories(tmp_path: Path)
 def test_reelly_archive_checkpoint_starts_without_cursor_when_empty() -> None:
     s3 = FakeCheckpointS3()
 
-    config = _resolve_reelly_archive_config(source_config={}, s3_client=s3)
+    config = resolve_archive_config(source_config={}, s3_client=s3)
 
     assert "page_cursor" not in config
 
@@ -212,7 +223,7 @@ def test_reelly_archive_checkpoint_resumes_from_next_page() -> None:
         "completed": False,
     }
 
-    config = _resolve_reelly_archive_config(source_config={}, s3_client=s3)
+    config = resolve_archive_config(source_config={}, s3_client=s3)
 
     assert config["page_cursor"] == 6
 
@@ -220,7 +231,7 @@ def test_reelly_archive_checkpoint_resumes_from_next_page() -> None:
 def test_reelly_archive_checkpoint_write_advances_cursor_and_marks_completion() -> None:
     s3 = FakeCheckpointS3()
 
-    _write_reelly_archive_checkpoint(
+    write_archive_checkpoint(
         raw_release=_raw_reelly_release(
             run_id="run-1",
             metadata={
@@ -241,7 +252,7 @@ def test_reelly_archive_checkpoint_write_advances_cursor_and_marks_completion() 
     assert checkpoint["page_total"] == 20
     assert checkpoint["updated_at"]
 
-    _write_reelly_archive_checkpoint(
+    write_archive_checkpoint(
         raw_release=_raw_reelly_release(
             run_id="run-2",
             metadata={
@@ -268,9 +279,9 @@ def test_reelly_archive_checkpoint_blocks_completed_rerun_unless_reset() -> None
     }
 
     with pytest.raises(Failure, match="checkpoint is already completed"):
-        _resolve_reelly_archive_config(source_config={}, s3_client=s3)
+        resolve_archive_config(source_config={}, s3_client=s3)
 
-    config = _resolve_reelly_archive_config(
+    config = resolve_archive_config(
         source_config={"reset_checkpoint": True},
         s3_client=s3,
     )
@@ -309,6 +320,121 @@ def test_reelly_supply_default_fetches_five_list_pages(tmp_path: Path) -> None:
     assert release.metadata["next_page"] == 6
     assert release.metadata["page_total"] == 10
     assert release.metadata["batch_completed_result_set"] is False
+
+
+def test_reelly_catalog_delta_bootstrap_fetches_list_only_and_writes_state(
+    tmp_path: Path,
+) -> None:
+    api_client = FakeReellyApi(
+        page_total=1,
+        items_by_page={1: [{"id": 101, "Project_name": "One"}]},
+    )
+
+    release = extract_release(
+        tmp_path,
+        config=ReellySupplyConfig(
+            mode="catalog_delta",
+            pages_per_run=10,
+            download_documents=False,
+            try_matrix_availability=False,
+        ),
+        now=datetime(2026, 5, 2, 16, 0, tzinfo=UTC),
+        api_client=api_client,
+        state_store=FakeCheckpointS3(),
+    )
+
+    assert [call[0] for call in api_client.list_calls] == [1]
+    assert api_client.detail_calls == []
+    assert api_client.document_calls == []
+    assert release.metadata["mode"] == "catalog_delta"
+    assert release.metadata["selected_project_count"] == 0
+    state_update = release.metadata["_state_updates"][0]
+    state = json.loads(Path(state_update["path"]).read_text(encoding="utf-8"))
+    assert state["projects"]["101"]["list_item"]["Project_name"] == "One"
+
+
+def test_reelly_catalog_delta_fetches_only_new_and_changed_project_details(
+    tmp_path: Path,
+) -> None:
+    unchanged = {"id": 101, "Project_name": "One"}
+    changed = {"id": 102, "Project_name": "Two changed"}
+    s3 = FakeCheckpointS3()
+    s3.objects[ReellySupplyConfig().catalog_state_key] = {
+        "version": 1,
+        "projects": {
+            "101": {"list_fingerprint": _fingerprint_payload(unchanged)},
+            "102": {"list_fingerprint": "old"},
+        },
+    }
+    api_client = FakeReellyApi(
+        page_total=1,
+        items_by_page={1: [unchanged, changed, {"id": 103, "Project_name": "Three"}]},
+        details={
+            102: {"id": 102, "Project_name": "Two changed", "Last_Modified": "2026-05-02"},
+            103: {"id": 103, "Project_name": "Three", "Last_Modified": "2026-05-02"},
+        },
+    )
+
+    release = extract_release(
+        tmp_path,
+        config=ReellySupplyConfig(
+            mode="catalog_delta",
+            pages_per_run=1,
+            detail_audit_limit=0,
+            fetch_documents_for_delta=False,
+            try_matrix_availability=False,
+        ),
+        now=datetime(2026, 5, 2, 16, 0, tzinfo=UTC),
+        api_client=api_client,
+        state_store=s3,
+    )
+
+    assert api_client.detail_calls == [102, 103]
+    assert api_client.document_calls == []
+    assert release.metadata["delta_reason_counts"] == {
+        "unchanged": 1,
+        "list_changed": 1,
+        "new": 1,
+    }
+
+
+def test_reelly_availability_delta_uses_catalog_state_without_project_list_or_details(
+    tmp_path: Path,
+) -> None:
+    s3 = FakeCheckpointS3()
+    s3.objects[ReellySupplyConfig().catalog_state_key] = {
+        "version": 1,
+        "projects": {
+            "101": {
+                "project_id": 101,
+                "project_availability_id": "avail-101",
+                "list_item": {"id": 101, "project_availability_id": "avail-101"},
+            },
+            "102": {"project_id": 102, "list_item": {"id": 102}},
+        },
+    }
+    api_client = FakeReellyApi(
+        matrix_responses={
+            ("floors", "avail-101"): {"availability": [], "building": {"id": "avail-101"}}
+        }
+    )
+
+    release = extract_release(
+        tmp_path,
+        config=ReellySupplyConfig(
+            mode="availability_delta",
+            matrix_endpoints=("floors",),
+        ),
+        now=datetime(2026, 5, 2, 16, 0, tzinfo=UTC),
+        api_client=api_client,
+        state_store=s3,
+    )
+
+    assert api_client.list_calls == []
+    assert api_client.detail_calls == []
+    assert api_client.matrix_calls == [("floors", "avail-101")]
+    assert release.metadata["candidate_project_count"] == 1
+    assert release.metadata["matrix_attempt_count"] == 1
 
 
 def test_reelly_supply_cursor_metadata_wraps_after_last_page(tmp_path: Path) -> None:
@@ -389,6 +515,7 @@ def test_reelly_supply_discovers_and_downloads_project_documents(tmp_path: Path)
             email="agent@example.com",
             password="secret",
             pages_per_run=1,
+            download_documents=True,
             allowed_document_hosts=(
                 "api.reelly.io",
                 "drive.google.com",
@@ -411,6 +538,41 @@ def test_reelly_supply_discovers_and_downloads_project_documents(tmp_path: Path)
     downloaded_paths = {row.get("downloaded_path") for row in rows if row["status"] == "downloaded"}
     assert all(path and path.startswith("documents/501/") for path in downloaded_paths)
     assert any(Path(file.path).parent.name == "501" for file in release.files)
+
+
+def test_reelly_supply_records_invalid_project_document_urls(tmp_path: Path) -> None:
+    api_client = FakeReellyApi(
+        page_total=1,
+        items_by_page={1: [{"id": 501}]},
+        details={
+            501: {
+                "id": 501,
+                "Project_name": "Project 501",
+                "Brochure": "https://evil.reelly.test/brochure.pdf",
+            }
+        },
+    )
+
+    extract_release(
+        tmp_path,
+        config=ReellySupplyConfig(
+            email="agent@example.com",
+            password="secret",
+            pages_per_run=1,
+            try_matrix_availability=False,
+            allowed_document_hosts=("drive.google.com",),
+        ),
+        now=datetime(2026, 5, 2, 16, 0, tzinfo=UTC),
+        api_client=api_client,
+    )
+
+    rows = _read_jsonl(tmp_path / "reelly_supply_project_documents.jsonl")
+
+    assert len(rows) == 1
+    assert rows[0]["status"] == "validation_error"
+    assert rows[0]["normalized_url"] == ""
+    assert rows[0]["error"] == "document host is not allowlisted: evil.reelly.test"
+    assert api_client.download_calls == []
 
 
 def test_reelly_supply_records_matrix_failures_without_failing(tmp_path: Path) -> None:
@@ -442,6 +604,78 @@ def test_reelly_supply_records_matrix_failures_without_failing(tmp_path: Path) -
     assert api_client.matrix_calls
     assert rows
     assert {row["status"] for row in rows} == {"error"}
+
+
+def test_reelly_supply_records_matrix_api_error_payloads_without_fallback(tmp_path: Path) -> None:
+    api_client = FakeReellyApi(
+        page_total=1,
+        items_by_page={1: [{"id": 701}]},
+        details={
+            701: {
+                "id": 701,
+                "Project_name": "Matrix Project",
+                "project_availability_id": "bad-matrix-id",
+                "project_api": "ignored-matrix-id",
+                "units_in_sale": 4,
+            }
+        },
+        matrix_responses={
+            (
+                "floors",
+                "bad-matrix-id",
+            ): {
+                "building": "[Line 2:Char 15] r.filter is not a function",
+                "availability": "[Line 2:Char 15] t.filter is not a function",
+            },
+            ("floors", "ignored-matrix-id"): {"building": [], "availability": []},
+        },
+    )
+
+    extract_release(
+        tmp_path,
+        config=ReellySupplyConfig(
+            email="agent@example.com",
+            password="secret",
+            pages_per_run=1,
+            matrix_endpoints=("floors",),
+        ),
+        now=datetime(2026, 5, 2, 16, 0, tzinfo=UTC),
+        api_client=api_client,
+    )
+
+    rows = _read_jsonl(tmp_path / "reelly_supply_matrix_availability.jsonl")
+
+    assert [call[1] for call in api_client.matrix_calls] == ["bad-matrix-id"]
+    assert [row["status"] for row in rows] == ["api_error"]
+    assert "not a function" in rows[0]["error"]
+
+
+def test_reelly_matrix_signal_and_candidates_only_use_availability_id() -> None:
+    project = {
+        "Project_name": "No Matrix Project",
+        "project_availability_id": "0",
+        "project_api": "matrix-api",
+        "units_in_sale": 4,
+    }
+
+    assert _has_matrix_signal(project) is False
+
+    project["project_availability_id"] = "matrix-availability-id"
+
+    assert _has_matrix_signal(project) is True
+    assert _matrix_candidates(project_id=701, project=project) == ["matrix-availability-id"]
+
+
+def test_reelly_matrix_payload_error_detects_xano_script_error_strings() -> None:
+    error = _matrix_payload_error(
+        {
+            "building": "[Line 2:Char 15] r.filter is not a function",
+            "availability": "[Line 2:Char 15] Cannot read properties of undefined",
+        }
+    )
+
+    assert "building" in error
+    assert "availability" in error
 
 
 def _read_jsonl(path: Path) -> list[dict[str, Any]]:

@@ -2,22 +2,34 @@
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import logging
 import time
 from collections import Counter
 from collections.abc import Mapping, Sequence
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from datetime import datetime
+from functools import partial
 from pathlib import Path
 from typing import Any, Protocol
 
 import httpx
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import Field, model_validator
 
 from holocron.platform.execution import new_run_id, utc_now
+from holocron.platform.hydration import (
+    finalize_hydration_inventory,
+    format_bytes,
+    hydrate_assets_in_order,
+    partition_hydration_assets_by_existing,
+    public_url_for_key,
+    read_manifest_jsonl_rows,
+    select_manifest_keys,
+    string_value,
+)
+from holocron.pydantic_helpers import CsvTuple, HolocronModel, NonBlankStr
 from holocron.sources.reelly_supply.extract import (
     DocumentDownload,
     DocumentTooLargeError,
@@ -32,20 +44,22 @@ from holocron.sources.reelly_supply.source import REELLY_DEFAULT_ALLOWED_DOCUMEN
 
 logger = logging.getLogger(__name__)
 
+_PROGRESS_LOG_INTERVAL = 25
+
 _DOCUMENTS_FILE_NAME = "reelly_supply_project_documents.jsonl"
 _PROJECT_DETAILS_FILE_NAME = "reelly_supply_project_details.jsonl"
 _INVENTORY_FILE_NAME = "reelly_supply_document_assets.jsonl"
 
 
-class ReellyDocumentAssetHydrationConfig(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    manifest_prefix: str = "raw/source=reelly_supply/manifests/"
-    target_prefix: str = "media/reelly_supply/documents"
-    inventory_prefix: str = "raw/source=reelly_supply/document_asset_manifests"
+class ReellyDocumentAssetHydrationConfig(HolocronModel):
+    manifest_prefix: NonBlankStr = "raw/source=reelly_supply/manifests/"
+    manifest_keys: CsvTuple = ()
+    latest_manifest_count: int | None = Field(default=None, ge=1)
+    target_prefix: NonBlankStr = "media/reelly_supply/documents"
+    inventory_prefix: NonBlankStr = "raw/source=reelly_supply/document_asset_manifests"
     max_assets_per_run: int = Field(default=500, ge=1)
     overwrite_existing: bool = False
-    allowed_document_hosts: tuple[str, ...] = REELLY_DEFAULT_ALLOWED_DOCUMENT_HOSTS
+    allowed_document_hosts: CsvTuple = REELLY_DEFAULT_ALLOWED_DOCUMENT_HOSTS
     max_document_mb: int = Field(default=100, ge=1)
     request_pause_seconds: float = Field(default=0, ge=0)
     timeout_seconds: float = Field(default=60, ge=1)
@@ -53,46 +67,18 @@ class ReellyDocumentAssetHydrationConfig(BaseModel):
     include_project_documents: bool = True
     include_project_detail_media: bool = False
     structured_target_keys: bool = False
-    asset_type_allowlist: tuple[str, ...] = ()
-    inventory_file_name: str = _INVENTORY_FILE_NAME
-
-    @field_validator("allowed_document_hosts", mode="before")
-    @classmethod
-    def coerce_allowed_document_hosts(cls, value: object) -> object:
-        if isinstance(value, str):
-            return tuple(host.strip() for host in value.split(",") if host.strip())
-        return value
-
-    @field_validator("asset_type_allowlist", mode="before")
-    @classmethod
-    def coerce_asset_type_allowlist(cls, value: object) -> object:
-        if isinstance(value, str):
-            return tuple(
-                asset_type.strip() for asset_type in value.split(",") if asset_type.strip()
-            )
-        return value
+    asset_type_allowlist: CsvTuple = ()
+    inventory_file_name: NonBlankStr = _INVENTORY_FILE_NAME
 
     @model_validator(mode="after")
     def validate_config(self) -> "ReellyDocumentAssetHydrationConfig":
-        if not self.manifest_prefix.strip():
-            raise ValueError("manifest_prefix must not be blank")
-        if not self.target_prefix.strip():
-            raise ValueError("target_prefix must not be blank")
-        if not self.inventory_prefix.strip():
-            raise ValueError("inventory_prefix must not be blank")
         if not self.allowed_document_hosts:
             raise ValueError("allowed_document_hosts must include at least one host")
-        if any(not host.strip() for host in self.allowed_document_hosts):
-            raise ValueError("allowed_document_hosts must not include blank hosts")
         if not self.include_project_documents and not self.include_project_detail_media:
             raise ValueError(
                 "at least one of include_project_documents or include_project_detail_media "
                 "must be true"
             )
-        if not self.inventory_file_name.strip():
-            raise ValueError("inventory_file_name must not be blank")
-        if any(not asset_type.strip() for asset_type in self.asset_type_allowlist):
-            raise ValueError("asset_type_allowlist must not include blank asset types")
         return self
 
 
@@ -143,27 +129,32 @@ def hydrate_reelly_document_assets(
 
     source_rows = _load_manifest_asset_rows(s3=s3, config=parsed_config)
     planned_assets = _plan_document_assets(source_rows, config=parsed_config)
-    selected_assets = planned_assets[: parsed_config.max_assets_per_run]
+    selected_assets, skipped_existing_assets = partition_hydration_assets_by_existing(
+        planned_assets=planned_assets,
+        object_exists=lambda key: s3.object_exists(key=key),
+        overwrite_existing=parsed_config.overwrite_existing,
+        max_assets_per_run=parsed_config.max_assets_per_run,
+    )
+    skipped_existing = len(skipped_existing_assets)
     _log_info(
         log,
         (
             "reelly_supply: hydrating document assets manifests=%s discovered=%s "
-            "selected=%s max_assets_per_run=%s overwrite_existing=%s "
+            "selected=%s skipped_existing=%s max_assets_per_run=%s overwrite_existing=%s "
             "max_concurrent_downloads=%s"
         ),
         len({row.source_manifest_key for row in source_rows}),
         len(planned_assets),
         len(selected_assets),
+        skipped_existing,
         parsed_config.max_assets_per_run,
         parsed_config.overwrite_existing,
         parsed_config.max_concurrent_downloads,
     )
 
-    if download_client is None:
-        with httpx.Client(
-            timeout=parsed_config.timeout_seconds,
-            follow_redirects=True,
-        ) as client:
+    with contextlib.ExitStack() as stack:
+        if download_client is None:
+            client = stack.enter_context(httpx.Client(timeout=parsed_config.timeout_seconds))
             download_client = ReellySupplyApiClient(
                 client=client,
                 base_url="",
@@ -171,17 +162,7 @@ def hydrate_reelly_document_assets(
                 availability_base_url="",
                 allowed_document_hosts=parsed_config.allowed_document_hosts,
             )
-            inventory_rows = _hydrate_planned_assets(
-                s3=s3,
-                planned_assets=selected_assets,
-                config=parsed_config,
-                download_client=download_client,
-                run_id=run_id,
-                created_at=current_time.isoformat(),
-                progress_log=log,
-            )
-    else:
-        inventory_rows = _hydrate_planned_assets(
+        hydrated_rows = _hydrate_planned_assets(
             s3=s3,
             planned_assets=selected_assets,
             config=parsed_config,
@@ -190,61 +171,41 @@ def hydrate_reelly_document_assets(
             created_at=current_time.isoformat(),
             progress_log=log,
         )
-
-    inventory_key = _inventory_key(
-        prefix=parsed_config.inventory_prefix,
+    result = finalize_hydration_inventory(
+        s3=s3,
         run_id=run_id,
-        file_name=parsed_config.inventory_file_name,
+        created_at=current_time.isoformat(),
+        manifest_prefix=parsed_config.manifest_prefix,
+        target_prefix=parsed_config.target_prefix,
+        inventory_prefix=parsed_config.inventory_prefix,
+        inventory_file_name=parsed_config.inventory_file_name,
+        source_manifest_count=len({row.source_manifest_key for row in source_rows}),
+        source_row_count=len(source_rows),
+        planned_assets=planned_assets,
+        skipped_existing_assets=skipped_existing_assets,
+        hydrated_rows=hydrated_rows,
+        skipped_existing_row_builder=partial(
+            _base_inventory_row,
+            run_id=run_id,
+            created_at=current_time.isoformat(),
+            s3=s3,
+        ),
+        sanitize_run_id=False,
+        extra_result={"max_concurrent_downloads": parsed_config.max_concurrent_downloads},
     )
-    s3.put_bytes(
-        key=inventory_key,
-        payload=_jsonl_bytes(inventory_rows),
-        content_type="application/x-ndjson",
-    )
-
-    status_counts = Counter(str(row.get("status")) for row in inventory_rows)
-    error_count = sum(
-        status_counts[status]
-        for status in ("download_error", "validation_error", "too_large", "missing_url")
-    )
-    total_bytes = sum(
-        int(row.get("size_bytes") or 0)
-        for row in inventory_rows
-        if row.get("status") == "downloaded"
-    )
-    result = {
-        "run_id": run_id,
-        "created_at": current_time.isoformat(),
-        "manifest_prefix": parsed_config.manifest_prefix,
-        "target_prefix": parsed_config.target_prefix,
-        "inventory_prefix": parsed_config.inventory_prefix,
-        "inventory_manifest_key": inventory_key,
-        "source_manifest_count": len({row.source_manifest_key for row in source_rows}),
-        "source_row_count": len(source_rows),
-        "source_document_row_count": len(source_rows),
-        "discovered": len(planned_assets),
-        "attempted": len(inventory_rows),
-        "downloaded": status_counts["downloaded"],
-        "already_exists": status_counts["already_exists"],
-        "already_existing": status_counts["already_exists"],
-        "errors": error_count,
-        "total_bytes": total_bytes,
-        "status_counts": dict(status_counts),
-        "max_concurrent_downloads": parsed_config.max_concurrent_downloads,
-    }
     _log_info(
         log,
         (
             "reelly_supply: completed document asset hydration run_id=%s attempted=%s "
-            "downloaded=%s already_existing=%s errors=%s bytes=%s inventory_key=%s"
+            "downloaded=%s already_exists=%s errors=%s bytes=%s inventory_key=%s"
         ),
         run_id,
         result["attempted"],
         result["downloaded"],
-        result["already_existing"],
+        result["already_exists"],
         result["errors"],
-        total_bytes,
-        inventory_key,
+        result["total_bytes"],
+        result["inventory_manifest_key"],
     )
     return result
 
@@ -264,11 +225,16 @@ def _load_manifest_asset_rows(
     config: ReellyDocumentAssetHydrationConfig,
 ) -> list[ManifestDocumentRow]:
     rows: list[ManifestDocumentRow] = []
-    for manifest_key in sorted(s3.list_keys(prefix=config.manifest_prefix)):
+    manifest_keys = select_manifest_keys(
+        listed_keys=s3.list_keys(prefix=config.manifest_prefix),
+        explicit_keys=config.manifest_keys,
+        latest_count=config.latest_manifest_count,
+    )
+    for manifest_key in manifest_keys:
         manifest = json.loads(s3.read_text(key=manifest_key))
         if not isinstance(manifest, dict):
             raise ValueError(f"Reelly raw manifest must be an object: {manifest_key}")
-        run_id = _string_value(manifest.get("run_id"))
+        run_id = string_value(manifest.get("run_id"))
         if config.include_project_documents:
             rows.extend(
                 _load_manifest_jsonl_rows(
@@ -307,23 +273,17 @@ def _load_manifest_jsonl_rows(
     file_name: str,
     strict: bool,
 ) -> list[ManifestDocumentRow]:
-    file_entry = _manifest_file_entry(manifest, file_name)
-    if file_entry is None:
-        return []
-    source_document_key = _string_value(file_entry.get("s3_key"))
-    if not source_document_key:
-        raise ValueError(f"Reelly file entry is missing s3_key: {manifest_key} {file_name}")
-    parsed_rows = _read_jsonl_rows(
-        text=s3.read_text(key=source_document_key),
-        source_key=source_document_key,
+    source_document_key, parsed_rows = read_manifest_jsonl_rows(
+        s3=s3,
+        manifest=manifest,
+        manifest_key=manifest_key,
+        file_name=file_name,
+        provider_label="Reelly",
+        row_label="Reelly document row",
         strict=strict,
     )
-    expected_count = file_entry.get("row_count")
-    if strict and expected_count is not None and int(expected_count) != len(parsed_rows):
-        raise ValueError(
-            f"Reelly row_count mismatch for {source_document_key}: "
-            f"manifest={expected_count} actual={len(parsed_rows)}"
-        )
+    if not source_document_key:
+        return []
     rows: list[ManifestDocumentRow] = []
     for line_number, row in parsed_rows:
         rows.append(
@@ -372,7 +332,8 @@ def _project_detail_media_rows(
                         "url": document.url,
                         "normalized_url": document.normalized_url,
                         "raw": document.raw,
-                        "status": "discovered",
+                        "status": document.status,
+                        "error": document.error,
                         "source_row_type": "project_details",
                         "source_detail_line": detail_row.line_number,
                         "source_detail_media_index": index,
@@ -392,14 +353,14 @@ def _plan_document_assets(
     asset_type_allowlist = set(config.asset_type_allowlist)
     for source_row in source_rows:
         row = source_row.row
-        project_id = _string_value(row.get("project_id"))
-        name = _string_value(row.get("name"))
-        field_path = _string_value(row.get("field_path"))
+        project_id = string_value(row.get("project_id"))
+        name = string_value(row.get("name"))
+        field_path = string_value(row.get("field_path"))
         asset_type = _asset_type_for_row(row)
         if asset_type_allowlist and asset_type not in asset_type_allowlist:
             continue
-        source_url = _string_value(row.get("url"))
-        candidate_url = _string_value(row.get("normalized_url")) or source_url
+        source_url = string_value(row.get("url"))
+        candidate_url = string_value(row.get("normalized_url")) or source_url
 
         if not candidate_url:
             planned_assets.append(
@@ -495,10 +456,8 @@ def _hydrate_planned_assets(
     created_at: str,
     progress_log: Any,
 ) -> list[dict[str, Any]]:
-    status_counts: Counter[str] = Counter()
     max_bytes = config.max_document_mb * 1024 * 1024
     total_assets = len(planned_assets)
-    downloaded_bytes = 0
     if total_assets == 0:
         return []
 
@@ -511,93 +470,62 @@ def _hydrate_planned_assets(
             total_assets,
         )
 
-    if worker_count == 1:
-        inventory_rows: list[dict[str, Any]] = []
-        for index, planned_asset in enumerate(planned_assets, start=1):
-            inventory_row = _hydrate_single_planned_asset(
-                s3=s3,
-                planned_asset=planned_asset,
-                config=config,
-                download_client=download_client,
-                max_bytes=max_bytes,
-                run_id=run_id,
-                created_at=created_at,
-                progress_log=progress_log,
-                index=index,
-                total=total_assets,
-            )
-            inventory_rows.append(inventory_row)
-            downloaded_bytes += _inventory_row_downloaded_bytes(inventory_row)
-            status_counts[str(inventory_row["status"])] += 1
-            _log_hydration_progress(
-                progress_log,
-                index=index,
-                total=total_assets,
-                status_counts=status_counts,
-                downloaded_bytes=downloaded_bytes,
-            )
-        return inventory_rows
+    def hydrate_one(index: int, planned_asset: PlannedDocumentAsset) -> dict[str, Any]:
+        return _hydrate_single_planned_asset(
+            s3=s3,
+            planned_asset=planned_asset,
+            config=config,
+            download_client=download_client,
+            max_bytes=max_bytes,
+            run_id=run_id,
+            created_at=created_at,
+            progress_log=progress_log,
+            index=index,
+            total=total_assets,
+        )
 
-    rows_by_index: dict[int, dict[str, Any]] = {}
-    assets_by_index = dict(enumerate(planned_assets, start=1))
-    with ThreadPoolExecutor(
-        max_workers=worker_count,
+    def failure_row(
+        index: int,
+        planned_asset: PlannedDocumentAsset,
+        exc: Exception,
+    ) -> dict[str, Any]:
+        inventory_row = _base_inventory_row(
+            planned_asset=planned_asset,
+            run_id=run_id,
+            created_at=created_at,
+            s3=s3,
+        )
+        inventory_row.update({"status": "download_error", "error": str(exc)})
+        _log_warning(
+            progress_log,
+            (
+                "reelly_supply: document asset worker failed asset_index=%s/%s "
+                "project_id=%s target_key=%s error=%s"
+            ),
+            index,
+            total_assets,
+            planned_asset.project_id,
+            planned_asset.target_key,
+            exc,
+        )
+        return inventory_row
+
+    return hydrate_assets_in_order(
+        planned_assets=planned_assets,
+        worker_count=worker_count,
         thread_name_prefix="reelly-document-assets",
-    ) as executor:
-        future_to_index = {
-            executor.submit(
-                _hydrate_single_planned_asset,
-                s3=s3,
-                planned_asset=planned_asset,
-                config=config,
-                download_client=download_client,
-                max_bytes=max_bytes,
-                run_id=run_id,
-                created_at=created_at,
-                progress_log=progress_log,
-                index=index,
-                total=total_assets,
-            ): index
-            for index, planned_asset in assets_by_index.items()
-        }
-        for completed_count, future in enumerate(as_completed(future_to_index), start=1):
-            index = future_to_index[future]
-            try:
-                inventory_row = future.result()
-            except Exception as exc:  # noqa: BLE001
-                planned_asset = assets_by_index[index]
-                inventory_row = _base_inventory_row(
-                    planned_asset=planned_asset,
-                    run_id=run_id,
-                    created_at=created_at,
-                    s3=s3,
-                )
-                inventory_row.update({"status": "download_error", "error": str(exc)})
-                _log_warning(
-                    progress_log,
-                    (
-                        "reelly_supply: document asset worker failed completed=%s/%s "
-                        "asset_index=%s project_id=%s target_key=%s error=%s"
-                    ),
-                    completed_count,
-                    total_assets,
-                    index,
-                    planned_asset.project_id,
-                    planned_asset.target_key,
-                    exc,
-                )
-            rows_by_index[index] = inventory_row
-            downloaded_bytes += _inventory_row_downloaded_bytes(inventory_row)
-            status_counts[str(inventory_row["status"])] += 1
+        hydrate_one=hydrate_one,
+        failure_row=failure_row,
+        on_progress=lambda completed, _row, status_counts, downloaded_bytes: (
             _log_hydration_progress(
                 progress_log,
-                index=completed_count,
+                index=completed,
                 total=total_assets,
                 status_counts=status_counts,
                 downloaded_bytes=downloaded_bytes,
             )
-
-    return [rows_by_index[index] for index in range(1, total_assets + 1)]
+        ),
+    )
 
 
 def _hydrate_single_planned_asset(
@@ -734,54 +662,9 @@ def _hydrate_single_planned_asset(
     return inventory_row
 
 
-def _inventory_row_downloaded_bytes(inventory_row: Mapping[str, Any]) -> int:
-    if inventory_row.get("status") != "downloaded":
-        return 0
-    return int(inventory_row.get("size_bytes") or 0)
-
-
-def _document_file_entry(manifest: Mapping[str, Any]) -> dict[str, Any] | None:
-    return _manifest_file_entry(manifest, _DOCUMENTS_FILE_NAME)
-
-
-def _manifest_file_entry(manifest: Mapping[str, Any], file_name: str) -> dict[str, Any] | None:
-    files = manifest.get("files")
-    if not isinstance(files, list):
-        raise ValueError("Reelly raw manifest files must be a list")
-    for item in files:
-        if not isinstance(item, dict):
-            raise ValueError("Reelly raw manifest files must contain objects")
-        if Path(_string_value(item.get("path"))).name == file_name:
-            return item
-    return None
-
-
-def _read_jsonl_rows(
-    *,
-    text: str,
-    source_key: str,
-    strict: bool = True,
-) -> list[tuple[int, dict[str, Any]]]:
-    rows: list[tuple[int, dict[str, Any]]] = []
-    for line_number, line in enumerate(text.splitlines(), start=1):
-        stripped = line.strip()
-        if not stripped:
-            continue
-        try:
-            payload = json.loads(stripped)
-        except json.JSONDecodeError:
-            if strict:
-                raise
-            continue
-        if not isinstance(payload, dict):
-            raise ValueError(f"Reelly document row must be an object: {source_key}:{line_number}")
-        rows.append((line_number, payload))
-    return rows
-
-
 def _base_inventory_row(
-    *,
     planned_asset: PlannedDocumentAsset,
+    *,
     run_id: str,
     created_at: str,
     s3: Any,
@@ -810,7 +693,7 @@ def _base_inventory_row(
         inventory_row["normalized_url"] = planned_asset.normalized_url
     if planned_asset.target_key:
         inventory_row["target_key"] = planned_asset.target_key
-        public_url = s3.public_url(key=planned_asset.target_key)
+        public_url = public_url_for_key(s3=s3, key=planned_asset.target_key)
         if public_url:
             inventory_row["public_url"] = public_url
     return inventory_row
@@ -841,8 +724,8 @@ def _target_key(
 
 
 def _asset_type_for_row(row: Mapping[str, Any]) -> str:
-    field_path = _string_value(row.get("field_path")).lower()
-    name = _string_value(row.get("name")).lower()
+    field_path = string_value(row.get("field_path")).lower()
+    name = string_value(row.get("name")).lower()
     combined = f"{field_path} {name}"
     if "brochure" in combined:
         return "brochure"
@@ -874,7 +757,7 @@ def _asset_type_for_row(row: Mapping[str, Any]) -> str:
         or "executive_sales" in field_path
     ):
         return "profile_image"
-    suffix = Path(_name_from_url_or_path(_string_value(row.get("normalized_url")), "")).suffix
+    suffix = Path(_name_from_url_or_path(string_value(row.get("normalized_url")), "")).suffix
     if suffix.lower() in {".jpg", ".jpeg", ".png", ".webp", ".gif", ".jfif"}:
         return "project_image"
     if suffix.lower() == ".pdf":
@@ -899,23 +782,6 @@ def _safe_target_file_name(*, name: str, normalized_url: str) -> str:
     return safe_name
 
 
-def _inventory_key(*, prefix: str, run_id: str, file_name: str) -> str:
-    return f"{prefix.rstrip('/')}/run_id={run_id}/{file_name}"
-
-
-def _jsonl_bytes(rows: Sequence[Mapping[str, Any]]) -> bytes:
-    lines = [json.dumps(row, ensure_ascii=False, separators=(",", ":")) for row in rows]
-    if not lines:
-        return b""
-    return ("\n".join(lines) + "\n").encode("utf-8")
-
-
-def _string_value(value: Any) -> str:
-    if value is None:
-        return ""
-    return str(value).strip()
-
-
 def _is_too_large_error(exc: BaseException) -> bool:
     return isinstance(exc, DocumentTooLargeError) or "exceeds max size" in str(exc).lower()
 
@@ -928,7 +794,7 @@ def _log_hydration_progress(
     status_counts: Counter[str],
     downloaded_bytes: int,
 ) -> None:
-    if not _should_log_hydration_progress(index=index, total=total):
+    if index != 1 and index != total and index % _PROGRESS_LOG_INTERVAL != 0:
         return
     _log_info(
         progress_log,
@@ -945,23 +811,8 @@ def _log_hydration_progress(
         status_counts["validation_error"],
         status_counts["download_error"],
         status_counts["too_large"],
-        _format_bytes(downloaded_bytes),
+        format_bytes(downloaded_bytes),
     )
-
-
-def _should_log_hydration_progress(*, index: int, total: int) -> bool:
-    return index == 1 or index == total or index % 25 == 0
-
-
-def _format_bytes(size_bytes: float | int) -> str:
-    size = float(size_bytes)
-    for unit in ("B", "KiB", "MiB", "GiB", "TiB"):
-        if size < 1024 or unit == "TiB":
-            if unit == "B":
-                return f"{int(size)} B"
-            return f"{size:.1f} {unit}"
-        size /= 1024
-    return f"{size:.1f} TiB"
 
 
 def _log_info(progress_log: Any, message: str, *args: Any) -> None:

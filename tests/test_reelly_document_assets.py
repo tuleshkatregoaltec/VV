@@ -15,31 +15,7 @@ from holocron.sources.reelly_supply.document_assets import (
     hydrate_reelly_document_assets,
 )
 from holocron.sources.reelly_supply.extract import DocumentDownload, DocumentTooLargeError
-
-
-class FakeS3:
-    def __init__(self, *, public_url_base: str = "https://cdn.example.test") -> None:
-        self.objects: dict[str, bytes] = {}
-        self.content_types: dict[str, str | None] = {}
-        self.public_url_base = public_url_base
-
-    def list_keys(self, *, prefix: str) -> list[str]:
-        return sorted(key for key in self.objects if key.startswith(prefix))
-
-    def read_text(self, *, key: str, encoding: str = "utf-8") -> str:
-        return self.objects[key].decode(encoding)
-
-    def put_bytes(self, *, key: str, payload: bytes, content_type: str | None = None) -> None:
-        self.objects[key] = payload
-        self.content_types[key] = content_type
-
-    def object_exists(self, *, key: str) -> bool:
-        return key in self.objects
-
-    def public_url(self, *, key: str) -> str | None:
-        if not self.public_url_base:
-            return None
-        return f"{self.public_url_base.rstrip('/')}/{key}"
+from tests.fakes import FakeS3, _jsonl_bytes
 
 
 class FakeDownloader:
@@ -177,8 +153,9 @@ def test_reelly_document_asset_skips_existing_objects_when_overwrite_is_false() 
 
     assert downloader.calls == []
     assert s3.objects[existing_key] == b"existing"
+    assert len(inventory_rows) == 1
     assert inventory_rows[0]["status"] == "already_exists"
-    assert inventory_rows[0]["target_key"] == existing_key
+    assert result["skipped_existing"] == 1
 
 
 def test_reelly_document_asset_inventory_records_success_and_failures() -> None:
@@ -233,13 +210,14 @@ def test_reelly_document_asset_inventory_records_success_and_failures() -> None:
     assert rows_by_project["ok"]["content_type"] == "application/pdf"
     assert rows_by_project["ok"]["public_url"].startswith("https://cdn.example.test/")
     assert s3.objects[rows_by_project["ok"]["target_key"]] == b"success"
-    assert rows_by_project["already"]["status"] == "already_exists"
     assert rows_by_project["bad"]["status"] == "validation_error"
+    assert rows_by_project["already"]["status"] == "already_exists"
     assert rows_by_project["missing"]["status"] == "missing_url"
     assert rows_by_project["fail"]["status"] == "download_error"
     assert rows_by_project["large"]["status"] == "too_large"
     assert result["downloaded"] == 1
-    assert result["already_existing"] == 1
+    assert result["skipped_existing"] == 1
+    assert result["already_exists"] == 1
     assert result["errors"] == 4
     assert result["total_bytes"] == 7
 
@@ -444,12 +422,6 @@ def _put_project_detail_manifest(
         }
     ).encode("utf-8")
     return manifest_key, detail_key
-
-
-def _jsonl_bytes(rows: list[dict[str, Any]]) -> bytes:
-    return ("\n".join(json.dumps(row, separators=(",", ":")) for row in rows) + "\n").encode(
-        "utf-8"
-    )
 
 
 def _inventory_rows(s3: FakeS3, key: str) -> list[dict[str, Any]]:
