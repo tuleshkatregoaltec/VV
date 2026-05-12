@@ -3,11 +3,8 @@ import json
 import pytest
 
 from holocron.platform.metadata import safe_config_metadata
-from holocron.sources.bay_listings.source import BayutListingsConfig
-from holocron.sources.bay_locations.source import BayutLocationsConfig
-from holocron.sources.bay_transactions.source import BayutTransactionsConfig
 from holocron.sources.dda.source import DdaConfig
-from holocron.sources.dld.source import DldConfig
+from holocron.sources.dld_open_data_shared import DldOpenDataConfig
 from holocron.sources.dxbi.source import DxbiConfig
 from holocron.sources.reelly_supply.source import ReellySupplyConfig
 
@@ -16,22 +13,7 @@ from holocron.sources.reelly_supply.source import ReellySupplyConfig
     ("config", "secret_values", "redacted_keys"),
     [
         (
-            BayutLocationsConfig(api_key="bay-locations-secret"),
-            ("bay-locations-secret",),
-            ("api_key",),
-        ),
-        (
-            BayutListingsConfig(api_key="bay-listings-secret"),
-            ("bay-listings-secret",),
-            ("api_key",),
-        ),
-        (
-            BayutTransactionsConfig(api_key="bay-transactions-secret"),
-            ("bay-transactions-secret",),
-            ("api_key",),
-        ),
-        (
-            DldConfig(consumer_id="dld-consumer-secret"),
+            DldOpenDataConfig(consumer_id="dld-consumer-secret"),
             ("dld-consumer-secret",),
             ("consumer_id",),
         ),

@@ -4,7 +4,6 @@ from dagster import (
     AssetsDefinition,
     ConfigMapping,
     DefaultScheduleStatus,
-    Failure,
     Field,
     JobDefinition,
     MaterializeResult,
@@ -16,21 +15,36 @@ from dagster import (
     asset,
     define_asset_job,
 )
+from dagster._core.definitions.unresolved_asset_job_definition import UnresolvedAssetJobDefinition
 
-from collections.abc import Mapping
+import json
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import Any
+from typing import Any, Protocol
 
 from holocron.contracts import RawRelease, SourceSpec
-from holocron.platform.checkpoints import read_checkpoint, write_checkpoint
-from holocron.platform.execution import utc_now
-from holocron.platform.manifests import manifest_s3_key, raw_file_s3_key
+from holocron.platform.manifests import manifest_s3_key, raw_file_s3_key, raw_manifest_is_smoke
 from holocron.platform.resources import ClickHouseResource, S3Resource
-from holocron.sources.bay_locations.source import DEFAULT_DUBAI_LOCATION_QUERIES
+from holocron.sources.dld_open_data_orchestration import (
+    DLD_OPEN_DATA_CHUNK_DEFAULTS,
+    DLD_OPEN_DATA_RENTS_FULL_DEFAULTS,
+    DLD_OPEN_DATA_RENTS_INCREMENTAL_DEFAULTS,
+    resolve_open_data_config,
+    write_open_data_checkpoint,
+)
 from holocron.sources.pf_listings.media_assets import (
     PropertyFinderListingMediaHydrationConfig,
     hydrate_pf_listing_media_assets,
+)
+from holocron.sources.pf_listings.orchestration import (
+    PF_LISTINGS_DETAIL_CHUNK_DEFAULTS,
+    PF_LISTINGS_LATEST_DELTA_DEFAULTS,
+    PF_LISTINGS_MANUAL_SNAPSHOT_DEFAULTS,
+    PF_LISTINGS_PLAN_DEFAULTS,
+    PF_LISTINGS_SEARCH_CHUNK_DEFAULTS,
+    resolve_listings_config,
+    write_listings_checkpoint,
 )
 from holocron.sources.news_feeds.assets import (
     NewsPublishConfig,
@@ -42,49 +56,44 @@ from holocron.sources.reelly_supply.document_assets import (
     ReellyDocumentAssetHydrationConfig,
     hydrate_reelly_document_assets,
 )
+from holocron.sources.reelly_supply.orchestration import (
+    REELLY_ARCHIVE_CHUNK_DEFAULTS,
+    REELLY_AVAILABILITY_DELTA_DEFAULTS,
+    REELLY_CATALOG_DELTA_DEFAULTS,
+    REELLY_PROJECT_MEDIA_DEFAULTS,
+    resolve_archive_config,
+    write_archive_checkpoint,
+)
 
 _DUBAI_TIMEZONE = "Asia/Dubai"
-_REELLY_ARCHIVE_OPERATION = "archive_chunk"
-_PF_LISTINGS_PLAN_OPERATION = "plan_snapshot"
-_PF_LISTINGS_SEARCH_OPERATION = "search_chunk"
-_PF_LISTINGS_DETAIL_OPERATION = "detail_chunk"
-_BAY_LOCATIONS_FULL_FETCH_DEFAULTS = {
-    "queries": list(DEFAULT_DUBAI_LOCATION_QUERIES),
-    "max_pages": 20,
-    "only_dubai": True,
-    "include_ancestors": True,
-    "stop_after_pages_without_new": 2,
+AssetJobDefinition = JobDefinition | UnresolvedAssetJobDefinition
+_NEWS_PROVIDER_GROUP = "news"
+_PROPERTYFINDER_PROVIDER_GROUP = "propertyfinder"
+_REELLY_PROVIDER_GROUP = "reelly"
+_DLD_OPEN_DATA_JOB_SPECS = (
+    ("transactions", "0 4 * * *", {"mode": "incremental"}, DLD_OPEN_DATA_CHUNK_DEFAULTS),
+    (
+        "rents",
+        "10 4 * * *",
+        DLD_OPEN_DATA_RENTS_INCREMENTAL_DEFAULTS,
+        DLD_OPEN_DATA_RENTS_FULL_DEFAULTS,
+    ),
+    ("projects", "20 4 * * *", {"mode": "incremental"}, DLD_OPEN_DATA_CHUNK_DEFAULTS),
+    ("valuations", "30 4 * * *", {"mode": "incremental"}, DLD_OPEN_DATA_CHUNK_DEFAULTS),
+    ("buildings", "40 4 * * *", {"mode": "incremental"}, DLD_OPEN_DATA_CHUNK_DEFAULTS),
+    ("developers", "50 4 * * *", {"mode": "incremental"}, DLD_OPEN_DATA_CHUNK_DEFAULTS),
+    ("lands", "10 5 * * *", {"mode": "incremental"}, DLD_OPEN_DATA_CHUNK_DEFAULTS),
+    ("units", "20 5 * * *", {"mode": "incremental"}, DLD_OPEN_DATA_CHUNK_DEFAULTS),
+    ("brokers", "30 5 * * *", {"mode": "incremental"}, DLD_OPEN_DATA_CHUNK_DEFAULTS),
+)
+_DLD_OPEN_DATA_SCHEDULE_SPECS = {
+    f"dld_od_{category}_daily_incremental": cron
+    for category, cron, _, _ in _DLD_OPEN_DATA_JOB_SPECS
 }
-_REELLY_ARCHIVE_CHUNK_DEFAULTS = {
-    "pages_per_run": 5,
-    "download_documents": False,
-    "download_all_project_docs": True,
-}
-_PF_LISTINGS_MANUAL_SNAPSHOT_DEFAULTS = {
-    "mode": "snapshot",
-    "max_planned_queries": 12000,
-    "max_search_pages_per_run": 50000,
-    "max_details_per_run": 100000,
-    "fetch_details": True,
-    "split_by_location": True,
-}
-_PF_LISTINGS_PLAN_DEFAULTS = {
-    "mode": "plan",
-    "max_planned_queries": 25000,
-    "max_results_per_query": 750,
-    "max_partition_depth": 10,
-    "split_by_location": True,
-}
-_PF_LISTINGS_SEARCH_CHUNK_DEFAULTS = {
-    "mode": "search",
-    "max_search_pages_per_run": 10000,
-    "fetch_details": False,
-}
-_PF_LISTINGS_DETAIL_CHUNK_DEFAULTS = {
-    "mode": "details",
-    "max_details_per_run": 25000,
-    "fetch_details": True,
-}
+
+
+class _ClientResource(Protocol):
+    def client(self) -> Any: ...
 
 
 def _raw_asset_name(source: SourceSpec) -> str:
@@ -95,215 +104,13 @@ def _bronze_asset_name(source: SourceSpec) -> str:
     return f"{source.name}_bronze"
 
 
-def _resolve_source_config(context: AssetExecutionContext) -> dict:
+def _get_source_config(context: AssetExecutionContext) -> dict:
     config = context.op_execution_context.op_config
     if config is None:
         return {}
     if not isinstance(config, dict):
         raise TypeError(f"Expected dict-like source config, got {type(config)!r}")
     return config
-
-
-def _resolve_reelly_archive_config(
-    *,
-    source_config: Mapping[str, Any],
-    s3_client: Any,
-) -> dict[str, Any]:
-    resolved_config = dict(source_config)
-    reset_checkpoint = bool(resolved_config.pop("reset_checkpoint", False))
-    checkpoint = read_checkpoint(
-        s3_client,
-        source="reelly_supply",
-        operation=_REELLY_ARCHIVE_OPERATION,
-    )
-    if checkpoint and checkpoint.get("completed") and not reset_checkpoint:
-        raise Failure(
-            description=(
-                "Reelly supply archive checkpoint is already completed. "
-                "Pass reset_checkpoint=true to run another archive pass."
-            ),
-            metadata={
-                "source": "reelly_supply",
-                "operation": _REELLY_ARCHIVE_OPERATION,
-            },
-        )
-
-    has_explicit_cursor = (
-        "page_cursor" in resolved_config and resolved_config["page_cursor"] is not None
-    )
-    if (
-        checkpoint
-        and not reset_checkpoint
-        and not has_explicit_cursor
-        and checkpoint.get("next_page") is not None
-    ):
-        resolved_config["page_cursor"] = checkpoint["next_page"]
-    return resolved_config
-
-
-def _resolve_pf_listings_config(
-    *,
-    source_config: Mapping[str, Any],
-    s3_client: Any,
-) -> dict[str, Any]:
-    resolved_config = dict(source_config)
-    reset_checkpoint = bool(resolved_config.pop("reset_checkpoint", False))
-    mode = str(resolved_config.get("mode") or "snapshot")
-
-    if mode == "search":
-        plan_manifest_key = str(resolved_config.get("plan_manifest_s3_key") or "").strip()
-        if not plan_manifest_key:
-            plan_checkpoint = read_checkpoint(
-                s3_client,
-                source="pf_listings",
-                operation=_PF_LISTINGS_PLAN_OPERATION,
-            )
-            plan_manifest_key = (
-                str(plan_checkpoint.get("last_manifest_s3_key") or "").strip()
-                if plan_checkpoint
-                else ""
-            )
-        if not plan_manifest_key:
-            raise Failure(
-                description=(
-                    "Property Finder search chunks require a completed planning manifest. "
-                    "Run pf_listings_plan_snapshot first or pass plan_manifest_s3_key."
-                ),
-                metadata={"source": "pf_listings", "operation": _PF_LISTINGS_SEARCH_OPERATION},
-            )
-        resolved_config["plan_manifest_s3_key"] = plan_manifest_key
-
-        has_explicit_cursor = (
-            "search_query_cursor" in source_config or "search_page_cursor" in source_config
-        )
-        checkpoint = read_checkpoint(
-            s3_client,
-            source="pf_listings",
-            operation=_PF_LISTINGS_SEARCH_OPERATION,
-        )
-        if (
-            checkpoint
-            and not reset_checkpoint
-            and checkpoint.get("plan_manifest_s3_key") == plan_manifest_key
-        ):
-            if checkpoint.get("completed"):
-                raise Failure(
-                    description=(
-                        "Property Finder search checkpoint is already completed for the "
-                        "current plan. Pass reset_checkpoint=true or run a new plan."
-                    ),
-                    metadata={
-                        "source": "pf_listings",
-                        "operation": _PF_LISTINGS_SEARCH_OPERATION,
-                        "plan_manifest_s3_key": plan_manifest_key,
-                    },
-                )
-            if not has_explicit_cursor:
-                resolved_config["search_query_cursor"] = checkpoint.get("next_query_index", 0)
-                resolved_config["search_page_cursor"] = checkpoint.get("next_page", 1)
-        return resolved_config
-
-    if mode == "details":
-        has_explicit_cursor = (
-            "detail_manifest_cursor" in source_config or "detail_row_cursor" in source_config
-        )
-        checkpoint = read_checkpoint(
-            s3_client,
-            source="pf_listings",
-            operation=_PF_LISTINGS_DETAIL_OPERATION,
-        )
-        if checkpoint and not reset_checkpoint and not has_explicit_cursor:
-            resolved_config["detail_manifest_cursor"] = checkpoint.get("next_manifest_index", 0)
-            resolved_config["detail_row_cursor"] = checkpoint.get("next_row_index", 0)
-        return resolved_config
-
-    return resolved_config
-
-
-def _write_reelly_archive_checkpoint(
-    *,
-    raw_release: RawRelease,
-    manifest_key: str,
-    s3_client: Any,
-) -> None:
-    metadata = dict(raw_release.metadata)
-    write_checkpoint(
-        s3_client,
-        source=raw_release.source,
-        operation=_REELLY_ARCHIVE_OPERATION,
-        payload={
-            "next_page": metadata.get("next_page"),
-            "completed": bool(metadata.get("batch_completed_result_set")),
-            "last_run_id": raw_release.run_id,
-            "last_manifest_s3_key": manifest_key,
-            "page_total": metadata.get("page_total"),
-            "updated_at": utc_now().isoformat(),
-        },
-    )
-
-
-def _write_pf_listings_checkpoint(
-    *,
-    raw_release: RawRelease,
-    manifest_key: str,
-    s3_client: Any,
-) -> None:
-    metadata = dict(raw_release.metadata)
-    stage = metadata.get("stage")
-    if stage == "plan":
-        write_checkpoint(
-            s3_client,
-            source=raw_release.source,
-            operation=_PF_LISTINGS_PLAN_OPERATION,
-            payload={
-                "completed": True,
-                "last_run_id": raw_release.run_id,
-                "last_manifest_s3_key": manifest_key,
-                "planned_query_count": metadata.get("planned_query_count"),
-                "terminal_query_count": metadata.get("terminal_query_count"),
-                "location_partition_count": metadata.get("location_partition_count"),
-                "updated_at": utc_now().isoformat(),
-            },
-        )
-        return
-
-    if stage == "search":
-        write_checkpoint(
-            s3_client,
-            source=raw_release.source,
-            operation=_PF_LISTINGS_SEARCH_OPERATION,
-            payload={
-                "completed": bool(metadata.get("search_completed_result_set")),
-                "next_query_index": metadata.get("next_query_index"),
-                "next_page": metadata.get("next_page"),
-                "plan_manifest_s3_key": metadata.get("plan_manifest_s3_key"),
-                "last_run_id": raw_release.run_id,
-                "last_manifest_s3_key": manifest_key,
-                "search_page_count": metadata.get("search_page_count"),
-                "property_row_count": metadata.get("property_row_count"),
-                "search_error_count": metadata.get("search_error_count"),
-                "updated_at": utc_now().isoformat(),
-            },
-        )
-        return
-
-    if stage == "details":
-        write_checkpoint(
-            s3_client,
-            source=raw_release.source,
-            operation=_PF_LISTINGS_DETAIL_OPERATION,
-            payload={
-                "completed": bool(metadata.get("detail_completed_result_set")),
-                "next_manifest_index": metadata.get("next_manifest_index"),
-                "next_row_index": metadata.get("next_row_index"),
-                "source_manifest_count": metadata.get("source_manifest_count"),
-                "source_property_row_count": metadata.get("source_property_row_count"),
-                "last_run_id": raw_release.run_id,
-                "last_manifest_s3_key": manifest_key,
-                "detail_row_count": metadata.get("detail_row_count"),
-                "updated_at": utc_now().isoformat(),
-            },
-        )
 
 
 def _raw_release_file_path(*, scratch_path: Path, local_path: Path) -> str:
@@ -315,21 +122,61 @@ def _raw_release_file_path(*, scratch_path: Path, local_path: Path) -> str:
         ) from exc
 
 
+def _pop_state_updates(metadata: dict[str, Any]) -> list[dict[str, str]]:
+    raw_updates = metadata.pop("_state_updates", [])
+    if not raw_updates:
+        return []
+    if not isinstance(raw_updates, list):
+        raise TypeError("Raw release metadata _state_updates must be a list")
+
+    updates: list[dict[str, str]] = []
+    for update in raw_updates:
+        if not isinstance(update, Mapping):
+            raise TypeError("Raw release metadata _state_updates entries must be objects")
+        key = str(update.get("key") or "").strip()
+        path = str(update.get("path") or "").strip()
+        if not key or not path:
+            raise ValueError("Raw release state update entries require key and path")
+        updates.append({"key": key, "path": path})
+    return updates
+
+
+def _write_state_updates(
+    *,
+    state_updates: list[dict[str, str]],
+    scratch_path: Path,
+    s3_client: Any,
+) -> None:
+    for update in state_updates:
+        local_path = Path(update["path"])
+        _raw_release_file_path(scratch_path=scratch_path, local_path=local_path)
+        payload = json.loads(local_path.read_text(encoding="utf-8"))
+        if not isinstance(payload, dict):
+            raise TypeError(f"State update payload must be a JSON object: {local_path}")
+        s3_client.put_json(key=update["key"], payload=payload)
+
+
 def _run_raw_extractor(
     *,
     context: AssetExecutionContext,
     source: SourceSpec,
     s3: S3Resource,
 ) -> tuple[dict, dict]:
-    source_config = _resolve_source_config(context)
+    source_config = _get_source_config(context)
     s3_client = s3.client()
     if source.name == "reelly_supply":
-        source_config = _resolve_reelly_archive_config(
+        source_config = resolve_archive_config(
             source_config=source_config,
             s3_client=s3_client,
         )
     if source.name == "pf_listings":
-        source_config = _resolve_pf_listings_config(
+        source_config = resolve_listings_config(
+            source_config=source_config,
+            s3_client=s3_client,
+        )
+    if source.name.startswith("dld_od_"):
+        source_config = resolve_open_data_config(
+            source_name=source.name,
             source_config=source_config,
             s3_client=s3_client,
         )
@@ -339,7 +186,7 @@ def _run_raw_extractor(
 
     with TemporaryDirectory(prefix=f"holocron-{source.name}-") as scratch_dir:
         extractor_kwargs: dict[str, Any] = {"config": source_config}
-        if source.name in {
+        if source.name.startswith("dld_od_") or source.name in {
             "reelly_supply",
             "dxbi_transactions",
             "news_feeds",
@@ -347,7 +194,7 @@ def _run_raw_extractor(
             "pf_listings",
         }:
             extractor_kwargs["progress_log"] = context.log
-        if source.name == "pf_listings":
+        if source.name in {"pf_listings", "reelly_supply"}:
             extractor_kwargs["state_store"] = s3_client
         raw_release = source.extractor(scratch_dir, **extractor_kwargs)
         if not isinstance(raw_release, RawRelease):
@@ -360,6 +207,8 @@ def _run_raw_extractor(
             )
         if not raw_release.files:
             raise ValueError(f"Extractor for source={source.name} returned no files")
+        release_metadata = dict(raw_release.metadata)
+        state_updates = _pop_state_updates(release_metadata)
 
         manifest_files: list[dict] = []
         total_rows = 0
@@ -367,11 +216,6 @@ def _run_raw_extractor(
         scratch_path = Path(scratch_dir)
         for raw_file in raw_release.files:
             local_path = Path(raw_file.path)
-            if not local_path.exists():
-                raise FileNotFoundError(
-                    f"Raw file does not exist for source={source.name}: {local_path}"
-                )
-
             file_path = _raw_release_file_path(scratch_path=scratch_path, local_path=local_path)
             file_key = raw_file_s3_key(
                 source=raw_release.source,
@@ -400,7 +244,8 @@ def _run_raw_extractor(
                 }
             )
 
-        manifest_payload = {
+        manifest_key = manifest_s3_key(source=raw_release.source, run_id=raw_release.run_id)
+        release_payload_base = {
             "source": raw_release.source,
             "run_id": raw_release.run_id,
             "extract_date": raw_release.extract_date,
@@ -408,35 +253,36 @@ def _run_raw_extractor(
             "manifest_version": raw_release.manifest_version,
             "schema_version": raw_release.schema_version,
             "files": manifest_files,
-            "metadata": dict(raw_release.metadata),
+            "metadata": release_metadata,
+            "manifest_s3_key": manifest_key,
         }
-
-        manifest_key = manifest_s3_key(source=raw_release.source, run_id=raw_release.run_id)
+        manifest_payload = {k: v for k, v in release_payload_base.items() if k != "manifest_s3_key"}
         s3_client.put_json(key=manifest_key, payload=manifest_payload)
-        if source.name == "reelly_supply":
-            _write_reelly_archive_checkpoint(
+        if source.name == "reelly_supply" and release_metadata.get("mode", "archive") == "archive":
+            write_archive_checkpoint(
                 raw_release=raw_release,
                 manifest_key=manifest_key,
                 s3_client=s3_client,
             )
         if source.name == "pf_listings":
-            _write_pf_listings_checkpoint(
+            write_listings_checkpoint(
                 raw_release=raw_release,
                 manifest_key=manifest_key,
                 s3_client=s3_client,
             )
+        if source.name.startswith("dld_od_"):
+            write_open_data_checkpoint(
+                raw_release=raw_release,
+                manifest_key=manifest_key,
+                s3_client=s3_client,
+            )
+        _write_state_updates(
+            state_updates=state_updates,
+            scratch_path=scratch_path,
+            s3_client=s3_client,
+        )
 
-    release_payload = {
-        "source": raw_release.source,
-        "run_id": raw_release.run_id,
-        "extract_date": raw_release.extract_date,
-        "created_at": raw_release.created_at,
-        "manifest_version": raw_release.manifest_version,
-        "schema_version": raw_release.schema_version,
-        "files": manifest_files,
-        "metadata": dict(raw_release.metadata),
-        "manifest_s3_key": manifest_key,
-    }
+    release_payload = release_payload_base
     output_metadata = {
         "source": source.name,
         "provider": source.provider,
@@ -454,17 +300,21 @@ def _run_raw_extractor(
 
 def _run_bronze_loader(
     *,
-    context: AssetExecutionContext,
     source: SourceSpec,
-    raw_release: dict,
-    s3: S3Resource,
-    clickhouse: ClickHouseResource,
+    raw_manifest: dict,
+    s3: _ClientResource,
+    clickhouse: _ClientResource,
 ) -> MaterializeResult:
-    if source.bronze_loader is None:
+    bronze_loader = source.bronze_loader
+    if bronze_loader is None:
         raise ValueError(f"No bronze loader configured for source={source.name}")
+    if raw_manifest_is_smoke(raw_manifest):
+        raise ValueError(
+            f"Smoke raw manifest cannot be loaded into normal bronze tables: source={source.name}"
+        )
 
-    result = source.bronze_loader(
-        raw_release=raw_release,
+    result = bronze_loader(
+        raw_manifest=raw_manifest,
         s3=s3.client(),
         clickhouse=clickhouse.client(),
     )
@@ -490,7 +340,7 @@ def build_assets_for_source(source: SourceSpec) -> list[AssetsDefinition]:
     raw_name = _raw_asset_name(source)
     bronze_name = _bronze_asset_name(source)
 
-    @asset(name=raw_name, group_name=source.name, config_schema=Permissive())
+    @asset(name=raw_name, group_name=source.provider, config_schema=Permissive())
     def raw_asset(
         context: AssetExecutionContext,
         s3: S3Resource,
@@ -501,20 +351,25 @@ def build_assets_for_source(source: SourceSpec) -> list[AssetsDefinition]:
     assets = [raw_asset]
     if not source.bronze_tables:
         return assets
+    if source.bronze_loader is None:
+        raise ValueError(f"Source {source.name} declares bronze tables without a bronze loader")
 
-    @asset(name=bronze_name, ins={"raw_release": AssetIn(key=raw_name)}, group_name=source.name)
+    @asset(
+        name=bronze_name,
+        ins={"raw_manifest": AssetIn(key=raw_name)},
+        group_name=source.provider,
+    )
     def bronze_asset(
         context: AssetExecutionContext,
-        raw_release: dict,
+        raw_manifest: dict,
         clickhouse: ClickHouseResource,
         s3: S3Resource,
     ) -> MaterializeResult:
-        if not isinstance(raw_release, dict):
-            raise TypeError(f"Expected raw release payload dict, got {type(raw_release)!r}")
+        if not isinstance(raw_manifest, dict):
+            raise TypeError(f"Expected raw manifest payload dict, got {type(raw_manifest)!r}")
         return _run_bronze_loader(
-            context=context,
             source=source,
-            raw_release=raw_release,
+            raw_manifest=raw_manifest,
             s3=s3,
             clickhouse=clickhouse,
         )
@@ -522,31 +377,12 @@ def build_assets_for_source(source: SourceSpec) -> list[AssetsDefinition]:
     return [raw_asset, bronze_asset]
 
 
-_REELLY_PROJECT_MEDIA_DEFAULTS = {
-    "target_prefix": "media/reelly_supply/project_media",
-    "inventory_prefix": "raw/source=reelly_supply/project_media_asset_manifests",
-    "inventory_file_name": "reelly_supply_project_media_assets.jsonl",
-    "include_project_documents": False,
-    "include_project_detail_media": True,
-    "structured_target_keys": True,
-    "max_concurrent_downloads": 8,
-    "asset_type_allowlist": (
-        "cover_image",
-        "developer_logo",
-        "building_image",
-        "interior_image",
-        "facility_image",
-        "master_plan",
-        "floorplan",
-        "unit_image",
-        "project_image",
-    ),
-}
-
-
 def build_reelly_document_assets() -> list[AssetsDefinition]:
     @asset(
-        name="reelly_supply_document_assets", group_name="reelly_supply", config_schema=Permissive()
+        name="reelly_supply_document_assets",
+        group_name=_REELLY_PROVIDER_GROUP,
+        deps=["reelly_supply_raw"],
+        config_schema=Permissive(),
     )
     def reelly_supply_document_assets(
         context: AssetExecutionContext,
@@ -554,7 +390,7 @@ def build_reelly_document_assets() -> list[AssetsDefinition]:
     ) -> MaterializeResult:
         result = hydrate_reelly_document_assets(
             s3=s3.client(),
-            config=_resolve_source_config(context),
+            config=_get_source_config(context),
             progress_log=context.log,
         )
         return MaterializeResult(
@@ -564,9 +400,10 @@ def build_reelly_document_assets() -> list[AssetsDefinition]:
                 "status": "materialized",
                 "run_id": result["run_id"],
                 "discovered": result["discovered"],
+                "skipped_existing": result["skipped_existing"],
                 "attempted": result["attempted"],
                 "downloaded": result["downloaded"],
-                "already_existing": result["already_existing"],
+                "already_exists": result["already_exists"],
                 "errors": result["errors"],
                 "total_bytes": result["total_bytes"],
                 "max_concurrent_downloads": result["max_concurrent_downloads"],
@@ -577,7 +414,8 @@ def build_reelly_document_assets() -> list[AssetsDefinition]:
 
     @asset(
         name="reelly_supply_project_media_assets",
-        group_name="reelly_supply",
+        group_name=_REELLY_PROVIDER_GROUP,
+        deps=["reelly_supply_raw"],
         config_schema=Permissive(),
     )
     def reelly_supply_project_media_assets(
@@ -586,7 +424,7 @@ def build_reelly_document_assets() -> list[AssetsDefinition]:
     ) -> MaterializeResult:
         result = hydrate_reelly_document_assets(
             s3=s3.client(),
-            config={**_REELLY_PROJECT_MEDIA_DEFAULTS, **_resolve_source_config(context)},
+            config={**REELLY_PROJECT_MEDIA_DEFAULTS, **_get_source_config(context)},
             progress_log=context.log,
         )
         return MaterializeResult(
@@ -596,9 +434,10 @@ def build_reelly_document_assets() -> list[AssetsDefinition]:
                 "status": "materialized",
                 "run_id": result["run_id"],
                 "discovered": result["discovered"],
+                "skipped_existing": result["skipped_existing"],
                 "attempted": result["attempted"],
                 "downloaded": result["downloaded"],
-                "already_existing": result["already_existing"],
+                "already_exists": result["already_exists"],
                 "errors": result["errors"],
                 "total_bytes": result["total_bytes"],
                 "max_concurrent_downloads": result["max_concurrent_downloads"],
@@ -613,7 +452,8 @@ def build_reelly_document_assets() -> list[AssetsDefinition]:
 def build_pf_listing_media_assets() -> list[AssetsDefinition]:
     @asset(
         name="pf_listing_media_assets",
-        group_name="pf_listings",
+        group_name=_PROPERTYFINDER_PROVIDER_GROUP,
+        deps=["pf_listings_raw"],
         config_schema=Permissive(),
     )
     def pf_listing_media_assets(
@@ -622,7 +462,7 @@ def build_pf_listing_media_assets() -> list[AssetsDefinition]:
     ) -> MaterializeResult:
         result = hydrate_pf_listing_media_assets(
             s3=s3.client(),
-            config=_resolve_source_config(context),
+            config=_get_source_config(context),
             progress_log=context.log,
         )
         return MaterializeResult(
@@ -632,9 +472,10 @@ def build_pf_listing_media_assets() -> list[AssetsDefinition]:
                 "status": "materialized",
                 "run_id": result["run_id"],
                 "discovered": result["discovered"],
+                "skipped_existing": result["skipped_existing"],
                 "attempted": result["attempted"],
                 "downloaded": result["downloaded"],
-                "already_existing": result["already_existing"],
+                "already_exists": result["already_exists"],
                 "errors": result["errors"],
                 "total_bytes": result["total_bytes"],
                 "max_concurrent_downloads": result["max_concurrent_downloads"],
@@ -649,7 +490,7 @@ def build_pf_listing_media_assets() -> list[AssetsDefinition]:
 def build_news_feed_assets() -> list[AssetsDefinition]:
     @asset(
         name="news_thumbnail_assets",
-        group_name="news_feeds",
+        group_name=_NEWS_PROVIDER_GROUP,
         deps=["news_feeds_raw"],
         config_schema=Permissive(),
     )
@@ -659,7 +500,7 @@ def build_news_feed_assets() -> list[AssetsDefinition]:
     ) -> MaterializeResult:
         result = hydrate_news_thumbnail_assets(
             s3=s3.client(),
-            config=_resolve_source_config(context),
+            config=_get_source_config(context),
             progress_log=context.log,
         )
         return MaterializeResult(
@@ -669,9 +510,10 @@ def build_news_feed_assets() -> list[AssetsDefinition]:
                 "status": "materialized",
                 "run_id": result["run_id"],
                 "discovered": result["discovered"],
+                "skipped_existing": result["skipped_existing"],
                 "attempted": result["attempted"],
                 "downloaded": result["downloaded"],
-                "already_existing": result["already_existing"],
+                "already_exists": result["already_exists"],
                 "errors": result["errors"],
                 "total_bytes": result["total_bytes"],
                 "source_manifest_count": result["source_manifest_count"],
@@ -684,7 +526,7 @@ def build_news_feed_assets() -> list[AssetsDefinition]:
 
     @asset(
         name="news_publish",
-        group_name="news_feeds",
+        group_name=_NEWS_PROVIDER_GROUP,
         deps=["news_thumbnail_assets"],
         config_schema=Permissive(),
     )
@@ -694,7 +536,7 @@ def build_news_feed_assets() -> list[AssetsDefinition]:
     ) -> MaterializeResult:
         result = publish_news_to_platform(
             s3=s3.client(),
-            config=_resolve_source_config(context),
+            config=_get_source_config(context),
             progress_log=context.log,
         )
         return MaterializeResult(
@@ -718,61 +560,60 @@ def build_news_feed_assets() -> list[AssetsDefinition]:
     return [news_thumbnail_assets, news_publish]
 
 
-def build_operational_jobs(sources: Mapping[str, SourceSpec]) -> list[JobDefinition]:
+def _build_dld_open_data_jobs(
+    sources: Mapping[str, SourceSpec],
+    *,
+    operation: str,
+) -> list[AssetJobDefinition]:
+    jobs: list[AssetJobDefinition] = []
+    for category, _, incremental_defaults, full_defaults in _DLD_OPEN_DATA_JOB_SPECS:
+        source_name = f"dld_od_{category}"
+        source = sources[source_name]
+        if operation == "daily_incremental":
+            config: Mapping[str, Any] | ConfigMapping = _raw_asset_run_config(
+                source,
+                incremental_defaults,
+            )
+        elif operation == "manual_backfill":
+            config = _backfill_config_mapping(source, defaults=full_defaults)
+        elif operation == "manual_snapshot":
+            config = _defaulted_raw_config_mapping(
+                source,
+                defaults={**full_defaults, "mode": "snapshot"},
+            )
+        else:
+            raise ValueError(f"Unsupported DLD Open Data operation: {operation}")
+        jobs.append(
+            _build_source_asset_job(
+                source=source,
+                name=f"{source_name}_{operation}",
+                raw_only=True,
+                config=config,
+            )
+        )
+    return jobs
+
+
+def build_operational_jobs(sources: Mapping[str, SourceSpec]) -> list[AssetJobDefinition]:
     return [
-        _build_source_asset_job(
-            source=sources["bay_listings"],
-            name="bay_listings_daily_incremental",
-            raw_only=False,
-        ),
-        _build_source_asset_job(
-            source=sources["bay_transactions"],
-            name="bay_transactions_daily_incremental",
-            raw_only=False,
-            config=_raw_asset_run_config(sources["bay_transactions"], {"mode": "incremental"}),
-        ),
-        _build_source_asset_job(
-            source=sources["dld_transactions"],
-            name="dld_transactions_daily_incremental",
-            raw_only=False,
-            config=_raw_asset_run_config(sources["dld_transactions"], {"mode": "incremental"}),
-        ),
+        *_build_dld_open_data_jobs(sources, operation="daily_incremental"),
         _build_source_asset_job(
             source=sources["dxbi_transactions"],
             name="dxbi_transactions_daily_incremental",
-            raw_only=False,
+            raw_only=True,
             config=_raw_asset_run_config(sources["dxbi_transactions"], {"mode": "incremental"}),
         ),
         _build_source_asset_job(
             source=sources["dda_planning_layers"],
             name="dda_planning_layers_weekly_full_refresh",
-            raw_only=False,
+            raw_only=True,
         ),
-        _build_source_asset_job(
-            source=sources["bay_locations"],
-            name="bay_locations_manual_full_fetch",
-            raw_only=False,
-            config=_defaulted_raw_config_mapping(
-                sources["bay_locations"],
-                defaults=_BAY_LOCATIONS_FULL_FETCH_DEFAULTS,
-            ),
-        ),
-        _build_source_asset_job(
-            source=sources["bay_transactions"],
-            name="bay_transactions_manual_backfill",
-            raw_only=False,
-            config=_backfill_config_mapping(sources["bay_transactions"]),
-        ),
-        _build_source_asset_job(
-            source=sources["dld_transactions"],
-            name="dld_transactions_manual_backfill",
-            raw_only=False,
-            config=_backfill_config_mapping(sources["dld_transactions"]),
-        ),
+        *_build_dld_open_data_jobs(sources, operation="manual_backfill"),
+        *_build_dld_open_data_jobs(sources, operation="manual_snapshot"),
         _build_source_asset_job(
             source=sources["dxbi_transactions"],
             name="dxbi_transactions_manual_backfill",
-            raw_only=False,
+            raw_only=True,
             config=_backfill_config_mapping(sources["dxbi_transactions"]),
         ),
         _build_source_asset_job(
@@ -792,7 +633,7 @@ def build_operational_jobs(sources: Mapping[str, SourceSpec]) -> list[JobDefinit
             raw_only=True,
             config=_defaulted_raw_config_mapping(
                 sources["pf_listings"],
-                defaults=_PF_LISTINGS_MANUAL_SNAPSHOT_DEFAULTS,
+                defaults=PF_LISTINGS_MANUAL_SNAPSHOT_DEFAULTS,
             ),
         ),
         _build_source_asset_job(
@@ -801,7 +642,7 @@ def build_operational_jobs(sources: Mapping[str, SourceSpec]) -> list[JobDefinit
             raw_only=True,
             config=_pf_listings_config_mapping(
                 sources["pf_listings"],
-                defaults=_PF_LISTINGS_PLAN_DEFAULTS,
+                defaults=PF_LISTINGS_PLAN_DEFAULTS,
             ),
         ),
         _build_source_asset_job(
@@ -810,7 +651,7 @@ def build_operational_jobs(sources: Mapping[str, SourceSpec]) -> list[JobDefinit
             raw_only=True,
             config=_pf_listings_config_mapping(
                 sources["pf_listings"],
-                defaults=_PF_LISTINGS_SEARCH_CHUNK_DEFAULTS,
+                defaults=PF_LISTINGS_SEARCH_CHUNK_DEFAULTS,
             ),
         ),
         _build_source_asset_job(
@@ -819,7 +660,15 @@ def build_operational_jobs(sources: Mapping[str, SourceSpec]) -> list[JobDefinit
             raw_only=True,
             config=_pf_listings_config_mapping(
                 sources["pf_listings"],
-                defaults=_PF_LISTINGS_DETAIL_CHUNK_DEFAULTS,
+                defaults=PF_LISTINGS_DETAIL_CHUNK_DEFAULTS,
+            ),
+        ),
+        define_asset_job(
+            name="pf_listings_daily_latest_delta",
+            selection=["pf_listings_raw", "pf_listing_media_assets"],
+            config=_pf_listings_latest_delta_config_mapping(
+                sources["pf_listings"],
+                defaults=PF_LISTINGS_LATEST_DELTA_DEFAULTS,
             ),
         ),
         _build_source_asset_job(
@@ -829,8 +678,29 @@ def build_operational_jobs(sources: Mapping[str, SourceSpec]) -> list[JobDefinit
             config=_reelly_archive_config_mapping(sources["reelly_supply"]),
         ),
         define_asset_job(
-            name="news_feeds_poll_and_publish",
-            selection=["news_feeds_raw", "news_thumbnail_assets", "news_publish"],
+            name="reelly_supply_daily_catalog_delta",
+            selection=[
+                "reelly_supply_raw",
+                "reelly_supply_document_assets",
+                "reelly_supply_project_media_assets",
+            ],
+            config=_reelly_catalog_delta_config_mapping(
+                sources["reelly_supply"],
+            ),
+        ),
+        _build_source_asset_job(
+            source=sources["reelly_supply"],
+            name="reelly_supply_daily_availability_delta",
+            raw_only=True,
+            config=_defaulted_raw_config_mapping(
+                sources["reelly_supply"],
+                defaults=REELLY_AVAILABILITY_DELTA_DEFAULTS,
+            ),
+        ),
+        define_asset_job(
+            name="news_feeds_poll_and_hydrate",
+            selection=["news_feeds_raw", "news_thumbnail_assets"],
+            config=_news_poll_and_hydrate_config_mapping(sources["news_feeds"]),
         ),
         _build_source_asset_job(
             source=sources["news_feeds"],
@@ -841,7 +711,11 @@ def build_operational_jobs(sources: Mapping[str, SourceSpec]) -> list[JobDefinit
             name="news_thumbnail_assets_backfill",
             selection=["news_thumbnail_assets"],
             config=_news_thumbnail_asset_config_mapping(
-                defaults=NewsThumbnailHydrationConfig(),
+                defaults=NewsThumbnailHydrationConfig(
+                    lookback_days=0,
+                    max_assets_per_run=100000,
+                    resolve_missing_from_article_pages=True,
+                ),
             ),
         ),
         define_asset_job(
@@ -865,7 +739,7 @@ def build_operational_jobs(sources: Mapping[str, SourceSpec]) -> list[JobDefinit
             config=_reelly_document_asset_config_mapping(
                 asset_name="reelly_supply_project_media_assets",
                 defaults=ReellyDocumentAssetHydrationConfig.model_validate(
-                    _REELLY_PROJECT_MEDIA_DEFAULTS
+                    REELLY_PROJECT_MEDIA_DEFAULTS
                 ),
             ),
         ),
@@ -880,15 +754,16 @@ def build_operational_jobs(sources: Mapping[str, SourceSpec]) -> list[JobDefinit
 
 
 def build_operational_schedules(
-    jobs_by_name: Mapping[str, JobDefinition],
+    jobs_by_name: Mapping[str, AssetJobDefinition],
 ) -> list[ScheduleDefinition]:
     schedule_specs = {
-        "dld_transactions_daily_incremental": "0 5 * * *",
-        "bay_transactions_daily_incremental": "30 5 * * *",
+        **_DLD_OPEN_DATA_SCHEDULE_SPECS,
         "dxbi_transactions_daily_incremental": "0 6 * * *",
-        "bay_listings_daily_incremental": "30 6 * * *",
+        "reelly_supply_daily_catalog_delta": "0 2 * * *",
+        "reelly_supply_daily_availability_delta": "30 2 * * *",
+        "pf_listings_daily_latest_delta": "0 3 * * *",
         "dda_planning_layers_weekly_full_refresh": "0 6 * * 0",
-        "news_feeds_poll_and_publish": "*/15 * * * *",
+        "news_feeds_poll_and_hydrate": "*/15 * * * *",
     }
     return [
         ScheduleDefinition(
@@ -908,7 +783,7 @@ def _build_source_asset_job(
     name: str,
     raw_only: bool,
     config: Mapping[str, Any] | ConfigMapping | None = None,
-) -> JobDefinition:
+) -> AssetJobDefinition:
     return define_asset_job(
         name=name,
         selection=_source_asset_selection(source, raw_only=raw_only),
@@ -933,10 +808,91 @@ def _raw_asset_run_config(source: SourceSpec, source_config: Mapping[str, Any]) 
     }
 
 
-def _backfill_config_mapping(source: SourceSpec) -> ConfigMapping:
+def _config_fields(
+    defaults: Any,
+    field_specs: Sequence[tuple[str, Any, str]],
+) -> dict[str, Field]:
+    return {
+        name: Field(
+            config_type,
+            default_value=_config_default(defaults, name, config_type),
+            is_required=False,
+            description=description,
+        )
+        for name, config_type, description in field_specs
+    }
+
+
+def _config_default(defaults: Any, name: str, config_type: Any) -> Any:
+    value = getattr(defaults, name)
+    if config_type == [str]:
+        return list(value)
+    return value
+
+
+def _permissive_config_mapping(
+    *,
+    config_fn: Any,
+    fields: Mapping[str, Any],
+) -> ConfigMapping:
+    return ConfigMapping(
+        config_fn=config_fn,
+        config_schema=Permissive(dict(fields)),
+        receive_processed_config_values=True,
+    )
+
+
+def _overrides_field(description: str) -> Field:
+    return Field(
+        Permissive(),
+        default_value={},
+        is_required=False,
+        description=description,
+    )
+
+
+def _reset_checkpoint_field(description: str) -> Field:
+    return Field(
+        bool,
+        default_value=False,
+        is_required=False,
+        description=description,
+    )
+
+
+def _section_field(description: str) -> Field:
+    return Field(
+        Permissive(),
+        default_value={},
+        is_required=False,
+        description=description,
+    )
+
+
+def _asset_config_mapping(
+    *,
+    asset_name: str,
+    defaults: Any,
+    field_specs: Sequence[tuple[str, Any, str]],
+) -> ConfigMapping:
+    def _map_asset_config(config: Mapping[str, Any]) -> dict[str, Any]:
+        return {"ops": {asset_name: {"config": dict(config)}}}
+
+    return _permissive_config_mapping(
+        config_fn=_map_asset_config,
+        fields=_config_fields(defaults, field_specs),
+    )
+
+
+def _backfill_config_mapping(
+    source: SourceSpec,
+    *,
+    defaults: Mapping[str, Any] | None = None,
+) -> ConfigMapping:
     def _map_backfill_config(config: Mapping[str, Any]) -> dict[str, Any]:
         overrides = _source_overrides(config, reserved_keys={"start_date", "end_date"})
         source_config = {
+            **dict(defaults or {}),
             **overrides,
             "mode": "backfill",
             "start_date": config["start_date"],
@@ -944,21 +900,13 @@ def _backfill_config_mapping(source: SourceSpec) -> ConfigMapping:
         }
         return _raw_asset_run_config(source, source_config)
 
-    return ConfigMapping(
+    return _permissive_config_mapping(
         config_fn=_map_backfill_config,
-        config_schema=Permissive(
-            {
-                "start_date": Field(StringSource, description="Inclusive backfill start date."),
-                "end_date": Field(StringSource, description="Inclusive backfill end date."),
-                "overrides": Field(
-                    Permissive(),
-                    default_value={},
-                    is_required=False,
-                    description="Optional source-specific raw asset config overrides.",
-                ),
-            }
-        ),
-        receive_processed_config_values=True,
+        fields={
+            "start_date": Field(StringSource, description="Inclusive backfill start date."),
+            "end_date": Field(StringSource, description="Inclusive backfill end date."),
+            "overrides": _overrides_field("Optional source-specific raw asset config overrides."),
+        },
     )
 
 
@@ -971,49 +919,30 @@ def _defaulted_raw_config_mapping(
         overrides = _source_overrides(config)
         return _raw_asset_run_config(source, {**defaults, **overrides})
 
-    return ConfigMapping(
+    return _permissive_config_mapping(
         config_fn=_map_defaulted_config,
-        config_schema=Permissive(
-            {
-                "overrides": Field(
-                    Permissive(),
-                    default_value={},
-                    is_required=False,
-                    description="Optional source-specific raw asset config overrides.",
-                )
-            }
-        ),
-        receive_processed_config_values=True,
+        fields={
+            "overrides": _overrides_field("Optional source-specific raw asset config overrides.")
+        },
     )
 
 
 def _reelly_archive_config_mapping(source: SourceSpec) -> ConfigMapping:
     def _map_reelly_config(config: Mapping[str, Any]) -> dict[str, Any]:
         overrides = _source_overrides(config, reserved_keys={"reset_checkpoint"})
-        source_config = {**_REELLY_ARCHIVE_CHUNK_DEFAULTS, **overrides}
+        source_config = {**REELLY_ARCHIVE_CHUNK_DEFAULTS, **overrides}
         if config.get("reset_checkpoint"):
             source_config["reset_checkpoint"] = True
         return _raw_asset_run_config(source, source_config)
 
-    return ConfigMapping(
+    return _permissive_config_mapping(
         config_fn=_map_reelly_config,
-        config_schema=Permissive(
-            {
-                "reset_checkpoint": Field(
-                    bool,
-                    default_value=False,
-                    is_required=False,
-                    description="Ignore a completed Reelly archive checkpoint and start a new pass.",
-                ),
-                "overrides": Field(
-                    Permissive(),
-                    default_value={},
-                    is_required=False,
-                    description="Optional Reelly raw asset config overrides.",
-                ),
-            }
-        ),
-        receive_processed_config_values=True,
+        fields={
+            "reset_checkpoint": _reset_checkpoint_field(
+                "Ignore a completed Reelly archive checkpoint and start a new pass."
+            ),
+            "overrides": _overrides_field("Optional Reelly raw asset config overrides."),
+        },
     )
 
 
@@ -1029,25 +958,85 @@ def _pf_listings_config_mapping(
             source_config["reset_checkpoint"] = True
         return _raw_asset_run_config(source, source_config)
 
-    return ConfigMapping(
+    return _permissive_config_mapping(
         config_fn=_map_pf_listings_config,
-        config_schema=Permissive(
-            {
-                "reset_checkpoint": Field(
-                    bool,
-                    default_value=False,
-                    is_required=False,
-                    description="Ignore the relevant Property Finder checkpoint and start over.",
-                ),
-                "overrides": Field(
-                    Permissive(),
-                    default_value={},
-                    is_required=False,
-                    description="Optional Property Finder raw asset config overrides.",
-                ),
+        fields={
+            "reset_checkpoint": _reset_checkpoint_field(
+                "Ignore the relevant Property Finder checkpoint and start over."
+            ),
+            "overrides": _overrides_field("Optional Property Finder raw asset config overrides."),
+        },
+    )
+
+
+def _pf_listings_latest_delta_config_mapping(
+    source: SourceSpec,
+    *,
+    defaults: Mapping[str, Any],
+) -> ConfigMapping:
+    def _map_pf_listings_latest_delta_config(config: Mapping[str, Any]) -> dict[str, Any]:
+        _reject_unexpected_top_level_keys(
+            config,
+            allowed_keys={"raw", "media"},
+            context="pf_listings_daily_latest_delta",
+        )
+        raw_config = dict(config.get("raw") or {})
+        raw_overrides = _source_overrides(raw_config, reserved_keys={"reset_checkpoint"})
+        source_config = {**defaults, **raw_overrides}
+        if raw_config.get("reset_checkpoint"):
+            source_config["reset_checkpoint"] = True
+        return {
+            "ops": {
+                _raw_asset_name(source): {"config": source_config},
+                "pf_listing_media_assets": {
+                    "config": {"latest_manifest_count": 1, **dict(config.get("media") or {})}
+                },
             }
-        ),
-        receive_processed_config_values=True,
+        }
+
+    return _permissive_config_mapping(
+        config_fn=_map_pf_listings_latest_delta_config,
+        fields={
+            "raw": _section_field("Property Finder latest-delta raw asset config overrides."),
+            "media": _section_field("Property Finder listing media hydration config overrides."),
+        },
+    )
+
+
+def _reelly_catalog_delta_config_mapping(source: SourceSpec) -> ConfigMapping:
+    def _map_reelly_catalog_delta_config(config: Mapping[str, Any]) -> dict[str, Any]:
+        _reject_unexpected_top_level_keys(
+            config,
+            allowed_keys={"raw", "documents", "project_media"},
+            context="reelly_supply_daily_catalog_delta",
+        )
+        raw_config = dict(config.get("raw") or {})
+        source_config = {
+            **REELLY_CATALOG_DELTA_DEFAULTS,
+            **_source_overrides(raw_config),
+        }
+        return {
+            "ops": {
+                _raw_asset_name(source): {"config": source_config},
+                "reelly_supply_document_assets": {
+                    "config": {"latest_manifest_count": 1, **dict(config.get("documents") or {})},
+                },
+                "reelly_supply_project_media_assets": {
+                    "config": {
+                        "latest_manifest_count": 1,
+                        **dict(config.get("project_media") or {}),
+                    },
+                },
+            }
+        }
+
+    return _permissive_config_mapping(
+        config_fn=_map_reelly_catalog_delta_config,
+        fields={
+            "raw": _section_field("Reelly catalog-delta raw asset config overrides."),
+            "documents": _section_field("Reelly document hydration config overrides."),
+            "project_media": _section_field("Reelly project-media hydration config overrides."),
+        },
     )
 
 
@@ -1056,112 +1045,42 @@ def _reelly_document_asset_config_mapping(
     asset_name: str,
     defaults: ReellyDocumentAssetHydrationConfig,
 ) -> ConfigMapping:
-    def _map_reelly_document_asset_config(config: Mapping[str, Any]) -> dict[str, Any]:
-        return {
-            "ops": {
-                asset_name: {
-                    "config": dict(config),
-                }
-            }
-        }
-
-    return ConfigMapping(
-        config_fn=_map_reelly_document_asset_config,
-        config_schema=Permissive(
-            {
-                "manifest_prefix": Field(
-                    StringSource,
-                    default_value=defaults.manifest_prefix,
-                    is_required=False,
-                    description="R2 prefix containing Reelly raw manifests.",
-                ),
-                "target_prefix": Field(
-                    StringSource,
-                    default_value=defaults.target_prefix,
-                    is_required=False,
-                    description="R2 prefix for hydrated Reelly document assets.",
-                ),
-                "inventory_prefix": Field(
-                    StringSource,
-                    default_value=defaults.inventory_prefix,
-                    is_required=False,
-                    description="R2 prefix for document asset inventory manifests.",
-                ),
-                "max_assets_per_run": Field(
-                    int,
-                    default_value=defaults.max_assets_per_run,
-                    is_required=False,
-                    description="Maximum document rows to process in one run.",
-                ),
-                "overwrite_existing": Field(
-                    bool,
-                    default_value=defaults.overwrite_existing,
-                    is_required=False,
-                    description="Re-download and replace objects that already exist.",
-                ),
-                "allowed_document_hosts": Field(
-                    [str],
-                    default_value=list(defaults.allowed_document_hosts),
-                    is_required=False,
-                    description="Allowlisted HTTPS hosts for document downloads.",
-                ),
-                "max_document_mb": Field(
-                    int,
-                    default_value=defaults.max_document_mb,
-                    is_required=False,
-                    description="Maximum single document download size in MiB.",
-                ),
-                "request_pause_seconds": Field(
-                    float,
-                    default_value=defaults.request_pause_seconds,
-                    is_required=False,
-                    description="Pause between document download attempts.",
-                ),
-                "timeout_seconds": Field(
-                    float,
-                    default_value=defaults.timeout_seconds,
-                    is_required=False,
-                    description="HTTP timeout for document downloads.",
-                ),
-                "max_concurrent_downloads": Field(
-                    int,
-                    default_value=defaults.max_concurrent_downloads,
-                    is_required=False,
-                    description="Maximum concurrent document downloads.",
-                ),
-                "include_project_documents": Field(
-                    bool,
-                    default_value=defaults.include_project_documents,
-                    is_required=False,
-                    description="Read media rows from reelly_supply_project_documents.jsonl.",
-                ),
-                "include_project_detail_media": Field(
-                    bool,
-                    default_value=defaults.include_project_detail_media,
-                    is_required=False,
-                    description="Discover media URLs from reelly_supply_project_details.jsonl.",
-                ),
-                "structured_target_keys": Field(
-                    bool,
-                    default_value=defaults.structured_target_keys,
-                    is_required=False,
-                    description="Include asset_type and field_path segments in R2 target keys.",
-                ),
-                "inventory_file_name": Field(
-                    StringSource,
-                    default_value=defaults.inventory_file_name,
-                    is_required=False,
-                    description="Inventory manifest JSONL file name.",
-                ),
-                "asset_type_allowlist": Field(
-                    [str],
-                    default_value=list(defaults.asset_type_allowlist),
-                    is_required=False,
-                    description="Optional list of asset_type values to hydrate.",
-                ),
-            }
+    return _asset_config_mapping(
+        asset_name=asset_name,
+        defaults=defaults,
+        field_specs=(
+            ("manifest_prefix", StringSource, "R2 prefix containing Reelly raw manifests."),
+            ("target_prefix", StringSource, "R2 prefix for hydrated Reelly document assets."),
+            (
+                "inventory_prefix",
+                StringSource,
+                "R2 prefix for document asset inventory manifests.",
+            ),
+            ("max_assets_per_run", int, "Maximum document rows to process in one run."),
+            ("overwrite_existing", bool, "Re-download and replace objects that already exist."),
+            ("allowed_document_hosts", [str], "Allowlisted HTTPS hosts for document downloads."),
+            ("max_document_mb", int, "Maximum single document download size in MiB."),
+            ("request_pause_seconds", float, "Pause between document download attempts."),
+            ("timeout_seconds", float, "HTTP timeout for document downloads."),
+            ("max_concurrent_downloads", int, "Maximum concurrent document downloads."),
+            (
+                "include_project_documents",
+                bool,
+                "Read media rows from reelly_supply_project_documents.jsonl.",
+            ),
+            (
+                "include_project_detail_media",
+                bool,
+                "Discover media URLs from reelly_supply_project_details.jsonl.",
+            ),
+            (
+                "structured_target_keys",
+                bool,
+                "Include asset_type and field_path segments in R2 target keys.",
+            ),
+            ("inventory_file_name", StringSource, "Inventory manifest JSONL file name."),
+            ("asset_type_allowlist", [str], "Optional list of asset_type values to hydrate."),
         ),
-        receive_processed_config_values=True,
     )
 
 
@@ -1169,106 +1088,83 @@ def _pf_listing_media_asset_config_mapping(
     *,
     defaults: PropertyFinderListingMediaHydrationConfig,
 ) -> ConfigMapping:
-    def _map_pf_listing_media_asset_config(config: Mapping[str, Any]) -> dict[str, Any]:
+    return _asset_config_mapping(
+        asset_name="pf_listing_media_assets",
+        defaults=defaults,
+        field_specs=(
+            (
+                "manifest_prefix",
+                StringSource,
+                "R2 prefix containing Property Finder raw manifests.",
+            ),
+            (
+                "target_prefix",
+                StringSource,
+                "R2 prefix for hydrated Property Finder listing media.",
+            ),
+            (
+                "inventory_prefix",
+                StringSource,
+                "R2 prefix for Property Finder media inventory manifests.",
+            ),
+            ("inventory_file_name", StringSource, "Inventory manifest JSONL file name."),
+            ("max_assets_per_run", int, "Maximum media assets to process in one run."),
+            (
+                "overwrite_existing",
+                bool,
+                "Re-download and replace media objects that already exist.",
+            ),
+            (
+                "allowed_media_hosts",
+                [str],
+                "Allowlisted HTTPS hosts for Property Finder media downloads.",
+            ),
+            ("max_media_mb", int, "Maximum single media download size in MiB."),
+            ("request_pause_seconds", float, "Pause between media download attempts."),
+            ("timeout_seconds", float, "HTTP timeout for media downloads."),
+            ("max_concurrent_downloads", int, "Maximum concurrent media downloads."),
+            (
+                "include_search_listing_media",
+                bool,
+                "Discover media from pf_listing_properties.jsonl.",
+            ),
+            ("include_detail_media", bool, "Discover media from pf_listing_details.jsonl."),
+            (
+                "asset_type_allowlist",
+                [str],
+                "Optional list of Property Finder media asset_type values to hydrate.",
+            ),
+        ),
+    )
+
+
+def _news_poll_and_hydrate_config_mapping(source: SourceSpec) -> ConfigMapping:
+    def _map_news_poll_and_hydrate_config(config: Mapping[str, Any]) -> dict[str, Any]:
+        _reject_unexpected_top_level_keys(
+            config,
+            allowed_keys={"raw", "thumbnails"},
+            context="news_feeds_poll_and_hydrate",
+        )
         return {
             "ops": {
-                "pf_listing_media_assets": {
-                    "config": dict(config),
-                }
+                _raw_asset_name(source): {
+                    "config": _source_overrides(dict(config.get("raw") or {})),
+                },
+                "news_thumbnail_assets": {
+                    "config": {
+                        "latest_manifest_count": 1,
+                        **dict(config.get("thumbnails") or {}),
+                    },
+                },
             }
         }
 
-    return ConfigMapping(
-        config_fn=_map_pf_listing_media_asset_config,
-        config_schema=Permissive(
-            {
-                "manifest_prefix": Field(
-                    StringSource,
-                    default_value=defaults.manifest_prefix,
-                    is_required=False,
-                    description="R2 prefix containing Property Finder raw manifests.",
-                ),
-                "target_prefix": Field(
-                    StringSource,
-                    default_value=defaults.target_prefix,
-                    is_required=False,
-                    description="R2 prefix for hydrated Property Finder listing media.",
-                ),
-                "inventory_prefix": Field(
-                    StringSource,
-                    default_value=defaults.inventory_prefix,
-                    is_required=False,
-                    description="R2 prefix for Property Finder media inventory manifests.",
-                ),
-                "inventory_file_name": Field(
-                    StringSource,
-                    default_value=defaults.inventory_file_name,
-                    is_required=False,
-                    description="Inventory manifest JSONL file name.",
-                ),
-                "max_assets_per_run": Field(
-                    int,
-                    default_value=defaults.max_assets_per_run,
-                    is_required=False,
-                    description="Maximum media assets to process in one run.",
-                ),
-                "overwrite_existing": Field(
-                    bool,
-                    default_value=defaults.overwrite_existing,
-                    is_required=False,
-                    description="Re-download and replace media objects that already exist.",
-                ),
-                "allowed_media_hosts": Field(
-                    [str],
-                    default_value=list(defaults.allowed_media_hosts),
-                    is_required=False,
-                    description="Allowlisted HTTPS hosts for Property Finder media downloads.",
-                ),
-                "max_media_mb": Field(
-                    int,
-                    default_value=defaults.max_media_mb,
-                    is_required=False,
-                    description="Maximum single media download size in MiB.",
-                ),
-                "request_pause_seconds": Field(
-                    float,
-                    default_value=defaults.request_pause_seconds,
-                    is_required=False,
-                    description="Pause between media download attempts.",
-                ),
-                "timeout_seconds": Field(
-                    float,
-                    default_value=defaults.timeout_seconds,
-                    is_required=False,
-                    description="HTTP timeout for media downloads.",
-                ),
-                "max_concurrent_downloads": Field(
-                    int,
-                    default_value=defaults.max_concurrent_downloads,
-                    is_required=False,
-                    description="Maximum concurrent media downloads.",
-                ),
-                "include_search_listing_media": Field(
-                    bool,
-                    default_value=defaults.include_search_listing_media,
-                    is_required=False,
-                    description="Discover media from pf_listing_properties.jsonl.",
-                ),
-                "include_detail_media": Field(
-                    bool,
-                    default_value=defaults.include_detail_media,
-                    is_required=False,
-                    description="Discover media from pf_listing_details.jsonl.",
-                ),
-                "asset_type_allowlist": Field(
-                    [str],
-                    default_value=list(defaults.asset_type_allowlist),
-                    is_required=False,
-                    description="Optional list of Property Finder media asset_type values to hydrate.",
-                ),
-            }
-        ),
-        receive_processed_config_values=True,
+    return _permissive_config_mapping(
+        config_fn=_map_news_poll_and_hydrate_config,
+        fields={
+            "raw": _section_field("News raw polling config overrides."),
+            "thumbnails": _section_field("News thumbnail hydration config overrides."),
+        },
     )
 
 
@@ -1276,94 +1172,36 @@ def _news_thumbnail_asset_config_mapping(
     *,
     defaults: NewsThumbnailHydrationConfig,
 ) -> ConfigMapping:
-    def _map_news_thumbnail_asset_config(config: Mapping[str, Any]) -> dict[str, Any]:
-        return {
-            "ops": {
-                "news_thumbnail_assets": {
-                    "config": dict(config),
-                }
-            }
-        }
-
-    return ConfigMapping(
-        config_fn=_map_news_thumbnail_asset_config,
-        config_schema=Permissive(
-            {
-                "manifest_prefix": Field(
-                    StringSource,
-                    default_value=defaults.manifest_prefix,
-                    is_required=False,
-                    description="R2 prefix containing news raw manifests.",
-                ),
-                "target_prefix": Field(
-                    StringSource,
-                    default_value=defaults.target_prefix,
-                    is_required=False,
-                    description="R2 prefix for mirrored news thumbnails.",
-                ),
-                "inventory_prefix": Field(
-                    StringSource,
-                    default_value=defaults.inventory_prefix,
-                    is_required=False,
-                    description="R2 prefix for news thumbnail inventory manifests.",
-                ),
-                "inventory_file_name": Field(
-                    StringSource,
-                    default_value=defaults.inventory_file_name,
-                    is_required=False,
-                    description="Inventory manifest JSONL file name.",
-                ),
-                "lookback_days": Field(
-                    int,
-                    default_value=defaults.lookback_days,
-                    is_required=False,
-                    description="Only hydrate article thumbnails discovered or published recently.",
-                ),
-                "max_assets_per_run": Field(
-                    int,
-                    default_value=defaults.max_assets_per_run,
-                    is_required=False,
-                    description="Maximum thumbnail candidates to process in one run.",
-                ),
-                "overwrite_existing": Field(
-                    bool,
-                    default_value=defaults.overwrite_existing,
-                    is_required=False,
-                    description="Re-download and replace thumbnails that already exist.",
-                ),
-                "allowed_thumbnail_hosts": Field(
-                    [str],
-                    default_value=list(defaults.allowed_thumbnail_hosts),
-                    is_required=False,
-                    description="Optional allowlist for thumbnail hosts.",
-                ),
-                "max_thumbnail_mb": Field(
-                    int,
-                    default_value=defaults.max_thumbnail_mb,
-                    is_required=False,
-                    description="Maximum single thumbnail download size in MiB.",
-                ),
-                "request_pause_seconds": Field(
-                    float,
-                    default_value=defaults.request_pause_seconds,
-                    is_required=False,
-                    description="Pause between thumbnail download attempts.",
-                ),
-                "timeout_seconds": Field(
-                    float,
-                    default_value=defaults.timeout_seconds,
-                    is_required=False,
-                    description="HTTP timeout for thumbnail downloads.",
-                ),
-                "max_concurrent_downloads": Field(
-                    int,
-                    default_value=defaults.max_concurrent_downloads,
-                    is_required=False,
-                    description="Maximum concurrent thumbnail downloads.",
-                ),
-            }
+    return _asset_config_mapping(
+        asset_name="news_thumbnail_assets",
+        defaults=defaults,
+        field_specs=(
+            ("manifest_prefix", StringSource, "R2 prefix containing news raw manifests."),
+            ("target_prefix", StringSource, "R2 prefix for mirrored news thumbnails."),
+            (
+                "inventory_prefix",
+                StringSource,
+                "R2 prefix for news thumbnail inventory manifests.",
+            ),
+            ("inventory_file_name", StringSource, "Inventory manifest JSONL file name."),
+            (
+                "lookback_days",
+                int,
+                "Only hydrate article thumbnails discovered or published recently.",
+            ),
+            ("max_assets_per_run", int, "Maximum thumbnail candidates to process in one run."),
+            ("overwrite_existing", bool, "Re-download and replace thumbnails that already exist."),
+            ("allowed_thumbnail_hosts", [str], "Optional allowlist for thumbnail hosts."),
+            ("max_thumbnail_mb", int, "Maximum single thumbnail download size in MiB."),
+            (
+                "resolve_missing_from_article_pages",
+                bool,
+                "Fetch article pages to discover missing thumbnail URLs.",
+            ),
+            ("request_pause_seconds", float, "Pause between thumbnail download attempts."),
+            ("timeout_seconds", float, "HTTP timeout for thumbnail downloads."),
+            ("max_concurrent_downloads", int, "Maximum concurrent thumbnail downloads."),
         ),
-        receive_processed_config_values=True,
     )
 
 
@@ -1374,6 +1212,11 @@ def _news_publish_config_mapping(
     thumbnail_defaults = NewsThumbnailHydrationConfig()
 
     def _map_news_publish_config(config: Mapping[str, Any]) -> dict[str, Any]:
+        if "thumbnail_inventory_prefix" in config:
+            raise ValueError(
+                "Use inventory_prefix for news_publish_backfill; it configures both "
+                "thumbnail hydration inventory output and publish inventory input."
+            )
         thumbnail_config = {
             key: config[key]
             for key in (
@@ -1386,6 +1229,7 @@ def _news_publish_config_mapping(
                 "overwrite_existing",
                 "allowed_thumbnail_hosts",
                 "max_thumbnail_mb",
+                "resolve_missing_from_article_pages",
                 "request_pause_seconds",
                 "timeout_seconds",
                 "max_concurrent_downloads",
@@ -1404,10 +1248,7 @@ def _news_publish_config_mapping(
             )
             if key in config
         }
-        if "inventory_prefix" in config:
-            publish_config["thumbnail_inventory_prefix"] = config["inventory_prefix"]
-        elif "thumbnail_inventory_prefix" in config:
-            publish_config["thumbnail_inventory_prefix"] = config["thumbnail_inventory_prefix"]
+        publish_config["thumbnail_inventory_prefix"] = config["inventory_prefix"]
         return {
             "ops": {
                 "news_thumbnail_assets": {
@@ -1419,115 +1260,89 @@ def _news_publish_config_mapping(
             }
         }
 
-    return ConfigMapping(
+    return _permissive_config_mapping(
         config_fn=_map_news_publish_config,
-        config_schema=Permissive(
-            {
-                "manifest_prefix": Field(
-                    StringSource,
-                    default_value=defaults.manifest_prefix,
-                    is_required=False,
-                    description="R2 prefix containing news raw manifests.",
+        fields={
+            **_config_fields(
+                defaults,
+                (
+                    (
+                        "manifest_prefix",
+                        StringSource,
+                        "R2 prefix containing news raw manifests.",
+                    ),
+                    (
+                        "lookback_days",
+                        int,
+                        "Only publish articles discovered or published recently.",
+                    ),
+                    ("max_articles_per_run", int, "Maximum article rows to upsert in one run."),
+                    (
+                        "platform_postgres_url",
+                        StringSource,
+                        "Override PLATFORM_POSTGRES_URL for this publish run.",
+                    ),
+                    (
+                        "ensure_schema",
+                        bool,
+                        "Create or update news_articles columns before publishing.",
+                    ),
+                    ("dry_run", bool, "Build article payloads without writing to Postgres."),
                 ),
-                "thumbnail_inventory_prefix": Field(
-                    StringSource,
-                    default_value=defaults.thumbnail_inventory_prefix,
-                    is_required=False,
-                    description="R2 prefix containing news thumbnail inventory manifests.",
+            ),
+            **_config_fields(
+                thumbnail_defaults,
+                (
+                    ("target_prefix", StringSource, "R2 prefix for mirrored news thumbnails."),
+                    (
+                        "inventory_prefix",
+                        StringSource,
+                        "R2 prefix for news thumbnail inventory manifests.",
+                    ),
+                    (
+                        "inventory_file_name",
+                        StringSource,
+                        "Inventory manifest JSONL file name.",
+                    ),
+                    (
+                        "max_assets_per_run",
+                        int,
+                        "Maximum thumbnail candidates to process in one run.",
+                    ),
+                    (
+                        "overwrite_existing",
+                        bool,
+                        "Re-download and replace thumbnails that already exist.",
+                    ),
+                    (
+                        "allowed_thumbnail_hosts",
+                        [str],
+                        "Optional allowlist for thumbnail hosts.",
+                    ),
+                    (
+                        "max_thumbnail_mb",
+                        int,
+                        "Maximum single thumbnail download size in MiB.",
+                    ),
+                    (
+                        "resolve_missing_from_article_pages",
+                        bool,
+                        "Fetch article pages to discover missing thumbnail URLs.",
+                    ),
+                    (
+                        "request_pause_seconds",
+                        float,
+                        "Pause between thumbnail download attempts.",
+                    ),
+                    ("timeout_seconds", float, "HTTP timeout for thumbnail downloads."),
+                    (
+                        "max_concurrent_downloads",
+                        int,
+                        "Maximum concurrent thumbnail downloads.",
+                    ),
                 ),
-                "lookback_days": Field(
-                    int,
-                    default_value=defaults.lookback_days,
-                    is_required=False,
-                    description="Only publish articles discovered or published recently.",
-                ),
-                "max_articles_per_run": Field(
-                    int,
-                    default_value=defaults.max_articles_per_run,
-                    is_required=False,
-                    description="Maximum article rows to upsert in one run.",
-                ),
-                "target_prefix": Field(
-                    StringSource,
-                    default_value=thumbnail_defaults.target_prefix,
-                    is_required=False,
-                    description="R2 prefix for mirrored news thumbnails.",
-                ),
-                "inventory_prefix": Field(
-                    StringSource,
-                    default_value=thumbnail_defaults.inventory_prefix,
-                    is_required=False,
-                    description="R2 prefix for news thumbnail inventory manifests.",
-                ),
-                "inventory_file_name": Field(
-                    StringSource,
-                    default_value=thumbnail_defaults.inventory_file_name,
-                    is_required=False,
-                    description="Inventory manifest JSONL file name.",
-                ),
-                "max_assets_per_run": Field(
-                    int,
-                    default_value=thumbnail_defaults.max_assets_per_run,
-                    is_required=False,
-                    description="Maximum thumbnail candidates to process in one run.",
-                ),
-                "overwrite_existing": Field(
-                    bool,
-                    default_value=thumbnail_defaults.overwrite_existing,
-                    is_required=False,
-                    description="Re-download and replace thumbnails that already exist.",
-                ),
-                "allowed_thumbnail_hosts": Field(
-                    [str],
-                    default_value=list(thumbnail_defaults.allowed_thumbnail_hosts),
-                    is_required=False,
-                    description="Optional allowlist for thumbnail hosts.",
-                ),
-                "max_thumbnail_mb": Field(
-                    int,
-                    default_value=thumbnail_defaults.max_thumbnail_mb,
-                    is_required=False,
-                    description="Maximum single thumbnail download size in MiB.",
-                ),
-                "request_pause_seconds": Field(
-                    float,
-                    default_value=thumbnail_defaults.request_pause_seconds,
-                    is_required=False,
-                    description="Pause between thumbnail download attempts.",
-                ),
-                "timeout_seconds": Field(
-                    float,
-                    default_value=thumbnail_defaults.timeout_seconds,
-                    is_required=False,
-                    description="HTTP timeout for thumbnail downloads.",
-                ),
-                "max_concurrent_downloads": Field(
-                    int,
-                    default_value=thumbnail_defaults.max_concurrent_downloads,
-                    is_required=False,
-                    description="Maximum concurrent thumbnail downloads.",
-                ),
-                "platform_postgres_url": Field(
-                    StringSource,
-                    default_value=defaults.platform_postgres_url,
-                    is_required=False,
-                    description="Override PLATFORM_POSTGRES_URL for this publish run.",
-                ),
-                "ensure_schema": Field(
-                    bool,
-                    default_value=defaults.ensure_schema,
-                    is_required=False,
-                    description="Create or update news_articles columns before publishing.",
-                ),
-                "dry_run": Field(
-                    bool,
-                    default_value=defaults.dry_run,
-                    is_required=False,
-                    description="Build article payloads without writing to Postgres.",
-                ),
-            }
-        ),
-        receive_processed_config_values=True,
+            ),
+        },
     )
 
 
@@ -1540,3 +1355,19 @@ def _source_overrides(
     direct_overrides = {key: value for key, value in config.items() if key not in reserved}
     nested_overrides = dict(config.get("overrides") or {})
     return {**direct_overrides, **nested_overrides}
+
+
+def _reject_unexpected_top_level_keys(
+    config: Mapping[str, Any],
+    *,
+    allowed_keys: set[str],
+    context: str,
+) -> None:
+    unexpected_keys = sorted(set(config) - allowed_keys)
+    if unexpected_keys:
+        allowed = ", ".join(sorted(allowed_keys))
+        unexpected = ", ".join(unexpected_keys)
+        raise ValueError(
+            f"{context} config keys must be nested under one of: {allowed}. "
+            f"Unexpected top-level keys: {unexpected}."
+        )

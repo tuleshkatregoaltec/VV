@@ -1,59 +1,91 @@
 import pytest
 from dagster import (
+    AssetsDefinition,
     DagsterInvalidConfigError,
     DefaultScheduleStatus,
     Definitions,
+    JobDefinition,
+    ScheduleDefinition,
     validate_run_config,
 )
+from typing import Any, cast
 
-from holocron.contracts import BronzeTable, SourceSpec
+from holocron.contracts import BronzeTable, RawRelease, SourceSpec
 from holocron.definitions import defs
-from holocron.orchestration.factory import _run_bronze_loader
+from holocron.orchestration.factory import (
+    _DLD_OPEN_DATA_JOB_SPECS,
+    _run_bronze_loader,
+    build_assets_for_source,
+)
+
+DLD_OD_CATEGORIES = tuple(category for category, _, _, _ in _DLD_OPEN_DATA_JOB_SPECS)
+DLD_OD_RAW_ASSETS = {f"dld_od_{category}_raw" for category in DLD_OD_CATEGORIES}
+DLD_OD_BRONZE_ASSETS = {f"dld_od_{category}_bronze" for category in DLD_OD_CATEGORIES}
+DLD_OD_INCREMENTAL_JOBS = {f"dld_od_{category}_daily_incremental" for category in DLD_OD_CATEGORIES}
+DLD_OD_MANUAL_BACKFILL_JOBS = {
+    f"dld_od_{category}_manual_backfill" for category in DLD_OD_CATEGORIES
+}
+DLD_OD_MANUAL_SNAPSHOT_JOBS = {
+    f"dld_od_{category}_manual_snapshot" for category in DLD_OD_CATEGORIES
+}
+DLD_OD_MANUAL_JOBS = DLD_OD_MANUAL_BACKFILL_JOBS | DLD_OD_MANUAL_SNAPSHOT_JOBS
+DLD_OD_INCREMENTAL_CRONS = {category: cron for category, cron, _, _ in _DLD_OPEN_DATA_JOB_SPECS}
 
 
 def test_definitions_validate_loadable() -> None:
     Definitions.validate_loadable(defs)
 
 
-def test_definitions_expose_source_assets_and_news_sync() -> None:
-    asset_keys = {asset.key.to_user_string() for asset in defs.assets}
+def test_definitions_expose_source_assets() -> None:
+    asset_keys = {asset.key.to_user_string() for asset in _defs_assets()}
 
     assert asset_keys == {
-        "bay_locations_raw",
-        "bay_locations_bronze",
-        "bay_listings_raw",
-        "bay_listings_bronze",
-        "bay_transactions_raw",
-        "bay_transactions_bronze",
         "dda_planning_layers_raw",
         "dda_planning_layers_bronze",
-        "dld_transactions_raw",
-        "dld_transactions_bronze",
+        *DLD_OD_RAW_ASSETS,
+        *DLD_OD_BRONZE_ASSETS,
         "dxbi_transactions_raw",
         "dxbi_transactions_bronze",
         "news_feeds_raw",
         "news_thumbnail_assets",
         "news_publish",
         "pf_locations_raw",
+        "pf_locations_bronze",
         "pf_listings_raw",
+        "pf_listings_bronze",
         "pf_listing_media_assets",
         "reelly_supply_raw",
+        "reelly_supply_bronze",
         "reelly_supply_document_assets",
         "reelly_supply_project_media_assets",
-        "news_sync",
     }
 
 
+def test_assets_use_provider_groups() -> None:
+    group_by_asset_key = {
+        key.to_user_string(): group_name
+        for asset in _defs_assets()
+        for key, group_name in asset.group_names_by_key.items()
+    }
+
+    assert group_by_asset_key["dld_od_transactions_raw"] == "dld"
+    assert group_by_asset_key["dld_od_transactions_bronze"] == "dld"
+    assert group_by_asset_key["pf_locations_bronze"] == "propertyfinder"
+    assert group_by_asset_key["pf_listings_raw"] == "propertyfinder"
+    assert group_by_asset_key["pf_listings_bronze"] == "propertyfinder"
+    assert group_by_asset_key["reelly_supply_bronze"] == "reelly"
+    assert group_by_asset_key["pf_listing_media_assets"] == "propertyfinder"
+    assert group_by_asset_key["reelly_supply_document_assets"] == "reelly"
+    assert group_by_asset_key["news_publish"] == "news"
+
+
 def test_definitions_expose_named_operational_jobs() -> None:
-    assert {job.name for job in defs.jobs} == {
-        "bay_listings_daily_incremental",
-        "bay_transactions_daily_incremental",
-        "dld_transactions_daily_incremental",
+    assert {job.name for job in _defs_jobs()} == {
+        *DLD_OD_INCREMENTAL_JOBS,
         "dxbi_transactions_daily_incremental",
         "dda_planning_layers_weekly_full_refresh",
-        "bay_locations_manual_full_fetch",
-        "bay_transactions_manual_backfill",
-        "dld_transactions_manual_backfill",
+        *DLD_OD_MANUAL_BACKFILL_JOBS,
+        *DLD_OD_MANUAL_SNAPSHOT_JOBS,
         "dxbi_transactions_manual_backfill",
         "dda_planning_layers_manual_full_refresh",
         "pf_locations_manual_full_fetch",
@@ -61,15 +93,17 @@ def test_definitions_expose_named_operational_jobs() -> None:
         "pf_listings_plan_snapshot",
         "pf_listings_search_chunk",
         "pf_listings_detail_chunk",
-        "news_feeds_poll_and_publish",
+        "pf_listings_daily_latest_delta",
+        "news_feeds_poll_and_hydrate",
         "news_feeds_manual_poll",
         "news_thumbnail_assets_backfill",
         "news_publish_backfill",
         "reelly_supply_archive_chunk",
+        "reelly_supply_daily_catalog_delta",
+        "reelly_supply_daily_availability_delta",
         "reelly_supply_document_assets_backfill",
         "reelly_supply_project_media_assets_backfill",
         "pf_listing_media_assets_backfill",
-        "news_sync_pipeline",
     }
 
 
@@ -81,29 +115,38 @@ def test_definitions_expose_only_recurring_operational_schedules() -> None:
             schedule.execution_timezone,
             schedule.default_status,
         )
-        for schedule in defs.schedules
+        for schedule in _defs_schedules()
     } == {
-        "dld_transactions_daily_incremental_schedule": (
-            "dld_transactions_daily_incremental",
-            "0 5 * * *",
-            "Asia/Dubai",
-            DefaultScheduleStatus.STOPPED,
-        ),
-        "bay_transactions_daily_incremental_schedule": (
-            "bay_transactions_daily_incremental",
-            "30 5 * * *",
-            "Asia/Dubai",
-            DefaultScheduleStatus.STOPPED,
-        ),
+        **{
+            f"dld_od_{category}_daily_incremental_schedule": (
+                f"dld_od_{category}_daily_incremental",
+                cron,
+                "Asia/Dubai",
+                DefaultScheduleStatus.STOPPED,
+            )
+            for category, cron in DLD_OD_INCREMENTAL_CRONS.items()
+        },
         "dxbi_transactions_daily_incremental_schedule": (
             "dxbi_transactions_daily_incremental",
             "0 6 * * *",
             "Asia/Dubai",
             DefaultScheduleStatus.STOPPED,
         ),
-        "bay_listings_daily_incremental_schedule": (
-            "bay_listings_daily_incremental",
-            "30 6 * * *",
+        "reelly_supply_daily_catalog_delta_schedule": (
+            "reelly_supply_daily_catalog_delta",
+            "0 2 * * *",
+            "Asia/Dubai",
+            DefaultScheduleStatus.STOPPED,
+        ),
+        "reelly_supply_daily_availability_delta_schedule": (
+            "reelly_supply_daily_availability_delta",
+            "30 2 * * *",
+            "Asia/Dubai",
+            DefaultScheduleStatus.STOPPED,
+        ),
+        "pf_listings_daily_latest_delta_schedule": (
+            "pf_listings_daily_latest_delta",
+            "0 3 * * *",
             "Asia/Dubai",
             DefaultScheduleStatus.STOPPED,
         ),
@@ -113,8 +156,8 @@ def test_definitions_expose_only_recurring_operational_schedules() -> None:
             "Asia/Dubai",
             DefaultScheduleStatus.STOPPED,
         ),
-        "news_feeds_poll_and_publish_schedule": (
-            "news_feeds_poll_and_publish",
+        "news_feeds_poll_and_hydrate_schedule": (
+            "news_feeds_poll_and_hydrate",
             "*/15 * * * *",
             "Asia/Dubai",
             DefaultScheduleStatus.STOPPED,
@@ -122,68 +165,57 @@ def test_definitions_expose_only_recurring_operational_schedules() -> None:
     }
 
 
-def test_scheduled_source_jobs_select_raw_and_bronze_assets() -> None:
-    assert _selected_assets("bay_listings_daily_incremental") == {
-        "bay_listings_raw",
-        "bay_listings_bronze",
+def test_operational_jobs_select_expected_assets() -> None:
+    expected_assets = {
+        **{
+            f"dld_od_{category}_daily_incremental": {f"dld_od_{category}_raw"}
+            for category in DLD_OD_CATEGORIES
+        },
+        "dxbi_transactions_daily_incremental": {"dxbi_transactions_raw"},
+        "dda_planning_layers_weekly_full_refresh": {"dda_planning_layers_raw"},
+        "reelly_supply_daily_availability_delta": {"reelly_supply_raw"},
+        "reelly_supply_daily_catalog_delta": {
+            "reelly_supply_raw",
+            "reelly_supply_document_assets",
+            "reelly_supply_project_media_assets",
+        },
+        "pf_listings_daily_latest_delta": {"pf_listings_raw", "pf_listing_media_assets"},
+        "news_feeds_poll_and_hydrate": {"news_feeds_raw", "news_thumbnail_assets"},
+        "dda_planning_layers_manual_full_refresh": {
+            "dda_planning_layers_raw",
+            "dda_planning_layers_bronze",
+        },
+        "pf_locations_manual_full_fetch": {"pf_locations_raw"},
+        "pf_listings_manual_snapshot": {"pf_listings_raw"},
+        "pf_listings_plan_snapshot": {"pf_listings_raw"},
+        "pf_listings_search_chunk": {"pf_listings_raw"},
+        "pf_listings_detail_chunk": {"pf_listings_raw"},
+        **{
+            f"dld_od_{category}_manual_backfill": {f"dld_od_{category}_raw"}
+            for category in DLD_OD_CATEGORIES
+        },
+        **{
+            f"dld_od_{category}_manual_snapshot": {f"dld_od_{category}_raw"}
+            for category in DLD_OD_CATEGORIES
+        },
+        "dxbi_transactions_manual_backfill": {"dxbi_transactions_raw"},
+        "pf_listing_media_assets_backfill": {"pf_listing_media_assets"},
+        "news_feeds_manual_poll": {"news_feeds_raw"},
+        "news_thumbnail_assets_backfill": {"news_thumbnail_assets"},
+        "news_publish_backfill": {"news_thumbnail_assets", "news_publish"},
+        "reelly_supply_archive_chunk": {"reelly_supply_raw"},
+        "reelly_supply_document_assets_backfill": {"reelly_supply_document_assets"},
+        "reelly_supply_project_media_assets_backfill": {"reelly_supply_project_media_assets"},
     }
-    assert _selected_assets("bay_transactions_daily_incremental") == {
-        "bay_transactions_raw",
-        "bay_transactions_bronze",
-    }
-    assert _selected_assets("dld_transactions_daily_incremental") == {
-        "dld_transactions_raw",
-        "dld_transactions_bronze",
-    }
-    assert _selected_assets("dxbi_transactions_daily_incremental") == {
-        "dxbi_transactions_raw",
-        "dxbi_transactions_bronze",
-    }
-    assert _selected_assets("news_feeds_poll_and_publish") == {
-        "news_feeds_raw",
-        "news_thumbnail_assets",
-        "news_publish",
-    }
-    assert _selected_assets("dda_planning_layers_weekly_full_refresh") == {
-        "dda_planning_layers_raw",
-        "dda_planning_layers_bronze",
-    }
+    for job_name, assets in expected_assets.items():
+        assert _selected_assets(job_name) == assets
 
 
-def test_manual_one_shot_jobs_select_expected_assets_without_schedules() -> None:
-    assert _selected_assets("bay_locations_manual_full_fetch") == {
-        "bay_locations_raw",
-        "bay_locations_bronze",
-    }
-    assert _selected_assets("dda_planning_layers_manual_full_refresh") == {
-        "dda_planning_layers_raw",
-        "dda_planning_layers_bronze",
-    }
-    assert _selected_assets("pf_locations_manual_full_fetch") == {"pf_locations_raw"}
-    assert _selected_assets("pf_listings_manual_snapshot") == {"pf_listings_raw"}
-    assert _selected_assets("pf_listings_plan_snapshot") == {"pf_listings_raw"}
-    assert _selected_assets("pf_listings_search_chunk") == {"pf_listings_raw"}
-    assert _selected_assets("pf_listings_detail_chunk") == {"pf_listings_raw"}
-    assert _selected_assets("pf_listing_media_assets_backfill") == {"pf_listing_media_assets"}
-    assert _selected_assets("news_feeds_manual_poll") == {"news_feeds_raw"}
-    assert _selected_assets("news_thumbnail_assets_backfill") == {"news_thumbnail_assets"}
-    assert _selected_assets("news_publish_backfill") == {
-        "news_thumbnail_assets",
-        "news_publish",
-    }
-    assert _selected_assets("reelly_supply_archive_chunk") == {"reelly_supply_raw"}
-    assert _selected_assets("reelly_supply_document_assets_backfill") == {
-        "reelly_supply_document_assets"
-    }
-    assert _selected_assets("reelly_supply_project_media_assets_backfill") == {
-        "reelly_supply_project_media_assets"
-    }
-    scheduled_jobs = {schedule.job_name for schedule in defs.schedules}
+def test_manual_one_shot_jobs_do_not_have_schedules() -> None:
+    scheduled_jobs = {schedule.job_name for schedule in _defs_schedules()}
     assert (
         not {
-            "bay_locations_manual_full_fetch",
-            "bay_transactions_manual_backfill",
-            "dld_transactions_manual_backfill",
+            *DLD_OD_MANUAL_JOBS,
             "dxbi_transactions_manual_backfill",
             "dda_planning_layers_manual_full_refresh",
             "pf_locations_manual_full_fetch",
@@ -206,8 +238,10 @@ def test_manual_one_shot_jobs_select_expected_assets_without_schedules() -> None
 @pytest.mark.parametrize(
     ("job_name", "raw_asset_name"),
     [
-        ("bay_transactions_manual_backfill", "bay_transactions_raw"),
-        ("dld_transactions_manual_backfill", "dld_transactions_raw"),
+        *[
+            (f"dld_od_{category}_manual_backfill", f"dld_od_{category}_raw")
+            for category in DLD_OD_CATEGORIES
+        ],
         ("dxbi_transactions_manual_backfill", "dxbi_transactions_raw"),
     ],
 )
@@ -220,162 +254,325 @@ def test_manual_backfill_jobs_require_dates_and_inject_backfill_mode(
     with pytest.raises(DagsterInvalidConfigError):
         validate_run_config(job, {"start_date": "2026-01-01"})
 
-    run_config = validate_run_config(
-        job,
-        {
-            "start_date": "2026-01-01",
-            "end_date": "2026-01-31",
-            "max_pages": 3,
-        },
+    backfill_dates = {"start_date": "2026-01-01", "end_date": "2026-01-31"}
+    raw_config = _op_config(job_name, raw_asset_name, {**backfill_dates, "max_pages": 3})
+    _assert_config_contains(
+        raw_config,
+        {"mode": "backfill", **backfill_dates, "max_pages": 3},
     )
 
-    raw_config = run_config["ops"][raw_asset_name]["config"]
-    assert raw_config["mode"] == "backfill"
-    assert raw_config["start_date"] == "2026-01-01"
-    assert raw_config["end_date"] == "2026-01-31"
-    assert raw_config["max_pages"] == 3
+    if job_name.startswith("dld_od_"):
+        default_raw_config = _op_config(job_name, raw_asset_name, backfill_dates)
+        _assert_config_contains(
+            default_raw_config,
+            {"page_size": 10000, "max_pages": 1, "slice_days": 366},
+        )
+        if job_name == "dld_od_rents_manual_backfill":
+            _assert_config_contains(
+                default_raw_config,
+                {"start_date": "2026-01-01", "filters": {"P_DATE_TYPE": "1"}},
+            )
 
 
 def test_manual_one_shot_jobs_default_raw_config() -> None:
-    bay_locations_config = validate_run_config(
-        defs.resolve_job_def("bay_locations_manual_full_fetch"),
-        {},
-    )["ops"]["bay_locations_raw"]["config"]
-    assert len(bay_locations_config["queries"]) > 10
-    assert bay_locations_config["max_pages"] == 20
-    assert bay_locations_config["include_ancestors"] is True
-
-    reelly_config = validate_run_config(
-        defs.resolve_job_def("reelly_supply_archive_chunk"),
-        {"page_cursor": 7},
-    )["ops"]["reelly_supply_raw"]["config"]
-    assert reelly_config["pages_per_run"] == 5
-    assert reelly_config["page_cursor"] == 7
-    assert reelly_config["download_documents"] is False
-    assert reelly_config["download_all_project_docs"] is True
-
-    reelly_document_config = validate_run_config(
-        defs.resolve_job_def("reelly_supply_document_assets_backfill"),
-        {},
-    )["ops"]["reelly_supply_document_assets"]["config"]
-    assert reelly_document_config["manifest_prefix"] == "raw/source=reelly_supply/manifests/"
-    assert reelly_document_config["target_prefix"] == "media/reelly_supply/documents"
-    assert reelly_document_config["max_assets_per_run"] == 500
-    assert reelly_document_config["overwrite_existing"] is False
-    assert reelly_document_config["include_project_documents"] is True
-    assert reelly_document_config["include_project_detail_media"] is False
-    assert reelly_document_config["structured_target_keys"] is False
-    assert reelly_document_config["max_concurrent_downloads"] == 1
-
-    reelly_media_config = validate_run_config(
-        defs.resolve_job_def("reelly_supply_project_media_assets_backfill"),
-        {},
-    )["ops"]["reelly_supply_project_media_assets"]["config"]
-    assert reelly_media_config["manifest_prefix"] == "raw/source=reelly_supply/manifests/"
-    assert reelly_media_config["target_prefix"] == "media/reelly_supply/project_media"
-    assert reelly_media_config["inventory_prefix"] == (
-        "raw/source=reelly_supply/project_media_asset_manifests"
+    config_cases = (
+        (
+            "dld_od_rents_manual_snapshot",
+            "dld_od_rents_raw",
+            {},
+            {
+                "mode": "snapshot",
+                "page_size": 10000,
+                "max_pages": 1,
+                "slice_days": 366,
+                "start_date": "2017-01-01",
+                "filters": {"P_DATE_TYPE": "1"},
+            },
+        ),
+        (
+            "dld_od_rents_daily_incremental",
+            "dld_od_rents_raw",
+            {},
+            {"mode": "incremental", "filters": {"P_DATE_TYPE": "0"}},
+        ),
+        (
+            "reelly_supply_archive_chunk",
+            "reelly_supply_raw",
+            {"page_cursor": 7},
+            {
+                "pages_per_run": 5,
+                "page_cursor": 7,
+                "download_documents": False,
+                "download_all_project_docs": True,
+            },
+        ),
+        (
+            "reelly_supply_daily_availability_delta",
+            "reelly_supply_raw",
+            {},
+            {"mode": "availability_delta", "try_matrix_availability": True},
+        ),
+        (
+            "reelly_supply_document_assets_backfill",
+            "reelly_supply_document_assets",
+            {},
+            {
+                "manifest_prefix": "raw/source=reelly_supply/manifests/",
+                "target_prefix": "media/reelly_supply/documents",
+                "max_assets_per_run": 500,
+                "overwrite_existing": False,
+                "include_project_documents": True,
+                "include_project_detail_media": False,
+                "structured_target_keys": False,
+                "max_concurrent_downloads": 1,
+            },
+        ),
+        (
+            "reelly_supply_project_media_assets_backfill",
+            "reelly_supply_project_media_assets",
+            {},
+            {
+                "manifest_prefix": "raw/source=reelly_supply/manifests/",
+                "target_prefix": "media/reelly_supply/project_media",
+                "inventory_prefix": "raw/source=reelly_supply/project_media_asset_manifests",
+                "inventory_file_name": "reelly_supply_project_media_assets.jsonl",
+                "include_project_documents": False,
+                "include_project_detail_media": True,
+                "structured_target_keys": True,
+                "max_concurrent_downloads": 8,
+            },
+        ),
+        (
+            "pf_listings_manual_snapshot",
+            "pf_listings_raw",
+            {},
+            {
+                "mode": "snapshot",
+                "max_planned_queries": 12000,
+                "max_search_pages_per_run": 50000,
+                "max_details_per_run": 100000,
+                "fetch_details": True,
+                "split_by_location": True,
+            },
+        ),
+        (
+            "pf_listings_plan_snapshot",
+            "pf_listings_raw",
+            {},
+            {
+                "mode": "plan",
+                "max_planned_queries": 25000,
+                "max_plan_queries_per_run": 500,
+                "max_results_per_query": 750,
+                "max_partition_depth": 10,
+            },
+        ),
+        (
+            "pf_listings_search_chunk",
+            "pf_listings_raw",
+            {},
+            {"mode": "search", "max_search_pages_per_run": 500, "fetch_details": False},
+        ),
+        (
+            "pf_listings_detail_chunk",
+            "pf_listings_raw",
+            {},
+            {"mode": "details", "max_details_per_run": 1000},
+        ),
+        (
+            "pf_listing_media_assets_backfill",
+            "pf_listing_media_assets",
+            {},
+            {
+                "manifest_prefix": "raw/source=pf_listings/manifests/",
+                "target_prefix": "media/pf_listings/listing_media",
+                "inventory_prefix": "raw/source=pf_listings/listing_media_asset_manifests",
+                "inventory_file_name": "pf_listing_media_assets.jsonl",
+                "max_assets_per_run": 100000,
+                "overwrite_existing": False,
+                "include_search_listing_media": True,
+                "include_detail_media": True,
+                "max_concurrent_downloads": 8,
+            },
+        ),
+        (
+            "news_thumbnail_assets_backfill",
+            "news_thumbnail_assets",
+            {},
+            {
+                "manifest_prefix": "raw/source=news_feeds/manifests/",
+                "target_prefix": "media/news/thumbnails",
+                "inventory_prefix": "raw/source=news_feeds/thumbnail_asset_manifests",
+                "inventory_file_name": "news_thumbnail_assets.jsonl",
+                "lookback_days": 0,
+                "max_assets_per_run": 100000,
+                "overwrite_existing": False,
+                "max_concurrent_downloads": 8,
+                "resolve_missing_from_article_pages": True,
+            },
+        ),
     )
-    assert reelly_media_config["inventory_file_name"] == "reelly_supply_project_media_assets.jsonl"
-    assert reelly_media_config["include_project_documents"] is False
-    assert reelly_media_config["include_project_detail_media"] is True
-    assert reelly_media_config["structured_target_keys"] is True
-    assert reelly_media_config["max_concurrent_downloads"] == 8
+    configs = {}
+    for job_name, op_name, run_config, expected in config_cases:
+        config = _op_config(job_name, op_name, run_config)
+        _assert_config_contains(config, expected)
+        configs[(job_name, op_name)] = config
+
+    for job_name, raw_asset_name in (
+        ("dld_od_lands_daily_incremental", "dld_od_lands_raw"),
+        ("dld_od_units_daily_incremental", "dld_od_units_raw"),
+        ("dld_od_brokers_daily_incremental", "dld_od_brokers_raw"),
+    ):
+        dld_od_inventory_incremental_config = _op_config(job_name, raw_asset_name)
+        assert dld_od_inventory_incremental_config["mode"] == "incremental"
+
+    reelly_catalog_run_config = _run_config("reelly_supply_daily_catalog_delta")
+    reelly_catalog_config = _run_op_config(reelly_catalog_run_config, "reelly_supply_raw")
+    _assert_config_contains(
+        reelly_catalog_config,
+        {
+            "mode": "catalog_delta",
+            "pages_per_run": 200,
+            "download_documents": False,
+            "fetch_documents_for_delta": True,
+            "detail_audit_limit": 50,
+        },
+    )
+    _assert_config_contains(
+        _run_op_config(reelly_catalog_run_config, "reelly_supply_document_assets"),
+        {"latest_manifest_count": 1},
+    )
+    _assert_config_contains(
+        _run_op_config(reelly_catalog_run_config, "reelly_supply_project_media_assets"),
+        {"latest_manifest_count": 1},
+    )
+    reelly_catalog_override_config = _run_config(
+        "reelly_supply_daily_catalog_delta",
+        {
+            "raw": {"pages_per_run": 9},
+            "documents": {"max_assets_per_run": 3},
+            "project_media": {"max_assets_per_run": 4},
+        },
+    )
+    _assert_config_contains(
+        _run_op_config(reelly_catalog_override_config, "reelly_supply_raw"),
+        {"pages_per_run": 9},
+    )
+    _assert_config_contains(
+        _run_op_config(reelly_catalog_override_config, "reelly_supply_document_assets"),
+        {"max_assets_per_run": 3},
+    )
+    _assert_config_contains(
+        _run_op_config(reelly_catalog_override_config, "reelly_supply_project_media_assets"),
+        {"max_assets_per_run": 4},
+    )
+
+    reelly_media_config = configs[
+        "reelly_supply_project_media_assets_backfill", "reelly_supply_project_media_assets"
+    ]
     assert "brochure" not in reelly_media_config["asset_type_allowlist"]
     assert "profile_image" not in reelly_media_config["asset_type_allowlist"]
     assert {"cover_image", "developer_logo", "floorplan"} <= set(
         reelly_media_config["asset_type_allowlist"]
     )
 
-    pf_listings_config = validate_run_config(
-        defs.resolve_job_def("pf_listings_manual_snapshot"),
-        {},
-    )["ops"]["pf_listings_raw"]["config"]
-    assert pf_listings_config["mode"] == "snapshot"
-    assert pf_listings_config["max_planned_queries"] == 12000
-    assert pf_listings_config["max_search_pages_per_run"] == 50000
-    assert pf_listings_config["max_details_per_run"] == 100000
-    assert pf_listings_config["fetch_details"] is True
-    assert pf_listings_config["split_by_location"] is True
-
-    pf_plan_config = validate_run_config(
-        defs.resolve_job_def("pf_listings_plan_snapshot"),
-        {},
-    )["ops"]["pf_listings_raw"]["config"]
-    assert pf_plan_config["mode"] == "plan"
-    assert pf_plan_config["max_planned_queries"] == 25000
-    assert pf_plan_config["max_results_per_query"] == 750
-    assert pf_plan_config["max_partition_depth"] == 10
-
-    pf_search_config = validate_run_config(
-        defs.resolve_job_def("pf_listings_search_chunk"),
-        {},
-    )["ops"]["pf_listings_raw"]["config"]
-    assert pf_search_config["mode"] == "search"
-    assert pf_search_config["max_search_pages_per_run"] == 10000
-    assert pf_search_config["fetch_details"] is False
-
-    pf_detail_config = validate_run_config(
-        defs.resolve_job_def("pf_listings_detail_chunk"),
-        {},
-    )["ops"]["pf_listings_raw"]["config"]
-    assert pf_detail_config["mode"] == "details"
-    assert pf_detail_config["max_details_per_run"] == 25000
-
-    pf_media_config = validate_run_config(
-        defs.resolve_job_def("pf_listing_media_assets_backfill"),
-        {},
-    )["ops"]["pf_listing_media_assets"]["config"]
-    assert pf_media_config["manifest_prefix"] == "raw/source=pf_listings/manifests/"
-    assert pf_media_config["target_prefix"] == "media/pf_listings/listing_media"
-    assert pf_media_config["inventory_prefix"] == (
-        "raw/source=pf_listings/listing_media_asset_manifests"
+    pf_latest_delta_run_config = _run_config("pf_listings_daily_latest_delta")
+    pf_latest_delta_config = _run_op_config(pf_latest_delta_run_config, "pf_listings_raw")
+    _assert_config_contains(
+        pf_latest_delta_config,
+        {
+            "mode": "latest_delta",
+            "max_pages_per_query": 5,
+            "max_search_pages_per_run": 40,
+            "latest_delta_stop_after_seen_pages": 2,
+            "latest_delta_bootstrap_details": False,
+        },
     )
-    assert pf_media_config["inventory_file_name"] == "pf_listing_media_assets.jsonl"
-    assert pf_media_config["max_assets_per_run"] == 100000
-    assert pf_media_config["overwrite_existing"] is False
-    assert pf_media_config["include_search_listing_media"] is True
-    assert pf_media_config["include_detail_media"] is True
-    assert pf_media_config["max_concurrent_downloads"] == 8
+    _assert_config_contains(
+        _run_op_config(pf_latest_delta_run_config, "pf_listing_media_assets"),
+        {"latest_manifest_count": 1},
+    )
+    pf_latest_delta_override_config = _run_config(
+        "pf_listings_daily_latest_delta",
+        {
+            "raw": {"max_details_per_run": 25},
+            "media": {"max_assets_per_run": 7},
+        },
+    )
+    _assert_config_contains(
+        _run_op_config(pf_latest_delta_override_config, "pf_listings_raw"),
+        {"max_details_per_run": 25},
+    )
+    _assert_config_contains(
+        _run_op_config(pf_latest_delta_override_config, "pf_listing_media_assets"),
+        {"max_assets_per_run": 7},
+    )
+
+    pf_media_config = configs[("pf_listing_media_assets_backfill", "pf_listing_media_assets")]
     assert "static.shared.propertyfinder.ae" in pf_media_config["allowed_media_hosts"]
 
-    news_thumbnail_config = validate_run_config(
-        defs.resolve_job_def("news_thumbnail_assets_backfill"),
-        {},
-    )["ops"]["news_thumbnail_assets"]["config"]
-    assert news_thumbnail_config["manifest_prefix"] == "raw/source=news_feeds/manifests/"
-    assert news_thumbnail_config["target_prefix"] == "media/news/thumbnails"
-    assert news_thumbnail_config["inventory_prefix"] == (
-        "raw/source=news_feeds/thumbnail_asset_manifests"
+    news_publish_config = _run_config("news_publish_backfill")
+    _assert_config_contains(
+        _run_op_config(news_publish_config, "news_thumbnail_assets"),
+        {"lookback_days": 3, "resolve_missing_from_article_pages": False},
     )
-    assert news_thumbnail_config["inventory_file_name"] == "news_thumbnail_assets.jsonl"
-    assert news_thumbnail_config["lookback_days"] == 3
-    assert news_thumbnail_config["max_assets_per_run"] == 1000
-    assert news_thumbnail_config["overwrite_existing"] is False
-    assert news_thumbnail_config["max_concurrent_downloads"] == 8
+    _assert_config_contains(
+        _run_op_config(news_publish_config, "news_publish"),
+        {
+            "manifest_prefix": "raw/source=news_feeds/manifests/",
+            "thumbnail_inventory_prefix": "raw/source=news_feeds/thumbnail_asset_manifests",
+            "lookback_days": 3,
+            "max_articles_per_run": 1000,
+            "ensure_schema": True,
+            "dry_run": False,
+        },
+    )
+    custom_news_publish_config = _run_config(
+        "news_publish_backfill",
+        {"inventory_prefix": "raw/source=news_feeds/custom_thumbnail_inventory"},
+    )
+    _assert_config_contains(
+        _run_op_config(custom_news_publish_config, "news_thumbnail_assets"),
+        {"inventory_prefix": "raw/source=news_feeds/custom_thumbnail_inventory"},
+    )
+    _assert_config_contains(
+        _run_op_config(custom_news_publish_config, "news_publish"),
+        {"thumbnail_inventory_prefix": "raw/source=news_feeds/custom_thumbnail_inventory"},
+    )
 
-    news_publish_config = validate_run_config(
-        defs.resolve_job_def("news_publish_backfill"),
-        {},
+    news_poll_config = _run_config("news_feeds_poll_and_hydrate")
+    _assert_config_contains(
+        _run_op_config(news_poll_config, "news_thumbnail_assets"),
+        {"latest_manifest_count": 1},
     )
-    assert news_publish_config["ops"]["news_thumbnail_assets"]["config"]["lookback_days"] == 3
-    assert news_publish_config["ops"]["news_publish"]["config"]["manifest_prefix"] == (
-        "raw/source=news_feeds/manifests/"
+    custom_news_poll_config = _run_config(
+        "news_feeds_poll_and_hydrate",
+        {
+            "raw": {"max_entries_per_feed": 5},
+            "thumbnails": {"latest_manifest_count": 2},
+        },
     )
-    assert news_publish_config["ops"]["news_publish"]["config"]["thumbnail_inventory_prefix"] == (
-        "raw/source=news_feeds/thumbnail_asset_manifests"
+    _assert_config_contains(
+        _run_op_config(custom_news_poll_config, "news_feeds_raw"),
+        {"max_entries_per_feed": 5},
     )
-    assert news_publish_config["ops"]["news_publish"]["config"]["lookback_days"] == 3
-    assert news_publish_config["ops"]["news_publish"]["config"]["max_articles_per_run"] == 1000
-    assert news_publish_config["ops"]["news_publish"]["config"]["ensure_schema"] is True
-    assert news_publish_config["ops"]["news_publish"]["config"]["dry_run"] is False
+    _assert_config_contains(
+        _run_op_config(custom_news_poll_config, "news_thumbnail_assets"),
+        {"latest_manifest_count": 2},
+    )
 
 
 def test_bronze_loader_routes_through_source_metadata() -> None:
     calls = []
 
-    def extractor() -> None:
-        return None
+    def extractor() -> RawRelease:
+        return RawRelease(
+            source="synthetic_source",
+            run_id="run-1",
+            extract_date="2026-05-01",
+            created_at="2026-05-01T00:00:00+00:00",
+            files=(),
+        )
 
     def bronze_loader(**kwargs):
         calls.append(kwargs)
@@ -402,22 +599,106 @@ def test_bronze_loader_routes_through_source_metadata() -> None:
             return self._client
 
     result = _run_bronze_loader(
-        context=None,  # type: ignore[arg-type]
         source=source,
-        raw_release={"source": "synthetic_source", "run_id": "run-1"},
-        s3=Resource("s3-client"),  # type: ignore[arg-type]
-        clickhouse=Resource("clickhouse-client"),  # type: ignore[arg-type]
+        raw_manifest={"source": "synthetic_source", "run_id": "run-1"},
+        s3=Resource("s3-client"),
+        clickhouse=Resource("clickhouse-client"),
     )
 
     assert calls == [
         {
-            "raw_release": {"source": "synthetic_source", "run_id": "run-1"},
+            "raw_manifest": {"source": "synthetic_source", "run_id": "run-1"},
             "s3": "s3-client",
             "clickhouse": "clickhouse-client",
         }
     ]
+    assert result.metadata is not None
     assert result.metadata["source"] == "synthetic_source"
     assert result.metadata["run_id"] == "run-1"
+
+
+def test_bronze_loader_rejects_smoke_raw_manifest() -> None:
+    def extractor() -> RawRelease:
+        return RawRelease(
+            source="synthetic_source",
+            run_id="run-1",
+            extract_date="2026-05-01",
+            created_at="2026-05-01T00:00:00+00:00",
+            files=(),
+        )
+
+    source = SourceSpec(
+        name="synthetic_source",
+        provider="synthetic",
+        extractor=extractor,
+        bronze_loader=lambda **kwargs: {},
+        bronze_tables=(BronzeTable(name="synthetic_bronze"),),
+    )
+
+    class Resource:
+        def client(self) -> str:
+            return "client"
+
+    with pytest.raises(ValueError, match="Smoke raw manifest"):
+        _run_bronze_loader(
+            source=source,
+            raw_manifest={
+                "source": "synthetic_source",
+                "run_id": "run-1",
+                "metadata": {"dataset_kind": "smoke"},
+            },
+            s3=Resource(),
+            clickhouse=Resource(),
+        )
+
+
+def test_source_with_bronze_tables_requires_bronze_loader() -> None:
+    def extractor() -> RawRelease:
+        return RawRelease(
+            source="bad_source",
+            run_id="run-1",
+            extract_date="2026-05-01",
+            created_at="2026-05-01T00:00:00+00:00",
+            files=(),
+        )
+
+    source = SourceSpec(
+        name="bad_source",
+        provider="synthetic",
+        extractor=extractor,
+        bronze_tables=(BronzeTable(name="bad_bronze"),),
+    )
+
+    with pytest.raises(ValueError, match="declares bronze tables without a bronze loader"):
+        build_assets_for_source(source)
+
+
+def _defs_assets() -> list[AssetsDefinition]:
+    return cast(list[AssetsDefinition], list(defs.assets or []))
+
+
+def _defs_jobs() -> list[JobDefinition]:
+    return cast(list[JobDefinition], list(defs.jobs or []))
+
+
+def _defs_schedules() -> list[ScheduleDefinition]:
+    return cast(list[ScheduleDefinition], list(defs.schedules or []))
+
+
+def _run_config(job_name: str, config: dict[str, Any] | None = None) -> dict[str, Any]:
+    return dict(validate_run_config(defs.resolve_job_def(job_name), config or {}))
+
+
+def _op_config(job_name: str, op_name: str, config: dict[str, Any] | None = None) -> dict[str, Any]:
+    return _run_op_config(_run_config(job_name, config), op_name)
+
+
+def _run_op_config(run_config: dict[str, Any], op_name: str) -> dict[str, Any]:
+    return run_config["ops"][op_name]["config"]
+
+
+def _assert_config_contains(config: dict[str, Any], expected: dict[str, Any]) -> None:
+    assert {key: config[key] for key in expected} == expected
 
 
 def _selected_assets(job_name: str) -> set[str]:

@@ -167,3 +167,13 @@ def iso_datetime_or_default(value: Any) -> datetime:
         return datetime.fromisoformat(parsed)
     except (ValueError, TypeError):
         return _EPOCH
+
+
+def iso_datetime_or_none(value: Any) -> datetime | None:
+    parsed = string_value(value)
+    if not parsed:
+        return None
+    try:
+        return datetime.fromisoformat(parsed)
+    except (ValueError, TypeError):
+        return None
