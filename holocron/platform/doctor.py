@@ -41,7 +41,6 @@ CLICKHOUSE_REQUIRED_ENV = (
 )
 
 OPTIONAL_SOURCE_ENV = (
-    "BAYUT_API_KEY",
     "REELLY_EMAIL",
     "REELLY_PASSWORD",
     "PLATFORM_POSTGRES_URL",
@@ -107,8 +106,8 @@ def _read_env_file(path: Path) -> dict[str, str]:
         return {}
 
     values: dict[str, str] = {}
-    for line_number, raw_line in enumerate(path.read_text().splitlines(), start=1):
-        line = raw_line.strip()
+    for line_number, line in enumerate(path.read_text().splitlines(), start=1):
+        line = line.strip()
         if not line or line.startswith("#"):
             continue
         if line.startswith("export "):
