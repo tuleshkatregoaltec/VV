@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import hashlib
 from collections.abc import Callable
+from datetime import date
+from pathlib import Path
+from tempfile import TemporaryDirectory
 from typing import Any
 
 from holocron.contracts import (
@@ -15,13 +18,19 @@ from holocron.platform.bronze import (
     bronze_load_result,
     coerce_int,
     iso_date_or_none,
-    load_jsonl_table_rows,
-    replace_run_rows,
+    replace_where_rows,
     stable_json,
     validate_raw_manifest,
 )
+from holocron.platform.clickhouse import sql_string
 from holocron.platform.clickhouse_schema import ensure_schema
-from holocron.platform.raw_files import manifest_files_by_name, string_value
+from holocron.platform.raw_files import (
+    download_manifest_file,
+    manifest_files_by_name,
+    read_jsonl_manifest_rows,
+    require_manifest_file,
+    string_value,
+)
 
 _KEY_SEPARATOR = "|"
 
@@ -95,23 +104,52 @@ def load_open_data_release_to_clickhouse(
     row_builder: Callable[..., tuple[Any, ...]],
 ) -> BronzeLoadResult:
     actual_source, run_id = validate_raw_manifest(raw_manifest, expected_source=source_name)
+    _require_complete_result_set(raw_manifest=raw_manifest, source_name=source_name)
     files_by_name = manifest_files_by_name(raw_manifest)
-    table_rows = load_jsonl_table_rows(
-        files_by_name=files_by_name,
-        file_name=row_file_name,
-        s3=s3,
-        run_id=run_id,
-        source_label=source_name,
-        row_builder=row_builder,
-        required=True,
-        scratch_prefix=f"holocron-{source_name}-bronze",
+    raw_rows: list[dict[str, Any]] = []
+    page_rows: list[dict[str, Any]] = []
+    page_file_name = row_file_name.replace("_rows.jsonl", "_pages.jsonl")
+    with TemporaryDirectory(prefix=f"holocron-{source_name}-bronze-{run_id}-") as scratch:
+        scratch_path = Path(scratch)
+        row_file_entry = require_manifest_file(files_by_name, row_file_name)
+        row_path = download_manifest_file(
+            file_name=row_file_name,
+            file_entry=row_file_entry,
+            s3=s3,
+            scratch_path=scratch_path,
+            source_label=source_name,
+        )
+        raw_rows = read_jsonl_manifest_rows(
+            path=row_path,
+            file_entry=row_file_entry,
+            source_label=source_name,
+        )
+        page_file_entry = files_by_name.get(page_file_name)
+        if page_file_entry is not None:
+            page_path = download_manifest_file(
+                file_name=page_file_name,
+                file_entry=page_file_entry,
+                s3=s3,
+                scratch_path=scratch_path,
+                source_label=source_name,
+            )
+            page_rows = read_jsonl_manifest_rows(
+                path=page_path,
+                file_entry=page_file_entry,
+                source_label=source_name,
+            )
+    table_rows = [row_builder(raw_row, fallback_run_id=run_id) for raw_row in raw_rows]
+    delete_predicate = _open_data_delete_predicate(
+        source_name=source_name,
+        raw_rows=raw_rows,
+        page_rows=page_rows,
     )
 
     ensure_schema(clickhouse=clickhouse)
-    replace_run_rows(
+    replace_where_rows(
         clickhouse=clickhouse,
         table=table_name,
-        run_id=run_id,
+        predicate=delete_predicate,
         rows=table_rows,
         column_names=column_names,
     )
@@ -121,3 +159,57 @@ def load_open_data_release_to_clickhouse(
         run_id=run_id,
         table_row_counts={table_name: len(table_rows)},
     )
+
+
+def _require_complete_result_set(*, raw_manifest: RawManifest, source_name: str) -> None:
+    metadata = raw_manifest.get("metadata")
+    if not isinstance(metadata, dict):
+        return
+    if metadata.get("completed_result_set") is False:
+        raise ValueError(
+            f"{source_name} incomplete raw result set cannot be loaded into current-state bronze"
+        )
+
+
+def _open_data_delete_predicate(
+    *,
+    source_name: str,
+    raw_rows: list[dict[str, Any]],
+    page_rows: list[dict[str, Any]],
+) -> str:
+    windows = _open_data_windows(raw_rows=raw_rows, page_rows=page_rows)
+    if not windows:
+        raise ValueError(
+            f"{source_name} raw manifest has no date-window/page metadata for current-state bronze"
+        )
+    if any(start is None or end is None for start, end in windows):
+        return "1 = 1"
+    return " OR ".join(
+        f"(date_window_start = {_date_sql(start)} AND date_window_end = {_date_sql(end)})"
+        for start, end in windows
+    )
+
+
+def _open_data_windows(
+    *,
+    raw_rows: list[dict[str, Any]],
+    page_rows: list[dict[str, Any]],
+) -> tuple[tuple[str | None, str | None], ...]:
+    windows: list[tuple[str | None, str | None]] = []
+    for row in (*page_rows, *raw_rows):
+        window = row.get("date_window")
+        if window is None:
+            windows.append((None, None))
+            continue
+        if not isinstance(window, dict):
+            continue
+        start = string_value(window.get("start_date")) or None
+        end = string_value(window.get("end_date")) or None
+        windows.append((start, end))
+    return tuple(dict.fromkeys(windows))
+
+
+def _date_sql(value: str | None) -> str:
+    if value is None:
+        return "NULL"
+    return f"toDate({sql_string(date.fromisoformat(value).isoformat())})"

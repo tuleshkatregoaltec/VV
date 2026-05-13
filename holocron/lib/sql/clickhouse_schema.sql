@@ -139,6 +139,93 @@ CREATE TABLE IF NOT EXISTS dxbi_transactions_bronze (
 ) ENGINE = MergeTree()
 ORDER BY (slice_start_date, source_table, transaction_key);
 
+CREATE TABLE IF NOT EXISTS dxbi_heatmap_rental_buildings_bronze (
+    rental_key    String,
+    run_id        String,
+    scraped_at    String DEFAULT '',
+    location_id   String DEFAULT '',
+    property_type LowCardinality(String) DEFAULT '',
+    bedrooms      LowCardinality(String) DEFAULT '',
+    query_json    String DEFAULT '',
+    raw_json      String DEFAULT ''
+) ENGINE = MergeTree()
+ORDER BY (location_id, property_type, bedrooms, rental_key);
+
+CREATE TABLE IF NOT EXISTS dxbi_heatmap_buildings_bronze (
+    response_key String,
+    run_id       String,
+    scraped_at   String DEFAULT '',
+    location_id  String DEFAULT '',
+    endpoint     LowCardinality(String) DEFAULT '',
+    status       UInt16 DEFAULT 0,
+    request_url  String DEFAULT '',
+    content_type String DEFAULT '',
+    seed_json    String DEFAULT '',
+    payload_json String DEFAULT '',
+    text         String DEFAULT ''
+) ENGINE = MergeTree()
+ORDER BY (location_id, endpoint, response_key);
+
+CREATE TABLE IF NOT EXISTS dxbi_heatmap_building_statuses_bronze (
+    response_key String,
+    run_id       String,
+    scraped_at   String DEFAULT '',
+    location_id  String DEFAULT '',
+    endpoint     LowCardinality(String) DEFAULT '',
+    status       UInt16 DEFAULT 0,
+    request_url  String DEFAULT '',
+    content_type String DEFAULT '',
+    seed_json    String DEFAULT '',
+    payload_json String DEFAULT '',
+    text         String DEFAULT ''
+) ENGINE = MergeTree()
+ORDER BY (location_id, endpoint, response_key);
+
+CREATE TABLE IF NOT EXISTS dxbi_heatmap_chessboards_bronze (
+    response_key String,
+    run_id       String,
+    scraped_at   String DEFAULT '',
+    location_id  String DEFAULT '',
+    endpoint     LowCardinality(String) DEFAULT '',
+    status       UInt16 DEFAULT 0,
+    request_url  String DEFAULT '',
+    content_type String DEFAULT '',
+    seed_json    String DEFAULT '',
+    payload_json String DEFAULT '',
+    text         String DEFAULT ''
+) ENGINE = MergeTree()
+ORDER BY (location_id, endpoint, response_key);
+
+CREATE TABLE IF NOT EXISTS dxbi_fam_map_buildings_bronze (
+    response_key String,
+    run_id       String,
+    scraped_at   String DEFAULT '',
+    location_id  String DEFAULT '',
+    endpoint     LowCardinality(String) DEFAULT '',
+    status       UInt16 DEFAULT 0,
+    request_url  String DEFAULT '',
+    content_type String DEFAULT '',
+    seed_json    String DEFAULT '',
+    payload_json String DEFAULT '',
+    text         String DEFAULT ''
+) ENGINE = MergeTree()
+ORDER BY (location_id, endpoint, response_key);
+
+CREATE TABLE IF NOT EXISTS dxbi_heatmap_errors_bronze (
+    error_key         String,
+    run_id            String,
+    scraped_at        String DEFAULT '',
+    location_id       String DEFAULT '',
+    endpoint          LowCardinality(String) DEFAULT '',
+    status            UInt16 DEFAULT 0,
+    request_url       String DEFAULT '',
+    request_body_json String DEFAULT '',
+    content_type      String DEFAULT '',
+    payload_json      String DEFAULT '',
+    text              String DEFAULT ''
+) ENGINE = MergeTree()
+ORDER BY (endpoint, location_id, error_key);
+
 CREATE TABLE IF NOT EXISTS dld_od_transactions_bronze (
     row_key              String,
     run_id               String,

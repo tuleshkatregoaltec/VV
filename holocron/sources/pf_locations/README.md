@@ -7,6 +7,7 @@ settings. It is planning data for Property Finder listing scrapes.
 
 - Provider: `propertyfinder`
 - Dagster raw asset: `pf_locations_raw`
+- Dagster bronze asset: `pf_locations_bronze`
 - Checkpoint strategy: `full_refresh`
 - Cadence: manual
 
@@ -36,4 +37,5 @@ Important knobs:
 ## Operational Notes
 
 Run this before broad `pf_listings` snapshots when location/filter assumptions
-need refreshing.
+need refreshing. The manual full-fetch job now updates bronze by atomically
+replacing the current location table from the complete raw hierarchy.

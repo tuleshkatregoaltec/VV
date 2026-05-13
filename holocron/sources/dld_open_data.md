@@ -41,7 +41,7 @@ state/source=dld_od_<category>/operation=snapshot_chunk.json
 ## Runtime Modes
 
 - `incremental`: default scheduled mode. Uses a lookback window ending at the
-  run date and writes raw only.
+  run date, writes raw, then updates the affected bronze date windows.
 - `backfill`: manual dated window. Requires `start_date` and `end_date`.
 - `snapshot`: manual full endpoint scan. Date-capable inventory endpoints that
   cannot sensibly snapshot through date windows omit date filters when their
@@ -51,7 +51,7 @@ state/source=dld_od_<category>/operation=snapshot_chunk.json
 
 Each source has the same job shape:
 
-- `dld_od_<category>_daily_incremental`: scheduled raw-only incremental job.
+- `dld_od_<category>_daily_incremental`: scheduled raw + bronze incremental job.
 - `dld_od_<category>_manual_backfill`: unscheduled raw-only dated backfill.
 - `dld_od_<category>_manual_snapshot`: unscheduled raw-only snapshot.
 
@@ -63,6 +63,10 @@ Incremental runs do not currently resume `max_pages` cursors across scheduled
 runs. Treat `max_pages` on daily incremental jobs as a per-run cap for bounded
 polling, not as durable resumability. Manual snapshot and backfill jobs keep
 checkpointed cursors because their windows are operator-controlled.
+
+Bronze loaders reject incomplete DLD raw chunks for current-state loads. Keep
+manual chunked backfills raw-only until the selected raw manifests represent
+complete windows, then replay them into bronze in order.
 
 ## Config Notes
 

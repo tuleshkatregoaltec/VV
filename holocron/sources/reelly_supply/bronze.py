@@ -13,7 +13,7 @@ from holocron.platform.bronze import (
     bronze_load_result,
     coerce_int,
     load_jsonl_table_rows,
-    replace_run_rows,
+    replace_keyed_rows,
     stable_json,
     validate_raw_manifest,
 )
@@ -113,24 +113,29 @@ def load_release_to_clickhouse(
         _DOCUMENTS_TABLE: len(document_rows),
         _AVAILABILITY_TABLE: len(availability_rows),
     }
-    replace_run_rows(
+    project_ids = [row[3] for row in project_rows]
+    replace_keyed_rows(
         clickhouse=clickhouse,
         table=_PROJECTS_TABLE,
-        run_id=run_id,
+        key_column="project_id",
+        key_values=project_ids,
         rows=project_rows,
         column_names=_PROJECT_COLUMNS,
     )
-    replace_run_rows(
+    document_project_ids = project_ids or [row[3] for row in document_rows]
+    replace_keyed_rows(
         clickhouse=clickhouse,
         table=_DOCUMENTS_TABLE,
-        run_id=run_id,
+        key_column="project_id",
+        key_values=document_project_ids,
         rows=document_rows,
         column_names=_DOCUMENT_COLUMNS,
     )
-    replace_run_rows(
+    replace_keyed_rows(
         clickhouse=clickhouse,
         table=_AVAILABILITY_TABLE,
-        run_id=run_id,
+        key_column="project_id",
+        key_values=[row[3] for row in availability_rows],
         rows=availability_rows,
         column_names=_AVAILABILITY_COLUMNS,
     )
@@ -140,7 +145,7 @@ def load_release_to_clickhouse(
 def _project_row_tuple(raw_row: dict[str, Any], *, fallback_run_id: str) -> tuple:
     raw_json = _json(raw_row.get("raw"))
     project_id = string_value(raw_row.get("project_id"))
-    project_key = _hash_key(project_id, raw_json)
+    project_key = project_id or _hash_key(raw_json)
     return (
         project_key,
         string_value(raw_row.get("_run_id")) or fallback_run_id,
@@ -159,7 +164,6 @@ def _document_row_tuple(raw_row: dict[str, Any], *, fallback_run_id: str) -> tup
         project_id,
         string_value(raw_row.get("normalized_url")) or string_value(raw_row.get("url")),
         string_value(raw_row.get("field_path")),
-        raw_json,
     )
     return (
         document_key,
@@ -188,7 +192,7 @@ def _availability_row_tuple(raw_row: dict[str, Any], *, fallback_run_id: str) ->
     endpoint = string_value(raw_row.get("endpoint"))
     candidate = string_value(raw_row.get("candidate"))
     return (
-        _hash_key(project_id, endpoint, candidate, raw_json),
+        _hash_key(project_id, endpoint, candidate),
         string_value(raw_row.get("_run_id")) or fallback_run_id,
         string_value(raw_row.get("scraped_at")),
         project_id,

@@ -587,7 +587,7 @@ def _build_dld_open_data_jobs(
             _build_source_asset_job(
                 source=source,
                 name=f"{source_name}_{operation}",
-                raw_only=True,
+                raw_only=operation != "daily_incremental",
                 config=config,
             )
         )
@@ -600,13 +600,13 @@ def build_operational_jobs(sources: Mapping[str, SourceSpec]) -> list[AssetJobDe
         _build_source_asset_job(
             source=sources["dxbi_transactions"],
             name="dxbi_transactions_daily_incremental",
-            raw_only=True,
+            raw_only=False,
             config=_raw_asset_run_config(sources["dxbi_transactions"], {"mode": "incremental"}),
         ),
         _build_source_asset_job(
             source=sources["dda_planning_layers"],
             name="dda_planning_layers_weekly_full_refresh",
-            raw_only=True,
+            raw_only=False,
         ),
         *_build_dld_open_data_jobs(sources, operation="manual_backfill"),
         *_build_dld_open_data_jobs(sources, operation="manual_snapshot"),
@@ -625,12 +625,12 @@ def build_operational_jobs(sources: Mapping[str, SourceSpec]) -> list[AssetJobDe
         _build_source_asset_job(
             source=sources["pf_locations"],
             name="pf_locations_manual_full_fetch",
-            raw_only=True,
+            raw_only=False,
         ),
         _build_source_asset_job(
             source=sources["pf_listings"],
             name="pf_listings_manual_snapshot",
-            raw_only=True,
+            raw_only=False,
             config=_defaulted_raw_config_mapping(
                 sources["pf_listings"],
                 defaults=PF_LISTINGS_MANUAL_SNAPSHOT_DEFAULTS,
@@ -665,7 +665,7 @@ def build_operational_jobs(sources: Mapping[str, SourceSpec]) -> list[AssetJobDe
         ),
         define_asset_job(
             name="pf_listings_daily_latest_delta",
-            selection=["pf_listings_raw", "pf_listing_media_assets"],
+            selection=["pf_listings_raw", "pf_listings_bronze", "pf_listing_media_assets"],
             config=_pf_listings_latest_delta_config_mapping(
                 sources["pf_listings"],
                 defaults=PF_LISTINGS_LATEST_DELTA_DEFAULTS,
@@ -681,6 +681,7 @@ def build_operational_jobs(sources: Mapping[str, SourceSpec]) -> list[AssetJobDe
             name="reelly_supply_daily_catalog_delta",
             selection=[
                 "reelly_supply_raw",
+                "reelly_supply_bronze",
                 "reelly_supply_document_assets",
                 "reelly_supply_project_media_assets",
             ],
@@ -691,7 +692,7 @@ def build_operational_jobs(sources: Mapping[str, SourceSpec]) -> list[AssetJobDe
         _build_source_asset_job(
             source=sources["reelly_supply"],
             name="reelly_supply_daily_availability_delta",
-            raw_only=True,
+            raw_only=False,
             config=_defaulted_raw_config_mapping(
                 sources["reelly_supply"],
                 defaults=REELLY_AVAILABILITY_DELTA_DEFAULTS,

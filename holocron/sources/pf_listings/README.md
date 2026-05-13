@@ -14,7 +14,9 @@ fetches, and media hydration.
   - `pf_listings_plan_snapshot`
   - `pf_listings_search_chunk`
   - `pf_listings_detail_chunk`
+  - `pf_listings_daily_latest_delta`
 - Media hydration asset: `pf_listing_media_assets`
+- Bronze asset: `pf_listings_bronze`
 
 ## Raw Files
 
@@ -96,9 +98,14 @@ The durable path is chunked:
    raw manifests, fetches listing detail `__NEXT_DATA__`, and advances
    `detail_chunk` only after the raw manifest exists.
 4. Run `pf_listing_media_assets_backfill` to hydrate associated images/media.
-   The scheduled latest-delta job runs this hydration after the raw delta so
-   new listing media lands in R2 with the raw ingest.
+   The scheduled latest-delta job also updates bronze for observed listing and
+   detail keys, then runs this hydration so new listing media lands in R2 with
+   the raw ingest.
 
 `pf_listings_manual_snapshot` remains available for bounded smoke tests, but it
 is intentionally not the preferred path for broad backfills because a single
 long process uploads only at the end.
+
+Current-state bronze is only as complete as the observed Property Finder rows.
+Latest-delta runs upsert seen listing keys and refreshed detail keys; they do
+not infer tombstones for listings that disappear outside the scanned pages.

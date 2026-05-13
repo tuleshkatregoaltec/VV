@@ -7,6 +7,7 @@ hydration for project documents and media.
 
 - Provider: `reelly`
 - Dagster raw asset: `reelly_supply_raw`
+- Dagster bronze asset: `reelly_supply_bronze`
 - Operational job: `reelly_supply_archive_chunk`
 - Checkpoint strategy: `cursor_pages`
 - Cadence: daily/manual chunks
@@ -78,7 +79,9 @@ Hydration knobs:
 
 ## Operational Notes
 
-The archive scrape is chunked and checkpointed. The hydration jobs are
+The archive scrape is chunked and checkpointed. The scheduled catalog and
+availability deltas update current-state bronze for touched project,
+document, and availability keys. The hydration jobs are
 idempotent and upload per asset, so they are better suited for long media
 backfills than source scrapes that only upload at the end. The scheduled catalog
 delta runs raw extraction together with document and project-media hydration,

@@ -9,7 +9,7 @@ data.
 - Provider: `dda`
 - Dagster raw asset: `dda_planning_layers_raw`
 - Checkpoint strategy: `full_refresh`
-- Cadence: weekly raw/full refresh schedule plus manual full refresh
+- Cadence: weekly raw + bronze full refresh schedule plus manual full refresh
 - Bronze tables: `dda_*` planning tables
 
 ## Raw Files
@@ -47,6 +47,8 @@ Important knobs:
 
 ## Operational Notes
 
-DDA is a full refresh source and has been wired through raw and bronze. It is a
-good candidate for repeatable backfills because it does not depend on a limited
-paid API quota. The registered weekly schedule is stopped by default.
+DDA is a full refresh source and has been wired through raw and bronze. Bronze
+replaces the current ClickHouse DDA tables atomically from each complete raw
+release. It is a good candidate for repeatable backfills because it does not
+depend on a limited paid API quota. The registered weekly schedule is stopped by
+default.

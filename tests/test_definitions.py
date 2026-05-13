@@ -168,25 +168,42 @@ def test_definitions_expose_only_recurring_operational_schedules() -> None:
 def test_operational_jobs_select_expected_assets() -> None:
     expected_assets = {
         **{
-            f"dld_od_{category}_daily_incremental": {f"dld_od_{category}_raw"}
+            f"dld_od_{category}_daily_incremental": {
+                f"dld_od_{category}_raw",
+                f"dld_od_{category}_bronze",
+            }
             for category in DLD_OD_CATEGORIES
         },
-        "dxbi_transactions_daily_incremental": {"dxbi_transactions_raw"},
-        "dda_planning_layers_weekly_full_refresh": {"dda_planning_layers_raw"},
-        "reelly_supply_daily_availability_delta": {"reelly_supply_raw"},
+        "dxbi_transactions_daily_incremental": {
+            "dxbi_transactions_raw",
+            "dxbi_transactions_bronze",
+        },
+        "dda_planning_layers_weekly_full_refresh": {
+            "dda_planning_layers_raw",
+            "dda_planning_layers_bronze",
+        },
+        "reelly_supply_daily_availability_delta": {
+            "reelly_supply_raw",
+            "reelly_supply_bronze",
+        },
         "reelly_supply_daily_catalog_delta": {
             "reelly_supply_raw",
+            "reelly_supply_bronze",
             "reelly_supply_document_assets",
             "reelly_supply_project_media_assets",
         },
-        "pf_listings_daily_latest_delta": {"pf_listings_raw", "pf_listing_media_assets"},
+        "pf_listings_daily_latest_delta": {
+            "pf_listings_raw",
+            "pf_listings_bronze",
+            "pf_listing_media_assets",
+        },
         "news_feeds_poll_and_hydrate": {"news_feeds_raw", "news_thumbnail_assets"},
         "dda_planning_layers_manual_full_refresh": {
             "dda_planning_layers_raw",
             "dda_planning_layers_bronze",
         },
-        "pf_locations_manual_full_fetch": {"pf_locations_raw"},
-        "pf_listings_manual_snapshot": {"pf_listings_raw"},
+        "pf_locations_manual_full_fetch": {"pf_locations_raw", "pf_locations_bronze"},
+        "pf_listings_manual_snapshot": {"pf_listings_raw", "pf_listings_bronze"},
         "pf_listings_plan_snapshot": {"pf_listings_raw"},
         "pf_listings_search_chunk": {"pf_listings_raw"},
         "pf_listings_detail_chunk": {"pf_listings_raw"},

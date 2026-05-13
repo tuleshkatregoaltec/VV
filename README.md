@@ -17,7 +17,7 @@ The intended flow is:
 ```text
 source connector
   -> immutable raw release in S3
-  -> bronze ClickHouse tables
+  -> current raw-shaped bronze ClickHouse tables
   -> optional domain outputs
 ```
 
@@ -151,7 +151,9 @@ The current MVP focus is:
 - bronze loading contracts per source
 - thin Dagster orchestration around raw and bronze only
 
-`dda_planning_layers` is now wired end-to-end in the active harness (raw extraction + bronze load).
+Recurring source jobs are wired to update bronze where the raw release is complete
+enough to safely maintain current-state tables. Raw S3 manifests remain the
+immutable audit/history layer.
 
 Silver layers are intentionally deferred until a few sources are producing real
 raw and bronze data and the cleaning requirements are clearer.

@@ -106,6 +106,47 @@ def replace_run_rows(
         clickhouse.insert_rows(table=table, rows=rows, column_names=column_names)
 
 
+def replace_where_rows(
+    *,
+    clickhouse: ClickHouseInserter,
+    table: str,
+    predicate: str,
+    rows: Sequence[tuple[Any, ...]],
+    column_names: Sequence[str],
+) -> None:
+    quoted_table = quote_clickhouse_identifier(table)
+    clickhouse.command(
+        f"ALTER TABLE {quoted_table} DELETE WHERE {predicate} SETTINGS mutations_sync = 1"
+    )
+    if rows:
+        clickhouse.insert_rows(table=table, rows=rows, column_names=column_names)
+
+
+def replace_keyed_rows(
+    *,
+    clickhouse: ClickHouseInserter,
+    table: str,
+    key_column: str,
+    key_values: Sequence[str],
+    rows: Sequence[tuple[Any, ...]],
+    column_names: Sequence[str],
+) -> None:
+    keys = tuple(dict.fromkeys(key for key in key_values if key))
+    if not keys:
+        if rows:
+            clickhouse.insert_rows(table=table, rows=rows, column_names=column_names)
+        return
+    quoted_key_column = quote_clickhouse_identifier(key_column)
+    quoted_values = ", ".join(sql_string(key) for key in keys)
+    replace_where_rows(
+        clickhouse=clickhouse,
+        table=table,
+        predicate=f"{quoted_key_column} IN ({quoted_values})",
+        rows=rows,
+        column_names=column_names,
+    )
+
+
 def coerce_int(value: Any) -> int:
     parsed = string_value(value)
     if not parsed:

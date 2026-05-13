@@ -1,7 +1,11 @@
 # Bronze Loading Patterns
 
-Bronze loaders transform raw S3 releases into ClickHouse tables. This doc covers
-the standard patterns, the three delete strategies, and the source contract wiring.
+Bronze loaders transform raw S3 releases into ClickHouse tables. In standard
+medallion terminology bronze is usually the immutable append-only raw layer.
+Holocron keeps that immutable history in raw S3 manifests, so ClickHouse
+`*_bronze` tables are the current raw-shaped warehouse surface used by Dagster
+and downstream jobs. Loaders therefore use delete+insert upserts around the
+affected source keys, date windows, or full-refresh table contents.
 
 ## Source Contract Wiring
 
@@ -100,27 +104,30 @@ releases that predate a new output file).
 
 ## Delete Strategies
 
-Bronze loaders must be idempotent — replaying the same raw manifest must produce
-the same table state. This requires deleting any existing rows for the run or
-window before inserting the new batch. There are three patterns in use:
+Bronze loaders must be idempotent and current-state compatible — replaying the
+same raw manifest must produce the same table state, and recurring incremental
+loads must not accumulate duplicates for overlapping source windows or keys.
+There are three patterns in use:
 
-### 1. Delete by `run_id` (most sources)
+### 1. Replace affected source keys
 
-Used when each run produces a self-contained snapshot of its rows:
+Used when an incremental run reports changed/current entities by stable source
+keys:
 
 ```python
-from holocron.platform.clickhouse import quote_clickhouse_identifier, sql_string
-
-clickhouse.command(
-    f"ALTER TABLE {quote_clickhouse_identifier(table)} "
-    f"DELETE WHERE run_id = {sql_string(run_id)} "
-    "SETTINGS mutations_sync = 1"
+replace_keyed_rows(
+    clickhouse=clickhouse,
+    table="pf_listings_bronze",
+    key_column="property_key",
+    key_values=[row[0] for row in listing_rows],
+    rows=listing_rows,
+    column_names=_COLUMNS,
 )
-if rows:
-    clickhouse.insert_rows(table=table, rows=rows, column_names=_COLUMNS)
 ```
 
-Used by: Reelly, Property Finder listings.
+Used by: Reelly and Property Finder listings. Child tables are usually replaced
+by parent entity key when a fresh detail payload is present, so removed child
+rows do not linger for entities that were re-fetched.
 
 ### 2. Delete by date window (DLD open data, DXBI)
 
@@ -137,6 +144,9 @@ clickhouse.insert_rows(table=table, rows=table_rows, column_names=_COLUMNS)
 
 The predicate targets the same date windows seen in the new batch, so a replay
 with the same input produces the same rows without accumulating duplicates.
+DLD also reads page rows so a complete zero-row date window clears stale rows
+from previous overlapping lookback runs. Incomplete paginated DLD chunks are
+rejected for current-state bronze because they cannot safely replace a window.
 
 ### 3. Full table replace (DDA, Property Finder locations)
 

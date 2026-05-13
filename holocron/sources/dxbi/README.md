@@ -15,16 +15,22 @@ Do not rename this source during an active run.
 - Dagster raw asset: `dxbi_transactions_raw`
 - Checkpoint strategy: `date_window`
 - Cadence: daily
-- Bronze table: `dxbi_transactions_bronze`
+- Bronze tables:
+  - `dxbi_transactions_bronze` for legacy report-table rows.
+  - `dxbi_heatmap_*_bronze` and `dxbi_fam_map_buildings_bronze` for the current
+    comprehensive map payloads.
 
-The current comprehensive raw shape is not suitable for the existing bronze
-table. Treat comprehensive runs as raw-only until the source is renamed/split.
+The source name is still historical. Comprehensive map rows now load into
+source-specific heatmap bronze tables, while `dxbi_transactions_bronze` remains
+limited to `report_tables`/`both` runs.
 
 ## Scrape Modes
 
 - `comprehensive`: current default. Opens the rental map, queries map endpoints,
-  dedupes buildings, and fetches building/unit payloads.
+  dedupes buildings, fetches building/unit payloads, and full-replaces the
+  heatmap bronze tables present in the raw manifest.
 - `report_tables`: legacy APEX table scrape for visible sales/rental tables.
+  Bronze replaces the affected date slices.
 - `both`: runs comprehensive and report table modes in one release.
 
 ## Comprehensive Raw Files

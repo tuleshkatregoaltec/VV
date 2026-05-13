@@ -6,7 +6,7 @@ from typing import Any
 
 import pytest
 
-from holocron.contracts import ClickHouseInserter, RawFileStore
+from holocron.contracts import ClickHouseWriter, RawFileStore
 from holocron.sources.dxbi.bronze import load_release_to_clickhouse
 
 
@@ -25,6 +25,7 @@ class _FakeClickHouse:
     def __init__(self) -> None:
         self.commands: list[str] = []
         self.insert_calls: list[dict[str, Any]] = []
+        self.replace_calls: list[dict[str, Any]] = []
 
     def command(self, sql: str) -> None:
         self.commands.append(sql)
@@ -44,12 +45,30 @@ class _FakeClickHouse:
             }
         )
 
+    def replace_table_rows(
+        self,
+        *,
+        table: str,
+        rows: Sequence[tuple[Any, ...]],
+        column_names: Sequence[str],
+        staging_suffix: str = "replace_rows",
+    ) -> int:
+        self.replace_calls.append(
+            {
+                "table": table,
+                "rows": rows,
+                "column_names": tuple(column_names),
+                "staging_suffix": staging_suffix,
+            }
+        )
+        return len(rows)
+
 
 def _s3(fake: _FakeS3) -> RawFileStore:
     return fake
 
 
-def _clickhouse(fake: _FakeClickHouse) -> ClickHouseInserter:
+def _clickhouse(fake: _FakeClickHouse) -> ClickHouseWriter:
     return fake
 
 
@@ -106,7 +125,7 @@ def test_load_release_to_clickhouse_loads_rows_and_clears_incremental_window() -
     delete_sql = next(
         sql
         for sql in clickhouse.commands
-        if "ALTER TABLE dxbi_transactions_bronze DELETE WHERE" in sql
+        if "ALTER TABLE `dxbi_transactions_bronze` DELETE WHERE" in sql
     )
     assert "slice_start_date = toDate('2026-04-29')" in delete_sql
     assert "slice_end_date = toDate('2026-04-29')" in delete_sql
@@ -118,12 +137,15 @@ def test_load_release_to_clickhouse_loads_rows_and_clears_incremental_window() -
     assert len(insert_call["rows"]) == 2
 
 
-def test_load_release_to_clickhouse_ignores_comprehensive_heatmap_rows() -> None:
+def test_load_release_to_clickhouse_loads_comprehensive_heatmap_rows() -> None:
     raw_rows = [
         {
             "endpoint": "heatmap_chessboard",
             "location_id": "1",
             "payload": {"Chessboard": {"Floors": []}},
+            "status": 200,
+            "request_url": "https://api.example.test/chessboard/1",
+            "content_type": "application/json",
             "_run_id": "raw-run-1",
             "_scraped_at": "2026-05-04T16:00:00+00:00",
         }
@@ -143,11 +165,17 @@ def test_load_release_to_clickhouse_ignores_comprehensive_heatmap_rows() -> None
         clickhouse=_clickhouse(clickhouse),
     )
 
-    assert result["total_rows"] == 0
-    assert not any(
-        "ALTER TABLE dxbi_transactions_bronze DELETE WHERE" in sql for sql in clickhouse.commands
-    )
+    assert result["table_row_counts"] == {"dxbi_heatmap_chessboards_bronze": 1}
+    assert result["total_rows"] == 1
     assert not clickhouse.insert_calls
+    assert clickhouse.replace_calls[0]["table"] == "dxbi_heatmap_chessboards_bronze"
+    assert clickhouse.replace_calls[0]["rows"][0][2:7] == (
+        "2026-05-04T16:00:00+00:00",
+        "1",
+        "heatmap_chessboard",
+        200,
+        "https://api.example.test/chessboard/1",
+    )
 
 
 def test_load_release_to_clickhouse_rejects_checksum_mismatch_before_mutation() -> None:
@@ -174,6 +202,7 @@ def test_load_release_to_clickhouse_rejects_checksum_mismatch_before_mutation() 
 
     assert not clickhouse.commands
     assert not clickhouse.insert_calls
+    assert not clickhouse.replace_calls
 
 
 def test_load_release_to_clickhouse_rejects_row_count_mismatch_before_mutation() -> None:
@@ -209,6 +238,7 @@ def test_load_release_to_clickhouse_rejects_row_count_mismatch_before_mutation()
 
     assert not clickhouse.commands
     assert not clickhouse.insert_calls
+    assert not clickhouse.replace_calls
 
 
 def test_load_release_to_clickhouse_rejects_non_dxbi_release() -> None:

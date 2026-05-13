@@ -61,7 +61,7 @@ def _descriptor(source_name: str = "dxbi_transactions", *, status: str = "comple
         "base_manifest_keys": [_manifest_key(source.name, "run-1")],
         "incremental_manifest_keys": [_manifest_key(source.name, "run-2")],
         "manifest_keys": [_manifest_key(source.name, "run-1"), _manifest_key(source.name, "run-2")],
-        "table_names": ["dxbi_transactions_bronze"],
+        "table_names": [table.name for table in source.bronze_tables],
         "replay_strategy": "truncate_then_apply_ordered_manifests",
         "coverage": {"window_start": "2026-01-01", "window_end": "2026-05-01"},
         "notes": "curated restore set",
@@ -207,7 +207,7 @@ def test_validate_dataset_version_descriptor_rejects_unknown_bronze_table() -> N
 
 def test_validate_dataset_version_descriptor_rejects_duplicate_table_names() -> None:
     descriptor = _descriptor()
-    descriptor["table_names"] = ["dxbi_transactions_bronze", "dxbi_transactions_bronze"]
+    descriptor["table_names"] = [descriptor["table_names"][0], descriptor["table_names"][0]]
 
     with pytest.raises(ValueError, match="table_names must not contain duplicates"):
         validate_dataset_version_descriptor(

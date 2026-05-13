@@ -21,6 +21,7 @@ class FakeClickHouse:
     def __init__(self) -> None:
         self.commands: list[str] = []
         self.insert_calls: list[dict[str, Any]] = []
+        self.replace_calls: list[dict[str, Any]] = []
 
     def command(self, sql: str) -> None:
         self.commands.append(sql)
@@ -33,6 +34,24 @@ class FakeClickHouse:
         column_names: Sequence[str],
     ) -> None:
         self.insert_calls.append({"table": table, "rows": rows, "column_names": column_names})
+
+    def replace_table_rows(
+        self,
+        *,
+        table: str,
+        rows: Sequence[tuple[Any, ...]],
+        column_names: Sequence[str],
+        staging_suffix: str = "replace_rows",
+    ) -> int:
+        self.replace_calls.append(
+            {
+                "table": table,
+                "rows": rows,
+                "column_names": column_names,
+                "staging_suffix": staging_suffix,
+            }
+        )
+        return len(rows)
 
 
 def _jsonl_payload(rows: list[dict[str, Any]]) -> bytes:
@@ -80,11 +99,12 @@ def test_dld_open_data_bronze_loaders_map_rows(source: str, row_file: str, table
 
     assert result["table_row_counts"] == {table: 1}
     assert any(f"CREATE TABLE IF NOT EXISTS {table}" in sql for sql in clickhouse.commands)
-    assert any(
-        f"ALTER TABLE `{table}` DELETE WHERE run_id = 'run-1'" in sql for sql in clickhouse.commands
-    )
+    delete_sql = next(sql for sql in clickhouse.commands if f"ALTER TABLE `{table}` DELETE" in sql)
+    assert "date_window_start = toDate('2026-05-05')" in delete_sql
+    assert "date_window_end = toDate('2026-05-06')" in delete_sql
+    assert "run_id = 'run-1'" not in delete_sql
     assert clickhouse.insert_calls[0]["table"] == table
-    # All sources share the same envelope layout at positions 1–7.
+    # All sources share the same envelope layout at positions 1-7.
     row = clickhouse.insert_calls[0]["rows"][0]
     assert row[1:8] == (
         "run-1",
@@ -95,6 +115,83 @@ def test_dld_open_data_bronze_loaders_map_rows(source: str, row_file: str, table
         1,
         3,
     )
+
+
+def test_dld_open_data_bronze_clears_zero_row_windows_from_page_metadata() -> None:
+    source = "dld_od_transactions"
+    row_file = "dld_od_transactions_rows.jsonl"
+    page_file = "dld_od_transactions_pages.jsonl"
+    table = "dld_od_transactions_bronze"
+    rows_payload = b""
+    pages_payload = _jsonl_payload(
+        [
+            {
+                "endpoint": "transactions",
+                "category": "transactions",
+                "date_window": {"start_date": "2026-05-05", "end_date": "2026-05-05"},
+                "row_count": 0,
+            }
+        ]
+    )
+    clickhouse = FakeClickHouse()
+    module = importlib.import_module(f"holocron.sources.{source}.bronze")
+
+    result = module.load_release_to_clickhouse(
+        raw_manifest={
+            "source": source,
+            "run_id": "run-1",
+            "metadata": {"completed_result_set": True},
+            "files": [
+                {
+                    "path": row_file,
+                    "s3_key": f"raw/{source}/{row_file}",
+                    "sha256": hashlib.sha256(rows_payload).hexdigest(),
+                    "row_count": 0,
+                },
+                {
+                    "path": page_file,
+                    "s3_key": f"raw/{source}/{page_file}",
+                    "sha256": hashlib.sha256(pages_payload).hexdigest(),
+                    "row_count": 1,
+                },
+            ],
+        },
+        s3=FakeS3(
+            {
+                f"raw/{source}/{row_file}": rows_payload,
+                f"raw/{source}/{page_file}": pages_payload,
+            }
+        ),
+        clickhouse=clickhouse,
+    )
+
+    assert result["table_row_counts"] == {table: 0}
+    delete_sql = next(sql for sql in clickhouse.commands if f"ALTER TABLE `{table}` DELETE" in sql)
+    assert "date_window_start = toDate('2026-05-05')" in delete_sql
+    assert not clickhouse.insert_calls
+
+
+def test_dld_open_data_bronze_rejects_incomplete_chunks_before_mutation() -> None:
+    source = "dld_od_transactions"
+    row_file = "dld_od_transactions_rows.jsonl"
+    payload = _jsonl_payload(
+        [{"date_window": {"start_date": "2026-05-05", "end_date": "2026-05-05"}}]
+    )
+    clickhouse = FakeClickHouse()
+    module = importlib.import_module(f"holocron.sources.{source}.bronze")
+
+    with pytest.raises(ValueError, match="incomplete raw result set"):
+        module.load_release_to_clickhouse(
+            raw_manifest={
+                **_release(source, row_file, payload),
+                "metadata": {"completed_result_set": False},
+            },
+            s3=FakeS3({f"raw/{source}/{row_file}": payload}),
+            clickhouse=clickhouse,
+        )
+
+    assert not clickhouse.commands
+    assert not clickhouse.insert_calls
 
 
 @pytest.mark.parametrize(("source", "row_file", "_table"), SOURCE_MODULES)

@@ -16,7 +16,7 @@ from holocron.platform.bronze import (
     coerce_int,
     coerce_nullable_int,
     load_jsonl_table_rows,
-    replace_run_rows,
+    replace_keyed_rows,
     stable_json,
     validate_raw_manifest,
 )
@@ -127,17 +127,19 @@ def load_release_to_clickhouse(
         _LISTINGS_TABLE: len(listing_rows),
         _DETAILS_TABLE: len(detail_rows),
     }
-    replace_run_rows(
+    replace_keyed_rows(
         clickhouse=clickhouse,
         table=_LISTINGS_TABLE,
-        run_id=run_id,
+        key_column="property_key",
+        key_values=[row[0] for row in listing_rows],
         rows=listing_rows,
         column_names=_LISTING_COLUMNS,
     )
-    replace_run_rows(
+    replace_keyed_rows(
         clickhouse=clickhouse,
         table=_DETAILS_TABLE,
-        run_id=run_id,
+        key_column="property_key",
+        key_values=[row[5] for row in detail_rows],
         rows=detail_rows,
         column_names=_DETAIL_COLUMNS,
     )
@@ -195,13 +197,13 @@ def _listing_row_tuple(raw_row: dict[str, Any], *, fallback_run_id: str) -> tupl
 
 
 def _detail_row_tuple(raw_row: dict[str, Any], *, fallback_run_id: str) -> tuple:
-    detail_json = _json(raw_row.get("raw"))
     property_key = string_value(raw_row.get("property_key"))
     details_path = string_value(raw_row.get("details_path"))
     detail_key = hashlib.sha1(
-        f"{property_key}|{details_path}|{detail_json}".encode(),
+        f"{property_key}|{details_path}".encode(),
         usedforsecurity=False,
     ).hexdigest()
+    detail_json = _json(raw_row.get("raw"))
     return (
         detail_key,
         string_value(raw_row.get("_run_id")) or fallback_run_id,
