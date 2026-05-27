@@ -44,6 +44,9 @@ def test_definitions_expose_source_assets() -> None:
         "dda_planning_layers_bronze",
         *DLD_OD_RAW_ASSETS,
         *DLD_OD_BRONZE_ASSETS,
+        "dld_mashrooi_raw",
+        "dld_pulse_historic_raw",
+        "dld_pulse_historic_bronze",
         "dxbi_transactions_raw",
         "dxbi_transactions_bronze",
         "news_feeds_raw",
@@ -70,6 +73,9 @@ def test_assets_use_provider_groups() -> None:
 
     assert group_by_asset_key["dld_od_transactions_raw"] == "dld"
     assert group_by_asset_key["dld_od_transactions_bronze"] == "dld"
+    assert group_by_asset_key["dld_mashrooi_raw"] == "dld"
+    assert group_by_asset_key["dld_pulse_historic_raw"] == "dld"
+    assert group_by_asset_key["dld_pulse_historic_bronze"] == "dld"
     assert group_by_asset_key["pf_locations_bronze"] == "propertyfinder"
     assert group_by_asset_key["pf_listings_raw"] == "propertyfinder"
     assert group_by_asset_key["pf_listings_bronze"] == "propertyfinder"
@@ -88,6 +94,8 @@ def test_definitions_expose_named_operational_jobs() -> None:
         *DLD_OD_MANUAL_SNAPSHOT_JOBS,
         "dxbi_transactions_manual_backfill",
         "dda_planning_layers_manual_full_refresh",
+        "dld_pulse_historic_archive",
+        "dld_pulse_historic_bronze_backfill",
         "pf_locations_manual_full_fetch",
         "pf_listings_manual_snapshot",
         "pf_listings_plan_snapshot",
@@ -202,6 +210,8 @@ def test_operational_jobs_select_expected_assets() -> None:
             "dda_planning_layers_raw",
             "dda_planning_layers_bronze",
         },
+        "dld_pulse_historic_archive": {"dld_pulse_historic_raw"},
+        "dld_pulse_historic_bronze_backfill": {"dld_pulse_historic_bronze"},
         "pf_locations_manual_full_fetch": {"pf_locations_raw", "pf_locations_bronze"},
         "pf_listings_manual_snapshot": {"pf_listings_raw", "pf_listings_bronze"},
         "pf_listings_plan_snapshot": {"pf_listings_raw"},
@@ -235,6 +245,8 @@ def test_manual_one_shot_jobs_do_not_have_schedules() -> None:
             *DLD_OD_MANUAL_JOBS,
             "dxbi_transactions_manual_backfill",
             "dda_planning_layers_manual_full_refresh",
+            "dld_pulse_historic_archive",
+            "dld_pulse_historic_bronze_backfill",
             "pf_locations_manual_full_fetch",
             "pf_listings_manual_snapshot",
             "pf_listings_plan_snapshot",
@@ -311,6 +323,24 @@ def test_manual_one_shot_jobs_default_raw_config() -> None:
             "dld_od_rents_raw",
             {},
             {"mode": "incremental", "filters": {"P_DATE_TYPE": "0"}},
+        ),
+        (
+            "dld_pulse_historic_archive",
+            "dld_pulse_historic_raw",
+            {},
+            {"input_dir": "pulse-data"},
+        ),
+        (
+            "dld_pulse_historic_bronze_backfill",
+            "dld_pulse_historic_bronze",
+            {},
+            {
+                "manifest_key": (
+                    "raw/source=dld_pulse_historic/manifests/dld-pulse-historic-2026-05-16.json"
+                ),
+                "batch_size": 5000,
+                "file_names": [],
+            },
         ),
         (
             "reelly_supply_archive_chunk",

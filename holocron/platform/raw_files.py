@@ -15,6 +15,7 @@ from holocron.platform.execution import build_raw_file
 from holocron.platform.manifests import RawManifestFileListAdapter, RawManifestModel
 
 _NDJSON_CONTENT_TYPE = "application/x-ndjson"
+_HASH_CHUNK_SIZE_BYTES = 8 * 1024 * 1024
 
 
 def string_value(value: Any) -> str:
@@ -80,7 +81,11 @@ def validate_file_sha256(
     expected_sha = string_value(file_entry.get("sha256"))
     if not expected_sha:
         return
-    actual_sha = hashlib.sha256(path.read_bytes()).hexdigest()
+    hasher = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(_HASH_CHUNK_SIZE_BYTES), b""):
+            hasher.update(chunk)
+    actual_sha = hasher.hexdigest()
     if actual_sha != expected_sha:
         raise ValueError(f"{source_label} raw file checksum mismatch: {path.name}")
 

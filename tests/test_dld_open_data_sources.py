@@ -78,6 +78,10 @@ def test_dld_open_data_sources_are_registered() -> None:
         assert registry.get(source_name).name == source_name
 
 
+def test_dld_pulse_historic_source_is_registered() -> None:
+    assert registry.get("dld_pulse_historic").name == "dld_pulse_historic"
+
+
 def test_dld_open_data_default_snapshot_checkpoint_resumes_effective_date_window() -> None:
     s3 = FakeCheckpointS3()
     s3.objects[

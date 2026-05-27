@@ -9,6 +9,8 @@ from holocron.sources.dld_od_rents import SOURCE as DLD_OD_RENTS_SOURCE
 from holocron.sources.dld_od_transactions import SOURCE as DLD_OD_TRANSACTIONS_SOURCE
 from holocron.sources.dld_od_units import SOURCE as DLD_OD_UNITS_SOURCE
 from holocron.sources.dld_od_valuations import SOURCE as DLD_OD_VALUATIONS_SOURCE
+from holocron.sources.dld_mashrooi import SOURCE as DLD_MASHROOI_SOURCE
+from holocron.sources.dld_pulse_historic import SOURCE as DLD_PULSE_HISTORIC_SOURCE
 from holocron.sources.dxbi import SOURCE as DXBI_SOURCE
 from holocron.sources.news_feeds import SOURCE as NEWS_FEEDS_SOURCE
 from holocron.sources.pf_listings import SOURCE as PF_LISTINGS_SOURCE
@@ -28,6 +30,8 @@ for source in (
     DLD_OD_UNITS_SOURCE,
     DLD_OD_BROKERS_SOURCE,
     DLD_OD_DEVELOPERS_SOURCE,
+    DLD_MASHROOI_SOURCE,
+    DLD_PULSE_HISTORIC_SOURCE,
     DXBI_SOURCE,
     NEWS_FEEDS_SOURCE,
     PF_LOCATIONS_SOURCE,
@@ -47,6 +51,8 @@ __all__ = [
     "DLD_OD_TRANSACTIONS_SOURCE",
     "DLD_OD_UNITS_SOURCE",
     "DLD_OD_VALUATIONS_SOURCE",
+    "DLD_MASHROOI_SOURCE",
+    "DLD_PULSE_HISTORIC_SOURCE",
     "DXBI_SOURCE",
     "NEWS_FEEDS_SOURCE",
     "PF_LISTINGS_SOURCE",

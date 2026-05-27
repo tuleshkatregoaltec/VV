@@ -147,6 +147,7 @@ class DetailCollectionResult:
     completed: bool
     source_manifest_count: int
     source_property_row_count: int
+    source_property_invalid_row_count: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -221,10 +222,6 @@ class PropertyFinderBrowserListingsClient:
         page.goto(
             url, wait_until="domcontentloaded", timeout=int(self._config.timeout_seconds * 1000)
         )
-        try:
-            page.wait_for_load_state("networkidle", timeout=_NETWORK_IDLE_TIMEOUT_MS)
-        except TimeoutError:
-            page.wait_for_timeout(3000)
         return _next_data_from_page(page=page, url=url)
 
     def _ensure_search_build_id(self) -> str:
@@ -980,6 +977,7 @@ def _extract_detail_chunk_files(
         "detail_completed_result_set": details.completed,
         "source_manifest_count": details.source_manifest_count,
         "source_property_row_count": details.source_property_row_count,
+        "source_property_invalid_row_count": details.source_property_invalid_row_count,
         "detail_row_count": len(details.detail_rows),
         "categories": list(config.categories),
         "location_ids": list(config.location_ids),
@@ -1751,6 +1749,7 @@ def _collect_detail_rows_from_manifests(
     detail_rows: list[dict[str, Any]] = []
     seen_paths: set[str] = set()
     source_property_row_count = 0
+    source_property_invalid_row_count = 0
     next_manifest_index = min(config.detail_manifest_cursor, len(manifest_keys))
     next_row_index = config.detail_row_cursor
 
@@ -1778,10 +1777,18 @@ def _collect_detail_rows_from_manifests(
             raise ValueError(
                 f"Property Finder properties file entry is missing s3_key: {manifest_key}"
             )
-        property_rows = _read_jsonl_dicts(
+        property_rows, invalid_row_count = _read_jsonl_dicts_lenient(
             text=state_store.read_text(key=source_key),
             source_key=source_key,
         )
+        if invalid_row_count:
+            source_property_invalid_row_count += invalid_row_count
+            _log_info(
+                progress_log,
+                "pf_listings: skipped invalid property JSONL rows count=%s source_key=%s",
+                invalid_row_count,
+                source_key,
+            )
         source_property_row_count += len(property_rows)
         row_index = (
             config.detail_row_cursor if manifest_index == config.detail_manifest_cursor else 0
@@ -1795,6 +1802,7 @@ def _collect_detail_rows_from_manifests(
                     completed=False,
                     source_manifest_count=len(manifest_keys),
                     source_property_row_count=source_property_row_count,
+                    source_property_invalid_row_count=source_property_invalid_row_count,
                 )
             property_row = property_rows[row_index]
             row_index += 1
@@ -1874,6 +1882,7 @@ def _collect_detail_rows_from_manifests(
         completed=True,
         source_manifest_count=len(manifest_keys),
         source_property_row_count=source_property_row_count,
+        source_property_invalid_row_count=source_property_invalid_row_count,
     )
 
 
@@ -2541,6 +2550,30 @@ def _read_jsonl_dicts(*, text: str, source_key: str) -> list[dict[str, Any]]:
             )
         rows.append(row)
     return rows
+
+
+def _read_jsonl_dicts_lenient(*, text: str, source_key: str) -> tuple[list[dict[str, Any]], int]:
+    rows: list[dict[str, Any]] = []
+    invalid_row_count = 0
+    for line_number, raw_line in enumerate(text.splitlines(), start=1):
+        if not raw_line.strip():
+            continue
+        try:
+            row = json.loads(raw_line)
+        except json.JSONDecodeError:
+            invalid_row_count += 1
+            continue
+        if not isinstance(row, dict):
+            invalid_row_count += 1
+            continue
+        rows.append(row)
+    if invalid_row_count:
+        logger.warning(
+            "Property Finder skipped invalid JSONL rows source_key=%s count=%s",
+            source_key,
+            invalid_row_count,
+        )
+    return rows, invalid_row_count
 
 
 def _next_data_from_page(*, page: Page, url: str) -> dict[str, Any]:

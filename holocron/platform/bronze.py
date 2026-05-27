@@ -23,6 +23,7 @@ from holocron.platform.raw_files import (
 )
 
 _FALSE_STRINGS = {"", "0", "false", "no", "n", "none"}
+_MAX_REPLACE_KEYED_DELETE_BYTES = 200_000
 
 
 def validate_raw_manifest(raw_manifest: RawManifest, *, expected_source: str) -> tuple[str, str]:
@@ -130,6 +131,7 @@ def replace_keyed_rows(
     key_values: Sequence[str],
     rows: Sequence[tuple[Any, ...]],
     column_names: Sequence[str],
+    delete_scope: str = "",
 ) -> None:
     keys = tuple(dict.fromkeys(key for key in key_values if key))
     if not keys:
@@ -137,14 +139,45 @@ def replace_keyed_rows(
             clickhouse.insert_rows(table=table, rows=rows, column_names=column_names)
         return
     quoted_key_column = quote_clickhouse_identifier(key_column)
-    quoted_values = ", ".join(sql_string(key) for key in keys)
-    replace_where_rows(
-        clickhouse=clickhouse,
-        table=table,
-        predicate=f"{quoted_key_column} IN ({quoted_values})",
-        rows=rows,
-        column_names=column_names,
-    )
+    for key_batch in _chunk_key_values(
+        quoted_key_column=quoted_key_column,
+        keys=keys,
+    ):
+        quoted_values = ", ".join(sql_string(key) for key in key_batch)
+        key_predicate = f"{quoted_key_column} IN ({quoted_values})"
+        predicate = f"({delete_scope}) AND ({key_predicate})" if delete_scope else key_predicate
+        replace_where_rows(
+            clickhouse=clickhouse,
+            table=table,
+            predicate=predicate,
+            rows=(),
+            column_names=column_names,
+        )
+    if rows:
+        clickhouse.insert_rows(table=table, rows=rows, column_names=column_names)
+
+
+def _chunk_key_values(
+    *,
+    quoted_key_column: str,
+    keys: Sequence[str],
+) -> list[tuple[str, ...]]:
+    batches: list[tuple[str, ...]] = []
+    current: list[str] = []
+    current_size = len(f"{quoted_key_column} IN ()")
+    for key in keys:
+        literal = sql_string(key)
+        extra_size = len(literal) + (2 if current else 0)
+        if current and current_size + extra_size > _MAX_REPLACE_KEYED_DELETE_BYTES:
+            batches.append(tuple(current))
+            current = []
+            current_size = len(f"{quoted_key_column} IN ()")
+            extra_size = len(literal)
+        current.append(key)
+        current_size += extra_size
+    if current:
+        batches.append(tuple(current))
+    return batches
 
 
 def coerce_int(value: Any) -> int:

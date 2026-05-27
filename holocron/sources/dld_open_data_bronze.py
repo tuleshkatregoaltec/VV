@@ -18,6 +18,7 @@ from holocron.platform.bronze import (
     bronze_load_result,
     coerce_int,
     iso_date_or_none,
+    replace_keyed_rows,
     replace_where_rows,
     stable_json,
     validate_raw_manifest,
@@ -104,7 +105,7 @@ def load_open_data_release_to_clickhouse(
     row_builder: Callable[..., tuple[Any, ...]],
 ) -> BronzeLoadResult:
     actual_source, run_id = validate_raw_manifest(raw_manifest, expected_source=source_name)
-    _require_complete_result_set(raw_manifest=raw_manifest, source_name=source_name)
+    _require_loadable_result_set(raw_manifest=raw_manifest, source_name=source_name)
     files_by_name = manifest_files_by_name(raw_manifest)
     raw_rows: list[dict[str, Any]] = []
     page_rows: list[dict[str, Any]] = []
@@ -146,13 +147,24 @@ def load_open_data_release_to_clickhouse(
     )
 
     ensure_schema(clickhouse=clickhouse)
-    replace_where_rows(
-        clickhouse=clickhouse,
-        table=table_name,
-        predicate=delete_predicate,
-        rows=table_rows,
-        column_names=column_names,
-    )
+    if delete_predicate is None:
+        replace_keyed_rows(
+            clickhouse=clickhouse,
+            table=table_name,
+            key_column="row_key",
+            key_values=[row[0] for row in table_rows],
+            rows=table_rows,
+            column_names=column_names,
+            delete_scope="source_system = 'dld_open_data'",
+        )
+    else:
+        replace_where_rows(
+            clickhouse=clickhouse,
+            table=table_name,
+            predicate=f"source_system = 'dld_open_data' AND ({delete_predicate})",
+            rows=table_rows,
+            column_names=column_names,
+        )
 
     return bronze_load_result(
         source=actual_source,
@@ -161,11 +173,14 @@ def load_open_data_release_to_clickhouse(
     )
 
 
-def _require_complete_result_set(*, raw_manifest: RawManifest, source_name: str) -> None:
+def _require_loadable_result_set(*, raw_manifest: RawManifest, source_name: str) -> None:
     metadata = raw_manifest.get("metadata")
     if not isinstance(metadata, dict):
         return
-    if metadata.get("completed_result_set") is False:
+    if metadata.get("completed_result_set") is False and metadata.get("stage") not in {
+        "snapshot",
+        "backfill",
+    }:
         raise ValueError(
             f"{source_name} incomplete raw result set cannot be loaded into current-state bronze"
         )
@@ -176,8 +191,12 @@ def _open_data_delete_predicate(
     source_name: str,
     raw_rows: list[dict[str, Any]],
     page_rows: list[dict[str, Any]],
-) -> str:
-    windows = _open_data_windows(raw_rows=raw_rows, page_rows=page_rows)
+) -> str | None:
+    windows = _open_data_start_windows(page_rows=page_rows)
+    if not page_rows:
+        windows = _open_data_windows(raw_rows=raw_rows, page_rows=page_rows)
+    if not windows and page_rows:
+        return None
     if not windows:
         raise ValueError(
             f"{source_name} raw manifest has no date-window/page metadata for current-state bronze"
@@ -190,6 +209,18 @@ def _open_data_delete_predicate(
     )
 
 
+def _open_data_start_windows(
+    *,
+    page_rows: list[dict[str, Any]],
+) -> tuple[tuple[str | None, str | None], ...]:
+    windows: list[tuple[str | None, str | None]] = []
+    for row in page_rows:
+        if coerce_int(row.get("skip")) != 0:
+            continue
+        windows.append(_open_data_window(row))
+    return tuple(dict.fromkeys(windows))
+
+
 def _open_data_windows(
     *,
     raw_rows: list[dict[str, Any]],
@@ -197,16 +228,19 @@ def _open_data_windows(
 ) -> tuple[tuple[str | None, str | None], ...]:
     windows: list[tuple[str | None, str | None]] = []
     for row in (*page_rows, *raw_rows):
-        window = row.get("date_window")
-        if window is None:
-            windows.append((None, None))
-            continue
-        if not isinstance(window, dict):
-            continue
-        start = string_value(window.get("start_date")) or None
-        end = string_value(window.get("end_date")) or None
-        windows.append((start, end))
+        windows.append(_open_data_window(row))
     return tuple(dict.fromkeys(windows))
+
+
+def _open_data_window(row: dict[str, Any]) -> tuple[str | None, str | None]:
+    window = row.get("date_window")
+    if window is None:
+        return (None, None)
+    if not isinstance(window, dict):
+        return (None, None)
+    start = string_value(window.get("start_date")) or None
+    end = string_value(window.get("end_date")) or None
+    return (start, end)
 
 
 def _date_sql(value: str | None) -> str:

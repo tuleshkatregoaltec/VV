@@ -516,17 +516,66 @@ CREATE TABLE IF NOT EXISTS dld_od_buildings_bronze (
 ORDER BY (building_number);
 
 CREATE TABLE IF NOT EXISTS dld_od_units_bronze (
-    row_key           String,
-    run_id            String,
-    scraped_at        String DEFAULT '',
-    mode              LowCardinality(String) DEFAULT '',
-    category          LowCardinality(String) DEFAULT '',
-    endpoint          LowCardinality(String) DEFAULT '',
-    date_window_start Nullable(Date),
-    date_window_end   Nullable(Date),
-    page_index        UInt32 DEFAULT 0,
-    row_index         UInt64 DEFAULT 0,
-    raw_json          String DEFAULT ''
+    row_key                 String,
+    run_id                  String,
+    scraped_at              String DEFAULT '',
+    mode                    LowCardinality(String) DEFAULT '',
+    category                LowCardinality(String) DEFAULT '',
+    endpoint                LowCardinality(String) DEFAULT '',
+    date_window_start       Nullable(Date),
+    date_window_end         Nullable(Date),
+    page_index              UInt32 DEFAULT 0,
+    row_index               UInt64 DEFAULT 0,
+    raw_json                String DEFAULT '',
+    source_system           LowCardinality(String) DEFAULT 'dld_open_data',
+    source_file             String DEFAULT '',
+    source_row_index        UInt64 DEFAULT 0,
+    property_id             UInt64 DEFAULT 0,
+    area_id                 UInt32 DEFAULT 0,
+    zone_id                 UInt32 DEFAULT 0,
+    area_en                 LowCardinality(String) DEFAULT '',
+    area_ar                 String DEFAULT '',
+    land_number             String DEFAULT '',
+    land_sub_number         String DEFAULT '',
+    building_number         String DEFAULT '',
+    unit_number             String DEFAULT '',
+    unit_balcony_area       Float64 DEFAULT 0,
+    unit_parking_number     String DEFAULT '',
+    parking_allocation_type String DEFAULT '',
+    parking_allocation_type_en LowCardinality(String) DEFAULT '',
+    parking_allocation_type_ar String DEFAULT '',
+    common_area             Float64 DEFAULT 0,
+    actual_common_area      Float64 DEFAULT 0,
+    floor                   String DEFAULT '',
+    rooms                   String DEFAULT '',
+    rooms_en                LowCardinality(String) DEFAULT '',
+    rooms_ar                String DEFAULT '',
+    actual_area             Float64 DEFAULT 0,
+    property_type_id        UInt32 DEFAULT 0,
+    property_type_en        LowCardinality(String) DEFAULT '',
+    property_type_ar        String DEFAULT '',
+    property_sub_type_id    UInt32 DEFAULT 0,
+    prop_sub_type_en        LowCardinality(String) DEFAULT '',
+    prop_sub_type_ar        String DEFAULT '',
+    parent_property_id      UInt64 DEFAULT 0,
+    grandparent_property_id UInt64 DEFAULT 0,
+    creation_date           DateTime DEFAULT toDateTime(0),
+    municipality_zip_code   String DEFAULT '',
+    municipality_number     String DEFAULT '',
+    parcel_id               String DEFAULT '',
+    is_free_hold            UInt8 DEFAULT 0,
+    is_lease_hold           UInt8 DEFAULT 0,
+    is_registered           UInt8 DEFAULT 0,
+    pre_registration_number String DEFAULT '',
+    master_project_id       UInt64 DEFAULT 0,
+    master_project_en       String DEFAULT '',
+    master_project_ar       String DEFAULT '',
+    project_id              UInt64 DEFAULT 0,
+    project_en              String DEFAULT '',
+    project_ar              String DEFAULT '',
+    land_type_id            UInt32 DEFAULT 0,
+    land_type_en            LowCardinality(String) DEFAULT '',
+    land_type_ar            String DEFAULT ''
 ) ENGINE = MergeTree()
 ORDER BY (run_id, row_key);
 
@@ -592,6 +641,149 @@ CREATE TABLE IF NOT EXISTS dld_od_developers_bronze (
     webpage                String DEFAULT ''
 ) ENGINE = MergeTree()
 ORDER BY (developer_number);
+
+ALTER TABLE dld_od_transactions_bronze ADD COLUMN IF NOT EXISTS source_system LowCardinality(String) DEFAULT 'dld_open_data';
+ALTER TABLE dld_od_transactions_bronze ADD COLUMN IF NOT EXISTS source_file String DEFAULT '';
+ALTER TABLE dld_od_transactions_bronze ADD COLUMN IF NOT EXISTS source_row_index UInt64 DEFAULT 0;
+ALTER TABLE dld_od_transactions_bronze ADD COLUMN IF NOT EXISTS raw_json String DEFAULT '';
+ALTER TABLE dld_od_transactions_bronze ADD COLUMN IF NOT EXISTS project_number String DEFAULT '';
+ALTER TABLE dld_od_transactions_bronze ADD COLUMN IF NOT EXISTS building_name_en String DEFAULT '';
+ALTER TABLE dld_od_transactions_bronze ADD COLUMN IF NOT EXISTS building_name_ar String DEFAULT '';
+ALTER TABLE dld_od_transactions_bronze ADD COLUMN IF NOT EXISTS reg_type_id UInt32 DEFAULT 0;
+ALTER TABLE dld_od_transactions_bronze ADD COLUMN IF NOT EXISTS reg_type_en LowCardinality(String) DEFAULT '';
+ALTER TABLE dld_od_transactions_bronze ADD COLUMN IF NOT EXISTS reg_type_ar String DEFAULT '';
+ALTER TABLE dld_od_transactions_bronze ADD COLUMN IF NOT EXISTS meter_sale_price Float64 DEFAULT 0;
+ALTER TABLE dld_od_transactions_bronze ADD COLUMN IF NOT EXISTS rent_value Float64 DEFAULT 0;
+ALTER TABLE dld_od_transactions_bronze ADD COLUMN IF NOT EXISTS meter_rent_price Float64 DEFAULT 0;
+ALTER TABLE dld_od_transactions_bronze ADD COLUMN IF NOT EXISTS no_of_parties_role_1 UInt32 DEFAULT 0;
+ALTER TABLE dld_od_transactions_bronze ADD COLUMN IF NOT EXISTS no_of_parties_role_2 UInt32 DEFAULT 0;
+ALTER TABLE dld_od_transactions_bronze ADD COLUMN IF NOT EXISTS no_of_parties_role_3 UInt32 DEFAULT 0;
+
+ALTER TABLE dld_od_rents_bronze ADD COLUMN IF NOT EXISTS source_system LowCardinality(String) DEFAULT 'dld_open_data';
+ALTER TABLE dld_od_rents_bronze ADD COLUMN IF NOT EXISTS source_file String DEFAULT '';
+ALTER TABLE dld_od_rents_bronze ADD COLUMN IF NOT EXISTS source_row_index UInt64 DEFAULT 0;
+ALTER TABLE dld_od_rents_bronze ADD COLUMN IF NOT EXISTS raw_json String DEFAULT '';
+ALTER TABLE dld_od_rents_bronze ADD COLUMN IF NOT EXISTS line_number UInt32 DEFAULT 0;
+ALTER TABLE dld_od_rents_bronze ADD COLUMN IF NOT EXISTS project_number String DEFAULT '';
+ALTER TABLE dld_od_rents_bronze ADD COLUMN IF NOT EXISTS tenant_type_id UInt32 DEFAULT 0;
+ALTER TABLE dld_od_rents_bronze ADD COLUMN IF NOT EXISTS tenant_type_en LowCardinality(String) DEFAULT '';
+ALTER TABLE dld_od_rents_bronze ADD COLUMN IF NOT EXISTS tenant_type_ar String DEFAULT '';
+ALTER TABLE dld_od_rents_bronze ADD COLUMN IF NOT EXISTS contract_reg_type_id UInt32 DEFAULT 0;
+ALTER TABLE dld_od_rents_bronze ADD COLUMN IF NOT EXISTS contract_reg_type_en LowCardinality(String) DEFAULT '';
+ALTER TABLE dld_od_rents_bronze ADD COLUMN IF NOT EXISTS contract_reg_type_ar String DEFAULT '';
+ALTER TABLE dld_od_rents_bronze ADD COLUMN IF NOT EXISTS ejari_bus_property_type_id UInt32 DEFAULT 0;
+ALTER TABLE dld_od_rents_bronze ADD COLUMN IF NOT EXISTS ejari_bus_property_type_en LowCardinality(String) DEFAULT '';
+ALTER TABLE dld_od_rents_bronze ADD COLUMN IF NOT EXISTS ejari_bus_property_type_ar String DEFAULT '';
+
+ALTER TABLE dld_od_projects_bronze ADD COLUMN IF NOT EXISTS source_system LowCardinality(String) DEFAULT 'dld_open_data';
+ALTER TABLE dld_od_projects_bronze ADD COLUMN IF NOT EXISTS source_file String DEFAULT '';
+ALTER TABLE dld_od_projects_bronze ADD COLUMN IF NOT EXISTS source_row_index UInt64 DEFAULT 0;
+ALTER TABLE dld_od_projects_bronze ADD COLUMN IF NOT EXISTS raw_json String DEFAULT '';
+ALTER TABLE dld_od_projects_bronze ADD COLUMN IF NOT EXISTS project_id UInt64 DEFAULT 0;
+ALTER TABLE dld_od_projects_bronze ADD COLUMN IF NOT EXISTS developer_id UInt64 DEFAULT 0;
+ALTER TABLE dld_od_projects_bronze ADD COLUMN IF NOT EXISTS developer_name String DEFAULT '';
+ALTER TABLE dld_od_projects_bronze ADD COLUMN IF NOT EXISTS master_developer_id UInt64 DEFAULT 0;
+ALTER TABLE dld_od_projects_bronze ADD COLUMN IF NOT EXISTS master_developer_number UInt64 DEFAULT 0;
+ALTER TABLE dld_od_projects_bronze ADD COLUMN IF NOT EXISTS master_developer_name String DEFAULT '';
+ALTER TABLE dld_od_projects_bronze ADD COLUMN IF NOT EXISTS project_type_id UInt32 DEFAULT 0;
+ALTER TABLE dld_od_projects_bronze ADD COLUMN IF NOT EXISTS project_classification_id UInt32 DEFAULT 0;
+ALTER TABLE dld_od_projects_bronze ADD COLUMN IF NOT EXISTS project_classification_ar String DEFAULT '';
+ALTER TABLE dld_od_projects_bronze ADD COLUMN IF NOT EXISTS escrow_agent_id UInt64 DEFAULT 0;
+ALTER TABLE dld_od_projects_bronze ADD COLUMN IF NOT EXISTS escrow_agent_name String DEFAULT '';
+ALTER TABLE dld_od_projects_bronze ADD COLUMN IF NOT EXISTS cancellation_date Nullable(DateTime);
+ALTER TABLE dld_od_projects_bronze ADD COLUMN IF NOT EXISTS property_id UInt64 DEFAULT 0;
+ALTER TABLE dld_od_projects_bronze ADD COLUMN IF NOT EXISTS area_id UInt32 DEFAULT 0;
+ALTER TABLE dld_od_projects_bronze ADD COLUMN IF NOT EXISTS zoning_authority_id UInt32 DEFAULT 0;
+ALTER TABLE dld_od_projects_bronze ADD COLUMN IF NOT EXISTS zoning_authority_en String DEFAULT '';
+ALTER TABLE dld_od_projects_bronze ADD COLUMN IF NOT EXISTS zoning_authority_ar String DEFAULT '';
+
+ALTER TABLE dld_od_valuations_bronze ADD COLUMN IF NOT EXISTS source_system LowCardinality(String) DEFAULT 'dld_open_data';
+ALTER TABLE dld_od_valuations_bronze ADD COLUMN IF NOT EXISTS source_file String DEFAULT '';
+ALTER TABLE dld_od_valuations_bronze ADD COLUMN IF NOT EXISTS source_row_index UInt64 DEFAULT 0;
+ALTER TABLE dld_od_valuations_bronze ADD COLUMN IF NOT EXISTS raw_json String DEFAULT '';
+
+ALTER TABLE dld_od_lands_bronze ADD COLUMN IF NOT EXISTS source_system LowCardinality(String) DEFAULT 'dld_open_data';
+ALTER TABLE dld_od_lands_bronze ADD COLUMN IF NOT EXISTS source_file String DEFAULT '';
+ALTER TABLE dld_od_lands_bronze ADD COLUMN IF NOT EXISTS source_row_index UInt64 DEFAULT 0;
+ALTER TABLE dld_od_lands_bronze ADD COLUMN IF NOT EXISTS raw_json String DEFAULT '';
+ALTER TABLE dld_od_lands_bronze ADD COLUMN IF NOT EXISTS property_id UInt64 DEFAULT 0;
+ALTER TABLE dld_od_lands_bronze ADD COLUMN IF NOT EXISTS property_type_id UInt32 DEFAULT 0;
+ALTER TABLE dld_od_lands_bronze ADD COLUMN IF NOT EXISTS property_type_en LowCardinality(String) DEFAULT '';
+ALTER TABLE dld_od_lands_bronze ADD COLUMN IF NOT EXISTS property_type_ar String DEFAULT '';
+ALTER TABLE dld_od_lands_bronze ADD COLUMN IF NOT EXISTS property_sub_type_id UInt32 DEFAULT 0;
+ALTER TABLE dld_od_lands_bronze ADD COLUMN IF NOT EXISTS project_id UInt64 DEFAULT 0;
+
+ALTER TABLE dld_od_buildings_bronze ADD COLUMN IF NOT EXISTS source_system LowCardinality(String) DEFAULT 'dld_open_data';
+ALTER TABLE dld_od_buildings_bronze ADD COLUMN IF NOT EXISTS source_file String DEFAULT '';
+ALTER TABLE dld_od_buildings_bronze ADD COLUMN IF NOT EXISTS source_row_index UInt64 DEFAULT 0;
+ALTER TABLE dld_od_buildings_bronze ADD COLUMN IF NOT EXISTS raw_json String DEFAULT '';
+ALTER TABLE dld_od_buildings_bronze ADD COLUMN IF NOT EXISTS property_id UInt64 DEFAULT 0;
+ALTER TABLE dld_od_buildings_bronze ADD COLUMN IF NOT EXISTS property_type_id UInt32 DEFAULT 0;
+ALTER TABLE dld_od_buildings_bronze ADD COLUMN IF NOT EXISTS property_type_en LowCardinality(String) DEFAULT '';
+ALTER TABLE dld_od_buildings_bronze ADD COLUMN IF NOT EXISTS property_type_ar String DEFAULT '';
+ALTER TABLE dld_od_buildings_bronze ADD COLUMN IF NOT EXISTS project_id UInt64 DEFAULT 0;
+
+ALTER TABLE dld_od_units_bronze ADD COLUMN IF NOT EXISTS source_system LowCardinality(String) DEFAULT 'dld_open_data';
+ALTER TABLE dld_od_units_bronze ADD COLUMN IF NOT EXISTS source_file String DEFAULT '';
+ALTER TABLE dld_od_units_bronze ADD COLUMN IF NOT EXISTS source_row_index UInt64 DEFAULT 0;
+ALTER TABLE dld_od_units_bronze ADD COLUMN IF NOT EXISTS property_id UInt64 DEFAULT 0;
+ALTER TABLE dld_od_units_bronze ADD COLUMN IF NOT EXISTS area_id UInt32 DEFAULT 0;
+ALTER TABLE dld_od_units_bronze ADD COLUMN IF NOT EXISTS zone_id UInt32 DEFAULT 0;
+ALTER TABLE dld_od_units_bronze ADD COLUMN IF NOT EXISTS area_en LowCardinality(String) DEFAULT '';
+ALTER TABLE dld_od_units_bronze ADD COLUMN IF NOT EXISTS area_ar String DEFAULT '';
+ALTER TABLE dld_od_units_bronze ADD COLUMN IF NOT EXISTS land_number String DEFAULT '';
+ALTER TABLE dld_od_units_bronze ADD COLUMN IF NOT EXISTS land_sub_number String DEFAULT '';
+ALTER TABLE dld_od_units_bronze ADD COLUMN IF NOT EXISTS building_number String DEFAULT '';
+ALTER TABLE dld_od_units_bronze ADD COLUMN IF NOT EXISTS unit_number String DEFAULT '';
+ALTER TABLE dld_od_units_bronze ADD COLUMN IF NOT EXISTS unit_balcony_area Float64 DEFAULT 0;
+ALTER TABLE dld_od_units_bronze ADD COLUMN IF NOT EXISTS unit_parking_number String DEFAULT '';
+ALTER TABLE dld_od_units_bronze ADD COLUMN IF NOT EXISTS parking_allocation_type String DEFAULT '';
+ALTER TABLE dld_od_units_bronze ADD COLUMN IF NOT EXISTS parking_allocation_type_en LowCardinality(String) DEFAULT '';
+ALTER TABLE dld_od_units_bronze ADD COLUMN IF NOT EXISTS parking_allocation_type_ar String DEFAULT '';
+ALTER TABLE dld_od_units_bronze ADD COLUMN IF NOT EXISTS common_area Float64 DEFAULT 0;
+ALTER TABLE dld_od_units_bronze ADD COLUMN IF NOT EXISTS actual_common_area Float64 DEFAULT 0;
+ALTER TABLE dld_od_units_bronze ADD COLUMN IF NOT EXISTS floor String DEFAULT '';
+ALTER TABLE dld_od_units_bronze ADD COLUMN IF NOT EXISTS rooms String DEFAULT '';
+ALTER TABLE dld_od_units_bronze ADD COLUMN IF NOT EXISTS rooms_en LowCardinality(String) DEFAULT '';
+ALTER TABLE dld_od_units_bronze ADD COLUMN IF NOT EXISTS rooms_ar String DEFAULT '';
+ALTER TABLE dld_od_units_bronze ADD COLUMN IF NOT EXISTS actual_area Float64 DEFAULT 0;
+ALTER TABLE dld_od_units_bronze ADD COLUMN IF NOT EXISTS property_type_id UInt32 DEFAULT 0;
+ALTER TABLE dld_od_units_bronze ADD COLUMN IF NOT EXISTS property_type_en LowCardinality(String) DEFAULT '';
+ALTER TABLE dld_od_units_bronze ADD COLUMN IF NOT EXISTS property_type_ar String DEFAULT '';
+ALTER TABLE dld_od_units_bronze ADD COLUMN IF NOT EXISTS property_sub_type_id UInt32 DEFAULT 0;
+ALTER TABLE dld_od_units_bronze ADD COLUMN IF NOT EXISTS prop_sub_type_en LowCardinality(String) DEFAULT '';
+ALTER TABLE dld_od_units_bronze ADD COLUMN IF NOT EXISTS prop_sub_type_ar String DEFAULT '';
+ALTER TABLE dld_od_units_bronze ADD COLUMN IF NOT EXISTS parent_property_id UInt64 DEFAULT 0;
+ALTER TABLE dld_od_units_bronze ADD COLUMN IF NOT EXISTS grandparent_property_id UInt64 DEFAULT 0;
+ALTER TABLE dld_od_units_bronze ADD COLUMN IF NOT EXISTS creation_date DateTime DEFAULT toDateTime(0);
+ALTER TABLE dld_od_units_bronze ADD COLUMN IF NOT EXISTS municipality_zip_code String DEFAULT '';
+ALTER TABLE dld_od_units_bronze ADD COLUMN IF NOT EXISTS municipality_number String DEFAULT '';
+ALTER TABLE dld_od_units_bronze ADD COLUMN IF NOT EXISTS parcel_id String DEFAULT '';
+ALTER TABLE dld_od_units_bronze ADD COLUMN IF NOT EXISTS is_free_hold UInt8 DEFAULT 0;
+ALTER TABLE dld_od_units_bronze ADD COLUMN IF NOT EXISTS is_lease_hold UInt8 DEFAULT 0;
+ALTER TABLE dld_od_units_bronze ADD COLUMN IF NOT EXISTS is_registered UInt8 DEFAULT 0;
+ALTER TABLE dld_od_units_bronze ADD COLUMN IF NOT EXISTS pre_registration_number String DEFAULT '';
+ALTER TABLE dld_od_units_bronze ADD COLUMN IF NOT EXISTS master_project_id UInt64 DEFAULT 0;
+ALTER TABLE dld_od_units_bronze ADD COLUMN IF NOT EXISTS master_project_en String DEFAULT '';
+ALTER TABLE dld_od_units_bronze ADD COLUMN IF NOT EXISTS master_project_ar String DEFAULT '';
+ALTER TABLE dld_od_units_bronze ADD COLUMN IF NOT EXISTS project_id UInt64 DEFAULT 0;
+ALTER TABLE dld_od_units_bronze ADD COLUMN IF NOT EXISTS project_en String DEFAULT '';
+ALTER TABLE dld_od_units_bronze ADD COLUMN IF NOT EXISTS project_ar String DEFAULT '';
+ALTER TABLE dld_od_units_bronze ADD COLUMN IF NOT EXISTS land_type_id UInt32 DEFAULT 0;
+ALTER TABLE dld_od_units_bronze ADD COLUMN IF NOT EXISTS land_type_en LowCardinality(String) DEFAULT '';
+ALTER TABLE dld_od_units_bronze ADD COLUMN IF NOT EXISTS land_type_ar String DEFAULT '';
+
+ALTER TABLE dld_od_brokers_bronze ADD COLUMN IF NOT EXISTS source_system LowCardinality(String) DEFAULT 'dld_open_data';
+ALTER TABLE dld_od_brokers_bronze ADD COLUMN IF NOT EXISTS source_file String DEFAULT '';
+ALTER TABLE dld_od_brokers_bronze ADD COLUMN IF NOT EXISTS source_row_index UInt64 DEFAULT 0;
+ALTER TABLE dld_od_brokers_bronze ADD COLUMN IF NOT EXISTS raw_json String DEFAULT '';
+
+ALTER TABLE dld_od_developers_bronze ADD COLUMN IF NOT EXISTS source_system LowCardinality(String) DEFAULT 'dld_open_data';
+ALTER TABLE dld_od_developers_bronze ADD COLUMN IF NOT EXISTS source_file String DEFAULT '';
+ALTER TABLE dld_od_developers_bronze ADD COLUMN IF NOT EXISTS source_row_index UInt64 DEFAULT 0;
+ALTER TABLE dld_od_developers_bronze ADD COLUMN IF NOT EXISTS raw_json String DEFAULT '';
+ALTER TABLE dld_od_developers_bronze ADD COLUMN IF NOT EXISTS developer_name_en String DEFAULT '';
+ALTER TABLE dld_od_developers_bronze ADD COLUMN IF NOT EXISTS developer_name_ar String DEFAULT '';
 
 CREATE TABLE IF NOT EXISTS pf_locations_bronze (
     location_id        String,

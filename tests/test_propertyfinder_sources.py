@@ -680,6 +680,56 @@ def test_pf_listings_detail_mode_resumes_through_property_manifests(tmp_path: Pa
     assert detail_rows[0]["source_row_index"] == 1
 
 
+def test_pf_listings_detail_mode_skips_malformed_property_rows(tmp_path: Path) -> None:
+    s3 = FakeS3()
+    _, _, properties_key = _put_pf_manifest(
+        s3,
+        run_id="search-1",
+        details=[],
+        properties=[],
+    )
+    valid_rows = [
+        {
+            "listing_id": "apt-1",
+            "property_key": "listing_id:apt-1",
+            "details_path": "/en/plp/buy/apartment-for-sale-dubai-apt-1.html",
+            "category_id": 1,
+            "location_id": "14",
+        },
+        {
+            "listing_id": "apt-2",
+            "property_key": "listing_id:apt-2",
+            "details_path": "/en/plp/buy/apartment-for-sale-dubai-apt-2.html",
+            "category_id": 1,
+            "location_id": "14",
+        },
+    ]
+    s3.objects[properties_key] = (
+        json.dumps(valid_rows[0], separators=(",", ":")).encode("utf-8")
+        + b'\n{"listing_id":"broken"\n'
+        + json.dumps(valid_rows[1], separators=(",", ":")).encode("utf-8")
+        + b"\n"
+    )
+    listing_client = FakePropertyFinderChunkListingsClient()
+
+    release = extract_listings_release(
+        tmp_path,
+        config=PropertyFinderListingsConfig(
+            mode="details",
+            categories=(1,),
+            max_details_per_run=10,
+        ),
+        now=datetime(2026, 5, 4, 12, 0, tzinfo=UTC),
+        listing_client=listing_client,
+        state_store=s3,
+    )
+
+    detail_rows = _read_jsonl(Path(release.files[0].path))
+    assert release.metadata["stage"] == "details"
+    assert release.metadata["source_property_invalid_row_count"] == 1
+    assert [row["listing_id"] for row in detail_rows] == ["apt-1", "apt-2"]
+
+
 def test_pf_listings_search_checkpoint_resolves_plan_and_cursor() -> None:
     s3 = FakeS3()
     s3.json_objects[checkpoint_s3_key(source="pf_listings", operation="plan_snapshot")] = {

@@ -33,6 +33,10 @@ from holocron.sources.dld_open_data_orchestration import (
     resolve_open_data_config,
     write_open_data_checkpoint,
 )
+from holocron.sources.dld_pulse_historic.assets import (
+    DldPulseHistoricBronzeConfig,
+    load_dld_pulse_historic_bronze,
+)
 from holocron.sources.pf_listings.media_assets import (
     PropertyFinderListingMediaHydrationConfig,
     hydrate_pf_listing_media_assets,
@@ -184,9 +188,20 @@ def _run_raw_extractor(
         "materializing raw source=%s with config keys=%s", source.name, sorted(source_config)
     )
 
-    with TemporaryDirectory(prefix=f"holocron-{source.name}-") as scratch_dir:
+    temporary_directory_dir: str | None = None
+    if source.name == "dld_pulse_historic":
+        input_dir = Path(str(source_config.get("input_dir") or "pulse-data")).expanduser()
+        if not input_dir.is_absolute():
+            input_dir = Path.cwd() / input_dir
+        temporary_directory_dir = str(input_dir.resolve().parent)
+
+    with TemporaryDirectory(
+        prefix=f"holocron-{source.name}-",
+        dir=temporary_directory_dir,
+    ) as scratch_dir:
         extractor_kwargs: dict[str, Any] = {"config": source_config}
         if source.name.startswith("dld_od_") or source.name in {
+            "dld_pulse_historic",
             "reelly_supply",
             "dxbi_transactions",
             "news_feeds",
@@ -560,6 +575,41 @@ def build_news_feed_assets() -> list[AssetsDefinition]:
     return [news_thumbnail_assets, news_publish]
 
 
+def build_dld_pulse_historic_assets() -> list[AssetsDefinition]:
+    @asset(
+        name="dld_pulse_historic_bronze",
+        group_name="dld",
+        config_schema=Permissive(),
+    )
+    def dld_pulse_historic_bronze(
+        context: AssetExecutionContext,
+        clickhouse: ClickHouseResource,
+        s3: S3Resource,
+    ) -> MaterializeResult:
+        asset_config = DldPulseHistoricBronzeConfig.model_validate(_get_source_config(context))
+        result = load_dld_pulse_historic_bronze(
+            s3=s3.client(),
+            clickhouse=clickhouse.client(),
+            config=asset_config,
+            progress_log=context.log,
+        )
+        return MaterializeResult(
+            metadata={
+                "source": "dld_pulse_historic",
+                "stage": "bronze",
+                "status": "materialized",
+                "manifest_s3_key": asset_config.manifest_key,
+                "batch_size": asset_config.batch_size,
+                "run_id": result["run_id"],
+                "table_count": result["table_count"],
+                "total_rows": result["total_rows"],
+                "table_row_counts": MetadataValue.json(result["table_row_counts"]),
+            }
+        )
+
+    return [dld_pulse_historic_bronze]
+
+
 def _build_dld_open_data_jobs(
     sources: Mapping[str, SourceSpec],
     *,
@@ -621,6 +671,20 @@ def build_operational_jobs(sources: Mapping[str, SourceSpec]) -> list[AssetJobDe
             name="dda_planning_layers_manual_full_refresh",
             raw_only=False,
             config=_defaulted_raw_config_mapping(sources["dda_planning_layers"], defaults={}),
+        ),
+        _build_source_asset_job(
+            source=sources["dld_pulse_historic"],
+            name="dld_pulse_historic_archive",
+            raw_only=True,
+            config=_raw_asset_run_config(
+                sources["dld_pulse_historic"],
+                {"input_dir": "pulse-data"},
+            ),
+        ),
+        define_asset_job(
+            name="dld_pulse_historic_bronze_backfill",
+            selection=["dld_pulse_historic_bronze"],
+            config=_dld_pulse_historic_bronze_config_mapping(),
         ),
         _build_source_asset_job(
             source=sources["pf_locations"],
@@ -882,6 +946,18 @@ def _asset_config_mapping(
     return _permissive_config_mapping(
         config_fn=_map_asset_config,
         fields=_config_fields(defaults, field_specs),
+    )
+
+
+def _dld_pulse_historic_bronze_config_mapping() -> ConfigMapping:
+    return _asset_config_mapping(
+        asset_name="dld_pulse_historic_bronze",
+        defaults=DldPulseHistoricBronzeConfig(),
+        field_specs=(
+            ("manifest_key", StringSource, "R2 raw manifest key for the archived Pulse release."),
+            ("batch_size", int, "ClickHouse insert batch size."),
+            ("file_names", [str], "Optional canonical Pulse CSV names to load."),
+        ),
     )
 
 

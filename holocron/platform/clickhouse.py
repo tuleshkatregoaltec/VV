@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Sequence
-from typing import Any
+from typing import Any, cast
 
 import clickhouse_connect
 
@@ -18,6 +18,8 @@ class ClickHouseClient:
             password=settings.clickhouse_password,
             database=settings.clickhouse_database,
             secure=settings.clickhouse_secure,
+            connect_timeout=30,
+            send_receive_timeout=900,
         )
 
     def command(self, sql: str) -> Any:
@@ -29,7 +31,25 @@ class ClickHouseClient:
     def insert_rows(
         self, *, table: str, rows: Sequence[Sequence[Any]], column_names: Sequence[str]
     ) -> None:
-        self._client.insert(table=table, data=list(rows), column_names=list(column_names))
+        data = list(rows)
+        if not data:
+            return
+        client = cast(Any, self._client)
+        context = client.create_insert_context(
+            table=table,
+            column_names=list(column_names),
+            data=data,
+        )
+        # Build a replayable body so HTTP retries never resume from a consumed insert stream.
+        context.compression = client.write_compression
+        insert_block = b"".join(client._transform.build_insert(context))
+        if context.insert_exception is not None:
+            raise context.insert_exception
+        client.raw_insert(
+            table=None,
+            insert_block=insert_block,
+            compression=context.compression,
+        )
 
     @staticmethod
     def _staging_name(table: str, staging_suffix: str) -> str:

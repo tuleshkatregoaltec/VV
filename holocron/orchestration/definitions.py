@@ -4,6 +4,7 @@ from dagster import Definitions
 
 from holocron.orchestration.factory import (
     build_assets_for_source,
+    build_dld_pulse_historic_assets,
     build_news_feed_assets,
     build_operational_jobs,
     build_operational_schedules,
@@ -19,6 +20,7 @@ for _source in registry.list_sources():
 _assets.extend(build_pf_listing_media_assets())
 _assets.extend(build_reelly_document_assets())
 _assets.extend(build_news_feed_assets())
+_assets.extend(build_dld_pulse_historic_assets())
 _sources_by_name = {_source.name: _source for _source in registry.list_sources()}
 _jobs = build_operational_jobs(_sources_by_name)
 _schedules = build_operational_schedules({_job.name: _job for _job in _jobs})

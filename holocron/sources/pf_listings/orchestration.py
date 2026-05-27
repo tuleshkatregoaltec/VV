@@ -278,6 +278,9 @@ def write_listings_checkpoint(
                 "next_row_index": metadata.get("next_row_index"),
                 "source_manifest_count": metadata.get("source_manifest_count"),
                 "source_property_row_count": metadata.get("source_property_row_count"),
+                "source_property_invalid_row_count": metadata.get(
+                    "source_property_invalid_row_count"
+                ),
                 "last_run_id": raw_release.run_id,
                 "last_manifest_s3_key": manifest_key,
                 "detail_row_count": metadata.get("detail_row_count"),
