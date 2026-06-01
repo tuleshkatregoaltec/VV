@@ -1,6 +1,22 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=swap');
 @import 'maplibre-gl/dist/maplibre-gl.css';
 
+@font-face {
+    font-family: 'General Sans Landing';
+    font-style: normal;
+    font-weight: 400;
+    font-display: swap;
+    src: url('/landing/fonts/GeneralSans-Regular.otf') format('opentype');
+}
+
+@font-face {
+    font-family: 'Fraunces Landing';
+    font-style: normal;
+    font-weight: 400;
+    font-display: swap;
+    src: url('/landing/fonts/Fraunces-Regular.ttf') format('truetype');
+}
+
 .building-popup .maplibregl-popup-content {
     padding: 8px 12px;
     border-radius: 8px;

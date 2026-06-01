@@ -8,7 +8,7 @@
 </script>
 
 <svelte:head>
-    <link rel="icon" href="/favicon.svg" />
+    <link rel="icon" href="/icon.svg" />
     <meta name="author" content="Vitevue" />
     <meta name="theme-color" content="#000000" />
     <meta property="og:type" content="website" />
