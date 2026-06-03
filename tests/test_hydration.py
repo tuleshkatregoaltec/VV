@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 
 from holocron.platform.hydration import (
     hydrate_assets_in_order,
     partition_hydration_assets_by_existing,
+    parse_jsonl_text,
     select_manifest_keys,
 )
 
@@ -74,6 +76,23 @@ def test_select_manifest_keys_prefers_explicit_keys() -> None:
     )
 
     assert keys == ("raw/source=demo/manifests/explicit.json",)
+
+
+def test_parse_jsonl_text_preserves_json_string_line_separators() -> None:
+    line_separator = chr(0x2028)
+    text = (
+        json.dumps({"description": f"first{line_separator}second"}, ensure_ascii=False)
+        + "\n"
+        + json.dumps({"description": "third"})
+        + "\n"
+    )
+
+    rows = parse_jsonl_text(text=text, source_key="raw/demo.jsonl", row_label="demo row")
+
+    assert rows == [
+        (1, {"description": f"first{line_separator}second"}),
+        (2, {"description": "third"}),
+    ]
 
 
 def test_hydrate_assets_in_order_records_single_worker_failures() -> None:

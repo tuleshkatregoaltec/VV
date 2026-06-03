@@ -159,7 +159,7 @@ def parse_jsonl_text(
     strict: bool = True,
 ) -> list[tuple[int, dict[str, Any]]]:
     rows: list[tuple[int, dict[str, Any]]] = []
-    for line_number, line in enumerate(text.splitlines(), start=1):
+    for line_number, line in enumerate(text.split("\n"), start=1):
         stripped = line.strip()
         if not stripped:
             continue
