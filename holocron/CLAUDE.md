@@ -13,9 +13,8 @@ Prefer the repo `justfile` for routine development and environment setup instead
 - List available commands: `just --list`
 - Install Python dependencies: `just sync`
 - Run the standard verification pass: `just check`
-- Prepare a local env file: `just env local`
-- Start the local stack: `just up local`
-- Stop the local stack: `just down local`
+- Start the shared local dev stack (from the platform root): `cd .. && just up`
+- Stop the shared local dev stack: `cd .. && just down`
 
 Use raw `uv`, `ruff`, `pytest`, or `docker compose` commands when you need something the `justfile` does not already cover.
 
@@ -29,7 +28,7 @@ For replication or deploy work on a VPS, prefer the repo recipes:
 - `just logs prod`
 - `just deploy`
 
-The base `docker-compose.yml` is intended to be VPS-safe and should not depend on bind mounts. Local-only overrides belong in `docker-compose.local.yml`.
+The base `docker-compose.yml` is intended to be VPS-safe and should not depend on bind mounts.
 
 ## Source Layout
 

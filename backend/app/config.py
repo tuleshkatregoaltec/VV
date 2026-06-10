@@ -35,7 +35,7 @@ class Settings(BaseSettings):
     ENVIRONMENT: Literal["local", "staging", "production"] = "local"
 
     # Database
-    DATABASE_URL: PostgresDsn  # configMap
+    POSTGRES_URL: PostgresDsn
 
     # Redis
     REDIS_URL: str  # configMap
@@ -102,7 +102,7 @@ class Settings(BaseSettings):
 
     @cached_property
     def ALEMBIC_DATABASE_URL(self) -> str:
-        database_url = str(self.DATABASE_URL)
+        database_url = str(self.POSTGRES_URL)
         if database_url.startswith("postgresql+asyncpg://"):
             return database_url.replace("postgresql+asyncpg://", "postgresql://", 1)
         return database_url

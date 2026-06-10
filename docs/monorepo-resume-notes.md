@@ -116,7 +116,7 @@ Holocron full check passed with 226 tests.
    - define a smaller root command taxonomy
    - keep package-specific detail inside each package
    - reduce overlap between root and Holocron commands
-   - decide whether `r2` remains the target name or becomes `raw-test`
+   - ~~decide whether `r2` remains the target name or becomes `raw-test`~~ → renamed to `raw-test`
 3. Audit Docker Compose files:
    - root Compose should contain only local platform dependencies
    - Holocron Compose should contain only Dagster/pipeline runtime concerns

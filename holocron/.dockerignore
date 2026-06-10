@@ -18,7 +18,7 @@ lkp/
 .env*
 !.env.example
 !.env.local.example
-!.env.r2.example
+!.env.raw-test.example
 .envrc
 
 *.py[codz]

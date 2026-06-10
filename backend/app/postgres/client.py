@@ -18,7 +18,7 @@ def get_postgres_engine() -> AsyncEngine:
     global _engine, _session_factory
 
     if _engine is None:
-        database_url = str(settings.DATABASE_URL)
+        database_url = str(settings.POSTGRES_URL)
         logger.info(f"Initializing PostgreSQL engine: {database_url.split('@', 1)[1]}")
 
         _engine = create_async_engine(

@@ -318,7 +318,7 @@ async def download_records_object(key: str) -> tuple[list[dict[str, Any]], int]:
 
 
 def get_database_url() -> str:
-    return require_env("DATABASE_URL")
+    return require_env("POSTGRES_URL")
 
 
 async def existing_urls(db: AsyncSession, urls: list[str]) -> set[str]:

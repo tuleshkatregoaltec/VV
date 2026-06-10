@@ -3,15 +3,17 @@ services:
     depends_on:
       dagster-daemon:
         condition: service_started
-      postgres:
+      postgres-dagster:
         condition: service_healthy
 
   dagster-daemon:
     depends_on:
-      postgres:
+      postgres-dagster:
         condition: service_healthy
 
-  postgres:
+  # Overrides the persistent postgres-dagster from the base compose with a
+  # transient instance for smoke-test runs.
+  postgres-dagster:
     image: postgres:16-alpine
     environment:
       POSTGRES_USER: dagster
@@ -26,6 +28,7 @@ services:
       interval: 5s
       timeout: 5s
       retries: 20
+    restart: "no"
 
 volumes:
   raw_test_postgres_data:

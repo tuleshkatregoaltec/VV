@@ -11,16 +11,16 @@ setup:
 	set -a && source .env.dev && set +a && cd backend && uv run alembic upgrade head && uv run python -m scripts.admin.create_auth_admin_user && uv run python -m scripts.admin.bootstrap_local_admin_state
 
 up:
-	docker compose up --build -d postgres auth-db-init auth inbucket clickhouse redis minio minio-setup
+	docker compose -f docker-compose.dev.yml up --build -d
 
 down:
-	docker compose down -v
+	docker compose -f docker-compose.dev.yml down -v
 
 logs service='':
-	if [ -n "{{service}}" ]; then docker compose logs -f {{service}}; else docker compose logs -f; fi
+	if [ -n "{{service}}" ]; then docker compose -f docker-compose.dev.yml logs -f {{service}}; else docker compose -f docker-compose.dev.yml logs -f; fi
 
 ps:
-	docker compose ps
+	docker compose -f docker-compose.dev.yml ps
 
 dev-backend:
 	set -a && source .env.dev && set +a && cd backend && uv sync && scripts/lifecycle/prestart.sh && uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
@@ -54,12 +54,22 @@ dev:
 	just up
 	just dev-app
 
+env:
+	bash scripts/pull-bitwarden-env.sh
+
+init:
+	docker compose --profile init run --rm auth-db-init
+
+migrate:
+	docker compose run --rm --no-deps backend uv run alembic upgrade head
+
+deploy:
+	docker compose pull backend
+	just migrate
+	docker compose up -d --no-build backend auth redis
+
 test-backend:
 	set -a && source .env.dev && set +a && cd backend && scripts/lifecycle/tests-start.sh
-
-lint-backend:
-	uv run --project backend ruff format --check backend
-	uv run --project backend ruff check backend
 
 format-backend:
 	uv run --project backend ruff format backend
@@ -71,17 +81,12 @@ test-frontend:
 build-frontend:
 	set -a && source .env.dev && set +a && cd frontend && bun run build
 
-lint-frontend:
-	cd frontend && bun run lint
-
 format-frontend:
 	cd frontend && bun run format
 
 check-all:
 	just format-backend
 	just format-frontend
-	just lint-backend
-	just lint-frontend
 	just test-backend
 	just test-frontend
 
@@ -99,9 +104,6 @@ load-clickhouse-local:
 
 build-clickhouse-facts:
 	set -a && source .env.dev && set +a && cd backend && uv run python -m scripts.clickhouse.build_fact_tables
-
-import-mashrooi-radar-demo:
-	set -a && source .env.dev && set +a && cd backend && uv run python -m scripts.radar.import_mashrooi_coordinates_demo
 
 holocron +args='':
 	@cd holocron && just {{args}}

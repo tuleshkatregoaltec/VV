@@ -34,8 +34,8 @@ Common commands:
 - `just env local` creates `.env.local` from `.env.local.example`
 - `just env prod` writes `.env` from Bitwarden Secrets Manager
 - `just env prod-manual` creates `.env` from `.env.example`
-- `just env r2` creates `.env.r2-test` from `.env.r2.example`
-- `just up <target>` starts a stack; targets are `local`, `prod`, or `r2`
+- `just env raw-test` creates `.env.raw-test` from `.env.raw-test.example`
+- `just up <target>` starts a stack; targets are `local`, `prod`, or `raw-test`
 - `just down <target>`, `just ps <target>`, and `just logs <target>` operate a stack
 - `just deploy` pulls the latest code and rebuilds the VPS stack
 
@@ -72,20 +72,21 @@ stored on the VPS.
 For local development, use `docker-compose.local.yml` through `just up local`;
 that override adds bind mounts plus local Postgres, ClickHouse, and MinIO.
 
-### Temporary R2 Raw Test
+### Raw Test Stack
 
-Before production R2, ClickHouse, and external Dagster Postgres are ready, you
-can smoke-test raw extraction on a VPS with an R2 bucket and temporary local
-Postgres for Dagster metadata:
+Before production object storage, ClickHouse, and external Dagster Postgres are
+ready, you can smoke-test raw extraction on a VPS with temporary local Postgres
+for Dagster metadata:
 
 ```bash
-just env r2
-# fill .env.r2-test with R2 credentials and any source credentials needed
-just up r2
+just env raw-test
+# fill .env.raw-test with object storage credentials and any source credentials needed
+just up raw-test
 ```
 
-If `BWS_ACCESS_TOKEN` and `BWS_PROJECT_ID` are exported, `just env r2` pulls
-`.env.r2-test` from Bitwarden instead. The R2 Bitwarden values should include:
+If `BWS_ACCESS_TOKEN` and `BWS_PROJECT_ID` are exported, `just env raw-test`
+pulls `.env.raw-test` from Bitwarden instead. The Bitwarden values should
+include:
 
 ```text
 DAGSTER_POSTGRES_URL=postgresql://dagster:dagster@postgres:5432/dagster
@@ -95,15 +96,15 @@ OBJECT_STORAGE_USE_PATH_STYLE=true
 ```
 
 This starts only Dagster plus local Postgres. Raw releases and manifests are
-written to R2. Do not run bronze jobs in this mode unless `.env.r2-test` has
-real ClickHouse values.
+written to object storage. Do not run bronze jobs in this mode unless
+`.env.raw-test` has real ClickHouse values.
 
 Useful commands:
 
 ```bash
-just ps r2
-just logs r2
-just down r2
+just ps raw-test
+just logs raw-test
+just down raw-test
 ```
 
 ## Package Layout
