@@ -4,8 +4,7 @@ set -euo pipefail
 ENV_FILE=".env"
 FORCE=0
 BWS_IMAGE="${BWS_IMAGE:-ghcr.io/bitwarden/bws}"
-# vitevue-prod project — not a secret
-BWS_PROJECT_ID="${BWS_PROJECT_ID:-0848f0fb-cb6e-44fe-89f5-b3de00d7f090}"
+BWS_PROJECT_ID="${BWS_PROJECT_ID:-}"
 
 usage() {
   cat <<'USAGE'
@@ -146,24 +145,6 @@ if grep -Eq "^BWS_ACCESS_TOKEN=" "$TMP_FILE"; then
   echo "Refusing to write BWS_ACCESS_TOKEN to $ENV_FILE." >&2
   exit 1
 fi
-
-# Append structural config that belongs in .env but is not a secret.
-# Docker Compose overrides host-specific values (e.g. host.docker.internal).
-cat >> "$TMP_FILE" <<'STRUCTURAL'
-
-# --- Structural config (non-secret, appended by pull-bitwarden-env.sh) ---
-ENVIRONMENT=local
-DEFAULT_CHAT_MODEL=google/gemini-3-flash-preview
-CLICKHOUSE_HOST=100.72.54.29
-CLICKHOUSE_PORT=8123
-CLICKHOUSE_USER=default
-CLICKHOUSE_DATABASE=vitevue
-CLICKHOUSE_SECURE=false
-AUTH_URL=http://100.72.54.29:9999/auth/v1
-OBJECT_STORAGE_PROVIDER=r2
-OBJECT_STORAGE_REGION=auto
-OBJECT_STORAGE_USE_PATH_STYLE=true
-STRUCTURAL
 
 chmod 600 "$TMP_FILE"
 mv "$TMP_FILE" "$ENV_FILE"

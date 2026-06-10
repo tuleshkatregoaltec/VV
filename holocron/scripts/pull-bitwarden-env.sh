@@ -5,8 +5,7 @@ ENV_FILE=".env"
 FORCE=0
 RAW_ONLY=0
 BWS_IMAGE="${BWS_IMAGE:-ghcr.io/bitwarden/bws}"
-# holocron-prod project — not a secret
-BWS_PROJECT_ID="${BWS_PROJECT_ID:-ccbc817d-9f65-489c-9905-b43f00f672bb}"
+BWS_PROJECT_ID="${BWS_PROJECT_ID:-}"
 
 usage() {
   cat <<'USAGE'
