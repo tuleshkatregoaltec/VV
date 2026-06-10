@@ -98,9 +98,10 @@ than rewriting Holocron's internal workflow immediately.
   Holocron-only. After import, preserve the package boundary and update that
   instruction so it applies to `holocron/` within the monorepo.
 - Environment variable names have been standardized across packages. Application
-  code should use `CLICKHOUSE_DATABASE` for ClickHouse and `R2_*` for Cloudflare
-  R2 object storage. Compose may still map `CLICKHOUSE_DATABASE` into
-  image-specific variables required by upstream containers.
+  code should use `CLICKHOUSE_DATABASE` for ClickHouse and `OBJECT_STORAGE_*`
+  for provider-neutral object storage. Compose may still map
+  `CLICKHOUSE_DATABASE` into image-specific variables required by upstream
+  containers.
 - The backend owns app PostgreSQL schema through SQLModel/Alembic. Holocron owns
   ClickHouse bronze DDL. Keep those ownership lines intact.
 

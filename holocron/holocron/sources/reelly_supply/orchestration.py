@@ -67,7 +67,7 @@ class _ArchiveCheckpoint(BaseModel):
 def resolve_archive_config(
     *,
     source_config: Mapping[str, Any],
-    s3_client: Any,
+    object_storage_client: Any,
 ) -> dict[str, Any]:
     resolved_config = dict(source_config)
     if str(resolved_config.get("mode") or _ARCHIVE_MODE) != _ARCHIVE_MODE:
@@ -75,7 +75,7 @@ def resolve_archive_config(
         return resolved_config
     reset_checkpoint = bool(resolved_config.pop("reset_checkpoint", False))
     checkpoint = read_checkpoint_model(
-        s3_client,
+        object_storage_client,
         source="reelly_supply",
         operation=REELLY_ARCHIVE_OPERATION,
         model=_ArchiveCheckpoint,
@@ -109,11 +109,11 @@ def write_archive_checkpoint(
     *,
     raw_release: RawRelease,
     manifest_key: str,
-    s3_client: Any,
+    object_storage_client: Any,
 ) -> None:
     metadata = dict(raw_release.metadata)
     write_checkpoint(
-        s3_client,
+        object_storage_client,
         source=raw_release.source,
         operation=REELLY_ARCHIVE_OPERATION,
         payload={

@@ -25,11 +25,10 @@ class CheckResult:
 
 CORE_REQUIRED_ENV = (
     "DAGSTER_POSTGRES_URL",
-    "R2_ACCESS_KEY_ID",
-    "R2_SECRET_ACCESS_KEY",
-    "R2_REGION",
-    "R2_BUCKET",
-    "R2_ENDPOINT_URL",
+    "OBJECT_STORAGE_ACCESS_KEY_ID",
+    "OBJECT_STORAGE_SECRET_ACCESS_KEY",
+    "OBJECT_STORAGE_REGION",
+    "OBJECT_STORAGE_BUCKET",
 )
 
 CLICKHOUSE_REQUIRED_ENV = (
@@ -59,12 +58,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--check-connections",
         action="store_true",
-        help="Connect to remote Dagster Postgres, R2, and ClickHouse.",
+        help="Connect to remote Dagster Postgres, object storage, and ClickHouse.",
     )
     parser.add_argument(
         "--raw-only",
         action="store_true",
-        help="Validate only the services needed for raw extraction: Dagster Postgres and R2.",
+        help="Validate only the services needed for raw extraction: Dagster Postgres and object storage.",
     )
     args = parser.parse_args(argv)
 
@@ -74,8 +73,10 @@ def main(argv: list[str] | None = None) -> int:
     )
     results = [
         _check_required_env(env, required_env=required_env),
+        _check_object_storage_provider(env),
+        _check_object_storage_endpoint(env),
         _check_postgres_url(env),
-        _check_boolean(env, "R2_USE_PATH_STYLE", required=False),
+        _check_boolean(env, "OBJECT_STORAGE_USE_PATH_STYLE", required=False),
         _check_optional_sources(env),
     ]
     if not args.raw_only:
@@ -89,7 +90,7 @@ def main(argv: list[str] | None = None) -> int:
         results.extend(
             [
                 _check_postgres_connection(env),
-                _check_r2_connection(env),
+                _check_object_storage_connection(env),
             ]
         )
         if not args.raw_only:
@@ -191,6 +192,38 @@ def _check_boolean(env: Mapping[str, str], key: str, *, required: bool = True) -
     return CheckResult(name=key, ok=True, detail=raw_value)
 
 
+def _object_storage_provider(env: Mapping[str, str]) -> str:
+    return env.get("OBJECT_STORAGE_PROVIDER", "r2").strip() or "r2"
+
+
+def _check_object_storage_provider(env: Mapping[str, str]) -> CheckResult:
+    provider = _object_storage_provider(env)
+    allowed = {"r2", "aws_s3", "minio"}
+    if provider not in allowed:
+        return CheckResult(
+            name="OBJECT_STORAGE_PROVIDER",
+            ok=False,
+            detail=f"must be one of: {', '.join(sorted(allowed))}",
+        )
+    return CheckResult(name="OBJECT_STORAGE_PROVIDER", ok=True, detail=provider)
+
+
+def _check_object_storage_endpoint(env: Mapping[str, str]) -> CheckResult:
+    provider = _object_storage_provider(env)
+    endpoint_url = env.get("OBJECT_STORAGE_ENDPOINT_URL", "").strip()
+    if provider in {"r2", "minio"} and not endpoint_url:
+        return CheckResult(
+            name="OBJECT_STORAGE_ENDPOINT_URL",
+            ok=False,
+            detail=f"required when OBJECT_STORAGE_PROVIDER={provider}",
+        )
+    return CheckResult(
+        name="OBJECT_STORAGE_ENDPOINT_URL",
+        ok=True,
+        detail=endpoint_url or "using provider default endpoint",
+    )
+
+
 def _check_optional_sources(env: Mapping[str, str]) -> CheckResult:
     configured = [key for key in OPTIONAL_SOURCE_ENV if env.get(key, "").strip()]
     missing = [key for key in OPTIONAL_SOURCE_ENV if key not in configured]
@@ -218,26 +251,30 @@ def _check_postgres_connection(env: Mapping[str, str]) -> CheckResult:
     return CheckResult(name="dagster postgres connection", ok=True, detail="select 1 succeeded")
 
 
-def _check_r2_connection(env: Mapping[str, str]) -> CheckResult:
+def _check_object_storage_connection(env: Mapping[str, str]) -> CheckResult:
     try:
         client = boto3.client(
             "s3",
-            aws_access_key_id=env["R2_ACCESS_KEY_ID"],
-            aws_secret_access_key=env["R2_SECRET_ACCESS_KEY"],
-            region_name=env["R2_REGION"],
-            endpoint_url=env["R2_ENDPOINT_URL"],
+            aws_access_key_id=env["OBJECT_STORAGE_ACCESS_KEY_ID"],
+            aws_secret_access_key=env["OBJECT_STORAGE_SECRET_ACCESS_KEY"],
+            region_name=env["OBJECT_STORAGE_REGION"],
+            endpoint_url=env.get("OBJECT_STORAGE_ENDPOINT_URL") or None,
             config=Config(
                 s3={
                     "addressing_style": "path"
-                    if _truthy(env.get("R2_USE_PATH_STYLE", "true"))
+                    if _truthy(env.get("OBJECT_STORAGE_USE_PATH_STYLE", "true"))
                     else "auto"
                 }
             ),
         )
-        client.head_bucket(Bucket=env["R2_BUCKET"])
+        client.head_bucket(Bucket=env["OBJECT_STORAGE_BUCKET"])
     except Exception as exc:  # noqa: BLE001 - this is a diagnostic command.
-        return CheckResult(name="r2 connection", ok=False, detail=str(exc))
-    return CheckResult(name="r2 connection", ok=True, detail=f"bucket exists: {env['R2_BUCKET']}")
+        return CheckResult(name="object storage connection", ok=False, detail=str(exc))
+    return CheckResult(
+        name="object storage connection",
+        ok=True,
+        detail=f"bucket exists: {env['OBJECT_STORAGE_BUCKET']}",
+    )
 
 
 def _check_clickhouse_connection(env: Mapping[str, str]) -> CheckResult:

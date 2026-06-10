@@ -19,7 +19,7 @@ from holocron.platform.manifests import (
 )
 from holocron.platform.raw_files import read_and_validate_manifest, string_value
 from holocron.pydantic_helpers import HolocronModel, NonBlankStr
-from holocron.platform.s3 import S3Client
+from holocron.platform.object_storage import ObjectStorageClient
 from holocron.platform.settings import settings
 from holocron.sources import registry
 
@@ -367,7 +367,9 @@ def _manifest_keys_from_run_ids(*, source_name: str, run_ids: Sequence[str]) -> 
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Manage raw dataset version descriptors in R2.")
+    parser = argparse.ArgumentParser(
+        description="Manage raw dataset version descriptors in object storage."
+    )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     create_parser = subparsers.add_parser(
@@ -400,7 +402,7 @@ def main(argv: list[str] | None = None) -> int:
 
     args = parser.parse_args(argv)
     source = registry.get(args.source)
-    s3 = S3Client(settings)
+    s3 = ObjectStorageClient(settings)
 
     if args.command == "create":
         coverage = _load_coverage(

@@ -11,7 +11,7 @@ from holocron.orchestration.factory import (
     build_pf_listing_media_assets,
     build_reelly_document_assets,
 )
-from holocron.platform.resources import ClickHouseResource, S3Resource
+from holocron.platform.resources import ClickHouseResource, ObjectStorageResource
 from holocron.sources import registry
 
 _assets = []
@@ -30,7 +30,7 @@ defs = Definitions(
     jobs=_jobs,
     schedules=_schedules,
     resources={
-        "s3": S3Resource(),
+        "object_storage": ObjectStorageResource(),
         "clickhouse": ClickHouseResource(),
     },
 )

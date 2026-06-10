@@ -8,7 +8,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.config import settings
 from app.core.cache import RedisCache
-from app.core.s3 import S3Client
+from app.core.object_storage import ObjectStorageClient
 from app.news.models import NewsArticle, NewsArticleResponse
 from app.upload.models import (
     ChunkedUploadResponse,
@@ -19,13 +19,15 @@ from app.upload.models import (
 logger = logging.getLogger(__name__)
 
 
-s3_client = S3Client(
-    endpoint_url=settings.R2_ENDPOINT_URL,
-    access_key_id=settings.R2_ACCESS_KEY_ID,
-    secret_access_key=settings.R2_SECRET_ACCESS_KEY,
-    bucket_name=settings.R2_BUCKET,
-    region=settings.R2_REGION,
-    use_path_style=settings.R2_USE_PATH_STYLE,
+object_storage_client = ObjectStorageClient(
+    endpoint_url=(
+        str(settings.OBJECT_STORAGE_ENDPOINT_URL) if settings.OBJECT_STORAGE_ENDPOINT_URL else None
+    ),
+    access_key_id=settings.OBJECT_STORAGE_ACCESS_KEY_ID,
+    secret_access_key=settings.OBJECT_STORAGE_SECRET_ACCESS_KEY,
+    bucket_name=settings.OBJECT_STORAGE_BUCKET,
+    region=settings.OBJECT_STORAGE_REGION,
+    use_path_style=settings.OBJECT_STORAGE_USE_PATH_STYLE,
 )
 
 
@@ -100,7 +102,7 @@ async def process_chunked_upload(
     expected_hash: str | None = None,
 ) -> ChunkedUploadResponse:
     """
-    Store chunk to S3. Assembly is handled by the ETL node, not here.
+    Store chunk to object storage. Assembly is handled by the ETL node, not here.
 
     When all chunks are received, saves metadata.json with upload info
     for the ETL node to use during assembly.
@@ -114,7 +116,7 @@ async def process_chunked_upload(
 
     # Store chunk in etl/uploads/ path for ETL node to access
     s3_key = f"etl/uploads/{upload_session_id}/chunk_{chunk_index:04d}"
-    await s3_client.upload(s3_key, chunk_data)
+    await object_storage_client.upload(s3_key, chunk_data)
 
     if not cache.redis:
         raise HTTPException(503, "Redis unavailable")
@@ -123,7 +125,9 @@ async def process_chunked_upload(
     await cache.redis.sadd(redis_key, chunk_index)  # type: ignore
     await cache.redis.expire(redis_key, 3600)  # type: ignore
 
-    logger.info(f"Chunk {chunk_index}/{total_chunks} uploaded to S3 for {safe_filename}")
+    logger.info(
+        f"Chunk {chunk_index}/{total_chunks} uploaded to object storage for {safe_filename}"
+    )
 
     received_count = await cache.redis.scard(redis_key)  # type: ignore
 
@@ -153,7 +157,7 @@ async def process_chunked_upload(
         }
 
         metadata_key = f"etl/uploads/{upload_session_id}/metadata.json"
-        await s3_client.upload(metadata_key, json.dumps(metadata).encode())
+        await object_storage_client.upload(metadata_key, json.dumps(metadata).encode())
 
         await cache.delete(redis_key)
 

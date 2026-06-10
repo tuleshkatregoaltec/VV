@@ -11,20 +11,22 @@ from botocore.exceptions import ClientError
 from holocron.platform.settings import Settings
 
 
-class S3Client:
+class ObjectStorageClient:
     def __init__(self, settings: Settings) -> None:
-        self._bucket = settings.r2_bucket
-        self._public_url_base = settings.r2_public_url_base.strip()
+        self._bucket = settings.object_storage_bucket
+        self._public_url_base = settings.object_storage_public_url_base.strip()
         session_kwargs: dict[str, Any] = {
-            "region_name": settings.r2_region,
-            "aws_access_key_id": settings.r2_access_key_id,
-            "aws_secret_access_key": settings.r2_secret_access_key,
+            "region_name": settings.object_storage_region,
+            "aws_access_key_id": settings.object_storage_access_key_id,
+            "aws_secret_access_key": settings.object_storage_secret_access_key,
         }
         session = boto3.session.Session(**session_kwargs)
-        config = Config(s3={"addressing_style": "path" if settings.r2_use_path_style else "auto"})
+        config = Config(
+            s3={"addressing_style": "path" if settings.object_storage_use_path_style else "auto"}
+        )
         self._client = session.client(
             "s3",
-            endpoint_url=settings.r2_endpoint_url,
+            endpoint_url=settings.object_storage_endpoint_url or None,
             config=config,
         )
 
@@ -54,7 +56,7 @@ class S3Client:
             raise
         payload = json.loads(response["Body"].read().decode("utf-8"))
         if not isinstance(payload, dict):
-            raise TypeError(f"S3 JSON object at key={key} must be a JSON object")
+            raise TypeError(f"Object-storage JSON object at key={key} must be a JSON object")
         return payload
 
     def put_bytes(self, *, key: str, payload: bytes, content_type: str | None = None) -> None:

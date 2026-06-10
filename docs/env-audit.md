@@ -12,36 +12,41 @@ No local secret values were inspected.
 
 ## Naming Rules
 
-- Use service prefixes for infrastructure-specific config: `R2_*`,
+- Use service prefixes for infrastructure-specific config: `OBJECT_STORAGE_*`,
   `CLICKHOUSE_*`, `DAGSTER_*`, `PLAYWRIGHT_*`.
 - Use product/runtime names for app concepts: `DATABASE_URL`, `FRONTEND_URL`,
   `PLATFORM_POSTGRES_URL`.
 - Do not carry legacy aliases in code. Rename call sites and env files together.
-- Use Cloudflare R2 naming for object storage.
+- Use provider-neutral object-storage naming. The current production provider
+  value is `r2`, but the env contract should also work for AWS S3 or MinIO.
 - Docker image-specific env names may still appear inside Compose service
   `environment` blocks when required by the upstream image. Those names are not
   application runtime config.
 
 ## Shared Infrastructure
 
-### Cloudflare R2
+### Object Storage
 
 Canonical object-storage env vars:
 
-- `R2_ENDPOINT_URL`
-- `R2_ACCESS_KEY_ID`
-- `R2_SECRET_ACCESS_KEY`
-- `R2_BUCKET`
-- `R2_REGION`
-- `R2_USE_PATH_STYLE`
-- `R2_PUBLIC_URL_BASE`
+- `OBJECT_STORAGE_PROVIDER`
+- `OBJECT_STORAGE_ENDPOINT_URL`
+- `OBJECT_STORAGE_ACCESS_KEY_ID`
+- `OBJECT_STORAGE_SECRET_ACCESS_KEY`
+- `OBJECT_STORAGE_BUCKET`
+- `OBJECT_STORAGE_REGION`
+- `OBJECT_STORAGE_USE_PATH_STYLE`
+- `OBJECT_STORAGE_PUBLIC_URL_BASE`
 
-`R2_PUBLIC_URL_BASE` is only needed when Holocron should write public asset URLs
-into inventories. Backend thumbnail serving signs private R2 keys through the
-API and does not require this value.
+`OBJECT_STORAGE_PROVIDER` currently accepts `r2`, `aws_s3`, or `minio`.
+`OBJECT_STORAGE_ENDPOINT_URL` is required for `r2` and `minio`; leave it unset
+for native AWS S3 unless a custom endpoint is needed.
+`OBJECT_STORAGE_PUBLIC_URL_BASE` is only needed when Holocron should write
+public asset URLs into inventories. Backend thumbnail serving signs private
+object keys through the API and does not require this value.
 
-Local MinIO can still be used for development by setting these same `R2_*` vars
-to MinIO endpoint and credentials.
+Local MinIO can still be used for development by setting these same
+`OBJECT_STORAGE_*` vars to MinIO endpoint and credentials.
 
 ### ClickHouse
 
@@ -97,10 +102,9 @@ Required backend settings:
 - `AUTH_SERVICE_ROLE_KEY`
 - `OPENROUTER_API_KEY`
 - `DEFAULT_CHAT_MODEL`
-- `R2_ENDPOINT_URL`
-- `R2_ACCESS_KEY_ID`
-- `R2_SECRET_ACCESS_KEY`
-- `R2_BUCKET`
+- `OBJECT_STORAGE_ACCESS_KEY_ID`
+- `OBJECT_STORAGE_SECRET_ACCESS_KEY`
+- `OBJECT_STORAGE_BUCKET`
 - `CLICKHOUSE_HOST`
 - `CLICKHOUSE_PORT`
 - `CLICKHOUSE_USER`
@@ -118,8 +122,10 @@ Optional backend settings:
 - `ENVIRONMENT`
 - `PUBLIC_API_BASE_URL`
 - `ALLOWED_ORIGINS`
-- `R2_REGION`
-- `R2_USE_PATH_STYLE`
+- `OBJECT_STORAGE_PROVIDER`
+- `OBJECT_STORAGE_ENDPOINT_URL`
+- `OBJECT_STORAGE_REGION`
+- `OBJECT_STORAGE_USE_PATH_STYLE`
 - `CLICKHOUSE_SECURE`
 - `LOGFIRE_TOKEN`
 - `HONEYBADGER_API_KEY`
@@ -169,11 +175,10 @@ Optional Playwright env vars:
 Required for full Holocron production:
 
 - `DAGSTER_POSTGRES_URL`
-- `R2_ACCESS_KEY_ID`
-- `R2_SECRET_ACCESS_KEY`
-- `R2_REGION`
-- `R2_BUCKET`
-- `R2_ENDPOINT_URL`
+- `OBJECT_STORAGE_ACCESS_KEY_ID`
+- `OBJECT_STORAGE_SECRET_ACCESS_KEY`
+- `OBJECT_STORAGE_REGION`
+- `OBJECT_STORAGE_BUCKET`
 - `CLICKHOUSE_HOST`
 - `CLICKHOUSE_PORT`
 - `CLICKHOUSE_USER`
@@ -181,20 +186,21 @@ Required for full Holocron production:
 - `CLICKHOUSE_DATABASE`
 - `CLICKHOUSE_SECURE`
 
-Required for raw-only R2 smoke tests:
+Required for raw-only object-storage smoke tests:
 
 - `DAGSTER_POSTGRES_URL`
-- `R2_ACCESS_KEY_ID`
-- `R2_SECRET_ACCESS_KEY`
-- `R2_REGION`
-- `R2_BUCKET`
-- `R2_ENDPOINT_URL`
+- `OBJECT_STORAGE_ACCESS_KEY_ID`
+- `OBJECT_STORAGE_SECRET_ACCESS_KEY`
+- `OBJECT_STORAGE_REGION`
+- `OBJECT_STORAGE_BUCKET`
 
 Optional Holocron settings:
 
 - `DAGSTER_PORT`
-- `R2_USE_PATH_STYLE`
-- `R2_PUBLIC_URL_BASE`
+- `OBJECT_STORAGE_PROVIDER`
+- `OBJECT_STORAGE_ENDPOINT_URL`
+- `OBJECT_STORAGE_USE_PATH_STYLE`
+- `OBJECT_STORAGE_PUBLIC_URL_BASE`
 - `REELLY_EMAIL`
 - `REELLY_PASSWORD`
 - `TWOCAPTCHA_API_KEY`
@@ -216,6 +222,7 @@ change that introduces it.
 
 - Backend code now reads `CLICKHOUSE_DATABASE` directly. Legacy database aliases
   are not supported backend settings.
-- Backend and Holocron both read R2 through `R2_*` vars only.
+- Backend and Holocron both read object storage through `OBJECT_STORAGE_*` vars
+  only.
 - Holocron news thumbnail prefixes use `media/news/thumbnails`, matching backend
   thumbnail proxy detection.

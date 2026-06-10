@@ -92,7 +92,7 @@ class _PfDetailCheckpoint(_CheckpointModel):
 def resolve_listings_config(
     *,
     source_config: Mapping[str, Any],
-    s3_client: Any,
+    object_storage_client: Any,
 ) -> dict[str, Any]:
     resolved_config = dict(source_config)
     reset_checkpoint = bool(resolved_config.pop("reset_checkpoint", False))
@@ -100,7 +100,7 @@ def resolve_listings_config(
 
     if mode == "plan":
         checkpoint = read_checkpoint_model(
-            s3_client,
+            object_storage_client,
             source=PF_LISTINGS_SOURCE_NAME,
             operation=PF_LISTINGS_PLAN_OPERATION,
             model=_PfPlanCheckpoint,
@@ -128,7 +128,7 @@ def resolve_listings_config(
             plan_manifest_keys.append(plan_manifest_key)
         if not plan_manifest_keys:
             plan_checkpoint = read_checkpoint_model(
-                s3_client,
+                object_storage_client,
                 source=PF_LISTINGS_SOURCE_NAME,
                 operation=PF_LISTINGS_PLAN_OPERATION,
                 model=_PfPlanCheckpoint,
@@ -164,7 +164,7 @@ def resolve_listings_config(
             "search_query_cursor" in source_config or "search_page_cursor" in source_config
         )
         checkpoint = read_checkpoint_model(
-            s3_client,
+            object_storage_client,
             source=PF_LISTINGS_SOURCE_NAME,
             operation=PF_LISTINGS_SEARCH_OPERATION,
             model=_PfSearchCheckpoint,
@@ -196,7 +196,7 @@ def resolve_listings_config(
             "detail_manifest_cursor" in source_config or "detail_row_cursor" in source_config
         )
         checkpoint = read_checkpoint_model(
-            s3_client,
+            object_storage_client,
             source=PF_LISTINGS_SOURCE_NAME,
             operation=PF_LISTINGS_DETAIL_OPERATION,
             model=_PfDetailCheckpoint,
@@ -213,7 +213,7 @@ def write_listings_checkpoint(
     *,
     raw_release: RawRelease,
     manifest_key: str,
-    s3_client: Any,
+    object_storage_client: Any,
 ) -> None:
     metadata = dict(raw_release.metadata)
     stage = metadata.get("stage")
@@ -228,7 +228,7 @@ def write_listings_checkpoint(
         ]
         plan_manifest_keys.append(manifest_key)
         write_checkpoint(
-            s3_client,
+            object_storage_client,
             source=raw_release.source,
             operation=PF_LISTINGS_PLAN_OPERATION,
             payload={
@@ -248,7 +248,7 @@ def write_listings_checkpoint(
 
     if stage == "search":
         write_checkpoint(
-            s3_client,
+            object_storage_client,
             source=raw_release.source,
             operation=PF_LISTINGS_SEARCH_OPERATION,
             payload={
@@ -269,7 +269,7 @@ def write_listings_checkpoint(
 
     if stage == "details":
         write_checkpoint(
-            s3_client,
+            object_storage_client,
             source=raw_release.source,
             operation=PF_LISTINGS_DETAIL_OPERATION,
             payload={

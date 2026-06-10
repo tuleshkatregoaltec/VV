@@ -193,19 +193,22 @@ def require_env(*names: str) -> str:
     raise RuntimeError(f"Missing required environment variable: {' or '.join(names)}")
 
 
-def build_s3_client_kwargs() -> dict[str, str]:
-    return {
-        "endpoint_url": require_env("R2_ENDPOINT_URL"),
-        "aws_access_key_id": require_env("R2_ACCESS_KEY_ID"),
-        "aws_secret_access_key": require_env("R2_SECRET_ACCESS_KEY"),
-        "region_name": env_value("R2_REGION") or "auto",
+def build_object_storage_client_kwargs() -> dict[str, str]:
+    kwargs = {
+        "aws_access_key_id": require_env("OBJECT_STORAGE_ACCESS_KEY_ID"),
+        "aws_secret_access_key": require_env("OBJECT_STORAGE_SECRET_ACCESS_KEY"),
+        "region_name": env_value("OBJECT_STORAGE_REGION") or "auto",
     }
+    endpoint_url = env_value("OBJECT_STORAGE_ENDPOINT_URL")
+    if endpoint_url:
+        kwargs["endpoint_url"] = endpoint_url
+    return kwargs
 
 
 async def signed_news_thumbnail_url(key: str) -> str:
-    bucket = require_env("R2_BUCKET")
+    bucket = require_env("OBJECT_STORAGE_BUCKET")
     session = aioboto3.Session()
-    async with session.client("s3", **build_s3_client_kwargs()) as s3:  # type: ignore[arg-type]
+    async with session.client("s3", **build_object_storage_client_kwargs()) as s3:  # type: ignore[arg-type]
         try:
             signed_url = s3.generate_presigned_url(
                 "get_object",

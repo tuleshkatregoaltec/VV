@@ -211,7 +211,7 @@ def test_raw_release_file_path_preserves_document_subdirectories(tmp_path: Path)
 def test_reelly_archive_checkpoint_starts_without_cursor_when_empty() -> None:
     s3 = FakeCheckpointS3()
 
-    config = resolve_archive_config(source_config={}, s3_client=s3)
+    config = resolve_archive_config(source_config={}, object_storage_client=s3)
 
     assert "page_cursor" not in config
 
@@ -223,7 +223,7 @@ def test_reelly_archive_checkpoint_resumes_from_next_page() -> None:
         "completed": False,
     }
 
-    config = resolve_archive_config(source_config={}, s3_client=s3)
+    config = resolve_archive_config(source_config={}, object_storage_client=s3)
 
     assert config["page_cursor"] == 6
 
@@ -241,7 +241,7 @@ def test_reelly_archive_checkpoint_write_advances_cursor_and_marks_completion() 
             },
         ),
         manifest_key="raw/source=reelly_supply/manifests/run-1.json",
-        s3_client=s3,
+        object_storage_client=s3,
     )
     checkpoint = s3.objects[checkpoint_s3_key(source="reelly_supply", operation="archive_chunk")]
 
@@ -262,7 +262,7 @@ def test_reelly_archive_checkpoint_write_advances_cursor_and_marks_completion() 
             },
         ),
         manifest_key="raw/source=reelly_supply/manifests/run-2.json",
-        s3_client=s3,
+        object_storage_client=s3,
     )
     checkpoint = s3.objects[checkpoint_s3_key(source="reelly_supply", operation="archive_chunk")]
 
@@ -279,11 +279,11 @@ def test_reelly_archive_checkpoint_blocks_completed_rerun_unless_reset() -> None
     }
 
     with pytest.raises(Failure, match="checkpoint is already completed"):
-        resolve_archive_config(source_config={}, s3_client=s3)
+        resolve_archive_config(source_config={}, object_storage_client=s3)
 
     config = resolve_archive_config(
         source_config={"reset_checkpoint": True},
-        s3_client=s3,
+        object_storage_client=s3,
     )
     assert "page_cursor" not in config
     assert "reset_checkpoint" not in config

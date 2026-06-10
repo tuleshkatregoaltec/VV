@@ -113,7 +113,7 @@ def test_dld_open_data_default_snapshot_checkpoint_resumes_effective_date_window
             "max_pages": 1,
             "slice_days": 366,
         },
-        s3_client=s3,
+        object_storage_client=s3,
     )
 
     assert config["window_cursor"] == 3
@@ -150,7 +150,7 @@ def test_dld_open_data_does_not_resume_date_window_checkpoint_without_effective_
             "max_pages": 1,
             "slice_days": 366,
         },
-        s3_client=s3,
+        object_storage_client=s3,
     )
 
     assert "window_cursor" not in config
@@ -187,7 +187,7 @@ def test_dld_open_data_default_snapshot_does_not_resume_explicit_date_checkpoint
             "max_pages": 1,
             "slice_days": 366,
         },
-        s3_client=s3,
+        object_storage_client=s3,
     )
 
     assert "window_cursor" not in config
@@ -221,7 +221,7 @@ def test_dld_open_data_explicit_snapshot_dates_must_match_checkpoint() -> None:
             "end_date": "2026-05-06",
             "slice_days": 366,
         },
-        s3_client=s3,
+        object_storage_client=s3,
     )
     mismatched_config = resolve_open_data_config(
         source_name="dld_od_transactions",
@@ -231,7 +231,7 @@ def test_dld_open_data_explicit_snapshot_dates_must_match_checkpoint() -> None:
             "end_date": "2026-05-06",
             "slice_days": 366,
         },
-        s3_client=s3,
+        object_storage_client=s3,
     )
 
     assert matching_config["window_cursor"] == 3
@@ -264,7 +264,7 @@ def test_dld_open_data_checkpoint_write_keeps_configured_and_effective_dates_sep
             },
         ),
         manifest_key="raw/source=dld_od_transactions/manifests/run-1.json",
-        s3_client=s3,
+        object_storage_client=s3,
     )
 
     checkpoint = s3.objects[
@@ -312,7 +312,7 @@ def test_dld_open_data_checkpoint_write_preserves_implicit_date_window_after_res
             },
         ),
         manifest_key="raw/source=dld_od_transactions/manifests/run-1.json",
-        s3_client=s3,
+        object_storage_client=s3,
     )
 
     checkpoint = s3.objects[

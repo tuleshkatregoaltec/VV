@@ -89,9 +89,9 @@ If `BWS_ACCESS_TOKEN` and `BWS_PROJECT_ID` are exported, `just env r2` pulls
 
 ```text
 DAGSTER_POSTGRES_URL=postgresql://dagster:dagster@postgres:5432/dagster
-R2_REGION=auto
-R2_ENDPOINT_URL=https://<account-id>.r2.cloudflarestorage.com
-R2_USE_PATH_STYLE=true
+OBJECT_STORAGE_REGION=auto
+OBJECT_STORAGE_ENDPOINT_URL=https://<account-id>.r2.cloudflarestorage.com
+OBJECT_STORAGE_USE_PATH_STYLE=true
 ```
 
 This starts only Dagster plus local Postgres. Raw releases and manifests are

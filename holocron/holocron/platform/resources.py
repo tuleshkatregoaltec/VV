@@ -3,13 +3,13 @@ from __future__ import annotations
 from dagster import ConfigurableResource
 
 from holocron.platform.clickhouse import ClickHouseClient
-from holocron.platform.s3 import S3Client
+from holocron.platform.object_storage import ObjectStorageClient
 from holocron.platform.settings import settings
 
 
-class S3Resource(ConfigurableResource):
-    def client(self) -> S3Client:
-        return S3Client(settings)
+class ObjectStorageResource(ConfigurableResource):
+    def client(self) -> ObjectStorageClient:
+        return ObjectStorageClient(settings)
 
 
 class ClickHouseResource(ConfigurableResource):

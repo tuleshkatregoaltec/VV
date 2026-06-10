@@ -1,7 +1,7 @@
-"""Import PropertyFinder listings from R2 into local demo tables.
+"""Import PropertyFinder listings from object storage into local demo tables.
 
 This intentionally mirrors the supply/news demo shortcut. It samples the latest available
-R2 listing manifests into a local `demo_pf_listings` table so the frontend can render a
+object-storage listing manifests into a local `demo_pf_listings` table so the frontend can render a
 listings website-style page without building the production ingestion pipeline first.
 """
 
@@ -27,7 +27,7 @@ PF_BASE_URL = "https://www.propertyfinder.ae"
 
 
 def iter_json_objects(text_value: str) -> Iterable[dict[str, Any]]:
-    """Read R2's newline-ish JSON streams, tolerating embedded newlines in strings."""
+    """Read newline-ish JSON streams, tolerating embedded newlines in strings."""
     index = 0
     length = len(text_value)
     while index < length:
@@ -296,7 +296,7 @@ async def list_objects(s3: Any, prefix: str) -> list[dict[str, Any]]:
     paginator = s3.get_paginator("list_objects_v2")
     objects: list[dict[str, Any]] = []
     async for page in paginator.paginate(
-        Bucket=settings.R2_BUCKET,
+        Bucket=settings.OBJECT_STORAGE_BUCKET,
         Prefix=prefix,
         PaginationConfig={"PageSize": 1000},
     ):
@@ -305,13 +305,13 @@ async def list_objects(s3: Any, prefix: str) -> list[dict[str, Any]]:
 
 
 async def read_text_object(s3: Any, key: str) -> str:
-    response = await s3.get_object(Bucket=settings.R2_BUCKET, Key=key)
+    response = await s3.get_object(Bucket=settings.OBJECT_STORAGE_BUCKET, Key=key)
     return (await response["Body"].read()).decode("utf-8", errors="replace")
 
 
 async def read_text_prefix(s3: Any, key: str, byte_count: int = 500_000) -> str:
     response = await s3.get_object(
-        Bucket=settings.R2_BUCKET,
+        Bucket=settings.OBJECT_STORAGE_BUCKET,
         Key=key,
         Range=f"bytes=0-{byte_count - 1}",
     )
@@ -348,18 +348,19 @@ async def sample_manifest_mode(s3: Any, file: dict[str, Any]) -> str | None:
 
 async def collect_listing_records(max_per_mode: int) -> tuple[list[dict[str, Any]], dict[str, int]]:
     session = aioboto3.Session()
-    s3_kwargs = {
-        "endpoint_url": str(settings.R2_ENDPOINT_URL),
-        "aws_access_key_id": settings.R2_ACCESS_KEY_ID,
-        "aws_secret_access_key": settings.R2_SECRET_ACCESS_KEY,
-        "region_name": settings.R2_REGION or "auto",
+    object_storage_client_kwargs = {
+        "aws_access_key_id": settings.OBJECT_STORAGE_ACCESS_KEY_ID,
+        "aws_secret_access_key": settings.OBJECT_STORAGE_SECRET_ACCESS_KEY,
+        "region_name": settings.OBJECT_STORAGE_REGION or "auto",
     }
+    if settings.OBJECT_STORAGE_ENDPOINT_URL:
+        object_storage_client_kwargs["endpoint_url"] = str(settings.OBJECT_STORAGE_ENDPOINT_URL)
 
     records: list[dict[str, Any]] = []
     counts = {"sale": 0, "rent": 0}
     seen_listing_ids: set[str] = set()
 
-    async with session.client("s3", **s3_kwargs) as s3:
+    async with session.client("s3", **object_storage_client_kwargs) as s3:
         manifests = await load_manifests(s3)
         for manifest in manifests:
             file = properties_file(manifest)

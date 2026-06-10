@@ -25,7 +25,7 @@ from typing import Any, Protocol
 
 from holocron.contracts import RawRelease, SourceSpec
 from holocron.platform.manifests import manifest_s3_key, raw_file_s3_key, raw_manifest_is_smoke
-from holocron.platform.resources import ClickHouseResource, S3Resource
+from holocron.platform.resources import ClickHouseResource, ObjectStorageResource
 from holocron.sources.dld_open_data_orchestration import (
     DLD_OPEN_DATA_CHUNK_DEFAULTS,
     DLD_OPEN_DATA_RENTS_FULL_DEFAULTS,
@@ -149,7 +149,7 @@ def _write_state_updates(
     *,
     state_updates: list[dict[str, str]],
     scratch_path: Path,
-    s3_client: Any,
+    object_storage_client: Any,
 ) -> None:
     for update in state_updates:
         local_path = Path(update["path"])
@@ -157,32 +157,32 @@ def _write_state_updates(
         payload = json.loads(local_path.read_text(encoding="utf-8"))
         if not isinstance(payload, dict):
             raise TypeError(f"State update payload must be a JSON object: {local_path}")
-        s3_client.put_json(key=update["key"], payload=payload)
+        object_storage_client.put_json(key=update["key"], payload=payload)
 
 
 def _run_raw_extractor(
     *,
     context: AssetExecutionContext,
     source: SourceSpec,
-    s3: S3Resource,
+    object_storage: ObjectStorageResource,
 ) -> tuple[dict, dict]:
     source_config = _get_source_config(context)
-    s3_client = s3.client()
+    object_storage_client = object_storage.client()
     if source.name == "reelly_supply":
         source_config = resolve_archive_config(
             source_config=source_config,
-            s3_client=s3_client,
+            object_storage_client=object_storage_client,
         )
     if source.name == "pf_listings":
         source_config = resolve_listings_config(
             source_config=source_config,
-            s3_client=s3_client,
+            object_storage_client=object_storage_client,
         )
     if source.name.startswith("dld_od_"):
         source_config = resolve_open_data_config(
             source_name=source.name,
             source_config=source_config,
-            s3_client=s3_client,
+            object_storage_client=object_storage_client,
         )
     context.log.info(
         "materializing raw source=%s with config keys=%s", source.name, sorted(source_config)
@@ -210,7 +210,7 @@ def _run_raw_extractor(
         }:
             extractor_kwargs["progress_log"] = context.log
         if source.name in {"pf_listings", "reelly_supply"}:
-            extractor_kwargs["state_store"] = s3_client
+            extractor_kwargs["state_store"] = object_storage_client
         raw_release = source.extractor(scratch_dir, **extractor_kwargs)
         if not isinstance(raw_release, RawRelease):
             raise TypeError(
@@ -238,7 +238,7 @@ def _run_raw_extractor(
                 run_id=raw_release.run_id,
                 file_name=file_path,
             )
-            s3_client.upload_file(
+            object_storage_client.upload_file(
                 path=local_path,
                 key=file_key,
                 content_type=raw_file.content_type,
@@ -272,29 +272,29 @@ def _run_raw_extractor(
             "manifest_s3_key": manifest_key,
         }
         manifest_payload = {k: v for k, v in release_payload_base.items() if k != "manifest_s3_key"}
-        s3_client.put_json(key=manifest_key, payload=manifest_payload)
+        object_storage_client.put_json(key=manifest_key, payload=manifest_payload)
         if source.name == "reelly_supply" and release_metadata.get("mode", "archive") == "archive":
             write_archive_checkpoint(
                 raw_release=raw_release,
                 manifest_key=manifest_key,
-                s3_client=s3_client,
+                object_storage_client=object_storage_client,
             )
         if source.name == "pf_listings":
             write_listings_checkpoint(
                 raw_release=raw_release,
                 manifest_key=manifest_key,
-                s3_client=s3_client,
+                object_storage_client=object_storage_client,
             )
         if source.name.startswith("dld_od_"):
             write_open_data_checkpoint(
                 raw_release=raw_release,
                 manifest_key=manifest_key,
-                s3_client=s3_client,
+                object_storage_client=object_storage_client,
             )
         _write_state_updates(
             state_updates=state_updates,
             scratch_path=scratch_path,
-            s3_client=s3_client,
+            object_storage_client=object_storage_client,
         )
 
     release_payload = release_payload_base
@@ -317,7 +317,7 @@ def _run_bronze_loader(
     *,
     source: SourceSpec,
     raw_manifest: dict,
-    s3: _ClientResource,
+    object_storage: _ClientResource,
     clickhouse: _ClientResource,
 ) -> MaterializeResult:
     bronze_loader = source.bronze_loader
@@ -330,7 +330,7 @@ def _run_bronze_loader(
 
     result = bronze_loader(
         raw_manifest=raw_manifest,
-        s3=s3.client(),
+        s3=object_storage.client(),
         clickhouse=clickhouse.client(),
     )
     return MaterializeResult(
@@ -358,9 +358,13 @@ def build_assets_for_source(source: SourceSpec) -> list[AssetsDefinition]:
     @asset(name=raw_name, group_name=source.provider, config_schema=Permissive())
     def raw_asset(
         context: AssetExecutionContext,
-        s3: S3Resource,
+        object_storage: ObjectStorageResource,
     ) -> Output[dict]:
-        release_payload, output_metadata = _run_raw_extractor(context=context, source=source, s3=s3)
+        release_payload, output_metadata = _run_raw_extractor(
+            context=context,
+            source=source,
+            object_storage=object_storage,
+        )
         return Output(release_payload, metadata=output_metadata)
 
     assets = [raw_asset]
@@ -378,14 +382,14 @@ def build_assets_for_source(source: SourceSpec) -> list[AssetsDefinition]:
         context: AssetExecutionContext,
         raw_manifest: dict,
         clickhouse: ClickHouseResource,
-        s3: S3Resource,
+        object_storage: ObjectStorageResource,
     ) -> MaterializeResult:
         if not isinstance(raw_manifest, dict):
             raise TypeError(f"Expected raw manifest payload dict, got {type(raw_manifest)!r}")
         return _run_bronze_loader(
             source=source,
             raw_manifest=raw_manifest,
-            s3=s3,
+            object_storage=object_storage,
             clickhouse=clickhouse,
         )
 
@@ -401,10 +405,10 @@ def build_reelly_document_assets() -> list[AssetsDefinition]:
     )
     def reelly_supply_document_assets(
         context: AssetExecutionContext,
-        s3: S3Resource,
+        object_storage: ObjectStorageResource,
     ) -> MaterializeResult:
         result = hydrate_reelly_document_assets(
-            s3=s3.client(),
+            s3=object_storage.client(),
             config=_get_source_config(context),
             progress_log=context.log,
         )
@@ -435,10 +439,10 @@ def build_reelly_document_assets() -> list[AssetsDefinition]:
     )
     def reelly_supply_project_media_assets(
         context: AssetExecutionContext,
-        s3: S3Resource,
+        object_storage: ObjectStorageResource,
     ) -> MaterializeResult:
         result = hydrate_reelly_document_assets(
-            s3=s3.client(),
+            s3=object_storage.client(),
             config={**REELLY_PROJECT_MEDIA_DEFAULTS, **_get_source_config(context)},
             progress_log=context.log,
         )
@@ -473,10 +477,10 @@ def build_pf_listing_media_assets() -> list[AssetsDefinition]:
     )
     def pf_listing_media_assets(
         context: AssetExecutionContext,
-        s3: S3Resource,
+        object_storage: ObjectStorageResource,
     ) -> MaterializeResult:
         result = hydrate_pf_listing_media_assets(
-            s3=s3.client(),
+            s3=object_storage.client(),
             config=_get_source_config(context),
             progress_log=context.log,
         )
@@ -511,10 +515,10 @@ def build_news_feed_assets() -> list[AssetsDefinition]:
     )
     def news_thumbnail_assets(
         context: AssetExecutionContext,
-        s3: S3Resource,
+        object_storage: ObjectStorageResource,
     ) -> MaterializeResult:
         result = hydrate_news_thumbnail_assets(
-            s3=s3.client(),
+            s3=object_storage.client(),
             config=_get_source_config(context),
             progress_log=context.log,
         )
@@ -547,10 +551,10 @@ def build_news_feed_assets() -> list[AssetsDefinition]:
     )
     def news_publish(
         context: AssetExecutionContext,
-        s3: S3Resource,
+        object_storage: ObjectStorageResource,
     ) -> MaterializeResult:
         result = publish_news_to_platform(
-            s3=s3.client(),
+            s3=object_storage.client(),
             config=_get_source_config(context),
             progress_log=context.log,
         )
@@ -584,11 +588,11 @@ def build_dld_pulse_historic_assets() -> list[AssetsDefinition]:
     def dld_pulse_historic_bronze(
         context: AssetExecutionContext,
         clickhouse: ClickHouseResource,
-        s3: S3Resource,
+        object_storage: ObjectStorageResource,
     ) -> MaterializeResult:
         asset_config = DldPulseHistoricBronzeConfig.model_validate(_get_source_config(context))
         result = load_dld_pulse_historic_bronze(
-            s3=s3.client(),
+            s3=object_storage.client(),
             clickhouse=clickhouse.client(),
             config=asset_config,
             progress_log=context.log,

@@ -49,7 +49,7 @@ def resolve_open_data_config(
     *,
     source_name: str,
     source_config: Mapping[str, Any],
-    s3_client: Any,
+    object_storage_client: Any,
 ) -> dict[str, Any]:
     resolved_config = dict(source_config)
     mode = str(resolved_config.get("mode") or "incremental")
@@ -59,7 +59,7 @@ def resolve_open_data_config(
 
     has_explicit_cursor = "window_cursor" in source_config or "skip_cursor" in source_config
     checkpoint = read_checkpoint_model(
-        s3_client,
+        object_storage_client,
         source=source_name,
         operation=open_data_checkpoint_operation(mode),
         model=_OpenDataCheckpoint,
@@ -98,7 +98,7 @@ def write_open_data_checkpoint(
     *,
     raw_release: RawRelease,
     manifest_key: str,
-    s3_client: Any,
+    object_storage_client: Any,
 ) -> None:
     metadata = dict(raw_release.metadata)
     mode = str(metadata.get("stage") or "")
@@ -108,7 +108,7 @@ def write_open_data_checkpoint(
     if not isinstance(config, Mapping):
         config = {}
     write_checkpoint(
-        s3_client,
+        object_storage_client,
         source=raw_release.source,
         operation=open_data_checkpoint_operation(mode),
         payload={

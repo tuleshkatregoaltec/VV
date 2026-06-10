@@ -753,7 +753,7 @@ def test_pf_listings_search_checkpoint_resolves_plan_and_cursor() -> None:
 
     config = resolve_listings_config(
         source_config={"mode": "search"},
-        s3_client=s3,
+        object_storage_client=s3,
     )
 
     assert config["plan_manifest_s3_key"] == "raw/source=pf_listings/manifests/plan-2.json"
@@ -784,7 +784,7 @@ def test_pf_listings_checkpoint_write_records_stage_specific_cursor() -> None:
             },
         ),
         manifest_key="raw/source=pf_listings/manifests/search-1.json",
-        s3_client=s3,
+        object_storage_client=s3,
     )
 
     checkpoint = s3.json_objects[checkpoint_s3_key(source="pf_listings", operation="search_chunk")]

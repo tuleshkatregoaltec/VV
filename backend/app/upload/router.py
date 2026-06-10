@@ -42,7 +42,7 @@ async def upload_chunked(
     expected_hash: Annotated[str | None, Query()] = None,
 ) -> ChunkedUploadResponse:
     """
-    Upload file chunks. Stores chunks to S3 for ETL node assembly.
+    Upload file chunks. Stores chunks to object storage for ETL node assembly.
 
     When all chunks are received, saves metadata.json with upload info.
     The ETL node is responsible for downloading, assembling, and verifying.
@@ -78,14 +78,14 @@ async def upload_news_article(
 
 @health_router.get("/health", response_model=UploadHealthResponse)
 async def health():
-    from app.upload.service import cache, s3_client
+    from app.upload.service import cache, object_storage_client
 
     try:
-        # Test S3 connection by uploading and deleting a test file
+        # Test object storage by uploading and deleting a test file.
         test_key = ".health_check"
         test_data = b"health_check"
-        await s3_client.upload(test_key, test_data)
-        await s3_client.delete_many([test_key])
+        await object_storage_client.upload(test_key, test_data)
+        await object_storage_client.delete_many([test_key])
 
         # Test Redis connection
         redis_ok = await cache.ping()

@@ -10,7 +10,7 @@ from holocron.contracts import ClickHouseCommands, ManifestStore, RawManifest
 from holocron.platform.clickhouse import ClickHouseClient, quote_clickhouse_identifier, sql_string
 from holocron.platform.clickhouse_schema import ensure_schema
 from holocron.platform.raw_files import manifest_files_by_name, string_value
-from holocron.platform.s3 import S3Client
+from holocron.platform.object_storage import ObjectStorageClient
 from holocron.platform.settings import settings
 
 _DLD_OPEN_DATA_SOURCE_SYSTEM = "dld_open_data"
@@ -273,7 +273,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     include_open_data = not args.pulse_only
     include_pulse = not args.open_data_only
     result = run_dld_provenance_backfill(
-        s3=S3Client(settings),
+        s3=ObjectStorageClient(settings),
         clickhouse=ClickHouseClient(settings),
         execute=bool(args.execute),
         include_open_data=include_open_data,

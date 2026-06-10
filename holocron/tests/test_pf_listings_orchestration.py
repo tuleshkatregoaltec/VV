@@ -38,7 +38,7 @@ def test_pf_listings_search_checkpoint_requires_full_plan_manifest_list_match() 
                 "raw/source=pf_listings/manifests/plan-c.json",
             ],
         },
-        s3_client=s3,
+        object_storage_client=s3,
     )
 
     assert config["plan_manifest_s3_key"] == "raw/source=pf_listings/manifests/plan-c.json"
@@ -67,7 +67,7 @@ def test_pf_listings_search_checkpoint_keeps_legacy_last_key_fallback() -> None:
                 "raw/source=pf_listings/manifests/plan-c.json",
             ],
         },
-        s3_client=s3,
+        object_storage_client=s3,
     )
 
     assert config["search_query_cursor"] == 12

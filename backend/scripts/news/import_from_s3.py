@@ -65,14 +65,17 @@ def require_env(*names: str) -> str:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="One-off importer for raw R2/S3 news feed articles into news_articles."
+        description="One-off importer for raw object-storage news feed articles into news_articles."
     )
     parser.add_argument("--prefix", default=DEFAULT_PREFIX)
-    parser.add_argument("--key", help="Import a specific S3 object key instead of the latest feed.")
+    parser.add_argument(
+        "--key",
+        help="Import a specific object-storage key instead of the latest feed.",
+    )
     parser.add_argument("--filename", default=DEFAULT_ARTICLES_FILENAME)
     parser.add_argument(
         "--thumbnail-manifest-key",
-        help="Import thumbnail R2 keys from a specific manifest object.",
+        help="Import thumbnail object keys from a specific manifest object.",
     )
     parser.add_argument("--thumbnail-manifest-prefix", default=DEFAULT_THUMBNAIL_MANIFEST_PREFIX)
     parser.add_argument("--skip-thumbnail-manifest", action="store_true")
@@ -247,26 +250,27 @@ def apply_thumbnail_map(articles: list[NewsArticle], thumbnail_map: dict[str, st
     return applied
 
 
-def build_s3_config() -> dict[str, str]:
+def build_object_storage_config() -> dict[str, str]:
     return {
-        "endpoint_url": require_env("R2_ENDPOINT_URL"),
-        "bucket": require_env("R2_BUCKET"),
-        "region": env_value("R2_REGION") or "auto",
-        "access_key": require_env("R2_ACCESS_KEY_ID"),
-        "secret_key": require_env("R2_SECRET_ACCESS_KEY"),
+        "endpoint_url": env_value("OBJECT_STORAGE_ENDPOINT_URL") or "",
+        "bucket": require_env("OBJECT_STORAGE_BUCKET"),
+        "region": env_value("OBJECT_STORAGE_REGION") or "auto",
+        "access_key": require_env("OBJECT_STORAGE_ACCESS_KEY_ID"),
+        "secret_key": require_env("OBJECT_STORAGE_SECRET_ACCESS_KEY"),
     }
 
 
-async def get_s3_client():
-    config = build_s3_config()
+async def get_object_storage_client():
+    config = build_object_storage_config()
     session = aioboto3.Session()
-    return session.client(
-        "s3",
-        endpoint_url=config["endpoint_url"],
-        aws_access_key_id=config["access_key"],
-        aws_secret_access_key=config["secret_key"],
-        region_name=config["region"],
-    )
+    client_kwargs = {
+        "aws_access_key_id": config["access_key"],
+        "aws_secret_access_key": config["secret_key"],
+        "region_name": config["region"],
+    }
+    if config["endpoint_url"]:
+        client_kwargs["endpoint_url"] = config["endpoint_url"]
+    return session.client("s3", **client_kwargs)
 
 
 async def find_latest_articles_key(s3: Any, bucket: str, prefix: str, filename: str) -> str:
@@ -306,8 +310,8 @@ async def find_latest_thumbnail_manifest_key(s3: Any, bucket: str, prefix: str) 
 
 
 async def download_records_object(key: str) -> tuple[list[dict[str, Any]], int]:
-    bucket = require_env("R2_BUCKET")
-    async with await get_s3_client() as s3:
+    bucket = require_env("OBJECT_STORAGE_BUCKET")
+    async with await get_object_storage_client() as s3:
         response = await s3.get_object(Bucket=bucket, Key=key)
         data = await response["Body"].read()
     return parse_records(data)
@@ -374,14 +378,14 @@ async def clear_news_cache() -> int:
 async def main() -> int:
     load_env()
     args = parse_args()
-    s3_config = build_s3_config()
+    object_storage_config = build_object_storage_config()
 
     key = args.key
     if not key:
-        async with await get_s3_client() as s3:
+        async with await get_object_storage_client() as s3:
             key = await find_latest_articles_key(
                 s3,
-                s3_config["bucket"],
+                object_storage_config["bucket"],
                 args.prefix,
                 args.filename,
             )
@@ -394,10 +398,10 @@ async def main() -> int:
     thumbnails_applied = 0
     if not args.skip_thumbnail_manifest:
         if not thumbnail_manifest_key:
-            async with await get_s3_client() as s3:
+            async with await get_object_storage_client() as s3:
                 thumbnail_manifest_key = await find_latest_thumbnail_manifest_key(
                     s3,
-                    s3_config["bucket"],
+                    object_storage_config["bucket"],
                     args.thumbnail_manifest_prefix,
                 )
         if thumbnail_manifest_key:

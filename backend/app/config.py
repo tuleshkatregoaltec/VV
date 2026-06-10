@@ -73,13 +73,14 @@ class Settings(BaseSettings):
     POSTHOG_API_KEY: str | None = None
     POSTHOG_HOST: AnyUrl | None = None
 
-    # Cloudflare R2 object storage
-    R2_ENDPOINT_URL: AnyUrl  # configMap
-    R2_ACCESS_KEY_ID: str  # Bitwarden Secrets
-    R2_SECRET_ACCESS_KEY: str  # Bitwarden Secrets
-    R2_BUCKET: str  # configMap
-    R2_REGION: str = "auto"  # configMap
-    R2_USE_PATH_STYLE: bool = True  # configMap
+    # Object storage. Production currently uses Cloudflare R2 through the S3-compatible API.
+    OBJECT_STORAGE_PROVIDER: Literal["r2", "aws_s3", "minio"] = "r2"  # configMap
+    OBJECT_STORAGE_ENDPOINT_URL: AnyUrl | None = None  # configMap
+    OBJECT_STORAGE_ACCESS_KEY_ID: str  # Bitwarden Secrets
+    OBJECT_STORAGE_SECRET_ACCESS_KEY: str  # Bitwarden Secrets
+    OBJECT_STORAGE_BUCKET: str  # configMap
+    OBJECT_STORAGE_REGION: str = "auto"  # configMap
+    OBJECT_STORAGE_USE_PATH_STYLE: bool = True  # configMap
 
     # ClickHouse
     CLICKHOUSE_HOST: str  # configMap
@@ -154,6 +155,17 @@ class Settings(BaseSettings):
         if bool(self.FIRST_SUPERUSER) != bool(self.FIRST_SUPERUSER_PASSWORD):
             raise ValueError(
                 "FIRST_SUPERUSER and FIRST_SUPERUSER_PASSWORD must both be set together"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def validate_object_storage_endpoint(self) -> Self:
+        if (
+            self.OBJECT_STORAGE_PROVIDER in {"r2", "minio"}
+            and self.OBJECT_STORAGE_ENDPOINT_URL is None
+        ):
+            raise ValueError(
+                "OBJECT_STORAGE_ENDPOINT_URL must be set when OBJECT_STORAGE_PROVIDER is r2 or minio"
             )
         return self
 

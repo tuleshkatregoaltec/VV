@@ -648,7 +648,7 @@ def test_bronze_loader_routes_through_source_metadata() -> None:
     result = _run_bronze_loader(
         source=source,
         raw_manifest={"source": "synthetic_source", "run_id": "run-1"},
-        s3=Resource("s3-client"),
+        object_storage=Resource("s3-client"),
         clickhouse=Resource("clickhouse-client"),
     )
 
@@ -694,7 +694,7 @@ def test_bronze_loader_rejects_smoke_raw_manifest() -> None:
                 "run_id": "run-1",
                 "metadata": {"dataset_kind": "smoke"},
             },
-            s3=Resource(),
+            object_storage=Resource(),
             clickhouse=Resource(),
         )
 

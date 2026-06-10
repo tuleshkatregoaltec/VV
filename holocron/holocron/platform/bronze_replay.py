@@ -26,7 +26,7 @@ from holocron.platform.manifests import (
     require_normal_raw_manifest,
 )
 from holocron.platform.raw_files import read_and_validate_manifest, string_value
-from holocron.platform.s3 import S3Client
+from holocron.platform.object_storage import ObjectStorageClient
 from holocron.platform.settings import settings
 from holocron.sources import registry
 
@@ -440,7 +440,7 @@ def main(argv: list[str] | None = None) -> int:
     ]
     result = replay_bronze_manifests(
         source_name=args.source,
-        s3=S3Client(settings),
+        s3=ObjectStorageClient(settings),
         clickhouse=ClickHouseClient(settings),
         manifest_keys=explicit_keys,
         manifest_prefix=args.manifest_prefix,

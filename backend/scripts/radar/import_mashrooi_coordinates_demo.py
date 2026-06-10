@@ -1,7 +1,7 @@
-"""Import DLD Mashrooi coordinates from R2 into ClickHouse demo tables.
+"""Import DLD Mashrooi coordinates from object storage into ClickHouse demo tables.
 
 Demo shortcut for the radar map. This intentionally materializes two simple local
-tables from the latest R2 export instead of building a production resolver.
+tables from the latest object-storage export instead of building a production resolver.
 """
 
 from __future__ import annotations
@@ -70,32 +70,34 @@ ORDER BY (project_number, point_type, point_index)
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Import latest R2 DLD Mashrooi coordinate export into ClickHouse."
+        description="Import latest DLD Mashrooi coordinate export from object storage into ClickHouse."
     )
     parser.add_argument("--manifest-key", help="Specific manifest key to import instead of latest")
     parser.add_argument("--no-reset", action="store_true", help="Do not recreate demo tables")
     return parser.parse_args()
 
 
-def s3_kwargs() -> dict[str, str]:
-    return {
-        "endpoint_url": str(settings.R2_ENDPOINT_URL),
-        "aws_access_key_id": settings.R2_ACCESS_KEY_ID,
-        "aws_secret_access_key": settings.R2_SECRET_ACCESS_KEY,
-        "region_name": settings.R2_REGION or "auto",
+def object_storage_client_kwargs() -> dict[str, str]:
+    kwargs = {
+        "aws_access_key_id": settings.OBJECT_STORAGE_ACCESS_KEY_ID,
+        "aws_secret_access_key": settings.OBJECT_STORAGE_SECRET_ACCESS_KEY,
+        "region_name": settings.OBJECT_STORAGE_REGION or "auto",
     }
+    if settings.OBJECT_STORAGE_ENDPOINT_URL:
+        kwargs["endpoint_url"] = str(settings.OBJECT_STORAGE_ENDPOINT_URL)
+    return kwargs
 
 
 async def list_objects(s3: Any, prefix: str) -> list[dict[str, Any]]:
     paginator = s3.get_paginator("list_objects_v2")
     objects: list[dict[str, Any]] = []
-    async for page in paginator.paginate(Bucket=settings.R2_BUCKET, Prefix=prefix):
+    async for page in paginator.paginate(Bucket=settings.OBJECT_STORAGE_BUCKET, Prefix=prefix):
         objects.extend(page.get("Contents", []))
     return objects
 
 
 async def read_text_object(s3: Any, key: str) -> str:
-    response = await s3.get_object(Bucket=settings.R2_BUCKET, Key=key)
+    response = await s3.get_object(Bucket=settings.OBJECT_STORAGE_BUCKET, Key=key)
     body = await response["Body"].read()
     return body.decode("utf-8-sig")
 
@@ -257,7 +259,7 @@ def insert_chunks(
 
 async def import_mashrooi_coordinates(manifest_key: str | None, reset: bool) -> None:
     session = aioboto3.Session()
-    async with session.client("s3", **s3_kwargs()) as s3:
+    async with session.client("s3", **object_storage_client_kwargs()) as s3:
         manifest = await load_manifest(s3, manifest_key)
         project_file = manifest_file(manifest, PROJECT_COORDINATE_FILE)
         detail_file = manifest_file(manifest, DETAIL_POINTS_FILE)
