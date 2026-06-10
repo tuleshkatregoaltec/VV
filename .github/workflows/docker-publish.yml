@@ -71,18 +71,25 @@ jobs:
     name: Deploy to ph-box
     needs: build
     runs-on: ubuntu-latest
+    permissions:
+      packages: read
 
     steps:
       - name: Deploy
         uses: appleboy/ssh-action@v1.2.0
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GHCR_USER: ${{ github.actor }}
         with:
           host: ${{ secrets.PHBOX_HOST }}
           username: ${{ secrets.PHBOX_USER }}
           key: ${{ secrets.PHBOX_SSH_KEY }}
+          envs: GHCR_TOKEN,GHCR_USER
           script: |
             set -e
             cd ~/vitevue-platform
             git pull --ff-only
+            echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
             docker compose pull backend
             docker compose run --rm --no-deps backend uv run alembic upgrade head
             docker compose up -d --no-build backend auth redis
