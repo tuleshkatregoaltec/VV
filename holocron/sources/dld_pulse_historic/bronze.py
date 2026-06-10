@@ -22,6 +22,7 @@ from holocron.contracts import (
 from holocron.platform.bronze import bronze_load_result, stable_json, validate_raw_manifest
 from holocron.platform.clickhouse import quote_clickhouse_identifier, sql_string
 from holocron.platform.clickhouse_schema import ensure_schema
+from holocron.platform.manifests import manifest_s3_key
 from holocron.platform.raw_files import (
     download_manifest_file,
     manifest_files_by_name,
@@ -101,6 +102,7 @@ _TRANSACTION_COLUMNS = (
     "source_file",
     "source_row_index",
     "raw_json",
+    "raw_manifest_s3_key",
     "project_number",
     "building_name_en",
     "building_name_ar",
@@ -169,6 +171,7 @@ _RENT_COLUMNS = (
     "source_file",
     "source_row_index",
     "raw_json",
+    "raw_manifest_s3_key",
     "line_number",
     "project_number",
     "tenant_type_id",
@@ -197,6 +200,7 @@ _UNIT_COLUMNS = (
     "source_system",
     "source_file",
     "source_row_index",
+    "raw_manifest_s3_key",
     "property_id",
     "area_id",
     "zone_id",
@@ -307,6 +311,7 @@ _BUILDING_COLUMNS = (
     "source_file",
     "source_row_index",
     "raw_json",
+    "raw_manifest_s3_key",
     "property_id",
     "property_type_id",
     "property_type_en",
@@ -359,6 +364,7 @@ _LAND_COLUMNS = (
     "source_file",
     "source_row_index",
     "raw_json",
+    "raw_manifest_s3_key",
     "property_id",
     "property_type_id",
     "property_type_en",
@@ -410,6 +416,7 @@ _PROJECT_COLUMNS = (
     "source_file",
     "source_row_index",
     "raw_json",
+    "raw_manifest_s3_key",
     "project_id",
     "developer_id",
     "developer_name",
@@ -464,6 +471,7 @@ _DEVELOPER_COLUMNS = (
     "source_file",
     "source_row_index",
     "raw_json",
+    "raw_manifest_s3_key",
     "developer_name_en",
     "developer_name_ar",
 )
@@ -551,7 +559,7 @@ def _load_csv_to_table(
 ) -> int:
     file_entry = require_manifest_file(files_by_name, file_name)
     created_at = string_value(raw_manifest.get("created_at"))
-    manifest_key = string_value(raw_manifest.get("manifest_s3_key"))
+    manifest_key = _raw_manifest_key(raw_manifest=raw_manifest, source=_SOURCE_NAME)
     staging_table = _staging_table_name(table=table, run_id=run_id, file_name=file_name)
     count = 0
     rows: list[tuple[Any, ...]] = []
@@ -783,6 +791,7 @@ def _provenance(
         file_name,
         row_index,
         stable_json(payload),
+        manifest_key,
     )
 
 
@@ -949,7 +958,7 @@ def _unit_row(
     file_name: str,
     manifest_key: str,
 ) -> tuple[Any, ...]:
-    source_system, source_file, source_row_index, raw_json = _provenance(
+    source_system, source_file, source_row_index, raw_json, raw_manifest_s3_key = _provenance(
         row,
         file_name=file_name,
         row_index=row_index,
@@ -968,6 +977,7 @@ def _unit_row(
         source_system,
         source_file,
         source_row_index,
+        raw_manifest_s3_key,
         _int(row.get("property_id")),
         _int(row.get("area_id")),
         _int(row.get("zone_id")),
@@ -1282,6 +1292,13 @@ def _row_key(file_name: str, row_index: int, *parts: Any) -> str:
         [_SOURCE_SYSTEM, file_name, str(row_index), *(_string(part) for part in parts)]
     )
     return hashlib.sha1(payload.encode("utf-8"), usedforsecurity=False).hexdigest()
+
+
+def _raw_manifest_key(*, raw_manifest: RawManifest, source: str) -> str:
+    explicit_key = string_value(raw_manifest.get("manifest_s3_key"))
+    if explicit_key:
+        return explicit_key
+    return manifest_s3_key(source=source, run_id=string_value(raw_manifest.get("run_id")))
 
 
 def _string(value: Any) -> str:

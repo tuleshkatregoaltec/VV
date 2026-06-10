@@ -212,6 +212,10 @@ def test_dld_open_data_units_bronze_maps_unit_columns() -> None:
     insert = clickhouse.insert_calls[0]
     unit = dict(zip(insert["column_names"], insert["rows"][0]))
     assert unit["raw_json"]
+    assert unit["source_system"] == "dld_open_data"
+    assert unit["source_file"] == row_file
+    assert unit["source_row_index"] == 3
+    assert unit["raw_manifest_s3_key"] == "raw/source=dld_od_units/manifests/run-1.json"
     assert unit["property_id"] == 111
     assert unit["parent_property_id"] == 222
     assert unit["grandparent_property_id"] == 333

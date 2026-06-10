@@ -646,6 +646,7 @@ ALTER TABLE dld_od_transactions_bronze ADD COLUMN IF NOT EXISTS source_system Lo
 ALTER TABLE dld_od_transactions_bronze ADD COLUMN IF NOT EXISTS source_file String DEFAULT '';
 ALTER TABLE dld_od_transactions_bronze ADD COLUMN IF NOT EXISTS source_row_index UInt64 DEFAULT 0;
 ALTER TABLE dld_od_transactions_bronze ADD COLUMN IF NOT EXISTS raw_json String DEFAULT '';
+ALTER TABLE dld_od_transactions_bronze ADD COLUMN IF NOT EXISTS raw_manifest_s3_key String DEFAULT '';
 ALTER TABLE dld_od_transactions_bronze ADD COLUMN IF NOT EXISTS project_number String DEFAULT '';
 ALTER TABLE dld_od_transactions_bronze ADD COLUMN IF NOT EXISTS building_name_en String DEFAULT '';
 ALTER TABLE dld_od_transactions_bronze ADD COLUMN IF NOT EXISTS building_name_ar String DEFAULT '';
@@ -663,6 +664,7 @@ ALTER TABLE dld_od_rents_bronze ADD COLUMN IF NOT EXISTS source_system LowCardin
 ALTER TABLE dld_od_rents_bronze ADD COLUMN IF NOT EXISTS source_file String DEFAULT '';
 ALTER TABLE dld_od_rents_bronze ADD COLUMN IF NOT EXISTS source_row_index UInt64 DEFAULT 0;
 ALTER TABLE dld_od_rents_bronze ADD COLUMN IF NOT EXISTS raw_json String DEFAULT '';
+ALTER TABLE dld_od_rents_bronze ADD COLUMN IF NOT EXISTS raw_manifest_s3_key String DEFAULT '';
 ALTER TABLE dld_od_rents_bronze ADD COLUMN IF NOT EXISTS line_number UInt32 DEFAULT 0;
 ALTER TABLE dld_od_rents_bronze ADD COLUMN IF NOT EXISTS project_number String DEFAULT '';
 ALTER TABLE dld_od_rents_bronze ADD COLUMN IF NOT EXISTS tenant_type_id UInt32 DEFAULT 0;
@@ -679,6 +681,7 @@ ALTER TABLE dld_od_projects_bronze ADD COLUMN IF NOT EXISTS source_system LowCar
 ALTER TABLE dld_od_projects_bronze ADD COLUMN IF NOT EXISTS source_file String DEFAULT '';
 ALTER TABLE dld_od_projects_bronze ADD COLUMN IF NOT EXISTS source_row_index UInt64 DEFAULT 0;
 ALTER TABLE dld_od_projects_bronze ADD COLUMN IF NOT EXISTS raw_json String DEFAULT '';
+ALTER TABLE dld_od_projects_bronze ADD COLUMN IF NOT EXISTS raw_manifest_s3_key String DEFAULT '';
 ALTER TABLE dld_od_projects_bronze ADD COLUMN IF NOT EXISTS project_id UInt64 DEFAULT 0;
 ALTER TABLE dld_od_projects_bronze ADD COLUMN IF NOT EXISTS developer_id UInt64 DEFAULT 0;
 ALTER TABLE dld_od_projects_bronze ADD COLUMN IF NOT EXISTS developer_name String DEFAULT '';
@@ -701,11 +704,13 @@ ALTER TABLE dld_od_valuations_bronze ADD COLUMN IF NOT EXISTS source_system LowC
 ALTER TABLE dld_od_valuations_bronze ADD COLUMN IF NOT EXISTS source_file String DEFAULT '';
 ALTER TABLE dld_od_valuations_bronze ADD COLUMN IF NOT EXISTS source_row_index UInt64 DEFAULT 0;
 ALTER TABLE dld_od_valuations_bronze ADD COLUMN IF NOT EXISTS raw_json String DEFAULT '';
+ALTER TABLE dld_od_valuations_bronze ADD COLUMN IF NOT EXISTS raw_manifest_s3_key String DEFAULT '';
 
 ALTER TABLE dld_od_lands_bronze ADD COLUMN IF NOT EXISTS source_system LowCardinality(String) DEFAULT 'dld_open_data';
 ALTER TABLE dld_od_lands_bronze ADD COLUMN IF NOT EXISTS source_file String DEFAULT '';
 ALTER TABLE dld_od_lands_bronze ADD COLUMN IF NOT EXISTS source_row_index UInt64 DEFAULT 0;
 ALTER TABLE dld_od_lands_bronze ADD COLUMN IF NOT EXISTS raw_json String DEFAULT '';
+ALTER TABLE dld_od_lands_bronze ADD COLUMN IF NOT EXISTS raw_manifest_s3_key String DEFAULT '';
 ALTER TABLE dld_od_lands_bronze ADD COLUMN IF NOT EXISTS property_id UInt64 DEFAULT 0;
 ALTER TABLE dld_od_lands_bronze ADD COLUMN IF NOT EXISTS property_type_id UInt32 DEFAULT 0;
 ALTER TABLE dld_od_lands_bronze ADD COLUMN IF NOT EXISTS property_type_en LowCardinality(String) DEFAULT '';
@@ -717,6 +722,7 @@ ALTER TABLE dld_od_buildings_bronze ADD COLUMN IF NOT EXISTS source_system LowCa
 ALTER TABLE dld_od_buildings_bronze ADD COLUMN IF NOT EXISTS source_file String DEFAULT '';
 ALTER TABLE dld_od_buildings_bronze ADD COLUMN IF NOT EXISTS source_row_index UInt64 DEFAULT 0;
 ALTER TABLE dld_od_buildings_bronze ADD COLUMN IF NOT EXISTS raw_json String DEFAULT '';
+ALTER TABLE dld_od_buildings_bronze ADD COLUMN IF NOT EXISTS raw_manifest_s3_key String DEFAULT '';
 ALTER TABLE dld_od_buildings_bronze ADD COLUMN IF NOT EXISTS property_id UInt64 DEFAULT 0;
 ALTER TABLE dld_od_buildings_bronze ADD COLUMN IF NOT EXISTS property_type_id UInt32 DEFAULT 0;
 ALTER TABLE dld_od_buildings_bronze ADD COLUMN IF NOT EXISTS property_type_en LowCardinality(String) DEFAULT '';
@@ -726,6 +732,7 @@ ALTER TABLE dld_od_buildings_bronze ADD COLUMN IF NOT EXISTS project_id UInt64 D
 ALTER TABLE dld_od_units_bronze ADD COLUMN IF NOT EXISTS source_system LowCardinality(String) DEFAULT 'dld_open_data';
 ALTER TABLE dld_od_units_bronze ADD COLUMN IF NOT EXISTS source_file String DEFAULT '';
 ALTER TABLE dld_od_units_bronze ADD COLUMN IF NOT EXISTS source_row_index UInt64 DEFAULT 0;
+ALTER TABLE dld_od_units_bronze ADD COLUMN IF NOT EXISTS raw_manifest_s3_key String DEFAULT '';
 ALTER TABLE dld_od_units_bronze ADD COLUMN IF NOT EXISTS property_id UInt64 DEFAULT 0;
 ALTER TABLE dld_od_units_bronze ADD COLUMN IF NOT EXISTS area_id UInt32 DEFAULT 0;
 ALTER TABLE dld_od_units_bronze ADD COLUMN IF NOT EXISTS zone_id UInt32 DEFAULT 0;
@@ -777,11 +784,13 @@ ALTER TABLE dld_od_brokers_bronze ADD COLUMN IF NOT EXISTS source_system LowCard
 ALTER TABLE dld_od_brokers_bronze ADD COLUMN IF NOT EXISTS source_file String DEFAULT '';
 ALTER TABLE dld_od_brokers_bronze ADD COLUMN IF NOT EXISTS source_row_index UInt64 DEFAULT 0;
 ALTER TABLE dld_od_brokers_bronze ADD COLUMN IF NOT EXISTS raw_json String DEFAULT '';
+ALTER TABLE dld_od_brokers_bronze ADD COLUMN IF NOT EXISTS raw_manifest_s3_key String DEFAULT '';
 
 ALTER TABLE dld_od_developers_bronze ADD COLUMN IF NOT EXISTS source_system LowCardinality(String) DEFAULT 'dld_open_data';
 ALTER TABLE dld_od_developers_bronze ADD COLUMN IF NOT EXISTS source_file String DEFAULT '';
 ALTER TABLE dld_od_developers_bronze ADD COLUMN IF NOT EXISTS source_row_index UInt64 DEFAULT 0;
 ALTER TABLE dld_od_developers_bronze ADD COLUMN IF NOT EXISTS raw_json String DEFAULT '';
+ALTER TABLE dld_od_developers_bronze ADD COLUMN IF NOT EXISTS raw_manifest_s3_key String DEFAULT '';
 ALTER TABLE dld_od_developers_bronze ADD COLUMN IF NOT EXISTS developer_name_en String DEFAULT '';
 ALTER TABLE dld_od_developers_bronze ADD COLUMN IF NOT EXISTS developer_name_ar String DEFAULT '';
 

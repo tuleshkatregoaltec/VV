@@ -25,6 +25,7 @@ from holocron.platform.bronze import (
 )
 from holocron.platform.clickhouse import sql_string
 from holocron.platform.clickhouse_schema import ensure_schema
+from holocron.platform.manifests import manifest_s3_key
 from holocron.platform.raw_files import (
     download_manifest_file,
     manifest_files_by_name,
@@ -34,6 +35,13 @@ from holocron.platform.raw_files import (
 )
 
 _KEY_SEPARATOR = "|"
+_SOURCE_SYSTEM = "dld_open_data"
+_PROVENANCE_COLUMNS = (
+    "source_system",
+    "source_file",
+    "source_row_index",
+    "raw_manifest_s3_key",
+)
 
 
 def dld_row_key(raw_row: dict[str, Any]) -> str:
@@ -139,7 +147,19 @@ def load_open_data_release_to_clickhouse(
                 file_entry=page_file_entry,
                 source_label=source_name,
             )
-    table_rows = [row_builder(raw_row, fallback_run_id=run_id) for raw_row in raw_rows]
+    raw_manifest_key = _raw_manifest_key(raw_manifest=raw_manifest, source=actual_source)
+    table_rows = [
+        (
+            *row_builder(raw_row, fallback_run_id=run_id),
+            _SOURCE_SYSTEM,
+            row_file_name,
+            max(coerce_int(raw_row.get("row_index")), 0),
+            raw_manifest_key,
+        )
+        for raw_row in raw_rows
+    ]
+    load_column_names = (*column_names, *_PROVENANCE_COLUMNS)
+    source_scope = f"source_system = {sql_string(_SOURCE_SYSTEM)}"
     delete_predicate = _open_data_delete_predicate(
         source_name=source_name,
         raw_rows=raw_rows,
@@ -154,16 +174,16 @@ def load_open_data_release_to_clickhouse(
             key_column="row_key",
             key_values=[row[0] for row in table_rows],
             rows=table_rows,
-            column_names=column_names,
-            delete_scope="source_system = 'dld_open_data'",
+            column_names=load_column_names,
+            delete_scope=source_scope,
         )
     else:
         replace_where_rows(
             clickhouse=clickhouse,
             table=table_name,
-            predicate=f"source_system = 'dld_open_data' AND ({delete_predicate})",
+            predicate=f"{source_scope} AND ({delete_predicate})",
             rows=table_rows,
-            column_names=column_names,
+            column_names=load_column_names,
         )
 
     return bronze_load_result(
@@ -184,6 +204,13 @@ def _require_loadable_result_set(*, raw_manifest: RawManifest, source_name: str)
         raise ValueError(
             f"{source_name} incomplete raw result set cannot be loaded into current-state bronze"
         )
+
+
+def _raw_manifest_key(*, raw_manifest: RawManifest, source: str) -> str:
+    explicit_key = string_value(raw_manifest.get("manifest_s3_key"))
+    if explicit_key:
+        return explicit_key
+    return manifest_s3_key(source=source, run_id=string_value(raw_manifest.get("run_id")))
 
 
 def _open_data_delete_predicate(

@@ -78,6 +78,9 @@ def test_dld_pulse_historic_bronze_stages_and_maps_canonical_files() -> None:
     assert transaction["is_offplan"] == 1
     assert transaction["area_id"] == 0
     assert "\\u0000" not in transaction["raw_json"]
+    assert transaction["raw_manifest_s3_key"] == (
+        "raw/source=dld_pulse_historic/manifests/manifest.json"
+    )
 
     unit_call = _insert_call(clickhouse, "dld_od_units_bronze")
     unit = dict(zip(unit_call["column_names"], unit_call["rows"][0]))
@@ -87,6 +90,7 @@ def test_dld_pulse_historic_bronze_stages_and_maps_canonical_files() -> None:
     assert unit["project_id"] == 333
     assert unit["building_number"] == "B-1"
     assert "manifest.json" in unit["raw_json"]
+    assert unit["raw_manifest_s3_key"] == "raw/source=dld_pulse_historic/manifests/manifest.json"
 
     developer_call = _insert_call(clickhouse, "dld_od_developers_bronze")
     developer = dict(zip(developer_call["column_names"], developer_call["rows"][0]))
