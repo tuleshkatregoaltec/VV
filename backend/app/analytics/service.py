@@ -61,6 +61,31 @@ _CONFIG_MOMENTUM_MIN_SAMPLE_SIZE = 20
 _BEDROOM_RE = re.compile(r"^\d+\s+B/R$", re.IGNORECASE)
 
 
+async def _latest_sales_anchor_date() -> date:
+    rows = await query(
+        """
+        SELECT max(instance_date) AS latest_sales_date
+        FROM ch_transactions
+        WHERE trans_group_en = 'Sales'
+          AND actual_worth > 0
+          AND instance_date <= today()
+        """,
+        {},
+    )
+    if not rows:
+        return date.today()
+
+    value = rows[0].get("latest_sales_date")
+    if isinstance(value, date):
+        return value
+    if isinstance(value, str):
+        try:
+            return date.fromisoformat(value)
+        except ValueError:
+            return date.today()
+    return date.today()
+
+
 def _room_sort_key(rooms: str) -> tuple:
     if rooms in _ROOM_ORDER:
         return (0, 0)
@@ -715,7 +740,7 @@ async def get_project_pipeline(
     if not rows:
         return ProjectPipelineResponse(area_name=area_name, developer_name=developer_name, data=[])
 
-    today = date.today()
+    today = await _latest_sales_anchor_date()
     start_quarter = _quarter_start(date(today.year - 1, 1, 1))
     periods = [_add_months(start_quarter, quarter_index * 3) for quarter_index in range(16)]
 
@@ -741,19 +766,19 @@ async def get_project_pipeline(
     data: list[ProjectPipelinePoint] = []
     today_quarter = _quarter_start(today)
     for period in periods:
-        if period < today_quarter:
+        new_pipeline_units = pipeline_by_quarter.get(period, 0)
+        if period <= today_quarter:
             cumulative_existing += completed_by_quarter.get(period, 0)
             data.append(
                 ProjectPipelinePoint(
                     period=period,
                     existing_stock_units=cumulative_existing,
                     carried_stock_units=0,
-                    new_pipeline_units=0,
+                    new_pipeline_units=new_pipeline_units if period == today_quarter else 0,
                 )
             )
             continue
 
-        new_pipeline_units = pipeline_by_quarter.get(period, 0)
         carried_stock_units = cumulative_existing + cumulative_future
         cumulative_future += new_pipeline_units
         data.append(

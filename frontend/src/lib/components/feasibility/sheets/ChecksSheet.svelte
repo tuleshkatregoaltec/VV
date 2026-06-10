@@ -33,7 +33,7 @@ function pill(status: CheckStatus) {
 	if (status === 'outlier') return 'bg-rose-100 text-rose-700'
 	if (status === 'warning') return 'bg-amber-100 text-amber-700'
 	if (status === 'missing') return 'bg-slate-200 text-slate-600'
-	return 'bg-emerald-100 text-emerald-700'
+	return 'bg-slate-100 text-slate-700'
 }
 
 // ── BTR checks ──────────────────────────────────────────────────────────────
@@ -257,7 +257,7 @@ Generate an HBU study to build the draft checks view.
 
 	<div class="bg-[#1F3864] border-b-2 border-[#1F3864] text-white px-4 py-2.5 flex items-center justify-between gap-4">
 		<div class="text-[13px] font-bold tracking-wide">MODEL CHECKS</div>
-		<div class="text-[10px] shrink-0 {validation.status === 'ready' ? 'text-emerald-300' : validation.status === 'invalid' ? 'text-rose-300' : 'text-amber-300'}">
+		<div class="text-[10px] shrink-0 {validation.status === 'ready' ? 'text-slate-200' : validation.status === 'invalid' ? 'text-rose-300' : 'text-amber-300'}">
 			{validation.status.replace('_', ' ').toUpperCase()} — {fmt(hardFailures)} fail · {fmt(warnings)} warn · {fmt(missingEvidence)} missing
 		</div>
 	</div>
@@ -287,7 +287,7 @@ Generate an HBU study to build the draft checks view.
 					{:else if check.status === 'missing'}
 						<span class="inline-block px-2 py-0.5 text-[9px] font-semibold uppercase rounded-sm bg-[#D9D9D9] text-[#595959]">N/A</span>
 					{:else}
-						<span class="inline-block px-2 py-0.5 text-[9px] font-semibold uppercase rounded-sm bg-[#E2F0D9] text-[#375623]">OK</span>
+						<span class="inline-block px-2 py-0.5 text-[9px] font-semibold uppercase rounded-sm bg-[#E7EAF0] text-[#334155]">OK</span>
 					{/if}
 				</td>
 				<td class="px-2 py-[3px] text-left text-[9px] text-slate-500">{check.note}</td>

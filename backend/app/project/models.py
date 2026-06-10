@@ -27,6 +27,9 @@ class GeoPin(BaseModel):
     latitude: float
     longitude: float
     property_id: Optional[int] = None
+    point_type: Optional[str] = None
+    point_number: Optional[str] = None
+    floor_count: Optional[int] = None
 
 
 class MasterProjectSummary(BaseModel):
@@ -112,6 +115,12 @@ class DDAPlotFeature(BaseModel):
     land_use: Optional[str] = None
     gfa_type: Optional[str] = None
     is_verified: bool = False
+    valuation_rate_min_aed_sqft: Optional[float] = None
+    valuation_rate_max_aed_sqft: Optional[float] = None
+    valuation_min_aed: Optional[float] = None
+    valuation_max_aed: Optional[float] = None
+    valuation_confidence: Optional[str] = None
+    valuation_note: Optional[str] = None
 
 
 class DDAOutlineFeature(BaseModel):
@@ -214,6 +223,11 @@ class ProjectRadarProject(BaseModel):
     latitude: float
     longitude: float
     geo_pin_count: int
+    coordinate_source: str = "ch_geo_buildings"
+    coordinate_method: Optional[str] = None
+    detail_point_count: int = 0
+    building_point_count: int = 0
+    land_point_count: int = 0
     completion_status: str
     pipeline_status: str
     project_status: Optional[str]
@@ -252,6 +266,8 @@ class ProjectRadarArea(BaseModel):
     total_sales_volume_12m: float
     median_sale_price: Optional[float]
     median_annual_rent: Optional[float]
+    avg_sale_price_sqm_12m: Optional[float]
+    avg_rent_price_sqm_12m: Optional[float]
     gross_yield_pct: Optional[float]
     top_developers: List[str]
     top_master_projects: List[str]
@@ -266,5 +282,13 @@ class ProjectRadarResponse(BaseModel):
 
     stats: ProjectRadarStats
     projects: List[ProjectRadarProject]
+    areas: List[ProjectRadarArea]
+    source_notes: List[str]
+
+
+class ProjectRadarOverviewResponse(BaseModel):
+    """Initial radar payload with zone heatmap data only."""
+
+    stats: ProjectRadarStats
     areas: List[ProjectRadarArea]
     source_notes: List[str]

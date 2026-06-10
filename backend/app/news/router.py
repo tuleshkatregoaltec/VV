@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, Query
-from fastapi.responses import FileResponse
+from fastapi.responses import RedirectResponse
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.decorators import cached_endpoint
@@ -36,9 +36,9 @@ async def get_news_thumbnail(
     article_id: int,
     db: AsyncSession = Depends(get_db_session),
 ):
-    path, content_type = await fetch_news_thumbnail(db, article_id)
-    return FileResponse(
-        path,
-        media_type=content_type,
+    url = await fetch_news_thumbnail(db, article_id)
+    return RedirectResponse(
+        url,
+        status_code=307,
         headers={"Cache-Control": "public, max-age=86400"},
     )

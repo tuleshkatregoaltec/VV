@@ -3,7 +3,7 @@ import { expect, test } from '../fixtures/guards';
 test('anonymous user is redirected from dashboard to auth', async ({ page, useAnonymous }) => {
 	await useAnonymous();
 	await page.goto('/dashboard');
-	await expect(page).toHaveURL(/\/auth$/);
+	await expect(page).toHaveURL(/\/auth\?next=%2Fdashboard$/);
 });
 
 test('active owner is redirected away from auth to dashboard', async ({ page, usePersona }) => {

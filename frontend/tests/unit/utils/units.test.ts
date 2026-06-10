@@ -12,12 +12,12 @@ import {
 } from '$lib/utils/units'
 
 describe('constants', () => {
-	it('SQM_TO_SQFT is approximately 10.764', () => {
-		expect(SQM_TO_SQFT).toBeCloseTo(10.764)
+	it('SQM_TO_SQFT uses the shared market conversion factor', () => {
+		expect(SQM_TO_SQFT).toBe(10.7639)
 	})
 
 	it('SQFT_TO_SQM is the inverse of SQM_TO_SQFT', () => {
-		expect(SQFT_TO_SQM).toBeCloseTo(1 / 10.764)
+		expect(SQFT_TO_SQM).toBeCloseTo(1 / SQM_TO_SQFT)
 	})
 
 	it('conversions are inverse of each other', () => {
@@ -31,11 +31,11 @@ describe('convertArea', () => {
 	})
 
 	it('converts sqm to sqft correctly', () => {
-		expect(convertArea(1, 'sqft')).toBeCloseTo(10.764)
+		expect(convertArea(1, 'sqft')).toBeCloseTo(SQM_TO_SQFT)
 	})
 
 	it('converts 100 sqm to sqft', () => {
-		expect(convertArea(100, 'sqft')).toBeCloseTo(1076.4)
+		expect(convertArea(100, 'sqft')).toBeCloseTo(100 * SQM_TO_SQFT)
 	})
 
 	it('handles zero', () => {
@@ -50,8 +50,8 @@ describe('convertPricePerArea', () => {
 	})
 
 	it('converts price/sqm to price/sqft by dividing', () => {
-		// 10764 AED/sqm -> ~1000 AED/sqft
-		expect(convertPricePerArea(10764, 'sqft')).toBeCloseTo(1000)
+		const pricePerSqm = 1000 * SQM_TO_SQFT
+		expect(convertPricePerArea(pricePerSqm, 'sqft')).toBeCloseTo(1000)
 	})
 
 	it('price per sqft is lower than price per sqm for same value', () => {

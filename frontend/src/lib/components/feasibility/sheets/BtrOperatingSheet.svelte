@@ -165,7 +165,7 @@ const debtRows = $derived(
 				},
 				{
 					label: 'DSCR at Origination',
-					value: fmt(btr.permDebt.dscrAtOrigination, 2) + 'x',
+					value: `${fmt(btr.permDebt.dscrAtOrigination, 2)}x`,
 					note: `Min: ${fmt(assumptions?.btrDscrMinimum ?? 1.25, 2)}x`
 				},
 				{
@@ -224,7 +224,7 @@ const returnRows = $derived(
 				},
 				{
 					label: 'Unlevered MOIC',
-					value: fmt(btr.returns.unleveredMoic, 2) + 'x',
+					value: `${fmt(btr.returns.unleveredMoic, 2)}x`,
 					note: 'Total distributions / total investment',
 					highlight: true
 				},
@@ -236,7 +236,7 @@ const returnRows = $derived(
 				},
 				{
 					label: 'Levered MOIC',
-					value: fmt(btr.returns.leveredMoic, 2) + 'x',
+					value: `${fmt(btr.returns.leveredMoic, 2)}x`,
 					note: 'Equity distributions / equity invested',
 					highlight: true
 				}
@@ -359,7 +359,7 @@ function noiMargin(yr: BtrOperatingYear): number {
 			<tr class="border-b border-[#D9D9D9] {row.isTotal ? 'bg-[#EEF2F7] font-semibold' : ''} hover:bg-slate-50/60">
 				<td class="px-2 py-[3px] text-left text-[10px] text-slate-800 sticky left-0 {row.isTotal ? 'bg-[#EEF2F7]' : 'bg-white'} z-10 {row.isNeg ? 'pl-6' : ''}">{row.label}</td>
 				{#each btr.operatingYears as yr (yr.year)}
-					<td class="px-2 py-[3px] text-right tabular-nums text-[10px] {row.isNeg && getVal(yr, row.key) < 0 ? 'text-rose-700' : 'text-slate-900'}">
+					<td class="px-2 py-[3px] text-right tabular-nums text-[10px] text-slate-900">
 						{row.isNeg ? fmtNeg(getVal(yr, row.key)) : fmtK(getVal(yr, row.key))}
 					</td>
 				{/each}
@@ -374,7 +374,7 @@ function noiMargin(yr: BtrOperatingYear): number {
 			<tr class="border-b border-[#D9D9D9] {row.isTotal ? 'bg-[#EEF2F7] font-semibold' : ''} hover:bg-slate-50/60">
 				<td class="px-2 py-[3px] text-left text-[10px] text-slate-800 sticky left-0 {row.isTotal ? 'bg-[#EEF2F7]' : 'bg-white'} z-10 {!row.isTotal ? 'pl-6' : ''}">{row.label}</td>
 				{#each btr.operatingYears as yr (yr.year)}
-					<td class="px-2 py-[3px] text-right tabular-nums text-[10px] text-rose-700">
+					<td class="px-2 py-[3px] text-right tabular-nums text-[10px] text-slate-900">
 						({fmtK(Math.abs(getExpVal(yr, row.key)))})
 					</td>
 				{/each}
@@ -385,7 +385,7 @@ function noiMargin(yr: BtrOperatingYear): number {
 		<tr class="border-t-2 border-[#B8C4CE] bg-[#EEF2F7] font-bold">
 			<td class="px-2 py-[4px] text-left text-[10px] text-slate-900 sticky left-0 bg-[#EEF2F7] z-10">Net Operating Income (NOI)</td>
 			{#each btr.operatingYears as yr (yr.year)}
-				<td class="px-2 py-[4px] text-right tabular-nums text-[10px] {yr.noiAed >= 0 ? 'text-emerald-700' : 'text-rose-700'}">
+				<td class="px-2 py-[4px] text-right tabular-nums text-[10px] text-slate-900">
 					{fmtNeg(yr.noiAed)}
 				</td>
 			{/each}
@@ -395,7 +395,7 @@ function noiMargin(yr: BtrOperatingYear): number {
 		<tr class="border-b border-[#D9D9D9] hover:bg-slate-50/60">
 			<td class="px-2 py-[3px] text-left text-[10px] text-slate-800 pl-6 sticky left-0 bg-white z-10">Less: CapEx Reserve</td>
 			{#each btr.operatingYears as yr (yr.year)}
-				<td class="px-2 py-[3px] text-right tabular-nums text-[10px] text-rose-700">
+				<td class="px-2 py-[3px] text-right tabular-nums text-[10px] text-slate-900">
 					({fmtK(Math.abs(yr.capexReserveAed))})
 				</td>
 			{/each}
@@ -403,7 +403,7 @@ function noiMargin(yr: BtrOperatingYear): number {
 		<tr class="border-t-2 border-[#B8C4CE] bg-[#EEF2F7] font-bold">
 			<td class="px-2 py-[4px] text-left text-[10px] text-slate-900 sticky left-0 bg-[#EEF2F7] z-10">Cash Flow from Operations (CFO)</td>
 			{#each btr.operatingYears as yr (yr.year)}
-				<td class="px-2 py-[4px] text-right tabular-nums text-[10px] {yr.cfoAed >= 0 ? 'text-emerald-700' : 'text-rose-700'}">
+				<td class="px-2 py-[4px] text-right tabular-nums text-[10px] text-slate-900">
 					{fmtNeg(yr.cfoAed)}
 				</td>
 			{/each}
@@ -416,7 +416,7 @@ function noiMargin(yr: BtrOperatingYear): number {
 		<tr class="border-b border-[#D9D9D9] hover:bg-slate-50/60">
 			<td class="px-2 py-[3px] text-left text-[10px] text-slate-800 pl-6 sticky left-0 bg-white z-10">Less: Debt Service</td>
 			{#each btr.operatingYears as yr (yr.year)}
-				<td class="px-2 py-[3px] text-right tabular-nums text-[10px] {yr.debtServiceAed > 0 ? 'text-rose-700' : 'text-slate-400'}">
+				<td class="px-2 py-[3px] text-right tabular-nums text-[10px] {yr.debtServiceAed > 0 ? 'text-slate-900' : 'text-slate-400'}">
 					{yr.debtServiceAed > 0 ? `(${fmtK(yr.debtServiceAed)})` : '—'}
 				</td>
 			{/each}
@@ -424,7 +424,7 @@ function noiMargin(yr: BtrOperatingYear): number {
 		<tr class="border-t-2 border-[#B8C4CE] bg-[#EEF2F7] font-bold">
 			<td class="px-2 py-[4px] text-left text-[10px] text-slate-900 sticky left-0 bg-[#EEF2F7] z-10">Cash Flow After Financing (CFAF)</td>
 			{#each btr.operatingYears as yr (yr.year)}
-				<td class="px-2 py-[4px] text-right tabular-nums text-[10px] {yr.cfafAed >= 0 ? 'text-emerald-700' : 'text-rose-700'}">
+				<td class="px-2 py-[4px] text-right tabular-nums text-[10px] text-slate-900">
 					{fmtNeg(yr.cfafAed)}
 				</td>
 			{/each}
@@ -491,7 +491,7 @@ function noiMargin(yr: BtrOperatingYear): number {
 		{#each debtRows as row (row.label)}
 			<tr class="border-b border-[#D9D9D9] hover:bg-slate-50/60">
 				<td class="px-2 py-[3px] text-left text-[10px] text-slate-800">{row.label}</td>
-				<td class="px-2 py-[3px] text-right tabular-nums text-[10px] font-medium {row.label === 'DSCR at Origination' && btr ? (btr.permDebt.dscrAtOrigination >= (assumptions?.btrDscrMinimum ?? 1.25) ? 'text-emerald-700' : 'text-rose-700') : 'text-slate-900'}">{row.value}</td>
+				<td class="px-2 py-[3px] text-right tabular-nums text-[10px] font-medium {row.label === 'DSCR at Origination' && btr ? (btr.permDebt.dscrAtOrigination >= (assumptions?.btrDscrMinimum ?? 1.25) ? 'text-slate-900' : 'text-amber-700') : 'text-slate-900'}">{row.value}</td>
 				<td class="px-2 py-[3px] text-left text-[9px] text-slate-500">{row.note}</td>
 			</tr>
 		{/each}
@@ -537,7 +537,7 @@ function noiMargin(yr: BtrOperatingYear): number {
 		<tr class="border-b border-[#D9D9D9] hover:bg-slate-50/60">
 			<td class="px-2 py-[3px] text-left text-[10px] text-slate-800 sticky left-0 bg-white z-10">Dev Costs</td>
 			{#each btr.annualCashFlow as yr (yr.yearLabel)}
-				<td class="px-2 py-[3px] text-right tabular-nums text-[10px] {yr.devCostsAed < 0 ? 'text-rose-700' : 'text-slate-400'}">{yr.devCostsAed !== 0 ? fmtNeg(yr.devCostsAed) : '—'}</td>
+				<td class="px-2 py-[3px] text-right tabular-nums text-[10px] {yr.devCostsAed !== 0 ? 'text-slate-900' : 'text-slate-400'}">{yr.devCostsAed !== 0 ? fmtNeg(yr.devCostsAed) : '—'}</td>
 			{/each}
 		</tr>
 		<!-- Dev debt -->
@@ -550,20 +550,20 @@ function noiMargin(yr: BtrOperatingYear): number {
 		<tr class="border-b border-[#D9D9D9] hover:bg-slate-50/60">
 			<td class="px-2 py-[3px] text-left text-[10px] text-slate-800 pl-6 sticky left-0 bg-white z-10">Dev Debt Repayment</td>
 			{#each btr.annualCashFlow as yr (yr.yearLabel)}
-				<td class="px-2 py-[3px] text-right tabular-nums text-[10px] {yr.devDebtRepaymentAed < 0 ? 'text-rose-700' : 'text-slate-400'}">{yr.devDebtRepaymentAed !== 0 ? fmtNeg(yr.devDebtRepaymentAed) : '—'}</td>
+				<td class="px-2 py-[3px] text-right tabular-nums text-[10px] {yr.devDebtRepaymentAed !== 0 ? 'text-slate-900' : 'text-slate-400'}">{yr.devDebtRepaymentAed !== 0 ? fmtNeg(yr.devDebtRepaymentAed) : '—'}</td>
 			{/each}
 		</tr>
 		<tr class="border-b border-[#D9D9D9] hover:bg-slate-50/60">
 			<td class="px-2 py-[3px] text-left text-[10px] text-slate-800 pl-6 sticky left-0 bg-white z-10">Dev Interest</td>
 			{#each btr.annualCashFlow as yr (yr.yearLabel)}
-				<td class="px-2 py-[3px] text-right tabular-nums text-[10px] {yr.devInterestAed < 0 ? 'text-rose-700' : 'text-slate-400'}">{yr.devInterestAed !== 0 ? fmtNeg(yr.devInterestAed) : '—'}</td>
+				<td class="px-2 py-[3px] text-right tabular-nums text-[10px] {yr.devInterestAed !== 0 ? 'text-slate-900' : 'text-slate-400'}">{yr.devInterestAed !== 0 ? fmtNeg(yr.devInterestAed) : '—'}</td>
 			{/each}
 		</tr>
 		<!-- Operating CFO -->
 		<tr class="border-b border-[#D9D9D9] hover:bg-slate-50/60">
 			<td class="px-2 py-[3px] text-left text-[10px] text-slate-800 sticky left-0 bg-white z-10">Operating CFO</td>
 			{#each btr.annualCashFlow as yr (yr.yearLabel)}
-				<td class="px-2 py-[3px] text-right tabular-nums text-[10px] {yr.cfoAed > 0 ? 'text-emerald-700' : yr.cfoAed < 0 ? 'text-rose-700' : 'text-slate-400'}">{yr.cfoAed !== 0 ? fmtNeg(yr.cfoAed) : '—'}</td>
+				<td class="px-2 py-[3px] text-right tabular-nums text-[10px] {yr.cfoAed !== 0 ? 'text-slate-900' : 'text-slate-400'}">{yr.cfoAed !== 0 ? fmtNeg(yr.cfoAed) : '—'}</td>
 			{/each}
 		</tr>
 		<!-- Perm debt -->
@@ -576,39 +576,39 @@ function noiMargin(yr: BtrOperatingYear): number {
 		<tr class="border-b border-[#D9D9D9] hover:bg-slate-50/60">
 			<td class="px-2 py-[3px] text-left text-[10px] text-slate-800 pl-6 sticky left-0 bg-white z-10">Perm Debt Service</td>
 			{#each btr.annualCashFlow as yr (yr.yearLabel)}
-				<td class="px-2 py-[3px] text-right tabular-nums text-[10px] {yr.permDebtServiceAed < 0 ? 'text-rose-700' : 'text-slate-400'}">{yr.permDebtServiceAed !== 0 ? fmtNeg(yr.permDebtServiceAed) : '—'}</td>
+				<td class="px-2 py-[3px] text-right tabular-nums text-[10px] {yr.permDebtServiceAed !== 0 ? 'text-slate-900' : 'text-slate-400'}">{yr.permDebtServiceAed !== 0 ? fmtNeg(yr.permDebtServiceAed) : '—'}</td>
 			{/each}
 		</tr>
 		<tr class="border-b border-[#D9D9D9] hover:bg-slate-50/60">
 			<td class="px-2 py-[3px] text-left text-[10px] text-slate-800 pl-6 sticky left-0 bg-white z-10">Loan Payoff at Exit</td>
 			{#each btr.annualCashFlow as yr (yr.yearLabel)}
-				<td class="px-2 py-[3px] text-right tabular-nums text-[10px] {yr.permLoanPayoffAed < 0 ? 'text-rose-700' : 'text-slate-400'}">{yr.permLoanPayoffAed !== 0 ? fmtNeg(yr.permLoanPayoffAed) : '—'}</td>
+				<td class="px-2 py-[3px] text-right tabular-nums text-[10px] {yr.permLoanPayoffAed !== 0 ? 'text-slate-900' : 'text-slate-400'}">{yr.permLoanPayoffAed !== 0 ? fmtNeg(yr.permLoanPayoffAed) : '—'}</td>
 			{/each}
 		</tr>
 		<!-- Disposition -->
 		<tr class="border-b border-[#D9D9D9] hover:bg-slate-50/60">
 			<td class="px-2 py-[3px] text-left text-[10px] text-slate-800 sticky left-0 bg-white z-10">Terminal Sale Value</td>
 			{#each btr.annualCashFlow as yr (yr.yearLabel)}
-				<td class="px-2 py-[3px] text-right tabular-nums text-[10px] text-emerald-700">{yr.salePriceAed !== 0 ? fmtK(yr.salePriceAed) : '—'}</td>
+				<td class="px-2 py-[3px] text-right tabular-nums text-[10px] text-slate-900">{yr.salePriceAed !== 0 ? fmtK(yr.salePriceAed) : '—'}</td>
 			{/each}
 		</tr>
 		<tr class="border-b border-[#D9D9D9] hover:bg-slate-50/60">
 			<td class="px-2 py-[3px] text-left text-[10px] text-slate-800 pl-6 sticky left-0 bg-white z-10">Sale Expenses</td>
 			{#each btr.annualCashFlow as yr (yr.yearLabel)}
-				<td class="px-2 py-[3px] text-right tabular-nums text-[10px] text-rose-700">{yr.saleExpensesAed !== 0 ? fmtNeg(yr.saleExpensesAed) : '—'}</td>
+				<td class="px-2 py-[3px] text-right tabular-nums text-[10px] text-slate-900">{yr.saleExpensesAed !== 0 ? fmtNeg(yr.saleExpensesAed) : '—'}</td>
 			{/each}
 		</tr>
 		<!-- Net flows -->
 		<tr class="border-t-2 border-[#B8C4CE] bg-[#EEF2F7] font-bold">
 			<td class="px-2 py-[4px] text-left text-[10px] text-slate-900 sticky left-0 bg-[#EEF2F7] z-10">Unlevered Cash Flow</td>
 			{#each btr.annualCashFlow as yr (yr.yearLabel)}
-				<td class="px-2 py-[4px] text-right tabular-nums text-[10px] {yr.unleveredCfAed >= 0 ? 'text-emerald-700' : 'text-rose-700'}">{fmtNeg(yr.unleveredCfAed)}</td>
+				<td class="px-2 py-[4px] text-right tabular-nums text-[10px] text-slate-900">{fmtNeg(yr.unleveredCfAed)}</td>
 			{/each}
 		</tr>
 		<tr class="border-t-2 border-[#B8C4CE] bg-[#EEF2F7] font-bold">
 			<td class="px-2 py-[4px] text-left text-[10px] text-slate-900 sticky left-0 bg-[#EEF2F7] z-10">Levered Cash Flow</td>
 			{#each btr.annualCashFlow as yr (yr.yearLabel)}
-				<td class="px-2 py-[4px] text-right tabular-nums text-[10px] {yr.leveredCfAed >= 0 ? 'text-emerald-700' : 'text-rose-700'}">{fmtNeg(yr.leveredCfAed)}</td>
+				<td class="px-2 py-[4px] text-right tabular-nums text-[10px] text-slate-900">{fmtNeg(yr.leveredCfAed)}</td>
 			{/each}
 		</tr>
 		</tbody>

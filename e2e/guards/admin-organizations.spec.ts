@@ -24,7 +24,7 @@ test('admin organizations page renders organization data', async ({ page, usePer
 	await page.goto('/admin/organizations');
 
 	await expect(page.getByRole('heading', { name: 'Organizations' })).toBeVisible();
-	await expect(page.getByRole('button', { name: '+ Create User' })).toBeVisible();
+	await expect(page.getByRole('button', { name: 'Create user' })).toBeVisible();
 	await expect(page.getByText('Acme Holdings')).toBeVisible();
 	await expect(page.getByText('owner@example.com')).toBeVisible();
 });

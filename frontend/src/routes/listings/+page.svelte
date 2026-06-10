@@ -231,6 +231,7 @@ function seededUnitInterval(seed: string, salt: string): number {
 	return (hashString(`${seed}:${salt}`) + 1) / 4294967297
 }
 
+// Demo-only placeholder until a real listing valuation/index signal exists.
 function mockVitevueIndexPercent(listingId: string): number {
 	const u1 = seededUnitInterval(listingId, 'vitevue-index-a')
 	const u2 = seededUnitInterval(listingId, 'vitevue-index-b')

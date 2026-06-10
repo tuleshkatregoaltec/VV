@@ -7,10 +7,13 @@ import {
 	Home,
 	LayoutDashboard,
 	LogOut,
+	MapPinned,
 	MessageSquare,
 	ReceiptText,
 	Settings,
-	User
+	ShieldCheck,
+	User,
+	Workflow
 } from 'lucide-svelte'
 import { page } from '$app/state'
 import { logout } from '$lib/api/auth'
@@ -61,6 +64,11 @@ function handleLogout() {
 				<span>Dashboard</span>
 			</a>
 
+			<a href="/workflows" onclick={onNavigate} class={linkClass('/workflows')} aria-current={isActive('/workflows') ? 'page' : undefined}>
+				<Workflow size={16} strokeWidth={2} aria-hidden="true" />
+				<span>Workflows</span>
+			</a>
+
 			<a href="/chat" onclick={onNavigate} class={linkClass('/chat')} aria-current={isActive('/chat') ? 'page' : undefined}>
 				<MessageSquare size={16} strokeWidth={2} aria-hidden="true" />
 				<span>Chat</span>
@@ -91,9 +99,19 @@ function handleLogout() {
 				<span>Radar</span>
 			</a>
 
+			<a href="/radar" onclick={onNavigate} class={linkClass('/radar')} aria-current={isActive('/radar') ? 'page' : undefined}>
+				<MapPinned size={16} strokeWidth={2} aria-hidden="true" />
+				<span>Radar Lab</span>
+			</a>
+
 			<a href="/upcoming" onclick={onNavigate} class={linkClass('/upcoming')} aria-current={isActive('/upcoming') ? 'page' : undefined}>
 				<Building2 size={16} strokeWidth={2} aria-hidden="true" />
 				<span>Upcoming</span>
+			</a>
+
+			<a href="/developers" onclick={onNavigate} class={linkClass('/developers')} aria-current={isActive('/developers') ? 'page' : undefined}>
+				<ShieldCheck size={16} strokeWidth={2} aria-hidden="true" />
+				<span>Developers</span>
 			</a>
 
 			<a href="/listings" onclick={onNavigate} class={linkClass('/listings')} aria-current={isActive('/listings') ? 'page' : undefined}>

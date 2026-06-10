@@ -2,6 +2,13 @@
 import { Download, X } from 'lucide-svelte'
 import ColumnSettingsDropdown from '$lib/components/dropdowns/ColumnSettingsDropdown.svelte'
 
+type ExportAction = {
+	label: string
+	onClick: () => void
+	disabled?: boolean
+	variant?: 'primary' | 'secondary'
+}
+
 let {
 	title = 'Dataset',
 	description = 'Visible columns and selected rows update this view.',
@@ -16,7 +23,8 @@ let {
 	selectedIds = $bindable(new Set<string>()),
 	getRowId,
 	exportLabel = 'Export',
-	exportDisabled = false
+	exportDisabled = false,
+	exportActions = []
 }: {
 	title?: string
 	description?: string
@@ -40,6 +48,7 @@ let {
 	getRowId?: (row: any) => string
 	exportLabel?: string
 	exportDisabled?: boolean
+	exportActions?: ExportAction[]
 } = $props()
 
 // Track which columns are visible (using column id as key)
@@ -183,7 +192,20 @@ function getRenderKey(row: any, index: number): string {
 				</div>
 			{/if}
 
-			{#if onExport}
+			{#if exportActions.length > 0}
+				{#each exportActions as action, index (action.label)}
+					<button
+						type="button"
+						onclick={action.onClick}
+						disabled={action.disabled}
+						data-variant={action.variant ?? (index === 0 ? 'primary' : 'secondary')}
+						class="ui-button h-10 px-3 text-sm disabled:cursor-not-allowed disabled:opacity-60"
+					>
+						<Download size={15} strokeWidth={1.8} />
+						{action.label}
+					</button>
+				{/each}
+			{:else if onExport}
 				<button
 					type="button"
 					onclick={onExport}

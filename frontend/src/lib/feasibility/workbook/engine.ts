@@ -9,6 +9,7 @@
 // with refund lag, area bridge, equity waterfall, annual CF rollup.
 // ══════════════════════════════════════════════════════════════════════════════
 
+import { SQM_TO_SQFT } from '$lib/utils/units'
 import { BTR_WORKBOOK_DEFAULTS, WORKBOOK_OPTION_DEFAULTS } from './defaults'
 import type { BtrUnitConfig, FeasibilityAssumptions, UsageType } from './models'
 
@@ -812,10 +813,10 @@ function periodicIrr(cashFlows: number[], periodsPerYear: number): number | null
 	for (let i = 0; i < 100; i++) {
 		const n = npv(rate)
 		const dn = cashFlows.reduce((sum, cf, idx) => sum - (idx * cf) / (1 + rate) ** (idx + 1), 0)
-		if (!isFinite(n) || !isFinite(dn)) break
+		if (!Number.isFinite(n) || !Number.isFinite(dn)) break
 		if (Math.abs(dn) < 1e-10) break
 		let nextRate = rate - n / dn
-		if (!isFinite(nextRate)) break
+		if (!Number.isFinite(nextRate)) break
 		nextRate = Math.max(Math.min(nextRate, maxRate), minRate)
 		if (Math.abs(nextRate - rate) < 1e-7) {
 			rate = nextRate
@@ -824,15 +825,15 @@ function periodicIrr(cashFlows: number[], periodsPerYear: number): number | null
 		}
 		rate = nextRate
 	}
-	if (newtonConverged && rate > minRate && rate < maxRate && isFinite(rate)) {
+	if (newtonConverged && rate > minRate && rate < maxRate && Number.isFinite(rate)) {
 		const annualised = ((1 + rate) ** periodsPerYear - 1) * 100
-		if (isFinite(annualised)) return annualised
+		if (Number.isFinite(annualised)) return annualised
 	}
 	let lo = -0.999
 	let hi = 5.0
 	let npvLo = npv(lo)
 	const npvHi = npv(hi)
-	if (!isFinite(npvLo) || !isFinite(npvHi)) return null
+	if (!Number.isFinite(npvLo) || !Number.isFinite(npvHi)) return null
 	if (npvLo * npvHi > 0) return null
 	for (let i = 0; i < 200; i++) {
 		const mid = (lo + hi) / 2
@@ -849,7 +850,7 @@ function periodicIrr(cashFlows: number[], periodsPerYear: number): number | null
 		}
 	}
 	const annualised = ((1 + rate) ** periodsPerYear - 1) * 100
-	return isFinite(annualised) ? annualised : null
+	return Number.isFinite(annualised) ? annualised : null
 }
 
 function computeXirr(cashFlows: Array<{ date: Date; amount: number }>): number | null {
@@ -1097,7 +1098,11 @@ function getActiveUnitConfigs(
 	const configs = btrConfigs ?? a.unitConfigs
 	return (configs ?? [])
 		.filter((row) => row.units > 0 && row.avgSizeSqm > 0)
-		.map((row) => ({ units: row.units, avgSizeSqm: row.avgSizeSqm, parkingRatio: row.parkingRatio }))
+		.map((row) => ({
+			units: row.units,
+			avgSizeSqm: row.avgSizeSqm,
+			parkingRatio: row.parkingRatio
+		}))
 }
 
 function getActiveUnitMix(a: FeasibilityAssumptions): Array<{ units: number; avgSizeSqm: number }> {
@@ -1111,9 +1116,7 @@ function targetParkingSpaces(a: FeasibilityAssumptions): number {
 	return round(
 		getActiveUnitConfigs(a).reduce((sum, row) => {
 			const fallbackRatio =
-				row.avgSizeSqm > a.largeUnitThresholdSqm
-					? a.largeUnitParkingRatio
-					: a.standardParkingRatio
+				row.avgSizeSqm > a.largeUnitThresholdSqm ? a.largeUnitParkingRatio : a.standardParkingRatio
 			const parkingRatio =
 				typeof row.parkingRatio === 'number' && Number.isFinite(row.parkingRatio)
 					? row.parkingRatio
@@ -2033,7 +2036,7 @@ function computeWaterfall(a: FeasibilityAssumptions, periods: CashFlowPeriod[]):
 // ── Returns ──────────────────────────────────────────────────────────────────
 
 function computeReturns(
-	a: FeasibilityAssumptions,
+	_a: FeasibilityAssumptions,
 	program: ProgramOutputs,
 	costs: CostOutputs,
 	area: AreaBridgeOutputs,
@@ -2082,7 +2085,7 @@ function computeReturns(
 		costs.totalDevCostInclVatAed > 0 ? round((peakDebtAed / costs.totalDevCostInclVatAed) * 100) : 0
 
 	// Break-even sale rate (total cost / sellable area in sqft)
-	const sellableAreaSqft = area.sellableArea * 10.7639
+	const sellableAreaSqft = area.sellableArea * SQM_TO_SQFT
 	const breakEvenSaleRateAedSqft =
 		sellableAreaSqft > 0 ? round(allInProjectCostAed / sellableAreaSqft, 0) : 0
 
@@ -2497,7 +2500,8 @@ function computeAnnualCashFlow(periods: CashFlowPeriod[]): AnnualCashFlowOutputs
 				closingDebtAed: 0
 			})
 		}
-		const row = byYear.get(year)!
+		const row = byYear.get(year)
+		if (!row) continue
 		row.revenueAed += p.revenueInflowsAed
 		row.costsAed += p.operatingOutflowsAed
 		row.unleveredCfAed += p.unleveredNetCashFlowAed
@@ -2902,173 +2906,6 @@ function computeBtrDevCashFlow(
 }
 
 // ── BTR Operating P&L ───────────────────────────────────────────────────────
-
-function computeBtrOperating(
-	a: FeasibilityAssumptions,
-	btrProgram: BtrProgramOutputs,
-	totalDevCostAed: number,
-	permDebt: BtrPermDebtOutputs,
-	stabilizationYear: number
-): BtrOperatingYear[] {
-	const holdYears = btr(a, 'btrHoldPeriodYears')
-	const leaseUpPace = btr(a, 'btrLeaseUpPaceUnitsPerMonth')
-	const stabilizedOccPct = btr(a, 'btrStabilizedOccupancyPct') / 100
-	const freeRentMonths = btr(a, 'btrFreeRentMonths')
-	const stabilizedFreeRent = btr(a, 'btrStabilizedFreeRentMonths')
-	const annualRentGrowth =
-		(btr(a, 'btrMarketRentGrowthPct') || btr(a, 'btrAnnualRentGrowthPct')) / 100
-	const generalVacancy = btr(a, 'btrGeneralVacancyPct') / 100
-	const pmFeePct = btr(a, 'btrPropertyManagementPct') / 100
-	const rmPsqm = btr(a, 'btrRepairsMaintenancePsqm')
-	const insurancePsqm = btr(a, 'btrInsurancePsqm')
-	const scPsqm = btr(a, 'btrServiceChargePsqm')
-	const utilPsqm = btr(a, 'btrUtilitiesPsqm')
-	const mktPct = btr(a, 'btrMarketingLeasingPct') / 100
-	const capexPct = btr(a, 'btrCapexReservePct') / 100
-	const parkingIncome = btr(a, 'btrParkingIncomeAed')
-	const ancillaryIncome = btr(a, 'btrAncillaryIncomeAed')
-	const ancillaryGrowth = btr(a, 'btrAncillaryGrowthPct') / 100
-	const opExGrowth = btr(a, 'btrOpExGrowthPct') / 100
-
-	const creditLossPct = btr(a, 'btrCreditLossPct') / 100
-	const payrollPsqm = btr(a, 'btrPayrollPsqm')
-	const generalAdminPct = btr(a, 'btrGeneralAdminPct') / 100
-	const contractServicesPsqm = btr(a, 'btrContractServicesPsqm')
-	const modelUnits = btr(a, 'btrModelUnits')
-	const ioYears = btr(a, 'btrPermDebtIoYears')
-	const ioDS = permDebt.ioDebtServiceAed
-	const piDS = permDebt.annualDebtServiceAed
-
-	const totalUnits = btrProgram.totalUnits
-	const totalArea = btrProgram.totalAreaSqm
-	const baseGPR = btrProgram.grossPotentialRentAed
-
-	// Guard: no units means no operating model
-	if (totalUnits <= 0) return []
-
-	// Model unit deduction: pro-rata annual rent of non-revenue show unit(s)
-	const baseModelUnitDeduction = totalUnits > 0 ? round((baseGPR * modelUnits) / totalUnits) : 0
-
-	// Lease-up: how many months to reach stabilized occupancy
-	const unitsToLeaseUp = Math.ceil(totalUnits * stabilizedOccPct)
-	const leaseUpMonths = leaseUpPace > 0 ? Math.ceil(unitsToLeaseUp / leaseUpPace) : 12
-
-	const years: BtrOperatingYear[] = []
-
-	for (let yr = 1; yr <= holdYears; yr++) {
-		const rentGrowthFactor = (1 + annualRentGrowth) ** (yr - 1)
-		const opExGrowthFactor = (1 + opExGrowth) ** (yr - 1)
-
-		// Occupancy ramp
-		const monthsIntoOps = yr * 12
-		let avgOccupancy: number
-		const isLeaseUp = monthsIntoOps <= leaseUpMonths
-		if (isLeaseUp) {
-			const startMonth = (yr - 1) * 12
-			let totalOccMonths = 0
-			for (let m = startMonth + 1; m <= startMonth + 12; m++) {
-				const occupied = Math.min(m * leaseUpPace, unitsToLeaseUp)
-				totalOccMonths += occupied / totalUnits
-			}
-			avgOccupancy = Math.min(totalOccMonths / 12, stabilizedOccPct)
-		} else {
-			// Stabilized vacancy is deducted explicitly below; do not embed it in occupied revenue.
-			avgOccupancy = 1
-		}
-
-		// ── Revenue ──
-		const grossPotentialRent = round(baseGPR * rentGrowthFactor)
-		// Non-revenue model/show unit(s) — deducted before vacancy
-		const modelUnitDeduction = round(baseModelUnitDeduction * rentGrowthFactor)
-		const adjustedGPR = round(grossPotentialRent - modelUnitDeduction)
-		// Concessions: lease-up uses initial free rent; stabilized uses renewal free rent
-		const concessionsFreeMonths = isLeaseUp ? freeRentMonths : stabilizedFreeRent
-		const concessionsPct = concessionsFreeMonths / 12
-		const concessions = round(adjustedGPR * avgOccupancy * concessionsPct)
-		const effectiveRentalIncome = round(adjustedGPR * avgOccupancy - concessions)
-
-		const otherIncome = round(
-			(parkingIncome + ancillaryIncome) * (1 + ancillaryGrowth) ** (yr - 1) * avgOccupancy
-		)
-		const totalPotentialIncome = round(effectiveRentalIncome + otherIncome)
-		// Vacancy and credit loss are separate line items
-		const vacancyLoss = round(totalPotentialIncome * generalVacancy)
-		const creditLoss = round(totalPotentialIncome * creditLossPct)
-		const vacancyCreditLoss = round(vacancyLoss + creditLoss)
-		const egr = round(totalPotentialIncome - vacancyCreditLoss)
-
-		// ── Operating Expenses ──
-		const propertyManagement = round(egr * pmFeePct)
-		const repairsMaintenance = round(totalArea * rmPsqm * opExGrowthFactor * avgOccupancy)
-		const payroll = round(totalArea * payrollPsqm * opExGrowthFactor)
-		const generalAdmin = round(egr * generalAdminPct)
-		const contractServices = round(totalArea * contractServicesPsqm * opExGrowthFactor)
-		const insurance = round(totalArea * insurancePsqm * opExGrowthFactor)
-		const serviceCharge = round(totalArea * scPsqm * opExGrowthFactor)
-		const utilities = round(totalArea * utilPsqm * opExGrowthFactor * avgOccupancy)
-		const marketingLeasing = round(egr * mktPct)
-		const totalOpEx = round(
-			propertyManagement +
-				repairsMaintenance +
-				payroll +
-				generalAdmin +
-				contractServices +
-				insurance +
-				serviceCharge +
-				utilities +
-				marketingLeasing
-		)
-		const opExRatio = egr > 0 ? round(totalOpEx / egr, 4) : 0
-
-		// ── NOI & CFO ──
-		const noi = round(egr - totalOpEx)
-		const capexReserve = round(Math.max(noi, 0) * capexPct)
-		const cfo = round(noi - capexReserve)
-
-		// ── Debt service: IO period then P&I ──
-		let debtService = 0
-		if (yr >= stabilizationYear) {
-			const yearsAfterRefi = yr - stabilizationYear
-			debtService = yearsAfterRefi < ioYears ? ioDS : piDS
-		}
-		const cfaf = round(cfo - debtService)
-
-		years.push({
-			year: yr,
-			yearLabel: `Year ${yr}`,
-			isLeaseUp,
-			occupancyPct: round((isLeaseUp ? avgOccupancy : stabilizedOccPct) * 100, 1),
-			grossPotentialRentAed: grossPotentialRent,
-			modelUnitDeductionAed: modelUnitDeduction,
-			concessionsAed: concessions,
-			effectiveRentalIncomeAed: effectiveRentalIncome,
-			otherIncomeAed: otherIncome,
-			totalPotentialIncomeAed: totalPotentialIncome,
-			vacancyAed: vacancyLoss,
-			creditLossAed: creditLoss,
-			vacancyCreditLossAed: vacancyCreditLoss,
-			effectiveGrossRevenueAed: egr,
-			propertyManagementAed: propertyManagement,
-			repairsMaintenanceAed: repairsMaintenance,
-			payrollAed: payroll,
-			generalAdminAed: generalAdmin,
-			contractServicesAed: contractServices,
-			insuranceAed: insurance,
-			serviceChargeAed: serviceCharge,
-			utilitiesAed: utilities,
-			marketingLeasingAed: marketingLeasing,
-			totalOpExAed: totalOpEx,
-			opExRatio,
-			noiAed: noi,
-			capexReserveAed: capexReserve,
-			cfoAed: cfo,
-			debtServiceAed: debtService,
-			cfafAed: cfaf
-		})
-	}
-
-	return years
-}
 
 function computeBtrOperatingMonths(
 	a: FeasibilityAssumptions,
@@ -3576,7 +3413,7 @@ function computeBtrAnnualCashFlow(
 // ── BTR Returns (standalone, no BTS dependencies) ───────────────────────────
 
 function computeBtrReturns(
-	a: FeasibilityAssumptions,
+	_a: FeasibilityAssumptions,
 	devCosts: BtrDevCostOutputs,
 	devCf: {
 		periods: BtrDevPeriod[]
@@ -3600,8 +3437,6 @@ function computeBtrReturns(
 	const stabilizedYear = operatingYears.find((y) => !y.isLeaseUp)
 	const stabilizedNoi = stabilizedYear?.noiAed ?? 0
 	const yieldOnCost = totalDevCost > 0 ? round((stabilizedNoi / totalDevCost) * 100, 2) : 0
-
-	const holdYears = btr(a, 'btrHoldPeriodYears')
 
 	// ── Unlevered IRR: dev costs out, CFO in, exit at end ──
 	const unleveredCfs: number[] = []

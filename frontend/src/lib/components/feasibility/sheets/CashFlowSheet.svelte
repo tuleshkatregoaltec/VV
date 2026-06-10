@@ -10,12 +10,12 @@ function fmt(value: number, digits = 0): string {
 
 function fmtPct(value: number | null | undefined): string {
 	if (value == null) return '—'
-	return value.toFixed(1) + '%'
+	return `${value.toFixed(1)}%`
 }
 
 function fmtMoic(value: number | null | undefined): string {
 	if (value == null) return '—'
-	return value.toFixed(2) + 'x'
+	return `${value.toFixed(2)}x`
 }
 
 const annualCf = $derived(workbookStore.workbook?.annualCashFlow ?? null)

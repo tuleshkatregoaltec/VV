@@ -7,7 +7,7 @@ import { browser } from '$app/environment'
 import { feasibility } from '$lib/api/feasibility'
 import type { FeasibilityAssumptions, UnitConfig } from '$lib/feasibility/workbook/models'
 import { type FeasibilitySheetTab, workbookStore } from '$lib/feasibility/workbook/store.svelte'
-import { formatNumber, titleCase } from '$lib/feasibility/workbook/utils'
+import { formatNumber, titleCase, unitConfigMatchesKey } from '$lib/feasibility/workbook/utils'
 import { feasibilityStudy } from '$lib/stores/feasibilityStudy.svelte'
 import { feasibilityWorkspace, type PendingProposal } from '$lib/stores/feasibilityWorkspace.svelte'
 
@@ -169,15 +169,8 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 	return Boolean(value && typeof value === 'object' && !Array.isArray(value))
 }
 
-function normalizeKey(v: string) {
-	return v.trim().toLowerCase().replaceAll(/\s+/g, '').replaceAll('/', '')
-}
-
 function findUnitConfig(key: string): UnitConfig | undefined {
-	return workbookStore.inputs.unitConfigs?.find(
-		(row) =>
-			normalizeKey(row.id) === normalizeKey(key) || normalizeKey(row.label) === normalizeKey(key)
-	)
+	return workbookStore.inputs.unitConfigs?.find((row) => unitConfigMatchesKey(row, key))
 }
 
 function labelForAssumption(key: string): string {
@@ -212,7 +205,9 @@ function formatUnitPrice(pricePsqm: number): string {
 function proposalSummary(proposal: PendingProposal | null): string {
 	if (!proposal) return ''
 	if (proposal.action === 'set_price_per_sqm') return 'Update unit pricing'
-	if (proposal.action === 'set_unit_mix') return 'Update unit mix'
+	if (proposal.action === 'set_unit_mix' || proposal.action === 'replace_unit_mix')
+		return 'Replace unit mix'
+	if (proposal.action === 'update_unit_mix') return 'Update unit mix'
 	if (proposal.action === 'set_payment_plan') return 'Update payment plan'
 	if (proposal.action === 'set_assumptions') return 'Update assumptions'
 	return titleCase(proposal.action)
@@ -234,7 +229,12 @@ function proposalLines(proposal: PendingProposal | null): ProposalLine[] {
 				}
 			})
 	}
-	if (proposal.action === 'set_unit_mix' && Array.isArray(proposal.payload)) {
+	if (
+		(proposal.action === 'set_unit_mix' ||
+			proposal.action === 'replace_unit_mix' ||
+			proposal.action === 'update_unit_mix') &&
+		Array.isArray(proposal.payload)
+	) {
 		return proposal.payload.filter(isRecord).map((row) => {
 			const key = String(row.type ?? '')
 			const unit = findUnitConfig(key)
@@ -285,7 +285,12 @@ function proposalTargets(proposal: PendingProposal): string[] {
 		}
 		if (fields.length === 0) fields.push('priceUpdate')
 	}
-	if (proposal.action === 'set_unit_mix' && Array.isArray(proposal.payload)) {
+	if (
+		(proposal.action === 'set_unit_mix' ||
+			proposal.action === 'replace_unit_mix' ||
+			proposal.action === 'update_unit_mix') &&
+		Array.isArray(proposal.payload)
+	) {
 		for (const row of proposal.payload.filter(isRecord)) {
 			const unit = findUnitConfig(String(row.type ?? ''))
 			if (!unit) continue

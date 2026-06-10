@@ -29,6 +29,7 @@ frontend/pnpm-lock.yaml
 frontend/yarn.lock
 frontend/.env
 frontend/.env.*
+!frontend/.env.example
 frontend/.DS_Store
 frontend/.vercel/
 frontend/.netlify/
@@ -258,16 +259,16 @@ marimo/_lsp/
 __marimo__/
 
 data/
+docs/
 
 # Docker volumes
 .docker-volumes/
 
-AGENTS.md
 CLAUDE.md
 
 .env.dev
 
-fonts/
+/fonts/
 
 # Dev review screenshots
 screenshot-*.png

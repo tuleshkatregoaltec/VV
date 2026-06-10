@@ -1,14 +1,18 @@
 import logging
-from typing import Any
+from typing import Annotated, Any, Literal
 
+from pydantic import Field, StringConstraints
 from pydantic_ai import Agent, RunContext
 
 from app.clickhouse import query
+from app.core.normalization import area_search_text
 from app.core.openrouter import create_openrouter_model
 
 logger = logging.getLogger(__name__)
 
 model = create_openrouter_model()
+AreaInput = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=80)]
+AreaComparisonInput = Annotated[list[AreaInput], Field(min_length=2, max_length=5)]
 
 
 def _float_or_none(value: Any) -> float | None:
@@ -25,37 +29,20 @@ def _string_list(value: Any, *, limit: int = 5) -> list[str]:
     return [str(item) for item in value if item][:limit]
 
 
+def _computed_area_yield_pct(row: dict[str, Any]) -> float | None:
+    median_price = _float_or_none(row.get("median_sale_price"))
+    median_rent = _float_or_none(row.get("median_annual_rent"))
+    if not median_price or not median_rent:
+        return None
+    return round(median_rent / median_price * 100, 2)
+
+
 def _clamp(value: int, minimum: int, maximum: int) -> int:
     return max(minimum, min(maximum, int(value or minimum)))
 
 
-def _area_search_text(area: str) -> str:
-    normalized = area.lower().strip()
-    normalized = normalized.replace("(", " ").replace(")", " ")
-    normalized = " ".join(normalized.split())
-
-    aliases = {
-        "jvc": "Jumeirah Village Circle",
-        "jumeirah village circle": "Jumeirah Village Circle",
-        "dubai marina": "Dubai Marina",
-        "jlt": "Jumeirah Lakes Towers",
-        "jumeirah lake towers": "Jumeirah Lakes Towers",
-        "jbr": "Jumeirah Beach Residence",
-        "jumeirah beach residence": "Jumeirah Beach Residence",
-        "downtown": "Downtown Dubai",
-        "downtown dubai": "Downtown Dubai",
-    }
-    if "jvc" in normalized or "jumeirah village circle" in normalized:
-        return "Jumeirah Village Circle"
-    if "jbr" in normalized or "jumeirah beach residence" in normalized:
-        return "Jumeirah Beach Residence"
-    if "jlt" in normalized or "jumeirah lake towers" in normalized:
-        return "Jumeirah Lakes Towers"
-    return aliases.get(normalized, area.strip())
-
-
 async def _resolve_area_name(area: str) -> str:
-    search_text = _area_search_text(area)
+    search_text = area_search_text(area)
     if not search_text:
         return area
 
@@ -139,6 +126,7 @@ async def _developer_where_clause(
         clauses.append(f"positionCaseInsensitive(developer_name, {{{key}:String}}) > 0")
     return "(" + " OR ".join(clauses or ["1 = 0"]) + ")"
 
+
 # Define agent
 agent = Agent(
     model,
@@ -158,6 +146,10 @@ agent = Agent(
         "**Scope Restriction**: You are specifically designed to answer questions about the Dubai real estate market. "
         "If a user asks about topics outside of this market (questions about other markets, general non-real-estate topics, or unrelated subjects), "
         "politely decline and redirect them to ask about real estate in Dubai.\n\n"
+        "**No Investment Advisory**: Do not provide personalised investment, financial, or legal advice. "
+        "Do not tell a user to buy, sell, invest in, or avoid a specific property, developer, or area. "
+        "You may compare historical data, explain observed patterns, and outline data-backed considerations. "
+        "Label trend analysis as historical unless the user explicitly asks for a scenario or assumption-based projection.\n\n"
         "**Data Analysis Philosophy**: Always prefer aggregate analysis over fetching raw data records. When you use your database tools, "
         "select queries that return summary statistics, rankings, trends, and calculated metrics rather than individual records. "
         "Exception: when the user explicitly asks to show matching inventory, listings, or comparable records, use a display tool so the app can render the results as an inline rich message.\n\n"
@@ -168,13 +160,26 @@ agent = Agent(
         "In your final response to the user, avoid explicitly naming tool functions, describing technical query details, or explaining which queries you selected. "
         "Simply present the insights as if you have natural expertise in this market.\n\n"
         "**Rich Chat UI**: When a user asks to show, list, open, chart, graph, or compare data, call a display tool in addition to answering briefly. "
-        "Use `show_listings` for live rental/sales inventory. Use `show_market_trend` for analytics, charts, and trend requests. "
+        'Use `show_listings` for live rental/sales inventory. For generic listing/inventory/property requests, use rental listings (`mode="rent"`) unless the user explicitly says sale, buy, purchase, for-sale, resale, or off-plan. '
+        "Use `show_market_trend` for simple price trend analytics. Use `show_chart` for custom charts, rankings, breakdowns, distributions, and dashboard-style widgets where you choose the dataset, metric, dimension, chart type, area, comparison areas, time window, and limit. "
+        'If the user asks for bottom, lowest, cheapest, least, or most affordable chart results, call `show_chart` with `sort_direction="asc"`; use `sort_direction="desc"` for top, highest, most, or largest results. '
+        "If the user asks for sqft, square foot, or price per foot, use a `_sqft` metric instead of a `_sqm` metric. "
+        'For citywide rental-yield area rankings, use `show_chart` with `dataset="areas"`, `metric="gross_yield_pct"`, `group_by="area"`, and `sort_direction="desc"`; do not use project-level yield averages for area yield rankings. '
+        'For generic rental-yield rankings, default to apartment/flat yield; pass `property_type="all"` only if the user explicitly asks for all property types, and pass `property_type="Villa"` only for villa yield. '
+        "When the user specifies a time horizon such as 90 days, 12 months, 3 years, YTD, or since a given year, convert it to the closest day count and pass it as `days` or `period_days`; use the 365-day default only when the user does not specify a period. "
         "The app will render these as typed rich message cards inline in the conversation. "
         "When you call a display tool that opens a rich card or artifact, keep the written response very short: one to three sentences, "
         "no long bullet list, and do not restate all rows or chart values that are visible in the card. "
-        "Summarize the key takeaway and point the user to the card for the detailed records or chart.\n\n"
+        "Summarize the key takeaway and point the user to the card for the detailed records or chart. "
+        "Conversation history may include a rendered-card context note; use that note as the source of truth for follow-up references like "
+        '"that top area", "the bottom two", or "those listings".\n\n'
+        "Important: `show_chart` returns a rendered card, not the underlying row values. After calling `show_chart`, do not invent or separately enumerate chart rankings or values in your text unless you also used a data tool that returns the same rows from the same metric/source. "
+        "When in doubt, keep the text to a one-sentence description of what the card shows.\n\n"
         "When using `show_listings`, do not claim listings were definitely found, and do not invent counts, prices, or areas. "
-        "The card is the source of truth for whether exact inventory matched the filters.\n\n"
+        "The card is the source of truth for whether exact inventory matched the filters. "
+        "After opening a listings card, keep the text to a neutral confirmation such as: "
+        '"I opened the listings card for that area; the card shows the exact matches and count." '
+        "If the rendered-card context in conversation history says a listings card had 0 exact matches, say that directly instead of describing available listings.\n\n"
         "**Tool Selection**: Use `get_area_snapshot` for one-neighborhood market context, `compare_areas` for side-by-side neighborhood decisions, "
         "`get_rental_market_pulse` for achieved rents and rental contract evidence, `search_development_projects` for finding projects by area/developer/status, "
         "and `get_developer_pipeline` for developer-specific pipeline questions.\n\n"
@@ -193,13 +198,13 @@ agent = Agent(
         '- **Specific numbers** from your analysis with clear units (e.g., "Average sale price of AED 1.2M", "15% year-over-year increase")\n'
         '- **Context** for those numbers (e.g., "based on 347 transactions in Q1 2024", "across Dubai Marina")\n'
         '- **Trends and patterns** with supporting data (e.g., "Prices have been rising steadily since...", "Premium developments are concentrated in...")\n'
-        '- **Data-driven recommendations** when appropriate (e.g., "Based on rental yields of X%, consider areas like...")\n\n'
+        "- **Data-backed considerations** when appropriate, without advising a purchase/sale decision.\n\n"
         "Example response structure:\n\n"
         "Based on analysis of [X] transactions over [time period], the average price in [area] is [number] [currency] per square foot. "
         "This represents a [percentage] change compared to [comparison period].\n\n"
         "Key trends include [trend description with supporting numbers]. [Area A] shows particularly strong performance with [specific metric], "
         "while [Area B] demonstrates [different pattern] with [supporting data].\n\n"
-        "For investors seeking [criteria mentioned in query], I recommend focusing on [areas/property types] because [data-driven reasoning with specific numbers]."
+        "For investors examining [criteria mentioned in query], the data points to [areas/property types] as candidates for further review because [data-driven reasoning with specific numbers]."
     ),
 )
 
@@ -222,7 +227,8 @@ async def show_listings(
 
     Use this when the user asks to show, list, find, or browse matching sale/rental listings.
     Args:
-        mode: "rent" or "sale".
+        mode: "rent" or "sale". Use "rent" for generic listing/inventory/property requests unless
+            the user explicitly asks for sale, buying, purchase, for-sale, resale, or off-plan.
         area: Dubai area/community name, e.g. "Business Bay".
         property_type: Listing type, e.g. "Apartment", "Villa", or leave blank.
         bedrooms: Exact bedroom value if a single value is requested, e.g. "1", "2", or "studio".
@@ -237,8 +243,9 @@ async def show_listings(
     subject = "rental listings" if mode == "rent" else "sales listings"
     location = f" in {area}" if area else ""
     return (
-        f"Requested matching {subject}{location}. "
-        "The inline card shows the current exact matches and count."
+        f"Opening matching {subject}{location}. "
+        "Do not describe availability, counts, prices, or example listings in your text; "
+        "the inline card is the source of truth for exact matches."
     )
 
 
@@ -260,6 +267,54 @@ async def show_market_trend(
     """
     subject = area or "the Dubai market"
     return f"Showing price trend analytics for {subject}."
+
+
+@agent.tool_plain
+async def show_chart(
+    dataset: str = "sales",
+    metric: str = "transaction_count",
+    group_by: str = "area",
+    chart_type: str = "horizontal_bar",
+    area: str = "",
+    areas: AreaComparisonInput | None = None,
+    sort_direction: Literal["desc", "asc"] = "desc",
+    property_usage: str = "Residential",
+    property_type: str = "",
+    days: int = 365,
+    limit: int = 8,
+) -> str:
+    """Render a configurable chart inline in the chat.
+
+    Use this when the user asks for a custom graph, chart, dashboard widget,
+    ranking, breakdown, distribution, or slice-and-dice style analysis.
+    Args:
+        dataset: "sales", "rentals", "areas", or "projects". Use "areas" for citywide
+            area yield rankings.
+        metric: Sales metrics: transaction_count, total_volume, avg_price, median_price,
+            avg_price_sqm, median_price_sqm, avg_price_sqft, median_price_sqft. Rental
+            metrics: contract_count, total_annual_value, avg_rent, median_rent,
+            median_rent_sqm, median_rent_sqft. Area metrics: gross_yield_pct. Project
+            metrics: project_count, active_projects, completed_projects, pipeline_units,
+            units_delivering_next_12_months, sales_transaction_count_12m,
+            rental_contract_count_12m, total_sales_volume_12m, gross_yield_pct,
+            avg_completion_pct.
+        group_by: Sales: time, area, property_type, bedrooms, project, master_project,
+            transaction_type. Rentals: time, area, property_type, project, master_project,
+            tenant_type. Projects: area, developer, completion_status, pipeline_status,
+            master_project.
+        chart_type: "line", "bar", "horizontal_bar", or "doughnut". Use line for time.
+        area: Optional Dubai area/community filter, e.g. "JVC".
+        areas: Optional array of 2-5 Dubai area/community names for comparisons, e.g.
+            ["Dubai Marina", "JVC", "Business Bay"]. Use group_by="time" for trend
+            comparisons or group_by="area" for side-by-side area comparisons.
+        sort_direction: "desc" for top/highest/largest charts, "asc" for bottom/lowest/cheapest charts.
+        property_usage: Optional usage filter, usually "Residential" or "Commercial".
+        property_type: Optional sales/rental property type filter, e.g. "Unit", "Villa", "Flat".
+            Area yield charts default to "Flat" unless the user explicitly asks for another type.
+        days: Lookback window for sales/rental charts. Default is 365 only when no user period is specified.
+        limit: Number of ranked categories to show.
+    """
+    return "Building a custom chart from the selected Dubai real estate data."
 
 
 @agent.tool
@@ -355,7 +410,7 @@ async def get_area_snapshot(ctx: RunContext[None], area: str) -> dict[str, Any]:
                 "median_annual_rent": _float_or_none(row["median_annual_rent"]),
                 "avg_sale_price_sqm_12m": _float_or_none(row["avg_sale_price_sqm_12m"]),
                 "avg_rent_price_sqm_12m": _float_or_none(row["avg_rent_price_sqm_12m"]),
-                "gross_yield_pct": _float_or_none(row["gross_yield_pct"]),
+                "gross_yield_pct": _computed_area_yield_pct(row),
             },
             "top_developers": _string_list(row.get("top_developers")),
             "top_master_projects": _string_list(row.get("top_master_projects")),
@@ -372,9 +427,7 @@ async def get_area_snapshot(ctx: RunContext[None], area: str) -> dict[str, Any]:
                     "sales_transaction_count_12m": _int_value(
                         project["sales_transaction_count_12m"]
                     ),
-                    "total_sales_volume_12m": _float_or_none(
-                        project["total_sales_volume_12m"]
-                    ),
+                    "total_sales_volume_12m": _float_or_none(project["total_sales_volume_12m"]),
                 }
                 for project in project_rows
             ],
@@ -461,22 +514,14 @@ async def compare_areas(
                         row["units_delivering_next_12_months"]
                     ),
                     "active_developers": _int_value(row["active_developers"]),
-                    "sales_transaction_count_12m": _int_value(
-                        row["sales_transaction_count_12m"]
-                    ),
-                    "rental_contract_count_12m": _int_value(
-                        row["rental_contract_count_12m"]
-                    ),
+                    "sales_transaction_count_12m": _int_value(row["sales_transaction_count_12m"]),
+                    "rental_contract_count_12m": _int_value(row["rental_contract_count_12m"]),
                     "total_sales_volume_12m": _float_or_none(row["total_sales_volume_12m"]),
                     "median_sale_price": _float_or_none(row["median_sale_price"]),
                     "median_annual_rent": _float_or_none(row["median_annual_rent"]),
-                    "avg_sale_price_sqm_12m": _float_or_none(
-                        row["avg_sale_price_sqm_12m"]
-                    ),
-                    "avg_rent_price_sqm_12m": _float_or_none(
-                        row["avg_rent_price_sqm_12m"]
-                    ),
-                    "gross_yield_pct": _float_or_none(row["gross_yield_pct"]),
+                    "avg_sale_price_sqm_12m": _float_or_none(row["avg_sale_price_sqm_12m"]),
+                    "avg_rent_price_sqm_12m": _float_or_none(row["avg_rent_price_sqm_12m"]),
+                    "gross_yield_pct": _computed_area_yield_pct(row),
                     "top_master_projects": _string_list(row.get("top_master_projects")),
                 }
             )
@@ -513,7 +558,7 @@ async def get_rental_market_pulse(
     """
     resolved_area = await _resolve_area_name(area)
     resolved_property_type = _project_type_for_rent(property_type)
-    safe_period_days = _clamp(period_days, 30, 1095)
+    safe_period_days = _clamp(period_days, 30, 3650)
 
     where = [
         "area_name_en = {area:String}",
@@ -608,9 +653,7 @@ async def get_rental_market_pulse(
                     "property_type": item["property_type"] or "Unknown",
                     "contract_count": _int_value(item["contract_count"]),
                     "median_annual_rent_aed": _float_or_none(item["median_annual_rent"]),
-                    "median_rent_per_sqm_aed": _float_or_none(
-                        item["median_rent_per_sqm"]
-                    ),
+                    "median_rent_per_sqm_aed": _float_or_none(item["median_rent_per_sqm"]),
                 }
                 for item in breakdown_rows
             ],
@@ -622,7 +665,7 @@ async def get_rental_market_pulse(
 
 @agent.tool
 async def get_market_pulse(
-    ctx: RunContext[None], area: str, period_days: int = 90
+    ctx: RunContext[None], area: str, period_days: int = 365
 ) -> dict[str, Any]:
     """Get vital market statistics for a specific area.
 
@@ -632,12 +675,13 @@ async def get_market_pulse(
     Args:
         ctx: Runtime context (unused)
         area: Area name (e.g., "Dubai Marina", "Downtown Dubai")
-        period_days: Analysis period in days (default: 90)
+        period_days: Analysis period in days. Default is 365 when no user period is specified.
 
     Returns:
         Dictionary with price, yield, volume, and trend data
     """
     resolved_area = await _resolve_area_name(area)
+    safe_period_days = _clamp(period_days, 30, 3650)
     sql = """
     WITH (
         SELECT max(instance_date)
@@ -667,14 +711,14 @@ async def get_market_pulse(
             sql,
             {
                 "area": resolved_area,
-                "period_days": _clamp(period_days, 30, 1095),
+                "period_days": safe_period_days,
             },
         )
 
         if not rows or int(rows[0].get("transaction_count") or 0) == 0:
             return {
                 "success": False,
-                "error": f"No data found for area '{area}' in the last {period_days} days",
+                "error": f"No data found for area '{area}' in the last {safe_period_days} days",
             }
 
         row = rows[0]
@@ -682,7 +726,7 @@ async def get_market_pulse(
             "success": True,
             "requested_area": area,
             "area": resolved_area,
-            "period_days": _clamp(period_days, 30, 1095),
+            "period_days": safe_period_days,
             "transaction_count": _int_value(row["transaction_count"]),
             "median_price_aed": _float_or_none(row["median_price"]),
             "avg_price_aed": _float_or_none(row["avg_price"]),
@@ -701,16 +745,16 @@ async def rank_areas(
     ctx: RunContext[None],
     metric: str = "volume",
     limit: int = 5,
-    period_days: int = 90,
+    period_days: int = 365,
 ) -> dict[str, Any]:
     """Rank top areas by a specific metric.
 
     Args:
         ctx: Runtime context (unused)
         metric: Ranking metric - "volume" (transaction count), "price" (median price),
-                or "growth" (price change percentage)
+                "growth" (price change percentage), or "yield" (gross rental yield)
         limit: Number of top areas to return (default: 5)
-        period_days: Analysis period in days (default: 90)
+        period_days: Analysis period in days. Default is 365 when no user period is specified.
 
     Returns:
         List of top areas with their respective metrics
@@ -758,6 +802,63 @@ async def rank_areas(
         GROUP BY area_name_en
         HAVING transaction_count >= 10
         ORDER BY median_price DESC
+        LIMIT {limit:Int32}
+        """
+    elif metric == "yield":
+        sql = """
+        WITH
+            anchor AS (
+                SELECT max(instance_date) AS max_date
+                FROM ch_transactions
+                WHERE trans_group_en = 'Sales' AND actual_worth > 0
+            ),
+            sales AS (
+                SELECT
+                    area_name_en AS area,
+                    median(actual_worth) AS median_sale_price,
+                    count() AS sales_count
+                FROM ch_transactions
+                WHERE
+                    instance_date >= (SELECT max_date FROM anchor) - {period_days:Int32}
+                    AND instance_date <= (SELECT max_date FROM anchor)
+                    AND trans_group_en = 'Sales'
+                    AND actual_worth > 0
+                    AND property_usage_en = 'Residential'
+                    AND property_type_en = 'Unit'
+                    AND area_name_en != ''
+                    AND lower(area_name_en) != 'unknown'
+                GROUP BY area
+                HAVING sales_count >= 250
+            ),
+            rentals AS (
+                SELECT
+                    area_name_en AS area,
+                    median(annual_amount) AS median_annual_rent,
+                    count() AS rental_count
+                FROM ch_rent_contracts
+                WHERE
+                    contract_start_date >= (SELECT max_date FROM anchor) - {period_days:Int32}
+                    AND contract_start_date <= (SELECT max_date FROM anchor)
+                    AND contract_start_date <= today()
+                    AND annual_amount > 0
+                    AND property_usage_en = 'Residential'
+                    AND ejari_property_type_en = 'Flat'
+                    AND area_name_en != ''
+                    AND lower(area_name_en) != 'unknown'
+                GROUP BY area
+                HAVING rental_count >= 250
+            )
+        SELECT
+            s.area,
+            round(r.median_annual_rent / nullIf(s.median_sale_price, 0) * 100, 2) AS gross_yield_pct,
+            round(s.median_sale_price, 0) AS median_sale_price,
+            round(r.median_annual_rent, 0) AS median_annual_rent,
+            s.sales_count,
+            r.rental_count
+        FROM sales AS s
+        INNER JOIN rentals AS r ON s.area = r.area
+        WHERE gross_yield_pct BETWEEN 1 AND 25
+        ORDER BY gross_yield_pct DESC
         LIMIT {limit:Int32}
         """
     elif metric == "growth":
@@ -810,16 +911,17 @@ async def rank_areas(
     else:
         return {
             "success": False,
-            "error": f"Invalid metric '{metric}'. Use 'volume', 'price', or 'growth'",
+            "error": f"Invalid metric '{metric}'. Use 'volume', 'price', 'growth', or 'yield'",
         }
 
     try:
-        rows = await query(sql, {"period_days": period_days, "limit": limit})
+        safe_period_days = _clamp(period_days, 30, 3650)
+        rows = await query(sql, {"period_days": safe_period_days, "limit": limit})
 
         if not rows:
             return {
                 "success": False,
-                "error": f"No data found for metric '{metric}' in the last {period_days} days",
+                "error": f"No data found for metric '{metric}' in the last {safe_period_days} days",
             }
 
         areas = []
@@ -840,6 +942,17 @@ async def rank_areas(
                         "transaction_count": _int_value(row["transaction_count"]),
                     }
                 )
+            elif metric == "yield":
+                areas.append(
+                    {
+                        "area": row["area"],
+                        "gross_yield_pct": _float_or_none(row["gross_yield_pct"]),
+                        "median_sale_price_aed": _float_or_none(row["median_sale_price"]),
+                        "median_annual_rent_aed": _float_or_none(row["median_annual_rent"]),
+                        "sales_transaction_count": _int_value(row["sales_count"]),
+                        "rental_contract_count": _int_value(row["rental_count"]),
+                    }
+                )
             elif metric == "growth":
                 areas.append(
                     {
@@ -853,7 +966,7 @@ async def rank_areas(
         return {
             "success": True,
             "metric": metric,
-            "period_days": period_days,
+            "period_days": safe_period_days,
             "top_areas": areas,
         }
     except Exception as e:
@@ -918,9 +1031,7 @@ async def rank_upcoming_project_areas(
                     "active_developers": _int_value(row["active_developers"]),
                     "avg_completion_pct": _float_or_none(row["avg_completion_pct"]),
                     "avg_delivery_confidence": _float_or_none(row["avg_delivery_confidence"]),
-                    "sales_transaction_count_12m": _int_value(
-                        row["sales_transaction_count_12m"]
-                    ),
+                    "sales_transaction_count_12m": _int_value(row["sales_transaction_count_12m"]),
                     "total_sales_volume_12m": _float_or_none(row["total_sales_volume_12m"]),
                     "top_developers": list(row.get("top_developers") or [])[:5],
                     "top_master_projects": list(row.get("top_master_projects") or [])[:5],
@@ -1040,12 +1151,8 @@ async def search_development_projects(
                     "units": _int_value(row["no_of_units"]),
                     "percent_completed": _float_or_none(row["percent_completed"]),
                     "delivery_confidence": _float_or_none(row["delivery_confidence"]),
-                    "sales_transaction_count_12m": _int_value(
-                        row["sales_transaction_count_12m"]
-                    ),
-                    "rental_contract_count_12m": _int_value(
-                        row["rental_contract_count_12m"]
-                    ),
+                    "sales_transaction_count_12m": _int_value(row["sales_transaction_count_12m"]),
+                    "rental_contract_count_12m": _int_value(row["rental_contract_count_12m"]),
                     "total_sales_volume_12m": _float_or_none(row["total_sales_volume_12m"]),
                     "median_sale_price": _float_or_none(row["median_sale_price"]),
                     "median_annual_rent": _float_or_none(row["median_annual_rent"]),
@@ -1166,15 +1273,9 @@ async def get_developer_pipeline(
                 "units_delivering_next_12_months": _int_value(
                     summary["units_delivering_next_12_months"]
                 ),
-                "avg_active_completion_pct": _float_or_none(
-                    summary["avg_active_completion_pct"]
-                ),
-                "sales_transaction_count_12m": _int_value(
-                    summary["sales_transaction_count_12m"]
-                ),
-                "total_sales_volume_12m": _float_or_none(
-                    summary["total_sales_volume_12m"]
-                ),
+                "avg_active_completion_pct": _float_or_none(summary["avg_active_completion_pct"]),
+                "sales_transaction_count_12m": _int_value(summary["sales_transaction_count_12m"]),
+                "total_sales_volume_12m": _float_or_none(summary["total_sales_volume_12m"]),
             },
             "top_areas": [
                 {

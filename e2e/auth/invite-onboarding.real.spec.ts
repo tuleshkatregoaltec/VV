@@ -16,13 +16,13 @@ import {
 const OWNER_PASSWORD = 'OwnerPassword123!';
 const MEMBER_PASSWORD = 'MemberPassword123!';
 const WRONG_PASSWORD = 'WrongPassword123!';
-const ADMIN_PASSWORD = 'admin123';
+const ADMIN_EMAIL = process.env.FIRST_SUPERUSER ?? 'admin@example.com';
+const ADMIN_PASSWORD = process.env.FIRST_SUPERUSER_PASSWORD ?? 'admin123';
 
 async function createOwnerWithActiveOrganization(request: APIRequestContext) {
-	const adminEmail = 'admin@example.com';
 	const ownerEmail = uniqueEmail('owner');
 
-	const adminSession = await loginUser(request, adminEmail, ADMIN_PASSWORD);
+	const adminSession = await loginUser(request, ADMIN_EMAIL, ADMIN_PASSWORD);
 	const ownerSession = await signupUser(request, {
 		email: ownerEmail,
 		password: OWNER_PASSWORD,

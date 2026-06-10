@@ -26,6 +26,11 @@ function formatNumber(value: number | null | undefined): string {
 	return Math.round(Number(value ?? 0)).toLocaleString()
 }
 
+function periodLabel(): string | null {
+	if (!points.length) return null
+	return `${points[0]?.date} to ${points[points.length - 1]?.date}`
+}
+
 function createChart() {
 	if (!canvas || points.length === 0) return
 	chart?.destroy()
@@ -144,9 +149,16 @@ $effect(() => {
 		</div>
 
 		<div class="rounded-md border border-border bg-panel p-3 text-xs leading-5 text-fg-3">
-			Latest average price is
+			<span class="font-semibold text-fg-2">Source:</span>
+			DLD sales transactions
+			{#if periodLabel()}
+				<span class="mx-1 text-fg-5">/</span>
+				<span class="font-semibold text-fg-2">Period:</span>
+				{periodLabel()}
+			{/if}
+			<span class="mx-1 text-fg-5">/</span>
+			Latest average price:
 			<span class="font-semibold text-fg-1">{formatMoney(points[points.length - 1]?.avg_price)}</span>
-			across the selected transaction scope.
 		</div>
 	</div>
 {/if}

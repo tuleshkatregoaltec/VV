@@ -1,10 +1,8 @@
 from fastapi import APIRouter, Depends, Query
-from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.dependencies import AuthContext, require_active_subscription
 from app.listings.models import ListingDetailResponse, ListingListResponse, ListingMode
-from app.listings.service import get_demo_listing, list_demo_listings
-from app.postgres import get_db_session
+from app.listings.service import get_listing_from_clickhouse, list_listings_from_clickhouse
 
 router = APIRouter(prefix="/api/v1/listings", tags=["listings"])
 
@@ -20,12 +18,10 @@ async def list_listings(
     bedrooms: str | None = Query(default=None, max_length=40),
     price_min: int | None = Query(default=None, ge=0),
     price_max: int | None = Query(default=None, ge=0),
-    db: AsyncSession = Depends(get_db_session),
     context: AuthContext = Depends(require_active_subscription),
 ):
-    """List locally imported PropertyFinder listings for the demo."""
-    return await list_demo_listings(
-        db=db,
+    """List Property Finder listings from ph_box ClickHouse."""
+    return await list_listings_from_clickhouse(
         mode=mode,
         limit=limit,
         offset=offset,
@@ -41,8 +37,7 @@ async def list_listings(
 @router.get("/{listing_id}", response_model=ListingDetailResponse)
 async def get_listing(
     listing_id: str,
-    db: AsyncSession = Depends(get_db_session),
     context: AuthContext = Depends(require_active_subscription),
 ):
-    """Get one locally imported PropertyFinder listing for the demo."""
-    return await get_demo_listing(db, listing_id)
+    """Get one Property Finder listing from ph_box ClickHouse."""
+    return await get_listing_from_clickhouse(listing_id)

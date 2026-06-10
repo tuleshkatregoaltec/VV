@@ -68,7 +68,7 @@ const netOk = $derived(Math.abs(vat?.netVatPosition ?? 0) < 1000)
 		] as row (row.label)}
 			<tr class="border-b border-[#D9D9D9] hover:bg-slate-50/60 {row.label === 'Net VAT Position' ? (row.ok ? 'bg-[#E8F5E9]' : 'bg-[#FFF3F3]') : ''}">
 				<td class="px-2 py-[3px] text-left text-[10px] text-slate-800 {row.label === 'Net VAT Position' ? 'font-semibold' : ''}" colspan="3">{row.label}</td>
-				<td class="px-2 py-[3px] text-right tabular-nums text-[10px] font-medium {row.label === 'Net VAT Position' ? (row.ok ? 'text-emerald-700' : 'text-rose-700') : 'text-slate-900'}">AED {row.value}</td>
+				<td class="px-2 py-[3px] text-right tabular-nums text-[10px] font-medium {row.label === 'Net VAT Position' ? (row.ok ? 'text-slate-900' : 'text-rose-700') : 'text-slate-900'}">AED {row.value}</td>
 			</tr>
 		{/each}
 

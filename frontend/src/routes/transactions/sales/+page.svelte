@@ -2,7 +2,11 @@
 import { createQuery } from '@tanstack/svelte-query'
 import { RotateCcw } from 'lucide-svelte'
 import type { ProjectSearchItem } from '$lib/api/analytics'
-import { type TransactionResponseOutput, transactions } from '$lib/api/transactions'
+import {
+	type TransactionExportFormat,
+	type TransactionResponseOutput,
+	transactions
+} from '$lib/api/transactions'
 import ProjectSelector from '$lib/components/analytics/ProjectSelector.svelte'
 import SearchableDropdown from '$lib/components/dropdowns/SearchableDropdown.svelte'
 import FilterPanel from '$lib/components/filters/FilterPanel.svelte'
@@ -48,6 +52,11 @@ interface TransformedTransaction {
 	landmark: string
 	metro: string
 	mall: string
+}
+
+type FilterChip = {
+	label: string
+	value: string
 }
 
 // Dropdown context is provided by transactions/+layout.svelte
@@ -207,6 +216,34 @@ function resetFilters() {
 	currentPage = 1
 }
 
+function addSelectedChip(chips: FilterChip[], label: string, value: string) {
+	if (value && value !== 'All') chips.push({ label, value })
+}
+
+function buildActiveFilterChips(): FilterChip[] {
+	const chips: FilterChip[] = [
+		{ label: 'Dataset', value: propertyType.current },
+		{ label: 'Period', value: timeframe.current },
+		{ label: 'Project', value: selectedSubProject ?? selectedProject?.name ?? 'All projects' }
+	]
+
+	addSelectedChip(chips, 'Building', localFilters.selectedBuilding)
+	addSelectedChip(chips, 'Property type', localFilters.selectedPropertyType)
+	addSelectedChip(
+		chips,
+		propertyType.current === PROPERTY_USAGE.RESIDENTIAL ? 'Bedrooms' : 'Sub type',
+		localFilters.selectedBedroomsOrSubType
+	)
+	addSelectedChip(chips, 'Registration', localFilters.selectedRegistration)
+	addSelectedChip(chips, 'Area', localFilters.areaRange)
+	addSelectedChip(chips, 'Price', localFilters.priceRange)
+	addSelectedChip(chips, 'Price/sq.m', localFilters.pricePerSqMRange)
+
+	return chips
+}
+
+let activeFilterChips = $derived(buildActiveFilterChips())
+
 function handleRowClick(row: TransformedTransaction) {
 	selectedTransaction = row
 }
@@ -248,18 +285,18 @@ $effect(() => {
 	selectedTransactionIds = new Set() // Clear selection on global filter change
 })
 
-let isExporting = $state(false)
+let exportingFormat = $state<TransactionExportFormat | null>(null)
 
-async function handleExport() {
-	isExporting = true
+async function handleExport(format: TransactionExportFormat) {
+	exportingFormat = format
 	try {
 		const filters = withSelectedIds(buildApiFilters(), 'transaction_ids', selectedTransactionIds)
-		const blob = await transactions.exportSales(filters)
+		const blob = await transactions.exportSales(filters, format)
 
 		const url = window.URL.createObjectURL(blob)
 		const a = document.createElement('a')
 		a.href = url
-		a.download = `sales_export_${Date.now()}.xlsx`
+		a.download = `sales_export_${Date.now()}.${format}`
 		document.body.appendChild(a)
 		a.click()
 		window.URL.revokeObjectURL(url)
@@ -268,7 +305,7 @@ async function handleExport() {
 		console.error('Export failed:', error)
 		alert(`Failed to export data: ${error instanceof Error ? error.message : 'Unknown error'}`)
 	} finally {
-		isExporting = false
+		exportingFormat = null
 	}
 }
 </script>
@@ -395,14 +432,43 @@ async function handleExport() {
 	</details>
 </div>
 
+<div
+	class="mb-4 flex flex-col gap-3 rounded-md border border-border bg-card px-4 py-3 lg:flex-row lg:items-center lg:justify-between"
+>
+	<div class="min-w-0">
+		<p class="text-xs font-semibold uppercase tracking-[0.18em] text-fg-4">Active filters</p>
+		<div class="mt-2 flex flex-wrap gap-2">
+			{#each activeFilterChips as chip (chip.label)}
+				<span class="rounded-sm border border-border bg-elevated px-2 py-1 text-xs text-fg-2">
+					<span class="font-medium text-fg-4">{chip.label}</span>
+					<span class="ml-1 font-semibold text-fg-1">{chip.value}</span>
+				</span>
+			{/each}
+		</div>
+	</div>
+	<div class="shrink-0 text-sm font-medium text-fg-2">
+		{totalRecords.toLocaleString()} matching transactions
+	</div>
+</div>
+
 <DataPanel
 	title="Sales records"
-	description="Transaction rows reflect the selected global and local filter context."
-	onExport={handleExport}
-	exportLabel={selectedTransactionIds.size > 0
-		? `Export selected (${selectedTransactionIds.size})`
-		: 'Export filtered (100 max)'}
-	exportDisabled={isExporting}
+	description={selectedTransactionIds.size > 0
+		? `Exporting ${selectedTransactionIds.size} selected rows as Excel or raw CSV.`
+		: 'Export filtered rows as DLD-metadata Excel or raw CSV, up to 50,000 rows.'}
+	exportActions={[
+		{
+			label: 'Excel',
+			onClick: () => handleExport('xlsx'),
+			disabled: exportingFormat !== null
+		},
+		{
+			label: 'CSV',
+			onClick: () => handleExport('csv'),
+			disabled: exportingFormat !== null,
+			variant: 'secondary'
+		}
+	]}
 	{columns}
 	data={displayData}
 	onrowclick={handleRowClick}

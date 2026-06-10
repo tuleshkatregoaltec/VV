@@ -1,15 +1,12 @@
-import hashlib
-import io
 import os
 from datetime import datetime, timezone
+from inspect import isawaitable
 from pathlib import Path
-from typing import Any
 from urllib.parse import urlparse
 
 import aioboto3
 from dotenv import dotenv_values
 from fastapi import HTTPException
-from PIL import Image, ImageOps
 from pydantic_ai import Agent
 from pydantic_ai.usage import UsageLimits
 from sqlmodel import func, select
@@ -26,9 +23,7 @@ from app.news.models import (
 )
 
 NEWS_THUMBNAIL_PREFIX = "media/news/thumbnails/"
-NEWS_THUMBNAIL_CACHE_SIZE = (288, 192)
-NEWS_THUMBNAIL_CACHE_QUALITY = 78
-NEWS_THUMBNAIL_FALLBACK_CONTENT_TYPE = "application/octet-stream"
+NEWS_THUMBNAIL_SIGNED_URL_TTL_SECONDS = 60 * 60 * 24
 NEWS_SUMMARY_ARTICLE_LIMIT = 50
 NEWS_SUMMARY_SYSTEM_PROMPT = """\
 You write concise market intelligence for a Dubai real estate dashboard.
@@ -207,146 +202,28 @@ def build_s3_client_kwargs() -> dict[str, str]:
     }
 
 
-def news_thumbnail_cache_dir() -> Path:
-    path = Path(env_value("NEWS_THUMBNAIL_CACHE_DIR") or ".cache/news-thumbnails")
-    if not path.is_absolute():
-        path = Path.cwd() / path
-    return path
-
-
-def news_thumbnail_cache_slug(article: NewsArticle) -> str:
-    key_hash = hashlib.sha256((article.thumbnail_url or "").encode("utf-8")).hexdigest()[:16]
-    return f"article-{article.id}-{key_hash}"
-
-
-def news_thumbnail_cache_path(article: NewsArticle) -> Path:
-    return news_thumbnail_cache_dir() / f"{news_thumbnail_cache_slug(article)}.webp"
-
-
-def news_thumbnail_original_cache_path(article: NewsArticle) -> Path:
-    return news_thumbnail_cache_dir() / f"{news_thumbnail_cache_slug(article)}.original"
-
-
-def news_thumbnail_original_meta_path(article: NewsArticle) -> Path:
-    return news_thumbnail_cache_dir() / f"{news_thumbnail_cache_slug(article)}.content-type"
-
-
-def news_thumbnail_miss_cache_path(article: NewsArticle) -> Path:
-    return news_thumbnail_cache_dir() / f"{news_thumbnail_cache_slug(article)}.missing"
-
-
-def is_image_content_type(content_type: str | None) -> bool:
-    if not content_type:
-        return False
-    return content_type.split(";", 1)[0].strip().lower().startswith("image/")
-
-
-def write_thumbnail_miss(article: NewsArticle, detail: str) -> None:
-    path = news_thumbnail_miss_cache_path(article)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(detail)
-
-
-def cached_original_thumbnail(article: NewsArticle) -> tuple[Path, str] | None:
-    path = news_thumbnail_original_cache_path(article)
-    meta_path = news_thumbnail_original_meta_path(article)
-    if not path.exists():
-        return None
-    if not meta_path.exists():
-        path.unlink(missing_ok=True)
-        return None
-    content_type = meta_path.read_text().strip() or NEWS_THUMBNAIL_FALLBACK_CONTENT_TYPE
-    if not is_image_content_type(content_type):
-        path.unlink(missing_ok=True)
-        meta_path.unlink(missing_ok=True)
-        write_thumbnail_miss(article, f"Unsupported thumbnail content type: {content_type}")
-        return None
-    return path, content_type
-
-
-def write_cached_original_thumbnail(
-    article: NewsArticle,
-    data: bytes,
-    content_type: str,
-) -> Path:
-    path = news_thumbnail_original_cache_path(article)
-    meta_path = news_thumbnail_original_meta_path(article)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp_path = path.with_suffix(".tmp")
-    tmp_path.write_bytes(data)
-    tmp_path.replace(path)
-    meta_path.write_text(content_type)
-    return path
-
-
-def build_cached_thumbnail(data: bytes, cache_path: Path) -> None:
-    cache_path.parent.mkdir(parents=True, exist_ok=True)
-    image = Image.open(io.BytesIO(data))
-    image = ImageOps.exif_transpose(image)
-    image = ImageOps.fit(
-        image,
-        NEWS_THUMBNAIL_CACHE_SIZE,
-        method=Image.Resampling.LANCZOS,
-    )
-    if image.mode not in ("RGB", "RGBA"):
-        image = image.convert("RGB")
-
-    tmp_path = cache_path.with_suffix(".tmp")
-    image.save(
-        tmp_path,
-        format="WEBP",
-        quality=NEWS_THUMBNAIL_CACHE_QUALITY,
-        method=6,
-    )
-    tmp_path.replace(cache_path)
-
-
-async def download_news_thumbnail(key: str) -> tuple[bytes, str]:
+async def signed_news_thumbnail_url(key: str) -> str:
     bucket = require_env("S3_BUCKET_NAME", "S3_BUCKET", "AWS_BUCKET_NAME", "AWS_BUCKET")
     session = aioboto3.Session()
     async with session.client("s3", **build_s3_client_kwargs()) as s3:  # type: ignore[arg-type]
         try:
-            response: dict[str, Any] = await s3.get_object(Bucket=bucket, Key=key)
+            signed_url = s3.generate_presigned_url(
+                "get_object",
+                Params={"Bucket": bucket, "Key": key},
+                ExpiresIn=NEWS_THUMBNAIL_SIGNED_URL_TTL_SECONDS,
+            )
         except Exception as exc:
             raise HTTPException(status_code=404, detail="Thumbnail not found") from exc
-        data = await response["Body"].read()
-        content_type = response.get("ContentType") or NEWS_THUMBNAIL_FALLBACK_CONTENT_TYPE
-        return data, content_type
+        if isawaitable(signed_url):
+            signed_url = await signed_url
+        return str(signed_url)
 
 
 async def fetch_news_thumbnail(
     db: AsyncSession,
     article_id: int,
-) -> tuple[Path, str]:
+) -> str:
     article = await db.get(NewsArticle, article_id)
     if article is None or not is_news_thumbnail_key(article.thumbnail_url):
         raise HTTPException(status_code=404, detail="Thumbnail not found")
-
-    cache_path = news_thumbnail_cache_path(article)
-    if cache_path.exists():
-        return cache_path, "image/webp"
-    if news_thumbnail_miss_cache_path(article).exists():
-        raise HTTPException(status_code=404, detail="Thumbnail not found")
-
-    original_cache = cached_original_thumbnail(article)
-    if original_cache is not None:
-        return original_cache
-    if news_thumbnail_miss_cache_path(article).exists():
-        raise HTTPException(status_code=404, detail="Thumbnail not found")
-
-    try:
-        data, content_type = await download_news_thumbnail(article.thumbnail_url)
-    except HTTPException:
-        write_thumbnail_miss(article, "Thumbnail not found")
-        raise
-
-    try:
-        build_cached_thumbnail(data, cache_path)
-    except Exception:
-        if is_image_content_type(content_type):
-            original_path = write_cached_original_thumbnail(article, data, content_type)
-            return original_path, content_type
-        write_thumbnail_miss(article, f"Unsupported thumbnail content type: {content_type}")
-        raise HTTPException(status_code=404, detail="Thumbnail not found") from None
-
-    return cache_path, "image/webp"
+    return await signed_news_thumbnail_url(article.thumbnail_url)

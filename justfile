@@ -99,3 +99,6 @@ load-clickhouse-local:
 
 build-clickhouse-facts:
 	set -a && source .env.dev && set +a && cd backend && uv run python -m scripts.clickhouse.build_fact_tables
+
+import-mashrooi-radar-demo:
+	set -a && source .env.dev && set +a && cd backend && uv run python -m scripts.radar.import_mashrooi_coordinates_demo

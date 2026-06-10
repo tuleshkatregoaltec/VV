@@ -7,8 +7,11 @@ import {
 	Download,
 	FileText,
 	ImageIcon,
+	Landmark,
 	Layers,
 	MapPin,
+	ShieldCheck,
+	TrendingUp,
 	WalletCards
 } from 'lucide-svelte'
 import { page } from '$app/state'
@@ -30,6 +33,8 @@ const paymentPlan = $derived(project?.payment_plan ?? [])
 const facilities = $derived(project?.facilities ?? [])
 const buildings = $derived(project?.buildings ?? [])
 const nearbyPoints = $derived(project?.nearby_points ?? [])
+const riskIndicators = $derived(project?.risk_indicators ?? [])
+const financialRiskMetrics = $derived(project?.financial_risk_metrics ?? [])
 const heroImage = $derived(project?.cover_image_url ?? gallery[0]?.url ?? '')
 const projectSummary = $derived(
 	compactText(project?.overview_excerpt ?? project?.overview) ||
@@ -60,6 +65,45 @@ function formatRange(from: number | null | undefined, to: number | null | undefi
 		return `${formatMoney(validFrom)} - ${formatMoney(validTo)}`
 	}
 	return formatMoney(validFrom ?? validTo)
+}
+
+function formatScore(value: number | null | undefined): string {
+	return value == null ? '~' : value.toFixed(1)
+}
+
+function formatInteger(value: number | null | undefined): string {
+	return value == null ? '~' : Math.round(value).toLocaleString()
+}
+
+function formatPct(value: number | null | undefined): string {
+	return value == null ? '~' : `${value.toFixed(1)}%`
+}
+
+function inventorySummary(): string {
+	if (!project) return '~'
+	if (project.units_sold != null && project.units_unsold != null) {
+		return `${formatInteger(project.units_sold)} sold / ${formatInteger(project.units_unsold)} unsold`
+	}
+	if (project.units_unsold != null) return `${formatInteger(project.units_unsold)} unsold`
+	return '~'
+}
+
+function riskPillClass(badge: string | null | undefined): string {
+	if (badge === 'Low') return 'border-teal-200 bg-teal-50 text-teal-700'
+	if (badge === 'Medium') return 'border-amber-200 bg-amber-50 text-amber-700'
+	if (badge === 'High') return 'border-rose-200 bg-rose-50 text-rose-700'
+	return 'border-slate-200 bg-slate-50 text-slate-600'
+}
+
+function riskPillLabel(badge: string | null | undefined): string {
+	if (badge === 'Low') return 'Low risk'
+	if (badge === 'Medium') return 'Medium risk'
+	if (badge === 'High') return 'High risk'
+	return badge ?? 'Review'
+}
+
+function indicatorBarWidth(score: number | null | undefined): number {
+	return Math.max(8, Math.min(100, score ?? 0))
 }
 
 function cleanDisplayText(value: string | null | undefined): string {
@@ -162,7 +206,7 @@ function hideBrokenImage(event: Event) {
 				</div>
 			</section>
 
-			<section class="grid gap-3 md:grid-cols-4">
+			<section class="grid gap-3 md:grid-cols-3 xl:grid-cols-6">
 				<div class="rounded-lg border border-border bg-card p-4 shadow-sm">
 					<p class="text-xs text-fg-4">Status</p>
 					<p class="mt-1 text-lg font-semibold text-fg-1">{project.status ?? 'TBD'}</p>
@@ -172,6 +216,14 @@ function hideBrokenImage(event: Event) {
 					<p class="mt-1 text-lg font-semibold text-fg-1">{project.sale_status ?? 'TBD'}</p>
 				</div>
 				<div class="rounded-lg border border-border bg-card p-4 shadow-sm">
+					<p class="text-xs text-fg-4">Launch</p>
+					<p class="mt-1 text-lg font-semibold text-fg-1">{project.launch_date ?? '~'}</p>
+				</div>
+				<div class="rounded-lg border border-border bg-card p-4 shadow-sm">
+					<p class="text-xs text-fg-4">Sold / unsold</p>
+					<p class="mt-1 text-base font-semibold leading-6 text-fg-1">{inventorySummary()}</p>
+				</div>
+				<div class="rounded-lg border border-border bg-card p-4 shadow-sm">
 					<p class="text-xs text-fg-4">Starting price</p>
 					<p class="mt-1 text-lg font-semibold text-fg-1">{formatMoney(project.min_price_aed)}</p>
 				</div>
@@ -179,6 +231,102 @@ function hideBrokenImage(event: Event) {
 					<p class="text-xs text-fg-4">Completion</p>
 					<p class="mt-1 text-lg font-semibold text-fg-1">{project.completion_date ?? 'TBD'}</p>
 				</div>
+			</section>
+
+			<section class="grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
+				<div class="rounded-lg border border-border bg-card p-5 shadow-sm">
+					<div class="flex flex-wrap items-start justify-between gap-4">
+						<div>
+							<p class="font-mono text-[10px] uppercase tracking-[0.08em] text-fg-4">
+								Internal / Project risk
+							</p>
+							<h2 class="mt-2 flex items-center gap-2 text-lg font-semibold text-fg-1">
+								<ShieldCheck size={18} strokeWidth={2} />
+								Risk cockpit
+							</h2>
+						</div>
+						<div class="rounded-md border px-3 py-2 text-right {riskPillClass(project.project_risk_badge)}">
+							<p class="text-[10px] uppercase tracking-[0.08em]">Project score</p>
+							<p class="text-2xl font-semibold tabular-nums">
+								{formatScore(project.project_score)}
+							</p>
+						</div>
+					</div>
+
+					<div class="mt-5 grid gap-3 sm:grid-cols-2">
+						{#each riskIndicators as indicator (indicator.key)}
+							<div class="rounded-md border border-border bg-panel px-3 py-3">
+								<div class="flex items-start justify-between gap-3">
+									<div class="min-w-0">
+										<p class="text-sm font-semibold text-fg-1">{indicator.label}</p>
+										<p class="mt-1 truncate text-xs text-fg-4">{indicator.note ?? 'Internal signal'}</p>
+									</div>
+									<span class="rounded-full border px-2 py-0.5 text-xs font-semibold {riskPillClass(indicator.status)}">
+										{riskPillLabel(indicator.status)}
+									</span>
+								</div>
+								<div class="mt-3 flex items-end justify-between gap-3">
+									<p class="text-lg font-semibold tabular-nums text-fg-1">
+										{indicator.value ?? '~'}
+									</p>
+									{#if indicator.score != null}
+										<p class="text-xs tabular-nums text-fg-4">
+											{formatScore(indicator.score)}
+										</p>
+									{/if}
+								</div>
+								{#if indicator.score != null}
+									<div class="mt-2 h-1.5 overflow-hidden rounded-full bg-card">
+										<div
+											class="h-full rounded-full bg-info"
+											style={`width: ${indicatorBarWidth(indicator.score)}%`}
+										></div>
+									</div>
+								{/if}
+							</div>
+						{/each}
+					</div>
+				</div>
+
+				<aside class="space-y-4">
+					<div class="rounded-lg border border-border bg-card p-5 shadow-sm">
+						<h2 class="mb-3 flex items-center gap-2 text-base font-semibold text-fg-1">
+							<Landmark size={17} strokeWidth={2} />
+							Financial risk
+						</h2>
+						<div class="space-y-2">
+							{#each financialRiskMetrics as metric (metric.key)}
+								<div class="flex items-center justify-between gap-3 rounded-md bg-panel px-3 py-2 text-sm">
+									<span class="min-w-0 truncate text-fg-4">{metric.label}</span>
+									<span class="font-semibold text-fg-1">{metric.value ?? '~'}</span>
+								</div>
+							{/each}
+						</div>
+					</div>
+
+					<div class="rounded-lg border border-border bg-card p-5 shadow-sm">
+						<h2 class="mb-3 flex items-center gap-2 text-base font-semibold text-fg-1">
+							<TrendingUp size={17} strokeWidth={2} />
+							Sales and feasibility
+						</h2>
+						<div class="mb-2 flex items-center justify-between rounded-md bg-panel px-3 py-2 text-sm">
+							<span class="text-fg-4">Absorption</span>
+							<span class="font-semibold text-fg-1">{formatPct(project.sales_absorption_pct)}</span>
+						</div>
+						<div class="mb-2 flex items-center justify-between rounded-md bg-panel px-3 py-2 text-sm">
+							<span class="text-fg-4">Total units</span>
+							<span class="font-semibold text-fg-1">{formatInteger(project.total_units)}</span>
+						</div>
+						<div class="flex items-center justify-between rounded-md bg-panel px-3 py-2 text-sm">
+							<span class="text-fg-4">Estimated project IRR</span>
+							<span class="font-semibold text-fg-1">{project.estimated_project_irr ?? '~'}</span>
+						</div>
+						<p class="mt-3 text-xs leading-5 text-fg-4">
+							{project.sales_inventory_source ?? 'Live inventory pending.'}
+						</p>
+						<p class="mt-1 text-xs leading-5 text-fg-4">Estimated IRR source: Feasibility model.</p>
+					</div>
+				</aside>
 			</section>
 
 			<section class="grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
@@ -251,6 +399,10 @@ function hideBrokenImage(event: Event) {
 							<div class="flex items-center justify-between gap-3 rounded-md bg-panel px-3 py-2">
 								<span class="text-fg-4">Sales status</span>
 								<span class="font-semibold text-fg-1">{project.sale_status ?? 'TBD'}</span>
+							</div>
+							<div class="flex items-center justify-between gap-3 rounded-md bg-panel px-3 py-2">
+								<span class="text-fg-4">Launch</span>
+								<span class="font-semibold text-fg-1">{project.launch_date ?? '~'}</span>
 							</div>
 							<div class="flex items-center justify-between gap-3 rounded-md bg-panel px-3 py-2">
 								<span class="text-fg-4">Completion</span>

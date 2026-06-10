@@ -6,5 +6,5 @@ test('stale cached user without a live auth session is redirected to /auth', asy
 	});
 
 	await page.goto('/dashboard');
-	await expect(page).toHaveURL(/\/auth$/);
+	await expect(page).toHaveURL(/\/auth\?next=%2Fdashboard$/);
 });

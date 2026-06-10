@@ -41,6 +41,14 @@ class FeasibilityChatDeps:
 class WorkspaceUnitMixUpdate(BaseModel):
     type: str
     count: int = Field(ge=0)
+    avgSizeSqm: float | None = Field(default=None, gt=0)
+    price_sqm: float | None = Field(default=None, gt=0)
+    parkingRatio: float | None = Field(default=None, ge=0)
+
+
+class WorkspaceUnitMixReplacement(BaseModel):
+    type: str
+    count: int = Field(ge=0)
     avgSizeSqm: float = Field(gt=0)
     price_sqm: float | None = Field(default=None, gt=0)
     parkingRatio: float | None = Field(default=None, ge=0)
@@ -56,6 +64,8 @@ workspace_chat_agent = Agent(
         "You are a Dubai real estate feasibility workspace assistant.\n\n"
         "The frontend owns the live workbook. You receive the current assumptions and workbook state each turn.\n"
         "Use tools for precise context or research, and use mutation tools when you want to suggest changes.\n"
+        "For unit mix changes, use replace_unit_mix when proposing a new complete target mix; omitted unit "
+        "types will be removed. Use update_unit_mix only for partial edits to listed existing unit types.\n"
         "Keep suggestions compact, practical, and evidence-led.\n"
         "When you call a mutation tool, do not write a long rationale. Use at most two short sentences "
         "that explain what the proposed change is and why it is being staged for approval."
@@ -182,7 +192,14 @@ async def update_prices(ctx: RunContext[FeasibilityChatDeps], prices: dict[str, 
 
 @workspace_chat_agent.tool_plain
 async def update_unit_mix(unit_mix: list[WorkspaceUnitMixUpdate]) -> str:
-    return f"Proposed unit mix update for {len(unit_mix)} unit type(s). Awaiting user approval."
+    """Patch only the listed unit types, keeping unmentioned unit types unchanged."""
+    return f"Proposed partial unit mix update for {len(unit_mix)} unit type(s). Awaiting user approval."
+
+
+@workspace_chat_agent.tool_plain
+async def replace_unit_mix(unit_mix: list[WorkspaceUnitMixReplacement]) -> str:
+    """Replace the full unit mix with exactly the listed unit types."""
+    return f"Proposed full unit mix replacement with {len(unit_mix)} unit type(s). Awaiting user approval."
 
 
 @workspace_chat_agent.tool_plain
@@ -200,7 +217,8 @@ async def update_payment_plan(payment_plan: FeasibilityPaymentPlan) -> str:
 _RESEARCH_TOOLS = {"show_transactions": "transactions", "show_analytics": "analytics"}
 _MUTATION_TOOLS = {
     "update_prices": "set_price_per_sqm",
-    "update_unit_mix": "set_unit_mix",
+    "update_unit_mix": "update_unit_mix",
+    "replace_unit_mix": "replace_unit_mix",
     "update_assumptions": "set_assumptions",
     "update_payment_plan": "set_payment_plan",
 }
@@ -213,6 +231,9 @@ def _extract_payload(part: ToolCallPart) -> Any:
     if part.tool_name == "update_unit_mix":
         raw = args.get("unit_mix", args)
         return [WorkspaceUnitMixUpdate(**row).model_dump(exclude_none=True) for row in raw]
+    if part.tool_name == "replace_unit_mix":
+        raw = args.get("unit_mix", args)
+        return [WorkspaceUnitMixReplacement(**row).model_dump(exclude_none=True) for row in raw]
     if part.tool_name == "update_assumptions":
         return args.get("assumptions", args)
     if part.tool_name == "update_payment_plan":

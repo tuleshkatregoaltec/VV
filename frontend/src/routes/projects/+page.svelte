@@ -131,7 +131,8 @@ const ddaPlotParams = $derived.by(() => {
 		south: roundCoordinate(ddaRequestViewport.south),
 		east: roundCoordinate(ddaRequestViewport.east),
 		north: roundCoordinate(ddaRequestViewport.north),
-		limit
+		limit,
+		include_valuations: true
 	}
 })
 const ddaOutlinesQuery = createQuery(() => projectQueries.ddaOutlines(ddaOutlineParams))

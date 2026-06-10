@@ -5,11 +5,11 @@ import { goto } from '$app/navigation'
 import { type ConversationListResponse, chat } from '$lib/api/chat'
 import CompactChatInput from '$lib/components/dashboard/CompactChatInput.svelte'
 import CompleteProfileModal from '$lib/components/dashboard/CompleteProfileModal.svelte'
+import CustomizableKpiGrid from '$lib/components/dashboard/CustomizableKpiGrid.svelte'
 import FullWidthMarketChart from '$lib/components/dashboard/FullWidthMarketChart.svelte'
 import AppFrame from '$lib/components/layout/AppFrame.svelte'
 import PageContainer from '$lib/components/layout/PageContainer.svelte'
 import NewsCard from '$lib/components/news/NewsCard.svelte'
-import { analyticsQueries } from '$lib/queries/analytics'
 import { chatKeys } from '$lib/queries/chat'
 import { getQueryClient } from '$lib/queries/client'
 import { newsQueries } from '$lib/queries/news'
@@ -75,27 +75,6 @@ $effect(() => {
 	return () => observer.disconnect()
 })
 
-const kpiQuery = createQuery(() => analyticsQueries.marketTrend(365))
-
-function formatPriceSqm(n: number): string {
-	return new Intl.NumberFormat('en-US').format(Math.round(n))
-}
-
-function formatPrice(n: number): string {
-	if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(2)}M`
-	if (n >= 1_000) return `${(n / 1_000).toFixed(0)}K`
-	return Math.round(n).toLocaleString()
-}
-
-function fmtPct(n: number | null | undefined): string | null {
-	if (n == null) return null
-	return `${n >= 0 ? '+' : ''}${n.toFixed(1)}%`
-}
-
-const lastPoint = $derived(
-	kpiQuery.data?.data?.length ? kpiQuery.data.data[kpiQuery.data.data.length - 1] : null
-)
-
 const SUGGESTIONS = [
 	'What are 2BR yields in Dubai Marina this quarter?',
 	'Compare JBR vs Palm Jumeirah price trends',
@@ -114,82 +93,11 @@ const SUGGESTIONS = [
 					{username ? `${username}'s workspace` : 'Market overview'}
 				</h1>
 				<p class="mt-1.5 text-sm text-fg-3">
-					Live market data · ask anything below or browse the latest transactions.
+					DLD market data · ask anything below or browse the latest transactions.
 				</p>
 			</div>
 
-			<!-- KPI Grid -->
-			<div class="grid grid-cols-1 gap-3 mb-3 sm:grid-cols-3">
-
-				<!-- Avg Price / sqm -->
-				<div class="ui-metric-card">
-					<div class="flex items-center justify-between mb-4">
-						<span class="font-mono text-[11px] uppercase tracking-[0.08em] text-fg-4">Avg. Price / sqm</span>
-						<svg class="h-[14px] w-[14px] text-fg-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z"/>
-						</svg>
-					</div>
-					{#if kpiQuery.isLoading}
-						<div class="h-9 w-32 animate-pulse rounded bg-panel"></div>
-						<div class="mt-2 h-4 w-20 animate-pulse rounded bg-panel"></div>
-					{:else}
-						<div class="font-display text-4xl font-normal leading-none tracking-normal text-fg-1 tabular-nums">
-							{lastPoint ? formatPriceSqm(lastPoint.avg_price_sqm) : '—'}
-						</div>
-						<p class="mt-1 text-[11px] text-fg-4">AED / sq.m</p>
-						{@const pct = fmtPct(kpiQuery.data?.avg_price_sqm_change_pct)}
-						{@const pos = (kpiQuery.data?.avg_price_sqm_change_pct ?? 0) >= 0}
-						{#if pct}
-							<p class="mt-2 font-mono text-xs {pos ? 'text-trend-up' : 'text-trend-down'}">
-								{pos ? '▲' : '▼'} {pct} YoY
-							</p>
-						{/if}
-					{/if}
-				</div>
-
-				<!-- Total Transactions -->
-				<div class="ui-metric-card">
-					<div class="flex items-center justify-between mb-4">
-						<span class="font-mono text-[11px] uppercase tracking-[0.08em] text-fg-4">Transactions</span>
-						<svg class="h-[14px] w-[14px] text-fg-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"/>
-						</svg>
-					</div>
-					{#if kpiQuery.isLoading}
-						<div class="h-9 w-28 animate-pulse rounded bg-panel"></div>
-					{:else}
-						<div class="font-display text-4xl font-normal leading-none tracking-normal text-fg-1 tabular-nums">
-							{kpiQuery.data ? kpiQuery.data.total_transactions.toLocaleString() : '—'}
-						</div>
-						<p class="mt-1 font-mono text-[10px] uppercase tracking-[0.06em] text-fg-4">Last 12 months</p>
-					{/if}
-				</div>
-
-				<!-- Avg Sale Price -->
-				<div class="ui-metric-card">
-					<div class="flex items-center justify-between mb-4">
-						<span class="font-mono text-[11px] uppercase tracking-[0.08em] text-fg-4">Avg. Sale Price</span>
-						<svg class="h-[14px] w-[14px] text-fg-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/>
-						</svg>
-					</div>
-					{#if kpiQuery.isLoading}
-						<div class="h-9 w-32 animate-pulse rounded bg-panel"></div>
-						<div class="mt-2 h-4 w-20 animate-pulse rounded bg-panel"></div>
-					{:else}
-						<div class="font-display text-4xl font-normal leading-none tracking-normal text-fg-1 tabular-nums">
-							<span class="text-2xl font-normal text-fg-3 mr-1">AED</span>{lastPoint ? formatPrice(lastPoint.avg_price) : '—'}
-						</div>
-						{@const pct = fmtPct(kpiQuery.data?.avg_price_change_pct)}
-						{@const pos = (kpiQuery.data?.avg_price_change_pct ?? 0) >= 0}
-						{#if pct}
-							<p class="mt-2 font-mono text-xs {pos ? 'text-trend-up' : 'text-trend-down'}">
-								{pos ? '▲' : '▼'} {pct} YoY
-							</p>
-						{/if}
-					{/if}
-				</div>
-			</div>
+			<CustomizableKpiGrid />
 
 			<!-- Two-col: Chart + AI -->
 			<div class="grid grid-cols-1 gap-3 mb-3 lg:grid-cols-[1.6fr_1fr]">

@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 
-set -e
-set -x
+set -euo pipefail
 
 set -a
 source .env.dev

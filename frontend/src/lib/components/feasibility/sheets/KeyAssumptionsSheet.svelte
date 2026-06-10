@@ -310,13 +310,13 @@ function setBtrNumber<K extends string>(key: K, raw: string) {
 			<tr class={ROW_STD}>
 				<td class="px-1 py-[3px] text-slate-400 text-[10px] text-center">—</td>
 				<td class={`${LABEL} pl-8 italic text-slate-600`}>↳ Required total GFA floors</td>
-				<td class={massing.gfaShortfallSqm > 0 ? 'px-1 py-[3px] text-right text-[11px] tabular-nums text-rose-700' : VALUE_BLACK}>{fmt(massing.requiredFloorsAtCoverage)}</td>
+				<td class={massing.gfaShortfallSqm > 0 ? 'px-1 py-[3px] text-right text-[11px] tabular-nums text-amber-700' : VALUE_BLACK}>{fmt(massing.requiredFloorsAtCoverage)}</td>
 				<td class={UNIT}>floors</td>
 			</tr>
 			<tr class={ROW_STD}>
 				<td class="px-1 py-[3px] text-slate-400 text-[10px] text-center">—</td>
 				<td class={`${LABEL} pl-8 italic text-slate-600`}>↳ Required residential floors for unit mix</td>
-				<td class={massing.unitCapacityGap < 0 ? 'px-1 py-[3px] text-right text-[11px] tabular-nums text-rose-700' : VALUE_BLACK}>{fmt(massing.requiredResidentialFloorsForUnits)}</td>
+				<td class={massing.unitCapacityGap < 0 ? 'px-1 py-[3px] text-right text-[11px] tabular-nums text-amber-700' : VALUE_BLACK}>{fmt(massing.requiredResidentialFloorsForUnits)}</td>
 				<td class={UNIT}>floors</td>
 			</tr>
 			<tr class={ROW_STD}>
@@ -465,7 +465,7 @@ function setBtrNumber<K extends string>(key: K, raw: string) {
 		Total GLA {fmt(btrTotalGlaSqm, 0)} sqm ({fmt(toSqft(btrTotalGlaSqm), 0)} sf)
 		vs GFA {fmt(s.maxGfaSqm, 0)} sqm ({fmt(gfaSqft, 0)} sf)
 		&nbsp;=&nbsp;
-		<span class={btrGlaAsPctOfGfa > 100 ? 'text-rose-700 font-semibold' : btrGlaAsPctOfGfa >= 75 ? 'text-emerald-700 font-semibold' : 'text-amber-700 font-semibold'}>
+		<span class={btrGlaAsPctOfGfa > 100 ? 'text-rose-700 font-semibold' : btrGlaAsPctOfGfa >= 75 ? 'text-slate-900 font-semibold' : 'text-amber-700 font-semibold'}>
 			{fmt(btrGlaAsPctOfGfa, 1)}% of GFA
 		</span>
 	</div>
@@ -574,7 +574,7 @@ function setBtrNumber<K extends string>(key: K, raw: string) {
 		Total GSA {fmt(toSqft(s.totalConfiguredAreaSqm), 0)} sf
 		vs GFA {fmt(gfaSqft, 0)} sf
 		&nbsp;=&nbsp;
-		<span class={gsaAsPctOfGfa > 100 ? 'text-rose-700 font-semibold' : gsaAsPctOfGfa >= 75 ? 'text-emerald-700 font-semibold' : 'text-amber-700 font-semibold'}>
+		<span class={gsaAsPctOfGfa > 100 ? 'text-rose-700 font-semibold' : gsaAsPctOfGfa >= 75 ? 'text-slate-900 font-semibold' : 'text-amber-700 font-semibold'}>
 			{fmt(gsaAsPctOfGfa, 1)}% of GFA
 		</span>
 	</div>

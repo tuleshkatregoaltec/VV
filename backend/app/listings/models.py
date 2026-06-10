@@ -98,7 +98,7 @@ class ListingDetailResponse(ListingCardResponse):
     source_run_id: str | None = None
     source_manifest_key: str | None = None
     scraped_at: AwareDatetime | None = None
-    demo_metadata: dict[str, Any] = Field(default_factory=dict)
+    source_metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 class ListingListResponse(BaseModel):

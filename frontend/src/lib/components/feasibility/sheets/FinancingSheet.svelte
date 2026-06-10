@@ -36,7 +36,7 @@ function pill(status: TestStatus) {
 	if (status === 'fail') return 'bg-rose-100 text-rose-700'
 	if (status === 'warning') return 'bg-amber-100 text-amber-700'
 	if (status === 'missing') return 'bg-slate-200 text-slate-600'
-	return 'bg-emerald-100 text-emerald-700'
+	return 'bg-slate-100 text-slate-700'
 }
 
 function statusLabel(status: TestStatus) {
@@ -202,7 +202,7 @@ const lenderTests = $derived([
 			</div>
 			<div class="px-3 py-2 border-r border-[#D9D9D9]">
 				<div class="text-[9px] uppercase tracking-wider text-slate-500 font-semibold">DSCR</div>
-				<div class="text-[13px] font-bold tabular-nums mt-0.5 {btr.permDebt.dscrAtOrigination >= (assumptions?.btrDscrMinimum ?? 1.25) ? 'text-emerald-700' : 'text-rose-700'}">{fmt(btr.permDebt.dscrAtOrigination, 2)}x</div>
+				<div class="text-[13px] font-bold tabular-nums mt-0.5 {btr.permDebt.dscrAtOrigination >= (assumptions?.btrDscrMinimum ?? 1.25) ? 'text-slate-900' : 'text-amber-700'}">{fmt(btr.permDebt.dscrAtOrigination, 2)}x</div>
 			</div>
 			<div class="px-3 py-2">
 				<div class="text-[9px] uppercase tracking-wider text-slate-500 font-semibold">Debt Yield</div>
@@ -251,7 +251,7 @@ const lenderTests = $derived([
 			</tr>
 			<!-- Sources -->
 			<tr class="bg-slate-50/80 border-b border-[#D9D9D9]">
-				<td class="px-2 py-[3px] text-left text-[10px] text-emerald-700 font-semibold uppercase tracking-wider text-[9px]" colspan="3">Sources</td>
+				<td class="px-2 py-[3px] text-left text-[10px] text-slate-700 font-semibold uppercase tracking-wider text-[9px]" colspan="3">Sources</td>
 			</tr>
 			<tr class="border-b border-[#D9D9D9] hover:bg-slate-50/60">
 				<td class="px-2 py-[3px] text-left text-[10px] text-slate-800 pl-4">Dev Debt (LTC-based)</td>
@@ -287,13 +287,13 @@ const lenderTests = $derived([
 			] as row (row.label)}
 				<tr class="border-b border-[#D9D9D9] hover:bg-slate-50/60">
 					<td class="px-2 py-[3px] text-left text-[10px] text-slate-800">{row.label}</td>
-					<td class="px-2 py-[3px] text-right tabular-nums text-[10px] {row.amount < 0 ? 'text-rose-700' : 'text-slate-900'} font-medium">AED {fmt(row.amount)}</td>
+					<td class="px-2 py-[3px] text-right tabular-nums text-[10px] text-slate-900 font-medium">AED {fmt(row.amount)}</td>
 					<td class="px-2 py-[3px] text-left text-[9px] text-slate-500">{row.note}</td>
 				</tr>
 			{/each}
 			<tr class="border-t-2 border-[#B8C4CE] bg-[#EEF2F7] font-semibold">
 				<td class="px-2 py-[4px] text-left text-[10px] text-slate-900">Net Refi Proceeds</td>
-				<td class="px-2 py-[4px] text-right tabular-nums text-[10px] font-bold {btr.permDebt.refiProceedsAed >= 0 ? 'text-emerald-700' : 'text-rose-700'}">AED {fmt(btr.permDebt.refiProceedsAed)}</td>
+				<td class="px-2 py-[4px] text-right tabular-nums text-[10px] font-bold {btr.permDebt.refiProceedsAed >= 0 ? 'text-slate-900' : 'text-amber-700'}">AED {fmt(btr.permDebt.refiProceedsAed)}</td>
 				<td class="px-2 py-[4px] text-left text-[9px] text-slate-500">{btr.permDebt.refiProceedsAed >= 0 ? 'Distributed to equity' : 'Additional equity call required'}</td>
 			</tr>
 
@@ -316,7 +316,7 @@ const lenderTests = $derived([
 			] as row (row.label)}
 				<tr class="border-b border-[#D9D9D9] hover:bg-slate-50/60">
 					<td class="px-2 py-[3px] text-left text-[10px] text-slate-800">{row.label}</td>
-					<td class="px-2 py-[3px] text-right tabular-nums text-[10px] font-medium {row.label === 'DSCR at Origination' ? (btr.permDebt.dscrAtOrigination >= (assumptions?.btrDscrMinimum ?? 1.25) ? 'text-emerald-700' : 'text-rose-700') : 'text-slate-900'}">{row.value}</td>
+					<td class="px-2 py-[3px] text-right tabular-nums text-[10px] font-medium {row.label === 'DSCR at Origination' ? (btr.permDebt.dscrAtOrigination >= (assumptions?.btrDscrMinimum ?? 1.25) ? 'text-slate-900' : 'text-amber-700') : 'text-slate-900'}">{row.value}</td>
 					<td class="px-2 py-[3px] text-left text-[9px] text-slate-500">{row.note}</td>
 				</tr>
 			{/each}
@@ -493,7 +493,7 @@ const lenderTests = $derived([
 				<tbody>
 				{#each sourcesUses.sources as item (item.code)}
 					<tr class="border-b border-[#D9D9D9] hover:bg-slate-50/60">
-						<td class="px-2 py-[3px] text-left text-[10px] font-semibold text-emerald-700 uppercase tracking-wider text-[9px]">{item.category}</td>
+						<td class="px-2 py-[3px] text-left text-[10px] font-semibold text-slate-700 uppercase tracking-wider text-[9px]">{item.category}</td>
 						<td class="px-2 py-[3px] text-left text-[10px] text-slate-800">{item.label}</td>
 						<td class="px-2 py-[3px] text-right tabular-nums text-slate-900 text-[10px]">AED {fmt(item.amountAed)}</td>
 						<td class="px-2 py-[3px] text-left text-[9px] text-slate-500">{item.basis}</td>

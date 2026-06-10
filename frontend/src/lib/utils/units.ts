@@ -1,4 +1,4 @@
-export const SQM_TO_SQFT = 10.764
+export const SQM_TO_SQFT = 10.7639
 export const SQFT_TO_SQM = 1 / SQM_TO_SQFT
 export const SQM_PER_SQFT = SQFT_TO_SQM
 

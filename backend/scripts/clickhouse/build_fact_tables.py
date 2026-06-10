@@ -57,6 +57,7 @@ SELECT
     p.master_project_en,
     p.project_status AS completion_status,
     multiIf(
+        upperUTF8(p.project_status) IN ('FINISHED', 'COMPLETED'), 'completed',
         lowerUTF8(p.project_status) LIKE '%complete%', 'completed',
         lowerUTF8(p.project_status) LIKE '%cancel%', 'cancelled',
         p.project_end_date IS NOT NULL AND p.project_end_date <= addMonths(today(), 12),
@@ -68,6 +69,7 @@ SELECT
     p.percent_completed,
     round(
         multiIf(
+            upperUTF8(p.project_status) IN ('FINISHED', 'COMPLETED'), 1,
             lowerUTF8(p.project_status) LIKE '%complete%', 1,
             lowerUTF8(p.project_status) LIKE '%cancel%', 0,
             p.percent_completed > 0, least(greatest(toFloat64(p.percent_completed) / 100, 0.1), 0.95),

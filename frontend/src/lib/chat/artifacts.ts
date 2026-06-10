@@ -4,7 +4,7 @@ export type ChatArtifactStatus = 'loading' | 'ready' | 'error' | 'stale'
 
 export interface ChatArtifactBase {
 	id: string
-	type: 'listing_results' | 'market_trend'
+	type: 'listing_results' | 'market_trend' | 'custom_chart'
 	status: ChatArtifactStatus
 	title: string
 	subtitle?: string | null
@@ -23,7 +23,42 @@ export interface MarketTrendArtifact extends ChatArtifactBase {
 	data?: MarketTrendResponse | null
 }
 
-export type ChatArtifact = ListingResultsArtifact | MarketTrendArtifact
+export interface CustomChartPoint {
+	label: string
+	value: number
+	record_count?: number | null
+	date?: string | null
+}
+
+export interface CustomChartSeries {
+	label: string
+	points: CustomChartPoint[]
+}
+
+export interface CustomChartData {
+	chart_type: 'line' | 'bar' | 'horizontal_bar' | 'doughnut'
+	metric: string
+	metric_label: string
+	dimension: string
+	dimension_label: string
+	data_source?: string | null
+	sort_direction?: 'asc' | 'desc' | null
+	points: CustomChartPoint[]
+	series?: CustomChartSeries[] | null
+	summary?: {
+		point_count?: number | null
+		total_records?: number | null
+		period_start?: string | null
+		period_end?: string | null
+	} | null
+}
+
+export interface CustomChartArtifact extends ChatArtifactBase {
+	type: 'custom_chart'
+	data?: CustomChartData | null
+}
+
+export type ChatArtifact = ListingResultsArtifact | MarketTrendArtifact | CustomChartArtifact
 
 export interface ChatArtifactStreamEvent {
 	type: 'artifact_opened' | 'artifact_updated'
@@ -35,7 +70,9 @@ export function isChatArtifact(value: unknown): value is ChatArtifact {
 	const candidate = value as Partial<ChatArtifact>
 	return (
 		typeof candidate.id === 'string' &&
-		(candidate.type === 'listing_results' || candidate.type === 'market_trend') &&
+		(candidate.type === 'listing_results' ||
+			candidate.type === 'market_trend' ||
+			candidate.type === 'custom_chart') &&
 		(candidate.status === 'loading' ||
 			candidate.status === 'ready' ||
 			candidate.status === 'error' ||

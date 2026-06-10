@@ -97,6 +97,7 @@ def make_subscription(**overrides):
 
 
 def test_get_bootstrap_admin_user_returns_existing_user(monkeypatch):
+    monkeypatch.setattr(bootstrap.settings, "FIRST_SUPERUSER", "admin@example.com")
     monkeypatch.setattr(
         bootstrap,
         "_list_auth_users",
@@ -109,6 +110,7 @@ def test_get_bootstrap_admin_user_returns_existing_user(monkeypatch):
 
 
 def test_get_bootstrap_admin_user_bootstraps_and_retries(monkeypatch):
+    monkeypatch.setattr(bootstrap.settings, "FIRST_SUPERUSER", "admin@example.com")
     calls = {"count": 0}
 
     def fake_list_auth_users():
@@ -130,6 +132,7 @@ def test_get_bootstrap_admin_user_bootstraps_and_retries(monkeypatch):
 
 
 def test_get_bootstrap_admin_user_raises_after_retry(monkeypatch):
+    monkeypatch.setattr(bootstrap.settings, "FIRST_SUPERUSER", "admin@example.com")
     monkeypatch.setattr(bootstrap, "_list_auth_users", lambda: [])
     monkeypatch.setattr(bootstrap, "create_user", lambda: None)
     monkeypatch.setattr(bootstrap.time, "sleep", lambda _seconds: None)

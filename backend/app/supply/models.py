@@ -62,6 +62,24 @@ class SupplyCatalogueNearbyPointResponse(BaseModel):
     time_min: float | None = None
 
 
+class SupplyCatalogueRiskIndicatorResponse(BaseModel):
+    key: str
+    label: str
+    value: str | None = None
+    score: float | None = None
+    status: str
+    available: bool = True
+    note: str | None = None
+
+
+class SupplyCatalogueFinancialMetricResponse(BaseModel):
+    key: str
+    label: str
+    value: str | None = None
+    status: str
+    note: str | None = None
+
+
 class SupplyCatalogueProjectCardResponse(BaseModel):
     project_id: int
     project_name: str
@@ -72,9 +90,16 @@ class SupplyCatalogueProjectCardResponse(BaseModel):
     status: str | None = None
     sale_status: str | None = None
     completion_date: str | None = None
+    launch_date: str | None = None
     min_price_aed: int | None = None
     max_price_aed: int | None = None
     units_in_sale: int | None = None
+    units_sold: int | None = None
+    units_unsold: int | None = None
+    total_units: int | None = None
+    registered_units: int | None = None
+    sales_absorption_pct: float | None = None
+    sales_inventory_source: str | None = None
     unit_types: list[str] = Field(default_factory=list)
     overview_excerpt: str | None = None
     cover_image_url: str | None = None
@@ -82,6 +107,12 @@ class SupplyCatalogueProjectCardResponse(BaseModel):
     image_count: int = 0
     floorplan_count: int = 0
     brochure_count: int = 0
+    project_score: float | None = None
+    project_risk_badge: str = "Review"
+    score_coverage_pct: float = 0.0
+    developer_score: float | None = None
+    developer_risk_badge: str | None = None
+    risk_indicators: list[SupplyCatalogueRiskIndicatorResponse] = Field(default_factory=list)
 
 
 class SupplyCatalogueProjectsResponse(BaseModel):
@@ -91,6 +122,7 @@ class SupplyCatalogueProjectsResponse(BaseModel):
     offset: int
     areas: list[str] = Field(default_factory=list)
     statuses: list[str] = Field(default_factory=list)
+    developers: list[str] = Field(default_factory=list)
 
 
 class SupplyCatalogueProjectDetailResponse(SupplyCatalogueProjectCardResponse):
@@ -105,4 +137,57 @@ class SupplyCatalogueProjectDetailResponse(SupplyCatalogueProjectCardResponse):
     floorplans: list[SupplyCatalogueAssetResponse] = Field(default_factory=list)
     brochures: list[SupplyCatalogueAssetResponse] = Field(default_factory=list)
     master_plans: list[SupplyCatalogueAssetResponse] = Field(default_factory=list)
-    demo_metadata: dict[str, Any] = Field(default_factory=dict)
+    source_metadata: dict[str, Any] = Field(default_factory=dict)
+    financial_risk_metrics: list[SupplyCatalogueFinancialMetricResponse] = Field(
+        default_factory=list
+    )
+    estimated_project_irr: str | None = None
+
+
+class DeveloperRankingCriterionResponse(BaseModel):
+    key: str
+    label: str
+    weight_pct: float
+    score: float | None = None
+    available: bool
+    note: str | None = None
+
+
+class DeveloperRankingResponse(BaseModel):
+    rank: int
+    developer_name: str
+    developer_id: int | None = None
+    developer_logo_url: str | None = None
+    proprietary_score: float | None = None
+    score_coverage_pct: float
+    risk_badge: str
+    units_sold: int
+    sales_transaction_count: int
+    sales_volume_aed: float
+    avg_price_sqft_aed: float | None = None
+    selling_projects: int
+    total_projects: int
+    active_projects: int
+    completed_projects: int
+    pipeline_units: int
+    registered_units: int
+    avg_completion_pct: float | None = None
+    on_time_delivery_score: float | None = None
+    sales_completion_score: float | None = None
+    historical_project_success_score: float | None = None
+    criteria: list[DeveloperRankingCriterionResponse] = Field(default_factory=list)
+
+
+class DeveloperRankingSummaryResponse(BaseModel):
+    total_developers: int
+    period_label: str
+    start_date: date | None = None
+    end_date: date | None = None
+    ranking_metric: str
+    available_score_weight_pct: float
+    unavailable_criteria: list[str] = Field(default_factory=list)
+
+
+class DeveloperRankingsResponse(BaseModel):
+    rankings: list[DeveloperRankingResponse]
+    summary: DeveloperRankingSummaryResponse

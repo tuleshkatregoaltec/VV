@@ -3,6 +3,7 @@ import type {
 	PlotResearchOutput as PlotResearch,
 	StudyContext
 } from '$lib/api/generated/hey-api/types.gen'
+import { SQM_TO_SQFT } from '$lib/utils/units'
 import type { WorkbookOutputs } from './engine'
 import type { FeasibilityAssumptions } from './models'
 import type { ValidationResult } from './validation'
@@ -25,8 +26,6 @@ export interface FeasibilityWorkbookExportInput {
 	validation?: ValidationResult | null
 	generatedAt?: Date
 }
-
-const SQM_TO_SQFT = 10.7639
 
 function round(value: number | null | undefined, digits = 0): number | null {
 	if (value === null || value === undefined || !Number.isFinite(value)) return null

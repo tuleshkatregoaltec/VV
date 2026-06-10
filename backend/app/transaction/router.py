@@ -1,6 +1,7 @@
 """Transaction listing and export endpoints - redesigned for ClickHouse."""
 
 from datetime import datetime
+from typing import Literal
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
@@ -133,6 +134,11 @@ async def get_rental_contracts(
 )
 async def export_sales_transactions_endpoint(
     context: AuthContext = Depends(require_active_subscription),
+    export_format: Literal["xlsx", "csv"] = Query(
+        default="xlsx",
+        alias="format",
+        description="Export file format: xlsx or csv",
+    ),
     transaction_ids: str = Query(
         default=None,
         description="Comma-separated transaction IDs (overrides filters and limit)",
@@ -161,9 +167,9 @@ async def export_sales_transactions_endpoint(
     price_per_sqm_max: float = Query(default=None, description="Maximum price per sqm"),
 ):
     """
-    Export sales transactions to Excel.
+    Export sales transactions to Excel or CSV.
 
-    Limit: 100 rows max (or specific transaction_ids if provided).
+    Limit: 50,000 rows max (or specific transaction_ids if provided).
     """
     stream = await export_sales_transactions(
         transaction_ids=transaction_ids,
@@ -183,14 +189,20 @@ async def export_sales_transactions_endpoint(
         price_max=price_max,
         price_per_sqm_min=price_per_sqm_min,
         price_per_sqm_max=price_per_sqm_max,
+        file_format=export_format,
     )
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    filename = f"sales_transactions_{timestamp}.xlsx"
+    filename = f"sales_transactions_{timestamp}.{export_format}"
+    media_type = (
+        "text/csv; charset=utf-8"
+        if export_format == "csv"
+        else "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
 
     return StreamingResponse(
         iter([stream.getvalue()]),
-        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        media_type=media_type,
         headers={
             "Content-Disposition": f"attachment; filename={filename}",
             "Access-Control-Expose-Headers": "Content-Disposition",
@@ -204,6 +216,11 @@ async def export_sales_transactions_endpoint(
 )
 async def export_rental_contracts_endpoint(
     context: AuthContext = Depends(require_active_subscription),
+    export_format: Literal["xlsx", "csv"] = Query(
+        default="xlsx",
+        alias="format",
+        description="Export file format: xlsx or csv",
+    ),
     contract_ids: str = Query(
         default=None,
         description="Comma-separated contract IDs (overrides filters and limit)",
@@ -229,9 +246,9 @@ async def export_rental_contracts_endpoint(
     rent_max: float = Query(default=None, description="Maximum annual rent"),
 ):
     """
-    Export rental contracts to Excel.
+    Export rental contracts to Excel or CSV.
 
-    Limit: 100 rows max (or specific contract_ids if provided).
+    Limit: 50,000 rows max (or specific contract_ids if provided).
     """
     stream = await export_rental_contracts(
         contract_ids=contract_ids,
@@ -248,14 +265,20 @@ async def export_rental_contracts_endpoint(
         area_max=area_max,
         rent_min=rent_min,
         rent_max=rent_max,
+        file_format=export_format,
     )
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    filename = f"rental_contracts_{timestamp}.xlsx"
+    filename = f"rental_contracts_{timestamp}.{export_format}"
+    media_type = (
+        "text/csv; charset=utf-8"
+        if export_format == "csv"
+        else "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
 
     return StreamingResponse(
         iter([stream.getvalue()]),
-        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        media_type=media_type,
         headers={
             "Content-Disposition": f"attachment; filename={filename}",
             "Access-Control-Expose-Headers": "Content-Disposition",

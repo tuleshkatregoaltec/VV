@@ -76,7 +76,7 @@ function fmt(v: number): string {
 
 function fmtOut(v: number): string {
 	if (v === 0) return '—'
-	return '(' + Math.round(v).toLocaleString('en-AE') + ')'
+	return `(${Math.round(v).toLocaleString('en-AE')})`
 }
 
 function periodValue(period: CashFlowPeriod, field: NumericPeriodField): number {
@@ -505,11 +505,11 @@ function round(v: number): number {
 			<!-- Total inflows subtotal -->
 			<tr class="border-t-2 border-[#1F3864] bg-[#E8F0FE]">
 				<td class="px-2 py-[4px] text-left text-[10px] font-bold text-slate-900 sticky left-0 bg-[#E8F0FE] z-10 border-r border-slate-200 whitespace-nowrap">TOTAL INFLOWS</td>
-				<td class="px-2 py-[4px] text-right text-[10px] tabular-nums font-bold text-emerald-700 bg-slate-100 border-r border-slate-300 whitespace-nowrap">
+				<td class="px-2 py-[4px] text-right text-[10px] tabular-nums font-bold text-slate-900 bg-slate-100 border-r border-slate-300 whitespace-nowrap">
 					{fmt(sum('revenueInflowsAed') + sum('vatRefundInflowsAed'))}
 				</td>
 				{#each periods as p}
-					<td class="px-2 py-[4px] text-right text-[10px] tabular-nums font-semibold whitespace-nowrap text-emerald-700">
+					<td class="px-2 py-[4px] text-right text-[10px] tabular-nums font-semibold whitespace-nowrap text-slate-900">
 						{fmt(p.revenueInflowsAed + (p.vatRefundInflowsAed ?? 0))}
 					</td>
 				{/each}
@@ -547,11 +547,11 @@ function round(v: number): number {
 			<!-- UNLEVERED NET CF -->
 			<tr class="border-t border-slate-300 bg-[#D6E4FF]">
 				<td class="px-2 py-[4px] text-left text-[10px] font-bold text-slate-900 sticky left-0 bg-[#D6E4FF] z-10 border-r border-slate-200 whitespace-nowrap">UNLEVERED NET CASH FLOW</td>
-				<td class="px-2 py-[4px] text-right text-[10px] tabular-nums font-bold bg-slate-100 border-r border-slate-300 whitespace-nowrap {totUnlevered >= 0 ? 'text-emerald-700' : 'text-rose-700'}">
+				<td class="px-2 py-[4px] text-right text-[10px] tabular-nums font-bold bg-slate-100 border-r border-slate-300 whitespace-nowrap text-slate-900">
 					{totUnlevered < 0 ? fmtOut(Math.abs(totUnlevered)) : fmt(totUnlevered)}
 				</td>
 				{#each periods as p}
-					<td class="px-2 py-[4px] text-right text-[10px] tabular-nums font-semibold whitespace-nowrap {p.unleveredNetCashFlowAed >= 0 ? 'text-emerald-700' : 'text-slate-900'}">
+					<td class="px-2 py-[4px] text-right text-[10px] tabular-nums font-semibold whitespace-nowrap text-slate-900">
 						{p.unleveredNetCashFlowAed < 0 ? fmtOut(Math.abs(p.unleveredNetCashFlowAed)) : fmt(p.unleveredNetCashFlowAed)}
 					</td>
 				{/each}
@@ -577,11 +577,11 @@ function round(v: number): number {
 			<!-- Levered net CF -->
 			<tr class="border-t border-slate-300 bg-[#D6E4FF]">
 				<td class="px-2 py-[4px] text-left text-[10px] font-bold text-slate-900 sticky left-0 bg-[#D6E4FF] z-10 border-r border-slate-200 whitespace-nowrap">LEVERED (EQUITY) NET CASH FLOW</td>
-				<td class="px-2 py-[4px] text-right text-[10px] tabular-nums font-bold bg-slate-100 border-r border-slate-300 whitespace-nowrap {totLevered >= 0 ? 'text-emerald-700' : 'text-rose-700'}">
+				<td class="px-2 py-[4px] text-right text-[10px] tabular-nums font-bold bg-slate-100 border-r border-slate-300 whitespace-nowrap text-slate-900">
 					{totLevered < 0 ? fmtOut(Math.abs(totLevered)) : fmt(totLevered)}
 				</td>
 				{#each periods as p}
-					<td class="px-2 py-[4px] text-right text-[10px] tabular-nums font-semibold whitespace-nowrap {p.leveredNetCashFlowAed >= 0 ? 'text-emerald-700' : 'text-slate-900'}">
+					<td class="px-2 py-[4px] text-right text-[10px] tabular-nums font-semibold whitespace-nowrap text-slate-900">
 						{p.leveredNetCashFlowAed < 0 ? fmtOut(Math.abs(p.leveredNetCashFlowAed)) : fmt(p.leveredNetCashFlowAed)}
 					</td>
 				{/each}
@@ -641,11 +641,11 @@ function round(v: number): number {
 			<!-- Total Sources -->
 			<tr class="border-t-2 border-[#1F3864] bg-[#E8F0FE]">
 				<td class="px-2 py-[4px] text-left text-[10px] font-bold text-slate-900 sticky left-0 bg-[#E8F0FE] z-10 border-r border-slate-200 whitespace-nowrap">Total Sources</td>
-				<td class="px-2 py-[4px] text-right text-[10px] tabular-nums font-bold bg-slate-100 border-r border-slate-300 text-emerald-700 whitespace-nowrap">
+				<td class="px-2 py-[4px] text-right text-[10px] tabular-nums font-bold bg-slate-100 border-r border-slate-300 text-slate-900 whitespace-nowrap">
 					{fmt(periods.reduce((s, p) => s + periodSources(p), 0))}
 				</td>
 				{#each periods as p}
-					<td class="px-2 py-[4px] text-right text-[10px] tabular-nums font-semibold whitespace-nowrap text-emerald-700">{fmt(periodSources(p))}</td>
+					<td class="px-2 py-[4px] text-right text-[10px] tabular-nums font-semibold whitespace-nowrap text-slate-900">{fmt(periodSources(p))}</td>
 				{/each}
 			</tr>
 			<!-- Total Uses -->
@@ -661,10 +661,10 @@ function round(v: number): number {
 			<!-- Funding gap -->
 			<tr class="border-t border-slate-200">
 				<td class="px-2 py-[3px] text-left text-[10px] font-semibold text-slate-700 sticky left-0 bg-white z-10 border-r border-slate-200 whitespace-nowrap">Funding Gap</td>
-				<td class="px-2 py-[3px] text-right text-[9px] tabular-nums font-semibold bg-slate-50 border-r border-slate-200 text-emerald-600 whitespace-nowrap">0</td>
+				<td class="px-2 py-[3px] text-right text-[9px] tabular-nums font-semibold bg-slate-50 border-r border-slate-200 text-slate-700 whitespace-nowrap">0</td>
 				{#each periods as p}
 					{@const bal = periodSources(p) - periodUses(p)}
-					<td class="px-2 py-[3px] text-right text-[10px] tabular-nums font-semibold whitespace-nowrap {Math.abs(bal) < 1 ? 'text-emerald-600' : 'text-rose-600'}">
+					<td class="px-2 py-[3px] text-right text-[10px] tabular-nums font-semibold whitespace-nowrap {Math.abs(bal) < 1 ? 'text-slate-700' : 'text-rose-600'}">
 						{Math.abs(bal) < 1 ? '—' : fmt(bal)}
 					</td>
 				{/each}
@@ -707,10 +707,10 @@ function round(v: number): number {
 			</tr>
 			<tr class="border-t border-slate-200">
 				<td class="px-2 py-[3px] text-left text-[10px] font-semibold text-slate-700 sticky left-0 bg-white z-10 border-r border-slate-200 whitespace-nowrap">Allocation Gap</td>
-				<td class="px-2 py-[3px] text-right text-[9px] tabular-nums font-semibold bg-slate-50 border-r border-slate-200 text-emerald-600 whitespace-nowrap">0</td>
+				<td class="px-2 py-[3px] text-right text-[9px] tabular-nums font-semibold bg-slate-50 border-r border-slate-200 text-slate-700 whitespace-nowrap">0</td>
 				{#each periodAllocs as a}
 					{@const chk = round(a.proceedsAlloc + a.acqDebtAlloc + a.conDebtAlloc + a.equityAlloc - a.totalOutflow)}
-					<td class="px-2 py-[3px] text-right text-[10px] tabular-nums font-semibold whitespace-nowrap {Math.abs(chk) < 1 ? 'text-emerald-600' : 'text-rose-600'}">
+					<td class="px-2 py-[3px] text-right text-[10px] tabular-nums font-semibold whitespace-nowrap {Math.abs(chk) < 1 ? 'text-slate-700' : 'text-rose-600'}">
 						{Math.abs(chk) < 1 ? '—' : fmt(chk)}
 					</td>
 				{/each}

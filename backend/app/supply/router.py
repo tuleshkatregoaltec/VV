@@ -1,29 +1,38 @@
 from fastapi import APIRouter, Depends, Query
-from fastapi.responses import FileResponse
-from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.decorators import cached_endpoint
 from app.core.dependencies import AuthContext, require_active_subscription
-from app.postgres import get_db_session
 from app.supply.models import (
+    DeveloperRankingsResponse,
     SupplyCatalogueProjectDetailResponse,
     SupplyCatalogueProjectsResponse,
     UpcomingProjectResponse,
     UpcomingProjectsResponse,
 )
 from app.supply.service import (
-    get_supply_catalogue_asset_file,
+    get_developer_rankings,
     get_supply_catalogue_project,
     get_upcoming_projects_ch,
     list_supply_catalogue_projects,
-    supply_catalogue_download_filename,
 )
 
 router = APIRouter(prefix="/api/v1/supply", tags=["supply"])
 
 
+@router.get("/developer-rankings", response_model=DeveloperRankingsResponse)
+@cached_endpoint(prefix="supply:developer_rankings", expire=1800)
+async def list_developer_rankings(
+    period: str = Query(default="1y", pattern="^(ytd|1y|3y|5y)$"),
+    metric: str = Query(default="proprietary_score", max_length=80),
+    limit: int = Query(default=25, ge=5, le=100),
+    context: AuthContext = Depends(require_active_subscription),
+):
+    """Rank developers using DLD project/transaction signals."""
+    return await get_developer_rankings(period=period, metric=metric, limit=limit)
+
+
 @router.get("/upcoming-projects", response_model=UpcomingProjectsResponse)
-@cached_endpoint(prefix="upcoming_projects", expire=3600)
+@cached_endpoint(prefix="upcoming_projects:v2", expire=3600)
 async def list_upcoming_projects(
     context: AuthContext = Depends(require_active_subscription),
 ):
@@ -60,46 +69,31 @@ async def list_catalogue_projects(
     search: str | None = Query(default=None, max_length=120),
     area: str | None = Query(default=None, max_length=120),
     status: str | None = Query(default=None, max_length=80),
-    db: AsyncSession = Depends(get_db_session),
+    developer: str | None = Query(default=None, max_length=160),
+    sort: str = Query(
+        default="recommended",
+        pattern="^(recommended|newest|price_low|price_high|delivery_soon|delivery_latest)$",
+    ),
+    include_past: bool = Query(default=False),
     context: AuthContext = Depends(require_active_subscription),
 ):
-    """List the demo-only supply catalogue."""
+    """List the ph_box Reelly supply catalogue."""
     return await list_supply_catalogue_projects(
-        db=db,
         limit=limit,
         offset=offset,
         search=search,
         area=area,
         status=status,
+        developer=developer,
+        sort=sort,
+        include_past=include_past,
     )
 
 
 @router.get("/catalogue/projects/{project_id}", response_model=SupplyCatalogueProjectDetailResponse)
 async def get_catalogue_project(
     project_id: int,
-    db: AsyncSession = Depends(get_db_session),
     context: AuthContext = Depends(require_active_subscription),
 ):
-    """Get one demo-only supply catalogue project."""
-    return await get_supply_catalogue_project(db, project_id)
-
-
-@router.get("/catalogue/assets/{asset_id}")
-async def get_catalogue_asset(
-    asset_id: int,
-    download: bool = False,
-    db: AsyncSession = Depends(get_db_session),
-):
-    """Serve locally cached supply catalogue demo assets, downloading from R2 on cache miss.
-
-    Demo note: this is unauthenticated so browser image tags and brochure links work.
-    Replace with signed URLs or a real media service before production use.
-    """
-    path, content_type, name = await get_supply_catalogue_asset_file(db, asset_id)
-    return FileResponse(
-        path,
-        media_type=content_type,
-        filename=supply_catalogue_download_filename(asset_id, name, content_type)
-        if download
-        else None,
-    )
+    """Get one ph_box Reelly supply catalogue project."""
+    return await get_supply_catalogue_project(None, project_id)

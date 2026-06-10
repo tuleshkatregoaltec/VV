@@ -1,10 +1,18 @@
 import type { DdaOutlineFeature, DdaPlotFeature } from '$lib/api/generated/hey-api/types.gen'
-import { type DdaOutlineParams, type DdaPlotParams, projects } from '$lib/api/projects'
+import {
+	type DdaOutlineParams,
+	type DdaPlotParams,
+	type ProjectRadarProject,
+	projects,
+	type RadarPinParams
+} from '$lib/api/projects'
 
 export const projectKeys = {
 	all: ['projects'] as const,
 	list: () => [...projectKeys.all, 'list'] as const,
 	radar: (limit: number) => [...projectKeys.all, 'radar', { limit }] as const,
+	radarOverview: () => [...projectKeys.all, 'radar-overview'] as const,
+	radarPins: (params: RadarPinParams) => [...projectKeys.all, 'radar-pins', params] as const,
 	master: (name: string) => [...projectKeys.all, 'master', name] as const,
 	detail: (id: number) => [...projectKeys.all, 'detail', id] as const,
 	building: (propertyId: number) => [...projectKeys.all, 'building', propertyId] as const,
@@ -22,6 +30,18 @@ export const projectQueries = {
 		queryKey: projectKeys.radar(limit),
 		queryFn: () => projects.radar(limit),
 		staleTime: 30 * 60 * 1000
+	}),
+	radarOverview: () => ({
+		queryKey: projectKeys.radarOverview(),
+		queryFn: () => projects.radarOverview(),
+		staleTime: 30 * 60 * 1000
+	}),
+	radarPins: (params: RadarPinParams | null) => ({
+		queryKey: projectKeys.radarPins(params ?? {}),
+		queryFn: () => projects.radarPins(params ?? {}),
+		enabled: Boolean(params),
+		placeholderData: (previousData: ProjectRadarProject[] | undefined) => previousData,
+		staleTime: 5 * 60 * 1000
 	}),
 	master: (name: string | null) => ({
 		queryKey: projectKeys.master(name ?? ''),

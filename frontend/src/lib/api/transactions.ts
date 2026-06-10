@@ -8,6 +8,7 @@ import type {
 
 export type RentalContractResponseOutput = RentalContractResponse
 export type TransactionResponseOutput = TransactionResponse
+export type TransactionExportFormat = 'xlsx' | 'csv'
 export type {
 	RentalContractListResponse,
 	TransactionListResponse,
@@ -55,7 +56,10 @@ export type SalesFacetFilters = Omit<
 >
 export type RentalFacetFilters = Omit<RentalTransactionFilters, 'limit' | 'offset' | 'contract_ids'>
 
-function withFilters(endpoint: string, filters: BaseTransactionFilters) {
+function withFilters(
+	endpoint: string,
+	filters: BaseTransactionFilters & { format?: TransactionExportFormat }
+) {
 	return client.withQuery(
 		endpoint,
 		filters as Record<string, string | number | boolean | null | undefined>
@@ -69,13 +73,19 @@ export const transactions = {
 	rentals: (filters: RentalTransactionFilters) =>
 		client.get<RentalContractListResponse>(withFilters('/api/v1/transactions/rentals', filters)),
 
-	exportSales: (filters: SalesTransactionFilters): Promise<Blob> =>
-		client.get<Blob>(withFilters('/api/v1/transactions/sales/export', filters), {
+	exportSales: (
+		filters: SalesTransactionFilters,
+		format: TransactionExportFormat = 'xlsx'
+	): Promise<Blob> =>
+		client.get<Blob>(withFilters('/api/v1/transactions/sales/export', { ...filters, format }), {
 			returnBlob: true
 		}),
 
-	exportRentals: (filters: RentalTransactionFilters): Promise<Blob> =>
-		client.get<Blob>(withFilters('/api/v1/transactions/rentals/export', filters), {
+	exportRentals: (
+		filters: RentalTransactionFilters,
+		format: TransactionExportFormat = 'xlsx'
+	): Promise<Blob> =>
+		client.get<Blob>(withFilters('/api/v1/transactions/rentals/export', { ...filters, format }), {
 			returnBlob: true
 		})
 }

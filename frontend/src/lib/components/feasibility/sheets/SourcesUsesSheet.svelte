@@ -86,10 +86,10 @@ const btrGapOk = $derived(Math.abs(btrGapAed) < 1000)
 		</tr>
 
 		<!-- Funding gap -->
-		<tr class="border-t-2 border-[#1F3864] {btrGapOk ? 'bg-[#E8F5E9]' : 'bg-[#FFF3F3]'}">
-			<td class="px-2 py-[4px] text-left text-[10px] font-bold {btrGapOk ? 'text-emerald-800' : 'text-rose-800'}">Funding Gap</td>
-			<td class="px-2 py-[4px] text-left text-[9px] {btrGapOk ? 'text-emerald-600' : 'text-rose-600'}"></td>
-			<td class="px-2 py-[4px] text-right tabular-nums text-[10px] font-bold {btrGapOk ? 'text-emerald-700' : 'text-rose-700'}">AED {fmt(btrGapAed)}</td>
+		<tr class="border-t-2 border-[#1F3864] {btrGapOk ? 'bg-[#EEF2F7]' : 'bg-[#FFF3F3]'}">
+			<td class="px-2 py-[4px] text-left text-[10px] font-bold {btrGapOk ? 'text-slate-900' : 'text-rose-800'}">Funding Gap</td>
+			<td class="px-2 py-[4px] text-left text-[9px] {btrGapOk ? 'text-slate-500' : 'text-rose-600'}"></td>
+			<td class="px-2 py-[4px] text-right tabular-nums text-[10px] font-bold {btrGapOk ? 'text-slate-900' : 'text-rose-700'}">AED {fmt(btrGapAed)}</td>
 		</tr>
 		</tbody>
 	</table>
@@ -156,10 +156,10 @@ const btrGapOk = $derived(Math.abs(btrGapAed) < 1000)
 		</tr>
 
 		<!-- Funding gap row -->
-		<tr class="border-t-2 border-[#1F3864] {gapOk ? 'bg-[#E8F5E9]' : 'bg-[#FFF3F3]'}">
-			<td class="px-2 py-[4px] text-left text-[10px] font-bold {gapOk ? 'text-emerald-800' : 'text-rose-800'}">Funding Gap</td>
-			<td class="px-2 py-[4px] text-left text-[9px] {gapOk ? 'text-emerald-600' : 'text-rose-600'}"></td>
-			<td class="px-2 py-[4px] text-right tabular-nums text-[10px] font-bold {gapOk ? 'text-emerald-700' : 'text-rose-700'}">AED {fmt(gapAed)}</td>
+		<tr class="border-t-2 border-[#1F3864] {gapOk ? 'bg-[#EEF2F7]' : 'bg-[#FFF3F3]'}">
+			<td class="px-2 py-[4px] text-left text-[10px] font-bold {gapOk ? 'text-slate-900' : 'text-rose-800'}">Funding Gap</td>
+			<td class="px-2 py-[4px] text-left text-[9px] {gapOk ? 'text-slate-500' : 'text-rose-600'}"></td>
+			<td class="px-2 py-[4px] text-right tabular-nums text-[10px] font-bold {gapOk ? 'text-slate-900' : 'text-rose-700'}">AED {fmt(gapAed)}</td>
 		</tr>
 
 		</tbody>

@@ -231,6 +231,65 @@ function featureCollection(features: GeoJSON.Feature[]): GeoJSON.FeatureCollecti
 	return { type: 'FeatureCollection', features }
 }
 
+function formatAedCompact(value: number) {
+	if (!Number.isFinite(value) || value <= 0) return '~'
+	if (value >= 1_000_000_000) return `AED ${(value / 1_000_000_000).toFixed(1)}B`
+	if (value >= 1_000_000) return `AED ${(value / 1_000_000).toFixed(1)}M`
+	return `AED ${(value / 1_000).toFixed(0)}K`
+}
+
+function formatSqmCompact(value: number) {
+	if (!Number.isFinite(value) || value <= 0) return '~'
+	return value >= 1000 ? `${(value / 1000).toFixed(1)}k sqm` : `${Math.round(value)} sqm`
+}
+
+function escapeHtml(value: unknown) {
+	return String(value ?? '')
+		.replaceAll('&', '&amp;')
+		.replaceAll('<', '&lt;')
+		.replaceAll('>', '&gt;')
+		.replaceAll('"', '&quot;')
+		.replaceAll("'", '&#39;')
+}
+
+function ddaParcelPopupHtml(props: Record<string, unknown>) {
+	const areaSqm = Number(props.plot_area_sqm)
+	const maxGfaSqm = Number(props.max_gfa_sqm)
+	const valuationMin = Number(props.valuation_min_aed)
+	const valuationMax = Number(props.valuation_max_aed)
+	const rateMin = Number(props.valuation_rate_min_aed_sqft)
+	const rateMax = Number(props.valuation_rate_max_aed_sqft)
+	const plotNumber = escapeHtml(props.plot_number)
+	const communityName = escapeHtml(props.community_name)
+	const valuationLabel =
+		valuationMin > 0 && valuationMax > 0
+			? `${formatAedCompact(valuationMin)} - ${formatAedCompact(valuationMax)}`
+			: '~'
+	const rateLabel = rateMin > 0 && rateMax > 0 ? `AED ${rateMin}-${rateMax} / sqft` : '~'
+	return (
+		`<div style="min-width:210px;font-size:12px;line-height:1.55;">` +
+		`<div style="font-weight:700;color:var(--color-map-popup-fg);">Plot ${plotNumber}</div>` +
+		`<div style="color:var(--color-map-popup-muted);margin-top:2px;">${formatSqmCompact(areaSqm)} · ${communityName}</div>` +
+		`<div style="margin-top:8px;border-top:1px solid color-mix(in srgb,var(--color-map-popup-muted) 20%,transparent);padding-top:7px;">` +
+		`<div style="color:var(--color-map-popup-muted);">Indicative valuation</div>` +
+		`<div style="font-weight:700;color:var(--color-map-popup-fg);font-size:13px;">${valuationLabel}</div>` +
+		`<div style="color:var(--color-map-popup-muted);margin-top:2px;">${formatSqmCompact(maxGfaSqm)} max GFA · ${rateLabel}</div>` +
+		`</div>` +
+		`</div>`
+	)
+}
+
+function ddaOutlinePopupHtml(props: Record<string, unknown>) {
+	return (
+		`<div style="font-size:12px;line-height:1.6;">` +
+		`<div style="font-weight:700;color:var(--color-map-popup-fg);">${escapeHtml(props.name)}</div>` +
+		`<div style="color:var(--color-map-popup-muted);margin-top:2px;">${Number(
+			props.plot_count || 0
+		).toLocaleString()} plots · ${escapeHtml(props.kind)}</div>` +
+		`</div>`
+	)
+}
+
 function ddaFeatureCollection(features: DdaMapFeature[]): GeoJSON.FeatureCollection {
 	return featureCollection(
 		features.map((feature) => {
@@ -255,6 +314,12 @@ function ddaFeatureCollection(features: DdaMapFeature[]): GeoJSON.FeatureCollect
 							plot_number: feature.plot_number,
 							plot_area_sqm: feature.plot_area_sqm,
 							max_gfa_sqm: feature.max_gfa_sqm ?? 0,
+							valuation_rate_min_aed_sqft: feature.valuation_rate_min_aed_sqft ?? 0,
+							valuation_rate_max_aed_sqft: feature.valuation_rate_max_aed_sqft ?? 0,
+							valuation_min_aed: feature.valuation_min_aed ?? 0,
+							valuation_max_aed: feature.valuation_max_aed ?? 0,
+							valuation_confidence: feature.valuation_confidence ?? '',
+							valuation_note: feature.valuation_note ?? '',
 							community_name: feature.community_name,
 							category,
 							color: plotColor(category)
@@ -474,8 +539,8 @@ function bindRadarHandlers() {
 			.setLngLat(event.lngLat)
 			.setHTML(
 				`<div style="min-width:180px;font-size:12px;line-height:1.45;">` +
-					`<div style="font-weight:700;color:var(--color-map-popup-fg);">${props.project_name}</div>` +
-					`<div style="color:var(--color-map-popup-muted);margin-top:2px;">${props.area_name} · ${props.stage}</div>` +
+					`<div style="font-weight:700;color:var(--color-map-popup-fg);">${escapeHtml(props.project_name)}</div>` +
+					`<div style="color:var(--color-map-popup-muted);margin-top:2px;">${escapeHtml(props.area_name)} · ${escapeHtml(props.stage)}</div>` +
 					`<div style="color:var(--color-map-popup-muted);margin-top:6px;">${Number(
 						props.no_of_units || 0
 					).toLocaleString()} units · ${Number(
@@ -698,7 +763,7 @@ function addBuildingMarkers(pins: GeoPin[]) {
 			closeOnClick: false,
 			className: 'building-popup'
 		}).setHTML(
-			`<div style="font-size:13px;font-weight:600;color:var(--color-map-popup-fg);white-space:nowrap;padding:2px 0;">${label}</div>`
+			`<div style="font-size:13px;font-weight:600;color:var(--color-map-popup-fg);white-space:nowrap;padding:2px 0;">${escapeHtml(label)}</div>`
 		)
 
 		const marker = new maplibregl.Marker({ element: markerEl })
@@ -749,7 +814,7 @@ export function addProjectMarker(
 
 	// Create popup
 	const popup = new maplibregl.Popup({ offset: 25, className: 'building-popup' }).setHTML(
-		`<div style="font-size:13px;font-weight:600;color:var(--color-map-popup-fg);">${projectName}</div>`
+		`<div style="font-size:13px;font-weight:600;color:var(--color-map-popup-fg);">${escapeHtml(projectName)}</div>`
 	)
 
 	marker.setPopup(popup)
@@ -828,28 +893,13 @@ function handleDDAPlotClick(e: maplibregl.MapLayerMouseEvent) {
 	if (props.feature_type === 'outline') {
 		new maplibregl.Popup({ className: 'building-popup' })
 			.setLngLat(e.lngLat)
-			.setHTML(
-				`<div style="font-size:12px;line-height:1.6;">` +
-					`<div style="font-weight:700;color:var(--color-map-popup-fg);">${props.name}</div>` +
-					`<div style="color:var(--color-map-popup-muted);margin-top:2px;">${Number(
-						props.plot_count || 0
-					).toLocaleString()} plots · ${props.kind}</div>` +
-					`</div>`
-			)
+			.setHTML(ddaOutlinePopupHtml(props))
 			.addTo(map)
 		return
 	}
-	const areaSqm = Number(props.plot_area_sqm)
-	const areaLabel =
-		areaSqm >= 1000 ? `${(areaSqm / 1000).toFixed(1)}k sqm` : `${Math.round(areaSqm)} sqm`
 	new maplibregl.Popup({ className: 'building-popup' })
 		.setLngLat(e.lngLat)
-		.setHTML(
-			`<div style="font-size:12px;line-height:1.6;">` +
-				`<div style="font-weight:700;color:var(--color-map-popup-fg);">Plot ${props.plot_number}</div>` +
-				`<div style="color:var(--color-map-popup-muted);margin-top:2px;">${areaLabel} · ${props.community_name}</div>` +
-				`</div>`
-		)
+		.setHTML(ddaParcelPopupHtml(props))
 		.addTo(map)
 }
 
@@ -857,8 +907,29 @@ function handleDDAPlotMouseEnter() {
 	if (map) map.getCanvas().style.cursor = 'pointer'
 }
 
+function handleDDAPlotMouseMove(e: maplibregl.MapLayerMouseEvent) {
+	if (!map) return
+	const props = e.features?.[0]?.properties
+	if (!props) return
+	if (!hoverPopup) {
+		hoverPopup = new maplibregl.Popup({
+			closeButton: false,
+			closeOnClick: false,
+			className: 'building-popup',
+			offset: 14
+		}).addTo(map)
+	}
+	hoverPopup
+		.setLngLat(e.lngLat)
+		.setHTML(
+			props.feature_type === 'outline' ? ddaOutlinePopupHtml(props) : ddaParcelPopupHtml(props)
+		)
+}
+
 function handleDDAPlotMouseLeave() {
 	if (map) map.getCanvas().style.cursor = ''
+	hoverPopup?.remove()
+	hoverPopup = null
 }
 
 function _unbindDDAHandlers() {
@@ -866,6 +937,7 @@ function _unbindDDAHandlers() {
 	try {
 		map.off('click', DDA_FILL_LAYER_ID, handleDDAPlotClick)
 		map.off('mouseenter', DDA_FILL_LAYER_ID, handleDDAPlotMouseEnter)
+		map.off('mousemove', DDA_FILL_LAYER_ID, handleDDAPlotMouseMove)
 		map.off('mouseleave', DDA_FILL_LAYER_ID, handleDDAPlotMouseLeave)
 	} catch (_e) {
 		// Handlers may not be bound yet.
@@ -878,6 +950,7 @@ function _bindDDAHandlers() {
 	ddaHandlersBound = true
 	map.on('click', DDA_FILL_LAYER_ID, handleDDAPlotClick)
 	map.on('mouseenter', DDA_FILL_LAYER_ID, handleDDAPlotMouseEnter)
+	map.on('mousemove', DDA_FILL_LAYER_ID, handleDDAPlotMouseMove)
 	map.on('mouseleave', DDA_FILL_LAYER_ID, handleDDAPlotMouseLeave)
 }
 

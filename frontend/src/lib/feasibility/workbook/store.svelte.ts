@@ -22,11 +22,17 @@ import {
 	type WorkbookOutputs
 } from '$lib/feasibility/workbook/engine'
 import type {
+	BtrUnitConfig,
 	FeasibilityAssumptions,
 	Plot,
 	PlotDetails,
 	UnitConfig
 } from '$lib/feasibility/workbook/models'
+import {
+	displayUnitTypeLabel,
+	unitConfigIdFromLabel,
+	unitConfigMatchesKey
+} from '$lib/feasibility/workbook/utils'
 import { type ValidationResult, validateWorkbook } from '$lib/feasibility/workbook/validation'
 
 import { toSqft } from '$lib/utils/units'
@@ -868,8 +874,180 @@ function removePricingEvidenceAt(index: number): void {
 	markSheetDirty('pricing_evidence')
 }
 
-function normalizeKey(v: string) {
-	return v.trim().toLowerCase().replaceAll(/\s+/g, '').replaceAll('/', '')
+function finiteNumber(value: unknown): number | null {
+	if (typeof value === 'number' && Number.isFinite(value)) return value
+	if (typeof value === 'string' && value.trim()) {
+		const parsed = Number(value)
+		return Number.isFinite(parsed) ? parsed : null
+	}
+	return null
+}
+
+function unitMixRowKey(row: Record<string, unknown>): string {
+	const key = row.type ?? row.id ?? row.label ?? row.unitType ?? row.unit_type
+	return typeof key === 'string' ? key.trim() : ''
+}
+
+function uniqueUnitConfigId(
+	configs: Array<Pick<UnitConfig | BtrUnitConfig, 'id'>>,
+	label: string
+): string {
+	const base = unitConfigIdFromLabel(label)
+	let candidate = base
+	let suffix = 2
+	while (configs.some((config) => config.id === candidate)) {
+		candidate = `${base}-${suffix}`
+		suffix += 1
+	}
+	return candidate
+}
+
+function applyUpdateUnitMixProposal(rows: Array<Record<string, unknown>>): boolean {
+	const assumptions = state.assumptions
+	if (!assumptions) return false
+	const isBtr =
+		assumptions.developmentModel === 'build_to_rent_residential' &&
+		(assumptions.btrUnitConfigs?.length ?? 0) > 0
+	let changed = false
+
+	if (isBtr) {
+		const nextConfigs = (assumptions.btrUnitConfigs ?? []).map((config) => ({ ...config }))
+		for (const row of rows) {
+			const key = unitMixRowKey(row)
+			if (!key) continue
+			const units = finiteNumber(row.count ?? row.units)
+			const avgSizeSqm = finiteNumber(row.avgSizeSqm ?? row.avg_size_sqm)
+			const monthlyRentAed = finiteNumber(row.monthlyRentAed ?? row.monthly_rent_aed)
+			const parkingRatio = finiteNumber(row.parkingRatio ?? row.parking_ratio)
+			const index = nextConfigs.findIndex((config) => unitConfigMatchesKey(config, key))
+
+			if (index >= 0) {
+				const current = nextConfigs[index]
+				const next = {
+					...current,
+					units: units === null ? current.units : Math.round(units),
+					avgSizeSqm: avgSizeSqm ?? current.avgSizeSqm,
+					monthlyRentAed: monthlyRentAed ?? current.monthlyRentAed,
+					parkingRatio: parkingRatio ?? current.parkingRatio
+				}
+				if (JSON.stringify(next) !== JSON.stringify(current)) {
+					nextConfigs[index] = next
+					changed = true
+				}
+			}
+		}
+		if (!changed) return false
+		markSheetsDirty(UNIT_MIX_IMPACT_SHEETS)
+		applyAssumptionsPatch({ btrUnitConfigs: nextConfigs } as Partial<FeasibilityAssumptions>)
+		return true
+	}
+
+	const nextConfigs = (assumptions.unitConfigs ?? []).map((config) => ({ ...config }))
+	for (const row of rows) {
+		const key = unitMixRowKey(row)
+		if (!key) continue
+		const units = finiteNumber(row.count ?? row.units)
+		const avgSizeSqm = finiteNumber(row.avgSizeSqm ?? row.avg_size_sqm)
+		const sellingRatePsqm = finiteNumber(
+			row.price_sqm ?? row.sellingRatePsqm ?? row.selling_rate_psqm
+		)
+		const parkingRatio = finiteNumber(row.parkingRatio ?? row.parking_ratio)
+		const index = nextConfigs.findIndex((config) => unitConfigMatchesKey(config, key))
+
+		if (index >= 0) {
+			const current = nextConfigs[index]
+			const next = {
+				...current,
+				units: units === null ? current.units : Math.round(units),
+				avgSizeSqm: avgSizeSqm ?? current.avgSizeSqm,
+				sellingRatePsqm: sellingRatePsqm ?? current.sellingRatePsqm,
+				parkingRatio: parkingRatio ?? current.parkingRatio
+			}
+			if (JSON.stringify(next) !== JSON.stringify(current)) {
+				nextConfigs[index] = next
+				changed = true
+			}
+		}
+	}
+	if (!changed) return false
+	markSheetsDirty(UNIT_MIX_IMPACT_SHEETS)
+	applyAssumptionsPatch({ unitConfigs: nextConfigs })
+	return true
+}
+
+function applyReplaceUnitMixProposal(rows: Array<Record<string, unknown>>): boolean {
+	const assumptions = state.assumptions
+	if (!assumptions) return false
+	const isBtr =
+		assumptions.developmentModel === 'build_to_rent_residential' &&
+		(assumptions.btrUnitConfigs?.length ?? 0) > 0
+
+	if (isBtr) {
+		const currentConfigs = assumptions.btrUnitConfigs ?? []
+		const nextConfigs: BtrUnitConfig[] = []
+		for (const row of rows) {
+			const key = unitMixRowKey(row)
+			if (!key) continue
+			const units = finiteNumber(row.count ?? row.units)
+			const avgSizeSqm = finiteNumber(row.avgSizeSqm ?? row.avg_size_sqm)
+			if (units === null || avgSizeSqm === null) continue
+			const match = currentConfigs.find((config) => unitConfigMatchesKey(config, key))
+			const label = match?.label ?? displayUnitTypeLabel(key)
+			nextConfigs.push({
+				id: match?.id ?? uniqueUnitConfigId([...currentConfigs, ...nextConfigs], label),
+				label,
+				units: Math.round(units),
+				avgSizeSqm,
+				monthlyRentAed:
+					finiteNumber(row.monthlyRentAed ?? row.monthly_rent_aed) ?? match?.monthlyRentAed ?? 0,
+				parkingRatio:
+					finiteNumber(row.parkingRatio ?? row.parking_ratio) ??
+					match?.parkingRatio ??
+					assumptions.standardParkingRatio
+			})
+		}
+		if (
+			nextConfigs.length === 0 ||
+			JSON.stringify(nextConfigs) === JSON.stringify(currentConfigs)
+		) {
+			return false
+		}
+		markSheetsDirty(UNIT_MIX_IMPACT_SHEETS)
+		applyAssumptionsPatch({ btrUnitConfigs: nextConfigs } as Partial<FeasibilityAssumptions>)
+		return true
+	}
+
+	const currentConfigs = assumptions.unitConfigs ?? []
+	const nextConfigs: UnitConfig[] = []
+	for (const row of rows) {
+		const key = unitMixRowKey(row)
+		if (!key) continue
+		const units = finiteNumber(row.count ?? row.units)
+		const avgSizeSqm = finiteNumber(row.avgSizeSqm ?? row.avg_size_sqm)
+		if (units === null || avgSizeSqm === null) continue
+		const match = currentConfigs.find((config) => unitConfigMatchesKey(config, key))
+		const label = match?.label ?? displayUnitTypeLabel(key)
+		nextConfigs.push({
+			id: match?.id ?? uniqueUnitConfigId([...currentConfigs, ...nextConfigs], label),
+			label,
+			units: Math.round(units),
+			avgSizeSqm,
+			sellingRatePsqm:
+				finiteNumber(row.price_sqm ?? row.sellingRatePsqm ?? row.selling_rate_psqm) ??
+				match?.sellingRatePsqm ??
+				averageSellingPricePsqmValue(),
+			parkingRatio:
+				finiteNumber(row.parkingRatio ?? row.parking_ratio) ??
+				match?.parkingRatio ??
+				assumptions.standardParkingRatio
+		})
+	}
+	if (nextConfigs.length === 0 || JSON.stringify(nextConfigs) === JSON.stringify(currentConfigs)) {
+		return false
+	}
+	markSheetsDirty(UNIT_MIX_IMPACT_SHEETS)
+	applyAssumptionsPatch({ unitConfigs: nextConfigs })
+	return true
 }
 
 function applyProposal(proposal: { action: string; payload: unknown }): boolean {
@@ -880,32 +1058,21 @@ function applyProposal(proposal: { action: string; payload: unknown }): boolean 
 		return true
 	}
 	if (action === 'set_price_per_sqm' && payload && typeof payload === 'object') {
+		let changed = false
 		for (const [key, price] of Object.entries(payload as Record<string, number>)) {
-			const match = state.assumptions.unitConfigs?.find(
-				(r) =>
-					normalizeKey(r.id) === normalizeKey(key) || normalizeKey(r.label) === normalizeKey(key)
-			)
-			if (match) updateUnitConfig(match.id, { sellingRatePsqm: price })
+			const match = state.assumptions.unitConfigs?.find((row) => unitConfigMatchesKey(row, key))
+			if (match) {
+				updateUnitConfig(match.id, { sellingRatePsqm: price })
+				changed = true
+			}
 		}
-		return true
+		return changed
 	}
-	if (action === 'set_unit_mix' && Array.isArray(payload)) {
-		for (const row of payload as Array<Record<string, unknown>>) {
-			const key = String(row.type ?? '')
-			const match = state.assumptions.unitConfigs?.find(
-				(r) =>
-					normalizeKey(r.id) === normalizeKey(key) || normalizeKey(r.label) === normalizeKey(key)
-			)
-			if (match)
-				updateUnitConfig(match.id, {
-					units: typeof row.count === 'number' ? row.count : match.units,
-					avgSizeSqm: typeof row.avgSizeSqm === 'number' ? row.avgSizeSqm : match.avgSizeSqm,
-					sellingRatePsqm:
-						typeof row.price_sqm === 'number' ? row.price_sqm : match.sellingRatePsqm,
-					parkingRatio: typeof row.parkingRatio === 'number' ? row.parkingRatio : match.parkingRatio
-				})
-		}
-		return true
+	if (action === 'update_unit_mix' && Array.isArray(payload)) {
+		return applyUpdateUnitMixProposal(payload as Array<Record<string, unknown>>)
+	}
+	if ((action === 'set_unit_mix' || action === 'replace_unit_mix') && Array.isArray(payload)) {
+		return applyReplaceUnitMixProposal(payload as Array<Record<string, unknown>>)
 	}
 	if (
 		action === 'set_payment_plan' &&

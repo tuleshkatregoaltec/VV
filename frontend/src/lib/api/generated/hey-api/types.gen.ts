@@ -997,6 +997,199 @@ export type DdaPlotFeature = {
      * Is Verified
      */
     is_verified?: boolean;
+    /**
+     * Valuation Rate Min Aed Sqft
+     */
+    valuation_rate_min_aed_sqft?: number | null;
+    /**
+     * Valuation Rate Max Aed Sqft
+     */
+    valuation_rate_max_aed_sqft?: number | null;
+    /**
+     * Valuation Min Aed
+     */
+    valuation_min_aed?: number | null;
+    /**
+     * Valuation Max Aed
+     */
+    valuation_max_aed?: number | null;
+    /**
+     * Valuation Confidence
+     */
+    valuation_confidence?: string | null;
+    /**
+     * Valuation Note
+     */
+    valuation_note?: string | null;
+};
+
+/**
+ * DeveloperRankingCriterionResponse
+ */
+export type DeveloperRankingCriterionResponse = {
+    /**
+     * Key
+     */
+    key: string;
+    /**
+     * Label
+     */
+    label: string;
+    /**
+     * Weight Pct
+     */
+    weight_pct: number;
+    /**
+     * Score
+     */
+    score?: number | null;
+    /**
+     * Available
+     */
+    available: boolean;
+    /**
+     * Note
+     */
+    note?: string | null;
+};
+
+/**
+ * DeveloperRankingResponse
+ */
+export type DeveloperRankingResponse = {
+    /**
+     * Rank
+     */
+    rank: number;
+    /**
+     * Developer Name
+     */
+    developer_name: string;
+    /**
+     * Developer Id
+     */
+    developer_id?: number | null;
+    /**
+     * Developer Logo Url
+     */
+    developer_logo_url?: string | null;
+    /**
+     * Proprietary Score
+     */
+    proprietary_score?: number | null;
+    /**
+     * Score Coverage Pct
+     */
+    score_coverage_pct: number;
+    /**
+     * Risk Badge
+     */
+    risk_badge: string;
+    /**
+     * Units Sold
+     */
+    units_sold: number;
+    /**
+     * Sales Transaction Count
+     */
+    sales_transaction_count: number;
+    /**
+     * Sales Volume Aed
+     */
+    sales_volume_aed: number;
+    /**
+     * Avg Price Sqft Aed
+     */
+    avg_price_sqft_aed?: number | null;
+    /**
+     * Selling Projects
+     */
+    selling_projects: number;
+    /**
+     * Total Projects
+     */
+    total_projects: number;
+    /**
+     * Active Projects
+     */
+    active_projects: number;
+    /**
+     * Completed Projects
+     */
+    completed_projects: number;
+    /**
+     * Pipeline Units
+     */
+    pipeline_units: number;
+    /**
+     * Registered Units
+     */
+    registered_units: number;
+    /**
+     * Avg Completion Pct
+     */
+    avg_completion_pct?: number | null;
+    /**
+     * On Time Delivery Score
+     */
+    on_time_delivery_score?: number | null;
+    /**
+     * Sales Completion Score
+     */
+    sales_completion_score?: number | null;
+    /**
+     * Historical Project Success Score
+     */
+    historical_project_success_score?: number | null;
+    /**
+     * Criteria
+     */
+    criteria?: Array<DeveloperRankingCriterionResponse>;
+};
+
+/**
+ * DeveloperRankingSummaryResponse
+ */
+export type DeveloperRankingSummaryResponse = {
+    /**
+     * Total Developers
+     */
+    total_developers: number;
+    /**
+     * Period Label
+     */
+    period_label: string;
+    /**
+     * Start Date
+     */
+    start_date?: string | null;
+    /**
+     * End Date
+     */
+    end_date?: string | null;
+    /**
+     * Ranking Metric
+     */
+    ranking_metric: string;
+    /**
+     * Available Score Weight Pct
+     */
+    available_score_weight_pct: number;
+    /**
+     * Unavailable Criteria
+     */
+    unavailable_criteria?: Array<string>;
+};
+
+/**
+ * DeveloperRankingsResponse
+ */
+export type DeveloperRankingsResponse = {
+    /**
+     * Rankings
+     */
+    rankings: Array<DeveloperRankingResponse>;
+    summary: DeveloperRankingSummaryResponse;
 };
 
 /**
@@ -1968,6 +2161,18 @@ export type GeoPin = {
      * Property Id
      */
     property_id?: number | null;
+    /**
+     * Point Type
+     */
+    point_type?: string | null;
+    /**
+     * Point Number
+     */
+    point_number?: string | null;
+    /**
+     * Floor Count
+     */
+    floor_count?: number | null;
 };
 
 /**
@@ -2406,9 +2611,9 @@ export type ListingDetailResponse = {
      */
     scraped_at?: string | null;
     /**
-     * Demo Metadata
+     * Source Metadata
      */
-    demo_metadata?: {
+    source_metadata?: {
         [key: string]: unknown;
     };
 };
@@ -4145,6 +4350,14 @@ export type ProjectRadarArea = {
      */
     median_annual_rent: number | null;
     /**
+     * Avg Sale Price Sqm 12M
+     */
+    avg_sale_price_sqm_12m: number | null;
+    /**
+     * Avg Rent Price Sqm 12M
+     */
+    avg_rent_price_sqm_12m: number | null;
+    /**
      * Gross Yield Pct
      */
     gross_yield_pct: number | null;
@@ -4172,6 +4385,23 @@ export type ProjectRadarArea = {
      * Dda Dominant Land Uses
      */
     dda_dominant_land_uses: Array<string>;
+};
+
+/**
+ * ProjectRadarOverviewResponse
+ *
+ * Initial radar payload with zone heatmap data only.
+ */
+export type ProjectRadarOverviewResponse = {
+    stats: ProjectRadarStats;
+    /**
+     * Areas
+     */
+    areas: Array<ProjectRadarArea>;
+    /**
+     * Source Notes
+     */
+    source_notes: Array<string>;
 };
 
 /**
@@ -4212,6 +4442,26 @@ export type ProjectRadarProject = {
      * Geo Pin Count
      */
     geo_pin_count: number;
+    /**
+     * Coordinate Source
+     */
+    coordinate_source?: string;
+    /**
+     * Coordinate Method
+     */
+    coordinate_method?: string | null;
+    /**
+     * Detail Point Count
+     */
+    detail_point_count?: number;
+    /**
+     * Building Point Count
+     */
+    building_point_count?: number;
+    /**
+     * Land Point Count
+     */
+    land_point_count?: number;
     /**
      * Completion Status
      */
@@ -5085,6 +5335,32 @@ export type SupplyCatalogueBuildingResponse = {
 };
 
 /**
+ * SupplyCatalogueFinancialMetricResponse
+ */
+export type SupplyCatalogueFinancialMetricResponse = {
+    /**
+     * Key
+     */
+    key: string;
+    /**
+     * Label
+     */
+    label: string;
+    /**
+     * Value
+     */
+    value?: string | null;
+    /**
+     * Status
+     */
+    status: string;
+    /**
+     * Note
+     */
+    note?: string | null;
+};
+
+/**
  * SupplyCatalogueNearbyPointResponse
  */
 export type SupplyCatalogueNearbyPointResponse = {
@@ -5161,6 +5437,10 @@ export type SupplyCatalogueProjectCardResponse = {
      */
     completion_date?: string | null;
     /**
+     * Launch Date
+     */
+    launch_date?: string | null;
+    /**
      * Min Price Aed
      */
     min_price_aed?: number | null;
@@ -5172,6 +5452,30 @@ export type SupplyCatalogueProjectCardResponse = {
      * Units In Sale
      */
     units_in_sale?: number | null;
+    /**
+     * Units Sold
+     */
+    units_sold?: number | null;
+    /**
+     * Units Unsold
+     */
+    units_unsold?: number | null;
+    /**
+     * Total Units
+     */
+    total_units?: number | null;
+    /**
+     * Registered Units
+     */
+    registered_units?: number | null;
+    /**
+     * Sales Absorption Pct
+     */
+    sales_absorption_pct?: number | null;
+    /**
+     * Sales Inventory Source
+     */
+    sales_inventory_source?: string | null;
     /**
      * Unit Types
      */
@@ -5200,6 +5504,30 @@ export type SupplyCatalogueProjectCardResponse = {
      * Brochure Count
      */
     brochure_count?: number;
+    /**
+     * Project Score
+     */
+    project_score?: number | null;
+    /**
+     * Project Risk Badge
+     */
+    project_risk_badge?: string;
+    /**
+     * Score Coverage Pct
+     */
+    score_coverage_pct?: number;
+    /**
+     * Developer Score
+     */
+    developer_score?: number | null;
+    /**
+     * Developer Risk Badge
+     */
+    developer_risk_badge?: string | null;
+    /**
+     * Risk Indicators
+     */
+    risk_indicators?: Array<SupplyCatalogueRiskIndicatorResponse>;
 };
 
 /**
@@ -5243,6 +5571,10 @@ export type SupplyCatalogueProjectDetailResponse = {
      */
     completion_date?: string | null;
     /**
+     * Launch Date
+     */
+    launch_date?: string | null;
+    /**
      * Min Price Aed
      */
     min_price_aed?: number | null;
@@ -5254,6 +5586,30 @@ export type SupplyCatalogueProjectDetailResponse = {
      * Units In Sale
      */
     units_in_sale?: number | null;
+    /**
+     * Units Sold
+     */
+    units_sold?: number | null;
+    /**
+     * Units Unsold
+     */
+    units_unsold?: number | null;
+    /**
+     * Total Units
+     */
+    total_units?: number | null;
+    /**
+     * Registered Units
+     */
+    registered_units?: number | null;
+    /**
+     * Sales Absorption Pct
+     */
+    sales_absorption_pct?: number | null;
+    /**
+     * Sales Inventory Source
+     */
+    sales_inventory_source?: string | null;
     /**
      * Unit Types
      */
@@ -5282,6 +5638,30 @@ export type SupplyCatalogueProjectDetailResponse = {
      * Brochure Count
      */
     brochure_count?: number;
+    /**
+     * Project Score
+     */
+    project_score?: number | null;
+    /**
+     * Project Risk Badge
+     */
+    project_risk_badge?: string;
+    /**
+     * Score Coverage Pct
+     */
+    score_coverage_pct?: number;
+    /**
+     * Developer Score
+     */
+    developer_score?: number | null;
+    /**
+     * Developer Risk Badge
+     */
+    developer_risk_badge?: string | null;
+    /**
+     * Risk Indicators
+     */
+    risk_indicators?: Array<SupplyCatalogueRiskIndicatorResponse>;
     /**
      * Overview
      */
@@ -5329,11 +5709,19 @@ export type SupplyCatalogueProjectDetailResponse = {
      */
     master_plans?: Array<SupplyCatalogueAssetResponse>;
     /**
-     * Demo Metadata
+     * Source Metadata
      */
-    demo_metadata?: {
+    source_metadata?: {
         [key: string]: unknown;
     };
+    /**
+     * Financial Risk Metrics
+     */
+    financial_risk_metrics?: Array<SupplyCatalogueFinancialMetricResponse>;
+    /**
+     * Estimated Project Irr
+     */
+    estimated_project_irr?: string | null;
 };
 
 /**
@@ -5364,6 +5752,44 @@ export type SupplyCatalogueProjectsResponse = {
      * Statuses
      */
     statuses?: Array<string>;
+    /**
+     * Developers
+     */
+    developers?: Array<string>;
+};
+
+/**
+ * SupplyCatalogueRiskIndicatorResponse
+ */
+export type SupplyCatalogueRiskIndicatorResponse = {
+    /**
+     * Key
+     */
+    key: string;
+    /**
+     * Label
+     */
+    label: string;
+    /**
+     * Value
+     */
+    value?: string | null;
+    /**
+     * Score
+     */
+    score?: number | null;
+    /**
+     * Status
+     */
+    status: string;
+    /**
+     * Available
+     */
+    available?: boolean;
+    /**
+     * Note
+     */
+    note?: string | null;
 };
 
 /**
@@ -7605,6 +8031,92 @@ export type ProjectsProjectRadarResponses = {
 
 export type ProjectsProjectRadarResponse = ProjectsProjectRadarResponses[keyof ProjectsProjectRadarResponses];
 
+export type ProjectsProjectRadarOverviewData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/projects/radar/overview';
+};
+
+export type ProjectsProjectRadarOverviewResponses = {
+    /**
+     * Successful Response
+     */
+    200: ProjectRadarOverviewResponse;
+};
+
+export type ProjectsProjectRadarOverviewResponse = ProjectsProjectRadarOverviewResponses[keyof ProjectsProjectRadarOverviewResponses];
+
+export type ProjectsProjectRadarPinsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * West
+         *
+         * Viewport west longitude
+         */
+        west?: number | null;
+        /**
+         * South
+         *
+         * Viewport south latitude
+         */
+        south?: number | null;
+        /**
+         * East
+         *
+         * Viewport east longitude
+         */
+        east?: number | null;
+        /**
+         * North
+         *
+         * Viewport north latitude
+         */
+        north?: number | null;
+        /**
+         * Area
+         *
+         * Area name to fetch pins for
+         */
+        area?: string | null;
+        /**
+         * Developer
+         *
+         * Developer name to focus
+         */
+        developer?: string | null;
+        /**
+         * Limit
+         *
+         * Maximum project pins
+         */
+        limit?: number;
+    };
+    url: '/api/v1/projects/radar/pins';
+};
+
+export type ProjectsProjectRadarPinsErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ProjectsProjectRadarPinsError = ProjectsProjectRadarPinsErrors[keyof ProjectsProjectRadarPinsErrors];
+
+export type ProjectsProjectRadarPinsResponses = {
+    /**
+     * Response Projects-Project Radar Pins
+     *
+     * Successful Response
+     */
+    200: Array<ProjectRadarProject>;
+};
+
+export type ProjectsProjectRadarPinsResponse = ProjectsProjectRadarPinsResponses[keyof ProjectsProjectRadarPinsResponses];
+
 export type ProjectsMasterProjectData = {
     body?: never;
     path?: never;
@@ -7707,6 +8219,12 @@ export type ProjectsGetDdaPlotsData = {
          * Maximum DDA plots to return
          */
         limit?: number;
+        /**
+         * Include Valuations
+         *
+         * Include transaction-derived valuation ranges. Disabled for bulk map rendering.
+         */
+        include_valuations?: boolean;
     };
     url: '/api/v1/projects/dda-plots';
 };
@@ -7825,6 +8343,44 @@ export type ProjectsProjectDetailsResponses = {
 
 export type ProjectsProjectDetailsResponse = ProjectsProjectDetailsResponses[keyof ProjectsProjectDetailsResponses];
 
+export type SupplyListDeveloperRankingsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Period
+         */
+        period?: string;
+        /**
+         * Metric
+         */
+        metric?: string;
+        /**
+         * Limit
+         */
+        limit?: number;
+    };
+    url: '/api/v1/supply/developer-rankings';
+};
+
+export type SupplyListDeveloperRankingsErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type SupplyListDeveloperRankingsError = SupplyListDeveloperRankingsErrors[keyof SupplyListDeveloperRankingsErrors];
+
+export type SupplyListDeveloperRankingsResponses = {
+    /**
+     * Successful Response
+     */
+    200: DeveloperRankingsResponse;
+};
+
+export type SupplyListDeveloperRankingsResponse = SupplyListDeveloperRankingsResponses[keyof SupplyListDeveloperRankingsResponses];
+
 export type SupplyListUpcomingProjectsData = {
     body?: never;
     path?: never;
@@ -7865,6 +8421,18 @@ export type SupplyListCatalogueProjectsData = {
          * Status
          */
         status?: string | null;
+        /**
+         * Developer
+         */
+        developer?: string | null;
+        /**
+         * Sort
+         */
+        sort?: string;
+        /**
+         * Include Past
+         */
+        include_past?: boolean;
     };
     url: '/api/v1/supply/catalogue/projects';
 };
@@ -7916,39 +8484,6 @@ export type SupplyGetCatalogueProjectResponses = {
 };
 
 export type SupplyGetCatalogueProjectResponse = SupplyGetCatalogueProjectResponses[keyof SupplyGetCatalogueProjectResponses];
-
-export type SupplyGetCatalogueAssetData = {
-    body?: never;
-    path: {
-        /**
-         * Asset Id
-         */
-        asset_id: number;
-    };
-    query?: {
-        /**
-         * Download
-         */
-        download?: boolean;
-    };
-    url: '/api/v1/supply/catalogue/assets/{asset_id}';
-};
-
-export type SupplyGetCatalogueAssetErrors = {
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type SupplyGetCatalogueAssetError = SupplyGetCatalogueAssetErrors[keyof SupplyGetCatalogueAssetErrors];
-
-export type SupplyGetCatalogueAssetResponses = {
-    /**
-     * Successful Response
-     */
-    200: unknown;
-};
 
 export type TransactionsGetSalesTransactionsData = {
     body?: never;
@@ -8205,6 +8740,12 @@ export type TransactionsExportSalesTransactionsEndpointData = {
     path?: never;
     query?: {
         /**
+         * Format
+         *
+         * Export file format: xlsx or csv
+         */
+        format?: 'xlsx' | 'csv';
+        /**
          * Transaction Ids
          *
          * Comma-separated transaction IDs (overrides filters and limit)
@@ -8330,6 +8871,12 @@ export type TransactionsExportRentalContractsEndpointData = {
     body?: never;
     path?: never;
     query?: {
+        /**
+         * Format
+         *
+         * Export file format: xlsx or csv
+         */
+        format?: 'xlsx' | 'csv';
         /**
          * Contract Ids
          *

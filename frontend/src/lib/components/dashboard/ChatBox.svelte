@@ -168,6 +168,10 @@ function toolDisplayLabel(tool: string | undefined, state: ToolCallState, cached
 			start: 'Building market view',
 			done: 'Market view ready'
 		},
+		show_chart: {
+			start: 'Building chart',
+			done: 'Chart ready'
+		},
 		get_area_snapshot: {
 			start: 'Reading area snapshot',
 			done: 'Area snapshot ready'

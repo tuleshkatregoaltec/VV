@@ -29,11 +29,14 @@ const mobileMenuLabel = $derived(showMobileMenu ? 'Close navigation menu' : 'Ope
 
 				<div class="hidden items-center gap-1 lg:flex">
 					<NavLink href="/dashboard" label="Dashboard" />
+					<NavLink href="/workflows" label="Workflows" />
 					<NavLink href="/chat" label="Chat" />
 					<NavLink href="/transactions/sales" label="Transactions" activePrefix="/transactions" />
 					<NavLink href="/analytics" label="Analytics" />
 					<NavLink href="/projects" label="Radar" />
+					<NavLink href="/radar" label="Radar Lab" />
 					<NavLink href="/upcoming" label="Upcoming" />
+					<NavLink href="/developers" label="Developers" />
 					<NavLink href="/listings" label="Listings" />
 					<NavLink href="/feasibility" label="Feasibility" />
 				</div>

@@ -1890,7 +1890,7 @@
 			"get": {
 				"tags": ["listings", "listings"],
 				"summary": "List Listings",
-				"description": "List locally imported PropertyFinder listings for the demo.",
+				"description": "List Property Finder listings from ph_box ClickHouse.",
 				"operationId": "listings-list_listings",
 				"parameters": [
 					{
@@ -2058,7 +2058,7 @@
 			"get": {
 				"tags": ["listings", "listings"],
 				"summary": "Get Listing",
-				"description": "Get one locally imported PropertyFinder listing for the demo.",
+				"description": "Get one Property Finder listing from ph_box ClickHouse.",
 				"operationId": "listings-get_listing",
 				"parameters": [
 					{
@@ -2809,7 +2809,7 @@
 						"required": false,
 						"schema": {
 							"type": "integer",
-							"maximum": 3000,
+							"maximum": 5000,
 							"minimum": 100,
 							"description": "Maximum mapped projects",
 							"default": 1400,
@@ -2825,6 +2825,192 @@
 							"application/json": {
 								"schema": {
 									"$ref": "#/components/schemas/ProjectRadarResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/projects/radar/overview": {
+			"get": {
+				"tags": ["projects", "projects"],
+				"summary": "Project Radar Overview",
+				"description": "Get lightweight radar stats and area heatmap data without project pins.",
+				"operationId": "projects-project_radar_overview",
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/ProjectRadarOverviewResponse"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/projects/radar/pins": {
+			"get": {
+				"tags": ["projects", "projects"],
+				"summary": "Project Radar Pins",
+				"description": "Get bounded project pins for a viewport, selected area, or developer overlay.",
+				"operationId": "projects-project_radar_pins",
+				"parameters": [
+					{
+						"name": "west",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "number",
+									"maximum": 57,
+									"minimum": 54
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "Viewport west longitude",
+							"title": "West"
+						},
+						"description": "Viewport west longitude"
+					},
+					{
+						"name": "south",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "number",
+									"maximum": 26,
+									"minimum": 24
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "Viewport south latitude",
+							"title": "South"
+						},
+						"description": "Viewport south latitude"
+					},
+					{
+						"name": "east",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "number",
+									"maximum": 57,
+									"minimum": 54
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "Viewport east longitude",
+							"title": "East"
+						},
+						"description": "Viewport east longitude"
+					},
+					{
+						"name": "north",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "number",
+									"maximum": 26,
+									"minimum": 24
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "Viewport north latitude",
+							"title": "North"
+						},
+						"description": "Viewport north latitude"
+					},
+					{
+						"name": "area",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "string"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "Area name to fetch pins for",
+							"title": "Area"
+						},
+						"description": "Area name to fetch pins for"
+					},
+					{
+						"name": "developer",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "string"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "Developer name to focus",
+							"title": "Developer"
+						},
+						"description": "Developer name to focus"
+					},
+					{
+						"name": "limit",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer",
+							"maximum": 2500,
+							"minimum": 10,
+							"description": "Maximum project pins",
+							"default": 700,
+							"title": "Limit"
+						},
+						"description": "Maximum project pins"
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "array",
+									"items": {
+										"$ref": "#/components/schemas/ProjectRadarProject"
+									},
+									"title": "Response Projects-Project Radar Pins"
 								}
 							}
 						}
@@ -3044,6 +3230,18 @@
 							"title": "Limit"
 						},
 						"description": "Maximum DDA plots to return"
+					},
+					{
+						"name": "include_valuations",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "boolean",
+							"description": "Include transaction-derived valuation ranges. Disabled for bulk map rendering.",
+							"default": false,
+							"title": "Include Valuations"
+						},
+						"description": "Include transaction-derived valuation ranges. Disabled for bulk map rendering."
 					}
 				],
 				"responses": {
@@ -3230,6 +3428,72 @@
 				}
 			}
 		},
+		"/api/v1/supply/developer-rankings": {
+			"get": {
+				"tags": ["supply", "supply"],
+				"summary": "List Developer Rankings",
+				"description": "Rank developers using DLD project/transaction signals.",
+				"operationId": "supply-list_developer_rankings",
+				"parameters": [
+					{
+						"name": "period",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"pattern": "^(ytd|1y|3y|5y)$",
+							"default": "1y",
+							"title": "Period"
+						}
+					},
+					{
+						"name": "metric",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"maxLength": 80,
+							"default": "proprietary_score",
+							"title": "Metric"
+						}
+					},
+					{
+						"name": "limit",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer",
+							"maximum": 100,
+							"minimum": 5,
+							"default": 25,
+							"title": "Limit"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/DeveloperRankingsResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
 		"/api/v1/supply/upcoming-projects": {
 			"get": {
 				"tags": ["supply", "supply"],
@@ -3254,7 +3518,7 @@
 			"get": {
 				"tags": ["supply", "supply"],
 				"summary": "List Catalogue Projects",
-				"description": "List the demo-only supply catalogue.",
+				"description": "List the ph_box Reelly supply catalogue.",
 				"operationId": "supply-list_catalogue_projects",
 				"parameters": [
 					{
@@ -3330,6 +3594,44 @@
 							],
 							"title": "Status"
 						}
+					},
+					{
+						"name": "developer",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "string",
+									"maxLength": 160
+								},
+								{
+									"type": "null"
+								}
+							],
+							"title": "Developer"
+						}
+					},
+					{
+						"name": "sort",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"pattern": "^(recommended|newest|price_low|price_high|delivery_soon|delivery_latest)$",
+							"default": "recommended",
+							"title": "Sort"
+						}
+					},
+					{
+						"name": "include_past",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "boolean",
+							"default": false,
+							"title": "Include Past"
+						}
 					}
 				],
 				"responses": {
@@ -3360,7 +3662,7 @@
 			"get": {
 				"tags": ["supply", "supply"],
 				"summary": "Get Catalogue Project",
-				"description": "Get one demo-only supply catalogue project.",
+				"description": "Get one ph_box Reelly supply catalogue project.",
 				"operationId": "supply-get_catalogue_project",
 				"parameters": [
 					{
@@ -3381,55 +3683,6 @@
 								"schema": {
 									"$ref": "#/components/schemas/SupplyCatalogueProjectDetailResponse"
 								}
-							}
-						}
-					},
-					"422": {
-						"description": "Validation Error",
-						"content": {
-							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/HTTPValidationError"
-								}
-							}
-						}
-					}
-				}
-			}
-		},
-		"/api/v1/supply/catalogue/assets/{asset_id}": {
-			"get": {
-				"tags": ["supply", "supply"],
-				"summary": "Get Catalogue Asset",
-				"description": "Serve locally cached supply catalogue demo assets, downloading from R2 on cache miss.\n\nDemo note: this is unauthenticated so browser image tags and brochure links work.\nReplace with signed URLs or a real media service before production use.",
-				"operationId": "supply-get_catalogue_asset",
-				"parameters": [
-					{
-						"name": "asset_id",
-						"in": "path",
-						"required": true,
-						"schema": {
-							"type": "integer",
-							"title": "Asset Id"
-						}
-					},
-					{
-						"name": "download",
-						"in": "query",
-						"required": false,
-						"schema": {
-							"type": "boolean",
-							"default": false,
-							"title": "Download"
-						}
-					}
-				],
-				"responses": {
-					"200": {
-						"description": "Successful Response",
-						"content": {
-							"application/json": {
-								"schema": {}
 							}
 						}
 					},
@@ -3889,9 +4142,22 @@
 			"get": {
 				"tags": ["transactions", "transactions"],
 				"summary": "Export Sales Transactions Endpoint",
-				"description": "Export sales transactions to Excel.\n\nLimit: 100 rows max (or specific transaction_ids if provided).",
+				"description": "Export sales transactions to Excel or CSV.\n\nLimit: 50,000 rows max (or specific transaction_ids if provided).",
 				"operationId": "transactions-export_sales_transactions_endpoint",
 				"parameters": [
+					{
+						"name": "format",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"enum": ["xlsx", "csv"],
+							"type": "string",
+							"description": "Export file format: xlsx or csv",
+							"default": "xlsx",
+							"title": "Format"
+						},
+						"description": "Export file format: xlsx or csv"
+					},
 					{
 						"name": "transaction_ids",
 						"in": "query",
@@ -4102,9 +4368,22 @@
 			"get": {
 				"tags": ["transactions", "transactions"],
 				"summary": "Export Rental Contracts Endpoint",
-				"description": "Export rental contracts to Excel.\n\nLimit: 100 rows max (or specific contract_ids if provided).",
+				"description": "Export rental contracts to Excel or CSV.\n\nLimit: 50,000 rows max (or specific contract_ids if provided).",
 				"operationId": "transactions-export_rental_contracts_endpoint",
 				"parameters": [
+					{
+						"name": "format",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"enum": ["xlsx", "csv"],
+							"type": "string",
+							"description": "Export file format: xlsx or csv",
+							"default": "xlsx",
+							"title": "Format"
+						},
+						"description": "Export file format: xlsx or csv"
+					},
 					{
 						"name": "contract_ids",
 						"in": "query",
@@ -7394,6 +7673,72 @@
 						"type": "boolean",
 						"title": "Is Verified",
 						"default": false
+					},
+					"valuation_rate_min_aed_sqft": {
+						"anyOf": [
+							{
+								"type": "number"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Valuation Rate Min Aed Sqft"
+					},
+					"valuation_rate_max_aed_sqft": {
+						"anyOf": [
+							{
+								"type": "number"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Valuation Rate Max Aed Sqft"
+					},
+					"valuation_min_aed": {
+						"anyOf": [
+							{
+								"type": "number"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Valuation Min Aed"
+					},
+					"valuation_max_aed": {
+						"anyOf": [
+							{
+								"type": "number"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Valuation Max Aed"
+					},
+					"valuation_confidence": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Valuation Confidence"
+					},
+					"valuation_note": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Valuation Note"
 					}
 				},
 				"type": "object",
@@ -7406,6 +7751,295 @@
 				],
 				"title": "DDAPlotFeature",
 				"description": "DDA GIS plot polygon for map overlay."
+			},
+			"DeveloperRankingCriterionResponse": {
+				"properties": {
+					"key": {
+						"type": "string",
+						"title": "Key"
+					},
+					"label": {
+						"type": "string",
+						"title": "Label"
+					},
+					"weight_pct": {
+						"type": "number",
+						"title": "Weight Pct"
+					},
+					"score": {
+						"anyOf": [
+							{
+								"type": "number"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Score"
+					},
+					"available": {
+						"type": "boolean",
+						"title": "Available"
+					},
+					"note": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Note"
+					}
+				},
+				"type": "object",
+				"required": ["key", "label", "weight_pct", "available"],
+				"title": "DeveloperRankingCriterionResponse"
+			},
+			"DeveloperRankingResponse": {
+				"properties": {
+					"rank": {
+						"type": "integer",
+						"title": "Rank"
+					},
+					"developer_name": {
+						"type": "string",
+						"title": "Developer Name"
+					},
+					"developer_id": {
+						"anyOf": [
+							{
+								"type": "integer"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Developer Id"
+					},
+					"developer_logo_url": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Developer Logo Url"
+					},
+					"proprietary_score": {
+						"anyOf": [
+							{
+								"type": "number"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Proprietary Score"
+					},
+					"score_coverage_pct": {
+						"type": "number",
+						"title": "Score Coverage Pct"
+					},
+					"risk_badge": {
+						"type": "string",
+						"title": "Risk Badge"
+					},
+					"units_sold": {
+						"type": "integer",
+						"title": "Units Sold"
+					},
+					"sales_transaction_count": {
+						"type": "integer",
+						"title": "Sales Transaction Count"
+					},
+					"sales_volume_aed": {
+						"type": "number",
+						"title": "Sales Volume Aed"
+					},
+					"avg_price_sqft_aed": {
+						"anyOf": [
+							{
+								"type": "number"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Avg Price Sqft Aed"
+					},
+					"selling_projects": {
+						"type": "integer",
+						"title": "Selling Projects"
+					},
+					"total_projects": {
+						"type": "integer",
+						"title": "Total Projects"
+					},
+					"active_projects": {
+						"type": "integer",
+						"title": "Active Projects"
+					},
+					"completed_projects": {
+						"type": "integer",
+						"title": "Completed Projects"
+					},
+					"pipeline_units": {
+						"type": "integer",
+						"title": "Pipeline Units"
+					},
+					"registered_units": {
+						"type": "integer",
+						"title": "Registered Units"
+					},
+					"avg_completion_pct": {
+						"anyOf": [
+							{
+								"type": "number"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Avg Completion Pct"
+					},
+					"on_time_delivery_score": {
+						"anyOf": [
+							{
+								"type": "number"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "On Time Delivery Score"
+					},
+					"sales_completion_score": {
+						"anyOf": [
+							{
+								"type": "number"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Sales Completion Score"
+					},
+					"historical_project_success_score": {
+						"anyOf": [
+							{
+								"type": "number"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Historical Project Success Score"
+					},
+					"criteria": {
+						"items": {
+							"$ref": "#/components/schemas/DeveloperRankingCriterionResponse"
+						},
+						"type": "array",
+						"title": "Criteria"
+					}
+				},
+				"type": "object",
+				"required": [
+					"rank",
+					"developer_name",
+					"score_coverage_pct",
+					"risk_badge",
+					"units_sold",
+					"sales_transaction_count",
+					"sales_volume_aed",
+					"selling_projects",
+					"total_projects",
+					"active_projects",
+					"completed_projects",
+					"pipeline_units",
+					"registered_units"
+				],
+				"title": "DeveloperRankingResponse"
+			},
+			"DeveloperRankingSummaryResponse": {
+				"properties": {
+					"total_developers": {
+						"type": "integer",
+						"title": "Total Developers"
+					},
+					"period_label": {
+						"type": "string",
+						"title": "Period Label"
+					},
+					"start_date": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "date"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Start Date"
+					},
+					"end_date": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "date"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "End Date"
+					},
+					"ranking_metric": {
+						"type": "string",
+						"title": "Ranking Metric"
+					},
+					"available_score_weight_pct": {
+						"type": "number",
+						"title": "Available Score Weight Pct"
+					},
+					"unavailable_criteria": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"title": "Unavailable Criteria"
+					}
+				},
+				"type": "object",
+				"required": [
+					"total_developers",
+					"period_label",
+					"ranking_metric",
+					"available_score_weight_pct"
+				],
+				"title": "DeveloperRankingSummaryResponse"
+			},
+			"DeveloperRankingsResponse": {
+				"properties": {
+					"rankings": {
+						"items": {
+							"$ref": "#/components/schemas/DeveloperRankingResponse"
+						},
+						"type": "array",
+						"title": "Rankings"
+					},
+					"summary": {
+						"$ref": "#/components/schemas/DeveloperRankingSummaryResponse"
+					}
+				},
+				"type": "object",
+				"required": ["rankings", "summary"],
+				"title": "DeveloperRankingsResponse"
 			},
 			"DimensionBreakdown": {
 				"properties": {
@@ -8791,6 +9425,39 @@
 							}
 						],
 						"title": "Property Id"
+					},
+					"point_type": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Point Type"
+					},
+					"point_number": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Point Number"
+					},
+					"floor_count": {
+						"anyOf": [
+							{
+								"type": "integer"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Floor Count"
 					}
 				},
 				"type": "object",
@@ -9764,10 +10431,10 @@
 						],
 						"title": "Scraped At"
 					},
-					"demo_metadata": {
+					"source_metadata": {
 						"additionalProperties": true,
 						"type": "object",
-						"title": "Demo Metadata"
+						"title": "Source Metadata"
 					}
 				},
 				"type": "object",
@@ -12631,6 +13298,28 @@
 						],
 						"title": "Median Annual Rent"
 					},
+					"avg_sale_price_sqm_12m": {
+						"anyOf": [
+							{
+								"type": "number"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Avg Sale Price Sqm 12M"
+					},
+					"avg_rent_price_sqm_12m": {
+						"anyOf": [
+							{
+								"type": "number"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Avg Rent Price Sqm 12M"
+					},
 					"gross_yield_pct": {
 						"anyOf": [
 							{
@@ -12696,6 +13385,8 @@
 					"total_sales_volume_12m",
 					"median_sale_price",
 					"median_annual_rent",
+					"avg_sale_price_sqm_12m",
+					"avg_rent_price_sqm_12m",
 					"gross_yield_pct",
 					"top_developers",
 					"top_master_projects",
@@ -12706,6 +13397,31 @@
 				],
 				"title": "ProjectRadarArea",
 				"description": "Area-level bubble with supply, demand, and DDA planning context."
+			},
+			"ProjectRadarOverviewResponse": {
+				"properties": {
+					"stats": {
+						"$ref": "#/components/schemas/ProjectRadarStats"
+					},
+					"areas": {
+						"items": {
+							"$ref": "#/components/schemas/ProjectRadarArea"
+						},
+						"type": "array",
+						"title": "Areas"
+					},
+					"source_notes": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"title": "Source Notes"
+					}
+				},
+				"type": "object",
+				"required": ["stats", "areas", "source_notes"],
+				"title": "ProjectRadarOverviewResponse",
+				"description": "Initial radar payload with zone heatmap data only."
 			},
 			"ProjectRadarProject": {
 				"properties": {
@@ -12754,6 +13470,37 @@
 					"geo_pin_count": {
 						"type": "integer",
 						"title": "Geo Pin Count"
+					},
+					"coordinate_source": {
+						"type": "string",
+						"title": "Coordinate Source",
+						"default": "ch_geo_buildings"
+					},
+					"coordinate_method": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Coordinate Method"
+					},
+					"detail_point_count": {
+						"type": "integer",
+						"title": "Detail Point Count",
+						"default": 0
+					},
+					"building_point_count": {
+						"type": "integer",
+						"title": "Building Point Count",
+						"default": 0
+					},
+					"land_point_count": {
+						"type": "integer",
+						"title": "Land Point Count",
+						"default": 0
 					},
 					"completion_status": {
 						"type": "string",
@@ -14111,6 +14858,47 @@
 				"required": ["name"],
 				"title": "SupplyCatalogueBuildingResponse"
 			},
+			"SupplyCatalogueFinancialMetricResponse": {
+				"properties": {
+					"key": {
+						"type": "string",
+						"title": "Key"
+					},
+					"label": {
+						"type": "string",
+						"title": "Label"
+					},
+					"value": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Value"
+					},
+					"status": {
+						"type": "string",
+						"title": "Status"
+					},
+					"note": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Note"
+					}
+				},
+				"type": "object",
+				"required": ["key", "label", "status"],
+				"title": "SupplyCatalogueFinancialMetricResponse"
+			},
 			"SupplyCatalogueNearbyPointResponse": {
 				"properties": {
 					"name": {
@@ -14257,6 +15045,17 @@
 						],
 						"title": "Completion Date"
 					},
+					"launch_date": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Launch Date"
+					},
 					"min_price_aed": {
 						"anyOf": [
 							{
@@ -14289,6 +15088,72 @@
 							}
 						],
 						"title": "Units In Sale"
+					},
+					"units_sold": {
+						"anyOf": [
+							{
+								"type": "integer"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Units Sold"
+					},
+					"units_unsold": {
+						"anyOf": [
+							{
+								"type": "integer"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Units Unsold"
+					},
+					"total_units": {
+						"anyOf": [
+							{
+								"type": "integer"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Total Units"
+					},
+					"registered_units": {
+						"anyOf": [
+							{
+								"type": "integer"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Registered Units"
+					},
+					"sales_absorption_pct": {
+						"anyOf": [
+							{
+								"type": "number"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Sales Absorption Pct"
+					},
+					"sales_inventory_source": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Sales Inventory Source"
 					},
 					"unit_types": {
 						"items": {
@@ -14344,6 +15209,56 @@
 						"type": "integer",
 						"title": "Brochure Count",
 						"default": 0
+					},
+					"project_score": {
+						"anyOf": [
+							{
+								"type": "number"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Project Score"
+					},
+					"project_risk_badge": {
+						"type": "string",
+						"title": "Project Risk Badge",
+						"default": "Review"
+					},
+					"score_coverage_pct": {
+						"type": "number",
+						"title": "Score Coverage Pct",
+						"default": 0.0
+					},
+					"developer_score": {
+						"anyOf": [
+							{
+								"type": "number"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Developer Score"
+					},
+					"developer_risk_badge": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Developer Risk Badge"
+					},
+					"risk_indicators": {
+						"items": {
+							"$ref": "#/components/schemas/SupplyCatalogueRiskIndicatorResponse"
+						},
+						"type": "array",
+						"title": "Risk Indicators"
 					}
 				},
 				"type": "object",
@@ -14430,6 +15345,17 @@
 						],
 						"title": "Completion Date"
 					},
+					"launch_date": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Launch Date"
+					},
 					"min_price_aed": {
 						"anyOf": [
 							{
@@ -14462,6 +15388,72 @@
 							}
 						],
 						"title": "Units In Sale"
+					},
+					"units_sold": {
+						"anyOf": [
+							{
+								"type": "integer"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Units Sold"
+					},
+					"units_unsold": {
+						"anyOf": [
+							{
+								"type": "integer"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Units Unsold"
+					},
+					"total_units": {
+						"anyOf": [
+							{
+								"type": "integer"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Total Units"
+					},
+					"registered_units": {
+						"anyOf": [
+							{
+								"type": "integer"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Registered Units"
+					},
+					"sales_absorption_pct": {
+						"anyOf": [
+							{
+								"type": "number"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Sales Absorption Pct"
+					},
+					"sales_inventory_source": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Sales Inventory Source"
 					},
 					"unit_types": {
 						"items": {
@@ -14517,6 +15509,56 @@
 						"type": "integer",
 						"title": "Brochure Count",
 						"default": 0
+					},
+					"project_score": {
+						"anyOf": [
+							{
+								"type": "number"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Project Score"
+					},
+					"project_risk_badge": {
+						"type": "string",
+						"title": "Project Risk Badge",
+						"default": "Review"
+					},
+					"score_coverage_pct": {
+						"type": "number",
+						"title": "Score Coverage Pct",
+						"default": 0.0
+					},
+					"developer_score": {
+						"anyOf": [
+							{
+								"type": "number"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Developer Score"
+					},
+					"developer_risk_badge": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Developer Risk Badge"
+					},
+					"risk_indicators": {
+						"items": {
+							"$ref": "#/components/schemas/SupplyCatalogueRiskIndicatorResponse"
+						},
+						"type": "array",
+						"title": "Risk Indicators"
 					},
 					"overview": {
 						"anyOf": [
@@ -14606,10 +15648,28 @@
 						"type": "array",
 						"title": "Master Plans"
 					},
-					"demo_metadata": {
+					"source_metadata": {
 						"additionalProperties": true,
 						"type": "object",
-						"title": "Demo Metadata"
+						"title": "Source Metadata"
+					},
+					"financial_risk_metrics": {
+						"items": {
+							"$ref": "#/components/schemas/SupplyCatalogueFinancialMetricResponse"
+						},
+						"type": "array",
+						"title": "Financial Risk Metrics"
+					},
+					"estimated_project_irr": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Estimated Project Irr"
 					}
 				},
 				"type": "object",
@@ -14650,11 +15710,75 @@
 						},
 						"type": "array",
 						"title": "Statuses"
+					},
+					"developers": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"title": "Developers"
 					}
 				},
 				"type": "object",
 				"required": ["projects", "total", "limit", "offset"],
 				"title": "SupplyCatalogueProjectsResponse"
+			},
+			"SupplyCatalogueRiskIndicatorResponse": {
+				"properties": {
+					"key": {
+						"type": "string",
+						"title": "Key"
+					},
+					"label": {
+						"type": "string",
+						"title": "Label"
+					},
+					"value": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Value"
+					},
+					"score": {
+						"anyOf": [
+							{
+								"type": "number"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Score"
+					},
+					"status": {
+						"type": "string",
+						"title": "Status"
+					},
+					"available": {
+						"type": "boolean",
+						"title": "Available",
+						"default": true
+					},
+					"note": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Note"
+					}
+				},
+				"type": "object",
+				"required": ["key", "label", "status"],
+				"title": "SupplyCatalogueRiskIndicatorResponse"
 			},
 			"SupplyCatalogueUnitResponse": {
 				"properties": {

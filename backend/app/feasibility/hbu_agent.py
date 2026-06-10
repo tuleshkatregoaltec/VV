@@ -157,7 +157,10 @@ def _effective_land_price_psqm(assumptions: FeasibilityAssumptions, plot_area_sq
 
 
 def _effective_land_acquisition_cost_aed(assumptions: FeasibilityAssumptions) -> float:
-    if assumptions.landAcquisitionCostOverrideAed and assumptions.landAcquisitionCostOverrideAed > 0:
+    if (
+        assumptions.landAcquisitionCostOverrideAed
+        and assumptions.landAcquisitionCostOverrideAed > 0
+    ):
         return round(assumptions.landAcquisitionCostOverrideAed, 2)
     return round(max(assumptions.plotAreaSqm, 0) * max(assumptions.landPricePsqm, 0), 2)
 
@@ -336,8 +339,8 @@ def _construction_cost_guidance(
     max_storeys: int | None,
 ) -> str:
     benchmark = _construction_cost_benchmark_psqm_bua(usage, max_storeys)
-    low_factor, normal_high_factor, exceptional_high_factor = CONSTRUCTION_COST_ADJUSTMENT_BANDS.get(
-        usage, CONSTRUCTION_COST_ADJUSTMENT_BANDS["unknown"]
+    low_factor, normal_high_factor, exceptional_high_factor = (
+        CONSTRUCTION_COST_ADJUSTMENT_BANDS.get(usage, CONSTRUCTION_COST_ADJUSTMENT_BANDS["unknown"])
     )
     normal_low = round(benchmark * low_factor / 50) * 50
     normal_high = round(benchmark * normal_high_factor / 50) * 50
@@ -384,7 +387,9 @@ def _inferred_storeys_from_gfa(plot: PlotDetails, usage: Usage) -> int | None:
     benchmark = _massing_benchmark(usage, None)
     regulatory_coverage = _parse_max_coverage(plot.max_coverage)
     target_coverage = min(
-        regulatory_coverage if regulatory_coverage and regulatory_coverage > 0 else benchmark["coverage_pct"],
+        regulatory_coverage
+        if regulatory_coverage and regulatory_coverage > 0
+        else benchmark["coverage_pct"],
         benchmark["coverage_pct"],
     )
     if target_coverage <= 0:
@@ -417,7 +422,9 @@ def _massing_scaffold_updates(plot: PlotDetails, usage: Usage) -> dict[str, floa
         else 30.0
     )
     target_coverage = min(
-        regulatory_coverage if regulatory_coverage and regulatory_coverage > 0 else benchmark["coverage_pct"],
+        regulatory_coverage
+        if regulatory_coverage and regulatory_coverage > 0
+        else benchmark["coverage_pct"],
         benchmark["coverage_pct"],
     )
     covered_footprint_sqm = max(plot.plot_area_sqm * (target_coverage / 100), 0)
@@ -484,9 +491,7 @@ def _bts_pricing_guidance(plot: PlotDetails, market_pricing, off_plan_benchmarks
     existing_by_type = {
         normalize_unit_type(row.unit_type): row.median_price_sqm for row in market_pricing or []
     }
-    far = plot.far or (
-        plot.max_gfa_sqm / plot.plot_area_sqm if plot.plot_area_sqm > 0 else 0.0
-    )
+    far = plot.far or (plot.max_gfa_sqm / plot.plot_area_sqm if plot.plot_area_sqm > 0 else 0.0)
     if plot.max_gfa_sqm >= 150_000 or far >= 25:
         scale_label = "very large high-FAR"
         low_haircut, high_haircut = 0.10, 0.15

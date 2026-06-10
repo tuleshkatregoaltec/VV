@@ -6,9 +6,16 @@ import logging
 import math
 import re
 import time
+from bisect import bisect_left
 from typing import Any, List, Optional
 
 from app.clickhouse.client import query
+from app.core.market_constants import SQM_TO_SQFT
+from app.core.normalization import (
+    DEVELOPER_LEGAL_ENTITY_PATTERN,
+    developer_brand_name,
+    developer_filter_names,
+)
 from app.project.models import (
     BuildingDetailResponse,
     BuildingInfo,
@@ -22,6 +29,7 @@ from app.project.models import (
     ProjectDetailResponse,
     ProjectMarketSnapshotResponse,
     ProjectRadarArea,
+    ProjectRadarOverviewResponse,
     ProjectRadarProject,
     ProjectRadarResponse,
     ProjectRadarStats,
@@ -33,6 +41,20 @@ logger = logging.getLogger(__name__)
 
 DDA_GEOMETRY_CACHE_TTL_SECONDS = 60 * 60
 _dda_geometry_cache: tuple[float, list[dict[str, Any]]] | None = None
+DDA_VALUATION_LOOKBACK_DAYS = 365 * 5
+DDA_VALUATION_MIN_TRANSACTION_AED = 1_000_000
+DDA_VALUATION_MARKET_PROCEDURES = (
+    "Sell",
+    "Delayed Sell",
+    "Sale On Payment Plan",
+)
+DDA_VALUATION_MAX_PLOT_AREA_DELTA = 0.01
+DDA_VALUATION_MIN_COMP_COUNT = 3
+DDA_VALUATION_SIZE_BAND = (0.5, 1.75)
+RADAR_YIELD_MIN_SAMPLE_COUNT = 5
+RADAR_YIELD_MIN_PCT = 1
+RADAR_YIELD_MAX_PCT = 25
+CH_GEO_BUILDINGS_SOURCE = "ch_geo_buildings"
 
 
 def _room_sort_key(rooms: str) -> tuple:
@@ -53,6 +75,77 @@ def _float_or_none(value: Any) -> float | None:
     except (TypeError, ValueError):
         return None
     return parsed if math.isfinite(parsed) else None
+
+
+def _int_value(value: Any) -> int:
+    try:
+        return int(value or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _radar_gross_yield_pct(row: dict[str, Any]) -> float | None:
+    """Compute yield with the same existing-sale denominator used by analytics."""
+    sale_count = _int_value(row.get("yield_existing_sale_count"))
+    rent_count = _int_value(row.get("yield_rental_contract_count"))
+    median_price = _float_or_none(row.get("yield_existing_median_sale_price"))
+    median_rent = _float_or_none(row.get("yield_median_annual_rent"))
+    if (
+        sale_count < RADAR_YIELD_MIN_SAMPLE_COUNT
+        or rent_count < RADAR_YIELD_MIN_SAMPLE_COUNT
+        or not median_price
+        or not median_rent
+    ):
+        return None
+
+    yield_pct = round(median_rent / median_price * 100, 2)
+    if yield_pct < RADAR_YIELD_MIN_PCT or yield_pct > RADAR_YIELD_MAX_PCT:
+        return None
+    return yield_pct
+
+
+def _contains_arabic(value: str) -> bool:
+    return any("\u0600" <= char <= "\u06ff" for char in value)
+
+
+def _developer_lookup(rows: list[dict[str, Any]]) -> dict[str, str]:
+    lookup: dict[str, str] = {}
+    for row in rows:
+        english = str(row.get("developer_name_en") or "").strip()
+        arabic = str(row.get("developer_name_ar") or "").strip()
+        if english:
+            lookup[english] = english
+        if arabic and english:
+            lookup[arabic] = english
+    return lookup
+
+
+def _developer_display_name(name: Any, lookup: dict[str, str]) -> str | None:
+    label = str(name or "").strip()
+    if not label:
+        return None
+    mapped = lookup.get(label)
+    if mapped:
+        return developer_brand_name(mapped)
+    if _contains_arabic(label):
+        return None
+    branded = developer_brand_name(label)
+    if branded == label and DEVELOPER_LEGAL_ENTITY_PATTERN.search(branded):
+        return None
+    return branded
+
+
+def _developer_display_list(raw: Any, lookup: dict[str, str], *, limit: int = 5) -> list[str]:
+    if not isinstance(raw, list):
+        return []
+    labels: list[str] = []
+    for item in raw:
+        label = _developer_display_name(item, lookup)
+        if label and label not in labels:
+            labels.append(label)
+        if len(labels) >= limit:
+            break
+    return labels
 
 
 def _land_use_labels(raw: Any, limit: int = 3) -> list[str]:
@@ -91,6 +184,29 @@ def _land_use_labels(raw: Any, limit: int = 3) -> list[str]:
             if len(labels) >= limit:
                 break
     return labels
+
+
+def _radar_geo_cte() -> str:
+    return f"""
+    geo_by_project AS (
+        SELECT
+            p.project_id AS project_id,
+            avg(g.lat) AS latitude,
+            avg(g.lng) AS longitude,
+            count() AS geo_pin_count,
+            '{CH_GEO_BUILDINGS_SOURCE}' AS coordinate_source,
+            '' AS coordinate_method,
+            0 AS detail_point_count,
+            count() AS building_point_count,
+            0 AS land_point_count
+        FROM ch_geo_buildings g
+        INNER JOIN ch_projects p ON g.project_name_en = p.project_name_en
+        WHERE g.lat BETWEEN 20 AND 30
+          AND g.lng BETWEEN 50 AND 60
+          AND g.project_name_en != ''
+        GROUP BY p.project_id
+    )
+    """
 
 
 async def list_all_projects() -> List[ProjectSearchResult]:
@@ -197,11 +313,15 @@ async def get_project_details(project_id: int) -> Optional[ProjectDetailResponse
         ORDER BY building_name_en
     """
 
-    buildings_result, composition_result, geo_result = await asyncio.gather(
+    query_tasks = [
         query(buildings_sql, {"project_id": project_id}),
         query(composition_sql, {"project_id": project_id}),
         query(geo_sql, {"project_name": project["project_name_en"]}),
-    )
+    ]
+    results = await asyncio.gather(*query_tasks)
+    buildings_result = results[0]
+    composition_result = results[1]
+    geo_result = results[2]
 
     buildings = [
         BuildingInfo(
@@ -241,6 +361,7 @@ async def get_project_details(project_id: int) -> Optional[ProjectDetailResponse
             latitude=r["lat"],
             longitude=r["lng"],
             property_id=building_by_norm.get(_norm(r["building_name_en"])) or None,
+            point_type="building",
         )
         for r in geo_result
     ]
@@ -386,143 +507,130 @@ async def get_master_project(master_name: str) -> Optional[MasterProjectResponse
     )
 
 
-async def get_project_radar(limit: int = 1400) -> ProjectRadarResponse:
-    """Return project and area map data for the radar view."""
-    project_sql = """
-        WITH geo_by_project AS (
-            SELECT
-                project_name_en,
-                avg(lat) AS latitude,
-                avg(lng) AS longitude,
-                count() AS geo_pin_count
-            FROM ch_geo_buildings
-            WHERE lat BETWEEN 20 AND 30
-              AND lng BETWEEN 50 AND 60
-              AND project_name_en != ''
-            GROUP BY project_name_en
+def _radar_source_notes() -> list[str]:
+    return [
+        "Project points are derived from geocoded building pins when available.",
+        "Building drilldowns use the existing geocoded building pin table.",
+        "Area bubbles combine ch_area_fact metrics with DDA community planning summaries.",
+        "DDA outlines load at overview zoom; parcel polygons load only for the zoomed viewport.",
+    ]
+
+
+def _radar_stats_from_row(row: dict[str, Any]) -> ProjectRadarStats:
+    return ProjectRadarStats(
+        total_projects=int(row.get("total_projects") or 0),
+        mapped_projects=int(row.get("mapped_projects") or 0),
+        active_projects=int(row.get("active_projects") or 0),
+        finished_projects=int(row.get("finished_projects") or 0),
+        pipeline_units=int(row.get("pipeline_units") or 0),
+        units_delivering_next_12_months=int(row.get("units_delivering_next_12_months") or 0),
+        sales_transaction_count_12m=int(row.get("sales_transaction_count_12m") or 0),
+        rental_contract_count_12m=int(row.get("rental_contract_count_12m") or 0),
+        total_sales_volume_12m=_float_or_none(row.get("total_sales_volume_12m")) or 0.0,
+        dda_plot_count=int(row.get("dda_plot_count") or 0),
+        dda_total_plot_area_sqm=_float_or_none(row.get("dda_total_plot_area_sqm")) or 0.0,
+        dda_total_gfa_sqm=_float_or_none(row.get("dda_total_gfa_sqm")) or 0.0,
+    )
+
+
+def _radar_projects_from_rows(
+    rows: list[dict[str, Any]], developers: dict[str, str]
+) -> list[ProjectRadarProject]:
+    return [
+        ProjectRadarProject(
+            project_id=row["project_id"],
+            project_name=row["project_name_en"],
+            area_name=row.get("area_name_en") or "Unknown",
+            developer_name=_developer_display_name(row.get("developer_name"), developers),
+            master_project_en=row.get("master_project_en") or None,
+            latitude=float(row["latitude"]),
+            longitude=float(row["longitude"]),
+            geo_pin_count=int(row.get("geo_pin_count") or 0),
+            coordinate_source=row.get("coordinate_source") or CH_GEO_BUILDINGS_SOURCE,
+            coordinate_method=row.get("coordinate_method") or None,
+            detail_point_count=int(row.get("detail_point_count") or 0),
+            building_point_count=int(row.get("building_point_count") or 0),
+            land_point_count=int(row.get("land_point_count") or 0),
+            completion_status=row.get("completion_status") or "",
+            pipeline_status=row.get("pipeline_status") or "",
+            project_status=row.get("project_status") or None,
+            no_of_units=int(row.get("no_of_units") or 0),
+            no_of_buildings=int(row.get("no_of_buildings") or 0),
+            percent_completed=_float_or_none(row.get("percent_completed")),
+            delivery_confidence=_float_or_none(row.get("estimated_delivery_confidence")) or 0.0,
+            sales_transaction_count_12m=int(row.get("sales_transaction_count_12m") or 0),
+            rental_contract_count_12m=int(row.get("rental_contract_count_12m") or 0),
+            total_sales_volume_12m=_float_or_none(row.get("total_sales_volume_12m")) or 0.0,
+            median_sale_price=_float_or_none(row.get("median_sale_price")),
+            median_annual_rent=_float_or_none(row.get("median_annual_rent")),
+            gross_yield_pct=_radar_gross_yield_pct(row),
+            avg_sale_price_sqm_12m=_float_or_none(row.get("avg_sale_price_sqm_12m")),
+            avg_rent_price_sqm_12m=_float_or_none(row.get("avg_rent_price_sqm_12m")),
         )
-        SELECT
-            f.project_id AS project_id,
-            f.project_name_en AS project_name_en,
-            f.area_name_en AS area_name_en,
-            f.developer_name AS developer_name,
-            f.master_project_en AS master_project_en,
-            g.latitude AS latitude,
-            g.longitude AS longitude,
-            g.geo_pin_count AS geo_pin_count,
-            f.completion_status AS completion_status,
-            f.pipeline_status AS pipeline_status,
-            p.project_status AS project_status,
-            f.no_of_units AS no_of_units,
-            p.no_of_buildings AS no_of_buildings,
-            f.percent_completed AS percent_completed,
-            f.estimated_delivery_confidence AS estimated_delivery_confidence,
-            f.sales_transaction_count_12m AS sales_transaction_count_12m,
-            f.rental_contract_count_12m AS rental_contract_count_12m,
-            f.total_sales_volume_12m AS total_sales_volume_12m,
-            f.median_sale_price AS median_sale_price,
-            f.median_annual_rent AS median_annual_rent,
-            f.gross_yield_pct AS gross_yield_pct,
-            f.avg_sale_price_sqm_12m AS avg_sale_price_sqm_12m,
-            f.avg_rent_price_sqm_12m AS avg_rent_price_sqm_12m
-        FROM ch_project_fact f
-        INNER JOIN ch_projects p ON p.project_id = f.project_id
-        INNER JOIN geo_by_project g ON g.project_name_en = f.project_name_en
-        WHERE f.project_name_en != ''
-        ORDER BY
-            (f.pipeline_status = 'delivering_next_12_months') DESC,
-            f.no_of_units DESC,
-            f.total_sales_volume_12m DESC
-        LIMIT {limit:UInt32}
+        for row in rows
+    ]
+
+
+def _radar_areas_from_rows(
+    rows: list[dict[str, Any]], developers: dict[str, str]
+) -> list[ProjectRadarArea]:
+    areas = [
+        ProjectRadarArea(
+            area_id=int(row.get("area_id") or 0),
+            area_name=row.get("area_name_en") or "Unknown",
+            latitude=_float_or_none(row.get("latitude")),
+            longitude=_float_or_none(row.get("longitude")),
+            mapped_projects=int(row.get("mapped_projects") or 0),
+            active_projects=int(row.get("active_projects") or 0),
+            completed_projects=int(row.get("completed_projects") or 0),
+            overdue_projects=int(row.get("overdue_projects") or 0),
+            pipeline_units=int(row.get("pipeline_units") or 0),
+            units_delivering_next_12_months=int(row.get("units_delivering_next_12_months") or 0),
+            active_developers=int(row.get("active_developers") or 0),
+            avg_completion_pct=_float_or_none(row.get("avg_completion_pct")) or 0.0,
+            avg_delivery_confidence=_float_or_none(row.get("avg_delivery_confidence")) or 0.0,
+            sales_transaction_count_12m=int(row.get("sales_transaction_count_12m") or 0),
+            rental_contract_count_12m=int(row.get("rental_contract_count_12m") or 0),
+            total_sales_volume_12m=_float_or_none(row.get("total_sales_volume_12m")) or 0.0,
+            median_sale_price=_float_or_none(row.get("median_sale_price")),
+            median_annual_rent=_float_or_none(row.get("median_annual_rent")),
+            avg_sale_price_sqm_12m=_float_or_none(row.get("avg_sale_price_sqm_12m")),
+            avg_rent_price_sqm_12m=_float_or_none(row.get("avg_rent_price_sqm_12m")),
+            gross_yield_pct=_radar_gross_yield_pct(row),
+            top_developers=_developer_display_list(row.get("top_developers"), developers, limit=5),
+            top_master_projects=list(row.get("top_master_projects") or [])[:5],
+            dda_plot_count=int(row.get("dda_plot_count") or 0),
+            dda_total_plot_area_sqm=_float_or_none(row.get("dda_total_plot_area_sqm")) or 0.0,
+            dda_total_gfa_sqm=_float_or_none(row.get("dda_total_gfa_sqm")) or 0.0,
+            dda_dominant_land_uses=_land_use_labels(row.get("dda_dominant_land_uses"), limit=5),
+        )
+        for row in rows
+    ]
+    unique_areas: list[ProjectRadarArea] = []
+    seen_area_names: set[str] = set()
+    for area in areas:
+        area_key = area.area_name.strip().lower()
+        if area_key in seen_area_names:
+            continue
+        seen_area_names.add(area_key)
+        unique_areas.append(area)
+    return unique_areas
+
+
+def _radar_developer_lookup_sql() -> str:
+    return """
+        SELECT developer_name_ar, developer_name_en
+        FROM ch_developers
+        WHERE developer_name_en != ''
     """
 
-    area_sql = """
-        WITH project_geo AS (
-            SELECT
-                project_name_en,
-                avg(lat) AS latitude,
-                avg(lng) AS longitude
-            FROM ch_geo_buildings
-            WHERE lat BETWEEN 20 AND 30
-              AND lng BETWEEN 50 AND 60
-              AND project_name_en != ''
-            GROUP BY project_name_en
-        ),
-        area_geo AS (
-            SELECT
-                p.area_name_en,
-                avg(g.latitude) AS latitude,
-                avg(g.longitude) AS longitude,
-                countDistinct(p.project_id) AS mapped_projects
-            FROM ch_projects p
-            INNER JOIN project_geo g ON g.project_name_en = p.project_name_en
-            WHERE p.area_name_en != ''
-            GROUP BY p.area_name_en
-        ),
-        dda_summary AS (
-            SELECT
-                community_name,
-                count() AS dda_plot_count,
-                sum(plot_area_sqm) AS dda_total_plot_area_sqm,
-                sum(max_gfa_sqm) AS dda_total_gfa_sqm,
-                arrayFilter(x -> x != '', topK(5)(land_use)) AS dda_dominant_land_uses
-            FROM ch_gis_land_plots FINAL
-            WHERE coordinates != ''
-              AND community_name != ''
-            GROUP BY community_name
-        )
-        SELECT
-            af.area_id AS area_id,
-            af.area_name_en AS area_name_en,
-            ag.latitude AS latitude,
-            ag.longitude AS longitude,
-            ifNull(ag.mapped_projects, 0) AS mapped_projects,
-            af.active_projects AS active_projects,
-            af.completed_projects AS completed_projects,
-            af.overdue_projects AS overdue_projects,
-            af.pipeline_units AS pipeline_units,
-            af.units_delivering_next_12_months AS units_delivering_next_12_months,
-            af.active_developers AS active_developers,
-            af.avg_completion_pct AS avg_completion_pct,
-            af.avg_delivery_confidence AS avg_delivery_confidence,
-            af.sales_transaction_count_12m AS sales_transaction_count_12m,
-            af.rental_contract_count_12m AS rental_contract_count_12m,
-            af.total_sales_volume_12m AS total_sales_volume_12m,
-            af.median_sale_price AS median_sale_price,
-            af.median_annual_rent AS median_annual_rent,
-            af.gross_yield_pct AS gross_yield_pct,
-            af.top_developers AS top_developers,
-            af.top_master_projects AS top_master_projects,
-            ifNull(ds.dda_plot_count, 0) AS dda_plot_count,
-            ifNull(ds.dda_total_plot_area_sqm, 0) AS dda_total_plot_area_sqm,
-            ifNull(ds.dda_total_gfa_sqm, 0) AS dda_total_gfa_sqm,
-            ifNull(ds.dda_dominant_land_uses, []) AS dda_dominant_land_uses
-        FROM ch_area_fact af
-        LEFT JOIN area_geo ag ON lower(ag.area_name_en) = lower(af.area_name_en)
-        LEFT JOIN dda_summary ds ON lower(ds.community_name) = lower(af.area_name_en)
-        WHERE af.area_name_en != ''
-          AND lower(af.area_name_en) != 'unknown'
-        ORDER BY af.pipeline_units DESC, af.sales_transaction_count_12m DESC
-        LIMIT 90
-    """
 
-    stats_sql = """
+def _radar_stats_sql(radar_geo_cte: str) -> str:
+    return f"""
+        WITH {radar_geo_cte}
         SELECT
             count() AS total_projects,
-            (
-                SELECT count()
-                FROM (
-                    SELECT DISTINCT p.project_id
-                    FROM ch_projects p
-                    INNER JOIN (
-                        SELECT DISTINCT project_name_en
-                        FROM ch_geo_buildings
-                        WHERE lat BETWEEN 20 AND 30
-                          AND lng BETWEEN 50 AND 60
-                          AND project_name_en != ''
-                    ) g ON g.project_name_en = p.project_name_en
-                )
-            ) AS mapped_projects,
+            (SELECT countDistinct(project_id) FROM geo_by_project) AS mapped_projects,
             countIf(completion_status != 'FINISHED') AS active_projects,
             countIf(completion_status = 'FINISHED') AS finished_projects,
             sumIf(no_of_units, completion_status != 'FINISHED') AS pipeline_units,
@@ -552,22 +660,602 @@ async def get_project_radar(limit: int = 1400) -> ProjectRadarResponse:
         FROM ch_project_fact
     """
 
-    project_rows, area_rows, stats_rows = await asyncio.gather(
+
+def _radar_area_sql(radar_geo_cte: str) -> str:
+    return f"""
+        WITH {radar_geo_cte},
+        area_geo AS (
+            SELECT
+                p.area_name_en,
+                avg(g.latitude) AS latitude,
+                avg(g.longitude) AS longitude,
+                countDistinct(p.project_id) AS mapped_projects
+            FROM ch_projects p
+            INNER JOIN geo_by_project g ON g.project_id = p.project_id
+            WHERE p.area_name_en != ''
+            GROUP BY p.area_name_en
+        ),
+        area_status AS (
+            SELECT
+                area_name_en,
+                any(area_id) AS area_id,
+                countIf(
+                    NOT (
+                        upperUTF8(completion_status) IN ('FINISHED', 'COMPLETED')
+                        OR lowerUTF8(completion_status) LIKE '%complete%'
+                        OR lowerUTF8(completion_status) LIKE '%cancel%'
+                    )
+                ) AS active_projects,
+                countIf(
+                    upperUTF8(completion_status) IN ('FINISHED', 'COMPLETED')
+                    OR lowerUTF8(completion_status) LIKE '%complete%'
+                ) AS completed_projects,
+                countIf(
+                    lowerUTF8(completion_status) LIKE '%delay%'
+                    OR lowerUTF8(completion_status) LIKE '%overdue%'
+                    OR lowerUTF8(completion_status) LIKE '%stall%'
+                    OR lowerUTF8(completion_status) LIKE '%suspend%'
+                    OR lowerUTF8(completion_status) LIKE '%hold%'
+                ) AS overdue_projects,
+                sumIf(
+                    no_of_units,
+                    NOT (
+                        upperUTF8(completion_status) IN ('FINISHED', 'COMPLETED')
+                        OR lowerUTF8(completion_status) LIKE '%complete%'
+                        OR lowerUTF8(completion_status) LIKE '%cancel%'
+                    )
+                ) AS pipeline_units,
+                sumIf(
+                    no_of_units,
+                    pipeline_status = 'delivering_next_12_months'
+                    AND NOT (
+                        upperUTF8(completion_status) IN ('FINISHED', 'COMPLETED')
+                        OR lowerUTF8(completion_status) LIKE '%complete%'
+                        OR lowerUTF8(completion_status) LIKE '%cancel%'
+                    )
+                ) AS units_delivering_next_12_months,
+                uniqExactIf(
+                    developer_name,
+                    developer_name != ''
+                    AND NOT (
+                        upperUTF8(completion_status) IN ('FINISHED', 'COMPLETED')
+                        OR lowerUTF8(completion_status) LIKE '%complete%'
+                        OR lowerUTF8(completion_status) LIKE '%cancel%'
+                    )
+                ) AS active_developers
+            FROM ch_project_fact
+            WHERE area_name_en != ''
+            GROUP BY area_name_en
+        ),
+        area_developers AS (
+            SELECT
+                area_name_en,
+                arrayFilter(x -> x != '', topK(5)(developer_name)) AS top_developers
+            FROM (
+                SELECT
+                    f.area_name_en AS area_name_en,
+                    coalesce(
+                        nullIf(dm.developer_name_en, ''),
+                        nullIf(p.master_developer_name, ''),
+                        nullIf(d.developer_name_en, ''),
+                        nullIf(da.developer_name_en, ''),
+                        nullIf(p.developer_name, ''),
+                        nullIf(f.developer_name, ''),
+                        ''
+                    ) AS developer_name
+                FROM ch_project_fact f
+                INNER JOIN ch_projects p ON p.project_id = f.project_id
+                LEFT JOIN ch_developers d ON p.developer_id = d.developer_id
+                LEFT JOIN ch_developers dm ON p.master_developer_id = dm.developer_id
+                LEFT JOIN ch_developers da ON f.developer_name = da.developer_name_ar
+                WHERE f.area_name_en != ''
+            )
+            WHERE developer_name != ''
+            GROUP BY area_name_en
+        ),
+        dda_summary AS (
+            SELECT
+                community_name,
+                count() AS dda_plot_count,
+                sum(plot_area_sqm) AS dda_total_plot_area_sqm,
+                sum(max_gfa_sqm) AS dda_total_gfa_sqm,
+                arrayFilter(x -> x != '', topK(5)(land_use)) AS dda_dominant_land_uses
+            FROM ch_gis_land_plots FINAL
+            WHERE coordinates != ''
+              AND community_name != ''
+            GROUP BY community_name
+        ),
+        area_existing_sales AS (
+            SELECT
+                area_name_en,
+                count() AS yield_existing_sale_count,
+                median(actual_worth) AS yield_existing_median_sale_price
+            FROM ch_transactions
+            WHERE trans_group_en = 'Sales'
+              AND property_type_en = 'Unit'
+              AND property_usage_en = 'Residential'
+              AND reg_type_en = 'Existing Properties'
+              AND actual_worth > 0
+              AND area_name_en != ''
+            GROUP BY area_name_en
+        ),
+        area_rents AS (
+            SELECT
+                area_name_en,
+                count() AS yield_rental_contract_count,
+                median(annual_amount) AS yield_median_annual_rent
+            FROM ch_rent_contracts
+            WHERE property_usage_en = 'Residential'
+              AND ejari_property_type_en = 'Flat'
+              AND annual_amount > 0
+              AND area_name_en != ''
+            GROUP BY area_name_en
+        )
+        SELECT
+            ifNull(ast.area_id, af.area_id) AS area_id,
+            af.area_name_en AS area_name_en,
+            ag.latitude AS latitude,
+            ag.longitude AS longitude,
+            ifNull(ag.mapped_projects, 0) AS mapped_projects,
+            ifNull(ast.active_projects, af.active_projects) AS active_projects,
+            ifNull(ast.completed_projects, af.completed_projects) AS completed_projects,
+            ifNull(ast.overdue_projects, af.overdue_projects) AS overdue_projects,
+            ifNull(ast.pipeline_units, af.pipeline_units) AS pipeline_units,
+            ifNull(
+                ast.units_delivering_next_12_months,
+                af.units_delivering_next_12_months
+            ) AS units_delivering_next_12_months,
+            ifNull(ast.active_developers, af.active_developers) AS active_developers,
+            af.avg_completion_pct AS avg_completion_pct,
+            af.avg_delivery_confidence AS avg_delivery_confidence,
+            af.sales_transaction_count_12m AS sales_transaction_count_12m,
+            af.rental_contract_count_12m AS rental_contract_count_12m,
+            af.total_sales_volume_12m AS total_sales_volume_12m,
+            coalesce(aes.yield_existing_median_sale_price, af.median_sale_price) AS median_sale_price,
+            coalesce(ar.yield_median_annual_rent, af.median_annual_rent) AS median_annual_rent,
+            aes.yield_existing_sale_count AS yield_existing_sale_count,
+            aes.yield_existing_median_sale_price AS yield_existing_median_sale_price,
+            ar.yield_rental_contract_count AS yield_rental_contract_count,
+            ar.yield_median_annual_rent AS yield_median_annual_rent,
+            af.avg_sale_price_sqm_12m AS avg_sale_price_sqm_12m,
+            af.avg_rent_price_sqm_12m AS avg_rent_price_sqm_12m,
+            ifNull(ad.top_developers, af.top_developers) AS top_developers,
+            af.top_master_projects AS top_master_projects,
+            ifNull(ds.dda_plot_count, 0) AS dda_plot_count,
+            ifNull(ds.dda_total_plot_area_sqm, 0) AS dda_total_plot_area_sqm,
+            ifNull(ds.dda_total_gfa_sqm, 0) AS dda_total_gfa_sqm,
+            ifNull(ds.dda_dominant_land_uses, []) AS dda_dominant_land_uses
+        FROM ch_area_fact af
+        LEFT JOIN area_geo ag ON lower(ag.area_name_en) = lower(af.area_name_en)
+        LEFT JOIN area_status ast ON lower(ast.area_name_en) = lower(af.area_name_en)
+        LEFT JOIN area_developers ad ON lower(ad.area_name_en) = lower(af.area_name_en)
+        LEFT JOIN dda_summary ds ON lower(ds.community_name) = lower(af.area_name_en)
+        LEFT JOIN area_existing_sales aes ON lower(aes.area_name_en) = lower(af.area_name_en)
+        LEFT JOIN area_rents ar ON lower(ar.area_name_en) = lower(af.area_name_en)
+        WHERE af.area_name_en != ''
+          AND lower(af.area_name_en) != 'unknown'
+        ORDER BY pipeline_units DESC, af.sales_transaction_count_12m DESC
+        LIMIT 90
+    """
+
+
+def _radar_project_pins_sql(radar_geo_cte: str, where_clause: str) -> str:
+    return f"""
+        WITH {radar_geo_cte},
+        project_existing_sales AS (
+            SELECT
+                project_name_en,
+                count() AS yield_existing_sale_count,
+                median(actual_worth) AS yield_existing_median_sale_price
+            FROM ch_transactions
+            WHERE trans_group_en = 'Sales'
+              AND property_type_en = 'Unit'
+              AND property_usage_en = 'Residential'
+              AND reg_type_en = 'Existing Properties'
+              AND actual_worth > 0
+              AND project_name_en != ''
+            GROUP BY project_name_en
+        ),
+        project_rents AS (
+            SELECT
+                project_name_en,
+                count() AS yield_rental_contract_count,
+                median(annual_amount) AS yield_median_annual_rent
+            FROM ch_rent_contracts
+            WHERE property_usage_en = 'Residential'
+              AND ejari_property_type_en = 'Flat'
+              AND annual_amount > 0
+              AND project_name_en != ''
+            GROUP BY project_name_en
+        )
+        SELECT
+            f.project_id AS project_id,
+            f.project_name_en AS project_name_en,
+            f.area_name_en AS area_name_en,
+            coalesce(
+                nullIf(dm.developer_name_en, ''),
+                nullIf(p.master_developer_name, ''),
+                nullIf(d.developer_name_en, ''),
+                nullIf(da.developer_name_en, ''),
+                nullIf(p.developer_name, ''),
+                nullIf(f.developer_name, '')
+            ) AS developer_name,
+            f.master_project_en AS master_project_en,
+            g.latitude AS latitude,
+            g.longitude AS longitude,
+            g.geo_pin_count AS geo_pin_count,
+            g.coordinate_source AS coordinate_source,
+            g.coordinate_method AS coordinate_method,
+            g.detail_point_count AS detail_point_count,
+            g.building_point_count AS building_point_count,
+            g.land_point_count AS land_point_count,
+            f.completion_status AS completion_status,
+            f.pipeline_status AS pipeline_status,
+            p.project_status AS project_status,
+            f.no_of_units AS no_of_units,
+            p.no_of_buildings AS no_of_buildings,
+            f.percent_completed AS percent_completed,
+            f.estimated_delivery_confidence AS estimated_delivery_confidence,
+            f.sales_transaction_count_12m AS sales_transaction_count_12m,
+            f.rental_contract_count_12m AS rental_contract_count_12m,
+            f.total_sales_volume_12m AS total_sales_volume_12m,
+            coalesce(pes.yield_existing_median_sale_price, f.median_sale_price) AS median_sale_price,
+            coalesce(pr.yield_median_annual_rent, f.median_annual_rent) AS median_annual_rent,
+            pes.yield_existing_sale_count AS yield_existing_sale_count,
+            pes.yield_existing_median_sale_price AS yield_existing_median_sale_price,
+            pr.yield_rental_contract_count AS yield_rental_contract_count,
+            pr.yield_median_annual_rent AS yield_median_annual_rent,
+            f.avg_sale_price_sqm_12m AS avg_sale_price_sqm_12m,
+            f.avg_rent_price_sqm_12m AS avg_rent_price_sqm_12m
+        FROM ch_project_fact f
+        INNER JOIN ch_projects p ON p.project_id = f.project_id
+        INNER JOIN geo_by_project g ON g.project_id = f.project_id
+        LEFT JOIN ch_developers d ON p.developer_id = d.developer_id
+        LEFT JOIN ch_developers dm ON p.master_developer_id = dm.developer_id
+        LEFT JOIN ch_developers da ON f.developer_name = da.developer_name_ar
+        LEFT JOIN project_existing_sales pes ON lower(pes.project_name_en) = lower(f.project_name_en)
+        LEFT JOIN project_rents pr ON lower(pr.project_name_en) = lower(f.project_name_en)
+        WHERE {where_clause}
+        ORDER BY
+            (f.pipeline_status = 'delivering_next_12_months') DESC,
+            f.no_of_units DESC,
+            f.total_sales_volume_12m DESC
+        LIMIT {{limit:UInt32}}
+    """
+
+
+def _radar_project_pin_filters(
+    *,
+    west: float | None,
+    south: float | None,
+    east: float | None,
+    north: float | None,
+    area: str | None,
+    developer: str | None,
+) -> tuple[str, dict[str, Any]]:
+    filters = ["f.project_name_en != ''"]
+    params: dict[str, Any] = {}
+    if west is not None and south is not None and east is not None and north is not None:
+        filters.extend(
+            [
+                "g.longitude BETWEEN {west:Float64} AND {east:Float64}",
+                "g.latitude BETWEEN {south:Float64} AND {north:Float64}",
+            ]
+        )
+        params.update({"west": west, "south": south, "east": east, "north": north})
+    if area:
+        filters.append("lower(f.area_name_en) = lower({area:String})")
+        params["area"] = area
+    if developer:
+        developer_names = developer_filter_names(developer)
+        if developer_names:
+            filters.append(
+                """
+                lower(
+                    coalesce(
+                        nullIf(dm.developer_name_en, ''),
+                        nullIf(p.master_developer_name, ''),
+                        nullIf(d.developer_name_en, ''),
+                        nullIf(da.developer_name_en, ''),
+                        nullIf(p.developer_name, ''),
+                        nullIf(f.developer_name, '')
+                    )
+                ) IN {developer_names:Array(String)}
+                """
+            )
+            params["developer_names"] = developer_names
+    return " AND ".join(filters), params
+
+
+async def get_project_radar_overview() -> ProjectRadarOverviewResponse:
+    """Return the initial radar payload without project pins."""
+    radar_geo_cte = _radar_geo_cte()
+    area_rows, stats_rows, developer_rows = await asyncio.gather(
+        query(_radar_area_sql(radar_geo_cte), {}),
+        query(_radar_stats_sql(radar_geo_cte), {}),
+        query(_radar_developer_lookup_sql(), {}),
+    )
+    developers = _developer_lookup(developer_rows)
+    return ProjectRadarOverviewResponse(
+        stats=_radar_stats_from_row(stats_rows[0] if stats_rows else {}),
+        areas=_radar_areas_from_rows(area_rows, developers),
+        source_notes=_radar_source_notes(),
+    )
+
+
+async def get_project_radar_pins(
+    *,
+    limit: int = 700,
+    west: float | None = None,
+    south: float | None = None,
+    east: float | None = None,
+    north: float | None = None,
+    area: str | None = None,
+    developer: str | None = None,
+) -> list[ProjectRadarProject]:
+    """Return bounded project pins for a viewport, area, or developer overlay."""
+    radar_geo_cte = _radar_geo_cte()
+    where_clause, params = _radar_project_pin_filters(
+        west=west,
+        south=south,
+        east=east,
+        north=north,
+        area=area,
+        developer=developer,
+    )
+    params["limit"] = limit
+    project_rows, developer_rows = await asyncio.gather(
+        query(_radar_project_pins_sql(radar_geo_cte, where_clause), params),
+        query(_radar_developer_lookup_sql(), {}),
+    )
+    return _radar_projects_from_rows(project_rows, _developer_lookup(developer_rows))
+
+
+async def get_project_radar(limit: int = 1400) -> ProjectRadarResponse:
+    """Return project and area map data for the radar view."""
+    radar_geo_cte = _radar_geo_cte()
+
+    project_sql = f"""
+        WITH {radar_geo_cte},
+        project_existing_sales AS (
+            SELECT
+                project_name_en,
+                count() AS yield_existing_sale_count,
+                median(actual_worth) AS yield_existing_median_sale_price
+            FROM ch_transactions
+            WHERE trans_group_en = 'Sales'
+              AND property_type_en = 'Unit'
+              AND property_usage_en = 'Residential'
+              AND reg_type_en = 'Existing Properties'
+              AND actual_worth > 0
+              AND project_name_en != ''
+            GROUP BY project_name_en
+        ),
+        project_rents AS (
+            SELECT
+                project_name_en,
+                count() AS yield_rental_contract_count,
+                median(annual_amount) AS yield_median_annual_rent
+            FROM ch_rent_contracts
+            WHERE property_usage_en = 'Residential'
+              AND ejari_property_type_en = 'Flat'
+              AND annual_amount > 0
+              AND project_name_en != ''
+            GROUP BY project_name_en
+        )
+        SELECT
+            f.project_id AS project_id,
+            f.project_name_en AS project_name_en,
+            f.area_name_en AS area_name_en,
+            coalesce(
+                nullIf(dm.developer_name_en, ''),
+                nullIf(p.master_developer_name, ''),
+                nullIf(d.developer_name_en, ''),
+                nullIf(da.developer_name_en, ''),
+                nullIf(p.developer_name, ''),
+                nullIf(f.developer_name, '')
+            ) AS developer_name,
+            f.master_project_en AS master_project_en,
+            g.latitude AS latitude,
+            g.longitude AS longitude,
+            g.geo_pin_count AS geo_pin_count,
+            g.coordinate_source AS coordinate_source,
+            g.coordinate_method AS coordinate_method,
+            g.detail_point_count AS detail_point_count,
+            g.building_point_count AS building_point_count,
+            g.land_point_count AS land_point_count,
+            f.completion_status AS completion_status,
+            f.pipeline_status AS pipeline_status,
+            p.project_status AS project_status,
+            f.no_of_units AS no_of_units,
+            p.no_of_buildings AS no_of_buildings,
+            f.percent_completed AS percent_completed,
+            f.estimated_delivery_confidence AS estimated_delivery_confidence,
+            f.sales_transaction_count_12m AS sales_transaction_count_12m,
+            f.rental_contract_count_12m AS rental_contract_count_12m,
+            f.total_sales_volume_12m AS total_sales_volume_12m,
+            coalesce(pes.yield_existing_median_sale_price, f.median_sale_price) AS median_sale_price,
+            coalesce(pr.yield_median_annual_rent, f.median_annual_rent) AS median_annual_rent,
+            pes.yield_existing_sale_count AS yield_existing_sale_count,
+            pes.yield_existing_median_sale_price AS yield_existing_median_sale_price,
+            pr.yield_rental_contract_count AS yield_rental_contract_count,
+            pr.yield_median_annual_rent AS yield_median_annual_rent,
+            f.avg_sale_price_sqm_12m AS avg_sale_price_sqm_12m,
+            f.avg_rent_price_sqm_12m AS avg_rent_price_sqm_12m
+        FROM ch_project_fact f
+        INNER JOIN ch_projects p ON p.project_id = f.project_id
+        INNER JOIN geo_by_project g ON g.project_id = f.project_id
+        LEFT JOIN ch_developers d ON p.developer_id = d.developer_id
+        LEFT JOIN ch_developers dm ON p.master_developer_id = dm.developer_id
+        LEFT JOIN ch_developers da ON f.developer_name = da.developer_name_ar
+        LEFT JOIN project_existing_sales pes ON lower(pes.project_name_en) = lower(f.project_name_en)
+        LEFT JOIN project_rents pr ON lower(pr.project_name_en) = lower(f.project_name_en)
+        WHERE f.project_name_en != ''
+        ORDER BY
+            (f.pipeline_status = 'delivering_next_12_months') DESC,
+            f.no_of_units DESC,
+            f.total_sales_volume_12m DESC
+        LIMIT {{limit:UInt32}}
+    """
+
+    area_sql = f"""
+        WITH {radar_geo_cte},
+        area_geo AS (
+            SELECT
+                p.area_name_en,
+                avg(g.latitude) AS latitude,
+                avg(g.longitude) AS longitude,
+                countDistinct(p.project_id) AS mapped_projects
+            FROM ch_projects p
+            INNER JOIN geo_by_project g ON g.project_id = p.project_id
+            WHERE p.area_name_en != ''
+            GROUP BY p.area_name_en
+        ),
+        dda_summary AS (
+            SELECT
+                community_name,
+                count() AS dda_plot_count,
+                sum(plot_area_sqm) AS dda_total_plot_area_sqm,
+                sum(max_gfa_sqm) AS dda_total_gfa_sqm,
+                arrayFilter(x -> x != '', topK(5)(land_use)) AS dda_dominant_land_uses
+            FROM ch_gis_land_plots FINAL
+            WHERE coordinates != ''
+              AND community_name != ''
+            GROUP BY community_name
+        ),
+        area_existing_sales AS (
+            SELECT
+                area_name_en,
+                count() AS yield_existing_sale_count,
+                median(actual_worth) AS yield_existing_median_sale_price
+            FROM ch_transactions
+            WHERE trans_group_en = 'Sales'
+              AND property_type_en = 'Unit'
+              AND property_usage_en = 'Residential'
+              AND reg_type_en = 'Existing Properties'
+              AND actual_worth > 0
+              AND area_name_en != ''
+            GROUP BY area_name_en
+        ),
+        area_rents AS (
+            SELECT
+                area_name_en,
+                count() AS yield_rental_contract_count,
+                median(annual_amount) AS yield_median_annual_rent
+            FROM ch_rent_contracts
+            WHERE property_usage_en = 'Residential'
+              AND ejari_property_type_en = 'Flat'
+              AND annual_amount > 0
+              AND area_name_en != ''
+            GROUP BY area_name_en
+        )
+        SELECT
+            af.area_id AS area_id,
+            af.area_name_en AS area_name_en,
+            ag.latitude AS latitude,
+            ag.longitude AS longitude,
+            ifNull(ag.mapped_projects, 0) AS mapped_projects,
+            af.active_projects AS active_projects,
+            af.completed_projects AS completed_projects,
+            af.overdue_projects AS overdue_projects,
+            af.pipeline_units AS pipeline_units,
+            af.units_delivering_next_12_months AS units_delivering_next_12_months,
+            af.active_developers AS active_developers,
+            af.avg_completion_pct AS avg_completion_pct,
+            af.avg_delivery_confidence AS avg_delivery_confidence,
+            af.sales_transaction_count_12m AS sales_transaction_count_12m,
+            af.rental_contract_count_12m AS rental_contract_count_12m,
+            af.total_sales_volume_12m AS total_sales_volume_12m,
+            coalesce(aes.yield_existing_median_sale_price, af.median_sale_price) AS median_sale_price,
+            coalesce(ar.yield_median_annual_rent, af.median_annual_rent) AS median_annual_rent,
+            aes.yield_existing_sale_count AS yield_existing_sale_count,
+            aes.yield_existing_median_sale_price AS yield_existing_median_sale_price,
+            ar.yield_rental_contract_count AS yield_rental_contract_count,
+            ar.yield_median_annual_rent AS yield_median_annual_rent,
+            af.avg_sale_price_sqm_12m AS avg_sale_price_sqm_12m,
+            af.avg_rent_price_sqm_12m AS avg_rent_price_sqm_12m,
+            af.top_developers AS top_developers,
+            af.top_master_projects AS top_master_projects,
+            ifNull(ds.dda_plot_count, 0) AS dda_plot_count,
+            ifNull(ds.dda_total_plot_area_sqm, 0) AS dda_total_plot_area_sqm,
+            ifNull(ds.dda_total_gfa_sqm, 0) AS dda_total_gfa_sqm,
+            ifNull(ds.dda_dominant_land_uses, []) AS dda_dominant_land_uses
+        FROM ch_area_fact af
+        LEFT JOIN area_geo ag ON lower(ag.area_name_en) = lower(af.area_name_en)
+        LEFT JOIN dda_summary ds ON lower(ds.community_name) = lower(af.area_name_en)
+        LEFT JOIN area_existing_sales aes ON lower(aes.area_name_en) = lower(af.area_name_en)
+        LEFT JOIN area_rents ar ON lower(ar.area_name_en) = lower(af.area_name_en)
+        WHERE af.area_name_en != ''
+          AND lower(af.area_name_en) != 'unknown'
+        ORDER BY af.pipeline_units DESC, af.sales_transaction_count_12m DESC
+        LIMIT 90
+    """
+
+    area_sql = _radar_area_sql(radar_geo_cte)
+
+    developer_lookup_sql = """
+        SELECT developer_name_ar, developer_name_en
+        FROM ch_developers
+        WHERE developer_name_en != ''
+    """
+
+    stats_sql = f"""
+        WITH {radar_geo_cte}
+        SELECT
+            count() AS total_projects,
+            (SELECT countDistinct(project_id) FROM geo_by_project) AS mapped_projects,
+            countIf(completion_status != 'FINISHED') AS active_projects,
+            countIf(completion_status = 'FINISHED') AS finished_projects,
+            sumIf(no_of_units, completion_status != 'FINISHED') AS pipeline_units,
+            sumIf(
+                no_of_units,
+                pipeline_status = 'delivering_next_12_months' AND completion_status != 'FINISHED'
+            )
+                AS units_delivering_next_12_months,
+            sum(sales_transaction_count_12m) AS sales_transaction_count_12m,
+            sum(rental_contract_count_12m) AS rental_contract_count_12m,
+            sum(total_sales_volume_12m) AS total_sales_volume_12m,
+            (
+                SELECT count()
+                FROM ch_gis_land_plots FINAL
+                WHERE coordinates != ''
+            ) AS dda_plot_count,
+            (
+                SELECT sum(plot_area_sqm)
+                FROM ch_gis_land_plots FINAL
+                WHERE coordinates != ''
+            ) AS dda_total_plot_area_sqm,
+            (
+                SELECT sum(max_gfa_sqm)
+                FROM ch_gis_land_plots FINAL
+                WHERE coordinates != ''
+            ) AS dda_total_gfa_sqm
+        FROM ch_project_fact
+    """
+
+    project_rows, area_rows, stats_rows, developer_rows = await asyncio.gather(
         query(project_sql, {"limit": limit}),
         query(area_sql, {}),
         query(stats_sql, {}),
+        query(developer_lookup_sql, {}),
     )
+    developers = _developer_lookup(developer_rows)
 
     projects = [
         ProjectRadarProject(
             project_id=row["project_id"],
             project_name=row["project_name_en"],
             area_name=row.get("area_name_en") or "Unknown",
-            developer_name=row.get("developer_name") or None,
+            developer_name=_developer_display_name(row.get("developer_name"), developers),
             master_project_en=row.get("master_project_en") or None,
             latitude=float(row["latitude"]),
             longitude=float(row["longitude"]),
             geo_pin_count=int(row.get("geo_pin_count") or 0),
+            coordinate_source=row.get("coordinate_source") or CH_GEO_BUILDINGS_SOURCE,
+            coordinate_method=row.get("coordinate_method") or None,
+            detail_point_count=int(row.get("detail_point_count") or 0),
+            building_point_count=int(row.get("building_point_count") or 0),
+            land_point_count=int(row.get("land_point_count") or 0),
             completion_status=row.get("completion_status") or "",
             pipeline_status=row.get("pipeline_status") or "",
             project_status=row.get("project_status") or None,
@@ -580,7 +1268,7 @@ async def get_project_radar(limit: int = 1400) -> ProjectRadarResponse:
             total_sales_volume_12m=_float_or_none(row.get("total_sales_volume_12m")) or 0.0,
             median_sale_price=_float_or_none(row.get("median_sale_price")),
             median_annual_rent=_float_or_none(row.get("median_annual_rent")),
-            gross_yield_pct=_float_or_none(row.get("gross_yield_pct")),
+            gross_yield_pct=_radar_gross_yield_pct(row),
             avg_sale_price_sqm_12m=_float_or_none(row.get("avg_sale_price_sqm_12m")),
             avg_rent_price_sqm_12m=_float_or_none(row.get("avg_rent_price_sqm_12m")),
         )
@@ -598,9 +1286,7 @@ async def get_project_radar(limit: int = 1400) -> ProjectRadarResponse:
             completed_projects=int(row.get("completed_projects") or 0),
             overdue_projects=int(row.get("overdue_projects") or 0),
             pipeline_units=int(row.get("pipeline_units") or 0),
-            units_delivering_next_12_months=int(
-                row.get("units_delivering_next_12_months") or 0
-            ),
+            units_delivering_next_12_months=int(row.get("units_delivering_next_12_months") or 0),
             active_developers=int(row.get("active_developers") or 0),
             avg_completion_pct=_float_or_none(row.get("avg_completion_pct")) or 0.0,
             avg_delivery_confidence=_float_or_none(row.get("avg_delivery_confidence")) or 0.0,
@@ -609,8 +1295,10 @@ async def get_project_radar(limit: int = 1400) -> ProjectRadarResponse:
             total_sales_volume_12m=_float_or_none(row.get("total_sales_volume_12m")) or 0.0,
             median_sale_price=_float_or_none(row.get("median_sale_price")),
             median_annual_rent=_float_or_none(row.get("median_annual_rent")),
-            gross_yield_pct=_float_or_none(row.get("gross_yield_pct")),
-            top_developers=list(row.get("top_developers") or [])[:5],
+            avg_sale_price_sqm_12m=_float_or_none(row.get("avg_sale_price_sqm_12m")),
+            avg_rent_price_sqm_12m=_float_or_none(row.get("avg_rent_price_sqm_12m")),
+            gross_yield_pct=_radar_gross_yield_pct(row),
+            top_developers=_developer_display_list(row.get("top_developers"), developers, limit=5),
             top_master_projects=list(row.get("top_master_projects") or [])[:5],
             dda_plot_count=int(row.get("dda_plot_count") or 0),
             dda_total_plot_area_sqm=_float_or_none(row.get("dda_total_plot_area_sqm")) or 0.0,
@@ -636,9 +1324,7 @@ async def get_project_radar(limit: int = 1400) -> ProjectRadarResponse:
         active_projects=int(stats_row.get("active_projects") or 0),
         finished_projects=int(stats_row.get("finished_projects") or 0),
         pipeline_units=int(stats_row.get("pipeline_units") or 0),
-        units_delivering_next_12_months=int(
-            stats_row.get("units_delivering_next_12_months") or 0
-        ),
+        units_delivering_next_12_months=int(stats_row.get("units_delivering_next_12_months") or 0),
         sales_transaction_count_12m=int(stats_row.get("sales_transaction_count_12m") or 0),
         rental_contract_count_12m=int(stats_row.get("rental_contract_count_12m") or 0),
         total_sales_volume_12m=_float_or_none(stats_row.get("total_sales_volume_12m")) or 0.0,
@@ -651,11 +1337,7 @@ async def get_project_radar(limit: int = 1400) -> ProjectRadarResponse:
         stats=stats,
         projects=projects,
         areas=areas,
-        source_notes=[
-            "Project points are derived from geocoded building pins when available.",
-            "Area bubbles combine ch_area_fact metrics with DDA community planning summaries.",
-            "DDA outlines load at overview zoom; parcel polygons load only for the zoomed viewport.",
-        ],
+        source_notes=_radar_source_notes(),
     )
 
 
@@ -731,12 +1413,7 @@ def _dubai_local_tm_to_lng_lat(easting: float, northing: float) -> list[float]:
     meridional_arc = y / scale_factor
     mu = meridional_arc / (
         semi_major_axis
-        * (
-            1
-            - eccentricity_sq / 4
-            - 3 * eccentricity_sq**2 / 64
-            - 5 * eccentricity_sq**3 / 256
-        )
+        * (1 - eccentricity_sq / 4 - 3 * eccentricity_sq**2 / 64 - 5 * eccentricity_sq**3 / 256)
     )
 
     e1 = (1 - math.sqrt(1 - eccentricity_sq)) / (1 + math.sqrt(1 - eccentricity_sq))
@@ -755,41 +1432,27 @@ def _dubai_local_tm_to_lng_lat(easting: float, northing: float) -> list[float]:
     c1 = second_eccentricity_sq * cos_fp**2
     t1 = tan_fp**2
     n1 = semi_major_axis / math.sqrt(1 - eccentricity_sq * sin_fp**2)
-    r1 = (
-        semi_major_axis
-        * (1 - eccentricity_sq)
-        / (1 - eccentricity_sq * sin_fp**2) ** 1.5
-    )
+    r1 = semi_major_axis * (1 - eccentricity_sq) / (1 - eccentricity_sq * sin_fp**2) ** 1.5
     d = x / (n1 * scale_factor)
 
     lat = footprint_lat - (n1 * tan_fp / r1) * (
         d**2 / 2
         - (5 + 3 * t1 + 10 * c1 - 4 * c1**2 - 9 * second_eccentricity_sq) * d**4 / 24
-        + (
-            61
-            + 90 * t1
-            + 298 * c1
-            + 45 * t1**2
-            - 252 * second_eccentricity_sq
-            - 3 * c1**2
-        )
+        + (61 + 90 * t1 + 298 * c1 + 45 * t1**2 - 252 * second_eccentricity_sq - 3 * c1**2)
         * d**6
         / 720
     )
-    lon = central_meridian + (
-        d
-        - (1 + 2 * t1 + c1) * d**3 / 6
+    lon = (
+        central_meridian
         + (
-            5
-            - 2 * c1
-            + 28 * t1
-            - 3 * c1**2
-            + 8 * second_eccentricity_sq
-            + 24 * t1**2
+            d
+            - (1 + 2 * t1 + c1) * d**3 / 6
+            + (5 - 2 * c1 + 28 * t1 - 3 * c1**2 + 8 * second_eccentricity_sq + 24 * t1**2)
+            * d**5
+            / 120
         )
-        * d**5
-        / 120
-    ) / cos_fp
+        / cos_fp
+    )
 
     return [math.degrees(lon), math.degrees(lat)]
 
@@ -818,9 +1481,7 @@ def _parse_plot_coordinates(raw: str) -> list[list[float]]:
     try:
         parsed = json.loads(raw)
         coords = [
-            coordinate
-            for p in parsed
-            if (coordinate := _normalize_plot_coordinate(p)) is not None
+            coordinate for p in parsed if (coordinate := _normalize_plot_coordinate(p)) is not None
         ]
         if len(coords) >= 3 and coords[0] != coords[-1]:
             coords.append(coords[0])
@@ -909,9 +1570,9 @@ def _convex_hull(points: list[list[float]]) -> list[list[float]]:
         point_a: tuple[float, float],
         point_b: tuple[float, float],
     ) -> float:
-        return (point_a[0] - origin[0]) * (point_b[1] - origin[1]) - (
-            point_a[1] - origin[1]
-        ) * (point_b[0] - origin[0])
+        return (point_a[0] - origin[0]) * (point_b[1] - origin[1]) - (point_a[1] - origin[1]) * (
+            point_b[0] - origin[0]
+        )
 
     lower: list[tuple[float, float]] = []
     for point in unique_points:
@@ -1057,19 +1718,300 @@ async def get_project_market_snapshot(project_id: int) -> Optional[ProjectMarket
     )
 
 
-def _plot_intersects_bounds(
-    coordinates: list[list[float]],
-    *,
-    west: float,
-    south: float,
-    east: float,
-    north: float,
-) -> bool:
-    if not coordinates:
+def _empty_dda_valuation(note: str) -> dict[str, Any]:
+    return {
+        "valuation_rate_min_aed_sqft": None,
+        "valuation_rate_max_aed_sqft": None,
+        "valuation_min_aed": None,
+        "valuation_max_aed": None,
+        "valuation_confidence": None,
+        "valuation_note": note,
+    }
+
+
+def _community_key(value: str | None) -> str:
+    return re.sub(r"[^a-z0-9]+", " ", (value or "").lower()).strip()
+
+
+def _plot_far(row: dict[str, Any]) -> float | None:
+    plot_area_sqm = _float_or_none(row.get("plot_area_sqm"))
+    max_gfa_sqm = _float_or_none(row.get("max_gfa_sqm"))
+    if not plot_area_sqm or plot_area_sqm <= 0 or not max_gfa_sqm or max_gfa_sqm <= 0:
+        return None
+    return max_gfa_sqm / plot_area_sqm
+
+
+def _far_band(value: float | None) -> str:
+    if value is None:
+        return "unknown"
+    if value < 1.5:
+        return "low"
+    if value < 3.0:
+        return "mid"
+    return "development"
+
+
+def _percentile(values: list[float], percentile: float) -> float | None:
+    valid = sorted(value for value in values if math.isfinite(value))
+    if not valid:
+        return None
+    if len(valid) == 1:
+        return valid[0]
+    position = (len(valid) - 1) * percentile
+    lower_index = int(position)
+    upper_index = min(lower_index + 1, len(valid) - 1)
+    weight = position - lower_index
+    return valid[lower_index] * (1 - weight) + valid[upper_index] * weight
+
+
+def _valuation_rate_range(rates: list[float]) -> tuple[float, float] | None:
+    valid = sorted(rate for rate in rates if rate > 0 and math.isfinite(rate))
+    if not valid:
+        return None
+    if len(valid) == 1:
+        rate = valid[0]
+        return rate * 0.9, rate * 1.1
+    if len(valid) < 4:
+        return valid[0], valid[-1]
+    low = _percentile(valid, 0.25)
+    high = _percentile(valid, 0.75)
+    if low is None or high is None:
+        return None
+    if low == high:
+        return low * 0.95, high * 1.05
+    return low, high
+
+
+def _evidence_size_match(evidence: dict[str, Any], plot_area_sqm: float) -> bool:
+    matched_area = _float_or_none(evidence.get("matched_plot_area_sqm"))
+    if not matched_area or matched_area <= 0 or plot_area_sqm <= 0:
         return False
-    lngs = [point[0] for point in coordinates]
-    lats = [point[1] for point in coordinates]
-    return min(lngs) <= east and max(lngs) >= west and min(lats) <= north and max(lats) >= south
+    min_ratio, max_ratio = DDA_VALUATION_SIZE_BAND
+    ratio = matched_area / plot_area_sqm
+    return min_ratio <= ratio <= max_ratio
+
+
+def _dedupe_evidence(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    seen: set[str] = set()
+    deduped: list[dict[str, Any]] = []
+    for item in items:
+        transaction_id = str(item.get("transaction_id") or "")
+        if transaction_id and transaction_id in seen:
+            continue
+        if transaction_id:
+            seen.add(transaction_id)
+        deduped.append(item)
+    return deduped
+
+
+def _select_plot_valuation_evidence(
+    row: dict[str, Any], community_evidence: list[dict[str, Any]]
+) -> tuple[list[dict[str, Any]], str]:
+    plot_number = str(row.get("plot_number") or "")
+    plot_area_sqm = _float_or_none(row.get("plot_area_sqm")) or 0.0
+    target_far_band = _far_band(_plot_far(row))
+
+    same_plot = [
+        item for item in community_evidence if str(item.get("plot_number") or "") == plot_number
+    ]
+    same_band = [
+        item
+        for item in community_evidence
+        if item.get("far_band") == target_far_band and _evidence_size_match(item, plot_area_sqm)
+    ]
+    broader_band = [item for item in community_evidence if item.get("far_band") == target_far_band]
+
+    candidates = _dedupe_evidence([*same_plot, *same_band])
+    if same_plot and len(candidates) >= DDA_VALUATION_MIN_COMP_COUNT:
+        return candidates, "matched plot and same-density comparable sales"
+    if len(candidates) >= DDA_VALUATION_MIN_COMP_COUNT:
+        return candidates, "same-community, same-density, size-matched sales"
+
+    candidates = _dedupe_evidence([*candidates, *broader_band])
+    if len(candidates) >= DDA_VALUATION_MIN_COMP_COUNT:
+        return candidates, "same-community, same-density sales"
+
+    candidates = _dedupe_evidence([*candidates, *community_evidence])
+    if candidates:
+        return candidates, "same-community land sales"
+    return [], "no transaction evidence"
+
+
+def _dda_plot_valuation(
+    row: dict[str, Any],
+    evidence_by_community: dict[str, list[dict[str, Any]]] | None = None,
+) -> dict[str, Any]:
+    max_gfa_sqm = _float_or_none(row.get("max_gfa_sqm"))
+    if not max_gfa_sqm or max_gfa_sqm <= 0:
+        return _empty_dda_valuation("Max GFA not available.")
+
+    community = _community_key(row.get("community_name"))
+    community_evidence = (evidence_by_community or {}).get(community, [])
+    evidence, basis = _select_plot_valuation_evidence(row, community_evidence)
+    rate_range = _valuation_rate_range([float(item.get("rate_aed_sqft") or 0) for item in evidence])
+    if not rate_range:
+        return _empty_dda_valuation("DLD land-sale evidence unavailable for this community.")
+
+    min_rate, max_rate = rate_range
+    max_gfa_sqft = max_gfa_sqm * SQM_TO_SQFT
+    confidence = "High" if len(evidence) >= 8 else "Medium" if len(evidence) >= 3 else "Low"
+    note = f"{len(evidence)} DLD land sales; {basis}; rates are AED/sqft of matched DDA max GFA."
+    return {
+        "valuation_rate_min_aed_sqft": round(min_rate, 1),
+        "valuation_rate_max_aed_sqft": round(max_rate, 1),
+        "valuation_min_aed": round(max_gfa_sqft * min_rate),
+        "valuation_max_aed": round(max_gfa_sqft * max_rate),
+        "valuation_confidence": confidence,
+        "valuation_note": note,
+    }
+
+
+def _dda_plot_indexes(
+    rows: list[dict[str, Any]],
+) -> dict[str, dict[str, list[Any]]]:
+    grouped: dict[str, list[dict[str, Any]]] = {}
+    for row in rows:
+        community = _community_key(row.get("community_name"))
+        plot_area_sqm = _float_or_none(row.get("plot_area_sqm"))
+        max_gfa_sqm = _float_or_none(row.get("max_gfa_sqm"))
+        if not community or not plot_area_sqm or plot_area_sqm <= 0:
+            continue
+        if not max_gfa_sqm or max_gfa_sqm <= 0:
+            continue
+        plot = {
+            "plot_number": row.get("plot_number"),
+            "plot_area_sqm": plot_area_sqm,
+            "max_gfa_sqm": max_gfa_sqm,
+            "far": max_gfa_sqm / plot_area_sqm,
+        }
+        grouped.setdefault(community, []).append(plot)
+
+    indexes: dict[str, dict[str, list[Any]]] = {}
+    for community, plots in grouped.items():
+        sorted_plots = sorted(plots, key=lambda item: item["plot_area_sqm"])
+        indexes[community] = {
+            "areas": [plot["plot_area_sqm"] for plot in sorted_plots],
+            "plots": sorted_plots,
+        }
+    return indexes
+
+
+def _nearest_dda_plot_by_area(
+    index: dict[str, list[Any]], transaction_area_sqm: float
+) -> dict[str, Any] | None:
+    areas = index["areas"]
+    plots = index["plots"]
+    if not areas:
+        return None
+    insert_at = bisect_left(areas, transaction_area_sqm)
+    candidates = []
+    if insert_at < len(plots):
+        candidates.append(plots[insert_at])
+    if insert_at > 0:
+        candidates.append(plots[insert_at - 1])
+    if not candidates:
+        return None
+    return min(candidates, key=lambda plot: abs(plot["plot_area_sqm"] - transaction_area_sqm))
+
+
+async def _dda_land_transaction_rows(communities: set[str]) -> list[dict[str, Any]]:
+    if not communities:
+        return []
+    return await query(
+        """
+        SELECT
+            transaction_id,
+            instance_date,
+            area_name_en,
+            project_name_en,
+            property_usage_en,
+            procedure_name_en,
+            toFloat64(procedure_area) AS plot_area_sqm,
+            toFloat64(actual_worth) AS price_aed
+        FROM ch_transactions
+        WHERE trans_group_en = 'Sales'
+          AND property_type_en = 'Land'
+          AND actual_worth > {min_transaction_aed:Float64}
+          AND procedure_area > 0
+          AND instance_date >= today() - {lookback_days:Int32}
+          AND has({communities:Array(String)}, lowerUTF8(area_name_en))
+          AND has({procedures:Array(String)}, procedure_name_en)
+        ORDER BY instance_date DESC
+        LIMIT 100000
+        """,
+        {
+            "communities": sorted(communities),
+            "procedures": list(DDA_VALUATION_MARKET_PROCEDURES),
+            "lookback_days": DDA_VALUATION_LOOKBACK_DAYS,
+            "min_transaction_aed": DDA_VALUATION_MIN_TRANSACTION_AED,
+        },
+    )
+
+
+def _transaction_evidence_by_community(
+    transaction_rows: list[dict[str, Any]],
+    plot_indexes: dict[str, dict[str, list[Any]]],
+) -> dict[str, list[dict[str, Any]]]:
+    evidence_by_community: dict[str, list[dict[str, Any]]] = {}
+    for transaction in transaction_rows:
+        community = _community_key(transaction.get("area_name_en"))
+        index = plot_indexes.get(community)
+        transaction_area = _float_or_none(transaction.get("plot_area_sqm"))
+        price_aed = _float_or_none(transaction.get("price_aed"))
+        if not index or not transaction_area or transaction_area <= 0:
+            continue
+        if not price_aed or price_aed <= 0:
+            continue
+
+        matched_plot = _nearest_dda_plot_by_area(index, transaction_area)
+        if not matched_plot:
+            continue
+        matched_area = float(matched_plot["plot_area_sqm"])
+        area_delta = abs(matched_area - transaction_area) / transaction_area
+        if area_delta > DDA_VALUATION_MAX_PLOT_AREA_DELTA:
+            continue
+
+        max_gfa_sqm = float(matched_plot["max_gfa_sqm"])
+        rate = price_aed / (max_gfa_sqm * SQM_TO_SQFT)
+        if not math.isfinite(rate) or rate <= 0:
+            continue
+
+        evidence_by_community.setdefault(community, []).append(
+            {
+                "transaction_id": transaction.get("transaction_id"),
+                "transaction_date": transaction.get("instance_date"),
+                "plot_number": matched_plot.get("plot_number"),
+                "matched_plot_area_sqm": matched_area,
+                "matched_max_gfa_sqm": max_gfa_sqm,
+                "far": matched_plot["far"],
+                "far_band": _far_band(matched_plot["far"]),
+                "rate_aed_sqft": rate,
+                "price_aed": price_aed,
+                "project_name": transaction.get("project_name_en") or "",
+                "procedure_name": transaction.get("procedure_name_en") or "",
+                "area_delta_pct": area_delta * 100,
+            }
+        )
+    return evidence_by_community
+
+
+async def _dda_transaction_valuation_lookup(
+    target_rows: list[dict[str, Any]], all_plot_rows: list[dict[str, Any]]
+) -> dict[str, dict[str, Any]]:
+    community_names = {
+        str(row.get("community_name") or "").strip().lower()
+        for row in target_rows
+        if str(row.get("community_name") or "").strip()
+    }
+    if not community_names:
+        return {}
+    plot_indexes = _dda_plot_indexes(all_plot_rows)
+    transaction_rows = await _dda_land_transaction_rows(community_names)
+    evidence_by_community = _transaction_evidence_by_community(transaction_rows, plot_indexes)
+    return {
+        str(row.get("plot_number") or ""): _dda_plot_valuation(row, evidence_by_community)
+        for row in target_rows
+    }
 
 
 async def get_dda_plots_for_area(
@@ -1079,16 +2021,18 @@ async def get_dda_plots_for_area(
     south: float | None = None,
     east: float | None = None,
     north: float | None = None,
+    include_valuations: bool = False,
 ) -> list[DDAPlotFeature]:
     """Return DDA GIS plot polygons for a community or current map bounds."""
     has_bounds = all(value is not None for value in (west, south, east, north))
     area_query = area.strip().lower() if area else ""
     rows = await _get_dda_plot_geometries()
-    results: list[DDAPlotFeature] = []
+    target_rows: list[dict[str, Any]] = []
     for row in rows:
-        if area_query and area_query not in " ".join(
-            [row["community_name"], row["project_name"]]
-        ).lower():
+        if (
+            area_query
+            and area_query not in " ".join([row["community_name"], row["project_name"]]).lower()
+        ):
             continue
         if has_bounds and not _bounds_intersects(
             row["bounds"],
@@ -1098,6 +2042,21 @@ async def get_dda_plots_for_area(
             north=north or 0,
         ):
             continue
+        target_rows.append(row)
+        if len(target_rows) >= limit:
+            break
+
+    valuations = (
+        await _dda_transaction_valuation_lookup(target_rows, rows) if include_valuations else {}
+    )
+    results: list[DDAPlotFeature] = []
+    for row in target_rows:
+        if include_valuations:
+            valuation = valuations.get(str(row.get("plot_number") or "")) or _dda_plot_valuation(
+                row
+            )
+        else:
+            valuation = _empty_dda_valuation("Valuation deferred for bulk map rendering.")
         results.append(
             DDAPlotFeature(
                 plot_number=row["plot_number"],
@@ -1112,8 +2071,7 @@ async def get_dda_plots_for_area(
                 land_use=row["land_use"],
                 gfa_type=row["gfa_type"],
                 is_verified=row["is_verified"],
+                **valuation,
             )
         )
-        if len(results) >= limit:
-            break
     return results

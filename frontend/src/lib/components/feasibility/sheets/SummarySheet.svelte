@@ -21,7 +21,7 @@ const btr = $derived(outputs?.btr)
 
 const XREF = 'text-emerald-700'
 
-type SummaryRow = { label: string; value: string; color?: string; bold?: boolean; neg?: boolean }
+type SummaryRow = { label: string; value: string; color?: string; bold?: boolean }
 type SummaryGroup = { title: string; rows: SummaryRow[]; span?: boolean }
 
 function rowsByLabels(rows: SummaryRow[], labels: string[]): SummaryRow[] {
@@ -244,8 +244,7 @@ const btrFinanceRows = $derived<SummaryRow[]>(
 				{ label: 'Refi Points/Fees', value: `AED ${fmt(btr.permDebt.refiPointsCostAed)}` },
 				{
 					label: 'Net Refi Proceeds',
-					value: `AED ${fmt(btr.permDebt.refiProceedsAed)}`,
-					neg: btr.permDebt.refiProceedsAed < 0
+					value: `AED ${fmt(btr.permDebt.refiProceedsAed)}`
 				},
 				{ label: 'Annual Debt Service', value: `AED ${fmt(btr.permDebt.annualDebtServiceAed)}` },
 				{ label: 'Loan Payoff at Exit', value: `AED ${fmt(btr.permDebt.loanPayoffAed)}` }
@@ -361,7 +360,7 @@ const projectInfo = $derived([
 					{#each group.rows as row (row.label)}
 						<tr class="border-b border-[#D9D9D9] {row.bold ? 'bg-[#EEF2F7] font-semibold' : ''} hover:bg-slate-50/60">
 							<td class="px-2 py-[3px] text-left text-[10px] text-slate-800">{row.label}</td>
-							<td class="px-2 py-[3px] text-right tabular-nums text-[10px] font-medium {row.neg ? 'text-rose-600' : row.color ?? 'text-emerald-700'}">{row.value}</td>
+							<td class="px-2 py-[3px] text-right tabular-nums text-[10px] font-medium {row.color ?? 'text-emerald-700'}">{row.value}</td>
 						</tr>
 					{/each}
 				</tbody>
@@ -392,7 +391,7 @@ const projectInfo = $derived([
 						{#each group.rows as row (row.label)}
 							<tr class="border-b border-[#D9D9D9] {row.bold ? 'bg-[#EEF2F7] font-semibold' : ''} hover:bg-slate-50/60">
 								<td class="px-2 py-[3px] text-left text-[10px] text-slate-800">{row.label}</td>
-								<td class="px-2 py-[3px] text-right tabular-nums text-[10px] font-medium {row.neg ? 'text-rose-600' : 'text-emerald-700'}">{row.value}</td>
+								<td class="px-2 py-[3px] text-right tabular-nums text-[10px] font-medium text-emerald-700">{row.value}</td>
 							</tr>
 						{/each}
 					</tbody>

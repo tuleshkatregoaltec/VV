@@ -15,6 +15,7 @@ import { cubicOut } from 'svelte/easing'
 import { fade, fly } from 'svelte/transition'
 import type { ListingCardResponse } from '$lib/api/listings'
 import type { ChatArtifact } from '$lib/chat/artifacts'
+import ChatCustomChartArtifact from './ChatCustomChartArtifact.svelte'
 import ChatMarketTrendArtifact from './ChatMarketTrendArtifact.svelte'
 
 let { artifact }: { artifact: ChatArtifact } = $props()
@@ -23,7 +24,8 @@ function surfaceLabel(): string {
 	if (artifact.status === 'loading')
 		return artifact.type === 'listing_results' ? 'Finding matches' : 'Building view'
 	if (artifact.status === 'error') return 'Could not load'
-	return artifact.type === 'listing_results' ? 'Matches' : 'Market view'
+	if (artifact.type === 'listing_results') return 'Matches'
+	return artifact.type === 'custom_chart' ? 'Chart view' : 'Market view'
 }
 
 function statusLabel(): string {
@@ -68,6 +70,11 @@ function resultSummary(): string {
 		const total = artifact.data?.total
 		return typeof total === 'number' ? `${total.toLocaleString()} matches` : 'Matching records'
 	}
+	if (artifact.type === 'custom_chart') {
+		const total = artifact.data?.summary?.total_records
+		if (typeof total === 'number') return `${total.toLocaleString()} records`
+		return `${artifact.data?.points?.length ?? 0} points`
+	}
 	const transactions = artifact.data?.total_transactions
 	return typeof transactions === 'number'
 		? `${transactions.toLocaleString()} transactions`
@@ -86,7 +93,7 @@ function resultSummary(): string {
 				<div class="grid h-8 w-8 shrink-0 place-items-center rounded-md border border-border bg-card text-fg-3">
 					{#if artifact.status === 'loading'}
 						<Loader2 size={16} strokeWidth={1.9} class="animate-spin" />
-					{:else if artifact.type === 'market_trend'}
+					{:else if artifact.type === 'market_trend' || artifact.type === 'custom_chart'}
 						<BarChart3 size={16} strokeWidth={1.9} />
 					{:else}
 						<Home size={16} strokeWidth={1.9} />
@@ -149,74 +156,85 @@ function resultSummary(): string {
 			<div class="rounded-md border border-error/20 bg-error-bg p-3 text-sm text-error">
 				{artifact.error ?? 'This result could not be loaded.'}
 			</div>
+		{:else if artifact.type === 'custom_chart'}
+			<ChatCustomChartArtifact artifact={artifact} />
 		{:else if artifact.type === 'market_trend'}
 			<ChatMarketTrendArtifact {artifact} />
 		{:else if artifact.type === 'listing_results'}
-			<div class="max-h-[560px] space-y-2 overflow-y-auto pr-1">
-				{#if !artifact.data?.listings?.length}
-					<div class="rounded-md border border-dashed border-border bg-card p-5 text-center">
-						<p class="text-sm font-semibold text-fg-1">No matching records</p>
-						<p class="mt-1 text-xs leading-5 text-fg-4">Try a broader area, budget, or bedroom range.</p>
-					</div>
-				{:else}
-					{#each artifact.data.listings as listing (listing.listing_id)}
-						{@const imageUrl = listingImage(listing)}
-						<article class="overflow-hidden rounded-md border border-border bg-card">
-							<div class="grid grid-cols-[104px_minmax(0,1fr)] sm:grid-cols-[128px_minmax(0,1fr)]">
-								<div class="relative h-full min-h-[112px] bg-elevated">
-									{#if imageUrl}
-										<img src={imageUrl} alt="" class="h-full w-full object-cover" loading="lazy" />
-									{:else}
-										<div class="grid h-full place-items-center text-fg-5">
-											<ImageIcon size={22} strokeWidth={1.6} />
-										</div>
-									{/if}
-								</div>
-								<div class="min-w-0 p-3">
-									<div class="flex items-start justify-between gap-2">
-										<div class="min-w-0">
-											<p class="truncate text-sm font-semibold text-fg-1">{listing.title}</p>
-											<p class="mt-1 truncate text-xs text-fg-4">
-												{listingLocation(listing) || listing.location_name || 'Dubai'}
-											</p>
-										</div>
-										{#if listing.share_url}
-											<a
-												href={listing.share_url}
-												target="_blank"
-												rel="noreferrer"
-												class="grid h-7 w-7 shrink-0 place-items-center rounded-md border border-border text-fg-4 transition hover:bg-elevated hover:text-fg-1"
-												aria-label="Open record"
-												title="Open record"
-											>
-												<ExternalLink size={14} strokeWidth={1.8} />
-											</a>
+			<div class="space-y-2">
+				<div class="max-h-[560px] space-y-2 overflow-y-auto pr-1">
+					{#if !artifact.data?.listings?.length}
+						<div class="rounded-md border border-dashed border-border bg-card p-5 text-center">
+							<p class="text-sm font-semibold text-fg-1">No matching records</p>
+							<p class="mt-1 text-xs leading-5 text-fg-4">Try a broader area, budget, or bedroom range.</p>
+						</div>
+					{:else}
+						{#each artifact.data.listings as listing (listing.listing_id)}
+							{@const imageUrl = listingImage(listing)}
+							<article class="overflow-hidden rounded-md border border-border bg-card">
+								<div class="grid grid-cols-[104px_minmax(0,1fr)] sm:grid-cols-[128px_minmax(0,1fr)]">
+									<div class="relative h-full min-h-[112px] bg-elevated">
+										{#if imageUrl}
+											<img src={imageUrl} alt="" class="h-full w-full object-cover" loading="lazy" />
+										{:else}
+											<div class="grid h-full place-items-center text-fg-5">
+												<ImageIcon size={22} strokeWidth={1.6} />
+											</div>
 										{/if}
 									</div>
-									<p class="mt-2 text-sm font-semibold text-fg-1">
-										{formatMoney(listing.price_value, listing.price_period)}
-									</p>
-									<div class="mt-2 flex flex-wrap items-center gap-2 text-xs text-fg-4">
-										<span class="inline-flex items-center gap-1">
-											<BedDouble size={13} strokeWidth={1.8} />
-											{listing.bedrooms ?? '-'}
-										</span>
-										<span class="inline-flex items-center gap-1">
-											<Square size={12} strokeWidth={1.8} />
-											{formatArea(listing.size_value, listing.size_unit)}
-										</span>
-										{#if listing.area_name}
-											<span class="inline-flex min-w-0 items-center gap-1">
-												<MapPin size={13} strokeWidth={1.8} />
-												<span class="truncate">{listing.area_name}</span>
+									<div class="min-w-0 p-3">
+										<div class="flex items-start justify-between gap-2">
+											<div class="min-w-0">
+												<p class="truncate text-sm font-semibold text-fg-1">{listing.title}</p>
+												<p class="mt-1 truncate text-xs text-fg-4">
+													{listingLocation(listing) || listing.location_name || 'Dubai'}
+												</p>
+											</div>
+											{#if listing.share_url}
+												<a
+													href={listing.share_url}
+													target="_blank"
+													rel="noreferrer"
+													class="grid h-7 w-7 shrink-0 place-items-center rounded-md border border-border text-fg-4 transition hover:bg-elevated hover:text-fg-1"
+													aria-label="Open record"
+													title="Open record"
+												>
+													<ExternalLink size={14} strokeWidth={1.8} />
+												</a>
+											{/if}
+										</div>
+										<p class="mt-2 text-sm font-semibold text-fg-1">
+											{formatMoney(listing.price_value, listing.price_period)}
+										</p>
+										<div class="mt-2 flex flex-wrap items-center gap-2 text-xs text-fg-4">
+											<span class="inline-flex items-center gap-1">
+												<BedDouble size={13} strokeWidth={1.8} />
+												{listing.bedrooms ?? '-'}
 											</span>
-										{/if}
+											<span class="inline-flex items-center gap-1">
+												<Square size={12} strokeWidth={1.8} />
+												{formatArea(listing.size_value, listing.size_unit)}
+											</span>
+											{#if listing.area_name}
+												<span class="inline-flex min-w-0 items-center gap-1">
+													<MapPin size={13} strokeWidth={1.8} />
+													<span class="truncate">{listing.area_name}</span>
+												</span>
+											{/if}
+										</div>
 									</div>
 								</div>
-							</div>
-						</article>
-					{/each}
-				{/if}
+							</article>
+						{/each}
+					{/if}
+				</div>
+				<div class="rounded-md border border-border bg-panel p-3 text-xs leading-5 text-fg-3">
+					<span class="font-semibold text-fg-2">Source:</span>
+					Listings import
+					<span class="mx-1 text-fg-5">/</span>
+					<span class="font-semibold text-fg-2">Scope:</span>
+					current exact matches
+				</div>
 			</div>
 		{/if}
 	</div>
