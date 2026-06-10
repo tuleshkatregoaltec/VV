@@ -259,7 +259,6 @@ marimo/_lsp/
 __marimo__/
 
 data/
-docs/
 
 # Docker volumes
 .docker-volumes/
