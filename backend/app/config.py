@@ -95,7 +95,9 @@ class Settings(BaseSettings):
     CLICKHOUSE_PORT: int  # configMap
     CLICKHOUSE_USER: str  # configMap
     CLICKHOUSE_PASSWORD: str  # Bitwarden Secrets
-    CLICKHOUSE_DB: str  # configMap
+    CLICKHOUSE_DB: str = Field(
+        validation_alias=AliasChoices("CLICKHOUSE_DATABASE", "CLICKHOUSE_DB")
+    )  # configMap
 
     # Stripe
     STRIPE_SECRET_KEY: str  # Bitwarden Secrets

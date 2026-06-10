@@ -22,7 +22,7 @@ class Settings(BaseSettings):
     platform_postgres_url: str = Field(default="", alias="PLATFORM_POSTGRES_URL")
     news_feed_urls: str = Field(default="", alias="NEWS_FEED_URLS")
     news_thumbnail_prefix: str = Field(
-        default="media/images/news/thumbnails",
+        default="media/news/thumbnails",
         alias="NEWS_THUMBNAIL_PREFIX",
     )
 
