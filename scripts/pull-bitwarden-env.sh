@@ -80,59 +80,50 @@ if grep -q "commented-out due to a problematic key name" "$TMP_FILE"; then
   exit 1
 fi
 
+# Keys required by the FastAPI backend (config.py). Missing or TO_BE_SET = hard fail.
 REQUIRED_KEYS=(
   POSTGRES_URL
+  REDIS_URL
   REDIS_PASSWORD
   SESSION_SECRET
   SERVICE_API_KEY
   AUTH_SERVICE_ROLE_KEY
   GOTRUE_JWT_SECRET
+  OPENROUTER_API_KEY
+  FRONTEND_URL
+  FRONTEND_SUCCESS_URL
+  FRONTEND_CANCEL_URL
+  OBJECT_STORAGE_ENDPOINT_URL
+  OBJECT_STORAGE_ACCESS_KEY_ID
+  OBJECT_STORAGE_SECRET_ACCESS_KEY
+  OBJECT_STORAGE_BUCKET
+  CLICKHOUSE_PASSWORD
+  STRIPE_SECRET_KEY
+  STRIPE_WEBHOOK_SECRET
+)
+
+# Keys needed for a full Docker Compose deploy (auth service, migrations).
+# Warn only — local dev without the auth container can skip these.
+DEPLOYMENT_KEYS=(
   GOTRUE_DB_DATABASE_URL
+  AUTH_DB_PASSWORD
+  POSTGRES_USER
+  POSTGRES_PASSWORD
   API_EXTERNAL_URL
   GOTRUE_SMTP_HOST
   GOTRUE_SMTP_USER
   GOTRUE_SMTP_PASS
   GOTRUE_SMTP_ADMIN_EMAIL
-  FRONTEND_URL
-  PUBLIC_API_BASE_URL
-  OBJECT_STORAGE_ENDPOINT_URL
-  OBJECT_STORAGE_ACCESS_KEY_ID
-  OBJECT_STORAGE_SECRET_ACCESS_KEY
-  OBJECT_STORAGE_BUCKET
-  STRIPE_SECRET_KEY
-  STRIPE_WEBHOOK_SECRET
-  OPENROUTER_API_KEY
-  POSTGRES_USER
-  POSTGRES_PASSWORD
-  AUTH_DB_PASSWORD
-)
-
-EXPECTED_KEYS=(
-  "${REQUIRED_KEYS[@]}"
-  STRIPE_PRICE_ID_TIER1
-  STRIPE_PRICE_ID_TIER2
-  POSTHOG_API_KEY
-  HONEYBADGER_API_KEY
-  CLICKHOUSE_PASSWORD
-  OBJECT_STORAGE_PUBLIC_URL_BASE
-  FRONTEND_SUCCESS_URL
-  FRONTEND_CANCEL_URL
 )
 
 MISSING_REQUIRED=()
 for key in "${REQUIRED_KEYS[@]}"; do
   if ! grep -Eq "^${key}=" "$TMP_FILE" || grep -Eq "^${key}=\"\"$" "$TMP_FILE"; then
     MISSING_REQUIRED+=("$key")
-  fi
-done
-
-# Treat TO_BE_SET as missing
-while IFS= read -r line; do
-  key="${line%%=*}"
-  if grep -Eq "^${key}=\"TO_BE_SET\"$" "$TMP_FILE"; then
+  elif grep -Eq "^${key}=\"TO_BE_SET\"$" "$TMP_FILE"; then
     MISSING_REQUIRED+=("$key (still set to TO_BE_SET)")
   fi
-done < <(grep -E "^[A-Z_]+=" "$TMP_FILE")
+done
 
 if (( ${#MISSING_REQUIRED[@]} > 0 )); then
   printf 'Missing or unfilled required Bitwarden secrets:\n' >&2
@@ -140,21 +131,39 @@ if (( ${#MISSING_REQUIRED[@]} > 0 )); then
   exit 1
 fi
 
-MISSING_EXPECTED=()
-for key in "${EXPECTED_KEYS[@]}"; do
-  if ! grep -Eq "^${key}=" "$TMP_FILE"; then
-    MISSING_EXPECTED+=("$key")
+MISSING_DEPLOYMENT=()
+for key in "${DEPLOYMENT_KEYS[@]}"; do
+  if ! grep -Eq "^${key}=" "$TMP_FILE" || grep -Eq "^${key}=\"TO_BE_SET\"$|^${key}=\"\"$" "$TMP_FILE"; then
+    MISSING_DEPLOYMENT+=("$key")
   fi
 done
 
-if (( ${#MISSING_EXPECTED[@]} > 0 )); then
-  printf 'Warning: expected optional keys are not present: %s\n' "${MISSING_EXPECTED[*]}" >&2
+if (( ${#MISSING_DEPLOYMENT[@]} > 0 )); then
+  printf 'Warning: deployment-only keys missing (needed for full Docker Compose deploy): %s\n' "${MISSING_DEPLOYMENT[*]}" >&2
 fi
 
 if grep -Eq "^BWS_ACCESS_TOKEN=" "$TMP_FILE"; then
   echo "Refusing to write BWS_ACCESS_TOKEN to $ENV_FILE." >&2
   exit 1
 fi
+
+# Append structural config that belongs in .env but is not a secret.
+# Docker Compose overrides host-specific values (e.g. host.docker.internal).
+cat >> "$TMP_FILE" <<'STRUCTURAL'
+
+# --- Structural config (non-secret, appended by pull-bitwarden-env.sh) ---
+ENVIRONMENT=local
+DEFAULT_CHAT_MODEL=google/gemini-3-flash-preview
+CLICKHOUSE_HOST=100.72.54.29
+CLICKHOUSE_PORT=8123
+CLICKHOUSE_USER=default
+CLICKHOUSE_DATABASE=vitevue
+CLICKHOUSE_SECURE=false
+AUTH_URL=http://100.72.54.29:9999/auth/v1
+OBJECT_STORAGE_PROVIDER=r2
+OBJECT_STORAGE_REGION=auto
+OBJECT_STORAGE_USE_PATH_STYLE=true
+STRUCTURAL
 
 chmod 600 "$TMP_FILE"
 mv "$TMP_FILE" "$ENV_FILE"

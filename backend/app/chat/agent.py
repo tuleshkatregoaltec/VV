@@ -2,18 +2,13 @@ import logging
 from typing import Any
 
 from pydantic_ai import Agent, RunContext
-from pydantic_ai.models.openai import OpenAIChatModel
-from pydantic_ai.providers.openrouter import OpenRouterProvider
 
-from app.config import settings
 from app.clickhouse import query
+from app.core.openrouter import create_openrouter_model
 
 logger = logging.getLogger(__name__)
 
-model = OpenAIChatModel(
-    model_name=settings.DEFAULT_CHAT_MODEL,
-    provider=OpenRouterProvider(openai_client=_ph_openai_client),
-)
+model = create_openrouter_model()
 
 # Define agent
 agent = Agent(
