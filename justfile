@@ -102,3 +102,6 @@ build-clickhouse-facts:
 
 import-mashrooi-radar-demo:
 	set -a && source .env.dev && set +a && cd backend && uv run python -m scripts.radar.import_mashrooi_coordinates_demo
+
+holocron +args='':
+	@cd holocron && just {{args}}
