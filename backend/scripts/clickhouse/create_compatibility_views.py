@@ -638,7 +638,7 @@ def get_client():
         port=settings.CLICKHOUSE_PORT,
         username=settings.CLICKHOUSE_USER,
         password=settings.CLICKHOUSE_PASSWORD,
-        database=settings.CLICKHOUSE_DB,
+        database=settings.CLICKHOUSE_DATABASE,
         connect_timeout=10,
         send_receive_timeout=300,
     )

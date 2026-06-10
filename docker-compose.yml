@@ -113,7 +113,7 @@ services:
     image: clickhouse/clickhouse-server:latest-alpine
     container_name: vitevue-clickhouse
     environment:
-      CLICKHOUSE_DB: vitevue
+      CLICKHOUSE_DB: ${CLICKHOUSE_DATABASE:-vitevue}
       CLICKHOUSE_USER: vitevue
       CLICKHOUSE_PASSWORD: vitevue_dev
       CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1

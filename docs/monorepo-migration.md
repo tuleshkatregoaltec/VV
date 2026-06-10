@@ -97,9 +97,10 @@ than rewriting Holocron's internal workflow immediately.
 - `holocron` docs include a migration note saying to keep that repo
   Holocron-only. After import, preserve the package boundary and update that
   instruction so it applies to `holocron/` within the monorepo.
-- Environment variable names intentionally differ in places:
-  `backend` uses `CLICKHOUSE_DB`; `holocron` uses `CLICKHOUSE_DATABASE`.
-  Do not collapse these until runtime owners are clear.
+- Environment variable names have been standardized across packages. Application
+  code should use `CLICKHOUSE_DATABASE` for ClickHouse and `R2_*` for Cloudflare
+  R2 object storage. Compose may still map `CLICKHOUSE_DATABASE` into
+  image-specific variables required by upstream containers.
 - The backend owns app PostgreSQL schema through SQLModel/Alembic. Holocron owns
   ClickHouse bronze DDL. Keep those ownership lines intact.
 
@@ -114,4 +115,3 @@ Before importing files:
    subtree history or a squashed import. Prefer full history unless repository
    policy says otherwise.
 4. Identify the minimal path changes needed after import.
-

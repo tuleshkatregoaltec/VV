@@ -11,7 +11,8 @@ CLICKHOUSE_HOST = os.environ.get("CLICKHOUSE_HOST", "localhost")
 CLICKHOUSE_PORT = int(os.environ.get("CLICKHOUSE_NATIVE_PORT", "9001"))
 CLICKHOUSE_USER = os.environ.get("CLICKHOUSE_USER", "vitevue")
 CLICKHOUSE_PASSWORD = os.environ.get("CLICKHOUSE_PASSWORD", "vitevue_dev")
-CLICKHOUSE_DB = os.environ.get("CLICKHOUSE_DB", "vitevue")
+CLICKHOUSE_DATABASE = os.environ.get("CLICKHOUSE_DATABASE", "vitevue")
+CLICKHOUSE_SECURE = os.environ.get("CLICKHOUSE_SECURE", "false").lower() in {"1", "true", "yes"}
 
 PROJECT_FACT_SQL = """
 CREATE TABLE ch_project_fact
@@ -137,7 +138,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--clickhouse-port", type=int, default=CLICKHOUSE_PORT)
     parser.add_argument("--clickhouse-user", default=CLICKHOUSE_USER)
     parser.add_argument("--clickhouse-password", default=CLICKHOUSE_PASSWORD)
-    parser.add_argument("--clickhouse-db", default=CLICKHOUSE_DB)
+    parser.add_argument("--clickhouse-database", default=CLICKHOUSE_DATABASE)
+    parser.add_argument(
+        "--clickhouse-secure", action=argparse.BooleanOptionalAction, default=CLICKHOUSE_SECURE
+    )
     return parser.parse_args()
 
 
@@ -147,7 +151,8 @@ def get_client(args: argparse.Namespace) -> Client:
         port=args.clickhouse_port,
         user=args.clickhouse_user,
         password=args.clickhouse_password,
-        database=args.clickhouse_db,
+        database=args.clickhouse_database,
+        secure=args.clickhouse_secure,
     )
 
 

@@ -6,7 +6,7 @@ Current scope:
 
 - source contracts
 - immutable raw release manifests
-- shared S3 and ClickHouse clients
+- shared R2-compatible object storage and ClickHouse clients
 - source registry
 - thin Dagster definitions
 
@@ -16,7 +16,7 @@ The intended flow is:
 
 ```text
 source connector
-  -> immutable raw release in S3
+  -> immutable raw release in Cloudflare R2
   -> current raw-shaped bronze ClickHouse tables
   -> optional domain outputs
 ```
@@ -43,7 +43,7 @@ Common commands:
 
 The production compose file is intentionally Dagster-only. A VPS should be disposable:
 
-- raw releases and manifests live in AWS S3
+- raw releases and manifests live in Cloudflare R2
 - bronze warehouse tables live in external ClickHouse
 - Dagster run/event/schedule metadata lives in external Postgres
 - the VPS runs only `dagster-webserver` and `dagster-daemon`
@@ -66,7 +66,7 @@ is changed.
 
 To move VPSs, stop the old machine, clone the same repo on the new machine, put
 the same Bitwarden machine account token and project id in the shell, then run
-`just env prod --force` and `just up prod`. No ClickHouse or S3 data is
+`just env prod --force` and `just up prod`. No ClickHouse or R2 data is
 stored on the VPS.
 
 For local development, use `docker-compose.local.yml` through `just up local`;
@@ -74,7 +74,7 @@ that override adds bind mounts plus local Postgres, ClickHouse, and MinIO.
 
 ### Temporary R2 Raw Test
 
-Before production S3, ClickHouse, and external Dagster Postgres are ready, you
+Before production R2, ClickHouse, and external Dagster Postgres are ready, you
 can smoke-test raw extraction on a VPS with an R2 bucket and temporary local
 Postgres for Dagster metadata:
 
@@ -89,9 +89,9 @@ If `BWS_ACCESS_TOKEN` and `BWS_PROJECT_ID` are exported, `just env r2` pulls
 
 ```text
 DAGSTER_POSTGRES_URL=postgresql://dagster:dagster@postgres:5432/dagster
-AWS_REGION=auto
-S3_ENDPOINT_URL=https://<account-id>.r2.cloudflarestorage.com
-S3_USE_PATH_STYLE=true
+R2_REGION=auto
+R2_ENDPOINT_URL=https://<account-id>.r2.cloudflarestorage.com
+R2_USE_PATH_STYLE=true
 ```
 
 This starts only Dagster plus local Postgres. Raw releases and manifests are
@@ -152,7 +152,7 @@ The current MVP focus is:
 - thin Dagster orchestration around raw and bronze only
 
 Recurring source jobs are wired to update bronze where the raw release is complete
-enough to safely maintain current-state tables. Raw S3 manifests remain the
+enough to safely maintain current-state tables. Raw R2 manifests remain the
 immutable audit/history layer.
 
 Silver layers are intentionally deferred until a few sources are producing real

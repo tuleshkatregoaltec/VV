@@ -13,21 +13,18 @@ from holocron.platform.settings import Settings
 
 class S3Client:
     def __init__(self, settings: Settings) -> None:
-        self._bucket = settings.s3_bucket
-        self._public_url_base = settings.s3_public_url_base.strip()
-        session_kwargs: dict[str, Any] = {"region_name": settings.s3_region}
-        if settings.r2_access_key_id and settings.r2_secret_access_key:
-            session_kwargs.update(
-                {
-                    "aws_access_key_id": settings.r2_access_key_id,
-                    "aws_secret_access_key": settings.r2_secret_access_key,
-                }
-            )
+        self._bucket = settings.r2_bucket
+        self._public_url_base = settings.r2_public_url_base.strip()
+        session_kwargs: dict[str, Any] = {
+            "region_name": settings.r2_region,
+            "aws_access_key_id": settings.r2_access_key_id,
+            "aws_secret_access_key": settings.r2_secret_access_key,
+        }
         session = boto3.session.Session(**session_kwargs)
-        config = Config(s3={"addressing_style": "path" if settings.s3_use_path_style else "auto"})
+        config = Config(s3={"addressing_style": "path" if settings.r2_use_path_style else "auto"})
         self._client = session.client(
             "s3",
-            endpoint_url=settings.r2_endpoint_url or settings.s3_endpoint_url,
+            endpoint_url=settings.r2_endpoint_url,
             config=config,
         )
 

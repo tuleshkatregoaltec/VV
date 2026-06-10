@@ -3,7 +3,8 @@
 Holocron is being rebuilt around four concerns:
 
 - `sources/`: one package per source connector
-- `platform/`: shared S3, ClickHouse, manifest, config, and runtime helpers
+- `platform/`: shared R2-compatible object storage, ClickHouse, manifest,
+  config, and runtime helpers
 - `orchestration/`: Dagster definitions only
 - `domain/`: cross-source and business-facing outputs
 
@@ -13,7 +14,7 @@ The intended flow is:
 
 ```text
 source connector
-  -> immutable raw release in S3
+  -> immutable raw release in Cloudflare R2
   -> bronze ClickHouse table(s)
   -> optional domain outputs
 ```

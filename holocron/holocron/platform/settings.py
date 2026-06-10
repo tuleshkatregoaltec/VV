@@ -5,12 +5,11 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(extra="ignore")
 
-    s3_bucket: str = Field(default="", alias="S3_BUCKET")
-    s3_region: str = Field(default="us-east-1", alias="AWS_REGION")
-    s3_endpoint_url: str | None = Field(default=None, alias="S3_ENDPOINT_URL")
-    s3_use_path_style: bool = Field(default=False, alias="S3_USE_PATH_STYLE")
-    s3_public_url_base: str = Field(default="", alias="S3_PUBLIC_URL_BASE")
-    r2_endpoint_url: str | None = Field(default=None, alias="R2_ENDPOINT")
+    r2_bucket: str = Field(default="", alias="R2_BUCKET")
+    r2_region: str = Field(default="auto", alias="R2_REGION")
+    r2_endpoint_url: str = Field(default="", alias="R2_ENDPOINT_URL")
+    r2_use_path_style: bool = Field(default=True, alias="R2_USE_PATH_STYLE")
+    r2_public_url_base: str = Field(default="", alias="R2_PUBLIC_URL_BASE")
     r2_access_key_id: str = Field(default="", alias="R2_ACCESS_KEY_ID")
     r2_secret_access_key: str = Field(default="", alias="R2_SECRET_ACCESS_KEY")
     clickhouse_host: str = Field(default="localhost", alias="CLICKHOUSE_HOST")

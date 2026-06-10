@@ -249,11 +249,11 @@ def apply_thumbnail_map(articles: list[NewsArticle], thumbnail_map: dict[str, st
 
 def build_s3_config() -> dict[str, str]:
     return {
-        "endpoint_url": require_env("S3_ENDPOINT_URL", "AWS_ENDPOINT_URL"),
-        "bucket": require_env("S3_BUCKET_NAME", "S3_BUCKET", "AWS_BUCKET_NAME", "AWS_BUCKET"),
-        "region": env_value("AWS_REGION", "S3_REGION") or "auto",
-        "access_key": require_env("AWS_ACCESS_KEY_ID", "S3_ACCESS_KEY_ID"),
-        "secret_key": require_env("AWS_SECRET_ACCESS_KEY", "S3_SECRET_ACCESS_KEY"),
+        "endpoint_url": require_env("R2_ENDPOINT_URL"),
+        "bucket": require_env("R2_BUCKET"),
+        "region": env_value("R2_REGION") or "auto",
+        "access_key": require_env("R2_ACCESS_KEY_ID"),
+        "secret_key": require_env("R2_SECRET_ACCESS_KEY"),
     }
 
 
@@ -306,7 +306,7 @@ async def find_latest_thumbnail_manifest_key(s3: Any, bucket: str, prefix: str) 
 
 
 async def download_records_object(key: str) -> tuple[list[dict[str, Any]], int]:
-    bucket = require_env("S3_BUCKET_NAME", "S3_BUCKET", "AWS_BUCKET_NAME", "AWS_BUCKET")
+    bucket = require_env("R2_BUCKET")
     async with await get_s3_client() as s3:
         response = await s3.get_object(Bucket=bucket, Key=key)
         data = await response["Body"].read()

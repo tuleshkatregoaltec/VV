@@ -25,10 +25,11 @@ class CheckResult:
 
 CORE_REQUIRED_ENV = (
     "DAGSTER_POSTGRES_URL",
-    "AWS_ACCESS_KEY_ID",
-    "AWS_SECRET_ACCESS_KEY",
-    "AWS_REGION",
-    "S3_BUCKET",
+    "R2_ACCESS_KEY_ID",
+    "R2_SECRET_ACCESS_KEY",
+    "R2_REGION",
+    "R2_BUCKET",
+    "R2_ENDPOINT_URL",
 )
 
 CLICKHOUSE_REQUIRED_ENV = (
@@ -58,12 +59,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--check-connections",
         action="store_true",
-        help="Connect to remote Dagster Postgres, S3, and ClickHouse.",
+        help="Connect to remote Dagster Postgres, R2, and ClickHouse.",
     )
     parser.add_argument(
         "--raw-only",
         action="store_true",
-        help="Validate only the services needed for raw extraction: Dagster Postgres and S3.",
+        help="Validate only the services needed for raw extraction: Dagster Postgres and R2.",
     )
     args = parser.parse_args(argv)
 
@@ -74,7 +75,7 @@ def main(argv: list[str] | None = None) -> int:
     results = [
         _check_required_env(env, required_env=required_env),
         _check_postgres_url(env),
-        _check_boolean(env, "S3_USE_PATH_STYLE", required=False),
+        _check_boolean(env, "R2_USE_PATH_STYLE", required=False),
         _check_optional_sources(env),
     ]
     if not args.raw_only:
@@ -88,7 +89,7 @@ def main(argv: list[str] | None = None) -> int:
         results.extend(
             [
                 _check_postgres_connection(env),
-                _check_s3_connection(env),
+                _check_r2_connection(env),
             ]
         )
         if not args.raw_only:
@@ -217,26 +218,26 @@ def _check_postgres_connection(env: Mapping[str, str]) -> CheckResult:
     return CheckResult(name="dagster postgres connection", ok=True, detail="select 1 succeeded")
 
 
-def _check_s3_connection(env: Mapping[str, str]) -> CheckResult:
+def _check_r2_connection(env: Mapping[str, str]) -> CheckResult:
     try:
         client = boto3.client(
             "s3",
-            aws_access_key_id=env["AWS_ACCESS_KEY_ID"],
-            aws_secret_access_key=env["AWS_SECRET_ACCESS_KEY"],
-            region_name=env["AWS_REGION"],
-            endpoint_url=_optional_value(env, "S3_ENDPOINT_URL"),
+            aws_access_key_id=env["R2_ACCESS_KEY_ID"],
+            aws_secret_access_key=env["R2_SECRET_ACCESS_KEY"],
+            region_name=env["R2_REGION"],
+            endpoint_url=env["R2_ENDPOINT_URL"],
             config=Config(
                 s3={
                     "addressing_style": "path"
-                    if _truthy(env.get("S3_USE_PATH_STYLE", "false"))
+                    if _truthy(env.get("R2_USE_PATH_STYLE", "true"))
                     else "auto"
                 }
             ),
         )
-        client.head_bucket(Bucket=env["S3_BUCKET"])
+        client.head_bucket(Bucket=env["R2_BUCKET"])
     except Exception as exc:  # noqa: BLE001 - this is a diagnostic command.
-        return CheckResult(name="s3 connection", ok=False, detail=str(exc))
-    return CheckResult(name="s3 connection", ok=True, detail=f"bucket exists: {env['S3_BUCKET']}")
+        return CheckResult(name="r2 connection", ok=False, detail=str(exc))
+    return CheckResult(name="r2 connection", ok=True, detail=f"bucket exists: {env['R2_BUCKET']}")
 
 
 def _check_clickhouse_connection(env: Mapping[str, str]) -> CheckResult:

@@ -3,11 +3,9 @@ from functools import cached_property
 from typing import Annotated, Any, Literal
 
 from pydantic import (
-    AliasChoices,
     AnyUrl,
     BeforeValidator,
     EmailStr,
-    Field,
     PostgresDsn,
     computed_field,
     field_validator,
@@ -75,29 +73,21 @@ class Settings(BaseSettings):
     POSTHOG_API_KEY: str | None = None
     POSTHOG_HOST: AnyUrl | None = None
 
-    # S3
-    S3_ENDPOINT_URL: AnyUrl = Field(
-        validation_alias=AliasChoices(
-            "AWS_ENDPOINT_URL", "S3_ENDPOINT_URL", "CLOUDFLARE_R2_ENDPOINT_URL"
-        )
-    )  # configMap
-    S3_ACCESS_KEY_ID: str = Field(
-        validation_alias=AliasChoices("AWS_ACCESS_KEY_ID", "S3_ACCESS_KEY_ID")
-    )  # Bitwarden Secrets
-    S3_SECRET_ACCESS_KEY: str = Field(
-        validation_alias=AliasChoices("AWS_SECRET_ACCESS_KEY", "S3_SECRET_ACCESS_KEY")
-    )
-    S3_BUCKET_NAME: str = Field(validation_alias=AliasChoices("S3_BUCKET_NAME", "S3_BUCKET"))
-    S3_REGION: str = Field(validation_alias=AliasChoices("AWS_REGION", "S3_REGION"))  # configMap
+    # Cloudflare R2 object storage
+    R2_ENDPOINT_URL: AnyUrl  # configMap
+    R2_ACCESS_KEY_ID: str  # Bitwarden Secrets
+    R2_SECRET_ACCESS_KEY: str  # Bitwarden Secrets
+    R2_BUCKET: str  # configMap
+    R2_REGION: str = "auto"  # configMap
+    R2_USE_PATH_STYLE: bool = True  # configMap
 
     # ClickHouse
     CLICKHOUSE_HOST: str  # configMap
     CLICKHOUSE_PORT: int  # configMap
     CLICKHOUSE_USER: str  # configMap
     CLICKHOUSE_PASSWORD: str  # Bitwarden Secrets
-    CLICKHOUSE_DB: str = Field(
-        validation_alias=AliasChoices("CLICKHOUSE_DATABASE", "CLICKHOUSE_DB")
-    )  # configMap
+    CLICKHOUSE_DATABASE: str  # configMap
+    CLICKHOUSE_SECURE: bool = False  # configMap
 
     # Stripe
     STRIPE_SECRET_KEY: str  # Bitwarden Secrets

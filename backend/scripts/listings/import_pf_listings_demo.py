@@ -296,7 +296,7 @@ async def list_objects(s3: Any, prefix: str) -> list[dict[str, Any]]:
     paginator = s3.get_paginator("list_objects_v2")
     objects: list[dict[str, Any]] = []
     async for page in paginator.paginate(
-        Bucket=settings.S3_BUCKET_NAME,
+        Bucket=settings.R2_BUCKET,
         Prefix=prefix,
         PaginationConfig={"PageSize": 1000},
     ):
@@ -305,13 +305,13 @@ async def list_objects(s3: Any, prefix: str) -> list[dict[str, Any]]:
 
 
 async def read_text_object(s3: Any, key: str) -> str:
-    response = await s3.get_object(Bucket=settings.S3_BUCKET_NAME, Key=key)
+    response = await s3.get_object(Bucket=settings.R2_BUCKET, Key=key)
     return (await response["Body"].read()).decode("utf-8", errors="replace")
 
 
 async def read_text_prefix(s3: Any, key: str, byte_count: int = 500_000) -> str:
     response = await s3.get_object(
-        Bucket=settings.S3_BUCKET_NAME,
+        Bucket=settings.R2_BUCKET,
         Key=key,
         Range=f"bytes=0-{byte_count - 1}",
     )
@@ -349,10 +349,10 @@ async def sample_manifest_mode(s3: Any, file: dict[str, Any]) -> str | None:
 async def collect_listing_records(max_per_mode: int) -> tuple[list[dict[str, Any]], dict[str, int]]:
     session = aioboto3.Session()
     s3_kwargs = {
-        "endpoint_url": str(settings.S3_ENDPOINT_URL),
-        "aws_access_key_id": settings.S3_ACCESS_KEY_ID,
-        "aws_secret_access_key": settings.S3_SECRET_ACCESS_KEY,
-        "region_name": settings.S3_REGION or "auto",
+        "endpoint_url": str(settings.R2_ENDPOINT_URL),
+        "aws_access_key_id": settings.R2_ACCESS_KEY_ID,
+        "aws_secret_access_key": settings.R2_SECRET_ACCESS_KEY,
+        "region_name": settings.R2_REGION or "auto",
     }
 
     records: list[dict[str, Any]] = []

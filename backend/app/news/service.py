@@ -195,15 +195,15 @@ def require_env(*names: str) -> str:
 
 def build_s3_client_kwargs() -> dict[str, str]:
     return {
-        "endpoint_url": require_env("S3_ENDPOINT_URL", "AWS_ENDPOINT_URL"),
-        "aws_access_key_id": require_env("AWS_ACCESS_KEY_ID", "S3_ACCESS_KEY_ID"),
-        "aws_secret_access_key": require_env("AWS_SECRET_ACCESS_KEY", "S3_SECRET_ACCESS_KEY"),
-        "region_name": env_value("AWS_REGION", "S3_REGION") or "auto",
+        "endpoint_url": require_env("R2_ENDPOINT_URL"),
+        "aws_access_key_id": require_env("R2_ACCESS_KEY_ID"),
+        "aws_secret_access_key": require_env("R2_SECRET_ACCESS_KEY"),
+        "region_name": env_value("R2_REGION") or "auto",
     }
 
 
 async def signed_news_thumbnail_url(key: str) -> str:
-    bucket = require_env("S3_BUCKET_NAME", "S3_BUCKET", "AWS_BUCKET_NAME", "AWS_BUCKET")
+    bucket = require_env("R2_BUCKET")
     session = aioboto3.Session()
     async with session.client("s3", **build_s3_client_kwargs()) as s3:  # type: ignore[arg-type]
         try:

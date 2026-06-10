@@ -2,6 +2,7 @@ import logging
 from contextlib import asynccontextmanager
 
 import aioboto3
+from botocore.config import Config
 
 logger = logging.getLogger(__name__)
 
@@ -16,6 +17,7 @@ class S3Client:
         secret_access_key: str,
         bucket_name: str,
         region: str = "auto",
+        use_path_style: bool = True,
     ):
         self.endpoint_url = endpoint_url
         self.bucket_name = bucket_name
@@ -25,6 +27,7 @@ class S3Client:
             "aws_access_key_id": access_key_id,
             "aws_secret_access_key": secret_access_key,
             "region_name": region,
+            "config": Config(s3={"addressing_style": "path" if use_path_style else "auto"}),
         }
 
     @asynccontextmanager

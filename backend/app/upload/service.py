@@ -20,11 +20,12 @@ logger = logging.getLogger(__name__)
 
 
 s3_client = S3Client(
-    endpoint_url=settings.S3_ENDPOINT_URL,
-    access_key_id=settings.S3_ACCESS_KEY_ID,
-    secret_access_key=settings.S3_SECRET_ACCESS_KEY,
-    bucket_name=settings.S3_BUCKET_NAME,
-    region=settings.S3_REGION,
+    endpoint_url=settings.R2_ENDPOINT_URL,
+    access_key_id=settings.R2_ACCESS_KEY_ID,
+    secret_access_key=settings.R2_SECRET_ACCESS_KEY,
+    bucket_name=settings.R2_BUCKET,
+    region=settings.R2_REGION,
+    use_path_style=settings.R2_USE_PATH_STYLE,
 )
 
 

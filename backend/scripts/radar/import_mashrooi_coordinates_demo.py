@@ -79,23 +79,23 @@ def parse_args() -> argparse.Namespace:
 
 def s3_kwargs() -> dict[str, str]:
     return {
-        "endpoint_url": str(settings.S3_ENDPOINT_URL),
-        "aws_access_key_id": settings.S3_ACCESS_KEY_ID,
-        "aws_secret_access_key": settings.S3_SECRET_ACCESS_KEY,
-        "region_name": settings.S3_REGION or "auto",
+        "endpoint_url": str(settings.R2_ENDPOINT_URL),
+        "aws_access_key_id": settings.R2_ACCESS_KEY_ID,
+        "aws_secret_access_key": settings.R2_SECRET_ACCESS_KEY,
+        "region_name": settings.R2_REGION or "auto",
     }
 
 
 async def list_objects(s3: Any, prefix: str) -> list[dict[str, Any]]:
     paginator = s3.get_paginator("list_objects_v2")
     objects: list[dict[str, Any]] = []
-    async for page in paginator.paginate(Bucket=settings.S3_BUCKET_NAME, Prefix=prefix):
+    async for page in paginator.paginate(Bucket=settings.R2_BUCKET, Prefix=prefix):
         objects.extend(page.get("Contents", []))
     return objects
 
 
 async def read_text_object(s3: Any, key: str) -> str:
-    response = await s3.get_object(Bucket=settings.S3_BUCKET_NAME, Key=key)
+    response = await s3.get_object(Bucket=settings.R2_BUCKET, Key=key)
     body = await response["Body"].read()
     return body.decode("utf-8-sig")
 
@@ -237,7 +237,7 @@ def clickhouse_client():
         port=settings.CLICKHOUSE_PORT,
         username=settings.CLICKHOUSE_USER,
         password=settings.CLICKHOUSE_PASSWORD,
-        database=settings.CLICKHOUSE_DB,
+        database=settings.CLICKHOUSE_DATABASE,
         connect_timeout=10,
         send_receive_timeout=300,
     )
