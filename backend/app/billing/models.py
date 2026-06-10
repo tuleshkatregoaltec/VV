@@ -1,8 +1,9 @@
-from typing import LiteralString
 from datetime import datetime, timezone
+from typing import LiteralString
+
 from pydantic import BaseModel
-from sqlmodel import SQLModel, Field
 from sqlalchemy import Column, DateTime
+from sqlmodel import Field, SQLModel
 
 
 class Subscription(SQLModel, table=True):
@@ -27,9 +28,7 @@ class Subscription(SQLModel, table=True):
     current_period_start: datetime = Field(
         sa_column=Column(DateTime(timezone=True), nullable=False)
     )
-    current_period_end: datetime = Field(
-        sa_column=Column(DateTime(timezone=True), nullable=False)
-    )
+    current_period_end: datetime = Field(sa_column=Column(DateTime(timezone=True), nullable=False))
     cancel_at_period_end: bool = Field(default=False)
 
     # Timestamps
@@ -69,10 +68,9 @@ class PaymentStatusResponse(BaseModel):
 class PaymentSyncResponse(BaseModel):
     """Payment sync response"""
 
-    payment_completed: bool
-    organization_id: str | None
-    organization_status: str | None
-    message: str
+    status: str
+    organization_id: str
+    seats: int
 
 
 class SubscriptionResponse(BaseModel):
@@ -94,3 +92,9 @@ class CustomerPortalResponse(BaseModel):
     """Response containing Stripe Customer Portal URL"""
 
     url: str
+
+
+class WebhookStatusResponse(BaseModel):
+    """Simple webhook acknowledgement response."""
+
+    status: str

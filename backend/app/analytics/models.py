@@ -1,9 +1,9 @@
 """Analytics schemas for API responses"""
 
-from pydantic import BaseModel
-from typing import Optional, Literal
 from datetime import date
+from typing import Literal, Optional
 
+from pydantic import BaseModel, Field
 
 # Valid timeframe options
 TimeframeDays = Literal[7, 30, 90, 180, 365]
@@ -118,6 +118,7 @@ class ProjectMeta(BaseModel):
     project_name: str
     area_name: Optional[str] = None
     developer_name: Optional[str] = None
+    developer_names: list[str] = Field(default_factory=list)
     project_status: Optional[str] = None
     completion_date: Optional[date] = None
     percent_completed: Optional[float] = None
@@ -153,6 +154,28 @@ class RoomAnalytics(BaseModel):
     gross_yield_pct: Optional[float] = None
 
 
+class ProjectConfigurationRow(BaseModel):
+    market_segment: Literal["all", "off_plan", "secondary"]
+    rooms: str
+    stock_units: int
+    sale_count: int
+    sales_last_12m: int
+    avg_sale_price: float
+    median_sale_price: float
+    avg_sale_price_sqm: float
+    avg_unit_size_sqm: float
+    rental_count: int
+    median_annual_rent: float
+    median_rent_sqm: float
+    gross_yield_pct: Optional[float] = None
+    price_change_yoy_pct: Optional[float] = None
+    sales_momentum_pct: Optional[float] = None
+    absorption_rate_pct: Optional[float] = None
+    price_p25: float
+    price_p50: float
+    price_p75: float
+
+
 class PropertyTypeBreakdown(BaseModel):
     property_type: str
     count: int
@@ -167,10 +190,11 @@ class RegTypeBreakdown(BaseModel):
     pct_of_total: float
 
 
-class UnitComposition(BaseModel):
+class AnalyticsUnitComposition(BaseModel):
     rooms: str
     count: int
     pct_of_total: float
+    avg_unit_size_sqm: float = 0.0
 
 
 class ProjectAnalyticsResponse(BaseModel):
@@ -183,7 +207,8 @@ class ProjectAnalyticsResponse(BaseModel):
     by_rooms: list[RoomAnalytics]
     by_property_type: list[PropertyTypeBreakdown]
     by_reg_type: list[RegTypeBreakdown]
-    unit_composition: list[UnitComposition]
+    unit_composition: list[AnalyticsUnitComposition]
+    configuration_analysis: list[ProjectConfigurationRow]
 
 
 class ProjectTrendPoint(BaseModel):
@@ -195,6 +220,58 @@ class ProjectTrendPoint(BaseModel):
 
 class ProjectTrendsResponse(BaseModel):
     data: list[ProjectTrendPoint]
+
+
+class ProjectForecastPoint(BaseModel):
+    date: date
+    avg_price: float
+    avg_price_sqm: float
+    series: Literal["historical", "forecast"]
+
+
+class ProjectForecastResponse(BaseModel):
+    data: list[ProjectForecastPoint]
+    delivery_date: Optional[date] = None
+    source_reg_type: str = "Off-Plan Properties"
+    methodology: str
+
+
+class ProjectPipelinePoint(BaseModel):
+    period: date
+    existing_stock_units: int
+    carried_stock_units: int
+    new_pipeline_units: int
+
+
+class ProjectPipelineResponse(BaseModel):
+    area_name: Optional[str] = None
+    developer_name: Optional[str] = None
+    data: list[ProjectPipelinePoint]
+
+
+class PriceDistributionBucket(BaseModel):
+    """Mean + population std dev for a single bedroom type."""
+
+    rooms: str
+    sale_count: int
+    mean_price: float
+    std_price: float
+    log_mean_price: float = 0.0
+    log_std_price: float = 0.0
+    p05_price: float = 0.0
+    p25_price: float = 0.0
+    p50_price: float = 0.0
+    p75_price: float = 0.0
+    p95_price: float = 0.0
+    mean_price_sqm: float
+    std_price_sqm: float
+
+
+class ProjectPriceDistributionResponse(BaseModel):
+    """Price distribution by bedroom type, including an all-rooms aggregate."""
+
+    all: Optional[PriceDistributionBucket] = None
+    by_rooms: list[PriceDistributionBucket]
 
 
 class ProjectSearchItem(BaseModel):

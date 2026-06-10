@@ -1,48 +1,56 @@
-import { http, stream } from './client';
-import type { StreamCallback } from './client';
+import type { StreamCallback } from './client'
+import { client } from './client'
+import type {
+	ConversationListResponse,
+	ConversationResponse,
+	CreateConversationRequest,
+	MessageResponse,
+	UpdateConversationRequest
+} from './generated/hey-api/types.gen'
 
-export interface Conversation {
-  id: number;
-  user_id: string;
-  title: string | null;
-  created_at: string;
-  updated_at: string;
+export type {
+	ConversationListResponse,
+	ConversationResponse,
+	CreateConversationRequest,
+	MessageResponse
 }
 
-export interface Message {
-  id: number;
-  conversation_id: number;
-  role: string;
-  content: string;
-  created_at: string;
-  tool_call_ids: number[] | null;
+export interface ConversationListParams {
+	limit?: number
+	offset?: number
 }
 
-export interface CreateConversationRequest {
-  title?: string;
+export interface MessageListParams {
+	limit?: number
 }
 
 export const chat = {
 	createConversation: (data: CreateConversationRequest = {}) =>
-		http.post<Conversation>('/api/v1/chat/conversations', data),
+		client.post<ConversationResponse>('/api/v1/chat/conversations', data),
 
-	getConversations: () =>
-		http.get<{ conversations: Conversation[]; total: number }>('/api/v1/chat/conversations'),
+	getConversations: ({ limit = 50, offset = 0 }: ConversationListParams = {}) =>
+		client.get<ConversationListResponse>(
+			client.withQuery('/api/v1/chat/conversations', { limit, offset })
+		),
 
 	updateConversation: (conversationId: number, title: string) =>
-		http.patch<Conversation>(`/api/v1/chat/conversations/${conversationId}`, { title }),
+		client.patch<ConversationResponse, UpdateConversationRequest>(
+			`/api/v1/chat/conversations/${conversationId}`,
+			{ title }
+		),
 
 	deleteConversation: (conversationId: number) =>
-		http.delete(`/api/v1/chat/conversations/${conversationId}`),
+		client.delete(`/api/v1/chat/conversations/${conversationId}`),
 
-	getMessages: (conversationId: number) =>
-		http.get<Message[]>(`/api/v1/chat/conversations/${conversationId}/messages`),
+	getMessages: (conversationId: number, { limit = 100 }: MessageListParams = {}) =>
+		client.get<MessageResponse[]>(
+			client.withQuery(`/api/v1/chat/conversations/${conversationId}/messages`, { limit })
+		),
 
 	/** Streams AI response chunks via Server-Sent Events */
 	sendMessage: (conversationId: number, message: string, onChunk: StreamCallback) =>
-		stream(
-			`/api/v1/chat/conversations/${conversationId}/messages/stream`,
-			onChunk,
-			{ method: 'POST', body: { message } }
-		)
-};
+		client.stream(`/api/v1/chat/conversations/${conversationId}/messages/stream`, onChunk, {
+			method: 'POST',
+			body: { message }
+		})
+}

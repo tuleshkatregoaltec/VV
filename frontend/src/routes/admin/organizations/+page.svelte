@@ -1,104 +1,212 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
-  import { goto } from '$app/navigation';
-  import { admin, type Organization } from '$lib/api/admin';
-  import { ApiError } from '$lib/api/client';
+import { createQuery } from '@tanstack/svelte-query'
+import { goto } from '$app/navigation'
+import { admin, type OrganizationListResponse } from '$lib/api/admin'
+import { ApiError } from '$lib/api/client'
+import CreateUserModal from '$lib/components/admin/CreateUserModal.svelte'
+import ConfirmModal from '$lib/components/ui/ConfirmModal.svelte'
+import { adminKeys, adminQueries } from '$lib/queries/admin'
+import { getQueryClient } from '$lib/queries/client'
 
-  let organizations: Organization[] = [];
-  let loading = true;
-  let error = '';
+let showCreateUser = $state(false)
+let activatingOrgId = $state<string | null>(null)
+let deletingOrgId = $state<string | null>(null)
+let confirmDeleteOrg = $state<OrganizationListResponse | null>(null)
+const queryClient = getQueryClient()
 
-  async function fetchOrganizations() {
-    loading = true;
-    error = '';
-    try {
-      organizations = await admin.organizations.list();
-    } catch (e) {
-      error = e instanceof ApiError ? e.message : 'Failed to fetch organizations';
-    } finally {
-      loading = false;
-    }
-  }
+const organizationsQuery = createQuery(() => adminQueries.organizations.list())
 
-  onMount(fetchOrganizations);
+const orgs = $derived(organizationsQuery.data ?? [])
+const error = $derived(
+	organizationsQuery.isError
+		? organizationsQuery.error instanceof ApiError
+			? organizationsQuery.error.message
+			: 'Failed to load organizations'
+		: ''
+)
+
+async function refreshOrganizations() {
+	await queryClient.invalidateQueries({ queryKey: adminKeys.organizations() })
+}
+
+async function activateOrg(org: OrganizationListResponse) {
+	activatingOrgId = org.id
+	try {
+		const updated = await admin.organizations.setSubscription(org.id, 'active')
+		queryClient.setQueryData<OrganizationListResponse[]>(
+			adminKeys.organizations(),
+			(current = []) => current.map((item) => (item.id === org.id ? updated : item))
+		)
+	} catch (e) {
+		alert(e instanceof ApiError ? e.message : 'Failed to activate')
+	} finally {
+		activatingOrgId = null
+	}
+}
+
+async function deleteOrg() {
+	if (!confirmDeleteOrg) return
+	const orgToDelete = confirmDeleteOrg
+	deletingOrgId = orgToDelete.id
+	try {
+		await admin.organizations.delete(orgToDelete.id)
+		queryClient.setQueryData<OrganizationListResponse[]>(
+			adminKeys.organizations(),
+			(current = []) => current.filter((item) => item.id !== orgToDelete.id)
+		)
+		confirmDeleteOrg = null
+	} catch (e) {
+		alert(e instanceof ApiError ? e.message : 'Failed to delete')
+	} finally {
+		deletingOrgId = null
+	}
+}
+
+function statusBadge(status: string) {
+	switch (status) {
+		case 'active':
+			return 'bg-success-bg text-success'
+		case 'trialing':
+			return 'bg-navy-pale text-navy'
+		case 'past_due':
+			return 'bg-warning-bg text-warning'
+		case 'canceled':
+			return 'bg-error-bg text-error'
+		default:
+			return 'bg-bone-muted text-fg-3'
+	}
+}
+
+function formatDate(d: string) {
+	return new Date(d).toLocaleDateString(undefined, {
+		year: 'numeric',
+		month: 'short',
+		day: 'numeric'
+	})
+}
 </script>
 
-<div class="max-w-7xl mx-auto px-4 py-8">
-  <div class="flex justify-between items-center mb-6">
-    <h1 class="text-3xl font-bold">Organizations</h1>
-    <button
-      onclick={() => goto('/admin/organizations/new')}
-      class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
-    >
-      New Organization
-    </button>
-  </div>
+<div class="flex flex-col gap-5">
+	<section class="mb-5 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+		<div class="flex flex-col gap-4 bg-navy px-5 py-5 text-bone sm:flex-row sm:items-end sm:justify-between">
+			<div>
+				<p class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Admin</p>
+				<h1 class="mt-2 font-display text-3xl leading-tight tracking-[var(--tracking-display)] text-bone">
+					Organizations
+				</h1>
+				<p class="mt-2 max-w-2xl text-sm leading-6 text-slate-300">
+					Review workspace owners, subscription state, member capacity, and admin actions.
+				</p>
+			</div>
+			<button
+				onclick={() => (showCreateUser = true)}
+				class="inline-flex h-10 items-center justify-center rounded-md bg-bone px-4 text-sm font-semibold text-navy transition-colors hover:bg-white"
+			>
+				Create user
+			</button>
+		</div>
+	</section>
 
-  {#if loading}
-    <div class="text-center py-12">
-      <p class="text-gray-600">Loading organizations...</p>
-    </div>
-  {:else if error}
-    <div class="bg-red-50 border border-red-200 rounded p-4">
-      <p class="text-red-600">{error}</p>
-    </div>
-  {:else if organizations.length === 0}
-    <div class="text-center py-12">
-      <p class="text-gray-600">No organizations found. Create your first one!</p>
-    </div>
-  {:else}
-    <div class="bg-white shadow-md rounded-lg overflow-hidden">
-      <table class="min-w-full divide-y divide-gray-200">
-        <thead class="bg-gray-50">
-          <tr>
-            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-              Name
-            </th>
-            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-              Domain
-            </th>
-            <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-              Users
-            </th>
-            <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-              Status
-            </th>
-            <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-              Actions
-            </th>
-          </tr>
-        </thead>
-        <tbody class="bg-white divide-y divide-gray-200">
-          {#each organizations as org}
-            <tr class="hover:bg-gray-50">
-              <td class="px-6 py-4 whitespace-nowrap">
-                <div class="text-sm font-medium text-gray-900">{org.name}</div>
-              </td>
-              <td class="px-6 py-4 whitespace-nowrap">
-                <div class="text-sm text-gray-500">{org.email_domain}</div>
-              </td>
-              <td class="px-6 py-4 whitespace-nowrap text-right">
-                <div class="text-sm text-gray-900">
-                  {org.active_user_count} / {org.max_users}
-                </div>
-              </td>
-              <td class="px-6 py-4 whitespace-nowrap text-center">
-                <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full {org.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}">
-                  {org.is_active ? 'Active' : 'Inactive'}
-                </span>
-              </td>
-              <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                <button
-                  onclick={() => goto(`/admin/organizations/${org.id}`)}
-                  class="text-blue-600 hover:text-blue-900"
-                >
-                  View
-                </button>
-              </td>
-            </tr>
-          {/each}
-        </tbody>
-      </table>
-    </div>
-  {/if}
+	{#if organizationsQuery.isPending}
+		<div class="py-16 text-center text-fg-4">Loading...</div>
+	{:else if error}
+		<div class="rounded-lg border border-[rgba(163,36,36,0.2)] bg-error-bg p-4 text-sm text-error">{error}</div>
+	{:else if orgs.length === 0}
+		<div class="py-16 text-center text-fg-4">No organizations yet.</div>
+	{:else}
+		<div class="overflow-hidden rounded-lg border border-border bg-white shadow-sm">
+			<table class="min-w-full divide-y divide-border">
+				<thead>
+					<tr class="bg-slate-50">
+						<th
+							class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-fg-4"
+							>Organization</th
+						>
+						<th
+							class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-fg-4"
+							>Owner</th
+						>
+						<th
+							class="px-5 py-3 text-center text-xs font-semibold uppercase tracking-wider text-fg-4"
+							>Members</th
+						>
+						<th
+							class="px-5 py-3 text-center text-xs font-semibold uppercase tracking-wider text-fg-4"
+							>Subscription</th
+						>
+						<th
+							class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-fg-4"
+							>Created</th
+						>
+						<th class="px-5 py-3"></th>
+					</tr>
+				</thead>
+				<tbody class="divide-y divide-border">
+					{#each orgs as org (org.id)}
+						<tr class="transition-colors hover:bg-slate-50">
+							<td class="px-5 py-4">
+								<span class="text-sm font-medium text-fg-1">{org.name}</span>
+							</td>
+							<td class="px-5 py-4 text-sm text-fg-3">{org.owner_email}</td>
+							<td class="px-5 py-4 text-center text-sm text-fg-3">
+								{org.user_count} / {org.max_users}
+							</td>
+							<td class="px-5 py-4 text-center">
+								<span
+									class="inline-flex items-center rounded-sm px-2.5 py-0.5 text-xs font-semibold {statusBadge(
+										org.subscription_status
+									)}"
+								>
+									{org.subscription_status}
+								</span>
+							</td>
+							<td class="px-5 py-4 text-sm text-fg-4">{formatDate(org.created_at)}</td>
+							<td class="px-5 py-4">
+								<div class="flex items-center justify-end gap-2">
+									{#if org.subscription_status !== 'active'}
+										<button
+											onclick={() => activateOrg(org)}
+											disabled={activatingOrgId === org.id}
+											class="rounded-md border border-[rgba(17,122,72,0.2)] bg-success-bg px-2.5 py-1 text-xs font-medium text-success transition-colors hover:opacity-90 disabled:opacity-50"
+										>
+											{activatingOrgId === org.id ? '...' : 'Activate'}
+										</button>
+									{/if}
+									<button
+										onclick={() => goto(`/admin/organizations/${org.id}`)}
+										class="rounded-md px-2.5 py-1 text-xs font-medium text-primary-light transition-colors hover:bg-navy-pale hover:text-navy"
+									>
+										View →
+									</button>
+									<button
+										onclick={() => (confirmDeleteOrg = org)}
+										class="rounded-md px-2.5 py-1 text-xs font-medium text-error transition-colors hover:bg-error-bg hover:opacity-90"
+									>
+										Delete
+									</button>
+								</div>
+							</td>
+						</tr>
+					{/each}
+				</tbody>
+			</table>
+		</div>
+	{/if}
 </div>
+
+<CreateUserModal
+	open={showCreateUser}
+	{orgs}
+	onClose={() => (showCreateUser = false)}
+	onCreated={refreshOrganizations}
+/>
+
+<ConfirmModal
+	open={confirmDeleteOrg !== null}
+	title="Delete organization"
+	message={`Delete '${confirmDeleteOrg?.name}'? This removes the org and all its data. Users will lose access.`}
+	confirmText={deletingOrgId ? 'Deleting...' : 'Delete'}
+	confirmVariant="danger"
+	onConfirm={deleteOrg}
+	onCancel={() => (confirmDeleteOrg = null)}
+/>

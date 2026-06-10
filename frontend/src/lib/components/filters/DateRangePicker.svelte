@@ -1,41 +1,41 @@
 <script lang="ts">
-	import { Calendar } from 'lucide-svelte';
+import { Calendar } from 'lucide-svelte'
 
-	interface Props {
-		startDate?: string;
-		endDate?: string;
-		onchange?: (dates: { start: string | null; end: string | null }) => void;
-		label?: string;
+interface Props {
+	startDate?: string
+	endDate?: string
+	onchange?: (dates: { start: string | null; end: string | null }) => void
+	label?: string
+}
+
+let { startDate = '', endDate = '', onchange, label = 'Date Range' }: Props = $props()
+
+let localStart = $state(startDate)
+let localEnd = $state(endDate)
+
+function handleChange() {
+	if (onchange) {
+		onchange({
+			start: localStart || null,
+			end: localEnd || null
+		})
 	}
+}
 
-	let { startDate = '', endDate = '', onchange, label = 'Date Range' }: Props = $props();
+function clearDates() {
+	localStart = ''
+	localEnd = ''
+	handleChange()
+}
 
-	let localStart = $state(startDate);
-	let localEnd = $state(endDate);
-
-	function handleChange() {
-		if (onchange) {
-			onchange({
-				start: localStart || null,
-				end: localEnd || null
-			});
-		}
-	}
-
-	function clearDates() {
-		localStart = '';
-		localEnd = '';
-		handleChange();
-	}
-
-	// Get today's date in YYYY-MM-DD format
-	const today = new Date().toISOString().split('T')[0];
+// Get today's date in YYYY-MM-DD format
+const today = new Date().toISOString().split('T')[0]
 </script>
 
 <div class="date-range-picker">
 	{#if label}
 		<label class="label">
-			<Calendar class="icon" size={16} />
+			<Calendar size={16} color="var(--text-tertiary, #9ca3af)" />
 			<span>{label}</span>
 		</label>
 	{/if}
@@ -69,9 +69,7 @@
 		</div>
 
 		{#if localStart || localEnd}
-			<button type="button" onclick={clearDates} class="clear-btn" title="Clear dates">
-				×
-			</button>
+			<button type="button" onclick={clearDates} class="clear-btn" title="Clear dates"> × </button>
 		{/if}
 	</div>
 </div>
@@ -90,10 +88,6 @@
 		font-size: 0.875rem;
 		font-weight: 500;
 		color: var(--text-secondary, #6b7280);
-	}
-
-	.icon {
-		color: var(--text-tertiary, #9ca3af);
 	}
 
 	.inputs-container {

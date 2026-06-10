@@ -1,39 +1,41 @@
 <script lang="ts">
-	import BreakdownChart from '$lib/components/charts/BreakdownChart.svelte';
-	import type { SalesAnalyticsResponse } from '$lib/api/analytics';
+import type { SalesAnalyticsResponse } from '$lib/api/analytics'
+import BreakdownChart from '$lib/components/charts/BreakdownChart.svelte'
 
-	let { data }: { data: SalesAnalyticsResponse } = $props();
+let { data }: { data: SalesAnalyticsResponse } = $props()
 
-	function formatNumber(value: number): string {
-		return value.toLocaleString();
+function formatNumber(value: number): string {
+	return value.toLocaleString()
+}
+
+function getTrend(
+	pct: number | null | undefined
+): { value: string; direction: 'up' | 'down' } | null {
+	if (pct == null) return null
+	return {
+		value: `${Math.abs(pct).toFixed(1)}% vs prev period`,
+		direction: pct >= 0 ? 'up' : 'down'
 	}
+}
 
-	function getTrend(pct: number | null): { value: string; direction: 'up' | 'down' } | null {
-		if (pct === null) return null;
-		return {
-			value: `${Math.abs(pct).toFixed(1)}% vs prev period`,
-			direction: pct >= 0 ? 'up' : 'down'
-		};
-	}
-
-	const trend = $derived(getTrend(data.summary.count_change_pct));
+const trend = $derived(getTrend(data.summary.count_change_pct))
 </script>
 
 <div class="space-y-6">
 	<!-- Summary Stats -->
-	<div class="bg-gradient-to-r from-primary/5 to-primary/10 rounded-xl p-6">
+	<div class="rounded-xl border border-navy-pale bg-navy-pale p-6">
 		<div class="flex items-baseline justify-between">
 			<div>
-				<p class="text-sm text-gray-600 mb-1">Total Transactions</p>
-				<p class="text-4xl font-bold text-gray-900">
+				<p class="mb-1 text-sm text-fg-4">Total Transactions</p>
+				<p class="text-4xl font-bold text-fg-1">
 					{formatNumber(data.summary.transaction_count)}
 				</p>
 			</div>
 			{#if trend}
 				<div
 					class="flex items-center text-sm font-semibold {trend.direction === 'up'
-						? 'text-green-600'
-						: 'text-red-600'}"
+						? 'text-trend-up'
+						: 'text-trend-down'}"
 				>
 					<svg class="w-5 h-5 mr-1" fill="currentColor" viewBox="0 0 20 20">
 						{#if trend.direction === 'up'}
@@ -54,7 +56,7 @@
 				</div>
 			{/if}
 		</div>
-		<p class="text-sm text-gray-600 mt-2">Last {data.timeframe_days} days</p>
+		<p class="mt-2 text-sm text-fg-4">Last {data.timeframe_days} days</p>
 	</div>
 
 	<!-- Breakdowns -->

@@ -48,6 +48,7 @@ dependencies = [
     "logfire[fastapi]>=4.19.0",
     "clickhouse-connect>=0.10.0",
     "clickhouse-driver>=0.2.10",
+    "pillow>=11.0.0",
 ]
 
 [tool.uv]
@@ -67,7 +68,7 @@ dev = [
 ]
 
 [tool.pytest.ini_options]
-testpaths = ["backend/tests"]
+testpaths = ["tests"]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 python_files = ["test_*.py"]
@@ -84,7 +85,7 @@ addopts = [
 ]
 
 [tool.coverage.run]
-source = ["backend/app"]
+source = ["app"]
 branch = true
 omit = [
     "*/tests/*",
@@ -97,4 +98,21 @@ exclude_lines = [
     "def __repr__",
     "raise NotImplementedError",
     "if TYPE_CHECKING:",
+]
+
+[tool.ruff]
+target-version = "py313"
+line-length = 100
+extend-exclude = [
+    "migrations/versions",
+]
+
+[tool.ruff.lint]
+select = [
+    "E",
+    "F",
+    "I",
+]
+ignore = [
+    "E501",
 ]

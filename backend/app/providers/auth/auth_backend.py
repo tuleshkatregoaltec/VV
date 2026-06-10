@@ -1,10 +1,8 @@
 from http.client import HTTPConnection
 
-from starlette.authentication import AuthenticationBackend, AuthenticationError
+from starlette.authentication import AuthCredentials, AuthenticationBackend, AuthenticationError
 
-from app.auth.service import get_auth_user
-
-from app.providers.auth.platform_user import PlatformUser
+from app.auth.service import verify_user
 
 # based on starlette.authentication.AuthenticationBackend
 
@@ -27,14 +25,8 @@ class AuthBackend(AuthenticationBackend):
         if scheme.lower() != "bearer":
             return
 
-        # auth user
-        auth_user = await get_auth_user(encoded_jwt)
-        if auth_user is None:
+        current_user = await verify_user(encoded_jwt)
+        if current_user is None:
             raise AuthenticationError({"detail": "Invalid credentials"})
 
-        # jwt is valid
-        user = PlatformUser(encoded_jwt, auth_user)
-        scopes = await user.get_scopes()
-
-        # return objects
-        return scopes, user
+        return AuthCredentials(), current_user

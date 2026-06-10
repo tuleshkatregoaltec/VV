@@ -1,77 +1,46 @@
-import { http } from './client';
+import { client } from './client'
+import type {
+	CreateUserRequest,
+	CreateUserResponse,
+	OrganizationListResponse,
+	OrgDetailResponse,
+	OrgUserResponse
+} from './generated/hey-api/types.gen'
 
-export interface Organization {
-    id: string;
-    name: string;
-    email_domain: string;
-    max_users: number;
-    is_active: boolean;
-    active_user_count: number;
-}
-
-export interface OrganizationUser {
-    id: string;
-    email: string;
-    first_name: string;
-    last_name: string;
-    is_active: boolean;
-    created_at: string;
-    last_login: string | null;
-    // Token usage fields
-    daily_token_limit: number;
-    tokens_used_today: number;
-    usage_percentage: number;
-}
-
-export interface OrganizationDetail {
-    organization: Organization;
-    users: OrganizationUser[];
-}
-
-export interface CreateOrganizationRequest {
-    name: string;
-    domain: string;
-    max_users: number;
-}
-
-export interface UpdateOrganizationRequest {
-    max_users?: number;
-    is_active?: boolean;
-}
-
-export interface UpdateUserRequest {
-    is_active?: boolean;
-    daily_token_limit?: number;
+export type {
+	CreateUserRequest,
+	CreateUserResponse,
+	OrgDetailResponse,
+	OrganizationListResponse,
+	OrgUserResponse
 }
 
 export interface UserTokenStats {
-    user_id: string;
-    tokens_used_today: number;
-    daily_limit: number;
-    usage_percentage: number;
-    remaining_tokens: number;
+	user_id: string
+	tokens_used_today: number
+	daily_limit: number
+	usage_percentage: number
+	remaining_tokens: number
 }
-
 
 export const admin = {
 	organizations: {
-		list: () => http.get<Organization[]>('/api/v1/admin/organizations'),
-		get: (id: string) => http.get<OrganizationDetail>(`/api/v1/admin/organizations/${id}`),
-		create: (data: CreateOrganizationRequest) =>
-			http.post<Organization>('/api/v1/admin/organizations', data),
-		update: (id: string, data: UpdateOrganizationRequest) =>
-			http.put<Organization>(`/api/v1/admin/organizations/${id}`, data),
-		delete: (id: string) => http.delete<void>(`/api/v1/admin/organizations/${id}`)
+		list: () => client.get<OrganizationListResponse[]>('/api/v1/admin/organizations'),
+		get: (id: string) => client.get<OrgDetailResponse>(`/api/v1/admin/organizations/${id}`),
+		update: (id: string, data: { max_users?: number }) =>
+			client.put<OrganizationListResponse>(`/api/v1/admin/organizations/${id}`, data),
+		delete: (id: string) => client.delete<void>(`/api/v1/admin/organizations/${id}`),
+		setSubscription: (id: string, status: string) =>
+			client.patch<OrganizationListResponse>(`/api/v1/admin/organizations/${id}/subscription`, {
+				status
+			})
 	},
 
 	users: {
-		update: (id: string, data: UpdateUserRequest) =>
-			http.put<OrganizationUser>(`/api/v1/admin/users/${id}`, data),
-
-		getTokenUsage: (id: string) =>
-			http.get<UserTokenStats>(`/api/v1/admin/users/${id}/token-usage`),
-
-		updateTokenLimit: (id: string, dailyTokenLimit: number) =>
-			http.put<OrganizationUser>(`/api/v1/admin/users/${id}`, { daily_token_limit: dailyTokenLimit })
+		create: (data: CreateUserRequest) =>
+			client.post<CreateUserResponse>('/api/v1/admin/users', data),
+		updateTokenLimit: (id: string, daily_token_limit: number) =>
+			client.patch<{ id: string }>(`/api/v1/admin/users/${id}`, { daily_token_limit }),
+		delete: (id: string) => client.delete<void>(`/api/v1/admin/users/${id}`)
 	}
-};
+}

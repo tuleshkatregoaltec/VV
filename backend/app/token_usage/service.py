@@ -5,16 +5,14 @@ from typing import Optional
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.token_usage.models import UserTokenUsage
 from app.auth.service import update_user_token_limit
+from app.token_usage.models import UserTokenUsage
 
 logger = logging.getLogger(__name__)
 
 
 class TokenUsageService:
-    async def get_today_usage(
-        self, db: AsyncSession, user_id: str
-    ) -> Optional[UserTokenUsage]:
+    async def get_today_usage(self, db: AsyncSession, user_id: str) -> Optional[UserTokenUsage]:
         today = date.today()
         stmt = select(UserTokenUsage).where(
             UserTokenUsage.user_id == user_id, UserTokenUsage.date == today

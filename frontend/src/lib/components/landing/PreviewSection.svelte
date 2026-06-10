@@ -1,239 +1,246 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+import { ArrowRight, Bot, Check, Database, FileSpreadsheet, MapPinned, Radar } from 'lucide-svelte'
 
-	let featuresInView = $state<boolean[]>([false, false, false]);
-	let sectionElement: HTMLElement;
+const signupHref = '/auth?view=signup'
+const demoHref = 'mailto:contact@vitevue.com?subject=Vitevue%20platform%20demo'
 
-	onMount(() => {
-		const observer = new IntersectionObserver(
-			(entries) => {
-				entries.forEach((entry) => {
-					if (entry.isIntersecting) {
-						const featureIndex = parseInt(entry.target.getAttribute('data-feature-index') || '0');
-						featuresInView[featureIndex] = true;
-					}
-				});
-			},
-			{ threshold: 0.2 }
-		);
+const highlights = [
+	{
+		title: 'Live market context',
+		copy: 'Daily pricing, transaction velocity, and research context in the workspace your team opens first.',
+		icon: Database
+	},
+	{
+		title: 'Planning radar',
+		copy: 'Business Bay DDA parcels, pipeline projects, and area-level supply signals in one map view.',
+		icon: MapPinned
+	},
+	{
+		title: 'AI feasibility support',
+		copy: 'Agent-suggested workbook changes stay reviewable before they flow into the model.',
+		icon: Bot
+	}
+]
 
-		const features = sectionElement.querySelectorAll('[data-feature-index]');
-		features.forEach((feature) => observer.observe(feature));
+const bullets = [
+	'Dashboard view for the daily market picture',
+	'Business Bay radar with DDA planning parcels enabled',
+	'Feasibility worksheet moments where AI suggestions remain under team control'
+]
 
-		return () => observer.disconnect();
-	});
+const workflowCards = [
+	{
+		title: 'Live data',
+		value: '10M+ indexed records',
+		icon: Database
+	},
+	{
+		title: 'Planning radar',
+		value: 'Parcels, pipeline, supply',
+		icon: Radar
+	},
+	{
+		title: 'Review queue',
+		value: 'AI changes stay gated',
+		icon: FileSpreadsheet
+	}
+]
+
+const signalRows = [
+	{ label: 'Business Bay', metric: 'DDA parcels', value: '42' },
+	{ label: 'JVC residential', metric: 'Comparable deals', value: '312' },
+	{ label: 'Downtown', metric: 'Supply watch', value: '+8.4%' }
+]
+
+const reviewRows = [
+	{ input: 'Saleable efficiency', current: '79.5%', suggested: '82.0%' },
+	{ input: 'Average price', current: '2,960', suggested: '3,080' },
+	{ input: 'Parking ratio', current: '1.25', suggested: '1.18' }
+]
 </script>
 
-<section bind:this={sectionElement} id="preview" class="py-24 bg-white relative overflow-hidden">
-	<!-- Floating decorative elements -->
-	<div class="absolute top-1/3 right-20 w-40 h-40 bg-teal-100 rounded-full blur-3xl opacity-20 animate-float-slow"></div>
-	<div class="absolute bottom-1/3 left-20 w-48 h-48 bg-cyan-100 rounded-full blur-3xl opacity-20 animate-float-delayed"></div>
+<section id="preview" class="scroll-mt-24 overflow-hidden bg-bone py-24 lg:py-28">
+	<div class="mx-auto max-w-7xl px-5 sm:px-8 lg:px-10">
+		<div class="grid items-center gap-14 lg:grid-cols-[0.82fr_1.18fr] lg:gap-16">
+			<div>
+				<span class="eyebrow">Platform</span>
+				<h2 class="display-2 mt-6">
+					A market workspace with <span class="display-italic">AI in the loop.</span>
+				</h2>
+				<p class="mt-5 max-w-xl text-[17px] leading-[1.65] text-fg-2">
+					Start from the daily dashboard, zoom into the planning layer around a target area,
+					and let the feasibility agent prepare workbook changes your team can accept, edit, or
+					reject.
+				</p>
 
-	<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative">
-		<div class="text-center mb-20">
-			<!-- Section badge -->
-			<div class="inline-flex items-center gap-2 px-4 py-2 bg-slate-50 border border-slate-200 rounded-full mb-6 shadow-sm hover:scale-105 transition-all duration-300">
-				<svg class="w-4 h-4 text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
-					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
-				</svg>
-				<span class="text-sm font-semibold text-slate-700">Platform overview</span>
+				<ul class="mt-7 space-y-3">
+					{#each bullets as bullet (bullet)}
+						<li class="flex items-start gap-3 text-[15px] leading-relaxed text-fg-2">
+							<span class="mt-0.5 grid h-5 w-5 flex-none place-items-center rounded-md bg-primary text-bone">
+								<Check class="h-3.5 w-3.5" aria-hidden="true" />
+							</span>
+							<span>{bullet}</span>
+						</li>
+					{/each}
+				</ul>
+
+				<div class="mt-8 flex flex-col gap-3 sm:flex-row">
+					<a
+						href={signupHref}
+						class="inline-flex items-center justify-center gap-2 rounded-md bg-primary px-6 py-3.5 text-sm font-medium text-bone transition-colors duration-200 hover:bg-primary-light"
+					>
+						Get launch access
+						<ArrowRight class="h-4 w-4" aria-hidden="true" />
+					</a>
+					<a
+						href={demoHref}
+						class="inline-flex items-center justify-center rounded-md border border-primary px-6 py-3.5 text-sm font-medium text-primary transition-colors duration-200 hover:bg-primary hover:text-bone"
+					>
+						Book a demo
+					</a>
+				</div>
 			</div>
 
-			<h2 class="text-4xl sm:text-5xl md:text-6xl font-bold text-slate-900 mb-4 hover:scale-[1.02] transition-transform duration-500">
-				AI that understands
-				<span class="bg-gradient-to-r from-teal-600 to-cyan-600 bg-clip-text text-transparent">
-					Dubai real estate
-				</span>
-			</h2>
-			<p class="text-xl text-slate-600 max-w-3xl mx-auto">
-				Stop searching. Start asking.
-			</p>
-		</div>
-
-		<!-- Feature 1: AI Chat - Full width with integrated visual -->
-		<div
-			data-feature-index="0"
-			class="mb-32 transition-all duration-700"
-			style="transform: scale({featuresInView[0] ? 1 : 0.95}); opacity: {featuresInView[0] ? 1 : 0}"
-		>
-			<div class="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
-				<div class="order-2 lg:order-1">
-					<div class="inline-flex items-center gap-2 px-4 py-2 bg-slate-50 border border-slate-200 rounded-full mb-6 shadow-sm">
-						<svg class="w-4 h-4 text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path>
-						</svg>
-						<span class="text-sm font-semibold text-slate-700">AI-POWERED</span>
-					</div>
-					<h3 class="text-4xl md:text-5xl font-bold text-slate-900 mb-6 leading-tight">
-						Ask anything,<br />
-						<span class="bg-gradient-to-r from-teal-600 to-cyan-600 bg-clip-text text-transparent">
-							get instant answers
-						</span>
-					</h3>
-					<p class="text-xl text-slate-600 mb-8 leading-relaxed">
-
-						"What's the quarter-on-quarter change for Dubai Marina 2-bedroom net yields?"
-						Just ask. Every tool you can use, so can our AI. Capable of analyzing geospatial and semantical inputs, our LLM can provide any KPI, explain market sentiment, price units and identify opportunities better than any human being.
-					</p>
-					<ul class="space-y-4">
-						<li class="flex items-start gap-3">
-							<div class="w-6 h-6 rounded-full bg-teal-600 flex items-center justify-center flex-shrink-0 mt-1">
-								<svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path>
-								</svg>
-							</div>
-							<span class="text-lg text-slate-700 font-medium">Trained on over 10M transactions and decades of macro data</span>
-						</li>
-						<li class="flex items-start gap-3">
-							<div class="w-6 h-6 rounded-full bg-teal-600 flex items-center justify-center flex-shrink-0 mt-1">
-								<svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path>
-								</svg>
-							</div>
-							<span class="text-lg text-slate-700 font-medium">Live data, industry reports and news absorption</span>
-						</li>
-						<li class="flex items-start gap-3">
-							<div class="w-6 h-6 rounded-full bg-teal-600 flex items-center justify-center flex-shrink-0 mt-1">
-								<svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path>
-								</svg>
-							</div>
-							<span class="text-lg text-slate-700 font-medium">Save time with automated analysis </span>
-						</li>
-					</ul>
-				</div>
-				<div class="order-1 lg:order-2 relative">
-					<!-- Floating screenshot placeholder with depth -->
-					<div class="relative group">
-						<div class="absolute -inset-4 bg-gradient-to-r from-teal-500/20 to-cyan-500/20 rounded-3xl blur-2xl group-hover:blur-3xl transition-all"></div>
-					<div class="relative bg-white rounded-2xl shadow-2xl border border-slate-200 p-3 transform hover:scale-105 hover:-translate-y-2 transition-all duration-300">
-							<img src="/images/chat.png" alt="Chat" class="w-full h-auto rounded-lg border border-slate-200" />
+			<div class="grid gap-4">
+				<div class="rounded-lg border border-bone-border bg-white p-4 shadow-[var(--shadow-md)]">
+					<div class="flex items-center justify-between gap-4 border-b border-border pb-4">
+						<div>
+							<p class="font-mono text-[10px] uppercase tracking-[0.1em] text-fg-4">
+								Workspace flow
+							</p>
+							<h3 class="mt-1 text-lg font-semibold text-fg-1">From market signal to model change</h3>
 						</div>
-					</div>
-				</div>
-			</div>
-		</div>
-
-		<!-- Feature 2: Analytics - Reversed layout -->
-		<div
-			data-feature-index="1"
-			class="mb-32 transition-all duration-700 delay-200"
-			style="transform: scale({featuresInView[1] ? 1 : 0.95}); opacity: {featuresInView[1] ? 1 : 0}"
-		>
-			<div class="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
-				<div class="relative group">
-					<div class="absolute -inset-4 bg-gradient-to-r from-teal-500/20 to-cyan-500/20 rounded-3xl blur-2xl group-hover:blur-3xl transition-all"></div>
-					<div class="relative bg-white rounded-2xl shadow-2xl border border-slate-200 p-3 transform hover:scale-105 hover:-translate-y-2 transition-all duration-300">
-						<img src="/images/analytics.png" alt="Analytics" class="w-full h-auto rounded-lg border border-slate-200" />
-					</div>
-				</div>
-				<div>
-					<div class="inline-flex items-center gap-2 px-4 py-2 bg-slate-50 border border-slate-200 rounded-full mb-6 shadow-sm">
-						<svg class="w-4 h-4 text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
-						</svg>
-						<span class="text-sm font-semibold text-slate-700">EXPORT-READY</span>
-					</div>
-					<h3 class="text-4xl md:text-5xl font-bold text-slate-900 mb-6 leading-tight">
-						Tactical comps,<br />
-						<span class="bg-gradient-to-r from-teal-600 to-cyan-600 bg-clip-text text-transparent">
-							institutional outputs
+						<span class="rounded-md bg-success-bg px-3 py-1 font-mono text-[10px] uppercase tracking-[0.08em] text-success">
+							Reviewable
 						</span>
-					</h3>
-					<p class="text-xl text-slate-600 mb-8 leading-relaxed">
-						Compare any target project or area against a defensible comps set built manually or auto-matched via our proprietary comparables algorithm. Review everything in a matched KPI grid, then export as institutional-grade deliverables.
-					</p>
-					<ul class="space-y-4">
-						<li class="flex items-start gap-3">
-							<div class="w-6 h-6 rounded-full bg-teal-600 flex items-center justify-center flex-shrink-0 mt-1">
-								<svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path>
-								</svg>
-							</div>
-							<span class="text-lg text-slate-700 font-medium">In-depth analytics in a matched KPI grid</span>
-						</li>
-						<li class="flex items-start gap-3">
-							<div class="w-6 h-6 rounded-full bg-teal-600 flex items-center justify-center flex-shrink-0 mt-1">
-								<svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path>
-								</svg>
-							</div>
-							<span class="text-lg text-slate-700 font-medium">Toggleable comps sets</span>
-						</li>
-						<li class="flex items-start gap-3">
-							<div class="w-6 h-6 rounded-full bg-teal-600 flex items-center justify-center flex-shrink-0 mt-1">
-								<svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path>
-								</svg>
-							</div>
-							<span class="text-lg text-slate-700 font-medium">Institutional-grade exports</span>
-						</li>
-					</ul>
-				</div>
-			</div>
-		</div>
-
-		<!-- Feature 3: Filtering - Full width again -->
-		<div
-			data-feature-index="2"
-			class="transition-all duration-700 delay-300"
-			style="transform: scale({featuresInView[2] ? 1 : 0.95}); opacity: {featuresInView[2] ? 1 : 0}"
-		>
-			<div class="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
-				<div class="order-2 lg:order-1">
-					<div class="inline-flex items-center gap-2 px-4 py-2 bg-slate-50 border border-slate-200 rounded-full mb-6 shadow-sm">
-						<svg class="w-4 h-4 text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"></path>
-						</svg>
-						<span class="text-sm font-semibold text-slate-700">VISUAL DATA</span>
 					</div>
-					<h3 class="text-4xl md:text-5xl font-bold text-slate-900 mb-6 leading-tight">
-						Your premium<br />
-						<span class="bg-gradient-to-r from-teal-600 to-cyan-600 bg-clip-text text-transparent">
-							radar system
-						</span>
-					</h3>
-					<p class="text-xl text-slate-600 mb-8 leading-relaxed">
-						Visualise Dubai data from a bird’s-eye view: demographics, yields, pricing and supply pipeline layers allow you to strike first and position with confidence. 
 
-					</p>
-					<ul class="space-y-4">
-						<li class="flex items-start gap-3">
-							<div class="w-6 h-6 rounded-full bg-teal-600 flex items-center justify-center flex-shrink-0 mt-1">
-								<svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path>
-								</svg>
+					<div class="mt-4 grid gap-3 sm:grid-cols-3">
+						{#each workflowCards as card, i (card.title)}
+							<div class="rounded-md bg-bone px-4 py-4">
+								<div class="flex items-center justify-between gap-3">
+									<span class="grid h-9 w-9 place-items-center rounded-full bg-white text-primary shadow-[var(--shadow-xs)]">
+										<svelte:component this={card.icon} class="h-4 w-4" aria-hidden="true" />
+									</span>
+									<span class="font-mono text-[10px] text-fg-4">0{i + 1}</span>
+								</div>
+								<p class="mt-4 text-sm font-semibold text-fg-1">{card.title}</p>
+								<p class="mt-1 text-xs leading-5 text-fg-3">{card.value}</p>
 							</div>
-							<span class="text-lg text-slate-700 font-medium">Navigate and monitor your market</span>
-						</li>
-						<li class="flex items-start gap-3">
-							<div class="w-6 h-6 rounded-full bg-teal-600 flex items-center justify-center flex-shrink-0 mt-1">
-								<svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path>
-								</svg>
-							</div>
-							<span class="text-lg text-slate-700 font-medium">Inventory pressure tracking</span>
-						</li>
-						<li class="flex items-start gap-3">
-							<div class="w-6 h-6 rounded-full bg-teal-600 flex items-center justify-center flex-shrink-0 mt-1">
-								<svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path>
-								</svg>
-							</div>
-							<span class="text-lg text-slate-700 font-medium">Geospatial dominance</span>
-						</li>
-					</ul>
+						{/each}
+					</div>
 				</div>
-				<div class="order-1 lg:order-2 relative">
-					<div class="relative group">
-						<div class="absolute -inset-4 bg-gradient-to-r from-teal-500/20 to-cyan-500/20 rounded-3xl blur-2xl group-hover:blur-3xl transition-all"></div>
-					<div class="relative bg-white rounded-2xl shadow-2xl border border-slate-200 p-3 transform hover:scale-105 hover:-translate-y-2 transition-all duration-300">
-						<img src="images/projects.png" alt="Projects" class="w-full h-auto rounded-lg border border-slate-200" />
+
+				<div class="grid gap-4 sm:grid-cols-[0.92fr_1.08fr]">
+					<article
+						id="radar"
+						class="scroll-mt-24 overflow-hidden rounded-lg border border-bone-border bg-white shadow-[var(--shadow-md)]"
+					>
+						<div class="flex items-center justify-between border-b border-border px-4 py-3">
+							<div class="flex items-center gap-2">
+								<span class="grid h-8 w-8 place-items-center rounded-full bg-primary-pale text-primary">
+									<MapPinned class="h-4 w-4" aria-hidden="true" />
+								</span>
+								<span class="text-sm font-semibold text-fg-1">Planning radar</span>
+							</div>
+							<span class="font-mono text-[10px] uppercase tracking-[0.08em] text-fg-4">Business Bay</span>
 						</div>
-					</div>
+						<div class="p-4">
+							<div
+								class="relative h-48 overflow-hidden rounded-md border border-border bg-[linear-gradient(90deg,rgba(226,232,240,0.75)_1px,transparent_1px),linear-gradient(0deg,rgba(226,232,240,0.75)_1px,transparent_1px)] bg-[size:28px_28px]"
+								aria-hidden="true"
+							>
+								<div class="absolute left-8 top-7 h-8 w-28 rotate-[-10deg] rounded-full bg-primary/12"></div>
+								<div class="absolute left-24 top-20 h-9 w-36 rotate-[8deg] rounded-full bg-success/12"></div>
+								<div class="absolute bottom-8 right-9 h-8 w-24 rotate-[-16deg] rounded-full bg-warning/14"></div>
+								<span class="absolute left-[22%] top-[34%] h-3 w-3 rounded-full bg-primary shadow-[0_0_0_8px_rgba(11,27,43,0.08)]"></span>
+								<span class="absolute right-[28%] top-[46%] h-3 w-3 rounded-full bg-success shadow-[0_0_0_8px_rgba(17,122,72,0.08)]"></span>
+								<span class="absolute bottom-[28%] left-[52%] h-3 w-3 rounded-full bg-warning shadow-[0_0_0_8px_rgba(165,90,19,0.1)]"></span>
+							</div>
+							<div class="mt-4 space-y-2">
+								{#each signalRows as row (row.label)}
+									<div class="grid grid-cols-[1fr_auto] gap-3 rounded-md bg-bone px-3 py-2.5">
+										<div>
+											<p class="text-xs font-semibold text-fg-1">{row.label}</p>
+											<p class="mt-0.5 font-mono text-[10px] uppercase tracking-[0.08em] text-fg-4">
+												{row.metric}
+											</p>
+										</div>
+										<span class="self-center font-mono text-sm font-semibold text-primary">{row.value}</span>
+									</div>
+								{/each}
+							</div>
+						</div>
+					</article>
+
+					<article
+						id="ai"
+						class="scroll-mt-24 overflow-hidden rounded-lg border border-bone-border bg-white shadow-[var(--shadow-md)]"
+					>
+						<div class="flex items-center justify-between border-b border-border px-4 py-3">
+							<div class="flex items-center gap-2">
+								<span class="grid h-8 w-8 place-items-center rounded-full bg-success-bg text-success">
+									<Bot class="h-4 w-4" aria-hidden="true" />
+								</span>
+								<span class="text-sm font-semibold text-fg-1">AI feasibility</span>
+							</div>
+							<span class="rounded-md bg-success-bg px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.08em] text-success">
+								Working
+							</span>
+						</div>
+
+						<div
+							id="feasibility"
+							class="scroll-mt-24 bg-slate-50 p-4"
+						>
+							<div class="rounded-md border border-border bg-white p-4 shadow-[var(--shadow-xs)]">
+								<div class="flex items-start gap-2.5">
+									<span class="grid h-8 w-8 flex-none place-items-center rounded-full bg-primary text-bone">
+										<FileSpreadsheet class="h-4 w-4" aria-hidden="true" />
+									</span>
+									<div class="min-w-0">
+										<p class="text-xs font-semibold text-fg-1">Revenue worksheet queue</p>
+										<p class="mt-1 text-[11px] leading-4 text-fg-3">
+											Business Bay comps support three model changes, held for manual approval.
+										</p>
+									</div>
+								</div>
+
+								<div class="mt-4 overflow-hidden rounded-md border border-border">
+									<div class="grid grid-cols-[1.1fr_0.8fr_0.8fr] bg-panel px-3 py-2 font-mono text-[9px] uppercase tracking-[0.08em] text-fg-4">
+										<span>Input</span>
+										<span>Current</span>
+										<span>Suggested</span>
+									</div>
+									{#each reviewRows as row (row.input)}
+										<div class="grid grid-cols-[1.1fr_0.8fr_0.8fr] border-t border-border bg-white px-3 py-2 text-[11px]">
+											<span class="text-fg-3">{row.input}</span>
+											<span class="font-mono text-fg-2">{row.current}</span>
+											<span class="font-mono font-semibold text-success">{row.suggested}</span>
+										</div>
+									{/each}
+								</div>
+							</div>
+						</div>
+					</article>
 				</div>
 			</div>
+		</div>
+
+		<div class="mt-16 grid gap-4 border-y border-bone-border py-6 md:grid-cols-3">
+			{#each highlights as item (item.title)}
+				<div class="flex gap-4">
+					<span
+						class="grid h-10 w-10 flex-none place-items-center rounded-md bg-primary-pale text-primary"
+					>
+						<svelte:component this={item.icon} class="h-4 w-4" aria-hidden="true" />
+					</span>
+					<div>
+						<h3 class="text-sm font-semibold text-fg-1">{item.title}</h3>
+						<p class="mt-1 text-sm leading-relaxed text-fg-3">{item.copy}</p>
+					</div>
+				</div>
+			{/each}
 		</div>
 	</div>
 </section>

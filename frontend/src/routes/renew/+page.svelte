@@ -1,159 +1,139 @@
 <script lang="ts">
-	import { goto } from '$app/navigation';
-	import { logout } from '$lib/api/auth';
-	import { currentUser } from '$lib/stores/user.svelte';
+import { goto } from '$app/navigation'
+import { resolve } from '$app/paths'
+import { getCustomerPortalUrl } from '$lib/api/organization'
+import AccountContextBar from '$lib/components/auth/AccountContextBar.svelte'
+import AuthFlowShell from '$lib/components/auth/AuthFlowShell.svelte'
+import { currentUser } from '$lib/stores/user.svelte'
 
-	// Layout ensures user is authenticated with profile + org before this page loads
-	// and that subscription is NOT active (otherwise redirects to dashboard)
-	let user = $derived(currentUser.data);
-	let processingRenewal = $state(false);
-	let error = $state('');
+let user = $derived(currentUser.data)
+let error = $state('')
+let processingRenewal = $state(false)
 
-	function getStatusMessage() {
-		if (!user) return 'Loading...';
+function getStatusMessage() {
+	if (!user) return 'Loading your organization state.'
 
-		const status = user.subscription_status;
-
-		switch (status) {
-			case 'past_due':
-				return 'Your organization subscription payment is past due.';
-			case 'canceled':
-				return 'Your organization subscription has been canceled.';
-			case 'incomplete':
-				return 'Your organization subscription setup is incomplete.';
-			case null:
-			case 'none':
-				return 'Your organization does not have an active subscription.';
-			default:
-				return 'Your organization subscription is inactive.';
-		}
+	switch (user.subscription_status) {
+		case 'past_due':
+			return 'Your organization subscription payment is past due.'
+		case 'canceled':
+			return 'Your organization subscription has been canceled.'
+		case 'incomplete':
+			return 'Your organization subscription setup is incomplete.'
+		case null:
+		case 'none':
+			return 'Your organization does not have an active subscription yet.'
+		default:
+			return 'Your organization subscription is currently inactive.'
 	}
+}
 
-	function getOwnerActionMessage() {
-		const status = user?.subscription_status;
+function getOwnerActionMessage() {
+	return user?.subscription_status === 'past_due'
+		? 'Update the payment method to restore access for the entire team.'
+		: 'Complete or renew billing to restore access for the entire team.'
+}
 
-		if (status === 'past_due') {
-			return 'Update your payment method to restore access for your entire team.';
-		}
-
-		return 'Renew your subscription to restore access for your entire team.';
+async function handleManageSubscription() {
+	processingRenewal = true
+	error = ''
+	try {
+		const result = await getCustomerPortalUrl()
+		window.location.href = result.url
+	} catch (err: unknown) {
+		error = err instanceof Error ? err.message : 'Failed to open subscription management'
+		processingRenewal = false
 	}
-
-	function getMemberActionMessage() {
-		return 'Please contact your organization owner to renew the subscription.';
-	}
-
-	async function handleManageSubscription() {
-		try {
-			const { getCustomerPortalUrl } = await import('$lib/api/organization');
-			const result = await getCustomerPortalUrl();
-			window.location.href = result.url;
-		} catch (err: any) {
-			error = err.message || 'Failed to open subscription management';
-		}
-	}
+}
 </script>
 
 <svelte:head>
 	<title>Subscription Renewal Required - Vitevue</title>
 </svelte:head>
 
-<div
-	class="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-slate-50 to-white px-4"
+<AuthFlowShell
+	title={user?.is_owner ? 'Restore your workspace access' : 'Workspace subscription inactive'}
+	description={getStatusMessage()}
+	eyebrow="Billing recovery"
+	sideAccent="Recovery flow"
+	sideTitle="Restore access without losing the workspace context."
+	sideCopy="Owners can recover billing here. Members can see why access changed and switch accounts if they landed in the wrong session."
 >
-		<div class="max-w-md w-full bg-white rounded-xl shadow-lg p-8">
-			<!-- Icon -->
+	<svelte:fragment slot="account">
+		<AccountContextBar email={user?.email} redirectTo="/auth" />
+	</svelte:fragment>
+
+	<svelte:fragment slot="side">
+		<div class="space-y-4 rounded-lg border border-[rgba(246,241,231,0.14)] bg-[color:rgba(246,241,231,0.05)] p-5">
+			<div class="rounded-lg border border-[rgba(246,241,231,0.14)] bg-[color:rgba(246,241,231,0.05)] p-4">
+				<p class="text-xs font-semibold uppercase tracking-[0.22em] text-slate-400">Organization</p>
+				<p class="mt-3 text-2xl font-semibold text-white">
+					{user?.organization_name || 'Workspace'}
+				</p>
+				<p class="mt-2 text-sm leading-6 text-slate-300">
+					Role: {user?.is_owner ? 'Owner' : 'Member'}
+				</p>
+			</div>
 			<div
-				class="flex items-center justify-center w-16 h-16 rounded-full bg-amber-100 mx-auto mb-4"
+				class="rounded-md border border-[rgba(246,241,231,0.12)] bg-[color:rgba(246,241,231,0.04)] px-4 py-4 text-sm leading-6 text-slate-200"
 			>
-				<svg class="w-8 h-8 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-					<path
-						stroke-linecap="round"
-						stroke-linejoin="round"
-						stroke-width="2"
-						d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-					></path>
-				</svg>
-			</div>
-
-			<!-- Title -->
-			<h1 class="text-2xl font-bold text-center mb-3 text-slate-900">
-				{user?.is_owner ? 'Subscription Renewal Required' : 'Subscription Inactive'}
-			</h1>
-
-			<!-- Status Message -->
-			<p class="text-slate-600 mb-2 text-center">{getStatusMessage()}</p>
-
-			<!-- Organization Info -->
-			{#if user?.organization_name}
-				<div class="mb-4 p-3 bg-slate-50 rounded-lg border border-slate-200">
-					<p class="text-sm text-slate-600">Organization</p>
-					<p class="font-semibold text-slate-900">{user.organization_name}</p>
-					<p class="text-xs text-slate-500 mt-1">
-						Your role: {user.is_owner ? 'Owner' : 'Member'}
-					</p>
-				</div>
-			{/if}
-
-			<!-- Role-based Action Message -->
-			<p class="text-sm text-slate-500 mb-6 text-center">
-				{user?.is_owner ? getOwnerActionMessage() : getMemberActionMessage()}
-			</p>
-
-			<!-- Error Message -->
-			{#if error}
-				<div class="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-600">
-					{error}
-				</div>
-			{/if}
-
-			<!-- Action Buttons -->
-			<div class="space-y-3">
 				{#if user?.is_owner}
-					<!-- Owner: Show Renew Button -->
-					{#if user.subscription_status === 'past_due' || user.subscription_status === 'canceled'}
-						<button
-							onclick={handleManageSubscription}
-							disabled={processingRenewal}
-							class="w-full bg-slate-900 hover:bg-slate-800 text-white font-semibold rounded-lg px-6 py-3 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-						>
-							{processingRenewal ? 'Processing...' : 'Manage Subscription'}
-						</button>
-					{:else}
-						<button
-							onclick={() => goto('/organization-setup')}
-							disabled={processingRenewal}
-							class="w-full bg-slate-900 hover:bg-slate-800 text-white font-semibold rounded-lg px-6 py-3 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-						>
-							{processingRenewal ? 'Processing...' : 'Complete Setup'}
-						</button>
-					{/if}
+					{getOwnerActionMessage()}
 				{:else}
-					<!-- Member: Show Contact Admin Message -->
-					<div class="p-4 bg-blue-50 border border-blue-200 rounded-lg">
-						<p class="text-sm text-blue-800 font-medium mb-1">Contact Your Organization Owner</p>
-						<p class="text-xs text-blue-600">
-							Only the organization owner can renew the subscription. Please reach out to them to
-							restore access.
-						</p>
-					</div>
+					Only the owner can restore billing. If you expected a different account, sign out and
+					switch first.
 				{/if}
-
-				<!-- Sign Out Button -->
-				<button
-					onclick={logout}
-					class="w-full border border-slate-300 text-slate-700 font-semibold rounded-lg px-6 py-3 hover:bg-slate-50 transition-colors"
-				>
-					Sign Out
-				</button>
 			</div>
-
-			<!-- Help Footer -->
-			<p class="text-center text-sm text-slate-500 mt-6">
-				Need help? Contact
-				<a href="mailto:contact@vitevue.com" class="text-slate-900 hover:underline">
-					contact@vitevue.com
-				</a>
-			</p>
 		</div>
-</div>
+	</svelte:fragment>
+
+	{#if error}
+		<div class="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+			{error}
+		</div>
+	{/if}
+
+	<div class="space-y-5">
+		<div class="rounded-lg border border-slate-200 bg-slate-50/80 p-6">
+			<p class="text-sm font-semibold text-slate-900">Current status</p>
+			<p class="mt-2 text-sm leading-6 text-slate-600">{getStatusMessage()}</p>
+		</div>
+
+		{#if user?.is_owner}
+			<div class="flex flex-col gap-3 sm:flex-row">
+				{#if user.subscription_status === 'past_due' || user.subscription_status === 'canceled'}
+					<button
+						type="button"
+						onclick={handleManageSubscription}
+						disabled={processingRenewal}
+						class="flex-1 rounded-md bg-navy px-5 py-3 text-sm font-semibold text-bone transition hover:bg-primary-light disabled:cursor-not-allowed disabled:opacity-50"
+					>
+						{processingRenewal ? 'Opening billing portal...' : 'Manage subscription'}
+					</button>
+				{:else}
+					<button
+						type="button"
+						onclick={() => goto(resolve('/setup'))}
+						class="flex-1 rounded-md bg-navy px-5 py-3 text-sm font-semibold text-bone transition hover:bg-primary-light"
+					>
+						Complete organization setup
+					</button>
+				{/if}
+				<a
+					href="mailto:contact@vitevue.com"
+					class="rounded-md border border-slate-300 px-5 py-3 text-center text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+				>
+					Contact support
+				</a>
+			</div>
+		{:else}
+			<div class="rounded-lg border border-navy-pale bg-navy-pale p-6">
+				<p class="text-sm font-semibold text-navy">Contact your organization owner</p>
+				<p class="mt-2 text-sm leading-6 text-primary-light">
+					Only the organization owner can restore billing. Once the subscription is active again,
+					your normal access will return automatically.
+				</p>
+			</div>
+		{/if}
+	</div>
+</AuthFlowShell>

@@ -1,0 +1,295 @@
+- generic [ref=e1]:
+  - banner [ref=e2]:
+    - generic [ref=e3]:
+      - button [ref=e4] [cursor=pointer]:
+        - img [ref=e5]
+      - link "Home" [ref=e7] [cursor=pointer]:
+        - /url: https://dxbinteract.com
+        - img "Home" [ref=e8]
+      - generic:
+        - list [ref=e10]:
+          - listitem [ref=e11]:
+            - link "Sign In" [ref=e12] [cursor=pointer]:
+              - /url: "javascript:apex.navigation.dialog('\\u002Fr\\u002Fproperty\\u002Flitedxb\\u002Flogin?dialogCs=qfkIPLooRS7WBdR-h_ud5qm13igLimwJJql68UEf0eU',{title:'Login',height:'490',width:'400',maxWidth:'960',modal:true,dialog:null},'t-Dialog-page--standard '+'login-modal round shadow-bg',apex.gPageContext$);"
+              - generic [ref=e13]: 
+              - text: Sign In
+        - list [ref=e15]:
+          - listitem [ref=e16]:
+            - link "Transactions" [ref=e17] [cursor=pointer]:
+              - /url: /
+              - generic [ref=e18]: Transactions
+          - listitem [ref=e19]:
+            - link "History" [ref=e20] [cursor=pointer]:
+              - /url: /dubai-property-prices
+              - generic [ref=e21]: History
+          - listitem [ref=e22]:
+            - link "Offplan Hub" [ref=e23] [cursor=pointer]:
+              - /url: /dubai-offplan-project-prices
+              - generic [ref=e24]: Offplan Hub
+          - listitem [ref=e25]:
+            - link "News" [ref=e26] [cursor=pointer]:
+              - /url: /news
+              - generic [ref=e27]: News
+          - listitem [ref=e28]:
+            - button "Cycles" [ref=e29] [cursor=pointer]:
+              - generic [ref=e30]: Cycles
+              - generic [ref=e31]: 
+          - listitem [ref=e32]:
+            - link "Agents" [ref=e33] [cursor=pointer]:
+              - /url: /agents
+              - generic [ref=e34]: Agents
+          - listitem [ref=e35]:
+            - link "Developers" [ref=e36] [cursor=pointer]:
+              - /url: /top-property-developers-in-dubai
+              - generic [ref=e37]: Developers
+          - listitem [ref=e38]:
+            - button "Reports" [ref=e39] [cursor=pointer]:
+              - generic [ref=e40]: Reports
+              - generic [ref=e41]: 
+          - listitem [ref=e42]:
+            - button "Maps" [ref=e43] [cursor=pointer]:
+              - generic [ref=e44]: Maps
+              - generic [ref=e45]: 
+          - listitem [ref=e46]:
+            - button "More" [ref=e47] [cursor=pointer]:
+              - generic [ref=e48]: More
+              - generic [ref=e49]: 
+  - generic [ref=e54]:
+    - generic [ref=e58]:
+      - text: 
+      - generic [ref=e60]:
+        - generic [ref=e61]:
+          - text: 
+          - generic [ref=e63]:
+            - img
+            - searchbox "Search by area, project or building" [ref=e64]
+        - generic [ref=e65] [cursor=pointer]:
+          - generic [ref=e66]: Beds
+          - generic [ref=e67]: 
+        - generic [ref=e68] [cursor=pointer]:
+          - generic [ref=e69]: Sales
+          - generic [ref=e70]: Rental
+        - generic [ref=e71] [cursor=pointer]:
+          - generic [ref=e72]: Status
+          - generic [ref=e73]: 
+        - generic [ref=e74] [cursor=pointer]:
+          - generic [ref=e75]: Sold by
+          - generic [ref=e76]: 
+        - generic [ref=e77] [cursor=pointer]:
+          - generic [ref=e78]: Type
+          - generic [ref=e79]: 
+        - generic [ref=e80] [cursor=pointer]:
+          - img [ref=e81]
+          - generic [ref=e85]: More
+        - generic [ref=e87] [cursor=pointer]: Search
+      - generic:  
+    - generic [ref=e91]:
+      - generic [ref=e93]:
+        - generic:
+          - generic [ref=e94] [cursor=pointer]: 
+          - generic [ref=e95] [cursor=pointer]: 
+      - generic [ref=e99]:
+        - generic [ref=e100]:
+          - list [ref=e101]:
+            - listitem "01 Jan 2026 to 31 Mar 2026" [ref=e202] [cursor=pointer]: YTD 01 Jan 2026 to 31 Mar 2026
+            - listitem "25 Mar 2026 to 31 Mar 2026" [ref=e203] [cursor=pointer]: 7D 25 Mar 2026 to 31 Mar 2026
+            - listitem "02 Mar 2026 to 31 Mar 2026" [ref=e204] [cursor=pointer]: 1M 02 Mar 2026 to 31 Mar 2026
+            - listitem "01 Jan 2026 to 31 Mar 2026" [ref=e205] [cursor=pointer]: 3M 01 Jan 2026 to 31 Mar 2026
+            - listitem "03 Oct 2025 to 31 Mar 2026" [ref=e206] [cursor=pointer]: 6M 03 Oct 2025 to 31 Mar 2026
+            - listitem "01 Apr 2025 to 31 Mar 2026" [ref=e207] [cursor=pointer]: 1Y 01 Apr 2025 to 31 Mar 2026
+            - listitem "Choose custom date range" [ref=e208] [cursor=pointer]: More Choose custom date range
+          - generic [ref=e210]: (25 Mar, 2026 to 31 Mar, 2026)
+        - generic [ref=e109]:
+          - link "Get Advice" [ref=e110] [cursor=pointer]:
+            - /url: javascript:void(0)
+            - generic [ref=e111]: 
+            - text: Get Advice
+          - generic [ref=e112]:
+            - link " Tools " [ref=e113] [cursor=pointer]:
+              - /url: javascript:void(0)
+              - generic [ref=e114]: 
+              - text: Tools
+              - generic [ref=e115]: 
+            - text:      
+          - generic [ref=e116]:
+            - link " Share " [ref=e117] [cursor=pointer]:
+              - /url: javascript:void(0)
+              - generic [ref=e118]: 
+              - text: Share
+              - generic [ref=e119]: 
+            - text:  􏿿
+        - text: 
+      - generic [ref=e122]:
+        - generic [ref=e124] [cursor=pointer]:  Sign In
+        - paragraph [ref=e125]:
+          - text: Buy directly from owners
+          - link "DXB Units" [ref=e126] [cursor=pointer]:
+            - /url: "https://bit.ly/dxbunits "
+      - generic [ref=e127]:
+        - generic [ref=e135]:
+          - generic [ref=e139]:
+            - paragraph [ref=e140]: Cost
+            - generic [ref=e144]: 
+            - generic [ref=e145]:
+              - checkbox
+          - generic [ref=e149]:
+            - generic [ref=e151]: Order by
+            - combobox "Order by" [ref=e154]:
+              - option "Newest" [selected]
+              - option "Oldest"
+              - option "High price"
+              - option "Low price"
+              - option "High price /sqft"
+              - option "Low price /sqft"
+        - generic [ref=e155]:
+          - generic [ref=e159]:
+            - generic [ref=e160]:
+              - heading "Ready to make your move?" [level=2] [ref=e161]
+              - paragraph [ref=e162]: You've seen the number for Dubai.
+              - paragraph [ref=e163]: Let's turn insights into action.
+            - generic [ref=e212]:
+              - generic [ref=e213]:
+                - generic [ref=e214]: I am interested to
+                - generic [ref=e215]:
+                  - generic [ref=e216]:
+                    - img [ref=e218] [cursor=pointer]
+                    - generic [ref=e220]: Buy
+                  - generic [ref=e221]:
+                    - img [ref=e223] [cursor=pointer]
+                    - generic [ref=e225]: Sell
+                  - generic [ref=e226]:
+                    - img [ref=e228] [cursor=pointer]
+                    - generic [ref=e230]: Rent
+                - button "Continue" [ref=e231] [cursor=pointer]:
+                  - text: Continue
+                  - generic [ref=e232]:
+                    - img
+              - generic [ref=e233]:
+                - generic [ref=e234]: What is your objective?
+                - generic [ref=e235]:
+                  - generic [ref=e236] [cursor=pointer]:
+                    - img [ref=e238]
+                    - generic [ref=e240]: Live in it
+                    - generic [ref=e241]: Primary residence
+                  - generic [ref=e242] [cursor=pointer]:
+                    - img [ref=e244]
+                    - generic [ref=e246]: Generate income
+                    - generic [ref=e247]: Rent it out
+                  - generic [ref=e248] [cursor=pointer]:
+                    - img [ref=e250]
+                    - generic [ref=e253]: Grow capital
+                    - generic [ref=e254]: Resell for profit
+                - generic [ref=e255]:
+                  - button [ref=e256] [cursor=pointer]:
+                    - generic [ref=e257]:
+                      - img
+                  - button "Continue" [ref=e258] [cursor=pointer]:
+                    - text: Continue
+                    - generic [ref=e259]:
+                      - img
+              - generic [ref=e260]:
+                - generic [ref=e261]: I am looking for
+                - generic [ref=e262]:
+                  - generic [ref=e263] [cursor=pointer]:
+                    - img [ref=e265]
+                    - generic [ref=e267]: Studio
+                  - generic [ref=e268] [cursor=pointer]:
+                    - img [ref=e270]
+                    - generic [ref=e272]: 1 Bed
+                  - generic [ref=e273] [cursor=pointer]:
+                    - img [ref=e275]
+                    - generic [ref=e277]: 2 Bed
+                  - generic [ref=e278] [cursor=pointer]:
+                    - img [ref=e280]
+                    - generic [ref=e282]: 3 Bed
+                  - generic [ref=e283] [cursor=pointer]:
+                    - img [ref=e285]
+                    - generic [ref=e287]: 4 Bed
+                  - generic [ref=e288] [cursor=pointer]:
+                    - img [ref=e290]
+                    - generic [ref=e292]: 5+ Bed
+                - generic [ref=e293]:
+                  - button [ref=e294] [cursor=pointer]:
+                    - generic [ref=e295]:
+                      - img
+                  - button "Continue" [ref=e296] [cursor=pointer]:
+                    - text: Continue
+                    - generic [ref=e297]:
+                      - img
+              - generic [ref=e298]:
+                - generic [ref=e299]: Price range (AED)
+                - generic [ref=e300]:
+                  - generic [ref=e301]:
+                    - generic [ref=e302]: Min price
+                    - img [ref=e303] [cursor=pointer]
+                    - textbox "Min price" [ref=e305]: 100,000
+                    - img [ref=e306]
+                  - generic [ref=e312]:
+                    - generic [ref=e313]: Max price
+                    - img [ref=e314] [cursor=pointer]
+                    - textbox "Max price" [ref=e316]: 1,000,000
+                    - img [ref=e317]
+                - generic [ref=e323]:
+                  - button [ref=e324] [cursor=pointer]:
+                    - generic [ref=e325]:
+                      - img
+                  - button "Continue" [ref=e326] [cursor=pointer]:
+                    - text: Continue
+                    - generic [ref=e327]:
+                      - img
+              - generic [ref=e328]:
+                - generic [ref=e329]: Amazing, give us a way to contact you
+                - generic [ref=e330]:
+                  - generic [ref=e331]:
+                    - textbox "Name" [ref=e332]
+                    - img "mdi-account" [ref=e333]
+                  - generic [ref=e335]:
+                    - textbox "Email" [ref=e336]
+                    - img "mdi-email" [ref=e337]
+                  - generic [ref=e339]:
+                    - textbox "Mobile" [ref=e340]
+                    - img [ref=e341]
+                - generic [ref=e345]:
+                  - button [ref=e346] [cursor=pointer]:
+                    - generic [ref=e347]:
+                      - img
+                  - button "Submit" [ref=e348] [cursor=pointer]:
+                    - generic [ref=e349]:
+                      - img
+                    - text: Submit
+              - generic [ref=e351]:
+                - img [ref=e352]
+                - generic [ref=e357]: Thanks for your interest.
+                - paragraph [ref=e358]: One of our representative will contact you soon on given details.
+                - button "Close" [ref=e359] [cursor=pointer]
+          - generic [ref=e166]:
+            - heading "Popular searches in 2026" [level=2] [ref=e167]
+            - generic [ref=e168]:
+              - generic [ref=e169] [cursor=pointer]:
+                - img [ref=e170]
+                - generic [ref=e178]: Download
+              - generic [ref=e179] [cursor=pointer]:
+                - img [ref=e180]
+                - generic [ref=e184]: Compare
+              - link "Ask" [ref=e185] [cursor=pointer]:
+                - /url: https://wa.me/971524375162?text=Hi DXB interact, I need assistance on Dubai real estate market data.
+                - img [ref=e186]:
+                  - generic "Whatsapp-color" [ref=e187]
+                - generic [ref=e191]: Ask
+    - contentinfo [ref=e192]:
+      - img [ref=e200] [cursor=pointer]
+      - text: 
+  - text:     
+  - dialog "Terms & Conditions" [ref=e360]:
+    - generic [ref=e361]:
+      - generic [ref=e362]: Terms & Conditions
+      - text: 
+    - generic [ref=e367]:
+      - paragraph [ref=e369]: All data, figures, statistics, and reports are proprietary to DXB Interact. Any use, reference, quotation, or redistribution must clearly and visibly attribute the source to DXB Interact. Use without attribution is not permitted.
+      - generic [ref=e370]:
+        - generic [ref=e376]:
+          - checkbox "I agree to the Terms & Conditions" [checked] [active] [ref=e377]
+          - generic [ref=e378] [cursor=pointer]: I agree to the Terms & Conditions 
+        - button "Submit" [ref=e381] [cursor=pointer]
+  - text:  􏿿        􏿿 􏿿
+  - text:    

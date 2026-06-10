@@ -1,5 +1,7 @@
-from pydantic import BaseModel
 from datetime import datetime
+
+from pydantic import BaseModel
+
 from app.news.models import NewsArticleResponse
 
 
@@ -45,3 +47,10 @@ class ChunkedUploadResponse(BaseModel):
     source_url: str | None = None
     uploaded_at: str | None = None
     session_id: str | None = None
+
+
+class UploadHealthResponse(BaseModel):
+    status: str
+    s3: bool
+    redis: bool | None = None
+    error: str | None = None

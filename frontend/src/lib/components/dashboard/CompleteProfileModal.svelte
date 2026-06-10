@@ -1,79 +1,79 @@
 <script lang="ts">
-	import { AuthClient } from '@supabase/auth-js';
-	import { env } from '$env/dynamic/public';
-	import TextInput from '$lib/components/auth/TextInput.svelte';
-	import { currentUser } from '$lib/stores/user.svelte';
+import { AuthClient } from '@supabase/auth-js'
+import { env } from '$env/dynamic/public'
+import TextInput from '$lib/components/auth/TextInput.svelte'
+import { currentUser } from '$lib/stores/user.svelte'
 
-	const client = new AuthClient({
-		url: `${env.PUBLIC_AUTH_BASE_URL}`,
-		storageKey: 'authentication',
-		detectSessionInUrl: true,
-		persistSession: true
-	});
+const client = new AuthClient({
+	url: `${env.PUBLIC_AUTH_BASE_URL}`,
+	storageKey: 'authentication',
+	detectSessionInUrl: true,
+	persistSession: true
+})
 
-	let firstName = $state('');
-	let lastName = $state('');
-	let loading = $state(false);
-	let error = $state('');
+let firstName = $state('')
+let lastName = $state('')
+let loading = $state(false)
+let error = $state('')
 
-	let fieldErrors = $state({
-		firstName: '',
-		lastName: ''
-	});
+let fieldErrors = $state({
+	firstName: '',
+	lastName: ''
+})
 
-	async function handleSubmit() {
-		fieldErrors.firstName = '';
-		fieldErrors.lastName = '';
+async function handleSubmit() {
+	fieldErrors.firstName = ''
+	fieldErrors.lastName = ''
 
-		if (!firstName.trim()) {
-			fieldErrors.firstName = 'First name is required';
-			return;
-		}
-		if (!lastName.trim()) {
-			fieldErrors.lastName = 'Last name is required';
-			return;
-		}
-
-		loading = true;
-		error = '';
-
-		try {
-			// Update Supabase auth metadata
-			const result = await client.updateUser({
-				data: {
-					first_name: firstName,
-					last_name: lastName
-				}
-			});
-
-			if (result.error) {
-				error = result.error.message || 'Failed to update profile';
-				return;
-			}
-
-			// Manually update the user store (Option A)
-			if (currentUser.data) {
-				currentUser.data = {
-					...currentUser.data,
-					first_name: firstName,
-					last_name: lastName
-				};
-			}
-		} catch (e) {
-			error = 'Failed to update profile. Please try again.';
-			console.error('Profile update error:', e);
-		} finally {
-			loading = false;
-		}
+	if (!firstName.trim()) {
+		fieldErrors.firstName = 'First name is required'
+		return
 	}
+	if (!lastName.trim()) {
+		fieldErrors.lastName = 'Last name is required'
+		return
+	}
+
+	loading = true
+	error = ''
+
+	try {
+		const result = await client.updateUser({
+			data: {
+				first_name: firstName,
+				last_name: lastName
+			}
+		})
+
+		if (result.error) {
+			error = result.error.message || 'Failed to update profile'
+			return
+		}
+
+		if (currentUser.data) {
+			currentUser.data = {
+				...currentUser.data,
+				first_name: firstName,
+				last_name: lastName
+			}
+		}
+	} catch (e) {
+		error = 'Failed to update profile. Please try again.'
+		console.error('Profile update error:', e)
+	} finally {
+		loading = false
+	}
+}
 </script>
 
 <!-- Blocking modal overlay -->
-<div class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-	<div class="bg-white rounded-2xl shadow-2xl max-w-md w-full p-8">
+<div class="fixed inset-0 bg-black/50  z-50 flex items-center justify-center p-4">
+	<div class="bg-white rounded-lg shadow-2xl max-w-md w-full p-8">
 		<!-- Header -->
 		<div class="mb-6 text-center">
-			<div class="w-16 h-16 bg-gradient-to-br from-teal-600 to-cyan-600 rounded-full flex items-center justify-center mx-auto mb-4">
+			<div
+				class="w-16 h-16 bg-primary rounded-full flex items-center justify-center mx-auto mb-4"
+			>
 				<svg class="w-8 h-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
 					<path
 						stroke-linecap="round"
@@ -122,7 +122,7 @@
 			<button
 				type="submit"
 				disabled={loading}
-				class="w-full bg-gradient-to-r from-teal-600 to-cyan-600 hover:from-teal-700 hover:to-cyan-700 text-white rounded-lg px-4 py-3
+				class="w-full bg-primary hover:bg-primary-light text-white rounded-lg px-4 py-3
                        transition-all disabled:opacity-50 disabled:cursor-not-allowed font-medium shadow-lg hover:shadow-xl"
 			>
 				{loading ? 'Saving...' : 'Continue'}

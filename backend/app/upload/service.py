@@ -8,24 +8,26 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.config import settings
 from app.core.cache import RedisCache
-from app.core.s3 import S3Client
-from app.news.models import NewsArticle
-from app.news.models import NewsArticleResponse
+from app.core.object_storage import ObjectStorageClient
+from app.news.models import NewsArticle, NewsArticleResponse
 from app.upload.models import (
+    ChunkedUploadResponse,
     NewsArticleCreate,
     NewsArticleUploadResponse,
-    ChunkedUploadResponse,
 )
 
 logger = logging.getLogger(__name__)
 
 
-s3_client = S3Client(
-    endpoint_url=settings.S3_ENDPOINT_URL,
-    access_key_id=settings.S3_ACCESS_KEY_ID,
-    secret_access_key=settings.S3_SECRET_ACCESS_KEY,
-    bucket_name=settings.S3_BUCKET_NAME,
-    region=settings.S3_REGION,
+object_storage_client = ObjectStorageClient(
+    endpoint_url=(
+        str(settings.OBJECT_STORAGE_ENDPOINT_URL) if settings.OBJECT_STORAGE_ENDPOINT_URL else None
+    ),
+    access_key_id=settings.OBJECT_STORAGE_ACCESS_KEY_ID,
+    secret_access_key=settings.OBJECT_STORAGE_SECRET_ACCESS_KEY,
+    bucket_name=settings.OBJECT_STORAGE_BUCKET,
+    region=settings.OBJECT_STORAGE_REGION,
+    use_path_style=settings.OBJECT_STORAGE_USE_PATH_STYLE,
 )
 
 
@@ -72,6 +74,7 @@ async def create_news_article(
     db.add(news_article)
     await db.commit()
     await db.refresh(news_article)
+    await cache.clear_prefix("news")
 
     return NewsArticleUploadResponse(
         created=True,
@@ -99,7 +102,7 @@ async def process_chunked_upload(
     expected_hash: str | None = None,
 ) -> ChunkedUploadResponse:
     """
-    Store chunk to S3. Assembly is handled by the ETL node, not here.
+    Store chunk to object storage. Assembly is handled by the ETL node, not here.
 
     When all chunks are received, saves metadata.json with upload info
     for the ETL node to use during assembly.
@@ -113,7 +116,7 @@ async def process_chunked_upload(
 
     # Store chunk in etl/uploads/ path for ETL node to access
     s3_key = f"etl/uploads/{upload_session_id}/chunk_{chunk_index:04d}"
-    await s3_client.upload(s3_key, chunk_data)
+    await object_storage_client.upload(s3_key, chunk_data)
 
     if not cache.redis:
         raise HTTPException(503, "Redis unavailable")
@@ -123,7 +126,7 @@ async def process_chunked_upload(
     await cache.redis.expire(redis_key, 3600)  # type: ignore
 
     logger.info(
-        f"Chunk {chunk_index}/{total_chunks} uploaded to S3 for {safe_filename}"
+        f"Chunk {chunk_index}/{total_chunks} uploaded to object storage for {safe_filename}"
     )
 
     received_count = await cache.redis.scard(redis_key)  # type: ignore
@@ -136,9 +139,7 @@ async def process_chunked_upload(
         )
 
     # All chunks received - save metadata for ETL node (no assembly here)
-    logger.info(
-        f"All {total_chunks} chunks received for {safe_filename}, saving metadata"
-    )
+    logger.info(f"All {total_chunks} chunks received for {safe_filename}, saving metadata")
 
     try:
         import json
@@ -156,7 +157,7 @@ async def process_chunked_upload(
         }
 
         metadata_key = f"etl/uploads/{upload_session_id}/metadata.json"
-        await s3_client.upload(metadata_key, json.dumps(metadata).encode())
+        await object_storage_client.upload(metadata_key, json.dumps(metadata).encode())
 
         await cache.delete(redis_key)
 

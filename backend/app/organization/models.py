@@ -1,10 +1,11 @@
-from typing import Optional, List, LiteralString
 from datetime import datetime, timezone
-from uuid import uuid4
 from enum import Enum
+from typing import List, LiteralString, Optional
+from uuid import uuid4
+
 from pydantic import BaseModel, ConfigDict, EmailStr
-from sqlmodel import SQLModel, Field
-from sqlalchemy import Column, DateTime, UniqueConstraint, CheckConstraint
+from sqlalchemy import CheckConstraint, Column, DateTime, UniqueConstraint
+from sqlmodel import Field, SQLModel
 
 
 class Organization(SQLModel, table=True):
@@ -18,8 +19,6 @@ class Organization(SQLModel, table=True):
     # Organization details
     name: str
     max_users: int = Field(default=5)
-    is_active: bool = Field(default=True)
-    owner_user_id: str  # User ID of organization owner
 
     # Payment and subscription tracking
     subscription_status: str = Field(
@@ -27,9 +26,7 @@ class Organization(SQLModel, table=True):
     )  # "pending", "active", "past_due", "canceled", "failed", "none"
 
     # Stripe integration (one customer per org)
-    stripe_customer_id: Optional[str] = Field(
-        default=None, unique=True, index=True, nullable=True
-    )
+    stripe_customer_id: Optional[str] = Field(default=None, unique=True, index=True, nullable=True)
     created_at: datetime = Field(
         sa_column=Column(DateTime(timezone=True), nullable=False),
         default_factory=lambda: datetime.now(timezone.utc),
@@ -81,13 +78,9 @@ class OrganizationInvitation(SQLModel, table=True):
     email: str = Field(index=True)
     role: str = Field(default="member")  # "owner" or "member"
     token: str = Field(unique=True, index=True)
-    status: str = Field(
-        default="pending"
-    )  # "pending", "accepted", "declined", "expired"
+    status: str = Field(default="pending")  # "pending", "accepted", "declined", "expired"
     invited_by_user_id: str
-    expires_at: datetime = Field(
-        sa_column=Column(DateTime(timezone=True), nullable=False)
-    )
+    expires_at: datetime = Field(sa_column=Column(DateTime(timezone=True), nullable=False))
     created_at: datetime = Field(
         sa_column=Column(DateTime(timezone=True), nullable=False),
         default_factory=lambda: datetime.now(timezone.utc),
@@ -100,6 +93,7 @@ class OrganizationInvitation(SQLModel, table=True):
 class OrganizationCreateRequest(BaseModel):
     name: str
     max_users: int = 5
+    owner_id: str
 
 
 class OwnerOrganizationCreateRequest(BaseModel):
@@ -120,7 +114,6 @@ class OwnerOrganizationCreateResponse(BaseModel):
 
 class OrganizationUpdateRequest(BaseModel):
     max_users: int
-    is_active: bool
 
 
 class OrganizationResponse(BaseModel):
@@ -129,7 +122,6 @@ class OrganizationResponse(BaseModel):
     id: str
     name: str
     max_users: int
-    is_active: bool
     active_user_count: Optional[int] = 0
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
@@ -137,21 +129,31 @@ class OrganizationResponse(BaseModel):
 
 class OrganizationDetailResponse(BaseModel):
     organization: OrganizationResponse
-    users: List[dict]
+    users: List["OrganizationUserDetailResponse"]
 
 
 class InviteUserRequest(BaseModel):
     """Request to invite a user to an organization"""
 
     email: EmailStr
-    organization_id: str
-    redirect_url: str
 
 
-class CompleteProfileRequest(BaseModel):
-    """Request to complete user profile after invitation"""
+class InviteUserResponse(BaseModel):
+    """Response after creating an organization invitation"""
 
-    organization_id: str
+    success: bool
+    invitation_token: str
+
+
+class OrganizationInvitationResponse(BaseModel):
+    """Pending invitation response for organization settings."""
+
+    id: str
+    email: str
+    role: str
+    status: str
+    expires_at: datetime
+    created_at: datetime
 
 
 class MembershipResponse(BaseModel):
@@ -170,6 +172,29 @@ class UserUpdateRequest(BaseModel):
     """Request to update user settings (admin only)"""
 
     daily_token_limit: Optional[int] = None
+
+
+class OperationSuccessResponse(BaseModel):
+    success: bool
+
+
+class OrganizationUserDetailResponse(BaseModel):
+    id: str
+    email: str
+    first_name: str
+    last_name: str
+    created_at: datetime | None
+    last_login: datetime | None
+    daily_token_limit: int
+    tokens_used_today: int
+    usage_percentage: float
+
+
+class UserTokenLimitUpdateResponse(BaseModel):
+    id: str
+    email: str
+    daily_token_limit: int
+    updated_at: datetime | None
 
 
 class ValidateInviteTokenResponse(BaseModel):

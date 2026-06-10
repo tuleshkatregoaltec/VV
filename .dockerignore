@@ -29,6 +29,7 @@ Thumbs.db
 
 # Data
 data/
+holocron/
 *.csv
 
 # Logs

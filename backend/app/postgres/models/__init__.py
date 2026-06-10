@@ -5,11 +5,12 @@ and any code importing from `app.postgres.models` continue to work during the
 migration.
 """
 
+from app.billing.models import Subscription
+from app.chat.models import Conversation, Message
+from app.feasibility.models import FeasibilitySavedStudy
+from app.news.models import NewsArticle
 from app.organization.models import Organization
 from app.token_usage.models import UserTokenUsage
-from app.billing.models import Subscription
-from app.news.models import NewsArticle
-from app.chat.models import Conversation, Message
 
 __all__ = [
     # Auth & User Management
@@ -22,4 +23,6 @@ __all__ = [
     # Chat
     "Conversation",
     "Message",
+    # Feasibility
+    "FeasibilitySavedStudy",
 ]

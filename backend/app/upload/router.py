@@ -5,12 +5,13 @@ from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, status
 from fastapi.responses import JSONResponse
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.postgres import get_db_session
 from app.core.dependencies import require_api_key
+from app.postgres import get_db_session
 from app.upload.models import (
+    ChunkedUploadResponse,
     NewsArticleUploadRequest,
     NewsArticleUploadResponse,
-    ChunkedUploadResponse,
+    UploadHealthResponse,
 )
 from app.upload.service import create_news_article, process_chunked_upload
 
@@ -41,7 +42,7 @@ async def upload_chunked(
     expected_hash: Annotated[str | None, Query()] = None,
 ) -> ChunkedUploadResponse:
     """
-    Upload file chunks. Stores chunks to S3 for ETL node assembly.
+    Upload file chunks. Stores chunks to object storage for ETL node assembly.
 
     When all chunks are received, saves metadata.json with upload info.
     The ETL node is responsible for downloading, assembling, and verifying.
@@ -75,22 +76,19 @@ async def upload_news_article(
         raise HTTPException(500, f"Failed to upload news article: {e}")
 
 
-@health_router.get("/health")
+@health_router.get("/health", response_model=UploadHealthResponse)
 async def health():
-    from app.upload.service import s3_client, cache
+    from app.upload.service import cache, object_storage_client
 
     try:
-        # Test S3 connection by uploading and deleting a test file
+        # Test object storage by uploading and deleting a test file.
         test_key = ".health_check"
         test_data = b"health_check"
-        await s3_client.upload(test_key, test_data)
-        await s3_client.delete_many([test_key])
+        await object_storage_client.upload(test_key, test_data)
+        await object_storage_client.delete_many([test_key])
 
         # Test Redis connection
-        redis_ok = False
-        if cache.redis:
-            cache.redis.ping()
-            redis_ok = True
+        redis_ok = await cache.ping()
 
         return JSONResponse(
             status_code=status.HTTP_200_OK,

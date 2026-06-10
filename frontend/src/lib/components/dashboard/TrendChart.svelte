@@ -1,63 +1,63 @@
 <script lang="ts">
-	import type { TrendPoint } from '$lib/api/analytics';
+import type { TrendPoint } from '$lib/api/analytics'
 
-	let { trends }: { trends: TrendPoint[] } = $props();
+let { trends }: { trends: TrendPoint[] } = $props()
 
-	// Calculate min/max for scaling
-	const values = $derived(trends.map((t) => t.avg_sqft));
-	const minValue = $derived(Math.min(...values));
-	const maxValue = $derived(Math.max(...values));
-	const valueRange = $derived(maxValue - minValue || 1);
+// Calculate min/max for scaling
+const values = $derived(trends.map((t) => t.avg_sqft))
+const minValue = $derived(Math.min(...values))
+const maxValue = $derived(Math.max(...values))
+const valueRange = $derived(maxValue - minValue || 1)
 
-	// Calculate percentage change
-	const firstValue = $derived(trends[0]?.avg_sqft ?? 0);
-	const lastValue = $derived(trends[trends.length - 1]?.avg_sqft ?? 0);
-	const percentChange = $derived(
-		firstValue ? (((lastValue - firstValue) / firstValue) * 100).toFixed(1) : '0.0'
-	);
-	const isPositive = $derived(Number(percentChange) >= 0);
+// Calculate percentage change
+const firstValue = $derived(trends[0]?.avg_sqft ?? 0)
+const lastValue = $derived(trends[trends.length - 1]?.avg_sqft ?? 0)
+const percentChange = $derived(
+	firstValue ? (((lastValue - firstValue) / firstValue) * 100).toFixed(1) : '0.0'
+)
+const isPositive = $derived(Number(percentChange) >= 0)
 
-	// Generate SVG path for trend line
-	const chartWidth = 200;
-	const chartHeight = 64;
-	const padding = 4;
+// Generate SVG path for trend line
+const chartWidth = 200
+const chartHeight = 64
+const padding = 4
 
-	function generatePath(data: TrendPoint[]): string {
-		if (data.length === 0) return '';
+function generatePath(data: TrendPoint[]): string {
+	if (data.length === 0) return ''
 
-		const points = data.map((point, i) => {
-			const x = (i / (data.length - 1)) * chartWidth;
-			const normalizedValue = (point.avg_sqft - minValue) / valueRange;
-			const y = chartHeight - padding - normalizedValue * (chartHeight - 2 * padding);
-			return { x, y };
-		});
+	const points = data.map((point, i) => {
+		const x = (i / (data.length - 1)) * chartWidth
+		const normalizedValue = (point.avg_sqft - minValue) / valueRange
+		const y = chartHeight - padding - normalizedValue * (chartHeight - 2 * padding)
+		return { x, y }
+	})
 
-		// Create smooth curve using cubic bezier
-		let path = `M ${points[0].x} ${points[0].y}`;
-		for (let i = 1; i < points.length; i++) {
-			const prev = points[i - 1];
-			const curr = points[i];
-			const cp1x = prev.x + (curr.x - prev.x) / 3;
-			const cp2x = prev.x + ((curr.x - prev.x) * 2) / 3;
-			path += ` C ${cp1x} ${prev.y}, ${cp2x} ${curr.y}, ${curr.x} ${curr.y}`;
-		}
-		return path;
+	// Create smooth curve using cubic bezier
+	let path = `M ${points[0].x} ${points[0].y}`
+	for (let i = 1; i < points.length; i++) {
+		const prev = points[i - 1]
+		const curr = points[i]
+		const cp1x = prev.x + (curr.x - prev.x) / 3
+		const cp2x = prev.x + ((curr.x - prev.x) * 2) / 3
+		path += ` C ${cp1x} ${prev.y}, ${cp2x} ${curr.y}, ${curr.x} ${curr.y}`
 	}
+	return path
+}
 
-	const linePath = $derived(generatePath(trends));
-	const areaPath = $derived(
-		linePath ? `${linePath} L ${chartWidth} ${chartHeight} L 0 ${chartHeight} Z` : ''
-	);
+const linePath = $derived(generatePath(trends))
+const areaPath = $derived(
+	linePath ? `${linePath} L ${chartWidth} ${chartHeight} L 0 ${chartHeight} Z` : ''
+)
 </script>
 
 <div class="mt-4">
 	<!-- Percentage change badge -->
 	<div class="flex items-center justify-between mb-2">
-		<span class="text-sm text-gray-600">Last 30 days</span>
+		<span class="text-sm text-fg-4">Last 30 days</span>
 		<div
 			class="flex items-center text-sm font-semibold {isPositive
-				? 'text-green-600'
-				: 'text-red-600'}"
+				? 'text-trend-up'
+				: 'text-trend-down'}"
 		>
 			{#if isPositive}
 				<svg class="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
@@ -92,12 +92,12 @@
 				<linearGradient id="trendGradient" x1="0" x2="0" y1="0" y2="1">
 					<stop
 						offset="0%"
-						stop-color={isPositive ? '#10b981' : '#ef4444'}
+						stop-color={isPositive ? 'var(--color-trend-up)' : 'var(--color-trend-down)'}
 						stop-opacity="0.3"
 					/>
 					<stop
 						offset="100%"
-						stop-color={isPositive ? '#10b981' : '#ef4444'}
+						stop-color={isPositive ? 'var(--color-trend-up)' : 'var(--color-trend-down)'}
 						stop-opacity="0.05"
 					/>
 				</linearGradient>
@@ -113,7 +113,7 @@
 				<path
 					d={linePath}
 					fill="none"
-					stroke={isPositive ? '#10b981' : '#ef4444'}
+					stroke={isPositive ? 'var(--color-trend-up)' : 'var(--color-trend-down)'}
 					stroke-width="2.5"
 					stroke-linecap="round"
 					stroke-linejoin="round"

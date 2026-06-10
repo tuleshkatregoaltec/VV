@@ -3,39 +3,58 @@
 import asyncio
 from datetime import date, timedelta
 from typing import Optional
+
 from fastapi import APIRouter, Depends, Query
 
-from app.core.dependencies import require_active_subscription, AuthContext
 from app.analytics.models import (
     AnalyticsResponse,
-    RentalAnalyticsResponse,
     AnalyticsSummary,
-    RentalSummary,
     MarketTrendPoint,
     MarketTrendResponse,
     ProjectAnalyticsResponse,
-    ProjectTrendsResponse,
+    ProjectForecastResponse,
+    ProjectPipelineResponse,
+    ProjectPriceDistributionResponse,
     ProjectSearchResponse,
+    ProjectTrendsResponse,
+    RentalAnalyticsResponse,
+    RentalSummary,
     SubProjectsResponse,
+)
+from app.analytics.queries import ProjectFilterType, ProjectScopeType
+from app.analytics.service import (
+    get_project_forecast,
+    get_project_pipeline,
+    get_project_price_distribution,
+    get_project_search,
+    get_project_summary,
+    get_project_trends,
+    get_sub_project_list,
 )
 from app.clickhouse.client import query
 from app.clickhouse.queries import (
-    sales_summary,
-    rentals_summary,
-    price_trends,
     MARKET_FILTERS,
+    price_trends,
+    rentals_summary,
+    sales_summary,
 )
-from app.analytics.service import (
-    get_project_search,
-    get_sub_project_list,
-    get_project_summary,
-    get_project_trends,
-)
+from app.core.decorators import cached_endpoint
+from app.core.dependencies import AuthContext, require_active_subscription
 
-router = APIRouter(
-    prefix="/api/v1/analytics",
-    tags=["analytics"],
-)
+router = APIRouter(prefix="/api/v1/analytics", tags=["analytics"])
+
+
+def _resolve_project_scope(
+    *,
+    master_project: Optional[str],
+    project: Optional[str],
+    filter_type: ProjectFilterType,
+) -> tuple[str, ProjectScopeType]:
+    if project:
+        return project, "project"
+    if master_project:
+        return master_project, filter_type
+    return "Dubai", "market"
 
 
 @router.get("/sales", response_model=AnalyticsResponse)
@@ -66,9 +85,7 @@ async def get_sales_analytics(
         default=None, description="Filter by property type (ignored if market_type set)"
     ),
     rooms: Optional[str] = Query(default=None, description="Filter by room count"),
-    reg_type: Optional[str] = Query(
-        default=None, description="Filter by registration type"
-    ),
+    reg_type: Optional[str] = Query(default=None, description="Filter by registration type"),
     price_bucket: Optional[str] = Query(
         default=None, description="Filter by price bucket (e.g., '1M-2M')"
     ),
@@ -116,7 +133,7 @@ async def get_sales_analytics(
         if not start_date:
             from datetime import timedelta
 
-            start_date = date.today() - timedelta(days=30)  # Default 30 days
+            start_date = date.today() - timedelta(days=180)  # Default 6 months
         if not end_date:
             end_date = date.today()
 
@@ -215,9 +232,7 @@ async def get_sales_analytics(
 @router.get("/rentals", response_model=RentalAnalyticsResponse)
 async def get_rental_analytics(
     context: AuthContext = Depends(require_active_subscription),
-    property_usage: str = Query(
-        default="Residential", description="Residential or Commercial"
-    ),
+    property_usage: str = Query(default="Residential", description="Residential or Commercial"),
     timeframe_days: Optional[int] = Query(
         default=None,
         description="Number of days to look back (overrides start_date if provided)",
@@ -231,9 +246,7 @@ async def get_rental_analytics(
     master_project: Optional[str] = Query(
         default=None, description="Filter by master project name"
     ),
-    property_type: Optional[str] = Query(
-        default=None, description="Filter by property type"
-    ),
+    property_type: Optional[str] = Query(default=None, description="Filter by property type"),
     rent_bucket: Optional[str] = Query(
         default=None, description="Filter by rent bucket (e.g., '100K-200K')"
     ),
@@ -263,9 +276,7 @@ async def get_rental_analytics(
         if not start_date:
             from datetime import timedelta
 
-            start_date = date.today() - timedelta(
-                days=90
-            )  # Default 90 days for rentals
+            start_date = date.today() - timedelta(days=180)  # Default 6 months
         if not end_date:
             end_date = date.today()
 
@@ -337,9 +348,7 @@ async def get_rental_analytics(
 @router.get("/market-trend", response_model=MarketTrendResponse)
 async def get_market_trend(
     context: AuthContext = Depends(require_active_subscription),
-    days: int = Query(
-        default=180, description="Number of days to look back (30, 90, 180, 365)"
-    ),
+    days: int = Query(default=180, description="Number of days to look back (30, 90, 180, 365)"),
     market_type: Optional[str] = Query(
         default=None,
         description=f"Market type (overrides property_usage). One of: {', '.join(MARKET_FILTERS)}",
@@ -416,9 +425,7 @@ async def get_market_trend(
 
     try:
         trend_result, current_result, prev_result = await asyncio.gather(
-            query(
-                trend_sql, _trend_params(start_date.isoformat(), end_date.isoformat())
-            ),
+            query(trend_sql, _trend_params(start_date.isoformat(), end_date.isoformat())),
             query(
                 current_summary_sql,
                 _trend_params(start_date.isoformat(), end_date.isoformat()),
@@ -454,9 +461,7 @@ async def get_market_trend(
     if current_result and prev_result:
         curr = current_result[0]
         prev = prev_result[0]
-        avg_price_change_pct = pct_change(
-            float(curr["avg_price"]), float(prev["avg_price"])
-        )
+        avg_price_change_pct = pct_change(float(curr["avg_price"]), float(prev["avg_price"]))
         avg_price_sqm_change_pct = pct_change(
             float(curr["median_price_per_sqm"]), float(prev["median_price_per_sqm"])
         )
@@ -488,26 +493,21 @@ async def search_projects_endpoint(
 async def get_sub_projects_endpoint(
     context: AuthContext = Depends(require_active_subscription),
     master_project: str = Query(description="Master project name"),
-    filter_type: str = Query(
+    filter_type: ProjectFilterType = Query(
         default="master", description="Filter type: master or virtual_master"
     ),
 ):
     """List sub-projects within a master or virtual master, sorted by transaction count."""
-    return await get_sub_project_list(
-        master_project=master_project, filter_type=filter_type
-    )
+    return await get_sub_project_list(master_project=master_project, filter_type=filter_type)
 
 
 @router.get("/project/summary", response_model=ProjectAnalyticsResponse)
+@cached_endpoint(prefix="analytics:project_summary", expire=900)
 async def get_project_summary_endpoint(
     context: AuthContext = Depends(require_active_subscription),
-    master_project: Optional[str] = Query(
-        default=None, description="Master project name"
-    ),
-    project: Optional[str] = Query(
-        default=None, description="Sub-project name (project_name_en)"
-    ),
-    filter_type: str = Query(
+    master_project: Optional[str] = Query(default=None, description="Master project name"),
+    project: Optional[str] = Query(default=None, description="Sub-project name (project_name_en)"),
+    filter_type: ProjectFilterType = Query(
         default="project", description="Filter type: master, virtual_master, or project"
     ),
 ):
@@ -516,46 +516,89 @@ async def get_project_summary_endpoint(
     Pass master_project with filter_type=master/virtual_master to aggregate the whole development,
     or project with filter_type=project for a specific sub-project.
     """
-    from fastapi import HTTPException
-
-    if project:
-        return await get_project_summary(
-            project_name=project, filter_type="project", master_project=master_project
-        )
-    if master_project:
-        return await get_project_summary(
-            project_name=master_project, filter_type=filter_type
-        )
-    raise HTTPException(
-        status_code=422, detail="Either master_project or project is required"
+    project_name, resolved_filter_type = _resolve_project_scope(
+        master_project=master_project, project=project, filter_type=filter_type
+    )
+    return await get_project_summary(
+        project_name=project_name,
+        filter_type=resolved_filter_type,
+        master_project=master_project,
     )
 
 
 @router.get("/project/trends", response_model=ProjectTrendsResponse)
 async def get_project_trends_endpoint(
     context: AuthContext = Depends(require_active_subscription),
-    master_project: Optional[str] = Query(
-        default=None, description="Master project name"
-    ),
-    project: Optional[str] = Query(
-        default=None, description="Sub-project name (project_name_en)"
-    ),
-    filter_type: str = Query(
+    master_project: Optional[str] = Query(default=None, description="Master project name"),
+    project: Optional[str] = Query(default=None, description="Sub-project name (project_name_en)"),
+    filter_type: ProjectFilterType = Query(
         default="project", description="Filter type: master, virtual_master, or project"
     ),
     days: int = Query(default=365, description="Number of days to look back"),
 ):
     """Sales price trend time series for a project, master, or virtual master."""
-    from fastapi import HTTPException
+    project_name, resolved_filter_type = _resolve_project_scope(
+        master_project=master_project, project=project, filter_type=filter_type
+    )
+    return await get_project_trends(
+        project_name=project_name, days=days, filter_type=resolved_filter_type
+    )
 
-    if project:
-        return await get_project_trends(
-            project_name=project, days=days, filter_type="project"
-        )
-    if master_project:
-        return await get_project_trends(
-            project_name=master_project, days=days, filter_type=filter_type
-        )
-    raise HTTPException(
-        status_code=422, detail="Either master_project or project is required"
+
+@router.get("/project/forecast", response_model=ProjectForecastResponse)
+async def get_project_forecast_endpoint(
+    context: AuthContext = Depends(require_active_subscription),
+    master_project: Optional[str] = Query(default=None, description="Master project name"),
+    project: Optional[str] = Query(default=None, description="Sub-project name (project_name_en)"),
+    filter_type: ProjectFilterType = Query(
+        default="project", description="Filter type: master, virtual_master, or project"
+    ),
+    days: int = Query(default=365, description="Number of days to look back"),
+):
+    project_name, resolved_filter_type = _resolve_project_scope(
+        master_project=master_project, project=project, filter_type=filter_type
+    )
+    return await get_project_forecast(
+        project_name=project_name, days=days, filter_type=resolved_filter_type
+    )
+
+
+@router.get("/project/pipeline", response_model=ProjectPipelineResponse)
+async def get_project_pipeline_endpoint(
+    context: AuthContext = Depends(require_active_subscription),
+    master_project: Optional[str] = Query(default=None, description="Master project name"),
+    project: Optional[str] = Query(default=None, description="Sub-project name (project_name_en)"),
+    filter_type: ProjectFilterType = Query(
+        default="project", description="Filter type: master, virtual_master, or project"
+    ),
+):
+    project_name, resolved_filter_type = _resolve_project_scope(
+        master_project=master_project, project=project, filter_type=filter_type
+    )
+    return await get_project_pipeline(project_name=project_name, filter_type=resolved_filter_type)
+
+
+@router.get(
+    "/project/price-distribution",
+    response_model=ProjectPriceDistributionResponse,
+)
+async def get_project_price_distribution_endpoint(
+    context: AuthContext = Depends(require_active_subscription),
+    master_project: Optional[str] = Query(default=None, description="Master project name"),
+    project: Optional[str] = Query(default=None, description="Sub-project name (project_name_en)"),
+    filter_type: ProjectFilterType = Query(
+        default="project", description="Filter type: master, virtual_master, or project"
+    ),
+    reg_type: Optional[str] = Query(
+        default=None,
+        description="Optional registration type filter (e.g. 'Off-Plan Properties')",
+    ),
+):
+    project_name, resolved_filter_type = _resolve_project_scope(
+        master_project=master_project, project=project, filter_type=filter_type
+    )
+    return await get_project_price_distribution(
+        project_name=project_name,
+        filter_type=resolved_filter_type,
+        reg_type=reg_type,
     )

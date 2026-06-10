@@ -1,7 +1,9 @@
-from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncEngine
-from sqlmodel.ext.asyncio.session import AsyncSession
-from typing import Optional, AsyncGenerator
 import logging
+from typing import AsyncGenerator, Optional
+
+from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker, create_async_engine
+from sqlmodel.ext.asyncio.session import AsyncSession
+
 from app.config import settings
 
 logger = logging.getLogger(__name__)
@@ -16,12 +18,11 @@ def get_postgres_engine() -> AsyncEngine:
     global _engine, _session_factory
 
     if _engine is None:
-        logger.info(
-            f"Initializing PostgreSQL engine: {settings.DATABASE_URL.split('@')[1]}"
-        )
+        database_url = str(settings.POSTGRES_URL)
+        logger.info(f"Initializing PostgreSQL engine: {database_url.split('@', 1)[1]}")
 
         _engine = create_async_engine(
-            settings.DATABASE_URL,
+            database_url,
             echo=False,
             pool_pre_ping=True,
             pool_size=5,
@@ -51,7 +52,7 @@ async def close_postgres() -> None:
 
 async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
     get_postgres_engine()
-    if _session_factory == None:
+    if _session_factory is None:
         raise RuntimeError("Session Factory does not yet exist")
 
     async with _session_factory() as session:

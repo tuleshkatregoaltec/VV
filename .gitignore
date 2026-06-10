@@ -29,6 +29,7 @@ frontend/pnpm-lock.yaml
 frontend/yarn.lock
 frontend/.env
 frontend/.env.*
+!frontend/.env.example
 frontend/.DS_Store
 frontend/.vercel/
 frontend/.netlify/
@@ -175,6 +176,7 @@ celerybeat.pid
 
 # Environments
 .env
+!.env.example
 .envrc
 .venv
 env/
@@ -221,9 +223,9 @@ cython_debug/
 .abstra/
 
 # Visual Studio Code
-#  Visual Studio Code specific template is maintained in a separate VisualStudioCode.gitignore 
+#  Visual Studio Code specific template is maintained in a separate VisualStudioCode.gitignore
 #  that can be found at https://github.com/github/gitignore/blob/main/Global/VisualStudioCode.gitignore
-#  and can be added to the global gitignore or merged into this file. However, if you prefer, 
+#  and can be added to the global gitignore or merged into this file. However, if you prefer,
 #  you could uncomment the following to ignore the entire vscode folder
 # .vscode/
 
@@ -238,6 +240,18 @@ cython_debug/
 #  exclude from AI features like autocomplete and code analysis. Recommended for sensitive data
 #  refer to https://docs.cursor.com/context/ignore-files
 .cursorignore
+
+# Local test artifacts and generated data
+.playwright-cli/
+.playwright-mcp/
+playwright-report/
+test-results/
+output/
+backend/logs/
+/sheets/
+ch_data/
+dda_plots.csv
+e2e/.auth/
 .cursorindexingignore
 
 # Marimo
@@ -246,15 +260,19 @@ marimo/_lsp/
 __marimo__/
 
 data/
-llm-slop/
-alembic/
-tests/
-CLAUDE.md
-flows.md
-project-search-logic.md
 
 # Docker volumes
 .docker-volumes/
 
-# Local development env
+CLAUDE.md
+
 .env.dev
+
+/fonts/
+
+# Dev review screenshots
+screenshot-*.png
+projects-*.png
+
+# Firecrawl local cache
+.firecrawl/

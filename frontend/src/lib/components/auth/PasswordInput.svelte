@@ -1,62 +1,62 @@
 <script lang="ts">
-	import { zxcvbn, zxcvbnOptions } from '@zxcvbn-ts/core';
-	import { onMount } from 'svelte';
+import { zxcvbn, zxcvbnOptions } from '@zxcvbn-ts/core'
+import { onMount } from 'svelte'
 
-	interface Props {
-		label: string;
-		value: string;
-		placeholder?: string;
-		error?: string;
-		disabled?: boolean;
-		required?: boolean;
-		autocomplete?: 'new-password' | 'current-password' | 'off';
-		showStrength?: boolean;
-		id?: string;
+interface Props {
+	label: string
+	value: string
+	placeholder?: string
+	error?: string
+	disabled?: boolean
+	required?: boolean
+	autocomplete?: 'new-password' | 'current-password' | 'off'
+	showStrength?: boolean
+	id?: string
+}
+
+let {
+	label,
+	value = $bindable(''),
+	placeholder = '',
+	error = '',
+	disabled = false,
+	required = false,
+	autocomplete = 'new-password',
+	showStrength = false,
+	id = `password-${Math.random().toString(36).substring(2, 11)}`
+}: Props = $props()
+
+let showPassword = $state(false)
+
+const strengthLevels = ['Very Weak', 'Weak', 'Fair', 'Good', 'Strong']
+const strengthColors = [
+	'bg-error',
+	'bg-warning',
+	'bg-[var(--color-slate-400)]',
+	'bg-[var(--color-navy-600)]',
+	'bg-success'
+]
+
+function calculatePasswordStrength(password: string): number {
+	if (!password) return 0
+
+	try {
+		const result = zxcvbn(password)
+		// zxcvbn returns score 0-4, we want 1-5 for display
+		return (result.score + 1) as 1 | 2 | 3 | 4 | 5
+	} catch {
+		return 0
 	}
+}
 
-	let {
-		label,
-		value = $bindable(''),
-		placeholder = '',
-		error = '',
-		disabled = false,
-		required = false,
-		autocomplete = 'new-password',
-		showStrength = false,
-		id = `password-${Math.random().toString(36).substring(2, 11)}`
-	}: Props = $props();
-
-	let showPassword = $state(false);
-
-	const strengthLevels = ['Very Weak', 'Weak', 'Fair', 'Good', 'Strong'];
-	const strengthColors = [
-		'bg-red-500',
-		'bg-orange-500',
-		'bg-yellow-500',
-		'bg-lime-500',
-		'bg-green-500'
-	];
-
-	function calculatePasswordStrength(password: string): number {
-		if (!password) return 0;
-
-		try {
-			const result = zxcvbn(password);
-			// zxcvbn returns score 0-4, we want 1-5 for display
-			return (result.score + 1) as 1 | 2 | 3 | 4 | 5;
-		} catch {
-			return 0;
-		}
-	}
-
-	let strength = $derived(showStrength ? calculatePasswordStrength(value) : 0);
+let strength = $derived(showStrength ? calculatePasswordStrength(value) : 0)
 </script>
 
 <div class="w-full">
-	<label for={id} class="block text-sm font-medium text-gray-700 mb-2">
+	<label for={id} class="mb-2 block text-sm font-medium text-fg-1">
 		{label}
 		{#if required}
-			<span class="text-red-500">*</span>
+			<span class="text-error">*</span>
 		{/if}
 	</label>
 	<div class="relative">
@@ -68,15 +68,17 @@
 			{disabled}
 			{required}
 			{autocomplete}
-			class="w-full px-4 py-3 pr-12 bg-gray-50 border rounded-lg transition-all
-                   focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20
-                   disabled:bg-gray-100 disabled:cursor-not-allowed
-                   {error ? 'border-red-300 bg-red-50' : 'border-gray-200'}"
+			class="w-full rounded-md border bg-white px-3.5 py-3 pr-12 text-sm text-fg-1 placeholder-fg-5 transition-all
+                   focus:outline-none focus:border-navy focus:ring-2 focus:ring-focus
+                   disabled:cursor-not-allowed disabled:bg-slate-100
+                   {error
+				? 'border-[var(--color-error)] bg-error-bg'
+				: 'border-border'}"
 		/>
 		<button
 			type="button"
 			onclick={() => (showPassword = !showPassword)}
-			class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 transition-colors"
+			class="absolute right-3 top-1/2 -translate-y-1/2 text-fg-4 transition-colors hover:text-fg-2"
 			tabindex="-1"
 		>
 			{#if showPassword}
@@ -122,16 +124,16 @@
 	{#if showStrength && value}
 		<div class="mt-2">
 			<div class="flex gap-1 mb-1">
-				{#each Array(5) as _, i}
+				{#each Array(5) as _, i (`strength-${i}`)}
 					<div
-						class="h-1 flex-1 rounded-full transition-all {i < strength
+						class="h-1 flex-1 rounded-sm transition-all {i < strength
 							? strengthColors[strength - 1]
-							: 'bg-gray-200'}"
+							: 'bg-[var(--color-slate-200)]'}"
 					></div>
 				{/each}
 			</div>
 			{#if strength > 0}
-				<p class="text-xs text-gray-600">
+				<p class="text-xs text-fg-4">
 					Strength: <span class="font-medium">{strengthLevels[strength - 1]}</span>
 				</p>
 			{/if}
@@ -139,6 +141,6 @@
 	{/if}
 
 	{#if error}
-		<p class="mt-2 text-sm text-red-600">{error}</p>
+		<p class="mt-2 text-sm text-error">{error}</p>
 	{/if}
 </div>

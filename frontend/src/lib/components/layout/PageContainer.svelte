@@ -1,42 +1,26 @@
 <script lang="ts">
-	export let maxWidth:
-		| 'sm'
-		| 'md'
-		| 'lg'
-		| 'xl'
-		| '2xl'
-		| '3xl'
-		| '4xl'
-		| '5xl'
-		| '6xl'
-		| '7xl'
-		| 'full' = '6xl';
-	export let padding: boolean = true;
-	export let centered: boolean = true;
+import type { Snippet } from 'svelte'
 
-	const maxWidthClasses = {
-		sm: 'max-w-sm',
-		md: 'max-w-md',
-		lg: 'max-w-lg',
-		xl: 'max-w-xl',
-		'2xl': 'max-w-2xl',
-		'3xl': 'max-w-3xl',
-		'4xl': 'max-w-4xl',
-		'5xl': 'max-w-5xl',
-		'6xl': 'max-w-6xl',
-		'7xl': 'max-w-7xl',
-		full: 'max-w-full'
-	};
+type PageContainerVariant = 'standard' | 'wide' | 'focused' | 'fullBleed'
+
+let {
+	children,
+	variant = 'standard',
+	class: className = ''
+}: {
+	children: Snippet
+	variant?: PageContainerVariant
+	class?: string
+} = $props()
+
+const variantClasses: Record<PageContainerVariant, string> = {
+	standard: 'mx-auto flex w-full max-w-[1360px] flex-col px-4 py-5 lg:px-6',
+	wide: 'mx-auto flex w-full max-w-[1440px] flex-col px-3 py-3 lg:px-5 lg:py-5',
+	focused: 'mx-auto flex w-full max-w-5xl flex-col px-4 py-5 lg:px-6',
+	fullBleed: 'w-full'
+}
 </script>
 
-<div class="flex-1 flex flex-col bg-background">
-	<div
-		class="flex flex-col {centered ? 'items-center' : ''} {padding
-			? 'pt-10 sm:pt-12 lg:pt-16 px-4 sm:px-6 lg:px-8'
-			: ''}"
-	>
-		<div class="{maxWidthClasses[maxWidth]} mx-auto w-full">
-			<slot />
-		</div>
-	</div>
+<div class="{variantClasses[variant]} {className}">
+	{@render children()}
 </div>

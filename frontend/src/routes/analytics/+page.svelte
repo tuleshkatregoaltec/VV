@@ -1,82 +1,148 @@
 <script lang="ts">
-	import ProjectSelector from '$lib/components/analytics/ProjectSelector.svelte';
-	import ProjectPanel from '$lib/components/analytics/ProjectPanel.svelte';
-	import type { ProjectSearchItem } from '$lib/api/analytics';
+import { createQuery } from '@tanstack/svelte-query'
+import { Building2, GitCompare } from 'lucide-svelte'
+import type { ProjectSearchItem } from '$lib/api/analytics'
+import type { SearchSelection } from '$lib/api/projects'
+import AnalyticsCompareView from '$lib/components/analytics/AnalyticsCompareView.svelte'
+import ProjectPanel from '$lib/components/analytics/ProjectPanel.svelte'
+import PageContainer from '$lib/components/layout/PageContainer.svelte'
+import ProjectSearchInput from '$lib/components/projects/ProjectSearchInput.svelte'
+import { projectQueries } from '$lib/queries/projects'
 
-	let projectA = $state<ProjectSearchItem | null>(null);
-	let projectB = $state<ProjectSearchItem | null>(null);
-	let comparing = $state(false);
+const DUBAI_MARKET_SELECTION: ProjectSearchItem = { name: 'Dubai', filter_type: 'market' }
 
-	function toggleCompare() {
-		comparing = !comparing;
-		if (!comparing) projectB = null;
+let projectA = $state<ProjectSearchItem | null>({ ...DUBAI_MARKET_SELECTION })
+let projectB = $state<ProjectSearchItem | null>(null)
+let comparing = $state(false)
+let isDubaiMarketSelected = $derived(projectA?.filter_type === 'market')
+
+const allProjectsQuery = createQuery(() => projectQueries.list())
+const allProjects = $derived(allProjectsQuery.data ?? [])
+
+function toggleCompare() {
+	comparing = !comparing
+	if (!comparing) projectB = null
+}
+
+function toAnalyticsSelection(sel: SearchSelection): ProjectSearchItem | null {
+	if (sel.type === 'master') {
+		return { name: sel.masterName, filter_type: 'master' }
 	}
+
+	const project = allProjects.find((item) => item.project_id === sel.projectId)
+	if (!project) return null
+	return { name: project.project_name, filter_type: 'project' }
+}
+
+function handleSearchSelectA(sel: SearchSelection) {
+	projectA = toAnalyticsSelection(sel)
+}
+
+function handleSearchSelectB(sel: SearchSelection) {
+	projectB = toAnalyticsSelection(sel)
+}
+
+function selectDubaiMarket() {
+	projectA = { ...DUBAI_MARKET_SELECTION }
+}
 </script>
 
-<div class="min-h-screen bg-slate-50">
-	<div class="max-w-7xl mx-auto px-4 py-6">
-
-		<!-- Toolbar -->
-		<div class="flex items-center gap-3 mb-6">
-			{#if comparing}
-				<div class="flex-1 grid grid-cols-2 gap-3">
-					<ProjectSelector bind:value={projectA} placeholder="Search project A..." />
-					<ProjectSelector bind:value={projectB} placeholder="Search project B..." />
+<PageContainer variant="standard" class="gap-4">
+		<section class="ui-surface relative z-30 overflow-visible">
+			<div class="ui-page-header grid px-5 py-4 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-center">
+				<div>
+					<p class="text-xs font-semibold uppercase tracking-[0.18em] text-on-navy-muted">
+						Analytics
+					</p>
+					<h1 class="mt-1 font-display text-2xl leading-tight tracking-[var(--tracking-display)] text-bone">
+						Dubai market analytics
+					</h1>
 				</div>
+
+				<button
+					type="button"
+					onclick={toggleCompare}
+					data-variant={comparing ? 'primary' : 'secondary'}
+					class="ui-button h-10 px-4 text-sm"
+				>
+					<GitCompare size={16} strokeWidth={1.8} />
+					{comparing ? 'Exit compare' : 'Compare'}
+				</button>
+			</div>
+		</section>
+
+		<section class="ui-surface p-4 sm:p-5">
+			<div class="mb-4 flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
+				<div>
+					<p class="text-xs font-semibold uppercase tracking-[0.18em] text-fg-4">
+						Project scope
+					</p>
+					<p class="mt-1 text-sm text-fg-3">
+						Dubai is loaded by default. Search a project or master community to narrow the view.
+					</p>
+				</div>
+				<button
+					type="button"
+					onclick={selectDubaiMarket}
+					data-variant={isDubaiMarketSelected ? 'primary' : 'secondary'}
+					class="ui-button h-9 px-3 text-sm"
+				>
+					<Building2 size={15} strokeWidth={1.8} />
+					Dubai market
+				</button>
+			</div>
+			<div class="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+				<div class="flex-1">
+					<div class="grid gap-3 {comparing ? 'xl:grid-cols-2' : ''}">
+						<ProjectSearchInput allProjects={allProjects} onSelect={handleSearchSelectA} />
+						{#if comparing}
+							<ProjectSearchInput allProjects={allProjects} onSelect={handleSearchSelectB} />
+						{/if}
+					</div>
+				</div>
+
+				<div class="hidden xl:block"></div>
+			</div>
+		</section>
+
+		{#if comparing}
+			{#if projectA && projectB}
+				<AnalyticsCompareView {projectA} {projectB} {allProjects} />
 			{:else}
-				<div class="flex-1 max-w-sm">
-					<ProjectSelector bind:value={projectA} placeholder="Search a project..." />
+				<div class="grid grid-cols-1 gap-6 xl:grid-cols-2">
+					{#if projectA}
+						<div class="ui-surface p-5">
+							<p class="text-xs font-semibold uppercase tracking-[0.18em] text-fg-4">Project A</p>
+							<p class="mt-2 text-lg font-semibold text-fg-1">{projectA.name}</p>
+							<p class="mt-1 text-sm text-fg-3">Select Project B to start comparison.</p>
+						</div>
+					{:else}
+						{@render EmptyState('Project A')}
+					{/if}
+					{#if projectB}
+						<div class="ui-surface p-5">
+							<p class="text-xs font-semibold uppercase tracking-[0.18em] text-fg-4">Project B</p>
+							<p class="mt-2 text-lg font-semibold text-fg-1">{projectB.name}</p>
+							<p class="mt-1 text-sm text-fg-3">Select Project A to start comparison.</p>
+						</div>
+					{:else}
+						{@render EmptyState('Project B')}
+					{/if}
 				</div>
 			{/if}
-
-			<button
-				onclick={toggleCompare}
-				class="flex-shrink-0 flex items-center gap-1.5 px-3 py-2.5 rounded-lg border text-sm font-medium transition-colors
-					{comparing
-						? 'bg-teal-600 border-teal-600 text-white hover:bg-teal-700'
-						: 'bg-white border-slate-200 text-slate-600 hover:border-teal-400 hover:text-teal-600'}"
-			>
-				<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-				</svg>
-				Compare
-			</button>
-		</div>
-
-		<!-- Content -->
-		{#if comparing}
-			<div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
-				<div>
-					{#if projectA}
-						<ProjectPanel selection={projectA} />
-					{:else}
-						{@render EmptyState()}
-					{/if}
-				</div>
-				<div>
-					{#if projectB}
-						<ProjectPanel selection={projectB} />
-					{:else}
-						{@render EmptyState()}
-					{/if}
-				</div>
-			</div>
 		{:else if projectA}
 			<ProjectPanel selection={projectA} />
 		{:else}
-			{@render EmptyState()}
+			{@render EmptyState('Analytics')}
 		{/if}
-	</div>
-</div>
+</PageContainer>
 
-{#snippet EmptyState()}
-	<div class="flex flex-col items-center justify-center py-24 text-center">
-		<div class="w-14 h-14 rounded-2xl bg-teal-50 flex items-center justify-center mb-4">
-			<svg class="w-7 h-7 text-teal-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-			</svg>
+{#snippet EmptyState(label: string)}
+	<div class="rounded-lg border border-dashed border-strong bg-card px-8 py-20 text-center shadow-sm">
+		<div class="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-md bg-navy-pale text-primary-light">
+			<Building2 size={28} strokeWidth={1.5} />
 		</div>
-		<p class="text-slate-700 font-medium mb-1">Search for a project</p>
-		<p class="text-sm text-slate-400">Type a project name above to view its analytics</p>
+		<p class="text-base font-semibold text-fg-1">{label} is waiting for a project.</p>
+		<p class="mt-2 text-sm text-fg-4">Search above to load live transaction-backed analytics.</p>
 	</div>
 {/snippet}

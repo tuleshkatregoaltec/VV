@@ -1,300 +1,283 @@
 <script lang="ts">
-	import CompactChatInput from '$lib/components/dashboard/CompactChatInput.svelte';
-	import FullWidthMarketChart from '$lib/components/dashboard/FullWidthMarketChart.svelte';
-	import CompleteProfileModal from '$lib/components/dashboard/CompleteProfileModal.svelte';
-	import AppShell from '$lib/components/layout/AppShell.svelte';
-	import NewsCard from '$lib/components/news/NewsCard.svelte';
-	import { goto } from '$app/navigation';
-	import { chat } from '$lib/api/chat';
-	import { news } from '$lib/api/news';
-	import { analytics } from '$lib/api/analytics';
-	import { createQuery, createInfiniteQuery } from '@tanstack/svelte-query';
-	import { currentUser } from '$lib/stores/user.svelte';
+import { createInfiniteQuery, createQuery } from '@tanstack/svelte-query'
+import { Activity, Building2, Sparkles } from 'lucide-svelte'
+import { goto } from '$app/navigation'
+import { type ConversationListResponse, chat } from '$lib/api/chat'
+import CompactChatInput from '$lib/components/dashboard/CompactChatInput.svelte'
+import CompleteProfileModal from '$lib/components/dashboard/CompleteProfileModal.svelte'
+import CustomizableKpiGrid from '$lib/components/dashboard/CustomizableKpiGrid.svelte'
+import FullWidthMarketChart from '$lib/components/dashboard/FullWidthMarketChart.svelte'
+import AppFrame from '$lib/components/layout/AppFrame.svelte'
+import PageContainer from '$lib/components/layout/PageContainer.svelte'
+import NewsCard from '$lib/components/news/NewsCard.svelte'
+import { chatKeys } from '$lib/queries/chat'
+import { getQueryClient } from '$lib/queries/client'
+import { newsQueries } from '$lib/queries/news'
+import { currentUser } from '$lib/stores/user.svelte'
 
-	let username = $derived(currentUser.data?.first_name ?? '');
-	let newsSection = $state<HTMLElement>();
-	let newsSectionVisible = $state(false);
-	let sentinel = $state<HTMLDivElement>();
+const queryClient = getQueryClient()
 
-	const LIMIT = 10; // Load 10 articles initially and per page
+let username = $derived(currentUser.data?.first_name ?? '')
+let newsSection = $state<HTMLElement>()
+let newsSectionVisible = $state(false)
+let sentinel = $state<HTMLDivElement>()
 
-	// Fetch news articles with infinite scrolling
-	const newsQuery = createInfiniteQuery(() => ({
-		queryKey: ['news', 'dashboard'],
-		queryFn: ({ pageParam = 0 }) => news.list({ limit: LIMIT, offset: pageParam }),
-		getNextPageParam: (lastPage) => {
-			const nextOffset = lastPage.offset + lastPage.articles.length;
-			return nextOffset < lastPage.total ? nextOffset : undefined;
+const LIMIT = 10
+
+const newsQuery = createInfiniteQuery(() => newsQueries.listInfinite('dashboard', LIMIT))
+const newsSummaryQuery = createQuery(() => newsQueries.summary())
+const newsArticles = $derived(newsQuery.data?.pages.flatMap((page) => page.articles) ?? [])
+
+async function handleChatSubmit(message: string) {
+	try {
+		const conversation = await chat.createConversation({ title: message.slice(0, 50) })
+		queryClient.setQueryData<ConversationListResponse>(chatKeys.conversations(), (current) => {
+			const conversations = [
+				conversation,
+				...(current?.conversations ?? []).filter((item) => item.id !== conversation.id)
+			]
+			return { conversations, total: conversations.length }
+		})
+		goto('/chat', {
+			state: { conversationId: conversation.id, initialMessage: message }
+		})
+	} catch (error) {
+		console.error('Failed to create conversation:', error)
+		throw error
+	}
+}
+
+$effect(() => {
+	if (!newsSection) return
+	const observer = new IntersectionObserver(
+		(entries) => {
+			entries.forEach((entry) => {
+				if (entry.isIntersecting) newsSectionVisible = true
+			})
 		},
-		initialPageParam: 0
-	}));
+		{ threshold: 0.1 }
+	)
+	observer.observe(newsSection)
+	return () => observer.disconnect()
+})
 
-	const newsArticles = $derived(newsQuery.data?.pages.flatMap((page) => page.articles) ?? []);
-
-	async function handleChatSubmit(message: string) {
-		try {
-			const conversation = await chat.createConversation({
-				title: message.slice(0, 50)
-			});
-
-			goto('/dashboard/chat', {
-				state: {
-					conversationId: conversation.id,
-					initialMessage: message
-				}
-			});
-		} catch (error) {
-			console.error('Failed to create conversation:', error);
-			throw error;
-		}
-	}
-
-	// Intersection observer to detect when news section is visible
-	$effect(() => {
-		if (!newsSection) return;
-
-		const observer = new IntersectionObserver(
-			(entries) => {
-				entries.forEach((entry) => {
-					if (entry.isIntersecting) {
-						newsSectionVisible = true;
-					}
-				});
-			},
-			{ threshold: 0.1 }
-		);
-
-		observer.observe(newsSection);
-
-		return () => observer.disconnect();
-	});
-
-	// Infinite scroll observer - trigger when user is 3 articles away from bottom
-	$effect(() => {
-		if (!sentinel) return;
-
-		const observer = new IntersectionObserver(
-			(entries) => {
-				if (entries[0].isIntersecting) {
-					if (newsQuery.hasNextPage && !newsQuery.isFetchingNextPage) {
-						console.log('Sentinel reached, loading next page...');
-						newsQuery.fetchNextPage();
-					}
-				}
-			},
-			{
-				threshold: 0.1,
-				rootMargin: '200px' // Start loading 200px before reaching sentinel
+$effect(() => {
+	if (!sentinel) return
+	const observer = new IntersectionObserver(
+		(entries) => {
+			if (entries[0].isIntersecting && newsQuery.hasNextPage && !newsQuery.isFetchingNextPage) {
+				newsQuery.fetchNextPage()
 			}
-		);
+		},
+		{ threshold: 0.1, rootMargin: '200px' }
+	)
+	observer.observe(sentinel)
+	return () => observer.disconnect()
+})
 
-		observer.observe(sentinel);
-
-		return () => observer.disconnect();
-	});
-
-	const kpiQuery = createQuery(() => ({
-		queryKey: ['market-trend', 365],
-		queryFn: () => analytics.marketTrend({ days: 365 }),
-		staleTime: 5 * 60 * 1000
-	}));
-
-	function formatPrice(n: number): string {
-		if (n >= 1_000_000) return `AED ${(n / 1_000_000).toFixed(2)}M`;
-		if (n >= 1_000) return `AED ${(n / 1_000).toFixed(0)}K`;
-		return `AED ${Math.round(n).toLocaleString()}`;
-	}
-
-	function formatCount(n: number): string {
-		return n.toLocaleString();
-	}
-
-	function fmtPct(n: number | null | undefined): string | null {
-		if (n == null) return null;
-		return `${n >= 0 ? '+' : ''}${n.toFixed(1)}%`;
-	}
-
-	const lastPoint = $derived(
-		kpiQuery.data?.data?.length ? kpiQuery.data.data[kpiQuery.data.data.length - 1] : null
-	);
+const SUGGESTIONS = [
+	'What are 2BR yields in Dubai Marina this quarter?',
+	'Compare JBR vs Palm Jumeirah price trends',
+	'Which sub-markets have the highest YoY growth?'
+]
 </script>
 
-<AppShell showFilters={false}>
-	<!-- Unified offwhite background -->
-	<div class="min-h-screen bg-slate-50">
-		<!-- Hero Section -->
-		<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-12 pb-8">
-			<!-- Hero + Chat on Left, KPIs on Right -->
-			<div class="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-12 lg:items-center">
-				<!-- Left: Hero + Chat (2 columns) -->
-				<div class="lg:col-span-2 space-y-8">
-					<!-- Hero Text -->
-					<div class="text-center">
-						<h1 class="text-5xl sm:text-6xl font-bold text-slate-900 mb-4">
-							Welcome, <span class="bg-gradient-to-r from-teal-600 to-cyan-600 bg-clip-text text-transparent">{username}</span>
-						</h1>
-						<p class="text-xl text-slate-600">Your Dubai real-estate dashboard</p>
-					</div>
-
-					<!-- Chat Input -->
-					<CompactChatInput
-						placeholder="Ask me anything about Dubai real estate..."
-						onSubmit={handleChatSubmit}
-					/>
-				</div>
-
-				<!-- Right: KPI Cards (1 column) -->
-				<div class="lg:col-span-1 flex flex-col gap-4">
-					<!-- Avg Price/sqm -->
-					<div class="bg-white/80 backdrop-blur-sm rounded-xl p-4 border border-teal-100 shadow-sm hover:shadow-md transition-all duration-300">
-						<div class="flex items-center gap-3 mb-3">
-							<div class="p-2.5 bg-gradient-to-br from-teal-600 to-cyan-600 rounded-lg flex-shrink-0">
-								<svg class="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z" />
-								</svg>
-							</div>
-							{#if kpiQuery.isLoading}
-								<div class="h-6 w-20 bg-slate-200 rounded-full animate-pulse"></div>
-							{:else}
-								{@const pct = fmtPct(kpiQuery.data?.avg_price_sqm_change_pct)}
-								{@const positive = (kpiQuery.data?.avg_price_sqm_change_pct ?? 0) >= 0}
-								{#if pct}
-									<div class="flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold {positive ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}">
-										<svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-											{#if positive}
-												<path fill-rule="evenodd" d="M5.293 9.707a1 1 0 010-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 01-1.414 1.414L11 7.414V15a1 1 0 11-2 0V7.414L6.707 9.707a1 1 0 01-1.414 0z" clip-rule="evenodd" />
-											{:else}
-												<path fill-rule="evenodd" d="M14.707 10.293a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 111.414-1.414L9 12.586V5a1 1 0 012 0v7.586l2.293-2.293a1 1 0 011.414 0z" clip-rule="evenodd" />
-											{/if}
-										</svg>
-										{pct} YoY
-									</div>
-								{/if}
-							{/if}
-						</div>
-						<h3 class="text-sm font-medium text-slate-600 mb-1">Avg. Price / sqm</h3>
-						{#if kpiQuery.isLoading}
-							<div class="h-8 w-32 bg-slate-200 rounded animate-pulse"></div>
-						{:else}
-							<p class="text-2xl font-bold text-slate-900">
-								{lastPoint ? `AED ${Math.round(lastPoint.avg_price_sqm).toLocaleString()}` : '—'}
-							</p>
-						{/if}
-					</div>
-
-					<!-- Total Transactions -->
-					<div class="bg-white/80 backdrop-blur-sm rounded-xl p-4 border border-teal-100 shadow-sm hover:shadow-md transition-all duration-300">
-						<div class="flex items-center gap-3 mb-3">
-							<div class="p-2.5 bg-gradient-to-br from-teal-600 to-cyan-600 rounded-lg flex-shrink-0">
-								<svg class="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-								</svg>
-							</div>
-							<div class="px-2.5 py-1 bg-slate-100 text-slate-600 rounded-full text-xs font-semibold">
-								Last 12 months
-							</div>
-						</div>
-						<h3 class="text-sm font-medium text-slate-600 mb-1">Total Transactions</h3>
-						{#if kpiQuery.isLoading}
-							<div class="h-8 w-28 bg-slate-200 rounded animate-pulse"></div>
-						{:else}
-							<p class="text-2xl font-bold text-slate-900">
-								{kpiQuery.data ? formatCount(kpiQuery.data.total_transactions) : '—'}
-							</p>
-						{/if}
-					</div>
-
-					<!-- Avg Sale Price -->
-					<div class="bg-white/80 backdrop-blur-sm rounded-xl p-4 border border-teal-100 shadow-sm hover:shadow-md transition-all duration-300">
-						<div class="flex items-center gap-3 mb-3">
-							<div class="p-2.5 bg-gradient-to-br from-teal-600 to-cyan-600 rounded-lg flex-shrink-0">
-								<svg class="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
-								</svg>
-							</div>
-							{#if kpiQuery.isLoading}
-								<div class="h-6 w-20 bg-slate-200 rounded-full animate-pulse"></div>
-							{:else}
-								{@const pct = fmtPct(kpiQuery.data?.avg_price_change_pct)}
-								{@const positive = (kpiQuery.data?.avg_price_change_pct ?? 0) >= 0}
-								{#if pct}
-									<div class="flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold {positive ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}">
-										<svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-											{#if positive}
-												<path fill-rule="evenodd" d="M5.293 9.707a1 1 0 010-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 01-1.414 1.414L11 7.414V15a1 1 0 11-2 0V7.414L6.707 9.707a1 1 0 01-1.414 0z" clip-rule="evenodd" />
-											{:else}
-												<path fill-rule="evenodd" d="M14.707 10.293a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 111.414-1.414L9 12.586V5a1 1 0 012 0v7.586l2.293-2.293a1 1 0 011.414 0z" clip-rule="evenodd" />
-											{/if}
-										</svg>
-										{pct} YoY
-									</div>
-								{/if}
-							{/if}
-						</div>
-						<h3 class="text-sm font-medium text-slate-600 mb-1">Avg. Sale Price</h3>
-						{#if kpiQuery.isLoading}
-							<div class="h-8 w-32 bg-slate-200 rounded animate-pulse"></div>
-						{:else}
-							<p class="text-2xl font-bold text-slate-900">
-								{lastPoint ? formatPrice(lastPoint.avg_price) : '—'}
-							</p>
-						{/if}
-					</div>
-				</div>
+<AppFrame stableScrollGutter>
+	<PageContainer variant="standard">
+			<!-- Page Header -->
+			<div class="py-8 pb-6">
+				<p class="font-mono text-[11px] uppercase tracking-[0.06em] text-fg-4 mb-2">
+					Workspace / <span class="text-fg-1">Dubai market</span>
+				</p>
+				<h1 class="text-2xl font-semibold tracking-normal text-fg-1">
+					{username ? `${username}'s workspace` : 'Market overview'}
+				</h1>
+				<p class="mt-1.5 text-sm text-fg-3">
+					DLD market data · ask anything below or browse the latest transactions.
+				</p>
 			</div>
 
-			<!-- Market Chart -->
-			<div class="mb-12">
-				<h2 class="text-2xl font-bold text-slate-900 mb-6">Market Trends</h2>
-				<div class="bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg border border-teal-100 p-8 hover:shadow-xl transition-shadow duration-300">
+			<CustomizableKpiGrid />
+
+			<!-- Two-col: Chart + AI -->
+			<div class="grid grid-cols-1 gap-3 mb-3 lg:grid-cols-[1.6fr_1fr]">
+
+				<!-- Market Chart Card -->
+				<div class="ui-surface p-6">
 					<FullWidthMarketChart />
 				</div>
-			</div>
 
-			<!-- News Section Header -->
-			<div class="text-center mb-12">
-				<div class="inline-block px-4 py-2 bg-teal-100 text-teal-700 rounded-full text-sm font-semibold mb-4">
-					Stay Informed
-				</div>
-				<h2 class="text-4xl sm:text-5xl font-bold text-slate-900 mb-4">Latest News</h2>
-				<p class="text-lg text-slate-600">Stay updated with the latest Dubai real estate news</p>
-			</div>
-		</div>
+				<!-- Vitevue AI Card -->
+				<div class="ui-surface flex flex-col p-6">
+					<div class="flex items-center justify-between mb-4">
+						<h3 class="text-sm font-semibold text-fg-1">Vitevue AI</h3>
+						<span class="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.08em] text-success">
+							<span class="inline-block h-1.5 w-1.5 rounded-full bg-success shadow-[0_0_0_3px_rgba(17,122,72,0.18)]"></span>
+							Live
+						</span>
+					</div>
 
-		<!-- News Feed Section with Fade Transition -->
-		<section
-			bind:this={newsSection}
-			class="pb-16 bg-slate-50 transition-opacity duration-1000 {newsSectionVisible
-				? 'opacity-100'
-				: 'opacity-0'}"
-		>
-			<div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-				<div class="space-y-4">
-					{#if newsQuery.isPending}
-						<div class="text-center text-slate-500 py-8">Loading news...</div>
-					{:else if newsQuery.isError}
-						<div class="text-center text-red-500 py-8">Error loading news</div>
-					{:else if newsArticles.length === 0}
-						<div class="text-center text-slate-500 py-8">No news articles available</div>
-					{:else}
-						{#each newsArticles as article (article.id)}
-							<NewsCard {article} />
+					<CompactChatInput
+						placeholder="Ask anything about Dubai real estate…"
+						onSubmit={handleChatSubmit}
+					/>
+
+					<div class="mt-4 flex flex-col gap-2">
+						{#each SUGGESTIONS as s (s)}
+							<button
+								type="button"
+								onclick={() => handleChatSubmit(s)}
+								class="w-full rounded-md border border-border bg-card px-3 py-2 text-left text-xs text-fg-2 transition-colors hover:border-strong hover:bg-elevated"
+							>
+								→ {s}
+							</button>
 						{/each}
+					</div>
+				</div>
+			</div>
 
-					{#if newsQuery.isFetchingNextPage}
-						<div class="text-center text-slate-500 py-4">Loading more...</div>
-					{/if}
+			<!-- News Section -->
+			<div class="mb-12" bind:this={newsSection}>
+				<div class="mb-4 flex items-center justify-between border-b border-border pb-4">
+					<div>
+						<p class="font-mono text-[11px] uppercase tracking-[0.08em] text-fg-4">Latest news</p>
+						<h2 class="mt-1 text-2xl font-semibold text-fg-1">Dubai real estate</h2>
+					</div>
+				</div>
 
-					<!-- Infinite scroll sentinel - placed after articles for next page trigger -->
-					<div bind:this={sentinel} class="h-4"></div>
+				<div class="mb-4 overflow-hidden rounded-lg border border-border bg-card shadow-[var(--shadow-sm)]">
+					<div class="grid grid-cols-1 lg:grid-cols-[220px_1fr]">
+						<div
+							class="flex flex-row items-center justify-between gap-3 border-b border-border bg-panel px-4 py-3 lg:flex-col lg:items-start lg:justify-start lg:border-b-0 lg:border-r"
+						>
+							<div class="flex items-center gap-3">
+								<div class="flex h-8 w-8 items-center justify-center rounded-md bg-navy text-on-navy">
+									<Sparkles class="h-4 w-4" />
+								</div>
+								<div>
+									<p class="text-sm font-semibold text-fg-1">Market brief</p>
+									<p class="text-xs text-fg-4">AI-filtered signal</p>
+								</div>
+							</div>
+							{#if newsSummaryQuery.data}
+								<span
+									class="inline-flex items-center gap-1.5 rounded-md bg-card px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.08em] text-fg-4 ring-1 ring-border"
+								>
+									<span class="h-1.5 w-1.5 rounded-full bg-success"></span>
+									{newsSummaryQuery.data.article_count} headlines
+								</span>
+							{/if}
+						</div>
+
+						<div class="grid grid-cols-1 lg:grid-cols-2 lg:divide-x lg:divide-border">
+						{#if newsSummaryQuery.isPending}
+							<div class="p-4">
+								<div class="mb-4 flex items-center gap-3">
+									<div class="h-8 w-8 animate-pulse rounded-md bg-panel"></div>
+									<div class="h-3 w-20 animate-pulse rounded bg-panel"></div>
+								</div>
+								<div class="space-y-2">
+									<div class="h-3 w-full animate-pulse rounded bg-panel"></div>
+									<div class="h-3 w-11/12 animate-pulse rounded bg-panel"></div>
+									<div class="h-3 w-4/5 animate-pulse rounded bg-panel"></div>
+								</div>
+							</div>
+							<div class="border-t border-border p-4 lg:border-t-0">
+								<div class="mb-4 flex items-center gap-3">
+									<div class="h-8 w-8 animate-pulse rounded-md bg-panel"></div>
+									<div class="h-3 w-24 animate-pulse rounded bg-panel"></div>
+								</div>
+								<div class="space-y-2">
+									<div class="h-3 w-full animate-pulse rounded bg-panel"></div>
+									<div class="h-3 w-10/12 animate-pulse rounded bg-panel"></div>
+									<div class="h-3 w-5/6 animate-pulse rounded bg-panel"></div>
+								</div>
+							</div>
+						{:else if newsSummaryQuery.data}
+							{@const summary = newsSummaryQuery.data}
+							<section class="p-4">
+								<div class="mb-3 flex items-center gap-2.5">
+									<div
+										class="flex h-7 w-7 items-center justify-center rounded-md bg-info-bg text-info ring-1 ring-border"
+									>
+										<Activity class="h-3.5 w-3.5" />
+									</div>
+									<div>
+										<h3 class="text-sm font-semibold leading-none text-fg-1">
+											{summary.macro.title}
+										</h3>
+										<p class="mt-1 text-[11px] text-fg-4">Rates, oil, policy, capital flows</p>
+									</div>
+								</div>
+								<ul class="space-y-2">
+									{#each (summary.macro.bullets ?? []).slice(0, 3) as bullet (bullet)}
+										<li class="grid grid-cols-[auto_1fr] gap-2 text-[13px] leading-5 text-fg-2">
+											<span class="mt-2 h-1.5 w-1.5 rounded-full bg-mark"></span>
+											<span>{bullet}</span>
+										</li>
+									{/each}
+								</ul>
+							</section>
+							<section class="border-t border-border p-4 lg:border-t-0">
+								<div class="mb-3 flex items-center gap-2.5">
+									<div
+										class="flex h-7 w-7 items-center justify-center rounded-md bg-warning-bg text-warning ring-1 ring-border"
+									>
+										<Building2 class="h-3.5 w-3.5" />
+									</div>
+									<div>
+										<h3 class="text-sm font-semibold leading-none text-fg-1">
+											{summary.real_estate.title}
+										</h3>
+										<p class="mt-1 text-[11px] text-fg-4">Projects, sales, infrastructure</p>
+									</div>
+								</div>
+								<ul class="space-y-2">
+									{#each (summary.real_estate.bullets ?? []).slice(0, 3) as bullet (bullet)}
+										<li class="grid grid-cols-[auto_1fr] gap-2 text-[13px] leading-5 text-fg-2">
+											<span class="mt-2 h-1.5 w-1.5 rounded-full bg-warning"></span>
+											<span>{bullet}</span>
+										</li>
+									{/each}
+								</ul>
+							</section>
+						{:else if newsSummaryQuery.isError}
+							<div
+								class="border-dashed border-border p-4 text-sm text-fg-4 lg:col-span-2"
+							>
+								Market brief unavailable
+							</div>
+						{/if}
+						</div>
+					</div>
+				</div>
+
+				<div
+					class="transition-opacity duration-700 {newsSectionVisible ? 'opacity-100' : 'opacity-0'}"
+				>
+					{#if newsQuery.isPending}
+						<div class="py-8 text-center text-sm text-fg-4">Loading…</div>
+					{:else if newsQuery.isError}
+						<div class="py-8 text-center text-sm text-error">Error loading news</div>
+					{:else if newsArticles.length === 0}
+						<div class="py-8 text-center text-sm text-fg-4">No articles available</div>
+					{:else}
+						<div class="space-y-3">
+							{#each newsArticles as article (article.id)}
+								<NewsCard {article} />
+							{/each}
+							{#if newsQuery.isFetchingNextPage}
+								<div class="py-4 text-center text-sm text-fg-4">Loading more…</div>
+							{/if}
+							<div bind:this={sentinel} class="h-4"></div>
+						</div>
 					{/if}
 				</div>
 			</div>
-		</section>
-	</div>
 
-	<!-- Complete Profile Modal - show if user is missing first or last name -->
+	</PageContainer>
+
 	{#if currentUser.data && (!currentUser.data.first_name || !currentUser.data.last_name)}
 		<CompleteProfileModal />
 	{/if}
-</AppShell>
+</AppFrame>

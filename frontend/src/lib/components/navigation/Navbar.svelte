@@ -1,61 +1,95 @@
 <script lang="ts">
-    import NavLink from './NavLink.svelte';
-    import NavDropdown from './NavDropdown.svelte';
-    import ProfileDropdown from './ProfileDropdown.svelte';
-    import MobileMenu from './MobileMenu.svelte';
+import { Bell, Menu, Search, X } from 'lucide-svelte'
+import ThemeToggle from '$lib/components/preferences/ThemeToggle.svelte'
+import MobileNavigation from './MobileNavigation.svelte'
+import NavLink from './NavLink.svelte'
+import ProfileDropdown from './ProfileDropdown.svelte'
 
-    let showMobileMenu = $state(false);
-
-    const transactionItems = [
-        { href: '/transactions/sales', label: 'Sales' },
-        { href: '/transactions/rentals', label: 'Rentals' }
-    ];
-
+let showMobileMenu = $state(false)
+const mobileMenuLabel = $derived(showMobileMenu ? 'Close navigation menu' : 'Open navigation menu')
 </script>
 
-<nav class="fixed top-4 left-0 right-0 z-50">
-    <div class="max-w-screen-2xl mx-auto px-4">
-        <div class="bg-white/95 backdrop-blur-lg rounded-2xl shadow-lg border border-slate-200/50 px-6 py-2.5">
-            <div class="flex items-center justify-between">
-                <a href="/" class="flex-shrink-0">
-                    <img
-                        src="/logos/vitevue-navbar-400.png"
-                        srcset="/logos/vitevue-navbar-800@2x.png 2x"
-                        alt="Vitevue"
-                        class="h-7 w-auto"
-                    />
-                </a>
+<nav class="sticky top-0 z-50 border-b border-border bg-card">
+	<div class="mx-auto max-w-[1440px] px-5 sm:px-8">
+		<div class="flex py-3.5 items-center justify-between">
+			<div class="flex min-w-0 items-center gap-10">
+				<a href="/" class="flex-shrink-0" aria-label="Vitevue home">
+					<img
+						src="/logos/vitevue-navbar-400.png"
+						srcset="/logos/vitevue-navbar-800@2x.png 2x"
+						alt="Vitevue"
+						class="brand-logo-light h-[22px] w-auto"
+					/>
+					<img
+						src="/logos/vitevue-navbar-bone.png"
+						alt="Vitevue"
+						class="brand-logo-dark h-[22px] w-auto"
+					/>
+				</a>
 
-                <div class="hidden md:flex items-center gap-2 ml-8 flex-1">
-                    <NavLink href="/dashboard" label="Dashboard" />
-                    <NavDropdown label="Transactions" items={transactionItems} />
-                    <NavLink href="/analytics" label="Analytics" />
-                    <NavLink href="/projects" label="Projects" />
-                    <NavLink href="/feasibility" label="Feasibility" />
-                </div>
+				<div class="hidden items-center gap-1 lg:flex">
+					<NavLink href="/dashboard" label="Dashboard" />
+					<NavLink href="/workflows" label="Workflows" />
+					<NavLink href="/chat" label="Chat" />
+					<NavLink href="/transactions/sales" label="Transactions" activePrefix="/transactions" />
+					<NavLink href="/analytics" label="Analytics" />
+					<NavLink href="/projects" label="Radar" />
+					<NavLink href="/radar" label="Radar Lab" />
+					<NavLink href="/upcoming" label="Upcoming" />
+					<NavLink href="/developers" label="Developers" />
+					<NavLink href="/listings" label="Listings" />
+					<NavLink href="/feasibility" label="Feasibility" />
+				</div>
+			</div>
 
-                <div class="flex items-center flex-shrink-0">
-                    <div class="hidden md:block">
-                        <ProfileDropdown />
-                    </div>
+			<div class="flex flex-shrink-0 items-center gap-3">
+				<div class="hidden items-center gap-3 lg:flex">
+					<button
+						type="button"
+						disabled
+						data-variant="ghost"
+						data-size="icon"
+						class="ui-button h-[34px] w-[34px] cursor-default"
+						aria-label="Search coming soon"
+						title="Search coming soon"
+					>
+						<Search size={14} strokeWidth={2} />
+					</button>
+					<button
+						type="button"
+						disabled
+						data-variant="ghost"
+						data-size="icon"
+						class="ui-button h-[34px] w-[34px] cursor-default"
+						aria-label="Notifications coming soon"
+						title="Notifications coming soon"
+					>
+						<Bell size={14} strokeWidth={2} />
+					</button>
+				</div>
+				<ThemeToggle />
+				<div class="hidden lg:block">
+					<ProfileDropdown />
+				</div>
 
-                    <button
-                        onclick={() => showMobileMenu = !showMobileMenu}
-                        class="md:hidden p-2"
-                        aria-label="Toggle menu"
-                    >
-                        <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            {#if showMobileMenu}
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-                            {:else}
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
-                            {/if}
-                        </svg>
-                    </button>
-                </div>
-            </div>
+				<button
+					onclick={() => (showMobileMenu = !showMobileMenu)}
+					data-variant="secondary"
+					data-size="icon"
+					class="ui-button h-9 w-9 lg:hidden"
+					aria-label={mobileMenuLabel}
+					aria-expanded={showMobileMenu}
+					aria-controls="mobile-navigation"
+				>
+					{#if showMobileMenu}
+						<X size={16} strokeWidth={2} />
+					{:else}
+						<Menu size={16} strokeWidth={2} />
+					{/if}
+				</button>
+			</div>
+		</div>
 
-            <MobileMenu show={showMobileMenu} />
-        </div>
-    </div>
+		<MobileNavigation show={showMobileMenu} onNavigate={() => (showMobileMenu = false)} />
+	</div>
 </nav>

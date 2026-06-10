@@ -1,35 +1,29 @@
-import { api } from './client';
+import { client } from './client'
+import type {
+	CheckoutSessionRequest,
+	CheckoutSessionResponse,
+	PaymentSyncResponse,
+	SyncAfterCheckoutRequest
+} from './generated/hey-api/types.gen'
 
-export interface CheckoutSession {
-	checkout_url: string;
-	session_id: string;
-	organization_id: string;
-}
-
-export interface SyncResponse {
-	status: string;
-	organization_id: string;
-	seats: number;
-}
+export type { CheckoutSessionResponse, PaymentSyncResponse }
 
 export async function createCheckoutSession(
-	organizationId: string,
-	seats: number,
+	organizationId: CheckoutSessionRequest['organization_id'],
+	seats: CheckoutSessionRequest['seats'],
 	priceTier: 'tier1' | 'tier2'
-): Promise<CheckoutSession> {
-	return api<CheckoutSession>('/api/v1/billing/create-checkout', {
-		method: 'POST',
-		body: {
-			organization_id: organizationId,
-			seats,
-			price_tier: priceTier
-		}
-	});
+): Promise<CheckoutSessionResponse> {
+	return client.post<CheckoutSessionResponse>('/api/v1/billing/create-checkout', {
+		organization_id: organizationId,
+		seats,
+		price_tier: priceTier
+	})
 }
 
-export async function syncAfterCheckout(sessionId: string): Promise<SyncResponse> {
-	return api<SyncResponse>('/api/v1/billing/sync-after-checkout', {
-		method: 'POST',
-		body: { session_id: sessionId }
-	});
+export async function syncAfterCheckout(
+	sessionId: SyncAfterCheckoutRequest['session_id']
+): Promise<PaymentSyncResponse> {
+	return client.post<PaymentSyncResponse>('/api/v1/billing/sync-after-checkout', {
+		session_id: sessionId
+	})
 }

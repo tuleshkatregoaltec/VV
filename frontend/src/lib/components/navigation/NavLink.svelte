@@ -1,17 +1,26 @@
 <script lang="ts">
-    import { page } from '$app/state';
+import { page } from '$app/state'
 
-    let { href, label }: { href: string; label: string } = $props();
-    
-    const isActive = $derived(page.url.pathname === href || page.url.pathname.startsWith(href + '/'));
+let {
+	href,
+	label,
+	activePrefix = href
+}: { href: string; label: string; activePrefix?: string } = $props()
+
+const isActive = $derived(
+	page.url.pathname === href ||
+		page.url.pathname.startsWith(`${href}/`) ||
+		page.url.pathname === activePrefix ||
+		page.url.pathname.startsWith(`${activePrefix}/`)
+)
 </script>
 
 <a
-    {href}
-    class="px-3 py-2 text-base font-medium rounded-xl transition-all {isActive
-        ? 'bg-gradient-to-r from-teal-600/80 to-cyan-600/80 text-white shadow-sm'
-        : 'text-gray-700 hover:text-slate-900 hover:bg-slate-50'}"
-    aria-current={isActive ? 'page' : undefined}
+	{href}
+class="rounded-md px-3 py-2 text-[13px] font-medium transition-colors duration-150 {isActive
+		? 'bg-info-bg text-info font-semibold'
+		: 'text-fg-3 hover:bg-panel hover:text-fg-1'}"
+	aria-current={isActive ? 'page' : undefined}
 >
-    {label}
+	{label}
 </a>

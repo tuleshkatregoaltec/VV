@@ -1,54 +1,12 @@
-from app.clickhouse.client import get_client, query, query_df, close_clickhouse
+from app.clickhouse.client import close_clickhouse, get_client, query, query_df
 from app.clickhouse.queries import (
-    # Analytics - Sales
-    sales_summary,
+    MARKET_FILTERS,
+    _project_filter,
     price_trends,
-    sales_by_area,
-    sales_by_property_type,
-    sales_by_rooms,
-    # Analytics - Rentals
     rentals_summary,
-    # Filters
-    distinct_property_types,
-    distinct_areas,
-    distinct_master_projects,
-    distinct_rooms,
-    # Projects
-    list_projects,
-    get_project_details,
-    list_developers,
-    list_buildings_for_project,
-    list_units_for_building,
-    # Comparables
-    find_comparable_units,
-    recent_transactions_for_area,
-    recent_rentals_for_area,
+    sales_summary,
 )
-from app.clickhouse.types import (
-    # Analytics
-    SalesSummary,
-    RentalSummary,
-    AreaStats,
-    PriceTrend,
-    PropertyTypeBreakdown,
-    RoomsBreakdown,
-    # Projects
-    ProjectListItem,
-    ProjectDetails,
-    DeveloperListItem,
-    BuildingListItem,
-    UnitListItem,
-    # Comparables
-    ComparableUnit,
-    ComparableTransaction,
-    ComparableRentalContract,
-    # Filters
-    FilterOption,
-    FilterOptions,
-    # Transactions
-    TransactionDetail,
-    RentalContractDetail,
-)
+from app.clickhouse.types import PriceTrend, RentalSummary, SalesSummary
 
 __all__ = [
     # Client functions
@@ -56,49 +14,14 @@ __all__ = [
     "query",
     "query_df",
     "close_clickhouse",
-    # Query templates - Analytics
+    # Shared query templates
+    "MARKET_FILTERS",
     "sales_summary",
     "price_trends",
-    "sales_by_area",
-    "sales_by_property_type",
-    "sales_by_rooms",
     "rentals_summary",
-    # Query templates - Filters
-    "distinct_property_types",
-    "distinct_areas",
-    "distinct_master_projects",
-    "distinct_rooms",
-    # Query templates - Projects
-    "list_projects",
-    "get_project_details",
-    "list_developers",
-    "list_buildings_for_project",
-    "list_units_for_building",
-    # Query templates - Comparables
-    "find_comparable_units",
-    "recent_transactions_for_area",
-    "recent_rentals_for_area",
-    # Response types - Analytics
+    "_project_filter",
+    # Shared response types
     "SalesSummary",
     "RentalSummary",
-    "AreaStats",
     "PriceTrend",
-    "PropertyTypeBreakdown",
-    "RoomsBreakdown",
-    # Response types - Projects
-    "ProjectListItem",
-    "ProjectDetails",
-    "DeveloperListItem",
-    "BuildingListItem",
-    "UnitListItem",
-    # Response types - Comparables
-    "ComparableUnit",
-    "ComparableTransaction",
-    "ComparableRentalContract",
-    # Response types - Filters
-    "FilterOption",
-    "FilterOptions",
-    # Response types - Transactions
-    "TransactionDetail",
-    "RentalContractDetail",
 ]

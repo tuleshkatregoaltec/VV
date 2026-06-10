@@ -1,11 +1,13 @@
-import stripe
 import logging
-from fastapi import APIRouter, Request, HTTPException
+
+import stripe
+from fastapi import APIRouter, HTTPException, Request
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from app.billing.models import WebhookStatusResponse
+from app.billing.service import sync_stripe_to_postgres
 from app.config import settings
 from app.postgres import get_db_session
-from app.billing.service import sync_stripe_to_postgres
 
 router = APIRouter(prefix="/api/v1/webhooks", tags=["webhooks"])
 logger = logging.getLogger(__name__)
@@ -22,9 +24,9 @@ TRACKED_EVENTS = [
 ]
 
 
-@router.post("/stripe")
+@router.post("/stripe", response_model=WebhookStatusResponse)
 async def stripe_webhook(request: Request):
-    """Stripe webhook: extract customer_id and sync."""
+    """Stripe webhook: treat Stripe as source of truth and sync Postgres from Stripe."""
 
     payload = await request.body()
     sig_header = request.headers.get("stripe-signature")
@@ -33,20 +35,14 @@ async def stripe_webhook(request: Request):
         raise HTTPException(400, "Missing stripe-signature")
 
     try:
-        event = stripe.Webhook.construct_event(
-            payload, sig_header, settings.STRIPE_WEBHOOK_SECRET
-        )
+        event = stripe.Webhook.construct_event(payload, sig_header, settings.STRIPE_WEBHOOK_SECRET)
     except ValueError:
         raise HTTPException(400, "Invalid payload")
     except stripe.SignatureVerificationError:
         raise HTTPException(400, "Invalid signature")
 
-    # Process event
     async for db in get_db_session():
-        try:
-            await process_webhook_event(event, db)
-        except Exception as e:
-            logger.error(f"Webhook error: {e}")
+        await process_webhook_event(event, db)
 
     return {"status": "success"}
 
