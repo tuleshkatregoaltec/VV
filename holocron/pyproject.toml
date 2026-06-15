@@ -24,6 +24,11 @@ dev = [
     "ruff>=0.15.12",
     "ty>=0.0.35",
 ]
+admin = [
+    "streamlit>=1.42.0",
+    "pyyaml>=6.0",
+    "python-dotenv>=1.0.0",
+]
 
 [tool.setuptools.packages.find]
 where = ["."]

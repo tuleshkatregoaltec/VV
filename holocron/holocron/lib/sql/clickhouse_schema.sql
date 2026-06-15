@@ -941,3 +941,117 @@ CREATE TABLE IF NOT EXISTS bronze_load_ledger (
     error           String DEFAULT ''
 ) ENGINE = MergeTree()
 ORDER BY (source, dataset_version, manifest_key, table_name, loaded_at);
+
+-- Silver layer: cleaned, normalised, analytics-ready tables derived from bronze.
+-- Field naming conventions:
+--   - Free-text entity names use initcap(trim()) applied at build time.
+--   - Arabic variants are preserved alongside English.
+--   - Bronze ingestion envelope (run_id, mode, page_index, etc.) is dropped.
+--   - Numeric-only ID fields (group_id, procedure_id, usage_id) are dropped;
+--     area_id and property_id are kept as stable cross-source identifiers.
+--   - Redundant string flags (is_free_hold_en/ar, is_offplan_en/ar) are dropped.
+
+CREATE TABLE IF NOT EXISTS silver_transactions (
+    row_key                  String,
+    transaction_number       String               DEFAULT '',
+    transaction_date         Date                 DEFAULT toDate(0),
+    trans_group              LowCardinality(String) DEFAULT '',
+    trans_group_ar           String               DEFAULT '',
+    procedure_name           LowCardinality(String) DEFAULT '',
+    procedure_name_ar        String               DEFAULT '',
+    procedure_area           Float64              DEFAULT 0,
+    property_type            LowCardinality(String) DEFAULT '',
+    property_type_ar         String               DEFAULT '',
+    property_sub_type        LowCardinality(String) DEFAULT '',
+    property_sub_type_ar     String               DEFAULT '',
+    property_usage           LowCardinality(String) DEFAULT '',
+    property_usage_ar        String               DEFAULT '',
+    reg_type                 LowCardinality(String) DEFAULT '',
+    reg_type_ar              String               DEFAULT '',
+    rooms_en                 LowCardinality(String) DEFAULT '',
+    rooms_ar                 String               DEFAULT '',
+    parking                  String               DEFAULT '',
+    building_age             UInt32               DEFAULT 0,
+    parcel_id                String               DEFAULT '',
+    area_id                  UInt32               DEFAULT 0,
+    area_name_en             LowCardinality(String) DEFAULT '',
+    area_name_ar             String               DEFAULT '',
+    project_name_en          String               DEFAULT '',
+    project_name_ar          String               DEFAULT '',
+    master_project_en        String               DEFAULT '',
+    master_project_ar        String               DEFAULT '',
+    building_name_en         String               DEFAULT '',
+    building_name_ar         String               DEFAULT '',
+    project_number           String               DEFAULT '',
+    property_id              UInt32               DEFAULT 0,
+    actual_area_sqm          Float64              DEFAULT 0,
+    sale_price_aed           Int64                DEFAULT 0,
+    price_per_sqm_aed        Float64              DEFAULT 0,
+    is_free_hold             UInt8                DEFAULT 0,
+    is_off_plan              UInt8                DEFAULT 0,
+    total_buyers             UInt32               DEFAULT 0,
+    total_sellers            UInt32               DEFAULT 0,
+    nearest_metro_en         String               DEFAULT '',
+    nearest_metro_ar         String               DEFAULT '',
+    nearest_mall_en          String               DEFAULT '',
+    nearest_mall_ar          String               DEFAULT '',
+    nearest_landmark_en      String               DEFAULT '',
+    nearest_landmark_ar      String               DEFAULT '',
+    no_of_parties_role_1     UInt32               DEFAULT 0,
+    no_of_parties_role_2     UInt32               DEFAULT 0,
+    no_of_parties_role_3     UInt32               DEFAULT 0
+) ENGINE = ReplacingMergeTree()
+ORDER BY (transaction_date, transaction_number);
+
+CREATE TABLE IF NOT EXISTS silver_rent_contracts (
+    row_key                      String,
+    contract_id                  String               DEFAULT '',
+    contract_number              String               DEFAULT '',
+    line_number                  UInt32               DEFAULT 0,
+    registration_date            Date                 DEFAULT toDate(0),
+    contract_start_date          Date                 DEFAULT toDate(0),
+    contract_end_date            Date                 DEFAULT toDate(0),
+    property_type                LowCardinality(String) DEFAULT '',
+    property_type_ar             String               DEFAULT '',
+    property_sub_type            LowCardinality(String) DEFAULT '',
+    property_sub_type_ar         String               DEFAULT '',
+    property_usage               LowCardinality(String) DEFAULT '',
+    property_usage_ar            String               DEFAULT '',
+    rooms                        LowCardinality(String) DEFAULT '',
+    parking                      String               DEFAULT '',
+    actual_area_sqm              Float64              DEFAULT 0,
+    annual_amount_aed            Int64                DEFAULT 0,
+    contract_amount_aed          Int64                DEFAULT 0,
+    rent_per_sqm_aed             Float64              DEFAULT 0,
+    total_properties             UInt32               DEFAULT 0,
+    version_number               UInt32               DEFAULT 0,
+    contract_version             LowCardinality(String) DEFAULT '',
+    contract_version_ar          String               DEFAULT '',
+    parcel_id                    String               DEFAULT '',
+    area_id                      UInt32               DEFAULT 0,
+    area_name_en                 LowCardinality(String) DEFAULT '',
+    area_name_ar                 String               DEFAULT '',
+    project_name_en              String               DEFAULT '',
+    project_name_ar              String               DEFAULT '',
+    master_project_en            String               DEFAULT '',
+    master_project_ar            String               DEFAULT '',
+    project_number               String               DEFAULT '',
+    property_id                  UInt32               DEFAULT 0,
+    land_property_id             UInt32               DEFAULT 0,
+    is_free_hold                 UInt8                DEFAULT 0,
+    tenant_type                  LowCardinality(String) DEFAULT '',
+    tenant_type_ar               String               DEFAULT '',
+    contract_reg_type            LowCardinality(String) DEFAULT '',
+    contract_reg_type_ar         String               DEFAULT '',
+    ejari_property_type_id       UInt32               DEFAULT 0,
+    ejari_property_sub_type_id   UInt32               DEFAULT 0,
+    ejari_business_property_type LowCardinality(String) DEFAULT '',
+    ejari_business_property_type_ar String            DEFAULT '',
+    nearest_metro_en             String               DEFAULT '',
+    nearest_metro_ar             String               DEFAULT '',
+    nearest_mall_en              String               DEFAULT '',
+    nearest_mall_ar              String               DEFAULT '',
+    nearest_landmark_en          String               DEFAULT '',
+    nearest_landmark_ar          String               DEFAULT ''
+) ENGINE = ReplacingMergeTree()
+ORDER BY (registration_date, contract_id);

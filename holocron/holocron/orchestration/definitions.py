@@ -10,6 +10,7 @@ from holocron.orchestration.factory import (
     build_operational_schedules,
     build_pf_listing_media_assets,
     build_reelly_document_assets,
+    build_silver_assets,
 )
 from holocron.platform.resources import ClickHouseResource, ObjectStorageResource
 from holocron.sources import registry
@@ -21,6 +22,7 @@ _assets.extend(build_pf_listing_media_assets())
 _assets.extend(build_reelly_document_assets())
 _assets.extend(build_news_feed_assets())
 _assets.extend(build_dld_pulse_historic_assets())
+_assets.extend(build_silver_assets())
 _sources_by_name = {_source.name: _source for _source in registry.list_sources()}
 _jobs = build_operational_jobs(_sources_by_name)
 _schedules = build_operational_schedules({_job.name: _job for _job in _jobs})

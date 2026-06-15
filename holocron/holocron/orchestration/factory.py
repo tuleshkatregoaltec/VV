@@ -56,6 +56,7 @@ from holocron.sources.news_feeds.assets import (
     hydrate_news_thumbnail_assets,
     publish_news_to_platform,
 )
+from holocron.silver.assets import silver_rent_contracts_asset, silver_transactions_asset
 from holocron.sources.reelly_supply.document_assets import (
     ReellyDocumentAssetHydrationConfig,
     hydrate_reelly_document_assets,
@@ -579,6 +580,10 @@ def build_news_feed_assets() -> list[AssetsDefinition]:
     return [news_thumbnail_assets, news_publish]
 
 
+def build_silver_assets() -> list[AssetsDefinition]:
+    return [silver_transactions_asset, silver_rent_contracts_asset]
+
+
 def build_dld_pulse_historic_assets() -> list[AssetsDefinition]:
     @asset(
         name="dld_pulse_historic_bronze",
@@ -819,6 +824,18 @@ def build_operational_jobs(sources: Mapping[str, SourceSpec]) -> list[AssetJobDe
                 defaults=PropertyFinderListingMediaHydrationConfig(),
             ),
         ),
+        define_asset_job(
+            name="silver_transactions_refresh",
+            selection=["silver_transactions"],
+        ),
+        define_asset_job(
+            name="silver_rent_contracts_refresh",
+            selection=["silver_rent_contracts"],
+        ),
+        define_asset_job(
+            name="silver_refresh",
+            selection=["silver_transactions", "silver_rent_contracts"],
+        ),
     ]
 
 
@@ -833,6 +850,8 @@ def build_operational_schedules(
         "pf_listings_daily_latest_delta": "0 3 * * *",
         "dda_planning_layers_weekly_full_refresh": "0 6 * * 0",
         "news_feeds_poll_and_hydrate": "*/15 * * * *",
+        # Silver runs after bronze ingestion completes (DLD bronze finishes ~05:30)
+        "silver_refresh": "0 6 * * *",
     }
     return [
         ScheduleDefinition(
