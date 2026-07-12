@@ -6,7 +6,18 @@ export default defineConfig({
 	plugins: [tailwindcss(), sveltekit()],
 
 	server: {
-		allowedHosts: ['demo.vitevue.com', 'frontend', 'localhost', '127.0.0.1']
+		allowedHosts: ['demo.vitevue.com', 'frontend', 'localhost', '127.0.0.1'],
+		proxy: {
+			'/api': {
+				target: process.env.VITEVUE_REMOTE_API_PROXY ?? 'http://127.0.0.1:18000',
+				changeOrigin: true
+			},
+			'/auth-proxy': {
+				target: process.env.VITEVUE_REMOTE_AUTH_PROXY ?? 'http://127.0.0.1:19999',
+				changeOrigin: true,
+				rewrite: (path) => path.replace(/^\/auth-proxy/, '')
+			}
+		}
 	},
 
 	test: {

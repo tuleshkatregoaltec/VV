@@ -2,7 +2,7 @@
 
 import csv
 import logging
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from io import BytesIO, StringIO
 from typing import Literal, Optional
 
@@ -23,6 +23,16 @@ logger = logging.getLogger(__name__)
 MAX_TRANSACTION_EXPORT_ROWS = 50_000
 SPREADSHEET_FORMULA_PREFIXES = ("=", "+", "-", "@")
 SPREADSHEET_CONTROL_PREFIXES = ("\t", "\r", "\n")
+
+
+def _date_only(value: object) -> date | None:
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    return value
 
 
 def _active_export_filters(filters: dict[str, object]) -> str:
@@ -239,7 +249,7 @@ async def fetch_sales_transactions(
     items = [
         TransactionResponse(
             transaction_id=row["transaction_id"],
-            instance_date=row["instance_date"],
+            instance_date=_date_only(row["instance_date"]),
             trans_group_en=row["trans_group_en"],
             procedure_name_en=row["procedure_name_en"],
             property_type_en=row["property_type_en"],

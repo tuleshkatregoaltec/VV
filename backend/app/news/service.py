@@ -119,6 +119,64 @@ def article_prompt_line(article: NewsArticle, index: int) -> str:
     return f"{index}. [{date_label}] {article.headline} ({article_source(article.url)})"
 
 
+def fallback_news_summary(articles: list[NewsArticle]) -> NewsSummaryResponse:
+    real_estate_keywords = (
+        "property",
+        "real estate",
+        "developer",
+        "rent",
+        "housing",
+        "villa",
+        "apartment",
+        "dubai",
+        "construction",
+        "project",
+    )
+    macro_keywords = (
+        "rate",
+        "inflation",
+        "oil",
+        "gdp",
+        "bank",
+        "market",
+        "economy",
+        "capital",
+        "investment",
+    )
+
+    def matching_bullets(keywords: tuple[str, ...], fallback: str) -> list[str]:
+        bullets: list[str] = []
+        for article in articles:
+            headline = article.headline.strip()
+            if not headline:
+                continue
+            lowered = headline.lower()
+            if any(keyword in lowered for keyword in keywords):
+                bullets.append(headline)
+            if len(bullets) == 4:
+                break
+        return bullets or [fallback]
+
+    return NewsSummaryResponse(
+        macro={
+            "title": "Macro",
+            "bullets": matching_bullets(
+                macro_keywords,
+                "No clear recent macro signal is available from the current news feed.",
+            ),
+        },
+        real_estate={
+            "title": "Real estate",
+            "bullets": matching_bullets(
+                real_estate_keywords,
+                "No clear recent real estate signal is available from the current news feed.",
+            ),
+        },
+        generated_at=datetime.now(timezone.utc),
+        article_count=len(articles),
+    )
+
+
 async def fetch_news_summary(db: AsyncSession) -> NewsSummaryResponse:
     stmt = (
         select(NewsArticle)
@@ -158,7 +216,7 @@ async def fetch_news_summary(db: AsyncSession) -> NewsSummaryResponse:
             usage_limits=UsageLimits(request_limit=1),
         )
     except Exception as exc:
-        raise HTTPException(status_code=502, detail="Failed to generate news summary") from exc
+        return fallback_news_summary(articles)
 
     return NewsSummaryResponse(
         macro=result.output.macro,

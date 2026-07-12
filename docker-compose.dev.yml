@@ -16,7 +16,7 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - ./.docker-volumes/postgres:/var/lib/postgresql/data
+      - dev-postgres-data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U vitevue"]
       interval: 5s
@@ -123,7 +123,7 @@ services:
     ports:
       - "6379:6379"
     volumes:
-      - ./.docker-volumes/redis:/data
+      - dev-redis-data:/data
     healthcheck:
       test: ["CMD", "redis-cli", "-a", "vitevue_dev", "ping"]
       interval: 5s
@@ -145,7 +145,7 @@ services:
       - "8123:8123"
       - "9001:9000"
     volumes:
-      - ./.docker-volumes/clickhouse:/var/lib/clickhouse
+      - dev-clickhouse-data:/var/lib/clickhouse
     ulimits:
       nofile:
         soft: 262144
@@ -183,7 +183,7 @@ services:
       MINIO_ROOT_USER: minioadmin
       MINIO_ROOT_PASSWORD: minioadmin
     volumes:
-      - ./.docker-volumes/minio:/data
+      - dev-minio-data:/data
     command: server /data --console-address ":9001"
     healthcheck:
       test: ["CMD", "mc", "ready", "local"]
@@ -218,7 +218,7 @@ services:
     ports:
       - "55432:5432"
     volumes:
-      - ./.docker-volumes/postgres-dagster:/var/lib/postgresql/data
+      - dev-postgres-dagster-data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U dagster -d dagster"]
       interval: 5s
@@ -231,7 +231,7 @@ services:
       context: ./holocron
       dockerfile: Dockerfile
     container_name: dev-dagster-webserver
-    command: dagster-webserver -h 0.0.0.0 -p 3000 -w /app/workspace.yaml
+    command: uv run --locked --no-dev dagster-webserver -h 0.0.0.0 -p 3000 -w /app/workspace.yaml
     ports:
       - "${DAGSTER_PORT:-3000}:3000"
     volumes:
@@ -273,7 +273,7 @@ services:
       context: ./holocron
       dockerfile: Dockerfile
     container_name: dev-dagster-daemon
-    command: dagster-daemon run -w /app/workspace.yaml
+    command: uv run --locked --no-dev dagster-daemon run -w /app/workspace.yaml
     volumes:
       - ./holocron:/app
     environment:
@@ -310,3 +310,10 @@ networks:
     driver: bridge
     driver_opts:
       com.docker.network.driver.mtu: "1280"
+
+volumes:
+  dev-postgres-data:
+  dev-redis-data:
+  dev-clickhouse-data:
+  dev-minio-data:
+  dev-postgres-dagster-data:

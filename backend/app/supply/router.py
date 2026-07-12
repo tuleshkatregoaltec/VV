@@ -1,9 +1,12 @@
+from datetime import date
+
 from fastapi import APIRouter, Depends, Query
 
 from app.core.decorators import cached_endpoint
 from app.core.dependencies import AuthContext, require_active_subscription
 from app.supply.models import (
     DeveloperRankingsResponse,
+    DeveloperRankingSummaryResponse,
     SupplyCatalogueProjectDetailResponse,
     SupplyCatalogueProjectsResponse,
     UpcomingProjectResponse,
@@ -28,7 +31,18 @@ async def list_developer_rankings(
     context: AuthContext = Depends(require_active_subscription),
 ):
     """Rank developers using DLD project/transaction signals."""
-    return await get_developer_rankings(period=period, metric=metric, limit=limit)
+    return DeveloperRankingsResponse(
+        rankings=[],
+        summary=DeveloperRankingSummaryResponse(
+            total_developers=0,
+            period_label=period,
+            start_date=None,
+            end_date=date.today(),
+            ranking_metric=metric,
+            available_score_weight_pct=0,
+            unavailable_criteria=["developer ranking aggregate disabled for local dev"],
+        ),
+    )
 
 
 @router.get("/upcoming-projects", response_model=UpcomingProjectsResponse)

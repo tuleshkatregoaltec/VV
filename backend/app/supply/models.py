@@ -14,7 +14,7 @@ class UpcomingProjectResponse(BaseModel):
     area_name: str
     project_start_date: Optional[date] = None
     project_end_date: Optional[date] = None
-    percent_completed: int = 0
+    percent_completed: float = 0
     no_of_buildings: Optional[int] = None
     no_of_units: Optional[int] = None
 

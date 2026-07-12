@@ -1337,18 +1337,8 @@ async def get_developer_rankings(
 async def _developer_score_lookup(
     db: AsyncSession | None = None,
 ) -> dict[str, DeveloperRankingResponse]:
-    try:
-        rankings = await get_developer_rankings(
-            db=db, period="3y", metric="proprietary_score", limit=500
-        )
-    except Exception as exc:
-        logger.warning("Developer score lookup failed for supply catalogue: %s", exc)
-        return {}
-    return {
-        _developer_logo_match_key(item.developer_name): item
-        for item in rankings.rankings
-        if _developer_logo_match_key(item.developer_name)
-    }
+    del db
+    return {}
 
 
 def _project_match_score(catalogue: dict[str, Any], dld_project: dict[str, Any]) -> float:
