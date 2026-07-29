@@ -2,6 +2,7 @@
 import {
 	BarChart3,
 	Building2,
+	ContactRound,
 	Calculator,
 	FolderOpen,
 	Home,
@@ -62,6 +63,11 @@ function handleLogout() {
 			<a href="/dashboard" onclick={onNavigate} class={linkClass('/dashboard')} aria-current={isActive('/dashboard') ? 'page' : undefined}>
 				<LayoutDashboard size={16} strokeWidth={2} aria-hidden="true" />
 				<span>Dashboard</span>
+			</a>
+
+			<a href="/crm" onclick={onNavigate} class={linkClass('/crm')} aria-current={isActive('/crm') ? 'page' : undefined}>
+				<ContactRound size={16} strokeWidth={2} aria-hidden="true" />
+				<span>CRM</span>
 			</a>
 
 			<a href="/workflows" onclick={onNavigate} class={linkClass('/workflows')} aria-current={isActive('/workflows') ? 'page' : undefined}>

@@ -247,6 +247,7 @@ cython_debug/
 playwright-report/
 test-results/
 output/
+/reelly_output/
 backend/logs/
 /sheets/
 ch_data/

@@ -139,6 +139,103 @@ CREATE TABLE IF NOT EXISTS dxbi_transactions_bronze (
 ) ENGINE = MergeTree()
 ORDER BY (slice_start_date, source_table, transaction_key);
 
+CREATE TABLE IF NOT EXISTS dxbi_rental_events (
+    event_key          String,
+    unit_candidate_key String,
+    unit_cohort_key    String,
+    location_name      String DEFAULT '',
+    building_name      String DEFAULT '',
+    project_name       String DEFAULT '',
+    area_name          LowCardinality(String) DEFAULT '',
+    property_type      LowCardinality(String) DEFAULT '',
+    bedrooms           LowCardinality(String) DEFAULT '',
+    size_sqft          Float64 DEFAULT 0,
+    annual_rent_aed    UInt64 DEFAULT 0,
+    purchase_price_aed UInt64 DEFAULT 0,
+    lease_start        Date,
+    lease_end          Date,
+    contract_state     LowCardinality(String) DEFAULT '',
+    source_account     LowCardinality(String) DEFAULT '',
+    source_shard_date  Date,
+    source_file        String DEFAULT '',
+    scraped_at         DateTime64(3, 'UTC'),
+    loaded_at          DateTime64(3, 'UTC') DEFAULT now64(3)
+) ENGINE = ReplacingMergeTree(loaded_at)
+ORDER BY (lease_start, unit_candidate_key, event_key);
+
+CREATE TABLE IF NOT EXISTS dxbi_rental_unit_candidates (
+    unit_candidate_key String,
+    event_key          String,
+    unit_cohort_key    String,
+    location_name      String DEFAULT '',
+    building_name      String DEFAULT '',
+    project_name       String DEFAULT '',
+    area_name          LowCardinality(String) DEFAULT '',
+    property_type      LowCardinality(String) DEFAULT '',
+    bedrooms           LowCardinality(String) DEFAULT '',
+    size_sqft          Float64 DEFAULT 0,
+    annual_rent_aed    UInt64 DEFAULT 0,
+    purchase_price_aed UInt64 DEFAULT 0,
+    lease_start        Date,
+    lease_end          Date,
+    contract_state     LowCardinality(String) DEFAULT '',
+    observed_contracts UInt32 DEFAULT 0,
+    last_scraped_at    DateTime64(3, 'UTC'),
+    loaded_at          DateTime64(3, 'UTC') DEFAULT now64(3)
+) ENGINE = ReplacingMergeTree(loaded_at)
+ORDER BY unit_candidate_key;
+
+CREATE TABLE IF NOT EXISTS dxbi_sales_unit_events (
+    sale_key           String,
+    transaction_date   Date,
+    unit_number        String,
+    building_name      String DEFAULT '',
+    building_key       String DEFAULT '',
+    project_name       String DEFAULT '',
+    area_name          LowCardinality(String) DEFAULT '',
+    area_key           String DEFAULT '',
+    property_type      LowCardinality(String) DEFAULT '',
+    market_status      LowCardinality(String) DEFAULT '',
+    bedrooms           LowCardinality(String) DEFAULT '',
+    size_sqft          Float64 DEFAULT 0,
+    size_key           UInt32 DEFAULT 0,
+    built_up_area_sqft Nullable(Float64),
+    balcony_sqft       Nullable(Float64),
+    sale_amount_aed    UInt64 DEFAULT 0,
+    price_per_sqft_aed Nullable(Float64),
+    capital_gain_pct   Nullable(Float64),
+    ltv_pct            Nullable(Float64),
+    seller_type        LowCardinality(String) DEFAULT '',
+    seller_transaction_count Nullable(UInt16),
+    agent_side         LowCardinality(String) DEFAULT '',
+    detail_url         String DEFAULT '',
+    source_file        String DEFAULT '',
+    loaded_at          DateTime64(3, 'UTC') DEFAULT now64(3)
+) ENGINE = ReplacingMergeTree(loaded_at)
+ORDER BY (building_key, bedrooms, size_key, transaction_date, sale_key);
+
+CREATE TABLE IF NOT EXISTS dxbi_rental_sale_matches (
+    unit_candidate_key             String,
+    unit_number                    String DEFAULT '',
+    identity_sale_date             Nullable(Date),
+    identity_sale_price            Nullable(UInt64),
+    last_purchase_date             Date,
+    matched_sale_price             UInt64 DEFAULT 0,
+    latest_property_type           LowCardinality(String) DEFAULT '',
+    latest_price_per_sqft_aed      Nullable(Float64),
+    latest_capital_gain_pct        Nullable(Float64),
+    latest_ltv_pct                 Nullable(Float64),
+    latest_seller_type             LowCardinality(String) DEFAULT '',
+    latest_seller_transaction_count Nullable(UInt16),
+    latest_market_status           LowCardinality(String) DEFAULT '',
+    latest_detail_url              String DEFAULT '',
+    matching_sales                 UInt32 DEFAULT 0,
+    matching_units                 UInt32 DEFAULT 0,
+    match_status                   LowCardinality(String) DEFAULT '',
+    loaded_at                      DateTime64(3, 'UTC') DEFAULT now64(3)
+) ENGINE = ReplacingMergeTree(loaded_at)
+ORDER BY unit_candidate_key;
+
 CREATE TABLE IF NOT EXISTS dxbi_heatmap_rental_buildings_bronze (
     rental_key    String,
     run_id        String,

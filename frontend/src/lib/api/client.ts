@@ -53,11 +53,15 @@ async function request<T>(endpoint: string, options: RequestOptions = {}): Promi
 	}
 
 	if (body !== undefined) {
-		config.headers = {
-			'Content-Type': 'application/json',
-			...config.headers
+		if (typeof FormData !== 'undefined' && body instanceof FormData) {
+			config.body = body
+		} else {
+			config.headers = {
+				'Content-Type': 'application/json',
+				...config.headers
+			}
+			config.body = JSON.stringify(body)
 		}
-		config.body = JSON.stringify(body)
 	}
 
 	let res: Response
