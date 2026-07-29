@@ -122,6 +122,9 @@ const contactImportsQuery = createQuery(() => crmQueries.contactImports())
 const ownerRegistryScope = $derived<CrmOwnerRegistryScope>(
 	savedFolder === 'rental_ready' ? 'rental_ready' : 'registry'
 )
+const ownerRegistryEnabled = $derived(
+	showSaved && savedFolder !== 'manual' && !selectedLeadId && !selectedOwnerKey
+)
 const ownerRegistryQuery = createQuery(() =>
 	crmQueries.ownerRegistry(
 		ownerRegistryScope,
@@ -129,7 +132,7 @@ const ownerRegistryQuery = createQuery(() =>
 			status: ownerStatus || undefined,
 			search: debouncedOwnerSearch || undefined
 		},
-		showSaved
+		ownerRegistryEnabled
 	)
 )
 const ownerProfileQuery = createQuery(() => crmQueries.ownerProfile(selectedOwnerKey))
@@ -479,11 +482,8 @@ async function runContactImport() {
 	try {
 		const result = await crm.uploadContactImport(importFile, importListName.trim())
 		latestImport = result
-		const refreshes: Promise<unknown>[] = [
-			contactImportsQuery.refetch(),
-			workspacesQuery.refetch(),
-			ownerRegistryQuery.refetch()
-		]
+		const refreshes: Promise<unknown>[] = [contactImportsQuery.refetch(), workspacesQuery.refetch()]
+		if (ownerRegistryEnabled) refreshes.push(ownerRegistryQuery.refetch())
 		if (selectedLeadId) refreshes.push(leadContactsQuery.refetch())
 		await Promise.all(refreshes)
 	} catch (error) {

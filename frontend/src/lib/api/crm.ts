@@ -509,13 +509,15 @@ export const crm = {
 		),
 	ownerRegistry: (
 		scope: CrmOwnerRegistryScope,
-		params: { status?: CrmOwnershipStatus; search?: string; limit?: number; offset?: number } = {}
+		params: { status?: CrmOwnershipStatus; search?: string; limit?: number; offset?: number } = {},
+		signal?: AbortSignal
 	) =>
 		client.get<CrmOwnerRegistryResponse>(
 			client.withQuery('/api/v1/crm/owner-registry', {
 				scope,
 				...params
-			})
+			}),
+			{ signal }
 		),
 	ownerProfile: (ownerKey: string) =>
 		client.get<CrmOwnerProfile>(`/api/v1/crm/owners/${encodeURIComponent(ownerKey)}`),

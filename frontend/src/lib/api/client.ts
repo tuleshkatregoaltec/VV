@@ -25,6 +25,7 @@ export interface RequestOptions {
 	body?: unknown
 	headers?: Record<string, string>
 	returnBlob?: boolean
+	signal?: AbortSignal
 }
 
 interface StreamOptions {
@@ -36,7 +37,7 @@ type QueryValue = string | number | boolean | null | undefined | Date
 type QueryParams = Record<string, QueryValue | QueryValue[]>
 
 async function request<T>(endpoint: string, options: RequestOptions = {}): Promise<T> {
-	const { method = 'GET', body, headers = {}, returnBlob = false } = options
+	const { method = 'GET', body, headers = {}, returnBlob = false, signal } = options
 
 	// if access token available, add auth header.
 	const access_token = await get_access_token()
@@ -47,6 +48,7 @@ async function request<T>(endpoint: string, options: RequestOptions = {}): Promi
 	const config: RequestInit = {
 		method,
 		credentials: 'include',
+		signal,
 		headers: {
 			...headers
 		}
@@ -68,6 +70,7 @@ async function request<T>(endpoint: string, options: RequestOptions = {}): Promi
 	try {
 		res = await fetch(`${env.PUBLIC_API_BASE_URL}${endpoint}`, config)
 	} catch (err) {
+		if (err instanceof Error && err.name === 'AbortError') throw err
 		throw new ApiError(
 			'Could not reach the API server. Check that the backend is running and try again.',
 			0,
