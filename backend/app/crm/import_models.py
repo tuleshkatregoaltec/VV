@@ -173,6 +173,10 @@ class CrmContactImportResponse(BaseModel):
     completed_at: datetime | None = None
 
 
+class CrmContactImportRename(BaseModel):
+    name: str = Field(min_length=1, max_length=200)
+
+
 class CrmContactListSummary(BaseModel):
     id: int
     source_import_id: int | None = None
@@ -284,14 +288,95 @@ class CrmOwnerProfile(BaseModel):
 class CrmOwnerRegistrySummary(BaseModel):
     rental_owner_profiles: int = 0
     registry_owner_profiles: int = 0
+    prior_owner_profiles: int = 0
     needs_review_profiles: int = 0
     multi_property_owners: int = 0
 
 
 class CrmOwnerRegistryResponse(BaseModel):
-    scope: Literal["all", "rental_ready", "registry"]
+    scope: Literal["all", "rental_ready", "registry", "prior_owners"]
     owners: list[CrmOwnerProfile]
     total: int
     limit: int
     offset: int
     summary: CrmOwnerRegistrySummary
+
+
+class CrmOwnerWorkspace(SQLModel, table=True):
+    __tablename__ = "crm_owner_workspaces"
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id",
+            "organization_id",
+            "owner_key",
+            name="uq_crm_owner_workspace_identity",
+        ),
+    )
+
+    id: int | None = SQLField(default=None, primary_key=True)
+    user_id: str = SQLField(index=True)
+    organization_id: str = SQLField(index=True)
+    owner_key: str = SQLField(index=True)
+    pipeline_status: str = SQLField(default="new", index=True)
+    highlight_color: str = SQLField(default="none")
+    next_follow_up: date | None = None
+    tags: list[str] = SQLField(
+        default_factory=list,
+        sa_column=Column(JSON, nullable=False),
+    )
+    created_at: datetime = SQLField(sa_column=Column(DateTime(timezone=True), nullable=False))
+    updated_at: datetime = SQLField(sa_column=Column(DateTime(timezone=True), nullable=False))
+
+
+class CrmOwnerNote(SQLModel, table=True):
+    __tablename__ = "crm_owner_notes"
+
+    id: int | None = SQLField(default=None, primary_key=True)
+    workspace_id: int = SQLField(
+        sa_column=Column(
+            ForeignKey("crm_owner_workspaces.id", ondelete="CASCADE"),
+            nullable=False,
+            index=True,
+        )
+    )
+    user_id: str = SQLField(index=True)
+    organization_id: str = SQLField(index=True)
+    body: str = SQLField(sa_column=Column(Text, nullable=False))
+    created_at: datetime = SQLField(sa_column=Column(DateTime(timezone=True), nullable=False))
+    updated_at: datetime = SQLField(sa_column=Column(DateTime(timezone=True), nullable=False))
+
+
+class CrmOwnerWorkspaceSummary(BaseModel):
+    owner_key: str
+    pipeline_status: Literal[
+        "new",
+        "researching",
+        "contact_ready",
+        "contacted",
+        "qualified",
+        "nurture",
+        "won",
+        "closed",
+    ]
+    highlight_color: Literal["none", "amber", "green", "blue", "red", "purple"]
+    next_follow_up: date | None = None
+    tags: list[str] = Field(default_factory=list)
+    note_count: int = 0
+    last_note: str | None = None
+    updated_at: datetime
+
+
+class CrmOwnerBulkUpdate(BaseModel):
+    owner_keys: list[str] = Field(min_length=1, max_length=200)
+    pipeline_status: Literal[
+        "new",
+        "researching",
+        "contact_ready",
+        "contacted",
+        "qualified",
+        "nurture",
+        "won",
+        "closed",
+    ] | None = None
+    highlight_color: Literal["none", "amber", "green", "blue", "red", "purple"] | None = None
+    note: str | None = Field(default=None, max_length=4_000)

@@ -7,7 +7,13 @@ migration.
 
 from app.billing.models import Subscription
 from app.chat.models import Conversation, Message
-from app.crm.import_models import CrmContactImport, CrmContactList, CrmPropertyContactClaim
+from app.crm.import_models import (
+    CrmContactImport,
+    CrmContactList,
+    CrmOwnerNote,
+    CrmOwnerWorkspace,
+    CrmPropertyContactClaim,
+)
 from app.crm.models import CrmLeadNote, CrmLeadWorkspace, CrmSavedLead
 from app.feasibility.models import FeasibilitySavedStudy
 from app.news.models import NewsArticle
@@ -32,6 +38,8 @@ __all__ = [
     "CrmContactImport",
     "CrmContactList",
     "CrmPropertyContactClaim",
+    "CrmOwnerWorkspace",
+    "CrmOwnerNote",
     # Feasibility
     "FeasibilitySavedStudy",
 ]

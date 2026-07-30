@@ -31,10 +31,14 @@ from app.crm.import_models import (
     CrmContactListDetail,
     CrmContactListSummary,
     CrmLeadImportedContact,
+    CrmOwnerBulkUpdate,
+    CrmOwnerNote,
     CrmOwnerProfile,
     CrmOwnerProperty,
     CrmOwnerRegistryResponse,
     CrmOwnerRegistrySummary,
+    CrmOwnerWorkspace,
+    CrmOwnerWorkspaceSummary,
     CrmPropertyContactClaim,
     CrmSheetMapping,
 )
@@ -50,7 +54,12 @@ _NON_KEY = re.compile(r"[^a-z0-9]+")
 _EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 _TRANSFER_WORDS = ("sale", "sell", "delayed sell")
 _OWNER_SUMMARY_CACHE_TTL_SECONDS = 300
-_owner_summary_cache: dict[str, tuple[float, CrmOwnerRegistrySummary]] = {}
+_owner_summary_cache: dict[tuple[str, int | None], tuple[float, CrmOwnerRegistrySummary]] = {}
+
+
+def _invalidate_owner_summary_cache(organization_id: str) -> None:
+    for key in [key for key in _owner_summary_cache if key[0] == organization_id]:
+        _owner_summary_cache.pop(key, None)
 
 _CANONICAL_FIELDS = {
     "area_name",
@@ -183,6 +192,10 @@ WITH base AS (
     FROM crm_property_contact_claims c
     INNER JOIN crm_contact_lists l ON l.id = c.list_id
     WHERE c.organization_id = :organization_id
+      AND (
+        CAST(:owner_list_id AS INTEGER) IS NULL
+        OR c.list_id = CAST(:owner_list_id AS INTEGER)
+      )
 ),
 ranked AS (
     SELECT
@@ -1250,7 +1263,7 @@ async def process_contact_import(
         record.completed_at = _utcnow()
         db.add(record)
         await db.commit()
-        _owner_summary_cache.pop(organization_id, None)
+        _invalidate_owner_summary_cache(organization_id)
         return await _import_response(db, record)
     except HTTPException:
         raise
@@ -1299,6 +1312,43 @@ async def list_contact_imports(
         .order_by(CrmContactImport.created_at.desc())
     )
     return [await _import_response(db, record) for record in result.all()]
+
+
+async def rename_contact_import(
+    db: AsyncSession,
+    *,
+    import_id: int,
+    name: str,
+    organization_id: str,
+) -> CrmContactImportResponse:
+    result = await db.exec(
+        select(CrmContactImport).where(
+            CrmContactImport.id == import_id,
+            CrmContactImport.organization_id == organization_id,
+        )
+    )
+    record = result.first()
+    if not record:
+        raise HTTPException(status_code=404, detail="Owner-data import not found")
+    cleaned = name.strip()
+    if not cleaned:
+        raise HTTPException(status_code=422, detail="Import name cannot be empty")
+    record.name = cleaned[:200]
+    db.add(record)
+    list_result = await db.exec(
+        select(CrmContactList).where(
+            CrmContactList.source_import_id == import_id,
+            CrmContactList.organization_id == organization_id,
+        )
+    )
+    contact_list = list_result.first()
+    if contact_list:
+        contact_list.name = record.name
+        contact_list.updated_at = _utcnow()
+        db.add(contact_list)
+    await db.commit()
+    await db.refresh(record)
+    return await _import_response(db, record)
 
 
 def _claim_property_key(claim: CrmPropertyContactClaim) -> str:
@@ -1775,8 +1825,13 @@ def _owner_registry_summary(
                     and item.ownership_status
                     in {"verified_current_owner", "probable_current_owner"}
                 )
+                and item.ownership_status != "former_owner"
                 for item in profile.properties
             )
+            for profile in profiles
+        ),
+        prior_owner_profiles=sum(
+            any(item.ownership_status == "former_owner" for item in profile.properties)
             for profile in profiles
         ),
         needs_review_profiles=sum(
@@ -1799,8 +1854,10 @@ def _owner_scope_clause(scope: str, alias: str = "p") -> str:
     )
     if scope == "rental_ready":
         return ready
+    if scope == "prior_owners":
+        return f"{alias}.ownership_status = 'former_owner'"
     if scope == "registry":
-        return f"NOT ({ready})"
+        return f"NOT ({ready}) AND {alias}.ownership_status <> 'former_owner'"
     return "TRUE"
 
 
@@ -1809,6 +1866,11 @@ def _owner_filter_sql(
     scope: str,
     status: str | None,
     search: str | None,
+    lease_window: str | None = None,
+    min_rent_aed: int | None = None,
+    max_rent_aed: int | None = None,
+    min_value_aed: int | None = None,
+    max_value_aed: int | None = None,
     alias: str = "p",
 ) -> tuple[str, dict[str, Any]]:
     clauses = [_owner_scope_clause(scope, alias)]
@@ -1826,6 +1888,34 @@ def _owner_filter_sql(
             ")) LIKE :owner_search"
         )
         parameters["owner_search"] = f"%{search.casefold().strip()}%"
+    if lease_window == "expired":
+        clauses.append(f"{alias}.lease_end < CURRENT_DATE")
+    elif lease_window in {"expiring_30", "expiring_60", "expiring_90"}:
+        lower_days, upper_days = {
+            "expiring_30": (0, 30),
+            "expiring_60": (30, 60),
+            "expiring_90": (60, 90),
+        }[lease_window]
+        clauses.append(
+            f"{alias}.lease_end > CURRENT_DATE + make_interval(days => :lease_lower_days)"
+        )
+        clauses.append(
+            f"{alias}.lease_end <= CURRENT_DATE + make_interval(days => :lease_upper_days)"
+        )
+        parameters["lease_lower_days"] = lower_days
+        parameters["lease_upper_days"] = upper_days
+    if min_rent_aed is not None:
+        clauses.append(f"{alias}.annual_rent_aed >= :owner_min_rent")
+        parameters["owner_min_rent"] = min_rent_aed
+    if max_rent_aed is not None:
+        clauses.append(f"{alias}.annual_rent_aed <= :owner_max_rent")
+        parameters["owner_max_rent"] = max_rent_aed
+    if min_value_aed is not None:
+        clauses.append(f"{alias}.latest_sale_price_aed >= :owner_min_value")
+        parameters["owner_min_value"] = min_value_aed
+    if max_value_aed is not None:
+        clauses.append(f"{alias}.latest_sale_price_aed <= :owner_max_value")
+        parameters["owner_max_value"] = max_value_aed
     return " AND ".join(f"({clause})" for clause in clauses), parameters
 
 
@@ -1833,8 +1923,10 @@ async def _owner_registry_summary_sql(
     db: AsyncSession,
     *,
     organization_id: str,
+    list_id: int | None,
 ) -> CrmOwnerRegistrySummary:
-    cached = _owner_summary_cache.get(organization_id)
+    cache_key = (organization_id, list_id)
+    cached = _owner_summary_cache.get(cache_key)
     if cached and monotonic() - cached[0] < _OWNER_SUMMARY_CACHE_TTL_SECONDS:
         return cached[1]
     statement = text(
@@ -1859,7 +1951,11 @@ async def _owner_registry_summary_sql(
                             'probable_current_owner'
                         )
                     )
+                    AND ownership_status <> 'former_owner'
                 ) AS registry_count,
+                count(*) FILTER (
+                    WHERE ownership_status = 'former_owner'
+                ) AS prior_count,
                 count(*) FILTER (
                     WHERE ownership_status IN (
                         'unit_linked_unverified',
@@ -1875,6 +1971,8 @@ async def _owner_registry_summary_sql(
                 AS rental_owner_profiles,
             count(*) FILTER (WHERE registry_count > 0)
                 AS registry_owner_profiles,
+            count(*) FILTER (WHERE prior_count > 0)
+                AS prior_owner_profiles,
             count(*) FILTER (WHERE review_count > 0)
                 AS needs_review_profiles,
             count(*) FILTER (WHERE property_count > 1)
@@ -1882,14 +1980,20 @@ async def _owner_registry_summary_sql(
         FROM profile_rollup
         """
     )
-    row = (await db.exec(statement, params={"organization_id": organization_id})).mappings().one()
+    row = (
+        await db.exec(
+            statement,
+            params={"organization_id": organization_id, "owner_list_id": list_id},
+        )
+    ).mappings().one()
     summary = CrmOwnerRegistrySummary(
         rental_owner_profiles=int(row["rental_owner_profiles"] or 0),
         registry_owner_profiles=int(row["registry_owner_profiles"] or 0),
+        prior_owner_profiles=int(row["prior_owner_profiles"] or 0),
         needs_review_profiles=int(row["needs_review_profiles"] or 0),
         multi_property_owners=int(row["multi_property_owners"] or 0),
     )
-    _owner_summary_cache[organization_id] = (monotonic(), summary)
+    _owner_summary_cache[cache_key] = (monotonic(), summary)
     return summary
 
 
@@ -1897,9 +2001,16 @@ async def _owner_page_keys_sql(
     db: AsyncSession,
     *,
     organization_id: str,
+    list_id: int | None,
     scope: str,
     status: str | None,
     search: str | None,
+    lease_window: str | None,
+    portfolio_only: bool,
+    min_rent_aed: int | None,
+    max_rent_aed: int | None,
+    min_value_aed: int | None,
+    max_value_aed: int | None,
     limit: int,
     offset: int,
 ) -> tuple[list[str], int]:
@@ -1907,6 +2018,11 @@ async def _owner_page_keys_sql(
         scope=scope,
         status=status,
         search=search,
+        lease_window=lease_window,
+        min_rent_aed=min_rent_aed,
+        max_rent_aed=max_rent_aed,
+        min_value_aed=min_value_aed,
+        max_value_aed=max_value_aed,
     )
     statement = text(
         _OWNER_REGISTRY_BASE_SQL
@@ -1937,6 +2053,7 @@ async def _owner_page_keys_sql(
             owner_key_sql,
             count(*) OVER () AS total_profiles
         FROM profile_rollup
+        WHERE (NOT :portfolio_only OR property_count > 1)
         ORDER BY
             contact_ready_count DESC,
             property_count DESC,
@@ -1949,6 +2066,8 @@ async def _owner_page_keys_sql(
     parameters.update(
         {
             "organization_id": organization_id,
+            "owner_list_id": list_id,
+            "portfolio_only": portfolio_only,
             "owner_limit": limit,
             "owner_offset": offset,
         }
@@ -1964,10 +2083,16 @@ async def _owner_properties_sql(
     db: AsyncSession,
     *,
     organization_id: str,
+    list_id: int | None,
     owner_keys: list[str],
     scope: str,
     status: str | None = None,
     search: str | None = None,
+    lease_window: str | None = None,
+    min_rent_aed: int | None = None,
+    max_rent_aed: int | None = None,
+    min_value_aed: int | None = None,
+    max_value_aed: int | None = None,
 ) -> dict[str, list[dict[str, Any]]]:
     if not owner_keys:
         return {}
@@ -1975,6 +2100,11 @@ async def _owner_properties_sql(
         scope=scope,
         status=status,
         search=search,
+        lease_window=lease_window,
+        min_rent_aed=min_rent_aed,
+        max_rent_aed=max_rent_aed,
+        min_value_aed=min_value_aed,
+        max_value_aed=max_value_aed,
     )
     statement = text(
         _OWNER_REGISTRY_BASE_SQL
@@ -2031,6 +2161,7 @@ async def _owner_properties_sql(
     parameters.update(
         {
             "organization_id": organization_id,
+            "owner_list_id": list_id,
             "owner_keys": owner_keys,
         }
     )
@@ -2117,32 +2248,53 @@ async def get_owner_registry(
     db: AsyncSession,
     *,
     organization_id: str,
+    list_id: int | None,
     scope: str,
     status: str | None,
     search: str | None,
+    lease_window: str | None,
+    portfolio_only: bool,
+    min_rent_aed: int | None,
+    max_rent_aed: int | None,
+    min_value_aed: int | None,
+    max_value_aed: int | None,
     limit: int,
     offset: int,
 ) -> CrmOwnerRegistryResponse:
     summary = await _owner_registry_summary_sql(
         db,
         organization_id=organization_id,
+        list_id=list_id,
     )
     owner_keys, total = await _owner_page_keys_sql(
         db,
         organization_id=organization_id,
+        list_id=list_id,
         scope=scope,
         status=status,
         search=search,
+        lease_window=lease_window,
+        portfolio_only=portfolio_only,
+        min_rent_aed=min_rent_aed,
+        max_rent_aed=max_rent_aed,
+        min_value_aed=min_value_aed,
+        max_value_aed=max_value_aed,
         limit=limit,
         offset=offset,
     )
     property_rows = await _owner_properties_sql(
         db,
         organization_id=organization_id,
+        list_id=list_id,
         owner_keys=owner_keys,
         scope=scope,
         status=status,
         search=search,
+        lease_window=lease_window,
+        min_rent_aed=min_rent_aed,
+        max_rent_aed=max_rent_aed,
+        min_value_aed=min_value_aed,
+        max_value_aed=max_value_aed,
     )
     profiles = [
         _sql_owner_profile(owner_key, property_rows[owner_key])
@@ -2168,6 +2320,7 @@ async def get_owner_profile(
     property_rows = await _owner_properties_sql(
         db,
         organization_id=organization_id,
+        list_id=None,
         owner_keys=[owner_key],
         scope="all",
     )
@@ -2175,3 +2328,131 @@ async def get_owner_profile(
     if not rows:
         raise HTTPException(status_code=404, detail="Owner profile not found")
     return _sql_owner_profile(owner_key, rows)
+
+
+def _owner_workspace_summaries(
+    workspaces: list[CrmOwnerWorkspace],
+    notes: list[CrmOwnerNote],
+) -> list[CrmOwnerWorkspaceSummary]:
+    notes_by_workspace: dict[int, list[CrmOwnerNote]] = {}
+    for note in notes:
+        notes_by_workspace.setdefault(note.workspace_id, []).append(note)
+    summaries: list[CrmOwnerWorkspaceSummary] = []
+    for workspace in workspaces:
+        workspace_notes = notes_by_workspace.get(workspace.id or 0, [])
+        workspace_notes.sort(key=lambda item: item.created_at, reverse=True)
+        summaries.append(
+            CrmOwnerWorkspaceSummary(
+                owner_key=workspace.owner_key,
+                pipeline_status=workspace.pipeline_status,  # type: ignore[arg-type]
+                highlight_color=workspace.highlight_color,  # type: ignore[arg-type]
+                next_follow_up=workspace.next_follow_up,
+                tags=list(workspace.tags or []),
+                note_count=len(workspace_notes),
+                last_note=workspace_notes[0].body if workspace_notes else None,
+                updated_at=workspace.updated_at,
+            )
+        )
+    summaries.sort(key=lambda item: item.updated_at, reverse=True)
+    return summaries
+
+
+async def list_owner_workspaces(
+    db: AsyncSession,
+    *,
+    user_id: str,
+    organization_id: str,
+) -> list[CrmOwnerWorkspaceSummary]:
+    workspace_result = await db.exec(
+        select(CrmOwnerWorkspace).where(
+            CrmOwnerWorkspace.user_id == user_id,
+            CrmOwnerWorkspace.organization_id == organization_id,
+        )
+    )
+    workspaces = list(workspace_result.all())
+    if not workspaces:
+        return []
+    workspace_ids = [item.id for item in workspaces if item.id is not None]
+    note_result = await db.exec(
+        select(CrmOwnerNote).where(
+            CrmOwnerNote.user_id == user_id,
+            CrmOwnerNote.organization_id == organization_id,
+            CrmOwnerNote.workspace_id.in_(workspace_ids),  # type: ignore[union-attr]
+        )
+    )
+    return _owner_workspace_summaries(workspaces, list(note_result.all()))
+
+
+async def bulk_update_owner_workspaces(
+    db: AsyncSession,
+    *,
+    payload: CrmOwnerBulkUpdate,
+    user_id: str,
+    organization_id: str,
+) -> list[CrmOwnerWorkspaceSummary]:
+    owner_keys = sorted({value.strip() for value in payload.owner_keys if value.strip()})
+    if not owner_keys:
+        raise HTTPException(status_code=422, detail="Select at least one owner")
+    if not any((payload.pipeline_status, payload.highlight_color, payload.note)):
+        raise HTTPException(status_code=422, detail="Choose a CRM update to apply")
+
+    claim_result = await db.exec(
+        select(CrmPropertyContactClaim.owner_key).where(
+            CrmPropertyContactClaim.organization_id == organization_id,
+            CrmPropertyContactClaim.owner_key.in_(owner_keys),  # type: ignore[union-attr]
+        )
+    )
+    valid_keys = set(claim_result.all())
+    owner_keys = [key for key in owner_keys if key in valid_keys]
+    if not owner_keys:
+        raise HTTPException(status_code=404, detail="Selected owners were not found")
+
+    workspace_result = await db.exec(
+        select(CrmOwnerWorkspace).where(
+            CrmOwnerWorkspace.user_id == user_id,
+            CrmOwnerWorkspace.organization_id == organization_id,
+            CrmOwnerWorkspace.owner_key.in_(owner_keys),  # type: ignore[union-attr]
+        )
+    )
+    existing = {workspace.owner_key: workspace for workspace in workspace_result.all()}
+    now = _utcnow()
+    touched: list[CrmOwnerWorkspace] = []
+    note_body = (payload.note or "").strip()
+    for owner_key in owner_keys:
+        workspace = existing.get(owner_key)
+        if workspace is None:
+            workspace = CrmOwnerWorkspace(
+                user_id=user_id,
+                organization_id=organization_id,
+                owner_key=owner_key,
+                pipeline_status="new",
+                highlight_color="none",
+                tags=[],
+                created_at=now,
+                updated_at=now,
+            )
+        if payload.pipeline_status is not None:
+            workspace.pipeline_status = payload.pipeline_status
+        if payload.highlight_color is not None:
+            workspace.highlight_color = payload.highlight_color
+        workspace.updated_at = now
+        db.add(workspace)
+        await db.flush()
+        if note_body and workspace.id is not None:
+            db.add(
+                CrmOwnerNote(
+                    workspace_id=workspace.id,
+                    user_id=user_id,
+                    organization_id=organization_id,
+                    body=note_body,
+                    created_at=now,
+                    updated_at=now,
+                )
+            )
+        touched.append(workspace)
+    await db.commit()
+    return await list_owner_workspaces(
+        db,
+        user_id=user_id,
+        organization_id=organization_id,
+    )

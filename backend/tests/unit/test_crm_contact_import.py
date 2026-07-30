@@ -7,6 +7,8 @@ from app.crm.import_service import (
     _heuristic_mapping,
     _normalize_phone,
     _normalize_unit,
+    _owner_filter_sql,
+    _owner_scope_clause,
     _unique_headers,
 )
 
@@ -225,3 +227,37 @@ def test_same_contact_across_two_properties_remains_two_property_claims():
 
     assert collapsed == 0
     assert len(unique) == 2
+
+
+def test_prior_owners_are_separated_from_current_owner_registry():
+    prior_clause = _owner_scope_clause("prior_owners")
+    registry_clause = _owner_scope_clause("registry")
+
+    assert "ownership_status = 'former_owner'" in prior_clause
+    assert "ownership_status <> 'former_owner'" in registry_clause
+    assert "verified_current_owner" in registry_clause
+
+
+def test_owner_filters_cover_lease_rent_and_value_ranges():
+    clause, parameters = _owner_filter_sql(
+        scope="rental_ready",
+        status=None,
+        search=None,
+        lease_window="expiring_60",
+        min_rent_aed=100_000,
+        max_rent_aed=250_000,
+        min_value_aed=1_500_000,
+        max_value_aed=4_000_000,
+    )
+
+    assert "lease_end" in clause
+    assert "annual_rent_aed" in clause
+    assert "latest_sale_price_aed" in clause
+    assert parameters == {
+        "lease_lower_days": 30,
+        "lease_upper_days": 60,
+        "owner_min_rent": 100_000,
+        "owner_max_rent": 250_000,
+        "owner_min_value": 1_500_000,
+        "owner_max_value": 4_000_000,
+    }

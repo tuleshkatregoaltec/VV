@@ -773,3 +773,27 @@ No live outbound integration is part of Phases 1–3.
 - [OpenRouter current-key validation endpoint](https://openrouter.ai/docs/api/api-reference/api-keys/get-current-key)
 - [OpenRouter Zero Data Retention](https://openrouter.ai/docs/guides/features/zdr)
 - [OpenRouter guardrails and spending controls](https://openrouter.ai/docs/guides/features/guardrails/overview)
+
+## 22. Saved Owner Workspace Implementation
+
+The current CRM publishes owner imports into both combined intelligence views and
+source-specific Saved folders:
+
+- **Rental owner leads** contains verified or probable current owners linked to a
+  lease opportunity.
+- **Current owners & review** contains non-rental current-owner candidates and
+  claims that still need verification.
+- **Prior owners registry** retains seller rows and uploaded buyers superseded by a
+  later observed transfer.
+- **Import folders** preserve one isolated view per uploaded workbook so areas and
+  source contexts do not have to be mixed.
+
+Import names can be edited after processing; the audit record and Saved folder are
+renamed together. Owner folders support server-side lease-window, annual-rent,
+property-value, verification, search, and multi-property filters.
+
+Agent state is stored per normalized owner identity. Users can select a page or an
+arbitrary subset and apply pipeline state, colour highlighting, or an organization-
+private note in bulk. Existing lease-lead notes and highlights remain visible on
+rental-owner rows. WhatsApp and email sequence controls are presentation-only until
+consent, provider, suppression, and approval workflows are implemented.

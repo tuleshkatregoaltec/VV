@@ -5,21 +5,27 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.dependencies import AuthContext, require_active_subscription
 from app.crm.import_models import (
+    CrmContactImportRename,
     CrmContactImportResponse,
     CrmContactListDetail,
     CrmContactListSummary,
     CrmLeadImportedContact,
+    CrmOwnerBulkUpdate,
     CrmOwnerProfile,
     CrmOwnerRegistryResponse,
+    CrmOwnerWorkspaceSummary,
 )
 from app.crm.import_service import (
+    bulk_update_owner_workspaces,
     get_contact_list,
     get_owner_profile,
     get_owner_registry,
     list_contact_imports,
     list_contact_lists,
     list_lead_imported_contacts,
+    list_owner_workspaces,
     process_contact_import,
+    rename_contact_import,
 )
 from app.crm.models import (
     CrmDashboardResponse,
@@ -88,6 +94,26 @@ async def crm_contact_imports(
     return await list_contact_imports(db, organization_id=organization_id)
 
 
+@router.patch(
+    "/contact-imports/{import_id}",
+    response_model=CrmContactImportResponse,
+)
+async def crm_rename_contact_import(
+    import_id: int,
+    payload: CrmContactImportRename,
+    context: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """Rename an import and its corresponding Saved folder."""
+    _, organization_id = _auth_ids(context)
+    return await rename_contact_import(
+        db,
+        import_id=import_id,
+        name=payload.name,
+        organization_id=organization_id,
+    )
+
+
 @router.get(
     "/contact-lists",
     response_model=list[CrmContactListSummary],
@@ -138,7 +164,11 @@ async def crm_contact_list(
     response_model=CrmOwnerRegistryResponse,
 )
 async def crm_owner_registry(
-    scope: str = Query(default="all", pattern="^(all|rental_ready|registry)$"),
+    scope: str = Query(
+        default="all",
+        pattern="^(all|rental_ready|registry|prior_owners)$",
+    ),
+    list_id: int | None = Query(default=None, ge=1),
     status: str | None = Query(
         default=None,
         pattern=(
@@ -147,6 +177,15 @@ async def crm_owner_registry(
         ),
     ),
     search: str | None = Query(default=None, max_length=160),
+    lease_window: str | None = Query(
+        default=None,
+        pattern="^(expired|expiring_30|expiring_60|expiring_90)$",
+    ),
+    portfolio_only: bool = Query(default=False),
+    min_rent_aed: int | None = Query(default=None, ge=0, le=10_000_000_000),
+    max_rent_aed: int | None = Query(default=None, ge=0, le=10_000_000_000),
+    min_value_aed: int | None = Query(default=None, ge=0, le=100_000_000_000),
+    max_value_aed: int | None = Query(default=None, ge=0, le=100_000_000_000),
     limit: int = Query(default=100, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
     context: AuthContext = Depends(require_active_subscription),
@@ -157,11 +196,54 @@ async def crm_owner_registry(
     return await get_owner_registry(
         db,
         organization_id=organization_id,
+        list_id=list_id,
         scope=scope,
         status=status,
         search=search,
+        lease_window=lease_window,
+        portfolio_only=portfolio_only,
+        min_rent_aed=min_rent_aed,
+        max_rent_aed=max_rent_aed,
+        min_value_aed=min_value_aed,
+        max_value_aed=max_value_aed,
         limit=limit,
         offset=offset,
+    )
+
+
+@router.get(
+    "/owner-workspaces",
+    response_model=list[CrmOwnerWorkspaceSummary],
+)
+async def crm_owner_workspaces(
+    context: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """List agent state and note summaries for owner profiles."""
+    user_id, organization_id = _auth_ids(context)
+    return await list_owner_workspaces(
+        db,
+        user_id=user_id,
+        organization_id=organization_id,
+    )
+
+
+@router.patch(
+    "/owner-workspaces/bulk",
+    response_model=list[CrmOwnerWorkspaceSummary],
+)
+async def crm_bulk_update_owner_workspaces(
+    payload: CrmOwnerBulkUpdate,
+    context: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """Apply pipeline, highlight, or note updates to selected owner profiles."""
+    user_id, organization_id = _auth_ids(context)
+    return await bulk_update_owner_workspaces(
+        db,
+        payload=payload,
+        user_id=user_id,
+        organization_id=organization_id,
     )
 
 

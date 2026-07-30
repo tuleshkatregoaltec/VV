@@ -301,7 +301,21 @@ export interface CrmLeadImportedContact {
 	source_lists: string[]
 }
 
-export type CrmOwnerRegistryScope = 'all' | 'rental_ready' | 'registry'
+export type CrmOwnerRegistryScope = 'all' | 'rental_ready' | 'registry' | 'prior_owners'
+
+export interface CrmOwnerRegistryParams {
+	list_id?: number
+	status?: CrmOwnershipStatus
+	search?: string
+	lease_window?: CrmLeadStatus
+	portfolio_only?: boolean
+	min_rent_aed?: number
+	max_rent_aed?: number
+	min_value_aed?: number
+	max_value_aed?: number
+	limit?: number
+	offset?: number
+}
 
 export interface CrmOwnerProperty {
 	property_key: string
@@ -350,9 +364,28 @@ export interface CrmOwnerRegistryResponse {
 	summary: {
 		rental_owner_profiles: number
 		registry_owner_profiles: number
+		prior_owner_profiles: number
 		needs_review_profiles: number
 		multi_property_owners: number
 	}
+}
+
+export interface CrmOwnerWorkspaceSummary {
+	owner_key: string
+	pipeline_status: CrmPipelineStatus
+	highlight_color: CrmHighlightColor
+	next_follow_up: string | null
+	tags: string[]
+	note_count: number
+	last_note: string | null
+	updated_at: string
+}
+
+export interface CrmOwnerBulkUpdate {
+	owner_keys: string[]
+	pipeline_status?: CrmPipelineStatus
+	highlight_color?: CrmHighlightColor
+	note?: string
 }
 
 export interface CrmSaleComparable {
@@ -499,6 +532,10 @@ export const crm = {
 		client.post<CrmSavedLead>(`/api/v1/crm/saved-leads/${encodeURIComponent(leadId)}`),
 	deleteSavedLead: (savedId: number) => client.delete<void>(`/api/v1/crm/saved-leads/${savedId}`),
 	contactImports: () => client.get<CrmContactImport[]>('/api/v1/crm/contact-imports'),
+	renameContactImport: (importId: number, name: string) =>
+		client.patch<CrmContactImport, { name: string }>(`/api/v1/crm/contact-imports/${importId}`, {
+			name
+		}),
 	contactLists: () => client.get<CrmContactListSummary[]>('/api/v1/crm/contact-lists'),
 	contactList: (
 		listId: number,
@@ -509,7 +546,7 @@ export const crm = {
 		),
 	ownerRegistry: (
 		scope: CrmOwnerRegistryScope,
-		params: { status?: CrmOwnershipStatus; search?: string; limit?: number; offset?: number } = {},
+		params: CrmOwnerRegistryParams = {},
 		signal?: AbortSignal
 	) =>
 		client.get<CrmOwnerRegistryResponse>(
@@ -521,6 +558,12 @@ export const crm = {
 		),
 	ownerProfile: (ownerKey: string) =>
 		client.get<CrmOwnerProfile>(`/api/v1/crm/owners/${encodeURIComponent(ownerKey)}`),
+	ownerWorkspaces: () => client.get<CrmOwnerWorkspaceSummary[]>('/api/v1/crm/owner-workspaces'),
+	bulkUpdateOwnerWorkspaces: (payload: CrmOwnerBulkUpdate) =>
+		client.patch<CrmOwnerWorkspaceSummary[], CrmOwnerBulkUpdate>(
+			'/api/v1/crm/owner-workspaces/bulk',
+			payload
+		),
 	uploadContactImport: (file: File, name: string) => {
 		const form = new FormData()
 		form.set('file', file)

@@ -25,6 +25,7 @@ import {
 	House,
 	KeyRound,
 	NotebookPen,
+	Pencil,
 	Phone,
 	RefreshCw,
 	Save,
@@ -72,11 +73,31 @@ let breakdown = $state<CrmBreakdownLevel>('area')
 let expiredDays = $state(365)
 let offset = $state(0)
 let showSaved = $state(false)
-let savedFolder = $state<'manual' | 'rental_ready' | 'registry'>('manual')
+let savedFolder = $state<'manual' | 'rental_ready' | 'registry' | 'prior_owners' | 'import'>(
+	'manual'
+)
+let selectedImportId = $state<number | null>(null)
 let savingCandidateKey = $state<string | null>(null)
 let ownerSearch = $state('')
 let debouncedOwnerSearch = $state('')
 let ownerStatus = $state<CrmOwnershipStatus | ''>('')
+let ownerLeaseWindow = $state<CrmLeadStatus | ''>('')
+let ownerPortfolioOnly = $state(false)
+let ownerMinRent = $state('')
+let ownerMaxRent = $state('')
+let ownerMinValue = $state('')
+let ownerMaxValue = $state('')
+let debouncedOwnerMinRent = $state('')
+let debouncedOwnerMaxRent = $state('')
+let debouncedOwnerMinValue = $state('')
+let debouncedOwnerMaxValue = $state('')
+let selectedOwnerKeys = $state<string[]>([])
+let bulkPipelineStatus = $state<CrmPipelineStatus | ''>('')
+let bulkHighlightColor = $state<CrmHighlightColor | ''>('')
+let bulkNote = $state('')
+let bulkSaving = $state(false)
+let renamingImportId = $state<number | null>(null)
+let importRenameDraft = $state('')
 let selectedOwnerKey = $state<string | null>(null)
 let showOutreachPreview = $state(false)
 let importFile = $state<File | null>(null)
@@ -120,22 +141,40 @@ const savedQuery = createQuery(() => crmQueries.saved())
 const leadContactsQuery = createQuery(() => crmQueries.leadContacts(selectedLeadId))
 const contactImportsQuery = createQuery(() => crmQueries.contactImports())
 const ownerRegistryScope = $derived<CrmOwnerRegistryScope>(
-	savedFolder === 'rental_ready' ? 'rental_ready' : 'registry'
+	savedFolder === 'rental_ready'
+		? 'rental_ready'
+		: savedFolder === 'registry'
+			? 'registry'
+			: savedFolder === 'prior_owners'
+				? 'prior_owners'
+				: 'all'
 )
 const ownerRegistryEnabled = $derived(
-	showSaved && savedFolder !== 'manual' && !selectedLeadId && !selectedOwnerKey
+	showSaved &&
+		savedFolder !== 'manual' &&
+		(savedFolder !== 'import' || selectedImportId !== null) &&
+		!selectedLeadId &&
+		!selectedOwnerKey
 )
 const ownerRegistryQuery = createQuery(() =>
 	crmQueries.ownerRegistry(
 		ownerRegistryScope,
 		{
+			list_id: savedFolder === 'import' ? (selectedImportId ?? undefined) : undefined,
 			status: ownerStatus || undefined,
-			search: debouncedOwnerSearch || undefined
+			search: debouncedOwnerSearch || undefined,
+			lease_window: ownerLeaseWindow || undefined,
+			portfolio_only: ownerPortfolioOnly || undefined,
+			min_rent_aed: Number(debouncedOwnerMinRent) || undefined,
+			max_rent_aed: Number(debouncedOwnerMaxRent) || undefined,
+			min_value_aed: Number(debouncedOwnerMinValue) || undefined,
+			max_value_aed: Number(debouncedOwnerMaxValue) || undefined
 		},
 		ownerRegistryEnabled
 	)
 )
 const ownerProfileQuery = createQuery(() => crmQueries.ownerProfile(selectedOwnerKey))
+const ownerWorkspacesQuery = createQuery(() => crmQueries.ownerWorkspaces())
 const dashboard = $derived(dashboardQuery.data)
 const summary = $derived(dashboard?.summary)
 const detail = $derived(detailQuery.data)
@@ -147,6 +186,9 @@ const importedLeadContacts = $derived(leadContactsQuery.data ?? [])
 const displayedImport = $derived(latestImport ?? contactImportsQuery.data?.[0])
 const ownerRegistry = $derived(ownerRegistryQuery.data)
 const selectedOwner = $derived(ownerProfileQuery.data)
+const selectedImport = $derived(
+	contactImportsQuery.data?.find((item) => item.list_id === selectedImportId)
+)
 const maxBreakdownTotal = $derived(
 	Math.max(1, ...(dashboard?.breakdown.map((item) => item.total) ?? [1]))
 )
@@ -168,6 +210,9 @@ const savedByCandidate = $derived(
 )
 const workspaceByCandidate = $derived(
 	new Map((workspacesQuery.data ?? []).map((item) => [item.unit_candidate_key, item]))
+)
+const ownerWorkspaceByKey = $derived(
+	new Map((ownerWorkspacesQuery.data ?? []).map((item) => [item.owner_key, item]))
 )
 const filteredSavedLeads = $derived(
 	(savedQuery.data ?? [])
@@ -205,6 +250,17 @@ $effect(() => {
 	const timeout = setTimeout(() => {
 		debouncedOwnerSearch = value
 	}, 250)
+	return () => clearTimeout(timeout)
+})
+
+$effect(() => {
+	const values = [ownerMinRent, ownerMaxRent, ownerMinValue, ownerMaxValue]
+	const timeout = setTimeout(() => {
+		debouncedOwnerMinRent = values[0]
+		debouncedOwnerMaxRent = values[1]
+		debouncedOwnerMinValue = values[2]
+		debouncedOwnerMaxValue = values[3]
+	}, 450)
 	return () => clearTimeout(timeout)
 })
 
@@ -511,14 +567,84 @@ function ownershipClass(status: CrmOwnershipStatus) {
 	return 'border-border bg-panel text-fg-4'
 }
 
-function openSavedFolder(folder: 'manual' | 'rental_ready' | 'registry') {
+function openSavedFolder(
+	folder: 'manual' | 'rental_ready' | 'registry' | 'prior_owners' | 'import',
+	importListId: number | null = null
+) {
 	savedFolder = folder
+	selectedImportId = folder === 'import' ? importListId : null
 	showSaved = true
 	selectedOwnerKey = null
+	selectedOwnerKeys = []
+	ownerSearch = ''
+	ownerStatus = ''
+	ownerLeaseWindow = ''
+	ownerPortfolioOnly = false
+	ownerMinRent = ''
+	ownerMaxRent = ''
+	ownerMinValue = ''
+	ownerMaxValue = ''
+	debouncedOwnerMinRent = ''
+	debouncedOwnerMaxRent = ''
+	debouncedOwnerMinValue = ''
+	debouncedOwnerMaxValue = ''
 }
 
 function openOwnerProfile(ownerKey: string) {
 	selectedOwnerKey = ownerKey
+}
+
+function ownerFolderTitle() {
+	if (savedFolder === 'rental_ready') return 'Rental owner leads'
+	if (savedFolder === 'registry') return 'Current owner registry & review'
+	if (savedFolder === 'prior_owners') return 'Prior owners registry'
+	if (savedFolder === 'import') return selectedImport?.name ?? 'Imported owner folder'
+	return 'Owner profiles'
+}
+
+function toggleOwnerSelection(ownerKey: string) {
+	selectedOwnerKeys = selectedOwnerKeys.includes(ownerKey)
+		? selectedOwnerKeys.filter((key) => key !== ownerKey)
+		: [...selectedOwnerKeys, ownerKey]
+}
+
+function toggleVisibleOwners() {
+	const visible = ownerRegistry?.owners.map((owner) => owner.owner_key) ?? []
+	const allSelected = visible.length > 0 && visible.every((key) => selectedOwnerKeys.includes(key))
+	selectedOwnerKeys = allSelected
+		? selectedOwnerKeys.filter((key) => !visible.includes(key))
+		: Array.from(new Set([...selectedOwnerKeys, ...visible]))
+}
+
+async function applyOwnerBulkUpdate() {
+	if (!selectedOwnerKeys.length || bulkSaving) return
+	if (!bulkPipelineStatus && !bulkHighlightColor && !bulkNote.trim()) return
+	bulkSaving = true
+	try {
+		await crm.bulkUpdateOwnerWorkspaces({
+			owner_keys: selectedOwnerKeys,
+			pipeline_status: bulkPipelineStatus || undefined,
+			highlight_color: bulkHighlightColor || undefined,
+			note: bulkNote.trim() || undefined
+		})
+		bulkNote = ''
+		bulkPipelineStatus = ''
+		bulkHighlightColor = ''
+		selectedOwnerKeys = []
+		await ownerWorkspacesQuery.refetch()
+	} finally {
+		bulkSaving = false
+	}
+}
+
+async function renameImport(item: CrmContactImport) {
+	const name = importRenameDraft.trim()
+	if (!name || renamingImportId !== item.id) return
+	const updated = await crm.renameContactImport(item.id, name)
+	if (latestImport?.id === item.id) latestImport = updated
+	renamingImportId = null
+	importRenameDraft = ''
+	await contactImportsQuery.refetch()
 }
 </script>
 
@@ -636,28 +762,46 @@ function openOwnerProfile(ownerKey: string) {
 						<div>
 							<p class="font-mono text-[10px] uppercase tracking-[0.08em] text-fg-4">Saved workspace</p>
 							<h2 class="mt-1 text-lg font-semibold text-fg-1">Lead and owner folders</h2>
-							<p class="mt-1 text-xs text-fg-4">Imports publish here after verification; the upload center remains an audit trail.</p>
+							<p class="mt-1 text-xs text-fg-4">Work across the combined registries or open one source import without mixing areas.</p>
 						</div>
 						{#if ownerRegistry?.summary.multi_property_owners}
 							<span class="rounded-full border border-info-border bg-info-bg px-3 py-1.5 text-[10px] font-semibold text-info">{number(ownerRegistry.summary.multi_property_owners)} multi-property owners identified</span>
 						{/if}
 					</div>
-					<div class="mt-4 grid gap-2 md:grid-cols-3">
+					<div class="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
 						<button type="button" class={`rounded-xl border p-4 text-left transition ${savedFolder === 'manual' ? 'border-navy bg-panel ring-1 ring-navy/10' : 'border-border hover:bg-panel'}`} onclick={() => openSavedFolder('manual')}>
 							<div class="flex items-center justify-between"><span class="flex h-8 w-8 items-center justify-center rounded-lg bg-card text-fg-2"><BookmarkCheck size={15} /></span><span class="font-mono text-sm font-semibold text-fg-1">{number(savedQuery.data?.length)}</span></div>
 							<p class="mt-3 text-sm font-semibold text-fg-1">My saved prospects</p>
 							<p class="mt-1 text-[10px] leading-4 text-fg-4">Properties manually shortlisted by the agent.</p>
 						</button>
 						<button type="button" class={`rounded-xl border p-4 text-left transition ${savedFolder === 'rental_ready' ? 'border-success-border bg-success-bg ring-1 ring-success/10' : 'border-border hover:bg-panel'}`} onclick={() => openSavedFolder('rental_ready')}>
-							<div class="flex items-center justify-between"><span class="flex h-8 w-8 items-center justify-center rounded-lg bg-success-bg text-success"><KeyRound size={15} /></span><span class="font-mono text-sm font-semibold text-success">{number(ownerRegistry?.summary.rental_owner_profiles)}</span></div>
+							<div class="flex items-center justify-between"><span class="flex h-8 w-8 items-center justify-center rounded-lg bg-success-bg text-success"><KeyRound size={15} /></span><span class="font-mono text-sm font-semibold text-success">{number(contactImportsQuery.data?.reduce((total, item) => total + item.summary.contact_ready, 0))}</span></div>
 							<p class="mt-3 text-sm font-semibold text-fg-1">Rental owner leads</p>
 							<p class="mt-1 text-[10px] leading-4 text-fg-4">Verified or probable owners linked to the lease pursuit system.</p>
 						</button>
 						<button type="button" class={`rounded-xl border p-4 text-left transition ${savedFolder === 'registry' ? 'border-info-border bg-info-bg ring-1 ring-info/10' : 'border-border hover:bg-panel'}`} onclick={() => openSavedFolder('registry')}>
-							<div class="flex items-center justify-between"><span class="flex h-8 w-8 items-center justify-center rounded-lg bg-info-bg text-info"><UsersRound size={15} /></span><span class="font-mono text-sm font-semibold text-info">{number(ownerRegistry?.summary.registry_owner_profiles)}</span></div>
-							<p class="mt-3 text-sm font-semibold text-fg-1">Owner registry & review</p>
-							<p class="mt-1 text-[10px] leading-4 text-fg-4">Non-rental owners and claims requiring verification or later follow-up.</p>
+							<div class="flex items-center justify-between"><span class="flex h-8 w-8 items-center justify-center rounded-lg bg-info-bg text-info"><UsersRound size={15} /></span><span class="font-mono text-[9px] font-semibold uppercase text-info">Combined</span></div>
+							<p class="mt-3 text-sm font-semibold text-fg-1">Current owners & review</p>
+							<p class="mt-1 text-[10px] leading-4 text-fg-4">Non-rental current owners and claims requiring verification.</p>
 						</button>
+						<button type="button" class={`rounded-xl border p-4 text-left transition ${savedFolder === 'prior_owners' ? 'border-error-border bg-error-bg ring-1 ring-error/10' : 'border-border hover:bg-panel'}`} onclick={() => openSavedFolder('prior_owners')}>
+							<div class="flex items-center justify-between"><span class="flex h-8 w-8 items-center justify-center rounded-lg bg-error-bg text-error"><History size={15} /></span><span class="font-mono text-sm font-semibold text-error">{number(contactImportsQuery.data?.reduce((total, item) => total + item.summary.former_owners, 0))}</span></div>
+							<p class="mt-3 text-sm font-semibold text-fg-1">Prior owners registry</p>
+							<p class="mt-1 text-[10px] leading-4 text-fg-4">Seller records and contacts superseded by a later transfer.</p>
+						</button>
+					</div>
+					<div class="mt-5 flex items-center justify-between gap-3 border-t border-border pt-4">
+						<div><p class="text-xs font-semibold text-fg-2">Import folders</p><p class="mt-0.5 text-[10px] text-fg-4">Open one upload to keep its area and source context isolated.</p></div>
+						<button type="button" class="ui-button" data-variant="ghost" data-size="sm" onclick={openOwnerDataWorkspace}><FileUp size={13} /> Manage imports</button>
+					</div>
+					<div class="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+						{#each contactImportsQuery.data ?? [] as item (item.id)}
+							<button type="button" disabled={!item.list_id} class={`rounded-lg border p-3 text-left transition disabled:opacity-50 ${savedFolder === 'import' && selectedImportId === item.list_id ? 'border-navy bg-panel ring-1 ring-navy/10' : 'border-border bg-card hover:border-info-border hover:bg-panel/50'}`} onclick={() => openSavedFolder('import', item.list_id)}>
+								<div class="flex items-start justify-between gap-3"><span class="flex h-8 w-8 flex-none items-center justify-center rounded-lg bg-panel text-fg-3"><FolderOpen size={15} /></span><span class="rounded-full border border-border px-2 py-0.5 font-mono text-[8px] uppercase text-fg-4">{shortDate(item.completed_at)}</span></div>
+								<p class="mt-3 truncate text-xs font-semibold text-fg-2">{item.name}</p>
+								<p class="mt-1 text-[9px] text-fg-4">{number(item.summary.candidate_rows)} owners · <span class="text-success">{number(item.summary.contact_ready)} rental leads</span> · <span class="text-error">{number(item.summary.former_owners)} prior</span></p>
+							</button>
+						{/each}
 					</div>
 				</section>
 			{/if}
@@ -734,12 +878,24 @@ function openOwnerProfile(ownerKey: string) {
 			{#if showSaved && savedFolder !== 'manual'}
 				<section class="mt-3 grid gap-3 xl:grid-cols-[minmax(0,1fr)_340px]">
 					<div class="ui-surface min-w-0 overflow-hidden">
-						<header class="flex flex-col justify-between gap-3 border-b border-border px-4 py-4 lg:flex-row lg:items-end">
-							<div>
-								<p class="font-semibold text-fg-1">{savedFolder === 'rental_ready' ? 'Rental owner leads' : 'Owner registry & review'}</p>
-								<p class="mt-0.5 text-xs text-fg-4">{number(ownerRegistry?.total)} deduplicated owner profiles · accumulated across all imports</p>
+						<header class="border-b border-border px-4 py-4">
+							<div class="flex flex-col justify-between gap-3 lg:flex-row lg:items-end">
+								<div>
+									<p class="font-semibold text-fg-1">{ownerFolderTitle()}</p>
+									<p class="mt-0.5 text-xs text-fg-4">{number(ownerRegistry?.total)} deduplicated owner profiles · {savedFolder === 'import' ? 'this import only' : 'accumulated across all imports'}</p>
+								</div>
+								<button type="button" class="ui-button self-start" data-variant="ghost" data-size="sm" onclick={toggleVisibleOwners}>
+									<CheckCircle2 size={13} /> {ownerRegistry?.owners.length && ownerRegistry.owners.every((owner) => selectedOwnerKeys.includes(owner.owner_key)) ? 'Clear page' : 'Select page'}
+								</button>
 							</div>
-							<div class="grid gap-2 sm:grid-cols-[220px_180px]">
+							{#if savedFolder === 'rental_ready'}
+								<div class="mt-4 flex flex-wrap gap-1.5">
+									{#each [['', 'All leases'], ['expired', 'Expired'], ['expiring_30', 'Next 30 days'], ['expiring_60', '31–60 days'], ['expiring_90', '61–90 days']] as option}
+										<button type="button" class={`rounded-full border px-3 py-1.5 text-[10px] font-semibold transition ${ownerLeaseWindow === option[0] ? 'border-navy bg-navy text-on-navy' : 'border-border bg-card text-fg-3 hover:border-strong hover:text-fg-1'}`} onclick={() => (ownerLeaseWindow = option[0] as CrmLeadStatus | '')}>{option[1]}</button>
+									{/each}
+								</div>
+							{/if}
+							<div class="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
 								<label class="relative">
 									<Search class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-fg-4" size={13} />
 									<input bind:value={ownerSearch} placeholder="Owner, phone or property" class="h-9 w-full rounded-md border border-border bg-card pl-9 pr-3 text-xs text-fg-2 outline-none focus:border-focus" />
@@ -753,15 +909,56 @@ function openOwnerProfile(ownerKey: string) {
 									<option value="conflicting_claim">Conflicting evidence</option>
 									<option value="unmatched">Unmatched</option>
 								</select>
+								<select bind:value={ownerLeaseWindow} class="h-9 rounded-md border border-border bg-card px-3 text-xs text-fg-2 outline-none focus:border-focus">
+									<option value="">All lease windows</option>
+									<option value="expired">Expired leases</option>
+									<option value="expiring_30">Expiring in 30 days</option>
+									<option value="expiring_60">Expiring in 31–60 days</option>
+									<option value="expiring_90">Expiring in 61–90 days</option>
+								</select>
+								<label class="flex h-9 items-center gap-2 rounded-md border border-border bg-card px-3 text-xs text-fg-2"><input type="checkbox" bind:checked={ownerPortfolioOnly} class="h-3.5 w-3.5 accent-navy" /> Multiple properties only</label>
+							</div>
+							<div class="mt-2 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+								<input bind:value={ownerMinRent} inputmode="numeric" placeholder="Minimum annual rent" class="h-9 rounded-md border border-border bg-card px-3 text-xs text-fg-2 outline-none focus:border-focus" />
+								<input bind:value={ownerMaxRent} inputmode="numeric" placeholder="Maximum annual rent" class="h-9 rounded-md border border-border bg-card px-3 text-xs text-fg-2 outline-none focus:border-focus" />
+								<input bind:value={ownerMinValue} inputmode="numeric" placeholder="Minimum property value" class="h-9 rounded-md border border-border bg-card px-3 text-xs text-fg-2 outline-none focus:border-focus" />
+								<input bind:value={ownerMaxValue} inputmode="numeric" placeholder="Maximum property value" class="h-9 rounded-md border border-border bg-card px-3 text-xs text-fg-2 outline-none focus:border-focus" />
 							</div>
 						</header>
+						{#if selectedOwnerKeys.length}
+							<div class="border-b border-info-border bg-info-bg px-4 py-3">
+								<div class="flex flex-wrap items-center gap-2">
+									<span class="mr-1 text-xs font-semibold text-info">{selectedOwnerKeys.length} selected</span>
+									<select bind:value={bulkPipelineStatus} class="h-8 rounded-md border border-info-border bg-card px-2 text-[11px] text-fg-2">
+										<option value="">Update status…</option>
+										{#each Object.entries(PIPELINE_LABELS) as [value, label]}<option value={value}>{label}</option>{/each}
+									</select>
+									<div class="flex h-8 items-center gap-1 rounded-md border border-info-border bg-card px-2" title="Highlight selected owners">
+										<Highlighter size={12} class="text-fg-4" />
+										{#each ['none', 'amber', 'green', 'blue', 'red', 'purple'] as color}
+											<button type="button" aria-label={`Use ${color} highlight`} class={`h-4 w-4 rounded-full ${highlightDotClass(color as CrmHighlightColor)} ${bulkHighlightColor === color ? 'ring-2 ring-navy ring-offset-1' : ''}`} onclick={() => (bulkHighlightColor = color as CrmHighlightColor)}></button>
+										{/each}
+									</div>
+									<div class="flex min-w-[260px] flex-1">
+										<input bind:value={bulkNote} maxlength="4000" placeholder="Add a note to every selected owner…" class="h-8 min-w-0 flex-1 rounded-l-md border border-info-border bg-card px-3 text-[11px] text-fg-2 outline-none" />
+										<button type="button" class="ui-button rounded-l-none" data-variant="primary" data-size="sm" disabled={bulkSaving || (!bulkPipelineStatus && !bulkHighlightColor && !bulkNote.trim())} onclick={applyOwnerBulkUpdate}>{#if bulkSaving}<RefreshCw size={12} class="animate-spin" />{:else}<Save size={12} />{/if} Apply</button>
+									</div>
+									<button type="button" class="ui-button" data-variant="secondary" data-size="sm" disabled title="WhatsApp automation will be connected in a later phase"><Send size={12} /> WhatsApp sequence · soon</button>
+									<button type="button" class="ui-button" data-variant="ghost" data-size="sm" onclick={() => (selectedOwnerKeys = [])}>Clear</button>
+								</div>
+							</div>
+						{/if}
 						{#if ownerRegistryQuery.isLoading || ownerRegistryQuery.isFetching}
 							<div class="grid min-h-80 place-items-center"><div class="text-center"><RefreshCw class="mx-auto animate-spin text-info" size={19} /><p class="mt-3 text-xs text-fg-4">Building owner profiles</p></div></div>
 						{:else if ownerRegistry?.owners.length}
 							<div class="divide-y divide-border">
 								{#each ownerRegistry.owners as owner (owner.owner_key)}
 									{@const primaryProperty = owner.properties[0]}
-									<article class="grid gap-4 px-4 py-4 transition hover:bg-panel/50 lg:grid-cols-[minmax(190px,1fr)_minmax(220px,1.25fr)_160px] lg:items-center">
+									{@const ownerWorkspace = ownerWorkspaceByKey.get(owner.owner_key)}
+									{@const linkedLeadWorkspace = primaryProperty?.unit_candidate_key ? workspaceByCandidate.get(primaryProperty.unit_candidate_key) : undefined}
+									{@const ownerCrmState = ownerWorkspace ?? linkedLeadWorkspace}
+									<article class={`grid gap-4 px-4 py-4 transition hover:bg-panel/50 lg:grid-cols-[28px_minmax(190px,1fr)_minmax(220px,1.25fr)_160px] lg:items-center ${highlightRowClass(ownerCrmState?.highlight_color)}`}>
+										<div class="flex items-start lg:items-center"><input type="checkbox" checked={selectedOwnerKeys.includes(owner.owner_key)} onchange={() => toggleOwnerSelection(owner.owner_key)} aria-label={`Select ${owner.contact_name}`} class="h-4 w-4 accent-navy" /></div>
 										<div class="min-w-0">
 											<div class="flex items-center gap-2"><p class="truncate text-sm font-semibold text-fg-1">{owner.contact_name}</p>{#if owner.property_count > 1}<span class="flex-none rounded-full border border-info-border bg-info-bg px-2 py-0.5 text-[9px] font-semibold text-info">{owner.property_count} properties</span>{/if}</div>
 											<div class="mt-2 flex flex-wrap gap-x-2 gap-y-1 text-[10px] text-fg-3">
@@ -773,10 +970,13 @@ function openOwnerProfile(ownerKey: string) {
 										<div class="min-w-0">
 											<div class="flex flex-wrap items-center gap-2">
 												<span class={`rounded-full border px-2 py-1 text-[9px] font-semibold ${ownershipClass(owner.highest_ownership_status)}`}>{ownershipLabel(owner.highest_ownership_status)} · {owner.highest_confidence_score}</span>
-												{#if owner.rental_linked_count}<span class="rounded-full border border-success-border bg-success-bg px-2 py-1 text-[9px] font-semibold text-success">{owner.rental_linked_count} rental-linked</span>{/if}
+												{#if owner.rental_linked_count}<span class="rounded-full border border-success-border bg-success-bg px-2 py-1 text-[9px] font-semibold text-success">{owner.rental_linked_count} {savedFolder === 'prior_owners' ? 'historic lease records' : 'rental-linked'}</span>{/if}
+												{#if ownerCrmState}<span class={`rounded-full border px-2 py-1 text-[9px] font-semibold ${pipelineClass(ownerCrmState.pipeline_status)}`}>{PIPELINE_LABELS[ownerCrmState.pipeline_status]}</span>{/if}
+												{#if ownerCrmState?.note_count}<span class="inline-flex items-center gap-1 rounded-full border border-border bg-card px-2 py-1 text-[9px] text-fg-3"><NotebookPen size={10} /> {ownerCrmState.note_count}</span>{/if}
 											</div>
 											<p class="mt-2 truncate text-xs font-semibold text-fg-2">{primaryProperty?.building_name || primaryProperty?.project_name || 'Property unresolved'}{primaryProperty?.unit_number ? ` · Unit ${primaryProperty.unit_number}` : ''}</p>
 											<p class="mt-1 text-[10px] text-fg-4">{primaryProperty?.area_name}{owner.next_lease_end ? ` · next lease ${shortDate(owner.next_lease_end)}` : ''}{primaryProperty?.duplicate_count > 1 ? ` · ${primaryProperty.duplicate_count} rows consolidated` : ''}</p>
+											{#if ownerWorkspace?.last_note}<p class="mt-1.5 line-clamp-1 text-[10px] italic text-fg-3">“{ownerWorkspace.last_note}”</p>{/if}
 										</div>
 										<div class="flex flex-col gap-2">
 											{#if owner.annual_rent_aed}<p class="text-right text-xs font-semibold tabular-nums text-fg-2">{money(owner.annual_rent_aed)} <span class="font-normal text-fg-4">rent</span></p>{/if}
@@ -796,6 +996,7 @@ function openOwnerProfile(ownerKey: string) {
 						<div class="grid grid-cols-2 gap-2 p-4">
 							<div class="rounded-lg border border-border bg-panel p-3"><p class="font-mono text-[9px] uppercase text-fg-4">Rental leads</p><p class="mt-1 text-lg font-semibold text-success">{number(ownerRegistry?.summary.rental_owner_profiles)}</p></div>
 							<div class="rounded-lg border border-border bg-panel p-3"><p class="font-mono text-[9px] uppercase text-fg-4">Registry</p><p class="mt-1 text-lg font-semibold text-info">{number(ownerRegistry?.summary.registry_owner_profiles)}</p></div>
+							<div class="rounded-lg border border-border bg-panel p-3"><p class="font-mono text-[9px] uppercase text-fg-4">Prior owners</p><p class="mt-1 text-lg font-semibold text-error">{number(ownerRegistry?.summary.prior_owner_profiles)}</p></div>
 							<div class="rounded-lg border border-border bg-panel p-3"><p class="font-mono text-[9px] uppercase text-fg-4">Needs review</p><p class="mt-1 text-lg font-semibold text-warning">{number(ownerRegistry?.summary.needs_review_profiles)}</p></div>
 							<div class="rounded-lg border border-border bg-panel p-3"><p class="font-mono text-[9px] uppercase text-fg-4">Portfolios</p><p class="mt-1 text-lg font-semibold text-fg-1">{number(ownerRegistry?.summary.multi_property_owners)}</p></div>
 						</div>
@@ -1141,16 +1342,29 @@ function openOwnerProfile(ownerKey: string) {
 							<div class="flex items-center gap-2 rounded-lg border border-border bg-card p-3 text-xs text-fg-4"><RefreshCw size={12} class="animate-spin" /> Loading imports</div>
 						{:else if contactImportsQuery.data?.length}
 							{#each contactImportsQuery.data as item (item.id)}
-								<button type="button" class={`w-full rounded-lg border p-3 text-left transition ${displayedImport?.id === item.id ? 'border-info-border bg-info-bg' : 'border-border bg-card hover:border-info-border'}`} onclick={() => (latestImport = item)}>
-									<div class="flex items-start justify-between gap-2">
-										<p class="line-clamp-2 text-xs font-semibold text-fg-2">{item.name}</p>
-										<span class="flex-none rounded-full border border-success-border bg-success-bg px-1.5 py-0.5 font-mono text-[8px] uppercase text-success">{item.status}</span>
-									</div>
-									<div class="mt-2 flex items-center gap-2 text-[9px]">
-										<span class="text-fg-4">{number(item.summary.candidate_rows)} unique claims</span>
-										<span class="text-success">{number(item.summary.contact_ready)} rental leads</span>
-									</div>
-								</button>
+								<div class={`rounded-lg border p-3 transition ${displayedImport?.id === item.id ? 'border-info-border bg-info-bg' : 'border-border bg-card hover:border-info-border'}`}>
+									{#if renamingImportId === item.id}
+										<form class="flex gap-1.5" onsubmit={(event) => { event.preventDefault(); renameImport(item) }}>
+											<input bind:value={importRenameDraft} maxlength="200" aria-label="Import folder name" class="h-8 min-w-0 flex-1 rounded-md border border-info-border bg-card px-2 text-xs text-fg-2 outline-none" />
+											<button type="submit" class="ui-button" data-variant="primary" data-size="icon" aria-label="Save import name"><Save size={12} /></button>
+											<button type="button" class="ui-button" data-variant="ghost" data-size="icon" aria-label="Cancel rename" onclick={() => { renamingImportId = null; importRenameDraft = '' }}><X size={12} /></button>
+										</form>
+									{:else}
+										<div class="flex items-start gap-2">
+											<button type="button" class="min-w-0 flex-1 text-left" onclick={() => (latestImport = item)}>
+												<div class="flex items-start justify-between gap-2">
+													<p class="line-clamp-2 text-xs font-semibold text-fg-2">{item.name}</p>
+													<span class="flex-none rounded-full border border-success-border bg-success-bg px-1.5 py-0.5 font-mono text-[8px] uppercase text-success">{item.status}</span>
+												</div>
+												<div class="mt-2 flex items-center gap-2 text-[9px]">
+													<span class="text-fg-4">{number(item.summary.candidate_rows)} unique claims</span>
+													<span class="text-success">{number(item.summary.contact_ready)} rental leads</span>
+												</div>
+											</button>
+											<button type="button" class="ui-button flex-none" data-variant="ghost" data-size="icon" aria-label={`Rename ${item.name}`} onclick={() => { renamingImportId = item.id; importRenameDraft = item.name }}><Pencil size={12} /></button>
+										</div>
+									{/if}
+								</div>
 							{/each}
 						{:else}
 							<div class="rounded-lg border border-dashed border-border bg-card p-4 text-center text-[10px] leading-4 text-fg-4">Completed uploads will remain here as an audit trail.</div>
@@ -1182,7 +1396,12 @@ function openOwnerProfile(ownerKey: string) {
 				{#if displayedImport}
 					<section class="rounded-xl border border-border bg-panel p-5">
 						<div class="flex items-start gap-3"><FolderOpen class="mt-0.5 text-info" size={18} /><div><h3 class="text-sm font-semibold text-fg-1">Published to Saved workspaces</h3><p class="mt-1 max-w-2xl text-xs leading-5 text-fg-3">The upload is retained here only as an audit record. Deduplicated owners are published into the actionable folders under <strong>Saved</strong>.</p></div></div>
-						<div class="mt-4 grid gap-3 md:grid-cols-2">
+						<div class="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+							<button type="button" disabled={!displayedImport.list_id} class="rounded-xl border border-navy bg-card p-4 text-left transition hover:bg-panel disabled:opacity-50" onclick={() => { showOutreachPreview = false; openSavedFolder('import', displayedImport.list_id) }}>
+								<div class="flex items-center justify-between"><span class="flex h-9 w-9 items-center justify-center rounded-lg bg-panel text-navy"><FolderOpen size={16} /></span><ArrowRight size={15} class="text-navy" /></div>
+								<p class="mt-3 text-sm font-semibold text-fg-1">{displayedImport.name}</p>
+								<p class="mt-1 text-xs leading-5 text-fg-3">Open this import alone, with its rental, current-owner, review, and prior-owner records intact.</p>
+							</button>
 							<button type="button" class="rounded-xl border border-success-border bg-success-bg p-4 text-left transition hover:ring-1 hover:ring-success/20" onclick={() => { showOutreachPreview = false; openSavedFolder('rental_ready') }}>
 								<div class="flex items-center justify-between"><span class="flex h-9 w-9 items-center justify-center rounded-lg bg-card text-success"><KeyRound size={16} /></span><ArrowRight size={15} class="text-success" /></div>
 								<p class="mt-3 text-sm font-semibold text-fg-1">Rental owner leads</p>
@@ -1190,8 +1409,13 @@ function openOwnerProfile(ownerKey: string) {
 							</button>
 							<button type="button" class="rounded-xl border border-info-border bg-info-bg p-4 text-left transition hover:ring-1 hover:ring-info/20" onclick={() => { showOutreachPreview = false; openSavedFolder('registry') }}>
 								<div class="flex items-center justify-between"><span class="flex h-9 w-9 items-center justify-center rounded-lg bg-card text-info"><UsersRound size={16} /></span><ArrowRight size={15} class="text-info" /></div>
-								<p class="mt-3 text-sm font-semibold text-fg-1">Owner registry & review</p>
-								<p class="mt-1 text-xs leading-5 text-fg-3">Verified non-rental owners, former owners, unresolved claims, and records requiring further evidence.</p>
+								<p class="mt-3 text-sm font-semibold text-fg-1">Combined owner registry</p>
+								<p class="mt-1 text-xs leading-5 text-fg-3">Current non-rental owners and unresolved claims across every import.</p>
+							</button>
+							<button type="button" class="rounded-xl border border-error-border bg-error-bg p-4 text-left transition hover:ring-1 hover:ring-error/20" onclick={() => { showOutreachPreview = false; openSavedFolder('prior_owners') }}>
+								<div class="flex items-center justify-between"><span class="flex h-9 w-9 items-center justify-center rounded-lg bg-card text-error"><History size={16} /></span><ArrowRight size={15} class="text-error" /></div>
+								<p class="mt-3 text-sm font-semibold text-fg-1">Prior owners registry</p>
+								<p class="mt-1 text-xs leading-5 text-fg-3">{number(displayedImport.summary.former_owners)} seller or superseded-owner records were retained as historical relationship intelligence.</p>
 							</button>
 						</div>
 						<div class="mt-4 rounded-lg border border-border bg-card p-4">

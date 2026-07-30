@@ -1,5 +1,6 @@
 import {
 	type CrmDashboardParams,
+	type CrmOwnerRegistryParams,
 	type CrmOwnerRegistryScope,
 	type CrmOwnershipStatus,
 	crm
@@ -18,11 +19,10 @@ export const crmKeys = {
 	contactLists: () => [...crmKeys.all, 'contact-lists'] as const,
 	contactList: (listId: number, params: { status?: CrmOwnershipStatus; search?: string }) =>
 		[...crmKeys.all, 'contact-list', listId, params] as const,
-	ownerRegistry: (
-		scope: CrmOwnerRegistryScope,
-		params: { status?: CrmOwnershipStatus; search?: string }
-	) => [...crmKeys.all, 'owner-registry', scope, params] as const,
-	ownerProfile: (ownerKey: string) => [...crmKeys.all, 'owner-profile', ownerKey] as const
+	ownerRegistry: (scope: CrmOwnerRegistryScope, params: CrmOwnerRegistryParams) =>
+		[...crmKeys.all, 'owner-registry', scope, params] as const,
+	ownerProfile: (ownerKey: string) => [...crmKeys.all, 'owner-profile', ownerKey] as const,
+	ownerWorkspaces: () => [...crmKeys.all, 'owner-workspaces'] as const
 }
 
 export const crmQueries = {
@@ -86,7 +86,7 @@ export const crmQueries = {
 	}),
 	ownerRegistry: (
 		scope: CrmOwnerRegistryScope,
-		params: { status?: CrmOwnershipStatus; search?: string } = {},
+		params: CrmOwnerRegistryParams = {},
 		enabled = true
 	) => ({
 		queryKey: crmKeys.ownerRegistry(scope, params),
@@ -99,6 +99,11 @@ export const crmQueries = {
 		queryKey: crmKeys.ownerProfile(ownerKey ?? ''),
 		queryFn: () => crm.ownerProfile(ownerKey ?? ''),
 		enabled: Boolean(ownerKey),
+		staleTime: 2 * 60 * 1000
+	}),
+	ownerWorkspaces: () => ({
+		queryKey: crmKeys.ownerWorkspaces(),
+		queryFn: () => crm.ownerWorkspaces(),
 		staleTime: 2 * 60 * 1000
 	})
 }
