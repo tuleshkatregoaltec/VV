@@ -17,6 +17,7 @@ from app.crm.import_models import (
 )
 from app.crm.import_service import (
     bulk_update_owner_workspaces,
+    delete_contact_import,
     get_contact_list,
     get_owner_profile,
     get_owner_registry,
@@ -112,6 +113,22 @@ async def crm_rename_contact_import(
         name=payload.name,
         organization_id=organization_id,
     )
+
+
+@router.delete("/contact-imports/{import_id}", status_code=204)
+async def crm_delete_contact_import(
+    import_id: int,
+    context: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """Delete one source import, its Saved folder, and its imported claims."""
+    _, organization_id = _auth_ids(context)
+    await delete_contact_import(
+        db,
+        import_id=import_id,
+        organization_id=organization_id,
+    )
+    return Response(status_code=204)
 
 
 @router.get(

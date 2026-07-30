@@ -536,6 +536,8 @@ export const crm = {
 		client.patch<CrmContactImport, { name: string }>(`/api/v1/crm/contact-imports/${importId}`, {
 			name
 		}),
+	deleteContactImport: (importId: number) =>
+		client.delete<void>(`/api/v1/crm/contact-imports/${importId}`),
 	contactLists: () => client.get<CrmContactListSummary[]>('/api/v1/crm/contact-lists'),
 	contactList: (
 		listId: number,

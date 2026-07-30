@@ -1,4 +1,7 @@
 from datetime import date
+from unittest.mock import AsyncMock, MagicMock
+
+import pytest
 
 from app.crm.import_service import (
     ParsedContact,
@@ -10,6 +13,7 @@ from app.crm.import_service import (
     _owner_filter_sql,
     _owner_scope_clause,
     _unique_headers,
+    delete_contact_import,
 )
 
 
@@ -96,6 +100,51 @@ def test_placeholder_columns_are_pruned_and_elan_uses_compound_villa_identifier(
     assert family == "contact_list"
     assert mapping["unit_number"] == "VILLA NUMBER__2"
     assert _normalize_unit("TAG-ELAN-B359") == "B359"
+
+
+def test_aura_plot_preregistration_column_is_used_as_the_villa_identifier():
+    headers = _unique_headers(
+        [
+            "Date",
+            "Price",
+            "Master Project",
+            "Project",
+            "Plot Pre Registeration No",
+            "Party Type",
+            "NameEn",
+            "Mobile",
+        ]
+    )
+
+    mapping, family, warnings = _heuristic_mapping(
+        headers,
+        filename="Aura 3.xlsx",
+        sheet_name="Sheet1",
+    )
+
+    assert family == "transaction_party"
+    assert mapping["unit_number"] == "Plot Pre Registeration No"
+    assert _normalize_unit("TAG-A3-075.2") == "075.2"
+    assert "No direct unit-number column was detected." not in warnings
+
+
+@pytest.mark.asyncio
+async def test_delete_import_removes_published_records_and_the_import():
+    record = MagicMock()
+    lookup = MagicMock()
+    lookup.first.return_value = record
+    db = AsyncMock()
+    db.exec.side_effect = [lookup, MagicMock(), MagicMock()]
+
+    await delete_contact_import(
+        db,
+        import_id=4,
+        organization_id="organization-1",
+    )
+
+    assert db.exec.await_count == 3
+    db.delete.assert_awaited_once_with(record)
+    db.commit.assert_awaited_once()
 
 
 def test_uae_phone_numbers_are_normalized_without_inventing_short_numbers():

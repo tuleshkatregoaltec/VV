@@ -101,6 +101,8 @@ let bulkNote = $state('')
 let bulkSaving = $state(false)
 let renamingImportId = $state<number | null>(null)
 let importRenameDraft = $state('')
+let pendingDeleteImport = $state<CrmContactImport | null>(null)
+let deletingImportId = $state<number | null>(null)
 let selectedOwnerKey = $state<string | null>(null)
 let showOutreachPreview = $state(false)
 let importFile = $state<File | null>(null)
@@ -668,6 +670,32 @@ async function renameImport(item: CrmContactImport) {
 	renamingImportId = null
 	importRenameDraft = ''
 	await contactImportsQuery.refetch()
+}
+
+async function deleteImport(item: CrmContactImport) {
+	if (deletingImportId !== null) return
+	deletingImportId = item.id
+	importError = ''
+	try {
+		await crm.deleteContactImport(item.id)
+		if (latestImport?.id === item.id) latestImport = null
+		if (renamingImportId === item.id) {
+			renamingImportId = null
+			importRenameDraft = ''
+		}
+		if (selectedImportId === item.list_id) {
+			selectedImportId = null
+			savedFolder = 'manual'
+		}
+		pendingDeleteImport = null
+		const refreshes: Promise<unknown>[] = [contactImportsQuery.refetch()]
+		if (ownerRegistryEnabled) refreshes.push(ownerRegistryQuery.refetch())
+		await Promise.all(refreshes)
+	} catch (error) {
+		importError = error instanceof Error ? error.message : 'The import could not be deleted.'
+	} finally {
+		deletingImportId = null
+	}
 }
 </script>
 
@@ -1395,6 +1423,7 @@ async function renameImport(item: CrmContactImport) {
 												</div>
 											</button>
 											<button type="button" class="ui-button flex-none" data-variant="ghost" data-size="icon" aria-label={`Rename ${item.name}`} onclick={() => { renamingImportId = item.id; importRenameDraft = item.name }}><Pencil size={12} /></button>
+											<button type="button" class="ui-button flex-none text-error" data-variant="ghost" data-size="icon" aria-label={`Delete ${item.name}`} onclick={() => (pendingDeleteImport = item)}><Trash2 size={12} /></button>
 										</div>
 									{/if}
 								</div>
@@ -1423,6 +1452,12 @@ async function renameImport(item: CrmContactImport) {
 							<div class="rounded-lg border border-success-border bg-card p-3"><p class="font-mono text-[9px] uppercase text-fg-4">Rental matches</p><p class="mt-1 text-lg font-semibold tabular-nums text-info">{number(displayedImport.summary.rental_opportunities)}</p></div>
 							<div class="rounded-lg border border-success-border bg-card p-3"><p class="font-mono text-[9px] uppercase text-fg-4">Contact ready</p><p class="mt-1 text-lg font-semibold tabular-nums text-fg-1">{number(displayedImport.summary.contact_ready)}</p></div>
 						</div>
+						{#if displayedImport.status === 'completed' && displayedImport.summary.total_rows > 0 && displayedImport.summary.candidate_rows === 0}
+							<div class="mt-3 flex items-start gap-2 rounded-lg border border-warning-border bg-warning-bg px-3 py-2.5 text-[10px] leading-4 text-warning">
+								<CircleAlert size={14} class="mt-0.5 flex-none" />
+								<p>No owner records were published from this workbook. Delete this import and upload the file again to retry it with the latest column-mapping rules.</p>
+							</div>
+						{/if}
 					</section>
 				{/if}
 
@@ -1465,6 +1500,27 @@ async function renameImport(item: CrmContactImport) {
 					<div class="flex min-h-[480px] items-center justify-center"><div class="max-w-sm text-center"><FileUp class="mx-auto text-fg-4" size={23} /><p class="mt-3 text-sm font-semibold text-fg-1">Import your first owner database</p><p class="mt-1 text-xs leading-5 text-fg-4">Results will be verified, deduplicated, and published into the Saved workspaces.</p></div></div>
 				{/if}
 			</main>
+		</div>
+	</div>
+{/if}
+
+{#if pendingDeleteImport}
+	<button type="button" class="fixed inset-0 z-[130] cursor-default bg-overlay backdrop-blur-[2px]" aria-label="Cancel import deletion" onclick={() => (pendingDeleteImport = null)}></button>
+	<div class="fixed left-1/2 top-1/2 z-[140] w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 rounded-xl border border-error-border bg-card p-5 shadow-2xl" role="alertdialog" aria-modal="true" aria-labelledby="delete-import-title">
+		<div class="flex items-start gap-3">
+			<span class="flex h-9 w-9 flex-none items-center justify-center rounded-lg bg-error-bg text-error"><Trash2 size={17} /></span>
+			<div class="min-w-0">
+				<h2 id="delete-import-title" class="text-base font-semibold text-fg-1">Delete “{pendingDeleteImport.name}”?</h2>
+				<p class="mt-2 text-xs leading-5 text-fg-3">
+					This removes the source import, its Saved folder, and {number(pendingDeleteImport.summary.candidate_rows)} imported owner claims. Agent notes, CRM statuses, and manually saved properties are retained.
+				</p>
+			</div>
+		</div>
+		<div class="mt-5 flex justify-end gap-2">
+			<button type="button" class="ui-button" data-variant="secondary" data-size="sm" disabled={deletingImportId !== null} onclick={() => (pendingDeleteImport = null)}>Cancel</button>
+			<button type="button" class="ui-button" data-variant="danger" data-size="sm" disabled={deletingImportId !== null} onclick={() => deleteImport(pendingDeleteImport!)}>
+				{#if deletingImportId !== null}<RefreshCw size={13} class="animate-spin" /> Deleting{:else}<Trash2 size={13} /> Delete import{/if}
+			</button>
 		</div>
 	</div>
 {/if}

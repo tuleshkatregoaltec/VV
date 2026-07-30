@@ -16,7 +16,7 @@ from typing import Any, Iterable
 import httpx
 import openpyxl
 from fastapi import HTTPException, UploadFile
-from sqlalchemy import or_, text
+from sqlalchemy import delete, or_, text
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -84,7 +84,15 @@ _ALIASES = {
     "master_project": {"masterproject", "masterdevelopment"},
     "project_name": {"project", "projectname", "development"},
     "building_name": {"buildingnameen", "building", "tower", "buildingname"},
-    "unit_number": {"unitnumber", "unit", "villanumber", "unitnumberproxy"},
+    "unit_number": {
+        "unitnumber",
+        "unit",
+        "villanumber",
+        "unitnumberproxy",
+        "plotpreregisterationno",
+        "plotpreregistrationno",
+        "plotregistrationno",
+    },
     "property_type": {"propertytypeen", "propertytype", "type"},
     "size_sqft": {"size", "areasqft", "propertysize"},
     "transaction_date": {"regis", "date", "registrationdate", "transactiondate"},
@@ -1361,6 +1369,41 @@ async def rename_contact_import(
     await db.commit()
     await db.refresh(record)
     return await _import_response(db, record)
+
+
+async def delete_contact_import(
+    db: AsyncSession,
+    *,
+    import_id: int,
+    organization_id: str,
+) -> None:
+    result = await db.exec(
+        select(CrmContactImport).where(
+            CrmContactImport.id == import_id,
+            CrmContactImport.organization_id == organization_id,
+        )
+    )
+    record = result.first()
+    if not record:
+        raise HTTPException(status_code=404, detail="Owner-data import not found")
+
+    # Remove only records published by this import. Agent-maintained lead
+    # workspaces, notes, and manually saved properties are intentionally kept.
+    await db.exec(
+        delete(CrmPropertyContactClaim).where(
+            CrmPropertyContactClaim.import_id == import_id,
+            CrmPropertyContactClaim.organization_id == organization_id,
+        )
+    )
+    await db.exec(
+        delete(CrmContactList).where(
+            CrmContactList.source_import_id == import_id,
+            CrmContactList.organization_id == organization_id,
+        )
+    )
+    await db.delete(record)
+    await db.commit()
+    _invalidate_owner_summary_cache(organization_id)
 
 
 def _claim_property_key(claim: CrmPropertyContactClaim) -> str:
