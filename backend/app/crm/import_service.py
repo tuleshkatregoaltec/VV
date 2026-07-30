@@ -177,8 +177,34 @@ _OWNERSHIP_PRIORITY = {
 _OWNER_REGISTRY_BASE_SQL = """
 WITH base AS (
     SELECT
-        c.*,
-        l.name AS source_list_name,
+        c.id,
+        c.organization_id,
+        c.import_id,
+        c.list_id,
+        c.source_sheet,
+        c.source_row_number,
+        c.owner_key,
+        c.property_key,
+        c.contact_name,
+        c.phone_primary,
+        c.phone_alternate,
+        c.email_primary,
+        c.area_name,
+        c.project_name,
+        c.building_name,
+        c.unit_number,
+        c.property_type,
+        c.transaction_date,
+        c.ownership_status,
+        c.confidence_score,
+        c.match_reason,
+        c.lead_id,
+        c.unit_candidate_key,
+        c.latest_sale_date,
+        c.latest_sale_price_aed,
+        c.later_sale_date,
+        c.lease_end,
+        c.annual_rent_aed,
         c.owner_key AS owner_key_sql,
         c.property_key AS property_key_sql,
         CASE c.ownership_status
@@ -190,7 +216,6 @@ WITH base AS (
             ELSE 1
         END AS status_rank
     FROM crm_property_contact_claims c
-    INNER JOIN crm_contact_lists l ON l.id = c.list_id
     WHERE c.organization_id = :organization_id
       AND (
         CAST(:owner_list_id AS INTEGER) IS NULL
@@ -198,31 +223,18 @@ WITH base AS (
       )
 ),
 ranked AS (
-    SELECT
-        *,
-        row_number() OVER (
-            PARTITION BY owner_key_sql, property_key_sql
-            ORDER BY status_rank DESC, confidence_score DESC,
-                transaction_date DESC NULLS LAST
-        ) AS property_rank
+    SELECT DISTINCT ON (owner_key_sql, property_key_sql)
+        *
     FROM base
-),
-properties AS (
-    SELECT * FROM ranked WHERE property_rank = 1
-),
-source_aggregation AS (
-    SELECT
+    ORDER BY
         owner_key_sql,
         property_key_sql,
-        count(*) AS duplicate_count,
-        array_agg(DISTINCT source_list_name ORDER BY source_list_name)
-            AS source_lists,
-        array_agg(
-            DISTINCT source_sheet || ':' || source_row_number::text
-            ORDER BY source_sheet || ':' || source_row_number::text
-        ) AS source_rows
-    FROM base
-    GROUP BY owner_key_sql, property_key_sql
+        status_rank DESC,
+        confidence_score DESC,
+        transaction_date DESC NULLS LAST
+),
+properties AS (
+    SELECT * FROM ranked
 )
 """
 
@@ -2109,34 +2121,38 @@ async def _owner_properties_sql(
     statement = text(
         _OWNER_REGISTRY_BASE_SQL
         + f"""
-        , limited_ranked AS (
-            SELECT
-                *,
-                row_number() OVER (
-                    PARTITION BY owner_key_sql, property_key_sql
-                    ORDER BY status_rank DESC, confidence_score DESC,
-                        transaction_date DESC NULLS LAST
-                ) AS limited_property_rank
+        , limited_properties AS (
+            SELECT DISTINCT ON (owner_key_sql, property_key_sql)
+                *
             FROM base
             WHERE owner_key_sql = ANY(:owner_keys)
-        ),
-        limited_properties AS (
-            SELECT * FROM limited_ranked WHERE limited_property_rank = 1
+            ORDER BY
+                owner_key_sql,
+                property_key_sql,
+                status_rank DESC,
+                confidence_score DESC,
+                transaction_date DESC NULLS LAST
         ),
         limited_source_aggregation AS (
             SELECT
-                owner_key_sql,
-                property_key_sql,
+                c.owner_key AS owner_key_sql,
+                c.property_key AS property_key_sql,
                 count(*) AS duplicate_count,
-                array_agg(DISTINCT source_list_name ORDER BY source_list_name)
+                array_agg(DISTINCT l.name ORDER BY l.name)
                     AS source_lists,
                 array_agg(
-                    DISTINCT source_sheet || ':' || source_row_number::text
-                    ORDER BY source_sheet || ':' || source_row_number::text
+                    DISTINCT c.source_sheet || ':' || c.source_row_number::text
+                    ORDER BY c.source_sheet || ':' || c.source_row_number::text
                 ) AS source_rows
-            FROM base
-            WHERE owner_key_sql = ANY(:owner_keys)
-            GROUP BY owner_key_sql, property_key_sql
+            FROM crm_property_contact_claims c
+            INNER JOIN crm_contact_lists l ON l.id = c.list_id
+            WHERE c.organization_id = :organization_id
+              AND (
+                CAST(:owner_list_id AS INTEGER) IS NULL
+                OR c.list_id = CAST(:owner_list_id AS INTEGER)
+              )
+              AND c.owner_key = ANY(:owner_keys)
+            GROUP BY c.owner_key, c.property_key
         ),
         scoped_properties AS (
             SELECT p.* FROM limited_properties p WHERE {where_sql}

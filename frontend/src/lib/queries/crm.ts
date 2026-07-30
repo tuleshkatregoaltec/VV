@@ -91,7 +91,7 @@ export const crmQueries = {
 	) => ({
 		queryKey: crmKeys.ownerRegistry(scope, params),
 		queryFn: ({ signal }: { signal: AbortSignal }) =>
-			crm.ownerRegistry(scope, { ...params, limit: 200 }, signal),
+			crm.ownerRegistry(scope, { ...params, limit: 50 }, signal),
 		enabled,
 		staleTime: 2 * 60 * 1000
 	}),

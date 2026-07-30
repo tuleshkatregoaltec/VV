@@ -59,6 +59,7 @@ import PageContainer from '$lib/components/layout/PageContainer.svelte'
 import { crmQueries } from '$lib/queries/crm'
 
 const PAGE_SIZE = 50
+const OWNER_PAGE_SIZE = 50
 let selectedLeadId = $state<string | null>(null)
 let search = $state('')
 let debouncedSearch = $state('')
@@ -87,6 +88,7 @@ let ownerMinRent = $state('')
 let ownerMaxRent = $state('')
 let ownerMinValue = $state('')
 let ownerMaxValue = $state('')
+let ownerOffset = $state(0)
 let debouncedOwnerMinRent = $state('')
 let debouncedOwnerMaxRent = $state('')
 let debouncedOwnerMinValue = $state('')
@@ -168,7 +170,8 @@ const ownerRegistryQuery = createQuery(() =>
 			min_rent_aed: Number(debouncedOwnerMinRent) || undefined,
 			max_rent_aed: Number(debouncedOwnerMaxRent) || undefined,
 			min_value_aed: Number(debouncedOwnerMinValue) || undefined,
-			max_value_aed: Number(debouncedOwnerMaxValue) || undefined
+			max_value_aed: Number(debouncedOwnerMaxValue) || undefined,
+			offset: ownerOffset
 		},
 		ownerRegistryEnabled
 	)
@@ -249,6 +252,7 @@ $effect(() => {
 	const value = ownerSearch.trim()
 	const timeout = setTimeout(() => {
 		debouncedOwnerSearch = value
+		ownerOffset = 0
 	}, 250)
 	return () => clearTimeout(timeout)
 })
@@ -260,6 +264,7 @@ $effect(() => {
 		debouncedOwnerMaxRent = values[1]
 		debouncedOwnerMinValue = values[2]
 		debouncedOwnerMaxValue = values[3]
+		ownerOffset = 0
 	}, 450)
 	return () => clearTimeout(timeout)
 })
@@ -576,6 +581,7 @@ function openSavedFolder(
 	showSaved = true
 	selectedOwnerKey = null
 	selectedOwnerKeys = []
+	ownerOffset = 0
 	ownerSearch = ''
 	ownerStatus = ''
 	ownerLeaseWindow = ''
@@ -891,7 +897,7 @@ async function renameImport(item: CrmContactImport) {
 							{#if savedFolder === 'rental_ready'}
 								<div class="mt-4 flex flex-wrap gap-1.5">
 									{#each [['', 'All leases'], ['expired', 'Expired'], ['expiring_30', 'Next 30 days'], ['expiring_60', '31–60 days'], ['expiring_90', '61–90 days']] as option}
-										<button type="button" class={`rounded-full border px-3 py-1.5 text-[10px] font-semibold transition ${ownerLeaseWindow === option[0] ? 'border-navy bg-navy text-on-navy' : 'border-border bg-card text-fg-3 hover:border-strong hover:text-fg-1'}`} onclick={() => (ownerLeaseWindow = option[0] as CrmLeadStatus | '')}>{option[1]}</button>
+										<button type="button" class={`rounded-full border px-3 py-1.5 text-[10px] font-semibold transition ${ownerLeaseWindow === option[0] ? 'border-navy bg-navy text-on-navy' : 'border-border bg-card text-fg-3 hover:border-strong hover:text-fg-1'}`} onclick={() => { ownerLeaseWindow = option[0] as CrmLeadStatus | ''; ownerOffset = 0 }}>{option[1]}</button>
 									{/each}
 								</div>
 							{/if}
@@ -900,7 +906,7 @@ async function renameImport(item: CrmContactImport) {
 									<Search class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-fg-4" size={13} />
 									<input bind:value={ownerSearch} placeholder="Owner, phone or property" class="h-9 w-full rounded-md border border-border bg-card pl-9 pr-3 text-xs text-fg-2 outline-none focus:border-focus" />
 								</label>
-								<select bind:value={ownerStatus} class="h-9 rounded-md border border-border bg-card px-3 text-xs text-fg-2 outline-none focus:border-focus">
+								<select bind:value={ownerStatus} onchange={() => (ownerOffset = 0)} class="h-9 rounded-md border border-border bg-card px-3 text-xs text-fg-2 outline-none focus:border-focus">
 									<option value="">All verification states</option>
 									<option value="verified_current_owner">Verified owners</option>
 									<option value="probable_current_owner">Probable owners</option>
@@ -909,14 +915,14 @@ async function renameImport(item: CrmContactImport) {
 									<option value="conflicting_claim">Conflicting evidence</option>
 									<option value="unmatched">Unmatched</option>
 								</select>
-								<select bind:value={ownerLeaseWindow} class="h-9 rounded-md border border-border bg-card px-3 text-xs text-fg-2 outline-none focus:border-focus">
+								<select bind:value={ownerLeaseWindow} onchange={() => (ownerOffset = 0)} class="h-9 rounded-md border border-border bg-card px-3 text-xs text-fg-2 outline-none focus:border-focus">
 									<option value="">All lease windows</option>
 									<option value="expired">Expired leases</option>
 									<option value="expiring_30">Expiring in 30 days</option>
 									<option value="expiring_60">Expiring in 31–60 days</option>
 									<option value="expiring_90">Expiring in 61–90 days</option>
 								</select>
-								<label class="flex h-9 items-center gap-2 rounded-md border border-border bg-card px-3 text-xs text-fg-2"><input type="checkbox" bind:checked={ownerPortfolioOnly} class="h-3.5 w-3.5 accent-navy" /> Multiple properties only</label>
+								<label class="flex h-9 items-center gap-2 rounded-md border border-border bg-card px-3 text-xs text-fg-2"><input type="checkbox" bind:checked={ownerPortfolioOnly} onchange={() => (ownerOffset = 0)} class="h-3.5 w-3.5 accent-navy" /> Multiple properties only</label>
 							</div>
 							<div class="mt-2 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
 								<input bind:value={ownerMinRent} inputmode="numeric" placeholder="Minimum annual rent" class="h-9 rounded-md border border-border bg-card px-3 text-xs text-fg-2 outline-none focus:border-focus" />
@@ -950,6 +956,8 @@ async function renameImport(item: CrmContactImport) {
 						{/if}
 						{#if ownerRegistryQuery.isLoading || ownerRegistryQuery.isFetching}
 							<div class="grid min-h-80 place-items-center"><div class="text-center"><RefreshCw class="mx-auto animate-spin text-info" size={19} /><p class="mt-3 text-xs text-fg-4">Building owner profiles</p></div></div>
+						{:else if ownerRegistryQuery.isError}
+							<div class="grid min-h-80 place-items-center p-8 text-center"><div><CircleAlert class="mx-auto text-error" size={25} /><p class="mt-3 text-sm font-semibold text-fg-1">Owner folder could not be loaded</p><p class="mt-1 max-w-sm text-xs leading-5 text-fg-4">{ownerRegistryQuery.error.message}</p><button type="button" class="ui-button mt-4" data-variant="secondary" data-size="sm" onclick={() => ownerRegistryQuery.refetch()}><RefreshCw size={12} /> Try again</button></div></div>
 						{:else if ownerRegistry?.owners.length}
 							<div class="divide-y divide-border">
 								{#each ownerRegistry.owners as owner (owner.owner_key)}
@@ -986,7 +994,15 @@ async function renameImport(item: CrmContactImport) {
 									</article>
 								{/each}
 							</div>
-							{#if ownerRegistry.total > ownerRegistry.owners.length}<p class="border-t border-border px-4 py-3 text-center text-[10px] text-fg-4">Showing the first {number(ownerRegistry.owners.length)} of {number(ownerRegistry.total)} profiles. Use search to narrow the folder.</p>{/if}
+							{#if ownerRegistry.total > OWNER_PAGE_SIZE}
+								<div class="flex items-center justify-between border-t border-border px-4 py-3">
+									<p class="text-[10px] text-fg-4">{number(ownerOffset + 1)}–{number(Math.min(ownerOffset + ownerRegistry.owners.length, ownerRegistry.total))} of {number(ownerRegistry.total)} profiles</p>
+									<div class="flex gap-2">
+										<button type="button" class="ui-button" data-variant="secondary" data-size="sm" disabled={ownerOffset === 0 || ownerRegistryQuery.isFetching} onclick={() => { ownerOffset = Math.max(0, ownerOffset - OWNER_PAGE_SIZE); selectedOwnerKeys = [] }}>Previous</button>
+										<button type="button" class="ui-button" data-variant="secondary" data-size="sm" disabled={ownerOffset + OWNER_PAGE_SIZE >= ownerRegistry.total || ownerRegistryQuery.isFetching} onclick={() => { ownerOffset += OWNER_PAGE_SIZE; selectedOwnerKeys = [] }}>Next</button>
+									</div>
+								</div>
+							{/if}
 						{:else}
 							<div class="grid min-h-80 place-items-center p-8 text-center"><div><UsersRound class="mx-auto text-fg-4" size={25} /><p class="mt-3 text-sm font-semibold text-fg-1">No owner profiles in this folder</p><p class="mt-1 max-w-sm text-xs leading-5 text-fg-4">Import owner data or broaden the verification filter.</p></div></div>
 						{/if}
