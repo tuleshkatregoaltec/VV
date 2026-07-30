@@ -40,6 +40,7 @@ import {
 	UsersRound,
 	X
 } from 'lucide-svelte'
+import { tick } from 'svelte'
 import type {
 	CrmAssetClass,
 	CrmBreakdownLevel,
@@ -298,11 +299,14 @@ function money(value: number | null | undefined, compact = false) {
 
 function shortDate(value: string | null | undefined) {
 	if (!value) return '—'
+	const datePrefix = value.match(/^\d{4}-\d{2}-\d{2}/)?.[0]
+	const parsed = new Date(datePrefix ? `${datePrefix}T00:00:00` : value)
+	if (Number.isNaN(parsed.getTime())) return '—'
 	return new Intl.DateTimeFormat('en-GB', {
 		day: '2-digit',
 		month: 'short',
 		year: 'numeric'
-	}).format(new Date(`${value}T00:00:00`))
+	}).format(parsed)
 }
 
 function number(value: number | null | undefined) {
@@ -596,6 +600,19 @@ function openSavedFolder(
 	debouncedOwnerMaxValue = ''
 }
 
+async function toggleSavedWorkspace() {
+	if (showSaved) {
+		showSaved = false
+		return
+	}
+	showSaved = true
+	selectedLeadId = null
+	await tick()
+	document
+		.getElementById('crm-saved-workspace')
+		?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+}
+
 function openOwnerProfile(ownerKey: string) {
 	selectedOwnerKey = ownerKey
 }
@@ -686,7 +703,7 @@ async function renameImport(item: CrmContactImport) {
 					class="ui-button"
 					data-variant={showSaved ? 'primary' : 'secondary'}
 					data-size="sm"
-					onclick={() => (showSaved = !showSaved)}
+					onclick={toggleSavedWorkspace}
 				>
 					{#if showSaved}<BookmarkCheck size={14} />{:else}<Bookmark size={14} />{/if}
 					Saved {savedQuery.data?.length ? `(${savedQuery.data.length})` : ''}
@@ -763,7 +780,7 @@ async function renameImport(item: CrmContactImport) {
 			</section>
 
 			{#if showSaved}
-				<section class="mt-3 ui-surface p-4">
+				<section id="crm-saved-workspace" class="mt-3 scroll-mt-20 ui-surface p-4">
 					<div class="flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
 						<div>
 							<p class="font-mono text-[10px] uppercase tracking-[0.08em] text-fg-4">Saved workspace</p>

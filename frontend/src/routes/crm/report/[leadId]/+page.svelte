@@ -19,12 +19,9 @@ function buildPriceChart(points: IndexPoint[]) {
 	const top = 18
 	const bottom = 34
 	const values = points.flatMap((point) =>
-		[
-			point.dubai_index,
-			point.segment_index,
-			point.dld_index,
-			point.dxbi_index
-		].filter((value): value is number => value !== null)
+		[point.dubai_index, point.segment_index, point.dld_index, point.dxbi_index].filter(
+			(value): value is number => value !== null
+		)
 	)
 	const minimum = values.length ? Math.min(...values) : 90
 	const maximum = values.length ? Math.max(...values) : 110
@@ -85,11 +82,14 @@ function number(value: number | null | undefined, digits = 0) {
 
 function shortDate(value: string | null | undefined) {
 	if (!value) return '—'
+	const datePrefix = value.match(/^\d{4}-\d{2}-\d{2}/)?.[0]
+	const parsed = new Date(datePrefix ? `${datePrefix}T00:00:00` : value)
+	if (Number.isNaN(parsed.getTime())) return '—'
 	return new Intl.DateTimeFormat('en-GB', {
 		day: '2-digit',
 		month: 'short',
 		year: 'numeric'
-	}).format(new Date(`${value}T00:00:00`))
+	}).format(parsed)
 }
 
 function signedPercent(value: number | null | undefined) {
