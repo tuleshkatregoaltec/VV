@@ -170,6 +170,23 @@ class InboundImportResponse(BaseModel):
     completed_at: datetime | None = None
 
 
+class InboundRegistryProfileResponse(BaseModel):
+    owner_key: str
+    contact_name: str
+    ownership_status: str
+    identity_score: int
+    identity_reason: str
+    area_name: str
+    project_name: str
+    building_name: str
+    unit_number: str
+    property_type: str
+    latest_sale_date: date | None = None
+    later_sale_date: date | None = None
+    lease_end: date | None = None
+    lead_id: str | None = None
+
+
 class InboundContactResponse(BaseModel):
     id: int
     full_name: str
@@ -180,6 +197,7 @@ class InboundContactResponse(BaseModel):
     preferred_channel: str | None = None
     consent_status: str
     do_not_contact: bool
+    registry_profiles: list[InboundRegistryProfileResponse] = Field(default_factory=list)
 
 
 class InboundEnquiryCreate(BaseModel):

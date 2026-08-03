@@ -24,6 +24,23 @@ def test_deterministic_extraction_understands_common_campaign_message():
     assert _normalize_intent("", "Looking to buy a 2 bedroom in JBR") == "buy"
 
 
+def test_campaign_context_can_guide_sparse_contacts_without_forcing_ambiguous_intent():
+    assert (
+        _normalize_intent(
+            "",
+            "Meta valuation campaign shown to Business Bay property owners",
+        )
+        == "sell"
+    )
+    assert (
+        _normalize_intent(
+            "",
+            "The form did not ask whether the person wants to buy, sell, rent, or let",
+        )
+        is None
+    )
+
+
 def test_redaction_removes_contact_identity_before_ai_extraction():
     redacted = _redact(
         "Call Jane Example on +971 50 123 4567 or jane@example.com, Emirates ID 784123456789012",

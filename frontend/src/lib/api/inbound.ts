@@ -13,6 +13,23 @@ export type InboundStatus =
 	| 'closed_lost'
 export type InboundMatchState = 'suggested' | 'saved' | 'dismissed' | 'contacted'
 
+export interface InboundRegistryProfile {
+	owner_key: string
+	contact_name: string
+	ownership_status: string
+	identity_score: number
+	identity_reason: string
+	area_name: string
+	project_name: string
+	building_name: string
+	unit_number: string
+	property_type: string
+	latest_sale_date: string | null
+	later_sale_date: string | null
+	lease_end: string | null
+	lead_id: string | null
+}
+
 export interface InboundContact {
 	id: number
 	full_name: string
@@ -23,6 +40,7 @@ export interface InboundContact {
 	preferred_channel: string | null
 	consent_status: string
 	do_not_contact: boolean
+	registry_profiles: InboundRegistryProfile[]
 }
 
 export interface InboundNote {
@@ -138,10 +156,11 @@ export const inbound = {
 	updateMatch: (id: number, state: InboundMatchState) =>
 		client.patch<InboundMatch, { state: InboundMatchState }>(`/api/v1/crm/inbound/matches/${id}`, { state }),
 	imports: () => client.get<InboundImport[]>('/api/v1/crm/inbound/imports'),
-	upload: (file: File, name: string) => {
+	upload: (file: File, name: string, campaignContext = '') => {
 		const form = new FormData()
 		form.set('file', file)
 		form.set('name', name)
+		form.set('campaign_context', campaignContext)
 		return client.post<InboundImport, FormData>('/api/v1/crm/inbound/imports', form)
 	},
 	deleteImport: (id: number) => client.delete<void>(`/api/v1/crm/inbound/imports/${id}`)

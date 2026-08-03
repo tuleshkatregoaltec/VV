@@ -275,5 +275,10 @@ CLAUDE.md
 screenshot-*.png
 projects-*.png
 
+# Local CRM fixtures may contain names copied from private owner registries
+/test-data/inbound-intelligence-demo.csv
+/test-data/inbound-intelligence-raw-contacts-demo.csv
+/test-data/inbound-intelligence-demo-expected.md
+
 # Firecrawl local cache
 .firecrawl/

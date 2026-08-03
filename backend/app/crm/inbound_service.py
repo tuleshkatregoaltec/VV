@@ -12,7 +12,7 @@ from typing import Any
 import httpx
 import openpyxl
 from fastapi import HTTPException, UploadFile
-from sqlalchemy import delete, exists, or_
+from sqlalchemy import delete, exists, func, or_
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -36,6 +36,7 @@ from app.crm.inbound_models import (
     InboundMatchesResponse,
     InboundMatchResponse,
     InboundNoteResponse,
+    InboundRegistryProfileResponse,
 )
 from app.listings.service import list_listings_from_clickhouse
 
@@ -400,7 +401,9 @@ async def create_inbound_enquiry(
     db.add(enquiry)
     await db.commit()
     await db.refresh(enquiry)
-    return await _enquiry_response(db, enquiry, contact=contact)
+    return await _enquiry_response(
+        db, enquiry, contact=contact, include_registry_profiles=True
+    )
 
 
 async def process_inbound_import(
@@ -410,6 +413,7 @@ async def process_inbound_import(
     name: str,
     user_id: str,
     organization_id: str,
+    campaign_context: str = "",
 ) -> InboundImportResponse:
     filename = Path(upload.filename or "inbound-leads.xlsx").name
     if not filename.lower().endswith((".xlsx", ".csv")):
@@ -417,7 +421,10 @@ async def process_inbound_import(
     data = await upload.read(_MAX_FILE_BYTES + 1)
     if len(data) > _MAX_FILE_BYTES:
         raise HTTPException(status_code=413, detail="Inbound import exceeds 50 MB")
-    digest = hashlib.sha256(data).hexdigest()
+    campaign_context = campaign_context.strip()[:4_000]
+    digest = hashlib.sha256(
+        data + b"\0" + campaign_context.casefold().encode()
+    ).hexdigest()
     existing_result = await db.exec(
         select(CrmInboundImport).where(
             CrmInboundImport.organization_id == organization_id,
@@ -446,6 +453,7 @@ async def process_inbound_import(
     summary = InboundImportSummary()
     try:
         rows, mapping = _file_rows(data, filename)
+        mapping["campaign_context"] = campaign_context
         record.mapping = mapping
         summary.total_rows = len(rows)
         if summary.total_rows > 10_000:
@@ -479,10 +487,20 @@ async def process_inbound_import(
                 continue
             row_fingerprints.add(row_fingerprint)
             notes = _text(row.get("notes"))
-            intent = _normalize_intent(row.get("intent"), notes)
-            criteria = _deterministic_criteria(row, notes)
-            redacted = _redact(notes, [full_name, phone or "", email or ""])
-            needs_ai = bool(notes) and (
+            combined_context = "\n".join(
+                part
+                for part in (
+                    f"Campaign context: {campaign_context}" if campaign_context else "",
+                    f"Row notes: {notes}" if notes else "",
+                )
+                if part
+            )
+            intent = _normalize_intent(row.get("intent"), combined_context)
+            criteria = _deterministic_criteria(row, combined_context)
+            redacted = _redact(
+                combined_context, [full_name, phone or "", email or ""]
+            )
+            needs_ai = bool(combined_context) and (
                 intent is None
                 or not criteria.get("locations")
                 or (
@@ -501,13 +519,6 @@ async def process_inbound_import(
             for key, value in ai_values.items():
                 criteria.setdefault(key, value)
             review: list[str] = []
-            if intent is None:
-                intent = "buy"
-                review.append("Intent was not explicit")
-            if intent in {"buy", "rent"} and not criteria.get("locations"):
-                review.append("Preferred location is missing")
-            if confidence and confidence < 0.85:
-                review.append("AI extraction confidence is below 85%")
             contact = await _find_or_create_contact(
                 db,
                 organization_id=organization_id,
@@ -518,6 +529,51 @@ async def process_inbound_import(
                 language=_text(row.get("language")) or None,
                 consent_status=_text(row.get("consent")) or "unknown",
             )
+            classification_source = "row_or_campaign"
+            if intent is None:
+                registry_profiles = await _registry_profiles(
+                    db, contact=contact, criteria=criteria
+                )
+                if any("current_owner" in profile.ownership_status for profile in registry_profiles):
+                    current_profile = next(
+                        profile
+                        for profile in registry_profiles
+                        if "current_owner" in profile.ownership_status
+                    )
+                    intent = "sell"
+                    classification_source = "current_owner_provisional"
+                    inferred_location = (
+                        current_profile.area_name
+                        or current_profile.project_name
+                        or current_profile.building_name
+                    )
+                    if inferred_location:
+                        criteria.setdefault("locations", [inferred_location])
+                    if current_profile.building_name:
+                        criteria.setdefault("building", current_profile.building_name)
+                    if current_profile.unit_number:
+                        criteria.setdefault("unit_number", current_profile.unit_number)
+                    if current_profile.property_type:
+                        criteria.setdefault("property_type", current_profile.property_type)
+                    review.append(
+                        "Current-owner profile found; seller classification is provisional until sale versus letting intent is confirmed"
+                    )
+                elif any(profile.ownership_status == "former_owner" for profile in registry_profiles):
+                    intent = "buy"
+                    classification_source = "former_owner_provisional"
+                    review.append(
+                        "Former-owner profile found; repeat-buyer classification is provisional until intent is confirmed"
+                    )
+                else:
+                    intent = "buy"
+                    classification_source = "unresolved_provisional"
+                    review.append(
+                        "No explicit intent or owner history was available; buyer classification is provisional"
+                    )
+            if intent in {"buy", "rent"} and not criteria.get("locations"):
+                review.append("Preferred location is missing")
+            if confidence and confidence < 0.85:
+                review.append("AI extraction confidence is below 85%")
             enquiry = CrmInboundEnquiry(
                 organization_id=organization_id,
                 contact_id=contact.id or 0,
@@ -536,7 +592,12 @@ async def process_inbound_import(
                 strict_fields=strict,
                 raw_notes=notes or None,
                 extraction_confidence=confidence or (0.8 if review else 0.9),
-                extraction_evidence={"redacted_ai": bool(ai_values), "mapping": mapping},
+                extraction_evidence={
+                    "redacted_ai": bool(ai_values),
+                    "campaign_context_used": bool(campaign_context),
+                    "classification_source": classification_source,
+                    "mapping": mapping,
+                },
                 review_reasons=review,
                 created_at=now,
                 updated_at=now,
@@ -631,7 +692,110 @@ async def delete_inbound_import(db: AsyncSession, import_id: int, organization_i
     await db.commit()
 
 
-def _contact_response(contact: CrmInboundContact) -> InboundContactResponse:
+async def _registry_profiles(
+    db: AsyncSession,
+    *,
+    contact: CrmInboundContact,
+    criteria: dict[str, Any],
+) -> list[InboundRegistryProfileResponse]:
+    conditions = [
+        func.lower(func.trim(CrmPropertyContactClaim.contact_name))
+        == contact.full_name.strip().lower()
+    ]
+    if contact.phone:
+        conditions.extend(
+            [
+                CrmPropertyContactClaim.phone_primary == contact.phone,
+                CrmPropertyContactClaim.phone_alternate == contact.phone,
+            ]
+        )
+    if contact.email:
+        conditions.append(func.lower(CrmPropertyContactClaim.email_primary) == contact.email.lower())
+    result = await db.exec(
+        select(CrmPropertyContactClaim)
+        .where(
+            CrmPropertyContactClaim.organization_id == contact.organization_id,
+            or_(*conditions),
+        )
+        .order_by(CrmPropertyContactClaim.confidence_score.desc())
+        .limit(100)
+    )
+    building = _token(criteria.get("building"))
+    unit_number = _token(criteria.get("unit_number"))
+    location_tokens = [_token(item) for item in _locations(criteria)]
+    profiles: list[InboundRegistryProfileResponse] = []
+    seen: set[tuple[str, str]] = set()
+    for claim in result.all():
+        property_identity = (claim.owner_key, claim.property_key)
+        if property_identity in seen:
+            continue
+        seen.add(property_identity)
+        phone_match = bool(
+            contact.phone
+            and contact.phone in {claim.phone_primary, claim.phone_alternate}
+        )
+        email_match = bool(
+            contact.email
+            and claim.email_primary
+            and contact.email.casefold() == claim.email_primary.casefold()
+        )
+        claim_building = _token(claim.building_name or claim.project_name)
+        exact_property = bool(
+            building
+            and unit_number
+            and building in claim_building
+            and unit_number == _token(claim.unit_number)
+        )
+        location_match = bool(
+            location_tokens
+            and any(
+                location
+                and location
+                in _token(f"{claim.area_name} {claim.project_name} {claim.building_name}")
+                for location in location_tokens
+            )
+        )
+        if phone_match or email_match:
+            identity_score = 100
+            identity_reason = "Contact detail matches the owner registry"
+        elif exact_property:
+            identity_score = 96
+            identity_reason = "Name, building, and unit match the owner registry"
+        elif building and building in claim_building:
+            identity_score = 84
+            identity_reason = "Name and building match; unit confirmation is still required"
+        elif location_match:
+            identity_score = 78
+            identity_reason = "Name and stated location match a registry profile"
+        else:
+            identity_score = 65
+            identity_reason = "Name-only registry match; verify identity before using it"
+        profiles.append(
+            InboundRegistryProfileResponse(
+                owner_key=claim.owner_key,
+                contact_name=claim.contact_name,
+                ownership_status=claim.ownership_status,
+                identity_score=identity_score,
+                identity_reason=identity_reason,
+                area_name=claim.area_name,
+                project_name=claim.project_name,
+                building_name=claim.building_name,
+                unit_number=claim.unit_number,
+                property_type=claim.property_type,
+                latest_sale_date=claim.latest_sale_date,
+                later_sale_date=claim.later_sale_date,
+                lease_end=claim.lease_end,
+                lead_id=claim.lead_id,
+            )
+        )
+    profiles.sort(key=lambda item: (item.identity_score, item.latest_sale_date or date.min), reverse=True)
+    return profiles[:10]
+
+
+def _contact_response(
+    contact: CrmInboundContact,
+    registry_profiles: list[InboundRegistryProfileResponse] | None = None,
+) -> InboundContactResponse:
     return InboundContactResponse(
         id=contact.id or 0,
         full_name=contact.full_name,
@@ -642,6 +806,7 @@ def _contact_response(contact: CrmInboundContact) -> InboundContactResponse:
         preferred_channel=contact.preferred_channel,
         consent_status=contact.consent_status,
         do_not_contact=contact.do_not_contact,
+        registry_profiles=registry_profiles or [],
     )
 
 
@@ -650,6 +815,7 @@ async def _enquiry_response(
     enquiry: CrmInboundEnquiry,
     *,
     contact: CrmInboundContact | None = None,
+    include_registry_profiles: bool = False,
 ) -> InboundEnquiryResponse:
     contact = contact or await db.get(CrmInboundContact, enquiry.contact_id)
     if not contact or contact.organization_id != enquiry.organization_id:
@@ -663,9 +829,14 @@ async def _enquiry_response(
         select(CrmInboundMatch).where(CrmInboundMatch.enquiry_id == enquiry.id)
     )
     matches = matches_result.all()
+    registry_profiles = (
+        await _registry_profiles(db, contact=contact, criteria=enquiry.criteria)
+        if include_registry_profiles
+        else []
+    )
     return InboundEnquiryResponse(
         id=enquiry.id or 0,
-        contact=_contact_response(contact),
+        contact=_contact_response(contact, registry_profiles),
         intent=enquiry.intent,  # type: ignore[arg-type]
         status=enquiry.status,  # type: ignore[arg-type]
         assigned_user_id=enquiry.assigned_user_id,
@@ -751,7 +922,7 @@ async def get_inbound_enquiry(db: AsyncSession, enquiry_id: int, organization_id
     enquiry = await db.get(CrmInboundEnquiry, enquiry_id)
     if not enquiry or enquiry.organization_id != organization_id:
         raise HTTPException(status_code=404, detail="Inbound enquiry not found")
-    return await _enquiry_response(db, enquiry)
+    return await _enquiry_response(db, enquiry, include_registry_profiles=True)
 
 
 async def update_inbound_enquiry(
@@ -773,7 +944,7 @@ async def update_inbound_enquiry(
     db.add(enquiry)
     await db.commit()
     await db.refresh(enquiry)
-    return await _enquiry_response(db, enquiry)
+    return await _enquiry_response(db, enquiry, include_registry_profiles=True)
 
 
 async def add_inbound_note(
@@ -794,7 +965,7 @@ async def add_inbound_note(
     enquiry.updated_at = _utcnow()
     db.add(enquiry)
     await db.commit()
-    return await _enquiry_response(db, enquiry)
+    return await _enquiry_response(db, enquiry, include_registry_profiles=True)
 
 
 def _locations(criteria: dict[str, Any]) -> list[str]:
@@ -1056,7 +1227,10 @@ async def refresh_inbound_matches(
             location, location_reason = _location_fit(
                 criteria, claim.area_name, claim.project_name, claim.building_name
             )
-            budget, budget_reason = _budget_fit(criteria, claim.latest_sale_price_aed)
+            owner_value = (
+                claim.annual_rent_aed if enquiry.intent == "rent" else claim.latest_sale_price_aed
+            )
+            budget, budget_reason = _budget_fit(criteria, owner_value)
             property_points = 10 if not criteria.get("property_type") or criteria.get("property_type", "").casefold() in claim.property_type.casefold() else 0
             if _violates_strict_fields(
                 enquiry.strict_fields,
@@ -1101,7 +1275,12 @@ async def refresh_inbound_matches(
                 str(lead.get("project_name") or ""),
                 str(lead.get("building_name") or ""),
             )
-            price = int(lead.get("matched_sale_price") or lead.get("purchase_price_aed") or 0) or None
+            price = (
+                int(lead.get("annual_rent_aed") or 0) or None
+                if enquiry.intent == "rent"
+                else int(lead.get("matched_sale_price") or lead.get("purchase_price_aed") or 0)
+                or None
+            )
             budget, budget_reason = _budget_fit(criteria, price)
             bedrooms = str(lead.get("bedrooms") or "")
             bedroom, bedroom_reason = _bedroom_fit(criteria, bedrooms)
@@ -1136,7 +1315,7 @@ async def refresh_inbound_matches(
             if item:
                 generated.append(item)
 
-        if expand_units:
+        if expand_units and enquiry.intent == "buy":
             sales_rows = await query(
                 """
                 SELECT
@@ -1311,7 +1490,16 @@ async def refresh_inbound_matches(
         )
         for listing in listings.listings:
             location, location_reason = _location_fit(criteria, listing.area_name or "", listing.subcommunity_name or "", listing.tower_name or "")
-            budget, budget_reason = _budget_fit(criteria, listing.price_value)
+            listing_price = listing.price_value
+            if enquiry.intent == "rent" and listing_price:
+                period = (listing.price_period or "").casefold()
+                if "month" in period:
+                    listing_price *= 12
+                elif "week" in period:
+                    listing_price *= 52
+                elif "day" in period:
+                    listing_price *= 365
+            budget, budget_reason = _budget_fit(criteria, listing_price)
             bedroom, bedroom_reason = _bedroom_fit(criteria, listing.bedrooms or "")
             property_points = 10 if not criteria.get("property_type") or criteria.get("property_type", "").casefold() in (listing.property_type or "").casefold() else 0
             if _violates_strict_fields(

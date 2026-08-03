@@ -206,13 +206,19 @@ async def crm_update_inbound_match(
 async def crm_inbound_import(
     file: UploadFile = File(...),
     name: str = Form(default="", max_length=200),
+    campaign_context: str = Form(default="", max_length=4_000),
     context: AuthContext = Depends(require_active_subscription),
     db: AsyncSession = Depends(get_db_session),
 ):
     """Normalize a campaign or CRM lead export into actionable enquiries."""
     user_id, organization_id = _auth_ids(context)
     return await process_inbound_import(
-        db, upload=file, name=name, user_id=user_id, organization_id=organization_id
+        db,
+        upload=file,
+        name=name,
+        user_id=user_id,
+        organization_id=organization_id,
+        campaign_context=campaign_context,
     )
 
 
