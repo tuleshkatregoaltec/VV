@@ -14,6 +14,13 @@ from app.crm.import_models import (
     CrmOwnerWorkspace,
     CrmPropertyContactClaim,
 )
+from app.crm.inbound_models import (
+    CrmInboundContact,
+    CrmInboundEnquiry,
+    CrmInboundImport,
+    CrmInboundMatch,
+    CrmInboundNote,
+)
 from app.crm.models import CrmLeadNote, CrmLeadWorkspace, CrmSavedLead
 from app.feasibility.models import FeasibilitySavedStudy
 from app.news.models import NewsArticle
@@ -40,6 +47,11 @@ __all__ = [
     "CrmPropertyContactClaim",
     "CrmOwnerWorkspace",
     "CrmOwnerNote",
+    "CrmInboundImport",
+    "CrmInboundContact",
+    "CrmInboundEnquiry",
+    "CrmInboundNote",
+    "CrmInboundMatch",
     # Feasibility
     "FeasibilitySavedStudy",
 ]

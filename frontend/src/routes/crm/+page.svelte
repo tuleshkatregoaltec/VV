@@ -723,6 +723,7 @@ async function deleteImport(item: CrmContactImport) {
 				</div>
 			</div>
 			<div class="flex flex-wrap items-center gap-2">
+				<a href="/crm/inbound" class="ui-button" data-variant="primary" data-size="sm"><Sparkles size={14} /> Inbound intelligence</a>
 				<button type="button" class="ui-button" data-variant="secondary" data-size="sm" onclick={openOwnerDataWorkspace}>
 					<FileUp size={14} /> Import owner data
 				</button>

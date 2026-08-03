@@ -28,6 +28,30 @@ from app.crm.import_service import (
     process_contact_import,
     rename_contact_import,
 )
+from app.crm.inbound_models import (
+    InboundEnquiryCreate,
+    InboundEnquiryListResponse,
+    InboundEnquiryResponse,
+    InboundEnquiryUpdate,
+    InboundImportResponse,
+    InboundMatchesResponse,
+    InboundMatchResponse,
+    InboundMatchUpdate,
+    InboundNoteCreate,
+)
+from app.crm.inbound_service import (
+    add_inbound_note,
+    create_inbound_enquiry,
+    delete_inbound_import,
+    get_inbound_enquiry,
+    get_inbound_matches,
+    list_inbound_enquiries,
+    list_inbound_imports,
+    process_inbound_import,
+    refresh_inbound_matches,
+    update_inbound_enquiry,
+    update_inbound_match_state,
+)
 from app.crm.models import (
     CrmDashboardResponse,
     CrmLeadDetailResponse,
@@ -58,6 +82,158 @@ router = APIRouter(prefix="/api/v1/crm", tags=["crm"])
 
 def _auth_ids(auth: AuthContext) -> tuple[str, str]:
     return str(auth.user.id), str(auth.organization.id)
+
+
+@router.post("/inbound/enquiries", response_model=InboundEnquiryResponse, status_code=201)
+async def crm_create_inbound_enquiry(
+    payload: InboundEnquiryCreate,
+    context: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """Create a manually entered buyer, tenant, seller, or landlord enquiry."""
+    user_id, organization_id = _auth_ids(context)
+    return await create_inbound_enquiry(
+        db, payload=payload, user_id=user_id, organization_id=organization_id
+    )
+
+
+@router.get("/inbound/enquiries", response_model=InboundEnquiryListResponse)
+async def crm_inbound_enquiries(
+    intent_group: str | None = Query(default=None, pattern="^(demand|instructions)$"),
+    status: str | None = Query(default=None, max_length=40),
+    search: str | None = Query(default=None, max_length=160),
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+    context: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """List organization-visible inbound enquiries and review exceptions."""
+    _, organization_id = _auth_ids(context)
+    return await list_inbound_enquiries(
+        db,
+        organization_id=organization_id,
+        intent_group=intent_group,
+        status=status,
+        search=search,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@router.get("/inbound/enquiries/{enquiry_id}", response_model=InboundEnquiryResponse)
+async def crm_inbound_enquiry(
+    enquiry_id: int,
+    context: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
+):
+    _, organization_id = _auth_ids(context)
+    return await get_inbound_enquiry(db, enquiry_id, organization_id)
+
+
+@router.patch("/inbound/enquiries/{enquiry_id}", response_model=InboundEnquiryResponse)
+async def crm_update_inbound_enquiry(
+    enquiry_id: int,
+    payload: InboundEnquiryUpdate,
+    context: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
+):
+    _, organization_id = _auth_ids(context)
+    return await update_inbound_enquiry(
+        db, enquiry_id=enquiry_id, organization_id=organization_id, payload=payload
+    )
+
+
+@router.post("/inbound/enquiries/{enquiry_id}/notes", response_model=InboundEnquiryResponse)
+async def crm_add_inbound_note(
+    enquiry_id: int,
+    payload: InboundNoteCreate,
+    context: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
+):
+    user_id, organization_id = _auth_ids(context)
+    return await add_inbound_note(
+        db,
+        enquiry_id=enquiry_id,
+        organization_id=organization_id,
+        user_id=user_id,
+        body=payload.body,
+    )
+
+
+@router.get("/inbound/enquiries/{enquiry_id}/matches", response_model=InboundMatchesResponse)
+async def crm_inbound_matches(
+    enquiry_id: int,
+    context: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
+):
+    _, organization_id = _auth_ids(context)
+    return await get_inbound_matches(db, enquiry_id, organization_id)
+
+
+@router.post(
+    "/inbound/enquiries/{enquiry_id}/matches/refresh",
+    response_model=InboundMatchesResponse,
+)
+async def crm_refresh_inbound_matches(
+    enquiry_id: int,
+    expand_units: bool = Query(default=False),
+    context: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
+):
+    _, organization_id = _auth_ids(context)
+    return await refresh_inbound_matches(
+        db,
+        enquiry_id=enquiry_id,
+        organization_id=organization_id,
+        expand_units=expand_units,
+    )
+
+
+@router.patch("/inbound/matches/{match_id}", response_model=InboundMatchResponse)
+async def crm_update_inbound_match(
+    match_id: int,
+    payload: InboundMatchUpdate,
+    context: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
+):
+    _, organization_id = _auth_ids(context)
+    return await update_inbound_match_state(
+        db, match_id=match_id, organization_id=organization_id, state=payload.state
+    )
+
+
+@router.post("/inbound/imports", response_model=InboundImportResponse, status_code=201)
+async def crm_inbound_import(
+    file: UploadFile = File(...),
+    name: str = Form(default="", max_length=200),
+    context: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """Normalize a campaign or CRM lead export into actionable enquiries."""
+    user_id, organization_id = _auth_ids(context)
+    return await process_inbound_import(
+        db, upload=file, name=name, user_id=user_id, organization_id=organization_id
+    )
+
+
+@router.get("/inbound/imports", response_model=list[InboundImportResponse])
+async def crm_inbound_imports(
+    context: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
+):
+    _, organization_id = _auth_ids(context)
+    return await list_inbound_imports(db, organization_id)
+
+
+@router.delete("/inbound/imports/{import_id}", status_code=204)
+async def crm_delete_inbound_import(
+    import_id: int,
+    context: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
+):
+    _, organization_id = _auth_ids(context)
+    await delete_inbound_import(db, import_id, organization_id)
+    return Response(status_code=204)
 
 
 @router.post(
