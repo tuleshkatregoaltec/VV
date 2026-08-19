@@ -1,6 +1,7 @@
+import json
 from datetime import date
 
-from fastapi import APIRouter, Depends, File, Form, Query, Response, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Response, UploadFile
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.dependencies import AuthContext, require_active_subscription
@@ -29,10 +30,12 @@ from app.crm.import_service import (
     rename_contact_import,
 )
 from app.crm.inbound_models import (
+    InboundActivityCreate,
     InboundEnquiryCreate,
     InboundEnquiryListResponse,
     InboundEnquiryResponse,
     InboundEnquiryUpdate,
+    InboundImportPreviewResponse,
     InboundImportResponse,
     InboundMatchesResponse,
     InboundMatchResponse,
@@ -40,6 +43,7 @@ from app.crm.inbound_models import (
     InboundNoteCreate,
 )
 from app.crm.inbound_service import (
+    add_inbound_activity,
     add_inbound_note,
     create_inbound_enquiry,
     delete_inbound_import,
@@ -47,6 +51,7 @@ from app.crm.inbound_service import (
     get_inbound_matches,
     list_inbound_enquiries,
     list_inbound_imports,
+    preview_inbound_import,
     process_inbound_import,
     refresh_inbound_matches,
     update_inbound_enquiry,
@@ -100,6 +105,9 @@ async def crm_create_inbound_enquiry(
 @router.get("/inbound/enquiries", response_model=InboundEnquiryListResponse)
 async def crm_inbound_enquiries(
     intent_group: str | None = Query(default=None, pattern="^(demand|instructions)$"),
+    workspace: str | None = Query(
+        default=None, pattern="^(inbox|unqualified|qualified|closed)$"
+    ),
     status: str | None = Query(default=None, max_length=40),
     search: str | None = Query(default=None, max_length=160),
     limit: int = Query(default=100, ge=1, le=500),
@@ -113,6 +121,7 @@ async def crm_inbound_enquiries(
         db,
         organization_id=organization_id,
         intent_group=intent_group,
+        workspace=workspace,
         status=status,
         search=search,
         limit=limit,
@@ -137,9 +146,13 @@ async def crm_update_inbound_enquiry(
     context: AuthContext = Depends(require_active_subscription),
     db: AsyncSession = Depends(get_db_session),
 ):
-    _, organization_id = _auth_ids(context)
+    user_id, organization_id = _auth_ids(context)
     return await update_inbound_enquiry(
-        db, enquiry_id=enquiry_id, organization_id=organization_id, payload=payload
+        db,
+        enquiry_id=enquiry_id,
+        organization_id=organization_id,
+        user_id=user_id,
+        payload=payload,
     )
 
 
@@ -156,6 +169,24 @@ async def crm_add_inbound_note(
         enquiry_id=enquiry_id,
         organization_id=organization_id,
         user_id=user_id,
+        body=payload.body,
+    )
+
+
+@router.post("/inbound/enquiries/{enquiry_id}/activities", response_model=InboundEnquiryResponse)
+async def crm_add_inbound_activity(
+    enquiry_id: int,
+    payload: InboundActivityCreate,
+    context: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
+):
+    user_id, organization_id = _auth_ids(context)
+    return await add_inbound_activity(
+        db,
+        enquiry_id=enquiry_id,
+        organization_id=organization_id,
+        user_id=user_id,
+        activity_type=payload.activity_type,
         body=payload.body,
     )
 
@@ -207,11 +238,16 @@ async def crm_inbound_import(
     file: UploadFile = File(...),
     name: str = Form(default="", max_length=200),
     campaign_context: str = Form(default="", max_length=4_000),
+    mapping_json: str = Form(default="", max_length=50_000),
     context: AuthContext = Depends(require_active_subscription),
     db: AsyncSession = Depends(get_db_session),
 ):
     """Normalize a campaign or CRM lead export into actionable enquiries."""
     user_id, organization_id = _auth_ids(context)
+    try:
+        mapping_override = json.loads(mapping_json) if mapping_json else None
+    except json.JSONDecodeError as exc:
+        raise HTTPException(status_code=422, detail="Invalid import mapping") from exc
     return await process_inbound_import(
         db,
         upload=file,
@@ -219,7 +255,18 @@ async def crm_inbound_import(
         user_id=user_id,
         organization_id=organization_id,
         campaign_context=campaign_context,
+        mapping_override=mapping_override,
     )
+
+
+@router.post("/inbound/imports/preview", response_model=InboundImportPreviewResponse)
+async def crm_preview_inbound_import(
+    file: UploadFile = File(...),
+    campaign_context: str = Form(default="", max_length=4_000),
+    context: AuthContext = Depends(require_active_subscription),
+):
+    """Inspect headers and samples without storing contacts or creating enquiries."""
+    return await preview_inbound_import(file, campaign_context)
 
 
 @router.get("/inbound/imports", response_model=list[InboundImportResponse])

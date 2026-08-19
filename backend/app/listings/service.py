@@ -11,6 +11,7 @@ from fastapi import HTTPException
 
 from app.clickhouse.client import query
 from app.listings.models import (
+    ListingAnalyticsResponse,
     ListingCardResponse,
     ListingDetailResponse,
     ListingFiltersResponse,
@@ -474,6 +475,53 @@ async def list_listings_from_clickhouse(
         limit=limit,
         offset=offset,
         filters=await _filters(mode),
+    )
+
+
+async def listing_analytics_from_clickhouse(
+    mode: ListingMode,
+    search: str | None = None,
+    area: str | None = None,
+    property_type: str | None = None,
+    bedrooms: str | None = None,
+    price_min: int | None = None,
+    price_max: int | None = None,
+) -> ListingAnalyticsResponse:
+    """Return aggregate metrics for the same available-listing filter set as the grid."""
+    where, params = _where_sql(
+        mode=mode,
+        search=search,
+        area=area,
+        property_type=property_type,
+        bedrooms=bedrooms,
+        bedrooms_in=None,
+        price_min=price_min,
+        price_max=price_max,
+    )
+    size_expr = "JSONExtractFloat(size_json, 'value')"
+    result = await query(
+        f"""
+        SELECT
+            count() AS total,
+            quantileTDigestIf(0.5)({PRICE_VALUE_EXPR}, {PRICE_VALUE_EXPR} > 0) AS median_price_aed,
+            quantileTDigestIf(
+                0.5
+            )({PRICE_VALUE_EXPR} / {size_expr}, {PRICE_VALUE_EXPR} > 0 AND {size_expr} > 0)
+                AS median_price_per_sqft_aed,
+            countIf(is_verified = 1) AS verified_count,
+            uniqExact(JSONExtract(listing_location_names_json, 'Array(String)')[2]) AS area_count
+        FROM {LISTINGS_TABLE}
+        WHERE {where}
+        """,
+        params,
+    )
+    row = result[0] if result else {}
+    return ListingAnalyticsResponse(
+        total=_int_or_none(row.get("total")) or 0,
+        median_price_aed=_float_or_none(row.get("median_price_aed")),
+        median_price_per_sqft_aed=_float_or_none(row.get("median_price_per_sqft_aed")),
+        verified_count=_int_or_none(row.get("verified_count")) or 0,
+        area_count=_int_or_none(row.get("area_count")) or 0,
     )
 
 

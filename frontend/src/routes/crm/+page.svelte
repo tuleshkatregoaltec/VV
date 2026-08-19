@@ -55,8 +55,15 @@ import type {
 	CrmTimelineEvent
 } from '$lib/api/crm'
 import { crm } from '$lib/api/crm'
+import CrmDashboardSkeleton from '$lib/components/crm/CrmDashboardSkeleton.svelte'
+import CrmPanelSkeleton from '$lib/components/crm/CrmPanelSkeleton.svelte'
 import AppFrame from '$lib/components/layout/AppFrame.svelte'
 import PageContainer from '$lib/components/layout/PageContainer.svelte'
+import {
+	formatCrmMoney,
+	formatCrmNumber as number,
+	formatCrmDate as shortDate
+} from '$lib/crm/format'
 import { crmQueries } from '$lib/queries/crm'
 
 const PAGE_SIZE = 50
@@ -138,13 +145,14 @@ const dashboardParams = $derived({
 	limit: PAGE_SIZE,
 	offset
 })
+const contactImportsEnabled = $derived(showSaved || showOutreachPreview)
 const dashboardQuery = createQuery(() => crmQueries.dashboard(dashboardParams))
 const detailQuery = createQuery(() => crmQueries.lead(selectedLeadId))
 const workspacesQuery = createQuery(() => crmQueries.workspaces())
 const workspaceQuery = createQuery(() => crmQueries.workspace(selectedLeadId))
 const savedQuery = createQuery(() => crmQueries.saved())
 const leadContactsQuery = createQuery(() => crmQueries.leadContacts(selectedLeadId))
-const contactImportsQuery = createQuery(() => crmQueries.contactImports())
+const contactImportsQuery = createQuery(() => crmQueries.contactImports(contactImportsEnabled))
 const ownerRegistryScope = $derived<CrmOwnerRegistryScope>(
 	savedFolder === 'rental_ready'
 		? 'rental_ready'
@@ -180,7 +188,9 @@ const ownerRegistryQuery = createQuery(() =>
 	)
 )
 const ownerProfileQuery = createQuery(() => crmQueries.ownerProfile(selectedOwnerKey))
-const ownerWorkspacesQuery = createQuery(() => crmQueries.ownerWorkspaces())
+const ownerWorkspacesQuery = createQuery(() =>
+	crmQueries.ownerWorkspaces(ownerRegistryEnabled || Boolean(selectedOwnerKey))
+)
 const dashboard = $derived(dashboardQuery.data)
 const summary = $derived(dashboard?.summary)
 const detail = $derived(detailQuery.data)
@@ -289,37 +299,15 @@ $effect(() => {
 	noteBody = ''
 })
 
-function money(value: number | null | undefined, compact = false) {
-	if (!value) return '—'
-	return new Intl.NumberFormat('en-AE', {
-		style: 'currency',
-		currency: 'AED',
-		notation: compact ? 'compact' : 'standard',
-		maximumFractionDigits: compact ? 1 : 0
-	}).format(value)
-}
-
-function shortDate(value: string | null | undefined) {
-	if (!value) return '—'
-	const datePrefix = value.match(/^\d{4}-\d{2}-\d{2}/)?.[0]
-	const parsed = new Date(datePrefix ? `${datePrefix}T00:00:00` : value)
-	if (Number.isNaN(parsed.getTime())) return '—'
-	return new Intl.DateTimeFormat('en-GB', {
-		day: '2-digit',
-		month: 'short',
-		year: 'numeric'
-	}).format(parsed)
-}
-
-function number(value: number | null | undefined) {
-	return new Intl.NumberFormat('en-AE').format(value ?? 0)
-}
-
 function lookbackLabel(days: number) {
 	if (days === 365) return '1 year'
 	if (days === 730) return '2 years'
 	if (days === 548) return '18 months'
 	return `${days} days`
+}
+
+function money(value: number | null | undefined, compact = false) {
+	return value ? formatCrmMoney(value, compact) : '—'
 }
 
 function statusLabel(lead: CrmLead) {
@@ -537,9 +525,8 @@ function chooseImportFile(event: Event) {
 	importError = ''
 }
 
-async function openOwnerDataWorkspace() {
+function openOwnerDataWorkspace() {
 	showOutreachPreview = true
-	await contactImportsQuery.refetch()
 }
 
 async function runContactImport() {
@@ -737,9 +724,19 @@ async function deleteImport(item: CrmContactImport) {
 					{#if showSaved}<BookmarkCheck size={14} />{:else}<Bookmark size={14} />{/if}
 					Saved {savedQuery.data?.length ? `(${savedQuery.data.length})` : ''}
 				</button>
-				<span class="rounded-full border border-success-border bg-success-bg px-3 py-1.5 text-xs font-semibold text-success">
-					<span class="mr-1.5 inline-block h-1.5 w-1.5 rounded-full bg-success"></span>Live data pipeline
-				</span>
+				{#if dashboardQuery.isError}
+					<span class="rounded-full border border-error-border bg-error-bg px-3 py-1.5 text-xs font-semibold text-error">
+						<span class="mr-1.5 inline-block h-1.5 w-1.5 rounded-full bg-error"></span>Data pipeline unavailable
+					</span>
+				{:else if dashboardQuery.isFetching}
+					<span class="rounded-full border border-border bg-panel px-3 py-1.5 text-xs font-semibold text-fg-3">
+						<span class="mr-1.5 inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-warning"></span>Checking data pipeline
+					</span>
+				{:else}
+					<span class="rounded-full border border-success-border bg-success-bg px-3 py-1.5 text-xs font-semibold text-success">
+						<span class="mr-1.5 inline-block h-1.5 w-1.5 rounded-full bg-success"></span>Live data pipeline
+					</span>
+				{/if}
 				<button type="button" class="ui-button" data-variant="secondary" data-size="sm" onclick={() => dashboardQuery.refetch()} disabled={dashboardQuery.isFetching}>
 					<RefreshCw size={14} class={dashboardQuery.isFetching ? 'animate-spin' : ''} /> Refresh
 				</button>
@@ -747,12 +744,10 @@ async function deleteImport(item: CrmContactImport) {
 		</header>
 
 		{#if dashboardQuery.isLoading}
-			<div class="grid min-h-[55vh] place-items-center text-center">
-				<div><RefreshCw class="mx-auto mb-3 animate-spin text-info" size={24} /><p class="text-sm font-medium text-fg-2">Scoring lease opportunities…</p></div>
-			</div>
+			<CrmDashboardSkeleton />
 		{:else if dashboardQuery.isError}
 			<div class="mt-6 rounded-lg border border-error-border bg-error-bg p-5">
-				<div class="flex items-start gap-3"><CircleAlert class="mt-0.5 text-error" size={18} /><div><p class="font-semibold text-error">CRM data could not be loaded</p><p class="mt-1 text-sm text-fg-2">{dashboardQuery.error.message}</p></div></div>
+				<div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between"><div class="flex items-start gap-3"><CircleAlert class="mt-0.5 text-error" size={18} /><div><p class="font-semibold text-error">CRM data could not be loaded</p><p class="mt-1 text-sm text-fg-2">{dashboardQuery.error.message}</p></div></div><button type="button" class="ui-button shrink-0" data-variant="secondary" data-size="sm" onclick={() => dashboardQuery.refetch()} disabled={dashboardQuery.isFetching}><RefreshCw size={14} class={dashboardQuery.isFetching ? 'animate-spin' : ''} /> Try again</button></div>
 			</div>
 		{:else}
 			<section class="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -1000,8 +995,8 @@ async function deleteImport(item: CrmContactImport) {
 								</div>
 							</div>
 						{/if}
-						{#if ownerRegistryQuery.isLoading || ownerRegistryQuery.isFetching}
-							<div class="grid min-h-80 place-items-center"><div class="text-center"><RefreshCw class="mx-auto animate-spin text-info" size={19} /><p class="mt-3 text-xs text-fg-4">Building owner profiles</p></div></div>
+						{#if ownerRegistryQuery.isLoading}
+							<CrmPanelSkeleton rows={5} compact />
 						{:else if ownerRegistryQuery.isError}
 							<div class="grid min-h-80 place-items-center p-8 text-center"><div><CircleAlert class="mx-auto text-error" size={25} /><p class="mt-3 text-sm font-semibold text-fg-1">Owner folder could not be loaded</p><p class="mt-1 max-w-sm text-xs leading-5 text-fg-4">{ownerRegistryQuery.error.message}</p><button type="button" class="ui-button mt-4" data-variant="secondary" data-size="sm" onclick={() => ownerRegistryQuery.refetch()}><RefreshCw size={12} /> Try again</button></div></div>
 						{:else if ownerRegistry?.owners.length}
@@ -1143,7 +1138,7 @@ async function deleteImport(item: CrmContactImport) {
 	<button type="button" class="fixed inset-0 z-[70] cursor-default bg-overlay backdrop-blur-[1px]" onclick={() => (selectedLeadId = null)} aria-label="Close lead"></button>
 	<div class="fixed inset-y-0 right-0 z-[80] isolate flex w-full max-w-2xl flex-col border-l border-border bg-card shadow-xl ring-1 ring-black/5" aria-label="Lead evidence" role="dialog" aria-modal="true">
 		{#if detailQuery.isLoading}
-			<div class="grid flex-1 place-items-center"><RefreshCw class="animate-spin text-info" size={22} /></div>
+			<CrmPanelSkeleton rows={5} />
 		{:else if detailQuery.isError}
 			<div class="p-6"><button type="button" class="float-right ui-button" data-variant="ghost" data-size="icon" onclick={() => (selectedLeadId = null)} aria-label="Close"><X size={16} /></button><p class="font-semibold text-error">Lead evidence unavailable</p><p class="mt-2 text-sm text-fg-3">{detailQuery.error.message}</p></div>
 		{:else if detail}
@@ -1219,7 +1214,7 @@ async function deleteImport(item: CrmContactImport) {
 						{#if workspaceSaving}<RefreshCw size={15} class="animate-spin text-info" />{/if}
 					</div>
 					{#if workspaceQuery.isLoading}
-						<div class="mt-4 grid h-24 place-items-center rounded-lg border border-border bg-panel"><RefreshCw size={16} class="animate-spin text-info" /></div>
+						<div class="mt-4 overflow-hidden rounded-lg border border-border"><CrmPanelSkeleton rows={1} compact /></div>
 					{:else if workspace}
 						<div class="mt-4 grid gap-3 sm:grid-cols-2">
 							<label class="grid gap-1.5">
@@ -1295,7 +1290,7 @@ async function deleteImport(item: CrmContactImport) {
 	<button type="button" class="fixed inset-0 z-[110] cursor-default bg-overlay backdrop-blur-[2px]" onclick={() => (selectedOwnerKey = null)} aria-label="Close owner profile"></button>
 	<div class="fixed inset-y-0 right-0 z-[120] isolate flex w-full max-w-2xl flex-col border-l border-border bg-card shadow-2xl" aria-label="Owner portfolio" role="dialog" aria-modal="true">
 		{#if ownerProfileQuery.isLoading}
-			<div class="grid flex-1 place-items-center"><RefreshCw class="animate-spin text-info" size={21} /></div>
+			<CrmPanelSkeleton rows={5} />
 		{:else if ownerProfileQuery.isError}
 			<div class="p-6"><button type="button" class="float-right ui-button" data-variant="ghost" data-size="icon" onclick={() => (selectedOwnerKey = null)} aria-label="Close"><X size={16} /></button><p class="font-semibold text-error">Owner profile unavailable</p><p class="mt-2 text-sm text-fg-3">{ownerProfileQuery.error.message}</p></div>
 		{:else if selectedOwner}
@@ -1401,7 +1396,7 @@ async function deleteImport(item: CrmContactImport) {
 					</div>
 					<div class="space-y-1.5">
 						{#if contactImportsQuery.isLoading}
-							<div class="flex items-center gap-2 rounded-lg border border-border bg-card p-3 text-xs text-fg-4"><RefreshCw size={12} class="animate-spin" /> Loading imports</div>
+							<div class="overflow-hidden rounded-lg border border-border bg-card"><CrmPanelSkeleton rows={3} compact /></div>
 						{:else if contactImportsQuery.data?.length}
 							{#each contactImportsQuery.data as item (item.id)}
 								<div class={`rounded-lg border p-3 transition ${displayedImport?.id === item.id ? 'border-info-border bg-info-bg' : 'border-border bg-card hover:border-info-border'}`}>
@@ -1497,6 +1492,8 @@ async function deleteImport(item: CrmContactImport) {
 							</ul>
 						</div>
 					</section>
+				{:else if contactImportsQuery.isLoading}
+					<CrmPanelSkeleton rows={5} />
 				{:else}
 					<div class="flex min-h-[480px] items-center justify-center"><div class="max-w-sm text-center"><FileUp class="mx-auto text-fg-4" size={23} /><p class="mt-3 text-sm font-semibold text-fg-1">Import your first owner database</p><p class="mt-1 text-xs leading-5 text-fg-4">Results will be verified, deduplicated, and published into the Saved workspaces.</p></div></div>
 				{/if}

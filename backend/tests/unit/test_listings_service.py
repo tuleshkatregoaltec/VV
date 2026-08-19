@@ -1,3 +1,6 @@
+import pytest
+
+from app.listings import service
 from app.listings.service import MONTHLY_PRICE_EXPR, PRICE_PERIOD_EXPR, _card_from_row, _where_sql
 
 
@@ -63,3 +66,34 @@ def test_listing_where_sql_can_filter_raw_price_period():
 
     assert f"{PRICE_PERIOD_EXPR} = {{price_period:String}}" in where
     assert params["price_period"] == "yearly"
+
+
+@pytest.mark.asyncio
+async def test_listing_analytics_uses_the_same_available_listing_scope(monkeypatch):
+    calls = []
+
+    async def fake_query(sql, params):
+        calls.append((sql, params))
+        return [
+            {
+                "total": 12,
+                "median_price_aed": 2_000_000,
+                "median_price_per_sqft_aed": 2_100.5,
+                "verified_count": 9,
+                "area_count": 3,
+            }
+        ]
+
+    monkeypatch.setattr(service, "query", fake_query)
+    analytics = await service.listing_analytics_from_clickhouse(
+        mode="sale", area="Dubai Marina", bedrooms="2"
+    )
+
+    assert analytics.total == 12
+    assert analytics.median_price_aed == 2_000_000
+    assert analytics.median_price_per_sqft_aed == 2_100.5
+    assert analytics.verified_count == 9
+    assert analytics.area_count == 3
+    assert "is_available = 1" in calls[0][0]
+    assert "quantileTDigestIf" in calls[0][0]
+    assert calls[0][1]["area"] == "Dubai Marina"

@@ -81,17 +81,17 @@ async def get_market_pulse(
     sql = """
     SELECT
         count(*) as transaction_count,
-        round(median(trans_value), 0) as median_price,
-        round(avg(trans_value), 0) as avg_price,
+        round(median(actual_worth), 0) as median_price,
+        round(avg(actual_worth), 0) as avg_price,
         round(median(actual_area), 1) as median_area_sqft,
-        round(median(trans_value / actual_area), 0) as median_price_per_sqft,
+        round(median(actual_worth / actual_area), 0) as median_price_per_sqft,
         min(instance_date) as period_start,
         max(instance_date) as period_end
     FROM ch_transactions
     WHERE
-        area_en = {area:String}
+        area_name_en = {area:String}
         AND instance_date >= today() - {period_days:Int32}
-        AND trans_value > 0
+        AND actual_worth > 0
         AND actual_area > 0
     """
 
@@ -144,30 +144,30 @@ async def rank_areas(
     if metric == "volume":
         sql = """
         SELECT
-            area_en as area,
+            area_name_en as area,
             count(*) as transaction_count,
-            round(median(trans_value), 0) as median_price
+            round(median(actual_worth), 0) as median_price
         FROM ch_transactions
         WHERE
             instance_date >= today() - {period_days:Int32}
-            AND trans_value > 0
-            AND area_en != ''
-        GROUP BY area_en
+            AND actual_worth > 0
+            AND area_name_en != ''
+        GROUP BY area_name_en
         ORDER BY transaction_count DESC
         LIMIT {limit:Int32}
         """
     elif metric == "price":
         sql = """
         SELECT
-            area_en as area,
-            round(median(trans_value), 0) as median_price,
+            area_name_en as area,
+            round(median(actual_worth), 0) as median_price,
             count(*) as transaction_count
         FROM ch_transactions
         WHERE
             instance_date >= today() - {period_days:Int32}
-            AND trans_value > 0
-            AND area_en != ''
-        GROUP BY area_en
+            AND actual_worth > 0
+            AND area_name_en != ''
+        GROUP BY area_name_en
         HAVING transaction_count >= 10
         ORDER BY median_price DESC
         LIMIT {limit:Int32}
@@ -178,27 +178,27 @@ async def rank_areas(
         WITH
             current_period AS (
                 SELECT
-                    area_en as area,
-                    median(trans_value) as current_median
+                    area_name_en as area,
+                    median(actual_worth) as current_median
                 FROM ch_transactions
                 WHERE
                     instance_date >= today() - {period_days:Int32}
-                    AND trans_value > 0
-                    AND area_en != ''
-                GROUP BY area_en
+                    AND actual_worth > 0
+                    AND area_name_en != ''
+                GROUP BY area_name_en
                 HAVING count(*) >= 10
             ),
             previous_period AS (
                 SELECT
-                    area_en as area,
-                    median(trans_value) as previous_median
+                    area_name_en as area,
+                    median(actual_worth) as previous_median
                 FROM ch_transactions
                 WHERE
                     instance_date >= today() - {period_days:Int32} * 2
                     AND instance_date < today() - {period_days:Int32}
-                    AND trans_value > 0
-                    AND area_en != ''
-                GROUP BY area_en
+                    AND actual_worth > 0
+                    AND area_name_en != ''
+                GROUP BY area_name_en
                 HAVING count(*) >= 10
             )
         SELECT
@@ -286,18 +286,18 @@ async def get_similar_projects(
     ref_sql = """
     SELECT
         master_project_en,
-        area_en,
+        area_name_en,
         property_type_en,
-        round(median(trans_value), 0) as median_price,
+        round(median(actual_worth), 0) as median_price,
         round(median(actual_area), 1) as median_area,
         count(*) as transaction_count
     FROM ch_transactions
     WHERE
         master_project_en ILIKE {project_name:String}
-        AND trans_value > 0
+        AND actual_worth > 0
         AND actual_area > 0
         AND instance_date >= today() - 365
-    GROUP BY master_project_en, area_en, property_type_en
+    GROUP BY master_project_en, area_name_en, property_type_en
     LIMIT 1
     """
 
@@ -312,7 +312,7 @@ async def get_similar_projects(
 
         ref_row = ref_rows[0]
         ref_project = ref_row["master_project_en"]
-        ref_area = ref_row["area_en"]
+        ref_area = ref_row["area_name_en"]
         ref_type = ref_row["property_type_en"]
         ref_price = ref_row["median_price"]
         ref_area_sqft = ref_row["median_area"]
@@ -321,21 +321,21 @@ async def get_similar_projects(
         similar_sql = """
         SELECT
             master_project_en,
-            area_en,
+            area_name_en,
             property_type_en,
-            round(median(trans_value), 0) as median_price,
+            round(median(actual_worth), 0) as median_price,
             round(median(actual_area), 1) as median_area,
             count(*) as transaction_count,
-            abs(median(trans_value) - {ref_price:Float64}) as price_diff
+            abs(median(actual_worth) - {ref_price:Float64}) as price_diff
         FROM ch_transactions
         WHERE
             master_project_en != {ref_project:String}
             AND property_type_en = {ref_type:String}
-            AND trans_value > 0
+            AND actual_worth > 0
             AND actual_area > 0
             AND instance_date >= today() - 365
             AND master_project_en != ''
-        GROUP BY master_project_en, area_en, property_type_en
+        GROUP BY master_project_en, area_name_en, property_type_en
         HAVING transaction_count >= 5
         ORDER BY price_diff ASC
         LIMIT {limit:Int32}
@@ -356,7 +356,7 @@ async def get_similar_projects(
             similar_projects.append(
                 {
                     "project": row["master_project_en"],
-                    "area": row["area_en"],
+                    "area": row["area_name_en"],
                     "property_type": row["property_type_en"],
                     "median_price_aed": row["median_price"],
                     "median_area_sqft": row["median_area"],

@@ -26,3 +26,6 @@ At a repo level, the codebase is organized into:
 ## Development
 
 See [development.md](/home/vitevue/repos/vitevue-platform/development.md) for setup, local commands, environment configuration, git hooks, and the day-to-day development workflow.
+
+For a new primary development Mac, including Tailscale, the scrape/data
+workflow, and local CRM data loading, see [docs/new-mac-setup.md](docs/new-mac-setup.md).

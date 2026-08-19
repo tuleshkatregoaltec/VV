@@ -45,7 +45,12 @@ async def create_conversation_endpoint(
     db: AsyncSession = Depends(get_db_session),
 ):
     """Create a new conversation"""
-    conversation = await create_conversation(db=db, user_id=context.user.id, title=request.title)
+    conversation = await create_conversation(
+        db=db,
+        user_id=context.user.id,
+        organization_id=context.organization.id,
+        title=request.title,
+    )
     return ConversationResponse.model_validate(conversation)
 
 

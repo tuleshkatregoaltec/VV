@@ -96,6 +96,9 @@ def _radar_gross_yield_pct(row: dict[str, Any]) -> float | None:
         or not median_price
         or not median_rent
     ):
+        fact_yield = _float_or_none(row.get("gross_yield_pct"))
+        if fact_yield is not None and RADAR_YIELD_MIN_PCT <= fact_yield <= RADAR_YIELD_MAX_PCT:
+            return round(fact_yield, 2)
         return None
 
     yield_pct = round(median_rent / median_price * 100, 2)
@@ -190,42 +193,51 @@ def _radar_geo_cte() -> str:
     return f"""
     geo_by_project AS (
         SELECT
-            p.project_id AS project_id,
-            avg(g.lat) AS latitude,
-            avg(g.lng) AS longitude,
+            lowerUTF8(gb.project_name_en) AS project_key,
+            min(gb.property_id) AS property_id,
+            any(gb.project_name_en) AS project_name_en,
+            any(gb.area_name_en) AS area_name_en,
+            any(gb.developer_name) AS developer_name,
+            avg(gb.lat) AS latitude,
+            avg(gb.lng) AS longitude,
             count() AS geo_pin_count,
             '{CH_GEO_BUILDINGS_SOURCE}' AS coordinate_source,
             '' AS coordinate_method,
             0 AS detail_point_count,
             count() AS building_point_count,
             0 AS land_point_count
-        FROM ch_geo_buildings g
-        INNER JOIN ch_projects p ON g.project_name_en = p.project_name_en
-        WHERE g.lat BETWEEN 20 AND 30
-          AND g.lng BETWEEN 50 AND 60
-          AND g.project_name_en != ''
-        GROUP BY p.project_id
+        FROM ch_geo_buildings AS gb
+        WHERE gb.project_name_en != ''
+          AND gb.lat BETWEEN 20 AND 30
+          AND gb.lng BETWEEN 50 AND 60
+        GROUP BY project_key
     )
     """
 
 
 async def list_all_projects() -> List[ProjectSearchResult]:
-    """Get all projects with minimal data for client-side search."""
+    """Get map-searchable projects from the locally geocoded DXBI catalogue.
+
+    DLD's local project extract stores its named records under ``project_number``
+    rather than a stable ``project_id``.  The coordinate catalogue has stable
+    building property ids, so negative ids deliberately identify its synthetic
+    project records and avoid collisions with genuine DLD project ids.
+    """
     sql = """
         SELECT
-            p.project_id AS project_id,
-            p.project_name_en,
-            p.area_name_en,
-            p.master_project_en,
-            COALESCE(NULLIF(d.developer_name_en, ''), p.developer_name) AS developer_name,
-            COALESCE(NULLIF(g.centroid_lat, 0), 25.2048) AS latitude,
-            COALESCE(NULLIF(g.centroid_lng, 0), 55.2708) AS longitude
-        FROM ch_projects p
-        LEFT JOIN ch_developers d ON p.developer_name = d.developer_name_ar
-        LEFT JOIN ch_geo_projects g ON p.project_id = g.project_id
-        WHERE p.project_name_en != ''
-          AND NOT match(p.project_name_en, '^Project [0-9]')
-        ORDER BY p.project_name_en
+            -toInt64(min(gb.property_id)) AS project_id,
+            any(gb.project_name_en) AS project_name_en,
+            any(gb.area_name_en) AS area_name_en,
+            '' AS master_project_en,
+            any(gb.developer_name) AS developer_name,
+            avg(gb.lat) AS latitude,
+            avg(gb.lng) AS longitude
+        FROM ch_geo_buildings AS gb
+        WHERE gb.project_name_en != ''
+          AND gb.lat BETWEEN 20 AND 30
+          AND gb.lng BETWEEN 50 AND 60
+        GROUP BY lowerUTF8(gb.project_name_en)
+        ORDER BY project_name_en
         LIMIT 5000
     """
 
@@ -247,6 +259,85 @@ async def list_all_projects() -> List[ProjectSearchResult]:
 
 async def get_project_details(project_id: int) -> Optional[ProjectDetailResponse]:
     """Get full project details including buildings and unit composition."""
+    # Radar/search synthetic ids are negative building property ids.  Resolve
+    # them directly from the DXBI coordinate catalogue before querying DLD.
+    if project_id < 0:
+        property_id = abs(project_id)
+        geo_project_sql = """
+            SELECT
+                any(gb.project_name_en) AS project_name_en,
+                any(gb.area_name_en) AS area_name_en,
+                any(gb.developer_name) AS developer_name,
+                avg(gb.lat) AS latitude,
+                avg(gb.lng) AS longitude
+            FROM ch_geo_buildings AS gb
+            WHERE gb.property_id = {property_id:UInt64}
+              AND gb.project_name_en != ''
+            GROUP BY gb.property_id
+        """
+        geo_project_rows = await query(geo_project_sql, {"property_id": property_id})
+        if not geo_project_rows:
+            return None
+
+        geo_project = geo_project_rows[0]
+        geo_rows = await query(
+            """
+            SELECT property_id, building_name_en, project_name_en, lat, lng
+            FROM ch_geo_buildings
+            WHERE project_name_en = {project_name:String}
+              AND lat BETWEEN 20 AND 30
+              AND lng BETWEEN 50 AND 60
+            ORDER BY building_name_en
+            """,
+            {"project_name": geo_project["project_name_en"]},
+        )
+        geo_pins = [
+            GeoPin(
+                building_name=row["building_name_en"] or f"Building {row['property_id']}",
+                project_name=row["project_name_en"],
+                latitude=float(row["lat"]),
+                longitude=float(row["lng"]),
+                property_id=int(row["property_id"]),
+                point_type="building",
+            )
+            for row in geo_rows
+        ]
+        buildings = [
+            BuildingInfo(
+                property_id=int(row["property_id"]),
+                building_number=None,
+                building_name=row["building_name_en"] or f"Building {row['property_id']}",
+                floors=None,
+            )
+            for row in geo_rows
+        ]
+        return ProjectDetailResponse(
+            project_id=project_id,
+            project_name=geo_project["project_name_en"],
+            project_number=None,
+            master_project_en=None,
+            area_id=None,
+            area_name=geo_project.get("area_name_en") or "Unknown",
+            latitude=float(geo_project["latitude"]),
+            longitude=float(geo_project["longitude"]),
+            developer_id=None,
+            developer_name=geo_project.get("developer_name") or None,
+            master_developer_id=None,
+            master_developer_name=None,
+            no_of_buildings=len(buildings) or None,
+            no_of_units=None,
+            no_of_villas=None,
+            no_of_lands=None,
+            project_start_date=None,
+            project_end_date=None,
+            completion_date=None,
+            percent_completed=None,
+            project_status=None,
+            unit_composition=[],
+            buildings=buildings,
+            geo_pins=geo_pins,
+        )
+
     project_sql = """
         SELECT
             p.project_id AS project_id,
@@ -630,7 +721,7 @@ def _radar_stats_sql(radar_geo_cte: str) -> str:
         WITH {radar_geo_cte}
         SELECT
             count() AS total_projects,
-            (SELECT countDistinct(project_id) FROM geo_by_project) AS mapped_projects,
+            (SELECT countDistinct(property_id) FROM geo_by_project) AS mapped_projects,
             countIf(completion_status != 'FINISHED') AS active_projects,
             countIf(completion_status = 'FINISHED') AS finished_projects,
             sumIf(no_of_units, completion_status != 'FINISHED') AS pipeline_units,
@@ -642,21 +733,9 @@ def _radar_stats_sql(radar_geo_cte: str) -> str:
             sum(sales_transaction_count_12m) AS sales_transaction_count_12m,
             sum(rental_contract_count_12m) AS rental_contract_count_12m,
             sum(total_sales_volume_12m) AS total_sales_volume_12m,
-            (
-                SELECT count()
-                FROM ch_gis_land_plots FINAL
-                WHERE coordinates != ''
-            ) AS dda_plot_count,
-            (
-                SELECT sum(plot_area_sqm)
-                FROM ch_gis_land_plots FINAL
-                WHERE coordinates != ''
-            ) AS dda_total_plot_area_sqm,
-            (
-                SELECT sum(max_gfa_sqm)
-                FROM ch_gis_land_plots FINAL
-                WHERE coordinates != ''
-            ) AS dda_total_gfa_sqm
+            0 AS dda_plot_count,
+            0 AS dda_total_plot_area_sqm,
+            0 AS dda_total_gfa_sqm
         FROM ch_project_fact
     """
 
@@ -666,14 +745,12 @@ def _radar_area_sql(radar_geo_cte: str) -> str:
         WITH {radar_geo_cte},
         area_geo AS (
             SELECT
-                p.area_name_en,
+                g.area_name_en,
                 avg(g.latitude) AS latitude,
                 avg(g.longitude) AS longitude,
-                countDistinct(p.project_id) AS mapped_projects
-            FROM ch_projects p
-            INNER JOIN geo_by_project g ON g.project_id = p.project_id
-            WHERE p.area_name_en != ''
-            GROUP BY p.area_name_en
+                countDistinct(g.project_key) AS mapped_projects
+            FROM geo_by_project g
+            GROUP BY g.area_name_en
         ),
         area_status AS (
             SELECT
@@ -731,64 +808,10 @@ def _radar_area_sql(radar_geo_cte: str) -> str:
             SELECT
                 area_name_en,
                 arrayFilter(x -> x != '', topK(5)(developer_name)) AS top_developers
-            FROM (
-                SELECT
-                    f.area_name_en AS area_name_en,
-                    coalesce(
-                        nullIf(dm.developer_name_en, ''),
-                        nullIf(p.master_developer_name, ''),
-                        nullIf(d.developer_name_en, ''),
-                        nullIf(da.developer_name_en, ''),
-                        nullIf(p.developer_name, ''),
-                        nullIf(f.developer_name, ''),
-                        ''
-                    ) AS developer_name
-                FROM ch_project_fact f
-                INNER JOIN ch_projects p ON p.project_id = f.project_id
-                LEFT JOIN ch_developers d ON p.developer_id = d.developer_id
-                LEFT JOIN ch_developers dm ON p.master_developer_id = dm.developer_id
-                LEFT JOIN ch_developers da ON f.developer_name = da.developer_name_ar
-                WHERE f.area_name_en != ''
-            )
-            WHERE developer_name != ''
-            GROUP BY area_name_en
-        ),
-        dda_summary AS (
-            SELECT
-                community_name,
-                count() AS dda_plot_count,
-                sum(plot_area_sqm) AS dda_total_plot_area_sqm,
-                sum(max_gfa_sqm) AS dda_total_gfa_sqm,
-                arrayFilter(x -> x != '', topK(5)(land_use)) AS dda_dominant_land_uses
-            FROM ch_gis_land_plots FINAL
-            WHERE coordinates != ''
-              AND community_name != ''
-            GROUP BY community_name
-        ),
-        area_existing_sales AS (
-            SELECT
-                area_name_en,
-                count() AS yield_existing_sale_count,
-                median(actual_worth) AS yield_existing_median_sale_price
-            FROM ch_transactions
-            WHERE trans_group_en = 'Sales'
-              AND property_type_en = 'Unit'
-              AND property_usage_en = 'Residential'
-              AND reg_type_en = 'Existing Properties'
-              AND actual_worth > 0
+            FROM ch_project_fact
+            WHERE project_id > 0
               AND area_name_en != ''
-            GROUP BY area_name_en
-        ),
-        area_rents AS (
-            SELECT
-                area_name_en,
-                count() AS yield_rental_contract_count,
-                median(annual_amount) AS yield_median_annual_rent
-            FROM ch_rent_contracts
-            WHERE property_usage_en = 'Residential'
-              AND ejari_property_type_en = 'Flat'
-              AND annual_amount > 0
-              AND area_name_en != ''
+              AND developer_name != ''
             GROUP BY area_name_en
         )
         SELECT
@@ -811,27 +834,21 @@ def _radar_area_sql(radar_geo_cte: str) -> str:
             af.sales_transaction_count_12m AS sales_transaction_count_12m,
             af.rental_contract_count_12m AS rental_contract_count_12m,
             af.total_sales_volume_12m AS total_sales_volume_12m,
-            coalesce(aes.yield_existing_median_sale_price, af.median_sale_price) AS median_sale_price,
-            coalesce(ar.yield_median_annual_rent, af.median_annual_rent) AS median_annual_rent,
-            aes.yield_existing_sale_count AS yield_existing_sale_count,
-            aes.yield_existing_median_sale_price AS yield_existing_median_sale_price,
-            ar.yield_rental_contract_count AS yield_rental_contract_count,
-            ar.yield_median_annual_rent AS yield_median_annual_rent,
+            af.median_sale_price AS median_sale_price,
+            af.median_annual_rent AS median_annual_rent,
+            af.gross_yield_pct AS gross_yield_pct,
             af.avg_sale_price_sqm_12m AS avg_sale_price_sqm_12m,
             af.avg_rent_price_sqm_12m AS avg_rent_price_sqm_12m,
             ifNull(ad.top_developers, af.top_developers) AS top_developers,
             af.top_master_projects AS top_master_projects,
-            ifNull(ds.dda_plot_count, 0) AS dda_plot_count,
-            ifNull(ds.dda_total_plot_area_sqm, 0) AS dda_total_plot_area_sqm,
-            ifNull(ds.dda_total_gfa_sqm, 0) AS dda_total_gfa_sqm,
-            ifNull(ds.dda_dominant_land_uses, []) AS dda_dominant_land_uses
+            0 AS dda_plot_count,
+            0 AS dda_total_plot_area_sqm,
+            0 AS dda_total_gfa_sqm,
+            [] AS dda_dominant_land_uses
         FROM ch_area_fact af
         LEFT JOIN area_geo ag ON lower(ag.area_name_en) = lower(af.area_name_en)
         LEFT JOIN area_status ast ON lower(ast.area_name_en) = lower(af.area_name_en)
         LEFT JOIN area_developers ad ON lower(ad.area_name_en) = lower(af.area_name_en)
-        LEFT JOIN dda_summary ds ON lower(ds.community_name) = lower(af.area_name_en)
-        LEFT JOIN area_existing_sales aes ON lower(aes.area_name_en) = lower(af.area_name_en)
-        LEFT JOIN area_rents ar ON lower(ar.area_name_en) = lower(af.area_name_en)
         WHERE af.area_name_en != ''
           AND lower(af.area_name_en) != 'unknown'
         ORDER BY pipeline_units DESC, af.sales_transaction_count_12m DESC
@@ -842,44 +859,37 @@ def _radar_area_sql(radar_geo_cte: str) -> str:
 def _radar_project_pins_sql(radar_geo_cte: str, where_clause: str) -> str:
     return f"""
         WITH {radar_geo_cte},
-        project_existing_sales AS (
+        fact_by_project AS (
             SELECT
-                project_name_en,
-                count() AS yield_existing_sale_count,
-                median(actual_worth) AS yield_existing_median_sale_price
-            FROM ch_transactions
-            WHERE trans_group_en = 'Sales'
-              AND property_type_en = 'Unit'
-              AND property_usage_en = 'Residential'
-              AND reg_type_en = 'Existing Properties'
-              AND actual_worth > 0
-              AND project_name_en != ''
-            GROUP BY project_name_en
-        ),
-        project_rents AS (
-            SELECT
-                project_name_en,
-                count() AS yield_rental_contract_count,
-                median(annual_amount) AS yield_median_annual_rent
-            FROM ch_rent_contracts
-            WHERE property_usage_en = 'Residential'
-              AND ejari_property_type_en = 'Flat'
-              AND annual_amount > 0
-              AND project_name_en != ''
-            GROUP BY project_name_en
+                lowerUTF8(pf.project_name_en) AS project_key,
+                any(pf.project_name_en) AS project_name_en,
+                any(pf.area_name_en) AS area_name_en,
+                any(pf.developer_name) AS developer_name,
+                any(pf.master_project_en) AS master_project_en,
+                any(pf.completion_status) AS completion_status,
+                any(pf.pipeline_status) AS pipeline_status,
+                any(pf.project_status) AS project_status,
+                any(pf.no_of_units) AS no_of_units,
+                any(pf.no_of_buildings) AS no_of_buildings,
+                any(pf.percent_completed) AS percent_completed,
+                any(pf.estimated_delivery_confidence) AS estimated_delivery_confidence,
+                sum(pf.sales_transaction_count_12m) AS sales_transaction_count_12m,
+                sum(pf.rental_contract_count_12m) AS rental_contract_count_12m,
+                sum(pf.total_sales_volume_12m) AS total_sales_volume_12m,
+                any(pf.median_sale_price) AS median_sale_price,
+                any(pf.median_annual_rent) AS median_annual_rent,
+                any(pf.gross_yield_pct) AS gross_yield_pct,
+                any(pf.avg_sale_price_sqm_12m) AS avg_sale_price_sqm_12m,
+                any(pf.avg_rent_price_sqm_12m) AS avg_rent_price_sqm_12m
+            FROM ch_project_fact AS pf
+            WHERE pf.project_name_en != ''
+            GROUP BY project_key
         )
         SELECT
-            f.project_id AS project_id,
-            f.project_name_en AS project_name_en,
-            f.area_name_en AS area_name_en,
-            coalesce(
-                nullIf(dm.developer_name_en, ''),
-                nullIf(p.master_developer_name, ''),
-                nullIf(d.developer_name_en, ''),
-                nullIf(da.developer_name_en, ''),
-                nullIf(p.developer_name, ''),
-                nullIf(f.developer_name, '')
-            ) AS developer_name,
+            -toInt64(g.property_id) AS project_id,
+            coalesce(nullIf(f.project_name_en, ''), g.project_name_en) AS project_name_en,
+            coalesce(nullIf(f.area_name_en, ''), g.area_name_en) AS area_name_en,
+            coalesce(nullIf(f.developer_name, ''), g.developer_name) AS developer_name,
             f.master_project_en AS master_project_en,
             g.latitude AS latitude,
             g.longitude AS longitude,
@@ -889,32 +899,23 @@ def _radar_project_pins_sql(radar_geo_cte: str, where_clause: str) -> str:
             g.detail_point_count AS detail_point_count,
             g.building_point_count AS building_point_count,
             g.land_point_count AS land_point_count,
-            f.completion_status AS completion_status,
-            f.pipeline_status AS pipeline_status,
-            p.project_status AS project_status,
-            f.no_of_units AS no_of_units,
-            p.no_of_buildings AS no_of_buildings,
+            ifNull(f.completion_status, '') AS completion_status,
+            ifNull(f.pipeline_status, '') AS pipeline_status,
+            f.project_status AS project_status,
+            ifNull(f.no_of_units, 0) AS no_of_units,
+            ifNull(f.no_of_buildings, 0) AS no_of_buildings,
             f.percent_completed AS percent_completed,
-            f.estimated_delivery_confidence AS estimated_delivery_confidence,
-            f.sales_transaction_count_12m AS sales_transaction_count_12m,
-            f.rental_contract_count_12m AS rental_contract_count_12m,
-            f.total_sales_volume_12m AS total_sales_volume_12m,
-            coalesce(pes.yield_existing_median_sale_price, f.median_sale_price) AS median_sale_price,
-            coalesce(pr.yield_median_annual_rent, f.median_annual_rent) AS median_annual_rent,
-            pes.yield_existing_sale_count AS yield_existing_sale_count,
-            pes.yield_existing_median_sale_price AS yield_existing_median_sale_price,
-            pr.yield_rental_contract_count AS yield_rental_contract_count,
-            pr.yield_median_annual_rent AS yield_median_annual_rent,
+            ifNull(f.estimated_delivery_confidence, 0) AS estimated_delivery_confidence,
+            ifNull(f.sales_transaction_count_12m, 0) AS sales_transaction_count_12m,
+            ifNull(f.rental_contract_count_12m, 0) AS rental_contract_count_12m,
+            ifNull(f.total_sales_volume_12m, 0) AS total_sales_volume_12m,
+            f.median_sale_price AS median_sale_price,
+            f.median_annual_rent AS median_annual_rent,
+            f.gross_yield_pct AS gross_yield_pct,
             f.avg_sale_price_sqm_12m AS avg_sale_price_sqm_12m,
             f.avg_rent_price_sqm_12m AS avg_rent_price_sqm_12m
-        FROM ch_project_fact f
-        INNER JOIN ch_projects p ON p.project_id = f.project_id
-        INNER JOIN geo_by_project g ON g.project_id = f.project_id
-        LEFT JOIN ch_developers d ON p.developer_id = d.developer_id
-        LEFT JOIN ch_developers dm ON p.master_developer_id = dm.developer_id
-        LEFT JOIN ch_developers da ON f.developer_name = da.developer_name_ar
-        LEFT JOIN project_existing_sales pes ON lower(pes.project_name_en) = lower(f.project_name_en)
-        LEFT JOIN project_rents pr ON lower(pr.project_name_en) = lower(f.project_name_en)
+        FROM geo_by_project g
+        LEFT JOIN fact_by_project f ON f.project_key = g.project_key
         WHERE {where_clause}
         ORDER BY
             (f.pipeline_status = 'delivering_next_12_months') DESC,
@@ -933,7 +934,10 @@ def _radar_project_pin_filters(
     area: str | None,
     developer: str | None,
 ) -> tuple[str, dict[str, Any]]:
-    filters = ["f.project_name_en != ''"]
+    # The coordinate CTE already excludes unnamed projects. Keeping the base
+    # predicate out of the outer query matters because ClickHouse otherwise
+    # pushes it into the aggregation that produces the display name.
+    filters = ["1"]
     params: dict[str, Any] = {}
     if west is not None and south is not None and east is not None and north is not None:
         filters.extend(
@@ -944,23 +948,15 @@ def _radar_project_pin_filters(
         )
         params.update({"west": west, "south": south, "east": east, "north": north})
     if area:
-        filters.append("lower(f.area_name_en) = lower({area:String})")
+        filters.append("lower(g.area_name_en) = lower({area:String})")
         params["area"] = area
     if developer:
         developer_names = developer_filter_names(developer)
         if developer_names:
             filters.append(
                 """
-                lower(
-                    coalesce(
-                        nullIf(dm.developer_name_en, ''),
-                        nullIf(p.master_developer_name, ''),
-                        nullIf(d.developer_name_en, ''),
-                        nullIf(da.developer_name_en, ''),
-                        nullIf(p.developer_name, ''),
-                        nullIf(f.developer_name, '')
-                    )
-                ) IN {developer_names:Array(String)}
+                lower(coalesce(nullIf(f.developer_name, ''), g.developer_name))
+                IN {developer_names:Array(String)}
                 """
             )
             params["developer_names"] = developer_names
@@ -1012,7 +1008,20 @@ async def get_project_radar_pins(
 
 
 async def get_project_radar(limit: int = 1400) -> ProjectRadarResponse:
-    """Return project and area map data for the radar view."""
+    """Return the legacy combined radar payload from the fast serving paths."""
+    overview, projects = await asyncio.gather(
+        get_project_radar_overview(),
+        get_project_radar_pins(limit=min(max(limit, 10), 1400)),
+    )
+    return ProjectRadarResponse(
+        stats=overview.stats,
+        areas=overview.areas,
+        projects=projects,
+        source_notes=overview.source_notes,
+    )
+
+    # Kept below temporarily as reference for the richer raw query while the
+    # serving endpoint uses materialized facts and DXBI coordinates above.
     radar_geo_cte = _radar_geo_cte()
 
     project_sql = f"""

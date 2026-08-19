@@ -11,6 +11,14 @@ import type {
 
 export type ListingMode = 'sale' | 'rent'
 
+export interface ListingAnalyticsResponse {
+	total: number
+	median_price_aed: number | null
+	median_price_per_sqft_aed: number | null
+	verified_count: number
+	area_count: number
+}
+
 export type {
 	ListingCardResponse,
 	ListingDetailResponse,
@@ -40,6 +48,19 @@ export const listings = {
 				mode: params.mode,
 				limit: params.limit,
 				offset: params.offset,
+				search: params.search,
+				area: params.area,
+				property_type: params.property_type,
+				bedrooms: params.bedrooms,
+				price_min: params.price_min,
+				price_max: params.price_max
+			})
+		),
+
+	analytics: (params: ListingParams = {}) =>
+		client.get<ListingAnalyticsResponse>(
+			client.withQuery('/api/v1/listings/analytics', {
+				mode: params.mode,
 				search: params.search,
 				area: params.area,
 				property_type: params.property_type,

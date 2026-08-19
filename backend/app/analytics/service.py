@@ -203,6 +203,75 @@ async def get_sub_project_list(
     )
 
 
+async def _get_market_summary(project_name: str) -> ProjectAnalyticsResponse:
+    """Return a quick citywide summary from the local materialized fact table.
+
+    The detailed analytics queries intentionally retain their raw, unit-level
+    paths for a selected project.  Running all of those citywide at once is
+    prohibitively expensive on a local ClickHouse instance, so the landing
+    scope uses the already materialized 12-month project aggregates instead.
+    """
+    rows = await query(
+        """
+        SELECT
+            sum(pf.sales_transaction_count_12m) AS sales_count,
+            sum(pf.total_sales_volume_12m) AS sales_volume,
+            if(
+                sum(pf.sales_transaction_count_12m) > 0,
+                sum(pf.median_sale_price * pf.sales_transaction_count_12m)
+                    / sum(pf.sales_transaction_count_12m),
+                0
+            ) AS avg_sale_price,
+            avgOrNull(pf.avg_sale_price_sqm_12m) AS avg_sale_price_sqm,
+            median(pf.median_sale_price) AS median_sale_price,
+            sum(pf.rental_contract_count_12m) AS rental_count,
+            sum(pf.median_annual_rent * pf.rental_contract_count_12m) AS rental_value,
+            median(pf.median_annual_rent) AS median_annual_rent,
+            avgOrNull(pf.avg_rent_price_sqm_12m) AS median_rent_sqm,
+            median(pf.gross_yield_pct) AS gross_yield_pct,
+            sum(pf.no_of_units) AS unit_count
+        FROM ch_project_fact AS pf
+        """,
+        {},
+    )
+    row = rows[0] if rows else {}
+    sales_count = int(row.get("sales_count") or 0)
+    rental_count = int(row.get("rental_count") or 0)
+    median_sale_price = float(row.get("median_sale_price") or 0)
+    median_annual_rent = float(row.get("median_annual_rent") or 0)
+    yield_pct = _positive_float(row.get("gross_yield_pct"))
+    if yield_pct is not None:
+        yield_pct = round(yield_pct, 2)
+
+    return ProjectAnalyticsResponse(
+        project=ProjectMeta(
+            project_name=project_name,
+            area_name="Dubai",
+            developer_name="All developers",
+            no_of_units=int(row.get("unit_count") or 0) or None,
+        ),
+        sales=ProjectSalesSummary(
+            transaction_count=sales_count,
+            total_volume=float(row.get("sales_volume") or 0),
+            avg_price=float(row.get("avg_sale_price") or 0),
+            avg_price_sqm=float(row.get("avg_sale_price_sqm") or 0),
+            median_price=median_sale_price,
+        ),
+        rentals=ProjectRentalSummary(
+            contract_count=rental_count,
+            total_annual_value=float(row.get("rental_value") or 0),
+            median_annual_rent=median_annual_rent,
+            median_rent_sqm=float(row.get("median_rent_sqm") or 0),
+        ),
+        overall_gross_yield_pct=yield_pct,
+        by_rooms=[],
+        by_property_type=[],
+        by_reg_type=[],
+        unit_composition=[],
+        configuration_analysis=[],
+    )
+
+
 async def get_project_summary(
     project_name: str,
     filter_type: ProjectScopeType = "project",
@@ -213,6 +282,9 @@ async def get_project_summary(
     filter_type controls the WHERE clause: 'master', 'virtual_master', 'project', or 'market'.
     For virtual_master, project_name is used as a LIKE prefix (suffix ' - %' appended here).
     """
+    if filter_type == "market":
+        return await _get_market_summary(project_name)
+
     # For LIKE queries the param needs the wildcard appended
     like_name = project_name + " - %" if filter_type == "virtual_master" else project_name
     params = {} if filter_type == "market" else {"project_name": like_name}

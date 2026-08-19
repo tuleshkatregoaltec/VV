@@ -43,12 +43,13 @@ WEEKLY_INTERVAL_MAX_DAYS = 180
 
 
 async def create_conversation(
-    db: AsyncSession, user_id: str, title: Optional[str] = None
+    db: AsyncSession, user_id: str, organization_id: str, title: Optional[str] = None
 ) -> Conversation:
     """Create a new conversation"""
     now = datetime.now(timezone.utc)
     conversation = Conversation(
         user_id=user_id,
+        organization_id=organization_id,
         title=title or "New Conversation",
         created_at=now,
         updated_at=now,

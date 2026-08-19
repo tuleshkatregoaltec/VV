@@ -203,7 +203,6 @@ def test_operational_jobs_select_expected_assets() -> None:
         "pf_listings_daily_latest_delta": {
             "pf_listings_raw",
             "pf_listings_bronze",
-            "pf_listing_media_assets",
         },
         "news_feeds_poll_and_hydrate": {"news_feeds_raw", "news_thumbnail_assets"},
         "dda_planning_layers_manual_full_refresh": {
@@ -535,24 +534,15 @@ def test_manual_one_shot_jobs_default_raw_config() -> None:
             "latest_delta_bootstrap_details": False,
         },
     )
-    _assert_config_contains(
-        _run_op_config(pf_latest_delta_run_config, "pf_listing_media_assets"),
-        {"latest_manifest_count": 1},
-    )
     pf_latest_delta_override_config = _run_config(
         "pf_listings_daily_latest_delta",
         {
             "raw": {"max_details_per_run": 25},
-            "media": {"max_assets_per_run": 7},
         },
     )
     _assert_config_contains(
         _run_op_config(pf_latest_delta_override_config, "pf_listings_raw"),
         {"max_details_per_run": 25},
-    )
-    _assert_config_contains(
-        _run_op_config(pf_latest_delta_override_config, "pf_listing_media_assets"),
-        {"max_assets_per_run": 7},
     )
 
     pf_media_config = configs[("pf_listing_media_assets_backfill", "pf_listing_media_assets")]

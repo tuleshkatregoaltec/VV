@@ -64,11 +64,13 @@ const listingFilters = $derived({
 const listingsQuery = createInfiniteQuery(() =>
 	listingQueries.listInfinite(listingFilters, PAGE_SIZE)
 )
+const analyticsQuery = createQuery(() => listingQueries.analytics(listingFilters))
 const detailQuery = createQuery(() => listingQueries.detail(selectedListingId))
 
 const listingSummary = $derived(listingsQuery.data?.pages[0])
 const listings = $derived(listingsQuery.data?.pages.flatMap((page) => page.listings) ?? [])
 const filters = $derived(listingSummary?.filters)
+const analytics = $derived(analyticsQuery.data)
 const selectedListing = $derived<ListingDetailResponse | null>(detailQuery.data ?? null)
 const activeCard = $derived.by(() => {
 	if (selectedListingId) {
@@ -206,6 +208,10 @@ function formatMoney(value: number | null | undefined, period?: string | null): 
 	return `${label}/${period.replace('ly', '')}`
 }
 
+function formatStatMoney(value: number | null | undefined): string {
+	return value == null ? '...' : formatMoney(value)
+}
+
 function formatArea(value: number | null | undefined, unit: string | null | undefined): string {
 	if (value == null || value <= 0) return 'Area unavailable'
 	return `${Math.round(value).toLocaleString()} ${unit ?? 'sqft'}`
@@ -218,35 +224,9 @@ function formatDate(value: string | null | undefined): string {
 	return date.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })
 }
 
-function hashString(value: string): number {
-	let hash = 2166136261
-	for (let index = 0; index < value.length; index += 1) {
-		hash ^= value.charCodeAt(index)
-		hash = Math.imul(hash, 16777619)
-	}
-	return hash >>> 0
-}
-
-function seededUnitInterval(seed: string, salt: string): number {
-	return (hashString(`${seed}:${salt}`) + 1) / 4294967297
-}
-
-// Demo-only placeholder until a real listing valuation/index signal exists.
-function mockVitevueIndexPercent(listingId: string): number {
-	const u1 = seededUnitInterval(listingId, 'vitevue-index-a')
-	const u2 = seededUnitInterval(listingId, 'vitevue-index-b')
-	const normal = Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2)
-	const clamped = Math.max(-10, Math.min(10, normal * 3.4))
-	return Math.round(clamped * 10) / 10
-}
-
-function formatVitevueIndex(value: number): string {
-	const sign = value > 0 ? '+' : ''
-	return `${sign}${value.toFixed(1)}%`
-}
-
-function vitevueIndexToneClass(value: number): string {
-	return value >= 0 ? 'text-success' : 'text-error'
+function pricePerSqft(listing: ListingCardResponse): number | null {
+	if (!listing.price_value || !listing.size_value || listing.size_value <= 0) return null
+	return listing.price_value / listing.size_value
 }
 
 function partyInitials(party: ListingPartyResponse | null | undefined): string {
@@ -314,6 +294,26 @@ function hideBrokenImage(event: Event) {
 
 		<section class="grid gap-4 xl:grid-cols-[minmax(0,1fr)_460px] xl:gap-0">
 			<div class="min-w-0 xl:pr-5">
+				<div class="mb-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+					<div class="ui-surface p-3">
+						<p class="text-xs font-medium text-fg-4">Available inventory</p>
+						<p class="mt-1 text-xl font-semibold tabular-nums text-fg-1">{analytics?.total?.toLocaleString() ?? '...'}</p>
+					</div>
+					<div class="ui-surface p-3">
+						<p class="text-xs font-medium text-fg-4">Median asking price</p>
+						<p class="mt-1 text-xl font-semibold tabular-nums text-fg-1">{formatStatMoney(analytics?.median_price_aed)}</p>
+					</div>
+					<div class="ui-surface p-3">
+						<p class="text-xs font-medium text-fg-4">Median AED / sqft</p>
+						<p class="mt-1 text-xl font-semibold tabular-nums text-fg-1">{analytics?.median_price_per_sqft_aed ? `AED ${Math.round(analytics.median_price_per_sqft_aed).toLocaleString()}` : '—'}</p>
+					</div>
+					<div class="ui-surface p-3">
+						<p class="text-xs font-medium text-fg-4">Verified share</p>
+						<p class="mt-1 text-xl font-semibold tabular-nums text-fg-1">{analytics?.total ? `${Math.round((analytics.verified_count / analytics.total) * 100)}%` : '—'}</p>
+						<p class="mt-0.5 text-xs text-fg-4">{analytics?.area_count?.toLocaleString() ?? '...'} areas</p>
+					</div>
+				</div>
+
 				<div class="ui-surface mb-3 overflow-visible p-3">
 					<div class="grid gap-2 lg:grid-cols-[minmax(0,1.2fr)_160px_160px_120px_120px_120px_auto]">
 						<label class="relative block">
@@ -527,14 +527,10 @@ function hideBrokenImage(event: Event) {
 				{:else}
 					<div class="grid gap-2">
 						{#each listings as listing (listing.listing_id)}
-							{@const vitevueIndex = mockVitevueIndexPercent(listing.listing_id)}
 							<button
 								type="button"
 								onclick={() => selectListing(listing)}
-								class="group grid w-full cursor-pointer gap-4 rounded-lg border p-4 text-left shadow-sm transition duration-200 hover:shadow-md lg:items-center {mode ===
-								'sale'
-									? 'lg:grid-cols-[minmax(0,1.1fr)_minmax(220px,0.7fr)_minmax(180px,0.55fr)_118px]'
-									: 'lg:grid-cols-[minmax(0,1.1fr)_minmax(220px,0.7fr)_minmax(180px,0.55fr)]'} {selectedListingId ===
+								class="group grid w-full cursor-pointer gap-4 rounded-lg border p-4 text-left shadow-sm transition duration-200 hover:shadow-md lg:items-center lg:grid-cols-[minmax(0,1.1fr)_minmax(220px,0.7fr)_minmax(180px,0.55fr)_118px] {selectedListingId ===
 								listing.listing_id
 									? 'border-info bg-info-bg'
 									: 'border-border bg-card hover:border-border-strong hover:bg-elevated'}"
@@ -588,10 +584,10 @@ function hideBrokenImage(event: Event) {
 									<p class="mt-1 truncate text-[11px] text-fg-4">{listing.broker_name ?? 'Broker unavailable'}</p>
 								</div>
 
-								{#if mode === 'sale'}
+								{#if pricePerSqft(listing)}
 									<div class="justify-self-start rounded-md border border-border bg-panel px-2.5 py-2 text-left lg:justify-self-end lg:text-right">
-										<p class="text-[10px] font-semibold uppercase tracking-[0.12em] text-fg-4">Vitevue Index</p>
-										<p class="mt-0.5 text-sm font-semibold tabular-nums {vitevueIndexToneClass(vitevueIndex)}">{formatVitevueIndex(vitevueIndex)}</p>
+										<p class="text-[10px] font-semibold uppercase tracking-[0.12em] text-fg-4">AED / sqft</p>
+										<p class="mt-0.5 text-sm font-semibold tabular-nums text-fg-1">AED {Math.round(pricePerSqft(listing) ?? 0).toLocaleString()}</p>
 									</div>
 								{/if}
 							</button>

@@ -11,6 +11,7 @@ class Conversation(SQLModel, table=True):
 
     id: Optional[int] = Field(default=None, primary_key=True)
     user_id: str = Field(index=True)
+    organization_id: str = Field(index=True)
     title: Optional[str] = None
     created_at: datetime = Field(
         sa_column=Column(DateTime(timezone=True), nullable=False),

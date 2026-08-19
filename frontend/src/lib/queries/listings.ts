@@ -5,6 +5,7 @@ type ListingFilters = Omit<ListingParams, 'limit' | 'offset'>
 export const listingKeys = {
 	all: ['listings'] as const,
 	list: (params: ListingParams) => [...listingKeys.all, 'list', params] as const,
+	analytics: (params: ListingParams) => [...listingKeys.all, 'analytics', params] as const,
 	detail: (listingId: string) => [...listingKeys.all, 'detail', listingId] as const
 }
 
@@ -23,6 +24,11 @@ export const listingQueries = {
 			return nextOffset < lastPage.total ? nextOffset : undefined
 		},
 		initialPageParam: 0,
+		staleTime: 30 * 60 * 1000
+	}),
+	analytics: (params: ListingFilters) => ({
+		queryKey: listingKeys.analytics(params),
+		queryFn: () => listings.analytics(params),
 		staleTime: 30 * 60 * 1000
 	}),
 	detail: (listingId: string | null) => ({

@@ -151,27 +151,18 @@ function buildFacetFilterParams(localFilterOverrides: Partial<RentalsLocalFilter
 	})
 }
 
-const propertyTypeOptionsQuery = createQuery(() =>
-	transactionQueries.rentalFilterOptions(buildFacetFilterParams({ selectedPropertyType: 'All' }))
-)
-const propertySubTypeOptionsQuery = createQuery(() =>
-	transactionQueries.rentalFilterOptions(buildFacetFilterParams({ selectedPropertySubType: 'All' }))
-)
-const tenantTypeOptionsQuery = createQuery(() =>
-	transactionQueries.rentalFilterOptions(buildFacetFilterParams({ selectedTenantType: 'All' }))
-)
-const registrationOptionsQuery = createQuery(() =>
-	transactionQueries.rentalFilterOptions(buildFacetFilterParams({ selectedRegistration: 'All' }))
-)
+// Keep the filter controls responsive by fetching their shared facets once,
+// rather than issuing four full rental-table scans beside the data request.
+const facetOptionsQuery = createQuery(() => transactionQueries.rentalFilterOptions(buildFacetFilterParams()))
 
 // ========================================
 // Derived Values
 // ========================================
 
-const propertyTypeOptions = $derived(propertyTypeOptionsQuery.data)
-const propertySubTypeOptions = $derived(propertySubTypeOptionsQuery.data)
-const tenantTypeOptions = $derived(tenantTypeOptionsQuery.data)
-const registrationOptions = $derived(registrationOptionsQuery.data)
+const propertyTypeOptions = $derived(facetOptionsQuery.data)
+const propertySubTypeOptions = $derived(facetOptionsQuery.data)
+const tenantTypeOptions = $derived(facetOptionsQuery.data)
+const registrationOptions = $derived(facetOptionsQuery.data)
 
 let filterDefinitions = $derived<FilterDefinition[]>([
 	{

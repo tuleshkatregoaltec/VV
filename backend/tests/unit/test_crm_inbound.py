@@ -1,14 +1,66 @@
+from datetime import date, datetime, timezone
+
+from app.crm.import_models import CrmPropertyContactClaim
+from app.crm.inbound_models import CrmInboundEnquiry
 from app.crm.inbound_service import (
     _bedroom_fit,
     _best_header,
     _budget_fit,
     _deterministic_criteria,
     _file_rows,
+    _lead_priority,
     _location_fit,
     _normalize_intent,
+    _ownership_enrichment,
+    _preview_file,
+    _qualification_complete,
     _redact,
     _violates_strict_fields,
 )
+
+
+def _owner_claim(
+    *,
+    property_key: str,
+    status: str,
+    phone: str | None = None,
+    lease_end: date | None = None,
+) -> CrmPropertyContactClaim:
+    now = datetime.now(timezone.utc)
+    return CrmPropertyContactClaim(
+        organization_id="org",
+        import_id=1,
+        list_id=1,
+        source_sheet="Owners",
+        source_row_number=1,
+        row_fingerprint=f"row-{property_key}",
+        owner_key="owner-1",
+        property_key=property_key,
+        contact_name="Maya Example",
+        phone_primary=phone,
+        ownership_status=status,
+        confidence_score=98,
+        match_reason="Registry evidence",
+        lease_end=lease_end,
+        created_at=now,
+        updated_at=now,
+    )
+
+
+def _inbound_enquiry(intent: str) -> CrmInboundEnquiry:
+    now = datetime.now(timezone.utc)
+    return CrmInboundEnquiry(
+        organization_id="org",
+        contact_id=1,
+        created_by_user_id="user",
+        record_kind="opportunity" if intent != "unknown" else "unqualified_contact",
+        intent=intent,
+        status="new",
+        source="Campaign",
+        enquiry_date=now,
+        created_at=now,
+        updated_at=now,
+    )
 
 
 def test_deterministic_extraction_understands_common_campaign_message():
@@ -24,14 +76,7 @@ def test_deterministic_extraction_understands_common_campaign_message():
     assert _normalize_intent("", "Looking to buy a 2 bedroom in JBR") == "buy"
 
 
-def test_campaign_context_can_guide_sparse_contacts_without_forcing_ambiguous_intent():
-    assert (
-        _normalize_intent(
-            "",
-            "Meta valuation campaign shown to Business Bay property owners",
-        )
-        == "sell"
-    )
+def test_ambiguous_message_does_not_force_intent():
     assert (
         _normalize_intent(
             "",
@@ -99,6 +144,48 @@ def test_match_scoring_distinguishes_exact_flexible_and_outside():
     assert _budget_fit(criteria, 4_000_000)[0] == 0
 
 
+def test_missing_requirements_never_award_match_points():
+    assert _location_fit({}, "JBR")[0] == 0
+    assert _budget_fit({}, 3_000_000)[0] == 0
+    assert _bedroom_fit({}, "2 Bed")[0] == 0
+
+
+def test_matching_requires_agent_qualified_minimum_brief():
+    now = datetime.now(timezone.utc)
+    enquiry = CrmInboundEnquiry(
+        organization_id="org",
+        contact_id=1,
+        created_by_user_id="user",
+        record_kind="opportunity",
+        intent="buy",
+        status="qualified",
+        source="Manual",
+        enquiry_date=now,
+        criteria={"locations": ["JBR"], "budget_max_aed": 3_000_000},
+        created_at=now,
+        updated_at=now,
+    )
+
+    assert _qualification_complete(enquiry)
+    enquiry.status = "contacted"
+    assert not _qualification_complete(enquiry)
+    enquiry.status = "qualified"
+    enquiry.intent = "unknown"
+    assert not _qualification_complete(enquiry)
+
+
+def test_import_preview_masks_contacts_and_does_not_persist_anything():
+    preview = _preview_file(
+        b"Lead Name,Mobile,Email,Requirements\nMaya,0501234567,maya@example.com,2 bed JBR\n",
+        "real-leads.csv",
+    )
+
+    assert preview.total_rows == 1
+    assert preview.sheets[0].field_map["phone"] == "Mobile"
+    assert preview.sheets[0].sample_rows[0]["phone"] == "Present"
+    assert preview.sheets[0].sample_rows[0]["email"] == "Present"
+
+
 def test_hard_criteria_exclude_matches_while_flexible_fields_only_reduce_score():
     assert _violates_strict_fields(
         ["locations"],
@@ -114,3 +201,82 @@ def test_hard_criteria_exclude_matches_while_flexible_fields_only_reduce_score()
         bedroom_points=0,
         property_points=0,
     )
+
+
+def test_exact_contact_owner_match_prioritizes_buyer_and_seller_leads():
+    enrichment = _ownership_enrichment(
+        [
+            (
+                _owner_claim(
+                    property_key="tower-a|101",
+                    status="verified_current_owner",
+                    phone="971501234567",
+                ),
+                "phone",
+            ),
+            (
+                _owner_claim(
+                    property_key="tower-b|202",
+                    status="former_owner",
+                    phone="971501234567",
+                ),
+                "phone",
+            ),
+        ]
+    )
+
+    assert enrichment.verification == "contact_exact"
+    assert enrichment.current_owner
+    assert enrichment.former_owner
+    assert enrichment.multiple_property_owner
+    assert enrichment.known_property_count == 2
+    assert _lead_priority(_inbound_enquiry("buy"), enrichment).band == "high"
+    assert _lead_priority(_inbound_enquiry("sell"), enrichment).band == "high"
+
+
+def test_rental_owner_signal_is_reported_and_prioritized():
+    enrichment = _ownership_enrichment(
+        [
+            (
+                _owner_claim(
+                    property_key="tower-a|101",
+                    status="probable_current_owner",
+                    phone="971501234567",
+                    lease_end=date(2026, 10, 1),
+                ),
+                "phone",
+            )
+        ]
+    )
+
+    assert enrichment.rental_owner
+    assert enrichment.rental_property_count == 1
+    assert _lead_priority(_inbound_enquiry("unknown"), enrichment).band == "high"
+
+
+def test_name_only_owner_match_remains_verification_required():
+    enrichment = _ownership_enrichment(
+        [
+            (
+                _owner_claim(
+                    property_key="tower-a|101",
+                    status="former_owner",
+                ),
+                "name",
+            )
+        ]
+    )
+
+    assert enrichment.verification == "name_only"
+    assert enrichment.former_owner
+    assert _lead_priority(_inbound_enquiry("sell"), enrichment).band == "medium"
+    assert _lead_priority(_inbound_enquiry("unknown"), enrichment).band == "medium"
+
+
+def test_unmatched_contact_keeps_standard_priority():
+    enrichment = _ownership_enrichment([])
+
+    priority = _lead_priority(_inbound_enquiry("buy"), enrichment)
+
+    assert not enrichment.matched
+    assert priority.band == "standard"

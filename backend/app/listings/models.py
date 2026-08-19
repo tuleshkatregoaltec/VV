@@ -107,3 +107,11 @@ class ListingListResponse(BaseModel):
     limit: int
     offset: int
     filters: ListingFiltersResponse = Field(default_factory=ListingFiltersResponse)
+
+
+class ListingAnalyticsResponse(BaseModel):
+    total: int = 0
+    median_price_aed: float | None = None
+    median_price_per_sqft_aed: float | None = None
+    verified_count: int = 0
+    area_count: int = 0

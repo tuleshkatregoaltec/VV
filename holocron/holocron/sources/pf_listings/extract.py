@@ -209,12 +209,38 @@ class PropertyFinderBrowserListingsClient:
         return payload
 
     def fetch_search_page(self, *, params: Sequence[tuple[str, str]]) -> dict[str, Any]:
-        build_id = self._ensure_search_build_id()
-        url = (
-            f"{self._base_url}/search/_next/data/{build_id}/"
-            f"{self._config.locale}/search.json?{urlencode(list(params), doseq=True)}"
+        page = self._search_page_or_new()
+        url = self._search_url(params=params)
+        last_error = ""
+        for attempt in range(1, _MAX_FETCH_ATTEMPTS + 1):
+            try:
+                response = page.goto(
+                    url,
+                    wait_until="domcontentloaded",
+                    timeout=int(self._config.timeout_seconds * 1000),
+                )
+                status = response.status if response is not None else 0
+                if status >= 500:
+                    last_error = f"status={status}"
+                elif status >= 400:
+                    raise RuntimeError(f"Property Finder search failed status={status} url={url}")
+                else:
+                    return _next_data_from_page(page=page, url=url)
+            except Exception as exc:  # noqa: BLE001
+                last_error = str(exc)
+                if attempt == _MAX_FETCH_ATTEMPTS:
+                    raise RuntimeError(
+                        f"Property Finder search navigation failed after retries url={url}: "
+                        f"{last_error}"
+                    ) from exc
+            if attempt < _MAX_FETCH_ATTEMPTS:
+                page.wait_for_timeout(1000 * attempt)
+        raise RuntimeError(
+            f"Property Finder search navigation failed after retries url={url}: {last_error}"
         )
-        return self._fetch_json(url=url, page=self._search_page_or_new())
+
+    def _search_url(self, *, params: Sequence[tuple[str, str]]) -> str:
+        return f"{self._base_url}/{self._config.locale}/search?{urlencode(list(params), doseq=True)}"
 
     def fetch_detail(self, *, details_path: str) -> dict[str, Any]:
         page = self._detail_page_or_new()

@@ -1090,92 +1090,56 @@ async def get_developer_rankings(
 
     rows = await query(
         """
-        WITH
-            sales AS (
-                SELECT
-                    if(p.master_developer_id > 0, p.master_developer_id, p.developer_id) AS developer_id,
-                    coalesce(
-                        nullIf(dm.developer_name_en, ''),
-                        nullIf(p.master_developer_name, ''),
-                        nullIf(d.developer_name_en, ''),
-                        nullIf(p.developer_name, ''),
-                        'Unknown'
-                    ) AS developer_name,
-                    count() AS units_sold,
-                    count() AS sales_transaction_count,
-                    sum(toFloat64(actual_worth)) AS sales_volume_aed,
-                    avg(toFloat64(meter_sale_price)) / {sqm_to_sqft:Float64} AS avg_price_sqft_aed,
-                    uniqExact(t.project_number) AS selling_projects
-                FROM ch_transactions t
-                INNER JOIN ch_projects p
-                    ON t.project_number = p.project_number
-                   AND t.project_number != ''
-                LEFT JOIN ch_developers d ON p.developer_id = d.developer_id
-                LEFT JOIN ch_developers dm ON p.master_developer_id = dm.developer_id
-                WHERE t.trans_group_en = 'Sales'
-                  AND t.actual_worth > 0
-                  AND t.instance_date BETWEEN {start_date:Date} AND {end_date:Date}
-                  AND developer_name != 'Unknown'
-                GROUP BY developer_id, developer_name
-            ),
-            projects AS (
-                SELECT
-                    if(p.master_developer_id > 0, p.master_developer_id, p.developer_id) AS developer_id,
-                    coalesce(
-                        nullIf(dm.developer_name_en, ''),
-                        nullIf(p.master_developer_name, ''),
-                        nullIf(d.developer_name_en, ''),
-                        nullIf(p.developer_name, ''),
-                        'Unknown'
-                    ) AS developer_name,
-                    count() AS total_projects,
-                    countIf(p.completion_date IS NULL AND p.cancellation_date IS NULL) AS active_projects,
-                    countIf(p.completion_date IS NOT NULL) AS completed_projects,
-                    sum(toUInt64(p.no_of_units)) AS registered_units,
-                    sumIf(toUInt64(p.no_of_units), p.completion_date IS NOT NULL) AS completed_units,
-                    sumIf(toUInt64(p.no_of_units), p.completion_date IS NULL AND p.cancellation_date IS NULL) AS pipeline_units,
-                    avgIf(p.percent_completed, p.completion_date IS NULL AND p.cancellation_date IS NULL) AS avg_completion_pct,
-                    sumIf(toUInt64(p.no_of_units), p.completion_date IS NOT NULL AND p.project_end_date IS NOT NULL AND p.completion_date <= p.project_end_date) AS on_time_units,
-                    sumIf(toUInt64(p.no_of_units), p.completion_date IS NOT NULL AND p.project_end_date IS NOT NULL) AS completed_units_with_schedule,
-                    countIf(p.project_start_date >= subtractYears({end_date:Date}, 10)) AS initiated_projects_10y,
-                    countIf(p.project_start_date >= subtractYears({end_date:Date}, 10) AND p.completion_date IS NOT NULL) AS completed_projects_10y
-                FROM ch_projects p
-                LEFT JOIN ch_developers d ON p.developer_id = d.developer_id
-                LEFT JOIN ch_developers dm ON p.master_developer_id = dm.developer_id
-                WHERE developer_name != 'Unknown'
-                GROUP BY developer_id, developer_name
-            ),
-            developers AS (
-                SELECT developer_id, developer_name FROM projects
-                UNION DISTINCT
-                SELECT developer_id, developer_name FROM sales
-            )
         SELECT
-            d.developer_id AS developer_id,
-            d.developer_name AS developer_name,
-            ifNull(s.units_sold, 0) AS units_sold,
-            ifNull(s.sales_transaction_count, 0) AS sales_transaction_count,
-            ifNull(s.sales_volume_aed, 0) AS sales_volume_aed,
-            s.avg_price_sqft_aed AS avg_price_sqft_aed,
-            ifNull(s.selling_projects, 0) AS selling_projects,
-            ifNull(p.total_projects, 0) AS total_projects,
-            ifNull(p.active_projects, 0) AS active_projects,
-            ifNull(p.completed_projects, 0) AS completed_projects,
-            ifNull(p.completed_units, 0) AS completed_units,
-            ifNull(p.pipeline_units, 0) AS pipeline_units,
-            ifNull(p.registered_units, 0) AS registered_units,
-            p.avg_completion_pct AS avg_completion_pct,
-            ifNull(p.on_time_units, 0) AS on_time_units,
-            ifNull(p.completed_units_with_schedule, 0) AS completed_units_with_schedule,
-            ifNull(p.initiated_projects_10y, 0) AS initiated_projects_10y,
-            ifNull(p.completed_projects_10y, 0) AS completed_projects_10y,
-            if(p.completed_units_with_schedule > 0, p.on_time_units / p.completed_units_with_schedule * 100, NULL) AS on_time_delivery_score,
-            if(p.registered_units > 0, least(100, ifNull(s.units_sold, 0) / p.registered_units * 100), NULL) AS sales_completion_score,
-            if(p.initiated_projects_10y > 0, p.completed_projects_10y / p.initiated_projects_10y * 100, NULL) AS historical_project_success_score
-        FROM developers d
-        LEFT JOIN sales s ON d.developer_id = s.developer_id AND d.developer_name = s.developer_name
-        LEFT JOIN projects p ON d.developer_id = p.developer_id AND d.developer_name = p.developer_name
-        WHERE ifNull(p.total_projects, 0) > 0 OR ifNull(s.units_sold, 0) > 0
+            max(pf.developer_id) AS developer_id,
+            any(pf.developer_name) AS developer_name,
+            sum(pf.sales_transaction_count_12m) AS units_sold,
+            sum(pf.sales_transaction_count_12m) AS sales_transaction_count,
+            sum(pf.total_sales_volume_12m) AS sales_volume_aed,
+            if(
+                sum(pf.sales_transaction_count_12m) > 0,
+                sum(pf.avg_sale_price_sqm_12m * pf.sales_transaction_count_12m)
+                    / sum(pf.sales_transaction_count_12m) / {sqm_to_sqft:Float64},
+                NULL
+            ) AS avg_price_sqft_aed,
+            countIf(pf.sales_transaction_count_12m > 0) AS selling_projects,
+            count() AS total_projects,
+            countIf(pf.completion_date IS NULL AND pf.cancellation_date IS NULL) AS active_projects,
+            countIf(pf.completion_date IS NOT NULL) AS completed_projects,
+            sumIf(pf.no_of_units, pf.completion_date IS NOT NULL) AS completed_units,
+            sumIf(pf.no_of_units, pf.completion_date IS NULL AND pf.cancellation_date IS NULL) AS pipeline_units,
+            sum(pf.no_of_units) AS registered_units,
+            avgIf(pf.percent_completed, pf.completion_date IS NULL AND pf.cancellation_date IS NULL) AS avg_completion_pct,
+            sumIf(
+                pf.no_of_units,
+                pf.completion_date IS NOT NULL
+                AND pf.project_end_date IS NOT NULL
+                AND pf.completion_date <= pf.project_end_date
+            ) AS on_time_units,
+            sumIf(
+                pf.no_of_units,
+                pf.completion_date IS NOT NULL AND pf.project_end_date IS NOT NULL
+            ) AS completed_units_with_schedule,
+            countIf(pf.project_start_date >= subtractYears({end_date:Date}, 10)) AS initiated_projects_10y,
+            countIf(
+                pf.project_start_date >= subtractYears({end_date:Date}, 10)
+                AND pf.completion_date IS NOT NULL
+            ) AS completed_projects_10y,
+            if(
+                completed_units_with_schedule > 0,
+                on_time_units / completed_units_with_schedule * 100,
+                NULL
+            ) AS on_time_delivery_score,
+            if(registered_units > 0, least(100, units_sold / registered_units * 100), NULL)
+                AS sales_completion_score,
+            if(
+                initiated_projects_10y > 0,
+                completed_projects_10y / initiated_projects_10y * 100,
+                NULL
+            ) AS historical_project_success_score
+        FROM ch_project_fact AS pf
+        WHERE pf.developer_name != ''
+        GROUP BY lowerUTF8(pf.developer_name)
         """,
         {
             "start_date": start_date.isoformat(),

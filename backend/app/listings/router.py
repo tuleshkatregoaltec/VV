@@ -1,8 +1,17 @@
 from fastapi import APIRouter, Depends, Query
 
 from app.core.dependencies import AuthContext, require_active_subscription
-from app.listings.models import ListingDetailResponse, ListingListResponse, ListingMode
-from app.listings.service import get_listing_from_clickhouse, list_listings_from_clickhouse
+from app.listings.models import (
+    ListingAnalyticsResponse,
+    ListingDetailResponse,
+    ListingListResponse,
+    ListingMode,
+)
+from app.listings.service import (
+    get_listing_from_clickhouse,
+    list_listings_from_clickhouse,
+    listing_analytics_from_clickhouse,
+)
 
 router = APIRouter(prefix="/api/v1/listings", tags=["listings"])
 
@@ -25,6 +34,29 @@ async def list_listings(
         mode=mode,
         limit=limit,
         offset=offset,
+        search=search,
+        area=area,
+        property_type=property_type,
+        bedrooms=bedrooms,
+        price_min=price_min,
+        price_max=price_max,
+    )
+
+
+@router.get("/analytics", response_model=ListingAnalyticsResponse)
+async def listing_analytics(
+    mode: ListingMode = Query(default="rent"),
+    search: str | None = Query(default=None, max_length=160),
+    area: str | None = Query(default=None, max_length=160),
+    property_type: str | None = Query(default=None, max_length=120),
+    bedrooms: str | None = Query(default=None, max_length=40),
+    price_min: int | None = Query(default=None, ge=0),
+    price_max: int | None = Query(default=None, ge=0),
+    context: AuthContext = Depends(require_active_subscription),
+):
+    """Aggregate metrics for the current Property Finder listing filters."""
+    return await listing_analytics_from_clickhouse(
+        mode=mode,
         search=search,
         area=area,
         property_type=property_type,

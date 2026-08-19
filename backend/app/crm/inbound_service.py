@@ -5,7 +5,7 @@ import hashlib
 import io
 import json
 import re
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -21,21 +21,27 @@ from app.config import settings
 from app.crm.import_models import CrmPropertyContactClaim
 from app.crm.import_service import _normalize_email, _normalize_phone
 from app.crm.inbound_models import (
+    CrmInboundActivity,
     CrmInboundContact,
     CrmInboundEnquiry,
     CrmInboundImport,
     CrmInboundMatch,
     CrmInboundNote,
+    InboundActivityResponse,
     InboundContactResponse,
     InboundEnquiryCreate,
     InboundEnquiryListResponse,
     InboundEnquiryResponse,
     InboundEnquiryUpdate,
+    InboundImportPreviewResponse,
+    InboundImportPreviewSheet,
     InboundImportResponse,
     InboundImportSummary,
     InboundMatchesResponse,
     InboundMatchResponse,
     InboundNoteResponse,
+    InboundOwnershipEnrichmentResponse,
+    InboundPriorityResponse,
     InboundRegistryProfileResponse,
 )
 from app.listings.service import list_listings_from_clickhouse
@@ -43,6 +49,8 @@ from app.listings.service import list_listings_from_clickhouse
 _MAX_FILE_BYTES = 50 * 1024 * 1024
 _ALGORITHM_VERSION = "inbound-v1"
 _LISTING_MAX_AGE_HOURS = 48
+_FIRST_RESPONSE_MINUTES = 5
+_QUALIFIED_STATUSES = {"qualified", "viewing", "valuation", "signed", "active", "won"}
 _NON_KEY = re.compile(r"[^a-z0-9]+")
 _EMAIL_RE = re.compile(r"\b[^\s@]+@[^\s@]+\.[^\s@]+\b")
 _PHONE_RE = re.compile(r"(?<!\d)(?:\+?971|0)?[\s().-]*5\d(?:[\s().-]*\d){7}(?!\d)")
@@ -145,6 +153,36 @@ def _normalize_intent(value: Any, notes: str = "") -> str | None:
     if any(word in raw for word in ("buyer", "looking to buy", "purchase", "for sale")):
         return "buy"
     return None
+
+
+def _qualification_complete(enquiry: CrmInboundEnquiry) -> bool:
+    if (
+        enquiry.record_kind != "opportunity"
+        or enquiry.intent not in {"buy", "rent", "sell", "let"}
+        or enquiry.status not in _QUALIFIED_STATUSES
+    ):
+        return False
+    criteria = enquiry.criteria or {}
+    if enquiry.intent in {"sell", "let"}:
+        return bool(criteria.get("building") and criteria.get("unit_number"))
+    has_location = bool(_locations(criteria))
+    has_brief = any(
+        criteria.get(field) not in (None, "", [])
+        for field in ("budget_max_aed", "bedrooms_min", "property_type")
+    )
+    return has_location and has_brief
+
+
+def _sla_state(enquiry: CrmInboundEnquiry) -> str:
+    if enquiry.first_contact_at:
+        return "responded"
+    due = enquiry.first_response_due_at
+    if not due:
+        return "on_time"
+    now = _utcnow()
+    if due <= now:
+        return "overdue"
+    return "due_soon" if due - now <= timedelta(minutes=2) else "on_time"
 
 
 def _redact(text: str, contact_values: list[str]) -> str:
@@ -286,17 +324,60 @@ def _best_header(rows: list[tuple[Any, ...]]) -> tuple[int, tuple[Any, ...], dic
     return index, values, mapping
 
 
-def _file_rows(data: bytes, filename: str) -> tuple[list[tuple[str, int, dict[str, Any]]], dict[str, Any]]:
+def _mapping_override_for_sheet(
+    override: dict[str, Any] | None,
+    sheet_name: str,
+    headers: list[Any],
+    detected: dict[str, int],
+) -> dict[str, int]:
+    if not override:
+        return detected
+    sheets = override.get("sheets", [])
+    sheet_config = next((item for item in sheets if item.get("sheet") == sheet_name), None)
+    if not sheet_config:
+        return detected
+    by_header = {_text(header): index for index, header in enumerate(headers)}
+    mapped = {
+        canonical: by_header[header]
+        for canonical, header in sheet_config.get("field_map", {}).items()
+        if header in by_header and canonical in _ALIASES
+    }
+    return mapped or detected
+
+
+def _file_rows(
+    data: bytes,
+    filename: str,
+    mapping_override: dict[str, Any] | None = None,
+) -> tuple[list[tuple[str, int, dict[str, Any]]], dict[str, Any]]:
     rows: list[tuple[str, int, dict[str, Any]]] = []
     mappings: list[dict[str, Any]] = []
     if filename.lower().endswith(".csv"):
         raw = list(csv.reader(io.StringIO(data.decode("utf-8-sig"))))
         header_index, header_values, mapping = _best_header([tuple(row) for row in raw])
         headers = list(header_values)
+        sheet_name = Path(filename).stem
+        mapping = _mapping_override_for_sheet(mapping_override, sheet_name, headers, mapping)
         for row_number, values in enumerate(raw[header_index + 1 :], start=header_index + 2):
             if any(_text(value) for value in values):
-                rows.append((Path(filename).stem, row_number, {key: values[index] if index < len(values) else None for key, index in mapping.items()}))
-        mappings.append({"sheet": Path(filename).stem, "header_row": header_index + 1, "field_map": {key: headers[index] for key, index in mapping.items()}})
+                rows.append(
+                    (
+                        sheet_name,
+                        row_number,
+                        {
+                            key: values[index] if index < len(values) else None
+                            for key, index in mapping.items()
+                        },
+                    )
+                )
+        mappings.append(
+            {
+                "sheet": sheet_name,
+                "header_row": header_index + 1,
+                "headers": [_text(value) for value in headers if _text(value)],
+                "field_map": {key: headers[index] for key, index in mapping.items()},
+            }
+        )
         return rows, {"sheets": mappings}
 
     workbook = openpyxl.load_workbook(io.BytesIO(data), read_only=True, data_only=True)
@@ -304,13 +385,180 @@ def _file_rows(data: bytes, filename: str) -> tuple[list[tuple[str, int, dict[st
         for sheet in workbook.worksheets:
             preview = list(sheet.iter_rows(min_row=1, max_row=15, values_only=True))
             header_index, header_values, mapping = _best_header(preview)
-            mappings.append({"sheet": sheet.title, "header_row": header_index + 1, "field_map": {key: _text(header_values[index]) for key, index in mapping.items()}})
-            for row_number, values in enumerate(sheet.iter_rows(min_row=header_index + 2, values_only=True), start=header_index + 2):
+            mapping = _mapping_override_for_sheet(
+                mapping_override, sheet.title, list(header_values), mapping
+            )
+            mappings.append(
+                {
+                    "sheet": sheet.title,
+                    "header_row": header_index + 1,
+                    "headers": [_text(value) for value in header_values if _text(value)],
+                    "field_map": {
+                        key: _text(header_values[index]) for key, index in mapping.items()
+                    },
+                }
+            )
+            for row_number, values in enumerate(
+                sheet.iter_rows(min_row=header_index + 2, values_only=True), start=header_index + 2
+            ):
                 if any(value not in (None, "") for value in values):
-                    rows.append((sheet.title, row_number, {key: values[index] if index < len(values) else None for key, index in mapping.items()}))
+                    rows.append(
+                        (
+                            sheet.title,
+                            row_number,
+                            {
+                                key: values[index] if index < len(values) else None
+                                for key, index in mapping.items()
+                            },
+                        )
+                    )
     finally:
         workbook.close()
     return rows, {"sheets": mappings}
+
+
+def _preview_file(
+    data: bytes,
+    filename: str,
+    mapping_override: dict[str, Any] | None = None,
+    ai_mapped_sheets: set[str] | None = None,
+) -> InboundImportPreviewResponse:
+    rows, audit = _file_rows(data, filename, mapping_override)
+    grouped: dict[str, list[tuple[int, dict[str, Any]]]] = {}
+    for sheet, row_number, row in rows:
+        grouped.setdefault(sheet, []).append((row_number, row))
+    sheets = []
+    for item in audit.get("sheets", []):
+        sheet_name = item["sheet"]
+        field_map = item.get("field_map", {})
+        headers = item.get("headers", [])
+        samples = []
+        for row_number, row in grouped.get(sheet_name, [])[:5]:
+            samples.append(
+                {
+                    "row": str(row_number),
+                    **{
+                        key: _redact(_text(value), [])[:160]
+                        for key, value in row.items()
+                        if value not in (None, "") and key not in {"phone", "email", "whatsapp"}
+                    },
+                    **{key: "Present" for key in ("phone", "email", "whatsapp") if row.get(key)},
+                }
+            )
+        sheets.append(
+            InboundImportPreviewSheet(
+                sheet=sheet_name,
+                header_row=item.get("header_row", 1),
+                headers=headers,
+                field_map=field_map,
+                sample_rows=samples,
+                row_count=len(grouped.get(sheet_name, [])),
+                mapping_source=(
+                    "ai_assisted" if sheet_name in (ai_mapped_sheets or set()) else "deterministic"
+                ),
+            )
+        )
+    warnings = []
+    if not any("full_name" in sheet.field_map for sheet in sheets):
+        warnings.append("No name column was detected")
+    if not any({"phone", "email"} & set(sheet.field_map) for sheet in sheets):
+        warnings.append("No phone or email column was detected")
+    return InboundImportPreviewResponse(
+        original_filename=filename,
+        size_bytes=len(data),
+        total_rows=len(rows),
+        sheets=sheets,
+        warnings=warnings,
+    )
+
+
+async def _ai_header_mapping(headers: list[str], campaign_context: str) -> dict[str, str]:
+    if not headers or not settings.OPENROUTER_API_KEY:
+        return {}
+    prompt = {
+        "task": "Map spreadsheet columns to a real-estate lead import schema.",
+        "headers": headers,
+        "source_context": campaign_context,
+        "allowed_fields": list(_ALIASES),
+        "rules": [
+            "Return JSON with a field_map object only",
+            "Keys must be allowed_fields",
+            "Values must exactly match one supplied header",
+            "Do not map uncertain columns",
+            "Campaign context describes the source and must not be treated as individual intent",
+        ],
+    }
+    try:
+        async with httpx.AsyncClient(timeout=20) as client:
+            response = await client.post(
+                "https://openrouter.ai/api/v1/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {settings.OPENROUTER_API_KEY}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": settings.DEFAULT_CHAT_MODEL,
+                    "messages": [
+                        {
+                            "role": "system",
+                            "content": "Map headers conservatively. Never invent columns or lead facts.",
+                        },
+                        {"role": "user", "content": json.dumps(prompt)},
+                    ],
+                    "response_format": {"type": "json_object"},
+                    "temperature": 0,
+                    "max_tokens": 600,
+                    "provider": {"zdr": True, "data_collection": "deny"},
+                },
+            )
+            response.raise_for_status()
+            payload = json.loads(response.json()["choices"][0]["message"]["content"])
+    except Exception:
+        return {}
+    proposed = payload.get("field_map", {})
+    return {
+        canonical: header
+        for canonical, header in proposed.items()
+        if canonical in _ALIASES and header in headers
+    }
+
+
+async def preview_inbound_import(
+    upload: UploadFile, campaign_context: str = ""
+) -> InboundImportPreviewResponse:
+    filename = Path(upload.filename or "inbound-leads.xlsx").name
+    if not filename.lower().endswith((".xlsx", ".csv")):
+        raise HTTPException(status_code=415, detail="Upload a CSV or XLSX file")
+    data = await upload.read(_MAX_FILE_BYTES + 1)
+    if len(data) > _MAX_FILE_BYTES:
+        raise HTTPException(status_code=413, detail="Inbound import exceeds 50 MB")
+    try:
+        preview = _preview_file(data, filename)
+        ai_mapped_sheets: set[str] = set()
+        for sheet in preview.sheets:
+            has_identity = bool(
+                {"full_name", "first_name", "phone", "email"} & set(sheet.field_map)
+            )
+            if has_identity and len(sheet.field_map) >= 4:
+                continue
+            suggested = await _ai_header_mapping(sheet.headers, campaign_context.strip()[:4_000])
+            for canonical, header in suggested.items():
+                sheet.field_map.setdefault(canonical, header)
+            if suggested:
+                ai_mapped_sheets.add(sheet.sheet)
+        if ai_mapped_sheets:
+            override = {
+                "sheets": [
+                    {"sheet": sheet.sheet, "field_map": sheet.field_map} for sheet in preview.sheets
+                ]
+            }
+            preview = _preview_file(data, filename, override, ai_mapped_sheets)
+            preview.warnings.append(
+                "AI suggested mappings are highlighted for review and are not applied until approval"
+            )
+        return preview
+    except Exception as exc:
+        raise HTTPException(status_code=422, detail=f"Could not read import: {exc}") from exc
 
 
 async def _find_or_create_contact(
@@ -363,6 +611,164 @@ async def _find_or_create_contact(
     return contact
 
 
+def _claim_property_identity(claim: CrmPropertyContactClaim) -> str:
+    return claim.property_key or "|".join(
+        (
+            _token(claim.building_name or claim.project_name),
+            _token(claim.unit_number),
+        )
+    )
+
+
+def _ownership_enrichment(
+    matches: list[tuple[CrmPropertyContactClaim, str]],
+) -> InboundOwnershipEnrichmentResponse:
+    if not matches:
+        return InboundOwnershipEnrichmentResponse()
+    basis_order = {"phone": 3, "email": 2, "name": 1}
+    match_basis = max((basis for _, basis in matches), key=basis_order.__getitem__)
+    best_by_property: dict[str, CrmPropertyContactClaim] = {}
+    status_order = {
+        "verified_current_owner": 5,
+        "probable_current_owner": 4,
+        "former_owner": 3,
+        "unit_linked_unverified": 2,
+        "conflicting_claim": 1,
+        "unmatched": 0,
+    }
+    for claim, _ in matches:
+        property_identity = _claim_property_identity(claim)
+        current = best_by_property.get(property_identity)
+        if current is None or (
+            status_order.get(claim.ownership_status, 0),
+            claim.confidence_score,
+        ) > (status_order.get(current.ownership_status, 0), current.confidence_score):
+            best_by_property[property_identity] = claim
+    claims = list(best_by_property.values())
+    current = [
+        claim
+        for claim in claims
+        if claim.ownership_status in {"verified_current_owner", "probable_current_owner"}
+    ]
+    former = [claim for claim in claims if claim.ownership_status == "former_owner"]
+    rental = [claim for claim in current if claim.lease_end or claim.lead_id]
+    reasons = [
+        "Phone matched owner records"
+        if match_basis == "phone"
+        else "Email matched owner records"
+        if match_basis == "email"
+        else "Name matched owner records; verify identity"
+    ]
+    if current:
+        reasons.append(
+            f"{len(current)} current propert{'y' if len(current) == 1 else 'ies'} observed"
+        )
+    if former:
+        reasons.append(f"{len(former)} prior propert{'y' if len(former) == 1 else 'ies'} observed")
+    if rental:
+        reasons.append(f"{len(rental)} rental propert{'y' if len(rental) == 1 else 'ies'} observed")
+    if len(claims) >= 2:
+        reasons.append(f"Known across {len(claims)} properties")
+    return InboundOwnershipEnrichmentResponse(
+        matched=True,
+        match_basis=match_basis,  # type: ignore[arg-type]
+        verification="contact_exact" if match_basis in {"phone", "email"} else "name_only",
+        current_owner=bool(current),
+        former_owner=bool(former),
+        rental_owner=bool(rental),
+        multiple_property_owner=len(claims) >= 2,
+        current_property_count=len(current),
+        prior_property_count=len(former),
+        rental_property_count=len(rental),
+        known_property_count=len(claims),
+        reasons=reasons,
+    )
+
+
+async def _bulk_ownership_enrichments(
+    db: AsyncSession,
+    *,
+    organization_id: str,
+    contacts: list[CrmInboundContact],
+) -> dict[int, InboundOwnershipEnrichmentResponse]:
+    if not contacts:
+        return {}
+    name_to_ids: dict[str, set[int]] = {}
+    phone_to_ids: dict[str, set[int]] = {}
+    email_to_ids: dict[str, set[int]] = {}
+    for contact in contacts:
+        contact_id = contact.id or 0
+        name = contact.full_name.strip().casefold()
+        if name:
+            name_to_ids.setdefault(name, set()).add(contact_id)
+        if contact.phone:
+            phone_to_ids.setdefault(contact.phone, set()).add(contact_id)
+        if contact.email:
+            email_to_ids.setdefault(contact.email.casefold(), set()).add(contact_id)
+    conditions = []
+    if name_to_ids:
+        conditions.append(
+            func.lower(func.trim(CrmPropertyContactClaim.contact_name)).in_(list(name_to_ids))
+        )
+    if phone_to_ids:
+        conditions.extend(
+            [
+                CrmPropertyContactClaim.phone_primary.in_(list(phone_to_ids)),
+                CrmPropertyContactClaim.phone_alternate.in_(list(phone_to_ids)),
+            ]
+        )
+    if email_to_ids:
+        conditions.append(func.lower(CrmPropertyContactClaim.email_primary).in_(list(email_to_ids)))
+    if not conditions:
+        return {}
+    result = await db.exec(
+        select(CrmPropertyContactClaim).where(
+            CrmPropertyContactClaim.organization_id == organization_id,
+            or_(*conditions),
+        )
+    )
+    matches: dict[int, list[tuple[CrmPropertyContactClaim, str]]] = {}
+    for claim in result.all():
+        claim_phone_values = {claim.phone_primary, claim.phone_alternate} - {None, ""}
+        phone_ids = {
+            contact_id
+            for value in claim_phone_values
+            for contact_id in phone_to_ids.get(str(value), set())
+        }
+        email_ids = email_to_ids.get((claim.email_primary or "").casefold(), set())
+        name_ids = name_to_ids.get(claim.contact_name.strip().casefold(), set())
+        for contact_id in phone_ids | email_ids | name_ids:
+            basis = (
+                "phone"
+                if contact_id in phone_ids
+                else "email"
+                if contact_id in email_ids
+                else "name"
+            )
+            matches.setdefault(contact_id, []).append((claim, basis))
+    return {
+        contact_id: _ownership_enrichment(contact_matches)
+        for contact_id, contact_matches in matches.items()
+    }
+
+
+def _lead_priority(
+    enquiry: CrmInboundEnquiry,
+    enrichment: InboundOwnershipEnrichmentResponse,
+) -> InboundPriorityResponse:
+    if not enrichment.matched:
+        return InboundPriorityResponse(
+            band="standard", reasons=["No owner-registry relationship observed"]
+        )
+    reasons = list(enrichment.reasons)
+    high_value_intent = enquiry.intent in {"buy", "sell"}
+    if enrichment.verification == "contact_exact" and (
+        high_value_intent or enrichment.multiple_property_owner or enrichment.rental_owner
+    ):
+        return InboundPriorityResponse(band="high", reasons=reasons)
+    return InboundPriorityResponse(band="medium", reasons=reasons)
+
+
 async def create_inbound_enquiry(
     db: AsyncSession,
     *,
@@ -381,12 +787,18 @@ async def create_inbound_enquiry(
         consent_status=payload.consent_status,
     )
     now = _utcnow()
+    record_kind = (
+        "opportunity"
+        if payload.record_kind == "opportunity" and payload.intent != "unknown"
+        else "unqualified_contact"
+    )
     enquiry = CrmInboundEnquiry(
         organization_id=organization_id,
         contact_id=contact.id or 0,
         created_by_user_id=user_id,
         assigned_user_id=payload.assigned_user_id or user_id,
-        intent=payload.intent,
+        record_kind=record_kind,
+        intent=payload.intent if record_kind == "opportunity" else "unknown",
         status="new",
         source=payload.source,
         campaign=payload.campaign,
@@ -394,16 +806,38 @@ async def create_inbound_enquiry(
         criteria=payload.criteria,
         strict_fields=payload.strict_fields,
         raw_notes=payload.notes,
+        observed_data={
+            "intent": payload.intent if payload.intent != "unknown" else None,
+            "message": payload.notes,
+            "criteria": payload.criteria,
+        },
+        confirmed_data=(
+            {"intent": payload.intent, "criteria": payload.criteria}
+            if record_kind == "opportunity"
+            else {}
+        ),
+        qualification={},
         extraction_confidence=1,
+        first_response_due_at=now + timedelta(minutes=_FIRST_RESPONSE_MINUTES),
         created_at=now,
         updated_at=now,
     )
     db.add(enquiry)
+    await db.flush()
+    db.add(
+        CrmInboundActivity(
+            enquiry_id=enquiry.id or 0,
+            organization_id=organization_id,
+            user_id=user_id,
+            activity_type="created",
+            body="Manually added to the lead inbox",
+            metadata_json={"source": payload.source},
+            created_at=now,
+        )
+    )
     await db.commit()
     await db.refresh(enquiry)
-    return await _enquiry_response(
-        db, enquiry, contact=contact, include_registry_profiles=True
-    )
+    return await _enquiry_response(db, enquiry, contact=contact, include_registry_profiles=True)
 
 
 async def process_inbound_import(
@@ -414,6 +848,7 @@ async def process_inbound_import(
     user_id: str,
     organization_id: str,
     campaign_context: str = "",
+    mapping_override: dict[str, Any] | None = None,
 ) -> InboundImportResponse:
     filename = Path(upload.filename or "inbound-leads.xlsx").name
     if not filename.lower().endswith((".xlsx", ".csv")):
@@ -422,9 +857,7 @@ async def process_inbound_import(
     if len(data) > _MAX_FILE_BYTES:
         raise HTTPException(status_code=413, detail="Inbound import exceeds 50 MB")
     campaign_context = campaign_context.strip()[:4_000]
-    digest = hashlib.sha256(
-        data + b"\0" + campaign_context.casefold().encode()
-    ).hexdigest()
+    digest = hashlib.sha256(data + b"\0" + campaign_context.casefold().encode()).hexdigest()
     existing_result = await db.exec(
         select(CrmInboundImport).where(
             CrmInboundImport.organization_id == organization_id,
@@ -451,18 +884,32 @@ async def process_inbound_import(
     await db.commit()
     await db.refresh(record)
     summary = InboundImportSummary()
+    imported_enquiries: list[CrmInboundEnquiry] = []
+    imported_contacts: dict[int, CrmInboundContact] = {}
     try:
-        rows, mapping = _file_rows(data, filename)
+        rows, mapping = _file_rows(data, filename, mapping_override)
         mapping["campaign_context"] = campaign_context
         record.mapping = mapping
         summary.total_rows = len(rows)
+        for sheet_mapping in mapping.get("sheets", []):
+            fields = set(sheet_mapping.get("field_map", {}))
+            if not ({"full_name", "first_name"} & fields):
+                raise ValueError(
+                    f"Map a full-name or first-name column for {sheet_mapping.get('sheet', 'the import')}"
+                )
+            if not ({"phone", "email", "whatsapp"} & fields):
+                raise ValueError(
+                    f"Map a phone, email, or WhatsApp column for {sheet_mapping.get('sheet', 'the import')}"
+                )
         if summary.total_rows > 10_000:
             raise ValueError("Inbound import exceeds the 10,000-row synchronous import limit")
         row_fingerprints: set[str] = set()
         for sheet, row_number, row in rows:
             first = _text(row.get("first_name"))
             last = _text(row.get("last_name"))
-            full_name = _text(row.get("full_name")) or " ".join(part for part in (first, last) if part)
+            full_name = _text(row.get("full_name")) or " ".join(
+                part for part in (first, last) if part
+            )
             phone = _normalize_phone(row.get("phone"))
             email = _normalize_email(row.get("email"))
             if not any((full_name, phone, email)):
@@ -487,20 +934,13 @@ async def process_inbound_import(
                 continue
             row_fingerprints.add(row_fingerprint)
             notes = _text(row.get("notes"))
-            combined_context = "\n".join(
-                part
-                for part in (
-                    f"Campaign context: {campaign_context}" if campaign_context else "",
-                    f"Row notes: {notes}" if notes else "",
-                )
-                if part
-            )
-            intent = _normalize_intent(row.get("intent"), combined_context)
-            criteria = _deterministic_criteria(row, combined_context)
-            redacted = _redact(
-                combined_context, [full_name, phone or "", email or ""]
-            )
-            needs_ai = bool(combined_context) and (
+            # Campaign context describes provenance, not an individual's intent.
+            # Only row fields and the person's message may establish observed facts.
+            row_context = notes
+            intent = _normalize_intent(row.get("intent"), row_context)
+            criteria = _deterministic_criteria(row, row_context)
+            redacted = _redact(row_context, [full_name, phone or "", email or ""])
+            needs_ai = bool(row_context) and (
                 intent is None
                 or not criteria.get("locations")
                 or (
@@ -515,9 +955,6 @@ async def process_inbound_import(
                 await _ai_extract(redacted, criteria) if needs_ai else ({}, 1.0, [])
             )
             ai_intent = ai_values.pop("_intent", None)
-            intent = intent or (ai_intent if ai_intent in {"buy", "rent", "sell", "let"} else None)
-            for key, value in ai_values.items():
-                criteria.setdefault(key, value)
             review: list[str] = []
             contact = await _find_or_create_contact(
                 db,
@@ -529,80 +966,76 @@ async def process_inbound_import(
                 language=_text(row.get("language")) or None,
                 consent_status=_text(row.get("consent")) or "unknown",
             )
-            classification_source = "row_or_campaign"
+            inferred_data: dict[str, Any] = {}
+            if ai_intent in {"buy", "rent", "sell", "let"} and intent is None:
+                inferred_data["intent"] = ai_intent
+            if ai_values:
+                inferred_data["criteria"] = ai_values
             if intent is None:
-                registry_profiles = await _registry_profiles(
-                    db, contact=contact, criteria=criteria
-                )
-                if any("current_owner" in profile.ownership_status for profile in registry_profiles):
-                    current_profile = next(
-                        profile
-                        for profile in registry_profiles
-                        if "current_owner" in profile.ownership_status
-                    )
-                    intent = "sell"
-                    classification_source = "current_owner_provisional"
-                    inferred_location = (
-                        current_profile.area_name
-                        or current_profile.project_name
-                        or current_profile.building_name
-                    )
-                    if inferred_location:
-                        criteria.setdefault("locations", [inferred_location])
-                    if current_profile.building_name:
-                        criteria.setdefault("building", current_profile.building_name)
-                    if current_profile.unit_number:
-                        criteria.setdefault("unit_number", current_profile.unit_number)
-                    if current_profile.property_type:
-                        criteria.setdefault("property_type", current_profile.property_type)
-                    review.append(
-                        "Current-owner profile found; seller classification is provisional until sale versus letting intent is confirmed"
-                    )
-                elif any(profile.ownership_status == "former_owner" for profile in registry_profiles):
-                    intent = "buy"
-                    classification_source = "former_owner_provisional"
-                    review.append(
-                        "Former-owner profile found; repeat-buyer classification is provisional until intent is confirmed"
-                    )
-                else:
-                    intent = "buy"
-                    classification_source = "unresolved_provisional"
-                    review.append(
-                        "No explicit intent or owner history was available; buyer classification is provisional"
-                    )
+                review.append("Intent was not explicitly supplied and must be qualified")
             if intent in {"buy", "rent"} and not criteria.get("locations"):
                 review.append("Preferred location is missing")
             if confidence and confidence < 0.85:
-                review.append("AI extraction confidence is below 85%")
+                review.append("Message extraction should be reviewed")
+            record_kind = "opportunity" if intent else "unqualified_contact"
+            observed_data = {
+                "intent": intent,
+                "message": notes or None,
+                "criteria": criteria,
+                "source": _text(row.get("source")) or "Imported",
+                "campaign": _text(row.get("campaign")) or record.name,
+                "campaign_context": campaign_context or None,
+            }
+            enquiry_date = _parse_datetime(row.get("created_at"))
             enquiry = CrmInboundEnquiry(
                 organization_id=organization_id,
                 contact_id=contact.id or 0,
                 source_import_id=record.id,
                 created_by_user_id=user_id,
                 assigned_user_id=user_id,
-                intent=intent,
+                record_kind=record_kind,
+                intent=intent or "unknown",
                 status="needs_review" if review else "new",
                 source=_text(row.get("source")) or "Imported",
                 campaign=_text(row.get("campaign")) or record.name,
                 source_lead_id=source_id or None,
                 source_sheet=sheet,
                 source_row_number=row_number,
-                enquiry_date=_parse_datetime(row.get("created_at")),
+                enquiry_date=enquiry_date,
                 criteria=criteria,
                 strict_fields=strict,
                 raw_notes=notes or None,
+                observed_data=observed_data,
+                inferred_data=inferred_data,
+                confirmed_data={},
+                qualification={},
                 extraction_confidence=confidence or (0.8 if review else 0.9),
                 extraction_evidence={
                     "redacted_ai": bool(ai_values),
                     "campaign_context_used": bool(campaign_context),
-                    "classification_source": classification_source,
+                    "classification_source": "row_or_message" if intent else "unknown",
                     "mapping": mapping,
                 },
                 review_reasons=review,
+                first_response_due_at=enquiry_date + timedelta(minutes=_FIRST_RESPONSE_MINUTES),
                 created_at=now,
                 updated_at=now,
             )
             db.add(enquiry)
+            await db.flush()
+            imported_enquiries.append(enquiry)
+            imported_contacts[contact.id or 0] = contact
+            db.add(
+                CrmInboundActivity(
+                    enquiry_id=enquiry.id or 0,
+                    organization_id=organization_id,
+                    user_id=user_id,
+                    activity_type="imported",
+                    body=f"Imported from {record.name}",
+                    metadata_json={"sheet": sheet, "row": row_number},
+                    created_at=now,
+                )
+            )
             summary.imported += 1
             summary.needs_review += int(bool(review))
             if intent == "buy":
@@ -611,8 +1044,23 @@ async def process_inbound_import(
                 summary.tenants += 1
             elif intent == "sell":
                 summary.sellers += 1
-            else:
+            elif intent == "let":
                 summary.landlords += 1
+            else:
+                summary.unqualified_contacts += 1
+        enrichments = await _bulk_ownership_enrichments(
+            db,
+            organization_id=organization_id,
+            contacts=list(imported_contacts.values()),
+        )
+        for enquiry in imported_enquiries:
+            enrichment = enrichments.get(enquiry.contact_id, InboundOwnershipEnrichmentResponse())
+            summary.owner_matches += int(enrichment.matched)
+            summary.current_owners += int(enrichment.current_owner)
+            summary.former_owners += int(enrichment.former_owner)
+            summary.rental_owners += int(enrichment.rental_owner)
+            summary.portfolio_owners += int(enrichment.multiple_property_owner)
+            summary.high_priority += int(_lead_priority(enquiry, enrichment).band == "high")
         record.status = "completed"
         record.summary = summary.model_dump()
         record.completed_at = _utcnow()
@@ -644,7 +1092,9 @@ def _import_response(record: CrmInboundImport) -> InboundImportResponse:
     )
 
 
-async def list_inbound_imports(db: AsyncSession, organization_id: str) -> list[InboundImportResponse]:
+async def list_inbound_imports(
+    db: AsyncSession, organization_id: str
+) -> list[InboundImportResponse]:
     result = await db.exec(
         select(CrmInboundImport)
         .where(CrmInboundImport.organization_id == organization_id)
@@ -710,7 +1160,9 @@ async def _registry_profiles(
             ]
         )
     if contact.email:
-        conditions.append(func.lower(CrmPropertyContactClaim.email_primary) == contact.email.lower())
+        conditions.append(
+            func.lower(CrmPropertyContactClaim.email_primary) == contact.email.lower()
+        )
     result = await db.exec(
         select(CrmPropertyContactClaim)
         .where(
@@ -731,8 +1183,7 @@ async def _registry_profiles(
             continue
         seen.add(property_identity)
         phone_match = bool(
-            contact.phone
-            and contact.phone in {claim.phone_primary, claim.phone_alternate}
+            contact.phone and contact.phone in {claim.phone_primary, claim.phone_alternate}
         )
         email_match = bool(
             contact.email
@@ -756,26 +1207,26 @@ async def _registry_profiles(
             )
         )
         if phone_match or email_match:
-            identity_score = 100
+            identity_strength = "exact"
             identity_reason = "Contact detail matches the owner registry"
         elif exact_property:
-            identity_score = 96
+            identity_strength = "exact"
             identity_reason = "Name, building, and unit match the owner registry"
         elif building and building in claim_building:
-            identity_score = 84
+            identity_strength = "possible"
             identity_reason = "Name and building match; unit confirmation is still required"
         elif location_match:
-            identity_score = 78
+            identity_strength = "possible"
             identity_reason = "Name and stated location match a registry profile"
         else:
-            identity_score = 65
+            identity_strength = "weak"
             identity_reason = "Name-only registry match; verify identity before using it"
         profiles.append(
             InboundRegistryProfileResponse(
                 owner_key=claim.owner_key,
                 contact_name=claim.contact_name,
                 ownership_status=claim.ownership_status,
-                identity_score=identity_score,
+                identity_strength=identity_strength,  # type: ignore[arg-type]
                 identity_reason=identity_reason,
                 area_name=claim.area_name,
                 project_name=claim.project_name,
@@ -788,7 +1239,14 @@ async def _registry_profiles(
                 lead_id=claim.lead_id,
             )
         )
-    profiles.sort(key=lambda item: (item.identity_score, item.latest_sale_date or date.min), reverse=True)
+    strength_order = {"exact": 3, "possible": 2, "weak": 1}
+    profiles.sort(
+        key=lambda item: (
+            strength_order[item.identity_strength],
+            item.latest_sale_date or date.min,
+        ),
+        reverse=True,
+    )
     return profiles[:10]
 
 
@@ -816,27 +1274,54 @@ async def _enquiry_response(
     *,
     contact: CrmInboundContact | None = None,
     include_registry_profiles: bool = False,
+    include_history: bool = False,
+    match_counts: tuple[int, int] | None = None,
+    ownership_enrichment: InboundOwnershipEnrichmentResponse | None = None,
 ) -> InboundEnquiryResponse:
     contact = contact or await db.get(CrmInboundContact, enquiry.contact_id)
     if not contact or contact.organization_id != enquiry.organization_id:
         raise HTTPException(status_code=500, detail="Inbound contact is missing")
-    notes_result = await db.exec(
-        select(CrmInboundNote)
-        .where(CrmInboundNote.enquiry_id == enquiry.id)
-        .order_by(CrmInboundNote.created_at.desc())
-    )
-    matches_result = await db.exec(
-        select(CrmInboundMatch).where(CrmInboundMatch.enquiry_id == enquiry.id)
-    )
-    matches = matches_result.all()
+    notes = []
+    activities = []
+    if include_history:
+        notes_result = await db.exec(
+            select(CrmInboundNote)
+            .where(CrmInboundNote.enquiry_id == enquiry.id)
+            .order_by(CrmInboundNote.created_at.desc())
+        )
+        notes = list(notes_result.all())
+        activities_result = await db.exec(
+            select(CrmInboundActivity)
+            .where(CrmInboundActivity.enquiry_id == enquiry.id)
+            .order_by(CrmInboundActivity.created_at.desc())
+        )
+        activities = list(activities_result.all())
+    if match_counts is None:
+        matches_result = await db.exec(
+            select(CrmInboundMatch).where(CrmInboundMatch.enquiry_id == enquiry.id)
+        )
+        matches = matches_result.all()
+        match_counts = (
+            len([item for item in matches if item.state not in {"dismissed", "stale"}]),
+            len([item for item in matches if item.state == "saved"]),
+        )
     registry_profiles = (
         await _registry_profiles(db, contact=contact, criteria=enquiry.criteria)
         if include_registry_profiles
         else []
     )
+    if ownership_enrichment is None:
+        ownership_enrichment = (
+            await _bulk_ownership_enrichments(
+                db,
+                organization_id=enquiry.organization_id,
+                contacts=[contact],
+            )
+        ).get(contact.id or 0, InboundOwnershipEnrichmentResponse())
     return InboundEnquiryResponse(
         id=enquiry.id or 0,
         contact=_contact_response(contact, registry_profiles),
+        record_kind=enquiry.record_kind,  # type: ignore[arg-type]
         intent=enquiry.intent,  # type: ignore[arg-type]
         status=enquiry.status,  # type: ignore[arg-type]
         assigned_user_id=enquiry.assigned_user_id,
@@ -847,16 +1332,42 @@ async def _enquiry_response(
         criteria=enquiry.criteria,
         strict_fields=enquiry.strict_fields,
         raw_notes=enquiry.raw_notes,
+        observed_data=enquiry.observed_data,
+        inferred_data=enquiry.inferred_data,
+        confirmed_data=enquiry.confirmed_data,
+        qualification=enquiry.qualification,
         extraction_confidence=enquiry.extraction_confidence,
         review_reasons=enquiry.review_reasons,
         next_follow_up=enquiry.next_follow_up,
+        first_response_due_at=enquiry.first_response_due_at,
+        first_contact_at=enquiry.first_contact_at,
+        last_contact_at=enquiry.last_contact_at,
+        contact_attempt_count=enquiry.contact_attempt_count,
+        lost_reason=enquiry.lost_reason,
+        sla_state=_sla_state(enquiry),  # type: ignore[arg-type]
+        qualification_complete=_qualification_complete(enquiry),
+        ownership_enrichment=ownership_enrichment,
+        priority=_lead_priority(enquiry, ownership_enrichment),
         tags=enquiry.tags,
         notes=[
-            InboundNoteResponse(id=note.id or 0, body=note.body, user_id=note.user_id, created_at=note.created_at)
-            for note in notes_result.all()
+            InboundNoteResponse(
+                id=note.id or 0, body=note.body, user_id=note.user_id, created_at=note.created_at
+            )
+            for note in notes
         ],
-        match_count=len([item for item in matches if item.state != "dismissed"]),
-        saved_match_count=len([item for item in matches if item.state == "saved"]),
+        activities=[
+            InboundActivityResponse(
+                id=activity.id or 0,
+                activity_type=activity.activity_type,
+                body=activity.body,
+                user_id=activity.user_id,
+                metadata=activity.metadata_json,
+                created_at=activity.created_at,
+            )
+            for activity in activities
+        ],
+        match_count=match_counts[0],
+        saved_match_count=match_counts[1],
         created_at=enquiry.created_at,
         updated_at=enquiry.updated_at,
     )
@@ -867,6 +1378,7 @@ async def list_inbound_enquiries(
     *,
     organization_id: str,
     intent_group: str | None,
+    workspace: str | None,
     status: str | None,
     search: str | None,
     limit: int,
@@ -883,6 +1395,21 @@ async def list_inbound_enquiries(
         enquiries = [item for item in enquiries if item.intent in {"buy", "rent"}]
     elif intent_group == "instructions":
         enquiries = [item for item in enquiries if item.intent in {"sell", "let"}]
+    if workspace == "inbox":
+        enquiries = [
+            item
+            for item in enquiries
+            if item.record_kind == "opportunity"
+            and item.status in {"new", "assigned", "attempted", "contacted", "needs_review"}
+        ]
+    elif workspace == "unqualified":
+        enquiries = [item for item in enquiries if item.record_kind == "unqualified_contact"]
+    elif workspace == "qualified":
+        enquiries = [item for item in enquiries if item.status in _QUALIFIED_STATUSES]
+    elif workspace == "closed":
+        enquiries = [
+            item for item in enquiries if item.status in {"nurture", "closed_lost", "disqualified"}
+        ]
     if status:
         enquiries = [item for item in enquiries if item.status == status]
     contacts: dict[int, CrmInboundContact] = {}
@@ -898,13 +1425,70 @@ async def list_inbound_enquiries(
         enquiries = [
             item
             for item in enquiries
-            if term in contacts.get(item.contact_id, CrmInboundContact(organization_id="", full_name="", created_at=_utcnow(), updated_at=_utcnow())).full_name.casefold()
+            if term
+            in contacts.get(
+                item.contact_id,
+                CrmInboundContact(
+                    organization_id="", full_name="", created_at=_utcnow(), updated_at=_utcnow()
+                ),
+            ).full_name.casefold()
             or term in json.dumps(item.criteria).casefold()
             or term in (item.campaign or "").casefold()
         ]
+    relevant_contact_ids = {item.contact_id for item in enquiries}
+    enrichments = await _bulk_ownership_enrichments(
+        db,
+        organization_id=organization_id,
+        contacts=[
+            contact
+            for contact_id, contact in contacts.items()
+            if contact_id in relevant_contact_ids
+        ],
+    )
+    priority_order = {"high": 3, "medium": 2, "standard": 1}
+    priorities = {
+        item.id or 0: _lead_priority(
+            item,
+            enrichments.get(item.contact_id, InboundOwnershipEnrichmentResponse()),
+        )
+        for item in enquiries
+    }
+    enquiries.sort(
+        key=lambda item: (
+            priority_order[priorities[item.id or 0].band],
+            item.enquiry_date,
+        ),
+        reverse=True,
+    )
     total = len(enquiries)
     page = enquiries[offset : offset + limit]
-    responses = [await _enquiry_response(db, item, contact=contacts.get(item.contact_id)) for item in page]
+    count_map: dict[int, tuple[int, int]] = {}
+    if page:
+        counts_result = await db.exec(
+            select(CrmInboundMatch.enquiry_id, CrmInboundMatch.state, func.count())
+            .where(CrmInboundMatch.enquiry_id.in_([item.id for item in page]))  # type: ignore[union-attr]
+            .group_by(CrmInboundMatch.enquiry_id, CrmInboundMatch.state)
+        )
+        aggregate: dict[int, list[int]] = {}
+        for enquiry_id, match_state, count in counts_result.all():
+            values = aggregate.setdefault(enquiry_id, [0, 0])
+            if match_state not in {"dismissed", "stale"}:
+                values[0] += count
+            if match_state == "saved":
+                values[1] += count
+        count_map = {key: (value[0], value[1]) for key, value in aggregate.items()}
+    responses = [
+        await _enquiry_response(
+            db,
+            item,
+            contact=contacts.get(item.contact_id),
+            match_counts=count_map.get(item.id or 0, (0, 0)),
+            ownership_enrichment=enrichments.get(
+                item.contact_id, InboundOwnershipEnrichmentResponse()
+            ),
+        )
+        for item in page
+    ]
     return InboundEnquiryListResponse(
         enquiries=responses,
         total=total,
@@ -914,15 +1498,54 @@ async def list_inbound_enquiries(
             "instructions": len([item for item in all_enquiries if item.intent in {"sell", "let"}]),
             "needs_review": len([item for item in all_enquiries if item.status == "needs_review"]),
             "unassigned": len([item for item in all_enquiries if not item.assigned_user_id]),
+            "unqualified": len(
+                [item for item in all_enquiries if item.record_kind == "unqualified_contact"]
+            ),
+            "qualified": len(
+                [item for item in all_enquiries if item.status in _QUALIFIED_STATUSES]
+            ),
+            "overdue": len([item for item in all_enquiries if _sla_state(item) == "overdue"]),
+            "follow_up_due": len(
+                [
+                    item
+                    for item in all_enquiries
+                    if item.next_follow_up and item.next_follow_up <= _utcnow().date()
+                ]
+            ),
+            "owner_matched": len(
+                [
+                    item
+                    for item in enquiries
+                    if enrichments.get(
+                        item.contact_id, InboundOwnershipEnrichmentResponse()
+                    ).matched
+                ]
+            ),
+            "portfolio_owners": len(
+                [
+                    item
+                    for item in enquiries
+                    if enrichments.get(
+                        item.contact_id, InboundOwnershipEnrichmentResponse()
+                    ).multiple_property_owner
+                ]
+            ),
+            "high_priority": len(
+                [item for item in enquiries if priorities[item.id or 0].band == "high"]
+            ),
         },
     )
 
 
-async def get_inbound_enquiry(db: AsyncSession, enquiry_id: int, organization_id: str) -> InboundEnquiryResponse:
+async def get_inbound_enquiry(
+    db: AsyncSession, enquiry_id: int, organization_id: str
+) -> InboundEnquiryResponse:
     enquiry = await db.get(CrmInboundEnquiry, enquiry_id)
     if not enquiry or enquiry.organization_id != organization_id:
         raise HTTPException(status_code=404, detail="Inbound enquiry not found")
-    return await _enquiry_response(db, enquiry, include_registry_profiles=True)
+    return await _enquiry_response(
+        db, enquiry, include_registry_profiles=True, include_history=True
+    )
 
 
 async def update_inbound_enquiry(
@@ -930,21 +1553,84 @@ async def update_inbound_enquiry(
     *,
     enquiry_id: int,
     organization_id: str,
+    user_id: str,
     payload: InboundEnquiryUpdate,
 ) -> InboundEnquiryResponse:
     enquiry = await db.get(CrmInboundEnquiry, enquiry_id)
     if not enquiry or enquiry.organization_id != organization_id:
         raise HTTPException(status_code=404, detail="Inbound enquiry not found")
-    for key, value in payload.model_dump(exclude_unset=True).items():
+    changes = payload.model_dump(exclude_unset=True)
+    contact_changes = {
+        key: changes.pop(key)
+        for key in ("consent_status", "do_not_contact", "preferred_channel")
+        if key in changes
+    }
+    previous_status = enquiry.status
+    matching_changed = bool(
+        {"intent", "record_kind", "criteria", "strict_fields", "confirmed_data"} & changes.keys()
+    )
+    for key, value in changes.items():
         if key == "notes":
             enquiry.raw_notes = value
         else:
             setattr(enquiry, key, value)
+    if changes.get("intent") and changes["intent"] != "unknown":
+        enquiry.record_kind = "opportunity"
+        enquiry.confirmed_data = {
+            **(enquiry.confirmed_data or {}),
+            "intent": changes["intent"],
+        }
+    if changes.get("criteria") is not None:
+        enquiry.confirmed_data = {
+            **(enquiry.confirmed_data or {}),
+            "criteria": changes["criteria"],
+        }
+    if enquiry.intent == "unknown":
+        enquiry.record_kind = "unqualified_contact"
     enquiry.updated_at = _utcnow()
     db.add(enquiry)
+    if contact_changes:
+        contact = await db.get(CrmInboundContact, enquiry.contact_id)
+        if not contact or contact.organization_id != organization_id:
+            raise HTTPException(status_code=500, detail="Inbound contact is missing")
+        for key, value in contact_changes.items():
+            setattr(contact, key, value)
+        contact.updated_at = enquiry.updated_at
+        db.add(contact)
+        db.add(
+            CrmInboundActivity(
+                enquiry_id=enquiry_id,
+                organization_id=organization_id,
+                user_id=user_id,
+                activity_type="contactability_updated",
+                body="Contact permissions or preferred channel updated",
+                metadata_json=contact_changes,
+                created_at=enquiry.updated_at,
+            )
+        )
+    if matching_changed:
+        await db.exec(
+            CrmInboundMatch.__table__.update()
+            .where(CrmInboundMatch.enquiry_id == enquiry_id)
+            .values(state="stale", updated_at=enquiry.updated_at)
+        )
+    if enquiry.status != previous_status:
+        db.add(
+            CrmInboundActivity(
+                enquiry_id=enquiry_id,
+                organization_id=organization_id,
+                user_id=user_id,
+                activity_type="status_changed",
+                body=f"Stage changed from {previous_status} to {enquiry.status}",
+                metadata_json={"from": previous_status, "to": enquiry.status},
+                created_at=enquiry.updated_at,
+            )
+        )
     await db.commit()
     await db.refresh(enquiry)
-    return await _enquiry_response(db, enquiry, include_registry_profiles=True)
+    return await _enquiry_response(
+        db, enquiry, include_registry_profiles=True, include_history=True
+    )
 
 
 async def add_inbound_note(
@@ -964,19 +1650,72 @@ async def add_inbound_note(
     )
     enquiry.updated_at = _utcnow()
     db.add(enquiry)
+    db.add(
+        CrmInboundActivity(
+            enquiry_id=enquiry_id,
+            organization_id=organization_id,
+            user_id=user_id,
+            activity_type="note",
+            body=body.strip(),
+            metadata_json={},
+            created_at=enquiry.updated_at,
+        )
+    )
     await db.commit()
-    return await _enquiry_response(db, enquiry, include_registry_profiles=True)
+    return await _enquiry_response(
+        db, enquiry, include_registry_profiles=True, include_history=True
+    )
+
+
+async def add_inbound_activity(
+    db: AsyncSession,
+    *,
+    enquiry_id: int,
+    organization_id: str,
+    user_id: str,
+    activity_type: str,
+    body: str | None,
+) -> InboundEnquiryResponse:
+    enquiry = await db.get(CrmInboundEnquiry, enquiry_id)
+    if not enquiry or enquiry.organization_id != organization_id:
+        raise HTTPException(status_code=404, detail="Inbound enquiry not found")
+    now = _utcnow()
+    enquiry.contact_attempt_count += 1
+    enquiry.last_contact_at = now
+    enquiry.first_contact_at = enquiry.first_contact_at or now
+    if enquiry.status in {"new", "assigned", "needs_review"}:
+        enquiry.status = "attempted"
+    enquiry.updated_at = now
+    db.add(enquiry)
+    db.add(
+        CrmInboundActivity(
+            enquiry_id=enquiry_id,
+            organization_id=organization_id,
+            user_id=user_id,
+            activity_type=activity_type,
+            body=body.strip() if body else None,
+            metadata_json={"attempt": enquiry.contact_attempt_count},
+            created_at=now,
+        )
+    )
+    await db.commit()
+    await db.refresh(enquiry)
+    return await _enquiry_response(
+        db, enquiry, include_registry_profiles=True, include_history=True
+    )
 
 
 def _locations(criteria: dict[str, Any]) -> list[str]:
     value = criteria.get("locations", [])
-    return [str(item) for item in value] if isinstance(value, list) else [str(value)] if value else []
+    return (
+        [str(item) for item in value] if isinstance(value, list) else [str(value)] if value else []
+    )
 
 
 def _location_fit(criteria: dict[str, Any], *values: str) -> tuple[int, str]:
     requested = _locations(criteria)
     if not requested:
-        return 10, "Location is open"
+        return 0, "Preferred location is missing"
     haystack = " ".join(values).casefold()
     if any(item.casefold() in haystack or haystack in item.casefold() for item in requested):
         return 20, f"Matches {requested[0]}"
@@ -987,7 +1726,7 @@ def _budget_fit(criteria: dict[str, Any], value: int | None) -> tuple[int, str]:
     maximum = int(criteria.get("budget_max_aed") or 0)
     minimum = int(criteria.get("budget_min_aed") or 0)
     if not maximum and not minimum:
-        return 8, "Budget is open"
+        return 0, "Budget is missing"
     if not value:
         return 5, "Price requires verification"
     if (not minimum or value >= minimum) and (not maximum or value <= maximum):
@@ -1000,7 +1739,7 @@ def _budget_fit(criteria: dict[str, Any], value: int | None) -> tuple[int, str]:
 def _bedroom_fit(criteria: dict[str, Any], value: str) -> tuple[int, str]:
     requested = criteria.get("bedrooms_min")
     if requested is None:
-        return 5, "Bedroom count is open"
+        return 0, "Bedroom requirement is missing"
     match = re.search(r"\d+", value)
     observed = int(match.group()) if match else 0 if "studio" in value.lower() else None
     if observed == int(requested):
@@ -1008,6 +1747,13 @@ def _bedroom_fit(criteria: dict[str, Any], value: str) -> tuple[int, str]:
     if observed is not None and abs(observed - int(requested)) <= 1:
         return 6, "Within flexible bedroom range"
     return 0, "Bedroom mismatch"
+
+
+def _property_fit(criteria: dict[str, Any], value: str) -> int:
+    requested = str(criteria.get("property_type") or "").strip()
+    if not requested:
+        return 0
+    return 10 if requested.casefold() in value.casefold() else 0
 
 
 def _violates_strict_fields(
@@ -1052,8 +1798,7 @@ async def _listing_freshness() -> tuple[datetime | None, bool]:
         )
         refreshed = _optional_datetime(rows[0].get("refreshed") if rows else None)
         fresh = bool(
-            refreshed
-            and (_utcnow() - refreshed).total_seconds() <= _LISTING_MAX_AGE_HOURS * 3600
+            refreshed and (_utcnow() - refreshed).total_seconds() <= _LISTING_MAX_AGE_HOURS * 3600
         )
         return refreshed, fresh
     except Exception:
@@ -1122,12 +1867,12 @@ def _match_response(item: CrmInboundMatch) -> InboundMatchResponse:
         id=item.id or 0,
         target_type=item.target_type,  # type: ignore[arg-type]
         target_key=item.target_key,
-        score=item.score,
         state=item.state,  # type: ignore[arg-type]
+        fit=item.fit,  # type: ignore[arg-type]
         title=item.title,
         subtitle=item.subtitle,
         reasons=item.reasons,
-        score_breakdown=item.score_breakdown,
+        missing_fields=item.missing_fields,
         snapshot=item.snapshot,
         generated_at=item.generated_at,
     )
@@ -1157,6 +1902,30 @@ async def _upsert_match(
     )
     item = result.first()
     now = _utcnow()
+    missing_fields = [
+        label
+        for label, present in (
+            ("location", bool(_locations(enquiry.criteria))),
+            (
+                "budget",
+                bool(
+                    enquiry.criteria.get("budget_min_aed")
+                    or enquiry.criteria.get("budget_max_aed")
+                    or enquiry.criteria.get("expected_price_aed")
+                ),
+            ),
+            (
+                "property details",
+                bool(
+                    enquiry.criteria.get("property_type")
+                    or enquiry.criteria.get("bedrooms_min") is not None
+                    or enquiry.criteria.get("unit_number")
+                ),
+            ),
+        )
+        if not present
+    ]
+    fit = "exact" if score >= 85 and not missing_fields else "near" if score >= 65 else "review"
     if item is None:
         item = CrmInboundMatch(
             enquiry_id=enquiry.id or 0,
@@ -1168,6 +1937,8 @@ async def _upsert_match(
             subtitle=subtitle,
             reasons=reasons,
             score_breakdown=breakdown,
+            fit=fit,
+            missing_fields=missing_fields,
             snapshot=snapshot,
             generated_at=now,
             updated_at=now,
@@ -1178,6 +1949,8 @@ async def _upsert_match(
         item.subtitle = subtitle
         item.reasons = reasons
         item.score_breakdown = breakdown
+        item.fit = fit
+        item.missing_fields = missing_fields
         item.snapshot = snapshot
         item.generated_at = now
         item.updated_at = now
@@ -1195,6 +1968,11 @@ async def refresh_inbound_matches(
     enquiry = await db.get(CrmInboundEnquiry, enquiry_id)
     if not enquiry or enquiry.organization_id != organization_id:
         raise HTTPException(status_code=404, detail="Inbound enquiry not found")
+    if not _qualification_complete(enquiry):
+        raise HTTPException(
+            status_code=409,
+            detail="Confirm the enquiry intent and minimum property requirements before matching",
+        )
     criteria = enquiry.criteria or {}
     generated: list[CrmInboundMatch] = []
 
@@ -1231,7 +2009,7 @@ async def refresh_inbound_matches(
                 claim.annual_rent_aed if enquiry.intent == "rent" else claim.latest_sale_price_aed
             )
             budget, budget_reason = _budget_fit(criteria, owner_value)
-            property_points = 10 if not criteria.get("property_type") or criteria.get("property_type", "").casefold() in claim.property_type.casefold() else 0
+            property_points = _property_fit(criteria, claim.property_type)
             if _violates_strict_fields(
                 enquiry.strict_fields,
                 location_points=location,
@@ -1251,8 +2029,17 @@ async def refresh_inbound_matches(
                 score=score,
                 title=claim.contact_name,
                 subtitle=f"{claim.building_name or claim.project_name} · Unit {claim.unit_number}",
-                reasons=[location_reason, budget_reason, "Current ownership evidence", "Contact available" if actionability == 20 else "Contact enrichment needed"],
-                breakdown={"requirements": location + budget + property_points + 15, "actionability": actionability, "timing": timing},
+                reasons=[
+                    location_reason,
+                    budget_reason,
+                    "Current ownership evidence",
+                    "Contact available" if actionability == 20 else "Contact enrichment needed",
+                ],
+                breakdown={
+                    "requirements": location + budget + property_points + 15,
+                    "actionability": actionability,
+                    "timing": timing,
+                },
                 snapshot={
                     "owner_key": claim.owner_key,
                     "phone": claim.phone_primary,
@@ -1285,7 +2072,7 @@ async def refresh_inbound_matches(
             bedrooms = str(lead.get("bedrooms") or "")
             bedroom, bedroom_reason = _bedroom_fit(criteria, bedrooms)
             property_type = str(lead.get("property_type") or "")
-            property_points = 10 if not criteria.get("property_type") or criteria.get("property_type", "").casefold() in property_type.casefold() else 0
+            property_points = _property_fit(criteria, property_type)
             if _violates_strict_fields(
                 enquiry.strict_fields,
                 location_points=location,
@@ -1302,14 +2089,20 @@ async def refresh_inbound_matches(
                 target_key=str(lead["unit_candidate_key"]),
                 score=score,
                 title=f"{lead.get('building_name') or 'Building'} · Unit {lead.get('unit_number') or 'unresolved'}",
-                subtitle=f"{bedrooms or 'Layout pending'} · AED {price:,}" if price else f"{bedrooms or 'Layout pending'} · value pending",
+                subtitle=f"{bedrooms or 'Layout pending'} · AED {price:,}"
+                if price
+                else f"{bedrooms or 'Layout pending'} · value pending",
                 reasons=[
                     location_reason,
                     budget_reason,
                     bedroom_reason,
                     f"Lease ends {lead.get('lease_end')}",
                 ],
-                breakdown={"requirements": location + budget + bedroom + property_points, "actionability": 7, "timing": 10},
+                breakdown={
+                    "requirements": location + budget + bedroom + property_points,
+                    "actionability": 7,
+                    "timing": 10,
+                },
                 snapshot=_json_snapshot(lead),
             )
             if item:
@@ -1349,7 +2142,9 @@ async def refresh_inbound_matches(
             )
             existing_keys = {item.target_key for item in generated if item.target_type == "unit"}
             for row in sales_rows:
-                target_key = f"registry:{row.get('building_key', '')}|{row.get('normalized_unit', '')}"
+                target_key = (
+                    f"registry:{row.get('building_key', '')}|{row.get('normalized_unit', '')}"
+                )
                 if target_key in existing_keys:
                     continue
                 location, location_reason = _location_fit(
@@ -1358,7 +2153,7 @@ async def refresh_inbound_matches(
                 price = int(row.get("sale_amount_aed") or 0) or None
                 budget, budget_reason = _budget_fit(criteria, price)
                 bedroom, bedroom_reason = _bedroom_fit(criteria, str(row.get("bedrooms") or ""))
-                property_points = 10 if not criteria.get("property_type") or criteria.get("property_type", "").casefold() in str(row.get("property_type") or "").casefold() else 0
+                property_points = _property_fit(criteria, str(row.get("property_type") or ""))
                 if _violates_strict_fields(
                     enquiry.strict_fields,
                     location_points=location,
@@ -1377,11 +2172,22 @@ async def refresh_inbound_matches(
                     score=score,
                     title=f"{row.get('building_name') or 'Building'} · Unit {row.get('unit_number')}",
                     subtitle=f"{row.get('bedrooms') or 'Layout pending'} · {f'AED {price:,}' if price else 'value pending'}",
-                    reasons=[location_reason, budget_reason, bedroom_reason, "Expanded sales-registry universe"],
-                    breakdown={"requirements": location + budget + bedroom + property_points, "actionability": 5, "timing": 5},
+                    reasons=[
+                        location_reason,
+                        budget_reason,
+                        bedroom_reason,
+                        "Expanded sales-registry universe",
+                    ],
+                    breakdown={
+                        "requirements": location + budget + bedroom + property_points,
+                        "actionability": 5,
+                        "timing": 5,
+                    },
                     snapshot={
                         **row,
-                        "latest_sale_date": latest_sale_date.isoformat() if isinstance(latest_sale_date, date) else latest_sale_date,
+                        "latest_sale_date": latest_sale_date.isoformat()
+                        if isinstance(latest_sale_date, date)
+                        else latest_sale_date,
                         "source": "sales_registry",
                     },
                 )
@@ -1445,6 +2251,8 @@ async def refresh_inbound_matches(
                 CrmInboundEnquiry.organization_id == organization_id,
                 CrmInboundEnquiry.intent == reverse_intent,
                 CrmInboundEnquiry.id != enquiry.id,
+                CrmInboundEnquiry.record_kind == "opportunity",
+                CrmInboundEnquiry.status.in_(list(_QUALIFIED_STATUSES)),  # type: ignore[union-attr]
                 CrmInboundEnquiry.status.notin_(["closed_lost", "won"]),  # type: ignore[union-attr]
             )
         )
@@ -1454,9 +2262,21 @@ async def refresh_inbound_matches(
         subject_value = criteria.get("expected_price_aed") or criteria.get("budget_max_aed")
         for demand in reverse_result.all():
             locations = _locations(demand.criteria)
-            location = 20 if not subject_locations or not locations or any(a.casefold() in b.casefold() or b.casefold() in a.casefold() for a in subject_locations for b in locations) else 0
+            location = (
+                20
+                if not subject_locations
+                or not locations
+                or any(
+                    a.casefold() in b.casefold() or b.casefold() in a.casefold()
+                    for a in subject_locations
+                    for b in locations
+                )
+                else 0
+            )
             budget, budget_reason = _budget_fit(demand.criteria, int(subject_value or 0) or None)
-            bedroom, bedroom_reason = _bedroom_fit(demand.criteria, str(criteria.get("bedrooms_min", "")))
+            bedroom, bedroom_reason = _bedroom_fit(
+                demand.criteria, str(criteria.get("bedrooms_min", ""))
+            )
             score = min(100, location + budget + bedroom + 10 + 20 + 10)
             contact = await db.get(CrmInboundContact, demand.contact_id)
             if not contact:
@@ -1470,8 +2290,17 @@ async def refresh_inbound_matches(
                 title=contact.full_name,
                 subtitle=f"Active {reverse_intent} enquiry · {demand.campaign or demand.source}",
                 reasons=["Reverse demand match", budget_reason, bedroom_reason],
-                breakdown={"requirements": location + budget + bedroom + 10, "actionability": 20, "timing": 10},
-                snapshot={"enquiry_id": demand.id, "criteria": demand.criteria, "phone": contact.phone, "email": contact.email},
+                breakdown={
+                    "requirements": location + budget + bedroom + 10,
+                    "actionability": 20,
+                    "timing": 10,
+                },
+                snapshot={
+                    "enquiry_id": demand.id,
+                    "criteria": demand.criteria,
+                    "phone": contact.phone,
+                    "email": contact.email,
+                },
             )
             if item:
                 generated.append(item)
@@ -1485,11 +2314,18 @@ async def refresh_inbound_matches(
             limit=60,
             area=requested_locations[0] if requested_locations else None,
             property_type=criteria.get("property_type"),
-            bedrooms=str(criteria.get("bedrooms_min")) if criteria.get("bedrooms_min") is not None else None,
+            bedrooms=str(criteria.get("bedrooms_min"))
+            if criteria.get("bedrooms_min") is not None
+            else None,
             price_max=criteria.get("budget_max_aed"),
         )
         for listing in listings.listings:
-            location, location_reason = _location_fit(criteria, listing.area_name or "", listing.subcommunity_name or "", listing.tower_name or "")
+            location, location_reason = _location_fit(
+                criteria,
+                listing.area_name or "",
+                listing.subcommunity_name or "",
+                listing.tower_name or "",
+            )
             listing_price = listing.price_value
             if enquiry.intent == "rent" and listing_price:
                 period = (listing.price_period or "").casefold()
@@ -1501,7 +2337,7 @@ async def refresh_inbound_matches(
                     listing_price *= 365
             budget, budget_reason = _budget_fit(criteria, listing_price)
             bedroom, bedroom_reason = _bedroom_fit(criteria, listing.bedrooms or "")
-            property_points = 10 if not criteria.get("property_type") or criteria.get("property_type", "").casefold() in (listing.property_type or "").casefold() else 0
+            property_points = _property_fit(criteria, listing.property_type or "")
             if _violates_strict_fields(
                 enquiry.strict_fields,
                 location_points=location,
@@ -1518,9 +2354,15 @@ async def refresh_inbound_matches(
                 target_key=listing.listing_id,
                 score=score,
                 title=listing.title,
-                subtitle=f"{listing.tower_name or listing.area_name or 'Dubai'} · AED {listing.price_value:,}" if listing.price_value else listing.tower_name or "Dubai",
+                subtitle=f"{listing.tower_name or listing.area_name or 'Dubai'} · AED {listing.price_value:,}"
+                if listing.price_value
+                else listing.tower_name or "Dubai",
                 reasons=[location_reason, budget_reason, bedroom_reason, "Fresh active listing"],
-                breakdown={"requirements": location + budget + bedroom + property_points, "actionability": 20, "timing": 10},
+                breakdown={
+                    "requirements": location + budget + bedroom + property_points,
+                    "actionability": 20,
+                    "timing": 10,
+                },
                 snapshot=listing.model_dump(mode="json"),
             )
             if item:
@@ -1532,10 +2374,15 @@ async def refresh_inbound_matches(
         .where(CrmInboundMatch.enquiry_id == enquiry_id)
         .order_by(CrmInboundMatch.score.desc())
     )
-    lanes: dict[str, list[InboundMatchResponse]] = {"owners": [], "units": [], "listings": [], "demand": []}
+    lanes: dict[str, list[InboundMatchResponse]] = {
+        "owners": [],
+        "units": [],
+        "listings": [],
+        "demand": [],
+    }
     lane_names = {"owner": "owners", "unit": "units", "listing": "listings", "demand": "demand"}
     for item in stored.all():
-        if item.state != "dismissed":
+        if item.state not in {"dismissed", "stale"}:
             lanes[lane_names[item.target_type]].append(_match_response(item))
     return InboundMatchesResponse(
         enquiry_id=enquiry_id,
@@ -1545,10 +2392,19 @@ async def refresh_inbound_matches(
     )
 
 
-async def get_inbound_matches(db: AsyncSession, enquiry_id: int, organization_id: str) -> InboundMatchesResponse:
+async def get_inbound_matches(
+    db: AsyncSession, enquiry_id: int, organization_id: str
+) -> InboundMatchesResponse:
     enquiry = await db.get(CrmInboundEnquiry, enquiry_id)
     if not enquiry or enquiry.organization_id != organization_id:
         raise HTTPException(status_code=404, detail="Inbound enquiry not found")
+    if not _qualification_complete(enquiry):
+        return InboundMatchesResponse(
+            enquiry_id=enquiry_id,
+            listing_fresh=False,
+            listing_last_refresh=None,
+            lanes={"owners": [], "units": [], "listings": [], "demand": []},
+        )
     result = await db.exec(
         select(CrmInboundMatch)
         .where(CrmInboundMatch.enquiry_id == enquiry_id)
@@ -1556,12 +2412,21 @@ async def get_inbound_matches(db: AsyncSession, enquiry_id: int, organization_id
     )
     items = result.all()
     if not items:
-        return await refresh_inbound_matches(db, enquiry_id=enquiry_id, organization_id=organization_id)
+        return await refresh_inbound_matches(
+            db, enquiry_id=enquiry_id, organization_id=organization_id
+        )
     listing_last_refresh, listing_fresh = await _listing_freshness()
-    lanes: dict[str, list[InboundMatchResponse]] = {"owners": [], "units": [], "listings": [], "demand": []}
+    lanes: dict[str, list[InboundMatchResponse]] = {
+        "owners": [],
+        "units": [],
+        "listings": [],
+        "demand": [],
+    }
     lane_names = {"owner": "owners", "unit": "units", "listing": "listings", "demand": "demand"}
     for item in items:
-        if item.state != "dismissed" and (item.target_type != "listing" or listing_fresh):
+        if item.state not in {"dismissed", "stale"} and (
+            item.target_type != "listing" or listing_fresh
+        ):
             lanes[lane_names[item.target_type]].append(_match_response(item))
     return InboundMatchesResponse(
         enquiry_id=enquiry_id,

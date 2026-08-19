@@ -27,8 +27,22 @@ USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36"
 )
-RENTAL_REGION_SELECTOR = "#rentHistory"
-RENTAL_MARKER = "47624226685649900817"
+REPORTS = {
+    "rentals": {
+        "region_selector": "#rentHistory",
+        "region_name": "rentHistory",
+        "marker": "47624226685649900817",
+        "table_selector": "#report_table_rentHistory",
+        "deal": "RENT",
+    },
+    "sales": {
+        "region_selector": "#soldhistory",
+        "region_name": "soldhistory",
+        "marker": "29609740940913885923",
+        "table_selector": "#report_table_soldhistory",
+        "deal": "SALE",
+    },
+}
 PAGE_SIZE = 300
 CENT = Decimal("0.01")
 RECOVERABLE_HTTP_STATUSES = {408, 429, 500, 502, 503, 504, 598}
@@ -102,7 +116,7 @@ def dates_between(start: date, end: date, direction: str) -> Iterator[date]:
 
 
 def shard_key(shard: dict[str, Any]) -> str:
-    return "|".join(
+    key = "|".join(
         (
             shard["date"],
             decimal_text(shard["min_price"]),
@@ -111,6 +125,12 @@ def shard_key(shard: dict[str, Any]) -> str:
             decimal_text(shard["max_size"]),
         )
     )
+    page_start = int(shard.get("page_start", 1))
+    return key if page_start == 1 else f"{key}|page={page_start}"
+
+
+def pagination_root_key(shard: dict[str, Any]) -> str:
+    return shard_key({**shard, "page_start": 1})
 
 
 def initial_shards(day: date) -> list[dict[str, Any]]:
@@ -187,12 +207,15 @@ def load_state(path: Path) -> dict[str, Any]:
             "completed": {},
             "expanded": {},
             "failed": {},
+            "paged": {},
             "requests": 0,
         }
     return json.loads(path.read_text())
 
 
-def write_shard(path: Path, shard: dict[str, Any], rows: list[dict[str, Any]]) -> None:
+def write_shard(
+    path: Path, shard: dict[str, Any], rows: list[dict[str, Any]], transaction_type: str
+) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.NamedTemporaryFile(dir=path.parent, delete=False) as raw_handle:
         temporary = Path(raw_handle.name)
@@ -200,7 +223,7 @@ def write_shard(path: Path, shard: dict[str, Any], rows: list[dict[str, Any]]) -
         with gzip.open(temporary, "wt", encoding="utf-8", compresslevel=6) as handle:
             for index, row in enumerate(rows, start=1):
                 record = {
-                    "transaction_type": "rentals",
+                    "transaction_type": transaction_type,
                     "shard": {
                         key: decimal_text(value) if isinstance(value, Decimal) else value
                         for key, value in shard.items()
@@ -264,16 +287,22 @@ def maybe_accept_terms(page: Page) -> None:
         pass
 
 
-def login(page: Page, credentials: dict[str, str]) -> None:
+def login(page: Page, credentials: dict[str, str], report: dict[str, str]) -> None:
     page.goto(DXBI_URL, wait_until="domcontentloaded", timeout=120_000)
     page.wait_for_timeout(3_000)
     maybe_accept_terms(page)
-    if page.locator(RENTAL_REGION_SELECTOR).count():
+    sign_in_candidates = page.get_by_text("Sign In", exact=True)
+    sign_in: Any | None = None
+    for index in range(sign_in_candidates.count()):
+        candidate = sign_in_candidates.nth(index)
+        if candidate.is_visible(timeout=1_000):
+            sign_in = candidate
+            break
+    if page.locator(report["region_selector"]).count() and sign_in is None:
         return
 
-    sign_in = page.get_by_text("Sign In", exact=True).first
-    if not sign_in.count():
-        raise RuntimeError("DXB Sign In control not found")
+    if sign_in is None:
+        raise RuntimeError("DXB Sign In control not found on an unauthenticated page")
     sign_in.click()
     page.wait_for_timeout(2_000)
     scope: Any = page
@@ -299,8 +328,8 @@ def login(page: Page, credentials: dict[str, str]) -> None:
     page.wait_for_timeout(5_000)
     page.goto(DXBI_URL, wait_until="domcontentloaded", timeout=120_000)
     page.wait_for_timeout(3_000)
-    if not page.locator(RENTAL_REGION_SELECTOR).count():
-        raise RuntimeError("DXB login did not expose the rental region")
+    if not page.locator(report["region_selector"]).count():
+        raise RuntimeError("DXB login did not expose the requested transaction region")
 
 
 def apply_filters_and_refresh(
@@ -308,6 +337,7 @@ def apply_filters_and_refresh(
     shard: dict[str, Any],
     filter_overrides: dict[str, str],
     location: dict[str, str],
+    report: dict[str, str],
 ) -> None:
     payload = {
         "date": shard["date"],
@@ -315,6 +345,7 @@ def apply_filters_and_refresh(
         "maxPrice": decimal_text(shard["max_price"]),
         "minSize": decimal_text(shard["min_size"]),
         "maxSize": decimal_text(shard["max_size"]),
+        "pageStart": int(shard.get("page_start", 1)),
         "filterOverrides": filter_overrides,
         "location": location,
     }
@@ -377,7 +408,7 @@ def apply_filters_and_refresh(
 
 
 def capture_template(
-    page: Page, template_date: str, filter_overrides: dict[str, str]
+    page: Page, template_date: str, filter_overrides: dict[str, str], report: dict[str, str]
 ) -> dict[str, str]:
     shard = {
         "date": template_date,
@@ -386,10 +417,12 @@ def capture_template(
         "min_size": None,
         "max_size": None,
     }
-    apply_filters_and_refresh(page, shard, filter_overrides, DEFAULT_LOCATION)
-    link = page.locator(f'{RENTAL_REGION_SELECTOR} a[href*="apex.widget.report.paginate"]').first
+    apply_filters_and_refresh(page, shard, filter_overrides, DEFAULT_LOCATION, report)
+    link = page.locator(
+        f'{report["region_selector"]} a[href*="apex.widget.report.paginate"]'
+    ).first
     if not link.count():
-        raise RuntimeError("dense template date produced no rental pagination link")
+        raise RuntimeError("dense template date produced no transaction pagination link")
     href = link.get_attribute("href") or ""
     match = PAGINATION_PATTERN.search(href)
     if not match:
@@ -399,7 +432,7 @@ def capture_template(
         lambda request: (
             request.method == "POST"
             and "wwv_flow.ajax?p_context=litedxb/transactions/" in request.url
-            and RENTAL_MARKER in (request.post_data or "")
+            and report["marker"] in (request.post_data or "")
         ),
         timeout=10_000,
     ) as request_info:
@@ -409,7 +442,7 @@ def capture_template(
                     `${selector} a[href*="apex.widget.report.paginate"]`
                 ).click();
             }""",
-            RENTAL_REGION_SELECTOR,
+            report["region_selector"],
         )
     request = request_info.value
     return {
@@ -425,6 +458,7 @@ def fetch_rows(
     shard: dict[str, Any],
     filter_overrides: dict[str, str],
     location: dict[str, str],
+    report: dict[str, str],
 ) -> dict[str, Any]:
     payload = {
         "template": template,
@@ -433,14 +467,16 @@ def fetch_rows(
         "maxPrice": decimal_text(shard["max_price"]),
         "minSize": decimal_text(shard["min_size"]),
         "maxSize": decimal_text(shard["max_size"]),
+        "pageStart": int(shard.get("page_start", 1)),
         "filterOverrides": filter_overrides,
         "location": location,
+        "report": report,
     }
     return page.evaluate(
         """async input => {
             const params = new URLSearchParams(input.template.post_data);
-            params.set('p_pg_min_row', '1');
-            params.set('p_pg_max_rows', '300');
+            params.set('p_pg_min_row', String(input.pageStart));
+            params.set('p_pg_max_rows', String(input.pageStart + 299));
             params.set('p_pg_rows_fetched', '300');
             params.set('x01', input.template.region_id);
             const payload = JSON.parse(params.get('p_json'));
@@ -484,8 +520,9 @@ def fetch_rows(
                 clearTimeout(timeout);
             }
             const html = await response.text();
+            const processingError = /Error processing request[.]/i.test(html);
             const document_ = new DOMParser().parseFromString(html, 'text/html');
-            const table = document_.querySelector('#report_table_rentHistory');
+            const table = document_.querySelector(input.report.table_selector);
             const headers = {};
             table?.querySelectorAll('thead th').forEach(header => {
                 if (header.id) {
@@ -513,8 +550,9 @@ def fetch_rows(
                 })
             })).filter(row => row.columns.some(column => column.text)) : [];
             return {
-                status: response.status,
+                status: processingError ? 598 : response.status,
                 login_redirect: /P9999_USERNAME|apex_authentication/i.test(html),
+                error: processingError ? 'DXBI_APEX_PROCESSING_ERROR' : '',
                 rows
             };
         }""",
@@ -535,6 +573,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--delay-min", type=float, default=3.0)
     parser.add_argument("--delay-max", type=float, default=6.0)
     parser.add_argument("--max-requests", type=int, default=0)
+    parser.add_argument("--report", choices=tuple(REPORTS), default="rentals")
     parser.add_argument(
         "--filter-overrides-json",
         default="{}",
@@ -562,6 +601,8 @@ def main() -> int:
     ):
         raise ValueError("--filter-overrides-json must be a JSON object of string values")
     filter_overrides = {**DEFAULT_FILTER_OVERRIDES, **supplied_overrides}
+    report = REPORTS[args.report]
+    filter_overrides["P74_DEAL"] = report["deal"]
     location = {
         "id": args.location_id,
         "text": args.location_text,
@@ -573,6 +614,7 @@ def main() -> int:
     shard_dir = output_dir / "shards"
     state_path = output_dir / "checkpoint.json"
     state = load_state(state_path)
+    state.setdefault("paged", {})
     credentials = json.loads(Path(args.credentials).read_text())
     if not credentials.get("email") or not credentials.get("password"):
         raise RuntimeError("credentials contain a blank email or password")
@@ -594,7 +636,7 @@ def main() -> int:
         page.set_default_timeout(FETCH_EVAL_TIMEOUT_MS)
         page.set_default_navigation_timeout(FETCH_EVAL_TIMEOUT_MS)
         try:
-            login(page, credentials)
+            login(page, credentials, report)
             if args.page_url != DXBI_URL:
                 page.goto(args.page_url, wait_until="domcontentloaded", timeout=120_000)
                 page.wait_for_timeout(3_000)
@@ -622,8 +664,9 @@ def main() -> int:
                         "min_size": None,
                         "max_size": None,
                     },
-                    DEFAULT_FILTER_OVERRIDES,
+                    filter_overrides,
                     DEFAULT_LOCATION,
+                    report,
                 )
                 print(
                     json.dumps(
@@ -668,15 +711,21 @@ def main() -> int:
             # Capture the authenticated APEX request shape using the known-dense
             # profile. The requested profile is injected into each fetch below;
             # sparse valid profiles do not necessarily expose a pagination link.
-            template = capture_template(
-                page, args.template_date, DEFAULT_FILTER_OVERRIDES
-            )
-
+            template = capture_template(page, args.template_date, filter_overrides, report)
             for day in dates_between(start, end, args.direction):
                 queue = initial_shards(day)
                 while queue:
                     shard = queue.pop(0)
                     key = shard_key(shard)
+                    root_key = pagination_root_key(shard)
+                    if key == root_key and root_key in state["paged"]:
+                        queue = [
+                            {
+                                **shard,
+                                "page_start": state["paged"][root_key]["next_page_start"],
+                            }
+                        ] + queue
+                        continue
                     if key in state["completed"] or key in state["failed"]:
                         continue
                     if key in state["expanded"]:
@@ -698,7 +747,7 @@ def main() -> int:
                     for attempt in range(1, 4):
                         try:
                             response = fetch_rows(
-                                page, template, shard, filter_overrides, location
+                                page, template, shard, filter_overrides, location, report
                             )
                         except PlaywrightTimeoutError as error:
                             response = {
@@ -718,10 +767,10 @@ def main() -> int:
                         current_run_requests += 1
                         state["requests"] = started_requests + current_run_requests
                         if response["login_redirect"]:
-                            login(page, credentials)
+                            login(page, credentials, report)
                             context.storage_state(path=storage_path)
                             template = capture_template(
-                                page, args.template_date, DEFAULT_FILTER_OVERRIDES
+                                page, args.template_date, filter_overrides, report
                             )
                             if attempt < 3:
                                 continue
@@ -756,13 +805,15 @@ def main() -> int:
                         relative_path = ""
                         if rows:
                             path = shard_dir / shard["date"] / f"{digest}.jsonl.gz"
-                            write_shard(path, shard, rows)
+                            write_shard(path, shard, rows, args.report)
                             relative_path = str(path.relative_to(output_dir))
                         state["completed"][key] = {
                             "rows": len(rows),
                             "path": relative_path,
                             "completed_at": utc_now(),
                         }
+                        if shard.get("page_start", 1) > 1:
+                            state["paged"].pop(root_key, None)
                         print(f"COMPLETE {key} rows={len(rows)}", flush=True)
                     else:
                         children = split_capped_shard(shard)
@@ -774,11 +825,24 @@ def main() -> int:
                             queue = children + queue
                             print(f"EXPAND {key} rows={len(rows)}", flush=True)
                         else:
-                            state["failed"][key] = {
-                                "reason": "300-row cap remains at minimum price and size spans",
-                                "failed_at": utc_now(),
+                            digest = hashlib.sha256(key.encode()).hexdigest()[:20]
+                            path = shard_dir / shard["date"] / f"{digest}.jsonl.gz"
+                            write_shard(path, shard, rows, args.report)
+                            state["completed"][key] = {
+                                "rows": len(rows),
+                                "path": str(path.relative_to(output_dir)),
+                                "completed_at": utc_now(),
                             }
-                            print(f"FAILED {key} rows={len(rows)}", flush=True)
+                            next_page_start = int(shard.get("page_start", 1)) + PAGE_SIZE
+                            state["paged"][root_key] = {
+                                "next_page_start": next_page_start,
+                                "paged_at": utc_now(),
+                            }
+                            queue = [{**shard, "page_start": next_page_start}] + queue
+                            print(
+                                f"PAGE {key} rows={len(rows)} next={next_page_start}",
+                                flush=True,
+                            )
                     atomic_json(state_path, state)
                     time.sleep(random.uniform(args.delay_min, args.delay_max))
         finally:

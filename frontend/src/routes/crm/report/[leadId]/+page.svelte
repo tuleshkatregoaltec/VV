@@ -1,8 +1,10 @@
 <script lang="ts">
 import { createQuery } from '@tanstack/svelte-query'
-import { ArrowLeft, FileDown, RefreshCw, ShieldCheck } from 'lucide-svelte'
+import { ArrowLeft, FileDown, ShieldCheck } from 'lucide-svelte'
 import { page } from '$app/state'
 import type { CrmPropertyReport } from '$lib/api/crm'
+import CrmPanelSkeleton from '$lib/components/crm/CrmPanelSkeleton.svelte'
+import { formatCrmMoney, formatCrmDate as shortDate } from '$lib/crm/format'
 import { crmQueries } from '$lib/queries/crm'
 
 const leadId = $derived(page.params.leadId ?? null)
@@ -67,29 +69,12 @@ function buildPriceChart(points: IndexPoint[]) {
 const priceChart = $derived(buildPriceChart(report?.price_index.points ?? []))
 
 function money(value: number | null | undefined) {
-	if (value === null || value === undefined) return '—'
-	return new Intl.NumberFormat('en-AE', {
-		style: 'currency',
-		currency: 'AED',
-		maximumFractionDigits: 0
-	}).format(value)
+	return formatCrmMoney(value)
 }
 
 function number(value: number | null | undefined, digits = 0) {
 	if (value === null || value === undefined) return '—'
 	return new Intl.NumberFormat('en-AE', { maximumFractionDigits: digits }).format(value)
-}
-
-function shortDate(value: string | null | undefined) {
-	if (!value) return '—'
-	const datePrefix = value.match(/^\d{4}-\d{2}-\d{2}/)?.[0]
-	const parsed = new Date(datePrefix ? `${datePrefix}T00:00:00` : value)
-	if (Number.isNaN(parsed.getTime())) return '—'
-	return new Intl.DateTimeFormat('en-GB', {
-		day: '2-digit',
-		month: 'short',
-		year: 'numeric'
-	}).format(parsed)
 }
 
 function signedPercent(value: number | null | undefined) {
@@ -114,7 +99,7 @@ function compactQuarter(value: string) {
 	</div>
 
 	{#if reportQuery.isLoading}
-		<div class="grid min-h-[70vh] place-items-center"><div class="text-center"><RefreshCw class="mx-auto animate-spin text-info" size={24} /><p class="mt-3 text-sm text-fg-3">Building property report…</p></div></div>
+		<div class="mx-auto max-w-[960px] overflow-hidden rounded-lg border border-border bg-card"><CrmPanelSkeleton rows={7} /></div>
 	{:else if reportQuery.isError}
 		<div class="mx-auto max-w-2xl rounded-lg border border-error-border bg-error-bg p-5 text-sm text-error">The property report could not be generated: {reportQuery.error.message}</div>
 	{:else if report}

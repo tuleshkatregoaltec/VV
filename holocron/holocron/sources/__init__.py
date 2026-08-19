@@ -1,5 +1,6 @@
 from holocron.sources.registry import SourceRegistry
 from holocron.sources.dda import SOURCE as DDA_SOURCE
+from holocron.sources.bayut_listings import SOURCE as BAYUT_LISTINGS_SOURCE
 from holocron.sources.dld_od_brokers import SOURCE as DLD_OD_BROKERS_SOURCE
 from holocron.sources.dld_od_buildings import SOURCE as DLD_OD_BUILDINGS_SOURCE
 from holocron.sources.dld_od_developers import SOURCE as DLD_OD_DEVELOPERS_SOURCE
@@ -21,6 +22,7 @@ registry = SourceRegistry()
 
 for source in (
     DDA_SOURCE,
+    BAYUT_LISTINGS_SOURCE,
     DLD_OD_TRANSACTIONS_SOURCE,
     DLD_OD_RENTS_SOURCE,
     DLD_OD_PROJECTS_SOURCE,
@@ -42,6 +44,7 @@ for source in (
 
 __all__ = [
     "DDA_SOURCE",
+    "BAYUT_LISTINGS_SOURCE",
     "DLD_OD_BROKERS_SOURCE",
     "DLD_OD_BUILDINGS_SOURCE",
     "DLD_OD_DEVELOPERS_SOURCE",

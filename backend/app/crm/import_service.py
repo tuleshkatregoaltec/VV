@@ -16,7 +16,7 @@ from typing import Any, Iterable
 import httpx
 import openpyxl
 from fastapi import HTTPException, UploadFile
-from sqlalchemy import delete, or_, text
+from sqlalchemy import delete, func, or_, text
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -1644,15 +1644,27 @@ async def list_lead_imported_contacts(
             [],
         ).append((claim, contact_list))
 
-    all_claims_result = await db.exec(
-        select(CrmPropertyContactClaim).where(
-            CrmPropertyContactClaim.organization_id == organization_id,
-        )
-    )
+    # A lead drawer only needs portfolio counts for the owners attached to that
+    # lead. Loading and de-duplicating every imported claim made this endpoint
+    # progressively slower as an organization's owner registry grew.
+    owner_keys = {_claim_owner_key(claim) for claim, _ in rows}
     property_counts: dict[str, int] = {}
-    for group in _dedupe_claims(list(all_claims_result.all())):
-        owner_key = _claim_owner_key(max(group, key=_claim_preference))
-        property_counts[owner_key] = property_counts.get(owner_key, 0) + 1
+    if owner_keys:
+        property_count_result = await db.exec(
+            select(
+                CrmPropertyContactClaim.owner_key,
+                func.count(func.distinct(CrmPropertyContactClaim.property_key)),
+            )
+            .where(
+                CrmPropertyContactClaim.organization_id == organization_id,
+                CrmPropertyContactClaim.owner_key.in_(owner_keys),
+            )
+            .group_by(CrmPropertyContactClaim.owner_key)
+        )
+        property_counts = {
+            str(owner_key): int(property_count)
+            for owner_key, property_count in property_count_result.all()
+        }
 
     contacts: list[CrmLeadImportedContact] = []
     for group_rows in grouped.values():

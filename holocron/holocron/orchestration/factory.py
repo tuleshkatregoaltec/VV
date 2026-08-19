@@ -738,7 +738,9 @@ def build_operational_jobs(sources: Mapping[str, SourceSpec]) -> list[AssetJobDe
         ),
         define_asset_job(
             name="pf_listings_daily_latest_delta",
-            selection=["pf_listings_raw", "pf_listings_bronze", "pf_listing_media_assets"],
+            # Listing facts and textual details are retained, but image/video assets are not
+            # hydrated as part of the routine inventory refresh.
+            selection=["pf_listings_raw", "pf_listings_bronze"],
             config=_pf_listings_latest_delta_config_mapping(
                 sources["pf_listings"],
                 defaults=PF_LISTINGS_LATEST_DELTA_DEFAULTS,
@@ -1088,9 +1090,6 @@ def _pf_listings_latest_delta_config_mapping(
         return {
             "ops": {
                 _raw_asset_name(source): {"config": source_config},
-                "pf_listing_media_assets": {
-                    "config": {"latest_manifest_count": 1, **dict(config.get("media") or {})}
-                },
             }
         }
 

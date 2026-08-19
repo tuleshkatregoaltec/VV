@@ -136,6 +136,7 @@ services:
   clickhouse:
     image: clickhouse/clickhouse-server:24.8
     container_name: dev-clickhouse
+    restart: unless-stopped
     environment:
       CLICKHOUSE_DB: vitevue
       CLICKHOUSE_USER: vitevue
@@ -164,13 +165,18 @@ services:
         condition: service_healthy
     volumes:
       - ./holocron:/work
-    entrypoint: >
-      /bin/sh -c "
-      clickhouse-client --host clickhouse --port 9000
-        --user vitevue --password vitevue_dev
-        --database vitevue --multiquery
-        < /work/holocron/lib/sql/clickhouse_schema.sql
-      "
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        exec clickhouse-client \
+          --host clickhouse \
+          --port 9000 \
+          --user vitevue \
+          --password vitevue_dev \
+          --database vitevue \
+          --multiquery \
+          < /work/holocron/lib/sql/clickhouse_schema.sql
     restart: "no"
 
   minio:

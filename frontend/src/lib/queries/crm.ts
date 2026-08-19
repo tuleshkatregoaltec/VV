@@ -28,18 +28,20 @@ export const crmKeys = {
 export const crmQueries = {
 	dashboard: (params: CrmDashboardParams) => ({
 		queryKey: crmKeys.dashboard(params),
-		queryFn: () => crm.dashboard(params),
+		queryFn: ({ signal }: { signal: AbortSignal }) => crm.dashboard(params, signal),
+		placeholderData: (previousData: Awaited<ReturnType<typeof crm.dashboard>> | undefined) =>
+			previousData,
 		staleTime: 15 * 60 * 1000
 	}),
 	lead: (leadId: string | null) => ({
 		queryKey: crmKeys.lead(leadId ?? ''),
-		queryFn: () => crm.lead(leadId ?? ''),
+		queryFn: ({ signal }: { signal: AbortSignal }) => crm.lead(leadId ?? '', signal),
 		enabled: Boolean(leadId),
 		staleTime: 15 * 60 * 1000
 	}),
 	report: (leadId: string | null) => ({
 		queryKey: crmKeys.report(leadId ?? ''),
-		queryFn: () => crm.report(leadId ?? ''),
+		queryFn: ({ signal }: { signal: AbortSignal }) => crm.report(leadId ?? '', signal),
 		enabled: Boolean(leadId),
 		staleTime: 15 * 60 * 1000
 	}),
@@ -50,7 +52,7 @@ export const crmQueries = {
 	}),
 	workspace: (leadId: string | null) => ({
 		queryKey: crmKeys.workspace(leadId ?? ''),
-		queryFn: () => crm.workspace(leadId ?? ''),
+		queryFn: ({ signal }: { signal: AbortSignal }) => crm.workspace(leadId ?? '', signal),
 		enabled: Boolean(leadId),
 		staleTime: 5 * 60 * 1000
 	}),
@@ -61,13 +63,14 @@ export const crmQueries = {
 	}),
 	leadContacts: (leadId: string | null) => ({
 		queryKey: crmKeys.leadContacts(leadId ?? ''),
-		queryFn: () => crm.leadContacts(leadId ?? ''),
+		queryFn: ({ signal }: { signal: AbortSignal }) => crm.leadContacts(leadId ?? '', signal),
 		enabled: Boolean(leadId),
 		staleTime: 5 * 60 * 1000
 	}),
-	contactImports: () => ({
+	contactImports: (enabled = true) => ({
 		queryKey: crmKeys.contactImports(),
-		queryFn: () => crm.contactImports(),
+		queryFn: ({ signal }: { signal: AbortSignal }) => crm.contactImports(signal),
+		enabled,
 		staleTime: 2 * 60 * 1000
 	}),
 	contactLists: () => ({
@@ -97,13 +100,14 @@ export const crmQueries = {
 	}),
 	ownerProfile: (ownerKey: string | null) => ({
 		queryKey: crmKeys.ownerProfile(ownerKey ?? ''),
-		queryFn: () => crm.ownerProfile(ownerKey ?? ''),
+		queryFn: ({ signal }: { signal: AbortSignal }) => crm.ownerProfile(ownerKey ?? '', signal),
 		enabled: Boolean(ownerKey),
 		staleTime: 2 * 60 * 1000
 	}),
-	ownerWorkspaces: () => ({
+	ownerWorkspaces: (enabled = true) => ({
 		queryKey: crmKeys.ownerWorkspaces(),
-		queryFn: () => crm.ownerWorkspaces(),
+		queryFn: ({ signal }: { signal: AbortSignal }) => crm.ownerWorkspaces(signal),
+		enabled,
 		staleTime: 2 * 60 * 1000
 	})
 }

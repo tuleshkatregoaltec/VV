@@ -488,7 +488,7 @@ export interface CrmDashboardParams {
 }
 
 export const crm = {
-	dashboard: (params: CrmDashboardParams = {}) =>
+	dashboard: (params: CrmDashboardParams = {}, signal?: AbortSignal) =>
 		client.get<CrmDashboardResponse>(
 			client.withQuery('/api/v1/crm/dashboard', {
 				status: params.status,
@@ -503,19 +503,27 @@ export const crm = {
 				expired_days: params.expired_days,
 				limit: params.limit,
 				offset: params.offset
-			})
+			}),
+			{ signal }
 		),
-	lead: (leadId: string) =>
-		client.get<CrmLeadDetailResponse>(`/api/v1/crm/leads/${encodeURIComponent(leadId)}`),
-	leadContacts: (leadId: string) =>
+	lead: (leadId: string, signal?: AbortSignal) =>
+		client.get<CrmLeadDetailResponse>(`/api/v1/crm/leads/${encodeURIComponent(leadId)}`, {
+			signal
+		}),
+	leadContacts: (leadId: string, signal?: AbortSignal) =>
 		client.get<CrmLeadImportedContact[]>(
-			`/api/v1/crm/leads/${encodeURIComponent(leadId)}/contacts`
+			`/api/v1/crm/leads/${encodeURIComponent(leadId)}/contacts`,
+			{ signal }
 		),
-	report: (leadId: string) =>
-		client.get<CrmPropertyReport>(`/api/v1/crm/leads/${encodeURIComponent(leadId)}/report`),
+	report: (leadId: string, signal?: AbortSignal) =>
+		client.get<CrmPropertyReport>(`/api/v1/crm/leads/${encodeURIComponent(leadId)}/report`, {
+			signal
+		}),
 	workspaces: () => client.get<CrmWorkspaceSummary[]>('/api/v1/crm/workspaces'),
-	workspace: (leadId: string) =>
-		client.get<CrmWorkspace>(`/api/v1/crm/workspaces/${encodeURIComponent(leadId)}`),
+	workspace: (leadId: string, signal?: AbortSignal) =>
+		client.get<CrmWorkspace>(`/api/v1/crm/workspaces/${encodeURIComponent(leadId)}`, {
+			signal
+		}),
 	updateWorkspace: (leadId: string, payload: CrmWorkspaceUpdate) =>
 		client.patch<CrmWorkspace, CrmWorkspaceUpdate>(
 			`/api/v1/crm/workspaces/${encodeURIComponent(leadId)}`,
@@ -531,7 +539,8 @@ export const crm = {
 	saveLead: (leadId: string) =>
 		client.post<CrmSavedLead>(`/api/v1/crm/saved-leads/${encodeURIComponent(leadId)}`),
 	deleteSavedLead: (savedId: number) => client.delete<void>(`/api/v1/crm/saved-leads/${savedId}`),
-	contactImports: () => client.get<CrmContactImport[]>('/api/v1/crm/contact-imports'),
+	contactImports: (signal?: AbortSignal) =>
+		client.get<CrmContactImport[]>('/api/v1/crm/contact-imports', { signal }),
 	renameContactImport: (importId: number, name: string) =>
 		client.patch<CrmContactImport, { name: string }>(`/api/v1/crm/contact-imports/${importId}`, {
 			name
@@ -558,9 +567,12 @@ export const crm = {
 			}),
 			{ signal }
 		),
-	ownerProfile: (ownerKey: string) =>
-		client.get<CrmOwnerProfile>(`/api/v1/crm/owners/${encodeURIComponent(ownerKey)}`),
-	ownerWorkspaces: () => client.get<CrmOwnerWorkspaceSummary[]>('/api/v1/crm/owner-workspaces'),
+	ownerProfile: (ownerKey: string, signal?: AbortSignal) =>
+		client.get<CrmOwnerProfile>(`/api/v1/crm/owners/${encodeURIComponent(ownerKey)}`, {
+			signal
+		}),
+	ownerWorkspaces: (signal?: AbortSignal) =>
+		client.get<CrmOwnerWorkspaceSummary[]>('/api/v1/crm/owner-workspaces', { signal }),
 	bulkUpdateOwnerWorkspaces: (payload: CrmOwnerBulkUpdate) =>
 		client.patch<CrmOwnerWorkspaceSummary[], CrmOwnerBulkUpdate>(
 			'/api/v1/crm/owner-workspaces/bulk',

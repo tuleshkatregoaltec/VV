@@ -1,8 +1,9 @@
 # Property Finder Listings
 
-`pf_listings` captures Property Finder Dubai listing snapshots with adaptive
-query partitioning, chunked search-page collection, chunked listing detail
-fetches, and media hydration.
+`pf_listings` captures Property Finder Dubai sale and rental listing snapshots
+with adaptive query partitioning, chunked search-page collection, chunked
+listing detail fetches, and media hydration. Search pages are collected through
+the public `/en/search` HTML route and their embedded Next.js payload.
 
 ## Source Contract
 
@@ -104,7 +105,9 @@ The durable path is chunked:
 
 `pf_listings_manual_snapshot` remains available for bounded smoke tests, but it
 is intentionally not the preferred path for broad backfills because a single
-long process uploads only at the end.
+long process uploads only at the end. A full Dubai sale-and-rental backfill
+uses the plan, search, and detail jobs in that order; the query planner splits
+result sets that exceed Property Finder's 50-page window before collection.
 
 Current-state bronze is only as complete as the observed Property Finder rows.
 Latest-delta runs upsert seen listing keys and refreshed detail keys; they do

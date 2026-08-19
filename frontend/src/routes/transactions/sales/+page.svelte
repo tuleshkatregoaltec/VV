@@ -104,29 +104,19 @@ function buildFacetFilterParams(localFilterOverrides: Partial<SalesLocalFilters>
 // Main transactions query
 const transactionsQuery = createQuery(() => transactionQueries.sales(salesApiFilters))
 
-const buildingOptionsQuery = createQuery(() =>
-	transactionQueries.salesFilterOptions(buildFacetFilterParams({ selectedBuilding: 'All' }))
-)
-const propertyTypeOptionsQuery = createQuery(() =>
-	transactionQueries.salesFilterOptions(buildFacetFilterParams({ selectedPropertyType: 'All' }))
-)
-const bedroomsOrSubTypeOptionsQuery = createQuery(() =>
-	transactionQueries.salesFilterOptions(
-		buildFacetFilterParams({ selectedBedroomsOrSubType: 'All' })
-	)
-)
-const registrationOptionsQuery = createQuery(() =>
-	transactionQueries.salesFilterOptions(buildFacetFilterParams({ selectedRegistration: 'All' }))
-)
+// One shared facet payload avoids four concurrent full-table scans on first
+// load. The selected value stays available in the control until the next
+// filter refresh, while the table can render immediately.
+const facetOptionsQuery = createQuery(() => transactionQueries.salesFilterOptions(buildFacetFilterParams()))
 
 let columns = $derived(
 	propertyType.current === PROPERTY_USAGE.RESIDENTIAL ? RESIDENTIAL_COLUMNS : COMMERCIAL_COLUMNS
 )
 
-const buildingOptions = $derived(buildingOptionsQuery.data)
-const propertyTypeOptions = $derived(propertyTypeOptionsQuery.data)
-const bedroomsOrSubTypeOptions = $derived(bedroomsOrSubTypeOptionsQuery.data)
-const registrationOptions = $derived(registrationOptionsQuery.data)
+const buildingOptions = $derived(facetOptionsQuery.data)
+const propertyTypeOptions = $derived(facetOptionsQuery.data)
+const bedroomsOrSubTypeOptions = $derived(facetOptionsQuery.data)
+const registrationOptions = $derived(facetOptionsQuery.data)
 
 let filterDefinitions = $derived<FilterDefinition[]>([
 	{

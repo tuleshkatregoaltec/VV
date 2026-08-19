@@ -781,7 +781,7 @@ async def get_lead_detail(lead_id: str, as_of: date | None = None) -> CrmLeadDet
     lead = _lead_from_row(current_rows[0])
     row = current_rows[0]
 
-    rental_rows = await query(
+    rental_query = query(
         """
         SELECT
             event_key,
@@ -801,58 +801,66 @@ async def get_lead_detail(lead_id: str, as_of: date | None = None) -> CrmLeadDet
     dld_sales_rows: list[dict[str, Any]] = []
     building_name = str(row.get("building_name") or "")
     if lead.unit_number and building_name:
-        exact_sales_rows = await query(
-            """
-            SELECT
-                sale_key,
-                transaction_date AS sale_date,
-                sale_amount_aed,
-                price_per_sqft_aed,
-                capital_gain_pct,
-                ltv_pct,
-                seller_type,
-                seller_transaction_count,
-                market_status,
-                detail_url
-            FROM dxbi_sales_unit_events FINAL
-            WHERE
-                unit_number = {unit_number:String}
-                AND building_key = {building_key:String}
-            ORDER BY transaction_date DESC
-            LIMIT 25
-            """,
-            {
-                "unit_number": lead.unit_number,
-                "building_key": _location_key(building_name),
-            },
+        rental_rows, exact_sales_rows = await asyncio.gather(
+            rental_query,
+            query(
+                """
+                SELECT
+                    sale_key,
+                    transaction_date AS sale_date,
+                    sale_amount_aed,
+                    price_per_sqft_aed,
+                    capital_gain_pct,
+                    ltv_pct,
+                    seller_type,
+                    seller_transaction_count,
+                    market_status,
+                    detail_url
+                FROM dxbi_sales_unit_events FINAL
+                WHERE
+                    unit_number = {unit_number:String}
+                    AND building_key = {building_key:String}
+                ORDER BY transaction_date DESC
+                LIMIT 25
+                """,
+                {
+                    "unit_number": lead.unit_number,
+                    "building_key": _location_key(building_name),
+                },
+            ),
         )
     elif building_name:
-        dld_sales_rows = await query(
-            """
-            SELECT
-                transaction_id,
-                toDate(instance_date) AS sale_date,
-                trans_value,
-                procedure_name_en
-            FROM ch_transactions
-            WHERE
-                trans_group_en = 'Sales'
-                AND positionCaseInsensitiveUTF8(building_name_en, {building:String}) > 0
-                AND ({bedrooms:String} = '' OR rooms_en = {bedrooms:String})
-                AND (
-                    {size_sqft:Float64} = 0
-                    OR abs(procedure_area * 10.7639 - {size_sqft:Float64})
-                        <= greatest(25, {size_sqft:Float64} * 0.03)
-                )
-            ORDER BY instance_date DESC
-            LIMIT 25
-            """,
-            {
-                "building": building_name,
-                "bedrooms": _dld_rooms(str(row.get("bedrooms") or "")),
-                "size_sqft": float(row.get("size_sqft") or 0),
-            },
+        rental_rows, dld_sales_rows = await asyncio.gather(
+            rental_query,
+            query(
+                """
+                SELECT
+                    transaction_id,
+                    toDate(instance_date) AS sale_date,
+                    trans_value,
+                    procedure_name_en
+                FROM ch_transactions
+                WHERE
+                    trans_group_en = 'Sales'
+                    AND positionCaseInsensitiveUTF8(building_name_en, {building:String}) > 0
+                    AND ({bedrooms:String} = '' OR rooms_en = {bedrooms:String})
+                    AND (
+                        {size_sqft:Float64} = 0
+                        OR abs(procedure_area * 10.7639 - {size_sqft:Float64})
+                            <= greatest(25, {size_sqft:Float64} * 0.03)
+                    )
+                ORDER BY instance_date DESC
+                LIMIT 25
+                """,
+                {
+                    "building": building_name,
+                    "bedrooms": _dld_rooms(str(row.get("bedrooms") or "")),
+                    "size_sqft": float(row.get("size_sqft") or 0),
+                },
+            ),
         )
+    else:
+        rental_rows = await rental_query
 
     timeline = [
         CrmTimelineEvent(

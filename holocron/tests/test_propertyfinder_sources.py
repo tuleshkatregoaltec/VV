@@ -11,6 +11,7 @@ from holocron.contracts import RawRelease
 from holocron.platform.checkpoints import checkpoint_s3_key
 from holocron.sources import PF_LISTINGS_SOURCE, PF_LOCATIONS_SOURCE, registry
 from holocron.sources.pf_listings.extract import extract_release as extract_listings_release
+from holocron.sources.pf_listings.extract import PropertyFinderBrowserListingsClient
 from holocron.sources.pf_listings.media_assets import (
     MediaDownload,
     PropertyFinderListingMediaHydrationConfig,
@@ -376,6 +377,16 @@ class FakeMediaDownloader:
 def test_propertyfinder_sources_are_registered() -> None:
     assert registry.get("pf_locations") is PF_LOCATIONS_SOURCE
     assert registry.get("pf_listings") is PF_LISTINGS_SOURCE
+
+
+def test_pf_listings_browser_client_uses_html_search_route() -> None:
+    client = object.__new__(PropertyFinderBrowserListingsClient)
+    client._base_url = "https://www.propertyfinder.ae"
+    client._config = PropertyFinderListingsConfig(locale="en")
+
+    assert client._search_url(
+        params=(("c", "2"), ("l", "1"), ("page", "3"), ("ob", "nd"))
+    ) == "https://www.propertyfinder.ae/en/search?c=2&l=1&page=3&ob=nd"
 
 
 def test_pf_locations_extract_writes_dubai_hierarchy_and_filter_context(tmp_path: Path) -> None:

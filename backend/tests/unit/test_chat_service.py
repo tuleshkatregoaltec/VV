@@ -29,7 +29,10 @@ async def db_session():
 @pytest.mark.asyncio
 async def test_delete_conversation_deletes_messages(db_session):
     conversation = await create_conversation(
-        db_session, user_id="user-1", title="Conversation to delete"
+        db_session,
+        user_id="user-1",
+        organization_id="org-1",
+        title="Conversation to delete",
     )
     assert conversation.id is not None
 
@@ -45,7 +48,10 @@ async def test_delete_conversation_deletes_messages(db_session):
 @pytest.mark.asyncio
 async def test_delete_conversation_enforces_owner(db_session):
     conversation = await create_conversation(
-        db_session, user_id="user-1", title="Private conversation"
+        db_session,
+        user_id="user-1",
+        organization_id="org-1",
+        title="Private conversation",
     )
     assert conversation.id is not None
     await add_message(db_session, conversation.id, "user", "private message")
