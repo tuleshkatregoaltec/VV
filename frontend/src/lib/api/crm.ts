@@ -12,12 +12,23 @@ export interface CrmLead {
 	building_name: string
 	project_name: string
 	area_name: string
+	registry_building_name: string
+	registry_project_name: string
+	registry_area_name: string
+	canonical_location_id: string | null
+	geography_match_status: string
+	coordinate_precision: string
+	latitude: number | null
+	longitude: number | null
 	asset_class: CrmAssetClass
 	property_type: string
 	property_subtype: string
 	matched_sales_property_type: string | null
 	bedrooms: string
 	size_sqft: number | null
+	contract_amount_aed: number
+	contract_term_days: number
+	contract_term_months: number | null
 	annual_rent_aed: number
 	latest_purchase_price_aed: number | null
 	unit_number: string | null
@@ -34,7 +45,6 @@ export interface CrmLead {
 	latest_seller_type: string | null
 	latest_seller_transaction_count: number | null
 	latest_market_status: string | null
-	latest_sale_detail_url: string | null
 	lease_start: string
 	lease_end: string
 	days_to_expiry: number
@@ -43,6 +53,10 @@ export interface CrmLead {
 	score: number
 	contract_state: string
 	match_confidence: CrmMatchConfidence
+	property_identity_key: string
+	ownership_timing: string
+	lease_evidence_state: string
+	data_complete_through: string | null
 	lead_reason: string
 	recommended_action: string
 	sale_conversation: boolean
@@ -87,6 +101,7 @@ export interface CrmCoverage {
 	rental_rows: number
 	exact_unit_ids_available: boolean
 	exact_unit_matches: number
+	data_complete_through: string | null
 	matching_method: string
 	caveat: string
 }
@@ -115,7 +130,6 @@ export interface CrmTimelineEvent {
 	end_date: string | null
 	source: string
 	confidence: CrmMatchConfidence
-	detail_url: string | null
 	ltv_pct: number | null
 	capital_gain_pct: number | null
 }
@@ -190,6 +204,8 @@ export type CrmOwnershipStatus =
 	| 'unit_linked_unverified'
 	| 'former_owner'
 	| 'conflicting_claim'
+	| 'insufficient_property_data'
+	| 'registry_not_observed'
 	| 'unmatched'
 
 export interface CrmContactImportSummary {
@@ -202,6 +218,8 @@ export interface CrmContactImportSummary {
 	unit_linked_unverified: number
 	former_owners: number
 	conflicting_claims: number
+	insufficient_property_data: number
+	registry_not_observed: number
 	unmatched: number
 	rental_opportunities: number
 	contact_ready: number
@@ -329,8 +347,19 @@ export interface CrmOwnerProperty {
 	match_reason: string
 	lead_id: string | null
 	unit_candidate_key: string | null
+	imported_transaction_date: string | null
+	imported_transaction_price_aed: number | null
+	imported_property_type: string
 	latest_sale_date: string | null
 	latest_sale_price_aed: number | null
+	registry_sale_date: string | null
+	registry_sale_price_aed: number | null
+	registry_property_type: string | null
+	registry_bedrooms: string | null
+	registry_size_sqft: number | null
+	registry_built_up_area_sqft: number | null
+	registry_price_per_sqft_aed: number | null
+	registry_market_status: string | null
 	later_sale_date: string | null
 	lease_end: string | null
 	annual_rent_aed: number | null
@@ -398,7 +427,6 @@ export interface CrmSaleComparable {
 	size_sqft: number
 	sale_amount_aed: number
 	price_per_sqft_aed: number | null
-	detail_url: string | null
 	selection_reason: string
 }
 
@@ -457,12 +485,12 @@ export interface CrmPropertyReport {
 			label: string
 			dubai_index: number
 			dld_index: number | null
-			dxbi_index: number | null
+			transaction_index: number | null
 			segment_index: number | null
 			dubai_median_psf_aed: number | null
 			segment_median_psf_aed: number | null
 			dld_transactions: number
-			dxbi_transactions: number
+			transaction_count: number
 			segment_transactions: number
 		}>
 		methodology: string

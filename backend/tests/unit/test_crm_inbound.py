@@ -1,9 +1,10 @@
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 
 from app.crm.import_models import CrmPropertyContactClaim
 from app.crm.inbound_models import CrmInboundEnquiry
 from app.crm.inbound_service import (
     _bedroom_fit,
+    _belongs_in_inbox,
     _best_header,
     _budget_fit,
     _deterministic_criteria,
@@ -13,6 +14,7 @@ from app.crm.inbound_service import (
     _normalize_intent,
     _ownership_enrichment,
     _preview_file,
+    _property_fit,
     _qualification_complete,
     _redact,
     _violates_strict_fields,
@@ -144,6 +146,11 @@ def test_match_scoring_distinguishes_exact_flexible_and_outside():
     assert _budget_fit(criteria, 4_000_000)[0] == 0
 
 
+def test_generic_residential_owner_types_do_not_block_apartment_inventory():
+    for imported_type in ("Unit", "Residential", "Residential Flats", "Flat"):
+        assert _property_fit({"property_type": imported_type}, "Apartment") == 10
+
+
 def test_missing_requirements_never_award_match_points():
     assert _location_fit({}, "JBR")[0] == 0
     assert _budget_fit({}, 3_000_000)[0] == 0
@@ -169,6 +176,23 @@ def test_matching_requires_agent_qualified_minimum_brief():
     assert _qualification_complete(enquiry)
     enquiry.status = "contacted"
     assert not _qualification_complete(enquiry)
+
+
+def test_qualified_but_untouched_opportunity_remains_in_operational_inbox():
+    enquiry = _inbound_enquiry("buy")
+    enquiry.status = "qualified"
+    enquiry.first_response_due_at = datetime.now(timezone.utc) - timedelta(hours=1)
+
+    assert _belongs_in_inbox(enquiry)
+
+    enquiry.first_contact_at = datetime.now(timezone.utc)
+    assert not _belongs_in_inbox(enquiry)
+
+    enquiry.next_follow_up = date.today()
+    assert _belongs_in_inbox(enquiry)
+
+    enquiry.status = "won"
+    assert not _belongs_in_inbox(enquiry)
     enquiry.status = "qualified"
     enquiry.intent = "unknown"
     assert not _qualification_complete(enquiry)
@@ -251,7 +275,9 @@ def test_rental_owner_signal_is_reported_and_prioritized():
 
     assert enrichment.rental_owner
     assert enrichment.rental_property_count == 1
-    assert _lead_priority(_inbound_enquiry("unknown"), enrichment).band == "high"
+    # Ownership raises the follow-up order, but an unqualified contact is not
+    # labelled high priority until the person's intent is known.
+    assert _lead_priority(_inbound_enquiry("unknown"), enrichment).band == "medium"
 
 
 def test_name_only_owner_match_remains_verification_required():
@@ -280,3 +306,50 @@ def test_unmatched_contact_keeps_standard_priority():
 
     assert not enrichment.matched
     assert priority.band == "standard"
+
+
+def test_priority_blends_ticket_size_with_verified_ownership():
+    enrichment = _ownership_enrichment(
+        [
+            (
+                _owner_claim(
+                    property_key="tower-a|101",
+                    status="verified_current_owner",
+                    phone="971501234567",
+                ),
+                "phone",
+            ),
+            (
+                _owner_claim(
+                    property_key="tower-b|202",
+                    status="former_owner",
+                    phone="971501234567",
+                ),
+                "phone",
+            ),
+        ]
+    )
+    smaller = _inbound_enquiry("buy")
+    smaller.criteria = {"budget_max_aed": 2_000_000}
+    larger = _inbound_enquiry("buy")
+    larger.criteria = {"budget_max_aed": 12_000_000}
+
+    smaller_priority = _lead_priority(smaller, enrichment)
+    larger_priority = _lead_priority(larger, enrichment)
+
+    assert larger_priority.score > smaller_priority.score
+    assert larger_priority.opportunity_value_aed == 12_000_000
+    assert larger_priority.band == "high"
+
+
+def test_name_only_match_is_never_presented_as_high_priority():
+    enrichment = _ownership_enrichment(
+        [(_owner_claim(property_key="tower-a|101", status="verified_current_owner"), "name")]
+    )
+    enquiry = _inbound_enquiry("buy")
+    enquiry.criteria = {"budget_max_aed": 50_000_000}
+
+    priority = _lead_priority(enquiry, enrichment)
+
+    assert priority.band == "medium"
+    assert "verify identity" in " ".join(priority.reasons).lower()

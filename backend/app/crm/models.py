@@ -29,12 +29,23 @@ class CrmLead(BaseModel):
     building_name: str
     project_name: str
     area_name: str
+    registry_building_name: str = ""
+    registry_project_name: str = ""
+    registry_area_name: str = ""
+    canonical_location_id: str | None = None
+    geography_match_status: str = "unmapped"
+    coordinate_precision: str = "missing"
+    latitude: float | None = None
+    longitude: float | None = None
     asset_class: CrmAssetClass = "other"
     property_type: str
     property_subtype: str = "Property"
     matched_sales_property_type: str | None = None
     bedrooms: str
     size_sqft: float | None = None
+    contract_amount_aed: int = 0
+    contract_term_days: int = 0
+    contract_term_months: float | None = None
     annual_rent_aed: int
     latest_purchase_price_aed: int | None = None
     unit_number: str | None = None
@@ -51,7 +62,6 @@ class CrmLead(BaseModel):
     latest_seller_type: str | None = None
     latest_seller_transaction_count: int | None = None
     latest_market_status: str | None = None
-    latest_sale_detail_url: str | None = None
     lease_start: date
     lease_end: date
     days_to_expiry: int
@@ -60,6 +70,10 @@ class CrmLead(BaseModel):
     score: int = Field(ge=0, le=100)
     contract_state: str
     match_confidence: MatchConfidence
+    property_identity_key: str = ""
+    ownership_timing: str = "unit_unresolved"
+    lease_evidence_state: str = "upcoming"
+    data_complete_through: date | None = None
     lead_reason: str
     recommended_action: str
     sale_conversation: bool
@@ -100,6 +114,7 @@ class CrmCoverage(BaseModel):
     rental_rows: int = 0
     exact_unit_ids_available: bool = False
     exact_unit_matches: int = 0
+    data_complete_through: date | None = None
     matching_method: str
     caveat: str
 
@@ -139,7 +154,6 @@ class CrmTimelineEvent(BaseModel):
     end_date: date | None = None
     source: str
     confidence: MatchConfidence
-    detail_url: str | None = None
     ltv_pct: float | None = None
     capital_gain_pct: float | None = None
 
@@ -279,7 +293,6 @@ class CrmSaleComparable(BaseModel):
     size_sqft: float
     sale_amount_aed: int
     price_per_sqft_aed: float | None = None
-    detail_url: str | None = None
     selection_reason: str
 
 
@@ -321,12 +334,12 @@ class CrmPriceIndexPoint(BaseModel):
     label: str
     dubai_index: float
     dld_index: float | None = None
-    dxbi_index: float | None = None
+    transaction_index: float | None = None
     segment_index: float | None = None
     dubai_median_psf_aed: int | None = None
     segment_median_psf_aed: int | None = None
     dld_transactions: int = 0
-    dxbi_transactions: int = 0
+    transaction_count: int = 0
     segment_transactions: int = 0
 
 

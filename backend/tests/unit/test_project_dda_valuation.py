@@ -105,6 +105,53 @@ def test_dda_transaction_evidence_matches_transactions_to_nearest_plot_area():
     assert business_bay["rate_aed_sqft"] == 25_000_000 / (5000 * project_service.SQM_TO_SQFT)
 
 
+def test_dda_development_evidence_distinguishes_direct_and_villa_subdivision_matches():
+    rows = [
+        {
+            "plot_number": f"villa-{index}",
+            "project_name": "Dubai Hills",
+            "community_name": "Hadaeq Sheikh Mohammed Bin Rashid",
+            "plot_area_sqm": 900,
+            "land_use_summary": ["RESIDENTIAL VILLA"],
+            "linked_asset_count": 1 if index == 0 else 0,
+            "linked_physical_asset_count": 1 if index == 0 else 0,
+            "site_plan_issue_date": None,
+            "site_plan_expiry_date": None,
+        }
+        for index in range(5)
+    ]
+
+    project_service._annotate_dda_development_evidence(rows)
+
+    assert rows[0]["development_status"] == "developed_confirmed"
+    assert rows[0]["development_method"] == "parcel_id_exact"
+    assert rows[1]["development_status"] == "developed_probable"
+    assert rows[1]["development_method"] == "villa_subdivision_inference"
+    assert rows[1]["subdivision_plot_count"] == 5
+    assert rows[1]["subdivision_confirmed_count"] == 1
+
+
+def test_dda_non_developable_land_is_not_reported_as_unbuilt_supply():
+    rows = [
+        {
+            "plot_number": "park-1",
+            "project_name": "",
+            "community_name": "Example",
+            "plot_area_sqm": 1_500,
+            "land_use_summary": ["OPEN SPACE LANDSCAPE"],
+            "linked_asset_count": 0,
+            "linked_physical_asset_count": 0,
+            "site_plan_issue_date": None,
+            "site_plan_expiry_date": None,
+        }
+    ]
+
+    project_service._annotate_dda_development_evidence(rows)
+
+    assert rows[0]["development_status"] == "non_developable"
+    assert rows[0]["development_method"] == "planning_land_use"
+
+
 @pytest.mark.asyncio
 async def test_dda_plot_bulk_layer_defers_valuation_lookup(monkeypatch):
     async def fake_geometries():

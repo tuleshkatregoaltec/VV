@@ -44,6 +44,24 @@ def test_location_key_normalizes_common_dxbi_spelling_variants() -> None:
     )
 
 
+def test_sales_area_uses_same_canonical_vocabulary_as_rentals() -> None:
+    event = normalize_sales_row(
+        {
+            "unit_number": "602",
+            "location_text": (
+                "Tower 108, Jumeirah Village Circle (JVC) Ready Apartment, Floor 6"
+            ),
+            "amount_text": "AED 900,000 AED 2,000 /sqft",
+            "specs_text": "450 sqft Studio",
+            "date_text": "01, Jan 2026 Individual",
+        }
+    )
+
+    assert event is not None
+    assert event["area_name"] == "Jumeirah Village Circle"
+    assert event["area_key"] == "jumeirahvillagecircle"
+
+
 def test_compact_payload_ignores_large_columns_array() -> None:
     payload = compact_payload(
         '{"unit_number":"302","location_text":"Tower, Area Ready Apartment, Floor 2",'
@@ -53,6 +71,29 @@ def test_compact_payload_ignores_large_columns_array() -> None:
     assert payload == {
         "unit_number": "302",
         "location_text": "Tower, Area Ready Apartment, Floor 2",
+    }
+
+
+def test_compact_payload_adapts_current_raw_report_columns() -> None:
+    payload = compact_payload(
+        '{"transaction_type":"sales","columns":['
+        '{"id":"PATH_NAME","text":"Buyer\'s agent Tower One, Business Bay Ready '
+        'Apartment, Floor u-hidden, No. 604-S","links":[{"href":"https://dxbinteract.com/sold/t-123"}]},'
+        '{"id":"TOTAL_PRICE","text":"AED 2,250,000 (+73%) AED 1,712 /sqft 80% LTV"},'
+        '{"id":"BEDROOM","text":"1,314 sqft 2 Beds"},'
+        '{"id":"SOLD_BY","text":"26, Aug 2026 Individual (4 Times)"}]}'
+    )
+
+    assert payload == {
+        "unit_number": "604-S",
+        "location_text": (
+            "Buyer's agent Tower One, Business Bay Ready Apartment, "
+            "Floor u-hidden, No. 604-S"
+        ),
+        "amount_text": "AED 2,250,000 (+73%) AED 1,712 /sqft 80% LTV",
+        "specs_text": "1,314 sqft 2 Beds",
+        "date_text": "26, Aug 2026 Individual (4 Times)",
+        "detail_url": "https://dxbinteract.com/sold/t-123",
     }
 
 

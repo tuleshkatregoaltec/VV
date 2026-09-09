@@ -5,6 +5,7 @@ from app.crm.service import (
     _commercial_mix_series,
     _dld_rooms,
     _empty_dashboard,
+    _filter_metadata_sql,
     _fixed_mix_series,
     _lead_from_row,
     _quarter_label,
@@ -46,8 +47,8 @@ def test_expired_candidate_is_an_owner_pursuit_not_a_confirmed_owner_record():
     lead = _lead_from_row(_lead_row())
 
     assert lead.status == "expired"
-    assert lead.sale_conversation is True
-    assert "no later lease observed" in lead.lead_reason
+    assert lead.sale_conversation is False
+    assert "exact-unit and renewal status remain unresolved" in lead.lead_reason
     assert "Resolve the exact unit" in lead.recommended_action
     assert lead.unit_number is None
     assert lead.gross_yield_pct is None
@@ -110,6 +111,47 @@ def test_yield_uses_latest_unit_sale_not_the_older_identity_match():
     assert lead.gross_yield_pct == 10.67
 
 
+def test_sale_during_active_tenancy_is_an_occupancy_review_not_an_unlet_claim():
+    lead = _lead_from_row(
+        _lead_row(
+            unit_number="602",
+            unit_match_status="unique",
+            ownership_timing="sale_during_lease",
+            lease_evidence_state="ownership_review",
+        )
+    )
+
+    assert lead.sale_conversation is False
+    assert "Ownership changed during the lease" in lead.lead_reason
+    assert "Verify the current owner and occupancy" in lead.recommended_action
+
+
+def test_expired_exact_unit_without_later_lease_is_immediately_an_unlet_signal():
+    lead = _lead_from_row(
+        _lead_row(
+            unit_number="602",
+            unit_match_status="unique",
+            ownership_timing="stable_rental_history",
+            lease_evidence_state="unlet_signal",
+        )
+    )
+
+    assert lead.sale_conversation is True
+    assert lead.lead_reason.startswith("Unlet signal:")
+    assert "no later registered lease" in lead.lead_reason
+
+
+def test_lead_query_collapses_price_specific_candidates_by_exact_unit():
+    assert "PARTITION BY property_identity_key" in _LEAD_CTE
+    assert "identity_rank = 1" in _LEAD_CTE
+    assert "sale_during_lease" in _LEAD_CTE
+    assert "last_purchase_date >= lease_end" in _LEAD_CTE
+    assert "'ownership_review'" in _LEAD_CTE
+    assert "'unit_unresolved'" in _LEAD_CTE
+    assert "registration_pending" not in _LEAD_CTE
+    assert "sale_near_expiry" not in _LEAD_CTE
+
+
 def test_filters_use_bound_parameters_for_agent_search():
     where, params = _where_clause(
         status="expired",
@@ -133,6 +175,15 @@ def test_filters_use_bound_parameters_for_agent_search():
         "asset_class": "commercial",
         "property_type": "Office",
     }
+
+
+def test_filter_options_are_derived_from_the_live_lead_window() -> None:
+    sql = _filter_metadata_sql("lead_status = {status:String}")
+
+    assert "FROM leads" in sql
+    assert "WHERE lead_status = {status:String}" in sql
+    assert "groupUniqArrayIf(area_name" in sql
+    assert "FROM dxbi_rental_unit_candidates FINAL" not in sql
 
 
 def test_commercial_price_index_keeps_a_stable_office_shop_mix():

@@ -1,3 +1,4 @@
+from enum import IntEnum
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -14,6 +15,7 @@ from app.project.models import (
     ProjectRadarProject,
     ProjectRadarResponse,
     ProjectSearchResult,
+    RadarBuildingPin,
 )
 from app.project.service import (
     get_building_details,
@@ -24,10 +26,20 @@ from app.project.service import (
     get_project_radar,
     get_project_radar_overview,
     get_project_radar_pins,
+    get_radar_building_pins,
     list_all_projects,
 )
 
 router = APIRouter(prefix="/api/v1/projects", tags=["projects"])
+
+
+class RadarPeriodDays(IntEnum):
+    """Supported Radar windows, parsed from their query-string representation."""
+
+    DAYS_30 = 30
+    DAYS_90 = 90
+    DAYS_180 = 180
+    DAYS_365 = 365
 
 
 @router.get("/list", response_model=List[ProjectSearchResult])
@@ -41,19 +53,27 @@ async def list_projects(context: AuthContext = Depends(require_active_subscripti
 @cached_endpoint(prefix="project_radar_ph_box", expire=1800)
 async def project_radar(
     limit: int = Query(default=1400, ge=100, le=5000, description="Maximum mapped projects"),
+    period_days: RadarPeriodDays = Query(
+        default=365,
+        description="Trailing DLD/Ejari activity window in days (maximum 365)",
+    ),
     context: AuthContext = Depends(require_active_subscription),
 ):
     """Get mapped project, area, and planning signals for the radar view."""
-    return await get_project_radar(limit=limit)
+    return await get_project_radar(limit=limit, period_days=period_days)
 
 
 @router.get("/radar/overview", response_model=ProjectRadarOverviewResponse)
 @cached_endpoint(prefix="project_radar_overview_ph_box", expire=1800)
 async def project_radar_overview(
+    period_days: RadarPeriodDays = Query(
+        default=365,
+        description="Trailing DLD/Ejari activity window in days (maximum 365)",
+    ),
     context: AuthContext = Depends(require_active_subscription),
 ):
     """Get lightweight radar stats and area heatmap data without project pins."""
-    return await get_project_radar_overview()
+    return await get_project_radar_overview(period_days=period_days)
 
 
 @router.get("/radar/pins", response_model=List[ProjectRadarProject])
@@ -66,6 +86,10 @@ async def project_radar_pins(
     area: Optional[str] = Query(None, description="Area name to fetch pins for"),
     developer: Optional[str] = Query(None, description="Developer name to focus"),
     limit: int = Query(default=700, ge=10, le=2500, description="Maximum project pins"),
+    period_days: RadarPeriodDays = Query(
+        default=365,
+        description="Trailing DLD/Ejari activity window in days (maximum 365)",
+    ),
     context: AuthContext = Depends(require_active_subscription),
 ):
     """Get bounded project pins for a viewport, selected area, or developer overlay."""
@@ -84,6 +108,34 @@ async def project_radar_pins(
         area=area,
         developer=developer,
         limit=limit,
+        period_days=period_days,
+    )
+
+
+@router.get("/radar/building-pins", response_model=List[RadarBuildingPin])
+@cached_endpoint(prefix="project_radar_building_pins_ph_box", expire=600)
+async def radar_building_pins(
+    west: float = Query(..., ge=54, le=57, description="Viewport west longitude"),
+    south: float = Query(..., ge=24, le=26, description="Viewport south latitude"),
+    east: float = Query(..., ge=54, le=57, description="Viewport east longitude"),
+    north: float = Query(..., ge=24, le=26, description="Viewport north latitude"),
+    limit: int = Query(default=3000, ge=10, le=10000, description="Maximum tower pins"),
+    period_days: RadarPeriodDays = Query(
+        default=365,
+        description="Trailing DLD/Ejari activity window in days (maximum 365)",
+    ),
+    context: AuthContext = Depends(require_active_subscription),
+):
+    """Get Property Finder tower pins and linked market evidence for a viewport."""
+    if west >= east or south >= north:
+        raise HTTPException(status_code=400, detail="Viewport bounds are invalid")
+    return await get_radar_building_pins(
+        west=west,
+        south=south,
+        east=east,
+        north=north,
+        limit=limit,
+        period_days=period_days,
     )
 
 

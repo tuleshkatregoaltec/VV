@@ -31,9 +31,17 @@ export interface InboundRegistryProfile {
 	building_name: string
 	unit_number: string
 	property_type: string
+	transaction_date: string | null
+	transaction_price_aed: number | null
 	latest_sale_date: string | null
+	latest_sale_price_aed: number | null
 	later_sale_date: string | null
+	ltv_pct: number | null
+	seller_type: string | null
+	lease_start: string | null
 	lease_end: string | null
+	annual_rent_aed: number | null
+	contract_state: string | null
 	lead_id: string | null
 }
 
@@ -71,11 +79,14 @@ export interface InboundOwnershipEnrichment {
 	prior_property_count: number
 	rental_property_count: number
 	known_property_count: number
+	observed_portfolio_value_aed: number
 	reasons: string[]
 }
 
 export interface InboundPriority {
 	band: 'high' | 'medium' | 'standard'
+	score: number
+	opportunity_value_aed: number
 	reasons: string[]
 }
 
@@ -206,7 +217,7 @@ export interface InboundImportPreview {
 
 export interface InboundMatch {
 	id: number
-	target_type: 'owner' | 'unit' | 'listing' | 'demand'
+	target_type: 'owner' | 'unit' | 'listing' | 'project' | 'demand'
 	target_key: string
 	state: InboundMatchState
 	fit: 'exact' | 'near' | 'review' | 'outside'
@@ -222,7 +233,9 @@ export interface InboundMatches {
 	enquiry_id: number
 	listing_fresh: boolean
 	listing_last_refresh: string | null
-	lanes: Record<'owners' | 'units' | 'listings' | 'demand', InboundMatch[]>
+	offplan_catalog_available: boolean
+	offplan_last_refresh: string | null
+	lanes: Record<'owners' | 'units' | 'listings' | 'offplan' | 'demand', InboundMatch[]>
 }
 
 export interface InboundListParams {

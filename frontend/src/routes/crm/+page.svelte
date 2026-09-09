@@ -16,7 +16,6 @@ import {
 	ClipboardList,
 	Clock3,
 	Database,
-	ExternalLink,
 	FileText,
 	FileUp,
 	FolderOpen,
@@ -310,9 +309,36 @@ function money(value: number | null | undefined, compact = false) {
 	return value ? formatCrmMoney(value, compact) : '—'
 }
 
+function propertyTitle(lead: CrmLead) {
+	return lead.building_name || lead.project_name || lead.area_name || 'Property unresolved'
+}
+
+function propertyPath(lead: CrmLead) {
+	const title = propertyTitle(lead)
+	return [lead.project_name, lead.area_name]
+		.filter((value, index, values) => value && value !== title && values.indexOf(value) === index)
+		.join(' · ')
+}
+
+function registryPath(lead: CrmLead) {
+	return [lead.registry_building_name, lead.registry_project_name, lead.registry_area_name]
+		.filter((value, index, values) => value && values.indexOf(value) === index)
+		.join(' · ')
+}
+
+function hasCanonicalAddressChange(lead: CrmLead) {
+	const canonical = [lead.building_name, lead.project_name, lead.area_name].filter(Boolean).join('|')
+	const registry = [lead.registry_building_name, lead.registry_project_name, lead.registry_area_name].filter(Boolean).join('|')
+	return Boolean(registry && canonical !== registry)
+}
+
 function statusLabel(lead: CrmLead) {
+	if (lead.ownership_timing === 'sale_during_lease') return 'Ownership changed'
+	if (lead.status === 'expired' && lead.lease_evidence_state === 'unit_unresolved') {
+		return `${Math.abs(lead.days_to_expiry)}d expired · unit unresolved`
+	}
 	return lead.status === 'expired'
-		? `${Math.abs(lead.days_to_expiry)}d overdue`
+		? `${Math.abs(lead.days_to_expiry)}d unlet signal`
 		: `${lead.days_to_expiry}d remaining`
 }
 
@@ -416,7 +442,7 @@ function assetLabel(lead: CrmLead) {
 }
 
 function selectBreakdown(label: string) {
-	if (label === 'Not exposed') return
+	if (label === 'Unresolved hierarchy') return
 	if (breakdown === 'area') {
 		area = label
 		project = ''
@@ -553,6 +579,8 @@ function ownershipLabel(status: CrmOwnershipStatus) {
 	if (status === 'unit_linked_unverified') return 'Ownership review'
 	if (status === 'former_owner') return 'Former owner'
 	if (status === 'conflicting_claim') return 'Conflicting evidence'
+	if (status === 'insufficient_property_data') return 'Insufficient property data'
+	if (status === 'registry_not_observed') return 'Registry gap'
 	return 'Unmatched'
 }
 
@@ -560,7 +588,11 @@ function ownershipClass(status: CrmOwnershipStatus) {
 	if (status === 'verified_current_owner') return 'border-success-border bg-success-bg text-success'
 	if (status === 'probable_current_owner') return 'border-info-border bg-info-bg text-info'
 	if (status === 'former_owner') return 'border-error-border bg-error-bg text-error'
-	if (status === 'unit_linked_unverified' || status === 'conflicting_claim')
+	if (
+		status === 'unit_linked_unverified' ||
+		status === 'conflicting_claim' ||
+		status === 'registry_not_observed'
+	)
 		return 'border-warning-border bg-warning-bg text-warning'
 	return 'border-border bg-panel text-fg-4'
 }
@@ -757,7 +789,7 @@ async function deleteImport(item: CrmContactImport) {
 				</div>
 				<div class="ui-surface p-4">
 					<div class="flex items-center justify-between"><span class="font-mono text-[10px] uppercase tracking-[0.08em] text-fg-4">Expired</span><Clock3 size={16} class="text-warning" /></div>
-					<p class="mt-3 text-2xl font-semibold tabular-nums text-fg-1">{number(summary?.expired_unlet)}</p><p class="mt-1 text-xs text-fg-3">No later lease · trailing {lookbackLabel(expiredDays)}</p>
+					<p class="mt-3 text-2xl font-semibold tabular-nums text-fg-1">{number(summary?.expired_unlet)}</p><p class="mt-1 text-xs text-fg-3">Exact units with no later registered lease · trailing {lookbackLabel(expiredDays)}</p>
 				</div>
 				<div class="ui-surface p-4">
 					<div class="flex items-center justify-between"><span class="font-mono text-[10px] uppercase tracking-[0.08em] text-fg-4">90-day pipeline</span><CalendarClock size={16} class="text-info" /></div>
@@ -799,7 +831,7 @@ async function deleteImport(item: CrmContactImport) {
 			<section class="mt-3 overflow-hidden rounded-lg border border-info-border bg-info-bg">
 				<div class="flex flex-col gap-3 px-4 py-3.5 lg:flex-row lg:items-center lg:justify-between">
 					<div class="flex items-start gap-3"><ShieldCheck class="mt-0.5 flex-none text-info" size={18} /><div><p class="text-sm font-semibold text-fg-1">Evidence-scored property candidates</p><p class="mt-0.5 text-xs leading-5 text-fg-2">{dashboard?.coverage.matching_method}. {dashboard?.coverage.caveat}</p></div></div>
-					<div class="flex flex-none items-center gap-2 font-mono text-[10px] uppercase tracking-[0.06em] text-fg-3"><Database size={13} /><span>{number(dashboard?.coverage.exact_unit_matches)} exact units</span><span>·</span><span>{number(dashboard?.coverage.rental_rows)} leases</span><span>·</span><span>{shortDate(dashboard?.coverage.rental_start_date)}–{shortDate(dashboard?.coverage.rental_end_date)}</span></div>
+					<div class="flex flex-none items-center gap-2 font-mono text-[10px] uppercase tracking-[0.06em] text-fg-3"><Database size={13} /><span>{number(dashboard?.coverage.exact_unit_matches)} exact units</span><span>·</span><span>{number(dashboard?.coverage.rental_rows)} leases</span><span>·</span><span>complete through {shortDate(dashboard?.coverage.data_complete_through)}</span></div>
 				</div>
 			</section>
 
@@ -954,6 +986,8 @@ async function deleteImport(item: CrmContactImport) {
 									<option value="unit_linked_unverified">Ownership review</option>
 									<option value="former_owner">Former owners</option>
 									<option value="conflicting_claim">Conflicting evidence</option>
+									<option value="registry_not_observed">Registry gaps</option>
+									<option value="insufficient_property_data">Insufficient property data</option>
 									<option value="unmatched">Unmatched</option>
 								</select>
 								<select bind:value={ownerLeaseWindow} onchange={() => (ownerOffset = 0)} class="h-9 rounded-md border border-border bg-card px-3 text-xs text-fg-2 outline-none focus:border-focus">
@@ -1081,10 +1115,10 @@ async function deleteImport(item: CrmContactImport) {
 										{@const leadWorkspace = workspaceByCandidate.get(lead.unit_candidate_key)}
 										<tr class="cursor-pointer border-b border-border transition-colors last:border-0 hover:bg-panel/70 {highlightRowClass(leadWorkspace?.highlight_color)}" onclick={() => (selectedLeadId = lead.lead_id)}>
 											<td class="px-4 py-3.5 align-top"><div class="flex items-center gap-2"><span class="inline-flex min-w-8 justify-center rounded-md border px-2 py-1 font-mono text-[11px] font-bold {priorityClass(lead.priority)}">{lead.score}</span><span class="text-xs font-semibold capitalize text-fg-2">{lead.priority}</span></div></td>
-											<td class="px-3 py-3.5 align-top"><div class="flex max-w-[280px] items-center gap-2"><p class="min-w-0 flex-1 truncate text-sm font-semibold text-fg-1">{lead.building_name}</p><span class="flex-none rounded-full border px-2 py-0.5 text-[9px] font-semibold {lead.asset_class === 'commercial' ? 'border-info-border bg-info-bg text-info' : 'border-success-border bg-success-bg text-success'}">{assetLabel(lead)}</span></div><p class="mt-0.5 max-w-[280px] truncate text-xs text-fg-3">{lead.project_name} · {lead.area_name}</p><p class="mt-1 font-mono text-[10px] text-fg-4"><span class={lead.unit_number ? 'font-bold text-success' : 'text-warning'}>{lead.unit_number ? `Unit ${lead.unit_number}` : 'Unit unresolved'}</span> · {lead.bedrooms} · {lead.size_sqft ? `${number(lead.size_sqft)} sqft` : 'size hidden'} · <span class={confidenceClass(lead.match_confidence)}>{lead.match_confidence} evidence</span></p></td>
+											<td class="px-3 py-3.5 align-top"><div class="flex max-w-[280px] items-center gap-2"><p class="min-w-0 flex-1 truncate text-sm font-semibold text-fg-1">{propertyTitle(lead)}</p><span class="flex-none rounded-full border px-2 py-0.5 text-[9px] font-semibold {lead.asset_class === 'commercial' ? 'border-info-border bg-info-bg text-info' : 'border-success-border bg-success-bg text-success'}">{assetLabel(lead)}</span></div>{#if propertyPath(lead)}<p class="mt-0.5 max-w-[280px] truncate text-xs text-fg-3">{propertyPath(lead)}</p>{/if}<p class="mt-1 font-mono text-[10px] text-fg-4"><span class={lead.unit_number ? 'font-bold text-success' : 'text-warning'}>{lead.unit_number ? `Unit ${lead.unit_number}` : 'Unit unresolved'}</span> · {lead.bedrooms} · {lead.size_sqft ? `${number(lead.size_sqft)} sqft` : 'size hidden'} · <span class={confidenceClass(lead.match_confidence)}>{lead.match_confidence} evidence</span></p></td>
 											<td class="px-3 py-3.5 align-top"><span class="inline-flex rounded-full px-2 py-1 text-[11px] font-semibold {statusClass(lead.status)}">{statusLabel(lead)}</span><p class="mt-1.5 text-xs text-fg-3">Ends {shortDate(lead.lease_end)}</p></td>
 											<td class="px-3 py-3.5 text-right align-top"><p class="text-sm font-semibold tabular-nums text-fg-1">{money(lead.annual_rent_aed)}</p><p class="mt-0.5 text-xs text-fg-4">per year</p></td>
-											<td class="px-3 py-3.5 align-top"><div class="flex flex-wrap gap-1.5"><span class="rounded bg-success-bg px-2 py-1 text-[10px] font-semibold text-success">{lead.asset_class === 'commercial' ? 'Lease / occupy' : 'Renew / re-let'}</span>{#if lead.sale_conversation}<span class="rounded bg-info-bg px-2 py-1 text-[10px] font-semibold text-info">{lead.asset_class === 'commercial' ? 'Investment sale' : 'Possible sale'}</span>{/if}{#if leadWorkspace}<span class="rounded border px-2 py-1 text-[10px] font-semibold {pipelineClass(leadWorkspace.pipeline_status)}">{PIPELINE_LABELS[leadWorkspace.pipeline_status]}{leadWorkspace.note_count ? ` · ${leadWorkspace.note_count} note${leadWorkspace.note_count === 1 ? '' : 's'}` : ''}</span>{/if}</div></td>
+											<td class="px-3 py-3.5 align-top"><div class="flex flex-wrap gap-1.5">{#if lead.ownership_timing === 'sale_during_lease'}<span class="rounded bg-warning-bg px-2 py-1 text-[10px] font-semibold text-warning">Ownership review</span>{:else}<span class="rounded bg-success-bg px-2 py-1 text-[10px] font-semibold text-success">{lead.asset_class === 'commercial' ? 'Lease / occupy' : 'Renew / re-let'}</span>{/if}{#if lead.sale_conversation}<span class="rounded bg-info-bg px-2 py-1 text-[10px] font-semibold text-info">{lead.asset_class === 'commercial' ? 'Investment sale' : 'Possible sale'}</span>{/if}{#if leadWorkspace}<span class="rounded border px-2 py-1 text-[10px] font-semibold {pipelineClass(leadWorkspace.pipeline_status)}">{PIPELINE_LABELS[leadWorkspace.pipeline_status]}{leadWorkspace.note_count ? ` · ${leadWorkspace.note_count} note${leadWorkspace.note_count === 1 ? '' : 's'}` : ''}</span>{/if}</div></td>
 										<td class="px-3 py-3.5 align-middle text-fg-4">
 											<button
 												type="button"
@@ -1106,7 +1140,7 @@ async function deleteImport(item: CrmContactImport) {
 							{#each displayedLeads as lead (lead.lead_id)}
 								{@const leadWorkspace = workspaceByCandidate.get(lead.unit_candidate_key)}
 								<button type="button" class="block w-full p-4 text-left transition-colors hover:bg-panel {highlightRowClass(leadWorkspace?.highlight_color)}" onclick={() => (selectedLeadId = lead.lead_id)}>
-								<div class="flex items-start justify-between gap-3"><div class="min-w-0"><div class="flex items-center gap-2"><p class="truncate text-sm font-semibold text-fg-1">{lead.building_name}</p><span class="flex-none rounded-full border border-border bg-panel px-2 py-0.5 text-[9px] font-semibold text-fg-3">{assetLabel(lead)}</span></div><p class="mt-0.5 truncate text-xs text-fg-3">{lead.project_name} · {lead.area_name}</p><p class="mt-1 font-mono text-[10px] {lead.unit_number ? 'text-success' : 'text-warning'}">{lead.unit_number ? `Unit ${lead.unit_number}` : 'Unit unresolved'}</p></div><div class="flex items-center gap-1"><span class="rounded-md border px-2 py-1 font-mono text-[11px] font-bold {priorityClass(lead.priority)}">{lead.score}</span><span class="p-1 text-success">{#if savedByCandidate.has(lead.unit_candidate_key)}<BookmarkCheck size={15} />{/if}</span></div></div>
+								<div class="flex items-start justify-between gap-3"><div class="min-w-0"><div class="flex items-center gap-2"><p class="truncate text-sm font-semibold text-fg-1">{propertyTitle(lead)}</p><span class="flex-none rounded-full border border-border bg-panel px-2 py-0.5 text-[9px] font-semibold text-fg-3">{assetLabel(lead)}</span></div>{#if propertyPath(lead)}<p class="mt-0.5 truncate text-xs text-fg-3">{propertyPath(lead)}</p>{/if}<p class="mt-1 font-mono text-[10px] {lead.unit_number ? 'text-success' : 'text-warning'}">{lead.unit_number ? `Unit ${lead.unit_number}` : 'Unit unresolved'}</p></div><div class="flex items-center gap-1"><span class="rounded-md border px-2 py-1 font-mono text-[11px] font-bold {priorityClass(lead.priority)}">{lead.score}</span><span class="p-1 text-success">{#if savedByCandidate.has(lead.unit_candidate_key)}<BookmarkCheck size={15} />{/if}</span></div></div>
 									<div class="mt-3 flex items-center justify-between"><div class="flex items-center gap-1.5"><span class="rounded-full px-2 py-1 text-[11px] font-semibold {statusClass(lead.status)}">{statusLabel(lead)}</span>{#if leadWorkspace}<span class="rounded border px-2 py-1 text-[10px] font-semibold {pipelineClass(leadWorkspace.pipeline_status)}">{PIPELINE_LABELS[leadWorkspace.pipeline_status]}</span>{/if}</div><span class="text-sm font-semibold text-fg-1">{money(lead.annual_rent_aed)}</span></div>
 								</button>
 							{/each}
@@ -1121,8 +1155,8 @@ async function deleteImport(item: CrmContactImport) {
 					<div class="border-b border-border px-4 py-3.5"><div class="flex items-center gap-2"><Building2 size={16} class="text-info" /><p class="font-semibold capitalize text-fg-1">{breakdown} opportunity map</p></div><p class="mt-1 text-xs text-fg-4">Where agents should prospect first</p></div>
 					<div class="divide-y divide-border">
 						{#each dashboard?.breakdown ?? [] as item}
-							<button type="button" class="group block w-full px-4 py-3 text-left transition-colors hover:bg-panel disabled:cursor-default" disabled={item.label === 'Not exposed'} onclick={() => selectBreakdown(item.label)}>
-								<div class="flex items-center justify-between gap-3"><p class="truncate text-sm font-medium text-fg-1 group-hover:text-info" title={item.label}>{item.label}</p><div class="flex flex-none items-center gap-1.5"><p class="font-mono text-xs font-semibold text-fg-2">{number(item.total)}</p>{#if item.label !== 'Not exposed'}<ChevronRight size={14} class="text-fg-4 transition-transform group-hover:translate-x-0.5" />{/if}</div></div><div class="mt-2 h-1.5 overflow-hidden rounded-full bg-panel"><div class="h-full rounded-full bg-info" style={`width: ${Math.max(3, (item.total / maxBreakdownTotal) * 100)}%`}></div></div><div class="mt-2 flex items-center justify-between text-[10px] text-fg-4"><span><strong class="text-error">{item.urgent}</strong> urgent · {item.expired} expired</span><span>{money(item.potential_value_aed, true)} rent</span></div>
+							<button type="button" class="group block w-full px-4 py-3 text-left transition-colors hover:bg-panel disabled:cursor-default" disabled={item.label === 'Unresolved hierarchy'} onclick={() => selectBreakdown(item.label)}>
+								<div class="flex items-center justify-between gap-3"><p class="truncate text-sm font-medium text-fg-1 group-hover:text-info" title={item.label}>{item.label}</p><div class="flex flex-none items-center gap-1.5"><p class="font-mono text-xs font-semibold text-fg-2">{number(item.total)}</p>{#if item.label !== 'Unresolved hierarchy'}<ChevronRight size={14} class="text-fg-4 transition-transform group-hover:translate-x-0.5" />{/if}</div></div><div class="mt-2 h-1.5 overflow-hidden rounded-full bg-panel"><div class="h-full rounded-full bg-info" style={`width: ${Math.max(3, (item.total / maxBreakdownTotal) * 100)}%`}></div></div><div class="mt-2 flex items-center justify-between text-[10px] text-fg-4"><span><strong class="text-error">{item.urgent}</strong> urgent · {item.expired} expired</span><span>{money(item.potential_value_aed, true)} rent</span></div>
 							</button>
 						{/each}
 					</div>
@@ -1144,7 +1178,7 @@ async function deleteImport(item: CrmContactImport) {
 		{:else if detail}
 			<header class="border-b border-border px-5 py-4">
 					<div class="flex items-start justify-between gap-4">
-						<div class="min-w-0"><div class="mb-2 flex flex-wrap items-center gap-2"><span class="rounded-md border px-2 py-1 font-mono text-[11px] font-bold {priorityClass(detail.lead.priority)}">Score {detail.lead.score}</span><span class="rounded-full px-2 py-1 text-[11px] font-semibold {statusClass(detail.lead.status)}">{statusLabel(detail.lead)}</span><span class="inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[11px] font-semibold {detail.lead.asset_class === 'commercial' ? 'border-info-border bg-info-bg text-info' : 'border-success-border bg-success-bg text-success'}">{#if detail.lead.asset_class === 'commercial'}<Store size={11} />{:else}<House size={11} />{/if}{assetLabel(detail.lead)}</span>{#if detail.lead.unit_number}<span class="rounded-full border border-success-border bg-success-bg px-2 py-1 font-mono text-[11px] font-bold text-success">Unit {detail.lead.unit_number}</span>{/if}{#if workspace}<span class="rounded-full border px-2 py-1 text-[11px] font-semibold {pipelineClass(workspace.pipeline_status)}">{PIPELINE_LABELS[workspace.pipeline_status]}</span>{/if}</div><h2 class="truncate text-xl font-semibold text-fg-1">{detail.lead.building_name}</h2><p class="mt-1 text-sm text-fg-3">{detail.lead.project_name} · {detail.lead.area_name}</p></div>
+						<div class="min-w-0"><div class="mb-2 flex flex-wrap items-center gap-2"><span class="rounded-md border px-2 py-1 font-mono text-[11px] font-bold {priorityClass(detail.lead.priority)}">Score {detail.lead.score}</span><span class="rounded-full px-2 py-1 text-[11px] font-semibold {statusClass(detail.lead.status)}">{statusLabel(detail.lead)}</span><span class="inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[11px] font-semibold {detail.lead.asset_class === 'commercial' ? 'border-info-border bg-info-bg text-info' : 'border-success-border bg-success-bg text-success'}">{#if detail.lead.asset_class === 'commercial'}<Store size={11} />{:else}<House size={11} />{/if}{assetLabel(detail.lead)}</span>{#if detail.lead.unit_number}<span class="rounded-full border border-success-border bg-success-bg px-2 py-1 font-mono text-[11px] font-bold text-success">Unit {detail.lead.unit_number}</span>{/if}{#if workspace}<span class="rounded-full border px-2 py-1 text-[11px] font-semibold {pipelineClass(workspace.pipeline_status)}">{PIPELINE_LABELS[workspace.pipeline_status]}</span>{/if}</div><h2 class="truncate text-xl font-semibold text-fg-1">{propertyTitle(detail.lead)}</h2>{#if propertyPath(detail.lead)}<p class="mt-1 text-sm text-fg-3">{propertyPath(detail.lead)}</p>{/if}</div>
 						<button type="button" class="ui-button flex-none" data-variant="ghost" data-size="icon" onclick={() => (selectedLeadId = null)} aria-label="Close lead"><X size={17} /></button>
 					</div>
 					<div class="mt-4 flex flex-wrap gap-2">
@@ -1154,7 +1188,6 @@ async function deleteImport(item: CrmContactImport) {
 						<button type="button" class="ui-button" data-variant="secondary" data-size="sm" onclick={() => openReport(detail.lead.lead_id)}>
 							<FileText size={14} /> Generate property report
 						</button>
-						{#if detail.lead.latest_sale_detail_url}<a class="ui-button" data-variant="ghost" data-size="sm" href={detail.lead.latest_sale_detail_url} target="_blank" rel="noreferrer"><ExternalLink size={14} /> Property record</a>{/if}
 					</div>
 			</header>
 			<div class="min-h-0 flex-1 overflow-y-auto">
@@ -1162,12 +1195,20 @@ async function deleteImport(item: CrmContactImport) {
 					<div class="rounded-lg border border-success-border bg-success-bg p-4"><div class="flex items-center gap-2 text-success"><Sparkles size={16} /><p class="text-xs font-bold uppercase tracking-[0.06em]">Next best action</p></div><p class="mt-2 text-sm font-semibold leading-6 text-fg-1">{detail.lead.recommended_action}</p><p class="mt-2 text-xs leading-5 text-fg-2">{detail.lead.lead_reason}</p><button type="button" class="mt-3 inline-flex items-center gap-1.5 text-xs font-semibold text-success" onclick={() => openReport(detail.lead.lead_id)}>Prepare owner brief <ArrowRight size={13} /></button></div>
 					<div class="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
 						<div class="rounded-lg border border-border bg-panel p-3"><p class="font-mono text-[10px] uppercase text-fg-4">Unit number</p><p class="mt-1.5 text-base font-semibold {detail.lead.unit_number ? 'text-success' : 'text-warning'}">{detail.lead.unit_number ?? 'Unresolved'}</p><p class="mt-0.5 text-[11px] text-fg-4">{detail.lead.unit_number ? 'unique sale match' : detail.lead.unit_match_status}</p></div>
-						<div class="rounded-lg border border-border bg-panel p-3"><p class="font-mono text-[10px] uppercase text-fg-4">Current rent</p><p class="mt-1.5 text-base font-semibold text-fg-1">{money(detail.lead.annual_rent_aed)}</p><p class="mt-0.5 text-[11px] text-fg-4">annual</p></div>
+						<div class="rounded-lg border border-border bg-panel p-3"><p class="font-mono text-[10px] uppercase text-fg-4">Annualized rent</p><p class="mt-1.5 text-base font-semibold text-fg-1">{money(detail.lead.annual_rent_aed)}</p><p class="mt-0.5 text-[11px] text-fg-4">from {money(detail.lead.contract_amount_aed)} · {detail.lead.contract_term_days} days</p></div>
 						<div class="rounded-lg border border-border bg-panel p-3"><p class="font-mono text-[10px] uppercase text-fg-4">Gross yield</p><p class="mt-1.5 text-base font-semibold text-fg-1">{detail.lead.gross_yield_pct ? `${detail.lead.gross_yield_pct.toFixed(2)}%` : '—'}</p><p class="mt-0.5 text-[11px] text-fg-4">rent ÷ matched purchase</p></div>
 						<div class="rounded-lg border border-border bg-panel p-3"><p class="font-mono text-[10px] uppercase text-fg-4">Latest purchase</p><p class="mt-1.5 text-base font-semibold text-fg-1">{money(detail.lead.matched_sale_price_aed ?? detail.lead.latest_purchase_price_aed)}</p><p class="mt-0.5 text-[11px] text-fg-4">{shortDate(detail.lead.last_purchase_date)}</p></div>
 						<div class="rounded-lg border border-border bg-panel p-3"><p class="font-mono text-[10px] uppercase text-fg-4">Lease term</p><p class="mt-1.5 text-sm font-semibold text-fg-1">{shortDate(detail.lead.lease_start)}</p><p class="mt-0.5 text-[11px] text-fg-4">to {shortDate(detail.lead.lease_end)}</p></div>
 						<div class="rounded-lg border border-border bg-panel p-3"><p class="font-mono text-[10px] uppercase text-fg-4">Asset evidence</p><p class="mt-1.5 text-sm font-semibold text-fg-1">{assetLabel(detail.lead)} · {number(detail.lead.size_sqft)} sqft</p><p class="mt-0.5 capitalize text-[11px] {confidenceClass(detail.lead.match_confidence)}">{detail.lead.match_confidence} confidence{detail.lead.matched_sales_property_type ? ` · Matched sale: ${detail.lead.matched_sales_property_type}` : ''}</p></div>
 					</div>
+					{#if hasCanonicalAddressChange(detail.lead)}
+						<div class="mt-3 rounded-lg border border-info-border bg-info-bg p-3.5">
+							<div class="flex items-start justify-between gap-3">
+								<div><p class="text-xs font-semibold text-fg-1">Standardized property hierarchy</p><p class="mt-1 text-[11px] leading-5 text-fg-3">Registry label: {registryPath(detail.lead)}</p></div>
+								<span class="rounded-full border border-info-border bg-card px-2 py-1 font-mono text-[9px] uppercase text-info">{detail.lead.geography_match_status.replaceAll('_', ' ')}</span>
+							</div>
+						</div>
+					{/if}
 					{#if detail.agent_signals.length}
 						<div class="mt-3 rounded-lg border border-info-border bg-info-bg p-4">
 							<p class="font-mono text-[10px] font-bold uppercase tracking-[0.06em] text-info">Verified agent signals</p>
@@ -1277,7 +1318,7 @@ async function deleteImport(item: CrmContactImport) {
 					<div class="relative mt-5"><div class="absolute bottom-3 left-[15px] top-3 w-px bg-border"></div><div class="space-y-5">
 						{#each detail.timeline as event (event.event_type + event.event_id)}
 							{@const Icon = timelineIcon(event)}
-							<div class="relative flex gap-3"><div class="z-10 flex h-8 w-8 flex-none items-center justify-center rounded-full border border-border bg-card text-fg-2"><Icon size={14} /></div><div class="min-w-0 flex-1 pt-0.5"><div class="flex items-start justify-between gap-3"><div><p class="text-sm font-semibold text-fg-1">{event.title}</p><p class="mt-0.5 text-xs text-fg-3">{event.description}</p>{#if event.ltv_pct !== null || event.capital_gain_pct !== null}<p class="mt-1 text-[11px] text-info">{event.ltv_pct !== null ? `${event.ltv_pct}% LTV at purchase` : ''}{event.ltv_pct !== null && event.capital_gain_pct !== null ? ' · ' : ''}{event.capital_gain_pct !== null ? `${event.capital_gain_pct > 0 ? '+' : ''}${event.capital_gain_pct}% vs prior sale` : ''}</p>{/if}</div>{#if event.amount_aed}<p class="flex-none text-xs font-semibold tabular-nums text-fg-2">{money(event.amount_aed)}</p>{/if}</div><div class="mt-1.5 flex flex-wrap items-center gap-2 font-mono text-[10px] uppercase tracking-[0.04em] text-fg-4"><span>{shortDate(event.event_date)}</span>{#if event.end_date}<span>→ {shortDate(event.end_date)}</span>{/if}<span>·</span><span>{event.source}</span><span class={confidenceClass(event.confidence)}>· {event.confidence}</span>{#if event.detail_url}<a href={event.detail_url} target="_blank" rel="noreferrer" class="inline-flex items-center gap-1 text-info hover:underline">Source <ExternalLink size={10} /></a>{/if}</div></div></div>
+							<div class="relative flex gap-3"><div class="z-10 flex h-8 w-8 flex-none items-center justify-center rounded-full border border-border bg-card text-fg-2"><Icon size={14} /></div><div class="min-w-0 flex-1 pt-0.5"><div class="flex items-start justify-between gap-3"><div><p class="text-sm font-semibold text-fg-1">{event.title}</p><p class="mt-0.5 text-xs text-fg-3">{event.description}</p>{#if event.ltv_pct !== null || event.capital_gain_pct !== null}<p class="mt-1 text-[11px] text-info">{event.ltv_pct !== null ? `${event.ltv_pct}% LTV at purchase` : ''}{event.ltv_pct !== null && event.capital_gain_pct !== null ? ' · ' : ''}{event.capital_gain_pct !== null ? `${event.capital_gain_pct > 0 ? '+' : ''}${event.capital_gain_pct}% vs prior sale` : ''}</p>{/if}</div>{#if event.amount_aed}<p class="flex-none text-xs font-semibold tabular-nums text-fg-2">{money(event.amount_aed)}</p>{/if}</div><div class="mt-1.5 flex flex-wrap items-center gap-2 font-mono text-[10px] uppercase tracking-[0.04em] text-fg-4"><span>{shortDate(event.event_date)}</span>{#if event.end_date}<span>→ {shortDate(event.end_date)}</span>{/if}<span>·</span><span>{event.source}</span><span class={confidenceClass(event.confidence)}>· {event.confidence}</span></div></div></div>
 						{/each}
 					</div></div>
 				</section>
@@ -1325,12 +1366,29 @@ async function deleteImport(item: CrmContactImport) {
 									<div class="min-w-0"><p class="truncate text-sm font-semibold text-fg-1">{property.building_name || property.project_name || 'Property unresolved'}</p><p class="mt-1 text-xs text-fg-3">{property.unit_number ? `Unit ${property.unit_number}` : 'Unit not supplied'}{property.area_name ? ` · ${property.area_name}` : ''}</p></div>
 									<span class={`rounded-full border px-2 py-1 text-[9px] font-semibold ${ownershipClass(property.ownership_status)}`}>{ownershipLabel(property.ownership_status)} · {property.confidence_score}</span>
 								</div>
-								<div class="mt-3 grid grid-cols-2 gap-2 text-[10px] sm:grid-cols-4">
-									<div><p class="text-fg-4">Latest sale</p><p class="mt-0.5 font-semibold text-fg-2">{shortDate(property.latest_sale_date)}</p></div>
-									<div><p class="text-fg-4">Recorded price</p><p class="mt-0.5 font-semibold text-fg-2">{money(property.latest_sale_price_aed)}</p></div>
-									<div><p class="text-fg-4">Lease expiry</p><p class="mt-0.5 font-semibold text-fg-2">{shortDate(property.lease_end)}</p></div>
-									<div><p class="text-fg-4">Annual rent</p><p class="mt-0.5 font-semibold text-fg-2">{money(property.annual_rent_aed)}</p></div>
+								<div class="mt-3 grid gap-2 sm:grid-cols-2">
+									<div class="rounded-lg border border-border bg-card p-3">
+										<div class="flex items-center gap-1.5"><FileText size={12} class="text-fg-4" /><p class="font-mono text-[9px] uppercase tracking-wide text-fg-4">Imported owner record</p></div>
+										<div class="mt-2 grid grid-cols-2 gap-x-3 gap-y-2 text-[10px]">
+											<div><p class="text-fg-4">Transaction date</p><p class="mt-0.5 font-semibold text-fg-2">{shortDate(property.imported_transaction_date)}</p></div>
+											<div><p class="text-fg-4">Sale price</p><p class="mt-0.5 font-semibold text-fg-2">{money(property.imported_transaction_price_aed)}</p></div>
+											<div><p class="text-fg-4">Property type</p><p class="mt-0.5 font-semibold text-fg-2">{property.imported_property_type || 'Not supplied'}</p></div>
+											<div><p class="text-fg-4">Unit</p><p class="mt-0.5 font-semibold text-fg-2">{property.unit_number || 'Not supplied'}</p></div>
+										</div>
+									</div>
+									<div class="rounded-lg border border-info-border bg-info-bg/40 p-3">
+										<div class="flex items-center justify-between gap-2"><div class="flex items-center gap-1.5"><Database size={12} class="text-info" /><p class="font-mono text-[9px] uppercase tracking-wide text-info">DLD record</p></div>{#if property.registry_market_status}<span class="rounded-full border border-info-border bg-card px-1.5 py-0.5 text-[8px] font-semibold text-info">{property.registry_market_status}</span>{/if}</div>
+										<div class="mt-2 grid grid-cols-2 gap-x-3 gap-y-2 text-[10px]">
+											<div><p class="text-fg-4">Latest recorded sale</p><p class="mt-0.5 font-semibold text-fg-2">{shortDate(property.registry_sale_date)}</p></div>
+											<div><p class="text-fg-4">Recorded price</p><p class="mt-0.5 font-semibold text-fg-2">{money(property.registry_sale_price_aed)}</p></div>
+											<div><p class="text-fg-4">Type / bedrooms</p><p class="mt-0.5 font-semibold text-fg-2">{property.registry_property_type || '—'}{property.registry_bedrooms ? ` · ${property.registry_bedrooms}` : ''}</p></div>
+											<div><p class="text-fg-4">Recorded size</p><p class="mt-0.5 font-semibold text-fg-2">{property.registry_size_sqft ? `${number(property.registry_size_sqft)} sqft` : '—'}</p></div>
+											<div><p class="text-fg-4">Built-up area</p><p class="mt-0.5 font-semibold text-fg-2">{property.registry_built_up_area_sqft ? `${number(property.registry_built_up_area_sqft)} sqft` : '—'}</p></div>
+											<div><p class="text-fg-4">Recorded price / sqft</p><p class="mt-0.5 font-semibold text-fg-2">{property.registry_price_per_sqft_aed ? `${money(property.registry_price_per_sqft_aed)} / sqft` : '—'}</p></div>
+										</div>
+									</div>
 								</div>
+								<div class="mt-2 grid grid-cols-2 gap-2 text-[10px]"><div><p class="text-fg-4">Lease expiry</p><p class="mt-0.5 font-semibold text-fg-2">{shortDate(property.lease_end)}</p></div><div><p class="text-fg-4">Annual rent</p><p class="mt-0.5 font-semibold text-fg-2">{money(property.annual_rent_aed)}</p></div></div>
 								<p class="mt-3 text-[11px] leading-5 text-fg-3">{property.match_reason}</p>
 								<div class="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-border pt-3"><p class="text-[9px] text-fg-4">{property.source_lists.join(' · ')}{property.duplicate_count > 1 ? ` · ${property.duplicate_count} source rows consolidated` : ''}</p>{#if property.lead_id}<button type="button" class="ui-button" data-variant="secondary" data-size="sm" onclick={() => { selectedOwnerKey = null; selectedLeadId = property.lead_id }}>Open lease lead <ArrowRight size={12} /></button>{/if}</div>
 							</article>

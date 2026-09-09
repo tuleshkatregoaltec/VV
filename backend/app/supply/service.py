@@ -16,6 +16,7 @@ from app.core.normalization import (
     developer_match_key,
     is_rankable_developer_brand,
 )
+from app.core.reelly_scope import reelly_dubai_project_scope
 from app.supply.models import (
     DeveloperRankingCriterionResponse,
     DeveloperRankingResponse,
@@ -1389,7 +1390,10 @@ def _catalogue_ch_filters(
     developer: str | None = None,
     include_past: bool = False,
 ) -> tuple[str, dict[str, Any]]:
-    clauses = ["JSON_VALUE(list_item_json, '$.Project_name') != ''"]
+    clauses = [
+        reelly_dubai_project_scope(),
+        "JSON_VALUE(list_item_json, '$.Project_name') != ''",
+    ]
     params: dict[str, Any] = {}
     if not include_past:
         clauses.append(
@@ -1527,10 +1531,11 @@ async def get_supply_catalogue_project(
 ) -> SupplyCatalogueProjectDetailResponse:
     del db
     rows = await query(
-        """
+        f"""
         SELECT project_key, project_id, run_id, scraped_at, list_item_json, raw_json
         FROM reelly_projects_bronze
-        WHERE project_key = {project_id:String} OR project_id = {project_id:String}
+        WHERE (project_key = {{project_id:String}} OR project_id = {{project_id:String}})
+          AND {reelly_dubai_project_scope()}
         LIMIT 1
         """,
         {"project_id": str(project_id)},

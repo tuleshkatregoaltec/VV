@@ -2,16 +2,19 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from pathlib import Path
+from unittest.mock import MagicMock
 
 import pytest
 
 from holocron.sources.bayut_listings.extract import (
     BayutAccessBlockedError,
+    BayutBrowserListingsClient,
     BayutSearchPage,
     _is_captcha_page,
     _search_url,
     extract_release,
 )
+from holocron.sources.bayut_listings.source import BayutListingsConfig
 
 
 class FakeBayutClient:
@@ -39,16 +42,22 @@ class FakeBayutClient:
 
 
 def test_search_url_adds_page_without_mutating_first_page() -> None:
-    assert _search_url(
-        base_url="https://www.bayut.com",
-        search_path="/for-sale/property/dubai/?sort=latest",
-        page_number=1,
-    ) == "https://www.bayut.com/for-sale/property/dubai/?sort=latest"
-    assert _search_url(
-        base_url="https://www.bayut.com",
-        search_path="/for-sale/property/dubai/?sort=latest",
-        page_number=3,
-    ) == "https://www.bayut.com/for-sale/property/dubai/?sort=latest&page=3"
+    assert (
+        _search_url(
+            base_url="https://www.bayut.com",
+            search_path="/for-sale/property/dubai/?sort=latest",
+            page_number=1,
+        )
+        == "https://www.bayut.com/for-sale/property/dubai/?sort=latest"
+    )
+    assert (
+        _search_url(
+            base_url="https://www.bayut.com",
+            search_path="/for-sale/property/dubai/?sort=latest",
+            page_number=3,
+        )
+        == "https://www.bayut.com/for-sale/property/dubai/page-3/?sort=latest"
+    )
 
 
 def test_captcha_detection_uses_url_and_html() -> None:
@@ -85,3 +94,17 @@ def test_access_error_is_explicit() -> None:
             "Use a permitted session or an authorised data feed; this collector "
             "does not attempt to bypass access controls."
         )
+
+
+def test_bounded_browser_does_not_treat_a_hydration_shell_as_empty_results() -> None:
+    context = MagicMock()
+    page = context.new_page.return_value
+    page.goto.return_value.status = 200
+    page.url = "https://www.bayut.com/for-sale/property/dubai/"
+    page.content.return_value = "<html><body>Loading...</body></html>"
+    page.title.return_value = "Bayut"
+    page.locator.return_value.evaluate_all.return_value = []
+    page.locator.return_value.inner_text.return_value = "Loading..."
+    client = BayutBrowserListingsClient(context=context, config=BayutListingsConfig())
+    with pytest.raises(RuntimeError, match="unrecognized_page"):
+        client.fetch_search_page(search_path="/for-sale/property/dubai/", page=1)

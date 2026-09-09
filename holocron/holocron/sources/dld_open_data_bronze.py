@@ -23,7 +23,7 @@ from holocron.platform.bronze import (
     stable_json,
     validate_raw_manifest,
 )
-from holocron.platform.clickhouse import sql_string
+from holocron.platform.clickhouse import quote_clickhouse_identifier, sql_string
 from holocron.platform.clickhouse_schema import ensure_schema
 from holocron.platform.manifests import manifest_s3_key
 from holocron.platform.raw_files import (
@@ -83,6 +83,8 @@ def build_open_data_bronze_loader(
     source_name: str,
     column_names: tuple[str, ...],
     row_builder: Callable[..., tuple[Any, ...]],
+    replace_date_column: str | None = None,
+    replace_date_columns: tuple[str, ...] = (),
 ) -> BronzeLoader:
     def load_release_to_clickhouse(
         *, raw_manifest: RawManifest, s3: RawFileStore, clickhouse: ClickHouseInserter
@@ -96,6 +98,8 @@ def build_open_data_bronze_loader(
             row_file_name=f"{source_name}_rows.jsonl",
             column_names=column_names,
             row_builder=row_builder,
+            replace_date_column=replace_date_column,
+            replace_date_columns=replace_date_columns,
         )
 
     return load_release_to_clickhouse
@@ -111,6 +115,8 @@ def load_open_data_release_to_clickhouse(
     row_file_name: str,
     column_names: tuple[str, ...],
     row_builder: Callable[..., tuple[Any, ...]],
+    replace_date_column: str | None = None,
+    replace_date_columns: tuple[str, ...] = (),
 ) -> BronzeLoadResult:
     actual_source, run_id = validate_raw_manifest(raw_manifest, expected_source=source_name)
     _require_loadable_result_set(raw_manifest=raw_manifest, source_name=source_name)
@@ -160,10 +166,13 @@ def load_open_data_release_to_clickhouse(
     ]
     load_column_names = (*column_names, *_PROVENANCE_COLUMNS)
     source_scope = f"source_system = {sql_string(_SOURCE_SYSTEM)}"
+    configured_replace_date_column = _raw_manifest_replace_date_column(raw_manifest)
     delete_predicate = _open_data_delete_predicate(
         source_name=source_name,
         raw_rows=raw_rows,
         page_rows=page_rows,
+        replace_date_column=configured_replace_date_column or replace_date_column,
+        replace_date_columns=replace_date_columns,
     )
 
     ensure_schema(clickhouse=clickhouse)
@@ -213,11 +222,23 @@ def _raw_manifest_key(*, raw_manifest: RawManifest, source: str) -> str:
     return manifest_s3_key(source=source, run_id=string_value(raw_manifest.get("run_id")))
 
 
+def _raw_manifest_replace_date_column(raw_manifest: RawManifest) -> str:
+    metadata = raw_manifest.get("metadata")
+    if not isinstance(metadata, dict):
+        return ""
+    config = metadata.get("config")
+    if not isinstance(config, dict):
+        return ""
+    return string_value(config.get("replace_date_column"))
+
+
 def _open_data_delete_predicate(
     *,
     source_name: str,
     raw_rows: list[dict[str, Any]],
     page_rows: list[dict[str, Any]],
+    replace_date_column: str | None,
+    replace_date_columns: tuple[str, ...],
 ) -> str | None:
     windows = _open_data_start_windows(page_rows=page_rows)
     if not page_rows:
@@ -230,6 +251,23 @@ def _open_data_delete_predicate(
         )
     if any(start is None or end is None for start, end in windows):
         return "1 = 1"
+    candidate_date_columns = (
+        *replace_date_columns,
+        *((replace_date_column,) if replace_date_column else ()),
+    )
+    date_columns = tuple(dict.fromkeys(candidate_date_columns))
+    if date_columns:
+        quoted_date_columns = tuple(quote_clickhouse_identifier(column) for column in date_columns)
+        return " OR ".join(
+            " OR ".join(
+                (
+                    f"(toDate({quoted_date_column}) >= {_date_sql(start)} "
+                    f"AND toDate({quoted_date_column}) <= {_date_sql(end)})"
+                )
+                for quoted_date_column in quoted_date_columns
+            )
+            for start, end in windows
+        )
     return " OR ".join(
         f"(date_window_start = {_date_sql(start)} AND date_window_end = {_date_sql(end)})"
         for start, end in windows

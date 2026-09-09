@@ -252,9 +252,17 @@ class InboundRegistryProfileResponse(BaseModel):
     building_name: str
     unit_number: str
     property_type: str
+    transaction_date: date | None = None
+    transaction_price_aed: int | None = None
     latest_sale_date: date | None = None
+    latest_sale_price_aed: int | None = None
     later_sale_date: date | None = None
+    ltv_pct: float | None = None
+    seller_type: str | None = None
+    lease_start: date | None = None
     lease_end: date | None = None
+    annual_rent_aed: int | None = None
+    contract_state: str | None = None
     lead_id: str | None = None
 
 
@@ -342,11 +350,14 @@ class InboundOwnershipEnrichmentResponse(BaseModel):
     prior_property_count: int = 0
     rental_property_count: int = 0
     known_property_count: int = 0
+    observed_portfolio_value_aed: int = 0
     reasons: list[str] = Field(default_factory=list)
 
 
 class InboundPriorityResponse(BaseModel):
     band: Literal["high", "medium", "standard"] = "standard"
+    score: int = Field(default=0, ge=0, le=100)
+    opportunity_value_aed: int = 0
     reasons: list[str] = Field(default_factory=list)
 
 
@@ -399,7 +410,7 @@ class InboundEnquiryListResponse(BaseModel):
 
 class InboundMatchResponse(BaseModel):
     id: int
-    target_type: Literal["owner", "unit", "listing", "demand"]
+    target_type: Literal["owner", "unit", "listing", "project", "demand"]
     target_key: str
     state: InboundMatchState
     fit: Literal["exact", "near", "review", "outside"]
@@ -415,6 +426,8 @@ class InboundMatchesResponse(BaseModel):
     enquiry_id: int
     listing_fresh: bool
     listing_last_refresh: datetime | None = None
+    offplan_catalog_available: bool = False
+    offplan_last_refresh: datetime | None = None
     lanes: dict[str, list[InboundMatchResponse]]
 
 

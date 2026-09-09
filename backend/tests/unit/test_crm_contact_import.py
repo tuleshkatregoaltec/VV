@@ -3,15 +3,23 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from app.crm import import_service
+from app.crm.import_models import CrmOwnerProfile, CrmOwnerProperty
 from app.crm.import_service import (
     ParsedContact,
     _apply_evidence,
+    _building_match_strength,
     _dedupe_candidates,
     _heuristic_mapping,
+    _location_similarity,
     _normalize_phone,
     _normalize_unit,
     _owner_filter_sql,
     _owner_scope_clause,
+    _recover_embedded_property_identity,
+    _recover_property_identity_from_near_transaction,
+    _recover_property_identity_from_transaction,
+    _sales_evidence,
     _unique_headers,
     delete_contact_import,
 )
@@ -69,6 +77,296 @@ def test_known_transaction_export_maps_owner_property_and_sale_fields():
     assert mapping["unit_number"] == "UnitNumber"
     assert mapping["contact_name"] == "NameEn"
     assert not warnings
+
+
+def test_building_identity_resolves_reordered_words_and_roman_numerals():
+    assert _building_match_strength(
+        "MULBERRY at PARK HEIGHTS Building A1",
+        "Mulberry Building A1, Mulberry At Park Heights",
+    ) == (2, "canonical_building_identity")
+    assert _building_match_strength("Ellington House II", "Ellington House 2") == (
+        2,
+        "canonical_building_identity",
+    )
+    assert _building_match_strength(
+        "Mulberry II at Park Heights Building A1",
+        "Mulberry Building A1",
+    ) == (0, "")
+
+
+def test_embedded_property_identifiers_are_recovered_from_building_field():
+    villa = _contact(
+        project_name="MAPLE 2",
+        building_name="DE Maple 2-V-486",
+        unit_number="NULL",
+    )
+    _recover_embedded_property_identity(villa)
+
+    assert villa.building_name == "MAPLE 2"
+    assert villa.unit_number == "DEMAPLE2-V-486"
+    assert villa.evidence["address_recovery"]["method"] == "embedded_villa_identifier"
+
+    numeric = _contact(
+        project_name="Golf Grove",
+        building_name="66",
+        unit_number="null",
+    )
+    _recover_embedded_property_identity(numeric)
+
+    assert numeric.building_name == "Golf Grove"
+    assert numeric.unit_number == "66"
+    assert numeric.evidence["address_recovery"]["method"] == "embedded_numeric_identifier"
+    assert _normalize_unit("NULL") == ""
+
+    edge = _contact(
+        project_name="The EDGE",
+        building_name="THE EDGE",
+        unit_number="B2611",
+    )
+    _recover_embedded_property_identity(edge)
+
+    assert edge.building_name == "The Edge Tower B"
+    assert edge.unit_number == "B2611"
+    assert edge.evidence["address_recovery"]["method"] == "project_unit_prefix_tower"
+
+
+@pytest.mark.asyncio
+async def test_unique_transaction_signature_recovers_canonical_property(monkeypatch):
+    contact = _contact(
+        area_name="",
+        project_name="Sidra 2",
+        building_name="",
+        unit_number="NULL",
+        transaction_date=date(2024, 4, 8),
+        transaction_price_aed=4_250_000,
+    )
+
+    async def fake_query(*_args, **_kwargs):
+        return [
+            {
+                "transaction_date": date(2024, 4, 8),
+                "sale_amount_aed": 4_250_000,
+                "unit_key": "de-sidra2-v-117",
+                "unit_number": "DE-SIDRA2-V-117",
+                "building_name": "Sidra 2",
+                "building_key": "sidra2",
+                "project_name": "",
+                "area_name": "Dubai Hills Estate",
+                "area_key": "dubaihillsestate",
+                "sale_key": "sidra-117",
+                "detail_url": "https://dxbinteract.com/sold/sidra-117",
+            }
+        ]
+
+    monkeypatch.setattr(import_service, "query", fake_query)
+
+    result = await _recover_property_identity_from_transaction([contact])
+
+    assert result["unique"] == 1
+    assert contact.area_name == "Dubai Hills Estate"
+    assert contact.building_name == "Sidra 2"
+    assert contact.unit_number == "DE-SIDRA2-V-117"
+    assert (
+        contact.evidence["property_identity_resolution"]["method"]
+        == "unique_transaction_signature"
+    )
+
+
+@pytest.mark.asyncio
+async def test_unique_transaction_signature_rejects_contradictory_location(monkeypatch):
+    contact = _contact(
+        area_name="Marsa Dubai",
+        project_name="Jumeirah Gate",
+        building_name="Jumeirah Gate Tower 2",
+        unit_number="1110",
+        transaction_date=date(2024, 4, 8),
+        transaction_price_aed=4_250_000,
+    )
+
+    async def fake_query(*_args, **_kwargs):
+        return [
+            {
+                "transaction_date": contact.transaction_date,
+                "sale_amount_aed": contact.transaction_price_aed,
+                "unit_key": "1110",
+                "unit_number": "1110",
+                "building_name": "Avenue Residence 4",
+                "building_key": "avenueresidence4",
+                "project_name": "Al Furjan",
+                "area_name": "Jebel Ali First",
+                "area_key": "jebelalifirst",
+                "sale_key": "unrelated-sale",
+                "detail_url": "",
+            }
+        ]
+
+    monkeypatch.setattr(import_service, "query", fake_query)
+
+    result = await _recover_property_identity_from_transaction([contact])
+
+    assert result["unique"] == 0
+    assert result["ambiguous"] == 1
+    assert contact.building_name == "Jumeirah Gate Tower 2"
+    assert "property_identity_resolution" not in contact.evidence
+
+
+def test_vetted_location_aliases_and_padded_numbers_match():
+    assert _location_similarity("Jumeirah Gate Tower 1", "The Address JBR 1") == 100
+    assert _location_similarity("Jumeirah Gate Tower 1", "Jason The Address JBR 1") == 100
+    assert _location_similarity("PARK HEIGHTS II T2", "Park Heights 2 Tower 2") == 100
+    assert _location_similarity("MAG EYE 910", "MAG 910") == 100
+    assert _location_similarity("ELLINGTON HOUSE", "Ellington House 1") == 100
+    assert _building_match_strength("Bay Square - 08", "Bay Square 8") == (
+        2,
+        "canonical_building_identity",
+    )
+
+
+@pytest.mark.asyncio
+async def test_transaction_collision_requires_unique_location_context(monkeypatch):
+    contact = _contact(
+        area_name="Marsa Dubai",
+        project_name="Jumeirah Gate",
+        building_name="Jumeirah Gate Tower 1",
+        unit_number="1203",
+        transaction_date=date(2024, 5, 2),
+        transaction_price_aed=3_100_000,
+    )
+
+    async def fake_query(*_args, **_kwargs):
+        return [
+            {
+                "transaction_date": contact.transaction_date,
+                "sale_amount_aed": contact.transaction_price_aed,
+                "unit_key": "1203",
+                "unit_number": "1203",
+                "building_name": f"Jumeirah Gate Tower {tower}",
+                "building_key": f"jumeirahgatetower{tower}",
+                "project_name": "Jumeirah Gate",
+                "area_name": "Marsa Dubai",
+                "area_key": "marsadubai",
+                "sale_key": f"tower-{tower}",
+                "detail_url": "",
+            }
+            for tower in (1, 2)
+        ]
+
+    monkeypatch.setattr(import_service, "query", fake_query)
+
+    result = await _recover_property_identity_from_transaction([contact])
+
+    assert result["contextual"] == 1
+    assert contact.building_name == "Jumeirah Gate Tower 1"
+    assert contact.evidence["property_identity_resolution"]["score"] == 100
+
+
+@pytest.mark.asyncio
+async def test_near_transaction_date_recovers_unit_with_project_context(monkeypatch):
+    contact = _contact(
+        area_name="",
+        project_name="Sidra 2",
+        building_name="",
+        unit_number="NULL",
+        transaction_date=date(2024, 3, 13),
+        transaction_price_aed=6_300_000,
+    )
+
+    async def fake_query(*_args, **_kwargs):
+        return [
+            {
+                "transaction_date": date(2024, 3, 14),
+                "sale_amount_aed": 6_300_000,
+                "unit_key": "desidra2-v-57",
+                "unit_number": "DE Sidra 2-V-57",
+                "building_name": "Sidra 2",
+                "building_key": "sidra2",
+                "project_name": "Sidra Villas",
+                "area_name": "Dubai Hills Estate",
+                "area_key": "dubaihillsestate",
+                "sale_key": "sidra-57",
+                "detail_url": "",
+            }
+        ]
+
+    monkeypatch.setattr(import_service, "query", fake_query)
+
+    result = await _recover_property_identity_from_near_transaction([contact])
+
+    assert result["resolved"] == 1
+    assert contact.building_name == "Sidra 2"
+    assert contact.unit_number == "DESIDRA2-V-57"
+    resolution = contact.evidence["property_identity_resolution"]
+    assert resolution["method"] == "near_transaction_signature_with_location"
+    assert resolution["date_delta_days"] == 1
+
+
+@pytest.mark.asyncio
+async def test_sales_evidence_uses_canonical_building_identity(monkeypatch):
+    contact = _contact(
+        area_name="",
+        project_name="Mulberry at Park Heights",
+        building_name="Mulberry at Park Heights Building A1",
+        unit_number="401",
+    )
+
+    async def fake_query(*_args, **_kwargs):
+        return [
+            {
+                "unit_key": "401",
+                "unit_number": "401",
+                "building_name": "Mulberry Building A1, Mulberry At Park Heights",
+                "building_key": "mulberrybuildinga1mulberryatparkheights",
+                "project_name": "",
+                "area_name": "Dubai Hills Estate",
+                "area_key": "dubaihillsestate",
+                "transaction_date": date(2026, 7, 10),
+                "sale_amount_aed": 5_575_000,
+                "sale_key": "mulberry-401",
+                "detail_url": "https://dxbinteract.com/sold/t-vnyeo",
+            }
+        ]
+
+    monkeypatch.setattr(import_service, "query", fake_query)
+
+    sales = await _sales_evidence([contact])
+
+    assert sales[contact.property_key][0]["_match_method"] == "unit_with_location_hierarchy"
+
+
+@pytest.mark.asyncio
+async def test_sales_evidence_combines_project_and_building_hierarchy(monkeypatch):
+    contact = _contact(
+        area_name="",
+        project_name="PARK RIDGE",
+        building_name="PARK RIDGE TOWER C",
+        unit_number="1203",
+    )
+
+    async def fake_query(*_args, **_kwargs):
+        return [
+            {
+                "unit_key": "1203",
+                "unit_number": "1203",
+                "building_name": f"Tower {tower}",
+                "building_key": f"tower{tower.lower()}",
+                "project_name": "Park Ridge",
+                "area_name": "Dubai Hills Estate",
+                "area_key": "dubaihillsestate",
+                "transaction_date": date(2024, 1, index),
+                "sale_amount_aed": 2_000_000 + index,
+                "sale_key": f"tower-{tower}",
+                "detail_url": "",
+            }
+            for index, tower in enumerate(("B", "C"), start=1)
+        ]
+
+    monkeypatch.setattr(import_service, "query", fake_query)
+
+    sales = await _sales_evidence([contact])
+
+    assert contact.building_name == "Tower C"
+    assert contact.project_name == "Park Ridge"
+    assert [row["sale_key"] for row in sales[contact.property_key]] == ["tower-C"]
 
 
 def test_placeholder_columns_are_pruned_and_elan_uses_compound_villa_identifier():
@@ -227,6 +525,17 @@ def test_contact_only_row_remains_unverified_even_with_exact_unit():
     assert "does not provide an acquisition date" in contact.match_reason
 
 
+def test_unresolvable_source_and_registry_gap_are_distinct_states():
+    missing_identity = _contact(building_name="Sidra 2", unit_number="")
+    _apply_evidence(missing_identity, sales={}, rentals={})
+    assert missing_identity.ownership_status == "insufficient_property_data"
+
+    registry_gap = _contact(building_name="Elan", unit_number="A150")
+    registry_gap.evidence["sales_lookup"] = {"status": "unit_not_observed"}
+    _apply_evidence(registry_gap, sales={}, rentals={})
+    assert registry_gap.ownership_status == "registry_not_observed"
+
+
 def test_duplicate_owner_property_rows_collapse_to_strongest_evidence():
     verified_one = _contact(
         source_row_number=2157,
@@ -310,3 +619,70 @@ def test_owner_filters_cover_lease_rent_and_value_ranges():
         "owner_min_value": 1_500_000,
         "owner_max_value": 4_000_000,
     }
+
+
+@pytest.mark.asyncio
+async def test_owner_profile_enrichment_adds_authoritative_registry_details(monkeypatch):
+    owner_property = CrmOwnerProperty(
+        property_key="mulberry-a1-401",
+        area_name="Dubai Hills Estate",
+        project_name="Mulberry at Park Heights",
+        building_name="MULBERRY at PARK HEIGHTS Building A1",
+        unit_number="401",
+        property_type="Flat",
+        ownership_status="former_owner",
+        confidence_score=99,
+        match_reason="A later sale was found",
+        imported_transaction_date=date(2020, 2, 9),
+        imported_transaction_price_aed=2_789_888,
+        imported_property_type="Flat",
+        latest_sale_date=date(2026, 7, 10),
+        latest_sale_price_aed=5_575_000,
+    )
+    profile = CrmOwnerProfile(
+        owner_key="owner-1",
+        contact_name="Example Owner",
+        highest_ownership_status="former_owner",
+        highest_confidence_score=99,
+        property_count=1,
+        rental_linked_count=0,
+        contact_ready_count=0,
+        annual_rent_aed=0,
+        properties=[owner_property],
+    )
+    registry_query = AsyncMock(
+        return_value=[
+            {
+                "transaction_date": date(2026, 7, 10),
+                "sale_amount_aed": 5_575_000,
+                "unit_key": "401",
+                "unit_number": "401",
+                "building_name": "Mulberry Building A1, Mulberry At Park Heights",
+                "building_key": "mulberry-building-a1",
+                "project_name": "Mulberry at Park Heights",
+                "area_name": "Dubai Hills Estate",
+                "area_key": "dubai-hills-estate",
+                "property_type": "Apartment",
+                "market_status": "Ready",
+                "bedrooms": "3 Beds",
+                "size_sqft": 1_938,
+                "built_up_area_sqft": 0,
+                "price_per_sqft_aed": 2_877,
+                "sale_key": "sale-1",
+            }
+        ]
+    )
+    monkeypatch.setattr(import_service, "query", registry_query)
+
+    enriched = await import_service._enrich_owner_profile_registry(profile)
+
+    result = enriched.properties[0]
+    assert result.imported_transaction_price_aed == 2_789_888
+    assert result.registry_sale_price_aed == 5_575_000
+    assert result.registry_property_type == "Apartment"
+    assert result.registry_bedrooms == "3 Beds"
+    assert result.registry_size_sqft == 1_938
+    assert result.registry_built_up_area_sqft is None
+    assert result.registry_price_per_sqft_aed == 2_877
+    assert result.registry_market_status == "Ready"
+    registry_query.assert_awaited_once()

@@ -27,9 +27,9 @@ logger = logging.getLogger(__name__)
 _PAGES_FILE = "bayut_listing_search_pages.jsonl"
 _LISTINGS_FILE = "bayut_listing_properties.jsonl"
 _DETAIL_URL_RE = re.compile(r"/property/details-(?P<listing_id>\d+)\.html", re.IGNORECASE)
-_PRICE_RE = re.compile(r"AED\s*([\d,]+)", re.IGNORECASE)
-_SIZE_RE = re.compile(r"([\d,]+)\s*sqft", re.IGNORECASE)
-_CAPTCHA_MARKERS = ("captchachallenge", "hcaptcha", "captcha challenge")
+_PRICE_RE = re.compile(r"AED\s*(\d[\d,]*(?:\.\d+)?)", re.IGNORECASE)
+_SIZE_RE = re.compile(r"(\d[\d,]*(?:\.\d+)?)\s*sq\.?\s*ft", re.IGNORECASE)
+_CAPTCHA_MARKERS = ("captchachallenge", "hcaptcha", "captcha challenge", "security check | bayut")
 _BLOCKED_RESOURCE_TYPES = frozenset({"font", "image", "media"})
 
 
@@ -77,16 +77,27 @@ class BayutBrowserListingsClient:
                 "Use a permitted session or an authorised data feed; this collector "
                 "does not attempt to bypass access controls."
             )
-        if response is not None and response.status >= 400:
-            raise RuntimeError(
-                f"Bayut search failed status={response.status} url={requested_url}"
-            )
+        if response is None or response.status >= 400:
+            status = response.status if response is not None else 0
+            raise RuntimeError(f"Bayut search failed status={status} url={requested_url}")
+        cards = tuple(_listing_cards(browser_page))
+        outcome = _validate_search_page(
+            requested_url=requested_url,
+            final_url=final_url,
+            cards=cards,
+            body_text=browser_page.locator("body").inner_text(),
+            title=browser_page.title(),
+        )
+        if outcome == "captcha":
+            raise BayutAccessBlockedError("Bayut presented a security check instead of listings")
+        if outcome != "ok":
+            raise RuntimeError(f"Bayut search failed outcome={outcome} url={requested_url}")
         return BayutSearchPage(
             requested_url=requested_url,
             final_url=final_url,
             status_code=response.status if response is not None else 0,
             html=html,
-            cards=tuple(_listing_cards(browser_page)),
+            cards=cards,
         )
 
     def _page_or_new(self) -> Page:
@@ -105,7 +116,9 @@ def extract_release(
     progress_log: Any | None = None,
 ) -> RawRelease:
     parsed_config = (
-        config if isinstance(config, BayutListingsConfig) else BayutListingsConfig.model_validate(config)
+        config
+        if isinstance(config, BayutListingsConfig)
+        else BayutListingsConfig.model_validate(config)
     )
     if parsed_config.storage_state_path and not Path(parsed_config.storage_state_path).exists():
         raise FileNotFoundError(
@@ -246,26 +259,66 @@ def _listing_rows(
 def _listing_cards(page: Page) -> list[dict[str, str]]:
     return page.locator("article").evaluate_all(
         """articles => articles.map((article) => {
+            if (article.closest('[aria-label="Off-Plan properties rail"], '
+                + '[aria-label="Off plan list"]')) return null;
             const link = [...article.querySelectorAll('a[href]')]
                 .find((anchor) => /\\/property\\/details-\\d+\\.html/i.test(anchor.href));
             if (!link) return null;
-            const heading = article.querySelector('h1, h2, h3, h4');
+            const heading = article.querySelector('[aria-label="Title"]')
+                || article.querySelector('h2, h1');
             return {
                 listing_url: link.href.split('?')[0],
-                title: (heading?.textContent || '').trim(),
+                title: (heading?.textContent || link.getAttribute('title') || '').trim(),
                 text: (article.innerText || '').trim(),
             };
         }).filter(Boolean)"""
     )
 
 
+def _validate_search_page(
+    *,
+    requested_url: str,
+    final_url: str,
+    cards: Sequence[Mapping[str, str]],
+    body_text: str,
+    title: str,
+) -> str:
+    """Do not mistake a redirect, hydration shell, or unknown block for the end."""
+    requested, final = urlsplit(requested_url), urlsplit(final_url)
+    if (
+        requested.netloc.lower() != final.netloc.lower()
+        or requested.path.rstrip("/") != final.path.rstrip("/")
+        or sorted(parse_qsl(requested.query)) != sorted(parse_qsl(final.query))
+    ):
+        return "unexpected_redirect"
+    if cards:
+        return "ok"
+    visible = f"{title}\n{body_text}".lower()
+    if any(marker in visible for marker in ("security check", "verify you are human")):
+        return "captcha"
+    if re.search(r"\bno (?:properties|results|listings) found\b", visible):
+        return "ok"
+    if re.match(r"^\s*0\s+(?:properties|apartments|villas|townhouses|penthouses)\b", title, re.I):
+        return "ok"
+    return "unrecognized_page"
+
+
 def _search_url(*, base_url: str, search_path: str, page_number: int) -> str:
+    if page_number < 1:
+        raise ValueError("page_number must be at least 1")
     absolute = urljoin(f"{base_url.rstrip('/')}/", search_path.lstrip("/"))
     parts = urlsplit(absolute)
-    query = [(key, value) for key, value in parse_qsl(parts.query, keep_blank_values=True) if key != "page"]
+    query = [
+        (key, value)
+        for key, value in parse_qsl(parts.query, keep_blank_values=True)
+        if key != "page"
+    ]
+    path = f"{parts.path.rstrip('/')}/"
+    if re.search(r"/page-\d+/$", path, re.IGNORECASE):
+        raise ValueError("search path must not contain a page cursor")
     if page_number > 1:
-        query.append(("page", str(page_number)))
-    return urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(query), ""))
+        path += f"page-{page_number}/"
+    return urlunsplit((parts.scheme, parts.netloc, path, urlencode(query), ""))
 
 
 def _is_captcha_page(*, final_url: str, html: str) -> bool:
@@ -273,11 +326,12 @@ def _is_captcha_page(*, final_url: str, html: str) -> bool:
     return any(marker in haystack for marker in _CAPTCHA_MARKERS)
 
 
-def _number_from_match(match: re.Match[str] | None) -> int | None:
+def _number_from_match(match: re.Match[str] | None) -> int | float | None:
     if match is None:
         return None
     try:
-        return int(match.group(1).replace(",", ""))
+        value = match.group(1).replace(",", "")
+        return float(value) if "." in value else int(value)
     except ValueError:
         return None
 
@@ -300,9 +354,11 @@ def _browser_listing_client(
         if config.block_media_requests:
             context.route(
                 "**/*",
-                lambda route: route.abort()
-                if route.request.resource_type in _BLOCKED_RESOURCE_TYPES
-                else route.continue_(),
+                lambda route: (
+                    route.abort()
+                    if route.request.resource_type in _BLOCKED_RESOURCE_TYPES
+                    else route.continue_()
+                ),
             )
         try:
             yield BayutBrowserListingsClient(context=context, config=config)

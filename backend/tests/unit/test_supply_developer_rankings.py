@@ -186,6 +186,8 @@ def test_developer_criteria_requires_enough_available_weight_for_score():
 def test_catalogue_filters_exclude_past_completion_dates_by_default():
     where, params = supply_service._catalogue_ch_filters(None, None, "Presale")
 
+    assert "lowerUTF8(trim(region)) = 'dubai'" in where
+    assert "latitude BETWEEN 24.55" in where
     assert "Completion_time" in where
     assert "JSON_VALUE(list_item_json, '$.Status') = {status:String}" in where
     assert params["today_ms"] > 0

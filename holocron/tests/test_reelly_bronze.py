@@ -48,7 +48,13 @@ def test_reelly_bronze_loads_projects_documents_and_availability() -> None:
                 "project_id": 123,
                 "delta_reason": "new",
                 "list_item": {"id": 123},
-                "raw": {"id": 123, "name": "Project"},
+                "raw": {
+                    "id": 123,
+                    "name": "Project",
+                    "Region": "Dubai",
+                    "Area_name": "Business Bay",
+                    "Coordinates": "25.186, 55.264",
+                },
             }
         ]
     )
@@ -137,6 +143,72 @@ def test_reelly_bronze_loads_projects_documents_and_availability() -> None:
         "123",
         "new",
     )
+
+
+def test_reelly_bronze_rejects_non_dubai_projects_and_their_children() -> None:
+    projects = _jsonl_payload(
+        [
+            {
+                "project_id": 123,
+                "list_item": {"id": 123},
+                "raw": {
+                    "Region": "Dubai",
+                    "Area_name": "Dubai Hills",
+                    "Coordinates": "25.112,55.245",
+                },
+            },
+            {
+                "project_id": 456,
+                "list_item": {"id": 456},
+                "raw": {
+                    "Region": "Dubai",
+                    "Area_name": "Yas Island",
+                    "Coordinates": "24.514,54.620",
+                },
+            },
+            {
+                "project_id": 789,
+                "list_item": {"id": 789},
+                "raw": {
+                    "Region": "Bali",
+                    "Area_name": "Ubud, Bali",
+                    "Coordinates": "-8.55,115.24",
+                },
+            },
+        ]
+    )
+    documents = _jsonl_payload(
+        [
+            {"project_id": project_id, "url": f"https://example.com/{project_id}.pdf"}
+            for project_id in (123, 456, 789)
+        ]
+    )
+    clickhouse = FakeClickHouse()
+
+    result = load_release_to_clickhouse(
+        raw_manifest={
+            "source": "reelly_supply",
+            "run_id": "dubai-only",
+            "files": [
+                _file("reelly_supply_project_details.jsonl", "raw/projects.jsonl", projects),
+                _file("reelly_supply_project_documents.jsonl", "raw/documents.jsonl", documents),
+            ],
+        },
+        s3=FakeS3({"raw/projects.jsonl": projects, "raw/documents.jsonl": documents}),
+        clickhouse=clickhouse,
+    )
+
+    assert result["table_row_counts"]["reelly_projects_bronze"] == 1
+    assert result["table_row_counts"]["reelly_documents_bronze"] == 1
+    project_call = next(
+        call for call in clickhouse.insert_calls if call["table"] == "reelly_projects_bronze"
+    )
+    document_call = next(
+        call for call in clickhouse.insert_calls if call["table"] == "reelly_documents_bronze"
+    )
+    assert [row[3] for row in project_call["rows"]] == ["123"]
+    assert [row[3] for row in document_call["rows"]] == ["123"]
+    assert any("'123', '456', '789'" in sql for sql in clickhouse.commands)
 
 
 def test_reelly_bronze_rejects_checksum_before_mutation() -> None:

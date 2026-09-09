@@ -13,6 +13,8 @@ CrmOwnershipStatus = Literal[
     "unit_linked_unverified",
     "former_owner",
     "conflicting_claim",
+    "insufficient_property_data",
+    "registry_not_observed",
     "unmatched",
 ]
 
@@ -144,6 +146,8 @@ class CrmContactImportSummary(BaseModel):
     unit_linked_unverified: int = 0
     former_owners: int = 0
     conflicting_claims: int = 0
+    insufficient_property_data: int = 0
+    registry_not_observed: int = 0
     unmatched: int = 0
     rental_opportunities: int = 0
     contact_ready: int = 0
@@ -259,8 +263,19 @@ class CrmOwnerProperty(BaseModel):
     match_reason: str
     lead_id: str | None = None
     unit_candidate_key: str | None = None
+    imported_transaction_date: date | None = None
+    imported_transaction_price_aed: int | None = None
+    imported_property_type: str = ""
     latest_sale_date: date | None = None
     latest_sale_price_aed: int | None = None
+    registry_sale_date: date | None = None
+    registry_sale_price_aed: int | None = None
+    registry_property_type: str | None = None
+    registry_bedrooms: str | None = None
+    registry_size_sqft: float | None = None
+    registry_built_up_area_sqft: float | None = None
+    registry_price_per_sqft_aed: float | None = None
+    registry_market_status: str | None = None
     later_sale_date: date | None = None
     lease_end: date | None = None
     annual_rent_aed: int | None = None

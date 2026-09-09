@@ -6,7 +6,7 @@ ENDPOINT = build_open_data_endpoint(
     category="rents",
     default_sort="REGISTRATION_DATE_DESC",
     default_filters={
-        "P_DATE_TYPE": "0",  # 0 = registration date filter
+        "P_DATE_TYPE": "1",  # 1 = contract start date filter
         "P_IS_FREE_HOLD": "",
         "P_VERSION": "",
         "P_AREA_ID": "",

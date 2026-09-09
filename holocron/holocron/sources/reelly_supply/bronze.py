@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 from typing import Any
 
 from holocron.contracts import (
@@ -27,6 +28,22 @@ _AVAILABILITY_TABLE = "reelly_matrix_availability_bronze"
 _PROJECT_DETAILS_FILE = "reelly_supply_project_details.jsonl"
 _DOCUMENTS_FILE = "reelly_supply_project_documents.jsonl"
 _AVAILABILITY_FILE = "reelly_supply_matrix_availability.jsonl"
+_DUBAI_LATITUDE_RANGE = (24.55, 25.55)
+_DUBAI_LONGITUDE_RANGE = (54.75, 56.25)
+_NON_DUBAI_AREA_MARKERS = (
+    "abu dhabi",
+    "ras al khaimah",
+    "umm al quwain",
+    "sharjah",
+    "ajman",
+    "fujairah",
+    "bali",
+    "phuket",
+    "thailand",
+    "oman",
+    "yas island",
+    "saadiyat island",
+)
 _PROJECT_COLUMNS = (
     "project_key",
     "run_id",
@@ -107,27 +124,37 @@ def load_release_to_clickhouse(
         scratch_prefix="holocron-reelly-bronze",
     )
 
+    all_project_ids = {string_value(row[3]) for row in project_rows if string_value(row[3])}
+    project_rows = [row for row in project_rows if _is_dubai_project_row(row)]
+    dubai_project_ids = {string_value(row[3]) for row in project_rows if string_value(row[3])}
+    document_project_ids = {string_value(row[3]) for row in document_rows if string_value(row[3])}
+    availability_project_ids = {
+        string_value(row[3]) for row in availability_rows if string_value(row[3])
+    }
+    document_rows = [row for row in document_rows if string_value(row[3]) in dubai_project_ids]
+    availability_rows = [
+        row for row in availability_rows if string_value(row[3]) in dubai_project_ids
+    ]
+
     ensure_schema(clickhouse=clickhouse)
     table_row_counts = {
         _PROJECTS_TABLE: len(project_rows),
         _DOCUMENTS_TABLE: len(document_rows),
         _AVAILABILITY_TABLE: len(availability_rows),
     }
-    project_ids = [row[3] for row in project_rows]
     replace_keyed_rows(
         clickhouse=clickhouse,
         table=_PROJECTS_TABLE,
         key_column="project_id",
-        key_values=project_ids,
+        key_values=sorted(all_project_ids),
         rows=project_rows,
         column_names=_PROJECT_COLUMNS,
     )
-    document_project_ids = project_ids or [row[3] for row in document_rows]
     replace_keyed_rows(
         clickhouse=clickhouse,
         table=_DOCUMENTS_TABLE,
         key_column="project_id",
-        key_values=document_project_ids,
+        key_values=sorted(all_project_ids | document_project_ids),
         rows=document_rows,
         column_names=_DOCUMENT_COLUMNS,
     )
@@ -135,11 +162,80 @@ def load_release_to_clickhouse(
         clickhouse=clickhouse,
         table=_AVAILABILITY_TABLE,
         key_column="project_id",
-        key_values=[row[3] for row in availability_rows],
+        key_values=sorted(all_project_ids | availability_project_ids),
         rows=availability_rows,
         column_names=_AVAILABILITY_COLUMNS,
     )
     return bronze_load_result(source=source_name, run_id=run_id, table_row_counts=table_row_counts)
+
+
+def _is_dubai_project_row(row: tuple[Any, ...]) -> bool:
+    try:
+        list_item = json.loads(str(row[5]))
+        raw = json.loads(str(row[6]))
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return False
+    if not isinstance(list_item, dict) or not isinstance(raw, dict):
+        return False
+    return _is_dubai_project_payload(raw=raw, list_item=list_item)
+
+
+def _is_dubai_project_payload(*, raw: dict[str, Any], list_item: dict[str, Any]) -> bool:
+    region = _first_text(raw, list_item, keys=("Region", "region"))
+    if region.casefold() != "dubai":
+        return False
+
+    area_name = _first_text(
+        raw,
+        list_item,
+        keys=("Area_name", "area_name", "Area", "area", "District", "district"),
+    ).casefold()
+    if any(marker in area_name for marker in _NON_DUBAI_AREA_MARKERS):
+        return False
+
+    latitude, longitude = _project_coordinates(raw=raw, list_item=list_item)
+    if latitude is None or longitude is None:
+        return True
+    return (
+        _DUBAI_LATITUDE_RANGE[0] <= latitude <= _DUBAI_LATITUDE_RANGE[1]
+        and _DUBAI_LONGITUDE_RANGE[0] <= longitude <= _DUBAI_LONGITUDE_RANGE[1]
+    )
+
+
+def _project_coordinates(
+    *, raw: dict[str, Any], list_item: dict[str, Any]
+) -> tuple[float | None, float | None]:
+    latitude = _float_or_none(_first_value(raw, list_item, keys=("latitude", "lat")))
+    longitude = _float_or_none(_first_value(raw, list_item, keys=("longitude", "lng", "lon")))
+    if latitude is not None and longitude is not None:
+        return latitude, longitude
+
+    coordinates = _first_text(raw, list_item, keys=("Coordinates", "coordinates"))
+    parts = [part.strip() for part in coordinates.replace(";", ",").split(",")]
+    if len(parts) >= 2:
+        return _float_or_none(parts[0]), _float_or_none(parts[1])
+    return latitude, longitude
+
+
+def _first_text(*sources: dict[str, Any], keys: tuple[str, ...]) -> str:
+    value = _first_value(*sources, keys=keys)
+    return str(value).strip() if value is not None else ""
+
+
+def _first_value(*sources: dict[str, Any], keys: tuple[str, ...]) -> Any:
+    for source in sources:
+        for key in keys:
+            value = source.get(key)
+            if value not in (None, ""):
+                return value
+    return None
+
+
+def _float_or_none(value: Any) -> float | None:
+    try:
+        return float(value) if value not in (None, "") else None
+    except (TypeError, ValueError):
+        return None
 
 
 def _project_row_tuple(raw_row: dict[str, Any], *, fallback_run_id: str) -> tuple:

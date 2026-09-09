@@ -13,6 +13,8 @@ ENDPOINT = build_open_data_endpoint(
         "P_USAGE_ID": "",
         "P_PROP_TYPE_ID": "",
     },
+    request_to_date_offset_days=1,
+    row_date_field="INSTANCE_DATE",
     description="DLD open-data sale, mortgage, and gift transactions.",
 )
 

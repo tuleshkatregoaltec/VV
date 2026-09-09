@@ -24,10 +24,18 @@ from tempfile import TemporaryDirectory
 from typing import Any, Protocol
 
 from holocron.contracts import RawRelease, SourceSpec
+from holocron.assets.geography import (
+    geo_entity_links_asset,
+    geo_location_closure_asset,
+    geo_location_nodes_asset,
+    geo_source_signatures_asset,
+    offplan_reelly_project_links_asset,
+)
 from holocron.platform.manifests import manifest_s3_key, raw_file_s3_key, raw_manifest_is_smoke
 from holocron.platform.resources import ClickHouseResource, ObjectStorageResource
 from holocron.sources.dld_open_data_orchestration import (
     DLD_OPEN_DATA_CHUNK_DEFAULTS,
+    DLD_OPEN_DATA_INCREMENTAL_DEFAULTS,
     DLD_OPEN_DATA_RENTS_FULL_DEFAULTS,
     DLD_OPEN_DATA_RENTS_INCREMENTAL_DEFAULTS,
     resolve_open_data_config,
@@ -76,7 +84,12 @@ _NEWS_PROVIDER_GROUP = "news"
 _PROPERTYFINDER_PROVIDER_GROUP = "propertyfinder"
 _REELLY_PROVIDER_GROUP = "reelly"
 _DLD_OPEN_DATA_JOB_SPECS = (
-    ("transactions", "0 4 * * *", {"mode": "incremental"}, DLD_OPEN_DATA_CHUNK_DEFAULTS),
+    (
+        "transactions",
+        "0 4 * * *",
+        DLD_OPEN_DATA_INCREMENTAL_DEFAULTS,
+        DLD_OPEN_DATA_CHUNK_DEFAULTS,
+    ),
     (
         "rents",
         "10 4 * * *",
@@ -584,6 +597,16 @@ def build_silver_assets() -> list[AssetsDefinition]:
     return [silver_transactions_asset, silver_rent_contracts_asset]
 
 
+def build_geography_assets() -> list[AssetsDefinition]:
+    return [
+        geo_location_nodes_asset,
+        geo_location_closure_asset,
+        geo_source_signatures_asset,
+        geo_entity_links_asset,
+        offplan_reelly_project_links_asset,
+    ]
+
+
 def build_dld_pulse_historic_assets() -> list[AssetsDefinition]:
     @asset(
         name="dld_pulse_historic_bronze",
@@ -838,6 +861,16 @@ def build_operational_jobs(sources: Mapping[str, SourceSpec]) -> list[AssetJobDe
             name="silver_refresh",
             selection=["silver_transactions", "silver_rent_contracts"],
         ),
+        define_asset_job(
+            name="geography_crosswalk_refresh",
+            selection=[
+                "geo_location_nodes",
+                "geo_location_closure",
+                "geo_source_signatures",
+                "geo_entity_links",
+                "offplan_reelly_project_links",
+            ],
+        ),
     ]
 
 
@@ -852,7 +885,11 @@ def build_operational_schedules(
         "pf_listings_daily_latest_delta": "0 3 * * *",
         "dda_planning_layers_weekly_full_refresh": "0 6 * * 0",
         "news_feeds_poll_and_hydrate": "*/15 * * * *",
-        # Silver runs after bronze ingestion completes (DLD bronze finishes ~05:30)
+        # Transaction silver runs after its 04:00 bronze ingestion.
+        "silver_transactions_refresh": "0 6 * * *",
+        # Rent silver runs after its 04:10 bronze ingestion.
+        "silver_rent_contracts_refresh": "10 6 * * *",
+        # The combined silver refresh remains available for full warehouse refreshes.
         "silver_refresh": "0 6 * * *",
     }
     return [

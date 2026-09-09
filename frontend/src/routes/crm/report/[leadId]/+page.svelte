@@ -21,7 +21,7 @@ function buildPriceChart(points: IndexPoint[]) {
 	const top = 18
 	const bottom = 34
 	const values = points.flatMap((point) =>
-		[point.dubai_index, point.segment_index, point.dld_index, point.dxbi_index].filter(
+		[point.dubai_index, point.segment_index, point.dld_index, point.transaction_index].filter(
 			(value): value is number => value !== null
 		)
 	)
@@ -62,7 +62,7 @@ function buildPriceChart(points: IndexPoint[]) {
 		dubaiPath: path((point) => point.dubai_index),
 		segmentPath: path((point) => point.segment_index),
 		dldPath: path((point) => point.dld_index),
-		dxbiPath: path((point) => point.dxbi_index)
+		transactionPath: path((point) => point.transaction_index)
 	}
 }
 
@@ -177,7 +177,7 @@ function compactQuarter(value: string) {
 								<text x={priceChart.x(tick.index)} y={priceChart.height - 9} text-anchor="middle" class="chart-label">{compactQuarter(tick.point.label)}</text>
 							{/each}
 							<path d={priceChart.dldPath} fill="none" stroke="var(--color-fg-4)" stroke-width="1.25" stroke-dasharray="4 4" opacity="0.55" />
-							<path d={priceChart.dxbiPath} fill="none" stroke="var(--color-warning)" stroke-width="1.25" stroke-dasharray="4 4" opacity="0.55" />
+							<path d={priceChart.transactionPath} fill="none" stroke="var(--color-warning)" stroke-width="1.25" stroke-dasharray="4 4" opacity="0.55" />
 							<path d={priceChart.dubaiPath} fill="none" stroke="var(--color-navy)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
 							<path d={priceChart.segmentPath} fill="none" stroke="var(--color-success)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />
 						</svg>

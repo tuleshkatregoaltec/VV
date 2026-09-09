@@ -24,7 +24,7 @@ from holocron.contracts import (
 )
 from holocron.platform.execution import build_raw_release, new_run_id, utc_now
 from holocron.platform.metadata import safe_config_metadata
-from holocron.platform.raw_files import build_raw_file_from_path
+from holocron.platform.raw_files import build_raw_file_from_path, string_value
 from holocron.pydantic_helpers import HolocronModel, NonBlankStr
 
 logger = logging.getLogger(__name__)
@@ -64,6 +64,8 @@ class DldOpenDataEndpointSpec:
     date_field_names: tuple[str, str] | None = ("P_FROM_DATE", "P_TO_DATE")
     snapshot_omits_date_filters: bool = False
     snapshot_blank_date_filters: bool = False
+    request_to_date_offset_days: int = 0
+    row_date_field: str | None = None
     description: str = ""
 
     @property
@@ -81,6 +83,8 @@ def build_open_data_endpoint(
     date_field_names: tuple[str, str] | None = ("P_FROM_DATE", "P_TO_DATE"),
     snapshot_omits_date_filters: bool = False,
     snapshot_blank_date_filters: bool = False,
+    request_to_date_offset_days: int = 0,
+    row_date_field: str | None = None,
     description: str = "",
 ) -> DldOpenDataEndpointSpec:
     source_name = source_name or f"dld_od_{category}"
@@ -96,6 +100,8 @@ def build_open_data_endpoint(
         date_field_names=date_field_names,
         snapshot_omits_date_filters=snapshot_omits_date_filters,
         snapshot_blank_date_filters=snapshot_blank_date_filters,
+        request_to_date_offset_days=request_to_date_offset_days,
+        row_date_field=row_date_field,
         description=description,
     )
 
@@ -149,6 +155,8 @@ class DldOpenDataConfig(HolocronModel):
     mode: Literal["snapshot", "incremental", "backfill"] = "incremental"
     start_date: date | None = None
     end_date: date | None = None
+    checkpointed_incremental: bool = False
+    incremental_overlap_days: int = Field(default=0, ge=0)
     lookback_days: int = Field(default=3, ge=0)
     slice_days: int = Field(default=1, ge=1)
     page_size: int = Field(default=100, ge=1, le=10000)
@@ -156,11 +164,16 @@ class DldOpenDataConfig(HolocronModel):
     window_cursor: int = Field(default=0, ge=0)
     skip_cursor: int = Field(default=0, ge=0)
     checkpoint_explicit_date_window: bool | None = Field(default=None, exclude=True)
+    row_date_field: str = ""
+    request_to_date_offset_days: int | None = Field(default=None, ge=0)
+    replace_date_column: str = ""
     sort: str = ""
     filters: dict[str, str] = Field(default_factory=dict)
     base_url: NonBlankStr = DLD_OPEN_DATA_BASE_URL
     consumer_id: NonBlankStr = DLD_OPEN_DATA_CONSUMER_ID
     request_pause_seconds: float = Field(default=0, ge=0)
+    request_retry_attempts: int = Field(default=3, ge=0)
+    request_retry_seconds: float = Field(default=2, ge=0)
     timeout_seconds: float = Field(default=60, ge=1)
 
     @field_validator("filters", mode="before")
@@ -189,10 +202,20 @@ class DldOpenDataApi(Protocol):
 
 
 class DldOpenDataApiClient:
-    def __init__(self, *, client: httpx.Client, base_url: str, consumer_id: str) -> None:
+    def __init__(
+        self,
+        *,
+        client: httpx.Client,
+        base_url: str,
+        consumer_id: str,
+        retry_attempts: int = 3,
+        retry_seconds: float = 2,
+    ) -> None:
         self._client = client
         self._base_url = base_url.rstrip("/")
         self._headers = {**_HEADERS, "consumer-id": consumer_id}
+        self._retry_attempts = retry_attempts
+        self._retry_seconds = retry_seconds
 
     def fetch(
         self,
@@ -200,17 +223,25 @@ class DldOpenDataApiClient:
         command: str,
         payload: Mapping[str, str],
     ) -> dict[str, Any]:
-        response = self._client.post(
-            f"{self._base_url}/{command}",
-            json=dict(payload),
-            headers=self._headers,
-        )
-        response.raise_for_status()
-        parsed = response.json()
-        if not isinstance(parsed, dict):
-            raise TypeError(f"DLD open-data {command} response must be a JSON object")
-        _raise_for_open_data_errors(parsed, command=command)
-        return parsed
+        for attempt in range(self._retry_attempts + 1):
+            try:
+                response = self._client.post(
+                    f"{self._base_url}/{command}",
+                    json=dict(payload),
+                    headers=self._headers,
+                )
+                response.raise_for_status()
+                parsed = response.json()
+                if not isinstance(parsed, dict):
+                    raise TypeError(f"DLD open-data {command} response must be a JSON object")
+                _raise_for_open_data_errors(parsed, command=command)
+                return parsed
+            except (httpx.TimeoutException, httpx.TransportError, httpx.HTTPStatusError) as exc:
+                if not _retryable_request_error(exc) or attempt >= self._retry_attempts:
+                    raise
+                if self._retry_seconds > 0:
+                    time.sleep(self._retry_seconds * (attempt + 1))
+        raise RuntimeError(f"DLD open-data {command} request retry loop exited unexpectedly")
 
 
 def extract_open_data_release(
@@ -244,6 +275,8 @@ def extract_open_data_release(
                 client=client,
                 base_url=parsed_config.base_url,
                 consumer_id=parsed_config.consumer_id,
+                retry_attempts=parsed_config.request_retry_attempts,
+                retry_seconds=parsed_config.request_retry_seconds,
             )
         files, metadata = _extract_files(
             output_path=output_path,
@@ -316,8 +349,14 @@ def _extract_files(
                     skip=skip,
                 )
                 raw_response = api_client.fetch(command=endpoint.command, payload=payload)
-                rows = _result_rows(raw_response, command=endpoint.command)
-                total = _total_from_rows(rows)
+                api_rows = _result_rows(raw_response, command=endpoint.command)
+                rows = _filter_rows_to_window(
+                    rows=api_rows,
+                    config=config,
+                    endpoint=endpoint,
+                    window=window,
+                )
+                total = _total_from_rows(api_rows)
                 page_count += 1
 
                 window_meta = _window_metadata(window)
@@ -332,6 +371,8 @@ def _extract_files(
                     "skip": skip,
                     "take": config.page_size,
                     "row_count": len(rows),
+                    "api_row_count": len(api_rows),
+                    "filtered_out_row_count": len(api_rows) - len(rows),
                     "total": total,
                     "raw": raw_response,
                 }
@@ -364,18 +405,18 @@ def _extract_files(
                     page_count,
                 )
 
-                if not rows:
+                if not api_rows:
                     next_window_index = window_index + 1
                     next_skip = 0
                     break
-                skip += len(rows)
+                skip += len(api_rows)
                 next_window_index = window_index
                 next_skip = skip
                 if total is not None and skip >= total:
                     next_window_index = window_index + 1
                     next_skip = 0
                     break
-                if len(rows) < config.page_size:
+                if len(api_rows) < config.page_size:
                     next_window_index = window_index + 1
                     next_skip = 0
                     break
@@ -447,8 +488,8 @@ def _request_windows(
         start_date = config.start_date
         end_date = config.end_date
     else:
-        start_date = today - timedelta(days=config.lookback_days)
-        end_date = today
+        end_date = config.end_date or today
+        start_date = config.start_date or end_date - timedelta(days=config.lookback_days)
     if start_date is None or end_date is None:
         raise ValueError("DLD open-data date-window mode requires start_date and end_date")
 
@@ -474,8 +515,13 @@ def _request_payload(
         from_key, to_key = endpoint.date_field_names
         start_date, end_date = window
         if start_date is not None and end_date is not None:
+            request_to_date_offset_days = (
+                config.request_to_date_offset_days
+                if config.request_to_date_offset_days is not None
+                else endpoint.request_to_date_offset_days
+            )
             payload[from_key] = _dld_date(start_date)
-            payload[to_key] = _dld_date(end_date)
+            payload[to_key] = _dld_date(end_date + timedelta(days=request_to_date_offset_days))
         elif endpoint.snapshot_blank_date_filters:
             payload[from_key] = ""
             payload[to_key] = ""
@@ -493,6 +539,19 @@ def _validate_config_for_endpoint(
     if not endpoint.supports_date_windows and config.mode in _DATE_WINDOW_MODES:
         raise ValueError(
             f"DLD open-data category {endpoint.category!r} only supports snapshot mode"
+        )
+    if endpoint.request_to_date_offset_days and not endpoint.row_date_field:
+        raise ValueError(
+            f"DLD open-data category {endpoint.category!r} requires row_date_field "
+            "when request_to_date_offset_days is set"
+        )
+    if config.request_to_date_offset_days and not _effective_row_date_field(
+        config=config,
+        endpoint=endpoint,
+    ):
+        raise ValueError(
+            f"DLD open-data category {endpoint.category!r} requires row_date_field "
+            "when request_to_date_offset_days is configured"
         )
 
 
@@ -531,6 +590,51 @@ def _total_from_rows(rows: Sequence[Mapping[str, Any]]) -> int | None:
     return None
 
 
+def _filter_rows_to_window(
+    *,
+    rows: Sequence[dict[str, Any]],
+    config: DldOpenDataConfig,
+    endpoint: DldOpenDataEndpointSpec,
+    window: tuple[date | None, date | None],
+) -> list[dict[str, Any]]:
+    row_date_field = _effective_row_date_field(config=config, endpoint=endpoint)
+    if not row_date_field:
+        return [dict(row) for row in rows]
+    start_date, end_date = window
+    if start_date is None or end_date is None:
+        return [dict(row) for row in rows]
+
+    filtered_rows: list[dict[str, Any]] = []
+    for row in rows:
+        row_date = _row_date(row.get(row_date_field))
+        if row_date is None or start_date <= row_date <= end_date:
+            filtered_rows.append(dict(row))
+    return filtered_rows
+
+
+def _effective_row_date_field(
+    *,
+    config: DldOpenDataConfig,
+    endpoint: DldOpenDataEndpointSpec,
+) -> str:
+    return config.row_date_field.strip() or string_value(endpoint.row_date_field)
+
+
+def _row_date(value: Any) -> date | None:
+    if value is None:
+        return None
+    parsed = str(value).strip()
+    if not parsed:
+        return None
+    try:
+        return datetime.fromisoformat(parsed.replace("Z", "+00:00")).date()
+    except ValueError:
+        try:
+            return datetime.strptime(parsed[:10], "%Y-%m-%d").date()
+        except ValueError:
+            return None
+
+
 def _raise_for_open_data_errors(payload: Mapping[str, Any], *, command: str) -> None:
     errors = payload.get("validationErrorsList")
     if errors:
@@ -538,6 +642,14 @@ def _raise_for_open_data_errors(payload: Mapping[str, Any], *, command: str) -> 
     response_code = payload.get("responseCode")
     if response_code not in (None, 200):
         raise RuntimeError(f"DLD open-data {command} returned responseCode={response_code}")
+
+
+def _retryable_request_error(exc: Exception) -> bool:
+    if isinstance(exc, (httpx.TimeoutException, httpx.TransportError)):
+        return True
+    if isinstance(exc, httpx.HTTPStatusError):
+        return exc.response.status_code >= 500
+    return False
 
 
 def _build_raw_file(path: Path, *, row_count: int, command: str) -> RawFile:

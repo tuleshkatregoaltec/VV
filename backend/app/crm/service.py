@@ -49,9 +49,47 @@ VALID_BREAKDOWNS = {
 }
 
 _LEAD_CTE = """
-WITH latest_unit AS (
+WITH coverage AS (
+    SELECT max(source_shard_date) AS data_complete_through
+    FROM dxbi_rental_events FINAL
+),
+latest_unit AS (
     SELECT
-        c.*,
+        c.event_key,
+        c.unit_candidate_key AS unit_candidate_key,
+        c.unit_cohort_key,
+        c.location_name,
+        if(
+            c.property_type IN ('Villa', 'Townhouse'),
+            '',
+            coalesce(nullIf(g.display_building_name, ''), c.building_name)
+        ) AS building_name,
+        coalesce(nullIf(g.display_project_name, ''), c.project_name) AS project_name,
+        coalesce(nullIf(g.display_area_name, ''), c.area_name) AS area_name,
+        c.building_name AS registry_building_name,
+        c.project_name AS registry_project_name,
+        c.area_name AS registry_area_name,
+        g.canonical_location_id,
+        coalesce(nullIf(g.match_status, ''), 'unmapped') AS geography_match_status,
+        coalesce(nullIf(g.coordinate_precision, ''), 'missing') AS coordinate_precision,
+        g.latitude,
+        g.longitude,
+        c.property_type,
+        c.bedrooms,
+        c.size_sqft,
+        c.contract_amount_aed,
+        c.contract_term_days,
+        c.contract_term_months,
+        c.annual_rent_aed,
+        c.rent_normalization_version,
+        c.address_normalization_version,
+        c.purchase_price_aed,
+        c.lease_start,
+        c.lease_end,
+        c.contract_state,
+        c.observed_contracts,
+        c.last_scraped_at,
+        c.loaded_at,
         m.unit_number,
         m.identity_sale_date,
         m.identity_sale_price,
@@ -68,11 +106,53 @@ WITH latest_unit AS (
         m.matching_units,
         m.match_status AS unit_match_status
     FROM dxbi_rental_unit_candidates AS c FINAL
-    LEFT JOIN dxbi_rental_sale_matches AS m FINAL USING (unit_candidate_key)
+    LEFT JOIN geo_crm_rental_hierarchy AS g
+        ON g.registry_area_name = c.area_name
+        AND g.registry_project_name = c.project_name
+        AND g.registry_building_name = c.building_name
+        AND g.source_grain = multiIf(
+            c.property_type IN ('Villa', 'Townhouse'), 'landed_phase',
+            c.building_name != '', 'building',
+            c.project_name != '', 'project',
+            'area'
+        )
+    LEFT JOIN dxbi_rental_sale_matches AS m FINAL
+        ON m.unit_candidate_key = c.unit_candidate_key
 ),
-leads AS (
+identified_unit AS (
     SELECT
         *,
+        if(
+            unit_match_status = 'unique' AND ifNull(unit_number, '') != '',
+            concat(
+                'unit:',
+                replaceRegexpAll(
+                    lowerUTF8(coalesce(nullIf(building_name, ''), nullIf(project_name, ''), location_name)),
+                    '[^a-z0-9]+',
+                    ''
+                ),
+                ':',
+                replaceRegexpAll(lowerUTF8(area_name), '[^a-z0-9]+', ''),
+                ':',
+                upperUTF8(unit_number)
+            ),
+            concat('candidate:', unit_candidate_key)
+        ) AS property_identity_key
+    FROM latest_unit
+),
+ranked_unit AS (
+    SELECT
+        *,
+        row_number() OVER (
+            PARTITION BY property_identity_key
+            ORDER BY lease_start DESC, lease_end DESC, last_scraped_at DESC, event_key DESC
+        ) AS identity_rank
+    FROM identified_unit
+),
+lead_evidence AS (
+    SELECT
+        r.*,
+        c.data_complete_through,
         multiIf(
             property_type IN ('Apartment', 'Villa'), 'residential',
             property_type = 'Commercial', 'commercial',
@@ -97,31 +177,64 @@ leads AS (
         ) AS property_subtype,
         dateDiff('day', {as_of:Date}, lease_end) AS days_to_expiry,
         multiIf(
+            unit_match_status != 'unique', 'unit_unresolved',
+            last_purchase_date >= lease_start
+                AND last_purchase_date < lease_end,
+                'sale_during_lease',
+            'stable_rental_history'
+        ) AS ownership_timing,
+        multiIf(
+            lease_end >= {as_of:Date}, 'upcoming',
+            unit_match_status != 'unique', 'unit_unresolved',
+            last_purchase_date >= lease_start
+                AND last_purchase_date < lease_end,
+                'ownership_review',
+            'unlet_signal'
+        ) AS lease_evidence_state,
+        multiIf(
             lease_end < {as_of:Date}, 'expired',
             lease_end <= addDays({as_of:Date}, 30), 'expiring_30',
             lease_end <= addDays({as_of:Date}, 60), 'expiring_60',
             'expiring_90'
         ) AS lead_status,
-        multiIf(
-            lease_end < {as_of:Date}, 96,
-            lease_end <= addDays({as_of:Date}, 30), 90,
-            lease_end <= addDays({as_of:Date}, 60), 76,
-            64
-        )
-        + if(purchase_price_aed > 0, 3, 0)
-        + if(unit_match_status = 'unique', 4, 0)
-        + if(contract_state = 'Renewed', 1, 0) AS raw_score,
-        if(raw_score >= 90, 'urgent', if(raw_score >= 75, 'high', 'medium')) AS priority,
         if(
             unit_match_status = 'unique',
             'high',
             if(purchase_price_aed > 0, 'medium', 'low')
         )
             AS match_confidence
-    FROM latest_unit
+    FROM ranked_unit AS r
+    CROSS JOIN coverage AS c
     WHERE
+        identity_rank = 1
+        AND
         lease_end >= addDays({as_of:Date}, -{expired_days:Int32})
         AND lease_end <= addDays({as_of:Date}, 90)
+        AND NOT (
+            unit_match_status = 'unique'
+            AND last_purchase_date >= lease_end
+        )
+),
+leads AS (
+    SELECT
+        *,
+        greatest(
+            0,
+            least(
+                100,
+                multiIf(
+                    lead_status = 'expired' AND lease_evidence_state = 'unlet_signal', 88,
+                    lead_status = 'expiring_30', 84,
+                    lead_status = 'expiring_60', 72,
+                    60
+                )
+                + if(unit_match_status = 'unique', 6, 0)
+                + if(contract_state = 'Renewed', 2, 0)
+                - if(ownership_timing = 'sale_during_lease', 25, 0)
+            )
+        ) AS raw_score,
+        if(raw_score >= 90, 'urgent', if(raw_score >= 75, 'high', 'medium')) AS priority
+    FROM lead_evidence
 )
 """
 
@@ -185,17 +298,78 @@ def _where_clause(
     return " AND ".join(conditions), params
 
 
+def _filter_metadata_sql(facet_where: str) -> str:
+    """Return live lead facets so every dropdown option can produce a result."""
+    return (
+        _LEAD_CTE
+        + f"""
+        SELECT
+            (SELECT count() FROM dxbi_rental_events FINAL) AS rows,
+            (
+                SELECT countIf(match_status = 'unique')
+                FROM dxbi_rental_sale_matches FINAL
+            ) AS exact_unit_matches,
+            min(lease_start) AS min_date,
+            max(lease_start) AS max_date,
+            (SELECT max(source_shard_date) FROM dxbi_rental_events FINAL)
+                AS data_complete_through,
+            arraySort(groupUniqArrayIf(area_name, area_name != '')) AS areas,
+            arraySort(
+                groupUniqArrayIf(
+                    project_name,
+                    project_name != ''
+                    AND {{filter_area:String}} != ''
+                    AND area_name = {{filter_area:String}}
+                )
+            ) AS projects,
+            arraySort(
+                groupUniqArrayIf(
+                    building_name,
+                    building_name != ''
+                    AND {{filter_area:String}} != ''
+                    AND area_name = {{filter_area:String}}
+                    AND {{filter_project:String}} != ''
+                    AND project_name = {{filter_project:String}}
+                )
+            ) AS buildings
+        FROM leads
+        WHERE {facet_where}
+        """
+    )
+
+
 def _lead_from_row(row: dict[str, Any]) -> CrmLead:
     days = int(row["days_to_expiry"])
     status = str(row["lead_status"])
     expired = status == "expired"
-    sale_candidate = bool(row.get("purchase_price_aed"))
     asset_class = str(row.get("asset_class") or "other")
     property_type = str(row.get("property_type") or "Property")
     matched_sales_property_type = str(row.get("latest_property_type") or "").strip() or None
     property_subtype = str(row.get("property_subtype") or property_type)
     unit_number = str(row.get("unit_number") or "").strip() or None
     unit_resolved = bool(unit_number and row.get("unit_match_status") == "unique")
+    ownership_timing = str(
+        row.get("ownership_timing")
+        or ("stable_rental_history" if unit_resolved else "unit_unresolved")
+    )
+    lease_evidence_state = str(
+        row.get("lease_evidence_state")
+        or (
+            "ownership_review"
+            if ownership_timing == "sale_during_lease"
+            else "unlet_signal"
+            if expired and unit_resolved
+            else "unit_unresolved"
+            if expired
+            else "upcoming"
+        )
+    )
+    sale_candidate = bool(
+        unit_resolved
+        and expired
+        and lease_evidence_state == "unlet_signal"
+        and ownership_timing == "stable_rental_history"
+    )
     matched_sale_price = int(row.get("matched_sale_price") or 0) or None
     annual_rent = int(row.get("annual_rent_aed") or 0)
     gross_yield = (
@@ -203,12 +377,24 @@ def _lead_from_row(row: dict[str, Any]) -> CrmLead:
         if matched_sale_price and annual_rent
         else None
     )
-    reason = (
-        f"Lease expired {abs(days)} days ago with no later lease observed for this candidate."
-        if expired
-        else f"Lease expires in {days} days; start owner outreach before the renewal window closes."
-    )
-    if asset_class == "commercial" and unit_resolved and expired and sale_candidate:
+    if ownership_timing == "sale_during_lease":
+        reason = (
+            "Ownership changed during the lease and no post-purchase lease is yet linked to "
+            "this exact unit. Occupancy requires verification."
+        )
+    elif expired:
+        reason = (
+            f"Unlet signal: lease expired {abs(days)} days ago and no later registered lease "
+            "was observed for this exact unit."
+            if unit_resolved
+            else f"Lease candidate expired {abs(days)} days ago; exact-unit and renewal status "
+            "remain unresolved."
+        )
+    else:
+        reason = f"Lease expires in {days} days; begin a renewal-status conversation."
+    if ownership_timing == "sale_during_lease":
+        action = "Verify the current owner and occupancy before proposing renewal or re-letting."
+    elif asset_class == "commercial" and unit_resolved and expired and sale_candidate:
         action = (
             f"Use unit {unit_number} to resolve the current owner, then offer a leasing "
             "mandate and test appetite for an investment sale."
@@ -244,15 +430,33 @@ def _lead_from_row(row: dict[str, Any]) -> CrmLead:
     return CrmLead(
         lead_id=str(row["event_key"]),
         unit_candidate_key=str(row["unit_candidate_key"]),
-        building_name=str(row.get("building_name") or "Building not exposed"),
-        project_name=str(row.get("project_name") or "Project not exposed"),
-        area_name=str(row.get("area_name") or "Area not exposed"),
+        building_name=str(row.get("building_name") or ""),
+        project_name=str(row.get("project_name") or ""),
+        area_name=str(row.get("area_name") or ""),
+        registry_building_name=str(row.get("registry_building_name") or ""),
+        registry_project_name=str(row.get("registry_project_name") or ""),
+        registry_area_name=str(row.get("registry_area_name") or ""),
+        canonical_location_id=str(row.get("canonical_location_id") or "") or None,
+        geography_match_status=str(row.get("geography_match_status") or "unmapped"),
+        coordinate_precision=str(row.get("coordinate_precision") or "missing"),
+        latitude=float(row["latitude"]) if row.get("latitude") is not None else None,
+        longitude=float(row["longitude"]) if row.get("longitude") is not None else None,
         asset_class=asset_class,
         property_type=property_type,
         property_subtype=property_subtype,
         matched_sales_property_type=matched_sales_property_type,
         bedrooms=str(row.get("bedrooms") or "Not stated"),
         size_sqft=float(row["size_sqft"]) if row.get("size_sqft") else None,
+        contract_amount_aed=int(row.get("contract_amount_aed") or row.get("annual_rent_aed") or 0),
+        contract_term_days=int(
+            row.get("contract_term_days")
+            or ((row["lease_end"] - row["lease_start"]).days + 1)
+        ),
+        contract_term_months=(
+            float(row["contract_term_months"])
+            if row.get("contract_term_months")
+            else None
+        ),
         annual_rent_aed=annual_rent,
         latest_purchase_price_aed=(
             int(row["purchase_price_aed"]) if row.get("purchase_price_aed") else None
@@ -287,7 +491,6 @@ def _lead_from_row(row: dict[str, Any]) -> CrmLead:
             else None
         ),
         latest_market_status=str(row.get("latest_market_status") or "") or None,
-        latest_sale_detail_url=str(row.get("latest_detail_url") or "") or None,
         lease_start=row["lease_start"],
         lease_end=row["lease_end"],
         days_to_expiry=days,
@@ -296,6 +499,10 @@ def _lead_from_row(row: dict[str, Any]) -> CrmLead:
         score=min(int(row["raw_score"]), 100),
         contract_state=str(row.get("contract_state") or "Unknown"),
         match_confidence=str(row["match_confidence"]),
+        property_identity_key=str(row.get("property_identity_key") or row["unit_candidate_key"]),
+        ownership_timing=ownership_timing,
+        lease_evidence_state=lease_evidence_state,
+        data_complete_through=row.get("data_complete_through"),
         lead_reason=reason,
         recommended_action=action,
         sale_conversation=sale_candidate,
@@ -559,6 +766,16 @@ async def get_dashboard(
         building=building,
         search=search,
     )
+    facet_where, facet_filter_params = _where_clause(
+        status=status,
+        priority=priority,
+        area=None,
+        project=None,
+        building=None,
+        search=search,
+        asset_class=asset_class,
+        property_type=property_type,
+    )
     params = {
         **filter_params,
         "as_of": anchor.isoformat(),
@@ -584,12 +801,25 @@ async def get_dashboard(
         SELECT
             count() AS total,
             countIf(priority = 'urgent') AS urgent,
-            countIf(lead_status = 'expired') AS expired,
+            countIf(
+                lead_status = 'expired'
+                AND lease_evidence_state = 'unlet_signal'
+                AND ownership_timing = 'stable_rental_history'
+                AND unit_match_status = 'unique'
+            ) AS expired,
             countIf(lead_status = 'expiring_30') AS expiring_30,
             countIf(lead_status = 'expiring_60') AS expiring_60,
             countIf(lead_status = 'expiring_90') AS expiring_90,
-            countIf(purchase_price_aed > 0) AS sale_candidates,
-            sum(annual_rent_aed) AS annual_rent_at_risk
+            countIf(
+                lead_status = 'expired'
+                AND lease_evidence_state = 'unlet_signal'
+                AND ownership_timing = 'stable_rental_history'
+                AND unit_match_status = 'unique'
+            ) AS sale_candidates,
+            sumIf(
+                annual_rent_aed,
+                ownership_timing = 'stable_rental_history'
+            ) AS annual_rent_at_risk
         FROM leads
         WHERE {where}
         """
@@ -598,14 +828,17 @@ async def get_dashboard(
         _LEAD_CTE
         + f"""
         SELECT
-            if({dimension} = '', 'Not exposed', {dimension}) AS label,
+            if({dimension} = '', 'Unresolved hierarchy', {dimension}) AS label,
             count() AS total,
             countIf(priority = 'urgent') AS urgent,
             countIf(lead_status = 'expired') AS expired,
             countIf(lead_status = 'expiring_30') AS expiring_30,
             countIf(lead_status = 'expiring_60') AS expiring_60,
             countIf(lead_status = 'expiring_90') AS expiring_90,
-            sum(annual_rent_aed) AS potential_value
+            sumIf(
+                annual_rent_aed,
+                ownership_timing = 'stable_rental_history'
+            ) AS potential_value
         FROM leads
         WHERE {where}
         GROUP BY label
@@ -621,7 +854,10 @@ async def get_dashboard(
             count() AS total,
             countIf(priority = 'urgent') AS urgent,
             countIf(unit_match_status = 'unique') AS exact_unit_matches,
-            sum(annual_rent_aed) AS annual_rent_at_risk,
+            sumIf(
+                annual_rent_aed,
+                ownership_timing = 'stable_rental_history'
+            ) AS annual_rent_at_risk,
             arraySort(groupUniqArray(property_subtype)) AS property_types
         FROM leads
         WHERE {asset_where}
@@ -630,37 +866,11 @@ async def get_dashboard(
             multiIf(asset_class = 'residential', 1, asset_class = 'commercial', 2, 3)
         """
     )
-    metadata_sql = """
-        SELECT
-            (SELECT count() FROM dxbi_rental_events FINAL) AS rows,
-            (
-                SELECT countIf(match_status = 'unique')
-                FROM dxbi_rental_sale_matches FINAL
-            ) AS exact_unit_matches,
-            min(lease_start) AS min_date,
-            max(lease_start) AS max_date,
-            arraySort(groupUniqArrayIf(area_name, area_name != '')) AS areas,
-            arraySort(
-                groupUniqArrayIf(
-                    project_name,
-                    project_name != ''
-                    AND {filter_area:String} != ''
-                    AND area_name = {filter_area:String}
-                )
-            ) AS projects,
-            arraySort(
-                groupUniqArrayIf(
-                    building_name,
-                    building_name != ''
-                    AND {filter_area:String} != ''
-                    AND area_name = {filter_area:String}
-                    AND {filter_project:String} != ''
-                    AND project_name = {filter_project:String}
-                )
-            ) AS buildings
-        FROM dxbi_rental_unit_candidates FINAL
-    """
+    metadata_sql = _filter_metadata_sql(facet_where)
     metadata_params = {
+        **facet_filter_params,
+        "as_of": anchor.isoformat(),
+        "expired_days": expired_days,
         "filter_area": area or "",
         "filter_project": project or "",
     }
@@ -749,14 +959,15 @@ async def get_dashboard(
             rental_rows=int(metadata.get("rows") or 0),
             exact_unit_ids_available=bool(metadata.get("exact_unit_matches")),
             exact_unit_matches=int(metadata.get("exact_unit_matches") or 0),
+            data_complete_through=metadata.get("data_complete_through"),
             matching_method=(
                 "Unique sale match on building, area, bedroom layout, exact size, "
-                "and latest purchase price"
+                "purchase evidence, and a stable exact-unit lease timeline"
             ),
             caveat=(
-                "Unique matches expose a unit number and purchase date. Ambiguous or unmatched "
-                "layouts remain flagged for title-deed verification; owner contacts still "
-                "require enrichment."
+                "An exact-unit lease is flagged as unlet immediately after expiry when no later "
+                "registered lease is observed. Sales on or after lease expiry are excluded; "
+                "sales during an active tenancy remain ownership-transition reviews."
             ),
         ),
         as_of=anchor,
@@ -887,7 +1098,6 @@ async def get_lead_detail(lead_id: str, as_of: date | None = None) -> CrmLeadDet
                 amount_aed=int(item.get("sale_amount_aed") or 0),
                 source="Sales transaction registry",
                 confidence="high",
-                detail_url=str(item.get("detail_url") or "") or None,
                 ltv_pct=(float(item["ltv_pct"]) if item.get("ltv_pct") is not None else None),
                 capital_gain_pct=(
                     float(item["capital_gain_pct"])
@@ -992,7 +1202,11 @@ def _agent_signals(lead: CrmLead) -> list[str]:
     return signals
 
 
-def _saved_lead_response(saved: CrmSavedLead) -> CrmSavedLeadResponse:
+def _saved_lead_response(
+    saved: CrmSavedLead,
+    *,
+    live_lead: CrmLead | None = None,
+) -> CrmSavedLeadResponse:
     if saved.id is None:
         raise HTTPException(status_code=500, detail="Saved CRM lead is missing an id")
     snapshot = dict(saved.snapshot)
@@ -1008,7 +1222,7 @@ def _saved_lead_response(saved: CrmSavedLead) -> CrmSavedLeadResponse:
     snapshot.setdefault("property_subtype", property_type)
     return CrmSavedLeadResponse(
         id=saved.id,
-        lead=CrmLead.model_validate(snapshot),
+        lead=live_lead or CrmLead.model_validate(snapshot),
         created_at=saved.created_at,
         updated_at=saved.updated_at,
     )
@@ -1028,7 +1242,37 @@ async def list_saved_leads(
         )
         .order_by(CrmSavedLead.updated_at.desc())
     )
-    return [_saved_lead_response(saved) for saved in result.all()]
+    saved_rows = list(result.all())
+    if not saved_rows:
+        return []
+
+    candidate_keys = [saved.unit_candidate_key for saved in saved_rows]
+    live_rows = await query(
+        _LEAD_CTE
+        + """
+        SELECT
+            i.unit_candidate_key AS saved_candidate_key,
+            l.*
+        FROM identified_unit AS i
+        ANY INNER JOIN leads AS l USING (property_identity_key)
+        WHERE i.unit_candidate_key IN {candidate_keys:Array(String)}
+        """,
+        {
+            "as_of": date.today().isoformat(),
+            "expired_days": 3650,
+            "candidate_keys": candidate_keys,
+        },
+    )
+    live_by_saved_key = {
+        str(row["saved_candidate_key"]): _lead_from_row(row) for row in live_rows
+    }
+    return [
+        _saved_lead_response(
+            saved,
+            live_lead=live_by_saved_key.get(saved.unit_candidate_key),
+        )
+        for saved in saved_rows
+    ]
 
 
 async def save_lead(
@@ -1528,7 +1772,7 @@ async def _build_price_index(
         GROUP BY quarter, segment
         ORDER BY quarter, segment
     """
-    dxbi_sql = """
+    transaction_sql = """
         SELECT
             toStartOfQuarter(transaction_date) AS quarter,
             property_type AS segment,
@@ -1576,18 +1820,18 @@ async def _build_price_index(
         "segment_type": segment_type,
         "is_commercial": int(is_commercial),
     }
-    dld_rows, dxbi_rows, segment_rows = await asyncio.gather(
+    dld_rows, transaction_rows, segment_rows = await asyncio.gather(
         query(dld_sql, params),
-        query(dxbi_sql, params),
+        query(transaction_sql, params),
         query(segment_sql, params),
     )
 
     mix_series = _commercial_mix_series if is_commercial else _fixed_mix_series
     dld_psf, dld_counts = mix_series(dld_rows)
-    dxbi_psf, dxbi_counts = mix_series(dxbi_rows)
+    transaction_psf, transaction_counts = mix_series(transaction_rows)
     segment_psf, segment_counts = _single_series(segment_rows)
     dld_index = _rebase_series(dld_psf)
-    dxbi_index = _rebase_series(dxbi_psf)
+    transaction_index = _rebase_series(transaction_psf)
     segment_index = _rebase_series(segment_psf)
 
     points: list[CrmPriceIndexPoint] = []
@@ -1595,11 +1839,13 @@ async def _build_price_index(
     while quarter < current_quarter:
         source_indexes = [
             value
-            for value in (dld_index.get(quarter), dxbi_index.get(quarter))
+            for value in (dld_index.get(quarter), transaction_index.get(quarter))
             if value is not None
         ]
         source_psf = [
-            value for value in (dld_psf.get(quarter), dxbi_psf.get(quarter)) if value is not None
+            value
+            for value in (dld_psf.get(quarter), transaction_psf.get(quarter))
+            if value is not None
         ]
         if source_indexes:
             points.append(
@@ -1608,7 +1854,7 @@ async def _build_price_index(
                     label=_quarter_label(quarter),
                     dubai_index=round(sum(source_indexes) / len(source_indexes), 2),
                     dld_index=dld_index.get(quarter),
-                    dxbi_index=dxbi_index.get(quarter),
+                    transaction_index=transaction_index.get(quarter),
                     segment_index=segment_index.get(quarter),
                     dubai_median_psf_aed=(
                         int(round(sum(source_psf) / len(source_psf))) if source_psf else None
@@ -1617,7 +1863,7 @@ async def _build_price_index(
                         int(round(segment_psf[quarter])) if quarter in segment_psf else None
                     ),
                     dld_transactions=dld_counts.get(quarter, 0),
-                    dxbi_transactions=dxbi_counts.get(quarter, 0),
+                    transaction_count=transaction_counts.get(quarter, 0),
                     segment_transactions=segment_counts.get(quarter, 0),
                 )
             )
@@ -1830,7 +2076,6 @@ async def get_property_report(
                 if row.get("price_per_sqft_aed") is not None
                 else None
             ),
-            detail_url=str(row.get("detail_url") or "") or None,
             selection_reason=selection_reason,
         )
         for row, selection_reason in selected_sale_rows

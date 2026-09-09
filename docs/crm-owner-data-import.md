@@ -1,7 +1,7 @@
 # CRM Owner Data Import and Verification
 
 Status: implementation specification  
-Last updated: 29 July 2026  
+Last updated: 26 August 2026
 Owning domain: `backend/app/crm` and `frontend/src/routes/crm`
 
 ## 1. Purpose
@@ -797,3 +797,71 @@ arbitrary subset and apply pipeline state, colour highlighting, or an organizati
 private note in bulk. Existing lease-lead notes and highlights remain visible on
 rental-owner rows. WhatsApp and email sequence controls are presentation-only until
 consent, provider, suppression, and approval workflows are implemented.
+
+## 23. Implemented Property Resolver and August 2026 Backfill
+
+The local CRM now resolves imported property identities with deterministic evidence;
+it does not call an LLM per owner row. The resolver applies these stages:
+
+1. normalize literal placeholders such as `NULL`, unit whitespace, spelling variants,
+   Roman numerals, token order, and leading zeroes;
+2. recover complete villa or numeric unit identifiers embedded in a building column;
+3. apply vetted project/building aliases and project-specific address rules, including
+   The Edge tower inference from explicit `A`/`B` unit prefixes;
+4. resolve exact sale-date and price signatures only when the source location agrees,
+   or when one collision candidate wins by a conservative location margin;
+5. check exact price within a 14-day date window when DLD export and DXBI display
+   dates differ, again requiring location agreement;
+6. match the normalized unit within the area, project, and building hierarchy and
+   reject tied or weak location candidates;
+7. apply the full sales history to distinguish current, probable, conflicting, and
+   former owners.
+
+Every canonical-address change is recorded in claim evidence with the source and
+resolved identity. Previously accepted globally unique date/price matches can be
+replayed from their original source identity using the audit mode. This prevents an
+unrelated but globally unique transaction from silently overriding a contradictory
+project name.
+
+Two non-match conditions are deliberately separated from `unmatched`:
+
+- `insufficient_property_data` means the imported row has no recoverable unit or
+  property identifier;
+- `registry_not_observed` means the import has a usable unit, but that unit is absent
+  from current DXBI sales coverage;
+- `unmatched` is reserved for rows where registry candidates exist but the location
+  cannot be selected safely.
+
+After the 26 August 2026 backfill and historical-signature audit, the four loaded
+imports contain 80,732 claims with 1,734 true unmatched rows (2.15%):
+
+| Import | Claims | True unmatched |
+| --- | ---: | ---: |
+| Tilal Al Ghaf — Elan | 922 | 40 |
+| Business Bay 2024 SVR | 26,197 | 581 |
+| JBR, June 2024 | 12,860 | 390 |
+| Dubai Hills Elite | 40,753 | 723 |
+
+An additional 2,235 rows are explicitly marked as insufficient source property data,
+and 193 contain usable units not observed in current registry coverage. They remain
+visible for source enrichment or future DXBI reprocessing and are not represented as
+successful matches. Import-card summaries are refreshed from live claims after every
+rematch so the UI cannot continue showing the original stale import counts.
+
+Operational commands are provided by
+`backend/scripts/crm/rematch_owner_claims.py`:
+
+```sh
+# Re-evaluate unresolved claims for one import.
+uv run python scripts/crm/rematch_owner_claims.py \
+  --organization-id <organization-id> --import-id <import-id>
+
+# Re-audit historical date/price-only resolutions from original source addresses.
+uv run python scripts/crm/rematch_owner_claims.py \
+  --organization-id <organization-id> --import-id <import-id> \
+  --audit-unique-transactions
+
+# Refresh import-card counts without running ClickHouse matching.
+uv run python scripts/crm/rematch_owner_claims.py \
+  --organization-id <organization-id> --summary-only
+```

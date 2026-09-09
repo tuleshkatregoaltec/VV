@@ -311,14 +311,21 @@ def project_meta_by_name() -> str:
             p.no_of_units,
             p.no_of_buildings
         FROM ch_projects p
-        LEFT JOIN ch_developers d ON p.developer_id = d.developer_id
-        LEFT JOIN ch_developers dn
-            ON replaceRegexpAll(trim(BOTH ' ' FROM ifNull(p.developer_name, '')), '\\s+', ' ')
-            = replaceRegexpAll(trim(BOTH ' ' FROM ifNull(dn.developer_name_ar, '')), '\\s+', ' ')
-        LEFT JOIN ch_developers md ON p.master_developer_id = md.developer_id
-        LEFT JOIN ch_developers mdn
-            ON replaceRegexpAll(trim(BOTH ' ' FROM ifNull(p.master_developer_name, '')), '\\s+', ' ')
-            = replaceRegexpAll(trim(BOTH ' ' FROM ifNull(mdn.developer_name_ar, '')), '\\s+', ' ')
+        ANY LEFT JOIN ch_developers d ON p.developer_id = d.developer_id
+        ANY LEFT JOIN ch_developers dn
+            ON notEmpty(trim(BOTH ' ' FROM ifNull(p.developer_name, '')))
+            AND notEmpty(trim(BOTH ' ' FROM ifNull(dn.developer_name_ar, '')))
+            AND replaceRegexpAll(trim(BOTH ' ' FROM ifNull(p.developer_name, '')), '\\s+', ' ')
+                = replaceRegexpAll(trim(BOTH ' ' FROM ifNull(dn.developer_name_ar, '')), '\\s+', ' ')
+        ANY LEFT JOIN ch_developers md ON p.master_developer_id = md.developer_id
+        ANY LEFT JOIN ch_developers mdn
+            ON notEmpty(trim(BOTH ' ' FROM ifNull(p.master_developer_name, '')))
+            AND notEmpty(trim(BOTH ' ' FROM ifNull(mdn.developer_name_ar, '')))
+            AND replaceRegexpAll(
+                trim(BOTH ' ' FROM ifNull(p.master_developer_name, '')), '\\s+', ' '
+            ) = replaceRegexpAll(
+                trim(BOTH ' ' FROM ifNull(mdn.developer_name_ar, '')), '\\s+', ' '
+            )
         WHERE p.project_name_en = {project_name:String}
         LIMIT 1
     """
@@ -382,14 +389,21 @@ def project_meta_by_master() -> str:
                 )
             ) as developer_names
         FROM ch_projects p
-        LEFT JOIN ch_developers d ON p.developer_id = d.developer_id
-        LEFT JOIN ch_developers dn
-            ON replaceRegexpAll(trim(BOTH ' ' FROM ifNull(p.developer_name, '')), '\\s+', ' ')
-            = replaceRegexpAll(trim(BOTH ' ' FROM ifNull(dn.developer_name_ar, '')), '\\s+', ' ')
-        LEFT JOIN ch_developers md ON p.master_developer_id = md.developer_id
-        LEFT JOIN ch_developers mdn
-            ON replaceRegexpAll(trim(BOTH ' ' FROM ifNull(p.master_developer_name, '')), '\\s+', ' ')
-            = replaceRegexpAll(trim(BOTH ' ' FROM ifNull(mdn.developer_name_ar, '')), '\\s+', ' ')
+        ANY LEFT JOIN ch_developers d ON p.developer_id = d.developer_id
+        ANY LEFT JOIN ch_developers dn
+            ON notEmpty(trim(BOTH ' ' FROM ifNull(p.developer_name, '')))
+            AND notEmpty(trim(BOTH ' ' FROM ifNull(dn.developer_name_ar, '')))
+            AND replaceRegexpAll(trim(BOTH ' ' FROM ifNull(p.developer_name, '')), '\\s+', ' ')
+                = replaceRegexpAll(trim(BOTH ' ' FROM ifNull(dn.developer_name_ar, '')), '\\s+', ' ')
+        ANY LEFT JOIN ch_developers md ON p.master_developer_id = md.developer_id
+        ANY LEFT JOIN ch_developers mdn
+            ON notEmpty(trim(BOTH ' ' FROM ifNull(p.master_developer_name, '')))
+            AND notEmpty(trim(BOTH ' ' FROM ifNull(mdn.developer_name_ar, '')))
+            AND replaceRegexpAll(
+                trim(BOTH ' ' FROM ifNull(p.master_developer_name, '')), '\\s+', ' '
+            ) = replaceRegexpAll(
+                trim(BOTH ' ' FROM ifNull(mdn.developer_name_ar, '')), '\\s+', ' '
+            )
         WHERE (p.master_project_en = {project_name:String}
             OR lower(p.project_name_en) LIKE concat(lower({project_name:String}), ' - %'))
     """
@@ -661,14 +675,21 @@ def area_supply_projects(filter_by_area: bool = True) -> str:
             p.percent_completed,
             p.no_of_units
         FROM ch_projects p
-        LEFT JOIN ch_developers d ON p.developer_id = d.developer_id
-        LEFT JOIN ch_developers dn
-            ON replaceRegexpAll(trim(BOTH ' ' FROM ifNull(p.developer_name, '')), '\\s+', ' ')
-            = replaceRegexpAll(trim(BOTH ' ' FROM ifNull(dn.developer_name_ar, '')), '\\s+', ' ')
-        LEFT JOIN ch_developers md ON p.master_developer_id = md.developer_id
-        LEFT JOIN ch_developers mdn
-            ON replaceRegexpAll(trim(BOTH ' ' FROM ifNull(p.master_developer_name, '')), '\\s+', ' ')
-            = replaceRegexpAll(trim(BOTH ' ' FROM ifNull(mdn.developer_name_ar, '')), '\\s+', ' ')
+        ANY LEFT JOIN ch_developers d ON p.developer_id = d.developer_id
+        ANY LEFT JOIN ch_developers dn
+            ON notEmpty(trim(BOTH ' ' FROM ifNull(p.developer_name, '')))
+            AND notEmpty(trim(BOTH ' ' FROM ifNull(dn.developer_name_ar, '')))
+            AND replaceRegexpAll(trim(BOTH ' ' FROM ifNull(p.developer_name, '')), '\\s+', ' ')
+                = replaceRegexpAll(trim(BOTH ' ' FROM ifNull(dn.developer_name_ar, '')), '\\s+', ' ')
+        ANY LEFT JOIN ch_developers md ON p.master_developer_id = md.developer_id
+        ANY LEFT JOIN ch_developers mdn
+            ON notEmpty(trim(BOTH ' ' FROM ifNull(p.master_developer_name, '')))
+            AND notEmpty(trim(BOTH ' ' FROM ifNull(mdn.developer_name_ar, '')))
+            AND replaceRegexpAll(
+                trim(BOTH ' ' FROM ifNull(p.master_developer_name, '')), '\\s+', ' '
+            ) = replaceRegexpAll(
+                trim(BOTH ' ' FROM ifNull(mdn.developer_name_ar, '')), '\\s+', ' '
+            )
         WHERE {area_filter}
           coalesce(p.no_of_units, 0) > 0
           AND p.cancellation_date IS NULL

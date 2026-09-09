@@ -3,6 +3,10 @@ from typing import Any, Literal
 from pydantic import AwareDatetime, BaseModel, Field
 
 ListingMode = Literal["sale", "rent"]
+ListingAssetClass = Literal["residential", "commercial"]
+ListingMarketPosition = Literal["below_market", "near_market", "above_market", "insufficient_data"]
+ListingBenchmarkLevel = Literal["building_layout", "project_layout", "insufficient_data"]
+ListingUrgencySignal = Literal["explicit_urgency", "value_language", "none"]
 
 
 class ListingImageResponse(BaseModel):
@@ -38,6 +42,7 @@ class ListingPartyResponse(BaseModel):
 
 class ListingFiltersResponse(BaseModel):
     modes: list[ListingMode] = Field(default_factory=list)
+    asset_classes: list[ListingAssetClass] = Field(default_factory=list)
     areas: list[str] = Field(default_factory=list)
     property_types: list[str] = Field(default_factory=list)
     bedrooms: list[str] = Field(default_factory=list)
@@ -48,6 +53,7 @@ class ListingFiltersResponse(BaseModel):
 class ListingCardResponse(BaseModel):
     listing_id: str
     listing_mode: ListingMode
+    asset_class: ListingAssetClass
     title: str
     reference: str | None = None
     property_type: str | None = None
@@ -73,6 +79,16 @@ class ListingCardResponse(BaseModel):
     broker_name: str | None = None
     broker_logo_url: str | None = None
     listed_date: AwareDatetime | None = None
+    listing_age_days: int | None = None
+    price_per_sqft_aed: float | None = None
+    market_median_price_per_sqft_aed: float | None = None
+    market_estimate_aed: float | None = None
+    market_delta_pct: float | None = None
+    market_position: ListingMarketPosition = "insufficient_data"
+    comparable_count: int = 0
+    benchmark_level: ListingBenchmarkLevel = "insufficient_data"
+    urgency_signal: ListingUrgencySignal = "none"
+    urgency_terms: list[str] = Field(default_factory=list)
     is_available: bool | None = None
     is_verified: bool | None = None
     is_featured: bool | None = None
@@ -109,9 +125,29 @@ class ListingListResponse(BaseModel):
     filters: ListingFiltersResponse = Field(default_factory=ListingFiltersResponse)
 
 
+class ListingTrendPoint(BaseModel):
+    period: str
+    average_asking_price_aed: float | None = None
+    median_asking_price_aed: float | None = None
+    median_price_per_sqft_aed: float | None = None
+    listing_count: int = 0
+    median_achieved_price_per_sqft_aed: float | None = None
+    achieved_transaction_count: int = 0
+
+
 class ListingAnalyticsResponse(BaseModel):
     total: int = 0
+    average_price_aed: float | None = None
     median_price_aed: float | None = None
     median_price_per_sqft_aed: float | None = None
+    average_listing_age_days: float | None = None
+    median_listing_age_days: float | None = None
+    newly_listed_30d: int = 0
+    below_market_count: int = 0
+    near_market_count: int = 0
+    above_market_count: int = 0
+    benchmarked_count: int = 0
     verified_count: int = 0
     area_count: int = 0
+    snapshot_at: AwareDatetime | None = None
+    trend: list[ListingTrendPoint] = Field(default_factory=list)

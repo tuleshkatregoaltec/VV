@@ -1,7 +1,15 @@
 import pytest
 
 from app.listings import service
-from app.listings.service import MONTHLY_PRICE_EXPR, PRICE_PERIOD_EXPR, _card_from_row, _where_sql
+from app.listings.service import (
+    MONTHLY_PRICE_EXPR,
+    PRICE_PERIOD_EXPR,
+    _card_from_row,
+    _category_ids,
+    _location_hierarchy,
+    _urgency_terms,
+    _where_sql,
+)
 
 
 class Row:
@@ -66,6 +74,47 @@ def test_listing_where_sql_can_filter_raw_price_period():
 
     assert f"{PRICE_PERIOD_EXPR} = {{price_period:String}}" in where
     assert params["price_period"] == "yearly"
+
+
+def test_source_categories_separate_residential_and_commercial_inventory():
+    assert _category_ids("sale", "residential") == (1,)
+    assert _category_ids("rent", "residential") == (2,)
+    assert _category_ids("sale", "commercial") == (3,)
+    assert _category_ids("rent", "commercial") == (4,)
+
+
+def test_apartment_location_leaf_is_building_and_parent_is_project():
+    assert _location_hierarchy(
+        ["Dubai", "Business Bay", "Peninsula", "Peninsula Three"], "Apartment"
+    ) == ("Business Bay", "Peninsula", "Peninsula Three")
+    assert _location_hierarchy(["Dubai", "Dubai Marina", "Elite Residence"], "Apartment") == (
+        "Dubai Marina",
+        None,
+        "Elite Residence",
+    )
+
+
+def test_villa_location_leaf_is_project_and_building_is_blank():
+    assert _location_hierarchy(["Dubai", "Arabian Ranches 3", "Bliss", "Bliss 2"], "Villa") == (
+        "Arabian Ranches 3",
+        "Bliss 2",
+        None,
+    )
+
+
+def test_sales_urgency_language_is_evidence_only_and_sales_only():
+    signal, terms = _urgency_terms(
+        "sale", "Motivated seller | Price reduced", "Vacant apartment"
+    )
+    assert signal == "explicit_urgency"
+    assert terms == ["motivated seller", "price reduced"]
+    assert _urgency_terms("rent", "Urgent sale", "Distress deal") == ("none", [])
+
+
+def test_generic_value_language_is_not_treated_as_explicit_urgency():
+    signal, terms = _urgency_terms("sale", "Best price in the building", None)
+    assert signal == "value_language"
+    assert terms == ["best price"]
 
 
 @pytest.mark.asyncio

@@ -242,6 +242,7 @@ services:
       - "${DAGSTER_PORT:-3000}:3000"
     volumes:
       - ./holocron:/app
+      - dev-dagster-webserver-venv:/app/.venv
     environment:
       DAGSTER_HOME: /app
       PYTHONUNBUFFERED: "1"
@@ -282,6 +283,7 @@ services:
     command: uv run --locked --no-dev dagster-daemon run -w /app/workspace.yaml
     volumes:
       - ./holocron:/app
+      - dev-dagster-daemon-venv:/app/.venv
     environment:
       DAGSTER_HOME: /app
       PYTHONUNBUFFERED: "1"
@@ -323,3 +325,5 @@ volumes:
   dev-clickhouse-data:
   dev-minio-data:
   dev-postgres-dagster-data:
+  dev-dagster-webserver-venv:
+  dev-dagster-daemon-venv:

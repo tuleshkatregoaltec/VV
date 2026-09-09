@@ -13,7 +13,7 @@ import {
 } from 'lucide-svelte'
 import { cubicOut } from 'svelte/easing'
 import { fade, fly } from 'svelte/transition'
-import type { ListingCardResponse } from '$lib/api/listings'
+import type { ListingCardResponse } from '$lib/api/generated/hey-api/types.gen'
 import type { ChatArtifact } from '$lib/chat/artifacts'
 import ChatCustomChartArtifact from './ChatCustomChartArtifact.svelte'
 import ChatMarketTrendArtifact from './ChatMarketTrendArtifact.svelte'

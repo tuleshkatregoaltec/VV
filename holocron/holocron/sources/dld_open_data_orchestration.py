@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from datetime import date, timedelta
 from typing import Any
 
 from dagster import Failure
@@ -16,6 +17,11 @@ DLD_OPEN_DATA_CHUNK_DEFAULTS = {
     "max_pages": 1,
     "slice_days": 366,
 }
+DLD_OPEN_DATA_INCREMENTAL_DEFAULTS = {
+    "mode": "incremental",
+    "page_size": 10000,
+    "slice_days": 14,
+}
 DLD_OPEN_DATA_RENTS_FULL_DEFAULTS = {
     **DLD_OPEN_DATA_CHUNK_DEFAULTS,
     "start_date": "2017-01-01",
@@ -23,7 +29,15 @@ DLD_OPEN_DATA_RENTS_FULL_DEFAULTS = {
 }
 DLD_OPEN_DATA_RENTS_INCREMENTAL_DEFAULTS = {
     "mode": "incremental",
-    "filters": {"P_DATE_TYPE": "0"},
+    "page_size": 10000,
+    "slice_days": 1,
+    "lookback_days": 14,
+    "checkpointed_incremental": True,
+    "incremental_overlap_days": 7,
+    "filters": {"P_DATE_TYPE": "3"},
+    "row_date_field": "REGISTRATION_DATE",
+    "request_to_date_offset_days": 1,
+    "replace_date_column": "registration_date",
 }
 
 
@@ -54,7 +68,13 @@ def resolve_open_data_config(
     resolved_config = dict(source_config)
     mode = str(resolved_config.get("mode") or "incremental")
     reset_checkpoint = bool(resolved_config.pop("reset_checkpoint", False))
-    if mode not in {"snapshot", "backfill"}:
+    if mode == "incremental":
+        if bool(resolved_config.get("checkpointed_incremental")):
+            return _resolve_checkpointed_incremental_config(
+                source_name=source_name,
+                source_config=resolved_config,
+                object_storage_client=object_storage_client,
+            )
         return resolved_config
 
     has_explicit_cursor = "window_cursor" in source_config or "skip_cursor" in source_config
@@ -94,6 +114,50 @@ def resolve_open_data_config(
     return resolved_config
 
 
+def _resolve_checkpointed_incremental_config(
+    *,
+    source_name: str,
+    source_config: Mapping[str, Any],
+    object_storage_client: Any,
+) -> dict[str, Any]:
+    resolved_config = dict(source_config)
+    today = utc_now().date()
+    end_date = _config_date(source_config, "end_date") or today
+    if _has_config_value(source_config, "start_date"):
+        resolved_config["end_date"] = end_date.isoformat()
+        return resolved_config
+
+    checkpoint = read_checkpoint_model(
+        object_storage_client,
+        source=source_name,
+        operation=open_data_checkpoint_operation("incremental"),
+        model=_OpenDataCheckpoint,
+    )
+    overlap_days = max(_config_int(source_config, "incremental_overlap_days", default=0), 0)
+    if (
+        checkpoint
+        and checkpoint.completed
+        and checkpoint.effective_end_date
+        and _open_data_checkpoint_matches(
+            checkpoint=checkpoint,
+            source_config=source_config,
+            mode="incremental",
+        )
+    ):
+        start_date = date.fromisoformat(checkpoint.effective_end_date) - timedelta(
+            days=overlap_days
+        )
+    else:
+        lookback_days = max(_config_int(source_config, "lookback_days", default=3), 0)
+        start_date = end_date - timedelta(days=lookback_days)
+    if start_date > end_date:
+        start_date = end_date
+    resolved_config["start_date"] = start_date.isoformat()
+    resolved_config["end_date"] = end_date.isoformat()
+    resolved_config["checkpoint_explicit_date_window"] = False
+    return resolved_config
+
+
 def write_open_data_checkpoint(
     *,
     raw_release: RawRelease,
@@ -102,11 +166,13 @@ def write_open_data_checkpoint(
 ) -> None:
     metadata = dict(raw_release.metadata)
     mode = str(metadata.get("stage") or "")
-    if mode not in {"snapshot", "backfill"}:
-        return
     config = metadata.get("config")
     if not isinstance(config, Mapping):
         config = {}
+    if mode == "incremental" and not bool(config.get("checkpointed_incremental")):
+        return
+    if mode not in {"snapshot", "backfill", "incremental"}:
+        return
     write_checkpoint(
         object_storage_client,
         source=raw_release.source,
@@ -139,6 +205,8 @@ def write_open_data_checkpoint(
 
 
 def open_data_checkpoint_operation(mode: str) -> str:
+    if mode == "incremental":
+        return "incremental_success"
     return f"{mode}_chunk"
 
 
@@ -210,3 +278,19 @@ def _has_config_value(config: Mapping[str, Any], key: str) -> bool:
 
 def _has_explicit_date_window(config: Mapping[str, Any]) -> bool:
     return any(_has_config_value(config, key) for key in ("start_date", "end_date"))
+
+
+def _config_date(config: Mapping[str, Any], key: str) -> date | None:
+    value = config.get(key)
+    if value in {None, ""}:
+        return None
+    if isinstance(value, date):
+        return value
+    return date.fromisoformat(str(value))
+
+
+def _config_int(config: Mapping[str, Any], key: str, *, default: int) -> int:
+    value = config.get(key)
+    if value in {None, ""}:
+        return default
+    return int(value)

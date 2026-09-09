@@ -131,8 +131,17 @@ def test_dld_open_data_bronze_loaders_map_rows(source: str, row_file: str, table
     assert any(f"CREATE TABLE IF NOT EXISTS {table}" in sql for sql in clickhouse.commands)
     delete_sql = next(sql for sql in clickhouse.commands if f"ALTER TABLE `{table}` DELETE" in sql)
     assert "source_system = 'dld_open_data'" in delete_sql
-    assert "date_window_start = toDate('2026-05-05')" in delete_sql
-    assert "date_window_end = toDate('2026-05-06')" in delete_sql
+    replace_date_columns = {
+        "dld_od_transactions": "instance_date",
+        "dld_od_rents": "start_date",
+    }
+    if source in replace_date_columns:
+        date_column = replace_date_columns[source]
+        assert f"toDate(`{date_column}`) >= toDate('2026-05-05')" in delete_sql
+        assert f"toDate(`{date_column}`) <= toDate('2026-05-06')" in delete_sql
+    else:
+        assert "date_window_start = toDate('2026-05-05')" in delete_sql
+        assert "date_window_end = toDate('2026-05-06')" in delete_sql
     assert "run_id = 'run-1'" not in delete_sql
     assert clickhouse.insert_calls[0]["table"] == table
     # All sources share the same envelope layout at positions 1-7.
@@ -146,6 +155,43 @@ def test_dld_open_data_bronze_loaders_map_rows(source: str, row_file: str, table
         1,
         3,
     )
+
+
+def test_dld_rents_bronze_can_replace_by_manifest_configured_registration_date() -> None:
+    source = "dld_od_rents"
+    row_file = "dld_od_rents_rows.jsonl"
+    table = "dld_od_rents_bronze"
+    payload = _jsonl_payload(
+        [
+            {
+                "endpoint": "rents",
+                "category": "rents",
+                "scraped_at": "2026-05-06T12:00:00+00:00",
+                "mode": "incremental",
+                "date_window": {"start_date": "2026-05-05", "end_date": "2026-05-06"},
+                "page_index": 1,
+                "row_index": 3,
+                "raw": {"TOTAL": 1, "ID": "row-1"},
+            }
+        ]
+    )
+    release = _release(source, row_file, payload)
+    release["metadata"] = {"config": {"replace_date_column": "registration_date"}}
+    clickhouse = FakeClickHouse()
+
+    result = importlib.import_module(
+        "holocron.sources.dld_od_rents.bronze"
+    ).load_release_to_clickhouse(
+        raw_manifest=release,
+        s3=FakeS3({f"raw/{source}/{row_file}": payload}),
+        clickhouse=clickhouse,
+    )
+
+    assert result["table_row_counts"] == {table: 1}
+    delete_sql = next(sql for sql in clickhouse.commands if f"ALTER TABLE `{table}` DELETE" in sql)
+    assert "toDate(`registration_date`) >= toDate('2026-05-05')" in delete_sql
+    assert "toDate(`registration_date`) <= toDate('2026-05-06')" in delete_sql
+    assert "toDate(`start_date`)" not in delete_sql
 
 
 def test_dld_open_data_units_bronze_maps_unit_columns() -> None:
@@ -285,7 +331,7 @@ def test_dld_open_data_bronze_clears_zero_row_windows_from_page_metadata() -> No
     assert result["table_row_counts"] == {table: 0}
     delete_sql = next(sql for sql in clickhouse.commands if f"ALTER TABLE `{table}` DELETE" in sql)
     assert "source_system = 'dld_open_data'" in delete_sql
-    assert "date_window_start = toDate('2026-05-05')" in delete_sql
+    assert "toDate(`instance_date`) >= toDate('2026-05-05')" in delete_sql
     assert not clickhouse.insert_calls
 
 

@@ -8,6 +8,8 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
+from holocron.sources.dxbi.rental_events import canonical_area_name
+
 _AGENT_PREFIX = re.compile(r"^(?:Buyer's|Seller's)\s+agent\s+", re.IGNORECASE)
 _LOCATION_SUFFIX = re.compile(
     r"\s+(?P<status>Offplan|Ready)\s+(?P<property_type>.+?),\s*Floor\b.*$",
@@ -32,6 +34,7 @@ _SOLD_BY = re.compile(
 _SALE_DATE = re.compile(
     r"(?P<day>\d{1,2}),\s*(?P<month>[A-Za-z]{3})\s*(?P<year>\d{4})"
 )
+_UNIT_NUMBER = re.compile(r"\bNo\.\s*(?P<unit>[A-Za-z0-9][A-Za-z0-9/-]*)", re.IGNORECASE)
 
 
 def normalize_sales_row(payload: dict[str, Any], *, source_file: str = "") -> dict[str, Any] | None:
@@ -58,7 +61,7 @@ def normalize_sales_row(payload: dict[str, Any], *, source_file: str = "") -> di
 
     parts = [part.strip() for part in location.split(",") if part.strip()]
     building_name = parts[0] if parts else ""
-    area_name = parts[-1] if len(parts) >= 2 else ""
+    area_name = canonical_area_name(parts[-1]) if len(parts) >= 2 else ""
     project_name = ", ".join(parts[1:-1]) if len(parts) >= 3 else ""
     specs = str(payload.get("specs_text") or "")
     bedrooms = _bedroom_label(specs)
@@ -104,6 +107,7 @@ def normalize_sales_row(payload: dict[str, Any], *, source_file: str = "") -> di
         "project_name": project_name,
         "area_name": area_name,
         "area_key": location_key(area_name),
+        "address_normalization_version": 5,
         "property_type": property_type,
         "market_status": market_status,
         "bedrooms": bedrooms,
@@ -136,11 +140,39 @@ def normalize_sales_row(payload: dict[str, Any], *, source_file: str = "") -> di
 
 
 def compact_payload(line: str) -> dict[str, Any]:
-    """Decode only the small top-level prefix, excluding bulky HTML column payloads."""
+    """Return the normalized input shape from old compact or current raw rows."""
     prefix = line.split(',"columns":', 1)[0]
     import json
 
-    return json.loads(f"{prefix}}}")
+    compact = json.loads(f"{prefix}}}")
+    if "unit_number" in compact:
+        return compact
+
+    record = json.loads(line)
+    columns = {
+        str(column.get("id") or ""): column
+        for column in record.get("columns") or []
+        if isinstance(column, dict)
+    }
+    location_text = str(columns.get("PATH_NAME", {}).get("text") or "")
+    unit_match = _UNIT_NUMBER.search(location_text)
+    detail_url = ""
+    for column in columns.values():
+        for link in column.get("links") or []:
+            candidate = str(link.get("href") or "")
+            if "/sold/" in candidate:
+                detail_url = candidate
+                break
+        if detail_url:
+            break
+    return {
+        "unit_number": unit_match.group("unit") if unit_match else "",
+        "location_text": location_text,
+        "amount_text": str(columns.get("TOTAL_PRICE", {}).get("text") or ""),
+        "specs_text": str(columns.get("BEDROOM", {}).get("text") or ""),
+        "date_text": str(columns.get("SOLD_BY", {}).get("text") or ""),
+        "detail_url": detail_url,
+    }
 
 
 def location_key(value: str) -> str:

@@ -383,7 +383,8 @@ async def crm_contact_list(
         default=None,
         pattern=(
             "^(verified_current_owner|probable_current_owner|unit_linked_unverified|"
-            "former_owner|conflicting_claim|unmatched)$"
+            "former_owner|conflicting_claim|insufficient_property_data|"
+            "registry_not_observed|unmatched)$"
         ),
     ),
     search: str | None = Query(default=None, max_length=160),
@@ -419,7 +420,8 @@ async def crm_owner_registry(
         default=None,
         pattern=(
             "^(verified_current_owner|probable_current_owner|unit_linked_unverified|"
-            "former_owner|conflicting_claim|unmatched)$"
+            "former_owner|conflicting_claim|insufficient_property_data|"
+            "registry_not_observed|unmatched)$"
         ),
     ),
     search: str | None = Query(default=None, max_length=160),

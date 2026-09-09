@@ -40,6 +40,7 @@ def test_definitions_expose_source_assets() -> None:
     asset_keys = {asset.key.to_user_string() for asset in _defs_assets()}
 
     assert asset_keys == {
+        "bayut_listings_raw",
         "dda_planning_layers_raw",
         "dda_planning_layers_bronze",
         *DLD_OD_RAW_ASSETS,
@@ -61,6 +62,13 @@ def test_definitions_expose_source_assets() -> None:
         "reelly_supply_bronze",
         "reelly_supply_document_assets",
         "reelly_supply_project_media_assets",
+        "silver_transactions",
+        "silver_rent_contracts",
+        "geo_location_nodes",
+        "geo_location_closure",
+        "geo_source_signatures",
+        "geo_entity_links",
+        "offplan_reelly_project_links",
     }
 
 
@@ -112,6 +120,10 @@ def test_definitions_expose_named_operational_jobs() -> None:
         "reelly_supply_document_assets_backfill",
         "reelly_supply_project_media_assets_backfill",
         "pf_listing_media_assets_backfill",
+        "silver_transactions_refresh",
+        "silver_rent_contracts_refresh",
+        "silver_refresh",
+        "geography_crosswalk_refresh",
     }
 
 
@@ -170,6 +182,24 @@ def test_definitions_expose_only_recurring_operational_schedules() -> None:
             "Asia/Dubai",
             DefaultScheduleStatus.STOPPED,
         ),
+        "silver_refresh_schedule": (
+            "silver_refresh",
+            "0 6 * * *",
+            "Asia/Dubai",
+            DefaultScheduleStatus.STOPPED,
+        ),
+        "silver_transactions_refresh_schedule": (
+            "silver_transactions_refresh",
+            "0 6 * * *",
+            "Asia/Dubai",
+            DefaultScheduleStatus.STOPPED,
+        ),
+        "silver_rent_contracts_refresh_schedule": (
+            "silver_rent_contracts_refresh",
+            "10 6 * * *",
+            "Asia/Dubai",
+            DefaultScheduleStatus.STOPPED,
+        ),
     }
 
 
@@ -205,6 +235,13 @@ def test_operational_jobs_select_expected_assets() -> None:
             "pf_listings_bronze",
         },
         "news_feeds_poll_and_hydrate": {"news_feeds_raw", "news_thumbnail_assets"},
+        "geography_crosswalk_refresh": {
+            "geo_location_nodes",
+            "geo_location_closure",
+            "geo_source_signatures",
+            "geo_entity_links",
+            "offplan_reelly_project_links",
+        },
         "dda_planning_layers_manual_full_refresh": {
             "dda_planning_layers_raw",
             "dda_planning_layers_bronze",
@@ -321,7 +358,18 @@ def test_manual_one_shot_jobs_default_raw_config() -> None:
             "dld_od_rents_daily_incremental",
             "dld_od_rents_raw",
             {},
-            {"mode": "incremental", "filters": {"P_DATE_TYPE": "0"}},
+            {
+                "mode": "incremental",
+                "page_size": 10000,
+                "slice_days": 1,
+                "lookback_days": 14,
+                "checkpointed_incremental": True,
+                "incremental_overlap_days": 7,
+                "filters": {"P_DATE_TYPE": "3"},
+                "row_date_field": "REGISTRATION_DATE",
+                "request_to_date_offset_days": 1,
+                "replace_date_column": "registration_date",
+            },
         ),
         (
             "dld_pulse_historic_archive",

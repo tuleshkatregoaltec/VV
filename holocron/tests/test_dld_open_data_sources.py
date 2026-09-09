@@ -1,4 +1,5 @@
 from datetime import UTC, date, datetime
+import json
 from pathlib import Path
 from typing import Any
 
@@ -19,6 +20,9 @@ from holocron.sources.dld_od_buildings.extract import (
 )
 from holocron.sources.dld_od_lands.extract import extract_release as extract_lands_release
 from holocron.sources.dld_od_rents.extract import extract_release as extract_rents_release
+from holocron.sources.dld_od_transactions.extract import (
+    extract_release as extract_transactions_release,
+)
 from holocron.sources.dld_od_units.extract import extract_release as extract_units_release
 
 
@@ -38,6 +42,20 @@ class FakeDldOpenDataClient:
             "responseCode": 200,
             "validationErrorsList": [],
             "response": {"result": rows},
+        }
+
+
+class FakeWindowDateClient:
+    def __init__(self, rows: list[dict[str, Any]]) -> None:
+        self.rows = rows
+        self.calls: list[tuple[str, dict[str, str]]] = []
+
+    def fetch(self, *, command: str, payload: dict[str, str]) -> dict:
+        self.calls.append((command, dict(payload)))
+        return {
+            "responseCode": 200,
+            "validationErrorsList": [],
+            "response": {"result": self.rows},
         }
 
 
@@ -80,6 +98,144 @@ def test_dld_open_data_sources_are_registered() -> None:
 
 def test_dld_pulse_historic_source_is_registered() -> None:
     assert registry.get("dld_pulse_historic").name == "dld_pulse_historic"
+
+
+def test_dld_transactions_request_includes_end_date_without_storing_next_day(
+    tmp_path: Path,
+) -> None:
+    api_client = FakeWindowDateClient(
+        [
+            {
+                "RN": 1,
+                "TOTAL": 2,
+                "TRANSACTION_NUMBER": "same-day",
+                "INSTANCE_DATE": "2026-06-14T12:00:00",
+            },
+            {
+                "RN": 2,
+                "TOTAL": 2,
+                "TRANSACTION_NUMBER": "next-day",
+                "INSTANCE_DATE": "2026-06-15T00:00:00",
+            },
+        ]
+    )
+
+    release = extract_transactions_release(
+        tmp_path,
+        config={
+            "mode": "backfill",
+            "start_date": "2026-06-14",
+            "end_date": "2026-06-14",
+            "checkpointed_incremental": True,
+            "incremental_overlap_days": 7,
+            "page_size": 10,
+        },
+        now=datetime(2026, 6, 14, 12, 0, tzinfo=UTC),
+        api_client=api_client,
+    )
+
+    assert release.metadata["row_count"] == 1
+    assert api_client.calls[0][1]["P_FROM_DATE"] == "06/14/2026"
+    assert api_client.calls[0][1]["P_TO_DATE"] == "06/15/2026"
+    rows_file = next(file for file in release.files if file.path.endswith("_rows.jsonl"))
+    rows = [
+        json.loads(line) for line in Path(rows_file.path).read_text(encoding="utf-8").splitlines()
+    ]
+    assert [row["raw"]["TRANSACTION_NUMBER"] for row in rows] == ["same-day"]
+
+
+def test_dld_rents_registration_request_includes_end_date_without_storing_next_day(
+    tmp_path: Path,
+) -> None:
+    api_client = FakeWindowDateClient(
+        [
+            {
+                "RN": 1,
+                "TOTAL": 2,
+                "REGISTRATION_DATE": "2026-06-14T12:00:00",
+            },
+            {
+                "RN": 2,
+                "TOTAL": 2,
+                "REGISTRATION_DATE": "2026-06-15T00:00:00",
+            },
+        ]
+    )
+
+    release = extract_rents_release(
+        tmp_path,
+        config={
+            "mode": "backfill",
+            "start_date": "2026-06-14",
+            "end_date": "2026-06-14",
+            "page_size": 10,
+            "filters": {"P_DATE_TYPE": "3"},
+            "row_date_field": "REGISTRATION_DATE",
+            "request_to_date_offset_days": 1,
+        },
+        now=datetime(2026, 6, 14, 12, 0, tzinfo=UTC),
+        api_client=api_client,
+    )
+
+    assert release.metadata["row_count"] == 1
+    assert api_client.calls[0][1]["P_DATE_TYPE"] == "3"
+    assert api_client.calls[0][1]["P_FROM_DATE"] == "06/14/2026"
+    assert api_client.calls[0][1]["P_TO_DATE"] == "06/15/2026"
+
+
+def test_checkpointed_incremental_uses_last_success_with_overlap(monkeypatch: Any) -> None:
+    from holocron.sources import dld_open_data_orchestration as orchestration
+
+    s3 = FakeCheckpointS3()
+    s3.objects[
+        checkpoint_s3_key(
+            source="dld_od_rents",
+            operation=open_data_checkpoint_operation("incremental"),
+        )
+    ] = {
+        "mode": "incremental",
+        "completed": True,
+        "effective_end_date": "2026-06-10",
+        "filters": {"P_DATE_TYPE": "3"},
+        "sort": "",
+    }
+    monkeypatch.setattr(orchestration, "utc_now", lambda: datetime(2026, 6, 24, tzinfo=UTC))
+
+    config = resolve_open_data_config(
+        source_name="dld_od_rents",
+        source_config={
+            "mode": "incremental",
+            "checkpointed_incremental": True,
+            "lookback_days": 14,
+            "incremental_overlap_days": 7,
+            "filters": {"P_DATE_TYPE": "3"},
+        },
+        object_storage_client=s3,
+    )
+
+    assert config["start_date"] == "2026-06-03"
+    assert config["end_date"] == "2026-06-24"
+    assert config["checkpoint_explicit_date_window"] is False
+
+
+def test_checkpointed_incremental_uses_lookback_without_checkpoint(monkeypatch: Any) -> None:
+    from holocron.sources import dld_open_data_orchestration as orchestration
+
+    monkeypatch.setattr(orchestration, "utc_now", lambda: datetime(2026, 6, 24, tzinfo=UTC))
+
+    config = resolve_open_data_config(
+        source_name="dld_od_rents",
+        source_config={
+            "mode": "incremental",
+            "checkpointed_incremental": True,
+            "lookback_days": 14,
+            "incremental_overlap_days": 7,
+        },
+        object_storage_client=FakeCheckpointS3(),
+    )
+
+    assert config["start_date"] == "2026-06-10"
+    assert config["end_date"] == "2026-06-24"
 
 
 def test_dld_open_data_default_snapshot_checkpoint_resumes_effective_date_window() -> None:
@@ -354,7 +510,7 @@ def test_dld_open_data_date_backfill_paginates_rows(tmp_path: Path) -> None:
     assert api_client.calls[0] == (
         "rents",
         {
-            "P_DATE_TYPE": "0",
+            "P_DATE_TYPE": "1",
             "P_IS_FREE_HOLD": "",
             "P_VERSION": "",
             "P_AREA_ID": "",

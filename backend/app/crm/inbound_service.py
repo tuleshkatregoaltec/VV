@@ -18,6 +18,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.clickhouse.client import query
 from app.config import settings
+from app.core.reelly_scope import reelly_dubai_project_scope
 from app.crm.import_models import CrmPropertyContactClaim
 from app.crm.import_service import _normalize_email, _normalize_phone
 from app.crm.inbound_models import (
@@ -183,6 +184,24 @@ def _sla_state(enquiry: CrmInboundEnquiry) -> str:
     if due <= now:
         return "overdue"
     return "due_soon" if due - now <= timedelta(minutes=2) else "on_time"
+
+
+def _belongs_in_inbox(enquiry: CrmInboundEnquiry) -> bool:
+    """Keep the inbox operational: an untouched qualified lead still needs a response."""
+    if enquiry.record_kind != "opportunity" or enquiry.status in {
+        "won",
+        "nurture",
+        "closed_lost",
+        "disqualified",
+    }:
+        return False
+    if enquiry.first_contact_at is None:
+        return True
+    if enquiry.status in {"new", "assigned", "attempted", "contacted", "needs_review"}:
+        return True
+    # Follow-up is a calendar-date commitment in the agent's local workspace,
+    # unlike response timestamps which are stored in UTC.
+    return bool(enquiry.next_follow_up and enquiry.next_follow_up <= date.today())
 
 
 def _redact(text: str, contact_values: list[str]) -> str:
@@ -620,6 +639,19 @@ def _claim_property_identity(claim: CrmPropertyContactClaim) -> str:
     )
 
 
+def _claim_observed_value(claim: CrmPropertyContactClaim) -> int:
+    evidence = claim.evidence or {}
+    candidates = (
+        claim.latest_sale_price_aed,
+        claim.transaction_price_aed,
+        evidence.get("latest_sale_price_aed"),
+        evidence.get("sale_amount_aed"),
+        evidence.get("transaction_price_aed"),
+        evidence.get("purchase_price_aed"),
+    )
+    return next((amount for value in candidates if (amount := _amount(value))), 0)
+
+
 def _ownership_enrichment(
     matches: list[tuple[CrmPropertyContactClaim, str]],
 ) -> InboundOwnershipEnrichmentResponse:
@@ -634,6 +666,8 @@ def _ownership_enrichment(
         "former_owner": 3,
         "unit_linked_unverified": 2,
         "conflicting_claim": 1,
+        "registry_not_observed": 0,
+        "insufficient_property_data": 0,
         "unmatched": 0,
     }
     for claim, _ in matches:
@@ -652,6 +686,7 @@ def _ownership_enrichment(
     ]
     former = [claim for claim in claims if claim.ownership_status == "former_owner"]
     rental = [claim for claim in current if claim.lease_end or claim.lead_id]
+    portfolio_value = sum(_claim_observed_value(claim) for claim in claims)
     reasons = [
         "Phone matched owner records"
         if match_basis == "phone"
@@ -669,6 +704,8 @@ def _ownership_enrichment(
         reasons.append(f"{len(rental)} rental propert{'y' if len(rental) == 1 else 'ies'} observed")
     if len(claims) >= 2:
         reasons.append(f"Known across {len(claims)} properties")
+    if portfolio_value:
+        reasons.append(f"AED {portfolio_value:,} in observed property-value evidence")
     return InboundOwnershipEnrichmentResponse(
         matched=True,
         match_basis=match_basis,  # type: ignore[arg-type]
@@ -681,6 +718,7 @@ def _ownership_enrichment(
         prior_property_count=len(former),
         rental_property_count=len(rental),
         known_property_count=len(claims),
+        observed_portfolio_value_aed=portfolio_value,
         reasons=reasons,
     )
 
@@ -752,21 +790,146 @@ async def _bulk_ownership_enrichments(
     }
 
 
+async def _registry_transaction_evidence(
+    claims: list[CrmPropertyContactClaim],
+) -> tuple[dict[str, dict[str, Any]], dict[str, dict[str, Any]]]:
+    """Hydrate owner-import claims with transaction and lease evidence in one batch."""
+    buildings = sorted(
+        {claim.building_name.strip().casefold() for claim in claims if claim.building_name.strip()}
+    )
+    units = sorted({claim.unit_number.strip().casefold() for claim in claims if claim.unit_number})
+    candidate_keys = sorted(
+        {claim.unit_candidate_key for claim in claims if claim.unit_candidate_key}
+    )
+    sales: dict[str, dict[str, Any]] = {}
+    leases: dict[str, dict[str, Any]] = {}
+    if buildings and units:
+        try:
+            rows = await query(
+                """
+                SELECT
+                    building_name,
+                    unit_number,
+                    transaction_date,
+                    sale_amount_aed,
+                    ltv_pct,
+                    seller_type,
+                    detail_url
+                FROM dxbi_sales_unit_events FINAL
+                WHERE
+                    lowerUTF8(building_name) IN {buildings:Array(String)}
+                    AND lowerUTF8(unit_number) IN {units:Array(String)}
+                ORDER BY transaction_date DESC
+                LIMIT 500
+                """,
+                {"buildings": buildings, "units": units},
+            )
+            for row in rows:
+                key = f"{_token(row.get('building_name'))}|{_token(row.get('unit_number'))}"
+                sales.setdefault(key, row)
+        except Exception:
+            sales = {}
+    if candidate_keys:
+        try:
+            rows = await query(
+                """
+                SELECT
+                    c.unit_candidate_key,
+                    c.lease_start,
+                    c.lease_end,
+                    c.annual_rent_aed,
+                    c.contract_state,
+                    c.observed_contracts
+                FROM dxbi_rental_unit_candidates AS c FINAL
+                WHERE c.unit_candidate_key IN {candidate_keys:Array(String)}
+                LIMIT 200
+                """,
+                {"candidate_keys": candidate_keys},
+            )
+            leases = {str(row["unit_candidate_key"]): row for row in rows}
+        except Exception:
+            leases = {}
+    return sales, leases
+
+
 def _lead_priority(
     enquiry: CrmInboundEnquiry,
     enrichment: InboundOwnershipEnrichmentResponse,
 ) -> InboundPriorityResponse:
-    if not enrichment.matched:
-        return InboundPriorityResponse(
-            band="standard", reasons=["No owner-registry relationship observed"]
+    """Rank commercial follow-up priority without presenting it as a probability."""
+    criteria = enquiry.criteria or {}
+    opportunity_value = (
+        _amount(
+            criteria.get("expected_price_aed")
+            or criteria.get("budget_max_aed")
+            or criteria.get("budget_min_aed")
+            or 0
         )
-    reasons = list(enrichment.reasons)
-    high_value_intent = enquiry.intent in {"buy", "sell"}
-    if enrichment.verification == "contact_exact" and (
-        high_value_intent or enrichment.multiple_property_owner or enrichment.rental_owner
-    ):
-        return InboundPriorityResponse(band="high", reasons=reasons)
-    return InboundPriorityResponse(band="medium", reasons=reasons)
+        or 0
+    )
+    score = 18 if enquiry.record_kind == "opportunity" and enquiry.intent != "unknown" else 8
+    reasons: list[str] = []
+
+    if opportunity_value:
+        if enquiry.intent in {"rent", "let"}:
+            value_points = (
+                24
+                if opportunity_value >= 1_000_000
+                else 19
+                if opportunity_value >= 500_000
+                else 14
+                if opportunity_value >= 300_000
+                else 9
+                if opportunity_value >= 150_000
+                else 4
+            )
+            reasons.append(f"AED {opportunity_value:,} stated annual rental requirement")
+        else:
+            value_points = (
+                24
+                if opportunity_value >= 20_000_000
+                else 19
+                if opportunity_value >= 10_000_000
+                else 14
+                if opportunity_value >= 5_000_000
+                else 9
+                if opportunity_value >= 2_000_000
+                else 4
+            )
+            reasons.append(f"AED {opportunity_value:,} stated transaction requirement")
+        score += value_points
+    else:
+        reasons.append("Opportunity value has not been qualified")
+
+    if enrichment.matched:
+        reasons.extend(enrichment.reasons)
+        score += 20 if enrichment.verification == "contact_exact" else 5
+        score += 10 if enrichment.current_owner else 0
+        score += 6 if enrichment.former_owner else 0
+        score += 8 if enrichment.rental_owner else 0
+        score += 8 if enrichment.multiple_property_owner else 0
+        if enrichment.observed_portfolio_value_aed >= 20_000_000:
+            score += 6
+        elif enrichment.observed_portfolio_value_aed >= 5_000_000:
+            score += 3
+    else:
+        reasons.append("No owner-registry relationship observed")
+
+    score = min(score, 100)
+    if enrichment.verification == "name_only":
+        band = "medium"
+    elif score >= 60 and enrichment.verification == "contact_exact":
+        band = "high"
+    elif score >= 40:
+        band = "medium"
+    else:
+        band = "standard"
+    return InboundPriorityResponse(
+        band=band,
+        score=score,
+        opportunity_value_aed=opportunity_value,
+        reasons=reasons,
+    )
 
 
 async def create_inbound_enquiry(
@@ -1172,12 +1335,14 @@ async def _registry_profiles(
         .order_by(CrmPropertyContactClaim.confidence_score.desc())
         .limit(100)
     )
+    claims = list(result.all())
+    sale_evidence, lease_evidence = await _registry_transaction_evidence(claims)
     building = _token(criteria.get("building"))
     unit_number = _token(criteria.get("unit_number"))
     location_tokens = [_token(item) for item in _locations(criteria)]
     profiles: list[InboundRegistryProfileResponse] = []
     seen: set[tuple[str, str]] = set()
-    for claim in result.all():
+    for claim in claims:
         property_identity = (claim.owner_key, claim.property_key)
         if property_identity in seen:
             continue
@@ -1221,6 +1386,11 @@ async def _registry_profiles(
         else:
             identity_strength = "weak"
             identity_reason = "Name-only registry match; verify identity before using it"
+        sale = sale_evidence.get(f"{_token(claim.building_name)}|{_token(claim.unit_number)}", {})
+        lease = lease_evidence.get(claim.unit_candidate_key or "", {})
+        sale_date = sale.get("transaction_date")
+        lease_start = lease.get("lease_start")
+        lease_end = lease.get("lease_end") or claim.lease_end
         profiles.append(
             InboundRegistryProfileResponse(
                 owner_key=claim.owner_key,
@@ -1233,9 +1403,19 @@ async def _registry_profiles(
                 building_name=claim.building_name,
                 unit_number=claim.unit_number,
                 property_type=claim.property_type,
-                latest_sale_date=claim.latest_sale_date,
+                transaction_date=claim.transaction_date,
+                transaction_price_aed=claim.transaction_price_aed,
+                latest_sale_date=claim.latest_sale_date
+                or (sale_date if isinstance(sale_date, date) else None),
+                latest_sale_price_aed=claim.latest_sale_price_aed
+                or _amount(sale.get("sale_amount_aed")),
                 later_sale_date=claim.later_sale_date,
-                lease_end=claim.lease_end,
+                ltv_pct=float(sale["ltv_pct"]) if sale.get("ltv_pct") is not None else None,
+                seller_type=_text(sale.get("seller_type")) or None,
+                lease_start=lease_start if isinstance(lease_start, date) else None,
+                lease_end=lease_end if isinstance(lease_end, date) else None,
+                annual_rent_aed=_amount(lease.get("annual_rent_aed")) or claim.annual_rent_aed,
+                contract_state=_text(lease.get("contract_state")) or None,
                 lead_id=claim.lead_id,
             )
         )
@@ -1391,17 +1571,32 @@ async def list_inbound_enquiries(
     )
     enquiries = list(result.all())
     all_enquiries = enquiries[:]
+    all_contacts: dict[int, CrmInboundContact] = {}
+    if all_enquiries:
+        contacts_result = await db.exec(
+            select(CrmInboundContact).where(
+                CrmInboundContact.id.in_([item.contact_id for item in all_enquiries])  # type: ignore[union-attr]
+            )
+        )
+        all_contacts = {item.id or 0: item for item in contacts_result.all()}
+    all_enrichments = await _bulk_ownership_enrichments(
+        db,
+        organization_id=organization_id,
+        contacts=list(all_contacts.values()),
+    )
+    all_priorities = {
+        item.id or 0: _lead_priority(
+            item,
+            all_enrichments.get(item.contact_id, InboundOwnershipEnrichmentResponse()),
+        )
+        for item in all_enquiries
+    }
     if intent_group == "demand":
         enquiries = [item for item in enquiries if item.intent in {"buy", "rent"}]
     elif intent_group == "instructions":
         enquiries = [item for item in enquiries if item.intent in {"sell", "let"}]
     if workspace == "inbox":
-        enquiries = [
-            item
-            for item in enquiries
-            if item.record_kind == "opportunity"
-            and item.status in {"new", "assigned", "attempted", "contacted", "needs_review"}
-        ]
+        enquiries = [item for item in enquiries if _belongs_in_inbox(item)]
     elif workspace == "unqualified":
         enquiries = [item for item in enquiries if item.record_kind == "unqualified_contact"]
     elif workspace == "qualified":
@@ -1412,14 +1607,11 @@ async def list_inbound_enquiries(
         ]
     if status:
         enquiries = [item for item in enquiries if item.status == status]
-    contacts: dict[int, CrmInboundContact] = {}
-    if enquiries:
-        contacts_result = await db.exec(
-            select(CrmInboundContact).where(
-                CrmInboundContact.id.in_([item.contact_id for item in enquiries])  # type: ignore[union-attr]
-            )
-        )
-        contacts = {item.id or 0: item for item in contacts_result.all()}
+    contacts = {
+        contact_id: contact
+        for contact_id, contact in all_contacts.items()
+        if contact_id in {item.contact_id for item in enquiries}
+    }
     if search:
         term = search.casefold()
         enquiries = [
@@ -1435,17 +1627,11 @@ async def list_inbound_enquiries(
             or term in json.dumps(item.criteria).casefold()
             or term in (item.campaign or "").casefold()
         ]
-    relevant_contact_ids = {item.contact_id for item in enquiries}
-    enrichments = await _bulk_ownership_enrichments(
-        db,
-        organization_id=organization_id,
-        contacts=[
-            contact
-            for contact_id, contact in contacts.items()
-            if contact_id in relevant_contact_ids
-        ],
-    )
-    priority_order = {"high": 3, "medium": 2, "standard": 1}
+    enrichments = {
+        contact_id: enrichment
+        for contact_id, enrichment in all_enrichments.items()
+        if contact_id in {item.contact_id for item in enquiries}
+    }
     priorities = {
         item.id or 0: _lead_priority(
             item,
@@ -1455,7 +1641,7 @@ async def list_inbound_enquiries(
     }
     enquiries.sort(
         key=lambda item: (
-            priority_order[priorities[item.id or 0].band],
+            priorities[item.id or 0].score,
             item.enquiry_date,
         ),
         reverse=True,
@@ -1515,8 +1701,8 @@ async def list_inbound_enquiries(
             "owner_matched": len(
                 [
                     item
-                    for item in enquiries
-                    if enrichments.get(
+                    for item in all_enquiries
+                    if all_enrichments.get(
                         item.contact_id, InboundOwnershipEnrichmentResponse()
                     ).matched
                 ]
@@ -1524,14 +1710,14 @@ async def list_inbound_enquiries(
             "portfolio_owners": len(
                 [
                     item
-                    for item in enquiries
-                    if enrichments.get(
+                    for item in all_enquiries
+                    if all_enrichments.get(
                         item.contact_id, InboundOwnershipEnrichmentResponse()
                     ).multiple_property_owner
                 ]
             ),
             "high_priority": len(
-                [item for item in enquiries if priorities[item.id or 0].band == "high"]
+                [item for item in all_enquiries if all_priorities[item.id or 0].band == "high"]
             ),
         },
     )
@@ -1750,10 +1936,35 @@ def _bedroom_fit(criteria: dict[str, Any], value: str) -> tuple[int, str]:
 
 
 def _property_fit(criteria: dict[str, Any], value: str) -> int:
-    requested = str(criteria.get("property_type") or "").strip()
+    requested = _canonical_property_type(criteria.get("property_type"))
     if not requested:
         return 0
-    return 10 if requested.casefold() in value.casefold() else 0
+    observed = _canonical_property_type(value)
+    return 10 if requested == observed else 0
+
+
+def _canonical_property_type(value: Any) -> str:
+    normalized = str(value or "").strip().casefold()
+    aliases = {
+        "flat": "apartment",
+        "apartments": "apartment",
+        "residential flat": "apartment",
+        "residential flats": "apartment",
+        "residential": "apartment",
+        "unit": "apartment",
+        "condo": "apartment",
+        "condominium": "apartment",
+        "hotel apartments": "apartment",
+        "townhouses": "townhouse",
+        "villas": "villa",
+        "offices": "office",
+    }
+    return aliases.get(normalized, normalized)
+
+
+def _listing_property_type(value: Any) -> str | None:
+    normalized = _canonical_property_type(value)
+    return normalized.title() if normalized else None
 
 
 def _violates_strict_fields(
@@ -1803,6 +2014,92 @@ async def _listing_freshness() -> tuple[datetime | None, bool]:
         return refreshed, fresh
     except Exception:
         return None, False
+
+
+async def _offplan_project_rows(criteria: dict[str, Any]) -> list[dict[str, Any]]:
+    requested_locations = _locations(criteria)
+    return await query(
+        f"""
+        SELECT
+            p.project_id,
+            p.project_name,
+            p.developer_name,
+            p.area_name,
+            p.sale_status,
+            p.units_in_sale,
+            p.min_price_aed,
+            p.max_price_aed,
+            p.completion_date,
+            p.readiness_progress,
+            p.website_url,
+            p.scraped_at,
+            u.unit_type_key,
+            u.unit_bedrooms,
+            u.unit_type,
+            u.price_from_aed AS unit_price_from,
+            u.price_to_aed AS unit_price_to,
+            u.area_from_sqft,
+            u.area_to_sqft,
+            u.units_amount
+        FROM (
+            SELECT
+                project_id,
+                project_name,
+                developer_name,
+                area_name,
+                sale_status,
+                units_in_sale,
+                min_price_aed,
+                max_price_aed,
+                completion_date,
+                readiness_progress,
+                website_url,
+                scraped_at
+            FROM reelly_projects_bronze
+            WHERE {reelly_dubai_project_scope()}
+            ORDER BY parseDateTimeBestEffortOrNull(scraped_at) DESC
+            LIMIT 1 BY project_id
+        ) AS p
+        LEFT JOIN (
+            SELECT
+                project_id,
+                unit_type_key,
+                unit_bedrooms,
+                unit_type,
+                price_from_aed,
+                price_to_aed,
+                area_from_sqft,
+                area_to_sqft,
+                units_amount
+            FROM reelly_project_unit_types_bronze
+            ORDER BY parseDateTimeBestEffortOrNull(scraped_at) DESC
+            LIMIT 1 BY unit_type_key
+        ) AS u USING (project_id)
+        WHERE
+            lowerUTF8(p.sale_status) = 'on sale'
+            AND (
+                {{area:String}} = ''
+                OR positionCaseInsensitiveUTF8(p.area_name, {{area:String}}) > 0
+                OR positionCaseInsensitiveUTF8(p.project_name, {{area:String}}) > 0
+            )
+        ORDER BY coalesce(u.price_from_aed, p.min_price_aed) ASC
+        LIMIT 120
+        """,
+        {"area": requested_locations[0] if requested_locations else ""},
+    )
+
+
+async def _offplan_catalog_freshness() -> datetime | None:
+    try:
+        rows = await query(
+            "SELECT max(parseDateTimeBestEffortOrNull(scraped_at)) AS refreshed "
+            "FROM reelly_projects_bronze "
+            f"WHERE {reelly_dubai_project_scope()}",
+            {},
+        )
+        return _optional_datetime(rows[0].get("refreshed") if rows else None)
+    except Exception:
+        return None
 
 
 def _json_snapshot(row: dict[str, Any]) -> dict[str, Any]:
@@ -1944,6 +2241,8 @@ async def _upsert_match(
             updated_at=now,
         )
     elif item.state != "dismissed":
+        if item.state == "stale":
+            item.state = "suggested"
         item.score = score
         item.title = title
         item.subtitle = subtitle
@@ -1974,6 +2273,14 @@ async def refresh_inbound_matches(
             detail="Confirm the enquiry intent and minimum property requirements before matching",
         )
     criteria = enquiry.criteria or {}
+    await db.exec(
+        CrmInboundMatch.__table__.update()
+        .where(
+            CrmInboundMatch.enquiry_id == enquiry_id,
+            CrmInboundMatch.state.notin_(["saved", "dismissed"]),
+        )
+        .values(state="stale", updated_at=_utcnow())
+    )
     generated: list[CrmInboundMatch] = []
 
     if enquiry.intent in {"buy", "rent"}:
@@ -2306,14 +2613,15 @@ async def refresh_inbound_matches(
                 generated.append(item)
 
     listing_last_refresh, listing_fresh = await _listing_freshness()
+    offplan_last_refresh = await _offplan_catalog_freshness()
 
-    if listing_fresh and enquiry.intent in {"buy", "rent"}:
+    if listing_last_refresh and enquiry.intent in {"buy", "rent"}:
         requested_locations = _locations(criteria)
         listings = await list_listings_from_clickhouse(
             mode="sale" if enquiry.intent == "buy" else "rent",
             limit=60,
             area=requested_locations[0] if requested_locations else None,
-            property_type=criteria.get("property_type"),
+            property_type=_listing_property_type(criteria.get("property_type")),
             bedrooms=str(criteria.get("bedrooms_min"))
             if criteria.get("bedrooms_min") is not None
             else None,
@@ -2357,7 +2665,14 @@ async def refresh_inbound_matches(
                 subtitle=f"{listing.tower_name or listing.area_name or 'Dubai'} · AED {listing.price_value:,}"
                 if listing.price_value
                 else listing.tower_name or "Dubai",
-                reasons=[location_reason, budget_reason, bedroom_reason, "Fresh active listing"],
+                reasons=[
+                    location_reason,
+                    budget_reason,
+                    bedroom_reason,
+                    "Fresh active listing"
+                    if listing_fresh
+                    else "Listing catalog candidate; availability requires confirmation",
+                ],
                 breakdown={
                     "requirements": location + budget + bedroom + property_points,
                     "actionability": 20,
@@ -2367,6 +2682,69 @@ async def refresh_inbound_matches(
             )
             if item:
                 generated.append(item)
+
+    if enquiry.intent == "buy" and offplan_last_refresh:
+        matched_projects: set[str] = set()
+        for project in await _offplan_project_rows(criteria):
+            project_id = str(project.get("project_id") or "")
+            if not project_id or project_id in matched_projects:
+                continue
+            location, location_reason = _location_fit(
+                criteria,
+                str(project.get("area_name") or ""),
+                str(project.get("project_name") or ""),
+            )
+            price = _amount(project.get("unit_price_from")) or _amount(project.get("min_price_aed"))
+            budget, budget_reason = _budget_fit(criteria, price)
+            bedroom, bedroom_reason = _bedroom_fit(
+                criteria, str(project.get("unit_bedrooms") or "")
+            )
+            property_points = _property_fit(criteria, str(project.get("unit_type") or ""))
+            if criteria.get("bedrooms_min") is not None and bedroom == 0:
+                continue
+            if criteria.get("property_type") and property_points == 0:
+                continue
+            if _violates_strict_fields(
+                enquiry.strict_fields,
+                location_points=location,
+                budget_points=budget,
+                bedroom_points=bedroom,
+                property_points=property_points,
+            ):
+                continue
+            score = min(100, location + budget + bedroom + property_points + 20 + 10)
+            item = await _upsert_match(
+                db,
+                enquiry=enquiry,
+                target_type="project",
+                target_key=(
+                    f"{project.get('project_id')}:{project.get('unit_type_key') or 'project'}"
+                ),
+                score=score,
+                title=str(project.get("project_name") or "Off-plan project"),
+                subtitle=(
+                    f"{project.get('developer_name') or 'Developer pending'} · from AED {price:,}"
+                    if price
+                    else f"{project.get('developer_name') or 'Developer pending'} · price pending"
+                ),
+                reasons=[
+                    location_reason,
+                    budget_reason,
+                    bedroom_reason,
+                    "Developer inventory catalog; availability requires confirmation",
+                ],
+                breakdown={
+                    "requirements": location + budget + bedroom + property_points,
+                    "actionability": 20,
+                    "timing": 10,
+                },
+                snapshot={**_json_snapshot(project), "source": "developer_supply_catalog"},
+            )
+            if item:
+                generated.append(item)
+                matched_projects.add(project_id)
+                if len(matched_projects) >= 20:
+                    break
 
     await db.commit()
     stored = await db.exec(
@@ -2378,9 +2756,16 @@ async def refresh_inbound_matches(
         "owners": [],
         "units": [],
         "listings": [],
+        "offplan": [],
         "demand": [],
     }
-    lane_names = {"owner": "owners", "unit": "units", "listing": "listings", "demand": "demand"}
+    lane_names = {
+        "owner": "owners",
+        "unit": "units",
+        "listing": "listings",
+        "project": "offplan",
+        "demand": "demand",
+    }
     for item in stored.all():
         if item.state not in {"dismissed", "stale"}:
             lanes[lane_names[item.target_type]].append(_match_response(item))
@@ -2388,6 +2773,8 @@ async def refresh_inbound_matches(
         enquiry_id=enquiry_id,
         listing_fresh=listing_fresh,
         listing_last_refresh=listing_last_refresh,
+        offplan_catalog_available=bool(offplan_last_refresh),
+        offplan_last_refresh=offplan_last_refresh,
         lanes=lanes,
     )
 
@@ -2403,7 +2790,9 @@ async def get_inbound_matches(
             enquiry_id=enquiry_id,
             listing_fresh=False,
             listing_last_refresh=None,
-            lanes={"owners": [], "units": [], "listings": [], "demand": []},
+            offplan_catalog_available=False,
+            offplan_last_refresh=None,
+            lanes={"owners": [], "units": [], "listings": [], "offplan": [], "demand": []},
         )
     result = await db.exec(
         select(CrmInboundMatch)
@@ -2411,27 +2800,35 @@ async def get_inbound_matches(
         .order_by(CrmInboundMatch.score.desc())
     )
     items = result.all()
-    if not items:
+    if not any(item.state != "stale" for item in items):
         return await refresh_inbound_matches(
             db, enquiry_id=enquiry_id, organization_id=organization_id
         )
     listing_last_refresh, listing_fresh = await _listing_freshness()
+    offplan_last_refresh = await _offplan_catalog_freshness()
     lanes: dict[str, list[InboundMatchResponse]] = {
         "owners": [],
         "units": [],
         "listings": [],
+        "offplan": [],
         "demand": [],
     }
-    lane_names = {"owner": "owners", "unit": "units", "listing": "listings", "demand": "demand"}
+    lane_names = {
+        "owner": "owners",
+        "unit": "units",
+        "listing": "listings",
+        "project": "offplan",
+        "demand": "demand",
+    }
     for item in items:
-        if item.state not in {"dismissed", "stale"} and (
-            item.target_type != "listing" or listing_fresh
-        ):
+        if item.state not in {"dismissed", "stale"}:
             lanes[lane_names[item.target_type]].append(_match_response(item))
     return InboundMatchesResponse(
         enquiry_id=enquiry_id,
         listing_fresh=listing_fresh,
         listing_last_refresh=listing_last_refresh,
+        offplan_catalog_available=bool(offplan_last_refresh),
+        offplan_last_refresh=offplan_last_refresh,
         lanes=lanes,
     )
 

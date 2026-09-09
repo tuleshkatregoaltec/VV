@@ -24,7 +24,9 @@ import type {
 	ProjectDetailResponse,
 	ProjectRadarArea,
 	ProjectRadarProject,
-	ProjectSearchResult
+	ProjectSearchResult,
+	RadarBuildingPin,
+	RadarPeriodDays
 } from '$lib/api/projects'
 import AppFrame from '$lib/components/layout/AppFrame.svelte'
 import PageContainer from '$lib/components/layout/PageContainer.svelte'
@@ -62,13 +64,14 @@ interface DdaRequestViewport extends DdaViewport {
 	zoomBucket: number
 }
 
-const DDA_OUTLINE_MIN_ZOOM = 12
+const DDA_OUTLINE_MIN_ZOOM = 10
 const DDA_PARCEL_MIN_ZOOM = 15.25
 const DDA_OUTLINE_PADDING = 0.22
 const DDA_PARCEL_PADDING = 0.12
 const DUBAI_CENTER_LNG = 55.2708
 const DUBAI_CENTER_LAT = 25.2048
 const RADAR_OVERVIEW_ZOOM = 11
+const RADAR_BUILDING_MIN_ZOOM = 12
 
 let isMinimized = $state(false)
 let panelView = $state<PanelView>('overview')
@@ -77,6 +80,7 @@ let selectedProjectId = $state<number | null>(null)
 let selectedAreaName = $state<string | null>(null)
 let selectedBuildingId = $state<number | null>(null)
 let searchQuery = $state('')
+let activityPeriodDays = $state<RadarPeriodDays>(365)
 let activeHeatmapLayer = $state<ZoneHeatmapLayer>('transaction_activity')
 let showZoneHeatmap = $state(true)
 let projectPinMode = $state<ProjectPinMode>('status')
@@ -91,16 +95,22 @@ let renderedDDAFeatures = $state<DdaMapFeature[]>([])
 let renderedDDAMode = $state<DdaLayerMode>('outlines')
 
 const heatmapLayerOptions: Array<{ value: ZoneHeatmapLayer; label: string; caption: string }> = [
-	{ value: 'transaction_activity', label: 'Activity', caption: 'Monthly volume' },
+	{ value: 'transaction_activity', label: 'Activity', caption: 'DLD sales and Ejari leases' },
 	{ value: 'avg_price_sqft', label: 'Price / sqft', caption: 'Sales rate' },
 	{ value: 'rental_yield', label: 'Yield', caption: 'Gross rent yield' }
+]
+const activityPeriodOptions: Array<{ value: RadarPeriodDays; label: string }> = [
+	{ value: 365, label: 'TTM' },
+	{ value: 180, label: '180d' },
+	{ value: 90, label: '90d' },
+	{ value: 30, label: '30d' }
 ]
 const projectPinModeOptions: Array<{ value: ProjectPinMode; label: string; caption: string }> = [
 	{ value: 'status', label: 'Status', caption: 'Official DLD status colours' },
 	{ value: 'risk', label: 'Risk', caption: 'Internal risk overlay' },
 	{ value: 'developer', label: 'Developer', caption: 'Portfolio geography' }
 ]
-const radarOverviewQuery = createQuery(() => projectQueries.radarOverview())
+const radarOverviewQuery = createQuery(() => projectQueries.radarOverview(activityPeriodDays))
 const projectListQuery = createQuery(() => ({
 	...projectQueries.list(),
 	enabled: searchQuery.trim().length >= 2
@@ -127,7 +137,8 @@ const radarPinParams = $derived.by(() => {
 		south: roundCoordinate(ddaViewport.south),
 		east: roundCoordinate(ddaViewport.east),
 		north: roundCoordinate(ddaViewport.north),
-		limit: mapProjectRenderLimit(mapZoom)
+		limit: mapProjectRenderLimit(mapZoom),
+		period_days: activityPeriodDays
 	}
 	if (projectPinMode === 'developer' && selectedDeveloperName) {
 		return { ...params, developer: selectedDeveloperName }
@@ -136,11 +147,26 @@ const radarPinParams = $derived.by(() => {
 })
 const areaProjectParams = $derived.by(() => {
 	if (panelView !== 'area' || !selectedAreaName) return null
-	return { area: selectedAreaName, limit: 25 }
+	return { area: selectedAreaName, limit: 25, period_days: activityPeriodDays }
 })
 const radarPinsQuery = createQuery(() => projectQueries.radarPins(radarPinParams))
+const radarBuildingPinParams = $derived.by(() => {
+	if (!showBuildingPins || !ddaViewport || mapZoom < RADAR_BUILDING_MIN_ZOOM) return null
+	return {
+		west: roundCoordinate(ddaViewport.west),
+		south: roundCoordinate(ddaViewport.south),
+		east: roundCoordinate(ddaViewport.east),
+		north: roundCoordinate(ddaViewport.north),
+		limit: 5000,
+		period_days: activityPeriodDays
+	}
+})
+const radarBuildingPinsQuery = createQuery(() =>
+	projectQueries.radarBuildingPins(radarBuildingPinParams)
+)
 const areaProjectsQuery = createQuery(() => projectQueries.radarPins(areaProjectParams))
 const radarPinProjects = $derived<ProjectRadarProject[]>(radarPinsQuery.data ?? [])
+const radarBuildingPins = $derived<RadarBuildingPin[]>(radarBuildingPinsQuery.data ?? [])
 const areaProjects = $derived<ProjectRadarProject[]>(areaProjectsQuery.data ?? [])
 const radarProjects = $derived<ProjectRadarProject[]>(
 	mergeRadarProjects(radarPinProjects, areaProjects)
@@ -229,7 +255,7 @@ const activeSelectionLabel = $derived.by(() => {
 		return selectedRadarProject?.project_name ?? projectDetails?.project_name ?? 'Project details'
 	}
 	if (panelView === 'area') return selectedArea?.area_name ?? selectedAreaName ?? 'Area lens'
-	return 'Radar lab overview'
+	return 'Radar overview'
 })
 
 const visibleMapProjects = $derived.by(() => {
@@ -253,6 +279,17 @@ const projectPinHint = $derived.by(() => {
 		return `${visibleMapProjects.length.toLocaleString()} visible project pins`
 	}
 	return 'No project pins in this viewport'
+})
+const buildingPinHint = $derived.by(() => {
+	if (!showBuildingPins) return 'Tower pins off'
+	if (mapZoom < RADAR_BUILDING_MIN_ZOOM) return 'Zoom in for PF towers'
+	if (radarBuildingPinsQuery.isFetching && radarBuildingPins.length === 0) {
+		return 'Loading tower pins'
+	}
+	if (radarBuildingPins.length > 0) {
+		return `${radarBuildingPins.length.toLocaleString()} visible PF towers`
+	}
+	return 'No PF towers in this viewport'
 })
 
 const searchResults = $derived.by(() => {
@@ -290,6 +327,18 @@ const isLoading = $derived(
 		(panelView === 'building' &&
 			(buildingDetailsQuery.isPending || buildingDetailsQuery.isFetching))
 )
+const radarQueryError = $derived.by(() => {
+	if (radarOverviewQuery.isError) return 'Market overview failed to load'
+	if (radarPinsQuery.isError) return 'Project pins failed to load'
+	if (radarBuildingPinsQuery.isError) return 'Tower pins failed to load'
+	if (areaProjectsQuery.isError) return 'Zone projects failed to load'
+	if (projectDetailsQuery.isError) return 'Project details failed to load'
+	if (buildingDetailsQuery.isError) return 'Building details failed to load'
+	if (showDDAPlots && (ddaOutlinesQuery.isError || ddaPlotsQuery.isError)) {
+		return 'Planning context failed to load'
+	}
+	return null
+})
 
 function dedupeAreas(areas: ProjectRadarArea[]): ProjectRadarArea[] {
 	const seen = new Set<string>()
@@ -374,10 +423,10 @@ function handleViewportChange(viewport: DdaViewport) {
 	if (showDDAPlots) ensureDdaRequestViewport(viewport)
 }
 
-function mapProjectRenderLimit(zoom: number): number {
-	if (zoom < 13.5) return 650
-	if (zoom < 15.5) return 900
-	return 1200
+function mapProjectRenderLimit(_zoom: number): number {
+	// Project points are clustered in MapLibre, so the Dubai-wide view can keep
+	// the complete 2.1k catalogue without dropping lower-ranked projects.
+	return 2500
 }
 
 function statusScore(project: ProjectRadarProject): number {
@@ -393,7 +442,7 @@ function mapPinScore(project: ProjectRadarProject): number {
 	return (
 		statusScore(project) +
 		(project.no_of_units ?? 0) +
-		(project.sales_transaction_count_12m + project.rental_contract_count_12m) * 0.35 +
+		((project.sales_transaction_count ?? 0) + (project.rental_contract_count ?? 0)) * 0.35 +
 		(project.delivery_confidence ?? 0) * 500
 	)
 }
@@ -457,24 +506,24 @@ function heatmapLayerLabel(layer: ZoneHeatmapLayer) {
 }
 
 function areaMetricValue(area: ProjectRadarArea, layer: ZoneHeatmapLayer): number {
-	if (layer === 'avg_price_sqft') return (area.avg_sale_price_sqm_12m ?? 0) / SQM_TO_SQFT
+	if (layer === 'avg_price_sqft') return (area.avg_sale_price_sqm ?? 0) / SQM_TO_SQFT
 	if (layer === 'rental_yield') return area.gross_yield_pct ?? 0
-	return area.sales_transaction_count_12m ?? 0
+	return (area.sales_transaction_count ?? 0) + (area.rental_contract_count ?? 0)
 }
 
 function areaMetricLabel(area: ProjectRadarArea, layer: ZoneHeatmapLayer): string {
 	const value = areaMetricValue(area, layer)
 	if (layer === 'avg_price_sqft') return formatPriceSqft(value)
 	if (layer === 'rental_yield') return value > 0 ? formatPct(value) : '~'
-	return formatCompact(value)
+	return `${formatCompact(area.sales_transaction_count)} sales · ${formatCompact(area.rental_contract_count)} leases`
 }
 
 function projectOfficialStatus(project: ProjectRadarProject) {
 	const status = `${project.project_status ?? ''} ${project.completion_status ?? ''}`.toLowerCase()
 	if (status.includes('stall') || status.includes('suspend') || status.includes('hold'))
 		return 'Stalled'
-	if (project.completion_status === 'FINISHED') return 'Completed'
-	if (project.pipeline_status === 'future') return 'Future/Announced'
+	if (status.includes('complete') || status.includes('finish')) return 'Completed'
+	if (status.includes('planned') || project.pipeline_status === 'future') return 'Future/Announced'
 	return 'Under Construction'
 }
 
@@ -484,11 +533,10 @@ function projectRisk(project: ProjectRadarProject) {
 	const completion = project.percent_completed ?? 0
 	if (status.includes('stall') || status.includes('suspend') || status.includes('hold'))
 		return 'High Risk'
-	if (project.completion_status !== 'FINISHED' && confidence < 0.35 && completion < 80)
-		return 'High Risk'
-	if (project.completion_status !== 'FINISHED' && (confidence < 0.55 || completion < 25))
-		return 'Warning'
-	if (project.completion_status !== 'FINISHED' && confidence < 0.72) return 'Medium'
+	if (status.includes('complete') || status.includes('finish')) return 'OK'
+	if (confidence < 0.35 && completion < 80) return 'High Risk'
+	if (confidence < 0.55 || completion < 25) return 'Warning'
+	if (confidence < 0.72) return 'Medium'
 	return 'OK'
 }
 
@@ -630,7 +678,7 @@ $effect(() => {
 </script>
 
 <svelte:head>
-	<title>Radar Lab - Vitevue</title>
+	<title>Radar - Vitevue</title>
 </svelte:head>
 
 <AppFrame>
@@ -640,10 +688,12 @@ $effect(() => {
 					<ProjectMap
 						bind:this={mapComponent}
 						projectPins={showProjectPins ? visibleMapProjects : []}
+						buildingPins={showBuildingPins ? radarBuildingPins : []}
 						areaBubbles={radarAreas}
 					{selectedProjectId}
 					selectedAreaName={selectedArea?.area_name ?? selectedAreaName}
 					{showProjectPins}
+					showBuildingPins={showBuildingPins && mapZoom >= RADAR_BUILDING_MIN_ZOOM}
 					{showAreaBubbles}
 					{showZoneHeatmap}
 					{activeHeatmapLayer}
@@ -663,11 +713,16 @@ $effect(() => {
 								<div class="min-w-0">
 								<div class="flex items-center gap-2 font-mono text-[10px] font-semibold uppercase tracking-[0.08em] text-fg-4">
 									<Activity size={13} />
-									Radar Lab
+									Radar
 								</div>
 								<h1 class="truncate text-sm font-semibold text-slate-950">
-									Dubai GIS heatmap
+									DLD & Ejari market map
 								</h1>
+								{#if stats}
+									<p class="truncate text-[10px] text-slate-500">
+										{stats.activity_period_start ?? '~'} to {stats.activity_period_end ?? '~'} · {(stats.activity_coverage_pct ?? 0).toFixed(1)}% mapped
+									</p>
+								{/if}
 							</div>
 						</div>
 
@@ -682,6 +737,19 @@ $effect(() => {
 												activeHeatmapLayer = option.value
 												showZoneHeatmap = true
 											}}
+										>
+											{option.label}
+										</button>
+									{/each}
+								</div>
+
+								<div class="flex shrink-0 items-center gap-1 rounded-md bg-panel p-1" aria-label="Activity period">
+									{#each activityPeriodOptions as option (option.value)}
+										<button
+											type="button"
+											class="whitespace-nowrap rounded px-2 py-1.5 text-xs font-semibold transition-colors {activityPeriodDays === option.value ? 'bg-card text-fg-1 shadow-sm' : 'text-fg-4 hover:bg-card/70 hover:text-fg-1'}"
+											title={`Trailing ${option.value} days`}
+											onclick={() => (activityPeriodDays = option.value)}
 										>
 											{option.label}
 										</button>
@@ -719,6 +787,18 @@ $effect(() => {
 										{/each}
 									</div>
 								{/if}
+
+								<button
+									type="button"
+									class="radar-layer-button {showBuildingPins ? 'is-active' : ''}"
+									aria-pressed={showBuildingPins}
+									aria-label="PF towers"
+									title="Property Finder tower coordinates"
+									onclick={() => (showBuildingPins = !showBuildingPins)}
+								>
+									<MapPinned size={16} />
+									<span>Towers</span>
+								</button>
 
 									<button
 										type="button"
@@ -803,6 +883,15 @@ $effect(() => {
 						</div>
 					</div>
 
+						{#if radarQueryError}
+							<div
+								class="pointer-events-auto rounded-lg border border-red-200 bg-red-50/95 px-3 py-2 text-xs font-semibold text-red-800 shadow-sm backdrop-blur"
+								role="alert"
+							>
+								{radarQueryError}. Refresh the view to retry.
+							</div>
+						{/if}
+
 						{#if projectPinMode === 'developer' && showProjectPins}
 							<div class="flex flex-wrap items-center gap-2">
 								<label class="radar-glass pointer-events-auto flex min-w-[260px] items-center gap-2 rounded-lg px-3 py-2">
@@ -829,6 +918,7 @@ $effect(() => {
 						<p class="truncate text-[11px] text-slate-500">
 							{radarAreas.length} zones · {stats?.mapped_projects?.toLocaleString() ?? '0'} mapped projects
 							· {projectPinHint}
+							· {buildingPinHint}
 							{#if showDDAPlots}
 								· {planningLayerHint}
 							{/if}
@@ -836,6 +926,14 @@ $effect(() => {
 					</div>
 					<div class="h-2 w-32 rounded-full bg-[linear-gradient(90deg,rgba(42,90,120,0.12),rgba(58,143,173,0.58),rgba(211,161,95,0.78),rgba(163,36,36,0.84))]"></div>
 				</div>
+				{#if showDDAPlots}
+					<div class="mt-2 flex flex-wrap gap-x-3 gap-y-1 border-t border-slate-200 pt-2 text-[10px] font-medium text-slate-600">
+						<span class="flex items-center gap-1"><span class="h-2 w-2 rounded-full bg-[#147d64]"></span>Confirmed</span>
+						<span class="flex items-center gap-1"><span class="h-2 w-2 rounded-full bg-[#5b8c6f]"></span>Probable / villa subdivision</span>
+						<span class="flex items-center gap-1"><span class="h-2 w-2 rounded-full bg-[#d99a2b]"></span>Planned</span>
+						<span class="flex items-center gap-1"><span class="h-2 w-2 rounded-full bg-slate-500"></span>No observed asset</span>
+					</div>
+				{/if}
 			</div>
 
 			{#if isMinimized}
@@ -956,9 +1054,10 @@ $effect(() => {
 															<UsersRound size={14} />
 														</button>
 													{/if}
-												</div>
-											</div>
-										</div>
+						</div>
+
+					</div>
+				</div>
 									{/if}
 
 										<div class="mt-4 grid grid-cols-2 gap-x-4 gap-y-3 border-t border-slate-200 pt-3">
@@ -977,7 +1076,7 @@ $effect(() => {
 											<div>
 												<p class="text-[11px] text-slate-500">Sales volume 12m</p>
 												<p class="text-sm font-semibold text-slate-950">
-													{formatCurrency(selectedRadarProject?.total_sales_volume_12m)}
+											{formatCurrency(selectedRadarProject?.total_sales_volume)}
 												</p>
 											</div>
 											<div>
@@ -1106,15 +1205,21 @@ $effect(() => {
 
 								<div class="grid grid-cols-2 gap-x-4 gap-y-4">
 									<div>
-										<p class="font-mono text-[10px] uppercase tracking-[0.08em] text-fg-4">Transactions</p>
+										<p class="font-mono text-[10px] uppercase tracking-[0.08em] text-fg-4">Sales</p>
 										<p class="mt-1 text-base font-semibold tabular-nums text-fg-1">
-											{selectedArea.sales_transaction_count_12m.toLocaleString()}
+											{(selectedArea.sales_transaction_count ?? 0).toLocaleString()}
+										</p>
+									</div>
+									<div>
+										<p class="font-mono text-[10px] uppercase tracking-[0.08em] text-fg-4">Ejari leases</p>
+										<p class="mt-1 text-base font-semibold tabular-nums text-fg-1">
+											{(selectedArea.rental_contract_count ?? 0).toLocaleString()}
 										</p>
 									</div>
 									<div>
 										<p class="font-mono text-[10px] uppercase tracking-[0.08em] text-fg-4">Price / sqft</p>
 										<p class="mt-1 text-base font-semibold tabular-nums text-fg-1">
-											{formatPriceSqft((selectedArea.avg_sale_price_sqm_12m ?? 0) / SQM_TO_SQFT)}
+											{formatPriceSqft((selectedArea.avg_sale_price_sqm ?? 0) / SQM_TO_SQFT)}
 										</p>
 									</div>
 									<div>

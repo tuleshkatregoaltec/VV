@@ -121,6 +121,14 @@ class DDAPlotFeature(BaseModel):
     valuation_max_aed: Optional[float] = None
     valuation_confidence: Optional[str] = None
     valuation_note: Optional[str] = None
+    development_status: str = "no_observed_asset"
+    development_confidence: str = "low"
+    development_method: str = "no_observed_asset"
+    development_note: Optional[str] = None
+    linked_asset_count: int = 0
+    linked_physical_asset_count: int = 0
+    subdivision_plot_count: int = 0
+    subdivision_confirmed_count: int = 0
 
 
 class DDAOutlineFeature(BaseModel):
@@ -133,6 +141,12 @@ class DDAOutlineFeature(BaseModel):
     total_gfa_sqm: float
     coordinates: List[List[float]]  # closed ring [[lng, lat], ...]
     land_use_summary: List[str] = []
+    developed_confirmed_count: int = 0
+    developed_probable_count: int = 0
+    planned_unbuilt_count: int = 0
+    no_observed_asset_count: int = 0
+    non_developable_count: int = 0
+    developed_share: float = 0.0
 
 
 class ProjectDetailResponse(BaseModel):
@@ -210,6 +224,16 @@ class ProjectRadarStats(BaseModel):
     dda_plot_count: int
     dda_total_plot_area_sqm: float
     dda_total_gfa_sqm: float
+    activity_period_days: int = 365
+    activity_period_start: Optional[date] = None
+    activity_period_end: Optional[date] = None
+    activity_source_label: str = "DLD / Ejari"
+    sales_transaction_count: int = 0
+    rental_contract_count: int = 0
+    total_sales_volume: float = 0.0
+    mapped_sales_transaction_count: int = 0
+    mapped_rental_contract_count: int = 0
+    activity_coverage_pct: float = 0.0
 
 
 class ProjectRadarProject(BaseModel):
@@ -228,6 +252,10 @@ class ProjectRadarProject(BaseModel):
     detail_point_count: int = 0
     building_point_count: int = 0
     land_point_count: int = 0
+    entity_source: str = "legacy_project"
+    supply_status: Optional[str] = None
+    supply_completion_date: Optional[date] = None
+    units_in_sale: int = 0
     completion_status: str
     pipeline_status: str
     project_status: Optional[str]
@@ -243,6 +271,33 @@ class ProjectRadarProject(BaseModel):
     gross_yield_pct: Optional[float]
     avg_sale_price_sqm_12m: Optional[float]
     avg_rent_price_sqm_12m: Optional[float]
+    sales_transaction_count: int = 0
+    rental_contract_count: int = 0
+    total_sales_volume: float = 0.0
+    avg_sale_price_sqm: Optional[float] = None
+    avg_rent_price_sqm: Optional[float] = None
+
+
+class RadarBuildingPin(BaseModel):
+    """Property Finder tower coordinate with linked DLD/Ejari activity."""
+
+    location_id: str
+    source_location_id: str
+    building_name: str
+    project_name: Optional[str] = None
+    area_name: str
+    latitude: float
+    longitude: float
+    coordinate_source: str = "property_finder"
+    coordinate_precision: str = "tower"
+    matched_source_signatures: int = 0
+    sales_transaction_count: int = 0
+    rental_contract_count: int = 0
+    total_sales_volume: float = 0.0
+    median_sale_price: Optional[float] = None
+    median_annual_rent: Optional[float] = None
+    listing_inventory_count: int = 0
+    last_activity_date: Optional[date] = None
 
 
 class ProjectRadarArea(BaseModel):
@@ -275,6 +330,11 @@ class ProjectRadarArea(BaseModel):
     dda_total_plot_area_sqm: float
     dda_total_gfa_sqm: float
     dda_dominant_land_uses: List[str]
+    sales_transaction_count: int = 0
+    rental_contract_count: int = 0
+    total_sales_volume: float = 0.0
+    avg_sale_price_sqm: Optional[float] = None
+    avg_rent_price_sqm: Optional[float] = None
 
 
 class ProjectRadarResponse(BaseModel):

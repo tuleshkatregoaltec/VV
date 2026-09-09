@@ -7,7 +7,8 @@ import type {
 	GeoPin,
 	GeoPolygon,
 	ProjectRadarArea,
-	ProjectRadarProject
+	ProjectRadarProject,
+	RadarBuildingPin
 } from '$lib/api/projects'
 import { colorTheme } from '$lib/stores/preferences.svelte'
 import { SQM_TO_SQFT } from '$lib/utils/units'
@@ -54,10 +55,12 @@ let {
 	onAreaSelect,
 	onViewportChange,
 	projectPins = [],
+	buildingPins = [],
 	areaBubbles = [],
 	selectedProjectId = null,
 	selectedAreaName = null,
 	showProjectPins = false,
+	showBuildingPins = false,
 	showAreaBubbles = false,
 	showZoneHeatmap = true,
 	activeHeatmapLayer = 'transaction_activity',
@@ -69,10 +72,12 @@ let {
 	onAreaSelect?: (areaName: string) => void
 	onViewportChange?: (viewport: MapViewport) => void
 	projectPins?: ProjectRadarProject[]
+	buildingPins?: RadarBuildingPin[]
 	areaBubbles?: ProjectRadarArea[]
 	selectedProjectId?: number | null
 	selectedAreaName?: string | null
 	showProjectPins?: boolean
+	showBuildingPins?: boolean
 	showAreaBubbles?: boolean
 	showZoneHeatmap?: boolean
 	activeHeatmapLayer?: ZoneHeatmapLayer
@@ -102,6 +107,10 @@ const PROJECT_CLUSTER_COUNT_LAYER_ID = 'radar-project-cluster-counts'
 const PROJECT_HALO_LAYER_ID = 'radar-project-halos'
 const PROJECT_LAYER_ID = 'radar-project-pins'
 const PROJECT_SELECTED_LAYER_ID = 'radar-project-selected'
+const BUILDING_SOURCE_ID = 'radar-pf-towers'
+const BUILDING_CLUSTER_LAYER_ID = 'radar-pf-tower-clusters'
+const BUILDING_CLUSTER_COUNT_LAYER_ID = 'radar-pf-tower-cluster-counts'
+const BUILDING_LAYER_ID = 'radar-pf-tower-pins'
 const AREA_SOURCE_ID = 'radar-areas'
 const AREA_HEATMAP_LAYER_ID = 'radar-area-heatmap'
 const AREA_LAYER_ID = 'radar-area-bubbles'
@@ -137,8 +146,8 @@ function projectOfficialStatus(project: ProjectRadarProject) {
 	const status = `${project.project_status ?? ''} ${project.completion_status ?? ''}`.toLowerCase()
 	if (status.includes('stall') || status.includes('suspend') || status.includes('hold'))
 		return 'Stalled'
-	if (project.completion_status === 'FINISHED') return 'Completed'
-	if (project.pipeline_status === 'future') return 'Future/Announced'
+	if (status.includes('complete') || status.includes('finish')) return 'Completed'
+	if (status.includes('planned') || project.pipeline_status === 'future') return 'Future/Announced'
 	return 'Under Construction'
 }
 
@@ -148,11 +157,10 @@ function projectRisk(project: ProjectRadarProject) {
 	const completion = project.percent_completed ?? 0
 	if (status.includes('stall') || status.includes('suspend') || status.includes('hold'))
 		return 'High Risk'
-	if (project.completion_status !== 'FINISHED' && confidence < 0.35 && completion < 80)
-		return 'High Risk'
-	if (project.completion_status !== 'FINISHED' && (confidence < 0.55 || completion < 25))
-		return 'Warning'
-	if (project.completion_status !== 'FINISHED' && confidence < 0.72) return 'Medium'
+	if (status.includes('complete') || status.includes('finish')) return 'OK'
+	if (confidence < 0.35 && completion < 80) return 'High Risk'
+	if (confidence < 0.55 || completion < 25) return 'Warning'
+	if (confidence < 0.72) return 'Medium'
 	return 'OK'
 }
 
@@ -196,9 +204,9 @@ function areaRadius(area: ProjectRadarArea) {
 }
 
 function areaMetricValue(area: ProjectRadarArea, layer: ZoneHeatmapLayer) {
-	if (layer === 'avg_price_sqft') return (area.avg_sale_price_sqm_12m ?? 0) / SQM_TO_SQFT
+	if (layer === 'avg_price_sqft') return (area.avg_sale_price_sqm ?? 0) / SQM_TO_SQFT
 	if (layer === 'rental_yield') return area.gross_yield_pct ?? 0
-	return area.sales_transaction_count_12m ?? 0
+	return (area.sales_transaction_count ?? 0) + (area.rental_contract_count ?? 0)
 }
 
 function areaMetricLabel(area: ProjectRadarArea, layer: ZoneHeatmapLayer) {
@@ -206,7 +214,7 @@ function areaMetricLabel(area: ProjectRadarArea, layer: ZoneHeatmapLayer) {
 	if (layer === 'avg_price_sqft')
 		return value > 0 ? `AED ${Math.round(value).toLocaleString()} / sqft` : '~'
 	if (layer === 'rental_yield') return value > 0 ? `${value.toFixed(1)}% gross yield` : '~'
-	return `${Math.round(value).toLocaleString()} sales txns`
+	return `${(area.sales_transaction_count ?? 0).toLocaleString()} sales · ${(area.rental_contract_count ?? 0).toLocaleString()} leases`
 }
 
 function areaHeatmapMax(layer: ZoneHeatmapLayer) {
@@ -243,6 +251,22 @@ function plotColor(category: string) {
 	return '#a55a13'
 }
 
+function developmentColor(status: string, fallbackCategory: string) {
+	if (status === 'developed_confirmed') return '#147d64'
+	if (status === 'developed_probable') return '#5b8c6f'
+	if (status === 'planned_unbuilt_candidate') return '#d99a2b'
+	if (status === 'no_observed_asset') return '#64748b'
+	if (status === 'non_developable') return '#7a8f50'
+	return plotColor(fallbackCategory)
+}
+
+function outlineDevelopmentColor(developedShare: number) {
+	if (developedShare >= 75) return '#147d64'
+	if (developedShare >= 40) return '#5b8c6f'
+	if (developedShare > 0) return '#d99a2b'
+	return '#64748b'
+}
+
 function isDDAOutlineFeature(feature: DdaMapFeature): feature is DdaOutlineFeature {
 	return 'kind' in feature && 'plot_count' in feature && !('plot_number' in feature)
 }
@@ -262,8 +286,8 @@ function projectFeature(project: ProjectRadarProject): GeoJSON.Feature {
 			official_status: officialStatus,
 			risk,
 			no_of_units: project.no_of_units,
-			sales_transaction_count_12m: project.sales_transaction_count_12m,
-			rental_contract_count_12m: project.rental_contract_count_12m,
+			sales_transaction_count: project.sales_transaction_count,
+			rental_contract_count: project.rental_contract_count,
 			gross_yield_pct: project.gross_yield_pct ?? 0,
 			coordinate_source: coordinateSourceLabel(radarProject),
 			detail_point_count: radarProject.detail_point_count ?? 0,
@@ -272,6 +296,36 @@ function projectFeature(project: ProjectRadarProject): GeoJSON.Feature {
 			radius: projectRadius(project),
 			color: projectColor(project),
 			opacity: projectOpacity(project)
+		}
+	}
+}
+
+function buildingFeature(building: RadarBuildingPin): GeoJSON.Feature {
+	const activity = building.sales_transaction_count + building.rental_contract_count
+	return {
+		type: 'Feature',
+		geometry: { type: 'Point', coordinates: [building.longitude, building.latitude] },
+		properties: {
+			location_id: building.location_id,
+			building_name: building.building_name,
+			project_name: building.project_name ?? '',
+			area_name: building.area_name,
+			sales_transaction_count: building.sales_transaction_count,
+			rental_contract_count: building.rental_contract_count,
+			total_sales_volume: building.total_sales_volume,
+			median_sale_price: building.median_sale_price ?? 0,
+			median_annual_rent: building.median_annual_rent ?? 0,
+			listing_inventory_count: building.listing_inventory_count,
+			matched_source_signatures: building.matched_source_signatures,
+			last_activity_date: building.last_activity_date ?? '',
+			activity,
+			color:
+				activity > 0 ? '#0f766e' : building.listing_inventory_count > 0 ? '#2563eb' : '#64748b',
+			radius: clamp(
+				4.5 + Math.log10(Math.max(1, activity + building.listing_inventory_count)),
+				5,
+				9
+			)
 		}
 	}
 }
@@ -293,8 +347,9 @@ function areaFeature(
 			area_name: area.area_name,
 			active_projects: area.active_projects,
 			pipeline_units: area.pipeline_units,
-			sales_transaction_count_12m: area.sales_transaction_count_12m,
-			avg_sale_price_sqft_12m: (area.avg_sale_price_sqm_12m ?? 0) / SQM_TO_SQFT,
+			sales_transaction_count: area.sales_transaction_count,
+			rental_contract_count: area.rental_contract_count,
+			avg_sale_price_sqft: (area.avg_sale_price_sqm ?? 0) / SQM_TO_SQFT,
 			gross_yield_pct: area.gross_yield_pct ?? 0,
 			heat_metric_value: metricValue,
 			heat_metric_label: areaMetricLabel(area, layer),
@@ -317,6 +372,29 @@ function formatAedCompact(value: number) {
 	return `AED ${(value / 1_000).toFixed(0)}K`
 }
 
+function towerPopupHtml(props: Record<string, unknown>) {
+	const project = String(props.project_name || '')
+	const area = String(props.area_name || 'Unknown')
+	const context = project ? `${project} · ${area}` : area
+	return (
+		`<div style="min-width:205px;font-size:12px;line-height:1.5;">` +
+		`<div style="font-weight:700;color:var(--color-map-popup-fg);">${escapeHtml(props.building_name)}</div>` +
+		`<div style="color:var(--color-map-popup-muted);margin-top:2px;">${escapeHtml(context)}</div>` +
+		`<div style="margin-top:7px;color:var(--color-map-popup-fg);">${Number(
+			props.sales_transaction_count || 0
+		).toLocaleString()} sales · ${Number(props.rental_contract_count || 0).toLocaleString()} leases</div>` +
+		`<div style="color:var(--color-map-popup-muted);margin-top:2px;">Median sale ${formatAedCompact(
+			Number(props.median_sale_price || 0)
+		)} · median rent ${formatAedCompact(Number(props.median_annual_rent || 0))}</div>` +
+		`<div style="color:var(--color-map-popup-muted);margin-top:2px;">${Number(
+			props.listing_inventory_count || 0
+		).toLocaleString()} PF listings · ${Number(
+			props.matched_source_signatures || 0
+		).toLocaleString()} matched address signatures</div>` +
+		`</div>`
+	)
+}
+
 function formatSqmCompact(value: number) {
 	if (!Number.isFinite(value) || value <= 0) return '~'
 	return value >= 1000 ? `${(value / 1000).toFixed(1)}k sqm` : `${Math.round(value)} sqm`
@@ -333,7 +411,10 @@ function escapeHtml(value: unknown) {
 
 function coordinateSourceLabel(project: RadarProjectPin) {
 	if (project.coordinate_source === 'dld_mashrooi') return 'DLD Mashrooi'
-	return 'Building geocode'
+	if (project.coordinate_source === 'pf_reelly_consensus') return 'PF + Reelly coordinate consensus'
+	if (project.coordinate_source === 'pf_location_hierarchy') return 'PF location hierarchy'
+	if (project.coordinate_source === 'reelly_catalogue') return 'Reelly project catalogue'
+	return 'DLD building centroid'
 }
 
 function detailPointLabel(pin: RadarGeoPin) {
@@ -350,6 +431,15 @@ function ddaParcelPopupHtml(props: Record<string, unknown>) {
 	const rateMax = Number(props.valuation_rate_max_aed_sqft)
 	const plotNumber = escapeHtml(props.plot_number)
 	const communityName = escapeHtml(props.community_name)
+	const developmentStatus = String(props.development_status || 'no_observed_asset')
+	const developmentLabel = developmentStatus
+		.split('_')
+		.map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+		.join(' ')
+	const developmentNote = escapeHtml(props.development_note || '')
+	const linkedAssets = Number(props.linked_physical_asset_count || 0)
+	const subdivisionConfirmed = Number(props.subdivision_confirmed_count || 0)
+	const subdivisionPlots = Number(props.subdivision_plot_count || 0)
 	const valuationLabel =
 		valuationMin > 0 && valuationMax > 0
 			? `${formatAedCompact(valuationMin)} - ${formatAedCompact(valuationMax)}`
@@ -359,6 +449,16 @@ function ddaParcelPopupHtml(props: Record<string, unknown>) {
 		`<div style="min-width:210px;font-size:12px;line-height:1.55;">` +
 		`<div style="font-weight:700;color:var(--color-map-popup-fg);">Plot ${plotNumber}</div>` +
 		`<div style="color:var(--color-map-popup-muted);margin-top:2px;">${formatSqmCompact(areaSqm)} · ${communityName}</div>` +
+		`<div style="margin-top:7px;font-weight:700;color:var(--color-map-popup-fg);">${escapeHtml(developmentLabel)}</div>` +
+		(developmentNote
+			? `<div style="color:var(--color-map-popup-muted);margin-top:2px;">${developmentNote}</div>`
+			: '') +
+		(linkedAssets > 0
+			? `<div style="color:var(--color-map-popup-muted);margin-top:2px;">${linkedAssets.toLocaleString()} linked physical asset record(s)</div>`
+			: '') +
+		(subdivisionPlots > 0
+			? `<div style="color:var(--color-map-popup-muted);margin-top:2px;">Subdivision evidence ${subdivisionConfirmed.toLocaleString()} / ${subdivisionPlots.toLocaleString()} plots</div>`
+			: '') +
 		`<div style="margin-top:8px;border-top:1px solid color-mix(in srgb,var(--color-map-popup-muted) 20%,transparent);padding-top:7px;">` +
 		`<div style="color:var(--color-map-popup-muted);">Indicative valuation</div>` +
 		`<div style="font-weight:700;color:var(--color-map-popup-fg);font-size:13px;">${valuationLabel}</div>` +
@@ -369,12 +469,19 @@ function ddaParcelPopupHtml(props: Record<string, unknown>) {
 }
 
 function ddaOutlinePopupHtml(props: Record<string, unknown>) {
+	const developedShare = Number(props.developed_share || 0)
 	return (
 		`<div style="font-size:12px;line-height:1.6;">` +
 		`<div style="font-weight:700;color:var(--color-map-popup-fg);">${escapeHtml(props.name)}</div>` +
 		`<div style="color:var(--color-map-popup-muted);margin-top:2px;">${Number(
 			props.plot_count || 0
 		).toLocaleString()} plots · ${escapeHtml(props.kind)}</div>` +
+		`<div style="font-weight:700;color:var(--color-map-popup-fg);margin-top:5px;">${developedShare.toFixed(1)}% developed evidence</div>` +
+		`<div style="color:var(--color-map-popup-muted);margin-top:2px;">${Number(
+			props.developed_confirmed_count || 0
+		).toLocaleString()} confirmed · ${Number(
+			props.developed_probable_count || 0
+		).toLocaleString()} probable</div>` +
 		`</div>`
 	)
 }
@@ -384,6 +491,7 @@ function ddaFeatureCollection(features: DdaMapFeature[]): GeoJSON.FeatureCollect
 		features.map((feature) => {
 			const isOutline = isDDAOutlineFeature(feature)
 			const category = plotCategory(feature)
+			const developmentStatus = isOutline ? '' : (feature.development_status ?? 'no_observed_asset')
 			return {
 				type: 'Feature',
 				geometry: { type: 'Polygon', coordinates: [feature.coordinates] },
@@ -395,8 +503,11 @@ function ddaFeatureCollection(features: DdaMapFeature[]): GeoJSON.FeatureCollect
 							plot_count: feature.plot_count,
 							total_plot_area_sqm: feature.total_plot_area_sqm,
 							total_gfa_sqm: feature.total_gfa_sqm,
+							developed_confirmed_count: feature.developed_confirmed_count,
+							developed_probable_count: feature.developed_probable_count,
+							developed_share: feature.developed_share,
 							category,
-							color: '#f59e0b'
+							color: outlineDevelopmentColor(feature.developed_share ?? 0)
 						}
 					: {
 							feature_type: 'parcel',
@@ -410,8 +521,15 @@ function ddaFeatureCollection(features: DdaMapFeature[]): GeoJSON.FeatureCollect
 							valuation_confidence: feature.valuation_confidence ?? '',
 							valuation_note: feature.valuation_note ?? '',
 							community_name: feature.community_name,
+							development_status: feature.development_status,
+							development_confidence: feature.development_confidence,
+							development_method: feature.development_method,
+							development_note: feature.development_note ?? '',
+							linked_physical_asset_count: feature.linked_physical_asset_count,
+							subdivision_plot_count: feature.subdivision_plot_count,
+							subdivision_confirmed_count: feature.subdivision_confirmed_count,
 							category,
-							color: plotColor(category)
+							color: developmentColor(developmentStatus, category)
 						}
 			}
 		})
@@ -481,10 +599,12 @@ $effect(() => {
 
 $effect(() => {
 	projectPins
+	buildingPins
 	areaBubbles
 	selectedProjectId
 	selectedAreaName
 	showProjectPins
+	showBuildingPins
 	showAreaBubbles
 	showZoneHeatmap
 	activeHeatmapLayer
@@ -649,6 +769,27 @@ function bindRadarHandlers() {
 		})
 	})
 
+	map.on('click', BUILDING_CLUSTER_LAYER_ID, (event) => {
+		const feature = event.features?.[0]
+		const clusterId = feature?.properties?.cluster_id
+		const source = map?.getSource(BUILDING_SOURCE_ID) as maplibregl.GeoJSONSource | undefined
+		if (!map || clusterId == null || !source || feature?.geometry?.type !== 'Point') return
+		const center = (feature.geometry as GeoJSON.Point).coordinates as [number, number]
+		void source.getClusterExpansionZoom(Number(clusterId)).then((zoom) => {
+			if (!map || zoom == null) return
+			map.easeTo({ center, zoom, duration: 550 })
+		})
+	})
+
+	map.on('click', BUILDING_LAYER_ID, (event) => {
+		const props = event.features?.[0]?.properties
+		if (!map || !props) return
+		new maplibregl.Popup({ className: 'building-popup', offset: 12 })
+			.setLngLat(event.lngLat)
+			.setHTML(towerPopupHtml(props))
+			.addTo(map)
+	})
+
 	map.on('click', AREA_LAYER_ID, (event) => {
 		const areaName = event.features?.[0]?.properties?.area_name
 		if (typeof areaName === 'string' && areaName) onAreaSelect?.(areaName)
@@ -680,7 +821,7 @@ function bindRadarHandlers() {
 					`<div style="color:var(--color-map-popup-muted);margin-top:6px;">${Number(
 						props.no_of_units || 0
 					).toLocaleString()} units · ${Number(
-						props.sales_transaction_count_12m || 0
+						props.sales_transaction_count || 0
 					).toLocaleString()} sales txns</div>` +
 					`</div>`
 			)
@@ -701,6 +842,15 @@ function bindRadarHandlers() {
 		if (map) map.getCanvas().style.cursor = ''
 	})
 
+	for (const layerId of [BUILDING_CLUSTER_LAYER_ID, BUILDING_LAYER_ID]) {
+		map.on('mouseenter', layerId, () => {
+			if (map) map.getCanvas().style.cursor = 'pointer'
+		})
+		map.on('mouseleave', layerId, () => {
+			if (map) map.getCanvas().style.cursor = ''
+		})
+	}
+
 	map.on('mouseenter', AREA_LAYER_ID, () => {
 		if (map) map.getCanvas().style.cursor = 'pointer'
 	})
@@ -718,6 +868,11 @@ function syncRadarLayers() {
 				.filter((project) => hasValidLngLat(project.longitude, project.latitude))
 				.map((project) => projectFeature(project))
 		: []
+	const buildingFeatures = showBuildingPins
+		? buildingPins
+				.filter((building) => hasValidLngLat(building.longitude, building.latitude))
+				.map((building) => buildingFeature(building))
+		: []
 	const areaFeatures = areaBubbles
 		.map((area, index) => areaFeature(area, index, activeHeatmapLayer, heatmapMax))
 		.filter((feature): feature is GeoJSON.Feature => feature !== null)
@@ -727,6 +882,11 @@ function syncRadarLayers() {
 		cluster: true,
 		clusterMaxZoom: 13,
 		clusterRadius: 48
+	})
+	setSourceData(BUILDING_SOURCE_ID, featureCollection(buildingFeatures), {
+		cluster: true,
+		clusterMaxZoom: 15,
+		clusterRadius: 38
 	})
 
 	if (!map.getLayer(AREA_HEATMAP_LAYER_ID)) {
@@ -794,6 +954,52 @@ function syncRadarLayers() {
 				'text-color': resolvedTheme === 'dark' ? '#e2e8f0' : '#0f172a',
 				'text-halo-color': resolvedTheme === 'dark' ? '#020617' : '#ffffff',
 				'text-halo-width': 1.2
+			}
+		})
+	}
+	if (!map.getLayer(BUILDING_CLUSTER_LAYER_ID)) {
+		map.addLayer({
+			id: BUILDING_CLUSTER_LAYER_ID,
+			type: 'circle',
+			source: BUILDING_SOURCE_ID,
+			filter: ['has', 'point_count'],
+			paint: {
+				'circle-color': '#0f3d4a',
+				'circle-radius': ['step', ['get', 'point_count'], 15, 30, 20, 100, 25],
+				'circle-opacity': 0.88,
+				'circle-stroke-color': '#ffffff',
+				'circle-stroke-width': 1.5,
+				'circle-stroke-opacity': 0.9
+			}
+		})
+	}
+	if (!map.getLayer(BUILDING_CLUSTER_COUNT_LAYER_ID)) {
+		map.addLayer({
+			id: BUILDING_CLUSTER_COUNT_LAYER_ID,
+			type: 'symbol',
+			source: BUILDING_SOURCE_ID,
+			filter: ['has', 'point_count'],
+			layout: {
+				'text-field': ['get', 'point_count_abbreviated'],
+				'text-font': ['Open Sans Semibold', 'Arial Unicode MS Bold'],
+				'text-size': 10
+			},
+			paint: { 'text-color': '#ffffff' }
+		})
+	}
+	if (!map.getLayer(BUILDING_LAYER_ID)) {
+		map.addLayer({
+			id: BUILDING_LAYER_ID,
+			type: 'circle',
+			source: BUILDING_SOURCE_ID,
+			filter: ['!', ['has', 'point_count']],
+			paint: {
+				'circle-radius': ['get', 'radius'],
+				'circle-color': ['get', 'color'],
+				'circle-opacity': 0.78,
+				'circle-stroke-color': '#ffffff',
+				'circle-stroke-width': 1.5,
+				'circle-stroke-opacity': 0.95
 			}
 		})
 	}
@@ -922,6 +1128,9 @@ function syncRadarLayers() {
 	setLayerVisibility(PROJECT_HALO_LAYER_ID, showProjectPins)
 	setLayerVisibility(PROJECT_LAYER_ID, showProjectPins)
 	setLayerVisibility(PROJECT_SELECTED_LAYER_ID, showProjectPins)
+	setLayerVisibility(BUILDING_CLUSTER_LAYER_ID, showBuildingPins)
+	setLayerVisibility(BUILDING_CLUSTER_COUNT_LAYER_ID, showBuildingPins)
+	setLayerVisibility(BUILDING_LAYER_ID, showBuildingPins)
 	raiseProjectLayers()
 	bindRadarHandlers()
 }

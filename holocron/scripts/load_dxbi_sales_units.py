@@ -4,7 +4,9 @@
 from __future__ import annotations
 
 import argparse
+import gzip
 import logging
+import os
 from pathlib import Path
 
 import clickhouse_connect
@@ -25,6 +27,7 @@ CREATE TABLE IF NOT EXISTS dxbi_sales_unit_events (
     project_name String DEFAULT '',
     area_name LowCardinality(String) DEFAULT '',
     area_key String DEFAULT '',
+    address_normalization_version UInt8 DEFAULT 5,
     property_type LowCardinality(String) DEFAULT '',
     market_status LowCardinality(String) DEFAULT '',
     bedrooms LowCardinality(String) DEFAULT '',
@@ -98,7 +101,11 @@ WITH candidates AS (
         replaceRegexpAll(
             replaceAll(
                 replaceAll(
-                    replaceAll(lowerUTF8(building_name), 'jumeriah', 'jumeirah'),
+                    replaceAll(
+                        lowerUTF8(coalesce(nullIf(building_name, ''), project_name)),
+                        'jumeriah',
+                        'jumeirah'
+                    ),
                     'residences',
                     'residence'
                 ),
@@ -114,7 +121,10 @@ WITH candidates AS (
             ''
         ) AS area_key
     FROM dxbi_rental_unit_candidates FINAL
-    WHERE purchase_price_aed > 0 AND building_name != '' AND area_name != ''
+    WHERE
+        purchase_price_aed > 0
+        AND coalesce(nullIf(building_name, ''), nullIf(project_name, '')) IS NOT NULL
+        AND area_name != ''
 ),
 matched AS (
     SELECT
@@ -249,6 +259,7 @@ FROM grouped
 WHERE matching_units > 1
 """
 SALES_ALTERS = [
+    "ALTER TABLE dxbi_sales_unit_events ADD COLUMN IF NOT EXISTS address_normalization_version UInt8 DEFAULT 0 AFTER area_key",
     "ALTER TABLE dxbi_sales_unit_events ADD COLUMN IF NOT EXISTS market_status LowCardinality(String) DEFAULT '' AFTER property_type",
     "ALTER TABLE dxbi_sales_unit_events ADD COLUMN IF NOT EXISTS built_up_area_sqft Nullable(Float64) AFTER size_key",
     "ALTER TABLE dxbi_sales_unit_events ADD COLUMN IF NOT EXISTS balcony_sqft Nullable(Float64) AFTER built_up_area_sqft",
@@ -280,6 +291,7 @@ COLUMNS = [
     "project_name",
     "area_name",
     "area_key",
+    "address_normalization_version",
     "property_type",
     "market_status",
     "bedrooms",
@@ -302,10 +314,11 @@ COLUMNS = [
 def discover_files(inputs: list[Path]) -> list[Path]:
     files: set[Path] = set()
     for path in inputs:
-        if path.is_file() and path.suffix == ".jsonl":
+        if path.is_file() and path.name.endswith((".jsonl", ".jsonl.gz")):
             files.add(path)
         elif path.is_dir():
             files.update(path.rglob("*.jsonl"))
+            files.update(path.rglob("*.jsonl.gz"))
         else:
             raise FileNotFoundError(f"Input does not exist: {path}")
     return sorted(files)
@@ -315,8 +328,9 @@ def load_files(files: list[Path], *, client, batch_size: int) -> tuple[int, int,
     loaded = skipped = errors = 0
     batch: list[list[object]] = []
     for index, path in enumerate(files, start=1):
+        opener = gzip.open if path.name.endswith(".gz") else open
         try:
-            with path.open("rt", encoding="utf-8") as handle:
+            with opener(path, "rt", encoding="utf-8") as handle:
                 for line in handle:
                     if '"unit_number":""' in line or '"unit_number":"u-hidden"' in line:
                         skipped += 1
@@ -368,11 +382,11 @@ def refresh_matches(client) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("inputs", nargs="*", type=Path)
-    parser.add_argument("--host", default="127.0.0.1")
-    parser.add_argument("--port", type=int, default=8123)
-    parser.add_argument("--database", default="vitevue")
-    parser.add_argument("--username", default="default")
-    parser.add_argument("--password", default="")
+    parser.add_argument("--host", default=os.getenv("CLICKHOUSE_HOST", "127.0.0.1"))
+    parser.add_argument("--port", type=int, default=int(os.getenv("CLICKHOUSE_PORT", "8123")))
+    parser.add_argument("--database", default=os.getenv("CLICKHOUSE_DATABASE", "vitevue"))
+    parser.add_argument("--username", default=os.getenv("CLICKHOUSE_USER", "default"))
+    parser.add_argument("--password", default=os.getenv("CLICKHOUSE_PASSWORD", ""))
     parser.add_argument("--batch-size", type=int, default=10_000)
     parser.add_argument("--refresh-matches-only", action="store_true")
     args = parser.parse_args()

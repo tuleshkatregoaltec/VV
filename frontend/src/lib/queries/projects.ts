@@ -4,15 +4,22 @@ import {
 	type DdaPlotParams,
 	type ProjectRadarProject,
 	projects,
+	type RadarBuildingPin,
+	type RadarBuildingPinParams,
+	type RadarPeriodDays,
 	type RadarPinParams
 } from '$lib/api/projects'
 
 export const projectKeys = {
 	all: ['projects'] as const,
 	list: () => [...projectKeys.all, 'list'] as const,
-	radar: (limit: number) => [...projectKeys.all, 'radar', { limit }] as const,
-	radarOverview: () => [...projectKeys.all, 'radar-overview'] as const,
+	radar: (limit: number, periodDays: RadarPeriodDays) =>
+		[...projectKeys.all, 'radar', { limit, periodDays }] as const,
+	radarOverview: (periodDays: RadarPeriodDays) =>
+		[...projectKeys.all, 'radar-overview', { periodDays }] as const,
 	radarPins: (params: RadarPinParams) => [...projectKeys.all, 'radar-pins', params] as const,
+	radarBuildingPins: (params: RadarBuildingPinParams) =>
+		[...projectKeys.all, 'radar-building-pins', params] as const,
 	master: (name: string) => [...projectKeys.all, 'master', name] as const,
 	detail: (id: number) => [...projectKeys.all, 'detail', id] as const,
 	building: (propertyId: number) => [...projectKeys.all, 'building', propertyId] as const,
@@ -26,14 +33,14 @@ export const projectQueries = {
 		queryFn: () => projects.list(),
 		staleTime: Infinity
 	}),
-	radar: (limit = 1400) => ({
-		queryKey: projectKeys.radar(limit),
-		queryFn: () => projects.radar(limit),
+	radar: (limit = 1400, periodDays: RadarPeriodDays = 365) => ({
+		queryKey: projectKeys.radar(limit, periodDays),
+		queryFn: () => projects.radar(limit, periodDays),
 		staleTime: 30 * 60 * 1000
 	}),
-	radarOverview: () => ({
-		queryKey: projectKeys.radarOverview(),
-		queryFn: () => projects.radarOverview(),
+	radarOverview: (periodDays: RadarPeriodDays = 365) => ({
+		queryKey: projectKeys.radarOverview(periodDays),
+		queryFn: () => projects.radarOverview(periodDays),
 		staleTime: 30 * 60 * 1000
 	}),
 	radarPins: (params: RadarPinParams | null) => ({
@@ -41,6 +48,13 @@ export const projectQueries = {
 		queryFn: () => projects.radarPins(params ?? {}),
 		enabled: Boolean(params),
 		placeholderData: (previousData: ProjectRadarProject[] | undefined) => previousData,
+		staleTime: 5 * 60 * 1000
+	}),
+	radarBuildingPins: (params: RadarBuildingPinParams | null) => ({
+		queryKey: projectKeys.radarBuildingPins(params ?? ({} as RadarBuildingPinParams)),
+		queryFn: () => projects.radarBuildingPins(params ?? ({} as RadarBuildingPinParams)),
+		enabled: Boolean(params),
+		placeholderData: (previousData: RadarBuildingPin[] | undefined) => previousData,
 		staleTime: 5 * 60 * 1000
 	}),
 	master: (name: string | null) => ({

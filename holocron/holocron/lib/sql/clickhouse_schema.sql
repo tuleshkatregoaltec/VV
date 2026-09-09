@@ -150,7 +150,12 @@ CREATE TABLE IF NOT EXISTS dxbi_rental_events (
     property_type      LowCardinality(String) DEFAULT '',
     bedrooms           LowCardinality(String) DEFAULT '',
     size_sqft          Float64 DEFAULT 0,
+    contract_amount_aed UInt64 DEFAULT 0,
+    contract_term_days UInt32 DEFAULT 0,
+    contract_term_months Float32 DEFAULT 0,
     annual_rent_aed    UInt64 DEFAULT 0,
+    rent_normalization_version UInt8 DEFAULT 1,
+    address_normalization_version UInt8 DEFAULT 3,
     purchase_price_aed UInt64 DEFAULT 0,
     lease_start        Date,
     lease_end          Date,
@@ -174,7 +179,12 @@ CREATE TABLE IF NOT EXISTS dxbi_rental_unit_candidates (
     property_type      LowCardinality(String) DEFAULT '',
     bedrooms           LowCardinality(String) DEFAULT '',
     size_sqft          Float64 DEFAULT 0,
+    contract_amount_aed UInt64 DEFAULT 0,
+    contract_term_days UInt32 DEFAULT 0,
+    contract_term_months Float32 DEFAULT 0,
     annual_rent_aed    UInt64 DEFAULT 0,
+    rent_normalization_version UInt8 DEFAULT 1,
+    address_normalization_version UInt8 DEFAULT 3,
     purchase_price_aed UInt64 DEFAULT 0,
     lease_start        Date,
     lease_end          Date,
@@ -185,6 +195,129 @@ CREATE TABLE IF NOT EXISTS dxbi_rental_unit_candidates (
 ) ENGINE = ReplacingMergeTree(loaded_at)
 ORDER BY unit_candidate_key;
 
+-- Shadow rental tables retain source identity and true row multiplicity. The
+-- event_key alias preserves the current backend contract for the v2 cutover.
+CREATE TABLE IF NOT EXISTS dxbi_rental_events_v2 (
+    contract_key       String,
+    event_key          String ALIAS contract_key,
+    source_contract_id String DEFAULT '',
+    unit_number        String DEFAULT '',
+    occurrence_index   UInt16 DEFAULT 1,
+    unit_candidate_key String,
+    unit_cohort_key    String,
+    location_name      String DEFAULT '',
+    building_name      String DEFAULT '',
+    project_name       String DEFAULT '',
+    area_name          LowCardinality(String) DEFAULT '',
+    property_type      LowCardinality(String) DEFAULT '',
+    bedrooms           LowCardinality(String) DEFAULT '',
+    size_sqft          Float64 DEFAULT 0,
+    contract_amount_aed UInt64 DEFAULT 0,
+    contract_term_days UInt32 DEFAULT 0,
+    contract_term_months Float32 DEFAULT 0,
+    annual_rent_aed    UInt64 DEFAULT 0,
+    rent_normalization_version UInt8 DEFAULT 2,
+    address_normalization_version UInt8 DEFAULT 5,
+    purchase_price_aed UInt64 DEFAULT 0,
+    lease_start        Date,
+    lease_end          Date,
+    contract_state     LowCardinality(String) DEFAULT '',
+    source_account     LowCardinality(String),
+    source_run_id      String,
+    report_type        LowCardinality(String) DEFAULT 'rentals',
+    filter_profile_id  LowCardinality(String),
+    source_location_id String,
+    source_location_text String DEFAULT '',
+    source_location_slug String DEFAULT '',
+    configuration_hash FixedString(20),
+    raw_row_fingerprint FixedString(64),
+    raw_attributes_json String DEFAULT '{}',
+    source_shard_date  Date,
+    source_file        String DEFAULT '',
+    scraped_at         DateTime64(3, 'UTC'),
+    loaded_at          DateTime64(3, 'UTC') DEFAULT now64(3)
+) ENGINE = ReplacingMergeTree(loaded_at)
+ORDER BY (lease_start, contract_key);
+
+CREATE TABLE IF NOT EXISTS dxbi_rental_unit_candidates_v2 (
+    contract_key       String,
+    event_key          String ALIAS contract_key,
+    unit_candidate_key String,
+    unit_cohort_key    String,
+    source_contract_id String DEFAULT '',
+    unit_number        String DEFAULT '',
+    location_name      String DEFAULT '',
+    building_name      String DEFAULT '',
+    project_name       String DEFAULT '',
+    area_name          LowCardinality(String) DEFAULT '',
+    property_type      LowCardinality(String) DEFAULT '',
+    bedrooms           LowCardinality(String) DEFAULT '',
+    size_sqft          Float64 DEFAULT 0,
+    contract_amount_aed UInt64 DEFAULT 0,
+    contract_term_days UInt32 DEFAULT 0,
+    contract_term_months Float32 DEFAULT 0,
+    annual_rent_aed    UInt64 DEFAULT 0,
+    rent_normalization_version UInt8 DEFAULT 2,
+    address_normalization_version UInt8 DEFAULT 5,
+    purchase_price_aed UInt64 DEFAULT 0,
+    lease_start        Date,
+    lease_end          Date,
+    contract_state     LowCardinality(String) DEFAULT '',
+    observed_contracts UInt32 DEFAULT 0,
+    last_scraped_at    DateTime64(3, 'UTC'),
+    loaded_at          DateTime64(3, 'UTC') DEFAULT now64(3)
+) ENGINE = ReplacingMergeTree(loaded_at)
+ORDER BY (contract_key, unit_candidate_key);
+
+CREATE TABLE IF NOT EXISTS dxbi_rental_run_reconciliation (
+    run_id               String,
+    report_type          LowCardinality(String),
+    status               LowCardinality(String),
+    raw_rows             UInt64,
+    unique_source_rows   UInt64,
+    normalized_rows      UInt64,
+    quarantined_rows     UInt64,
+    profile_overlap_rows UInt64,
+    loaded_contracts     UInt64,
+    out_of_scope_rows    UInt64,
+    expected_partitions  UInt32,
+    completed_partitions UInt32,
+    failed_partitions    UInt32,
+    manifest_hash        String DEFAULT '',
+    details_json         String DEFAULT '{}',
+    started_at           DateTime64(3, 'UTC'),
+    finished_at          DateTime64(3, 'UTC'),
+    loaded_at            DateTime64(3, 'UTC') DEFAULT now64(3)
+) ENGINE = ReplacingMergeTree(loaded_at)
+ORDER BY (report_type, run_id);
+
+CREATE OR REPLACE VIEW dxbi_rental_ingestion_health AS
+SELECT
+    latest_run_id,
+    latest_status,
+    latest_finished_at,
+    dateDiff('hour', latest_finished_at, now64(3)) AS age_hours,
+    latest_quarantined_rows,
+    latest_expected_partitions,
+    latest_completed_partitions,
+    toUInt8(
+        latest_status = 'success'
+        AND latest_quarantined_rows = 0
+        AND latest_completed_partitions = latest_expected_partitions
+        AND dateDiff('hour', latest_finished_at, now64(3)) <= 36
+    ) AS healthy
+FROM (
+    SELECT
+        argMax(run_id, finished_at) AS latest_run_id,
+        argMax(status, finished_at) AS latest_status,
+        max(finished_at) AS latest_finished_at,
+        argMax(quarantined_rows, finished_at) AS latest_quarantined_rows,
+        argMax(expected_partitions, finished_at) AS latest_expected_partitions,
+        argMax(completed_partitions, finished_at) AS latest_completed_partitions
+    FROM dxbi_rental_run_reconciliation FINAL
+    WHERE report_type = 'rentals'
+);
+
 CREATE TABLE IF NOT EXISTS dxbi_sales_unit_events (
     sale_key           String,
     transaction_date   Date,
@@ -194,6 +327,7 @@ CREATE TABLE IF NOT EXISTS dxbi_sales_unit_events (
     project_name       String DEFAULT '',
     area_name          LowCardinality(String) DEFAULT '',
     area_key           String DEFAULT '',
+    address_normalization_version UInt8 DEFAULT 3,
     property_type      LowCardinality(String) DEFAULT '',
     market_status      LowCardinality(String) DEFAULT '',
     bedrooms           LowCardinality(String) DEFAULT '',
@@ -1044,7 +1178,7 @@ ORDER BY (source, dataset_version, manifest_key, table_name, loaded_at);
 --   - Free-text entity names use initcap(trim()) applied at build time.
 --   - Arabic variants are preserved alongside English.
 --   - Bronze ingestion envelope (run_id, mode, page_index, etc.) is dropped.
---   - Numeric-only ID fields (group_id, procedure_id, usage_id) are dropped;
+--   - Numeric-only ID fields (group_id, procedure_id, usage_id) are dropped.
 --     area_id and property_id are kept as stable cross-source identifiers.
 --   - Redundant string flags (is_free_hold_en/ar, is_offplan_en/ar) are dropped.
 
@@ -1149,6 +1283,441 @@ CREATE TABLE IF NOT EXISTS silver_rent_contracts (
     nearest_mall_en              String               DEFAULT '',
     nearest_mall_ar              String               DEFAULT '',
     nearest_landmark_en          String               DEFAULT '',
-    nearest_landmark_ar          String               DEFAULT ''
+    nearest_landmark_ar          String               DEFAULT '',
+    annual_amount_per_property_aed Float64            DEFAULT 0,
+    property_category            LowCardinality(String) DEFAULT '',
+    market_scope                 LowCardinality(String) DEFAULT '',
+    is_residential_home          UInt8                DEFAULT 0,
+    is_single_property_contract  UInt8                DEFAULT 0,
+    is_rent_per_sqm_valid        UInt8                DEFAULT 0,
+    is_yield_eligible             UInt8                DEFAULT 0
 ) ENGINE = ReplacingMergeTree()
 ORDER BY (registration_date, contract_id);
+
+ALTER TABLE silver_rent_contracts
+    ADD COLUMN IF NOT EXISTS annual_amount_per_property_aed Float64 DEFAULT 0;
+ALTER TABLE silver_rent_contracts
+    ADD COLUMN IF NOT EXISTS property_category LowCardinality(String) DEFAULT '';
+ALTER TABLE silver_rent_contracts
+    ADD COLUMN IF NOT EXISTS market_scope LowCardinality(String) DEFAULT '';
+ALTER TABLE silver_rent_contracts
+    ADD COLUMN IF NOT EXISTS is_residential_home UInt8 DEFAULT 0;
+ALTER TABLE silver_rent_contracts
+    ADD COLUMN IF NOT EXISTS is_single_property_contract UInt8 DEFAULT 0;
+ALTER TABLE silver_rent_contracts
+    ADD COLUMN IF NOT EXISTS is_rent_per_sqm_valid UInt8 DEFAULT 0;
+ALTER TABLE silver_rent_contracts
+    ADD COLUMN IF NOT EXISTS is_yield_eligible UInt8 DEFAULT 0;
+
+-- Canonical geography derived from Property Finder's typed location hierarchy.
+-- Source labels remain untouched. The crosswalk is additive and may deliberately
+-- leave a source signature unmapped when the available evidence is ambiguous.
+
+CREATE TABLE IF NOT EXISTS geo_location_nodes (
+    canonical_location_id        String,
+    source_location_id           String,
+    parent_canonical_location_id Nullable(String),
+    snapshot_id                  String,
+    scraped_at                   Nullable(DateTime64(3, 'UTC')),
+    location_type                LowCardinality(String),
+    level                        Int32,
+    name                         String,
+    normalized_name              String,
+    path_name                    String,
+    path_ids_json                String,
+    latitude                     Nullable(Float64),
+    longitude                    Nullable(Float64),
+    coordinate_status            LowCardinality(String),
+    published                    UInt8,
+    materialized_at              DateTime64(3, 'UTC') DEFAULT now64(3)
+) ENGINE = ReplacingMergeTree(materialized_at)
+ORDER BY canonical_location_id;
+
+CREATE TABLE IF NOT EXISTS geo_location_closure (
+    ancestor_location_id   String,
+    descendant_location_id String,
+    depth                  UInt16,
+    snapshot_id            String,
+    materialized_at        DateTime64(3, 'UTC') DEFAULT now64(3)
+) ENGINE = ReplacingMergeTree(materialized_at)
+ORDER BY (ancestor_location_id, descendant_location_id);
+
+CREATE TABLE IF NOT EXISTS geo_source_signatures (
+    source_system             LowCardinality(String),
+    source_key                String,
+    source_grain              LowCardinality(String),
+    property_type             LowCardinality(String) DEFAULT '',
+    market_status             LowCardinality(String) DEFAULT '',
+    source_entity_class       LowCardinality(String) DEFAULT '',
+    raw_area_name             String,
+    raw_master_project_name   String,
+    raw_project_name          String,
+    raw_building_name         String,
+    normalized_area_name      String,
+    normalized_master_project String,
+    normalized_project_name   String,
+    normalized_building_name  String,
+    row_count                 UInt64,
+    represented_value_aed     Int64,
+    first_observed            Nullable(Date),
+    last_observed             Nullable(Date),
+    normalization_version     UInt16,
+    build_id                  String,
+    materialized_at           DateTime64(3, 'UTC') DEFAULT now64(3)
+) ENGINE = ReplacingMergeTree(materialized_at)
+ORDER BY (source_system, source_key);
+
+ALTER TABLE geo_source_signatures
+    ADD COLUMN IF NOT EXISTS property_type LowCardinality(String) DEFAULT '' AFTER source_grain;
+ALTER TABLE geo_source_signatures
+    ADD COLUMN IF NOT EXISTS market_status LowCardinality(String) DEFAULT '' AFTER property_type;
+ALTER TABLE geo_source_signatures
+    ADD COLUMN IF NOT EXISTS source_entity_class LowCardinality(String) DEFAULT '' AFTER market_status;
+
+CREATE TABLE IF NOT EXISTS geo_entity_links (
+    source_system         LowCardinality(String),
+    source_key            String,
+    canonical_location_id Nullable(String),
+    target_grain          LowCardinality(String),
+    relation              LowCardinality(String),
+    status                LowCardinality(String),
+    match_method          LowCardinality(String),
+    confidence            LowCardinality(String),
+    candidate_count       UInt16,
+    evidence_json         String,
+    normalization_version UInt16,
+    pf_snapshot_id        String,
+    build_id              String,
+    reviewed_by           String DEFAULT '',
+    reviewed_at           Nullable(DateTime64(3, 'UTC')),
+    materialized_at       DateTime64(3, 'UTC') DEFAULT now64(3)
+) ENGINE = ReplacingMergeTree(materialized_at)
+ORDER BY (source_system, source_key);
+
+-- Human review decisions live separately from generated links so refreshes cannot
+-- overwrite them. An active approval must target a current canonical node, and an
+-- active rejection deliberately leaves the source signature unmapped.
+CREATE TABLE IF NOT EXISTS geo_entity_link_overrides (
+    source_system         LowCardinality(String),
+    source_key            String,
+    canonical_location_id Nullable(String),
+    decision              LowCardinality(String),
+    relation              LowCardinality(String) DEFAULT 'equivalent',
+    review_note           String,
+    reviewed_by           String,
+    reviewed_at           DateTime64(3, 'UTC') DEFAULT now64(3),
+    active                UInt8 DEFAULT 1
+) ENGINE = ReplacingMergeTree(reviewed_at)
+ORDER BY (source_system, source_key);
+
+CREATE TABLE IF NOT EXISTS geo_tower_aliases (
+    canonical_location_id String,
+    alias_name            String,
+    normalized_alias      String,
+    source_system         LowCardinality(String),
+    evidence_json         String,
+    status                LowCardinality(String),
+    reviewed_by           String DEFAULT '',
+    reviewed_at           Nullable(DateTime64(3, 'UTC')),
+    active                UInt8 DEFAULT 1,
+    materialized_at       DateTime64(3, 'UTC') DEFAULT now64(3)
+) ENGINE = ReplacingMergeTree(materialized_at)
+ORDER BY (canonical_location_id, normalized_alias, source_system);
+
+CREATE TABLE IF NOT EXISTS geo_entity_link_candidates (
+    source_system         LowCardinality(String),
+    source_key            String,
+    candidate_rank        UInt8,
+    canonical_location_id String,
+    target_name           String,
+    score                 UInt8,
+    context_supported     UInt8,
+    identity_compatible   UInt8,
+    match_method          LowCardinality(String),
+    source_variant        String,
+    target_variant        String,
+    build_id              String,
+    materialized_at       DateTime64(3, 'UTC') DEFAULT now64(3)
+) ENGINE = ReplacingMergeTree(materialized_at)
+ORDER BY (source_system, source_key, candidate_rank);
+
+-- Reelly is a project catalogue, not a geographic hierarchy. Keep this crosswalk
+-- separate from PF geography so a project/phase link cannot be mistaken for a
+-- physical tower. Every off-plan signature receives a row, including unresolved
+-- and catalogue-absent records.
+CREATE TABLE IF NOT EXISTS offplan_reelly_project_links (
+    source_system         LowCardinality(String),
+    source_key            String,
+    reelly_project_id     Nullable(String),
+    relation              LowCardinality(String),
+    status                LowCardinality(String),
+    match_method          LowCardinality(String),
+    confidence            LowCardinality(String),
+    candidate_count       UInt16,
+    evidence_json         String,
+    normalization_version UInt16,
+    catalog_build_id      String,
+    source_build_id       String,
+    reviewed_by           String DEFAULT '',
+    reviewed_at           Nullable(DateTime64(3, 'UTC')),
+    materialized_at       DateTime64(3, 'UTC') DEFAULT now64(3)
+) ENGINE = ReplacingMergeTree(materialized_at)
+ORDER BY (source_system, source_key);
+
+CREATE TABLE IF NOT EXISTS offplan_reelly_project_link_overrides (
+    source_system     LowCardinality(String),
+    source_key        String,
+    reelly_project_id Nullable(String),
+    decision          LowCardinality(String),
+    relation          LowCardinality(String) DEFAULT 'equivalent',
+    review_note       String,
+    reviewed_by       String,
+    reviewed_at       DateTime64(3, 'UTC') DEFAULT now64(3),
+    active            UInt8 DEFAULT 1
+) ENGINE = ReplacingMergeTree(reviewed_at)
+ORDER BY (source_system, source_key);
+
+CREATE TABLE IF NOT EXISTS offplan_reelly_project_link_candidates (
+    source_system      LowCardinality(String),
+    source_key         String,
+    candidate_rank     UInt8,
+    reelly_project_id  String,
+    project_name       String,
+    area_name          String,
+    score              UInt8,
+    context_supported  UInt8,
+    identity_compatible UInt8,
+    match_method       LowCardinality(String),
+    relation           LowCardinality(String),
+    source_field       LowCardinality(String),
+    source_variant     String,
+    target_variant     String,
+    catalog_build_id   String,
+    source_build_id    String,
+    materialized_at    DateTime64(3, 'UTC') DEFAULT now64(3)
+) ENGINE = ReplacingMergeTree(materialized_at)
+ORDER BY (source_system, source_key, candidate_rank);
+
+CREATE OR REPLACE VIEW offplan_reelly_mapped_source_facts AS
+SELECT
+    s.source_system AS source_system,
+    s.source_key AS source_key,
+    s.property_type AS property_type,
+    s.raw_area_name AS raw_area_name,
+    s.raw_master_project_name AS raw_master_project_name,
+    s.raw_project_name AS raw_project_name,
+    s.raw_building_name AS raw_building_name,
+    s.row_count AS row_count,
+    s.represented_value_aed AS represented_value_aed,
+    s.first_observed AS first_observed,
+    s.last_observed AS last_observed,
+    l.reelly_project_id AS reelly_project_id,
+    l.relation AS relation,
+    l.status AS match_status,
+    l.match_method AS match_method,
+    l.confidence AS match_confidence,
+    l.candidate_count AS candidate_count,
+    l.evidence_json AS evidence_json,
+    r.project_key AS reelly_project_key,
+    r.project_name AS reelly_project_name,
+    replaceRegexpAll(lowerUTF8(r.project_name), '[^a-z0-9]', '')
+        AS normalized_reelly_project_name,
+    r.area_name AS reelly_area_name,
+    r.developer_name AS reelly_developer_name,
+    r.latitude AS latitude,
+    r.longitude AS longitude,
+    r.completion_time AS completion_time,
+    r.readiness_progress AS readiness_progress
+FROM geo_source_signatures AS s
+INNER JOIN offplan_reelly_project_links AS l USING (source_system, source_key)
+LEFT JOIN silver_reelly_projects AS r FINAL
+    ON r.project_id = l.reelly_project_id
+WHERE s.market_status = 'Offplan';
+
+CREATE OR REPLACE VIEW geo_mapped_source_facts AS
+SELECT
+    s.source_system AS source_system,
+    s.source_key AS source_key,
+    s.source_grain AS source_grain,
+    s.property_type AS property_type,
+    s.market_status AS market_status,
+    s.source_entity_class AS source_entity_class,
+    s.raw_area_name AS raw_area_name,
+    s.raw_master_project_name AS raw_master_project_name,
+    s.raw_project_name AS raw_project_name,
+    s.raw_building_name AS raw_building_name,
+    s.normalized_area_name AS normalized_area_name,
+    s.normalized_master_project AS normalized_master_project,
+    s.normalized_project_name AS normalized_project_name,
+    s.normalized_building_name AS normalized_building_name,
+    s.row_count AS row_count,
+    s.represented_value_aed AS represented_value_aed,
+    s.first_observed AS first_observed,
+    s.last_observed AS last_observed,
+    s.normalization_version AS normalization_version,
+    s.build_id AS build_id,
+    l.canonical_location_id AS canonical_location_id,
+    l.target_grain,
+    l.relation,
+    l.status AS match_status,
+    l.match_method,
+    l.confidence AS match_confidence,
+    l.candidate_count,
+    l.evidence_json,
+    n.name AS canonical_location_name,
+    n.location_type AS canonical_location_type,
+    n.path_name AS canonical_path_name,
+    n.latitude,
+    n.longitude,
+    n.coordinate_status
+FROM geo_source_signatures AS s
+INNER JOIN geo_entity_links AS l USING (source_system, source_key)
+LEFT JOIN geo_location_nodes AS n
+    ON n.canonical_location_id = l.canonical_location_id;
+
+-- One display hierarchy per distinct CRM rental address. Canonical PF names are
+-- published only for approved crosswalks; registry labels remain available for
+-- auditing and as the fallback for unresolved signatures.
+CREATE OR REPLACE VIEW geo_crm_rental_hierarchy AS
+WITH canonical_ancestors AS (
+    SELECT
+        c.descendant_location_id AS canonical_location_id,
+        argMinIf(n.name, c.depth, n.location_type = 'COMMUNITY') AS community_name,
+        argMinIf(n.name, c.depth, n.location_type = 'SUBCOMMUNITY')
+            AS nearest_subcommunity_name,
+        argMinIf(
+            n.name,
+            c.depth,
+            n.location_type = 'SUBCOMMUNITY' AND c.depth > 0
+        ) AS parent_subcommunity_name
+    FROM geo_location_closure AS c
+    INNER JOIN geo_location_nodes AS n
+        ON n.canonical_location_id = c.ancestor_location_id
+    GROUP BY c.descendant_location_id
+)
+SELECT
+    m.source_key,
+    m.source_grain,
+    m.row_count,
+    m.raw_area_name AS registry_area_name,
+    m.raw_project_name AS registry_project_name,
+    m.raw_building_name AS registry_building_name,
+    transform(
+        if(
+            m.match_status IN ('auto_approved', 'manual_approved')
+                AND a.community_name != '',
+            a.community_name,
+            m.raw_area_name
+        ),
+        [
+            'Al Barshaa South 1', 'Al Barshaa South 3',
+            'Al Goze Industrial 1', 'Al Goze Industrial 3', 'Al Goze Industrial 4',
+            'Al Saffa 1', 'Al Saffa 2', 'Al Safouh 1', 'Al Safouh 2',
+            'Al Thanayah 4', 'Dubai Creek Harbour (The Lagoons)',
+            'Dubai Investment Park (DIP)', 'Dubai Production City (IMPZ)',
+            'Dubai South (Dubai World Central)', 'Dubai Maritime City',
+            'Festival City', 'The Greens', 'Hessayan 1',
+            'Um Suqaim 1', 'Um Suqaim 2', 'Um Suqaim 3',
+            'Za''Abeel 1', 'Zaabeel 1', 'Zaabeel 2'
+        ],
+        [
+            'Al Barsha South 1', 'Al Barsha South 3',
+            'Al Quoz Industrial 1', 'Al Quoz Industrial 3', 'Al Quoz Industrial 4',
+            'Al Safa 1', 'Al Safa 2', 'Al Sufouh 1', 'Al Sufouh 2',
+            'Al Thanyah 4', 'Dubai Creek Harbour',
+            'Dubai Investment Park', 'Dubai Production City',
+            'Dubai South', 'Maritime City',
+            'Dubai Festival City', 'Greens', 'Hessyan 1',
+            'Umm Suqeim 1', 'Umm Suqeim 2', 'Umm Suqeim 3',
+            'Zabeel 1', 'Zabeel 1', 'Zabeel 2'
+        ],
+        if(
+            m.match_status IN ('auto_approved', 'manual_approved')
+                AND a.community_name != '',
+            a.community_name,
+            m.raw_area_name
+        )
+    ) AS display_area_name,
+    multiIf(
+        m.source_grain = 'landed_phase'
+            AND m.match_status IN ('auto_approved', 'manual_approved')
+            AND m.canonical_location_type = 'SUBCOMMUNITY',
+            m.canonical_location_name,
+        m.source_grain = 'project'
+            AND m.match_status IN ('auto_approved', 'manual_approved')
+            AND m.canonical_location_type IN ('SUBCOMMUNITY', 'TOWER'),
+            m.canonical_location_name,
+        m.source_grain = 'building'
+            AND m.match_status IN ('auto_approved', 'manual_approved')
+            AND a.parent_subcommunity_name != '',
+            a.parent_subcommunity_name,
+        m.raw_project_name
+    ) AS display_project_name,
+    multiIf(
+        m.source_grain = 'landed_phase', '',
+        m.source_grain = 'building'
+            AND m.match_status IN ('auto_approved', 'manual_approved')
+            AND JSONExtractString(m.evidence_json, 'source_field') = 'building',
+            m.canonical_location_name,
+        m.raw_building_name
+    ) AS display_building_name,
+    m.canonical_location_id,
+    m.target_grain AS canonical_grain,
+    m.match_status,
+    m.match_method,
+    m.match_confidence,
+    m.latitude,
+    m.longitude,
+    m.coordinate_status,
+    multiIf(
+        m.latitude IS NULL OR m.longitude IS NULL, 'missing',
+        JSONExtractString(m.evidence_json, 'source_field') IN ('building', 'building_aggregate'),
+            'exact_location',
+        m.source_grain = 'landed_phase', 'phase_location',
+        m.source_grain = 'project', 'project_location',
+        'community_location'
+    ) AS coordinate_precision
+FROM geo_mapped_source_facts AS m
+LEFT JOIN canonical_ancestors AS a USING (canonical_location_id)
+WHERE m.source_system = 'dxbi_rentals';
+
+CREATE OR REPLACE VIEW geo_crosswalk_review_queue AS
+SELECT
+    s.source_system,
+    s.source_key,
+    s.source_grain,
+    s.property_type,
+    s.market_status,
+    s.source_entity_class,
+    s.raw_area_name,
+    s.raw_master_project_name,
+    s.raw_project_name,
+    s.raw_building_name,
+    s.row_count,
+    s.represented_value_aed,
+    s.first_observed,
+    s.last_observed,
+    l.status,
+    l.match_method,
+    l.candidate_count,
+    l.evidence_json,
+    s.build_id
+FROM geo_source_signatures AS s
+INNER JOIN geo_entity_links AS l USING (source_system, source_key)
+WHERE l.status NOT IN ('auto_approved', 'manual_approved');
+
+CREATE OR REPLACE VIEW geo_stale_link_overrides AS
+SELECT
+    o.source_system,
+    o.source_key,
+    o.canonical_location_id,
+    o.decision,
+    o.relation,
+    o.review_note,
+    o.reviewed_by,
+    o.reviewed_at
+FROM (
+    SELECT * FROM geo_entity_link_overrides FINAL WHERE active = 1
+) AS o
+LEFT JOIN geo_source_signatures AS s USING (source_system, source_key)
+WHERE s.source_key IS NULL;

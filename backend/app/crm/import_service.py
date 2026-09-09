@@ -9,6 +9,7 @@ import logging
 import re
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
+from functools import lru_cache
 from pathlib import Path
 from time import monotonic
 from typing import Any, Iterable
@@ -16,7 +17,7 @@ from typing import Any, Iterable
 import httpx
 import openpyxl
 from fastapi import HTTPException, UploadFile
-from sqlalchemy import delete, func, or_, text
+from sqlalchemy import and_, delete, func, or_, text
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -49,12 +50,56 @@ logger = logging.getLogger(__name__)
 _MAX_FILE_BYTES = 50 * 1024 * 1024
 _MAX_ROWS = 500_000
 _QUERY_CHUNK = 4_000
+_SALES_EVIDENCE_UNIT_CHUNK = 20_000
 _PLACEHOLDER_HEADER = re.compile(r"^column\s*\d+$", re.IGNORECASE)
 _NON_KEY = re.compile(r"[^a-z0-9]+")
+_LOCATION_TOKEN = re.compile(r"[a-z0-9]+")
 _EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 _TRANSFER_WORDS = ("sale", "sell", "delayed sell")
 _OWNER_SUMMARY_CACHE_TTL_SECONDS = 300
 _owner_summary_cache: dict[tuple[str, int | None], tuple[float, CrmOwnerRegistrySummary]] = {}
+_UNIT_PLACEHOLDERS = {"", "-", "n/a", "na", "none", "null", "unknown"}
+_NUMERIC_PROPERTY_IDENTIFIER = re.compile(r"^\d+(?:\.\d+)?$")
+_VILLA_PROPERTY_IDENTIFIER = re.compile(
+    r"(?:^|[-\s])(?:v|villa)[-\s]*[a-z0-9.]+$", re.IGNORECASE
+)
+_TRANSACTION_SIGNATURE_CHUNK = 1_500
+_LOCATION_ALIAS_GROUPS = (
+    ("jumeirah gate tower 1", "the address jbr 1"),
+    ("jumeirah gate tower 2", "the address jbr 2"),
+    ("maple", "maple 1"),
+    ("maple iii", "maple 3"),
+    ("park heights ii t1", "park heights 2 tower 1"),
+    ("park heights ii t2", "park heights 2 tower 2"),
+    ("executive residences", "executive residences 1"),
+    ("club villas at dubai hills", "club villas"),
+    ("mag eye phase 1", "mag eye townhouses"),
+    ("mag eye 890", "mag 890"),
+    ("mag eye 900", "mag 900"),
+    ("mag eye 910", "mag 910"),
+    ("mag eye 920", "mag 920"),
+    ("ellington house", "ellington house 1"),
+    ("j one - 1", "j one tower a"),
+    ("canal heights", "canal heights 1"),
+    ("churchill tower 1-commercial", "churchill executive"),
+    ("churchill tower 2-residential", "churchill residence"),
+    ("atria ra", "the atria residences"),
+    ("citadel tower", "the citadel"),
+    ("prive by damac (a)", "prive (a)"),
+    ("prive by damac (b)", "prive (b)"),
+)
+_ROMAN_NUMERALS = {
+    "i": "1",
+    "ii": "2",
+    "iii": "3",
+    "iv": "4",
+    "v": "5",
+    "vi": "6",
+    "vii": "7",
+    "viii": "8",
+    "ix": "9",
+    "x": "10",
+}
 
 
 def _invalidate_owner_summary_cache(organization_id: str) -> None:
@@ -179,6 +224,8 @@ _OWNERSHIP_PRIORITY = {
     "probable_current_owner": 4,
     "unit_linked_unverified": 3,
     "conflicting_claim": 2,
+    "registry_not_observed": 1,
+    "insufficient_property_data": 1,
     "unmatched": 1,
 }
 
@@ -203,6 +250,7 @@ WITH base AS (
         c.unit_number,
         c.property_type,
         c.transaction_date,
+        c.transaction_price_aed,
         c.ownership_status,
         c.confidence_score,
         c.match_reason,
@@ -245,6 +293,17 @@ properties AS (
     SELECT * FROM ranked
 )
 """
+
+_STATUS_SUMMARY_FIELDS = {
+    "verified_current_owner": "verified_current_owners",
+    "probable_current_owner": "probable_current_owners",
+    "unit_linked_unverified": "unit_linked_unverified",
+    "former_owner": "former_owners",
+    "conflicting_claim": "conflicting_claims",
+    "insufficient_property_data": "insufficient_property_data",
+    "registry_not_observed": "registry_not_observed",
+    "unmatched": "unmatched",
+}
 
 
 def _identity_text(value: str) -> str:
@@ -357,7 +416,14 @@ def _header_token(value: str) -> str:
     return _NON_KEY.sub("", base.lower())
 
 
+@lru_cache(maxsize=100_000)
 def _location_key(value: str) -> str:
+    normalized = _canonical_location_text(value)
+    return _NON_KEY.sub("", normalized)
+
+
+@lru_cache(maxsize=100_000)
+def _canonical_location_text(value: str) -> str:
     normalized = value.lower()
     for source, target in {
         "jumeriah": "jumeirah",
@@ -365,7 +431,120 @@ def _location_key(value: str) -> str:
         "apartments": "apartment",
     }.items():
         normalized = normalized.replace(source, target)
-    return _NON_KEY.sub("", normalized)
+    return normalized
+
+
+@lru_cache(maxsize=100_000)
+def _location_tokens(value: str) -> tuple[str, ...]:
+    """Return a stable building identity token set without trusting word order."""
+    tokens: list[str] = []
+    for token in _LOCATION_TOKEN.findall(_canonical_location_text(value)):
+        normalized = _ROMAN_NUMERALS.get(token, token)
+        tokens.append(str(int(normalized)) if normalized.isdigit() else normalized)
+    return tuple(tokens)
+
+
+@lru_cache(maxsize=100_000)
+def _location_alias_identity(value: str) -> str:
+    key = _location_key(value)
+    if not key:
+        return ""
+    for group in _LOCATION_ALIAS_GROUPS:
+        canonical = _location_key(group[0])
+        for alias in group:
+            alias_key = _location_key(alias)
+            if key == alias_key or (len(alias_key) >= 8 and key.endswith(alias_key)):
+                return canonical
+    return key
+
+
+@lru_cache(maxsize=200_000)
+def _building_match_strength(owner_location: str, sale_location: str) -> tuple[int, str]:
+    """Return a conservative match score for two building labels.
+
+    DXB Interact frequently puts the project after the building while owner
+    exports put it before the building. We accept reordered labels and a single
+    unambiguous appended/omitted location suffix, but never a generic fuzzy
+    string match. Unit equality and a unique area are enforced by the caller.
+    """
+    owner_key = _location_key(owner_location)
+    sale_key = _location_key(sale_location)
+    if owner_key and owner_key == sale_key:
+        return 3, "exact_building_key"
+
+    owner_tokens = frozenset(_location_tokens(owner_location))
+    sale_tokens = frozenset(_location_tokens(sale_location))
+    if len(owner_tokens) < 3 or len(sale_tokens) < 3:
+        return 0, ""
+
+    owner_numbers = _location_number_markers(owner_location)
+    sale_numbers = _location_number_markers(sale_location)
+    if owner_numbers != sale_numbers:
+        return 0, ""
+    if owner_tokens == sale_tokens:
+        return 2, "canonical_building_identity"
+    if owner_tokens <= sale_tokens or sale_tokens <= owner_tokens:
+        return 1, "canonical_building_variant"
+    return 0, ""
+
+
+@lru_cache(maxsize=100_000)
+def _location_number_markers(value: str) -> frozenset[str]:
+    markers: set[str] = set()
+    for token in _location_tokens(value):
+        markers.update(str(int(marker)) for marker in re.findall(r"\d+", token))
+    return frozenset(markers)
+
+
+@lru_cache(maxsize=300_000)
+def _location_similarity(owner_location: str, sale_location: str) -> int:
+    """Score two location labels for transaction-collision resolution."""
+    if not owner_location or not sale_location:
+        return 0
+    if _location_alias_identity(owner_location) == _location_alias_identity(sale_location):
+        return 100
+    strength, _ = _building_match_strength(owner_location, sale_location)
+    if strength:
+        return {1: 82, 2: 92, 3: 100}[strength]
+
+    owner_tokens = frozenset(_location_tokens(owner_location))
+    sale_tokens = frozenset(_location_tokens(sale_location))
+    if not owner_tokens or not sale_tokens:
+        return 0
+    owner_numbers = _location_number_markers(owner_location)
+    sale_numbers = _location_number_markers(sale_location)
+    if owner_numbers and sale_numbers and owner_numbers != sale_numbers:
+        return 0
+
+    overlap = len(owner_tokens & sale_tokens)
+    if not overlap:
+        return 0
+    return round(75 * overlap / len(owner_tokens | sale_tokens))
+
+
+def _transaction_location_score(candidate: ParsedContact, row: dict[str, Any]) -> int:
+    owner_building = _usable_project_name(candidate.building_name)
+    owner_project = _usable_project_name(candidate.project_name)
+    owner_area = _usable_project_name(candidate.area_name)
+    sale_building = str(row.get("building_name") or "")
+    sale_project = str(row.get("project_name") or "")
+    sale_area = str(row.get("area_name") or "")
+    combined_sale = " ".join(value for value in (sale_building, sale_project) if value)
+
+    building_score = max(
+        (_location_similarity(owner_building, value) for value in (sale_building, combined_sale)),
+        default=0,
+    )
+    project_score = max(
+        (_location_similarity(owner_project, value) for value in (sale_project, sale_building, combined_sale)),
+        default=0,
+    )
+    area_score = _location_similarity(owner_area, sale_area)
+    if owner_building:
+        return round(0.70 * building_score + 0.25 * project_score + 0.05 * area_score)
+    if owner_project:
+        return round(0.90 * project_score + 0.10 * area_score)
+    return area_score
 
 
 def _unique_headers(values: tuple[Any, ...] | list[Any]) -> list[HeaderCell]:
@@ -607,11 +786,68 @@ async def _llm_mapping(profile: SheetProfile) -> SheetProfile:
 def _normalize_unit(value: Any) -> str:
     unit = _text(value).upper().replace("–", "-")
     unit = re.sub(r"\s+", "", unit)
+    if unit.lower() in _UNIT_PLACEHOLDERS:
+        return ""
     if unit.endswith(".0") and unit[:-2].isdigit():
         unit = unit[:-2]
     if unit.startswith("TAG-") and "-" in unit:
         unit = unit.rsplit("-", 1)[-1]
     return unit
+
+
+def _usable_project_name(value: str) -> str:
+    """Return a project label only when it is meaningful matching context."""
+    project = value.strip()
+    if not project or project.lower() in _UNIT_PLACEHOLDERS:
+        return ""
+    return "" if _NUMERIC_PROPERTY_IDENTIFIER.fullmatch(project) else project
+
+
+def _recover_embedded_property_identity(candidate: ParsedContact) -> None:
+    """Recover a unit embedded in owner-export address fields when unambiguous.
+
+    Some owner files put a complete villa identifier in the building column
+    (``DE Maple 2-V-486``) while DXB Interact stores ``Maple 2`` as the
+    building and the complete identifier as the unit. Other exports put a
+    plain unit number in that column alongside a project name.  Recover only
+    these explicit formats; arbitrary address text remains unmatched.
+    """
+    candidate.unit_number = _normalize_unit(candidate.unit_number)
+    source_location = candidate.building_name or candidate.project_name
+    edge_tower = re.match(r"^([AB])\d+$", candidate.unit_number, re.IGNORECASE)
+    if _location_key(source_location) == "theedge" and edge_tower:
+        source_building = candidate.building_name
+        candidate.building_name = f"The Edge Tower {edge_tower.group(1).upper()}"
+        candidate.evidence["address_recovery"] = {
+            "source_building_name": source_building,
+            "resolved_building_name": candidate.building_name,
+            "resolved_unit_number": candidate.unit_number,
+            "method": "project_unit_prefix_tower",
+        }
+    if candidate.unit_number:
+        return
+
+    source_building = candidate.building_name.strip()
+    project = _usable_project_name(candidate.project_name)
+    if not source_building or source_building.lower() in _UNIT_PLACEHOLDERS or not project:
+        return
+
+    source_identifier = _normalize_unit(source_building)
+    is_villa_identifier = bool(_VILLA_PROPERTY_IDENTIFIER.search(source_building))
+    is_numeric_identifier = bool(_NUMERIC_PROPERTY_IDENTIFIER.fullmatch(source_building))
+    if not (is_villa_identifier or is_numeric_identifier):
+        return
+
+    candidate.building_name = project
+    candidate.unit_number = source_identifier
+    candidate.evidence["address_recovery"] = {
+        "source_building_name": source_building,
+        "resolved_building_name": project,
+        "resolved_unit_number": source_identifier,
+        "method": (
+            "embedded_villa_identifier" if is_villa_identifier else "embedded_numeric_identifier"
+        ),
+    }
 
 
 def _normalize_phone(value: Any) -> str | None:
@@ -718,7 +954,7 @@ def _candidate_from_row(
 ) -> ParsedContact | None:
     name = _text(_field_value(row, profile, "contact_name"))
     unit = _normalize_unit(_field_value(row, profile, "unit_number"))
-    if not name or not unit:
+    if not name:
         return None
     role = _normalized_role(_field_value(row, profile, "party_role"))
     procedure = _text(_field_value(row, profile, "procedure_type"))
@@ -750,7 +986,7 @@ def _candidate_from_row(
             transaction_date.isoformat() if transaction_date else "",
         )
     )
-    return ParsedContact(
+    candidate = ParsedContact(
         source_sheet=profile.name,
         source_row_number=row_number,
         contact_name=name[:300],
@@ -768,6 +1004,8 @@ def _candidate_from_row(
         procedure_type=procedure[:160],
         row_fingerprint=hashlib.sha256(fingerprint_source.encode()).hexdigest(),
     )
+    _recover_embedded_property_identity(candidate)
+    return candidate
 
 
 def _parse_xlsx(
@@ -837,31 +1075,461 @@ def _parse_csv(
     return candidates, total_rows
 
 
-async def _sales_evidence(
+async def _recover_property_identity_from_transaction(
     candidates: list[ParsedContact],
-) -> dict[str, list[dict[str, Any]]]:
-    property_keys = sorted(
-        {candidate.property_key for candidate in candidates if candidate.property_key}
-    )
-    evidence: dict[str, list[dict[str, Any]]] = {}
-    for chunk in _chunks(property_keys):
+) -> dict[str, int]:
+    """Resolve a canonical DXBI property from an exact sale date and price.
+
+    Transaction-party imports usually contain authoritative DLD date/price
+    evidence even when their project fields use a different naming scheme.
+    A globally unique signature is sufficient to recover the property. When a
+    signature occurs on multiple properties, location context must select one
+    candidate with a clear score margin.
+    """
+    eligible = [
+        candidate
+        for candidate in candidates
+        if candidate.transaction_date and candidate.transaction_price_aed
+    ]
+    unique_resolutions = 0
+    contextual_resolutions = 0
+    ambiguous = 0
+    for start in range(0, len(eligible), _TRANSACTION_SIGNATURE_CHUNK):
+        batch = eligible[start : start + _TRANSACTION_SIGNATURE_CHUNK]
+        wanted = {
+            (candidate.transaction_date, int(candidate.transaction_price_aed or 0))
+            for candidate in batch
+        }
         rows = await query(
             """
             SELECT
-                concat(building_key, '|', lowerUTF8(unit_number)) AS property_key,
+                transaction_date,
+                sale_amount_aed,
+                replaceRegexpAll(lowerUTF8(unit_number), '\\s+', '') AS unit_key,
+                unit_number,
+                building_name,
+                building_key,
+                project_name,
+                area_name,
+                area_key,
+                sale_key,
+                detail_url
+            FROM dxbi_sales_unit_events FINAL
+            WHERE transaction_date IN {dates:Array(Date)}
+              AND sale_amount_aed IN {prices:Array(UInt64)}
+            """,
+            {
+                "dates": sorted({signature[0] for signature in wanted}),
+                "prices": sorted({signature[1] for signature in wanted}),
+            },
+        )
+        by_signature: dict[
+            tuple[date, int],
+            dict[tuple[str, str, str], dict[str, Any]],
+        ] = {}
+        for row in rows:
+            signature = (
+                row["transaction_date"],
+                int(row.get("sale_amount_aed") or 0),
+            )
+            if signature not in wanted:
+                continue
+            unit_key = str(row.get("unit_key") or "")
+            building_key = str(row.get("building_key") or "") or _location_key(
+                str(row.get("building_name") or row.get("project_name") or "")
+            )
+            if not unit_key or not building_key:
+                continue
+            property_identity = (
+                str(row.get("area_key") or ""),
+                building_key,
+                unit_key,
+            )
+            by_signature.setdefault(signature, {}).setdefault(property_identity, row)
+
+        for candidate in batch:
+            signature = (
+                candidate.transaction_date,
+                int(candidate.transaction_price_aed or 0),
+            )
+            properties = list(by_signature.get(signature, {}).values())
+            if not properties:
+                continue
+
+            method = "unique_transaction_signature"
+            score = 100
+            selected: dict[str, Any] | None = None
+            if len(properties) == 1:
+                selected = properties[0]
+                location_score = _transaction_location_score(candidate, selected)
+                has_source_location = bool(
+                    _usable_project_name(candidate.building_name)
+                    or _usable_project_name(candidate.project_name)
+                    or _usable_project_name(candidate.area_name)
+                )
+                if has_source_location and location_score < 55:
+                    selected = None
+                    ambiguous += 1
+                    continue
+                score = location_score or 100
+                unique_resolutions += 1
+            else:
+                scored = sorted(
+                    (
+                        (_transaction_location_score(candidate, row), row)
+                        for row in properties
+                    ),
+                    key=lambda item: item[0],
+                    reverse=True,
+                )
+                score, selected = scored[0]
+                runner_up = scored[1][0]
+                if score < 55 or score - runner_up < 12:
+                    selected = None
+                    ambiguous += 1
+                    continue
+                method = "transaction_signature_with_location"
+                contextual_resolutions += 1
+
+            if not selected:
+                continue
+            source_identity = {
+                "area_name": candidate.area_name,
+                "project_name": candidate.project_name,
+                "building_name": candidate.building_name,
+                "unit_number": candidate.unit_number,
+            }
+            candidate.area_name = str(selected.get("area_name") or candidate.area_name)
+            candidate.project_name = str(
+                selected.get("project_name") or candidate.project_name
+            )
+            candidate.building_name = str(
+                selected.get("building_name") or selected.get("project_name") or ""
+            )
+            candidate.unit_number = _normalize_unit(selected.get("unit_number"))
+            candidate.evidence["property_identity_resolution"] = {
+                "method": method,
+                "score": score,
+                "transaction_candidate_count": len(properties),
+                "source": source_identity,
+                "resolved": {
+                    "area_name": candidate.area_name,
+                    "project_name": candidate.project_name,
+                    "building_name": candidate.building_name,
+                    "unit_number": candidate.unit_number,
+                    "sale_key": str(selected.get("sale_key") or ""),
+                },
+            }
+
+    return {
+        "eligible": len(eligible),
+        "unique": unique_resolutions,
+        "contextual": contextual_resolutions,
+        "ambiguous": ambiguous,
+    }
+
+
+async def _recover_property_identity_from_near_transaction(
+    candidates: list[ParsedContact],
+    *,
+    window_days: int = 14,
+) -> dict[str, int]:
+    """Recover property identity when registry/display dates differ slightly.
+
+    The DLD registration date in owner exports can differ from DXBI's displayed
+    transaction date. Price remains exact, and a project/building hierarchy
+    must identify one property within the bounded window.
+    """
+    eligible = [
+        candidate
+        for candidate in candidates
+        if candidate.transaction_date
+        and candidate.transaction_price_aed
+        and "property_identity_resolution" not in candidate.evidence
+    ]
+    resolved = 0
+    ambiguous = 0
+    for start in range(0, len(eligible), 500):
+        batch = eligible[start : start + 500]
+        dates = {
+            candidate.transaction_date + timedelta(days=offset)
+            for candidate in batch
+            for offset in range(-window_days, window_days + 1)
+            if candidate.transaction_date
+        }
+        prices = sorted({int(candidate.transaction_price_aed or 0) for candidate in batch})
+        rows = await query(
+            """
+            SELECT
+                transaction_date,
+                sale_amount_aed,
+                replaceRegexpAll(lowerUTF8(unit_number), '\\s+', '') AS unit_key,
+                unit_number,
+                building_name,
+                building_key,
+                project_name,
+                area_name,
+                area_key,
+                sale_key,
+                detail_url
+            FROM dxbi_sales_unit_events FINAL
+            WHERE transaction_date IN {dates:Array(Date)}
+              AND sale_amount_aed IN {prices:Array(UInt64)}
+            """,
+            {"dates": sorted(dates), "prices": prices},
+        )
+        rows_by_price: dict[int, list[dict[str, Any]]] = {}
+        for row in rows:
+            rows_by_price.setdefault(int(row.get("sale_amount_aed") or 0), []).append(row)
+
+        for candidate in batch:
+            source_date = candidate.transaction_date
+            if not source_date:
+                continue
+            candidate_rows = [
+                row
+                for row in rows_by_price.get(int(candidate.transaction_price_aed or 0), [])
+                if abs((row["transaction_date"] - source_date).days) <= window_days
+            ]
+            properties: dict[tuple[str, str, str], dict[str, Any]] = {}
+            for row in candidate_rows:
+                unit_key = str(row.get("unit_key") or "")
+                building_key = str(row.get("building_key") or "") or _location_key(
+                    str(row.get("building_name") or row.get("project_name") or "")
+                )
+                if not unit_key or not building_key:
+                    continue
+                identity = (
+                    str(row.get("area_key") or ""),
+                    building_key,
+                    unit_key,
+                )
+                current = properties.get(identity)
+                if current is None or abs((row["transaction_date"] - source_date).days) < abs(
+                    (current["transaction_date"] - source_date).days
+                ):
+                    properties[identity] = row
+            if not properties:
+                continue
+
+            ranked = sorted(
+                (
+                    (
+                        _transaction_location_score(candidate, row),
+                        abs((row["transaction_date"] - source_date).days),
+                        row,
+                    )
+                    for row in properties.values()
+                ),
+                key=lambda item: (-item[0], item[1]),
+            )
+            score, date_delta, selected = ranked[0]
+            if score < 55:
+                continue
+            if len(ranked) > 1:
+                runner_score, runner_delta, _ = ranked[1]
+                clear_location = score - runner_score >= 12
+                clear_date = score >= 80 and date_delta + 2 <= runner_delta
+                if not (clear_location or clear_date):
+                    ambiguous += 1
+                    continue
+
+            source_identity = {
+                "area_name": candidate.area_name,
+                "project_name": candidate.project_name,
+                "building_name": candidate.building_name,
+                "unit_number": candidate.unit_number,
+            }
+            candidate.area_name = str(selected.get("area_name") or candidate.area_name)
+            candidate.project_name = str(
+                selected.get("project_name") or candidate.project_name
+            )
+            candidate.building_name = str(
+                selected.get("building_name") or selected.get("project_name") or ""
+            )
+            candidate.unit_number = _normalize_unit(selected.get("unit_number"))
+            candidate.evidence["property_identity_resolution"] = {
+                "method": "near_transaction_signature_with_location",
+                "score": score,
+                "date_delta_days": date_delta,
+                "transaction_candidate_count": len(ranked),
+                "source": source_identity,
+                "resolved": {
+                    "area_name": candidate.area_name,
+                    "project_name": candidate.project_name,
+                    "building_name": candidate.building_name,
+                    "unit_number": candidate.unit_number,
+                    "sale_key": str(selected.get("sale_key") or ""),
+                },
+            }
+            resolved += 1
+
+    return {"eligible": len(eligible), "resolved": resolved, "ambiguous": ambiguous}
+
+
+async def _sales_evidence(
+    candidates: list[ParsedContact],
+) -> dict[str, list[dict[str, Any]]]:
+    """Find DXBI sales history through a canonical project/building hierarchy."""
+    unit_keys = sorted(
+        {candidate.unit_number.lower() for candidate in candidates if candidate.property_key}
+    )
+    evidence: dict[str, list[dict[str, Any]]] = {}
+    sales_by_unit: dict[str, list[dict[str, Any]]] = {}
+    for chunk in _chunks(unit_keys, size=_SALES_EVIDENCE_UNIT_CHUNK):
+        rows = await query(
+            """
+            SELECT
+                replaceRegexpAll(lowerUTF8(unit_number), '\\s+', '') AS unit_key,
+                unit_number,
+                building_name,
+                building_key,
+                project_name,
+                area_name,
+                area_key,
                 transaction_date,
                 sale_amount_aed,
                 sale_key,
                 detail_url
             FROM dxbi_sales_unit_events FINAL
-            WHERE concat(building_key, '|', lowerUTF8(unit_number))
-                IN {property_keys:Array(String)}
-            ORDER BY property_key, transaction_date
+            WHERE replaceRegexpAll(lowerUTF8(unit_number), '\\s+', '')
+                IN {unit_keys:Array(String)}
+            ORDER BY unit_key, transaction_date
             """,
-            {"property_keys": chunk},
+            {"unit_keys": chunk},
         )
         for row in rows:
-            evidence.setdefault(str(row["property_key"]), []).append(row)
+            sales_by_unit.setdefault(str(row["unit_key"]), []).append(row)
+
+    properties_by_unit: dict[
+        str,
+        list[tuple[tuple[str, str, str], list[dict[str, Any]]]],
+    ] = {}
+    for unit_key, unit_rows in sales_by_unit.items():
+        grouped: dict[tuple[str, str, str], list[dict[str, Any]]] = {}
+        for row in unit_rows:
+            building_key = str(row.get("building_key") or "") or _location_key(
+                str(row.get("building_name") or row.get("project_name") or "")
+            )
+            identity = (
+                str(row.get("area_key") or ""),
+                building_key,
+                str(row.get("unit_key") or ""),
+            )
+            grouped.setdefault(identity, []).append(row)
+        properties_by_unit[unit_key] = list(grouped.items())
+
+    resolution_cache: dict[
+        tuple[str, str, str, str],
+        tuple[int, str, list[dict[str, Any]], int] | None,
+    ] = {}
+    for candidate in candidates:
+        source_property_key = candidate.property_key
+        if not source_property_key:
+            continue
+        rows_for_unit = sales_by_unit.get(candidate.unit_number.lower(), [])
+        if not rows_for_unit:
+            candidate.evidence["sales_lookup"] = {
+                "status": "unit_not_observed",
+                "normalized_unit_number": candidate.unit_number.lower(),
+            }
+            continue
+
+        cache_key = (
+            _location_key(candidate.area_name),
+            _location_key(candidate.project_name),
+            _location_key(candidate.building_name),
+            candidate.unit_number.lower(),
+        )
+        if cache_key in resolution_cache:
+            cached = resolution_cache[cache_key]
+            if cached is None:
+                continue
+            best_score, method, selected_rows, registry_candidate_count = cached
+        else:
+            ranked = sorted(
+                (
+                    (
+                        _transaction_location_score(candidate, property_rows[0]),
+                        identity,
+                        property_rows,
+                    )
+                    for identity, property_rows in properties_by_unit[
+                        candidate.unit_number.lower()
+                    ]
+                ),
+                key=lambda item: item[0],
+                reverse=True,
+            )
+            best_score, _, selected_rows = ranked[0]
+            runner_up = ranked[1][0] if len(ranked) > 1 else 0
+            distinctive_unit = (
+                len(candidate.unit_number) >= 5
+                and any(character.isalpha() for character in candidate.unit_number)
+            )
+            unique_distinctive_unit = distinctive_unit and len(ranked) == 1
+            if not unique_distinctive_unit and (
+                best_score < 55 or (len(ranked) > 1 and best_score - runner_up < 12)
+            ):
+                candidate.evidence["sales_lookup"] = {
+                    "status": "ambiguous_location",
+                    "registry_property_candidates": len(ranked),
+                    "best_location_score": best_score,
+                    "runner_up_location_score": runner_up,
+                }
+                resolution_cache[cache_key] = None
+                continue
+
+            method = (
+                "unique_registry_unit_identifier"
+                if unique_distinctive_unit
+                else "unit_with_location_hierarchy"
+            )
+            registry_candidate_count = len(ranked)
+            resolution_cache[cache_key] = (
+                best_score,
+                method,
+                selected_rows,
+                registry_candidate_count,
+            )
+
+        canonical = selected_rows[0]
+        candidate.evidence.pop("sales_lookup", None)
+        source_identity = {
+            "area_name": candidate.area_name,
+            "project_name": candidate.project_name,
+            "building_name": candidate.building_name,
+            "unit_number": candidate.unit_number,
+        }
+        candidate.area_name = str(canonical.get("area_name") or candidate.area_name)
+        candidate.project_name = str(canonical.get("project_name") or candidate.project_name)
+        candidate.building_name = str(
+            canonical.get("building_name") or canonical.get("project_name") or ""
+        )
+        candidate.unit_number = _normalize_unit(canonical.get("unit_number"))
+        if candidate.property_key != source_property_key:
+            candidate.evidence["unit_hierarchy_resolution"] = {
+                "method": method,
+                "score": best_score,
+                "registry_property_candidates": registry_candidate_count,
+                "source": source_identity,
+                "resolved": {
+                    "area_name": candidate.area_name,
+                    "project_name": candidate.project_name,
+                    "building_name": candidate.building_name,
+                    "unit_number": candidate.unit_number,
+                },
+            }
+
+        selected: list[dict[str, Any]] = []
+        seen_sale_keys: set[str] = set()
+        for row in selected_rows:
+            sale_key = str(row.get("sale_key") or "")
+            if sale_key in seen_sale_keys:
+                continue
+            seen_sale_keys.add(sale_key)
+            selected.append({**row, "_match_method": method})
+        evidence[candidate.property_key] = selected
     return evidence
 
 
@@ -931,6 +1599,14 @@ def _apply_evidence(
     if latest:
         candidate.latest_sale_date = latest["transaction_date"]
         candidate.latest_sale_price_aed = int(latest.get("sale_amount_aed") or 0) or None
+        methods = sorted({str(event.get("_match_method") or "exact_building_key") for event in sale_events})
+        candidate.evidence["sales_match"] = {
+            "methods": methods,
+            "matched_buildings": sorted(
+                {str(event.get("building_name") or "") for event in sale_events if event.get("building_name")}
+            ),
+            "matched_sales": len(sale_events),
+        }
 
     if candidate.party_role == "Seller":
         candidate.ownership_status = "former_owner"
@@ -943,7 +1619,12 @@ def _apply_evidence(
         return
 
     if not key:
-        candidate.match_reason = "The source row does not contain a usable building and unit."
+        candidate.ownership_status = "insufficient_property_data"
+        candidate.confidence_score = 0
+        candidate.match_reason = (
+            "The source row has transaction evidence but no recoverable unit/property "
+            "identifier; registry matching requires source enrichment."
+        )
         return
 
     if not latest:
@@ -955,8 +1636,26 @@ def _apply_evidence(
                 "evidence was not found in the sales registry."
             )
         else:
-            candidate.match_reason = "No exact building and unit match was found."
+            lookup_status = str((candidate.evidence.get("sales_lookup") or {}).get("status") or "")
+            if lookup_status == "unit_not_observed":
+                candidate.ownership_status = "registry_not_observed"
+                candidate.confidence_score = 10
+                candidate.match_reason = (
+                    "The source contains a usable unit identifier, but that unit is not "
+                    "present in current DXBI sales-registry coverage."
+                )
+            else:
+                candidate.match_reason = (
+                    "Registry candidates exist for the unit, but the property location "
+                    "could not be resolved unambiguously."
+                )
         return
+
+    identity_label = (
+        "canonical building identity and unit"
+        if any(str(event.get("_match_method")) != "exact_building_key" for event in sale_events)
+        else "exact building and unit"
+    )
 
     if not candidate.transaction_date:
         candidate.ownership_status = "unit_linked_unverified"
@@ -1001,7 +1700,7 @@ def _apply_evidence(
         candidate.ownership_status = "verified_current_owner"
         candidate.confidence_score = 98
         candidate.match_reason = (
-            "Exact building and unit; acquisition date and price match the latest sale, "
+            f"{identity_label.title()}; acquisition date and price match the latest sale, "
             "with no later transfer observed."
         )
         return
@@ -1010,7 +1709,7 @@ def _apply_evidence(
         candidate.ownership_status = "probable_current_owner"
         candidate.confidence_score = 86
         candidate.match_reason = (
-            "Exact building and unit; acquisition date matches the latest sale and no "
+            f"{identity_label.title()}; acquisition date matches the latest sale and no "
             "later transfer is observed. Price evidence was unavailable."
         )
         return
@@ -1030,6 +1729,241 @@ def _apply_evidence(
         "The unit is exact, but the uploaded acquisition date does not match the observed "
         "sales history."
     )
+
+
+async def rematch_property_contact_claims(
+    db: AsyncSession,
+    *,
+    organization_id: str,
+    import_id: int | None = None,
+    only_unmatched: bool = True,
+    audit_resolution_methods: set[str] | None = None,
+) -> dict[str, int]:
+    """Re-evaluate saved owner claims against the current DXBI sales registry.
+
+    Imports are immutable source records, but their evidence changes when either
+    DXBI coverage improves or the building-identity resolver improves. This
+    updates only calculated matching fields, never the uploaded contact data.
+    """
+    statement = select(CrmPropertyContactClaim).where(
+        CrmPropertyContactClaim.organization_id == organization_id
+    )
+    if import_id is not None:
+        statement = statement.where(CrmPropertyContactClaim.import_id == import_id)
+    if audit_resolution_methods:
+        statement = statement.where(
+            CrmPropertyContactClaim.evidence["property_identity_resolution"][
+                "method"
+            ].as_string().in_(sorted(audit_resolution_methods))
+        )
+    elif only_unmatched:
+        statement = statement.where(CrmPropertyContactClaim.ownership_status == "unmatched")
+    claims = (await db.exec(statement)).all()
+    candidates: list[ParsedContact] = []
+    for claim in claims:
+        claim_evidence = dict(claim.evidence or {})
+        source_identity: dict[str, Any] = {}
+        if audit_resolution_methods:
+            prior_resolution = claim_evidence.get("property_identity_resolution")
+            if isinstance(prior_resolution, dict) and prior_resolution.get(
+                "method"
+            ) in audit_resolution_methods:
+                raw_source = prior_resolution.get("source")
+                if isinstance(raw_source, dict):
+                    source_identity = raw_source
+            for calculated_key in (
+                "property_identity_resolution",
+                "unit_hierarchy_resolution",
+                "sales_lookup",
+                "sales_match",
+            ):
+                claim_evidence.pop(calculated_key, None)
+
+        def identity_field(field_name: str, current: str) -> str:
+            value = source_identity.get(field_name)
+            return str(value) if value is not None else current
+
+        candidate = ParsedContact(
+            source_sheet=claim.source_sheet,
+            source_row_number=claim.source_row_number,
+            contact_name=claim.contact_name,
+            phone_primary=claim.phone_primary,
+            phone_alternate=claim.phone_alternate,
+            email_primary=claim.email_primary,
+            area_name=identity_field("area_name", claim.area_name),
+            project_name=identity_field("project_name", claim.project_name),
+            building_name=identity_field("building_name", claim.building_name),
+            unit_number=identity_field("unit_number", claim.unit_number),
+            property_type=claim.property_type,
+            transaction_date=claim.transaction_date,
+            transaction_price_aed=claim.transaction_price_aed,
+            party_role=claim.party_role,
+            procedure_type=claim.procedure_type,
+            row_fingerprint=claim.row_fingerprint,
+            evidence={
+                key: value for key, value in claim_evidence.items() if key != "sales_match"
+            },
+        )
+        _recover_embedded_property_identity(candidate)
+        candidates.append(candidate)
+    resolution_counts = await _recover_property_identity_from_transaction(candidates)
+    near_resolution_counts = await _recover_property_identity_from_near_transaction(candidates)
+    sales = await _sales_evidence(candidates)
+    rentals = await _rental_evidence(candidates)
+    now = _utcnow()
+    status_counts: dict[str, int] = {}
+    for claim, candidate in zip(claims, candidates, strict=True):
+        _apply_evidence(candidate, sales=sales, rentals=rentals)
+        claim.area_name = candidate.area_name
+        claim.project_name = candidate.project_name
+        claim.building_name = candidate.building_name
+        claim.unit_number = candidate.unit_number
+        claim.property_key = candidate.property_key
+        claim.owner_key = _candidate_owner_key(candidate)
+        claim.ownership_status = candidate.ownership_status
+        claim.confidence_score = candidate.confidence_score
+        claim.match_reason = candidate.match_reason
+        claim.lead_id = candidate.lead_id
+        claim.unit_candidate_key = candidate.unit_candidate_key
+        claim.latest_sale_date = candidate.latest_sale_date
+        claim.latest_sale_price_aed = candidate.latest_sale_price_aed
+        claim.later_sale_date = candidate.later_sale_date
+        claim.lease_end = candidate.lease_end
+        claim.annual_rent_aed = candidate.annual_rent_aed
+        claim.evidence = candidate.evidence
+        claim.updated_at = now
+        db.add(claim)
+        status_counts[candidate.ownership_status] = (
+            status_counts.get(candidate.ownership_status, 0) + 1
+        )
+    await db.flush()
+    affected_import_ids = {claim.import_id for claim in claims}
+    if import_id is not None:
+        affected_import_ids.add(import_id)
+    await _refresh_contact_import_match_summaries(
+        db,
+        organization_id=organization_id,
+        import_ids=affected_import_ids,
+    )
+    await db.commit()
+    _invalidate_owner_summary_cache(organization_id)
+    return {
+        "claims": len(claims),
+        **{f"transaction_{key}": value for key, value in resolution_counts.items()},
+        **{
+            f"near_transaction_{key}": value
+            for key, value in near_resolution_counts.items()
+        },
+        **status_counts,
+    }
+
+
+async def _refresh_contact_import_match_summaries(
+    db: AsyncSession,
+    *,
+    organization_id: str,
+    import_ids: set[int],
+) -> dict[int, dict[str, int]]:
+    """Synchronize persisted import cards with current claim evidence."""
+    refreshed: dict[int, dict[str, int]] = {}
+    if not import_ids:
+        return refreshed
+
+    import_result = await db.exec(
+        select(CrmContactImport).where(
+            CrmContactImport.organization_id == organization_id,
+            CrmContactImport.id.in_(sorted(import_ids)),
+        )
+    )
+    for record in import_result.all():
+        record_id = record.id
+        if record_id is None:
+            continue
+        status_result = await db.exec(
+            select(CrmPropertyContactClaim.ownership_status, func.count())
+            .where(
+                CrmPropertyContactClaim.organization_id == organization_id,
+                CrmPropertyContactClaim.import_id == record_id,
+            )
+            .group_by(CrmPropertyContactClaim.ownership_status)
+        )
+        status_counts = {str(status): int(count) for status, count in status_result.all()}
+        has_contact = or_(
+            CrmPropertyContactClaim.phone_primary.is_not(None),
+            CrmPropertyContactClaim.phone_alternate.is_not(None),
+            CrmPropertyContactClaim.email_primary.is_not(None),
+        )
+        metrics_result = await db.exec(
+            select(
+                func.count(),
+                func.count().filter(has_contact),
+                func.count().filter(CrmPropertyContactClaim.lead_id.is_not(None)),
+                func.count().filter(
+                    and_(
+                        CrmPropertyContactClaim.lead_id.is_not(None),
+                        has_contact,
+                        CrmPropertyContactClaim.ownership_status.in_(
+                            ("verified_current_owner", "probable_current_owner")
+                        ),
+                    )
+                ),
+            ).where(
+                CrmPropertyContactClaim.organization_id == organization_id,
+                CrmPropertyContactClaim.import_id == record_id,
+            )
+        )
+        candidate_rows, valid_contacts, rental_opportunities, contact_ready = (
+            int(value or 0) for value in metrics_result.one()
+        )
+        summary = dict(record.summary or {})
+        summary.update(
+            {
+                "candidate_rows": candidate_rows,
+                "valid_contacts": valid_contacts,
+                "rental_opportunities": rental_opportunities,
+                "contact_ready": contact_ready,
+            }
+        )
+        for summary_field in _STATUS_SUMMARY_FIELDS.values():
+            summary[summary_field] = 0
+        for status, count in status_counts.items():
+            summary_field = _STATUS_SUMMARY_FIELDS.get(status)
+            if summary_field:
+                summary[summary_field] = count
+        validated = CrmContactImportSummary.model_validate(summary).model_dump()
+        record.summary = validated
+        db.add(record)
+        refreshed[record_id] = {
+            "candidate_rows": candidate_rows,
+            **status_counts,
+        }
+    return refreshed
+
+
+async def refresh_contact_import_match_summaries(
+    db: AsyncSession,
+    *,
+    organization_id: str,
+    import_id: int | None = None,
+) -> dict[int, dict[str, int]]:
+    """Refresh import-card summaries without re-running registry matching."""
+    if import_id is not None:
+        import_ids = {import_id}
+    else:
+        result = await db.exec(
+            select(CrmContactImport.id).where(
+                CrmContactImport.organization_id == organization_id
+            )
+        )
+        import_ids = {record_id for record_id in result.all() if record_id is not None}
+    refreshed = await _refresh_contact_import_match_summaries(
+        db,
+        organization_id=organization_id,
+        import_ids=import_ids,
+    )
+    await db.commit()
+    _invalidate_owner_summary_cache(organization_id)
+    return refreshed
 
 
 def _summary(
@@ -1054,6 +1988,13 @@ def _summary(
         former_owners=sum(candidate.ownership_status == "former_owner" for candidate in candidates),
         conflicting_claims=sum(
             candidate.ownership_status == "conflicting_claim" for candidate in candidates
+        ),
+        insufficient_property_data=sum(
+            candidate.ownership_status == "insufficient_property_data"
+            for candidate in candidates
+        ),
+        registry_not_observed=sum(
+            candidate.ownership_status == "registry_not_observed" for candidate in candidates
         ),
         unmatched=sum(candidate.ownership_status == "unmatched" for candidate in candidates),
         rental_opportunities=sum(bool(candidate.lead_id) for candidate in candidates),
@@ -1202,10 +2143,10 @@ async def process_contact_import(
         profiles = [await _llm_mapping(profile) for profile in profiles]
         parser = _parse_xlsx if suffix == ".xlsx" else _parse_csv
         candidates, total_rows = await asyncio.to_thread(parser, data, filename, profiles)
-        sales, rentals = await asyncio.gather(
-            _sales_evidence(candidates),
-            _rental_evidence(candidates),
-        )
+        await _recover_property_identity_from_transaction(candidates)
+        await _recover_property_identity_from_near_transaction(candidates)
+        sales = await _sales_evidence(candidates)
+        rentals = await _rental_evidence(candidates)
         for candidate in candidates:
             _apply_evidence(candidate, sales=sales, rentals=rentals)
         candidates, duplicate_rows_collapsed = _dedupe_candidates(candidates)
@@ -1528,7 +2469,13 @@ def _list_summary(
             for claim in unique_claims
         ),
         needs_review=sum(
-            claim.ownership_status in {"unit_linked_unverified", "conflicting_claim"}
+            claim.ownership_status
+            in {
+                "unit_linked_unverified",
+                "conflicting_claim",
+                "insufficient_property_data",
+                "registry_not_observed",
+            }
             for claim in unique_claims
         ),
         former_owners=sum(claim.ownership_status == "former_owner" for claim in unique_claims),
@@ -1742,8 +2689,13 @@ def _property_from_rows(
         match_reason=best.match_reason,
         lead_id=best.lead_id,
         unit_candidate_key=best.unit_candidate_key,
+        imported_transaction_date=best.transaction_date,
+        imported_transaction_price_aed=best.transaction_price_aed,
+        imported_property_type=best.property_type,
         latest_sale_date=best.latest_sale_date,
         latest_sale_price_aed=best.latest_sale_price_aed,
+        registry_sale_date=best.latest_sale_date,
+        registry_sale_price_aed=best.latest_sale_price_aed,
         later_sale_date=best.later_sale_date,
         lease_end=best.lease_end,
         annual_rent_aed=best.annual_rent_aed,
@@ -1904,7 +2856,13 @@ def _owner_registry_summary(
         needs_review_profiles=sum(
             any(
                 item.ownership_status
-                in {"unit_linked_unverified", "conflicting_claim", "unmatched"}
+                in {
+                    "unit_linked_unverified",
+                    "conflicting_claim",
+                    "insufficient_property_data",
+                    "registry_not_observed",
+                    "unmatched",
+                }
                 for item in profile.properties
             )
             for profile in profiles
@@ -2027,6 +2985,8 @@ async def _owner_registry_summary_sql(
                     WHERE ownership_status IN (
                         'unit_linked_unverified',
                         'conflicting_claim',
+                        'insufficient_property_data',
+                        'registry_not_observed',
                         'unmatched'
                     )
                 ) AS review_count
@@ -2256,8 +3216,17 @@ def _sql_owner_property(row: dict[str, Any]) -> CrmOwnerProperty:
         match_reason=str(row["match_reason"] or ""),
         lead_id=str(row["lead_id"]) if row["lead_id"] else None,
         unit_candidate_key=(str(row["unit_candidate_key"]) if row["unit_candidate_key"] else None),
+        imported_transaction_date=row["transaction_date"],
+        imported_transaction_price_aed=(
+            int(row["transaction_price_aed"]) if row["transaction_price_aed"] else None
+        ),
+        imported_property_type=str(row["property_type"] or ""),
         latest_sale_date=row["latest_sale_date"],
         latest_sale_price_aed=(
+            int(row["latest_sale_price_aed"]) if row["latest_sale_price_aed"] else None
+        ),
+        registry_sale_date=row["latest_sale_date"],
+        registry_sale_price_aed=(
             int(row["latest_sale_price_aed"]) if row["latest_sale_price_aed"] else None
         ),
         later_sale_date=row["later_sale_date"],
@@ -2382,6 +3351,161 @@ async def get_owner_registry(
     )
 
 
+def _owner_property_registry_score(
+    owner_property: CrmOwnerProperty,
+    row: dict[str, Any],
+) -> int:
+    owner_building = _usable_project_name(owner_property.building_name)
+    owner_project = _usable_project_name(owner_property.project_name)
+    owner_area = _usable_project_name(owner_property.area_name)
+    sale_building = str(row.get("building_name") or "")
+    sale_project = str(row.get("project_name") or "")
+    sale_area = str(row.get("area_name") or "")
+    combined_sale = " ".join(value for value in (sale_building, sale_project) if value)
+    building_score = max(
+        (
+            _location_similarity(owner_building, value)
+            for value in (sale_building, combined_sale)
+        ),
+        default=0,
+    )
+    project_score = max(
+        (
+            _location_similarity(owner_project, value)
+            for value in (sale_project, sale_building, combined_sale)
+        ),
+        default=0,
+    )
+    area_score = _location_similarity(owner_area, sale_area)
+    if owner_building:
+        return round(0.70 * building_score + 0.25 * project_score + 0.05 * area_score)
+    if owner_project:
+        return round(0.90 * project_score + 0.10 * area_score)
+    return area_score
+
+
+def _positive_float(value: Any) -> float | None:
+    parsed = float(value or 0)
+    return parsed if parsed > 0 else None
+
+
+async def _enrich_owner_profile_registry(profile: CrmOwnerProfile) -> CrmOwnerProfile:
+    """Attach authoritative DLD registry attributes to a clicked owner profile.
+
+    Claims already retain the selected property's latest sale signature. Restricting
+    the registry query to those signatures avoids scanning every Dubai property that
+    happens to use a generic unit number such as 101 or 204.
+    """
+    eligible = [
+        owner_property
+        for owner_property in profile.properties
+        if owner_property.unit_number
+        and owner_property.latest_sale_date
+        and owner_property.latest_sale_price_aed
+    ]
+    if not eligible:
+        return profile
+    signatures = {
+        (
+            owner_property.latest_sale_date,
+            int(owner_property.latest_sale_price_aed or 0),
+        )
+        for owner_property in eligible
+    }
+    rows = await query(
+        """
+        SELECT
+            transaction_date,
+            sale_amount_aed,
+            replaceRegexpAll(lowerUTF8(unit_number), '\\s+', '') AS unit_key,
+            unit_number,
+            building_name,
+            building_key,
+            project_name,
+            area_name,
+            area_key,
+            property_type,
+            market_status,
+            bedrooms,
+            size_sqft,
+            built_up_area_sqft,
+            price_per_sqft_aed,
+            sale_key
+        FROM dxbi_sales_unit_events FINAL
+        WHERE transaction_date IN {dates:Array(Date)}
+          AND sale_amount_aed IN {prices:Array(UInt64)}
+        """,
+        {
+            "dates": sorted({signature[0] for signature in signatures}),
+            "prices": sorted({signature[1] for signature in signatures}),
+        },
+    )
+    rows_by_signature: dict[tuple[date, int], list[dict[str, Any]]] = {}
+    for row in rows:
+        signature = (
+            row["transaction_date"],
+            int(row.get("sale_amount_aed") or 0),
+        )
+        if signature in signatures:
+            rows_by_signature.setdefault(signature, []).append(row)
+
+    for owner_property in eligible:
+        signature = (
+            owner_property.latest_sale_date,
+            int(owner_property.latest_sale_price_aed or 0),
+        )
+        unit_key = _normalize_unit(owner_property.unit_number).lower()
+        property_candidates: dict[tuple[str, str, str], dict[str, Any]] = {}
+        for row in rows_by_signature.get(signature, []):
+            if str(row.get("unit_key") or "") != unit_key:
+                continue
+            building_key = str(row.get("building_key") or "") or _location_key(
+                str(row.get("building_name") or row.get("project_name") or "")
+            )
+            identity = (
+                str(row.get("area_key") or ""),
+                building_key,
+                str(row.get("unit_key") or ""),
+            )
+            property_candidates.setdefault(identity, row)
+        if not property_candidates:
+            continue
+        ranked = sorted(
+            (
+                (_owner_property_registry_score(owner_property, row), row)
+                for row in property_candidates.values()
+            ),
+            key=lambda item: item[0],
+            reverse=True,
+        )
+        score, selected = ranked[0]
+        runner_up = ranked[1][0] if len(ranked) > 1 else 0
+        if score < 55 or (len(ranked) > 1 and score - runner_up < 12):
+            continue
+
+        owner_property.registry_sale_date = selected["transaction_date"]
+        owner_property.registry_sale_price_aed = int(
+            selected.get("sale_amount_aed") or 0
+        ) or None
+        owner_property.registry_property_type = (
+            str(selected.get("property_type") or "").strip() or None
+        )
+        owner_property.registry_bedrooms = (
+            str(selected.get("bedrooms") or "").strip() or None
+        )
+        owner_property.registry_size_sqft = _positive_float(selected.get("size_sqft"))
+        owner_property.registry_built_up_area_sqft = _positive_float(
+            selected.get("built_up_area_sqft")
+        )
+        owner_property.registry_price_per_sqft_aed = _positive_float(
+            selected.get("price_per_sqft_aed")
+        )
+        owner_property.registry_market_status = (
+            str(selected.get("market_status") or "").strip() or None
+        )
+    return profile
+
+
 async def get_owner_profile(
     db: AsyncSession,
     *,
@@ -2398,7 +3522,15 @@ async def get_owner_profile(
     rows = property_rows.get(owner_key)
     if not rows:
         raise HTTPException(status_code=404, detail="Owner profile not found")
-    return _sql_owner_profile(owner_key, rows)
+    profile = _sql_owner_profile(owner_key, rows)
+    try:
+        return await _enrich_owner_profile_registry(profile)
+    except Exception:
+        logger.exception(
+            "Owner profile registry enrichment failed",
+            extra={"owner_key": owner_key},
+        )
+        return profile
 
 
 def _owner_workspace_summaries(

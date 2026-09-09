@@ -12,7 +12,41 @@ def schema_sql_path() -> Path:
 
 
 def iter_sql_statements(sql: str) -> list[str]:
-    return [statement.strip() for statement in sql.split(";") if statement.strip()]
+    statements: list[str] = []
+    current: list[str] = []
+    in_single_quote = False
+    index = 0
+    while index < len(sql):
+        character = sql[index]
+        following = sql[index + 1] if index + 1 < len(sql) else ""
+        if not in_single_quote and character == "-" and following == "-":
+            newline = sql.find("\n", index + 2)
+            if newline == -1:
+                break
+            current.append("\n")
+            index = newline + 1
+            continue
+        if character == "'":
+            current.append(character)
+            if in_single_quote and following == "'":
+                current.append(following)
+                index += 2
+                continue
+            in_single_quote = not in_single_quote
+            index += 1
+            continue
+        if character == ";" and not in_single_quote:
+            statement = "".join(current).strip()
+            if statement:
+                statements.append(statement)
+            current = []
+        else:
+            current.append(character)
+        index += 1
+    trailing = "".join(current).strip()
+    if trailing:
+        statements.append(trailing)
+    return statements
 
 
 def ensure_schema(*, clickhouse: ClickHouseCommands) -> None:

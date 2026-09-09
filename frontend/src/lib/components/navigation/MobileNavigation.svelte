@@ -2,9 +2,8 @@
 import {
 	BarChart3,
 	Building2,
-	ContactRound,
 	Calculator,
-	FolderOpen,
+	ContactRound,
 	Home,
 	LayoutDashboard,
 	LogOut,
@@ -100,14 +99,9 @@ function handleLogout() {
 				<span>Analytics</span>
 			</a>
 
-			<a href="/projects" onclick={onNavigate} class={linkClass('/projects')} aria-current={isActive('/projects') ? 'page' : undefined}>
-				<FolderOpen size={16} strokeWidth={2} aria-hidden="true" />
-				<span>Radar</span>
-			</a>
-
 			<a href="/radar" onclick={onNavigate} class={linkClass('/radar')} aria-current={isActive('/radar') ? 'page' : undefined}>
 				<MapPinned size={16} strokeWidth={2} aria-hidden="true" />
-				<span>Radar Lab</span>
+				<span>Radar</span>
 			</a>
 
 			<a href="/upcoming" onclick={onNavigate} class={linkClass('/upcoming')} aria-current={isActive('/upcoming') ? 'page' : undefined}>

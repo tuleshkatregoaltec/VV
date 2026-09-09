@@ -472,6 +472,56 @@ export type AuthMeResponse = {
 };
 
 /**
+ * Body_crm-crm_contact_import
+ */
+export type BodyCrmCrmContactImport = {
+    /**
+     * File
+     */
+    file: Blob | File;
+    /**
+     * Name
+     */
+    name?: string;
+};
+
+/**
+ * Body_crm-crm_inbound_import
+ */
+export type BodyCrmCrmInboundImport = {
+    /**
+     * File
+     */
+    file: Blob | File;
+    /**
+     * Name
+     */
+    name?: string;
+    /**
+     * Campaign Context
+     */
+    campaign_context?: string;
+    /**
+     * Mapping Json
+     */
+    mapping_json?: string;
+};
+
+/**
+ * Body_crm-crm_preview_inbound_import
+ */
+export type BodyCrmCrmPreviewInboundImport = {
+    /**
+     * File
+     */
+    file: Blob | File;
+    /**
+     * Campaign Context
+     */
+    campaign_context?: string;
+};
+
+/**
  * Body_upload-upload_chunked
  */
 export type BodyUploadUploadChunked = {
@@ -896,6 +946,1729 @@ export type CreateUserResponse = {
 };
 
 /**
+ * CrmAssetBreakdownItem
+ */
+export type CrmAssetBreakdownItem = {
+    /**
+     * Asset Class
+     */
+    asset_class: 'residential' | 'commercial' | 'other';
+    /**
+     * Total
+     */
+    total: number;
+    /**
+     * Urgent
+     */
+    urgent: number;
+    /**
+     * Exact Unit Matches
+     */
+    exact_unit_matches: number;
+    /**
+     * Annual Rent At Risk Aed
+     */
+    annual_rent_at_risk_aed: number;
+    /**
+     * Property Types
+     */
+    property_types?: Array<string>;
+};
+
+/**
+ * CrmBreakdownItem
+ */
+export type CrmBreakdownItem = {
+    /**
+     * Label
+     */
+    label: string;
+    /**
+     * Total
+     */
+    total: number;
+    /**
+     * Urgent
+     */
+    urgent: number;
+    /**
+     * Expired
+     */
+    expired: number;
+    /**
+     * Expiring 30
+     */
+    expiring_30: number;
+    /**
+     * Expiring 60
+     */
+    expiring_60: number;
+    /**
+     * Expiring 90
+     */
+    expiring_90: number;
+    /**
+     * Potential Value Aed
+     */
+    potential_value_aed: number;
+};
+
+/**
+ * CrmContactClaimResponse
+ */
+export type CrmContactClaimResponse = {
+    /**
+     * Id
+     */
+    id: number;
+    /**
+     * Source Sheet
+     */
+    source_sheet: string;
+    /**
+     * Source Row Number
+     */
+    source_row_number: number;
+    /**
+     * Contact Name
+     */
+    contact_name: string;
+    /**
+     * Phone Primary
+     */
+    phone_primary?: string | null;
+    /**
+     * Phone Alternate
+     */
+    phone_alternate?: string | null;
+    /**
+     * Email Primary
+     */
+    email_primary?: string | null;
+    /**
+     * Area Name
+     */
+    area_name: string;
+    /**
+     * Project Name
+     */
+    project_name: string;
+    /**
+     * Building Name
+     */
+    building_name: string;
+    /**
+     * Unit Number
+     */
+    unit_number: string;
+    /**
+     * Property Type
+     */
+    property_type: string;
+    /**
+     * Transaction Date
+     */
+    transaction_date?: string | null;
+    /**
+     * Transaction Price Aed
+     */
+    transaction_price_aed?: number | null;
+    /**
+     * Ownership Status
+     */
+    ownership_status: 'verified_current_owner' | 'probable_current_owner' | 'unit_linked_unverified' | 'former_owner' | 'conflicting_claim' | 'insufficient_property_data' | 'registry_not_observed' | 'unmatched';
+    /**
+     * Confidence Score
+     */
+    confidence_score: number;
+    /**
+     * Match Reason
+     */
+    match_reason: string;
+    /**
+     * Lead Id
+     */
+    lead_id?: string | null;
+    /**
+     * Unit Candidate Key
+     */
+    unit_candidate_key?: string | null;
+    /**
+     * Latest Sale Date
+     */
+    latest_sale_date?: string | null;
+    /**
+     * Latest Sale Price Aed
+     */
+    latest_sale_price_aed?: number | null;
+    /**
+     * Later Sale Date
+     */
+    later_sale_date?: string | null;
+    /**
+     * Lease End
+     */
+    lease_end?: string | null;
+    /**
+     * Annual Rent Aed
+     */
+    annual_rent_aed?: number | null;
+    /**
+     * Owner Key
+     */
+    owner_key: string;
+    /**
+     * Duplicate Count
+     */
+    duplicate_count?: number;
+    /**
+     * Source Rows
+     */
+    source_rows?: Array<string>;
+};
+
+/**
+ * CrmContactImportRename
+ */
+export type CrmContactImportRename = {
+    /**
+     * Name
+     */
+    name: string;
+};
+
+/**
+ * CrmContactImportResponse
+ */
+export type CrmContactImportResponse = {
+    /**
+     * Id
+     */
+    id: number;
+    /**
+     * List Id
+     */
+    list_id?: number | null;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Original Filename
+     */
+    original_filename: string;
+    /**
+     * Status
+     */
+    status: 'processing' | 'completed' | 'failed';
+    summary: CrmContactImportSummary;
+    /**
+     * Mappings
+     */
+    mappings?: Array<CrmSheetMapping>;
+    /**
+     * Error Message
+     */
+    error_message?: string | null;
+    /**
+     * Created At
+     */
+    created_at: string;
+    /**
+     * Completed At
+     */
+    completed_at?: string | null;
+};
+
+/**
+ * CrmContactImportSummary
+ */
+export type CrmContactImportSummary = {
+    /**
+     * Total Rows
+     */
+    total_rows?: number;
+    /**
+     * Candidate Rows
+     */
+    candidate_rows?: number;
+    /**
+     * Duplicate Rows Collapsed
+     */
+    duplicate_rows_collapsed?: number;
+    /**
+     * Valid Contacts
+     */
+    valid_contacts?: number;
+    /**
+     * Verified Current Owners
+     */
+    verified_current_owners?: number;
+    /**
+     * Probable Current Owners
+     */
+    probable_current_owners?: number;
+    /**
+     * Unit Linked Unverified
+     */
+    unit_linked_unverified?: number;
+    /**
+     * Former Owners
+     */
+    former_owners?: number;
+    /**
+     * Conflicting Claims
+     */
+    conflicting_claims?: number;
+    /**
+     * Insufficient Property Data
+     */
+    insufficient_property_data?: number;
+    /**
+     * Registry Not Observed
+     */
+    registry_not_observed?: number;
+    /**
+     * Unmatched
+     */
+    unmatched?: number;
+    /**
+     * Rental Opportunities
+     */
+    rental_opportunities?: number;
+    /**
+     * Contact Ready
+     */
+    contact_ready?: number;
+};
+
+/**
+ * CrmContactListDetail
+ */
+export type CrmContactListDetail = {
+    list: CrmContactListSummary;
+    /**
+     * Contacts
+     */
+    contacts: Array<CrmContactClaimResponse>;
+    /**
+     * Total
+     */
+    total: number;
+    /**
+     * Limit
+     */
+    limit: number;
+    /**
+     * Offset
+     */
+    offset: number;
+};
+
+/**
+ * CrmContactListSummary
+ */
+export type CrmContactListSummary = {
+    /**
+     * Id
+     */
+    id: number;
+    /**
+     * Source Import Id
+     */
+    source_import_id?: number | null;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Description
+     */
+    description?: string | null;
+    /**
+     * Total Contacts
+     */
+    total_contacts?: number;
+    /**
+     * Contact Ready
+     */
+    contact_ready?: number;
+    /**
+     * Needs Review
+     */
+    needs_review?: number;
+    /**
+     * Former Owners
+     */
+    former_owners?: number;
+    /**
+     * Created At
+     */
+    created_at: string;
+    /**
+     * Updated At
+     */
+    updated_at: string;
+};
+
+/**
+ * CrmCoverage
+ */
+export type CrmCoverage = {
+    /**
+     * Rental Source
+     */
+    rental_source: string;
+    /**
+     * Rental Start Date
+     */
+    rental_start_date?: string | null;
+    /**
+     * Rental End Date
+     */
+    rental_end_date?: string | null;
+    /**
+     * Rental Rows
+     */
+    rental_rows?: number;
+    /**
+     * Exact Unit Ids Available
+     */
+    exact_unit_ids_available?: boolean;
+    /**
+     * Exact Unit Matches
+     */
+    exact_unit_matches?: number;
+    /**
+     * Data Complete Through
+     */
+    data_complete_through?: string | null;
+    /**
+     * Matching Method
+     */
+    matching_method: string;
+    /**
+     * Caveat
+     */
+    caveat: string;
+};
+
+/**
+ * CrmDashboardResponse
+ */
+export type CrmDashboardResponse = {
+    /**
+     * Leads
+     */
+    leads: Array<CrmLead>;
+    /**
+     * Total
+     */
+    total: number;
+    /**
+     * Limit
+     */
+    limit: number;
+    /**
+     * Offset
+     */
+    offset: number;
+    summary: CrmSummary;
+    /**
+     * Asset Breakdown
+     */
+    asset_breakdown?: Array<CrmAssetBreakdownItem>;
+    /**
+     * Breakdown
+     */
+    breakdown: Array<CrmBreakdownItem>;
+    /**
+     * Breakdown Level
+     */
+    breakdown_level: string;
+    filters: CrmFilters;
+    coverage: CrmCoverage;
+    /**
+     * As Of
+     */
+    as_of: string;
+};
+
+/**
+ * CrmFilters
+ */
+export type CrmFilters = {
+    /**
+     * Areas
+     */
+    areas?: Array<string>;
+    /**
+     * Projects
+     */
+    projects?: Array<string>;
+    /**
+     * Buildings
+     */
+    buildings?: Array<string>;
+    /**
+     * Property Types
+     */
+    property_types?: Array<string>;
+};
+
+/**
+ * CrmLead
+ */
+export type CrmLead = {
+    /**
+     * Lead Id
+     */
+    lead_id: string;
+    /**
+     * Unit Candidate Key
+     */
+    unit_candidate_key: string;
+    /**
+     * Building Name
+     */
+    building_name: string;
+    /**
+     * Project Name
+     */
+    project_name: string;
+    /**
+     * Area Name
+     */
+    area_name: string;
+    /**
+     * Registry Building Name
+     */
+    registry_building_name?: string;
+    /**
+     * Registry Project Name
+     */
+    registry_project_name?: string;
+    /**
+     * Registry Area Name
+     */
+    registry_area_name?: string;
+    /**
+     * Canonical Location Id
+     */
+    canonical_location_id?: string | null;
+    /**
+     * Geography Match Status
+     */
+    geography_match_status?: string;
+    /**
+     * Coordinate Precision
+     */
+    coordinate_precision?: string;
+    /**
+     * Latitude
+     */
+    latitude?: number | null;
+    /**
+     * Longitude
+     */
+    longitude?: number | null;
+    /**
+     * Asset Class
+     */
+    asset_class?: 'residential' | 'commercial' | 'other';
+    /**
+     * Property Type
+     */
+    property_type: string;
+    /**
+     * Property Subtype
+     */
+    property_subtype?: string;
+    /**
+     * Matched Sales Property Type
+     */
+    matched_sales_property_type?: string | null;
+    /**
+     * Bedrooms
+     */
+    bedrooms: string;
+    /**
+     * Size Sqft
+     */
+    size_sqft?: number | null;
+    /**
+     * Contract Amount Aed
+     */
+    contract_amount_aed?: number;
+    /**
+     * Contract Term Days
+     */
+    contract_term_days?: number;
+    /**
+     * Contract Term Months
+     */
+    contract_term_months?: number | null;
+    /**
+     * Annual Rent Aed
+     */
+    annual_rent_aed: number;
+    /**
+     * Latest Purchase Price Aed
+     */
+    latest_purchase_price_aed?: number | null;
+    /**
+     * Unit Number
+     */
+    unit_number?: string | null;
+    /**
+     * Unit Match Status
+     */
+    unit_match_status?: string;
+    /**
+     * Matching Units
+     */
+    matching_units?: number;
+    /**
+     * Last Purchase Date
+     */
+    last_purchase_date?: string | null;
+    /**
+     * Matched Sale Price Aed
+     */
+    matched_sale_price_aed?: number | null;
+    /**
+     * Gross Yield Pct
+     */
+    gross_yield_pct?: number | null;
+    /**
+     * Identity Sale Date
+     */
+    identity_sale_date?: string | null;
+    /**
+     * Identity Sale Price Aed
+     */
+    identity_sale_price_aed?: number | null;
+    /**
+     * Latest Price Per Sqft Aed
+     */
+    latest_price_per_sqft_aed?: number | null;
+    /**
+     * Latest Capital Gain Pct
+     */
+    latest_capital_gain_pct?: number | null;
+    /**
+     * Latest Ltv Pct
+     */
+    latest_ltv_pct?: number | null;
+    /**
+     * Latest Seller Type
+     */
+    latest_seller_type?: string | null;
+    /**
+     * Latest Seller Transaction Count
+     */
+    latest_seller_transaction_count?: number | null;
+    /**
+     * Latest Market Status
+     */
+    latest_market_status?: string | null;
+    /**
+     * Lease Start
+     */
+    lease_start: string;
+    /**
+     * Lease End
+     */
+    lease_end: string;
+    /**
+     * Days To Expiry
+     */
+    days_to_expiry: number;
+    /**
+     * Status
+     */
+    status: 'expired' | 'expiring_30' | 'expiring_60' | 'expiring_90';
+    /**
+     * Priority
+     */
+    priority: 'urgent' | 'high' | 'medium';
+    /**
+     * Score
+     */
+    score: number;
+    /**
+     * Contract State
+     */
+    contract_state: string;
+    /**
+     * Match Confidence
+     */
+    match_confidence: 'high' | 'medium' | 'low';
+    /**
+     * Property Identity Key
+     */
+    property_identity_key?: string;
+    /**
+     * Ownership Timing
+     */
+    ownership_timing?: string;
+    /**
+     * Lease Evidence State
+     */
+    lease_evidence_state?: string;
+    /**
+     * Data Complete Through
+     */
+    data_complete_through?: string | null;
+    /**
+     * Lead Reason
+     */
+    lead_reason: string;
+    /**
+     * Recommended Action
+     */
+    recommended_action: string;
+    /**
+     * Sale Conversation
+     */
+    sale_conversation: boolean;
+    /**
+     * Source
+     */
+    source?: string;
+};
+
+/**
+ * CrmLeadDetailResponse
+ */
+export type CrmLeadDetailResponse = {
+    lead: CrmLead;
+    /**
+     * Timeline
+     */
+    timeline: Array<CrmTimelineEvent>;
+    /**
+     * Next Best Actions
+     */
+    next_best_actions: Array<string>;
+    /**
+     * Agent Signals
+     */
+    agent_signals?: Array<string>;
+    /**
+     * Match Explanation
+     */
+    match_explanation: string;
+    /**
+     * Generated At
+     */
+    generated_at: string;
+};
+
+/**
+ * CrmLeadImportedContact
+ */
+export type CrmLeadImportedContact = {
+    /**
+     * Claim Id
+     */
+    claim_id: number;
+    /**
+     * List Id
+     */
+    list_id: number;
+    /**
+     * List Name
+     */
+    list_name: string;
+    /**
+     * Contact Name
+     */
+    contact_name: string;
+    /**
+     * Phone Primary
+     */
+    phone_primary?: string | null;
+    /**
+     * Phone Alternate
+     */
+    phone_alternate?: string | null;
+    /**
+     * Email Primary
+     */
+    email_primary?: string | null;
+    /**
+     * Ownership Status
+     */
+    ownership_status: 'verified_current_owner' | 'probable_current_owner' | 'unit_linked_unverified' | 'former_owner' | 'conflicting_claim' | 'insufficient_property_data' | 'registry_not_observed' | 'unmatched';
+    /**
+     * Confidence Score
+     */
+    confidence_score: number;
+    /**
+     * Match Reason
+     */
+    match_reason: string;
+    /**
+     * Source Sheet
+     */
+    source_sheet: string;
+    /**
+     * Imported At
+     */
+    imported_at: string;
+    /**
+     * Owner Key
+     */
+    owner_key: string;
+    /**
+     * Duplicate Count
+     */
+    duplicate_count?: number;
+    /**
+     * Property Count
+     */
+    property_count?: number;
+    /**
+     * Source Lists
+     */
+    source_lists?: Array<string>;
+};
+
+/**
+ * CrmLeadNoteResponse
+ */
+export type CrmLeadNoteResponse = {
+    /**
+     * Id
+     */
+    id: number;
+    /**
+     * Body
+     */
+    body: string;
+    /**
+     * Created At
+     */
+    created_at: string;
+    /**
+     * Updated At
+     */
+    updated_at: string;
+};
+
+/**
+ * CrmNoteCreate
+ */
+export type CrmNoteCreate = {
+    /**
+     * Body
+     */
+    body: string;
+};
+
+/**
+ * CrmOwnerBulkUpdate
+ */
+export type CrmOwnerBulkUpdate = {
+    /**
+     * Owner Keys
+     */
+    owner_keys: Array<string>;
+    /**
+     * Pipeline Status
+     */
+    pipeline_status?: 'new' | 'researching' | 'contact_ready' | 'contacted' | 'qualified' | 'nurture' | 'won' | 'closed' | null;
+    /**
+     * Highlight Color
+     */
+    highlight_color?: 'none' | 'amber' | 'green' | 'blue' | 'red' | 'purple' | null;
+    /**
+     * Note
+     */
+    note?: string | null;
+};
+
+/**
+ * CrmOwnerProfile
+ */
+export type CrmOwnerProfile = {
+    /**
+     * Owner Key
+     */
+    owner_key: string;
+    /**
+     * Contact Name
+     */
+    contact_name: string;
+    /**
+     * Phone Primary
+     */
+    phone_primary?: string | null;
+    /**
+     * Phone Alternate
+     */
+    phone_alternate?: string | null;
+    /**
+     * Email Primary
+     */
+    email_primary?: string | null;
+    /**
+     * Highest Ownership Status
+     */
+    highest_ownership_status: 'verified_current_owner' | 'probable_current_owner' | 'unit_linked_unverified' | 'former_owner' | 'conflicting_claim' | 'insufficient_property_data' | 'registry_not_observed' | 'unmatched';
+    /**
+     * Highest Confidence Score
+     */
+    highest_confidence_score: number;
+    /**
+     * Property Count
+     */
+    property_count: number;
+    /**
+     * Rental Linked Count
+     */
+    rental_linked_count: number;
+    /**
+     * Contact Ready Count
+     */
+    contact_ready_count: number;
+    /**
+     * Annual Rent Aed
+     */
+    annual_rent_aed: number;
+    /**
+     * Next Lease End
+     */
+    next_lease_end?: string | null;
+    /**
+     * Properties
+     */
+    properties?: Array<CrmOwnerProperty>;
+};
+
+/**
+ * CrmOwnerProperty
+ */
+export type CrmOwnerProperty = {
+    /**
+     * Property Key
+     */
+    property_key: string;
+    /**
+     * Area Name
+     */
+    area_name: string;
+    /**
+     * Project Name
+     */
+    project_name: string;
+    /**
+     * Building Name
+     */
+    building_name: string;
+    /**
+     * Unit Number
+     */
+    unit_number: string;
+    /**
+     * Property Type
+     */
+    property_type: string;
+    /**
+     * Ownership Status
+     */
+    ownership_status: 'verified_current_owner' | 'probable_current_owner' | 'unit_linked_unverified' | 'former_owner' | 'conflicting_claim' | 'insufficient_property_data' | 'registry_not_observed' | 'unmatched';
+    /**
+     * Confidence Score
+     */
+    confidence_score: number;
+    /**
+     * Match Reason
+     */
+    match_reason: string;
+    /**
+     * Lead Id
+     */
+    lead_id?: string | null;
+    /**
+     * Unit Candidate Key
+     */
+    unit_candidate_key?: string | null;
+    /**
+     * Imported Transaction Date
+     */
+    imported_transaction_date?: string | null;
+    /**
+     * Imported Transaction Price Aed
+     */
+    imported_transaction_price_aed?: number | null;
+    /**
+     * Imported Property Type
+     */
+    imported_property_type?: string;
+    /**
+     * Latest Sale Date
+     */
+    latest_sale_date?: string | null;
+    /**
+     * Latest Sale Price Aed
+     */
+    latest_sale_price_aed?: number | null;
+    /**
+     * Registry Sale Date
+     */
+    registry_sale_date?: string | null;
+    /**
+     * Registry Sale Price Aed
+     */
+    registry_sale_price_aed?: number | null;
+    /**
+     * Registry Property Type
+     */
+    registry_property_type?: string | null;
+    /**
+     * Registry Bedrooms
+     */
+    registry_bedrooms?: string | null;
+    /**
+     * Registry Size Sqft
+     */
+    registry_size_sqft?: number | null;
+    /**
+     * Registry Built Up Area Sqft
+     */
+    registry_built_up_area_sqft?: number | null;
+    /**
+     * Registry Price Per Sqft Aed
+     */
+    registry_price_per_sqft_aed?: number | null;
+    /**
+     * Registry Market Status
+     */
+    registry_market_status?: string | null;
+    /**
+     * Later Sale Date
+     */
+    later_sale_date?: string | null;
+    /**
+     * Lease End
+     */
+    lease_end?: string | null;
+    /**
+     * Annual Rent Aed
+     */
+    annual_rent_aed?: number | null;
+    /**
+     * Duplicate Count
+     */
+    duplicate_count?: number;
+    /**
+     * Source Lists
+     */
+    source_lists?: Array<string>;
+    /**
+     * Source Rows
+     */
+    source_rows?: Array<string>;
+};
+
+/**
+ * CrmOwnerRegistryResponse
+ */
+export type CrmOwnerRegistryResponse = {
+    /**
+     * Scope
+     */
+    scope: 'all' | 'rental_ready' | 'registry' | 'prior_owners';
+    /**
+     * Owners
+     */
+    owners: Array<CrmOwnerProfile>;
+    /**
+     * Total
+     */
+    total: number;
+    /**
+     * Limit
+     */
+    limit: number;
+    /**
+     * Offset
+     */
+    offset: number;
+    summary: CrmOwnerRegistrySummary;
+};
+
+/**
+ * CrmOwnerRegistrySummary
+ */
+export type CrmOwnerRegistrySummary = {
+    /**
+     * Rental Owner Profiles
+     */
+    rental_owner_profiles?: number;
+    /**
+     * Registry Owner Profiles
+     */
+    registry_owner_profiles?: number;
+    /**
+     * Prior Owner Profiles
+     */
+    prior_owner_profiles?: number;
+    /**
+     * Needs Review Profiles
+     */
+    needs_review_profiles?: number;
+    /**
+     * Multi Property Owners
+     */
+    multi_property_owners?: number;
+};
+
+/**
+ * CrmOwnerWorkspaceSummary
+ */
+export type CrmOwnerWorkspaceSummary = {
+    /**
+     * Owner Key
+     */
+    owner_key: string;
+    /**
+     * Pipeline Status
+     */
+    pipeline_status: 'new' | 'researching' | 'contact_ready' | 'contacted' | 'qualified' | 'nurture' | 'won' | 'closed';
+    /**
+     * Highlight Color
+     */
+    highlight_color: 'none' | 'amber' | 'green' | 'blue' | 'red' | 'purple';
+    /**
+     * Next Follow Up
+     */
+    next_follow_up?: string | null;
+    /**
+     * Tags
+     */
+    tags?: Array<string>;
+    /**
+     * Note Count
+     */
+    note_count?: number;
+    /**
+     * Last Note
+     */
+    last_note?: string | null;
+    /**
+     * Updated At
+     */
+    updated_at: string;
+};
+
+/**
+ * CrmPriceIndex
+ */
+export type CrmPriceIndex = {
+    /**
+     * Name
+     */
+    name?: string;
+    /**
+     * Base Period
+     */
+    base_period: string;
+    /**
+     * Latest Period
+     */
+    latest_period: string;
+    /**
+     * Current Index
+     */
+    current_index: number;
+    /**
+     * Change Since Base Pct
+     */
+    change_since_base_pct: number;
+    /**
+     * Year Over Year Pct
+     */
+    year_over_year_pct?: number | null;
+    /**
+     * Current Median Psf Aed
+     */
+    current_median_psf_aed?: number | null;
+    /**
+     * Segment Name
+     */
+    segment_name: string;
+    /**
+     * Segment Current Index
+     */
+    segment_current_index?: number | null;
+    /**
+     * Segment Year Over Year Pct
+     */
+    segment_year_over_year_pct?: number | null;
+    /**
+     * Segment Current Median Psf Aed
+     */
+    segment_current_median_psf_aed?: number | null;
+    /**
+     * Points
+     */
+    points?: Array<CrmPriceIndexPoint>;
+    /**
+     * Methodology
+     */
+    methodology: string;
+};
+
+/**
+ * CrmPriceIndexPoint
+ */
+export type CrmPriceIndexPoint = {
+    /**
+     * Quarter
+     */
+    quarter: string;
+    /**
+     * Label
+     */
+    label: string;
+    /**
+     * Dubai Index
+     */
+    dubai_index: number;
+    /**
+     * Dld Index
+     */
+    dld_index?: number | null;
+    /**
+     * Transaction Index
+     */
+    transaction_index?: number | null;
+    /**
+     * Segment Index
+     */
+    segment_index?: number | null;
+    /**
+     * Dubai Median Psf Aed
+     */
+    dubai_median_psf_aed?: number | null;
+    /**
+     * Segment Median Psf Aed
+     */
+    segment_median_psf_aed?: number | null;
+    /**
+     * Dld Transactions
+     */
+    dld_transactions?: number;
+    /**
+     * Transaction Count
+     */
+    transaction_count?: number;
+    /**
+     * Segment Transactions
+     */
+    segment_transactions?: number;
+};
+
+/**
+ * CrmPropertyReportResponse
+ */
+export type CrmPropertyReportResponse = {
+    lead: CrmLead;
+    /**
+     * Period Start
+     */
+    period_start: string;
+    /**
+     * Period End
+     */
+    period_end: string;
+    /**
+     * Sales Comparables
+     */
+    sales_comparables: Array<CrmSaleComparable>;
+    /**
+     * Rental Comparables
+     */
+    rental_comparables: Array<CrmRentalComparable>;
+    analysis: CrmReportAnalysis;
+    price_index: CrmPriceIndex;
+    /**
+     * Agent Signals
+     */
+    agent_signals?: Array<string>;
+    /**
+     * Methodology
+     */
+    methodology?: Array<string>;
+    /**
+     * Generated At
+     */
+    generated_at: string;
+};
+
+/**
+ * CrmRentalComparable
+ */
+export type CrmRentalComparable = {
+    /**
+     * Lease Start
+     */
+    lease_start: string;
+    /**
+     * Building Name
+     */
+    building_name: string;
+    /**
+     * Unit Number
+     */
+    unit_number?: string | null;
+    /**
+     * Unit Series
+     */
+    unit_series?: string | null;
+    /**
+     * Unit Match Status
+     */
+    unit_match_status?: string;
+    /**
+     * Property Type
+     */
+    property_type: string;
+    /**
+     * Bedrooms
+     */
+    bedrooms: string;
+    /**
+     * Size Sqft
+     */
+    size_sqft: number;
+    /**
+     * Annual Rent Aed
+     */
+    annual_rent_aed: number;
+    /**
+     * Rent Per Sqft Aed
+     */
+    rent_per_sqft_aed?: number | null;
+    /**
+     * Selection Reason
+     */
+    selection_reason: string;
+};
+
+/**
+ * CrmReportAnalysis
+ */
+export type CrmReportAnalysis = {
+    /**
+     * Estimated Market Value Aed
+     */
+    estimated_market_value_aed?: number | null;
+    /**
+     * Estimated Value Low Aed
+     */
+    estimated_value_low_aed?: number | null;
+    /**
+     * Estimated Value High Aed
+     */
+    estimated_value_high_aed?: number | null;
+    /**
+     * Estimated Market Rent Aed
+     */
+    estimated_market_rent_aed?: number | null;
+    /**
+     * Indicated Capital Change Aed
+     */
+    indicated_capital_change_aed?: number | null;
+    /**
+     * Indicated Capital Change Pct
+     */
+    indicated_capital_change_pct?: number | null;
+    /**
+     * Indicative Selling Costs Aed
+     */
+    indicative_selling_costs_aed?: number | null;
+    /**
+     * Indicative Proceeds Before Debt Aed
+     */
+    indicative_proceeds_before_debt_aed?: number | null;
+    /**
+     * Estimated Market Gross Yield Pct
+     */
+    estimated_market_gross_yield_pct?: number | null;
+    /**
+     * Current Rent Vs Market Pct
+     */
+    current_rent_vs_market_pct?: number | null;
+    /**
+     * Target Unit Series
+     */
+    target_unit_series?: string | null;
+    /**
+     * Sales Selection Basis
+     */
+    sales_selection_basis: string;
+    /**
+     * Rental Selection Basis
+     */
+    rental_selection_basis: string;
+    /**
+     * Sales Comparables Used
+     */
+    sales_comparables_used?: number;
+    /**
+     * Rental Comparables Used
+     */
+    rental_comparables_used?: number;
+    /**
+     * Confidence
+     */
+    confidence: 'high' | 'medium' | 'low';
+};
+
+/**
+ * CrmSaleComparable
+ */
+export type CrmSaleComparable = {
+    /**
+     * Transaction Date
+     */
+    transaction_date: string;
+    /**
+     * Building Name
+     */
+    building_name: string;
+    /**
+     * Unit Number
+     */
+    unit_number: string;
+    /**
+     * Unit Series
+     */
+    unit_series?: string | null;
+    /**
+     * Property Type
+     */
+    property_type: string;
+    /**
+     * Bedrooms
+     */
+    bedrooms: string;
+    /**
+     * Size Sqft
+     */
+    size_sqft: number;
+    /**
+     * Sale Amount Aed
+     */
+    sale_amount_aed: number;
+    /**
+     * Price Per Sqft Aed
+     */
+    price_per_sqft_aed?: number | null;
+    /**
+     * Selection Reason
+     */
+    selection_reason: string;
+};
+
+/**
+ * CrmSavedLeadResponse
+ */
+export type CrmSavedLeadResponse = {
+    /**
+     * Id
+     */
+    id: number;
+    lead: CrmLead;
+    /**
+     * Created At
+     */
+    created_at: string;
+    /**
+     * Updated At
+     */
+    updated_at: string;
+};
+
+/**
+ * CrmSheetMapping
+ */
+export type CrmSheetMapping = {
+    /**
+     * Sheet Name
+     */
+    sheet_name: string;
+    /**
+     * Header Row
+     */
+    header_row: number;
+    /**
+     * Meaningful Rows
+     */
+    meaningful_rows: number;
+    /**
+     * Sheet Family
+     */
+    sheet_family: string;
+    /**
+     * Mapping Source
+     */
+    mapping_source: 'heuristic' | 'llm' | 'heuristic_fallback';
+    /**
+     * Confidence
+     */
+    confidence: number;
+    /**
+     * Field Map
+     */
+    field_map?: {
+        [key: string]: string;
+    };
+    /**
+     * Warnings
+     */
+    warnings?: Array<string>;
+};
+
+/**
+ * CrmSummary
+ */
+export type CrmSummary = {
+    /**
+     * Total Leads
+     */
+    total_leads: number;
+    /**
+     * Urgent
+     */
+    urgent: number;
+    /**
+     * Expired Unlet
+     */
+    expired_unlet: number;
+    /**
+     * Expiring 30 Days
+     */
+    expiring_30_days: number;
+    /**
+     * Expiring 31 To 60 Days
+     */
+    expiring_31_to_60_days: number;
+    /**
+     * Expiring 61 To 90 Days
+     */
+    expiring_61_to_90_days: number;
+    /**
+     * Sale Conversation Candidates
+     */
+    sale_conversation_candidates: number;
+    /**
+     * Annual Rent At Risk Aed
+     */
+    annual_rent_at_risk_aed: number;
+};
+
+/**
+ * CrmTimelineEvent
+ */
+export type CrmTimelineEvent = {
+    /**
+     * Event Id
+     */
+    event_id: string;
+    /**
+     * Event Type
+     */
+    event_type: 'lease' | 'sale';
+    /**
+     * Event Date
+     */
+    event_date: string;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Description
+     */
+    description: string;
+    /**
+     * Amount Aed
+     */
+    amount_aed?: number | null;
+    /**
+     * End Date
+     */
+    end_date?: string | null;
+    /**
+     * Source
+     */
+    source: string;
+    /**
+     * Confidence
+     */
+    confidence: 'high' | 'medium' | 'low';
+    /**
+     * Ltv Pct
+     */
+    ltv_pct?: number | null;
+    /**
+     * Capital Gain Pct
+     */
+    capital_gain_pct?: number | null;
+};
+
+/**
+ * CrmWorkspaceResponse
+ */
+export type CrmWorkspaceResponse = {
+    /**
+     * Id
+     */
+    id?: number | null;
+    /**
+     * Lead Id
+     */
+    lead_id: string;
+    /**
+     * Unit Candidate Key
+     */
+    unit_candidate_key: string;
+    /**
+     * Pipeline Status
+     */
+    pipeline_status: 'new' | 'researching' | 'contact_ready' | 'contacted' | 'qualified' | 'nurture' | 'won' | 'closed';
+    /**
+     * Highlight Color
+     */
+    highlight_color: 'none' | 'amber' | 'green' | 'blue' | 'red' | 'purple';
+    /**
+     * Owner Name
+     */
+    owner_name?: string | null;
+    /**
+     * Owner Email
+     */
+    owner_email?: string | null;
+    /**
+     * Owner Phone
+     */
+    owner_phone?: string | null;
+    /**
+     * Next Follow Up
+     */
+    next_follow_up?: string | null;
+    /**
+     * Tags
+     */
+    tags?: Array<string>;
+    /**
+     * Note Count
+     */
+    note_count?: number;
+    /**
+     * Updated At
+     */
+    updated_at: string;
+    /**
+     * Notes
+     */
+    notes?: Array<CrmLeadNoteResponse>;
+};
+
+/**
+ * CrmWorkspaceSummary
+ */
+export type CrmWorkspaceSummary = {
+    /**
+     * Id
+     */
+    id?: number | null;
+    /**
+     * Lead Id
+     */
+    lead_id: string;
+    /**
+     * Unit Candidate Key
+     */
+    unit_candidate_key: string;
+    /**
+     * Pipeline Status
+     */
+    pipeline_status: 'new' | 'researching' | 'contact_ready' | 'contacted' | 'qualified' | 'nurture' | 'won' | 'closed';
+    /**
+     * Highlight Color
+     */
+    highlight_color: 'none' | 'amber' | 'green' | 'blue' | 'red' | 'purple';
+    /**
+     * Owner Name
+     */
+    owner_name?: string | null;
+    /**
+     * Owner Email
+     */
+    owner_email?: string | null;
+    /**
+     * Owner Phone
+     */
+    owner_phone?: string | null;
+    /**
+     * Next Follow Up
+     */
+    next_follow_up?: string | null;
+    /**
+     * Tags
+     */
+    tags?: Array<string>;
+    /**
+     * Note Count
+     */
+    note_count?: number;
+    /**
+     * Updated At
+     */
+    updated_at: string;
+};
+
+/**
+ * CrmWorkspaceUpdate
+ */
+export type CrmWorkspaceUpdate = {
+    /**
+     * Pipeline Status
+     */
+    pipeline_status?: 'new' | 'researching' | 'contact_ready' | 'contacted' | 'qualified' | 'nurture' | 'won' | 'closed' | null;
+    /**
+     * Highlight Color
+     */
+    highlight_color?: 'none' | 'amber' | 'green' | 'blue' | 'red' | 'purple' | null;
+    /**
+     * Owner Name
+     */
+    owner_name?: string | null;
+    /**
+     * Owner Email
+     */
+    owner_email?: string | null;
+    /**
+     * Owner Phone
+     */
+    owner_phone?: string | null;
+    /**
+     * Next Follow Up
+     */
+    next_follow_up?: string | null;
+    /**
+     * Tags
+     */
+    tags?: Array<string> | null;
+};
+
+/**
  * CustomerPortalResponse
  *
  * Response containing Stripe Customer Portal URL
@@ -941,6 +2714,30 @@ export type DdaOutlineFeature = {
      * Land Use Summary
      */
     land_use_summary?: Array<string>;
+    /**
+     * Developed Confirmed Count
+     */
+    developed_confirmed_count?: number;
+    /**
+     * Developed Probable Count
+     */
+    developed_probable_count?: number;
+    /**
+     * Planned Unbuilt Count
+     */
+    planned_unbuilt_count?: number;
+    /**
+     * No Observed Asset Count
+     */
+    no_observed_asset_count?: number;
+    /**
+     * Non Developable Count
+     */
+    non_developable_count?: number;
+    /**
+     * Developed Share
+     */
+    developed_share?: number;
 };
 
 /**
@@ -1021,6 +2818,38 @@ export type DdaPlotFeature = {
      * Valuation Note
      */
     valuation_note?: string | null;
+    /**
+     * Development Status
+     */
+    development_status?: string;
+    /**
+     * Development Confidence
+     */
+    development_confidence?: string;
+    /**
+     * Development Method
+     */
+    development_method?: string;
+    /**
+     * Development Note
+     */
+    development_note?: string | null;
+    /**
+     * Linked Asset Count
+     */
+    linked_asset_count?: number;
+    /**
+     * Linked Physical Asset Count
+     */
+    linked_physical_asset_count?: number;
+    /**
+     * Subdivision Plot Count
+     */
+    subdivision_plot_count?: number;
+    /**
+     * Subdivision Confirmed Count
+     */
+    subdivision_confirmed_count?: number;
 };
 
 /**
@@ -2208,6 +4037,876 @@ export type HealthResponse = {
 };
 
 /**
+ * InboundActivityCreate
+ */
+export type InboundActivityCreate = {
+    /**
+     * Activity Type
+     */
+    activity_type: 'contact_attempt' | 'call' | 'email' | 'whatsapp' | 'meeting';
+    /**
+     * Body
+     */
+    body?: string | null;
+};
+
+/**
+ * InboundActivityResponse
+ */
+export type InboundActivityResponse = {
+    /**
+     * Id
+     */
+    id: number;
+    /**
+     * Activity Type
+     */
+    activity_type: string;
+    /**
+     * Body
+     */
+    body?: string | null;
+    /**
+     * User Id
+     */
+    user_id: string;
+    /**
+     * Metadata
+     */
+    metadata?: {
+        [key: string]: unknown;
+    };
+    /**
+     * Created At
+     */
+    created_at: string;
+};
+
+/**
+ * InboundContactResponse
+ */
+export type InboundContactResponse = {
+    /**
+     * Id
+     */
+    id: number;
+    /**
+     * Full Name
+     */
+    full_name: string;
+    /**
+     * Phone
+     */
+    phone?: string | null;
+    /**
+     * Email
+     */
+    email?: string | null;
+    /**
+     * Whatsapp
+     */
+    whatsapp?: string | null;
+    /**
+     * Preferred Language
+     */
+    preferred_language?: string | null;
+    /**
+     * Preferred Channel
+     */
+    preferred_channel?: string | null;
+    /**
+     * Consent Status
+     */
+    consent_status: string;
+    /**
+     * Do Not Contact
+     */
+    do_not_contact: boolean;
+    /**
+     * Registry Profiles
+     */
+    registry_profiles?: Array<InboundRegistryProfileResponse>;
+};
+
+/**
+ * InboundEnquiryCreate
+ */
+export type InboundEnquiryCreate = {
+    /**
+     * Intent
+     */
+    intent?: 'unknown' | 'buy' | 'rent' | 'sell' | 'let';
+    /**
+     * Record Kind
+     */
+    record_kind?: 'unqualified_contact' | 'opportunity';
+    /**
+     * Full Name
+     */
+    full_name: string;
+    /**
+     * Phone
+     */
+    phone?: string | null;
+    /**
+     * Email
+     */
+    email?: string | null;
+    /**
+     * Whatsapp
+     */
+    whatsapp?: string | null;
+    /**
+     * Source
+     */
+    source?: string;
+    /**
+     * Campaign
+     */
+    campaign?: string | null;
+    /**
+     * Assigned User Id
+     */
+    assigned_user_id?: string | null;
+    /**
+     * Notes
+     */
+    notes?: string | null;
+    /**
+     * Criteria
+     */
+    criteria?: {
+        [key: string]: unknown;
+    };
+    /**
+     * Strict Fields
+     */
+    strict_fields?: Array<string>;
+    /**
+     * Consent Status
+     */
+    consent_status?: string;
+};
+
+/**
+ * InboundEnquiryListResponse
+ */
+export type InboundEnquiryListResponse = {
+    /**
+     * Enquiries
+     */
+    enquiries: Array<InboundEnquiryResponse>;
+    /**
+     * Total
+     */
+    total: number;
+    /**
+     * Summary
+     */
+    summary: {
+        [key: string]: number;
+    };
+};
+
+/**
+ * InboundEnquiryResponse
+ */
+export type InboundEnquiryResponse = {
+    /**
+     * Id
+     */
+    id: number;
+    contact: InboundContactResponse;
+    /**
+     * Record Kind
+     */
+    record_kind: 'unqualified_contact' | 'opportunity';
+    /**
+     * Intent
+     */
+    intent: 'unknown' | 'buy' | 'rent' | 'sell' | 'let';
+    /**
+     * Status
+     */
+    status: 'new' | 'needs_review' | 'assigned' | 'attempted' | 'contacted' | 'qualified' | 'viewing' | 'valuation' | 'signed' | 'active' | 'won' | 'nurture' | 'closed_lost' | 'disqualified';
+    /**
+     * Assigned User Id
+     */
+    assigned_user_id?: string | null;
+    /**
+     * Source
+     */
+    source: string;
+    /**
+     * Campaign
+     */
+    campaign?: string | null;
+    /**
+     * Source Import Id
+     */
+    source_import_id?: number | null;
+    /**
+     * Enquiry Date
+     */
+    enquiry_date: string;
+    /**
+     * Criteria
+     */
+    criteria: {
+        [key: string]: unknown;
+    };
+    /**
+     * Strict Fields
+     */
+    strict_fields: Array<string>;
+    /**
+     * Raw Notes
+     */
+    raw_notes?: string | null;
+    /**
+     * Observed Data
+     */
+    observed_data: {
+        [key: string]: unknown;
+    };
+    /**
+     * Inferred Data
+     */
+    inferred_data: {
+        [key: string]: unknown;
+    };
+    /**
+     * Confirmed Data
+     */
+    confirmed_data: {
+        [key: string]: unknown;
+    };
+    /**
+     * Qualification
+     */
+    qualification: {
+        [key: string]: unknown;
+    };
+    /**
+     * Extraction Confidence
+     */
+    extraction_confidence: number;
+    /**
+     * Review Reasons
+     */
+    review_reasons: Array<string>;
+    /**
+     * Next Follow Up
+     */
+    next_follow_up?: string | null;
+    /**
+     * First Response Due At
+     */
+    first_response_due_at?: string | null;
+    /**
+     * First Contact At
+     */
+    first_contact_at?: string | null;
+    /**
+     * Last Contact At
+     */
+    last_contact_at?: string | null;
+    /**
+     * Contact Attempt Count
+     */
+    contact_attempt_count?: number;
+    /**
+     * Lost Reason
+     */
+    lost_reason?: string | null;
+    /**
+     * Sla State
+     */
+    sla_state: 'on_time' | 'due_soon' | 'overdue' | 'responded';
+    /**
+     * Qualification Complete
+     */
+    qualification_complete: boolean;
+    ownership_enrichment?: InboundOwnershipEnrichmentResponse;
+    priority?: InboundPriorityResponse;
+    /**
+     * Tags
+     */
+    tags: Array<string>;
+    /**
+     * Notes
+     */
+    notes?: Array<InboundNoteResponse>;
+    /**
+     * Activities
+     */
+    activities?: Array<InboundActivityResponse>;
+    /**
+     * Match Count
+     */
+    match_count?: number;
+    /**
+     * Saved Match Count
+     */
+    saved_match_count?: number;
+    /**
+     * Created At
+     */
+    created_at: string;
+    /**
+     * Updated At
+     */
+    updated_at: string;
+};
+
+/**
+ * InboundEnquiryUpdate
+ */
+export type InboundEnquiryUpdate = {
+    /**
+     * Intent
+     */
+    intent?: 'unknown' | 'buy' | 'rent' | 'sell' | 'let' | null;
+    /**
+     * Status
+     */
+    status?: 'new' | 'needs_review' | 'assigned' | 'attempted' | 'contacted' | 'qualified' | 'viewing' | 'valuation' | 'signed' | 'active' | 'won' | 'nurture' | 'closed_lost' | 'disqualified' | null;
+    /**
+     * Record Kind
+     */
+    record_kind?: 'unqualified_contact' | 'opportunity' | null;
+    /**
+     * Assigned User Id
+     */
+    assigned_user_id?: string | null;
+    /**
+     * Criteria
+     */
+    criteria?: {
+        [key: string]: unknown;
+    } | null;
+    /**
+     * Strict Fields
+     */
+    strict_fields?: Array<string> | null;
+    /**
+     * Next Follow Up
+     */
+    next_follow_up?: string | null;
+    /**
+     * Tags
+     */
+    tags?: Array<string> | null;
+    /**
+     * Notes
+     */
+    notes?: string | null;
+    /**
+     * Confirmed Data
+     */
+    confirmed_data?: {
+        [key: string]: unknown;
+    } | null;
+    /**
+     * Qualification
+     */
+    qualification?: {
+        [key: string]: unknown;
+    } | null;
+    /**
+     * Lost Reason
+     */
+    lost_reason?: string | null;
+    /**
+     * Consent Status
+     */
+    consent_status?: 'unknown' | 'provided' | 'withdrawn' | null;
+    /**
+     * Do Not Contact
+     */
+    do_not_contact?: boolean | null;
+    /**
+     * Preferred Channel
+     */
+    preferred_channel?: string | null;
+};
+
+/**
+ * InboundImportPreviewResponse
+ */
+export type InboundImportPreviewResponse = {
+    /**
+     * Original Filename
+     */
+    original_filename: string;
+    /**
+     * Size Bytes
+     */
+    size_bytes: number;
+    /**
+     * Total Rows
+     */
+    total_rows: number;
+    /**
+     * Sheets
+     */
+    sheets: Array<InboundImportPreviewSheet>;
+    /**
+     * Warnings
+     */
+    warnings?: Array<string>;
+};
+
+/**
+ * InboundImportPreviewSheet
+ */
+export type InboundImportPreviewSheet = {
+    /**
+     * Sheet
+     */
+    sheet: string;
+    /**
+     * Header Row
+     */
+    header_row: number;
+    /**
+     * Headers
+     */
+    headers: Array<string>;
+    /**
+     * Field Map
+     */
+    field_map: {
+        [key: string]: string;
+    };
+    /**
+     * Sample Rows
+     */
+    sample_rows?: Array<{
+        [key: string]: string;
+    }>;
+    /**
+     * Row Count
+     */
+    row_count?: number;
+    /**
+     * Mapping Source
+     */
+    mapping_source?: 'deterministic' | 'ai_assisted';
+};
+
+/**
+ * InboundImportResponse
+ */
+export type InboundImportResponse = {
+    /**
+     * Id
+     */
+    id: number;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Original Filename
+     */
+    original_filename: string;
+    /**
+     * Status
+     */
+    status: 'processing' | 'completed' | 'failed';
+    summary: InboundImportSummary;
+    /**
+     * Mapping
+     */
+    mapping?: {
+        [key: string]: unknown;
+    };
+    /**
+     * Error Message
+     */
+    error_message?: string | null;
+    /**
+     * Created At
+     */
+    created_at: string;
+    /**
+     * Completed At
+     */
+    completed_at?: string | null;
+};
+
+/**
+ * InboundImportSummary
+ */
+export type InboundImportSummary = {
+    /**
+     * Total Rows
+     */
+    total_rows?: number;
+    /**
+     * Imported
+     */
+    imported?: number;
+    /**
+     * Duplicates
+     */
+    duplicates?: number;
+    /**
+     * Needs Review
+     */
+    needs_review?: number;
+    /**
+     * Buyers
+     */
+    buyers?: number;
+    /**
+     * Tenants
+     */
+    tenants?: number;
+    /**
+     * Sellers
+     */
+    sellers?: number;
+    /**
+     * Landlords
+     */
+    landlords?: number;
+    /**
+     * Unqualified Contacts
+     */
+    unqualified_contacts?: number;
+    /**
+     * Rejected
+     */
+    rejected?: number;
+    /**
+     * Owner Matches
+     */
+    owner_matches?: number;
+    /**
+     * Current Owners
+     */
+    current_owners?: number;
+    /**
+     * Former Owners
+     */
+    former_owners?: number;
+    /**
+     * Rental Owners
+     */
+    rental_owners?: number;
+    /**
+     * Portfolio Owners
+     */
+    portfolio_owners?: number;
+    /**
+     * High Priority
+     */
+    high_priority?: number;
+};
+
+/**
+ * InboundMatchResponse
+ */
+export type InboundMatchResponse = {
+    /**
+     * Id
+     */
+    id: number;
+    /**
+     * Target Type
+     */
+    target_type: 'owner' | 'unit' | 'listing' | 'project' | 'demand';
+    /**
+     * Target Key
+     */
+    target_key: string;
+    /**
+     * State
+     */
+    state: 'suggested' | 'saved' | 'dismissed' | 'contacted' | 'stale';
+    /**
+     * Fit
+     */
+    fit: 'exact' | 'near' | 'review' | 'outside';
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Subtitle
+     */
+    subtitle: string;
+    /**
+     * Reasons
+     */
+    reasons: Array<string>;
+    /**
+     * Missing Fields
+     */
+    missing_fields: Array<string>;
+    /**
+     * Snapshot
+     */
+    snapshot: {
+        [key: string]: unknown;
+    };
+    /**
+     * Generated At
+     */
+    generated_at: string;
+};
+
+/**
+ * InboundMatchUpdate
+ */
+export type InboundMatchUpdate = {
+    /**
+     * State
+     */
+    state: 'suggested' | 'saved' | 'dismissed' | 'contacted' | 'stale';
+};
+
+/**
+ * InboundMatchesResponse
+ */
+export type InboundMatchesResponse = {
+    /**
+     * Enquiry Id
+     */
+    enquiry_id: number;
+    /**
+     * Listing Fresh
+     */
+    listing_fresh: boolean;
+    /**
+     * Listing Last Refresh
+     */
+    listing_last_refresh?: string | null;
+    /**
+     * Offplan Catalog Available
+     */
+    offplan_catalog_available?: boolean;
+    /**
+     * Offplan Last Refresh
+     */
+    offplan_last_refresh?: string | null;
+    /**
+     * Lanes
+     */
+    lanes: {
+        [key: string]: Array<InboundMatchResponse>;
+    };
+};
+
+/**
+ * InboundNoteCreate
+ */
+export type InboundNoteCreate = {
+    /**
+     * Body
+     */
+    body: string;
+};
+
+/**
+ * InboundNoteResponse
+ */
+export type InboundNoteResponse = {
+    /**
+     * Id
+     */
+    id: number;
+    /**
+     * Body
+     */
+    body: string;
+    /**
+     * User Id
+     */
+    user_id: string;
+    /**
+     * Created At
+     */
+    created_at: string;
+};
+
+/**
+ * InboundOwnershipEnrichmentResponse
+ */
+export type InboundOwnershipEnrichmentResponse = {
+    /**
+     * Matched
+     */
+    matched?: boolean;
+    /**
+     * Match Basis
+     */
+    match_basis?: 'phone' | 'email' | 'name' | 'none';
+    /**
+     * Verification
+     */
+    verification?: 'contact_exact' | 'name_only' | 'none';
+    /**
+     * Current Owner
+     */
+    current_owner?: boolean;
+    /**
+     * Former Owner
+     */
+    former_owner?: boolean;
+    /**
+     * Rental Owner
+     */
+    rental_owner?: boolean;
+    /**
+     * Multiple Property Owner
+     */
+    multiple_property_owner?: boolean;
+    /**
+     * Current Property Count
+     */
+    current_property_count?: number;
+    /**
+     * Prior Property Count
+     */
+    prior_property_count?: number;
+    /**
+     * Rental Property Count
+     */
+    rental_property_count?: number;
+    /**
+     * Known Property Count
+     */
+    known_property_count?: number;
+    /**
+     * Observed Portfolio Value Aed
+     */
+    observed_portfolio_value_aed?: number;
+    /**
+     * Reasons
+     */
+    reasons?: Array<string>;
+};
+
+/**
+ * InboundPriorityResponse
+ */
+export type InboundPriorityResponse = {
+    /**
+     * Band
+     */
+    band?: 'high' | 'medium' | 'standard';
+    /**
+     * Score
+     */
+    score?: number;
+    /**
+     * Opportunity Value Aed
+     */
+    opportunity_value_aed?: number;
+    /**
+     * Reasons
+     */
+    reasons?: Array<string>;
+};
+
+/**
+ * InboundRegistryProfileResponse
+ */
+export type InboundRegistryProfileResponse = {
+    /**
+     * Owner Key
+     */
+    owner_key: string;
+    /**
+     * Contact Name
+     */
+    contact_name: string;
+    /**
+     * Ownership Status
+     */
+    ownership_status: string;
+    /**
+     * Identity Strength
+     */
+    identity_strength: 'exact' | 'possible' | 'weak';
+    /**
+     * Identity Reason
+     */
+    identity_reason: string;
+    /**
+     * Area Name
+     */
+    area_name: string;
+    /**
+     * Project Name
+     */
+    project_name: string;
+    /**
+     * Building Name
+     */
+    building_name: string;
+    /**
+     * Unit Number
+     */
+    unit_number: string;
+    /**
+     * Property Type
+     */
+    property_type: string;
+    /**
+     * Transaction Date
+     */
+    transaction_date?: string | null;
+    /**
+     * Transaction Price Aed
+     */
+    transaction_price_aed?: number | null;
+    /**
+     * Latest Sale Date
+     */
+    latest_sale_date?: string | null;
+    /**
+     * Latest Sale Price Aed
+     */
+    latest_sale_price_aed?: number | null;
+    /**
+     * Later Sale Date
+     */
+    later_sale_date?: string | null;
+    /**
+     * Ltv Pct
+     */
+    ltv_pct?: number | null;
+    /**
+     * Seller Type
+     */
+    seller_type?: string | null;
+    /**
+     * Lease Start
+     */
+    lease_start?: string | null;
+    /**
+     * Lease End
+     */
+    lease_end?: string | null;
+    /**
+     * Annual Rent Aed
+     */
+    annual_rent_aed?: number | null;
+    /**
+     * Contract State
+     */
+    contract_state?: string | null;
+    /**
+     * Lead Id
+     */
+    lead_id?: string | null;
+};
+
+/**
  * InviteUserRequest
  *
  * Request to invite a user to an organization
@@ -2286,6 +4985,72 @@ export type LandSaleEvidence = {
 };
 
 /**
+ * ListingAnalyticsResponse
+ */
+export type ListingAnalyticsResponse = {
+    /**
+     * Total
+     */
+    total?: number;
+    /**
+     * Average Price Aed
+     */
+    average_price_aed?: number | null;
+    /**
+     * Median Price Aed
+     */
+    median_price_aed?: number | null;
+    /**
+     * Median Price Per Sqft Aed
+     */
+    median_price_per_sqft_aed?: number | null;
+    /**
+     * Average Listing Age Days
+     */
+    average_listing_age_days?: number | null;
+    /**
+     * Median Listing Age Days
+     */
+    median_listing_age_days?: number | null;
+    /**
+     * Newly Listed 30D
+     */
+    newly_listed_30d?: number;
+    /**
+     * Below Market Count
+     */
+    below_market_count?: number;
+    /**
+     * Near Market Count
+     */
+    near_market_count?: number;
+    /**
+     * Above Market Count
+     */
+    above_market_count?: number;
+    /**
+     * Benchmarked Count
+     */
+    benchmarked_count?: number;
+    /**
+     * Verified Count
+     */
+    verified_count?: number;
+    /**
+     * Area Count
+     */
+    area_count?: number;
+    /**
+     * Snapshot At
+     */
+    snapshot_at?: string | null;
+    /**
+     * Trend
+     */
+    trend?: Array<ListingTrendPoint>;
+};
+
+/**
  * ListingCardResponse
  */
 export type ListingCardResponse = {
@@ -2297,6 +5062,10 @@ export type ListingCardResponse = {
      * Listing Mode
      */
     listing_mode: 'sale' | 'rent';
+    /**
+     * Asset Class
+     */
+    asset_class: 'residential' | 'commercial';
     /**
      * Title
      */
@@ -2397,6 +5166,46 @@ export type ListingCardResponse = {
      * Listed Date
      */
     listed_date?: string | null;
+    /**
+     * Listing Age Days
+     */
+    listing_age_days?: number | null;
+    /**
+     * Price Per Sqft Aed
+     */
+    price_per_sqft_aed?: number | null;
+    /**
+     * Market Median Price Per Sqft Aed
+     */
+    market_median_price_per_sqft_aed?: number | null;
+    /**
+     * Market Estimate Aed
+     */
+    market_estimate_aed?: number | null;
+    /**
+     * Market Delta Pct
+     */
+    market_delta_pct?: number | null;
+    /**
+     * Market Position
+     */
+    market_position?: 'below_market' | 'near_market' | 'above_market' | 'insufficient_data';
+    /**
+     * Comparable Count
+     */
+    comparable_count?: number;
+    /**
+     * Benchmark Level
+     */
+    benchmark_level?: 'building_layout' | 'project_layout' | 'insufficient_data';
+    /**
+     * Urgency Signal
+     */
+    urgency_signal?: 'explicit_urgency' | 'value_language' | 'none';
+    /**
+     * Urgency Terms
+     */
+    urgency_terms?: Array<string>;
     /**
      * Is Available
      */
@@ -2432,6 +5241,10 @@ export type ListingDetailResponse = {
      */
     listing_mode: 'sale' | 'rent';
     /**
+     * Asset Class
+     */
+    asset_class: 'residential' | 'commercial';
+    /**
      * Title
      */
     title: string;
@@ -2531,6 +5344,46 @@ export type ListingDetailResponse = {
      * Listed Date
      */
     listed_date?: string | null;
+    /**
+     * Listing Age Days
+     */
+    listing_age_days?: number | null;
+    /**
+     * Price Per Sqft Aed
+     */
+    price_per_sqft_aed?: number | null;
+    /**
+     * Market Median Price Per Sqft Aed
+     */
+    market_median_price_per_sqft_aed?: number | null;
+    /**
+     * Market Estimate Aed
+     */
+    market_estimate_aed?: number | null;
+    /**
+     * Market Delta Pct
+     */
+    market_delta_pct?: number | null;
+    /**
+     * Market Position
+     */
+    market_position?: 'below_market' | 'near_market' | 'above_market' | 'insufficient_data';
+    /**
+     * Comparable Count
+     */
+    comparable_count?: number;
+    /**
+     * Benchmark Level
+     */
+    benchmark_level?: 'building_layout' | 'project_layout' | 'insufficient_data';
+    /**
+     * Urgency Signal
+     */
+    urgency_signal?: 'explicit_urgency' | 'value_language' | 'none';
+    /**
+     * Urgency Terms
+     */
+    urgency_terms?: Array<string>;
     /**
      * Is Available
      */
@@ -2626,6 +5479,10 @@ export type ListingFiltersResponse = {
      * Modes
      */
     modes?: Array<'sale' | 'rent'>;
+    /**
+     * Asset Classes
+     */
+    asset_classes?: Array<'residential' | 'commercial'>;
     /**
      * Areas
      */
@@ -2775,6 +5632,40 @@ export type ListingPartyResponse = {
      * Languages
      */
     languages?: Array<string>;
+};
+
+/**
+ * ListingTrendPoint
+ */
+export type ListingTrendPoint = {
+    /**
+     * Period
+     */
+    period: string;
+    /**
+     * Average Asking Price Aed
+     */
+    average_asking_price_aed?: number | null;
+    /**
+     * Median Asking Price Aed
+     */
+    median_asking_price_aed?: number | null;
+    /**
+     * Median Price Per Sqft Aed
+     */
+    median_price_per_sqft_aed?: number | null;
+    /**
+     * Listing Count
+     */
+    listing_count?: number;
+    /**
+     * Median Achieved Price Per Sqft Aed
+     */
+    median_achieved_price_per_sqft_aed?: number | null;
+    /**
+     * Achieved Transaction Count
+     */
+    achieved_transaction_count?: number;
 };
 
 /**
@@ -4385,6 +7276,26 @@ export type ProjectRadarArea = {
      * Dda Dominant Land Uses
      */
     dda_dominant_land_uses: Array<string>;
+    /**
+     * Sales Transaction Count
+     */
+    sales_transaction_count?: number;
+    /**
+     * Rental Contract Count
+     */
+    rental_contract_count?: number;
+    /**
+     * Total Sales Volume
+     */
+    total_sales_volume?: number;
+    /**
+     * Avg Sale Price Sqm
+     */
+    avg_sale_price_sqm?: number | null;
+    /**
+     * Avg Rent Price Sqm
+     */
+    avg_rent_price_sqm?: number | null;
 };
 
 /**
@@ -4522,6 +7433,26 @@ export type ProjectRadarProject = {
      * Avg Rent Price Sqm 12M
      */
     avg_rent_price_sqm_12m: number | null;
+    /**
+     * Sales Transaction Count
+     */
+    sales_transaction_count?: number;
+    /**
+     * Rental Contract Count
+     */
+    rental_contract_count?: number;
+    /**
+     * Total Sales Volume
+     */
+    total_sales_volume?: number;
+    /**
+     * Avg Sale Price Sqm
+     */
+    avg_sale_price_sqm?: number | null;
+    /**
+     * Avg Rent Price Sqm
+     */
+    avg_rent_price_sqm?: number | null;
 };
 
 /**
@@ -4599,6 +7530,46 @@ export type ProjectRadarStats = {
      * Dda Total Gfa Sqm
      */
     dda_total_gfa_sqm: number;
+    /**
+     * Activity Period Days
+     */
+    activity_period_days?: number;
+    /**
+     * Activity Period Start
+     */
+    activity_period_start?: string | null;
+    /**
+     * Activity Period End
+     */
+    activity_period_end?: string | null;
+    /**
+     * Activity Source Label
+     */
+    activity_source_label?: string;
+    /**
+     * Sales Transaction Count
+     */
+    sales_transaction_count?: number;
+    /**
+     * Rental Contract Count
+     */
+    rental_contract_count?: number;
+    /**
+     * Total Sales Volume
+     */
+    total_sales_volume?: number;
+    /**
+     * Mapped Sales Transaction Count
+     */
+    mapped_sales_transaction_count?: number;
+    /**
+     * Mapped Rental Contract Count
+     */
+    mapped_rental_contract_count?: number;
+    /**
+     * Activity Coverage Pct
+     */
+    activity_coverage_pct?: number;
 };
 
 /**
@@ -7189,6 +10160,1107 @@ export type ChatSendMessageResponses = {
     200: unknown;
 };
 
+export type CrmCrmInboundEnquiriesData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Intent Group
+         */
+        intent_group?: string | null;
+        /**
+         * Workspace
+         */
+        workspace?: string | null;
+        /**
+         * Status
+         */
+        status?: string | null;
+        /**
+         * Search
+         */
+        search?: string | null;
+        /**
+         * Limit
+         */
+        limit?: number;
+        /**
+         * Offset
+         */
+        offset?: number;
+    };
+    url: '/api/v1/crm/inbound/enquiries';
+};
+
+export type CrmCrmInboundEnquiriesErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmInboundEnquiriesError = CrmCrmInboundEnquiriesErrors[keyof CrmCrmInboundEnquiriesErrors];
+
+export type CrmCrmInboundEnquiriesResponses = {
+    /**
+     * Successful Response
+     */
+    200: InboundEnquiryListResponse;
+};
+
+export type CrmCrmInboundEnquiriesResponse = CrmCrmInboundEnquiriesResponses[keyof CrmCrmInboundEnquiriesResponses];
+
+export type CrmCrmCreateInboundEnquiryData = {
+    body: InboundEnquiryCreate;
+    path?: never;
+    query?: never;
+    url: '/api/v1/crm/inbound/enquiries';
+};
+
+export type CrmCrmCreateInboundEnquiryErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmCreateInboundEnquiryError = CrmCrmCreateInboundEnquiryErrors[keyof CrmCrmCreateInboundEnquiryErrors];
+
+export type CrmCrmCreateInboundEnquiryResponses = {
+    /**
+     * Successful Response
+     */
+    201: InboundEnquiryResponse;
+};
+
+export type CrmCrmCreateInboundEnquiryResponse = CrmCrmCreateInboundEnquiryResponses[keyof CrmCrmCreateInboundEnquiryResponses];
+
+export type CrmCrmInboundEnquiryData = {
+    body?: never;
+    path: {
+        /**
+         * Enquiry Id
+         */
+        enquiry_id: number;
+    };
+    query?: never;
+    url: '/api/v1/crm/inbound/enquiries/{enquiry_id}';
+};
+
+export type CrmCrmInboundEnquiryErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmInboundEnquiryError = CrmCrmInboundEnquiryErrors[keyof CrmCrmInboundEnquiryErrors];
+
+export type CrmCrmInboundEnquiryResponses = {
+    /**
+     * Successful Response
+     */
+    200: InboundEnquiryResponse;
+};
+
+export type CrmCrmInboundEnquiryResponse = CrmCrmInboundEnquiryResponses[keyof CrmCrmInboundEnquiryResponses];
+
+export type CrmCrmUpdateInboundEnquiryData = {
+    body: InboundEnquiryUpdate;
+    path: {
+        /**
+         * Enquiry Id
+         */
+        enquiry_id: number;
+    };
+    query?: never;
+    url: '/api/v1/crm/inbound/enquiries/{enquiry_id}';
+};
+
+export type CrmCrmUpdateInboundEnquiryErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmUpdateInboundEnquiryError = CrmCrmUpdateInboundEnquiryErrors[keyof CrmCrmUpdateInboundEnquiryErrors];
+
+export type CrmCrmUpdateInboundEnquiryResponses = {
+    /**
+     * Successful Response
+     */
+    200: InboundEnquiryResponse;
+};
+
+export type CrmCrmUpdateInboundEnquiryResponse = CrmCrmUpdateInboundEnquiryResponses[keyof CrmCrmUpdateInboundEnquiryResponses];
+
+export type CrmCrmAddInboundNoteData = {
+    body: InboundNoteCreate;
+    path: {
+        /**
+         * Enquiry Id
+         */
+        enquiry_id: number;
+    };
+    query?: never;
+    url: '/api/v1/crm/inbound/enquiries/{enquiry_id}/notes';
+};
+
+export type CrmCrmAddInboundNoteErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmAddInboundNoteError = CrmCrmAddInboundNoteErrors[keyof CrmCrmAddInboundNoteErrors];
+
+export type CrmCrmAddInboundNoteResponses = {
+    /**
+     * Successful Response
+     */
+    200: InboundEnquiryResponse;
+};
+
+export type CrmCrmAddInboundNoteResponse = CrmCrmAddInboundNoteResponses[keyof CrmCrmAddInboundNoteResponses];
+
+export type CrmCrmAddInboundActivityData = {
+    body: InboundActivityCreate;
+    path: {
+        /**
+         * Enquiry Id
+         */
+        enquiry_id: number;
+    };
+    query?: never;
+    url: '/api/v1/crm/inbound/enquiries/{enquiry_id}/activities';
+};
+
+export type CrmCrmAddInboundActivityErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmAddInboundActivityError = CrmCrmAddInboundActivityErrors[keyof CrmCrmAddInboundActivityErrors];
+
+export type CrmCrmAddInboundActivityResponses = {
+    /**
+     * Successful Response
+     */
+    200: InboundEnquiryResponse;
+};
+
+export type CrmCrmAddInboundActivityResponse = CrmCrmAddInboundActivityResponses[keyof CrmCrmAddInboundActivityResponses];
+
+export type CrmCrmInboundMatchesData = {
+    body?: never;
+    path: {
+        /**
+         * Enquiry Id
+         */
+        enquiry_id: number;
+    };
+    query?: never;
+    url: '/api/v1/crm/inbound/enquiries/{enquiry_id}/matches';
+};
+
+export type CrmCrmInboundMatchesErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmInboundMatchesError = CrmCrmInboundMatchesErrors[keyof CrmCrmInboundMatchesErrors];
+
+export type CrmCrmInboundMatchesResponses = {
+    /**
+     * Successful Response
+     */
+    200: InboundMatchesResponse;
+};
+
+export type CrmCrmInboundMatchesResponse = CrmCrmInboundMatchesResponses[keyof CrmCrmInboundMatchesResponses];
+
+export type CrmCrmRefreshInboundMatchesData = {
+    body?: never;
+    path: {
+        /**
+         * Enquiry Id
+         */
+        enquiry_id: number;
+    };
+    query?: {
+        /**
+         * Expand Units
+         */
+        expand_units?: boolean;
+    };
+    url: '/api/v1/crm/inbound/enquiries/{enquiry_id}/matches/refresh';
+};
+
+export type CrmCrmRefreshInboundMatchesErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmRefreshInboundMatchesError = CrmCrmRefreshInboundMatchesErrors[keyof CrmCrmRefreshInboundMatchesErrors];
+
+export type CrmCrmRefreshInboundMatchesResponses = {
+    /**
+     * Successful Response
+     */
+    200: InboundMatchesResponse;
+};
+
+export type CrmCrmRefreshInboundMatchesResponse = CrmCrmRefreshInboundMatchesResponses[keyof CrmCrmRefreshInboundMatchesResponses];
+
+export type CrmCrmUpdateInboundMatchData = {
+    body: InboundMatchUpdate;
+    path: {
+        /**
+         * Match Id
+         */
+        match_id: number;
+    };
+    query?: never;
+    url: '/api/v1/crm/inbound/matches/{match_id}';
+};
+
+export type CrmCrmUpdateInboundMatchErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmUpdateInboundMatchError = CrmCrmUpdateInboundMatchErrors[keyof CrmCrmUpdateInboundMatchErrors];
+
+export type CrmCrmUpdateInboundMatchResponses = {
+    /**
+     * Successful Response
+     */
+    200: InboundMatchResponse;
+};
+
+export type CrmCrmUpdateInboundMatchResponse = CrmCrmUpdateInboundMatchResponses[keyof CrmCrmUpdateInboundMatchResponses];
+
+export type CrmCrmInboundImportsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/crm/inbound/imports';
+};
+
+export type CrmCrmInboundImportsResponses = {
+    /**
+     * Response Crm-Crm Inbound Imports
+     *
+     * Successful Response
+     */
+    200: Array<InboundImportResponse>;
+};
+
+export type CrmCrmInboundImportsResponse = CrmCrmInboundImportsResponses[keyof CrmCrmInboundImportsResponses];
+
+export type CrmCrmInboundImportData = {
+    body: BodyCrmCrmInboundImport;
+    path?: never;
+    query?: never;
+    url: '/api/v1/crm/inbound/imports';
+};
+
+export type CrmCrmInboundImportErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmInboundImportError = CrmCrmInboundImportErrors[keyof CrmCrmInboundImportErrors];
+
+export type CrmCrmInboundImportResponses = {
+    /**
+     * Successful Response
+     */
+    201: InboundImportResponse;
+};
+
+export type CrmCrmInboundImportResponse = CrmCrmInboundImportResponses[keyof CrmCrmInboundImportResponses];
+
+export type CrmCrmPreviewInboundImportData = {
+    body: BodyCrmCrmPreviewInboundImport;
+    path?: never;
+    query?: never;
+    url: '/api/v1/crm/inbound/imports/preview';
+};
+
+export type CrmCrmPreviewInboundImportErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmPreviewInboundImportError = CrmCrmPreviewInboundImportErrors[keyof CrmCrmPreviewInboundImportErrors];
+
+export type CrmCrmPreviewInboundImportResponses = {
+    /**
+     * Successful Response
+     */
+    200: InboundImportPreviewResponse;
+};
+
+export type CrmCrmPreviewInboundImportResponse = CrmCrmPreviewInboundImportResponses[keyof CrmCrmPreviewInboundImportResponses];
+
+export type CrmCrmDeleteInboundImportData = {
+    body?: never;
+    path: {
+        /**
+         * Import Id
+         */
+        import_id: number;
+    };
+    query?: never;
+    url: '/api/v1/crm/inbound/imports/{import_id}';
+};
+
+export type CrmCrmDeleteInboundImportErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmDeleteInboundImportError = CrmCrmDeleteInboundImportErrors[keyof CrmCrmDeleteInboundImportErrors];
+
+export type CrmCrmDeleteInboundImportResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type CrmCrmDeleteInboundImportResponse = CrmCrmDeleteInboundImportResponses[keyof CrmCrmDeleteInboundImportResponses];
+
+export type CrmCrmContactImportsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/crm/contact-imports';
+};
+
+export type CrmCrmContactImportsResponses = {
+    /**
+     * Response Crm-Crm Contact Imports
+     *
+     * Successful Response
+     */
+    200: Array<CrmContactImportResponse>;
+};
+
+export type CrmCrmContactImportsResponse = CrmCrmContactImportsResponses[keyof CrmCrmContactImportsResponses];
+
+export type CrmCrmContactImportData = {
+    body: BodyCrmCrmContactImport;
+    path?: never;
+    query?: never;
+    url: '/api/v1/crm/contact-imports';
+};
+
+export type CrmCrmContactImportErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmContactImportError = CrmCrmContactImportErrors[keyof CrmCrmContactImportErrors];
+
+export type CrmCrmContactImportResponses = {
+    /**
+     * Successful Response
+     */
+    201: CrmContactImportResponse;
+};
+
+export type CrmCrmContactImportResponse = CrmCrmContactImportResponses[keyof CrmCrmContactImportResponses];
+
+export type CrmCrmDeleteContactImportData = {
+    body?: never;
+    path: {
+        /**
+         * Import Id
+         */
+        import_id: number;
+    };
+    query?: never;
+    url: '/api/v1/crm/contact-imports/{import_id}';
+};
+
+export type CrmCrmDeleteContactImportErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmDeleteContactImportError = CrmCrmDeleteContactImportErrors[keyof CrmCrmDeleteContactImportErrors];
+
+export type CrmCrmDeleteContactImportResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type CrmCrmDeleteContactImportResponse = CrmCrmDeleteContactImportResponses[keyof CrmCrmDeleteContactImportResponses];
+
+export type CrmCrmRenameContactImportData = {
+    body: CrmContactImportRename;
+    path: {
+        /**
+         * Import Id
+         */
+        import_id: number;
+    };
+    query?: never;
+    url: '/api/v1/crm/contact-imports/{import_id}';
+};
+
+export type CrmCrmRenameContactImportErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmRenameContactImportError = CrmCrmRenameContactImportErrors[keyof CrmCrmRenameContactImportErrors];
+
+export type CrmCrmRenameContactImportResponses = {
+    /**
+     * Successful Response
+     */
+    200: CrmContactImportResponse;
+};
+
+export type CrmCrmRenameContactImportResponse = CrmCrmRenameContactImportResponses[keyof CrmCrmRenameContactImportResponses];
+
+export type CrmCrmContactListsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/crm/contact-lists';
+};
+
+export type CrmCrmContactListsResponses = {
+    /**
+     * Response Crm-Crm Contact Lists
+     *
+     * Successful Response
+     */
+    200: Array<CrmContactListSummary>;
+};
+
+export type CrmCrmContactListsResponse = CrmCrmContactListsResponses[keyof CrmCrmContactListsResponses];
+
+export type CrmCrmContactListData = {
+    body?: never;
+    path: {
+        /**
+         * List Id
+         */
+        list_id: number;
+    };
+    query?: {
+        /**
+         * Status
+         */
+        status?: string | null;
+        /**
+         * Search
+         */
+        search?: string | null;
+        /**
+         * Limit
+         */
+        limit?: number;
+        /**
+         * Offset
+         */
+        offset?: number;
+    };
+    url: '/api/v1/crm/contact-lists/{list_id}';
+};
+
+export type CrmCrmContactListErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmContactListError = CrmCrmContactListErrors[keyof CrmCrmContactListErrors];
+
+export type CrmCrmContactListResponses = {
+    /**
+     * Successful Response
+     */
+    200: CrmContactListDetail;
+};
+
+export type CrmCrmContactListResponse = CrmCrmContactListResponses[keyof CrmCrmContactListResponses];
+
+export type CrmCrmOwnerRegistryData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Scope
+         */
+        scope?: string;
+        /**
+         * List Id
+         */
+        list_id?: number | null;
+        /**
+         * Status
+         */
+        status?: string | null;
+        /**
+         * Search
+         */
+        search?: string | null;
+        /**
+         * Lease Window
+         */
+        lease_window?: string | null;
+        /**
+         * Portfolio Only
+         */
+        portfolio_only?: boolean;
+        /**
+         * Min Rent Aed
+         */
+        min_rent_aed?: number | null;
+        /**
+         * Max Rent Aed
+         */
+        max_rent_aed?: number | null;
+        /**
+         * Min Value Aed
+         */
+        min_value_aed?: number | null;
+        /**
+         * Max Value Aed
+         */
+        max_value_aed?: number | null;
+        /**
+         * Limit
+         */
+        limit?: number;
+        /**
+         * Offset
+         */
+        offset?: number;
+    };
+    url: '/api/v1/crm/owner-registry';
+};
+
+export type CrmCrmOwnerRegistryErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmOwnerRegistryError = CrmCrmOwnerRegistryErrors[keyof CrmCrmOwnerRegistryErrors];
+
+export type CrmCrmOwnerRegistryResponses = {
+    /**
+     * Successful Response
+     */
+    200: CrmOwnerRegistryResponse;
+};
+
+export type CrmCrmOwnerRegistryResponse = CrmCrmOwnerRegistryResponses[keyof CrmCrmOwnerRegistryResponses];
+
+export type CrmCrmOwnerWorkspacesData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/crm/owner-workspaces';
+};
+
+export type CrmCrmOwnerWorkspacesResponses = {
+    /**
+     * Response Crm-Crm Owner Workspaces
+     *
+     * Successful Response
+     */
+    200: Array<CrmOwnerWorkspaceSummary>;
+};
+
+export type CrmCrmOwnerWorkspacesResponse = CrmCrmOwnerWorkspacesResponses[keyof CrmCrmOwnerWorkspacesResponses];
+
+export type CrmCrmBulkUpdateOwnerWorkspacesData = {
+    body: CrmOwnerBulkUpdate;
+    path?: never;
+    query?: never;
+    url: '/api/v1/crm/owner-workspaces/bulk';
+};
+
+export type CrmCrmBulkUpdateOwnerWorkspacesErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmBulkUpdateOwnerWorkspacesError = CrmCrmBulkUpdateOwnerWorkspacesErrors[keyof CrmCrmBulkUpdateOwnerWorkspacesErrors];
+
+export type CrmCrmBulkUpdateOwnerWorkspacesResponses = {
+    /**
+     * Response Crm-Crm Bulk Update Owner Workspaces
+     *
+     * Successful Response
+     */
+    200: Array<CrmOwnerWorkspaceSummary>;
+};
+
+export type CrmCrmBulkUpdateOwnerWorkspacesResponse = CrmCrmBulkUpdateOwnerWorkspacesResponses[keyof CrmCrmBulkUpdateOwnerWorkspacesResponses];
+
+export type CrmCrmOwnerProfileData = {
+    body?: never;
+    path: {
+        /**
+         * Owner Key
+         */
+        owner_key: string;
+    };
+    query?: never;
+    url: '/api/v1/crm/owners/{owner_key}';
+};
+
+export type CrmCrmOwnerProfileErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmOwnerProfileError = CrmCrmOwnerProfileErrors[keyof CrmCrmOwnerProfileErrors];
+
+export type CrmCrmOwnerProfileResponses = {
+    /**
+     * Successful Response
+     */
+    200: CrmOwnerProfile;
+};
+
+export type CrmCrmOwnerProfileResponse = CrmCrmOwnerProfileResponses[keyof CrmCrmOwnerProfileResponses];
+
+export type CrmCrmDashboardData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Status
+         */
+        status?: string | null;
+        /**
+         * Priority
+         */
+        priority?: string | null;
+        /**
+         * Asset Class
+         */
+        asset_class?: string | null;
+        /**
+         * Property Type
+         */
+        property_type?: string | null;
+        /**
+         * Area
+         */
+        area?: string | null;
+        /**
+         * Project
+         */
+        project?: string | null;
+        /**
+         * Building
+         */
+        building?: string | null;
+        /**
+         * Search
+         */
+        search?: string | null;
+        /**
+         * Breakdown
+         */
+        breakdown?: string;
+        /**
+         * Expired Days
+         */
+        expired_days?: number;
+        /**
+         * Limit
+         */
+        limit?: number;
+        /**
+         * Offset
+         */
+        offset?: number;
+        /**
+         * As Of
+         */
+        as_of?: string | null;
+    };
+    url: '/api/v1/crm/dashboard';
+};
+
+export type CrmCrmDashboardErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmDashboardError = CrmCrmDashboardErrors[keyof CrmCrmDashboardErrors];
+
+export type CrmCrmDashboardResponses = {
+    /**
+     * Successful Response
+     */
+    200: CrmDashboardResponse;
+};
+
+export type CrmCrmDashboardResponse = CrmCrmDashboardResponses[keyof CrmCrmDashboardResponses];
+
+export type CrmCrmLeadDetailData = {
+    body?: never;
+    path: {
+        /**
+         * Lead Id
+         */
+        lead_id: string;
+    };
+    query?: {
+        /**
+         * As Of
+         */
+        as_of?: string | null;
+    };
+    url: '/api/v1/crm/leads/{lead_id}';
+};
+
+export type CrmCrmLeadDetailErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmLeadDetailError = CrmCrmLeadDetailErrors[keyof CrmCrmLeadDetailErrors];
+
+export type CrmCrmLeadDetailResponses = {
+    /**
+     * Successful Response
+     */
+    200: CrmLeadDetailResponse;
+};
+
+export type CrmCrmLeadDetailResponse = CrmCrmLeadDetailResponses[keyof CrmCrmLeadDetailResponses];
+
+export type CrmCrmLeadContactsData = {
+    body?: never;
+    path: {
+        /**
+         * Lead Id
+         */
+        lead_id: string;
+    };
+    query?: never;
+    url: '/api/v1/crm/leads/{lead_id}/contacts';
+};
+
+export type CrmCrmLeadContactsErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmLeadContactsError = CrmCrmLeadContactsErrors[keyof CrmCrmLeadContactsErrors];
+
+export type CrmCrmLeadContactsResponses = {
+    /**
+     * Response Crm-Crm Lead Contacts
+     *
+     * Successful Response
+     */
+    200: Array<CrmLeadImportedContact>;
+};
+
+export type CrmCrmLeadContactsResponse = CrmCrmLeadContactsResponses[keyof CrmCrmLeadContactsResponses];
+
+export type CrmCrmPropertyReportData = {
+    body?: never;
+    path: {
+        /**
+         * Lead Id
+         */
+        lead_id: string;
+    };
+    query?: {
+        /**
+         * As Of
+         */
+        as_of?: string | null;
+    };
+    url: '/api/v1/crm/leads/{lead_id}/report';
+};
+
+export type CrmCrmPropertyReportErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmPropertyReportError = CrmCrmPropertyReportErrors[keyof CrmCrmPropertyReportErrors];
+
+export type CrmCrmPropertyReportResponses = {
+    /**
+     * Successful Response
+     */
+    200: CrmPropertyReportResponse;
+};
+
+export type CrmCrmPropertyReportResponse = CrmCrmPropertyReportResponses[keyof CrmCrmPropertyReportResponses];
+
+export type CrmCrmWorkspacesData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/crm/workspaces';
+};
+
+export type CrmCrmWorkspacesResponses = {
+    /**
+     * Response Crm-Crm Workspaces
+     *
+     * Successful Response
+     */
+    200: Array<CrmWorkspaceSummary>;
+};
+
+export type CrmCrmWorkspacesResponse = CrmCrmWorkspacesResponses[keyof CrmCrmWorkspacesResponses];
+
+export type CrmCrmLeadWorkspaceData = {
+    body?: never;
+    path: {
+        /**
+         * Lead Id
+         */
+        lead_id: string;
+    };
+    query?: never;
+    url: '/api/v1/crm/workspaces/{lead_id}';
+};
+
+export type CrmCrmLeadWorkspaceErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmLeadWorkspaceError = CrmCrmLeadWorkspaceErrors[keyof CrmCrmLeadWorkspaceErrors];
+
+export type CrmCrmLeadWorkspaceResponses = {
+    /**
+     * Successful Response
+     */
+    200: CrmWorkspaceResponse;
+};
+
+export type CrmCrmLeadWorkspaceResponse = CrmCrmLeadWorkspaceResponses[keyof CrmCrmLeadWorkspaceResponses];
+
+export type CrmCrmUpdateWorkspaceData = {
+    body: CrmWorkspaceUpdate;
+    path: {
+        /**
+         * Lead Id
+         */
+        lead_id: string;
+    };
+    query?: never;
+    url: '/api/v1/crm/workspaces/{lead_id}';
+};
+
+export type CrmCrmUpdateWorkspaceErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmUpdateWorkspaceError = CrmCrmUpdateWorkspaceErrors[keyof CrmCrmUpdateWorkspaceErrors];
+
+export type CrmCrmUpdateWorkspaceResponses = {
+    /**
+     * Successful Response
+     */
+    200: CrmWorkspaceResponse;
+};
+
+export type CrmCrmUpdateWorkspaceResponse = CrmCrmUpdateWorkspaceResponses[keyof CrmCrmUpdateWorkspaceResponses];
+
+export type CrmCrmAddNoteData = {
+    body: CrmNoteCreate;
+    path: {
+        /**
+         * Lead Id
+         */
+        lead_id: string;
+    };
+    query?: never;
+    url: '/api/v1/crm/workspaces/{lead_id}/notes';
+};
+
+export type CrmCrmAddNoteErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmAddNoteError = CrmCrmAddNoteErrors[keyof CrmCrmAddNoteErrors];
+
+export type CrmCrmAddNoteResponses = {
+    /**
+     * Successful Response
+     */
+    200: CrmWorkspaceResponse;
+};
+
+export type CrmCrmAddNoteResponse = CrmCrmAddNoteResponses[keyof CrmCrmAddNoteResponses];
+
+export type CrmCrmDeleteNoteData = {
+    body?: never;
+    path: {
+        /**
+         * Note Id
+         */
+        note_id: number;
+    };
+    query?: never;
+    url: '/api/v1/crm/notes/{note_id}';
+};
+
+export type CrmCrmDeleteNoteErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmDeleteNoteError = CrmCrmDeleteNoteErrors[keyof CrmCrmDeleteNoteErrors];
+
+export type CrmCrmDeleteNoteResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type CrmCrmDeleteNoteResponse = CrmCrmDeleteNoteResponses[keyof CrmCrmDeleteNoteResponses];
+
+export type CrmCrmSavedLeadsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/crm/saved-leads';
+};
+
+export type CrmCrmSavedLeadsResponses = {
+    /**
+     * Response Crm-Crm Saved Leads
+     *
+     * Successful Response
+     */
+    200: Array<CrmSavedLeadResponse>;
+};
+
+export type CrmCrmSavedLeadsResponse = CrmCrmSavedLeadsResponses[keyof CrmCrmSavedLeadsResponses];
+
+export type CrmCrmSaveLeadData = {
+    body?: never;
+    path: {
+        /**
+         * Lead Id
+         */
+        lead_id: string;
+    };
+    query?: never;
+    url: '/api/v1/crm/saved-leads/{lead_id}';
+};
+
+export type CrmCrmSaveLeadErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmSaveLeadError = CrmCrmSaveLeadErrors[keyof CrmCrmSaveLeadErrors];
+
+export type CrmCrmSaveLeadResponses = {
+    /**
+     * Successful Response
+     */
+    201: CrmSavedLeadResponse;
+};
+
+export type CrmCrmSaveLeadResponse = CrmCrmSaveLeadResponses[keyof CrmCrmSaveLeadResponses];
+
+export type CrmCrmDeleteSavedLeadData = {
+    body?: never;
+    path: {
+        /**
+         * Saved Id
+         */
+        saved_id: number;
+    };
+    query?: never;
+    url: '/api/v1/crm/saved-leads/{saved_id}';
+};
+
+export type CrmCrmDeleteSavedLeadErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmDeleteSavedLeadError = CrmCrmDeleteSavedLeadErrors[keyof CrmCrmDeleteSavedLeadErrors];
+
+export type CrmCrmDeleteSavedLeadResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type CrmCrmDeleteSavedLeadResponse = CrmCrmDeleteSavedLeadResponses[keyof CrmCrmDeleteSavedLeadResponses];
+
 export type FiltersGetSalesFilterOptionsData = {
     body?: never;
     path?: never;
@@ -7424,6 +11496,10 @@ export type ListingsListListingsData = {
          */
         mode?: 'sale' | 'rent';
         /**
+         * Asset Class
+         */
+        asset_class?: 'residential' | 'commercial' | null;
+        /**
          * Limit
          */
         limit?: number;
@@ -7476,6 +11552,98 @@ export type ListingsListListingsResponses = {
 };
 
 export type ListingsListListingsResponse = ListingsListListingsResponses[keyof ListingsListListingsResponses];
+
+export type ListingsListingFiltersData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Mode
+         */
+        mode?: 'sale' | 'rent';
+        /**
+         * Asset Class
+         */
+        asset_class?: 'residential' | 'commercial' | null;
+    };
+    url: '/api/v1/listings/filters';
+};
+
+export type ListingsListingFiltersErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListingsListingFiltersError = ListingsListingFiltersErrors[keyof ListingsListingFiltersErrors];
+
+export type ListingsListingFiltersResponses = {
+    /**
+     * Successful Response
+     */
+    200: ListingFiltersResponse;
+};
+
+export type ListingsListingFiltersResponse = ListingsListingFiltersResponses[keyof ListingsListingFiltersResponses];
+
+export type ListingsListingAnalyticsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Mode
+         */
+        mode?: 'sale' | 'rent';
+        /**
+         * Asset Class
+         */
+        asset_class?: 'residential' | 'commercial' | null;
+        /**
+         * Search
+         */
+        search?: string | null;
+        /**
+         * Area
+         */
+        area?: string | null;
+        /**
+         * Property Type
+         */
+        property_type?: string | null;
+        /**
+         * Bedrooms
+         */
+        bedrooms?: string | null;
+        /**
+         * Price Min
+         */
+        price_min?: number | null;
+        /**
+         * Price Max
+         */
+        price_max?: number | null;
+    };
+    url: '/api/v1/listings/analytics';
+};
+
+export type ListingsListingAnalyticsErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListingsListingAnalyticsError = ListingsListingAnalyticsErrors[keyof ListingsListingAnalyticsErrors];
+
+export type ListingsListingAnalyticsResponses = {
+    /**
+     * Successful Response
+     */
+    200: ListingAnalyticsResponse;
+};
+
+export type ListingsListingAnalyticsResponse = ListingsListingAnalyticsResponses[keyof ListingsListingAnalyticsResponses];
 
 export type ListingsGetListingData = {
     body?: never;
@@ -8009,6 +12177,12 @@ export type ProjectsProjectRadarData = {
          * Maximum mapped projects
          */
         limit?: number;
+        /**
+         * Period Days
+         *
+         * Trailing DLD/Ejari activity window in days (maximum 365)
+         */
+        period_days?: 30 | 90 | 180 | 365;
     };
     url: '/api/v1/projects/radar';
 };
@@ -8034,9 +12208,25 @@ export type ProjectsProjectRadarResponse = ProjectsProjectRadarResponses[keyof P
 export type ProjectsProjectRadarOverviewData = {
     body?: never;
     path?: never;
-    query?: never;
+    query?: {
+        /**
+         * Period Days
+         *
+         * Trailing DLD/Ejari activity window in days (maximum 365)
+         */
+        period_days?: 30 | 90 | 180 | 365;
+    };
     url: '/api/v1/projects/radar/overview';
 };
+
+export type ProjectsProjectRadarOverviewErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ProjectsProjectRadarOverviewError = ProjectsProjectRadarOverviewErrors[keyof ProjectsProjectRadarOverviewErrors];
 
 export type ProjectsProjectRadarOverviewResponses = {
     /**
@@ -8093,6 +12283,12 @@ export type ProjectsProjectRadarPinsData = {
          * Maximum project pins
          */
         limit?: number;
+        /**
+         * Period Days
+         *
+         * Trailing DLD/Ejari activity window in days (maximum 365)
+         */
+        period_days?: 30 | 90 | 180 | 365;
     };
     url: '/api/v1/projects/radar/pins';
 };
