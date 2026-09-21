@@ -1537,29 +1537,49 @@ async def _rental_evidence(
     candidates: list[ParsedContact],
 ) -> dict[str, dict[str, Any]]:
     units = sorted({candidate.unit_number for candidate in candidates if candidate.unit_number})
+    return await _rental_evidence_for_units(units)
+
+
+async def _rental_evidence_for_units(units: list[str]) -> dict[str, dict[str, Any]]:
     evidence: dict[str, dict[str, Any]] = {}
+    units = sorted({_normalize_unit(unit) for unit in units if _normalize_unit(unit)})
+    if not units:
+        return evidence
+    columns = await query(
+        "SELECT count() AS has_unit FROM system.columns WHERE database=currentDatabase() "
+        "AND table='dxbi_rental_unit_candidates' AND name='unit_number'"
+    )
+    source_unit = "c.unit_number" if columns[0]["has_unit"] else "''"
     anchor = date.today()
     for chunk in _chunks(units):
         rows = await query(
-            """
+            rf"""
+            WITH
+                if({source_unit} != '', {source_unit}, m.unit_number) AS observed_unit,
+                replaceRegexpAll(upperUTF8(replaceAll(observed_unit, '–', '-')), '\\s+', '') AS compact_unit,
+                if(match(compact_unit, '^\\d+\\.0$'), substring(compact_unit, 1, length(compact_unit)-2), compact_unit) AS numeric_unit,
+                if(startsWith(numeric_unit, 'TAG-'), arrayElement(splitByChar('-', numeric_unit), -1), numeric_unit) AS normalized_unit
             SELECT
-                c.event_key,
-                c.unit_candidate_key,
-                c.building_name,
-                c.project_name,
-                c.area_name,
-                c.property_type,
-                c.lease_end,
-                c.annual_rent_aed,
-                m.unit_number
+                c.event_key AS event_key,
+                c.unit_candidate_key AS unit_candidate_key,
+                c.building_name AS building_name,
+                c.project_name AS project_name,
+                c.area_name AS area_name,
+                c.property_type AS property_type,
+                c.lease_end AS lease_end,
+                c.annual_rent_aed AS annual_rent_aed,
+                observed_unit AS unit_number,
+                normalized_unit AS unit_key,
+                if({source_unit} != '', 'source_unit', 'sale_inference') AS rental_match_method
             FROM dxbi_rental_unit_candidates AS c FINAL
-            INNER JOIN dxbi_rental_sale_matches AS m FINAL USING (unit_candidate_key)
+            LEFT JOIN dxbi_rental_sale_matches AS m FINAL USING (unit_candidate_key)
             WHERE
-                m.match_status = 'unique'
-                AND m.unit_number IN {units:Array(String)}
-                AND c.lease_end >= {window_start:Date}
-                AND c.lease_end <= {window_end:Date}
-            ORDER BY c.lease_end DESC
+                ({source_unit} != '' OR m.match_status = 'unique')
+                AND normalized_unit IN {{units:Array(String)}}
+                AND c.lease_end >= {{window_start:Date}}
+                AND c.lease_end <= {{window_end:Date}}
+            ORDER BY ({source_unit} != '') DESC, c.lease_end DESC, c.unit_candidate_key, c.event_key
+            SETTINGS max_threads=2, max_memory_usage=2000000000
             """,
             {
                 "units": chunk,
@@ -1569,9 +1589,77 @@ async def _rental_evidence(
         )
         for row in rows:
             location = str(row.get("building_name") or row.get("project_name") or "")
-            key = f"{_location_key(location)}|{str(row['unit_number']).lower()}"
+            key = f"{_location_key(location)}|{_normalize_unit(row['unit_number']).lower()}"
             evidence.setdefault(key, row)
     return evidence
+
+
+async def refresh_property_contact_rentals(
+    db: AsyncSession,
+    *,
+    organization_id: str,
+    import_id: int | None = None,
+    commit: bool = True,
+) -> dict[str, int]:
+    """Refresh rental links for every imported claim without changing owner identities.
+
+    Missing current evidence clears an old rental link. Contact/source data,
+    ownership assessments, sales evidence and agent workspaces remain intact.
+    """
+    statement = select(CrmPropertyContactClaim).where(
+        CrmPropertyContactClaim.organization_id == organization_id
+    )
+    if import_id is not None:
+        statement = statement.where(CrmPropertyContactClaim.import_id == import_id)
+    claims = (await db.exec(statement.with_for_update())).all()
+    units = sorted({claim.unit_number for claim in claims if claim.unit_number})
+    rentals = await _rental_evidence_for_units(units)
+    counts = {
+        "claims": len(claims),
+        "before_hits": 0,
+        "after_hits": 0,
+        "added_hits": 0,
+        "removed_hits": 0,
+        "changed_claims": 0,
+    }
+    now = _utcnow()
+    for claim in claims:
+        before = (claim.lead_id, claim.unit_candidate_key, claim.lease_end, claim.annual_rent_aed)
+        rental = rentals.get(claim.property_key)
+        after = (
+            (
+                str(rental["event_key"]),
+                str(rental["unit_candidate_key"]),
+                rental.get("lease_end"),
+                int(rental.get("annual_rent_aed") or 0) or None,
+            )
+            if rental
+            else (None, None, None, None)
+        )
+        counts["before_hits"] += bool(before[0])
+        counts["after_hits"] += bool(after[0])
+        counts["added_hits"] += bool(after[0]) and not before[0]
+        counts["removed_hits"] += bool(before[0]) and not after[0]
+        if before != after:
+            (claim.lead_id, claim.unit_candidate_key, claim.lease_end, claim.annual_rent_aed) = (
+                after
+            )
+            claim.updated_at = now
+            db.add(claim)
+            counts["changed_claims"] += 1
+    await db.flush()
+    import_ids = {claim.import_id for claim in claims}
+    if import_id is not None:
+        import_ids.add(import_id)
+    await _refresh_contact_import_match_summaries(
+        db,
+        organization_id=organization_id,
+        import_ids=import_ids,
+    )
+    if commit:
+        await db.commit()
+    _invalidate_owner_summary_cache(organization_id)
+    return counts
 
 
 def _price_matches(imported: int | None, observed: int) -> bool:

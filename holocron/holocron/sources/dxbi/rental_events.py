@@ -264,6 +264,36 @@ def normalize_rental_row(
     }
 
 
+def legacy_rental_event(event: dict[str, Any]) -> dict[str, Any]:
+    """Keep the active v1 identities stable until the validated v2 cutover."""
+    cohort_parts = (
+        _key_text(event["building_name"] or event["location_name"]),
+        _key_text(event["project_name"]),
+        _key_text(event["area_name"]),
+        _key_text(event["property_type"]),
+        _key_text(event["bedrooms"]),
+        f"{event['size_sqft']:.1f}",
+    )
+    purchase_price = event["purchase_price_aed"]
+    candidate_parts = cohort_parts + (
+        str(int(round(purchase_price / 1_000) * 1_000)) if purchase_price else "unknown",
+    )
+    return {
+        **event,
+        "unit_cohort_key": _digest(cohort_parts),
+        "unit_candidate_key": _digest(candidate_parts),
+        "event_key": _digest(
+            candidate_parts
+            + (
+                event["lease_start"].isoformat(),
+                event["lease_end"].isoformat(),
+                str(event["contract_amount_aed"]),
+                event["contract_state"].lower(),
+            )
+        ),
+    }
+
+
 def normalize_rental_rows(
     payloads: list[tuple[dict[str, Any], str, str]],
 ) -> RentalNormalizationResult:
@@ -351,6 +381,7 @@ def normalize_rental_rows(
             representative.pop("_input_index", None)
             events.append(representative)
 
+    events = merge_rental_snapshots(events)
     unique_source_rows = sum(
         max(scope_counts.values()) for scope_counts in raw_multiplicity.values()
     )
@@ -362,6 +393,84 @@ def normalize_rental_rows(
         unique_source_rows=unique_source_rows,
         profile_overlap=max(0, len(normalized) - len(events)),
     )
+
+
+def merge_rental_snapshots(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Reconcile snapshots when an older collection concealed the unit number.
+
+    Identified units remain distinct. Unidentified occurrences are retained only
+    to preserve the largest observed multiplicity within an exact lease cohort;
+    they are never assigned to a guessed unit or added on top of a fuller snapshot.
+    """
+
+    def cohort_key(event: dict[str, Any]) -> tuple:
+        return (
+            event["source_contract_id"],
+            _key_text(event["location_name"]),
+            _key_text(event["property_type"]),
+            _key_text(event["bedrooms"]),
+            f"{event['size_sqft']:.3f}",
+            event["lease_start"],
+            event["lease_end"],
+            event["contract_amount_aed"],
+            event["contract_state"].lower(),
+        )
+
+    def version(event: dict[str, Any]) -> tuple:
+        scraped_at = event["scraped_at"]
+        if scraped_at.tzinfo is None:
+            scraped_at = scraped_at.replace(tzinfo=timezone.utc)
+        return bool(event["unit_number"]), scraped_at
+
+    # Count each snapshot before selecting representatives across snapshots.
+    # Otherwise a repeated known unit can move to another run and make a real
+    # unidentified occurrence from its original run disappear.
+    scoped_keys: dict[tuple, dict[tuple, set[str]]] = defaultdict(lambda: defaultdict(set))
+    observed_sizes: dict[tuple, int] = defaultdict(int)
+    by_key: dict[str, dict[str, Any]] = {}
+    for event in events:
+        key = event["contract_key"]
+        scope = (
+            event["source_run_id"],
+            event["source_account"],
+            event["filter_profile_id"],
+            event["source_location_id"],
+            event["source_shard_date"],
+            event["configuration_hash"],
+        )
+        cohort = cohort_key(event)
+        scoped_keys[cohort][scope].add(key)
+        observed_sizes[cohort] = max(
+            observed_sizes[cohort], int(event.get("source_cohort_size", 0))
+        )
+        previous = by_key.get(key)
+        if previous is None or version(event) >= version(previous):
+            by_key[key] = event
+    cohorts: dict[tuple, list[dict[str, Any]]] = defaultdict(list)
+    for event in by_key.values():
+        cohorts[cohort_key(event)].append(event)
+    merged: list[dict[str, Any]] = []
+    for cohort, rows in cohorts.items():
+        cohort_size = max(
+            max(map(len, scoped_keys[cohort].values())),
+            observed_sizes[cohort],
+        )
+        # Persist the observed multiplicity so incremental merges are idempotent
+        # even after a more recent snapshot supplies the representative row.
+        rows = [{**row, "source_cohort_size": cohort_size} for row in rows]
+        known = [row for row in rows if row["unit_number"]]
+        unknown = [row for row in rows if not row["unit_number"]]
+        if not known or not unknown:
+            merged.extend(rows)
+            continue
+        remainder = max(0, cohort_size - len(known))
+        merged.extend(known)
+        merged.extend(
+            sorted(unknown, key=lambda row: (row["occurrence_index"], row["contract_key"]))[
+                :remainder
+            ]
+        )
+    return merged
 
 
 def extract_unit_number(payload: dict[str, Any]) -> str:

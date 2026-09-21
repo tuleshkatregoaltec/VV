@@ -54,6 +54,16 @@ def test_expired_candidate_is_an_owner_pursuit_not_a_confirmed_owner_record():
     assert lead.gross_yield_pct is None
 
 
+def test_saved_lead_join_columns_and_legacy_status_remain_readable():
+    row = {"l." + key: value for key, value in _lead_row().items()}
+    row["saved_candidate_key"] = "candidate-1"
+    row["_legacy_identity"] = True
+    lead = _lead_from_row(row)
+    assert lead.lead_id == "lead-1"
+    assert lead.unit_candidate_key == "candidate-1"
+    assert "before the data refresh" in lead.lead_reason
+
+
 def test_unique_sales_match_exposes_unit_purchase_date_and_gross_yield():
     lead = _lead_from_row(
         _lead_row(

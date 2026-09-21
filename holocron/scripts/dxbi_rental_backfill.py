@@ -201,7 +201,9 @@ def split_capped_shard(shard: dict[str, Any]) -> list[dict[str, Any]]:
             {**shard, "min_size": minimum, "max_size": maximum} for minimum, maximum in SIZE_BUCKETS
         ]
 
-    if max_size is None or max_size - min_size > CENT:
+    if max_size is None or max_size - min_size > CENT or (
+        min_size > 0 and max_size - min_size == CENT
+    ):
         ranges = bisect_range(min_size, max_size)
         return [{**shard, "min_size": minimum, "max_size": maximum} for minimum, maximum in ranges]
     # DXBI treats some zero-valued size bounds as blank filters. If such a

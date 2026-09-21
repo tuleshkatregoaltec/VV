@@ -17,13 +17,19 @@ from typing import Any
 
 import clickhouse_connect
 
-from holocron.sources.dxbi.rental_events import normalize_rental_rows, source_account_from_path
+from holocron.sources.dxbi.rental_events import (
+    legacy_rental_event,
+    merge_rental_snapshots,
+    normalize_rental_rows,
+    source_account_from_path,
+)
 
 logger = logging.getLogger("dxbi_rental_loader")
 
 TABLE = "dxbi_rental_events_v2"
 INDEX_TABLE = "dxbi_rental_unit_candidates_v2"
 RECONCILIATION_TABLE = "dxbi_rental_run_reconciliation"
+LEGACY_TARGET = False
 _DATE_PATH = re.compile(r"(?:^|/)(?:date[=/])(?P<date>\d{4}-\d{2}-\d{2})(?:/|$)")
 
 CREATE_TABLE_SQL = f"""
@@ -33,6 +39,7 @@ CREATE TABLE IF NOT EXISTS {TABLE} (
     source_contract_id String DEFAULT '',
     unit_number String DEFAULT '',
     occurrence_index UInt16 DEFAULT 1,
+    source_cohort_size UInt32 DEFAULT 0,
     unit_candidate_key String,
     unit_cohort_key String,
     location_name String DEFAULT '',
@@ -75,6 +82,7 @@ COLUMNS = [
     "source_contract_id",
     "unit_number",
     "occurrence_index",
+    "source_cohort_size",
     "unit_candidate_key",
     "unit_cohort_key",
     "location_name",
@@ -324,6 +332,14 @@ def load_files(
     batch_size: int,
     quarantine_path: Path | None = None,
 ) -> dict[str, int]:
+    merge_active = TABLE == "dxbi_rental_events" and not LEGACY_TARGET
+    target = TABLE + "_history_refresh" if merge_active else TABLE
+    grouped = group_files_by_day(files)
+    if merge_active:
+        if "unknown" in grouped:
+            raise RuntimeError("Active rental updates require known source dates")
+        client.command(f"DROP TABLE IF EXISTS {target}")
+        client.command(f"CREATE TABLE {target} AS {TABLE}")
     totals = {
         "raw_rows": 0,
         "unique_source_rows": 0,
@@ -334,12 +350,30 @@ def load_files(
         "out_of_scope_rows": 0,
     }
     quarantined_rows: list[dict[str, Any]] = []
-    for day, day_files in group_files_by_day(files).items():
+    for day, day_files in grouped.items():
         payloads, malformed, raw_lines = _read_payloads(day_files)
         result = normalize_rental_rows(payloads)
         day_quarantine = [*malformed, *result.quarantined]
         events = [event for event in result.events if event["lease_start"] >= min_start_date]
         out_of_scope = len(result.events) - len(events)
+        if LEGACY_TARGET:
+            events = [legacy_rental_event(event) for event in events]
+        elif merge_active:
+            if any(event["lease_start"].isoformat() != day for event in events):
+                raise RuntimeError("Rental source date differs from lease-start date")
+            existing = list(
+                client.query(
+                    f"SELECT {', '.join(COLUMNS)} FROM {TABLE} FINAL WHERE lease_start={{day:Date}}",
+                    parameters={"day": day},
+                ).named_results()
+            )
+            # ClickHouse returns FixedString values as bytes. Mixed historical
+            # and newly normalized batches must use one representation.
+            for event in existing:
+                for column in ("configuration_hash", "raw_row_fingerprint"):
+                    if isinstance(event[column], bytes):
+                        event[column] = event[column].decode("utf-8").rstrip("\x00")
+            events = merge_rental_snapshots([*existing, *events])
         totals["raw_rows"] += raw_lines
         totals["unique_source_rows"] += result.unique_source_rows
         totals["normalized_rows"] += result.normalized_rows
@@ -351,7 +385,7 @@ def load_files(
         for offset in range(0, len(events), batch_size):
             batch_events = events[offset : offset + batch_size]
             client.insert(
-                TABLE,
+                target,
                 [[event[column] for column in COLUMNS] for event in batch_events],
                 column_names=COLUMNS,
             )
@@ -381,11 +415,22 @@ def load_files(
                 handle.write("\n")
     elif quarantine_path:
         quarantine_path.unlink(missing_ok=True)
+    if merge_active:
+        if totals["quarantined_rows"]:
+            raise RuntimeError("Active rental update contains invalid rows; previous data retained")
+        client.command(
+            f"INSERT INTO {target} SELECT * FROM {TABLE} FINAL "
+            "WHERE lease_start NOT IN {days:Array(Date)} SETTINGS max_threads=2",
+            parameters={"days": [date.fromisoformat(day) for day in grouped]},
+        )
+        client.command(f"EXCHANGE TABLES {TABLE} AND {target}")
+        client.command(f"DROP TABLE {target}")
     return totals
 
 
 def configure_target(client, target: str) -> None:
     global TABLE, INDEX_TABLE, CREATE_TABLE_SQL, CREATE_INDEX_SQL, REFRESH_INDEX_SQL
+    global COLUMNS, LEGACY_TARGET
 
     use_active = target == "active"
     if target == "auto":
@@ -409,15 +454,88 @@ def configure_target(client, target: str) -> None:
     CREATE_TABLE_SQL = CREATE_TABLE_SQL.replace(old_table, TABLE)
     CREATE_INDEX_SQL = CREATE_INDEX_SQL.replace(old_index, INDEX_TABLE)
     REFRESH_INDEX_SQL = REFRESH_INDEX_SQL.replace(old_index, INDEX_TABLE).replace(old_table, TABLE)
+    active_columns = [
+        row[0]
+        for row in client.query(
+            "SELECT name FROM system.columns WHERE database = currentDatabase() "
+            "AND table = 'dxbi_rental_events' ORDER BY position"
+        ).result_rows
+    ]
+    if active_columns and "contract_key" not in active_columns:
+        LEGACY_TARGET = True
+        COLUMNS = [name for name in active_columns if name != "loaded_at"]
+        index_columns = [
+            row[0]
+            for row in client.query(
+                "SELECT name FROM system.columns WHERE database = currentDatabase() "
+                "AND table = 'dxbi_rental_unit_candidates' ORDER BY position"
+            ).result_rows
+        ]
+        if not index_columns:
+            raise RuntimeError("The active v1 rental candidate table is missing")
+        expressions = {
+            "unit_candidate_key": "unit_candidate_key",
+            "observed_contracts": "toUInt32(count())",
+            "last_scraped_at": "max(scraped_at)",
+            "loaded_at": "now64(3)",
+        }
+        values = [
+            expressions.get(
+                name,
+                f"argMax({name}, tuple(lease_start, lease_end, scraped_at, event_key))",
+            )
+            for name in index_columns
+        ]
+        REFRESH_INDEX_SQL = (
+            f"INSERT INTO {INDEX_TABLE} ({', '.join(index_columns)}) "
+            f"SELECT {', '.join(values)} FROM {TABLE} FINAL "
+            "WHERE lease_start >= toDate('2025-01-01') GROUP BY unit_candidate_key"
+        )
 
 
 def refresh_candidate_index(client) -> None:
     """Rebuild the candidate projection so removed or corrected candidates cannot linger."""
     logger.info("Refreshing %s", INDEX_TABLE)
     client.command(CREATE_INDEX_SQL)
-    client.command(f"TRUNCATE TABLE {INDEX_TABLE}")
-    client.command(REFRESH_INDEX_SQL)
-    client.command(f"OPTIMIZE TABLE {INDEX_TABLE} FINAL")
+    staging = f"{INDEX_TABLE}_refresh"
+    client.command(f"DROP TABLE IF EXISTS {staging}")
+    client.command(f"CREATE TABLE {staging} AS {INDEX_TABLE}")
+    columns = [
+        row[0]
+        for row in client.query(
+            "SELECT name FROM system.columns WHERE database=currentDatabase() "
+            "AND table={table:String} AND default_kind != 'ALIAS' ORDER BY position",
+            parameters={"table": INDEX_TABLE},
+        ).result_rows
+    ]
+    aggregates = {
+        "unit_candidate_key": "unit_candidate_key",
+        "observed_contracts": "toUInt32(contract_count)",
+        "last_scraped_at": "last_scraped_at",
+        "loaded_at": "now64(3)",
+    }
+    latest_columns = [name for name in columns if name not in aggregates]
+    projection = [
+        aggregates.get(name, f"latest.{latest_columns.index(name) + 1}")
+        if name in latest_columns
+        else aggregates[name]
+        for name in columns
+    ]
+    # One tuple keeps fields from the same latest event and avoids duplicating
+    # the large ordering key in a separate argMax state for every column.
+    client.command(
+        f"INSERT INTO {staging} ({', '.join(columns)}) "
+        f"SELECT {', '.join(projection)} FROM ("
+        "SELECT unit_candidate_key, "
+        f"argMax(tuple({', '.join(latest_columns)}), "
+        "tuple(lease_start, lease_end, scraped_at, event_key)) AS latest, "
+        f"count() AS contract_count, max(scraped_at) AS last_scraped_at FROM {TABLE} FINAL "
+        "WHERE lease_start >= toDate('2025-01-01') GROUP BY unit_candidate_key) "
+        "SETTINGS max_threads=2, max_bytes_before_external_group_by=100000000, "
+        "max_memory_usage=3000000000"
+    )
+    client.command(f"EXCHANGE TABLES {INDEX_TABLE} AND {staging}")
+    client.command(f"DROP TABLE {staging}")
 
 
 def _partition_counts(inputs: list[Path]) -> tuple[int, int, int, str]:
@@ -427,6 +545,14 @@ def _partition_counts(inputs: list[Path]) -> tuple[int, int, int, str]:
         path = input_path if input_path.is_dir() else input_path.parent
         reconciliation_path = path / "reconciliation.json"
         if not reconciliation_path.exists():
+            checkpoint_path = path / "checkpoint.json"
+            if checkpoint_path.exists():
+                checkpoint = json.loads(checkpoint_path.read_text())
+                done = len(checkpoint.get("completed", {}))
+                unfinished = len(checkpoint.get("failed", {})) + len(checkpoint.get("paged", {}))
+                expected += done + unfinished
+                completed += done
+                failed += unfinished
             continue
         payload = json.loads(reconciliation_path.read_text())
         expected += int(payload.get("expected_partitions") or 0)
@@ -516,6 +642,10 @@ def main() -> int:
     )
     configure_target(client, args.target)
     client.command(CREATE_TABLE_SQL)
+    if not LEGACY_TARGET:
+        client.command(
+            f"ALTER TABLE {TABLE} ADD COLUMN IF NOT EXISTS source_cohort_size UInt32 DEFAULT 0"
+        )
     quarantine_output = args.quarantine_output
     if quarantine_output is None and args.reconciliation_output:
         quarantine_output = args.reconciliation_output.with_name("rental_quarantine.jsonl")

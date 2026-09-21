@@ -6,18 +6,17 @@ sync_dir="${DXBI_SYNC_DIR:-/Users/eier/VV/DXBI-Daily}"
 remote="${DXBI_REMOTE:-root@188.245.147.179}"
 remote_dir="${DXBI_REMOTE_DIR:-/root/data/dxbi-daily/}"
 loaded_dir="${sync_dir}/.loaded"
-lock_dir="${sync_dir}/.sync-lock"
 sync_attempts="${DXBI_SYNC_ATTEMPTS:-5}"
 sync_retry_delay_seconds="${DXBI_SYNC_RETRY_DELAY_SECONDS:-30}"
 clickhouse_ready_attempts="${DXBI_CLICKHOUSE_READY_ATTEMPTS:-20}"
 clickhouse_retry_delay_seconds="${DXBI_CLICKHOUSE_RETRY_DELAY_SECONDS:-15}"
 
 mkdir -p "$sync_dir" "$loaded_dir"
-if ! mkdir "$lock_dir" 2>/dev/null; then
-  echo "DXBI sync/load is already running."
-  exit 0
+if [[ "${DXBI_LOCK_HELD:-}" != "1" ]]; then
+  export PYTHONPATH="${repo_dir}/holocron"
+  exec "${repo_dir}/holocron/.venv/bin/python" -m holocron.platform.run_locked \
+    "${sync_dir}/sync.lock" /usr/bin/env DXBI_LOCK_HELD=1 /bin/bash "$0"
 fi
-trap 'rmdir "$lock_dir"' EXIT
 
 for ((attempt = 1; attempt <= sync_attempts; attempt++)); do
   if rsync -az --partial -e "ssh -o BatchMode=yes" "$remote:$remote_dir" "$sync_dir/"; then
@@ -31,13 +30,17 @@ for ((attempt = 1; attempt <= sync_attempts; attempt++)); do
   sleep "$sync_retry_delay_seconds"
 done
 
-recent_rental_success="$(find "${sync_dir}/rentals" \
-  -mindepth 2 -maxdepth 2 -type f -path '*/run=*-daily/_SUCCESS' \
-  -mmin -2160 -print -quit 2>/dev/null)"
-if [[ -z "$recent_rental_success" ]]; then
-  echo "DXBI rental health failure: no successful daily run in the last 36 hours." >&2
-  exit 1
-fi
+health_status=0
+for report in rentals sales; do
+  recent_success="$(find "${sync_dir}/${report}" \
+    -mindepth 2 -maxdepth 2 -type f \
+    \( -path '*/run=????-??-??/_SUCCESS' -o -path '*/run=????-??-??-daily/_SUCCESS' \) \
+    -mmin -2160 -print -quit 2>/dev/null)"
+  if [[ -z "$recent_success" ]]; then
+    echo "DXBI ${report} health failure: no successful daily run in the last 36 hours." >&2
+    health_status=1
+  fi
+done
 
 rental_runs=()
 sales_runs=()
@@ -57,7 +60,7 @@ done < <(find "${sync_dir}/sales" -mindepth 1 -maxdepth 1 -type d -name 'run=*' 
 geography_pending="${loaded_dir}/geography-pending"
 if (( ${#rental_runs[@]} == 0 && ${#sales_runs[@]} == 0 )) && [[ ! -f "$geography_pending" ]]; then
   echo "No new completed DXBI runs to load."
-  exit 0
+  exit "$health_status"
 fi
 
 set -a
@@ -82,6 +85,7 @@ cd "${repo_dir}/holocron"
 if (( ${#rental_runs[@]} > 0 )); then
   rental_load_id="$(date -u +%Y%m%dT%H%M%SZ)"
   .venv/bin/python scripts/load_dxbi_rental_events.py \
+    --target active \
     --host "$CLICKHOUSE_HOST" \
     --port "$CLICKHOUSE_PORT" \
     --database "$CLICKHOUSE_DATABASE" \
@@ -112,3 +116,4 @@ fi
 # Refresh the canonical location crosswalk after new report rows are loaded.
 .venv/bin/python scripts/refresh_geography_crosswalk.py
 rm -f "$geography_pending"
+exit "$health_status"

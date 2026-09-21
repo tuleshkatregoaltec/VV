@@ -369,14 +369,49 @@ def load_files(files: list[Path], *, client, batch_size: int) -> tuple[int, int,
     return loaded, skipped, errors
 
 
-def refresh_matches(client) -> None:
-    logger.info("Refreshing %s", MATCH_TABLE)
-    client.command(CREATE_MATCH_SQL)
+def refresh_matches(
+    client,
+    *,
+    candidate_table: str = "dxbi_rental_unit_candidates",
+    match_table: str = MATCH_TABLE,
+) -> None:
+    if candidate_table not in {"dxbi_rental_unit_candidates", "dxbi_rental_unit_candidates_v2"}:
+        raise ValueError("Unsupported rental candidate table")
+    if match_table not in {MATCH_TABLE, MATCH_TABLE + "_v2"}:
+        raise ValueError("Unsupported rental match table")
+    logger.info("Refreshing %s", match_table)
+    client.command(CREATE_MATCH_SQL.replace(MATCH_TABLE, match_table))
     for statement in MATCH_ALTERS:
-        client.command(statement)
-    client.command(f"TRUNCATE TABLE {MATCH_TABLE}")
-    client.command(REFRESH_MATCH_SQL)
-    client.command(f"OPTIMIZE TABLE {MATCH_TABLE} FINAL")
+        client.command(statement.replace(MATCH_TABLE, match_table))
+    has_unit = bool(
+        client.query(
+            "SELECT count() FROM system.columns WHERE database=currentDatabase() "
+            "AND table={table:String} AND name='unit_number'",
+            parameters={"table": candidate_table},
+        ).result_rows[0][0]
+    )
+    sql = REFRESH_MATCH_SQL.replace("dxbi_rental_unit_candidates", candidate_table)
+    if has_unit:
+        sql = sql.replace(
+            "        bedrooms,\n        toUInt32(round(size_sqft))",
+            "        bedrooms,\n        unit_number AS source_unit_number,\n"
+            "        toUInt32(round(size_sqft))",
+        ).replace(
+            "s.sale_amount_aed BETWEEN c.purchase_price_aed * 0.985 AND c.purchase_price_aed * 1.015",
+            "s.sale_amount_aed BETWEEN c.purchase_price_aed * 0.985 AND c.purchase_price_aed * 1.015 "
+            "AND (c.source_unit_number = '' OR "
+            "upperUTF8(trimBoth(s.unit_number)) = upperUTF8(trimBoth(c.source_unit_number)))",
+        )
+    staging = match_table + "_refresh"
+    client.command(f"DROP TABLE IF EXISTS {staging}")
+    client.command(f"CREATE TABLE {staging} AS {match_table}")
+    client.command(
+        sql.replace(f"INSERT INTO {MATCH_TABLE}", f"INSERT INTO {staging}")
+        + " SETTINGS max_threads=2, max_bytes_before_external_group_by=100000000, "
+        "max_memory_usage=3000000000"
+    )
+    client.command(f"EXCHANGE TABLES {match_table} AND {staging}")
+    client.command(f"DROP TABLE {staging}")
 
 
 def main() -> None:
@@ -409,6 +444,8 @@ def main() -> None:
         logger.info("Discovered %s sales files", len(files))
         loaded, skipped, errors = load_files(files, client=client, batch_size=args.batch_size)
         logger.info("Sales load complete loaded=%s skipped=%s errors=%s", loaded, skipped, errors)
+        if errors:
+            raise SystemExit("Sales import had errors; completed-run markers must not advance")
         client.command(f"OPTIMIZE TABLE {SALES_TABLE} FINAL")
     refresh_matches(client)
 

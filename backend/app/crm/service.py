@@ -42,11 +42,46 @@ logger = logging.getLogger(__name__)
 
 DXBI_TABLE = "dxbi_rental_events"
 DXBI_CANDIDATE_TABLE = "dxbi_rental_unit_candidates"
+_LEGACY_RENTAL_TABLES = (
+    "dxbi_rental_events",
+    "dxbi_rental_unit_candidates",
+    "dxbi_rental_sale_matches",
+)
 VALID_BREAKDOWNS = {
     "area": "area_name",
     "project": "project_name",
     "building": "building_name",
 }
+
+
+async def _query_with_legacy_rentals(
+    sql: str, params: dict[str, Any], *, saved_candidates: bool = False
+) -> list[dict[str, Any]]:
+    """Keep saved v1 identities readable without guessing a replacement v2 unit."""
+    rows = await query(sql, params)
+    legacy_params = dict(params)
+    if saved_candidates:
+        found = {str(row["saved_candidate_key"]) for row in rows}
+        missing = [key for key in params["candidate_keys"] if key not in found]
+        if not missing:
+            return rows
+        legacy_params["candidate_keys"] = missing
+    elif rows:
+        return rows
+    required = [name for name in _LEGACY_RENTAL_TABLES if name in sql]
+    available = await query(
+        "SELECT count() AS tables FROM system.tables "
+        "WHERE database=currentDatabase() AND name IN {names:Array(String)}",
+        {"names": [name + "_legacy" for name in required]},
+    )
+    if not required or not available or int(available[0]["tables"]) != len(required):
+        return rows
+    legacy_sql = sql
+    for name in required:
+        legacy_sql = legacy_sql.replace(name, name + "_legacy")
+    legacy_rows = await query(legacy_sql, legacy_params)
+    return [*rows, *[{**row, "_legacy_identity": True} for row in legacy_rows]]
+
 
 _LEAD_CTE = """
 WITH coverage AS (
@@ -90,7 +125,7 @@ latest_unit AS (
         c.observed_contracts,
         c.last_scraped_at,
         c.loaded_at,
-        m.unit_number,
+        coalesce(nullIf(c.unit_number, ''), m.unit_number) AS unit_number,
         m.identity_sale_date,
         m.identity_sale_price,
         m.last_purchase_date,
@@ -339,6 +374,8 @@ def _filter_metadata_sql(facet_where: str) -> str:
 
 
 def _lead_from_row(row: dict[str, Any]) -> CrmLead:
+    # Saved-lead joins return l.* fields with the table alias in their names.
+    row = {key.removeprefix("l."): value for key, value in row.items()}
     days = int(row["days_to_expiry"])
     status = str(row["lead_status"])
     expired = status == "expired"
@@ -427,6 +464,11 @@ def _lead_from_row(row: dict[str, Any]) -> CrmLead:
         action = "Resolve the exact unit, then offer re-letting and test appetite for a sale."
     else:
         action = "Resolve the exact unit, then contact the owner about renewal or re-letting."
+    if row.get("_legacy_identity"):
+        reason = (
+            "Saved rental snapshot from before the data refresh; current lease status needs review."
+        )
+        action = "Check the current unit and lease evidence before contacting the owner."
     return CrmLead(
         lead_id=str(row["event_key"]),
         unit_candidate_key=str(row["unit_candidate_key"]),
@@ -449,13 +491,10 @@ def _lead_from_row(row: dict[str, Any]) -> CrmLead:
         size_sqft=float(row["size_sqft"]) if row.get("size_sqft") else None,
         contract_amount_aed=int(row.get("contract_amount_aed") or row.get("annual_rent_aed") or 0),
         contract_term_days=int(
-            row.get("contract_term_days")
-            or ((row["lease_end"] - row["lease_start"]).days + 1)
+            row.get("contract_term_days") or ((row["lease_end"] - row["lease_start"]).days + 1)
         ),
         contract_term_months=(
-            float(row["contract_term_months"])
-            if row.get("contract_term_months")
-            else None
+            float(row["contract_term_months"]) if row.get("contract_term_months") else None
         ),
         annual_rent_aed=annual_rent,
         latest_purchase_price_aed=(
@@ -979,7 +1018,7 @@ async def get_lead_detail(lead_id: str, as_of: date | None = None) -> CrmLeadDet
     if not await _tables_exist():
         raise HTTPException(status_code=404, detail="CRM lead data has not been loaded")
 
-    current_rows = await query(
+    current_rows = await _query_with_legacy_rentals(
         _LEAD_CTE + " SELECT * FROM leads WHERE event_key = {lead_id:String} LIMIT 1",
         {
             "as_of": anchor.isoformat(),
@@ -992,7 +1031,7 @@ async def get_lead_detail(lead_id: str, as_of: date | None = None) -> CrmLeadDet
     lead = _lead_from_row(current_rows[0])
     row = current_rows[0]
 
-    rental_query = query(
+    rental_query = _query_with_legacy_rentals(
         """
         SELECT
             event_key,
@@ -1247,7 +1286,7 @@ async def list_saved_leads(
         return []
 
     candidate_keys = [saved.unit_candidate_key for saved in saved_rows]
-    live_rows = await query(
+    live_rows = await _query_with_legacy_rentals(
         _LEAD_CTE
         + """
         SELECT
@@ -1262,10 +1301,9 @@ async def list_saved_leads(
             "expired_days": 3650,
             "candidate_keys": candidate_keys,
         },
+        saved_candidates=True,
     )
-    live_by_saved_key = {
-        str(row["saved_candidate_key"]): _lead_from_row(row) for row in live_rows
-    }
+    live_by_saved_key = {str(row["saved_candidate_key"]): _lead_from_row(row) for row in live_rows}
     return [
         _saved_lead_response(
             saved,
@@ -1386,7 +1424,7 @@ async def _workspace_for_candidate(
 
 
 async def _candidate_key_for_lead(lead_id: str) -> str:
-    rows = await query(
+    rows = await _query_with_legacy_rentals(
         """
         SELECT unit_candidate_key
         FROM dxbi_rental_unit_candidates FINAL

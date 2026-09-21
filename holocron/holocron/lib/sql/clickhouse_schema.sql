@@ -203,6 +203,7 @@ CREATE TABLE IF NOT EXISTS dxbi_rental_events_v2 (
     source_contract_id String DEFAULT '',
     unit_number        String DEFAULT '',
     occurrence_index   UInt16 DEFAULT 1,
+    source_cohort_size  UInt32 DEFAULT 0,
     unit_candidate_key String,
     unit_cohort_key    String,
     location_name      String DEFAULT '',

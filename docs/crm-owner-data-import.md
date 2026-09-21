@@ -864,4 +864,18 @@ uv run python scripts/crm/rematch_owner_claims.py \
 # Refresh import-card counts without running ClickHouse matching.
 uv run python scripts/crm/rematch_owner_claims.py \
   --organization-id <organization-id> --summary-only
+
+# Refresh rental links for every claim while retaining sales/ownership assessments.
+uv run python scripts/crm/rematch_owner_claims.py \
+  --organization-id <organization-id> --rentals-only
 ```
+
+The local market-data coordinator also runs `scripts.crm.refresh_rental_imports`
+after successful DXBI publication. Rental matching now uses explicit v2 source
+unit numbers where available, matched to the saved building/project-and-unit
+identity. Hidden-unit rows still require an unambiguous sales-registry inference.
+The existing lease-end window is unchanged. This rental refresh updates links,
+lease/rent fields, and import summaries; it does not redo sales-based ownership
+verification or modify contact data and agent workspaces. Original source files
+do not need to be uploaded again. The August 26 figures above are a historical
+audit, not current rental-match totals.

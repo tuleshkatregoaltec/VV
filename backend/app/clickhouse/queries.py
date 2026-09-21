@@ -123,7 +123,7 @@ def price_trends(
         raise ValueError("interval must be 'day', 'week', or 'month'")
 
     if interval == "day":
-        time_group = "instance_date"
+        time_group = "toDate(instance_date)"
     elif interval == "week":
         time_group = "toStartOfWeek(instance_date)"
     else:
