@@ -282,3 +282,6 @@ projects-*.png
 
 # Firecrawl local cache
 .firecrawl/
+
+# Full AI execution/evaluation evidence is private and local only.
+.evaluation/

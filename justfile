@@ -132,3 +132,7 @@ ai-benchmark:
 
 test-evaluation *args:
 	just test-backend tests/evaluation {{args}}
+
+# Explicit live model execution, private evidence, local authenticated application.
+ai-evaluate *args:
+	set -a && source .env.dev && set +a && cd backend && uv run python -m scripts.evaluation run {{args}}

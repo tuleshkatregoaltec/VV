@@ -9,8 +9,18 @@ from scripts.evaluation.inventory import build_inventory
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=["inventory", "dataset"])
+    parser.add_argument("command", choices=["inventory", "dataset", "run"])
+    parser.add_argument("--directory")
+    parser.add_argument("--case", action="append", dest="case_ids")
+    parser.add_argument("--data-context", default="local-mutable-warehouse")
     args = parser.parse_args()
+    if args.command == "run":
+        import asyncio
+
+        from scripts.evaluation.run import run_benchmark
+
+        asyncio.run(run_benchmark(args.directory, args.case_ids, data_context=args.data_context))
+        return
     if args.command == "inventory":
         result = build_inventory()
     else:

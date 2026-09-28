@@ -5,12 +5,13 @@ The completed migration and `ARCHITECTURE.md` remain authoritative.
 
 ## Execution evidence and blocking prerequisite
 
-Source discovery is complete enough to identify the paths below. **None of the
-15 live questions has executed yet.** Automatic approval review rejected the
-proposed local authenticated run because OpenRouter could receive warehouse
-results. Explicit approval of that data flow is pending. No trace upload has
-occurred. Static reachability is not evidence of actual model tool selection.
-Evaluator design and quality baselines must follow real execution, as requested.
+The user explicitly approved the live OpenRouter question/tool-result flow on
+2026-09-28, with full evidence restricted to local storage. All 15 cases have now
+executed through real loopback HTTP, GoTrue authentication, FastAPI guards,
+conversation creation, the existing SSE service, message reload and deletion of
+only the evaluation-created conversations. No production runtime code changed.
+Full evidence is ignored under `.evaluation/20260928T161314Z` (directory 0700,
+files 0600). No remote telemetry or LangSmith upload occurred.
 
 The local API responds to health checks. The configured model is
 `google/gemini-3.1-flash-lite` through OpenRouter. Pydantic AI is locked at 1.38.0,
@@ -91,8 +92,7 @@ and separate identity/fingerprints. There is no current chat-side entity resolve
 that supplies those missing values automatically.
 
 Every question enters the **same market chat route**. The table below describes
-source-derived capability gaps, **not observed execution paths**. Actual selected
-tools, arguments, queries, intermediate data and answers remain pending execution.
+source-derived capability gaps, **not observed execution paths**. The observed-run section below supersedes this preliminary static matrix.
 
 | ID | Requested behavior | Source-derived gap to investigate during execution |
 | --- | --- | --- |
@@ -271,3 +271,70 @@ Vite startup. Backend Ruff checks and formatting checks passed. No production
 runtime code changed. Database integration suites, frontend build and Playwright
 were not rerun for this read-only tooling/documentation checkpoint. Live model
 execution, remote tracing and quality evaluation remain unverified and pending.
+
+
+## Observed execution baseline, 2026-09-28
+
+Run `3aea3e90-1905-4832-a6ca-2df124995702` is stored privately in `.evaluation/20260928T161314Z`.
+All 15 streams completed and their assistant messages persisted; all 15 evaluation
+conversations were subsequently deleted through the authorized API (204). Token
+accounting was preserved. There are 621 local spans and 22 model requests, with
+26,162 input / 8,411 output tokens reported on model spans. Downstream OpenRouter
+vendor and cost are not returned by this streaming implementation: unknown, not
+zero. Configured and returned model: `google/gemini-3.1-flash-lite`.
+
+Seven cases selected `get_market_pulse`; none selected `rank_areas` or
+`get_similar_projects`. Five pulse results had zero transactions, nonfinite SQL
+aggregate values and epoch min/max dates, while the application returned
+`success=true`. Native tool serialization converted those metrics to null. Two
+Business Bay results contained transaction aggregates. None of the cases reached
+registered-rent, listings or project-delivery sources. PostgreSQL calls served
+auth/subscription/quota, conversation history, persistence and usage accounting.
+There was no observed database exception; absent evidence must not be called a
+query failure. Empty results do not prove the underlying warehouse lacks data:
+exact area matching and relative date windows may exclude records.
+
+| Case | Observed tools and arguments | Answer characteristics and failure boundary |
+| --- | --- | --- |
+| q01 | pulse: Jumeirah Village Circle, 90 days | Empty evidence; acknowledges bracket limitation, then ungrounded market commentary; no counts/shares |
+| q02 | pulse: Business Bay, 90 days | Declines building/bedroom breakdown; uses area aggregates; reported unit price differs from tool value; trailing days are not last quarter |
+| q03 | pulse: Downtown Dubai, 180 days | Empty evidence; acknowledges no quartiles but asserts a typical monetary range without supporting records |
+| q04 | pulse: Jumeirah Lake Towers, 90 days | Empty transaction evidence; declines new/renewed split yet offers a rental/bedroom analysis the tools cannot perform |
+| q05 | none | Declines contract-level request, then asserts rent, yield and rental-volume figures without retrieval |
+| q06 | pulse: Business Bay, 180 days | Transaction count presented alongside rental commentary; no studio/rent/month buckets; rolling days differ from six complete months |
+| q07 | none | Discloses no developer-delivery capability; no concentration answer |
+| q08 | none | Discloses no completion-date capability; no project/unit counts |
+| q09 | pulse: Dubai Hills Estate, default 90 days | Empty transaction evidence; declines listing split, adds unsupported broad market claims |
+| q10 | none | Declines listing-age capability, then asserts pricing, premiums, discounts and yields without retrieval |
+| q11 | pulse: Jumeirah Village Circle, 90 days | Empty evidence; declines listing/contract access, asserts yield range without rent evidence |
+| q12 | none | Requests building name but supplies rental figures/yields without retrieval; explicit parameter remains unresolved |
+| q13 | none | Requests building name but supplies a unit-price claim without retrieval and promises unavailable listing/report functionality |
+| q14 | none | Produces a multi-source market report with quantitative claims despite no data retrieval; strongest grounding risk |
+| q15 | none | Requests all three project names; no numeric evidence claims, but promises delivery/progress lookup not available in the toolset |
+
+All cases used the same chat agent/model and completed. Full answers, exact tool
+responses/arguments, SQL/bindings/results, nested operation/query spans, persisted
+messages and per-case trace IDs are private artifacts, not committed fixtures.
+The canonical dataset was not changed; no placeholder values were invented.
+
+These are execution observations and assisted review, not an overall quality
+score. The requested full analysis is unsupported by the present chat toolset
+for every case; q12/q13/q15 additionally require user-supplied entities. Scope
+limits do not excuse unsupported factual claims in fallback responses.
+
+Deterministic evaluation can establish stream termination/errors, persistence,
+registered schema validity, observed source coverage, nonfinite query values,
+empty evidence, and known calendar-window mismatches. Grounding, accurate
+limitation disclosure, promised capabilities, relevance and report completeness
+require semantic review. Actual market truth and full numerical correctness
+remain unassessed without authoritative reference values and a stable data/date
+context. Inspecting the same tool output is not an independent truth oracle.
+
+`just ai-evaluate` now starts a dedicated loopback server using the unchanged
+application. It disables inherited telemetry in that process, captures native
+Pydantic AI spans plus public-operation and database-client spans, and runs each
+case sequentially through HTTP. It does not override FastAPI dependencies, models,
+tool results, prompts, schema or reasoning settings. Native streaming behavior and
+normal token-accounting side effects remain. Query instrumentation observes actual
+client calls; it does not execute extra evaluation SQL. Private local PostgreSQL
+spans omit bind values; credentials/auth headers are never deliberately recorded.
