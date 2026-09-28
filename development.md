@@ -95,7 +95,7 @@ Use `just --list` for the current command list. The main recipes are:
 | `just dev-backend` | Start the FastAPI backend on the host. |
 | `just dev-frontend` | Start the SvelteKit frontend on the host. |
 | `just check-all` | Format backend/frontend, lint backend/frontend, then run backend/frontend tests. This may modify files. |
-| `just test-backend` | Apply migrations and run backend tests. |
+| `just test-backend [args...]` | Run fast backend tests, or the exact pytest selection provided. |
 | `just test-frontend` | Run frontend unit tests. |
 | `just test-e2e` | Run the Playwright e2e suite. |
 | `just test-guards` | Run the mocked route-guard Playwright suite. |
@@ -124,7 +124,9 @@ Useful verification pattern:
 Important details:
 
 - `just check-all` is not read-only. It runs format recipes before linting and tests, so inspect `git diff` afterward and stage any intentional formatting changes.
-- `just test-backend` applies migrations before running backend tests.
+- `just test-backend` runs fast tests without migrating the application database.
+- `just test-backend-postgres`, `just test-backend-clickhouse`, and `just test-backend-infrastructure` run real-service integration tests. PostgreSQL and ClickHouse fixtures create uniquely named disposable databases on local services; PostgreSQL applies the complete migration chain. Missing services are failures, not skips.
+- Use the host Node version required by the locked Vite/Svelte dependencies (Node 20.19 or newer); Node 18 cannot run the frontend baseline.
 - Backend tests expect the local service stack to be available when tests need Postgres, auth, ClickHouse, Redis, or object storage.
 - Playwright e2e tests expect local services and the backend to be available. The Playwright config can reuse a running frontend or start the frontend dev server for the test run.
 - Use `just test-e2e` for real browser coverage and `just test-guards` for the mocked route-guard suite.

@@ -215,7 +215,7 @@ async def fetch_news_summary(db: AsyncSession) -> NewsSummaryResponse:
             prompt,
             usage_limits=UsageLimits(request_limit=1),
         )
-    except Exception as exc:
+    except Exception:
         return fallback_news_summary(articles)
 
     return NewsSummaryResponse(

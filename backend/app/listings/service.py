@@ -36,9 +36,7 @@ PRICE_PERIOD_EXPR = "lower(JSON_VALUE(price_json, '$.period'))"
 SIZE_VALUE_EXPR = "JSONExtractFloat(size_json, 'value')"
 PROPERTY_TYPE_EXPR = "JSON_VALUE(raw_property_json, '$.property_type')"
 AREA_NAME_EXPR = "JSONExtract(listing_location_names_json, 'Array(String)')[2]"
-PEER_LOCATION_EXPR = (
-    "arrayElement(JSONExtract(listing_location_names_json, 'Array(String)'), -1)"
-)
+PEER_LOCATION_EXPR = "arrayElement(JSONExtract(listing_location_names_json, 'Array(String)'), -1)"
 LISTED_AT_EXPR = "parseDateTimeBestEffortOrNull(JSON_VALUE(raw_property_json, '$.listed_date'))"
 SCRAPED_AT_EXPR = "parseDateTimeBestEffortOrNull(scraped_at)"
 MONTHLY_PRICE_EXPR = f"""
@@ -662,9 +660,7 @@ async def _achieved_trend(
         return []
     date_column = "lease_start" if mode == "rent" else "transaction_date"
     table = "dxbi_rental_events" if mode == "rent" else "dxbi_sales_unit_events"
-    psf_expr = (
-        "annual_rent_aed / size_sqft" if mode == "rent" else "price_per_sqft_aed"
-    )
+    psf_expr = "annual_rent_aed / size_sqft" if mode == "rent" else "price_per_sqft_aed"
     psf_bounds = "BETWEEN 5 AND 2000" if mode == "rent" else "BETWEEN 200 AND 12000"
     clauses = [
         f"{date_column} >= {{achieved_start:Date}}",
@@ -676,9 +672,7 @@ async def _achieved_trend(
     params: dict[str, Any] = {
         "achieved_start": f"{periods[0]}-01",
         "achieved_end": _next_month(periods[-1]),
-        "achieved_property_types": _achieved_property_types(
-            mode, asset_class, property_type
-        ),
+        "achieved_property_types": _achieved_property_types(mode, asset_class, property_type),
     }
     if area_key := _location_match_key(area):
         clauses.append(
@@ -1056,7 +1050,9 @@ async def listing_analytics_from_clickhouse(
         params,
     )
     result, trend_result = await asyncio.gather(result_future, trend_future)
-    trend_periods = [str(point.get("period") or "") for point in trend_result if point.get("period")]
+    trend_periods = [
+        str(point.get("period") or "") for point in trend_result if point.get("period")
+    ]
     achieved_rows = await _achieved_trend(
         mode=mode,
         asset_class=asset_class or "residential",

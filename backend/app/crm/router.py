@@ -105,9 +105,7 @@ async def crm_create_inbound_enquiry(
 @router.get("/inbound/enquiries", response_model=InboundEnquiryListResponse)
 async def crm_inbound_enquiries(
     intent_group: str | None = Query(default=None, pattern="^(demand|instructions)$"),
-    workspace: str | None = Query(
-        default=None, pattern="^(inbox|unqualified|qualified|closed)$"
-    ),
+    workspace: str | None = Query(default=None, pattern="^(inbox|unqualified|qualified|closed)$"),
     status: str | None = Query(default=None, max_length=40),
     search: str | None = Query(default=None, max_length=160),
     limit: int = Query(default=100, ge=1, le=500),

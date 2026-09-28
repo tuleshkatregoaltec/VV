@@ -103,9 +103,7 @@ def test_villa_location_leaf_is_project_and_building_is_blank():
 
 
 def test_sales_urgency_language_is_evidence_only_and_sales_only():
-    signal, terms = _urgency_terms(
-        "sale", "Motivated seller | Price reduced", "Vacant apartment"
-    )
+    signal, terms = _urgency_terms("sale", "Motivated seller | Price reduced", "Vacant apartment")
     assert signal == "explicit_urgency"
     assert terms == ["motivated seller", "price reduced"]
     assert _urgency_terms("rent", "Urgent sale", "Distress deal") == ("none", [])

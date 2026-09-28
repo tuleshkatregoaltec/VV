@@ -1,4 +1,5 @@
 set shell := ["bash", "-cu"]
+set positional-arguments
 
 default:
 	@just --list
@@ -68,8 +69,8 @@ deploy:
 	just migrate
 	docker compose up -d --no-build backend auth redis
 
-test-backend:
-	set -a && source .env.dev && set +a && cd backend && scripts/lifecycle/tests-start.sh
+test-backend *args:
+	set -a && source .env.dev && set +a && cd backend && scripts/lifecycle/tests-start.sh "$@"
 
 format-backend:
 	uv run --project backend ruff format backend
@@ -107,3 +108,17 @@ build-clickhouse-facts:
 
 holocron +args='':
 	@cd holocron && just {{args}}
+
+# Read-only checks and explicitly isolated integration suites.
+lint-backend:
+	uv run --project backend ruff check backend
+	uv run --project backend ruff format --check backend
+
+test-backend-postgres *args:
+	set -a && source .env.dev && set +a && cd backend && uv run pytest tests/integration/postgres "$@"
+
+test-backend-clickhouse *args:
+	set -a && source .env.dev && set +a && cd backend && uv run pytest tests/integration/clickhouse "$@"
+
+test-backend-infrastructure *args:
+	set -a && source .env.dev && set +a && cd backend && uv run pytest tests/integration/infrastructure "$@"

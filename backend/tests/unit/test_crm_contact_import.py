@@ -167,8 +167,7 @@ async def test_unique_transaction_signature_recovers_canonical_property(monkeypa
     assert contact.building_name == "Sidra 2"
     assert contact.unit_number == "DE-SIDRA2-V-117"
     assert (
-        contact.evidence["property_identity_resolution"]["method"]
-        == "unique_transaction_signature"
+        contact.evidence["property_identity_resolution"]["method"] == "unique_transaction_signature"
     )
 
 

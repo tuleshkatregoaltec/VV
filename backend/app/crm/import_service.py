@@ -60,9 +60,7 @@ _OWNER_SUMMARY_CACHE_TTL_SECONDS = 300
 _owner_summary_cache: dict[tuple[str, int | None], tuple[float, CrmOwnerRegistrySummary]] = {}
 _UNIT_PLACEHOLDERS = {"", "-", "n/a", "na", "none", "null", "unknown"}
 _NUMERIC_PROPERTY_IDENTIFIER = re.compile(r"^\d+(?:\.\d+)?$")
-_VILLA_PROPERTY_IDENTIFIER = re.compile(
-    r"(?:^|[-\s])(?:v|villa)[-\s]*[a-z0-9.]+$", re.IGNORECASE
-)
+_VILLA_PROPERTY_IDENTIFIER = re.compile(r"(?:^|[-\s])(?:v|villa)[-\s]*[a-z0-9.]+$", re.IGNORECASE)
 _TRANSACTION_SIGNATURE_CHUNK = 1_500
 _LOCATION_ALIAS_GROUPS = (
     ("jumeirah gate tower 1", "the address jbr 1"),
@@ -105,6 +103,7 @@ _ROMAN_NUMERALS = {
 def _invalidate_owner_summary_cache(organization_id: str) -> None:
     for key in [key for key in _owner_summary_cache if key[0] == organization_id]:
         _owner_summary_cache.pop(key, None)
+
 
 _CANONICAL_FIELDS = {
     "area_name",
@@ -536,7 +535,10 @@ def _transaction_location_score(candidate: ParsedContact, row: dict[str, Any]) -
         default=0,
     )
     project_score = max(
-        (_location_similarity(owner_project, value) for value in (sale_project, sale_building, combined_sale)),
+        (
+            _location_similarity(owner_project, value)
+            for value in (sale_project, sale_building, combined_sale)
+        ),
         default=0,
     )
     area_score = _location_similarity(owner_area, sale_area)
@@ -1175,10 +1177,7 @@ async def _recover_property_identity_from_transaction(
                 unique_resolutions += 1
             else:
                 scored = sorted(
-                    (
-                        (_transaction_location_score(candidate, row), row)
-                        for row in properties
-                    ),
+                    ((_transaction_location_score(candidate, row), row) for row in properties),
                     key=lambda item: item[0],
                     reverse=True,
                 )
@@ -1200,9 +1199,7 @@ async def _recover_property_identity_from_transaction(
                 "unit_number": candidate.unit_number,
             }
             candidate.area_name = str(selected.get("area_name") or candidate.area_name)
-            candidate.project_name = str(
-                selected.get("project_name") or candidate.project_name
-            )
+            candidate.project_name = str(selected.get("project_name") or candidate.project_name)
             candidate.building_name = str(
                 selected.get("building_name") or selected.get("project_name") or ""
             )
@@ -1341,9 +1338,7 @@ async def _recover_property_identity_from_near_transaction(
                 "unit_number": candidate.unit_number,
             }
             candidate.area_name = str(selected.get("area_name") or candidate.area_name)
-            candidate.project_name = str(
-                selected.get("project_name") or candidate.project_name
-            )
+            candidate.project_name = str(selected.get("project_name") or candidate.project_name)
             candidate.building_name = str(
                 selected.get("building_name") or selected.get("project_name") or ""
             )
@@ -1454,18 +1449,15 @@ async def _sales_evidence(
                         identity,
                         property_rows,
                     )
-                    for identity, property_rows in properties_by_unit[
-                        candidate.unit_number.lower()
-                    ]
+                    for identity, property_rows in properties_by_unit[candidate.unit_number.lower()]
                 ),
                 key=lambda item: item[0],
                 reverse=True,
             )
             best_score, _, selected_rows = ranked[0]
             runner_up = ranked[1][0] if len(ranked) > 1 else 0
-            distinctive_unit = (
-                len(candidate.unit_number) >= 5
-                and any(character.isalpha() for character in candidate.unit_number)
+            distinctive_unit = len(candidate.unit_number) >= 5 and any(
+                character.isalpha() for character in candidate.unit_number
             )
             unique_distinctive_unit = distinctive_unit and len(ranked) == 1
             if not unique_distinctive_unit and (
@@ -1687,11 +1679,17 @@ def _apply_evidence(
     if latest:
         candidate.latest_sale_date = latest["transaction_date"]
         candidate.latest_sale_price_aed = int(latest.get("sale_amount_aed") or 0) or None
-        methods = sorted({str(event.get("_match_method") or "exact_building_key") for event in sale_events})
+        methods = sorted(
+            {str(event.get("_match_method") or "exact_building_key") for event in sale_events}
+        )
         candidate.evidence["sales_match"] = {
             "methods": methods,
             "matched_buildings": sorted(
-                {str(event.get("building_name") or "") for event in sale_events if event.get("building_name")}
+                {
+                    str(event.get("building_name") or "")
+                    for event in sale_events
+                    if event.get("building_name")
+                }
             ),
             "matched_sales": len(sale_events),
         }
@@ -1840,9 +1838,9 @@ async def rematch_property_contact_claims(
         statement = statement.where(CrmPropertyContactClaim.import_id == import_id)
     if audit_resolution_methods:
         statement = statement.where(
-            CrmPropertyContactClaim.evidence["property_identity_resolution"][
-                "method"
-            ].as_string().in_(sorted(audit_resolution_methods))
+            CrmPropertyContactClaim.evidence["property_identity_resolution"]["method"]
+            .as_string()
+            .in_(sorted(audit_resolution_methods))
         )
     elif only_unmatched:
         statement = statement.where(CrmPropertyContactClaim.ownership_status == "unmatched")
@@ -1853,9 +1851,10 @@ async def rematch_property_contact_claims(
         source_identity: dict[str, Any] = {}
         if audit_resolution_methods:
             prior_resolution = claim_evidence.get("property_identity_resolution")
-            if isinstance(prior_resolution, dict) and prior_resolution.get(
-                "method"
-            ) in audit_resolution_methods:
+            if (
+                isinstance(prior_resolution, dict)
+                and prior_resolution.get("method") in audit_resolution_methods
+            ):
                 raw_source = prior_resolution.get("source")
                 if isinstance(raw_source, dict):
                     source_identity = raw_source
@@ -1888,9 +1887,7 @@ async def rematch_property_contact_claims(
             party_role=claim.party_role,
             procedure_type=claim.procedure_type,
             row_fingerprint=claim.row_fingerprint,
-            evidence={
-                key: value for key, value in claim_evidence.items() if key != "sales_match"
-            },
+            evidence={key: value for key, value in claim_evidence.items() if key != "sales_match"},
         )
         _recover_embedded_property_identity(candidate)
         candidates.append(candidate)
@@ -1938,10 +1935,7 @@ async def rematch_property_contact_claims(
     return {
         "claims": len(claims),
         **{f"transaction_{key}": value for key, value in resolution_counts.items()},
-        **{
-            f"near_transaction_{key}": value
-            for key, value in near_resolution_counts.items()
-        },
+        **{f"near_transaction_{key}": value for key, value in near_resolution_counts.items()},
         **status_counts,
     }
 
@@ -2039,9 +2033,7 @@ async def refresh_contact_import_match_summaries(
         import_ids = {import_id}
     else:
         result = await db.exec(
-            select(CrmContactImport.id).where(
-                CrmContactImport.organization_id == organization_id
-            )
+            select(CrmContactImport.id).where(CrmContactImport.organization_id == organization_id)
         )
         import_ids = {record_id for record_id in result.all() if record_id is not None}
     refreshed = await _refresh_contact_import_match_summaries(
@@ -2078,8 +2070,7 @@ def _summary(
             candidate.ownership_status == "conflicting_claim" for candidate in candidates
         ),
         insufficient_property_data=sum(
-            candidate.ownership_status == "insufficient_property_data"
-            for candidate in candidates
+            candidate.ownership_status == "insufficient_property_data" for candidate in candidates
         ),
         registry_not_observed=sum(
             candidate.ownership_status == "registry_not_observed" for candidate in candidates
@@ -3096,11 +3087,15 @@ async def _owner_registry_summary_sql(
         """
     )
     row = (
-        await db.exec(
-            statement,
-            params={"organization_id": organization_id, "owner_list_id": list_id},
+        (
+            await db.exec(
+                statement,
+                params={"organization_id": organization_id, "owner_list_id": list_id},
+            )
         )
-    ).mappings().one()
+        .mappings()
+        .one()
+    )
     summary = CrmOwnerRegistrySummary(
         rental_owner_profiles=int(row["rental_owner_profiles"] or 0),
         registry_owner_profiles=int(row["registry_owner_profiles"] or 0),
@@ -3451,10 +3446,7 @@ def _owner_property_registry_score(
     sale_area = str(row.get("area_name") or "")
     combined_sale = " ".join(value for value in (sale_building, sale_project) if value)
     building_score = max(
-        (
-            _location_similarity(owner_building, value)
-            for value in (sale_building, combined_sale)
-        ),
+        (_location_similarity(owner_building, value) for value in (sale_building, combined_sale)),
         default=0,
     )
     project_score = max(
@@ -3572,15 +3564,11 @@ async def _enrich_owner_profile_registry(profile: CrmOwnerProfile) -> CrmOwnerPr
             continue
 
         owner_property.registry_sale_date = selected["transaction_date"]
-        owner_property.registry_sale_price_aed = int(
-            selected.get("sale_amount_aed") or 0
-        ) or None
+        owner_property.registry_sale_price_aed = int(selected.get("sale_amount_aed") or 0) or None
         owner_property.registry_property_type = (
             str(selected.get("property_type") or "").strip() or None
         )
-        owner_property.registry_bedrooms = (
-            str(selected.get("bedrooms") or "").strip() or None
-        )
+        owner_property.registry_bedrooms = str(selected.get("bedrooms") or "").strip() or None
         owner_property.registry_size_sqft = _positive_float(selected.get("size_sqft"))
         owner_property.registry_built_up_area_sqft = _positive_float(
             selected.get("built_up_area_sqft")
