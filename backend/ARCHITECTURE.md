@@ -5,6 +5,12 @@ The approved Phase 0–7 migration preserves endpoint paths, operation IDs, requ
 and response schemas, SSE events, stored JSON, source identifiers, query rules,
 transaction boundaries, provider arguments, and frontend behavior.
 
+The migration checkpoints below end at `9b3303f`. The subsequent evaluation and
+observability implementation is documented in [EVALUATION.md](EVALUATION.md).
+Its developer CLI lives outside the application domains in `scripts/evaluation`;
+optional observation hooks live in infrastructure. It introduces no evaluation
+HTTP domain and does not change the placement or dependency rules below.
+
 ## Placement and dependency rules
 
 - HTTP endpoints belong to the owning `router.py`: parsing, guards and serialization.
@@ -301,5 +307,6 @@ and existing handoff/source typing issues. These checks were run, and no asserti
 type rules or contracts were weakened. The known local monthly-price SQL failure
 recorded above also remains outside this structural migration.
 
-No evaluation capability, new chat tools, quota expansion, concurrency/atomicity
-changes, market-formula changes, new workers, or deployment was introduced.
+The migration itself introduced no evaluation capability, new chat tools, quota
+expansion, concurrency/atomicity changes, market-formula changes, new workers, or
+deployment. Subsequent evaluation tooling observes these preserved capabilities.

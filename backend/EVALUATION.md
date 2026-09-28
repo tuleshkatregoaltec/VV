@@ -385,8 +385,9 @@ Use `kind: exact` with `expected`, or `kind: records` with an expected list.
 `just ai-compare --baseline FILE --candidate FILE` rejects incompatible datasets,
 parameters/questions, criteria, evaluator/reference versions, dates and data
 contexts. It detects per-dimension pass-to-fail and lost-assessment regressions;
-method changes are explicit. Exit codes: 0 comparable/no regression, 1 regression,
-2 incomparable. The initial run uses a mutable local warehouse, so it intentionally
+method changes are explicit. A removed assessment or a changed review method
+cannot hide the loss of a previous pass. Exit codes: 0 comparable/no regression,
+1 regression, 2 incomparable. The initial run uses a mutable local warehouse, so it intentionally
 cannot establish a controlled model-versus-model quality comparison. A future run
 must use an actual pinned snapshot and document it with `--data-context`; that
 label is an operator assertion, not an automatic database snapshot mechanism.
@@ -561,7 +562,38 @@ new database table, queue, endpoint, UI, or duplicated business logic.
   remains unassessed without authoritative references; assisted judgments are
   explicitly distinct from human sign-off.
 
-No frontend/API schemas, generated client, migration, business query or Holocron
-code changed. Holocron/infrastructure-only suites and the unchanged frontend broad
-type check were not rerun; the migration's existing type-check limitations remain
+During the evaluation stage, no frontend/API schemas, generated client, migration,
+business query or Holocron code changed. Holocron/infrastructure-only suites and
+the unchanged frontend broad type check were not rerun at that checkpoint; the migration's existing type-check limitations remain
 recorded in `ARCHITECTURE.md` and are not claimed resolved here.
+
+
+## Combined PR verification
+
+The branch combines the migration and evaluation checkpoints on top of `VV`
+(`86b924d`). The existing commits remain separate, reviewable stages in one PR.
+Wrap-up review fixed a regression-gate edge case: removing a passing assessment
+or changing its method could previously hide the loss of that pass. Parameterized
+tests reproduced both failures before the fix; method changes now remain visible
+alongside status regressions. No model execution or business behavior changed.
+
+Fresh verification on the combined implementation:
+
+- 323 fast backend tests, including 37 evaluation tests, architectural boundaries,
+  frozen contracts, auth/streaming behavior and Bun workbook parity; no skips.
+- 56 offline CI-selection tests with dummy-only configuration.
+- 13 PostgreSQL, 15 ClickHouse and 2 Redis/MinIO integration tests.
+- 469 Holocron tests; full Holocron Ruff lint; format/type checks on both changed
+  Holocron files. One existing helper-class collection warning remains.
+- 68 frontend unit tests, production build, 37 Playwright tests and 10 guard tests.
+- Backend Ruff lint/format, diff whitespace checks and applicable commit hooks.
+  The frontend hook has no changed frontend source files to check.
+
+The broader checks were rerun and reproduce the documented baseline limitations:
+frontend type checking has 8 errors in 2 unchanged listings files; Holocron's
+broad format check finds 14 unchanged files and its broad type check reports 62
+diagnostics. These are not claimed passing or fixed. Existing live benchmark
+artifacts were retained without another billed model run. LangSmith ingestion
+still requires account credentials; raw execution evidence remains private and
+excluded from the PR. The migration repair and its manual-backfill/downgrade
+limitations remain documented in `ARCHITECTURE.md` and the migration itself.

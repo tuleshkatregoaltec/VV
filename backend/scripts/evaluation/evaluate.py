@@ -443,7 +443,7 @@ def compare(baseline, candidate):
                         "change": "assessment_method_changed",
                     }
                 )
-            elif prior["status"] != current["status"]:
+            if prior["status"] != current["status"]:
                 change = {
                     "case_id": case_id,
                     "dimension": dimension,

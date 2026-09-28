@@ -132,7 +132,15 @@ def test_reference_ranges_records_and_missing_values_do_not_grade_answer_text():
         )
 
 
-def test_comparison_detects_lost_assessment_and_rejects_changed_benchmark_context():
+@pytest.mark.parametrize(
+    "candidate_check",
+    [
+        {"status": "unassessed", "method": "human"},
+        {"status": "unassessed", "method": "assisted_review"},
+        None,
+    ],
+)
+def test_comparison_detects_lost_assessment_and_rejects_changed_benchmark_context(candidate_check):
     baseline = {
         key: "same"
         for key in (
@@ -153,7 +161,9 @@ def test_comparison_detects_lost_assessment_and_rejects_changed_benchmark_contex
         }
     ]
     candidate = deepcopy(baseline)
-    candidate["cases"][0]["checks"]["grounding"]["status"] = "unassessed"
+    candidate["cases"][0]["checks"] = (
+        {"grounding": candidate_check} if candidate_check is not None else {}
+    )
     result = compare(baseline, candidate)
     assert result["comparable"] and len(result["regressions"]) == 1
     candidate["date"] = "different"
