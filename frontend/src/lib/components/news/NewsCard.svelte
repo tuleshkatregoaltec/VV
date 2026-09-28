@@ -40,6 +40,9 @@ const sourceLabel = $derived.by(() => {
 })
 </script>
 
+<!-- Old code (before dark-mode fix):
+	class="group flex gap-4 p-5 bg-white border border-border rounded-lg no-underline text-inherit hover:border-slate-300 transition-colors duration-200"
+-->
 <a
 	href={article.url}
 	target="_blank"
@@ -47,6 +50,9 @@ const sourceLabel = $derived.by(() => {
 	class="group flex gap-4 p-5 bg-card border border-border rounded-lg no-underline text-inherit hover:border-strong transition-colors duration-200"
 >
 	{#if showImage}
+		<!-- Old code (before dark-mode fix):
+			class="w-36 h-24 object-cover rounded border border-slate-100 flex-shrink-0"
+		-->
 		<img
 			src={imageSrc}
 			alt={article.headline}
@@ -58,6 +64,14 @@ const sourceLabel = $derived.by(() => {
 			class="w-36 h-24 object-cover rounded border border-border flex-shrink-0"
 		/>
 	{:else}
+		<!-- Old code (before dark-mode and long-name overflow fix):
+		<div
+			aria-hidden="true"
+			class="w-36 h-24 rounded border border-slate-100 bg-slate-50 flex-shrink-0 flex items-center justify-center text-xs font-semibold text-slate-500"
+		>
+			{sourceLabel ?? 'News'}
+		</div>
+		-->
 		<div
 			aria-hidden="true"
 			class="w-36 h-24 rounded border border-border bg-app flex-shrink-0 flex items-center justify-center px-2 text-xs font-semibold text-fg-4"
@@ -66,6 +80,13 @@ const sourceLabel = $derived.by(() => {
 		</div>
 	{/if}
 	<div class="flex flex-col gap-2 flex-1">
+		<!-- Old code (before dark-mode fix):
+		<div class="flex items-center gap-2 text-xs text-slate-500">
+			{#if sourceLabel}
+				<span class="font-semibold text-slate-600">{sourceLabel}</span>
+				<span class="text-slate-400">•</span>
+			{/if}
+		-->
 		<div class="flex items-center gap-2 text-xs text-fg-4">
 			{#if sourceLabel}
 				<span class="font-semibold text-fg-3">{sourceLabel}</span>
