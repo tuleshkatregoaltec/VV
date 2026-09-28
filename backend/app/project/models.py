@@ -3,9 +3,6 @@ from typing import List, Optional
 
 from pydantic import BaseModel
 
-from app.plots.models import DDAOutlineFeature as DDAOutlineFeature
-from app.plots.models import DDAPlotFeature as DDAPlotFeature
-
 
 class GeoPolygon(BaseModel):
     """Geographic polygon (area boundaries)"""

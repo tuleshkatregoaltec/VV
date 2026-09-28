@@ -215,3 +215,91 @@ with the identical pre-migration expression. A characterization test records the
 failure; annual-price inventory and benchmark execution pass. The expression has
 not been changed. Explicit-ID transaction exports also retain their existing
 uncapped selection path, separate from the 50,000-row filtered-export limit.
+
+## Capability map for future changes
+
+| Capability | Application owner | Persistence / warehouse | Pure rules or provider boundary |
+| --- | --- | --- | --- |
+| Conversations and turns | `chat/service.py` | `chat/repository.py` | `agent.py`, thin `tools.py`, `artifacts.py`, `events.py` |
+| Analytics and charts | `analytics/service.py`, `charts.py` | `queries.py`, `chart_queries.py` | `metrics.py` |
+| Identity and profile | `auth/service.py`, `profile.py` | Public account operations | `providers/auth/client.py` |
+| Organization and invites | `organization/service.py`, `invitations.py` | `repository.py` | Request/response contracts in `models.py` |
+| Billing and usage | `billing/service.py`, `token_usage/service.py` | Each domain's `repository.py` | `billing/stripe_gateway.py` |
+| Administrative workflows | `admin/service.py` | Public organization/billing/usage reads | No admin repository |
+| CRM | `imports.py`, `ownership.py`, `owners.py`, `inbound_imports.py`, `inbound.py`, `matching.py`, `opportunities.py`, `workspaces.py`, `reports.py` | Capability-specific repositories and query modules | `identity.py`, `import_parsing.py`, `inbound_policy.py`, `matching_policy.py`, `ai.py` |
+| Projects and radar | `project/service.py`, `radar.py` | `queries.py`, `radar_queries.py` | `mapping.py` |
+| GIS and land evidence | `plots/service.py`, `evidence.py`, `valuation.py` | `queries.py` | `geometry.py` |
+| Area evidence | `area/service.py` | `queries.py` | Existing area contracts |
+| Feasibility | `studies.py`, `generation.py`, `research.py`, `chat.py`; read adapters in `service.py` | `repository.py`, `queries.py` | `assumptions.py`, `assumption_defaults.py`, `normalization.py`, agents, existing workbook/engine |
+| Transactions and facets | `transaction/service.py`, `facets.py`, `exports.py` | `queries.py` | Export sanitization stays with exports; `/filters` remains a route adapter |
+| Listings | `listings/service.py` | `queries.py` | `mapping.py`, `policy.py` |
+| Supply and developer rankings | `supply/service.py`, `rankings.py` | `queries.py` | `mapping.py`, `scoring.py`, public `scope.py` |
+| News | `news/service.py`, `ingestion.py` | `repository.py` | `agent.py`; signing through `core/object_storage.py` |
+| Chunk uploads | `upload/service.py` | Object storage and upload-state Redis | Existing chunk/metadata protocol |
+
+Every domain keeps its HTTP parsing/guards in `router.py` and canonical contracts
+in its existing model modules. Only add a named policy, query or repository module
+when the capability needs it. Large cohesive SQL, deterministic assumption and
+workbook modules are intentional; line count alone is not an extraction trigger.
+
+A new evaluation capability would get `evaluation/router.py`, `service.py` and
+`models.py`, tests under the existing test categories, and only the repository,
+query or provider adapter that its actual persistence/integration requires. Register
+its router in `main.py`; register a PostgreSQL table and add a migration only if
+needed. It may call public domain operations and provider adapters. It must not
+import chat lifecycle, tools, repositories or private helpers. A later chat tool
+can call the evaluation operation without making evaluation depend on chat. No
+evaluation implementation or new tool registration is part of this migration.
+
+Debug a request from router to its application operation, then the owning query,
+repository or provider. Keep failure/commit ordering visible in the application
+operation. Add focused policy tests for rules, API tests for contracts, real database
+tests for query semantics/commits, streaming/tool tests for agents, and browser tests
+for affected user flows. The dependency tests enforce acyclic imports, public
+cross-domain operations, SQL ownership, pure policies, and removal of old shims.
+
+## Phase 7 and final checkpoint
+
+News owns article ingestion, normalization, repository access and summary agents.
+Upload retains chunk transport/state and calls news ingestion through its existing
+HTTP route. The backend news-import CLI retains arguments, environment/storage
+selection, dry-run behavior, and engine lifecycle; its normalization and batch
+writes use news operations. Upload deduplication still leaves an existing article
+untouched; batch imports still update only when requested. Holocron's separate
+news writer and schema-bootstrap behavior are unchanged.
+
+Thumbnail SDK signing is infrastructure-owned. Legacy news environment lookup and
+SDK arguments remain distinct from upload's configured path-style client. Public
+cache invalidation preserves Holocron's required connection check and prefix list.
+All temporary shared-query/reference and moved-model shims were removed after
+callers adopted canonical owners. The explicit PostgreSQL registry includes
+organization memberships/invitations and inbound activity, with no schema changes.
+
+Final verification:
+
+- 286 fast backend tests, including Bun workbook parity and frozen API/model/tool/
+  JSON/streaming contracts; 13 isolated PostgreSQL tests; 15 real ClickHouse tests;
+  2 Redis/MinIO integration tests. No test is skipped in the final run.
+- 68 frontend unit tests, production build, 10 dedicated guard tests and all
+  37 Playwright tests pass. Browser export rendering uses mocked download payloads;
+  backend integration independently executes actual exports against ClickHouse.
+- Backend lint/format, acyclic imports, zero legacy dependency exceptions and the
+  public cross-domain access rule pass. An independent AST comparison confirms all
+  36 extracted feasibility assumption functions, 19 supply scoring functions and
+  9 listings policy functions are identical to the original implementation.
+- News CLI `--help` succeeds. All 469 Holocron tests pass. Its changed cache-refresh
+  module and test pass Ruff check/format and `ty`; the whole runtime passes Ruff
+  lint. Holocron emits one existing collection warning for a helper exception class.
+
+Unrelated baseline checks are recorded rather than silently treated as passing:
+frontend `bun run check` reports eight errors in the unchanged listings API wrapper
+and page (optional intelligence fields versus the generated types). Frontend source
+and generated client files are unchanged from the migration baseline. Holocron's
+baseline `just check` stops on 14 pre-existing formatting failures; its separate
+broad type check reports 62 diagnostics, including missing optional admin dependencies
+and existing handoff/source typing issues. These checks were run, and no assertions,
+type rules or contracts were weakened. The known local monthly-price SQL failure
+recorded above also remains outside this structural migration.
+
+No evaluation capability, new chat tools, quota expansion, concurrency/atomicity
+changes, market-formula changes, new workers, or deployment was introduced.

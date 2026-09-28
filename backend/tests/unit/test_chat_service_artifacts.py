@@ -6,8 +6,8 @@ from app.analytics import chart_queries
 from app.chat import agent as chat_agent
 from app.chat import artifacts as chat_artifacts
 from app.chat.models import Message
-from app.core.market_constants import SQM_TO_SQFT
 from app.listings.models import ListingFiltersResponse, ListingListResponse
+from app.market.reference import SQM_TO_SQFT
 
 
 def test_pydantic_history_includes_rendered_artifact_context():

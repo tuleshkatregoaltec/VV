@@ -107,12 +107,9 @@ def main() -> int:
         if all(code == 0 for code in report["stages"].values()):
             cache_code = (
                 "import asyncio\n"
-                "from app.core.decorators import cache\n"
+                "from app.core.cache import invalidate_prefixes\n"
                 "async def clear():\n"
-                "    await cache.redis.ping()\n"
-                "    for prefix in ('transactions:sales', 'transactions:rentals', 'analytics:'):\n"
-                "        await cache.clear_prefix(prefix)\n"
-                "    await cache.redis.aclose()\n"
+                "    await invalidate_prefixes(('transactions:sales', 'transactions:rentals', 'analytics:'), require_connection=True)\n"
                 "asyncio.run(clear())\n"
             )
             result = subprocess.run(

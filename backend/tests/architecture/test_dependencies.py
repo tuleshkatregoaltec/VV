@@ -243,3 +243,58 @@ def test_feasibility_and_inventory_capabilities_keep_io_in_their_adapters():
     assert "app.feasibility.generation" not in graph["app.feasibility.hbu_agent"]
     assert "app.feasibility.hbu_agent" in graph["app.feasibility.generation"]
     assert not (APP / "filters/service.py").exists()
+
+
+def test_final_news_infrastructure_and_shim_boundaries():
+    graph = imports()
+    for module in [
+        "app.news.service",
+        "app.news.ingestion",
+        "app.news.agent",
+        "app.upload.service",
+    ]:
+        assert not graph[module] & {
+            "sqlmodel.select",
+            "sqlalchemy.select",
+            "app.clickhouse.client",
+        }, module
+    for module in ["app.news.service", "app.news.ingestion"]:
+        assert not graph[module] & {"aioboto3", "dotenv.dotenv_values"}, module
+    assert not any(target.startswith("app.upload") for target in graph["app.news.ingestion"])
+    for old in [
+        "clickhouse/queries.py",
+        "clickhouse/types.py",
+        "core/normalization.py",
+        "core/market_constants.py",
+        "core/reelly_scope.py",
+        "filters/service.py",
+        "filters/models.py",
+    ]:
+        assert not (APP / old).exists(), old
+    for source, targets in graph.items():
+        if source.startswith("app.core.") and source != "app.core.dependencies":
+            assert not any(
+                target.startswith(
+                    ("app.news.", "app.chat.", "app.crm.", "app.organization.", "app.billing.")
+                )
+                for target in targets
+            ), source
+
+
+def test_cross_domain_calls_use_public_operations_instead_of_internal_data_access():
+    for path in APP.rglob("*.py"):
+        source_domain = path.relative_to(APP).parts[0]
+        if source_domain in {"core", "postgres"}:
+            continue  # Entry composition and explicit model registration have separate guards.
+        for node in ast.walk(ast.parse(path.read_text())):
+            if (
+                not isinstance(node, ast.ImportFrom)
+                or not node.module
+                or not node.module.startswith("app.")
+            ):
+                continue
+            target_parts = node.module.split(".")
+            if target_parts[1] == source_domain:
+                continue
+            assert not target_parts[-1].endswith(("repository", "queries")), (path, node.module)
+            assert not any(alias.name.startswith("_") for alias in node.names), (path, node.module)

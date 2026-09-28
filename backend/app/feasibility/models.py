@@ -6,10 +6,7 @@ from sqlalchemy import DateTime
 from sqlmodel import JSON, Column, SQLModel
 from sqlmodel import Field as SQLField
 
-from app.plots.models import GISLandUse as GISLandUse
-from app.plots.models import LandPlot as LandPlot
 from app.plots.models import LandSaleEvidence, PlotDetails, Usage
-from app.plots.models import Plot as Plot
 
 DevelopmentModel = Literal[
     "build_to_sell_residential",

@@ -65,3 +65,8 @@ def test_successful_import_refresh_runs_from_backend_before_cache_clear(monkeypa
     assert "scripts.crm.refresh_rental_imports" in calls[4][0]
     assert calls[4][1] == repo / "backend"
     assert len(calls) == 6
+    code = calls[-1][0][-1]
+    assert "from app.core.cache import invalidate_prefixes" in code
+    assert "require_connection=True" in code
+    assert "('transactions:sales', 'transactions:rentals', 'analytics:')" in code
+    compile(code, "<cache-invalidation>", "exec")

@@ -127,3 +127,29 @@ class RedisCache:
         except Exception as e:
             logger.error("Redis ping failed: %s", str(e))
             return False
+
+
+async def invalidate_prefixes(
+    prefixes: tuple[str, ...],
+    *,
+    cache_client: RedisCache | None = None,
+    require_connection: bool = False,
+) -> int:
+    """Invalidate named caches; callers can preserve their own connection configuration."""
+    owned = cache_client is None
+    if cache_client is None:
+        from app.config import settings
+
+        cache_client = RedisCache(settings.REDIS_URL, settings.REDIS_PASSWORD)
+    try:
+        if require_connection:
+            if cache_client.redis is None:
+                raise RuntimeError("Redis unavailable")
+            await cache_client.redis.ping()
+        deleted = 0
+        for prefix in prefixes:
+            deleted += await cache_client.clear_prefix(prefix)
+        return deleted
+    finally:
+        if owned and cache_client.redis is not None:
+            await cache_client.redis.aclose()

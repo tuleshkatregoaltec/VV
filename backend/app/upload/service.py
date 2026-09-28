@@ -1,23 +1,15 @@
 import hashlib
 import logging
-from datetime import datetime, timezone
+from datetime import datetime
 
 from fastapi import HTTPException, UploadFile
-from sqlmodel import select
-from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.config import settings
 from app.core.cache import RedisCache
 from app.core.object_storage import ObjectStorageClient
-from app.news.models import NewsArticle, NewsArticleResponse
-from app.upload.models import (
-    ChunkedUploadResponse,
-    NewsArticleCreate,
-    NewsArticleUploadResponse,
-)
+from app.upload.models import ChunkedUploadResponse
 
 logger = logging.getLogger(__name__)
-
 
 object_storage_client = ObjectStorageClient(
     endpoint_url=(
@@ -29,7 +21,6 @@ object_storage_client = ObjectStorageClient(
     region=settings.OBJECT_STORAGE_REGION,
     use_path_style=settings.OBJECT_STORAGE_USE_PATH_STYLE,
 )
-
 
 cache = RedisCache(settings.REDIS_URL, settings.REDIS_PASSWORD)
 
@@ -43,51 +34,6 @@ def sanitize_filename(filename: str) -> str:
 
 def calculate_hash(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
-
-
-async def create_news_article(
-    db: AsyncSession,
-    article_data: NewsArticleCreate,
-) -> NewsArticleUploadResponse:
-    stmt = select(NewsArticle).where(NewsArticle.url == article_data.url)
-    result = await db.exec(stmt)
-    existing_article = result.first()
-
-    if existing_article:
-        return NewsArticleUploadResponse(
-            created=False,
-            article=NewsArticleResponse(
-                id=existing_article.id,
-                url=existing_article.url,
-                headline=existing_article.headline,
-                thumbnail_url=existing_article.thumbnail_url or "",
-                thumbnail_base64=existing_article.thumbnail_base64,
-                publish_date=existing_article.publish_date.replace(tzinfo=timezone.utc),
-            ),
-            message="Article already exists in database",
-        )
-
-    news_article = NewsArticle(**article_data.model_dump())
-
-    news_article.publish_date = news_article.publish_date.replace(tzinfo=timezone.utc)
-
-    db.add(news_article)
-    await db.commit()
-    await db.refresh(news_article)
-    await cache.clear_prefix("news")
-
-    return NewsArticleUploadResponse(
-        created=True,
-        article=NewsArticleResponse(
-            id=news_article.id,
-            url=news_article.url,
-            headline=news_article.headline,
-            thumbnail_url=news_article.thumbnail_url or "",
-            thumbnail_base64=news_article.thumbnail_base64,
-            publish_date=news_article.publish_date.replace(tzinfo=timezone.utc),
-        ),
-        message="Article created successfully",
-    )
 
 
 async def process_chunked_upload(

@@ -24,3 +24,25 @@ def table_contract():
 def test_postgres_models_preserve_schema():
     expected = json.loads((Path(__file__).parent / "fixtures/model_metadata.json").read_text())
     assert table_contract() == expected
+
+
+def test_registry_registers_every_table_without_loading_application_routes():
+    import subprocess
+    import sys
+
+    code = """
+import json
+from sqlmodel import SQLModel
+import app.postgres.models as registry
+registered = sorted(getattr(registry, name).__tablename__ for name in registry.__all__)
+print(json.dumps({'registered': registered, 'metadata': sorted(SQLModel.metadata.tables)}))
+"""
+    result = subprocess.run(
+        [sys.executable, "-c", code], capture_output=True, text=True, check=True
+    )
+    actual = json.loads(result.stdout)
+    expected = sorted(
+        json.loads((Path(__file__).parent / "fixtures/model_metadata.json").read_text())
+    )
+    assert actual["registered"] == expected
+    assert actual["metadata"] == expected
