@@ -338,3 +338,68 @@ tool results, prompts, schema or reasoning settings. Native streaming behavior a
 normal token-accounting side effects remain. Query instrumentation observes actual
 client calls; it does not execute extra evaluation SQL. Private local PostgreSQL
 spans omit bind values; credentials/auth headers are never deliberately recorded.
+
+## Evaluators and first quality baseline
+
+`just ai-assess --directory ../.evaluation/RUN` reads stored native spans and
+persisted HTTP/SSE evidence; it does not call any provider. It writes a private
+assessment, a per-case Markdown report and a human-review template. Optional
+`--reviews FILE` applies explicitly attributed `human` or `assisted_review`
+judgments. Blank templates are not accepted as completed reviews. The initial
+review is labeled **Codex-assisted trace inspection**, not human sign-off.
+
+Dimensions remain independent: execution, persistence, trace coverage, tool
+schema, tool execution, query execution, finite query values, evidence availability,
+source-family coverage, recognized calendar-window mismatch, parameter binding,
+capability support, grounding, completeness, capability disclosure, semantic
+quality and numerical correctness. No overall score is computed. Source-family
+coverage is not proof of correct query filters. Semantic quality remains unassessed
+until a reviewer evaluates it. A standalone LLM judge is deliberately deferred:
+these initial traces contain pervasive missing capabilities/evidence, and a second
+model would not supply an authoritative numerical oracle. The attributed review
+path supports adjudicating grounding and disclosure without an extra provider call.
+
+`criteria.json` is separate from the unchanged canonical inputs. Its capability
+assessment is tied to the observed registered tool/schema fingerprint and becomes
+unassessed when that contract changes. Source mapping is explicit and conservative;
+unknown tables do not get credit. Review it when new source implementations appear.
+Adding q16 requires a dataset case and, when known, criteria; absent criteria yield
+unassessed coverage rather than a fabricated pass.
+
+`--references FILE` supports exact structured evidence, numeric ranges and entity/
+record sets with an authoritative source label. It requires matching dataset digest,
+data context and execution date. It cannot exact-match free-form answer text or
+turn a tool-result check into a claim about answer correctness. Reference format:
+
+```json
+{
+  "dataset_sha256": "SHA256_FROM_RUN",
+  "data_context": "PINNED_SNAPSHOT_ID",
+  "date": "YYYY-MM-DD",
+  "cases": {
+    "q01": [{"path": ["tools", 0, "result", "transaction_count"],
+             "kind": "range", "min": 10, "max": 12,
+             "source": "curated authoritative snapshot reference"}]
+  }
+}
+```
+
+The values above illustrate the schema; they are not canonical expected answers.
+Use `kind: exact` with `expected`, or `kind: records` with an expected list.
+
+`just ai-compare --baseline FILE --candidate FILE` rejects incompatible datasets,
+parameters/questions, criteria, evaluator/reference versions, dates and data
+contexts. It detects per-dimension pass-to-fail and lost-assessment regressions;
+method changes are explicit. Exit codes: 0 comparable/no regression, 1 regression,
+2 incomparable. The initial run uses a mutable local warehouse, so it intentionally
+cannot establish a controlled model-versus-model quality comparison. A future run
+must use an actual pinned snapshot and document it with `--data-context`; that
+label is an operator assertion, not an automatic database snapshot mechanism.
+
+Observed deterministic baseline: all 15 executions/persistence/trace checks pass;
+7 selected tool schemas pass; 5 queries contain nonfinite evidence; 2 observed
+rolling-day queries cannot answer the requested complete calendar windows; 12
+cases lack one or more required source families; all 15 full requested analyses
+are unsupported by the current chat tool contract; 3 retain unresolved parameters.
+Assisted review flags grounding risks in 11 answers. Numerical correctness remains
+unassessed for all 15. This is an honest initial quality baseline, not 15 passes.

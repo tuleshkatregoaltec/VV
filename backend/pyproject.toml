@@ -49,6 +49,10 @@ dependencies = [
     "clickhouse-connect>=0.10.0",
     "clickhouse-driver>=0.2.10",
     "pillow>=11.0.0",
+    "jsonschema==4.25.1",
+    "langsmith[otel]>=0.4.26",
+    "opentelemetry-sdk==1.39.1",
+    "opentelemetry-exporter-otlp-proto-http==1.39.1",
 ]
 
 [tool.uv]

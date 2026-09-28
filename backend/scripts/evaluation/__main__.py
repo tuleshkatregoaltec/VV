@@ -9,11 +9,50 @@ from scripts.evaluation.inventory import build_inventory
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=["inventory", "dataset", "run"])
+    parser.add_argument("command", choices=["inventory", "dataset", "run", "assess", "compare"])
     parser.add_argument("--directory")
     parser.add_argument("--case", action="append", dest="case_ids")
     parser.add_argument("--data-context", default="local-mutable-warehouse")
+    parser.add_argument("--references")
+    parser.add_argument("--reviews")
+    parser.add_argument("--baseline")
+    parser.add_argument("--candidate")
     args = parser.parse_args()
+    if args.command == "assess":
+        from pathlib import Path
+
+        from scripts.evaluation.evaluate import assess_run
+
+        if not args.directory:
+            parser.error("assess requires --directory")
+        path, result = assess_run(Path(args.directory), args.references, args.reviews)
+        from scripts.evaluation.report import write_report
+
+        print(f"Private assessment: {path}")
+        print(f"Private report: {write_report(Path(args.directory), result)}")
+        for case in result["cases"]:
+            print(
+                json.dumps(
+                    {
+                        "case_id": case["case_id"],
+                        "checks": {name: check["status"] for name, check in case["checks"].items()},
+                    }
+                )
+            )
+        return
+    if args.command == "compare":
+        from pathlib import Path
+
+        from scripts.evaluation.evaluate import compare
+
+        if not args.baseline or not args.candidate:
+            parser.error("compare requires --baseline and --candidate")
+        result = compare(
+            json.loads(Path(args.baseline).read_text()),
+            json.loads(Path(args.candidate).read_text()),
+        )
+        print(json.dumps(result, indent=2))
+        raise SystemExit(2 if not result["comparable"] else 1 if result["regressions"] else 0)
     if args.command == "run":
         import asyncio
 

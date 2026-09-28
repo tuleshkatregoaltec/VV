@@ -136,3 +136,10 @@ test-evaluation *args:
 # Explicit live model execution, private evidence, local authenticated application.
 ai-evaluate *args:
 	set -a && source .env.dev && set +a && cd backend && uv run python -m scripts.evaluation run {{args}}
+
+# Local trace assessment and comparison; never call models or export evidence.
+ai-assess *args:
+	cd backend && uv run python -m scripts.evaluation assess {{args}}
+
+ai-compare *args:
+	cd backend && uv run python -m scripts.evaluation compare {{args}}
