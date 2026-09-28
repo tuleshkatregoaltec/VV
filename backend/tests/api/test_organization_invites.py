@@ -52,7 +52,7 @@ def make_owner_context(max_users: int = 3, org_id: str = "org-1") -> AuthContext
 
 @pytest.mark.asyncio
 async def test_invite_user_returns_created_invitation_token(api_client, monkeypatch):
-    from app.organization import router
+    from app.organization import invitations as router
 
     async def override_owner_context():
         return make_owner_context()
@@ -134,7 +134,7 @@ async def test_invite_user_returns_created_invitation_token(api_client, monkeypa
 
 @pytest.mark.asyncio
 async def test_invite_user_rejects_when_org_has_no_available_seats(api_client, monkeypatch):
-    from app.organization import router
+    from app.organization import invitations as router
 
     async def override_owner_context():
         return make_owner_context(max_users=1)
@@ -176,7 +176,7 @@ async def test_invite_user_rejects_when_org_has_no_available_seats(api_client, m
 async def test_invite_user_rejects_when_pending_invites_have_reserved_remaining_seats(
     api_client, monkeypatch
 ):
-    from app.organization import router
+    from app.organization import invitations as router
 
     async def override_owner_context():
         return make_owner_context(max_users=3)
@@ -214,7 +214,7 @@ async def test_invite_user_rejects_when_pending_invites_have_reserved_remaining_
 
 @pytest.mark.asyncio
 async def test_invite_user_expires_new_token_when_delivery_fails(api_client, monkeypatch):
-    from app.organization import router
+    from app.organization import invitations as router
 
     async def override_owner_context():
         return make_owner_context()
@@ -277,7 +277,7 @@ async def test_invite_user_expires_new_token_when_delivery_fails(api_client, mon
 
 @pytest.mark.asyncio
 async def test_invite_user_expires_prior_pending_tokens_only_after_success(api_client, monkeypatch):
-    from app.organization import router
+    from app.organization import invitations as router
 
     async def override_owner_context():
         return make_owner_context()
@@ -326,7 +326,7 @@ async def test_invite_user_expires_prior_pending_tokens_only_after_success(api_c
 
 @pytest.mark.asyncio
 async def test_validate_invite_token_rejects_non_pending_invitation(api_client, monkeypatch):
-    from app.organization import router
+    from app.organization import invitations as router
 
     async def override_db():
         yield SimpleNamespace()
@@ -345,7 +345,7 @@ async def test_validate_invite_token_rejects_non_pending_invitation(api_client, 
 
 @pytest.mark.asyncio
 async def test_delete_invitation_cancels_pending_invite(api_client, monkeypatch):
-    from app.organization import router
+    from app.organization import invitations as router
 
     async def override_owner_context():
         return make_owner_context()
@@ -383,7 +383,7 @@ async def test_delete_invitation_cancels_pending_invite(api_client, monkeypatch)
 
 @pytest.mark.asyncio
 async def test_delete_invitation_rejects_other_organization_invite(api_client, monkeypatch):
-    from app.organization import router
+    from app.organization import invitations as router
 
     async def override_owner_context():
         return make_owner_context(org_id="org-1")
@@ -417,7 +417,7 @@ async def test_delete_invitation_rejects_other_organization_invite(api_client, m
 
 @pytest.mark.asyncio
 async def test_accept_invite_rejects_when_org_has_no_seats_left(api_client, monkeypatch):
-    from app.organization import router
+    from app.organization import invitations as router
 
     async def override_require_auth():
         return SimpleNamespace(id="user-2", email="member@example.com")

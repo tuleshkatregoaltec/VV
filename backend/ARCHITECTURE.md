@@ -93,3 +93,16 @@ Phase 0 verification: 263 fast backend tests, 3 isolated PostgreSQL tests,
 frontend production build, 31 Playwright tests, and backend lint/format checks
 passed. Seven pre-existing formatting failures were normalized with identical
 Python ASTs. Subsequent phases add capability-specific cases before extraction.
+
+## Phase 1 checkpoint
+
+Analytics routes now delegate workflows to the service, deterministic configuration
+metrics to `metrics.py`, and warehouse execution to `queries.py`. Organization
+routes delegate account workflows and invitations to their owners; persistence
+is isolated in the organization repository. Admin composes public organization,
+billing and usage reads. Existing HTTP errors and transaction boundaries remain.
+
+Verification: 265 backend tests (including Bun workbook parity), 5 isolated
+PostgreSQL tests, 1 actual ClickHouse test, 68 frontend tests, 31 Playwright tests,
+OpenAPI/model/tool/JSON contracts, lint/format and acyclic imports passed. Six
+legacy dependency exceptions were removed; no exceptions were added.

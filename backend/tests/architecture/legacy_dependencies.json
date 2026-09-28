@@ -1,8 +1,5 @@
 [
-  "app.admin.router -> sqlmodel.select",
   "app.analytics.queries -> app.clickhouse.queries",
-  "app.analytics.router -> app.clickhouse.client",
-  "app.analytics.router -> app.clickhouse.queries",
   "app.auth.router -> app.postgres.models",
   "app.chat.agent -> app.clickhouse",
   "app.chat.service -> app.clickhouse",
@@ -14,9 +11,6 @@
   "app.crm.inbound_service -> app.core.reelly_scope",
   "app.feasibility.workbook -> app.feasibility.queries",
   "app.filters.service -> app.clickhouse.queries",
-  "app.organization.router -> app.postgres.models",
-  "app.organization.router -> sqlmodel.select",
-  "app.organization.service -> app.postgres.models",
   "app.project.service -> app.core.market_constants",
   "app.project.service -> app.core.normalization",
   "app.project.service -> app.core.reelly_scope",

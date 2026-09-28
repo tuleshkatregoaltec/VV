@@ -88,5 +88,15 @@ class TokenUsageService:
     async def update_user_limit(self, user_id: str, new_limit: int) -> None:
         await update_user_token_limit(user_id, new_limit)
 
+    async def get_usage_records(
+        self, db: AsyncSession, day: date, user_ids: list[str] | None = None
+    ):
+        """Read accounting records for administrative reporting, without recording usage."""
+        stmt = select(UserTokenUsage).where(UserTokenUsage.date == day)
+        if user_ids is not None:
+            stmt = stmt.where(UserTokenUsage.user_id.in_(user_ids))
+        result = await db.execute(stmt)
+        return result.scalars().all()
+
 
 token_usage_service = TokenUsageService()

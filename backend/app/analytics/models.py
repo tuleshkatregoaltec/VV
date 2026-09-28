@@ -290,3 +290,6 @@ class SubProjectItem(BaseModel):
 
 class SubProjectsResponse(BaseModel):
     sub_projects: list[SubProjectItem]
+
+
+TrendInterval = Literal["day", "week", "month"]

@@ -8,9 +8,13 @@ from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
-from app.billing.models import Subscription
+from app.billing.models import CustomerPortalResponse, Subscription, SubscriptionResponse
 from app.config import settings
-from app.organization.models import Organization, OrganizationMembership
+from app.organization.models import (
+    Organization,
+    OrganizationMembership,
+)
+from app.organization.service import get_member_count, get_pending_invitation_count
 
 stripe.api_key = settings.STRIPE_SECRET_KEY
 logger = logging.getLogger(__name__)
@@ -314,3 +318,48 @@ async def get_customer_portal_url(customer_id: str, return_url: str) -> str:
         return_url=return_url,
     )
     return portal_session.url
+
+
+async def get_organization_subscription(
+    context_organization, context_subscription, db: AsyncSession
+):
+    """Get organization subscription details (owner only)."""
+
+    if not context_subscription:
+        raise HTTPException(status_code=404, detail="No subscription found")
+
+    current_members = await get_member_count(db, context_organization.id)
+    pending_invitations = await get_pending_invitation_count(db, context_organization.id)
+    reserved_seats = current_members + pending_invitations
+    available_seats = max(0, context_subscription.seats - reserved_seats)
+    excess_users = max(0, current_members - context_subscription.seats)
+
+    now = datetime.now(timezone.utc)
+    within_paid_period = now < context_subscription.current_period_end
+
+    return SubscriptionResponse(
+        id=context_subscription.id,
+        organization_id=context_subscription.organization_id,
+        status=context_subscription.status,
+        seats=context_subscription.seats,
+        current_period_end=context_subscription.current_period_end,
+        cancel_at_period_end=context_subscription.cancel_at_period_end,
+        current_members=current_members,
+        available_seats=available_seats,
+        excess_users=excess_users,
+        within_paid_period=within_paid_period,
+    )
+
+
+async def get_stripe_customer_portal(context_organization, db: AsyncSession):
+    """Get Stripe Customer Portal URL (admin only)."""
+
+    organization = context_organization
+
+    if not organization.stripe_customer_id:
+        raise HTTPException(status_code=404, detail="No Stripe customer found")
+
+    return_url = f"{settings.FRONTEND_URL}/settings/organization"
+    portal_url = await get_customer_portal_url(organization.stripe_customer_id, return_url)
+
+    return CustomerPortalResponse(url=portal_url)

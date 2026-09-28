@@ -1,8 +1,16 @@
-from typing import Literal, Optional
+from typing import Optional
 
-from app.clickhouse.queries import ProjectFilterType, ProjectScopeType, _project_filter
-
-TrendInterval = Literal["day", "week", "month"]
+from app.analytics.models import TrendInterval
+from app.clickhouse.client import query
+from app.clickhouse.queries import MARKET_FILTERS as MARKET_FILTERS
+from app.clickhouse.queries import (
+    ProjectFilterType,
+    ProjectScopeType,
+    _project_filter,
+    price_trends,
+    rentals_summary,
+    sales_summary,
+)
 
 
 def search_projects() -> str:
@@ -694,3 +702,212 @@ def area_supply_projects(filter_by_area: bool = True) -> str:
           coalesce(p.no_of_units, 0) > 0
           AND p.cancellation_date IS NULL
     """
+
+
+async def fetch_latest_sales_anchor_date_rows(parameters: dict):
+    return await query(
+        """
+        SELECT max(instance_date) AS latest_sales_date
+        FROM ch_transactions
+        WHERE trans_group_en = 'Sales'
+          AND actual_worth > 0
+          AND instance_date <= today()
+        """,
+        parameters,
+    )
+
+
+async def fetch_search_projects(parameters: dict):
+    return await query(search_projects(), parameters)
+
+
+async def fetch_search_sub_projects(parameters: dict, filter_type: ProjectFilterType = "master"):
+    return await query(search_sub_projects(filter_type), parameters)
+
+
+async def fetch_get_market_summary_rows(parameters: dict):
+    return await query(
+        """
+        SELECT
+            sum(pf.sales_transaction_count_12m) AS sales_count,
+            sum(pf.total_sales_volume_12m) AS sales_volume,
+            if(
+                sum(pf.sales_transaction_count_12m) > 0,
+                sum(pf.median_sale_price * pf.sales_transaction_count_12m)
+                    / sum(pf.sales_transaction_count_12m),
+                0
+            ) AS avg_sale_price,
+            avgOrNull(pf.avg_sale_price_sqm_12m) AS avg_sale_price_sqm,
+            median(pf.median_sale_price) AS median_sale_price,
+            sum(pf.rental_contract_count_12m) AS rental_count,
+            sum(pf.median_annual_rent * pf.rental_contract_count_12m) AS rental_value,
+            median(pf.median_annual_rent) AS median_annual_rent,
+            avgOrNull(pf.avg_rent_price_sqm_12m) AS median_rent_sqm,
+            median(pf.gross_yield_pct) AS gross_yield_pct,
+            sum(pf.no_of_units) AS unit_count
+        FROM ch_project_fact AS pf
+        """,
+        parameters,
+    )
+
+
+async def fetch_project_meta(parameters: dict, filter_type):
+    meta_fn = {
+        "master": project_meta_by_master,
+        "virtual_master": project_meta_by_virtual_master,
+        "project": project_meta_by_name,
+    }[filter_type]
+    return await query(meta_fn(), parameters)
+
+
+async def fetch_project_developers_by_scope(
+    parameters: dict, filter_type: ProjectFilterType = "master"
+):
+    return await query(project_developers_by_scope(filter_type), parameters)
+
+
+async def fetch_project_sales_summary(
+    parameters: dict, filter_type: ProjectScopeType = "project", reg_type: Optional[str] = None
+):
+    return await query(project_sales_summary(filter_type, reg_type), parameters)
+
+
+async def fetch_project_sales_by_rooms(
+    parameters: dict, filter_type: ProjectScopeType = "project", reg_type: Optional[str] = None
+):
+    return await query(project_sales_by_rooms(filter_type, reg_type), parameters)
+
+
+async def fetch_project_configuration_sales(
+    parameters: dict, filter_type: ProjectScopeType = "project", reg_type: Optional[str] = None
+):
+    return await query(project_configuration_sales(filter_type, reg_type), parameters)
+
+
+async def fetch_project_sales_by_property_type(
+    parameters: dict, filter_type: ProjectScopeType = "project"
+):
+    return await query(project_sales_by_property_type(filter_type), parameters)
+
+
+async def fetch_project_sales_by_reg_type(
+    parameters: dict, filter_type: ProjectScopeType = "project"
+):
+    return await query(project_sales_by_reg_type(filter_type), parameters)
+
+
+async def fetch_project_rentals_summary(
+    parameters: dict, filter_type: ProjectScopeType = "project"
+):
+    return await query(project_rentals_summary(filter_type), parameters)
+
+
+async def fetch_project_rentals_by_rooms(
+    parameters: dict, filter_type: ProjectScopeType = "project"
+):
+    return await query(project_rentals_by_rooms(filter_type), parameters)
+
+
+async def fetch_project_units_composition(
+    parameters: dict, filter_type: ProjectScopeType = "project"
+):
+    return await query(project_units_composition(filter_type), parameters)
+
+
+async def fetch_project_price_trends(
+    parameters: dict, interval: TrendInterval = "month", filter_type: ProjectScopeType = "project"
+):
+    return await query(project_price_trends(interval, filter_type), parameters)
+
+
+async def fetch_project_offplan_price_curve(
+    parameters: dict, interval: TrendInterval = "month", filter_type: ProjectScopeType = "project"
+):
+    return await query(project_offplan_price_curve(interval, filter_type), parameters)
+
+
+async def fetch_area_supply_projects(parameters: dict, filter_by_area: bool = True):
+    return await query(area_supply_projects(filter_by_area), parameters)
+
+
+async def fetch_project_price_distribution(
+    parameters: dict, filter_type: ProjectScopeType = "project", reg_type: Optional[str] = None
+):
+    return await query(project_price_distribution(filter_type, reg_type), parameters)
+
+
+async def fetch_sales_summary(
+    parameters: dict,
+    property_usage: Optional[str],
+    start_date: str,
+    end_date: str,
+    master_project: Optional[str] = None,
+    property_type: Optional[str] = None,
+    property_sub_type: Optional[str] = None,
+    rooms: Optional[str] = None,
+    area_name: Optional[str] = None,
+    reg_type: Optional[str] = None,
+    price_bucket: Optional[str] = None,
+    area_bucket: Optional[str] = None,
+    property_usage_in: Optional[list] = None,
+):
+    return await query(
+        sales_summary(
+            property_usage,
+            start_date,
+            end_date,
+            master_project,
+            property_type,
+            property_sub_type,
+            rooms,
+            area_name,
+            reg_type,
+            price_bucket,
+            area_bucket,
+            property_usage_in,
+        ),
+        parameters,
+    )
+
+
+async def fetch_rentals_summary(
+    parameters: dict,
+    property_usage: str,
+    start_date: str,
+    end_date: str,
+    master_project: Optional[str] = None,
+    property_type: Optional[str] = None,
+    area_name: Optional[str] = None,
+):
+    return await query(
+        rentals_summary(
+            property_usage, start_date, end_date, master_project, property_type, area_name
+        ),
+        parameters,
+    )
+
+
+async def fetch_price_trends(
+    parameters: dict,
+    property_usage: Optional[str],
+    start_date: str,
+    end_date: str,
+    interval: str = "month",
+    master_project: Optional[str] = None,
+    property_type: Optional[str] = None,
+    area_name: Optional[str] = None,
+    property_usage_in: Optional[list] = None,
+):
+    return await query(
+        price_trends(
+            property_usage,
+            start_date,
+            end_date,
+            interval,
+            master_project,
+            property_type,
+            area_name,
+            property_usage_in,
+        ),
+        parameters,
+    )
