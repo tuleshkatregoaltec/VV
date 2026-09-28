@@ -433,6 +433,21 @@ let pipelineChart: Chart | null = null
 let marketSplitChart: Chart | null = null
 let themeVersion = $state(0)
 
+// Dark-mode chart colours (chart tokens are missing from app.css); used only by this panel.
+const DARK_CHART_COLORS = {
+	line: '#d9e1ea',
+	fill: 'rgba(217, 225, 234, 0.12)',
+	grid: 'rgba(148, 163, 184, 0.17)',
+	axis: 'rgba(148, 163, 184, 0.32)'
+}
+
+function getPanelChartTheme() {
+	const theme = getChartTheme()
+	return document.documentElement.dataset.theme === 'dark'
+		? { ...theme, ...DARK_CHART_COLORS }
+		: theme
+}
+
 // ─── Trend chart ─────────────────────────────────────────────────────────
 function buildTrendChart() {
 	const recordedSeries = getRecordedTrendSeries()
@@ -441,7 +456,7 @@ function buildTrendChart() {
 	trendChart?.destroy()
 	const ctx = trendCanvas.getContext('2d')
 	if (!ctx) return
-	const theme = getChartTheme()
+	const theme = getPanelChartTheme()
 
 	const gradient = ctx.createLinearGradient(0, 0, 0, 280)
 	gradient.addColorStop(0, theme.fill)
@@ -576,7 +591,7 @@ function buildBellChart() {
 	bellChart?.destroy()
 	const ctx = bellCanvas.getContext('2d')
 	if (!ctx) return
-	const theme = getChartTheme()
+	const theme = getPanelChartTheme()
 
 	const mu = bucket.log_mean_price
 	const sigma = bucket.log_std_price
@@ -719,7 +734,7 @@ function buildPipelineChart() {
 	pipelineChart?.destroy()
 	const ctx = pipelineCanvas.getContext('2d')
 	if (!ctx) return
-	const theme = getChartTheme()
+	const theme = getPanelChartTheme()
 
 	const currentQuarterMs = getCurrentQuarterStartMs()
 	const firstProjectedIdx = pipelineData.findIndex(
