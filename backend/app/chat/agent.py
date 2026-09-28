@@ -16,6 +16,7 @@ model = create_openrouter_model()
 # Define agent
 agent = Agent(
     model,
+    name="market_chat",
     system_prompt=(
         "You are Vitevue AI, an expert Real Estate Analyst specializing in Dubai real estate markets. "
         "You have access to predefined database queries that can retrieve comprehensive real estate data.\n\n"

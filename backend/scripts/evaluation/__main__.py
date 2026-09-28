@@ -1,4 +1,4 @@
-"""Read-only benchmark and capability discovery commands."""
+"""Local AI benchmark execution, evaluation and explicit sanitized export."""
 
 import argparse
 import json
@@ -9,15 +9,33 @@ from scripts.evaluation.inventory import build_inventory
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=["inventory", "dataset", "run", "assess", "compare"])
+    parser.add_argument(
+        "command", choices=["inventory", "dataset", "run", "assess", "compare", "export"]
+    )
     parser.add_argument("--directory")
     parser.add_argument("--case", action="append", dest="case_ids")
     parser.add_argument("--data-context", default="local-mutable-warehouse")
+    parser.add_argument("--bindings")
     parser.add_argument("--references")
     parser.add_argument("--reviews")
     parser.add_argument("--baseline")
     parser.add_argument("--candidate")
+    parser.add_argument("--assessment")
+    parser.add_argument("--upload", action="store_true")
     args = parser.parse_args()
+    if args.command == "export":
+        from pathlib import Path
+
+        from scripts.evaluation.langsmith import export_run
+
+        if not args.directory or not args.assessment:
+            parser.error("export requires --directory and --assessment")
+        print(
+            json.dumps(
+                export_run(Path(args.directory), Path(args.assessment), args.upload), indent=2
+            )
+        )
+        return
     if args.command == "assess":
         from pathlib import Path
 
@@ -58,7 +76,14 @@ def main():
 
         from scripts.evaluation.run import run_benchmark
 
-        asyncio.run(run_benchmark(args.directory, args.case_ids, data_context=args.data_context))
+        asyncio.run(
+            run_benchmark(
+                args.directory,
+                args.case_ids,
+                data_context=args.data_context,
+                bindings_path=args.bindings,
+            )
+        )
         return
     if args.command == "inventory":
         result = build_inventory()

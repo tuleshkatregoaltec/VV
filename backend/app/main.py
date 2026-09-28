@@ -21,6 +21,8 @@ from app.chat.router import router as chat_router
 from app.clickhouse import close_clickhouse
 from app.config import settings
 from app.core.logging_config import LOGGING_CONFIG
+from app.core.observability import Middleware as ObservabilityMiddleware
+from app.core.observability import configure as configure_observability
 from app.crm.router import router as crm_router
 from app.feasibility.router import router as feasibility_router
 from app.filters.router import router as filters_router
@@ -36,7 +38,9 @@ from app.upload.router import health_router
 from app.upload.router import router as upload_router
 
 logfire.configure(send_to_logfire=bool(settings.LOGFIRE_TOKEN))
-logfire.instrument_pydantic_ai()
+observability_provider = configure_observability(settings)
+if observability_provider is None:
+    logfire.instrument_pydantic_ai()
 logging.config.dictConfig(LOGGING_CONFIG)
 
 
@@ -51,6 +55,8 @@ async def lifespan(app: FastAPI):
     yield
     await close_clickhouse()
     await close_postgres()
+    if observability_provider is not None:
+        observability_provider.shutdown()
 
 
 app = FastAPI(
@@ -59,7 +65,11 @@ app = FastAPI(
     lifespan=lifespan,
     generate_unique_id_function=custom_generate_unique_id,
 )
-logfire.instrument_fastapi(app)
+if observability_provider is None:
+    logfire.instrument_fastapi(app)
+else:
+    # Use one HTTP instrumentation path so every exported child has its parent.
+    app.add_middleware(ObservabilityMiddleware)
 
 if settings.honeybadger_enabled:
     honeybadger.configure(api_key=settings.HONEYBADGER_API_KEY)

@@ -46,6 +46,7 @@ from app.analytics.models import (
     SubProjectsResponse,
 )
 from app.analytics.queries import MARKET_FILTERS, ProjectFilterType, ProjectScopeType
+from app.core.observability import operation
 
 # Room sort order: Studio first, then numeric bedrooms, then anything else
 
@@ -1064,6 +1065,7 @@ async def get_market_trend(
     )
 
 
+@operation
 async def get_market_pulse(area: str, period_days: int = 90) -> dict[str, Any]:
     """Get vital market statistics for a specific area.
 
@@ -1106,6 +1108,7 @@ async def get_market_pulse(area: str, period_days: int = 90) -> dict[str, Any]:
         return {"success": False, "error": str(e)}
 
 
+@operation
 async def rank_areas(
     metric: str = "volume",
     limit: int = 5,

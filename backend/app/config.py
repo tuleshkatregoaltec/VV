@@ -58,6 +58,12 @@ class Settings(BaseSettings):
     HONEYBADGER_API_KEY: str | None = None
     LOGFIRE_TOKEN: str | None = None
 
+    # Content-free AI telemetry is explicitly opt-in.
+    AI_TELEMETRY_ENABLED: bool = False
+    LANGSMITH_API_KEY: str | None = None
+    LANGSMITH_ENDPOINT: str = "https://api.smith.langchain.com"
+    LANGSMITH_WORKSPACE_ID: str | None = None
+
     # OpenRouter
     OPENROUTER_API_KEY: str  # Bitwarden Secrets
     DEFAULT_CHAT_MODEL: str  # configMap

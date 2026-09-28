@@ -90,3 +90,14 @@ def test_private_files_refuse_symlinks(tmp_path):
     with pytest.raises(OSError):
         private_write(link, {"overwrite": True})
     assert target.read_text() == "preserve"
+
+
+def test_redaction_handles_nested_json_escaped_credentials():
+    import json
+
+    from scripts.evaluation.tracing import scrub_secrets
+
+    secret = 'key"with\\escape'
+    nested = json.dumps({"message": json.dumps({"password": secret})})
+    clean = json.loads(scrub_secrets(nested, (secret,)))
+    assert json.loads(clean["message"])["password"] == "[SECRET]"

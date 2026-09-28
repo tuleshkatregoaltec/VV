@@ -94,6 +94,14 @@ def observation(record, spans):
                     if key in attrs
                 }
             )
+    ids = {span["context"].get("span_id") for span in selected}
+    missing_parents = sorted(
+        {
+            span["parent_id"]
+            for span in selected
+            if span.get("parent_id") and span["parent_id"] not in ids
+        }
+    )
     tables = {table for query in queries for table in query["tables"]}
     return {
         "answer": record.get("answer", ""),
@@ -102,6 +110,7 @@ def observation(record, spans):
         "models": models,
         "sources": sorted(source for source, known in SOURCE_TABLES.items() if tables & known),
         "trace_span_count": len(selected),
+        "trace_missing_parents": missing_parents,
         "trace_root_present": any(span["name"] == "application.http" for span in selected),
         "token_usage": {
             "input": sum(model.get("gen_ai.usage.input_tokens", 0) for model in models),
@@ -147,14 +156,15 @@ def evaluate_case(record, observed, runtime, criteria):
     ]
     trace_valid = (
         observed["trace_root_present"]
+        and not observed["trace_missing_parents"]
         and bool(observed["models"])
         and Counter(started_tools) == Counter(tool["name"] for tool in observed["tools"])
     )
     checks["trace_coverage"] = metric(
         "pass" if trace_valid else "fail",
-        "HTTP/model/tool spans accounted for"
+        "HTTP/model/tool spans and parent links accounted for"
         if trace_valid
-        else "missing root, model or tool evidence",
+        else "missing root, model, tool evidence or parent spans",
     )
     tools = observed["tools"]
     schema_errors = []
@@ -209,7 +219,9 @@ def evaluate_case(record, observed, runtime, criteria):
         if isinstance(tool["result"], dict) and tool["result"].get("transaction_count") == 0
     ]
     availability = (
-        "none"
+        "failed"
+        if failed_tools
+        else "none"
         if not tools
         else "empty"
         if len(empty) == len(tools)
@@ -218,7 +230,12 @@ def evaluate_case(record, observed, runtime, criteria):
         else "present"
     )
     checks["evidence_availability"] = metric(
-        "unassessed" if availability in {"none", "empty"} else "pass", availability
+        "fail"
+        if availability == "failed"
+        else "unassessed"
+        if availability in {"none", "empty"}
+        else "pass",
+        availability,
     )
     required = set(criteria.get("required_sources", []))
     missing = required - set(observed["sources"])

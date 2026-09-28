@@ -64,7 +64,20 @@ def write_report(directory: Path, assessment: dict) -> Path:
             "Deterministic: transport, persistence, schema, observed sources, finite evidence and recognized date predicates. Semantic review: grounding, limitation disclosure, completeness and unsupported promises. Human/reference review: market truth, ambiguous units, scope and exact values. Missing references leave numerical correctness unassessed.",
             "",
         ]
-    path = directory / f"report-{assessment['evaluator_sha256'][:12]}.md"
+    from scripts.evaluation.tracing import fingerprint
+
+    version = fingerprint(
+        {
+            key: assessment[key]
+            for key in (
+                "evaluator_sha256",
+                "criteria_sha256",
+                "references_sha256",
+                "reviews_sha256",
+            )
+        }
+    )[:16]
+    path = directory / f"report-{version}.md"
     fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, 0o600)
     os.fchmod(fd, 0o600)
     with os.fdopen(fd, "w") as output:

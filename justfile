@@ -143,3 +143,7 @@ ai-assess *args:
 
 ai-compare *args:
 	cd backend && uv run python -m scripts.evaluation compare {{args}}
+
+# Preview by default. --upload explicitly sends only allowlisted metadata to LangSmith.
+ai-export *args:
+	set -a && source .env.dev && set +a && cd backend && uv run python -m scripts.evaluation export {{args}}

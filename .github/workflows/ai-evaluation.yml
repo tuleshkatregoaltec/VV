@@ -1,0 +1,28 @@
+name: AI evaluation infrastructure
+
+on:
+  pull_request:
+    paths: ['backend/**', 'justfile', '.github/workflows/ai-evaluation.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  offline-checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+        with:
+          python-version: '3.13'
+      - uses: extractions/setup-just@v4
+      - name: Install locked dependencies
+        run: uv sync --project backend --frozen
+      - name: Use dummy configuration without model or telemetry credentials
+        run: cp backend/tests/evaluation/offline.env .env.dev
+      - name: Check evaluation infrastructure and domain boundaries
+        run: just test-backend tests/evaluation tests/architecture tests/agents tests/streaming
+      - name: Lint backend
+        run: just lint-backend

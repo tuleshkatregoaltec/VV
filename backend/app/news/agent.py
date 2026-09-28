@@ -33,6 +33,7 @@ def get_news_summary_agent() -> Agent[None, NewsSummaryDraft]:
     if _news_summary_agent is None:
         _news_summary_agent = Agent(
             create_openrouter_model(),
+            name="news_summary",
             output_type=NewsSummaryDraft,
             model_settings={"temperature": 0.1},
             system_prompt=NEWS_SUMMARY_SYSTEM_PROMPT,

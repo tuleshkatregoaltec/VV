@@ -225,11 +225,22 @@ Production deployment is separate from the local Compose environment:
 - The backend production image is built from `backend/Dockerfile`.
 - Managed production services such as databases, caches, and object storage are external and are not provisioned by this repo.
 
-## AI evaluation discovery
+## AI evaluation and observability
 
-`just ai-benchmark` prints the 15 canonical questions and their dataset fingerprint.
-`just ai-inventory` generates a static agent/tool/capability map from backend source.
-Both are read-only and make no model calls or telemetry uploads. Run
-`just test-evaluation` for their offline tests (also included in the default backend
-suite). See [backend/EVALUATION.md](backend/EVALUATION.md) for the discovery findings,
-implementation plan, limitations, and pending live-execution prerequisite.
+`just ai-benchmark` validates the canonical questions; `just ai-inventory` generates
+the source-derived capability map. Both are offline. `just test-evaluation` checks
+the evaluation infrastructure without model calls or remote telemetry.
+
+`just ai-evaluate` runs real authenticated local HTTP/SSE conversations with the
+configured model, incurring ordinary model usage. Full private evidence goes under
+Git-ignored `.evaluation/`. `just ai-assess --directory /absolute/run` generates
+separate per-dimension findings and a private report; `--reviews` attaches attributed
+semantic review. `just ai-compare --baseline FILE --candidate FILE` checks compatible
+assessments and rejects mutable/unmatched data contexts.
+
+`just ai-export --directory /absolute/run --assessment /absolute/assessment.json`
+creates a metadata-only preview. Only an explicit `--upload` with a locally configured
+LangSmith key publishes it. Production telemetry separately requires
+`AI_TELEMETRY_ENABLED=true`; it defaults off. See [backend/EVALUATION.md](backend/EVALUATION.md)
+for the actual baselines, parameter bindings, privacy boundary, extension workflow,
+remaining remote-ingestion verification and known product capability gaps.

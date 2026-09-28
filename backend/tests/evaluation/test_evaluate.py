@@ -22,6 +22,7 @@ def inputs():
         "queries": [],
         "sources": [],
         "trace_root_present": True,
+        "trace_missing_parents": [],
     }
     return record, observed, {"tools": {}}
 
@@ -177,3 +178,9 @@ def test_trace_extraction_does_not_double_count_agent_and_model_tokens():
         },
     ]
     assert observation(record, spans)["token_usage"]["input"] == 30
+
+
+def test_trace_coverage_rejects_missing_infrastructure_parents():
+    record, observed, runtime = inputs()
+    observed["trace_missing_parents"] = ["unrecorded-fastapi-parent"]
+    assert evaluate_case(record, observed, runtime, {})["trace_coverage"]["status"] == "fail"

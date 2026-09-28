@@ -2,6 +2,7 @@ import asyncio
 import logging
 from typing import Any, List, Optional
 
+from app.core.observability import operation
 from app.project import queries
 from app.project.mapping import _float_or_none, _room_sort_key
 from app.project.models import (
@@ -369,6 +370,7 @@ async def get_project_market_snapshot(project_id: int) -> Optional[ProjectMarket
     )
 
 
+@operation
 async def get_similar_projects(project_name: str, limit: int = 5) -> dict[str, Any]:
     """Find similar projects based on attributes.
 

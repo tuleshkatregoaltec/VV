@@ -37,7 +37,15 @@ def private_write(path: Path, value) -> None:
 def scrub_secrets(text: str, secrets: tuple[str, ...]) -> str:
     for secret in sorted(secrets, key=len, reverse=True):
         if secret:
-            text = text.replace(secret, "[SECRET]")
+            # Secrets can occur inside nested serialized tool messages. Redact
+            # literal and JSON-escaped forms without corrupting the JSON envelope.
+            forms = {secret}
+            escaped = secret
+            for _ in range(3):
+                escaped = json.dumps(escaped)[1:-1]
+                forms.add(escaped)
+            for form in sorted(forms, key=len, reverse=True):
+                text = text.replace(form, "[SECRET]")
     text = re.sub(r"(?i)Bearer\s+[A-Za-z0-9._~-]+", "Bearer [SECRET]", text)
     text = re.sub(r"\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+", "[TOKEN]", text)
     return text

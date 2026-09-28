@@ -29,11 +29,14 @@ class Case(BaseModel):
         """No values means the original clarification input; partial bindings are errors."""
         if parameters is None:
             return self.question
-        if parameters.keys() != set(self.parameters):
+        if not isinstance(parameters, dict) or parameters.keys() != set(self.parameters):
             raise ValueError(
                 "supply exactly the declared parameters, or leave the template unbound"
             )
-        if any(not value.strip() or "[" in value or "]" in value for value in parameters.values()):
+        if any(
+            not isinstance(value, str) or not value.strip() or "[" in value or "]" in value
+            for value in parameters.values()
+        ):
             raise ValueError("parameter values must be nonempty concrete values")
         return re.sub(r"\[([^]]+)\]", lambda match: parameters[match[1]], self.question)
 

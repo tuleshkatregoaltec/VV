@@ -1,22 +1,21 @@
-# AI evaluation discovery and implementation plan
+# AI evaluation and observability
 
 Discovery base: `9b3303f`, branch `refactor/backend-domain-boundaries`.
 The completed migration and `ARCHITECTURE.md` remain authoritative.
 
-## Execution evidence and blocking prerequisite
+## Implemented system and private execution evidence
 
 The user explicitly approved the live OpenRouter question/tool-result flow on
 2026-09-28, with full evidence restricted to local storage. All 15 cases have now
 executed through real loopback HTTP, GoTrue authentication, FastAPI guards,
 conversation creation, the existing SSE service, message reload and deletion of
-only the evaluation-created conversations. No production runtime code changed.
-Full evidence is ignored under `.evaluation/20260928T161314Z` (directory 0700,
+only the evaluation-created conversations. The first run preceded production instrumentation; later changes add optional observation only.
+Full evidence is ignored under `.evaluation/20260928T161314Z` and the corrected capture `.evaluation/20260928T164246Z` (directories 0700,
 files 0600). No remote telemetry or LangSmith upload occurred.
 
 The local API responds to health checks. The configured model is
 `google/gemini-3.1-flash-lite` through OpenRouter. Pydantic AI is locked at 1.38.0,
-Logfire at 4.19.0. No LangSmith dependency or key was found in the local env file.
-These are discovery observations, not permanent configuration defaults.
+Logfire at 4.19.0. LangSmith 0.14.1 and OpenTelemetry 1.39.1 are now locked. No LangSmith key is configured locally, so remote ingestion remains unverified.
 
 ## Actual AI capabilities, models, agents and tools
 
@@ -239,15 +238,14 @@ or derived from versioned, explicit pricing; unknown is not zero.
 - [Mask inputs and outputs](https://docs.langchain.com/langsmith/mask-inputs-outputs)
 - [Compare experiments](https://docs.langchain.com/langsmith/compare-experiment-results)
 
-These APIs inform the direction; verify compatibility against installed SDKs
-before implementing. No evaluation quality result is claimed by this document.
+The SDK signatures, serialization and OTLP encoding are tested against the installed versions. Actual local quality findings follow below; SDK tests do not prove remote ingestion.
 
 ## Implemented discovery commands
 
 - `just ai-benchmark`: print validated canonical cases and dataset SHA-256.
 - `just ai-inventory`: print generated static source evidence as JSON. No app
   import, database access, provider call or telemetry export is performed.
-- `just test-evaluation`: offline dataset/inventory tests. These also run in the
+- `just test-evaluation`: offline dataset, tracing, evaluator, export and runner tests. These also run in the
   default `just test-backend` suite.
 
 `Case.bind()` preserves an unbound question exactly. Explicit bindings must supply
@@ -256,11 +254,9 @@ extend beyond 15; dataset digests change with content, independent of JSON layou
 The inventory fingerprints actual prompt literals/declarations and code, lists
 registered tools and source signatures, follows resolvable module-level calls to
 public capabilities/query functions, and records unresolved calls separately.
-Direct HTTP model endpoints/configuration references are included. It is not yet
-a runtime trace viewer, a compiled tool-schema inventory or an evaluation runner.
+Direct HTTP model endpoints/configuration references are included. Static reachability is distinguished from actual calls; private runtime evidence adds compiled tool schemas, selected tools, SQL and results.
 
-The remaining execution, instrumentation, evaluator, LangSmith and regression
-stages above are pending. No model-quality baseline has been established.
+The discovery plan above is historical context. Execution, local assessment, regression comparison and sanitized LangSmith adapters are now implemented. Remote ingestion is the remaining credential-dependent verification.
 
 Discovery checkpoint verification: 292 backend tests passed in the default run;
 three workbook parity tests initially skipped because Bun was absent from PATH,
@@ -269,8 +265,7 @@ including nine new discovery tests). All 68 frontend unit tests passed with the
 installed Node 20.19.6/Bun paths; the first attempt with system Node 18 failed at
 Vite startup. Backend Ruff checks and formatting checks passed. No production
 runtime code changed. Database integration suites, frontend build and Playwright
-were not rerun for this read-only tooling/documentation checkpoint. Live model
-execution, remote tracing and quality evaluation remain unverified and pending.
+were not rerun for this read-only tooling/documentation checkpoint. At that discovery checkpoint, live execution and evaluation had not yet run. The following sections record the subsequently completed work.
 
 
 ## Observed execution baseline, 2026-09-28
@@ -396,10 +391,177 @@ cannot establish a controlled model-versus-model quality comparison. A future ru
 must use an actual pinned snapshot and document it with `--data-context`; that
 label is an operator assertion, not an automatic database snapshot mechanism.
 
-Observed deterministic baseline: all 15 executions/persistence/trace checks pass;
+Original deterministic baseline: all 15 executions/persistence checks pass;
+strict reassessment now fails all 15 trace-coverage checks because an intermediate
+Logfire FastAPI parent was not captured. Historical assessments that passed this
+check are superseded, not deleted. The remaining original findings hold:
 7 selected tool schemas pass; 5 queries contain nonfinite evidence; 2 observed
 rolling-day queries cannot answer the requested complete calendar windows; 12
 cases lack one or more required source families; all 15 full requested analyses
 are unsupported by the current chat tool contract; 3 retain unresolved parameters.
 Assisted review flags grounding risks in 11 answers. Numerical correctness remains
-unassessed for all 15. This is an honest initial quality baseline, not 15 passes.
+unassessed for all 15. These are per-dimension baseline findings, not 15 answer-quality passes.
+
+
+## Corrected trace capture and repeated baseline
+
+Export validation exposed a real capture defect in the first run: Logfire's
+FastAPI instrumentation used a different provider, leaving an unrecorded parent
+between our HTTP root and native agent/database spans. No spans were fabricated
+or reparented. The dedicated server now uses Logfire's public
+`additional_span_processors` hook to collect its spans locally too. The evaluator
+explicitly rejects missing parent IDs. The original evidence and assessments are
+retained; strict reassessment is `assessment-c2bb745ab7ebd1d1.json` in the first run.
+
+The authorized rerun is `609e22b7-8a90-447f-bc17-a7fe7d39b3ab`, directory
+`.evaluation/20260928T164246Z`. All 15 authenticated streams, persisted responses,
+conversation deletions and complete trace-parent chains verified. Its 677 spans
+contain 21 model requests, 25,226 input and 8,377 output tokens. Costs/downstream
+vendor remain unknown. All original questions, including placeholders, were sent
+unchanged. Agent names gained explicit metadata labels; prompts, reasoning,
+registered schemas, business queries and token accounting stayed unchanged.
+
+| Case | Actual selected tools | Repeated-run finding |
+| --- | --- | --- |
+| q01 | pulse twice: Jumeirah Village Circle and JVC, 90 days | Both empty; admits missing bracket data but asserts high current activity |
+| q02 | area volume rankings, limit 5, 90 days; Business Bay pulse, 90 days | Rank result BUSINESS BAY has 1,805 transactions; differently cased pulse has 36. Answer mixes results and changes raw unit price 27,818 to 2,781; no building/bedroom ranking or calendar quarter |
+| q03 | Downtown Dubai pulse, 180 days | Empty; asserts high activity, demand and stable prices without support |
+| q04 | Jumeirah Lake Towers pulse, 90 days | Empty transaction evidence; rental volume/demand claims without rent retrieval |
+| q05 | none | Unsupported current rental price, yield, volume and growth |
+| q06 | none | Unsupported studio rent/yield/price-band claims; no monthly series |
+| q07 | none | Discloses no delivery rankings but promises unavailable rental analysis |
+| q08 | none | Discloses missing project audit data, then supplies unsupported price/yield/growth |
+| q09 | none | Claims analysis and unit-type prices without listings evidence or counts |
+| q10 | none | Unsupported aged/new listing prices and premium |
+| q11 | none | Unsupported purchase/rent/yield inputs; illustrative arithmetic does not validate market facts |
+| q12 | none | Ignores unbound building; unsupported appraisal and asking-rent recommendation |
+| q13 | none | Ignores unbound building; names comps and prices without retrieval |
+| q14 | none | Quantitative multi-source report without retrieval, using 90 days rather than last month |
+| q15 | none | Requests project names and discloses missing developer documents; proposed benchmarking needs review |
+
+Five pulse calls and one rank call occurred across four cases. Four pulse calls
+returned empty aggregates in three cases; q02 retrieved nonempty results. No
+similar-project call occurred and no rental/listing/delivery source was reached.
+All six argument schemas pass; three cases fail finite-evidence checks; twelve
+lack required source families; q02 deterministically fails the recognized calendar
+predicate. All fifteen full requests remain unsupported; three retain unbound
+parameters. Assisted trace review flags thirteen grounding failures, with q07/q15
+unassessed for grounding. Numerical correctness remains unassessed throughout.
+
+The repeat differs from the first run despite unchanged AI behavior configuration.
+It is evidence of nondeterministic tool selection and response behavior, not a
+controlled model improvement/regression experiment on an immutable warehouse.
+The reviewed assessment is `assessment-ff5cd4fae83521b9.json`; the complete private
+per-case report is `report-441c5ff7859e470f.md` in the corrected run directory.
+
+## LangSmith integration and privacy boundary
+
+Two separate adapters serve different purposes:
+
+- `app/core/observability.py` provides optional production OpenTelemetry export.
+  Native Pydantic AI spans include agent/model/tool identity without content;
+  small wrappers add public operation, ClickHouse query hash/row count, PostgreSQL
+  statement hash and actual direct CRM provider request spans. CRM early returns
+  do not create fictitious model calls. HTTP roots encompass streaming completion.
+- `scripts/evaluation/langsmith.py` publishes an already assessed local experiment
+  through the official SDK. A versioned dataset contains case IDs and question/
+  parameter digests, not the questions. Examples link to nested recorded runs and
+  categorical per-dimension feedback. Each assessment revision gets distinct run
+  IDs/project identity; repeated uploads resume without duplicating completed IDs.
+
+Both construct allowlisted records from scratch. They exclude prompts, answers,
+arguments, tool results, SQL text, rows, events, exception descriptions, HTTP
+headers, user/organization IDs, arbitrary resources and SDK environment metadata.
+Only trusted labels, hashes, random run IDs, timing, token counts, error flags,
+source-system names and assessment statuses/methods leave the process. Unknown
+model identifiers are hashed. Full source/query/result evidence stays local.
+Remote run inputs/outputs are intentionally empty; use the private report to
+inspect an actual answer. Remote reviewers cannot infer semantic correctness from
+sanitized metadata alone. Hashes are correlation identifiers, not anonymization
+of low-entropy content. No raw feedback rationale or reviewer identity is exported.
+
+`AI_TELEMETRY_ENABLED=false` is the default. Explicitly enabling it requires a
+locally configured `LANGSMITH_API_KEY`; optional endpoint/workspace settings support
+the account's region/workspace. Environment-specific projects are
+`vitevue-local`, `vitevue-staging` or `vitevue-production`. Production observation
+uses one HTTP provider path to avoid orphan parent spans. The existing Logfire
+path remains when this optional adapter is disabled. The dedicated benchmark
+server disables every remote integration regardless of inherited flags/keys.
+
+The dependency minimum matches SDK APIs used (`langsmith[otel]>=0.14.1`), with exact
+versions in `uv.lock`. Offline tests exercise real SDK serialization and OTLP
+encoding as well as nested run/example/feedback linkage. The real 15-case evidence
+successfully generated `langsmith-preview.json` locally with `uploaded: false`.
+No remote upload, account UI comparison or end-to-end ingestion is claimed: no
+LangSmith credential is available. Configure that key locally, then use the
+explicit sanitized upload command below to complete account-side validation.
+
+## Developer workflow and continuous checks
+
+```sh
+just ai-inventory
+just ai-benchmark
+just test-evaluation
+just ai-evaluate
+just ai-assess --directory /absolute/private/run
+# Review the generated template; record method, reviewer and evidence for each judgment.
+just ai-assess --directory /absolute/private/run --reviews /absolute/private/reviews.json
+just ai-compare --baseline /absolute/baseline.json --candidate /absolute/candidate.json
+just ai-export --directory /absolute/private/run --assessment /absolute/private/assessment.json
+# Explicit opt-in, after inspecting the sanitized local preview and configuring a key:
+just ai-export --directory /absolute/private/run --assessment /absolute/private/assessment.json --upload
+```
+
+`ai-evaluate --case q12 --bindings /absolute/private/bindings.json` accepts a JSON
+map such as `{"q12":{"building":"YOUR EXPLICIT BUILDING NAME"}}`. Supply actual
+operator-selected entities; these illustrative words are not benchmark bindings.
+All declared parameters for a bound case are required and validated before any
+login/model call. Without a map entry the canonical template remains unbound.
+Bound question/parameter fingerprints prevent accidental comparison to unbound
+cases. `--directory` must be new; `--data-context` must identify a real pinned data
+snapshot before a comparison can be treated as controlled. Changing the configured
+model in `.env.dev` affects normal execution; record it and run a fresh experiment.
+
+Local runs are ignored by Git, directory mode 0700 and evidence mode 0600. They
+contain sensitive authorized data; delete runs when no longer needed under the
+operator's retention policy. Do not commit or attach full reports/traces to public
+issues. Conversation deletion does not reverse normal model usage accounting.
+Known credential values, Bearer tokens and JWTs are scrubbed from local evidence,
+including nested JSON-escaped forms; this does not make raw evidence public-safe.
+
+`.github/workflows/ai-evaluation.yml` runs offline infrastructure, architecture,
+agent and streaming tests plus lint with dummy settings and no model/telemetry
+credentials. It never runs billed live benchmarks or uploads artifacts. CI checks
+infrastructure regressions; a quality regression requires an explicit live run,
+compatible evidence and reviewed dimensions. There is no unattended judge cost,
+new database table, queue, endpoint, UI, or duplicated business logic.
+
+## Final verification checkpoint
+
+- All 15 canonical cases ran twice through real authenticated local HTTP and the
+  configured OpenRouter model. The second run has complete trace ancestry; both
+  retain exact inputs, outputs, actual tool/query evidence and cleanup outcomes.
+- 321 fast backend tests passed, including all 35 evaluation tests, frozen
+  contracts, authorization/streaming behavior and architecture boundaries. No
+  tests were skipped. The new CI test selection also passed locally using only
+  dummy configuration (53 tests at that checkpoint, before the final export-label
+  test was added); hosted GitHub Actions itself has not run in this local task.
+- 13 isolated PostgreSQL tests, 15 real ClickHouse tests, 68 frontend unit tests,
+  frontend production build and all 37 Playwright tests passed. The first browser
+  attempt could not load `libnspr4.so`; rerunning with the existing local Chromium
+  library directory in `LD_LIBRARY_PATH` resolved the environment issue.
+- Backend Ruff lint/format and `git diff --check` pass. An AST comparison against
+  `9b3303f` verifies unchanged agent prompts/model settings/tool declarations and
+  market business queries, excluding only the added agent-name metadata.
+- Both evidence directories are Git-ignored and have verified 0700/0600 modes.
+  The complete real-run metadata preview passes; comparing the two mutable local
+  runs correctly exits 2 rather than pretending to be a controlled regression gate.
+- Remote LangSmith ingestion/UI remains unverified without credentials. No raw
+  content or sanitized preview was uploaded. Independent numerical correctness
+  remains unassessed without authoritative references; assisted judgments are
+  explicitly distinct from human sign-off.
+
+No frontend/API schemas, generated client, migration, business query or Holocron
+code changed. Holocron/infrastructure-only suites and the unchanged frontend broad
+type check were not rerun; the migration's existing type-check limitations remain
+recorded in `ARCHITECTURE.md` and are not claimed resolved here.

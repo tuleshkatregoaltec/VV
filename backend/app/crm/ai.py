@@ -7,12 +7,14 @@ from typing import Any
 import httpx
 
 from app.config import settings
+from app.core.observability import operation, provider_request
 from app.crm.import_parsing import _CANONICAL_FIELDS, SheetProfile
 from app.crm.inbound_policy import _ALIASES
 
 logger = logging.getLogger(__name__)
 
 
+@operation
 async def _llm_mapping(profile: SheetProfile) -> SheetProfile:
     prompt = {
         "task": "Map spreadsheet headers to canonical CRM owner-import fields.",
@@ -34,7 +36,8 @@ async def _llm_mapping(profile: SheetProfile) -> SheetProfile:
     }
     try:
         async with httpx.AsyncClient(timeout=35) as client:
-            response = await client.post(
+            response = await provider_request(
+                client,
                 "https://openrouter.ai/api/v1/chat/completions",
                 headers={
                     "Authorization": f"Bearer {settings.OPENROUTER_API_KEY}",
@@ -91,6 +94,7 @@ async def _llm_mapping(profile: SheetProfile) -> SheetProfile:
     return profile
 
 
+@operation
 async def _ai_extract(notes: str, known: dict[str, Any]) -> tuple[dict[str, Any], float, list[str]]:
     if not notes or not settings.OPENROUTER_API_KEY:
         return {}, 0.0, []
@@ -118,7 +122,8 @@ async def _ai_extract(notes: str, known: dict[str, Any]) -> tuple[dict[str, Any]
     }
     try:
         async with httpx.AsyncClient(timeout=25) as client:
-            response = await client.post(
+            response = await provider_request(
+                client,
                 "https://openrouter.ai/api/v1/chat/completions",
                 headers={
                     "Authorization": f"Bearer {settings.OPENROUTER_API_KEY}",
@@ -152,6 +157,7 @@ async def _ai_extract(notes: str, known: dict[str, Any]) -> tuple[dict[str, Any]
     return criteria, max(0.0, min(1.0, confidence)), strict
 
 
+@operation
 async def _ai_header_mapping(headers: list[str], campaign_context: str) -> dict[str, str]:
     if not headers or not settings.OPENROUTER_API_KEY:
         return {}
@@ -170,7 +176,8 @@ async def _ai_header_mapping(headers: list[str], campaign_context: str) -> dict[
     }
     try:
         async with httpx.AsyncClient(timeout=20) as client:
-            response = await client.post(
+            response = await provider_request(
+                client,
                 "https://openrouter.ai/api/v1/chat/completions",
                 headers={
                     "Authorization": f"Bearer {settings.OPENROUTER_API_KEY}",

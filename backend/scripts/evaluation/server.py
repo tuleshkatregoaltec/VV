@@ -16,6 +16,7 @@ def create_app():
 
     if settings.ENVIRONMENT != "local":
         raise RuntimeError("Live evaluation server requires ENVIRONMENT=local")
+    settings.AI_TELEMETRY_ENABLED = False
     settings.LOGFIRE_TOKEN = None
     settings.HONEYBADGER_API_KEY = None
     settings.POSTHOG_API_KEY = None
@@ -55,8 +56,19 @@ def create_app():
 
     client.query = observe_query(client.query, tracer)
     client.query_df = observe_query(client.query_df, tracer)
+    # Logfire owns FastAPI's internal spans on a separate provider. Capture them
+    # through its public processor hook so native children never have missing parents.
+    import logfire
+
     from app.main import app
 
+    logfire.configure(
+        send_to_logfire=False,
+        console=False,
+        additional_span_processors=[
+            SimpleSpanProcessor(LocalExporter(directory / "spans.jsonl", secrets))
+        ],
+    )
     logging.disable(
         logging.CRITICAL
     )  # Avoid normal SQL logs writing bind values outside the private run.
@@ -86,6 +98,7 @@ def create_app():
             "configured_model": settings.DEFAULT_CHAT_MODEL,
             "provider": "openrouter",
             "agent": "app.chat.agent.agent",
+            "agent_name": agent.name,
             "prompt_sha256": fingerprint(agent._system_prompts),
             "tools_sha256": fingerprint(tools),
             "tools": tools,

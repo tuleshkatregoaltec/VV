@@ -158,6 +158,7 @@ Zoning and GFA constraints from the plot data are absolute.\
 
 hbu_seed_agent = Agent(
     model,
+    name="hbu_seed_agent",
     deps_type=HBUSeedDeps,
     output_type=HBUSeedDraft,
     model_settings={"temperature": 0.1},
@@ -214,6 +215,7 @@ are absolute.\
 
 hbu_seed_agent_bts_prefetched = Agent(
     model,
+    name="hbu_seed_agent_bts_prefetched",
     deps_type=HBUSeedDeps,
     output_type=HBUSeedDraft,
     model_settings={"temperature": 0.1},
@@ -266,6 +268,7 @@ Never invent evidence. If evidence is absent, say so. Zoning and GFA constraints
 
 hbu_seed_agent_btr = Agent(
     model,
+    name="hbu_seed_agent_btr",
     deps_type=HBUSeedDeps,
     output_type=HBUSeedDraft,
     model_settings={"temperature": 0.1},

@@ -50,6 +50,7 @@ model = create_openrouter_model()
 
 workspace_chat_agent = Agent(
     model,
+    name="feasibility_workspace",
     deps_type=FeasibilityChatDeps,
     model_settings={"temperature": 0.1},
     system_prompt=(

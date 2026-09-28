@@ -19,12 +19,12 @@ from scripts.evaluation.tracing import private_directory, private_write, scrub_s
 ROOT = Path(__file__).resolve().parents[3]
 
 
-async def execute_case(client, case, timeout):
+async def execute_case(client, case, timeout, parameters=None):
     record = {
         "case_id": case.id,
-        "question": case.bind(),
-        "parameters": {},
-        "unbound_parameters": case.parameters,
+        "question": case.bind(parameters),
+        "parameters": parameters or {},
+        "unbound_parameters": case.parameters if parameters is None else [],
         "started_at": datetime.now(timezone.utc).isoformat(),
         "events": [],
         "trace_ids": {},
@@ -44,7 +44,7 @@ async def execute_case(client, case, timeout):
             async with client.stream(
                 "POST",
                 f"/api/v1/chat/conversations/{conversation_id}/messages/stream",
-                json={"message": case.bind()},
+                json={"message": record["question"]},
             ) as response:
                 record["http_status"] = response.status_code
                 record["trace_ids"]["stream"] = response.headers.get("x-evaluation-trace-id")
@@ -80,7 +80,11 @@ async def execute_case(client, case, timeout):
 
 
 async def run_benchmark(
-    directory=None, case_ids=None, timeout=180, data_context="local-mutable-warehouse"
+    directory=None,
+    case_ids=None,
+    timeout=180,
+    data_context="local-mutable-warehouse",
+    bindings_path=None,
 ):
     from app.config import settings
 
@@ -95,6 +99,11 @@ async def run_benchmark(
     cases = [case for case in benchmark.cases if case_ids is None or case.id in case_ids]
     if not cases or (case_ids and set(case_ids) != {case.id for case in cases}):
         raise ValueError("Unknown/empty case selection")
+    bindings = json.loads(Path(bindings_path).read_text()) if bindings_path else {}
+    if not isinstance(bindings, dict) or set(bindings) - {case.id for case in cases}:
+        raise ValueError("Bindings must map selected case IDs to explicit parameter values")
+    for case in cases:
+        case.bind(bindings.get(case.id))  # Validate before login or provider calls.
     directory = (
         Path(directory)
         if directory
@@ -176,7 +185,7 @@ async def run_benchmark(
             client.headers["Authorization"] = "Bearer " + token
             secrets = (token, settings.OPENROUTER_API_KEY, settings.FIRST_SUPERUSER_PASSWORD)
             for case in cases:
-                record = await execute_case(client, case, timeout)
+                record = await execute_case(client, case, timeout, bindings.get(case.id))
                 record = json.loads(scrub_secrets(json.dumps(record), secrets))
                 record["run_id"] = run_id
                 private_write(directory / f"{case.id}.json", record)
