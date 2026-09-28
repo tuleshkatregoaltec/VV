@@ -2,7 +2,7 @@ import json
 from contextlib import asynccontextmanager
 from types import SimpleNamespace
 
-from app.feasibility import chat_agent
+from app.feasibility import chat as chat_agent
 from app.plots.models import PlotDetails
 
 

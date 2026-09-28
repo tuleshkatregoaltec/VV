@@ -6,7 +6,7 @@ from app.feasibility.assumption_defaults import (
     deterministic_default_updates,
     sanitize_generated_assumptions,
 )
-from app.feasibility.hbu_agent import (
+from app.feasibility.assumptions import (
     _apply_bts_acquisition_cost_defaults,
     _bts_pricing_guidance,
     _construction_cost_guidance,

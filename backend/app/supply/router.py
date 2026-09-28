@@ -9,8 +9,8 @@ from app.supply.models import (
     UpcomingProjectResponse,
     UpcomingProjectsResponse,
 )
+from app.supply.rankings import get_developer_rankings
 from app.supply.service import (
-    get_developer_rankings,
     get_supply_catalogue_project,
     get_upcoming_projects_ch,
     list_supply_catalogue_projects,

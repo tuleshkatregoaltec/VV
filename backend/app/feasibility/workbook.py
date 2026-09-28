@@ -23,7 +23,7 @@ from app.feasibility.models import (
     ValidationIssue,
     ValidationSummary,
 )
-from app.feasibility.queries import normalize_unit_type
+from app.feasibility.normalization import normalize_unit_type
 from app.plots.models import PlotDetails, Usage
 
 BuildingForm = Literal["low_rise", "mid_rise", "tower"]

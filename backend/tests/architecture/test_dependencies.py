@@ -198,3 +198,48 @@ def test_project_plot_and_area_operations_do_not_own_warehouse_sql():
             assert not any(
                 target.startswith(("app.project.", "app.feasibility.")) for target in targets
             ), source
+
+
+def test_feasibility_and_inventory_capabilities_keep_io_in_their_adapters():
+    graph = imports()
+    operations = [
+        "feasibility.service",
+        "feasibility.studies",
+        "feasibility.generation",
+        "feasibility.research",
+        "feasibility.chat",
+        "feasibility.chat_agent",
+        "feasibility.hbu_agent",
+        "transaction.service",
+        "transaction.exports",
+        "transaction.facets",
+        "listings.service",
+        "supply.service",
+        "supply.rankings",
+    ]
+    pure = [
+        "feasibility.assumptions",
+        "feasibility.normalization",
+        "listings.mapping",
+        "listings.policy",
+        "supply.mapping",
+        "supply.scoring",
+    ]
+    for module in operations + pure:
+        assert not graph["app." + module] & {
+            "app.clickhouse.client",
+            "sqlmodel.select",
+            "sqlalchemy.select",
+            "app.postgres.client",
+        }, module
+        tree = ast.parse((APP / (module.replace(".", "/") + ".py")).read_text())
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Constant) and isinstance(node.value, str):
+                assert not re.search(
+                    r"^\s*(?:SELECT|WITH)\b[\s\S]*\bFROM\b", node.value, re.IGNORECASE
+                ), module
+    for module in pure:
+        assert not graph["app." + module] & {"httpx", "pydantic_ai.Agent", "app.core.openrouter"}
+    assert "app.feasibility.generation" not in graph["app.feasibility.hbu_agent"]
+    assert "app.feasibility.hbu_agent" in graph["app.feasibility.generation"]
+    assert not (APP / "filters/service.py").exists()

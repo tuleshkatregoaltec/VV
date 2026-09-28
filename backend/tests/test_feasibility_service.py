@@ -2,9 +2,10 @@ from unittest.mock import AsyncMock, patch
 
 from fastapi import HTTPException
 
+from app.feasibility.generation import generate_seeded_study
 from app.feasibility.models import GenerateStudyRequest, PlotResearch
-from app.feasibility.queries import get_comparable_data
-from app.feasibility.service import generate_seeded_study, get_comparable_or_404
+from app.feasibility.research import get_comparable_data
+from app.feasibility.service import get_comparable_or_404
 from app.plots.models import PlotDetails
 from app.plots.service import get_land_plots, search_land_plots
 
@@ -251,10 +252,10 @@ async def test_generate_seeded_study_builds_response_from_plot_and_research():
     )
 
     with patch(
-        "app.feasibility.service.generate_hbu_for_plot", new=AsyncMock(return_value=research)
+        "app.feasibility.generation.generate_hbu_for_plot", new=AsyncMock(return_value=research)
     ):
         with patch(
-            "app.feasibility.service.get_plot_details_or_404", new=AsyncMock(return_value=plot)
+            "app.feasibility.generation.get_plot_details_or_404", new=AsyncMock(return_value=plot)
         ):
             response = await generate_seeded_study(
                 GenerateStudyRequest(

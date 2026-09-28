@@ -3,6 +3,8 @@ from fastapi.responses import StreamingResponse
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.dependencies import AuthContext, require_active_subscription
+from app.feasibility.chat import stream_chat_events
+from app.feasibility.generation import generate_hbu_for_plot, generate_seeded_study
 from app.feasibility.models import (
     ComparableData,
     FeasibilityChatRequest,
@@ -15,21 +17,20 @@ from app.feasibility.models import (
     PlotResearch,
 )
 from app.feasibility.service import (
-    create_saved_study,
-    delete_saved_study,
-    generate_hbu_for_plot,
-    generate_seeded_study,
     get_comparable_or_404,
     get_plot_details_or_404,
     get_plot_land_sales_or_404,
-    get_saved_study,
     list_nearby_land_plots,
     list_plot_communities,
-    list_saved_studies,
     list_transaction_areas,
     search_gis_plots,
     search_nearby_land_plots,
-    stream_chat_events,
+)
+from app.feasibility.studies import (
+    create_saved_study,
+    delete_saved_study,
+    get_saved_study,
+    list_saved_studies,
     update_saved_study,
 )
 from app.plots.models import LandSaleEvidence, Plot, PlotDetails, Usage

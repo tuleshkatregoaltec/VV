@@ -184,3 +184,34 @@ identifiers, land-evidence fallback and conversions, both synthetic project-ID
 ranges, shared geographic resolution, area sorting, and browser plot selection.
 Unreachable legacy radar code following an unconditional return was removed;
 the active radar queries and response contracts remain unchanged.
+
+## Phase 6 checkpoint
+
+Feasibility now separates saved studies/repository, generation, deterministic
+assumptions, research/queries, agent declarations/tools, and streaming lifecycle.
+The generation path calls the HBU agent through its invocation operation; prompts,
+registered tools, request limits and underwriting defaults remain unchanged. The
+workbook uses pure normalization, removing the final legacy dependency exception.
+
+Transactions own facets, warehouse queries and export formatting; the existing
+filters URLs remain adapters and their model import re-exports the same class.
+Listings separates source mapping, benchmark/urgency policy and warehouse queries.
+Supply separates source mapping, scoring, rankings and queries. Catalogue response
+composition stays in its application service to avoid a mapping/scoring cycle.
+Existing empty developer-logo/score lookups and pending financial fields remain.
+
+Verification: 277 fast backend tests, 12 PostgreSQL tests, 15 ClickHouse tests,
+68 frontend tests, production build, all 37 Playwright tests, lint and acyclic
+imports passed. New coverage includes provider selection/request limits, committed
+study JSON and ownership scopes, rental evidence sample thresholds, transaction
+paging/facets/CSV sanitization, listings benchmarks, supply catalogue/rankings,
+and both browser CSV downloads. All frozen contracts still match.
+
+### Future improvement — outside this migration
+
+The pre-existing monthly listing-price SQL mixes Int64 and Float64 branches in
+`multiIf` and raises `NO_COMMON_TYPE` on local ClickHouse 24.8. This was reproduced
+with the identical pre-migration expression. A characterization test records the
+failure; annual-price inventory and benchmark execution pass. The expression has
+not been changed. Explicit-ID transaction exports also retain their existing
+uncapped selection path, separate from the 50,000-row filtered-export limit.
