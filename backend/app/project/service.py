@@ -11,7 +11,6 @@ from datetime import date
 from typing import Any, List, Optional
 
 from app.clickhouse.client import query
-from app.core.reelly_scope import reelly_dubai_project_scope
 from app.market.reference import (
     DEVELOPER_LEGAL_ENTITY_PATTERN,
     SQM_TO_SQFT,
@@ -40,6 +39,7 @@ from app.project.models import (
     ProjectUnitComposition,
     RadarBuildingPin,
 )
+from app.supply.scope import reelly_dubai_project_scope
 
 logger = logging.getLogger(__name__)
 

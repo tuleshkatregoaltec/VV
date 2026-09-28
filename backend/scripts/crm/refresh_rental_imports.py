@@ -13,7 +13,8 @@ from sqlalchemy.ext.asyncio import async_sessionmaker
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.clickhouse.client import close_clickhouse, query
-from app.crm import import_service
+from app.crm import identity, import_repository, owner_queries, owner_repository, owners
+from app.crm import ownership as import_service
 from app.postgres.client import close_postgres, get_postgres_engine
 
 
@@ -59,7 +60,19 @@ async def refresh(state_dir: Path, *, dry_run: bool = False) -> dict:
     marker = state_dir / "import-rental-matches.json"
     previous = json.loads(marker.read_text()) if marker.exists() else {}
     snapshot = await rental_snapshot()
-    rules = hashlib.sha256(Path(import_service.__file__).read_bytes()).hexdigest()
+    rules = hashlib.sha256(
+        b"\0".join(
+            Path(module.__file__).read_bytes()
+            for module in (
+                identity,
+                import_service,
+                owners,
+                owner_repository,
+                owner_queries,
+                import_repository,
+            )
+        )
+    ).hexdigest()
     today = date.today().isoformat()
     factory = async_sessionmaker(get_postgres_engine(), class_=AsyncSession, expire_on_commit=False)
     async with factory() as db:

@@ -1,6 +1,3 @@
 [
-  "app.crm.inbound_service -> app.core.reelly_scope",
-  "app.feasibility.workbook -> app.feasibility.queries",
-  "app.project.service -> app.core.reelly_scope",
-  "app.supply.service -> app.core.reelly_scope"
+  "app.feasibility.workbook -> app.feasibility.queries"
 ]

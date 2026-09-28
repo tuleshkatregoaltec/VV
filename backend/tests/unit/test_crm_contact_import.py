@@ -3,25 +3,26 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from app.crm import import_service
-from app.crm.import_models import CrmOwnerProfile, CrmOwnerProperty
-from app.crm.import_service import (
+from app.crm import owner_queries as crm_owner_queries
+from app.crm import owners as crm_owners
+from app.crm.identity import (
     ParsedContact,
-    _apply_evidence,
     _building_match_strength,
     _dedupe_candidates,
-    _heuristic_mapping,
     _location_similarity,
     _normalize_phone,
     _normalize_unit,
-    _owner_filter_sql,
-    _owner_scope_clause,
     _recover_embedded_property_identity,
+)
+from app.crm.import_models import CrmOwnerProfile, CrmOwnerProperty
+from app.crm.import_parsing import _heuristic_mapping, _unique_headers
+from app.crm.imports import delete_contact_import
+from app.crm.owner_repository import _owner_filter_sql, _owner_scope_clause
+from app.crm.ownership import (
+    _apply_evidence,
     _recover_property_identity_from_near_transaction,
     _recover_property_identity_from_transaction,
     _sales_evidence,
-    _unique_headers,
-    delete_contact_import,
 )
 
 
@@ -158,7 +159,7 @@ async def test_unique_transaction_signature_recovers_canonical_property(monkeypa
             }
         ]
 
-    monkeypatch.setattr(import_service, "query", fake_query)
+    monkeypatch.setattr(crm_owner_queries, "query", fake_query)
 
     result = await _recover_property_identity_from_transaction([contact])
 
@@ -199,7 +200,7 @@ async def test_unique_transaction_signature_rejects_contradictory_location(monke
             }
         ]
 
-    monkeypatch.setattr(import_service, "query", fake_query)
+    monkeypatch.setattr(crm_owner_queries, "query", fake_query)
 
     result = await _recover_property_identity_from_transaction([contact])
 
@@ -250,7 +251,7 @@ async def test_transaction_collision_requires_unique_location_context(monkeypatc
             for tower in (1, 2)
         ]
 
-    monkeypatch.setattr(import_service, "query", fake_query)
+    monkeypatch.setattr(crm_owner_queries, "query", fake_query)
 
     result = await _recover_property_identity_from_transaction([contact])
 
@@ -287,7 +288,7 @@ async def test_near_transaction_date_recovers_unit_with_project_context(monkeypa
             }
         ]
 
-    monkeypatch.setattr(import_service, "query", fake_query)
+    monkeypatch.setattr(crm_owner_queries, "query", fake_query)
 
     result = await _recover_property_identity_from_near_transaction([contact])
 
@@ -325,7 +326,7 @@ async def test_sales_evidence_uses_canonical_building_identity(monkeypatch):
             }
         ]
 
-    monkeypatch.setattr(import_service, "query", fake_query)
+    monkeypatch.setattr(crm_owner_queries, "query", fake_query)
 
     sales = await _sales_evidence([contact])
 
@@ -359,7 +360,7 @@ async def test_sales_evidence_combines_project_and_building_hierarchy(monkeypatc
             for index, tower in enumerate(("B", "C"), start=1)
         ]
 
-    monkeypatch.setattr(import_service, "query", fake_query)
+    monkeypatch.setattr(crm_owner_queries, "query", fake_query)
 
     sales = await _sales_evidence([contact])
 
@@ -671,9 +672,9 @@ async def test_owner_profile_enrichment_adds_authoritative_registry_details(monk
             }
         ]
     )
-    monkeypatch.setattr(import_service, "query", registry_query)
+    monkeypatch.setattr(crm_owner_queries, "query", registry_query)
 
-    enriched = await import_service._enrich_owner_profile_registry(profile)
+    enriched = await crm_owners._enrich_owner_profile_registry(profile)
 
     result = enriched.properties[0]
     assert result.imported_transaction_price_aed == 2_789_888

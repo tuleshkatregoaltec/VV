@@ -1,7 +1,12 @@
+from __future__ import annotations
+
 from typing import Any
 
+from app.clickhouse.client import query
 from app.clickhouse.client import query as ch_query
-from app.listings.models import ListingMode
+from app.listings.models import (
+    ListingMode,
+)
 from app.market.reference import listing_area_terms
 
 
@@ -45,3 +50,10 @@ async def resolve_listing_area(mode: ListingMode, area: str | None) -> str | Non
         params,
     )
     return rows[0]["area_name"] if rows else area
+
+
+async def fetch_inventory_freshness(parameters):
+    return await query(
+        "SELECT max(parseDateTimeBestEffortOrNull(scraped_at)) AS refreshed FROM pf_listings_bronze",
+        parameters,
+    )

@@ -10,13 +10,13 @@ from fastapi import HTTPException
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.clickhouse.client import query
-from app.core.reelly_scope import reelly_dubai_project_scope
 from app.market.reference import (
     SQM_TO_SQFT,
     developer_brand_name,
     developer_match_key,
     is_rankable_developer_brand,
 )
+from app.supply import queries
 from app.supply.models import (
     DeveloperRankingCriterionResponse,
     DeveloperRankingResponse,
@@ -33,6 +33,7 @@ from app.supply.models import (
     SupplyCatalogueRiskIndicatorResponse,
     SupplyCatalogueUnitResponse,
 )
+from app.supply.scope import reelly_dubai_project_scope
 
 logger = logging.getLogger(__name__)
 
@@ -42,12 +43,14 @@ SUPPLY_CATALOGUE_GALLERY_ASSET_TYPES = (
     "facility_image",
     "unit_image",
 )
+
 DEVELOPER_RANKING_PERIODS: dict[str, tuple[str, int | None]] = {
     "ytd": ("Year to date", None),
     "1y": ("Last 12 months", 365),
     "3y": ("Last 3 years", 365 * 3),
     "5y": ("Last 5 years", 365 * 5),
 }
+
 DEVELOPER_RANKING_METRICS = {
     "proprietary_score",
     "units_sold",
@@ -58,24 +61,30 @@ DEVELOPER_RANKING_METRICS = {
     "completed_projects",
     "avg_completion_pct",
 }
+
 DEVELOPER_SCORE_WEIGHTS = {
     "delivered_unit_scale": 20.0,
     "pipeline_unit_scale": 15.0,
     "on_time_delivery": 65.0,
 }
+
 DEVELOPER_SCORE_MIN_WEIGHT = 40.0
+
 DEVELOPER_DELIVERED_UNIT_FULL_SCORE = 10_000
+
 DEVELOPER_PIPELINE_UNIT_FULL_SCORE = 15_000
-# Note for follow-up: Q Properties is hidden from developer rankings pending
-# validation of its developer grouping and source-data quality.
+
 DEVELOPER_RANKING_HIDDEN_DEVELOPER_KEYS = {"properties"}
+
 PROJECT_SCORE_MIN_COVERAGE = 35.0
+
 PROJECT_RISK_WEIGHTS = {
     "developer": 35.0,
     "delivery": 25.0,
     "progress": 20.0,
     "sales": 20.0,
 }
+
 SUPPLY_CATALOGUE_SORTS = {
     "recommended",
     "newest",
@@ -1583,3 +1592,30 @@ async def get_supply_catalogue_project(
         financial_risk_metrics=_financial_risk_metrics(),
         estimated_project_irr="~",
     )
+
+
+def _freshness_datetime(value: Any) -> datetime | None:
+    if isinstance(value, datetime):
+        return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+    if isinstance(value, date):
+        return datetime(value.year, value.month, value.day, tzinfo=timezone.utc)
+    raw = "" if value is None else str(value).strip()
+    if not raw:
+        return None
+    try:
+        parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+        return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+    except ValueError:
+        return None
+
+
+async def list_matching_inventory(area: str) -> list[dict[str, Any]]:
+    return await queries.fetch_matching_inventory({"area": area})
+
+
+async def get_catalog_freshness() -> datetime | None:
+    try:
+        rows = await queries.fetch_catalog_freshness({})
+        return _freshness_datetime(rows[0].get("refreshed") if rows else None)
+    except Exception:
+        return None

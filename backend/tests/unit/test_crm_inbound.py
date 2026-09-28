@@ -1,22 +1,22 @@
 from datetime import date, datetime, timedelta, timezone
 
 from app.crm.import_models import CrmPropertyContactClaim
+from app.crm.inbound import _ownership_enrichment
+from app.crm.inbound_imports import _best_header, _file_rows, _preview_file
 from app.crm.inbound_models import CrmInboundEnquiry
-from app.crm.inbound_service import (
-    _bedroom_fit,
+from app.crm.inbound_policy import (
     _belongs_in_inbox,
-    _best_header,
-    _budget_fit,
     _deterministic_criteria,
-    _file_rows,
     _lead_priority,
-    _location_fit,
     _normalize_intent,
-    _ownership_enrichment,
-    _preview_file,
-    _property_fit,
     _qualification_complete,
     _redact,
+)
+from app.crm.matching_policy import (
+    _bedroom_fit,
+    _budget_fit,
+    _location_fit,
+    _property_fit,
     _violates_strict_fields,
 )
 

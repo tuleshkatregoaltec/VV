@@ -21,7 +21,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.config import settings
-from app.crm.inbound_service import delete_inbound_import, process_inbound_import
+from app.crm.inbound_imports import delete_inbound_import, process_inbound_import
 
 LEGACY_IMPORT_NAMES = {"lead-inbox-waterfront-campaign-demo"}
 DEMO_IMPORT_NAME = "Owner intelligence QA — simulated inbound"

@@ -6,13 +6,14 @@ import asyncio
 import json
 import re
 from collections.abc import Mapping
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import Any
 
 from fastapi import HTTPException
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.clickhouse.client import query
+from app.listings import queries
 from app.listings.models import (
     ListingAnalyticsResponse,
     ListingAssetClass,
@@ -29,17 +30,29 @@ from app.listings.models import (
 )
 
 SALE_CATEGORY_IDS = (1, 3)
+
 RENT_CATEGORY_IDS = (2, 4)
+
 LISTINGS_TABLE = "pf_listings_bronze"
+
 LISTINGS_SOURCE_LABEL = f"ph_box ClickHouse {LISTINGS_TABLE}"
+
 PRICE_VALUE_EXPR = "JSONExtractInt(price_json, 'value')"
+
 PRICE_PERIOD_EXPR = "lower(JSON_VALUE(price_json, '$.period'))"
+
 SIZE_VALUE_EXPR = "JSONExtractFloat(size_json, 'value')"
+
 PROPERTY_TYPE_EXPR = "JSON_VALUE(raw_property_json, '$.property_type')"
+
 AREA_NAME_EXPR = "JSONExtract(listing_location_names_json, 'Array(String)')[2]"
+
 PEER_LOCATION_EXPR = "arrayElement(JSONExtract(listing_location_names_json, 'Array(String)'), -1)"
+
 LISTED_AT_EXPR = "parseDateTimeBestEffortOrNull(JSON_VALUE(raw_property_json, '$.listed_date'))"
+
 SCRAPED_AT_EXPR = "parseDateTimeBestEffortOrNull(scraped_at)"
+
 MONTHLY_PRICE_EXPR = f"""
 multiIf(
     {PRICE_PERIOD_EXPR} IN ('year', 'yearly', 'annual', 'annually'), {PRICE_VALUE_EXPR} / 12,
@@ -48,6 +61,7 @@ multiIf(
     {PRICE_VALUE_EXPR}
 )
 """
+
 ANNUAL_PRICE_EXPR = f"""
 multiIf(
     {PRICE_PERIOD_EXPR} IN ('month', 'monthly'), {PRICE_VALUE_EXPR} * 12,
@@ -69,7 +83,9 @@ NON_BUILDING_PROPERTY_TYPES = {
     "villa",
     "warehouse",
 }
+
 MIN_BENCHMARK_COMPARABLES = 5
+
 MARKET_POSITION_THRESHOLD = 0.10
 
 SIZE_BUCKET_EXPR = f"""
@@ -85,6 +101,7 @@ toUInt32(round(
     500
 ))
 """
+
 VALID_BENCHMARK_SIZE_EXPR = f"""
 multiIf(
     lowerUTF8({PROPERTY_TYPE_EXPR}) = 'apartment' AND lowerUTF8(bedrooms) = 'studio',
@@ -115,6 +132,7 @@ EXPLICIT_URGENCY_TERMS = (
     "priced to sell",
     "quick sale",
 )
+
 VALUE_LANGUAGE_TERMS = (
     "below market",
     "lowest price",
@@ -1185,3 +1203,35 @@ async def resolve_listing_area(db: AsyncSession, mode: ListingMode, area: str | 
 
     del db
     return await query_area(mode, area)
+
+
+_LISTING_MAX_AGE_HOURS = 48
+
+
+def _freshness_datetime(value: Any) -> datetime | None:
+    if isinstance(value, datetime):
+        return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+    if isinstance(value, date):
+        return datetime(value.year, value.month, value.day, tzinfo=timezone.utc)
+    raw = "" if value is None else str(value).strip()
+    if not raw:
+        return None
+    try:
+        parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+        return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+    except ValueError:
+        return None
+
+
+async def get_inventory_freshness() -> tuple[datetime | None, bool]:
+    try:
+        rows = await queries.fetch_inventory_freshness({})
+        refreshed = _freshness_datetime(rows[0].get("refreshed") if rows else None)
+        fresh = bool(
+            refreshed
+            and (datetime.now(timezone.utc) - refreshed).total_seconds()
+            <= _LISTING_MAX_AGE_HOURS * 3600
+        )
+        return refreshed, fresh
+    except Exception:
+        return None, False

@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.clickhouse.client import close_clickhouse
-from app.crm.import_service import (
+from app.crm.ownership import (
     refresh_contact_import_match_summaries,
     refresh_property_contact_rentals,
     rematch_property_contact_claims,

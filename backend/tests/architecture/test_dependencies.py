@@ -2,6 +2,7 @@
 
 import ast
 import json
+import re
 from pathlib import Path
 
 APP = Path(__file__).parents[2] / "app"
@@ -130,3 +131,46 @@ def test_migrated_account_operations_do_not_own_sql_or_sdks():
     }
     for module in modules:
         assert not (graph[module] & forbidden), (module, graph[module] & forbidden)
+
+
+def test_crm_capabilities_keep_database_and_inventory_boundaries():
+    graph = imports()
+    operations = {
+        "imports",
+        "ownership",
+        "owners",
+        "inbound_imports",
+        "inbound",
+        "matching",
+        "opportunities",
+        "workspaces",
+        "reports",
+        "router",
+    }
+    for name in operations:
+        module = "app.crm." + name
+        assert not graph[module] & {
+            "app.clickhouse.client",
+            "sqlmodel.select",
+            "sqlalchemy.delete",
+            "sqlalchemy.text",
+            "sqlalchemy.func",
+        }, module
+        tree = ast.parse((APP / "crm" / (name + ".py")).read_text())
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Constant) and isinstance(node.value, str):
+                assert not re.search(
+                    r"^\s*(?:SELECT|WITH)\b[\s\S]*\bFROM\b", node.value, re.IGNORECASE
+                ), module
+    for source, targets in graph.items():
+        if source.startswith(("app.listings.", "app.supply.")):
+            assert not any(target.startswith("app.crm.") for target in targets), source
+    for name in ("identity", "inbound_policy", "matching_policy", "import_parsing"):
+        assert not graph["app.crm." + name] & {
+            "httpx",
+            "app.clickhouse.client",
+            "sqlmodel.select",
+            "app.postgres.client",
+        }
+    for name in ("service", "import_service", "inbound_service"):
+        assert not (APP / "crm" / (name + ".py")).exists()

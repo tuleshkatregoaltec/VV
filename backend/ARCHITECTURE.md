@@ -142,3 +142,28 @@ arguments, webhook event filtering, active-subscription preference, idempotent
 subscription persistence, checkout failure commits, and per-user token accumulation.
 No quota coverage, concurrency, transaction atomicity, SDK call mode or HTTP contract
 was changed. Both remaining runtime model-registry imports were removed.
+
+## Phase 4 checkpoint
+
+CRM now has explicit owners for contact parsing/identity, import orchestration,
+AI mapping/extraction, ownership evidence, owner registry, inbound enquiries and
+imports, matching policies/workflows, opportunities, agent workspaces, and property
+reports. PostgreSQL operations live in capability repositories and return records
+or rows; ClickHouse operations live in owner/opportunity/report query modules.
+The three old service facades were removed after all runtime, script and test
+callers moved. Inventory freshness and Reelly eligibility are public listings and
+supply capabilities; neither inventory domain imports CRM.
+
+Verification: 271 backend tests, 11 isolated PostgreSQL tests, 5 ClickHouse tests,
+68 frontend tests, production frontend build, clean lint and all 34 Playwright
+tests passed. New cases execute owner-registry DISTINCT ON deduplication, import
+deletion retaining agent notes/workspaces/saved JSON, match score/state transitions,
+legacy rental identity fallback, latest sale evidence, Dubai source eligibility,
+and contact/note/consent persistence through the real browser/API. Existing import
+failure commits, list-summary ordering, read-triggered matching, scoring thresholds
+and reports remain unchanged. Three Reelly-scope exceptions were removed; the graph
+is acyclic and CRM SQL/inventory boundaries are now enforced.
+
+The rental refresh script now fingerprints the extracted rule/query modules in a
+fixed order. This changes its fingerprint once on migration and preserves detection
+of subsequent matching-rule changes, marker format, locking and dry-run rollback.
