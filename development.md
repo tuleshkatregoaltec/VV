@@ -224,3 +224,12 @@ Production deployment is separate from the local Compose environment:
 - The frontend production build is for Cloudflare Pages with environment variables injected by that platform.
 - The backend production image is built from `backend/Dockerfile`.
 - Managed production services such as databases, caches, and object storage are external and are not provisioned by this repo.
+
+## AI evaluation discovery
+
+`just ai-benchmark` prints the 15 canonical questions and their dataset fingerprint.
+`just ai-inventory` generates a static agent/tool/capability map from backend source.
+Both are read-only and make no model calls or telemetry uploads. Run
+`just test-evaluation` for their offline tests (also included in the default backend
+suite). See [backend/EVALUATION.md](backend/EVALUATION.md) for the discovery findings,
+implementation plan, limitations, and pending live-execution prerequisite.

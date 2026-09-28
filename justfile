@@ -122,3 +122,13 @@ test-backend-clickhouse *args:
 
 test-backend-infrastructure *args:
 	set -a && source .env.dev && set +a && cd backend && uv run pytest tests/integration/infrastructure "$@"
+
+# Read-only AI capability discovery; does not call model providers or upload data.
+ai-inventory:
+	cd backend && uv run python -m scripts.evaluation inventory
+
+ai-benchmark:
+	cd backend && uv run python -m scripts.evaluation dataset
+
+test-evaluation *args:
+	just test-backend tests/evaluation {{args}}
