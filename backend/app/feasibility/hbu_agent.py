@@ -21,18 +21,15 @@ from app.feasibility.models import (
     DevelopmentModel,
     FeasibilityAssumptions,
     FeasibilityUnitConfig,
-    PlotDetails,
     PlotResearch,
     RentalComparableProject,
     RentalMarketSummary,
     RentalRateBySizeBand,
-    Usage,
 )
 from app.feasibility.queries import (
     build_off_plan_pricing_confidence,
     build_off_plan_unit_benchmarks,
     get_comparable_data,
-    get_land_sale_evidence,
     get_market_pricing,
     get_off_plan_pricing_curve,
     get_rental_rates_by_size_band,
@@ -40,7 +37,9 @@ from app.feasibility.queries import (
     rank_plot_comparables,
     resolve_market_area,
 )
-from app.feasibility.queries import get_plot_details as fetch_plot_details
+from app.plots.evidence import get_land_sale_evidence
+from app.plots.models import PlotDetails, Usage
+from app.plots.service import get_plot_details as fetch_plot_details
 from app.project.service import get_project_market_snapshot
 
 logger = logging.getLogger(__name__)

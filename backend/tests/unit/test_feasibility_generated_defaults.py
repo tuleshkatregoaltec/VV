@@ -21,11 +21,10 @@ from app.feasibility.models import (
     FeasibilityAssumptions,
     FeasibilityPaymentPlan,
     FeasibilityUnitConfig,
-    LandSaleEvidence,
     MarketPricingRow,
     OffPlanUnitPricingBenchmark,
-    PlotDetails,
 )
+from app.plots.models import LandSaleEvidence, PlotDetails
 
 
 def _plot(

@@ -174,3 +174,27 @@ def test_crm_capabilities_keep_database_and_inventory_boundaries():
         }
     for name in ("service", "import_service", "inbound_service"):
         assert not (APP / "crm" / (name + ".py")).exists()
+
+
+def test_project_plot_and_area_operations_do_not_own_warehouse_sql():
+    graph = imports()
+    for module in (
+        "project.service",
+        "project.radar",
+        "plots.service",
+        "plots.evidence",
+        "plots.valuation",
+        "area.service",
+    ):
+        assert "app.clickhouse.client" not in graph["app." + module]
+        tree = ast.parse((APP / (module.replace(".", "/") + ".py")).read_text())
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Constant) and isinstance(node.value, str):
+                assert not re.search(
+                    r"^\s*(?:SELECT|WITH)\b[\s\S]*\bFROM\b", node.value, re.IGNORECASE
+                ), module
+    for source, targets in graph.items():
+        if source.startswith("app.plots."):
+            assert not any(
+                target.startswith(("app.project.", "app.feasibility.")) for target in targets
+            ), source

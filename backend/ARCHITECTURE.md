@@ -167,3 +167,20 @@ is acyclic and CRM SQL/inventory boundaries are now enforced.
 The rental refresh script now fingerprints the extracted rule/query modules in a
 fixed order. This changes its fingerprint once on migration and preserves detection
 of subsequent matching-rule changes, marker format, locking and dry-run rollback.
+
+## Phase 5 checkpoint
+
+Project catalogue and radar now own their application operations, response mapping
+and warehouse queries. Plots owns DDA/GIS geometry, plot lookup, land evidence and
+valuation; area warehouse access has its own query module. Existing HTTP routes
+remain in project and feasibility. Old model modules re-export the identical plot
+classes for import compatibility. Map rings and feasibility rings retain their
+separate closing-point behavior, and bulk geometry still defers valuation.
+
+Verification: 273 fast backend tests, 11 PostgreSQL tests, 9 ClickHouse tests,
+68 frontend tests, production build, all 35 Playwright tests, lint and acyclic
+imports passed. New tests cover the one-hour geometry cache, leading-zero plot
+identifiers, land-evidence fallback and conversions, both synthetic project-ID
+ranges, shared geographic resolution, area sorting, and browser plot selection.
+Unreachable legacy radar code following an unconditional return was removed;
+the active radar queries and response contracts remain unchanged.

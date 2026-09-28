@@ -1,6 +1,4 @@
-import json
 import logging
-import math
 import re
 from datetime import datetime, timezone
 from typing import Any, Literal
@@ -9,24 +7,21 @@ from app.clickhouse.client import query
 from app.feasibility.models import (
     ComparableData,
     ComparableProject,
-    GISLandUse,
-    LandSaleEvidence,
     MarketPricingRow,
     OffPlanPricingConfidence,
     OffPlanPricingRow,
     OffPlanUnitPricingBenchmark,
-    Plot,
-    PlotDetails,
     RentalRateBySizeBand,
     UnitTypeData,
-    Usage,
 )
+from app.plots.models import PlotDetails, Usage
 
 logger = logging.getLogger(__name__)
 
 Stage = Literal["existing", "off_plan", "upcoming", "all"]
 
 RESIDENTIAL_TYPES = ["studio", "1br", "2br", "3br", "4br", "4br+", "villa", "townhouse"]
+
 COMMERCIAL_TYPES = ["office", "retail", "industrial", "hospitality"]
 
 
@@ -64,43 +59,6 @@ def normalize_unit_type(value: str) -> str:
     return "other"
 
 
-def infer_usage_from_plot(
-    land_use_values: list[str], gfa_type: str, general_notes: list[str]
-) -> Usage:
-    haystack = " ".join(
-        [
-            *(land_use_values or []),
-            gfa_type or "",
-            *(general_notes or []),
-        ]
-    ).lower()
-    has_res = any(
-        token in haystack
-        for token in ["residential", "villa", "apartment", "townhouse", "dwelling"]
-    )
-    has_com = any(
-        token in haystack
-        for token in [
-            "commercial",
-            "office",
-            "retail",
-            "shopping center",
-            "shop",
-            "hotel",
-            "hospitality",
-            "warehouse",
-            "industrial",
-        ]
-    )
-    if has_res and has_com:
-        return "mixed_use"
-    if has_res:
-        return "residential"
-    if has_com:
-        return "commercial"
-    return "unknown"
-
-
 def normalize_project_stage(value: str) -> Stage:
     raw = normalize_whitespace(value).upper()
     if raw in {"FINISHED"}:
@@ -119,19 +77,6 @@ def transaction_usage_clause(usage: Usage, column: str = "property_usage_en") ->
         return f"({column} IN ('Commercial', 'Industrial', 'Storage'))"
     if usage == "mixed_use":
         return f"({column} IN ('Residential / Commercial', 'Multi-Use', 'Industrial / Commercial', 'Industrial / Commercial / Residential'))"
-    return "1 = 1"
-
-
-def land_sale_usage_clause(usage: Usage, column: str = "property_usage_en") -> str:
-    if usage == "residential":
-        return f"{column} = 'Residential'"
-    if usage == "commercial":
-        return f"({column} IN ('Commercial', 'Industrial', 'Storage', 'Industrial / Commercial'))"
-    if usage == "mixed_use":
-        return (
-            f"({column} IN ('Residential / Commercial', 'Multi-Use', "
-            "'Industrial / Commercial', 'Industrial / Commercial / Residential'))"
-        )
     return "1 = 1"
 
 
@@ -319,102 +264,6 @@ def build_off_plan_unit_benchmarks(
     return benchmarks
 
 
-def _parse_land_use(raw: str) -> list[GISLandUse]:
-    if not raw:
-        return []
-    try:
-        parsed = json.loads(raw)
-        return [
-            GISLandUse(
-                type=str(item.get("type", "")).strip(),
-                use=str(item.get("use", "")).strip(),
-            )
-            for item in parsed
-            if item.get("type") or item.get("use")
-        ]
-    except Exception:
-        return []
-
-
-def _parse_notes(raw: str) -> list[str]:
-    if not raw:
-        return []
-    return [part.strip() for part in raw.split(" | ") if part.strip()]
-
-
-def _coordinate_pair(raw: object) -> list[float] | None:
-    if not isinstance(raw, (list, tuple)) or len(raw) < 2:
-        return None
-    try:
-        x = float(raw[0])  # type: ignore[index]
-        y = float(raw[1])  # type: ignore[index]
-    except (TypeError, ValueError):
-        return None
-    if not math.isfinite(x) or not math.isfinite(y):
-        return None
-    return [x, y]
-
-
-def _extract_coordinate_pairs(raw: object) -> list[list[float]]:
-    pair = _coordinate_pair(raw)
-    if pair is not None:
-        return [pair]
-    if not isinstance(raw, (list, tuple)):
-        return []
-    coords: list[list[float]] = []
-    for item in raw:
-        coords.extend(_extract_coordinate_pairs(item))
-    return coords
-
-
-def _parse_coordinates(raw: object) -> list[list[float]]:
-    if raw in (None, "", "[]"):
-        return []
-    parsed: object = raw
-    if isinstance(raw, str):
-        try:
-            parsed = json.loads(raw)
-        except json.JSONDecodeError:
-            return []
-    if isinstance(parsed, dict):
-        parsed = parsed.get("coordinates", [])
-    coords = _extract_coordinate_pairs(parsed)
-    if len(coords) >= 2 and coords[0] == coords[-1]:
-        coords = coords[:-1]
-    return coords
-
-
-def _build_setbacks(row: dict[str, Any]) -> dict[str, str]:
-    result: dict[str, str] = {}
-    for side in range(1, 5):
-        building = str(row.get(f"side{side}_building") or "").strip()
-        podium = str(row.get(f"side{side}_podium") or "").strip()
-        if building:
-            result[f"side{side}_building"] = building
-        if podium:
-            result[f"side{side}_podium"] = podium
-    return result
-
-
-def _build_plot_warnings(row: dict[str, Any], far: float | None, notes: list[str]) -> list[str]:
-    warnings: list[str] = []
-    if not row.get("is_verified"):
-        warnings.append("GIS plot is not marked as verified.")
-    if not row.get("max_gfa_sqm"):
-        warnings.append("Maximum GFA is missing, so HBU fit is lower confidence.")
-    if row.get("site_plan_expiry_date"):
-        warnings.append(f"Site plan expiry date: {row['site_plan_expiry_date']}.")
-    if row.get("max_height", "").upper() == "SEE NOTES":
-        warnings.append("Maximum height is defined in notes instead of a structured field.")
-    if row.get("max_coverage", "").upper() == "SEE NOTES":
-        warnings.append("Maximum coverage is defined in notes instead of a structured field.")
-    if far and far > 12:
-        warnings.append("Derived FAR is unusually high; confirm the GIS record manually.")
-    if any("NOC" in note.upper() for note in notes):
-        warnings.append("General notes include authority or third-party NOC requirements.")
-    return warnings
-
-
 def _dominant_type(rows: list[dict[str, Any]]) -> str | None:
     if not rows:
         return None
@@ -449,136 +298,6 @@ async def resolve_market_area(name: str) -> str:
     """
     rows = await query(sql, {"name": name, "pattern": f"%{name}%"})
     return rows[0]["area_name_en"] if rows else name
-
-
-async def search_plots(
-    q: str = "",
-    community: str = "",
-    min_plot_area_sqm: float | None = None,
-    max_plot_area_sqm: float | None = None,
-    offset: int = 0,
-    limit: int = 200,
-) -> list[Plot]:
-    where = ["plot_number != ''"]
-    params: dict[str, Any] = {"limit": limit, "offset": offset}
-    if q:
-        where.append(
-            "(plot_number ILIKE {q:String} OR project_name ILIKE {q:String} OR community_name ILIKE {q:String})"
-        )
-        params["q"] = f"%{q}%"
-    if community:
-        where.append(
-            "lowerUTF8(trimBoth(community_name)) = lowerUTF8(trimBoth({community:String}))"
-        )
-        params["community"] = community
-    if min_plot_area_sqm is not None:
-        where.append("plot_area_sqm >= {min_plot_area_sqm:Float64}")
-        params["min_plot_area_sqm"] = min_plot_area_sqm
-    if max_plot_area_sqm is not None:
-        where.append("plot_area_sqm <= {max_plot_area_sqm:Float64}")
-        params["max_plot_area_sqm"] = max_plot_area_sqm
-
-    sql = f"""
-    SELECT
-        plot_number,
-        community_name,
-        project_name,
-        plot_area_sqm,
-        max_gfa_sqm,
-        max_height,
-        max_coverage,
-        gfa_type,
-        is_verified,
-        land_use
-    FROM ch_gis_land_plots
-    WHERE {" AND ".join(where)}
-    ORDER BY is_verified DESC, plot_area_sqm DESC
-    LIMIT {{limit:UInt32}}
-    OFFSET {{offset:UInt32}}
-    """
-    rows = await query(sql, params)
-    plots: list[Plot] = []
-    for row in rows:
-        land_use = _parse_land_use(row.get("land_use", ""))
-        plots.append(
-            Plot(
-                plot_number=row["plot_number"],
-                community_name=row.get("community_name") or "",
-                project_name=row.get("project_name") or "",
-                plot_area_sqm=float(row.get("plot_area_sqm") or 0),
-                max_gfa_sqm=float(row.get("max_gfa_sqm") or 0),
-                max_height=row.get("max_height") or "",
-                max_coverage=row.get("max_coverage") or "",
-                gfa_type=row.get("gfa_type") or "",
-                is_verified=bool(row.get("is_verified")),
-                land_use_summary=[f"{item.type}: {item.use}" for item in land_use[:3]],
-            )
-        )
-    return plots
-
-
-async def list_communities(limit: int = 5000) -> list[str]:
-    sql = """
-    SELECT community_name
-    FROM ch_gis_land_plots
-    WHERE community_name != ''
-    GROUP BY community_name
-    ORDER BY count() DESC, community_name
-    LIMIT {limit:UInt32}
-    """
-    rows = await query(sql, {"limit": limit})
-    return [r["community_name"] for r in rows]
-
-
-async def get_plot_details(plot_number: str) -> PlotDetails | None:
-    sql = """
-    SELECT *
-    FROM ch_gis_land_plots
-    WHERE plot_number = {plot_number:String}
-    LIMIT 1
-    """
-    rows = await query(sql, {"plot_number": plot_number})
-    if not rows:
-        return None
-
-    row = rows[0]
-    plot_area_sqm = float(row.get("plot_area_sqm") or 0)
-    max_gfa_sqm = float(row.get("max_gfa_sqm") or 0)
-    far = round(max_gfa_sqm / plot_area_sqm, 2) if plot_area_sqm > 0 and max_gfa_sqm > 0 else None
-    land_use = _parse_land_use(row.get("land_use", ""))
-    notes = _parse_notes(row.get("general_notes", ""))
-    inferred_usage = infer_usage_from_plot(
-        [f"{item.type} {item.use}" for item in land_use],
-        str(row.get("gfa_type") or ""),
-        notes,
-    )
-    return PlotDetails(
-        plot_number=row["plot_number"],
-        community_name=row.get("community_name") or "",
-        project_name=row.get("project_name") or "",
-        master_developer=(row.get("master_developer") or None),
-        plot_area_sqm=plot_area_sqm,
-        max_gfa_sqm=max_gfa_sqm,
-        max_gfa_sqft=float(row.get("max_gfa_sqft") or 0),
-        max_height=row.get("max_height") or "",
-        max_coverage=row.get("max_coverage") or "",
-        gfa_type=row.get("gfa_type") or "",
-        far=far,
-        inferred_usage=inferred_usage,
-        site_plan_issue_date=str(row.get("site_plan_issue_date"))
-        if row.get("site_plan_issue_date")
-        else None,
-        site_plan_expiry_date=str(row.get("site_plan_expiry_date"))
-        if row.get("site_plan_expiry_date")
-        else None,
-        is_verified=bool(row.get("is_verified")),
-        verify_comments=(row.get("verify_comments") or None),
-        land_use=land_use,
-        general_notes=notes,
-        setbacks=_build_setbacks(row),
-        coordinates=_parse_coordinates(row.get("coordinates", "")),
-        warnings=_build_plot_warnings(row, far, notes),
-    )
 
 
 async def get_market_pricing(
@@ -736,94 +455,6 @@ async def get_rental_rates_by_size_band(
                 )
             )
     return results
-
-
-async def get_land_sale_evidence(
-    area_name: str,
-    plot_area_sqm: float | None = None,
-    usage: Usage | None = None,
-    target_far: float | None = None,
-    days: int = 1825,
-    limit: int = 12,
-) -> list[LandSaleEvidence]:
-    base_where = [
-        "trans_group_en = 'Sales'",
-        "property_type_en = 'Land'",
-        "actual_worth > 0",
-        "procedure_area > 0",
-        "lower(area_name_en) = lower({area_name:String})",
-        "instance_date >= today() - {days:Int32}",
-    ]
-    if plot_area_sqm and plot_area_sqm > 0:
-        base_where.append("procedure_area BETWEEN {min_area:Float64} AND {max_area:Float64}")
-        min_area = plot_area_sqm * 10.764 * 0.5
-        max_area = plot_area_sqm * 10.764 * 1.75
-    else:
-        min_area = None
-        max_area = None
-
-    params: dict[str, Any] = {
-        "area_name": area_name,
-        "days": days,
-        "limit": limit,
-        "target_area": (plot_area_sqm or 0) * 10.764,
-    }
-    if min_area is not None and max_area is not None:
-        params["min_area"] = min_area
-        params["max_area"] = max_area
-
-    async def fetch_rows(where: list[str]) -> list[dict[str, Any]]:
-        sql = f"""
-        SELECT
-            transaction_id,
-            instance_date,
-            area_name_en,
-            project_name_en,
-            procedure_name_en,
-            property_usage_en,
-            round(toFloat64(procedure_area) * 0.092903, 1) AS plot_area_sqm,
-            toFloat64(actual_worth) AS price_aed,
-            round(toFloat64(actual_worth) / greatest(toFloat64(procedure_area) * 0.092903, 1), 0) AS price_sqm,
-            nullIf(nearest_landmark_en, '') AS nearest_landmark
-        FROM ch_transactions
-        WHERE {" AND ".join(where)}
-        ORDER BY
-            instance_date DESC,
-            abs(toFloat64(procedure_area) - {{target_area:Float64}}) ASC
-        LIMIT {{limit:Int32}}
-        """
-        return await query(sql, params)
-
-    rows: list[dict[str, Any]] = []
-    if usage and usage != "unknown":
-        rows = await fetch_rows([*base_where, land_sale_usage_clause(usage)])
-    if not rows:
-        rows = await fetch_rows(base_where)
-
-    def _price_per_gfa(price_aed: float, comp_plot_sqm: float) -> float | None:
-        if target_far and target_far > 0 and comp_plot_sqm > 0 and price_aed > 0:
-            return round(price_aed / (comp_plot_sqm * target_far), 0)
-        return None
-
-    return [
-        LandSaleEvidence(
-            transaction_id=row["transaction_id"],
-            instance_date=str(row["instance_date"]),
-            area_name=row["area_name_en"],
-            project_name=row.get("project_name_en") or "",
-            procedure_name=row.get("procedure_name_en") or "",
-            property_usage=row.get("property_usage_en") or "",
-            plot_area_sqm=float(row.get("plot_area_sqm") or 0),
-            price_aed=float(row.get("price_aed") or 0),
-            price_sqm=float(row.get("price_sqm") or 0),
-            price_per_gfa_sqm=_price_per_gfa(
-                float(row.get("price_aed") or 0),
-                float(row.get("plot_area_sqm") or 0),
-            ),
-            nearest_landmark=row.get("nearest_landmark"),
-        )
-        for row in rows
-    ]
 
 
 async def _project_unit_mix(project_ids: list[int]) -> dict[int, list[dict[str, Any]]]:
@@ -984,21 +615,6 @@ async def rank_plot_comparables(
 
     scored.sort(key=lambda item: (-item.score, item.land_area_delta_pct or 9999))
     return scored[:limit]
-
-
-async def get_land_plots(area: str, size_sqm: float, tolerance: float = 0.25) -> list[Plot]:
-    min_plot_area_sqm = size_sqm * (1 - tolerance)
-    max_plot_area_sqm = size_sqm * (1 + tolerance)
-    return await search_plots(
-        community=area,
-        min_plot_area_sqm=min_plot_area_sqm,
-        max_plot_area_sqm=max_plot_area_sqm,
-        limit=50,
-    )
-
-
-async def search_land_plots(area: str, q: str, limit: int = 30) -> list[Plot]:
-    return await search_plots(q=q, community=area, limit=limit)
 
 
 async def get_comparable_data(project_ids: list[int]) -> ComparableData | None:

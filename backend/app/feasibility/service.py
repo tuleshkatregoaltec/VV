@@ -22,18 +22,14 @@ from app.feasibility.models import (
     FeasibilityStudyUpdateRequest,
     GenerateStudyRequest,
     GenerateStudyResponse,
-    LandSaleEvidence,
-    Plot,
-    PlotDetails,
     PlotResearch,
     StudyContext,
-    Usage,
 )
-from app.feasibility.queries import (
-    get_areas,
-    get_comparable_data,
+from app.feasibility.queries import get_areas, get_comparable_data
+from app.plots.evidence import get_land_sale_evidence
+from app.plots.models import LandSaleEvidence, Plot, PlotDetails, Usage
+from app.plots.service import (
     get_land_plots,
-    get_land_sale_evidence,
     get_plot_details,
     list_communities,
     search_land_plots,

@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from types import SimpleNamespace
 
 from app.feasibility import chat_agent
-from app.feasibility.models import PlotDetails
+from app.plots.models import PlotDetails
 
 
 async def test_invalid_history_warns_and_provider_failure_terminates_without_done(monkeypatch):

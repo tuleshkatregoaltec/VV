@@ -1,6 +1,6 @@
 import pytest
 
-from app.feasibility import queries
+from app.plots import evidence, queries
 
 
 @pytest.mark.asyncio
@@ -13,7 +13,7 @@ async def test_land_sale_evidence_prioritizes_recent_transactions(monkeypatch):
 
     monkeypatch.setattr(queries, "query", fake_query)
 
-    await queries.get_land_sale_evidence(
+    await evidence.get_land_sale_evidence(
         area_name="Business Bay",
         plot_area_sqm=1000.0,
         usage="residential",

@@ -10,20 +10,17 @@ from pydantic_ai.usage import UsageLimits
 
 from app.clickhouse.client import query as ch_query
 from app.core.openrouter import create_openrouter_model
-from app.feasibility.models import (
-    FeasibilityPaymentPlan,
-    PlotDetails,
-    Usage,
-)
+from app.feasibility.models import FeasibilityPaymentPlan
 from app.feasibility.queries import (
     Stage,
-    get_land_sale_evidence,
     get_market_pricing,
-    get_plot_details,
     rank_plot_comparables,
     transaction_stage_clause,
     transaction_usage_clause,
 )
+from app.plots.evidence import get_land_sale_evidence
+from app.plots.models import PlotDetails, Usage
+from app.plots.service import get_plot_details
 
 logger = logging.getLogger(__name__)
 

@@ -12,11 +12,7 @@ from app.feasibility.models import (
     FeasibilityStudyUpdateRequest,
     GenerateStudyRequest,
     GenerateStudyResponse,
-    LandSaleEvidence,
-    Plot,
-    PlotDetails,
     PlotResearch,
-    Usage,
 )
 from app.feasibility.service import (
     create_saved_study,
@@ -36,6 +32,7 @@ from app.feasibility.service import (
     stream_chat_events,
     update_saved_study,
 )
+from app.plots.models import LandSaleEvidence, Plot, PlotDetails, Usage
 from app.postgres import get_db_session
 
 router = APIRouter(prefix="/api/v1/feasibility", tags=["feasibility"])
