@@ -3,20 +3,15 @@ from datetime import datetime, timezone
 from typing import Optional
 from uuid import uuid4
 
-import stripe
 from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlmodel import select
 
+from app.billing import repository, stripe_gateway
 from app.billing.models import CustomerPortalResponse, Subscription, SubscriptionResponse
 from app.config import settings
-from app.organization.models import (
-    Organization,
-    OrganizationMembership,
-)
+from app.organization import service as organization_service
 from app.organization.service import get_member_count, get_pending_invitation_count
 
-stripe.api_key = settings.STRIPE_SECRET_KEY
 logger = logging.getLogger(__name__)
 
 
@@ -25,15 +20,13 @@ async def sync_stripe_to_postgres(stripe_customer_id: str, db: AsyncSession) -> 
     try:
         logger.info(f"Syncing Stripe customer {stripe_customer_id}")
 
-        stmt = select(Organization).where(Organization.stripe_customer_id == stripe_customer_id)
-        result = await db.execute(stmt)
-        org = result.scalar_one_or_none()
+        org = await organization_service.get_organization_by_customer(db, stripe_customer_id)
 
         if not org:
             logger.error(f"No organization found for customer {stripe_customer_id}")
             raise ValueError(f"Organization not found for customer {stripe_customer_id}")
 
-        subscriptions = stripe.Subscription.list(
+        subscriptions = stripe_gateway.list_subscriptions(
             customer=stripe_customer_id,
             limit=10,
             status="all",
@@ -79,9 +72,7 @@ async def sync_stripe_to_postgres(stripe_customer_id: str, db: AsyncSession) -> 
         org.subscription_status = stripe_sub.status
         org.max_users = seats
 
-        stmt = select(Subscription).where(Subscription.stripe_subscription_id == stripe_sub.id)
-        result = await db.execute(stmt)
-        subscription = result.scalar_one_or_none()
+        subscription = await repository.get_by_stripe_id(db, stripe_sub.id)
 
         # Stripe API 2025+: current_period_start/end moved from subscription to items
         period_start = datetime.fromtimestamp(seat_item["current_period_start"], tz=timezone.utc)
@@ -100,7 +91,7 @@ async def sync_stripe_to_postgres(stripe_customer_id: str, db: AsyncSession) -> 
                 current_period_end=period_end,
                 cancel_at_period_end=stripe_sub.cancel_at_period_end,
             )
-            db.add(subscription)
+            repository.save(db, subscription)
         else:
             subscription.status = stripe_sub.status
             subscription.seats = seats
@@ -142,18 +133,14 @@ async def create_checkout_session(
     This endpoint only handles Stripe customer + checkout session creation.
     """
     # Get existing organization
-    org = await db.get(Organization, organization_id)
+    org = await organization_service.get_organization_by_id(db, organization_id)
     if not org:
         raise HTTPException(404, "Organization not found")
 
     # Verify user is owner of this organization
-    stmt = select(OrganizationMembership).where(
-        OrganizationMembership.organization_id == organization_id,
-        OrganizationMembership.user_id == user_id,
-        OrganizationMembership.role == "owner",
+    membership = await organization_service.get_owner_membership_for_user(
+        db, organization_id, user_id
     )
-    result = await db.execute(stmt)
-    membership = result.scalar_one_or_none()
 
     if not membership:
         raise HTTPException(403, "Not authorized: You must be the owner of this organization")
@@ -178,7 +165,7 @@ async def create_checkout_session(
 
     if not customer_id:
         try:
-            customer = stripe.Customer.create(
+            customer = stripe_gateway.create_customer(
                 email=email,
                 name=f"{first_name} {last_name}",
                 metadata={
@@ -201,7 +188,7 @@ async def create_checkout_session(
         except Exception as e:
             await db.rollback()
             try:
-                stripe.Customer.delete(customer_id)
+                stripe_gateway.delete_customer(customer_id)
             except Exception:
                 logger.exception("Failed to delete Stripe customer %s during rollback", customer_id)
             logger.error(f"Failed to link Stripe customer: {e}")
@@ -227,7 +214,7 @@ async def create_checkout_session(
 
         logger.info(f"Creating Stripe checkout for org {org.id} with price {price_id}")
 
-        checkout_session = stripe.checkout.Session.create(
+        checkout_session = stripe_gateway.create_checkout(
             customer=customer_id,
             mode="subscription",
             line_items=[
@@ -258,7 +245,7 @@ async def create_checkout_session(
 async def sync_after_checkout(session_id: str, user_id: str, db: AsyncSession) -> dict:
     """Verify checkout session and sync subscription from Stripe."""
     try:
-        session = stripe.checkout.Session.retrieve(session_id)
+        session = stripe_gateway.retrieve_checkout(session_id)
     except Exception as e:
         logger.error(f"Failed to retrieve session {session_id}: {e}")
         raise HTTPException(400, f"Invalid session: {str(e)}")
@@ -270,20 +257,13 @@ async def sync_after_checkout(session_id: str, user_id: str, db: AsyncSession) -
     if not customer_id:
         raise HTTPException(400, "No customer in session")
 
-    stmt = select(Organization).where(Organization.stripe_customer_id == customer_id)
-    result = await db.execute(stmt)
-    org = result.scalar_one_or_none()
+    org = await organization_service.get_organization_by_customer(db, customer_id)
 
     if not org:
         raise HTTPException(404, "Organization not found for session")
 
-    stmt = select(OrganizationMembership).where(
-        OrganizationMembership.organization_id == org.id,
-        OrganizationMembership.user_id == user_id,
-        OrganizationMembership.role == "owner",
-    )
-    result = await db.execute(stmt)
-    is_owner = result.scalar_one_or_none() is not None
+    membership = await organization_service.get_owner_membership_for_user(db, org.id, user_id)
+    is_owner = membership is not None
 
     if not is_owner:
         raise HTTPException(403, "Not authorized for this organization")
@@ -295,25 +275,23 @@ async def sync_after_checkout(session_id: str, user_id: str, db: AsyncSession) -
 
 async def get_subscription_by_org(organization_id: str, db: AsyncSession) -> Optional[Subscription]:
     """Get organization subscription."""
-    stmt = select(Subscription).where(Subscription.organization_id == organization_id)
-    result = await db.execute(stmt)
-    return result.scalar_one_or_none()
+    return await repository.get_by_organization(db, organization_id)
 
 
 async def cancel_subscription(subscription_id: str, at_period_end: bool = True) -> None:
     """Cancel subscription in Stripe."""
     if at_period_end:
-        stripe.Subscription.modify(
+        stripe_gateway.modify_subscription(
             subscription_id,
             cancel_at_period_end=True,
         )
     else:
-        stripe.Subscription.cancel(subscription_id)
+        stripe_gateway.cancel_subscription(subscription_id)
 
 
 async def get_customer_portal_url(customer_id: str, return_url: str) -> str:
     """Generate Stripe Customer Portal URL."""
-    portal_session = stripe.billing_portal.Session.create(
+    portal_session = stripe_gateway.create_portal(
         customer=customer_id,
         return_url=return_url,
     )
@@ -363,3 +341,52 @@ async def get_stripe_customer_portal(context_organization, db: AsyncSession):
     portal_url = await get_customer_portal_url(organization.stripe_customer_id, return_url)
 
     return CustomerPortalResponse(url=portal_url)
+
+
+async def get_latest_subscription_by_org(organization_id: str, db: AsyncSession):
+    return await repository.get_latest_by_organization(db, organization_id)
+
+
+TRACKED_EVENTS = [
+    "checkout.session.completed",
+    "customer.subscription.created",
+    "customer.subscription.updated",
+    "customer.subscription.deleted",
+    "invoice.paid",
+    "invoice.payment_failed",
+    "invoice_payment.paid",  # Newer Stripe event fired alongside invoice.paid
+]
+
+
+async def process_webhook_event(event: dict, db: AsyncSession):
+    """Extract customer_id per event type and sync."""
+
+    event_type = event["type"]
+
+    if event_type not in TRACKED_EVENTS:
+        logger.info(f"Ignoring event: {event_type}")
+        return
+
+    event_object = event["data"]["object"]
+    customer_id = None
+
+    # Extract customer_id based on event type
+    if event_type == "checkout.session.completed":
+        # Checkout Session object
+        customer_id = event_object.get("customer")
+
+    elif event_type.startswith("customer.subscription."):
+        # Subscription object
+        customer_id = event_object.get("customer")
+
+    elif event_type.startswith("invoice.") or event_type.startswith("invoice_payment."):
+        # Invoice / InvoicePayment object
+        customer_id = event_object.get("customer")
+
+    if not customer_id:
+        logger.warning(f"No customer in {event_type}")
+        return
+
+    logger.info(f"Processing {event_type} for customer {customer_id}")
+
+    await sync_stripe_to_postgres(customer_id, db)

@@ -119,3 +119,19 @@ async def delete_membership(db: AsyncSession, membership: OrganizationMembership
 
 async def delete_organization(db: AsyncSession, organization: Organization):
     await db.delete(organization)
+
+
+async def get_organization_by_customer(db: AsyncSession, customer_id: str):
+    stmt = select(Organization).where(Organization.stripe_customer_id == customer_id)
+    result = await db.execute(stmt)
+    return result.scalar_one_or_none()
+
+
+async def get_owner_membership_for_user(db: AsyncSession, org_id: str, user_id: str):
+    stmt = select(OrganizationMembership).where(
+        OrganizationMembership.organization_id == org_id,
+        OrganizationMembership.user_id == user_id,
+        OrganizationMembership.role == "owner",
+    )
+    result = await db.execute(stmt)
+    return result.scalar_one_or_none()

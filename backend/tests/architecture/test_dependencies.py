@@ -103,3 +103,30 @@ def test_chat_orchestration_cannot_own_warehouse_queries():
         if path.stem != "repository":
             assert "sqlmodel.select" not in graph[module]
             assert "sqlalchemy.delete" not in graph[module]
+
+
+def test_migrated_account_operations_do_not_own_sql_or_sdks():
+    graph = imports()
+    modules = {
+        "app.auth.router",
+        "app.auth.service",
+        "app.auth.profile",
+        "app.organization.router",
+        "app.organization.service",
+        "app.organization.invitations",
+        "app.billing.router",
+        "app.billing.webhooks",
+        "app.billing.service",
+        "app.admin.router",
+        "app.admin.service",
+        "app.token_usage.service",
+    }
+    forbidden = {
+        "sqlmodel.select",
+        "sqlalchemy.select",
+        "sqlalchemy.delete",
+        "stripe",
+        "supabase_auth.AsyncGoTrueClient",
+    }
+    for module in modules:
+        assert not (graph[module] & forbidden), (module, graph[module] & forbidden)

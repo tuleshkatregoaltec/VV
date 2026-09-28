@@ -2,10 +2,10 @@ import logging
 from datetime import date, datetime, timezone
 from typing import Optional
 
-from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.auth.service import update_user_token_limit
+from app.token_usage import repository
 from app.token_usage.models import UserTokenUsage
 
 logger = logging.getLogger(__name__)
@@ -13,12 +13,7 @@ logger = logging.getLogger(__name__)
 
 class TokenUsageService:
     async def get_today_usage(self, db: AsyncSession, user_id: str) -> Optional[UserTokenUsage]:
-        today = date.today()
-        stmt = select(UserTokenUsage).where(
-            UserTokenUsage.user_id == user_id, UserTokenUsage.date == today
-        )
-        result = await db.exec(stmt)
-        return result.first()
+        return await repository.get_usage(db, user_id, date.today())
 
     async def create_usage_record(
         self,
@@ -41,7 +36,7 @@ class TokenUsageService:
             updated_at=now,
         )
 
-        db.add(usage)
+        repository.save(db, usage)
         await db.commit()
         await db.refresh(usage)
         return usage
@@ -59,7 +54,7 @@ class TokenUsageService:
         usage_record.total_tokens += total_tokens
         usage_record.updated_at = datetime.now(timezone.utc)
 
-        db.add(usage_record)
+        repository.save(db, usage_record)
         await db.commit()
         await db.refresh(usage_record)
         return usage_record
@@ -91,12 +86,7 @@ class TokenUsageService:
     async def get_usage_records(
         self, db: AsyncSession, day: date, user_ids: list[str] | None = None
     ):
-        """Read accounting records for administrative reporting, without recording usage."""
-        stmt = select(UserTokenUsage).where(UserTokenUsage.date == day)
-        if user_ids is not None:
-            stmt = stmt.where(UserTokenUsage.user_id.in_(user_ids))
-        result = await db.execute(stmt)
-        return result.scalars().all()
+        return await repository.get_usage_records(db, day, user_ids)
 
 
 token_usage_service = TokenUsageService()

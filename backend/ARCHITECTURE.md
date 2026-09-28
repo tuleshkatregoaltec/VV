@@ -125,3 +125,20 @@ covers pulse, rankings, sales/project charts and similar projects. The historica
 pulse inclusion of non-sales remains distinct from sales-chart filtering.
 The graph is acyclic, 13 further legacy edges disappeared, and chat cannot import
 ClickHouse or contain warehouse statements. Provider/tool schemas remain frozen.
+
+## Phase 3 checkpoint
+
+Identity delegates GoTrue mechanics to `providers/auth/client.py`; `/me` composition
+lives in `auth/profile.py`. Billing owns a Stripe gateway and subscription repository,
+and dispatches webhook application work from its service. Organization exposes
+customer and owner-membership reads. Usage persistence lives in its repository.
+The dependency adapter uses public account reads and retains the latest-subscription
+selection (separate from the strict single-subscription administrative read).
+
+Verification: 269 backend tests plus the added account-boundary check, 8 isolated
+PostgreSQL tests, 68 frontend tests and all 33 Playwright tests passed, with clean
+lint/format and acyclic imports. New tests preserve auth metadata and redirect
+arguments, webhook event filtering, active-subscription preference, idempotent
+subscription persistence, checkout failure commits, and per-user token accumulation.
+No quota coverage, concurrency, transaction atomicity, SDK call mode or HTTP contract
+was changed. Both remaining runtime model-registry imports were removed.

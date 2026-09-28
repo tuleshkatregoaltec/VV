@@ -1,6 +1,4 @@
 [
-  "app.auth.router -> app.postgres.models",
-  "app.core.dependencies -> app.postgres.models",
   "app.crm.inbound_service -> app.core.reelly_scope",
   "app.feasibility.workbook -> app.feasibility.queries",
   "app.project.service -> app.core.reelly_scope",

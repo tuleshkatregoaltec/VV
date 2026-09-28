@@ -473,3 +473,11 @@ async def update_member_token_limit(
         daily_token_limit=user.daily_token_limit,
         updated_at=user.updated_at,
     )
+
+
+async def get_organization_by_customer(db: AsyncSession, customer_id: str):
+    return await repository.get_organization_by_customer(db, customer_id)
+
+
+async def get_owner_membership_for_user(db: AsyncSession, org_id: str, user_id: str):
+    return await repository.get_owner_membership_for_user(db, org_id, user_id)

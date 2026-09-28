@@ -136,12 +136,12 @@ async def test_create_checkout_session_returns_checkout_session(monkeypatch):
     monkeypatch.setattr(service.settings, "STRIPE_PRICE_ID_TIER1", "price_tier_1")
     monkeypatch.setattr(service.settings, "STRIPE_PRICE_ID_TIER2", "price_tier_2")
     monkeypatch.setattr(
-        service.stripe.Customer,
+        service.stripe_gateway.stripe.Customer,
         "create",
         lambda **kwargs: SimpleNamespace(id="cus_123"),
     )
     monkeypatch.setattr(
-        service.stripe.checkout.Session,
+        service.stripe_gateway.stripe.checkout.Session,
         "create",
         lambda **kwargs: SimpleNamespace(
             id="cs_test_123", url="https://checkout.stripe.test/session"
@@ -171,7 +171,7 @@ async def test_sync_after_checkout_requires_completed_session(monkeypatch):
     from app.billing import service
 
     monkeypatch.setattr(
-        service.stripe.checkout.Session,
+        service.stripe_gateway.stripe.checkout.Session,
         "retrieve",
         lambda session_id: SimpleNamespace(status="open", customer="cus_123"),
     )
@@ -190,7 +190,7 @@ async def test_sync_after_checkout_requires_owner(monkeypatch):
     db = FakeDB(organization=org, execute_results=[org, None])
 
     monkeypatch.setattr(
-        service.stripe.checkout.Session,
+        service.stripe_gateway.stripe.checkout.Session,
         "retrieve",
         lambda session_id: SimpleNamespace(status="complete", customer="cus_123"),
     )
@@ -209,7 +209,7 @@ async def test_sync_after_checkout_returns_synced_state(monkeypatch):
     db = FakeDB(organization=org, execute_results=[org, make_membership()])
 
     monkeypatch.setattr(
-        service.stripe.checkout.Session,
+        service.stripe_gateway.stripe.checkout.Session,
         "retrieve",
         lambda session_id: SimpleNamespace(status="complete", customer="cus_123"),
     )
