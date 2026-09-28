@@ -1,8 +1,9 @@
 """Business logic for project analytics — merges parallel ClickHouse results."""
 
 import asyncio
+import logging
 from datetime import date, timedelta
-from typing import Optional
+from typing import Any, Optional
 
 from app.analytics import queries
 from app.analytics.metrics import (
@@ -47,6 +48,9 @@ from app.analytics.models import (
 from app.analytics.queries import MARKET_FILTERS, ProjectFilterType, ProjectScopeType
 
 # Room sort order: Studio first, then numeric bedrooms, then anything else
+
+
+logger = logging.getLogger(__name__)
 
 
 async def _latest_sales_anchor_date() -> date:
@@ -1058,3 +1062,116 @@ async def get_market_trend(
         avg_price_change_pct=avg_price_change_pct,
         avg_price_sqm_change_pct=avg_price_sqm_change_pct,
     )
+
+
+async def get_market_pulse(area: str, period_days: int = 90) -> dict[str, Any]:
+    """Get vital market statistics for a specific area.
+
+    Returns aggregate metrics including median price, average yield, transaction volume,
+    and price trends for the specified area and time period.
+
+    Args:
+        ctx: Runtime context (unused)
+        area: Area name (e.g., "Dubai Marina", "Downtown Dubai")
+        period_days: Analysis period in days (default: 90)
+
+    Returns:
+        Dictionary with price, yield, volume, and trend data
+    """
+
+    try:
+        rows = await queries.fetch_market_pulse({"area": area, "period_days": period_days})
+
+        if not rows:
+            return {
+                "success": False,
+                "error": f"No data found for area '{area}' in the last {period_days} days",
+            }
+
+        row = rows[0]
+        return {
+            "success": True,
+            "area": area,
+            "period_days": period_days,
+            "transaction_count": row["transaction_count"],
+            "median_price_aed": row["median_price"],
+            "avg_price_aed": row["avg_price"],
+            "median_area_sqft": row["median_area_sqft"],
+            "median_price_per_sqft_aed": row["median_price_per_sqft"],
+            "period_start": str(row["period_start"]),
+            "period_end": str(row["period_end"]),
+        }
+    except Exception as e:
+        logger.exception(f"Error executing get_market_pulse for area {area}")
+        return {"success": False, "error": str(e)}
+
+
+async def rank_areas(
+    metric: str = "volume",
+    limit: int = 5,
+    period_days: int = 90,
+) -> dict[str, Any]:
+    """Rank top areas by a specific metric.
+
+    Args:
+        ctx: Runtime context (unused)
+        metric: Ranking metric - "volume" (transaction count), "price" (median price),
+                or "growth" (price change percentage)
+        limit: Number of top areas to return (default: 5)
+        period_days: Analysis period in days (default: 90)
+
+    Returns:
+        List of top areas with their respective metrics
+    """
+    if metric not in {"volume", "price", "growth"}:
+        return {
+            "success": False,
+            "error": f"Invalid metric '{metric}'. Use 'volume', 'price', or 'growth'",
+        }
+
+    try:
+        rows = await queries.fetch_rank_areas(metric, {"period_days": period_days, "limit": limit})
+
+        if not rows:
+            return {
+                "success": False,
+                "error": f"No data found for metric '{metric}' in the last {period_days} days",
+            }
+
+        areas = []
+        for row in rows:
+            if metric == "volume":
+                areas.append(
+                    {
+                        "area": row["area"],
+                        "transaction_count": row["transaction_count"],
+                        "median_price_aed": row["median_price"],
+                    }
+                )
+            elif metric == "price":
+                areas.append(
+                    {
+                        "area": row["area"],
+                        "median_price_aed": row["median_price"],
+                        "transaction_count": row["transaction_count"],
+                    }
+                )
+            elif metric == "growth":
+                areas.append(
+                    {
+                        "area": row["area"],
+                        "current_median_price_aed": row["current_median_price"],
+                        "previous_median_price_aed": row["previous_median_price"],
+                        "growth_percentage": row["growth_percentage"],
+                    }
+                )
+
+        return {
+            "success": True,
+            "metric": metric,
+            "period_days": period_days,
+            "top_areas": areas,
+        }
+    except Exception as e:
+        logger.exception(f"Error executing rank_areas for metric {metric}")
+        return {"success": False, "error": str(e)}

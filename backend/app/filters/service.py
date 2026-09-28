@@ -4,8 +4,8 @@ import re
 from typing import Optional
 
 from app.clickhouse.client import query
-from app.clickhouse.queries import _project_filter
 from app.filters.models import FilterOptionsResponse
+from app.market.scope import project_filter_clause as _project_filter
 
 
 def _rooms_sort_key(room: str) -> tuple:

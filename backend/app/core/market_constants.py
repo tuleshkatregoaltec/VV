@@ -1,3 +1,3 @@
-"""Shared real-estate market constants."""
+"""Temporary compatibility exports; use app.market.reference."""
 
-SQM_TO_SQFT = 10.7639
+from app.market.reference import SQM_TO_SQFT as SQM_TO_SQFT

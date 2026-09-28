@@ -1,7 +1,7 @@
 import math
 import re
 from datetime import date
-from typing import Literal, Optional
+from typing import Any, Literal, Optional
 
 from app.analytics.models import ProjectConfigurationRow, TrendInterval
 
@@ -190,3 +190,260 @@ def build_configuration_rows(
 
     rows.sort(key=lambda x: _room_sort_key(x.rooms))
     return rows
+
+
+DEFAULT_CHART_DAYS = 365
+MIN_CHART_DAYS = 30
+MAX_CHART_DAYS = 3650
+DAILY_INTERVAL_MAX_DAYS = 30
+WEEKLY_INTERVAL_MAX_DAYS = 180
+
+
+def clamp_int(value: Any, *, default: int, min_value: int, max_value: int) -> int:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return default
+    return max(min_value, min(max_value, parsed))
+
+
+def positive_int(value: Any) -> int | None:
+    if value is None or value == "":
+        return None
+    try:
+        parsed = int(float(value))
+    except (TypeError, ValueError):
+        return None
+    return parsed if parsed >= 0 else None
+
+
+def clean_text(value: Any) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
+
+
+def _chart_area_inputs(args: dict[str, Any]) -> list[str]:
+    raw_areas = args.get("areas")
+    if isinstance(raw_areas, list):
+        areas: list[str] = []
+        seen: set[str] = set()
+        for raw_item in raw_areas:
+            area = " ".join(str(raw_item).strip().split())
+            key = area.lower()
+            if area and key not in seen:
+                seen.add(key)
+                areas.append(area)
+            if len(areas) >= 5:
+                break
+        if len(areas) >= 2:
+            return areas
+
+    area = clean_text(args.get("area"))
+    return [area] if area else []
+
+
+def _trend_interval(days: int) -> str:
+    if days <= DAILY_INTERVAL_MAX_DAYS:
+        return "day"
+    if days <= WEEKLY_INTERVAL_MAX_DAYS:
+        return "week"
+    return "month"
+
+
+def _chart_days(value: Any) -> int:
+    return clamp_int(
+        value,
+        default=DEFAULT_CHART_DAYS,
+        min_value=MIN_CHART_DAYS,
+        max_value=MAX_CHART_DAYS,
+    )
+
+
+def _chart_type(value: Any, group_by: str) -> str:
+    requested = str(value or "").lower().replace("-", "_")
+    if requested in {"donut", "doughnut", "pie"}:
+        return "doughnut"
+    if requested in {"horizontal_bar", "bar_horizontal"}:
+        return "horizontal_bar"
+    if requested in {"line", "area"}:
+        return "line"
+    if group_by == "time":
+        return "line"
+    if requested == "bar":
+        return "bar"
+    return "horizontal_bar"
+
+
+def _chart_sort_direction(value: Any) -> str:
+    requested = str(value or "").lower().strip()
+    if requested in {"asc", "ascending", "bottom", "lowest", "least", "cheap", "cheapest"}:
+        return "asc"
+    return "desc"
+
+
+def _chart_min_records(args: dict[str, Any], *, group_by: str, metric: str) -> int:
+    default = (
+        25
+        if group_by == "area"
+        and metric
+        in {
+            "avg_price",
+            "median_price",
+            "avg_price_sqm",
+            "median_price_sqm",
+            "avg_price_sqft",
+            "median_price_sqft",
+            "avg_rent",
+            "median_rent",
+            "median_rent_sqm",
+            "median_rent_sqft",
+        }
+        else 1
+    )
+    return clamp_int(args.get("min_records"), default=default, min_value=1, max_value=10_000)
+
+
+def metric_label(metric: str) -> str:
+    labels = {
+        "transaction_count": "Transactions",
+        "contract_count": "Contracts",
+        "project_count": "Projects",
+        "active_projects": "Active projects",
+        "completed_projects": "Completed projects",
+        "total_volume": "Total value",
+        "total_annual_value": "Total annual rent",
+        "total_sales_volume_12m": "12m sales value",
+        "avg_price": "Average price",
+        "median_price": "Median price",
+        "avg_price_sqm": "Average price / sqm",
+        "median_price_sqm": "Median price / sqm",
+        "avg_price_sqft": "Average price / sqft",
+        "median_price_sqft": "Median price / sqft",
+        "avg_rent": "Average rent",
+        "median_rent": "Median rent",
+        "median_rent_sqm": "Median rent / sqm",
+        "median_rent_sqft": "Median rent / sqft",
+        "pipeline_units": "Pipeline units",
+        "units_delivering_next_12_months": "Units delivering next 12m",
+        "sales_transaction_count_12m": "12m sales transactions",
+        "rental_contract_count_12m": "12m rental contracts",
+        "gross_yield_pct": "Gross yield",
+        "avg_completion_pct": "Average completion",
+    }
+    return labels.get(metric, metric.replace("_", " ").title())
+
+
+def dimension_label(group_by: str) -> str:
+    labels = {
+        "time": "Time",
+        "area": "Area",
+        "property_type": "Property type",
+        "bedrooms": "Bedrooms",
+        "project": "Project",
+        "master_project": "Master project",
+        "transaction_type": "Transaction type",
+        "tenant_type": "Tenant type",
+        "developer": "Developer",
+        "completion_status": "Completion status",
+        "pipeline_status": "Pipeline status",
+    }
+    return labels.get(group_by, group_by.replace("_", " ").title())
+
+
+def _chart_points(rows: list[dict[str, Any]], *, time_series: bool) -> list[dict[str, Any]]:
+    points: list[dict[str, Any]] = []
+    for row in rows:
+        raw_label = row.get("label")
+        if raw_label is None or raw_label == "":
+            raw_label = "Unknown"
+        value = float(row.get("value") or 0)
+        point = {
+            "label": str(raw_label),
+            "value": value,
+            "record_count": clamp_int(
+                row.get("record_count"), default=0, min_value=0, max_value=10_000_000
+            ),
+        }
+        if time_series:
+            point["date"] = str(raw_label)
+        points.append(point)
+    return points
+
+
+def _chart_summary(
+    points: list[dict[str, Any]], *, period_start: date | None, period_end: date | None
+) -> dict[str, Any]:
+    return {
+        "point_count": len(points),
+        "total_records": sum(int(point.get("record_count") or 0) for point in points),
+        "period_start": str(period_start) if period_start else None,
+        "period_end": str(period_end) if period_end else None,
+    }
+
+
+def _chart_series_summary(
+    series: list[dict[str, Any]], *, period_start: date | None, period_end: date | None
+) -> dict[str, Any]:
+    points = [
+        point
+        for series_item in series
+        for point in series_item.get("points", [])
+        if isinstance(point, dict)
+    ]
+    return _chart_summary(points, period_start=period_start, period_end=period_end)
+
+
+def _chart_series(
+    rows: list[dict[str, Any]], *, time_series: bool, series_order: list[str]
+) -> list[dict[str, Any]]:
+    points_by_series = {label: [] for label in series_order}
+    for row in rows:
+        label = str(row.get("series_label") or "Other")
+        points_by_series.setdefault(label, [])
+        points_by_series[label].extend(_chart_points([row], time_series=time_series))
+
+    return [
+        {"label": label, "points": points} for label, points in points_by_series.items() if points
+    ]
+
+
+def _flatten_chart_series(series: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [
+        point
+        for series_item in series
+        for point in series_item.get("points", [])
+        if isinstance(point, dict)
+    ]
+
+
+def _optional_chart_filter(value: Any) -> str | None:
+    text_value = clean_text(value)
+    if not text_value or text_value.lower() in {"all", "any", "none"}:
+        return None
+    return text_value
+
+
+def _rental_property_type(value: Any) -> str | None:
+    property_type = _optional_chart_filter(value)
+    if not property_type:
+        return None
+    normalized = property_type.lower()
+    if normalized in {"unit", "apartment", "apartments", "flat", "flats"}:
+        return "Flat"
+    if normalized in {"villa", "villas"}:
+        return "Villa"
+    return property_type
+
+
+def _sales_property_type(value: Any) -> str | None:
+    property_type = _optional_chart_filter(value)
+    if not property_type:
+        return None
+    normalized = property_type.lower()
+    if normalized in {"unit", "apartment", "apartments", "flat", "flats"}:
+        return "Unit"
+    if normalized in {"villa", "villas"}:
+        return "Villa"
+    return property_type

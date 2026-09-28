@@ -88,3 +88,18 @@ def test_application_imports_are_acyclic():
 
     for module in graph:
         visit(module, [])
+
+
+def test_chat_orchestration_cannot_own_warehouse_queries():
+    graph = imports()
+    for path in (APP / "chat").glob("*.py"):
+        tree = ast.parse(path.read_text())
+        module = "app.chat." + path.stem
+        assert not any(target.startswith("app.clickhouse") for target in graph[module])
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Constant) and isinstance(node.value, str):
+                value = node.value.upper()
+                assert not value.lstrip().startswith(("SELECT ", "SELECT\n", "WITH\n")), path
+        if path.stem != "repository":
+            assert "sqlmodel.select" not in graph[module]
+            assert "sqlalchemy.delete" not in graph[module]

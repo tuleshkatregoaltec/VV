@@ -2,15 +2,9 @@ from typing import Optional
 
 from app.analytics.models import TrendInterval
 from app.clickhouse.client import query
-from app.clickhouse.queries import MARKET_FILTERS as MARKET_FILTERS
-from app.clickhouse.queries import (
-    ProjectFilterType,
-    ProjectScopeType,
-    _project_filter,
-    price_trends,
-    rentals_summary,
-    sales_summary,
-)
+from app.market.scope import MARKET_FILTERS as MARKET_FILTERS
+from app.market.scope import ProjectFilterType, ProjectScopeType
+from app.market.scope import project_filter_clause as _project_filter
 
 
 def search_projects() -> str:
@@ -911,3 +905,275 @@ async def fetch_price_trends(
         ),
         parameters,
     )
+
+
+def sales_summary(
+    property_usage: Optional[str],
+    start_date: str,
+    end_date: str,
+    master_project: Optional[str] = None,
+    property_type: Optional[str] = None,
+    property_sub_type: Optional[str] = None,
+    rooms: Optional[str] = None,
+    area_name: Optional[str] = None,
+    reg_type: Optional[str] = None,
+    price_bucket: Optional[str] = None,
+    area_bucket: Optional[str] = None,
+    property_usage_in: Optional[list] = None,
+) -> str:
+    """
+    Get sales analytics summary for a date range.
+
+    Returns: transaction_count, median_price, avg_price, total_volume,
+             median_price_per_sqm, median_area_sqm
+
+    All filtering uses parameter binding - no SQL injection risk.
+    property_usage_in values must come from MARKET_FILTERS (trusted, not user input).
+    """
+    # Build WHERE clause with parameter placeholders
+    where_clauses = [
+        "trans_group_en = 'Sales'",
+        "instance_date BETWEEN {start_date:Date} AND {end_date:Date}",
+    ]
+    if property_usage is not None:
+        where_clauses.append("property_usage_en = {property_usage:String}")
+    elif property_usage_in is not None:
+        vals = "', '".join(property_usage_in)
+        where_clauses.append(f"property_usage_en IN ('{vals}')")
+
+    if master_project is not None:
+        where_clauses.append("master_project_en = {master_project:String}")
+    if property_type is not None:
+        where_clauses.append("property_type_en = {property_type:String}")
+    if property_sub_type is not None:
+        where_clauses.append("property_sub_type_en = {property_sub_type:String}")
+    if rooms is not None:
+        where_clauses.append("rooms_en = {rooms:String}")
+    if area_name is not None:
+        where_clauses.append("area_name_en = {area_name:String}")
+    if reg_type is not None:
+        where_clauses.append("reg_type_en = {reg_type:String}")
+    if price_bucket is not None:
+        where_clauses.append("price_bucket = {price_bucket:String}")
+    if area_bucket is not None:
+        where_clauses.append("area_bucket = {area_bucket:String}")
+
+    where_clause = " AND ".join(where_clauses)
+
+    return f"""
+        SELECT
+            count() as transaction_count,
+            round(median(actual_worth), 2) as median_price,
+            round(avg(actual_worth), 2) as avg_price,
+            round(sum(actual_worth), 2) as total_volume,
+            round(median(meter_sale_price), 2) as median_price_per_sqm,
+            round(median(procedure_area), 2) as median_area_sqm
+        FROM ch_transactions
+        WHERE {where_clause}
+    """
+
+
+def price_trends(
+    property_usage: Optional[str],
+    start_date: str,
+    end_date: str,
+    interval: str = "month",
+    master_project: Optional[str] = None,
+    property_type: Optional[str] = None,
+    area_name: Optional[str] = None,
+    property_usage_in: Optional[list] = None,
+) -> str:
+    """
+    Get price trends over time (grouped by day, week, or month).
+
+    Args:
+        interval: 'day', 'week', or 'month'
+
+    Returns: period, transaction_count, avg_price, avg_price_sqm
+    property_usage_in values must come from MARKET_FILTERS (trusted, not user input).
+    """
+    # SAFE: interval is controlled by application, not user input
+    if interval not in ("day", "week", "month"):
+        raise ValueError("interval must be 'day', 'week', or 'month'")
+
+    if interval == "day":
+        time_group = "toDate(instance_date)"
+    elif interval == "week":
+        time_group = "toStartOfWeek(instance_date)"
+    else:
+        time_group = "toStartOfMonth(instance_date)"
+
+    where_clauses = [
+        "trans_group_en = 'Sales'",
+        "instance_date BETWEEN {start_date:Date} AND {end_date:Date}",
+    ]
+    if property_usage is not None:
+        where_clauses.append("property_usage_en = {property_usage:String}")
+    elif property_usage_in is not None:
+        vals = "', '".join(property_usage_in)
+        where_clauses.append(f"property_usage_en IN ('{vals}')")
+
+    if master_project is not None:
+        where_clauses.append("master_project_en = {master_project:String}")
+    if property_type is not None:
+        where_clauses.append("property_type_en = {property_type:String}")
+    if area_name is not None:
+        where_clauses.append("area_name_en = {area_name:String}")
+
+    where_clause = " AND ".join(where_clauses)
+
+    return f"""
+        SELECT
+            {time_group} as period,
+            count() as transaction_count,
+            round(avg(actual_worth), 2) as avg_price,
+            round(avg(meter_sale_price), 2) as avg_price_sqm
+        FROM ch_transactions
+        WHERE {where_clause}
+        GROUP BY period
+        ORDER BY period ASC
+    """
+
+
+def rentals_summary(
+    property_usage: str,
+    start_date: str,
+    end_date: str,
+    master_project: Optional[str] = None,
+    property_type: Optional[str] = None,
+    area_name: Optional[str] = None,
+) -> str:
+    """
+    Get rental analytics summary for a date range.
+
+    Returns: contract_count, median_rent, avg_rent, total_annual_value,
+             median_rent_per_sqm, median_area_sqm
+    """
+    where_clauses = [
+        "property_usage_en = {property_usage:String}",
+        "contract_start_date BETWEEN {start_date:Date} AND {end_date:Date}",
+    ]
+
+    if master_project is not None:
+        where_clauses.append("master_project_en = {master_project:String}")
+    if property_type is not None:
+        where_clauses.append("ejari_property_type_en = {property_type:String}")
+    if area_name is not None:
+        where_clauses.append("area_name_en = {area_name:String}")
+
+    where_clause = " AND ".join(where_clauses)
+
+    return f"""
+        SELECT
+            count() as contract_count,
+            round(median(annual_amount), 2) as median_rent,
+            round(avg(annual_amount), 2) as avg_rent,
+            round(sum(annual_amount), 2) as total_annual_value,
+            round(median(annual_amount / nullIf(actual_area, 0)), 2) as median_rent_per_sqm,
+            round(median(actual_area), 2) as median_area_sqm
+        FROM ch_rent_contracts
+        WHERE {where_clause}
+    """
+
+
+GET_MARKET_PULSE_SQL = """
+    SELECT
+        count(*) as transaction_count,
+        round(median(actual_worth), 0) as median_price,
+        round(avg(actual_worth), 0) as avg_price,
+        round(median(actual_area), 1) as median_area_sqft,
+        round(median(actual_worth / actual_area), 0) as median_price_per_sqft,
+        min(instance_date) as period_start,
+        max(instance_date) as period_end
+    FROM ch_transactions
+    WHERE
+        area_name_en = {area:String}
+        AND instance_date >= today() - {period_days:Int32}
+        AND actual_worth > 0
+        AND actual_area > 0
+    """
+
+
+async def fetch_market_pulse(parameters: dict):
+    return await query(GET_MARKET_PULSE_SQL, parameters)
+
+
+RANK_AREAS_VOLUME_SQL = """
+        SELECT
+            area_name_en as area,
+            count(*) as transaction_count,
+            round(median(actual_worth), 0) as median_price
+        FROM ch_transactions
+        WHERE
+            instance_date >= today() - {period_days:Int32}
+            AND actual_worth > 0
+            AND area_name_en != ''
+        GROUP BY area_name_en
+        ORDER BY transaction_count DESC
+        LIMIT {limit:Int32}
+        """
+
+
+RANK_AREAS_PRICE_SQL = """
+        SELECT
+            area_name_en as area,
+            round(median(actual_worth), 0) as median_price,
+            count(*) as transaction_count
+        FROM ch_transactions
+        WHERE
+            instance_date >= today() - {period_days:Int32}
+            AND actual_worth > 0
+            AND area_name_en != ''
+        GROUP BY area_name_en
+        HAVING transaction_count >= 10
+        ORDER BY median_price DESC
+        LIMIT {limit:Int32}
+        """
+
+
+RANK_AREAS_GROWTH_SQL = """
+        WITH
+            current_period AS (
+                SELECT
+                    area_name_en as area,
+                    median(actual_worth) as current_median
+                FROM ch_transactions
+                WHERE
+                    instance_date >= today() - {period_days:Int32}
+                    AND actual_worth > 0
+                    AND area_name_en != ''
+                GROUP BY area_name_en
+                HAVING count(*) >= 10
+            ),
+            previous_period AS (
+                SELECT
+                    area_name_en as area,
+                    median(actual_worth) as previous_median
+                FROM ch_transactions
+                WHERE
+                    instance_date >= today() - {period_days:Int32} * 2
+                    AND instance_date < today() - {period_days:Int32}
+                    AND actual_worth > 0
+                    AND area_name_en != ''
+                GROUP BY area_name_en
+                HAVING count(*) >= 10
+            )
+        SELECT
+            c.area,
+            round(c.current_median, 0) as current_median_price,
+            round(p.previous_median, 0) as previous_median_price,
+            round(((c.current_median - p.previous_median) / p.previous_median) * 100, 2) as growth_percentage
+        FROM current_period c
+        INNER JOIN previous_period p ON c.area = p.area
+        ORDER BY growth_percentage DESC
+        LIMIT {limit:Int32}
+        """
+
+
+async def fetch_rank_areas(metric: str, parameters: dict):
+    statement = {
+        "volume": RANK_AREAS_VOLUME_SQL,
+        "price": RANK_AREAS_PRICE_SQL,
+        "growth": RANK_AREAS_GROWTH_SQL,
+    }[metric]
+    return await query(statement, parameters)

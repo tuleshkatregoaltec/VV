@@ -11,13 +11,14 @@ from datetime import date
 from typing import Any, List, Optional
 
 from app.clickhouse.client import query
-from app.core.market_constants import SQM_TO_SQFT
-from app.core.normalization import (
+from app.core.reelly_scope import reelly_dubai_project_scope
+from app.market.reference import (
     DEVELOPER_LEGAL_ENTITY_PATTERN,
+    SQM_TO_SQFT,
     developer_brand_name,
     developer_filter_names,
 )
-from app.core.reelly_scope import reelly_dubai_project_scope
+from app.project import queries
 from app.project.models import (
     BuildingDetailResponse,
     BuildingInfo,
@@ -3187,3 +3188,78 @@ async def get_dda_plots_for_area(
             )
         )
     return results
+
+
+async def get_similar_projects(project_name: str, limit: int = 5) -> dict[str, Any]:
+    """Find similar projects based on attributes.
+
+    Uses ClickHouse projections to efficiently search for comparable projects
+    based on property characteristics, location, and developer.
+
+    Args:
+        ctx: Runtime context (unused)
+        project_name: Name of the reference project
+        limit: Number of similar projects to return (default: 5)
+
+    Returns:
+        List of similar projects with comparison metrics
+    """
+    # First, get the reference project details
+
+    try:
+        ref_rows = await queries.fetch_similar_project_reference(
+            {"project_name": f"%{project_name}%"}
+        )
+
+        if not ref_rows:
+            return {
+                "success": False,
+                "error": f"No data found for project '{project_name}'",
+            }
+
+        ref_row = ref_rows[0]
+        ref_project = ref_row["master_project_en"]
+        ref_area = ref_row["area_name_en"]
+        ref_type = ref_row["property_type_en"]
+        ref_price = ref_row["median_price"]
+        ref_area_sqft = ref_row["median_area"]
+
+        # Find similar projects
+
+        similar_rows = await queries.fetch_similar_projects(
+            {
+                "ref_price": ref_price,
+                "ref_project": ref_project,
+                "ref_type": ref_type,
+                "limit": limit,
+            },
+        )
+
+        similar_projects = []
+        for row in similar_rows:
+            similar_projects.append(
+                {
+                    "project": row["master_project_en"],
+                    "area": row["area_name_en"],
+                    "property_type": row["property_type_en"],
+                    "median_price_aed": row["median_price"],
+                    "median_area_sqft": row["median_area"],
+                    "transaction_count": row["transaction_count"],
+                    "price_difference_aed": row["price_diff"],
+                }
+            )
+
+        return {
+            "success": True,
+            "reference_project": {
+                "name": ref_project,
+                "area": ref_area,
+                "property_type": ref_type,
+                "median_price_aed": ref_price,
+                "median_area_sqft": ref_area_sqft,
+            },
+            "similar_projects": similar_projects,
+        }
+    except Exception as e:
+        logger.exception(f"Error executing get_similar_projects for {project_name}")
+        return {"success": False, "error": str(e)}

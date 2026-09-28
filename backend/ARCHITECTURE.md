@@ -106,3 +106,22 @@ Verification: 265 backend tests (including Bun workbook parity), 5 isolated
 PostgreSQL tests, 1 actual ClickHouse test, 68 frontend tests, 31 Playwright tests,
 OpenAPI/model/tool/JSON contracts, lint/format and acyclic imports passed. Six
 legacy dependency exceptions were removed; no exceptions were added.
+
+## Phase 2 checkpoint
+
+Chat now owns conversation/turn orchestration, its repository, agent registration,
+thin tool adapters, artifact envelopes and SSE encoding. Analytics owns reusable
+chart results, chart policies and warehouse SQL. Project owns similar-project
+lookup; listings owns listing-area resolution. Shared market names, units and
+scope predicates live under `market`. Temporary old helper modules only re-export
+the single implementation and will be removed in Phase 7.
+
+Verification: 266 backend tests, 5 isolated PostgreSQL tests, 3 actual ClickHouse
+tests, 68 frontend tests, production frontend build and 33 Playwright tests passed.
+Browser additions cover real conversation create/rename/reload/delete and fixed
+SSE/artifact rendering plus message reload; the latter deliberately mocks the
+stream, while backend streaming tests exercise the agent lifecycle. Query execution
+covers pulse, rankings, sales/project charts and similar projects. The historical
+pulse inclusion of non-sales remains distinct from sales-chart filtering.
+The graph is acyclic, 13 further legacy edges disappeared, and chat cannot import
+ClickHouse or contain warehouse statements. Provider/tool schemas remain frozen.

@@ -1,21 +1,8 @@
 [
-  "app.analytics.queries -> app.clickhouse.queries",
   "app.auth.router -> app.postgres.models",
-  "app.chat.agent -> app.clickhouse",
-  "app.chat.service -> app.clickhouse",
-  "app.chat.service -> app.clickhouse.queries",
-  "app.chat.service -> app.core.market_constants",
-  "app.chat.service -> app.core.normalization",
-  "app.clickhouse -> app.clickhouse.queries",
   "app.core.dependencies -> app.postgres.models",
   "app.crm.inbound_service -> app.core.reelly_scope",
   "app.feasibility.workbook -> app.feasibility.queries",
-  "app.filters.service -> app.clickhouse.queries",
-  "app.project.service -> app.core.market_constants",
-  "app.project.service -> app.core.normalization",
   "app.project.service -> app.core.reelly_scope",
-  "app.supply.service -> app.core.market_constants",
-  "app.supply.service -> app.core.normalization",
-  "app.supply.service -> app.core.reelly_scope",
-  "app.transaction.service -> app.clickhouse.queries"
+  "app.supply.service -> app.core.reelly_scope"
 ]

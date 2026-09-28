@@ -1,9 +1,12 @@
 import logging
-from typing import Any
+from typing import List
 
-from pydantic_ai import Agent, RunContext
+from pydantic_ai import Agent
+from pydantic_ai.messages import ModelMessage, ModelRequest, ModelResponse, TextPart, UserPromptPart
 
-from app.clickhouse import query
+from app.chat.artifacts import _artifact_history_context
+from app.chat.models import Message
+from app.chat.tools import get_market_pulse, get_similar_projects, rank_areas
 from app.core.openrouter import create_openrouter_model
 
 logger = logging.getLogger(__name__)
@@ -61,321 +64,27 @@ agent = Agent(
 )
 
 
-@agent.tool
-async def get_market_pulse(
-    ctx: RunContext[None], area: str, period_days: int = 90
-) -> dict[str, Any]:
-    """Get vital market statistics for a specific area.
-
-    Returns aggregate metrics including median price, average yield, transaction volume,
-    and price trends for the specified area and time period.
-
-    Args:
-        ctx: Runtime context (unused)
-        area: Area name (e.g., "Dubai Marina", "Downtown Dubai")
-        period_days: Analysis period in days (default: 90)
-
-    Returns:
-        Dictionary with price, yield, volume, and trend data
-    """
-    sql = """
-    SELECT
-        count(*) as transaction_count,
-        round(median(actual_worth), 0) as median_price,
-        round(avg(actual_worth), 0) as avg_price,
-        round(median(actual_area), 1) as median_area_sqft,
-        round(median(actual_worth / actual_area), 0) as median_price_per_sqft,
-        min(instance_date) as period_start,
-        max(instance_date) as period_end
-    FROM ch_transactions
-    WHERE
-        area_name_en = {area:String}
-        AND instance_date >= today() - {period_days:Int32}
-        AND actual_worth > 0
-        AND actual_area > 0
-    """
-
-    try:
-        rows = await query(sql, {"area": area, "period_days": period_days})
-
-        if not rows:
-            return {
-                "success": False,
-                "error": f"No data found for area '{area}' in the last {period_days} days",
-            }
-
-        row = rows[0]
-        return {
-            "success": True,
-            "area": area,
-            "period_days": period_days,
-            "transaction_count": row["transaction_count"],
-            "median_price_aed": row["median_price"],
-            "avg_price_aed": row["avg_price"],
-            "median_area_sqft": row["median_area_sqft"],
-            "median_price_per_sqft_aed": row["median_price_per_sqft"],
-            "period_start": str(row["period_start"]),
-            "period_end": str(row["period_end"]),
-        }
-    except Exception as e:
-        logger.exception(f"Error executing get_market_pulse for area {area}")
-        return {"success": False, "error": str(e)}
+agent.tool(get_market_pulse)
+agent.tool(rank_areas)
+agent.tool(get_similar_projects)
 
 
-@agent.tool
-async def rank_areas(
-    ctx: RunContext[None],
-    metric: str = "volume",
-    limit: int = 5,
-    period_days: int = 90,
-) -> dict[str, Any]:
-    """Rank top areas by a specific metric.
+def _convert_to_pydantic_messages(messages: List[Message]) -> List[ModelMessage]:
+    """Convert database messages to Pydantic AI message format"""
+    pydantic_messages: List[ModelMessage] = []
 
-    Args:
-        ctx: Runtime context (unused)
-        metric: Ranking metric - "volume" (transaction count), "price" (median price),
-                or "growth" (price change percentage)
-        limit: Number of top areas to return (default: 5)
-        period_days: Analysis period in days (default: 90)
-
-    Returns:
-        List of top areas with their respective metrics
-    """
-    if metric == "volume":
-        sql = """
-        SELECT
-            area_name_en as area,
-            count(*) as transaction_count,
-            round(median(actual_worth), 0) as median_price
-        FROM ch_transactions
-        WHERE
-            instance_date >= today() - {period_days:Int32}
-            AND actual_worth > 0
-            AND area_name_en != ''
-        GROUP BY area_name_en
-        ORDER BY transaction_count DESC
-        LIMIT {limit:Int32}
-        """
-    elif metric == "price":
-        sql = """
-        SELECT
-            area_name_en as area,
-            round(median(actual_worth), 0) as median_price,
-            count(*) as transaction_count
-        FROM ch_transactions
-        WHERE
-            instance_date >= today() - {period_days:Int32}
-            AND actual_worth > 0
-            AND area_name_en != ''
-        GROUP BY area_name_en
-        HAVING transaction_count >= 10
-        ORDER BY median_price DESC
-        LIMIT {limit:Int32}
-        """
-    elif metric == "growth":
-        # Compare current period vs previous period
-        sql = """
-        WITH
-            current_period AS (
-                SELECT
-                    area_name_en as area,
-                    median(actual_worth) as current_median
-                FROM ch_transactions
-                WHERE
-                    instance_date >= today() - {period_days:Int32}
-                    AND actual_worth > 0
-                    AND area_name_en != ''
-                GROUP BY area_name_en
-                HAVING count(*) >= 10
-            ),
-            previous_period AS (
-                SELECT
-                    area_name_en as area,
-                    median(actual_worth) as previous_median
-                FROM ch_transactions
-                WHERE
-                    instance_date >= today() - {period_days:Int32} * 2
-                    AND instance_date < today() - {period_days:Int32}
-                    AND actual_worth > 0
-                    AND area_name_en != ''
-                GROUP BY area_name_en
-                HAVING count(*) >= 10
-            )
-        SELECT
-            c.area,
-            round(c.current_median, 0) as current_median_price,
-            round(p.previous_median, 0) as previous_median_price,
-            round(((c.current_median - p.previous_median) / p.previous_median) * 100, 2) as growth_percentage
-        FROM current_period c
-        INNER JOIN previous_period p ON c.area = p.area
-        ORDER BY growth_percentage DESC
-        LIMIT {limit:Int32}
-        """
-    else:
-        return {
-            "success": False,
-            "error": f"Invalid metric '{metric}'. Use 'volume', 'price', or 'growth'",
-        }
-
-    try:
-        rows = await query(sql, {"period_days": period_days, "limit": limit})
-
-        if not rows:
-            return {
-                "success": False,
-                "error": f"No data found for metric '{metric}' in the last {period_days} days",
-            }
-
-        areas = []
-        for row in rows:
-            if metric == "volume":
-                areas.append(
-                    {
-                        "area": row["area"],
-                        "transaction_count": row["transaction_count"],
-                        "median_price_aed": row["median_price"],
-                    }
+    for msg in messages:
+        if msg.role == "user":
+            pydantic_messages.append(ModelRequest(parts=[UserPromptPart(content=msg.content)]))
+        elif msg.role == "assistant":
+            artifact_context = _artifact_history_context(msg.meta_data)
+            content = msg.content
+            if artifact_context:
+                content = (
+                    f"{content}\n\n"
+                    "[Rendered card context for follow-up references]\n"
+                    f"{artifact_context}"
                 )
-            elif metric == "price":
-                areas.append(
-                    {
-                        "area": row["area"],
-                        "median_price_aed": row["median_price"],
-                        "transaction_count": row["transaction_count"],
-                    }
-                )
-            elif metric == "growth":
-                areas.append(
-                    {
-                        "area": row["area"],
-                        "current_median_price_aed": row["current_median_price"],
-                        "previous_median_price_aed": row["previous_median_price"],
-                        "growth_percentage": row["growth_percentage"],
-                    }
-                )
+            pydantic_messages.append(ModelResponse(parts=[TextPart(content=content)]))
 
-        return {
-            "success": True,
-            "metric": metric,
-            "period_days": period_days,
-            "top_areas": areas,
-        }
-    except Exception as e:
-        logger.exception(f"Error executing rank_areas for metric {metric}")
-        return {"success": False, "error": str(e)}
-
-
-@agent.tool
-async def get_similar_projects(
-    ctx: RunContext[None], project_name: str, limit: int = 5
-) -> dict[str, Any]:
-    """Find similar projects based on attributes.
-
-    Uses ClickHouse projections to efficiently search for comparable projects
-    based on property characteristics, location, and developer.
-
-    Args:
-        ctx: Runtime context (unused)
-        project_name: Name of the reference project
-        limit: Number of similar projects to return (default: 5)
-
-    Returns:
-        List of similar projects with comparison metrics
-    """
-    # First, get the reference project details
-    ref_sql = """
-    SELECT
-        master_project_en,
-        area_name_en,
-        property_type_en,
-        round(median(actual_worth), 0) as median_price,
-        round(median(actual_area), 1) as median_area,
-        count(*) as transaction_count
-    FROM ch_transactions
-    WHERE
-        master_project_en ILIKE {project_name:String}
-        AND actual_worth > 0
-        AND actual_area > 0
-        AND instance_date >= today() - 365
-    GROUP BY master_project_en, area_name_en, property_type_en
-    LIMIT 1
-    """
-
-    try:
-        ref_rows = await query(ref_sql, {"project_name": f"%{project_name}%"})
-
-        if not ref_rows:
-            return {
-                "success": False,
-                "error": f"No data found for project '{project_name}'",
-            }
-
-        ref_row = ref_rows[0]
-        ref_project = ref_row["master_project_en"]
-        ref_area = ref_row["area_name_en"]
-        ref_type = ref_row["property_type_en"]
-        ref_price = ref_row["median_price"]
-        ref_area_sqft = ref_row["median_area"]
-
-        # Find similar projects
-        similar_sql = """
-        SELECT
-            master_project_en,
-            area_name_en,
-            property_type_en,
-            round(median(actual_worth), 0) as median_price,
-            round(median(actual_area), 1) as median_area,
-            count(*) as transaction_count,
-            abs(median(actual_worth) - {ref_price:Float64}) as price_diff
-        FROM ch_transactions
-        WHERE
-            master_project_en != {ref_project:String}
-            AND property_type_en = {ref_type:String}
-            AND actual_worth > 0
-            AND actual_area > 0
-            AND instance_date >= today() - 365
-            AND master_project_en != ''
-        GROUP BY master_project_en, area_name_en, property_type_en
-        HAVING transaction_count >= 5
-        ORDER BY price_diff ASC
-        LIMIT {limit:Int32}
-        """
-
-        similar_rows = await query(
-            similar_sql,
-            {
-                "ref_price": ref_price,
-                "ref_project": ref_project,
-                "ref_type": ref_type,
-                "limit": limit,
-            },
-        )
-
-        similar_projects = []
-        for row in similar_rows:
-            similar_projects.append(
-                {
-                    "project": row["master_project_en"],
-                    "area": row["area_name_en"],
-                    "property_type": row["property_type_en"],
-                    "median_price_aed": row["median_price"],
-                    "median_area_sqft": row["median_area"],
-                    "transaction_count": row["transaction_count"],
-                    "price_difference_aed": row["price_diff"],
-                }
-            )
-
-        return {
-            "success": True,
-            "reference_project": {
-                "name": ref_project,
-                "area": ref_area,
-                "property_type": ref_type,
-                "median_price_aed": ref_price,
-                "median_area_sqft": ref_area_sqft,
-            },
-            "similar_projects": similar_projects,
-        }
-    except Exception as e:
-        logger.exception(f"Error executing get_similar_projects for {project_name}")
-        return {"success": False, "error": str(e)}
+    return pydantic_messages

@@ -10,13 +10,13 @@ from fastapi import HTTPException
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.clickhouse.client import query
-from app.core.market_constants import SQM_TO_SQFT
-from app.core.normalization import (
+from app.core.reelly_scope import reelly_dubai_project_scope
+from app.market.reference import (
+    SQM_TO_SQFT,
     developer_brand_name,
     developer_match_key,
     is_rankable_developer_brand,
 )
-from app.core.reelly_scope import reelly_dubai_project_scope
 from app.supply.models import (
     DeveloperRankingCriterionResponse,
     DeveloperRankingResponse,

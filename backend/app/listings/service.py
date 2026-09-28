@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import HTTPException
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.clickhouse.client import query
 from app.listings.models import (
@@ -1177,3 +1178,10 @@ async def get_listing_from_clickhouse(listing_id: str) -> ListingDetailResponse:
             "run_id": data.get("run_id"),
         },
     )
+
+
+async def resolve_listing_area(db: AsyncSession, mode: ListingMode, area: str | None) -> str | None:
+    from app.listings.queries import resolve_listing_area as query_area
+
+    del db
+    return await query_area(mode, area)
