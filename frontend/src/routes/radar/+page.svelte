@@ -732,7 +732,7 @@ $effect(() => {
 									{#each heatmapLayerOptions as option (option.value)}
 										<button
 											type="button"
-											class="whitespace-nowrap rounded px-2.5 py-1.5 text-xs font-semibold transition-colors {activeHeatmapLayer === option.value ? 'bg-white text-fg-1 shadow-sm' : 'text-white/68 hover:bg-white/10 hover:text-white'}"
+											class="whitespace-nowrap rounded px-2.5 py-1.5 text-xs font-semibold transition-colors {activeHeatmapLayer === option.value ? 'bg-white text-navy shadow-sm' : 'text-white/68 hover:bg-white/10 hover:text-white'}"
 											onclick={() => {
 												activeHeatmapLayer = option.value
 												showZoneHeatmap = true
