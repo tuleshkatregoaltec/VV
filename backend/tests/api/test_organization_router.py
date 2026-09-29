@@ -47,7 +47,7 @@ def make_owner_context(org_id: str = "org-1") -> AuthContext:
 
 @pytest.mark.asyncio
 async def test_get_organization_rejects_access_to_other_owners_org(api_client, monkeypatch):
-    from app.organization import router
+    from app.organization import service as router
 
     async def override_owner_context():
         return make_owner_context(org_id="org-1")
@@ -70,7 +70,7 @@ async def test_get_organization_rejects_access_to_other_owners_org(api_client, m
 
 @pytest.mark.asyncio
 async def test_update_organization_rejects_access_to_other_owners_org(api_client, monkeypatch):
-    from app.organization import router
+    from app.organization import service as router
 
     async def override_owner_context():
         return make_owner_context(org_id="org-1")
@@ -83,7 +83,7 @@ async def test_update_organization_rejects_access_to_other_owners_org(api_client
 
     app.dependency_overrides[require_owner_membership] = override_owner_context
     app.dependency_overrides[get_db_session] = override_db
-    monkeypatch.setattr(router, "update_organization_service", fail_if_called)
+    monkeypatch.setattr(router, "update_organization", fail_if_called)
 
     response = await api_client.put(
         "/api/v1/organization/organizations/org-2",
@@ -96,7 +96,7 @@ async def test_update_organization_rejects_access_to_other_owners_org(api_client
 
 @pytest.mark.asyncio
 async def test_update_user_rejects_members_from_other_organizations(api_client, monkeypatch):
-    from app.organization import router
+    from app.organization import service as router
 
     async def override_owner_context():
         return make_owner_context(org_id="org-1")
@@ -128,7 +128,7 @@ async def test_update_user_rejects_members_from_other_organizations(api_client, 
 async def test_admin_create_organization_passes_requested_owner_id_to_service(
     api_client, monkeypatch
 ):
-    from app.organization import router
+    from app.organization import service as router
 
     async def override_admin():
         return SimpleNamespace(id="admin-user-id", email="admin@example.com")
@@ -166,7 +166,7 @@ async def test_admin_create_organization_passes_requested_owner_id_to_service(
     app.dependency_overrides[get_db_session] = override_db
     monkeypatch.setattr(router, "get_user_by_id", fake_get_user_by_id)
     monkeypatch.setattr(router, "get_membership_for_user", fake_get_membership_for_user)
-    monkeypatch.setattr(router, "create_organization_service", fake_create_organization_service)
+    monkeypatch.setattr(router, "create_organization", fake_create_organization_service)
     monkeypatch.setattr(router, "add_user_to_organization", fake_add_user_to_organization)
 
     response = await api_client.post(
@@ -209,7 +209,7 @@ async def test_admin_create_organization_requires_explicit_owner_id(api_client):
 
 @pytest.mark.asyncio
 async def test_admin_create_organization_rejects_unknown_owner_id(api_client, monkeypatch):
-    from app.organization import router
+    from app.organization import service as router
 
     async def override_admin():
         return SimpleNamespace(id="admin-user-id", email="admin@example.com")

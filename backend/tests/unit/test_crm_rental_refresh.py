@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from app.crm import import_service
+from app.crm import ownership as crm_ownership
 from scripts.crm import refresh_rental_imports
 
 
@@ -54,9 +54,9 @@ async def test_refresh_adds_hits_clears_stale_links_and_preserves_owner_work(mon
         }
     )
     summaries = AsyncMock()
-    monkeypatch.setattr(import_service, "_rental_evidence_for_units", evidence)
-    monkeypatch.setattr(import_service, "_refresh_contact_import_match_summaries", summaries)
-    result = await import_service.refresh_property_contact_rentals(db, organization_id="org")
+    monkeypatch.setattr(crm_ownership, "_rental_evidence_for_units", evidence)
+    monkeypatch.setattr(crm_ownership, "_refresh_contact_import_match_summaries", summaries)
+    result = await crm_ownership.refresh_property_contact_rentals(db, organization_id="org")
     assert result == {
         "claims": 3,
         "before_hits": 1,
@@ -90,7 +90,7 @@ async def test_repeated_refresh_does_not_rewrite_existing_links(monkeypatch):
     db.add = MagicMock()
     db.exec.return_value = SimpleNamespace(all=lambda: [row])
     monkeypatch.setattr(
-        import_service,
+        crm_ownership,
         "_rental_evidence_for_units",
         AsyncMock(
             return_value={
@@ -103,8 +103,8 @@ async def test_repeated_refresh_does_not_rewrite_existing_links(monkeypatch):
             }
         ),
     )
-    monkeypatch.setattr(import_service, "_refresh_contact_import_match_summaries", AsyncMock())
-    result = await import_service.refresh_property_contact_rentals(
+    monkeypatch.setattr(crm_ownership, "_refresh_contact_import_match_summaries", AsyncMock())
+    result = await crm_ownership.refresh_property_contact_rentals(
         db, organization_id="org", import_id=2, commit=False
     )
     assert result["changed_claims"] == 0
@@ -120,12 +120,12 @@ async def test_failed_warehouse_read_does_not_clear_saved_links(monkeypatch):
     db.add = MagicMock()
     db.exec.return_value = SimpleNamespace(all=lambda: [row])
     monkeypatch.setattr(
-        import_service,
+        crm_ownership,
         "_rental_evidence_for_units",
         AsyncMock(side_effect=RuntimeError("Warehouse unavailable")),
     )
     with pytest.raises(RuntimeError, match="Warehouse unavailable"):
-        await import_service.refresh_property_contact_rentals(db, organization_id="org")
+        await crm_ownership.refresh_property_contact_rentals(db, organization_id="org")
     assert row.lead_id == "old-event"
     db.add.assert_not_called()
     db.commit.assert_not_awaited()
@@ -148,7 +148,7 @@ async def test_source_change_aborts_publication_and_leaves_marker_unchanged(monk
         refresh_rental_imports, "claim_snapshot", AsyncMock(return_value={"rows": 1})
     )
     rematch = AsyncMock(return_value={"claims": 1})
-    monkeypatch.setattr(import_service, "refresh_property_contact_rentals", rematch)
+    monkeypatch.setattr(crm_ownership, "refresh_property_contact_rentals", rematch)
     with pytest.raises(RuntimeError, match="changed during refresh"):
         await refresh_rental_imports.refresh(tmp_path)
     db.commit.assert_not_awaited()
@@ -170,7 +170,7 @@ async def test_dry_run_rolls_back_and_does_not_advance_marker(monkeypatch, tmp_p
         refresh_rental_imports, "claim_snapshot", AsyncMock(return_value={"rows": 1})
     )
     monkeypatch.setattr(
-        import_service, "refresh_property_contact_rentals", AsyncMock(return_value={"claims": 1})
+        crm_ownership, "refresh_property_contact_rentals", AsyncMock(return_value={"claims": 1})
     )
     report = await refresh_rental_imports.refresh(tmp_path, dry_run=True)
     assert report["dry_run"]

@@ -16,18 +16,25 @@ from app.crm.import_models import (
     CrmOwnerRegistryResponse,
     CrmOwnerWorkspaceSummary,
 )
-from app.crm.import_service import (
-    bulk_update_owner_workspaces,
+from app.crm.imports import (
     delete_contact_import,
-    get_contact_list,
-    get_owner_profile,
-    get_owner_registry,
     list_contact_imports,
-    list_contact_lists,
-    list_lead_imported_contacts,
-    list_owner_workspaces,
     process_contact_import,
     rename_contact_import,
+)
+from app.crm.inbound import (
+    add_inbound_activity,
+    add_inbound_note,
+    create_inbound_enquiry,
+    get_inbound_enquiry,
+    list_inbound_enquiries,
+    update_inbound_enquiry,
+)
+from app.crm.inbound_imports import (
+    delete_inbound_import,
+    list_inbound_imports,
+    preview_inbound_import,
+    process_inbound_import,
 )
 from app.crm.inbound_models import (
     InboundActivityCreate,
@@ -42,19 +49,9 @@ from app.crm.inbound_models import (
     InboundMatchUpdate,
     InboundNoteCreate,
 )
-from app.crm.inbound_service import (
-    add_inbound_activity,
-    add_inbound_note,
-    create_inbound_enquiry,
-    delete_inbound_import,
-    get_inbound_enquiry,
+from app.crm.matching import (
     get_inbound_matches,
-    list_inbound_enquiries,
-    list_inbound_imports,
-    preview_inbound_import,
-    process_inbound_import,
     refresh_inbound_matches,
-    update_inbound_enquiry,
     update_inbound_match_state,
 )
 from app.crm.models import (
@@ -67,15 +64,23 @@ from app.crm.models import (
     CrmWorkspaceSummary,
     CrmWorkspaceUpdate,
 )
-from app.crm.service import (
+from app.crm.opportunities import get_dashboard, get_lead_detail
+from app.crm.owners import (
+    get_contact_list,
+    get_owner_profile,
+    get_owner_registry,
+    list_contact_lists,
+    list_lead_imported_contacts,
+)
+from app.crm.reports import get_property_report
+from app.crm.workspaces import (
     add_lead_note,
+    bulk_update_owner_workspaces,
     delete_lead_note,
     delete_saved_lead,
-    get_dashboard,
-    get_lead_detail,
     get_lead_workspace,
-    get_property_report,
     list_lead_workspaces,
+    list_owner_workspaces,
     list_saved_leads,
     save_lead,
     update_lead_workspace,
@@ -105,9 +110,7 @@ async def crm_create_inbound_enquiry(
 @router.get("/inbound/enquiries", response_model=InboundEnquiryListResponse)
 async def crm_inbound_enquiries(
     intent_group: str | None = Query(default=None, pattern="^(demand|instructions)$"),
-    workspace: str | None = Query(
-        default=None, pattern="^(inbox|unqualified|qualified|closed)$"
-    ),
+    workspace: str | None = Query(default=None, pattern="^(inbox|unqualified|qualified|closed)$"),
     status: str | None = Query(default=None, max_length=40),
     search: str | None = Query(default=None, max_length=160),
     limit: int = Query(default=100, ge=1, le=500),

@@ -1,5 +1,6 @@
 import logging
 from contextlib import asynccontextmanager
+from inspect import isawaitable
 
 import aioboto3
 from botocore.config import Config
@@ -55,3 +56,25 @@ class ObjectStorageClient:
         async with self.client() as s3:
             objects = [{"Key": key} for key in keys]
             await s3.delete_objects(Bucket=self.bucket_name, Delete={"Objects": objects})
+
+
+class ObjectStorageSigningError(Exception):
+    """The SDK rejected a synchronous presign request."""
+
+
+async def sign_object_url(
+    *, bucket: str, key: str, expires_in: int, client_kwargs: dict[str, str]
+) -> str:
+    session = aioboto3.Session()
+    async with session.client("s3", **client_kwargs) as s3:
+        try:
+            signed_url = s3.generate_presigned_url(
+                "get_object",
+                Params={"Bucket": bucket, "Key": key},
+                ExpiresIn=expires_in,
+            )
+        except Exception as exc:
+            raise ObjectStorageSigningError() from exc
+        if isawaitable(signed_url):
+            signed_url = await signed_url
+        return str(signed_url)

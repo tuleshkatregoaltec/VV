@@ -1,4 +1,4 @@
-from app.core.normalization import area_search_text
+from app.market.reference import area_search_text
 
 
 def test_area_search_text_handles_parenthetical_jvc_alias():

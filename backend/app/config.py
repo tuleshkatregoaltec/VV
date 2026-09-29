@@ -1,7 +1,10 @@
+import os
 import warnings
 from functools import cached_property
+from pathlib import Path
 from typing import Annotated, Any, Literal
 
+from dotenv import dotenv_values
 from pydantic import (
     AnyUrl,
     BeforeValidator,
@@ -54,6 +57,12 @@ class Settings(BaseSettings):
     # Honeybadger
     HONEYBADGER_API_KEY: str | None = None
     LOGFIRE_TOKEN: str | None = None
+
+    # Content-free AI telemetry is explicitly opt-in.
+    AI_TELEMETRY_ENABLED: bool = False
+    LANGSMITH_API_KEY: str | None = None
+    LANGSMITH_ENDPOINT: str = "https://api.smith.langchain.com"
+    LANGSMITH_WORKSPACE_ID: str | None = None
 
     # OpenRouter
     OPENROUTER_API_KEY: str  # Bitwarden Secrets
@@ -196,3 +205,41 @@ class Settings(BaseSettings):
 
 
 settings = Settings()  # type: ignore
+
+
+# Legacy news storage resolution: name priority, then process/cwd/parent precedence.
+def env_value(*names: str) -> str | None:
+    env_files = [
+        dotenv_values(path)
+        for path in (Path.cwd() / ".env.dev", Path.cwd().parent / ".env.dev")
+        if path.exists()
+    ]
+
+    for name in names:
+        value = os.environ.get(name)
+        if value:
+            return value
+        for values in env_files:
+            value = values.get(name)
+            if value:
+                return value
+    return None
+
+
+def require_env(*names: str) -> str:
+    value = env_value(*names)
+    if value:
+        return value
+    raise RuntimeError(f"Missing required environment variable: {' or '.join(names)}")
+
+
+def build_object_storage_client_kwargs() -> dict[str, str]:
+    kwargs = {
+        "aws_access_key_id": require_env("OBJECT_STORAGE_ACCESS_KEY_ID"),
+        "aws_secret_access_key": require_env("OBJECT_STORAGE_SECRET_ACCESS_KEY"),
+        "region_name": env_value("OBJECT_STORAGE_REGION") or "auto",
+    }
+    endpoint_url = env_value("OBJECT_STORAGE_ENDPOINT_URL")
+    if endpoint_url:
+        kwargs["endpoint_url"] = endpoint_url
+    return kwargs

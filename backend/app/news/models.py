@@ -50,3 +50,21 @@ class NewsSummaryDraft(BaseModel):
 class NewsSummaryResponse(NewsSummaryDraft):
     generated_at: AwareDatetime
     article_count: int
+
+
+class NewsArticleCreate(BaseModel):
+    url: str
+    headline: str
+    thumbnail_url: str | None = None
+    thumbnail_base64: str | None = None
+    publish_date: datetime | None = None
+
+
+class NewsArticleUploadResponse(BaseModel):
+    created: bool
+    article: NewsArticleResponse | None = None
+    message: str
+
+
+class NewsArticleUploadRequest(BaseModel):
+    article: NewsArticleCreate

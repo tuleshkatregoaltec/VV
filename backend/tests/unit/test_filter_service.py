@@ -1,6 +1,6 @@
 from unittest.mock import AsyncMock, patch
 
-from app.filters.service import get_rental_filter_options, get_sales_filter_options
+from app.transaction.facets import get_rental_filter_options, get_sales_filter_options
 
 
 async def test_get_sales_filter_options_normalizes_and_applies_full_context():
@@ -21,7 +21,7 @@ async def test_get_sales_filter_options_normalizes_and_applies_full_context():
         ]
     )
 
-    with patch("app.filters.service.query", new=mock_query):
+    with patch("app.transaction.queries.query", new=mock_query):
         result = await get_sales_filter_options(
             property_usage="Residential",
             project="Downtown Views",
@@ -91,7 +91,7 @@ async def test_get_rental_filter_options_normalizes_and_applies_full_context():
         ]
     )
 
-    with patch("app.filters.service.query", new=mock_query):
+    with patch("app.transaction.queries.query", new=mock_query):
         result = await get_rental_filter_options(
             property_usage="Residential",
             project="Marina Gate",

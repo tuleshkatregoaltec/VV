@@ -1,6 +1,7 @@
 from openpyxl import load_workbook
 
-from app.transaction import service as transaction_service
+from app.transaction import exports as transaction_service
+from app.transaction import queries
 
 SALES_ROW = {
     "transaction_id": "T-1",
@@ -53,7 +54,7 @@ async def test_sales_excel_export_has_dld_metadata_and_50000_row_limit(monkeypat
         seen["params"] = params
         return [SALES_ROW]
 
-    monkeypatch.setattr(transaction_service, "query", fake_query)
+    monkeypatch.setattr(queries, "query", fake_query)
 
     stream = await transaction_service.export_sales_transactions(area="Dubai Marina")
 
@@ -74,7 +75,7 @@ async def test_sales_csv_export_returns_raw_data_without_workbook_metadata(monke
     async def fake_query(sql, params):
         return [SALES_ROW]
 
-    monkeypatch.setattr(transaction_service, "query", fake_query)
+    monkeypatch.setattr(queries, "query", fake_query)
 
     stream = await transaction_service.export_sales_transactions(
         area="Dubai Marina",
@@ -100,7 +101,7 @@ async def test_sales_exports_escape_spreadsheet_formula_strings(monkeypatch):
     async def fake_query(sql, params):
         return [dangerous_row]
 
-    monkeypatch.setattr(transaction_service, "query", fake_query)
+    monkeypatch.setattr(queries, "query", fake_query)
 
     csv_stream = await transaction_service.export_sales_transactions(file_format="csv")
     csv_content = csv_stream.getvalue().decode("utf-8-sig")
@@ -128,7 +129,7 @@ async def test_rental_excel_export_has_dld_metadata_and_50000_row_limit(monkeypa
         seen["params"] = params
         return [RENTAL_ROW]
 
-    monkeypatch.setattr(transaction_service, "query", fake_query)
+    monkeypatch.setattr(queries, "query", fake_query)
 
     stream = await transaction_service.export_rental_contracts(area="Dubai Marina")
 

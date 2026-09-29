@@ -6,58 +6,13 @@ from sqlalchemy import DateTime
 from sqlmodel import JSON, Column, SQLModel
 from sqlmodel import Field as SQLField
 
-Usage = Literal["residential", "commercial", "mixed_use", "unknown"]
+from app.plots.models import LandSaleEvidence, PlotDetails, Usage
+
 DevelopmentModel = Literal[
     "build_to_sell_residential",
     "build_to_rent_residential",
     "build_to_lease_commercial",
 ]
-
-
-class GISLandUse(BaseModel):
-    type: str
-    use: str
-
-
-class Plot(BaseModel):
-    plot_number: str
-    community_name: str
-    project_name: str
-    plot_area_sqm: float
-    max_gfa_sqm: float
-    max_height: str
-    max_coverage: str
-    gfa_type: str
-    is_verified: bool
-    land_use_summary: list[str] = Field(default_factory=list)
-
-
-class LandPlot(Plot):
-    """Backward-compatible alias for older feasibility imports."""
-
-
-class PlotDetails(BaseModel):
-    plot_number: str
-    community_name: str
-    project_name: str
-    master_developer: str | None = None
-    plot_area_sqm: float
-    max_gfa_sqm: float
-    max_gfa_sqft: float
-    max_height: str
-    max_coverage: str
-    gfa_type: str
-    far: float | None = None
-    inferred_usage: Usage
-    site_plan_issue_date: str | None = None
-    site_plan_expiry_date: str | None = None
-    is_verified: bool
-    verify_comments: str | None = None
-    land_use: list[GISLandUse] = Field(default_factory=list)
-    general_notes: list[str] = Field(default_factory=list)
-    setbacks: dict[str, str] = Field(default_factory=dict)
-    coordinates: list[list[float]] = Field(default_factory=list)
-    warnings: list[str] = Field(default_factory=list)
 
 
 class MarketPricingRow(BaseModel):
@@ -127,20 +82,6 @@ class OffPlanUnitPricingBenchmark(BaseModel):
     recency_score: float
     last_transaction_date: str | None = None
     note: str
-
-
-class LandSaleEvidence(BaseModel):
-    transaction_id: str
-    instance_date: str
-    area_name: str
-    project_name: str
-    procedure_name: str
-    property_usage: str
-    plot_area_sqm: float
-    price_aed: float
-    price_sqm: float
-    price_per_gfa_sqm: float | None = None
-    nearest_landmark: str | None = None
 
 
 class RentalRateBySizeBand(BaseModel):

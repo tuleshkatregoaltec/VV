@@ -2,7 +2,8 @@ from unittest.mock import AsyncMock, patch
 
 from fastapi import HTTPException
 
-from app.feasibility.models import ComparableData, GenerateStudyResponse, LandPlot, UnitTypeData
+from app.feasibility.models import ComparableData, GenerateStudyResponse, UnitTypeData
+from app.plots.models import LandPlot
 
 MOCK_LAND_PLOT = LandPlot(
     plot_number="L001",

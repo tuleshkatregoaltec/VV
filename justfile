@@ -1,4 +1,5 @@
 set shell := ["bash", "-cu"]
+set positional-arguments
 
 default:
 	@just --list
@@ -68,8 +69,8 @@ deploy:
 	just migrate
 	docker compose up -d --no-build backend auth redis
 
-test-backend:
-	set -a && source .env.dev && set +a && cd backend && scripts/lifecycle/tests-start.sh
+test-backend *args:
+	set -a && source .env.dev && set +a && cd backend && scripts/lifecycle/tests-start.sh "$@"
 
 format-backend:
 	uv run --project backend ruff format backend
@@ -107,3 +108,42 @@ build-clickhouse-facts:
 
 holocron +args='':
 	@cd holocron && just {{args}}
+
+# Read-only checks and explicitly isolated integration suites.
+lint-backend:
+	uv run --project backend ruff check backend
+	uv run --project backend ruff format --check backend
+
+test-backend-postgres *args:
+	set -a && source .env.dev && set +a && cd backend && uv run pytest tests/integration/postgres "$@"
+
+test-backend-clickhouse *args:
+	set -a && source .env.dev && set +a && cd backend && uv run pytest tests/integration/clickhouse "$@"
+
+test-backend-infrastructure *args:
+	set -a && source .env.dev && set +a && cd backend && uv run pytest tests/integration/infrastructure "$@"
+
+# Read-only AI capability discovery; does not call model providers or upload data.
+ai-inventory:
+	cd backend && uv run python -m scripts.evaluation inventory
+
+ai-benchmark:
+	cd backend && uv run python -m scripts.evaluation dataset
+
+test-evaluation *args:
+	just test-backend tests/evaluation {{args}}
+
+# Explicit live model execution, private evidence, local authenticated application.
+ai-evaluate *args:
+	set -a && source .env.dev && set +a && cd backend && uv run python -m scripts.evaluation run {{args}}
+
+# Local trace assessment and comparison; never call models or export evidence.
+ai-assess *args:
+	cd backend && uv run python -m scripts.evaluation assess {{args}}
+
+ai-compare *args:
+	cd backend && uv run python -m scripts.evaluation compare {{args}}
+
+# Preview by default. --upload explicitly sends only allowlisted metadata to LangSmith.
+ai-export *args:
+	set -a && source .env.dev && set +a && cd backend && uv run python -m scripts.evaluation export {{args}}

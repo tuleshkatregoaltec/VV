@@ -12,6 +12,7 @@ import pandas as pd
 from clickhouse_connect.driver.asyncclient import AsyncClient
 
 from app.config import settings
+from app.core.observability import warehouse_query
 
 logger = logging.getLogger(__name__)
 
@@ -51,6 +52,7 @@ async def close_clickhouse() -> None:
         _client = None
 
 
+@warehouse_query
 async def query(
     sql: str,
     parameters: Optional[Dict[str, Any]] = None,
@@ -67,6 +69,7 @@ async def query(
     return [dict(zip(column_names, row)) for row in result.result_rows]
 
 
+@warehouse_query
 async def query_df(
     sql: str,
     parameters: Optional[Dict[str, Any]] = None,

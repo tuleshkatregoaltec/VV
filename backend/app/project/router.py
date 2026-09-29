@@ -5,10 +5,10 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.core.decorators import cached_endpoint
 from app.core.dependencies import AuthContext, require_active_subscription
+from app.plots.models import DDAOutlineFeature, DDAPlotFeature
+from app.plots.service import get_dda_outlines_for_bounds, get_dda_plots_for_area
 from app.project.models import (
     BuildingDetailResponse,
-    DDAOutlineFeature,
-    DDAPlotFeature,
     MasterProjectResponse,
     ProjectDetailResponse,
     ProjectRadarOverviewResponse,
@@ -17,16 +17,16 @@ from app.project.models import (
     ProjectSearchResult,
     RadarBuildingPin,
 )
-from app.project.service import (
-    get_building_details,
-    get_dda_outlines_for_bounds,
-    get_dda_plots_for_area,
-    get_master_project,
-    get_project_details,
+from app.project.radar import (
     get_project_radar,
     get_project_radar_overview,
     get_project_radar_pins,
     get_radar_building_pins,
+)
+from app.project.service import (
+    get_building_details,
+    get_master_project,
+    get_project_details,
     list_all_projects,
 )
 

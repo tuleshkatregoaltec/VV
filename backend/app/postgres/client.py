@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker, create_async
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.config import settings
+from app.core.observability import instrument_postgres
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +30,7 @@ def get_postgres_engine() -> AsyncEngine:
             max_overflow=10,
         )
 
+        instrument_postgres(_engine)
         _session_factory = async_sessionmaker(
             _engine,
             class_=AsyncSession,

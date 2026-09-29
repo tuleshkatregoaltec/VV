@@ -1,6 +1,10 @@
 import pytest
 
-from app.project import service as project_service
+from app.market import reference as market_reference
+from app.plots import evidence as plots_evidence
+from app.plots import queries as plots_queries
+from app.plots import service as plots_service
+from app.plots import valuation as plots_valuation
 
 
 def test_dda_plot_valuation_uses_transaction_evidence_rates():
@@ -36,7 +40,7 @@ def test_dda_plot_valuation_uses_transaction_evidence_rates():
             },
         ]
     }
-    valuation = project_service._dda_plot_valuation(
+    valuation = plots_valuation._dda_plot_valuation(
         {
             "plot_number": "3460999",
             "community_name": "Business Bay",
@@ -48,14 +52,14 @@ def test_dda_plot_valuation_uses_transaction_evidence_rates():
 
     assert valuation["valuation_rate_min_aed_sqft"] == 475.0
     assert valuation["valuation_rate_max_aed_sqft"] == 650.0
-    assert valuation["valuation_min_aed"] == round(1000 * project_service.SQM_TO_SQFT * 475)
-    assert valuation["valuation_max_aed"] == round(1000 * project_service.SQM_TO_SQFT * 650)
+    assert valuation["valuation_min_aed"] == round(1000 * market_reference.SQM_TO_SQFT * 475)
+    assert valuation["valuation_max_aed"] == round(1000 * market_reference.SQM_TO_SQFT * 650)
     assert valuation["valuation_confidence"] == "Medium"
     assert "4 DLD land sales" in valuation["valuation_note"]
 
 
 def test_dda_plot_valuation_stays_pending_without_max_gfa():
-    valuation = project_service._dda_plot_valuation(
+    valuation = plots_valuation._dda_plot_valuation(
         {
             "community_name": "Business Bay",
             "land_use": "Residential",
@@ -69,7 +73,7 @@ def test_dda_plot_valuation_stays_pending_without_max_gfa():
 
 
 def test_dda_transaction_evidence_matches_transactions_to_nearest_plot_area():
-    plot_indexes = project_service._dda_plot_indexes(
+    plot_indexes = plots_valuation._dda_plot_indexes(
         [
             {
                 "plot_number": "small",
@@ -86,7 +90,7 @@ def test_dda_transaction_evidence_matches_transactions_to_nearest_plot_area():
         ]
     )
 
-    evidence = project_service._transaction_evidence_by_community(
+    evidence = plots_valuation._transaction_evidence_by_community(
         [
             {
                 "transaction_id": "tx-1",
@@ -102,7 +106,7 @@ def test_dda_transaction_evidence_matches_transactions_to_nearest_plot_area():
 
     business_bay = evidence["business bay"][0]
     assert business_bay["plot_number"] == "small"
-    assert business_bay["rate_aed_sqft"] == 25_000_000 / (5000 * project_service.SQM_TO_SQFT)
+    assert business_bay["rate_aed_sqft"] == 25_000_000 / (5000 * market_reference.SQM_TO_SQFT)
 
 
 def test_dda_development_evidence_distinguishes_direct_and_villa_subdivision_matches():
@@ -121,7 +125,7 @@ def test_dda_development_evidence_distinguishes_direct_and_villa_subdivision_mat
         for index in range(5)
     ]
 
-    project_service._annotate_dda_development_evidence(rows)
+    plots_evidence._annotate_dda_development_evidence(rows)
 
     assert rows[0]["development_status"] == "developed_confirmed"
     assert rows[0]["development_method"] == "parcel_id_exact"
@@ -146,7 +150,7 @@ def test_dda_non_developable_land_is_not_reported_as_unbuilt_supply():
         }
     ]
 
-    project_service._annotate_dda_development_evidence(rows)
+    plots_evidence._annotate_dda_development_evidence(rows)
 
     assert rows[0]["development_status"] == "non_developable"
     assert rows[0]["development_method"] == "planning_land_use"
@@ -182,11 +186,40 @@ async def test_dda_plot_bulk_layer_defers_valuation_lookup(monkeypatch):
     async def fail_valuation_lookup(*_args, **_kwargs):
         raise AssertionError("Bulk DDA map requests should not run transaction valuation lookup")
 
-    monkeypatch.setattr(project_service, "_get_dda_plot_geometries", fake_geometries)
-    monkeypatch.setattr(project_service, "_dda_transaction_valuation_lookup", fail_valuation_lookup)
+    monkeypatch.setattr(plots_service, "_get_dda_plot_geometries", fake_geometries)
+    monkeypatch.setattr(plots_service, "_dda_transaction_valuation_lookup", fail_valuation_lookup)
 
-    plots = await project_service.get_dda_plots_for_area(limit=100, include_valuations=False)
+    plots = await plots_service.get_dda_plots_for_area(limit=100, include_valuations=False)
 
     assert len(plots) == 1
     assert plots[0].valuation_min_aed is None
     assert plots[0].valuation_note == "Valuation deferred for bulk map rendering."
+
+
+async def test_dda_geometry_cache_preserves_one_hour_lifetime(monkeypatch):
+    from types import SimpleNamespace
+
+    now = [100.0]
+    calls = []
+
+    async def query(sql, parameters):
+        calls.append(parameters)
+        return [
+            {
+                "plot_number": "plot-cache",
+                "coordinates": "[[55.2,25.1],[55.3,25.1],[55.3,25.2],[55.2,25.1]]",
+                "plot_area_sqm": 1000,
+                "max_gfa_sqm": 5000,
+            }
+        ]
+
+    monkeypatch.setattr(plots_queries, "query", query)
+    monkeypatch.setattr(plots_service, "time", SimpleNamespace(monotonic=lambda: now[0]))
+    monkeypatch.setattr(plots_service, "_dda_geometry_cache", None)
+    first = await plots_service._get_dda_plot_geometries()
+    now[0] += 3599
+    assert await plots_service._get_dda_plot_geometries() is first
+    assert len(calls) == 1
+    now[0] += 2
+    assert await plots_service._get_dda_plot_geometries() == first
+    assert len(calls) == 2

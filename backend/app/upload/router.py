@@ -6,14 +6,11 @@ from fastapi.responses import JSONResponse
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.dependencies import require_api_key
+from app.news.ingestion import create_news_article
+from app.news.models import NewsArticleUploadRequest, NewsArticleUploadResponse
 from app.postgres import get_db_session
-from app.upload.models import (
-    ChunkedUploadResponse,
-    NewsArticleUploadRequest,
-    NewsArticleUploadResponse,
-    UploadHealthResponse,
-)
-from app.upload.service import create_news_article, process_chunked_upload
+from app.upload.models import ChunkedUploadResponse, UploadHealthResponse
+from app.upload.service import process_chunked_upload
 
 logger = logging.getLogger(__name__)
 

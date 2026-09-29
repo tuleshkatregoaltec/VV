@@ -12,7 +12,7 @@ from app.feasibility.models import (
     FeasibilityStudyUpdateRequest,
     GenerateStudyResponse,
 )
-from app.feasibility.service import (
+from app.feasibility.studies import (
     create_saved_study,
     delete_saved_study,
     get_saved_study,
@@ -159,7 +159,7 @@ def generated_study(**assumption_overrides):
 
 async def create_one(db_session, *, user_id="user-1", organization_id="org-1"):
     with patch(
-        "app.feasibility.service.generate_seeded_study",
+        "app.feasibility.studies.generate_seeded_study",
         new=AsyncMock(return_value=generated_study()),
     ):
         return await create_saved_study(
@@ -232,7 +232,7 @@ async def test_saved_study_update_does_not_regenerate_research(db_session):
         db_session, study_id=created.id, user_id="user-1", organization_id="org-1"
     )
 
-    with patch("app.feasibility.service.generate_seeded_study", new=AsyncMock()) as generate:
+    with patch("app.feasibility.studies.generate_seeded_study", new=AsyncMock()) as generate:
         await update_saved_study(
             db_session,
             study_id=created.id,

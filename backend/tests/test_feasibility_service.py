@@ -2,9 +2,12 @@ from unittest.mock import AsyncMock, patch
 
 from fastapi import HTTPException
 
-from app.feasibility.models import GenerateStudyRequest, PlotDetails, PlotResearch
-from app.feasibility.queries import get_comparable_data, get_land_plots, search_land_plots
-from app.feasibility.service import generate_seeded_study, get_comparable_or_404
+from app.feasibility.generation import generate_seeded_study
+from app.feasibility.models import GenerateStudyRequest, PlotResearch
+from app.feasibility.research import get_comparable_data
+from app.feasibility.service import get_comparable_or_404
+from app.plots.models import PlotDetails
+from app.plots.service import get_land_plots, search_land_plots
 
 MOCK_LAND_ROW = {
     "plot_number": "L001",
@@ -25,7 +28,7 @@ async def test_get_comparable_data_empty_returns_none():
 
 
 async def test_get_land_plots_maps_rows_to_land_plot_models():
-    with patch("app.feasibility.queries.query", new=AsyncMock(return_value=[MOCK_LAND_ROW])):
+    with patch("app.plots.queries.query", new=AsyncMock(return_value=[MOCK_LAND_ROW])):
         plots = await get_land_plots("Downtown Dubai", 1000.0)
 
     assert len(plots) == 1
@@ -36,7 +39,7 @@ async def test_get_land_plots_maps_rows_to_land_plot_models():
 
 
 async def test_get_land_plots_empty_db_returns_empty_list():
-    with patch("app.feasibility.queries.query", new=AsyncMock(return_value=[])):
+    with patch("app.plots.queries.query", new=AsyncMock(return_value=[])):
         plots = await get_land_plots("Downtown Dubai", 1000.0)
 
     assert plots == []
@@ -50,7 +53,7 @@ async def test_get_land_plots_null_optional_fields():
         "gfa_type": "",
         "land_use": "",
     }
-    with patch("app.feasibility.queries.query", new=AsyncMock(return_value=[row])):
+    with patch("app.plots.queries.query", new=AsyncMock(return_value=[row])):
         plots = await get_land_plots("Downtown Dubai", 1000.0)
 
     assert plots[0].plot_number == ""
@@ -60,7 +63,7 @@ async def test_get_land_plots_null_optional_fields():
 
 
 async def test_search_land_plots_maps_rows():
-    with patch("app.feasibility.queries.query", new=AsyncMock(return_value=[MOCK_LAND_ROW])):
+    with patch("app.plots.queries.query", new=AsyncMock(return_value=[MOCK_LAND_ROW])):
         plots = await search_land_plots("Downtown Dubai", "L001")
 
     assert len(plots) == 1
@@ -249,10 +252,10 @@ async def test_generate_seeded_study_builds_response_from_plot_and_research():
     )
 
     with patch(
-        "app.feasibility.service.generate_hbu_for_plot", new=AsyncMock(return_value=research)
+        "app.feasibility.generation.generate_hbu_for_plot", new=AsyncMock(return_value=research)
     ):
         with patch(
-            "app.feasibility.service.get_plot_details_or_404", new=AsyncMock(return_value=plot)
+            "app.feasibility.generation.get_plot_details_or_404", new=AsyncMock(return_value=plot)
         ):
             response = await generate_seeded_study(
                 GenerateStudyRequest(

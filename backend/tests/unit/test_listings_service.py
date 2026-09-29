@@ -1,15 +1,9 @@
 import pytest
 
 from app.listings import service
-from app.listings.service import (
-    MONTHLY_PRICE_EXPR,
-    PRICE_PERIOD_EXPR,
-    _card_from_row,
-    _category_ids,
-    _location_hierarchy,
-    _urgency_terms,
-    _where_sql,
-)
+from app.listings.mapping import _card_from_row, _location_hierarchy
+from app.listings.policy import _category_ids, _urgency_terms
+from app.listings.queries import MONTHLY_PRICE_EXPR, PRICE_PERIOD_EXPR, _where_sql
 
 
 class Row:
@@ -103,9 +97,7 @@ def test_villa_location_leaf_is_project_and_building_is_blank():
 
 
 def test_sales_urgency_language_is_evidence_only_and_sales_only():
-    signal, terms = _urgency_terms(
-        "sale", "Motivated seller | Price reduced", "Vacant apartment"
-    )
+    signal, terms = _urgency_terms("sale", "Motivated seller | Price reduced", "Vacant apartment")
     assert signal == "explicit_urgency"
     assert terms == ["motivated seller", "price reduced"]
     assert _urgency_terms("rent", "Urgent sale", "Distress deal") == ("none", [])
@@ -133,7 +125,7 @@ async def test_listing_analytics_uses_the_same_available_listing_scope(monkeypat
             }
         ]
 
-    monkeypatch.setattr(service, "query", fake_query)
+    monkeypatch.setattr(service.queries, "query", fake_query)
     analytics = await service.listing_analytics_from_clickhouse(
         mode="sale", area="Dubai Marina", bedrooms="2"
     )

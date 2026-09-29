@@ -5,7 +5,7 @@ from app.analytics.queries import (
     project_units_composition,
 )
 from app.analytics.router import _resolve_project_scope
-from app.clickhouse.queries import _project_filter
+from app.market.scope import project_filter_clause as _project_filter
 
 
 def test_default_project_scope_resolves_to_dubai_market() -> None:

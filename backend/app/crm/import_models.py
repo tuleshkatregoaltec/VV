@@ -383,15 +383,18 @@ class CrmOwnerWorkspaceSummary(BaseModel):
 
 class CrmOwnerBulkUpdate(BaseModel):
     owner_keys: list[str] = Field(min_length=1, max_length=200)
-    pipeline_status: Literal[
-        "new",
-        "researching",
-        "contact_ready",
-        "contacted",
-        "qualified",
-        "nurture",
-        "won",
-        "closed",
-    ] | None = None
+    pipeline_status: (
+        Literal[
+            "new",
+            "researching",
+            "contact_ready",
+            "contacted",
+            "qualified",
+            "nurture",
+            "won",
+            "closed",
+        ]
+        | None
+    ) = None
     highlight_color: Literal["none", "amber", "green", "blue", "red", "purple"] | None = None
     note: str | None = Field(default=None, max_length=4_000)

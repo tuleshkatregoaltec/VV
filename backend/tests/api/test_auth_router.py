@@ -47,7 +47,7 @@ def clear_overrides():
 
 @pytest.mark.asyncio
 async def test_me_returns_owner_subscription_context(api_client, monkeypatch):
-    from app.auth import router
+    from app.auth import profile as router
 
     async def override_require_auth():
         return make_user()
@@ -82,7 +82,7 @@ async def test_me_returns_owner_subscription_context(api_client, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_me_promotes_system_admin_role(api_client, monkeypatch):
-    from app.auth import router
+    from app.auth import profile as router
 
     async def override_require_auth():
         return make_user(email="admin@example.com", is_admin=True)

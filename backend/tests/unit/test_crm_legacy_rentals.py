@@ -1,6 +1,7 @@
 import asyncio
 
-from app.crm import service
+from app.crm import opportunities
+from app.crm import opportunity_queries as service
 
 
 def test_existing_lead_does_not_query_legacy_tables(monkeypatch):
@@ -26,7 +27,7 @@ def test_saved_legacy_candidate_remains_resolvable_after_v2_cutover(monkeypatch)
         return []
 
     monkeypatch.setattr(service, "query", query)
-    assert asyncio.run(service._candidate_key_for_lead("saved-old-lead")) == "saved-old-unit"
+    assert asyncio.run(opportunities.resolve_candidate_key("saved-old-lead")) == "saved-old-unit"
 
 
 def test_mixed_saved_leads_only_fall_back_for_missing_identities(monkeypatch):

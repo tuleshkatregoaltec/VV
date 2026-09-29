@@ -4,13 +4,9 @@ from fastapi import APIRouter, Depends, Query
 
 from app.core.decorators import cached_endpoint
 from app.core.dependencies import AuthContext, require_active_subscription
-from app.filters.models import FilterOptionsResponse
-from app.filters.service import (
-    get_rental_filter_options as get_rental_filters_service,
-)
-from app.filters.service import (
-    get_sales_filter_options as get_sales_filters_service,
-)
+from app.transaction.facets import get_rental_filter_options as get_rental_filters_service
+from app.transaction.facets import get_sales_filter_options as get_sales_filters_service
+from app.transaction.models import FilterOptionsResponse
 
 router = APIRouter(prefix="/api/v1/filters", tags=["filters"])
 

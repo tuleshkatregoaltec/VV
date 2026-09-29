@@ -4,12 +4,12 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Optional
 
 from fastapi import Depends, Header, HTTPException, Request
-from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.auth.service import get_user_by_id
+from app.billing.service import get_latest_subscription_by_org
 from app.config import settings
-from app.organization.service import get_membership_for_user
+from app.organization.service import get_membership_for_user, get_organization_by_id
 from app.postgres import get_db_session
 from app.providers.auth import AuthenticatedUser
 from app.token_usage.service import token_usage_service
@@ -111,7 +111,6 @@ async def require_membership(
     """
     Require user with an organization membership.
     """
-    from app.postgres.models import Organization, Subscription
 
     membership = await get_membership_for_user(db, current_user.id)
     if not membership:
@@ -124,16 +123,11 @@ async def require_membership(
         )
 
     # Get organization
-    organization = await db.get(Organization, membership.organization_id)
+    organization = await get_organization_by_id(db, membership.organization_id)
     if not organization:
         raise HTTPException(status_code=500, detail="Organization not found")
 
-    result = await db.exec(
-        select(Subscription)
-        .where(Subscription.organization_id == organization.id)
-        .order_by(Subscription.created_at.desc())
-    )
-    subscription = result.first()
+    subscription = await get_latest_subscription_by_org(organization.id, db)
 
     return AuthContext(
         user=current_user,

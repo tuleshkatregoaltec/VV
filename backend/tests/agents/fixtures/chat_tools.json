@@ -1,0 +1,68 @@
+{
+  "get_market_pulse": {
+    "description": "<summary>Get vital market statistics for a specific area.\n\nReturns aggregate metrics including median price, average yield, transaction volume,\nand price trends for the specified area and time period.</summary>\n<returns>\n<description>Dictionary with price, yield, volume, and trend data</description>\n</returns>",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "area": {
+          "description": "Area name (e.g., \"Dubai Marina\", \"Downtown Dubai\")",
+          "type": "string"
+        },
+        "period_days": {
+          "default": 90,
+          "description": "Analysis period in days (default: 90)",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "area"
+      ],
+      "type": "object"
+    }
+  },
+  "get_similar_projects": {
+    "description": "<summary>Find similar projects based on attributes.\n\nUses ClickHouse projections to efficiently search for comparable projects\nbased on property characteristics, location, and developer.</summary>\n<returns>\n<description>List of similar projects with comparison metrics</description>\n</returns>",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "limit": {
+          "default": 5,
+          "description": "Number of similar projects to return (default: 5)",
+          "type": "integer"
+        },
+        "project_name": {
+          "description": "Name of the reference project",
+          "type": "string"
+        }
+      },
+      "required": [
+        "project_name"
+      ],
+      "type": "object"
+    }
+  },
+  "rank_areas": {
+    "description": "<summary>Rank top areas by a specific metric.</summary>\n<returns>\n<description>List of top areas with their respective metrics</description>\n</returns>",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "limit": {
+          "default": 5,
+          "description": "Number of top areas to return (default: 5)",
+          "type": "integer"
+        },
+        "metric": {
+          "default": "volume",
+          "description": "Ranking metric - \"volume\" (transaction count), \"price\" (median price),\n    or \"growth\" (price change percentage)",
+          "type": "string"
+        },
+        "period_days": {
+          "default": 90,
+          "description": "Analysis period in days (default: 90)",
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    }
+  }
+}
