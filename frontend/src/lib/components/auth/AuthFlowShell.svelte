@@ -65,7 +65,7 @@ export let bodyClass = ''
 				class={`flex h-full w-full justify-center ${cardViewportFill ? 'items-stretch' : 'items-start'} ${sectionWidthClass}`}
 			>
 				<div
-					class={`flex w-full ${contentWidthClass} ${cardViewportFill ? 'min-h-[calc(100vh-2rem)]' : ''} ${panelClass} flex-col rounded-lg border border-[var(--color-border-warm)] bg-white p-5 shadow-sm sm:p-6 lg:p-8 ${cardClass}`}
+					class={`flex w-full ${contentWidthClass} ${cardViewportFill ? 'min-h-[calc(100vh-2rem)]' : ''} ${panelClass} flex-col rounded-lg border border-border bg-card p-5 shadow-sm sm:p-6 lg:p-8 ${cardClass}`}
 				>
 				<div class="flex h-full flex-col gap-4">
 					<div class="flex flex-wrap items-center justify-between gap-4">
