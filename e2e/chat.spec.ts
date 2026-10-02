@@ -43,7 +43,8 @@ test('chat renders existing SSE artifacts and keeps them after message refresh',
         { id: 2, conversation_id: conversation.id, role: 'assistant', content: 'Existing streaming contract preserved.', created_at: now, meta_data: { artifacts: [artifact], total_tokens: 17 } }
     ] : [] }));
     await page.route('**/api/v1/chat/conversations/987654/messages/stream', route => {
-        expect(route.request().postDataJSON()).toEqual({ message: 'Show market activity' });
+        expect(route.request().postDataJSON()).toEqual({ message: 'Show market activity', request_id: expect.any(String) });
+        expect(route.request().postDataJSON().request_id).toMatch(/^[0-9a-f-]{36}$/);
         sent = true;
         const events = [
             { type: 'thinking' }, { type: 'tool_call_start', tool: 'show_chart', tool_call_id: 'call-1' },

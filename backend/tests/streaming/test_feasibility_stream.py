@@ -25,7 +25,7 @@ async def test_invalid_history_warns_and_provider_failure_terminates_without_don
     @asynccontextmanager
     async def fail(message, **kwargs):
         calls.append((message, kwargs))
-        raise RuntimeError("provider unavailable")
+        raise RuntimeError("provider unavailable: private upstream payload")
         yield  # pragma: no cover
 
     monkeypatch.setattr(chat_agent, "workspace_chat_agent", SimpleNamespace(iter=fail))
@@ -43,7 +43,7 @@ async def test_invalid_history_warns_and_provider_failure_terminates_without_don
             "type": "warning",
             "content": "Session context reset — conversation history could not be restored.",
         },
-        {"type": "error", "error": "provider unavailable"},
+        {"type": "error", "error": "AI response could not be completed"},
     ]
     assert calls[0][0] == "Use the latest request"
     assert calls[0][1]["message_history"] == []

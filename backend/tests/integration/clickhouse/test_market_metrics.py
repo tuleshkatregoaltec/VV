@@ -308,15 +308,35 @@ async def test_registered_chat_agent_executes_the_tool_against_the_database(serv
         ]
         if not tool_returns:
             return ModelResponse(
-                parts=[ToolCallPart(tool_name="query_market_metrics", args=arguments)]
+                parts=[
+                    ToolCallPart(
+                        tool_name="query_market_metrics",
+                        args={
+                            "request": {
+                                key: value
+                                for key, value in arguments.items()
+                                if key != "reference_date"
+                            }
+                        },
+                    )
+                ]
             )
         returned.append(tool_returns[-1].content)
         return ModelResponse(parts=[TextPart(content="done")])
 
-    with agent.override(model=FunctionModel(scripted)):
-        await agent.run("What was the average sale price in JVC last month?")
+    from unittest.mock import AsyncMock
+
+    from app.chat.mcp import ChatToolContext, market_mcp
+
+    context = ChatToolContext("fixture-user", "fixture-org", REFERENCE, "metric-fixture")
+    async with market_mcp(context, AsyncMock(return_value=True)) as tools:
+        with agent.override(model=FunctionModel(scripted)):
+            await agent.run("What was the average sale price in JVC last month?", toolsets=[tools])
 
     api = (await client.post("/api/v1/analytics/market-metrics", json=arguments)).json()
-    assert returned and json.loads(json.dumps(returned[0])) == api
+    assert returned
+    evidence = json.loads(json.dumps(returned[0]))
+    assert evidence["data"]["total"] == api["total"]
+    assert evidence["evidence"]["coverage"]["status"] == "unverified"
     assert api["total"]["count"] == 3
     assert api["total"]["values"] == {"mean_aed": 2_000_000, "median_aed": 1_000_000}

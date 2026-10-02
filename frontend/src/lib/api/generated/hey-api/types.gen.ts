@@ -8656,6 +8656,10 @@ export type SendMessageRequest = {
      * Message
      */
     message: string;
+    /**
+     * Request Id
+     */
+    request_id?: string | null;
 };
 
 /**

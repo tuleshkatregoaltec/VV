@@ -46,8 +46,8 @@ export default defineConfig({
 	],
 
 	webServer: {
-		command: 'cd ../frontend && bun run dev -- --host 127.0.0.1',
-		url: 'http://localhost:5173',
+		command: `cd ../frontend && bun run dev -- --host 127.0.0.1 --port ${new URL(baseURL).port || '5173'} --strictPort`,
+		url: baseURL,
 		reuseExistingServer: !process.env.CI,
 		timeout: 120_000
 	}

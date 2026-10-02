@@ -154,3 +154,10 @@ ai-compare *args:
 # Preview by default. --upload explicitly sends only allowlisted metadata to LangSmith.
 ai-export *args:
 	set -a && source .env.dev && set +a && cd backend && uv run python -m scripts.evaluation export {{args}}
+
+# Prepare sanitized behavioral splits and check promotion evidence without paid training.
+ai-prepare *args:
+	cd backend && uv run python -m scripts.evaluation prepare {{args}}
+
+ai-promote *args:
+	cd backend && uv run python -m scripts.evaluation promote {{args}}

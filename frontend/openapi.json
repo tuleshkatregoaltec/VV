@@ -23312,9 +23312,24 @@
 				"properties": {
 					"message": {
 						"type": "string",
+						"maxLength": 16000,
+						"minLength": 1,
 						"title": "Message"
+					},
+					"request_id": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "uuid"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Request Id"
 					}
 				},
+				"additionalProperties": false,
 				"type": "object",
 				"required": ["message"],
 				"title": "SendMessageRequest",

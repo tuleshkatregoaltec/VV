@@ -33,7 +33,7 @@ def postgres_test_url():
     try:
         subprocess.run(
             ["uv", "run", "alembic", "upgrade", "head"],
-            cwd=Path(__file__).parents[3],
+            cwd=Path(__file__).parents[2],
             env={**os.environ, "POSTGRES_URL": target},
             check=True,
             capture_output=True,

@@ -158,10 +158,12 @@ async def send_message(
                 user_message=request.message,
                 user_id=context.user.id,
                 organization_id=context.organization.id,
+                request_id=str(request.request_id) if request.request_id else None,
+                daily_token_limit=context.user.daily_token_limit,
             ):
                 yield chunk
         except Exception as e:
-            logger.exception(f"Error in send_message endpoint: {e}")
+            logger.warning("Chat endpoint failed (%s)", type(e).__name__)
             yield f"data: {json.dumps({'type': 'error', 'error': 'Internal server error'})}\n\n"
 
     return StreamingResponse(

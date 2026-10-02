@@ -40,7 +40,7 @@ from app.upload.router import router as upload_router
 logfire.configure(send_to_logfire=bool(settings.LOGFIRE_TOKEN))
 observability_provider = configure_observability(settings)
 if observability_provider is None:
-    logfire.instrument_pydantic_ai()
+    logfire.instrument_pydantic_ai(include_content=False)
 logging.config.dictConfig(LOGGING_CONFIG)
 
 

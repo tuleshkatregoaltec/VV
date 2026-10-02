@@ -5,6 +5,7 @@ import type {
 	ConversationResponse,
 	CreateConversationRequest,
 	MessageResponse,
+	SendMessageRequest,
 	UpdateConversationRequest
 } from './generated/hey-api/types.gen'
 
@@ -48,9 +49,14 @@ export const chat = {
 		),
 
 	/** Streams AI response chunks via Server-Sent Events */
-	sendMessage: (conversationId: number, message: string, onChunk: StreamCallback) =>
+	sendMessage: (
+		conversationId: number,
+		message: string,
+		onChunk: StreamCallback,
+		requestId: string = crypto.randomUUID()
+	) =>
 		client.stream(`/api/v1/chat/conversations/${conversationId}/messages/stream`, onChunk, {
 			method: 'POST',
-			body: { message }
+			body: { message, request_id: requestId } satisfies SendMessageRequest
 		})
 }

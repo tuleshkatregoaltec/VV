@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
 from typing import Any, Dict, List, LiteralString, Optional
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import DateTime, Text
@@ -54,7 +55,10 @@ class CreateConversationRequest(BaseModel):
 class SendMessageRequest(BaseModel):
     """Request model for sending a message in a conversation"""
 
-    message: str
+    model_config = ConfigDict(extra="forbid")
+
+    message: str = Field(min_length=1, max_length=16000)
+    request_id: UUID | None = None
 
 
 class UpdateConversationRequest(BaseModel):

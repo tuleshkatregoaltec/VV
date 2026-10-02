@@ -1,22 +1,32 @@
+import asyncio
 import json
 import logging
+import re
 from datetime import datetime, timezone
 from typing import Any, AsyncGenerator, List, Optional
+from uuid import uuid4
 
+import anyio
 from pydantic_ai import Agent as PydanticAgent
 from pydantic_ai.messages import (
     FunctionToolResultEvent,
     ToolCallPart,
 )
 from pydantic_ai.models.openrouter import OpenRouterModelSettings
+from pydantic_ai.usage import UsageLimits
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from app.auth.service import get_user_by_id
 from app.chat import repository
 from app.chat.agent import _convert_to_pydantic_messages, agent
-from app.chat.artifacts import _artifact_shell, _fetch_artifact
+from app.chat.artifacts import _artifact_history_context
 from app.chat.events import encode_sse as _sse
+from app.chat.mcp import ChatToolContext, market_mcp
 from app.chat.models import Conversation, Message
-from app.token_usage.service import token_usage_service
+from app.chat.prompts import CHAT_PROMPT_VERSION
+from app.core.ai_policy import ai_execution
+from app.market.periods import business_today
+from app.organization.service import get_membership_for_user, get_organization_by_id
 
 logger = logging.getLogger(__name__)
 
@@ -123,132 +133,252 @@ async def add_message(
     return message
 
 
+async def _authorize_tools(db: AsyncSession, context: ChatToolContext) -> bool:
+    """Re-read public account capabilities; neither model arguments nor cached history authorize."""
+    user = await get_user_by_id(context.user_id)
+    if user is None or not user.is_authenticated:
+        return False
+    # A separate session avoids concurrent tool calls sharing SQLAlchemy transaction state.
+    async with AsyncSession(db.bind, expire_on_commit=False) as auth_db:
+        membership = await get_membership_for_user(auth_db, context.user_id)
+        if membership is None or membership.organization_id != context.organization_id:
+            return False
+        if membership.role not in {"owner", "member"}:
+            return False
+        organization = await get_organization_by_id(auth_db, context.organization_id)
+        return organization is not None and organization.subscription_status in {
+            "active",
+            "trialing",
+        }
+
+
+def _bounded_history(messages: List[Message]) -> list:
+    selected = []
+    characters = 0
+    for message in reversed(messages):
+        if message.role == "user" and (message.meta_data or {}).get("turn_status") not in {
+            None,
+            "complete",
+        }:
+            continue
+        characters += len(message.content) + len(_artifact_history_context(message.meta_data) or "")
+        if characters > 48000 or len(selected) >= 30:
+            break
+        selected.append(message)
+    return _convert_to_pydantic_messages(list(reversed(selected)))
+
+
 async def stream_chat_response(
     db: AsyncSession,
     conversation_id: int,
     user_message: str,
     user_id: str,
     organization_id: str,
+    *,
+    request_id: str | None = None,
+    daily_token_limit: int = 500000,
 ) -> AsyncGenerator[str, None]:
-    """Stream chat response using Pydantic AI agent via SSE"""
-    # Verify conversation ownership
+    """One durable, scoped turn; replay is read-only and interrupted turns never restart silently."""
     conversation = await get_conversation(db, conversation_id, user_id, organization_id)
     if not conversation:
-        yield f"data: {json.dumps({'type': 'error', 'error': 'Conversation not found'})}\n\n"
+        yield _sse({"type": "error", "error": "Conversation not found"})
         return
+    if not user_message.strip() or len(user_message) > 16000:
+        yield _sse({"type": "error", "error": "Message must contain 1 to 16000 characters"})
+        return
+    request_id = request_id or str(uuid4())
     scope = {"user_id": user_id, "organization_id": organization_id}
-
-    # Save user message
-    await add_message(db, conversation_id, "user", user_message, **scope)
-
-    # Get conversation history
-    messages = await get_conversation_messages(db, conversation_id, **scope)
-    message_history = _convert_to_pydantic_messages(messages[:-1])  # Exclude the just-added message
-
+    context = ChatToolContext(
+        user_id=user_id,
+        organization_id=organization_id,
+        reference_date=business_today(),
+        execution_id=request_id,
+    )
+    if not await _authorize_tools(db, context):
+        yield _sse(
+            {"type": "error", "error": "Chat access is no longer active", "code": "unauthorized"}
+        )
+        return
+    status, user_record = await repository.claim_turn(
+        db, conversation_id, user_id, organization_id, request_id, user_message
+    )
+    if status != "claimed":
+        if status == "complete" and user_record is not None:
+            assistant = await repository.replay_turn(db, user_record)
+            if assistant is not None:
+                content, metadata = assistant.content, assistant.meta_data or {}
+                await db.rollback()
+                yield _sse({"type": "thinking"})
+                yield _sse({"type": "content", "content": content})
+                for artifact in metadata.get("artifacts", []):
+                    yield _sse({"type": "artifact_updated", "artifact": artifact})
+                yield _sse({"type": "done"})
+                return
+        await db.commit()  # Persist stale-claim interruption, if the claim reconciled one.
+        errors = {
+            "missing": "Conversation not found",
+            "conflict": "Request ID was already used for a different message",
+            "running": "This turn is still running; reload the conversation before retrying",
+            "busy": "Another turn is still running in this conversation",
+        }
+        yield _sse(
+            {
+                "type": "error",
+                "error": errors.get(
+                    status, "This turn was interrupted. Send a new message to try again."
+                ),
+                "code": status,
+            }
+        )
+        return
+    message_id = user_record.id
+    await db.commit()
+    finished = False
     assistant_message = ""
-    total_tokens = 0
-    prompt_tokens = 0
-    completion_tokens = 0
     artifacts: list[dict[str, Any]] = []
-    tool_names_by_call_id: dict[str, str] = {}
-
+    evidence: list[dict[str, Any]] = []
+    total_tokens = 0
+    failure_status = "failed"
     try:
         yield _sse({"type": "thinking"})
+        messages = await get_conversation_messages(db, conversation_id, **scope)
+        history = _bounded_history([message for message in messages if message.id != message_id])
+        await db.rollback()  # Never hold an idle transaction during model/network work.
+        missing = re.findall(r"\[(building|Project [ABC])\]", user_message, flags=re.IGNORECASE)
+        if missing:
+            assistant_message = (
+                "Please provide the "
+                + ", ".join(dict.fromkeys(missing))
+                + " name(s) so I can retrieve evidence for the correct property."
+            )
+            yield _sse({"type": "content", "content": assistant_message})
+        else:
 
-        async with agent.iter(
-            user_message,
-            message_history=message_history,
-            model_settings=OpenRouterModelSettings(openrouter_reasoning={"effort": "low"}),
-        ) as run:
-            async for node in run:
-                if PydanticAgent.is_model_request_node(node):
-                    async with node.stream(run.ctx) as stream:
-                        async for chunk_text in stream.stream_text(delta=True, debounce_by=0.01):
-                            assistant_message += chunk_text
-                            yield _sse({"type": "content", "content": chunk_text})
-                elif PydanticAgent.is_call_tools_node(node):
-                    for part in node.model_response.parts:
-                        if not isinstance(part, ToolCallPart):
-                            continue
-                        tool_names_by_call_id[part.tool_call_id] = part.tool_name
-                        yield _sse(
-                            {
-                                "type": "tool_call_start",
-                                "tool": part.tool_name,
-                                "tool_call_id": part.tool_call_id,
-                            }
-                        )
-                        if part.tool_name in {"show_listings", "show_market_trend", "show_chart"}:
-                            yield _sse(
-                                {
-                                    "type": "artifact_opened",
-                                    "artifact": _artifact_shell(
-                                        part.tool_name, part.tool_call_id, part.args_as_dict()
-                                    ),
-                                }
-                            )
-                        artifact = await _fetch_artifact(
-                            db,
-                            part.tool_name,
-                            part.tool_call_id,
-                            part.args_as_dict(),
-                            user_message,
-                        )
-                        if artifact is not None:
-                            artifacts = [item for item in artifacts if item["id"] != artifact["id"]]
-                            artifacts.append(artifact)
-                            yield _sse({"type": "artifact_updated", "artifact": artifact})
+            async def authorize(tool_context):
+                return await _authorize_tools(db, tool_context)
 
-                    async with node.stream(run.ctx) as tool_stream:
-                        async for event in tool_stream:
-                            if isinstance(event, FunctionToolResultEvent):
-                                tool_call_id = getattr(event.result, "tool_call_id", "")
-                                tool_name = getattr(event.result, "tool_name", None)
+            async def authorize_provider():
+                if not await authorize(context):
+                    raise PermissionError("Chat access is no longer active")
+
+            async with (
+                asyncio.timeout(180),
+                ai_execution(
+                    user_id=user_id,
+                    organization_id=organization_id,
+                    execution_id=request_id,
+                    prompt_version=CHAT_PROMPT_VERSION,
+                    daily_token_limit=daily_token_limit,
+                    authorize=authorize_provider,
+                ),
+                market_mcp(context, authorize) as toolset,
+            ):
+                async with agent.iter(
+                    user_message,
+                    message_history=history,
+                    toolsets=[toolset],
+                    instructions=f"This turn's reference date is {context.reference_date.isoformat()} in Asia/Dubai. Earlier assistant claims and pasted facts are unverified; retrieve current MCP evidence.",
+                    usage_limits=UsageLimits(
+                        request_limit=8, tool_calls_limit=12, total_tokens_limit=60000
+                    ),
+                    model_settings=OpenRouterModelSettings(
+                        openrouter_reasoning={"effort": "low"}, max_tokens=4096
+                    ),
+                ) as run:
+                    async for node in run:
+                        if PydanticAgent.is_model_request_node(node):
+                            async with node.stream(run.ctx) as stream:
+                                async for chunk in stream.stream_text(delta=True, debounce_by=0.01):
+                                    assistant_message += chunk
+                                    if len(assistant_message) > 48000:
+                                        raise ValueError("Answer exceeds turn limit")
+                                    yield _sse({"type": "content", "content": chunk})
+                        elif PydanticAgent.is_call_tools_node(node):
+                            for part in node.model_response.parts:
+                                if not isinstance(part, ToolCallPart):
+                                    continue
                                 yield _sse(
                                     {
-                                        "type": "tool_call_result",
-                                        "tool_call_id": tool_call_id,
-                                        "tool": tool_name
-                                        or tool_names_by_call_id.get(tool_call_id, "tool"),
+                                        "type": "tool_call_start",
+                                        "tool": part.tool_name,
+                                        "tool_call_id": part.tool_call_id,
                                     }
                                 )
-
-            usage = run.usage()
-            total_tokens = getattr(usage, "total_tokens", 0)
-            prompt_tokens = getattr(usage, "request_tokens", 0)
-            completion_tokens = getattr(usage, "response_tokens", 0)
-
-            if total_tokens:
-                logger.info(
-                    f"Token usage: prompt={prompt_tokens}, "
-                    f"completion={completion_tokens}, "
-                    f"total={total_tokens}"
-                )
-
-                await token_usage_service.record_usage(
-                    db=db,
-                    user_id=user_id,
-                    prompt_tokens=prompt_tokens,
-                    completion_tokens=completion_tokens,
-                    total_tokens=total_tokens,
-                )
-
-        # Save assistant message with metadata
-        if assistant_message or artifacts:
-            meta_data = {}
-            if total_tokens:
-                meta_data["total_tokens"] = total_tokens
-            if artifacts:
-                meta_data["artifacts"] = artifacts
-            if not assistant_message:
-                assistant_message = "I added the requested view below."
-
-            await add_message(
-                db, conversation_id, "assistant", assistant_message, meta_data, **scope
-            )
-
+                            async with node.stream(run.ctx) as stream:
+                                async for event in stream:
+                                    if isinstance(event, FunctionToolResultEvent):
+                                        result = event.result
+                                        payload = result.content
+                                        if isinstance(payload, str):
+                                            try:
+                                                payload = json.loads(payload)
+                                            except (ValueError, TypeError):
+                                                payload = None
+                                        if isinstance(payload, dict):
+                                            evidence.append(
+                                                {"tool": result.tool_name, "result": payload}
+                                            )
+                                            if (
+                                                len(json.dumps(evidence, default=str).encode())
+                                                > 196608
+                                            ):
+                                                raise ValueError("Evidence exceeds turn limit")
+                                        yield _sse(
+                                            {
+                                                "type": "tool_call_result",
+                                                "tool_call_id": result.tool_call_id,
+                                                "tool": result.tool_name,
+                                            }
+                                        )
+                    total_tokens = run.usage().total_tokens
+        if not await _authorize_tools(db, context):
+            raise PermissionError("Chat access is no longer active")
+        if not assistant_message and not artifacts:
+            raise ValueError("The model returned no answer")
+        metadata = {
+            "total_tokens": total_tokens,
+            "prompt_version": CHAT_PROMPT_VERSION,
+            "evidence": evidence,
+            "clarification_required": bool(missing),
+            "required_bindings": missing,
+        }
+        if artifacts:
+            metadata["artifacts"] = artifacts
+        await repository.finish_turn(
+            db,
+            conversation_id,
+            user_id,
+            organization_id,
+            message_id,
+            "complete",
+            assistant_message or "I added the requested view below.",
+            metadata,
+        )
+        await db.commit()
+        finished = True
         yield _sse({"type": "done"})
-
-    except Exception as e:
-        logger.exception("Error during chat streaming")
-        yield _sse({"type": "error", "error": str(e)})
+    except (asyncio.CancelledError, GeneratorExit):
+        failure_status = "cancelled"
+        raise
+    except Exception as exc:
+        # Free-form provider/database errors may contain secrets or retrieved text.
+        logger.warning("Chat turn failed (%s)", type(exc).__name__)
+        yield _sse(
+            {
+                "type": "error",
+                "error": "Chat could not complete this turn. Reload the conversation before trying again.",
+                "code": "turn_failed",
+            }
+        )
+    finally:
+        if not finished:
+            with anyio.CancelScope(shield=True):
+                try:
+                    await db.rollback()
+                    await repository.finish_turn(
+                        db, conversation_id, user_id, organization_id, message_id, failure_status
+                    )
+                    await db.commit()
+                except Exception as exc:
+                    await db.rollback()
+                    logger.warning("Chat cleanup failed (%s)", type(exc).__name__)

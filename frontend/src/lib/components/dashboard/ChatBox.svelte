@@ -86,7 +86,22 @@ let localMessageSequence = 0
 const queryClient = useQueryClient()
 const messagesQuery = createQuery(() => chatQueries.messages(conversationId))
 let loading = $derived(messagesQuery.isLoading)
-let displayError = $derived(error ?? (messagesQuery.isError ? 'Failed to load messages' : null))
+let persistedTurnNotice = $derived.by(() => {
+	if (activeStreamConversationId === conversationId) return null
+	const last = messagesQuery.data?.at(-1)
+	if (last?.role !== 'user') return null
+	const status = last.meta_data?.turn_status
+	if (status === 'cancelled')
+		return 'The last response was cancelled. Send a new message to continue.'
+	if (status === 'failed' || status === 'interrupted')
+		return 'The last response could not complete. Send a new message to try again.'
+	if (status === 'running')
+		return 'The last response has not completed. Reload the conversation to check its status.'
+	return null
+})
+let displayError = $derived(
+	error ?? (messagesQuery.isError ? 'Failed to load messages' : persistedTurnNotice)
+)
 const scrollSignal = $derived(
 	`${messages.length}:${messages.at(-1)?.content.length ?? 0}:${messages.at(-1)?.toolCalls?.length ?? 0}:${messages.at(-1)?.artifacts?.length ?? 0}:${isThinking}:${streamController ? 'streaming' : 'idle'}`
 )
@@ -283,6 +298,7 @@ async function refreshMessagesAfterStream(conversationIdToRefresh: number) {
 async function handleSubmit() {
 	const text = inputValue.trim()
 	if (!text || !conversationId) return
+	error = null
 
 	if (streamController) streamController.close()
 
@@ -426,6 +442,7 @@ function autoResizeTextarea() {
 }
 
 function stopStreaming() {
+	error = 'Response cancelled. Send a new message to continue.'
 	streamController?.close()
 	streamController = null
 	activeStreamConversationId = null
