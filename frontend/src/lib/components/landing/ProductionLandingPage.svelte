@@ -1,6 +1,6 @@
 <script lang="ts">
-import { onMount } from 'svelte'
 import { ArrowDownRight, Mail } from 'lucide-svelte'
+import { onMount } from 'svelte'
 
 const accessHref = 'mailto:contact@vitevue.com?subject=Vitevue%20access'
 const contactHref =
@@ -244,7 +244,7 @@ onMount(() => {
 	initNav()
 
 	return () => {
-		cleanups.forEach((cleanup) => cleanup())
+		for (const cleanup of cleanups) cleanup()
 	}
 })
 </script>
