@@ -48,6 +48,7 @@
               "title": "Building"
             },
             "evidence_kind": {
+              "description": "Use listings for inventory, listing age AND listing-to-rent gross yields. Use sales/rentals only for achieved transaction metrics; delivery for projects; report for composed reports. Listing yield requests keep their asking bounds and comparable-rent period in the SAME listings cohort.",
               "enum": [
                 "listings",
                 "sales",
@@ -104,8 +105,7 @@
                   "type": "null"
                 }
               ],
-              "default": null,
-              "description": "Explicit requested transaction/comparable-rent period. A listing inventory snapshot has no historical period. Omit when the user did not specify one."
+              "description": "Required interpretation: the user's explicit transaction/comparable-rent period, including for listings cohorts used for yield. Set null only when the user supplied no applicable period. Inventory remains a current snapshot; its cohort's rent period is retained for comparison."
             },
             "price_max": {
               "anyOf": [
@@ -217,7 +217,8 @@
           },
           "required": [
             "id",
-            "evidence_kind"
+            "evidence_kind",
+            "period"
           ],
           "title": "MarketCohort",
           "type": "object"

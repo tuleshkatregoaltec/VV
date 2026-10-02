@@ -52,7 +52,9 @@ class MarketCohort(BaseModel):
     model_config = ConfigDict(extra="forbid", allow_inf_nan=False, frozen=True)
 
     id: str = Field(min_length=1, max_length=40, pattern=r"^[a-zA-Z0-9_-]+$")
-    evidence_kind: Literal["listings", "sales", "rentals", "delivery", "report"]
+    evidence_kind: Literal["listings", "sales", "rentals", "delivery", "report"] = Field(
+        description="Use listings for inventory, listing age AND listing-to-rent gross yields. Use sales/rentals only for achieved transaction metrics; delivery for projects; report for composed reports. Listing yield requests keep their asking bounds and comparable-rent period in the SAME listings cohort."
+    )
     location: str | None = Field(default=None, min_length=1, max_length=120)
     building: str | None = Field(default=None, min_length=1, max_length=160)
     project: str | None = Field(default=None, min_length=1, max_length=160)
@@ -77,12 +79,16 @@ class MarketCohort(BaseModel):
         default=None, description="Required with price_max: false for below, true for at most."
     )
     period: MarketPeriodRequest | None = Field(
-        default=None,
-        description="Explicit requested transaction/comparable-rent period. A listing inventory snapshot has no historical period. Omit when the user did not specify one.",
+        description="Required interpretation: the user's explicit transaction/comparable-rent period, including for listings cohorts used for yield. Set null only when the user supplied no applicable period. Inventory remains a current snapshot; its cohort's rent period is retained for comparison."
     )
 
     @model_validator(mode="after")
     def complete_bounds(self):
+        expected_mode = {"sales": "sale", "rentals": "rent"}.get(self.evidence_kind)
+        if expected_mode and self.mode is not None and self.mode != expected_mode:
+            raise ValueError(
+                f"{self.evidence_kind} evidence requires mode={expected_mode}. Listing-to-rent yield uses evidence_kind=listings with mode=sale and asking-price bounds."
+            )
         for field in ("price_min", "price_max"):
             if (getattr(self, field) is None) != (getattr(self, f"{field}_inclusive") is None):
                 raise ValueError(f"{field} and {field}_inclusive must be supplied together")

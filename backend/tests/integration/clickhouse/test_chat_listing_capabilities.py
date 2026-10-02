@@ -392,6 +392,7 @@ async def test_empty_listing_inventory_returns_zero_count_and_unknown_prices(
                     "cohorts": [
                         {
                             "id": "studio",
+                            "period": None,
                             "evidence_kind": "listings",
                             "location": "Dubai Hills Estate",
                             "bedrooms": ["studio"],

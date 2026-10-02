@@ -25,7 +25,7 @@ COHORT = {
 
 def scope(*cohorts):
     result = TurnScope(date(2026, 10, 3))
-    result.bind(BindMarketScopeRequest(cohorts=list(cohorts)))
+    result.bind(BindMarketScopeRequest(cohorts=[{"period": None, **cohort} for cohort in cohorts]))
     return result
 
 
@@ -265,3 +265,23 @@ def test_wire_schema_allows_inheritance_but_domain_model_still_requires_fields()
         validate({"request": {}, "scope_id": "income"}, schemas[name])
         with pytest.raises(ValidationError):
             mcp.TOOL_MODELS[name].model_validate({})
+
+
+async def test_contradictory_source_and_missing_period_are_repairable_before_scope_freezes(
+    executor,
+):
+    server, operation = executor
+    result = await server.call(
+        "bind_market_scope", {"request": {"cohorts": [COHORT | {"evidence_kind": "rentals"}]}}
+    )
+    assert result["error"]["code"] == "invalid_arguments"
+    assert "mode=rent" in result["error"]["details"][0]["message"]
+    assert not server.scope.cohorts
+    missing_period = {key: value for key, value in COHORT.items() if key != "period"}
+    result = await server.call("bind_market_scope", {"request": {"cohorts": [missing_period]}})
+    assert result["error"]["details"][0]["field"] == "cohorts.0.period"
+    assert not server.scope.cohorts
+    assert (await server.call("bind_market_scope", {"request": {"cohorts": [COHORT]}}))[
+        "status"
+    ] == "ok"
+    operation.assert_not_awaited()
