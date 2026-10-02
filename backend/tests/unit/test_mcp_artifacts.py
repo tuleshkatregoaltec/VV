@@ -174,3 +174,23 @@ def test_unavailable_report_component_does_not_render_and_chart_subset_is_disclo
     assert len(artifact["data"]["points"]) == 50
     assert artifact["data"]["summary"]["total_records"] == 60
     assert "first 50 returned groups" in artifact["subtitle"]
+
+
+def test_rental_chart_does_not_label_whole_term_contract_amount_as_annual_rent():
+    envelope = metrics()
+    envelope["data"].update(
+        dataset="rentals",
+        rows=[],
+        definitions=[
+            {
+                "name": "median_contract_aed",
+                "unit": "AED",
+                "definition": "Median whole-term contract amount",
+            }
+        ],
+    )
+    envelope["data"]["total"]["values"] = {"median_contract_aed": 240000}
+    [artifact] = render_mcp_artifacts("query_market_metrics", "rent", envelope, created_at=CREATED)
+    assert "whole-term contract rent" in artifact["data"]["metric_label"]
+    assert "annual" not in artifact["title"]
+    assert artifact["data"]["points"][0]["value"] == 240000

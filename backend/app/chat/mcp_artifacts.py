@@ -106,8 +106,22 @@ def _metric_artifact(data, evidence, identifier, created_at):
             f"Showing the first {MAX_CHART_POINTS} returned groups; this chart is a subset."
         )
     points = points[:MAX_CHART_POINTS]
-    label = name.replace("_", " ").replace("aed", "AED") + f" ({unit})"
-    source_label = "Achieved sales" if data.get("dataset") == "sales" else "Registered annual rents"
+    amount = "achieved sale price" if data.get("dataset") == "sales" else "annual registered rent"
+    labels = {
+        "count": "Eligible records",
+        "rated_count": "Records with known area",
+        "total_contract_aed": "Total whole-term contract rent",
+        "median_contract_aed": "Median whole-term contract rent",
+        "total_aed": f"Total {amount}",
+        "mean_aed": f"Mean {amount}",
+        "median_aed": f"Median {amount}",
+        "p25_aed": f"25th percentile {amount}",
+        "p75_aed": f"75th percentile {amount}",
+    }
+    label = labels.get(name, f"{name.replace('_', ' ')} {amount}") + f" ({unit})"
+    source_label = (
+        "Achieved sales" if data.get("dataset") == "sales" else "Registered rental contracts"
+    )
     artifact = _base(
         "custom_chart",
         identifier,
