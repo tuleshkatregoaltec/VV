@@ -35,9 +35,10 @@ ARGS = {"request": {"dataset": "sales", "period": {"type": "previous_month"}}}
 async def bind_scope(client, cohorts=None):
     """Bind through the real tool before exercising an existing retrieval contract."""
     call = getattr(client, "direct_call_tool", None) or client.call
+    cohorts = cohorts or [{"id": "sales", "evidence_kind": "sales"}]
     result = await call(
         "bind_market_scope",
-        {"request": {"cohorts": cohorts or [{"id": "sales", "evidence_kind": "sales"}]}},
+        {"request": {"cohorts": [{"period": None, **cohort} for cohort in cohorts]}},
     )
     assert result["status"] == "ok", result
 

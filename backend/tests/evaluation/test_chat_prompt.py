@@ -12,7 +12,7 @@ from app.chat.prompts import CHAT_PROMPT_VERSION, CHAT_SYSTEM_PROMPT
 
 
 def test_binding_covers_all_explicit_constraints_and_keeps_cohorts_paired():
-    assert "Before any retrieval, call bind_market_scope once" in CHAT_SYSTEM_PROMPT
+    assert "Before any retrieval, successfully call bind_market_scope once" in CHAT_SYSTEM_PROMPT
     assert (
         "location, building/project, bedrooms, property_type, sale/rent mode, price bounds"
         in CHAT_SYSTEM_PROMPT
@@ -58,7 +58,7 @@ async def test_provider_receives_required_composer_and_unpinned_report_rules():
     agent = Agent(FunctionModel(inspect), system_prompt=CHAT_SYSTEM_PROMPT)
     await agent.run("Create a multi-source client report")
     prompt = "\n".join(received)
-    assert CHAT_PROMPT_VERSION == "database-mcp-v4"
+    assert CHAT_PROMPT_VERSION == "database-mcp-v5"
     assert "MUST call compose_market_report" in prompt
     assert (
         "Do not bypass\nit by assembling separate metrics, inventory and delivery calls" in prompt
@@ -80,3 +80,27 @@ def test_delivery_scope_and_listing_source_are_explicit():
     )
     assert "Do not call query_market_metrics for listing inventory" in CHAT_SYSTEM_PROMPT
     assert "or fallback for a listing-only question" in CHAT_SYSTEM_PROMPT
+
+
+def test_listing_yield_scope_binds_comparable_period_without_switching_evidence_kind():
+    assert "Include period on every cohort" in CHAT_SYSTEM_PROMPT
+    assert "or null only when no applicable period was requested" in CHAT_SYSTEM_PROMPT
+    assert "evidence_kind='listings' and mode='sale'" in CHAT_SYSTEM_PROMPT
+    assert (
+        "Bind any explicit comparable-rent period in that SAME listing cohort" in CHAT_SYSTEM_PROMPT
+    )
+    assert "only a successful binding freezes scope" in CHAT_SYSTEM_PROMPT
+
+
+def test_inventory_zero_and_yield_unavailability_retain_the_actual_scoped_evidence():
+    assert "data.inventory.total is the scoped" in CHAT_SYSTEM_PROMPT
+    assert "report 0 as zero matching listings, not as an unavailable count" in CHAT_SYSTEM_PROMPT
+    assert (
+        "Never substitute evidence.release.observations row counts for inventory.total"
+        in CHAT_SYSTEM_PROMPT
+    )
+    assert "Explain unavailable yields using the actual returned reason" in CHAT_SYSTEM_PROMPT
+    assert (
+        "Claim insufficient sample size only when scoped evidence establishes" in CHAT_SYSTEM_PROMPT
+    )
+    assert "Five or more contracts" in CHAT_SYSTEM_PROMPT

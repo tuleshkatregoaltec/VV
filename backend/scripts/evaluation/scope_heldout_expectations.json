@@ -97,7 +97,8 @@
             "studio"
           ],
           "property_type": "apartment",
-          "mode": "sale"
+          "mode": "sale",
+          "period": null
         },
         {
           "id": "bed-1",
@@ -107,7 +108,8 @@
             "1"
           ],
           "property_type": "apartment",
-          "mode": "sale"
+          "mode": "sale",
+          "period": null
         },
         {
           "id": "bed-2",
@@ -117,7 +119,8 @@
             "2"
           ],
           "property_type": "apartment",
-          "mode": "sale"
+          "mode": "sale",
+          "period": null
         }
       ],
       "review_notes": "Three separate bedroom cohorts must remain allowed. Request current inventory, never historical achieved sales. No user period is present; do not bind one. Empty inventory cannot test positive median accuracy."
@@ -208,7 +211,8 @@
           "property_type": "apartment",
           "mode": "sale",
           "price_max": 1200000,
-          "price_max_inclusive": false
+          "price_max_inclusive": false,
+          "period": null
         }
       ],
       "review_notes": "No period is specified. Do not invent six months or emit previous_months without months. A documented default may apply transparently; unavailable evidence means no yield estimate."
