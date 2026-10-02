@@ -23,6 +23,7 @@ from holocron.contracts import (
     SourceSpec,
 )
 from holocron.platform.execution import build_raw_release, new_run_id, utc_now
+from holocron.platform.http_retry import RetryPolicy, provider_limiter, send
 from holocron.platform.metadata import safe_config_metadata
 from holocron.platform.raw_files import build_raw_file_from_path, string_value
 from holocron.pydantic_helpers import HolocronModel, NonBlankStr
@@ -174,6 +175,9 @@ class DldOpenDataConfig(HolocronModel):
     request_pause_seconds: float = Field(default=0, ge=0)
     request_retry_attempts: int = Field(default=3, ge=0)
     request_retry_seconds: float = Field(default=2, ge=0)
+    request_retry_deadline_seconds: float = Field(default=900, ge=1)
+    # Conservative until the DLD gateway quota is recorded (decision D2).
+    min_request_interval_seconds: float = Field(default=1.0, ge=0)
     timeout_seconds: float = Field(default=60, ge=1)
 
     @field_validator("filters", mode="before")
@@ -210,12 +214,21 @@ class DldOpenDataApiClient:
         consumer_id: str,
         retry_attempts: int = 3,
         retry_seconds: float = 2,
+        retry_deadline_seconds: float = 900,
+        min_request_interval_seconds: float = 1.0,
     ) -> None:
         self._client = client
         self._base_url = base_url.rstrip("/")
         self._headers = {**_HEADERS, "consumer-id": consumer_id}
-        self._retry_attempts = retry_attempts
-        self._retry_seconds = retry_seconds
+        self._policy = RetryPolicy(
+            attempts=retry_attempts + 1,
+            base_seconds=retry_seconds,
+            deadline_seconds=retry_deadline_seconds,
+        )
+        # Every DLD category shares the one gateway consumer id, so they share one limiter.
+        self.limiter = provider_limiter(
+            "dld_open_data", min_interval_seconds=min_request_interval_seconds
+        )
 
     def fetch(
         self,
@@ -223,25 +236,24 @@ class DldOpenDataApiClient:
         command: str,
         payload: Mapping[str, str],
     ) -> dict[str, Any]:
-        for attempt in range(self._retry_attempts + 1):
-            try:
-                response = self._client.post(
-                    f"{self._base_url}/{command}",
-                    json=dict(payload),
-                    headers=self._headers,
-                )
-                response.raise_for_status()
-                parsed = response.json()
-                if not isinstance(parsed, dict):
-                    raise TypeError(f"DLD open-data {command} response must be a JSON object")
-                _raise_for_open_data_errors(parsed, command=command)
-                return parsed
-            except (httpx.TimeoutException, httpx.TransportError, httpx.HTTPStatusError) as exc:
-                if not _retryable_request_error(exc) or attempt >= self._retry_attempts:
-                    raise
-                if self._retry_seconds > 0:
-                    time.sleep(self._retry_seconds * (attempt + 1))
-        raise RuntimeError(f"DLD open-data {command} request retry loop exited unexpectedly")
+        response = send(
+            self._client,
+            "POST",
+            f"{self._base_url}/{command}",
+            policy=self._policy,
+            limiter=self.limiter,
+            json=dict(payload),
+            headers=self._headers,
+        )
+        parsed = response.json()
+        if not isinstance(parsed, dict):
+            raise TypeError(f"DLD open-data {command} response must be a JSON object")
+        _raise_for_open_data_errors(parsed, command=command)
+        return parsed
+
+
+class PaginationIncomplete(RuntimeError):
+    """A window's pages did not return every row its TOTAL announced (rows shifted mid-crawl)."""
 
 
 def extract_open_data_release(
@@ -277,6 +289,8 @@ def extract_open_data_release(
                 consumer_id=parsed_config.consumer_id,
                 retry_attempts=parsed_config.request_retry_attempts,
                 retry_seconds=parsed_config.request_retry_seconds,
+                retry_deadline_seconds=parsed_config.request_retry_deadline_seconds,
+                min_request_interval_seconds=parsed_config.min_request_interval_seconds,
             )
         files, metadata = _extract_files(
             output_path=output_path,
@@ -287,6 +301,10 @@ def extract_open_data_release(
             today=current_time.date(),
             progress_log=log,
         )
+        limiter = getattr(api_client, "limiter", None)
+        if limiter is not None:
+            # requests / retries / throttled (429) / bytes for this process's DLD calls.
+            metadata["http"] = dict(limiter.counters)
 
     if not files:
         raise RuntimeError(f"DLD open-data {endpoint.category} extraction produced no raw files")
@@ -337,6 +355,7 @@ def _extract_files(
             skip = config.skip_cursor if window_index == config.window_cursor else 0
             next_window_index = window_index
             next_skip = skip
+            window_totals: set[int] = set()
             while True:
                 if config.max_pages is not None and page_count >= config.max_pages:
                     next_window_index = window_index
@@ -357,6 +376,8 @@ def _extract_files(
                     window=window,
                 )
                 total = _total_from_rows(api_rows)
+                if total is not None:
+                    window_totals.add(total)
                 page_count += 1
 
                 window_meta = _window_metadata(window)
@@ -421,6 +442,9 @@ def _extract_files(
                     next_skip = 0
                     break
                 _pause(config)
+            resumed_mid_window = window_index == config.window_cursor and config.skip_cursor > 0
+            if next_window_index == window_index + 1 and not resumed_mid_window:
+                _verify_window_complete(totals=window_totals, window=window, endpoint=endpoint)
             if config.max_pages is not None and page_count >= config.max_pages:
                 break
         else:
@@ -590,6 +614,24 @@ def _total_from_rows(rows: Sequence[Mapping[str, Any]]) -> int | None:
     return None
 
 
+def _verify_window_complete(
+    *,
+    totals: set[int],
+    window: tuple[date | None, date | None],
+    endpoint: DldOpenDataEndpointSpec,
+) -> None:
+    """Skip/take pages shift when rows are registered mid-crawl: one row repeats and another
+    is never returned, while RN still looks contiguous. Every page reports the result set's
+    TOTAL, so a TOTAL that changed between pages means the window was read inconsistently;
+    the run fails rather than replace stored rows with that set. (Distinct-row counting is
+    not used: DLD can return genuinely identical records.)"""
+    if len(totals) > 1:
+        raise PaginationIncomplete(
+            f"DLD open-data {endpoint.category} window {_window_metadata(window)}: "
+            f"TOTAL changed during pagination ({sorted(totals)}); rerun the window"
+        )
+
+
 def _filter_rows_to_window(
     *,
     rows: Sequence[dict[str, Any]],
@@ -642,14 +684,6 @@ def _raise_for_open_data_errors(payload: Mapping[str, Any], *, command: str) -> 
     response_code = payload.get("responseCode")
     if response_code not in (None, 200):
         raise RuntimeError(f"DLD open-data {command} returned responseCode={response_code}")
-
-
-def _retryable_request_error(exc: Exception) -> bool:
-    if isinstance(exc, (httpx.TimeoutException, httpx.TransportError)):
-        return True
-    if isinstance(exc, httpx.HTTPStatusError):
-        return exc.response.status_code >= 500
-    return False
 
 
 def _build_raw_file(path: Path, *, row_count: int, command: str) -> RawFile:

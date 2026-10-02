@@ -36,11 +36,13 @@ from holocron.platform.manifests import manifest_s3_key, raw_file_s3_key, raw_ma
 from holocron.platform.resources import ClickHouseResource, ObjectStorageResource
 from holocron.sources.dld_open_data_orchestration import (
     DLD_OPEN_DATA_CHUNK_DEFAULTS,
+    DLD_OPEN_DATA_DATED_INCREMENTAL_DEFAULTS,
     DLD_OPEN_DATA_INCREMENTAL_DEFAULTS,
     DLD_OPEN_DATA_RENTS_FULL_DEFAULTS,
     DLD_OPEN_DATA_RENTS_INCREMENTAL_DEFAULTS,
     resolve_open_data_config,
     write_open_data_checkpoint,
+    write_open_data_watermark,
 )
 from holocron.sources.dld_pulse_historic.assets import (
     DldPulseHistoricBronzeConfig,
@@ -103,10 +105,25 @@ _DLD_OPEN_DATA_JOB_SPECS = (
         DLD_OPEN_DATA_RENTS_INCREMENTAL_DEFAULTS,
         DLD_OPEN_DATA_RENTS_FULL_DEFAULTS,
     ),
-    ("projects", "20 4 * * *", {"mode": "incremental"}, DLD_OPEN_DATA_CHUNK_DEFAULTS),
-    ("valuations", "30 4 * * *", {"mode": "incremental"}, DLD_OPEN_DATA_CHUNK_DEFAULTS),
+    (
+        "projects",
+        "20 4 * * *",
+        DLD_OPEN_DATA_DATED_INCREMENTAL_DEFAULTS,
+        DLD_OPEN_DATA_CHUNK_DEFAULTS,
+    ),
+    (
+        "valuations",
+        "30 4 * * *",
+        DLD_OPEN_DATA_DATED_INCREMENTAL_DEFAULTS,
+        DLD_OPEN_DATA_CHUNK_DEFAULTS,
+    ),
     ("buildings", "40 4 * * *", {"mode": "incremental"}, DLD_OPEN_DATA_CHUNK_DEFAULTS),
-    ("developers", "50 4 * * *", {"mode": "incremental"}, DLD_OPEN_DATA_CHUNK_DEFAULTS),
+    (
+        "developers",
+        "50 4 * * *",
+        DLD_OPEN_DATA_DATED_INCREMENTAL_DEFAULTS,
+        DLD_OPEN_DATA_CHUNK_DEFAULTS,
+    ),
     ("lands", "10 5 * * *", {"mode": "incremental"}, DLD_OPEN_DATA_CHUNK_DEFAULTS),
     ("units", "20 5 * * *", {"mode": "incremental"}, DLD_OPEN_DATA_CHUNK_DEFAULTS),
     ("brokers", "30 5 * * *", {"mode": "incremental"}, DLD_OPEN_DATA_CHUNK_DEFAULTS),
@@ -354,6 +371,11 @@ def _run_bronze_loader(
         s3=object_storage.client(),
         clickhouse=clickhouse.client(),
     )
+    if source.name.startswith("dld_od_"):
+        # The incremental watermark moves only once the window is in bronze.
+        write_open_data_watermark(
+            raw_manifest=raw_manifest, object_storage_client=object_storage.client()
+        )
     return MaterializeResult(
         metadata={
             "source": source.name,
@@ -376,7 +398,14 @@ def build_assets_for_source(source: SourceSpec) -> list[AssetsDefinition]:
     raw_name = _raw_asset_name(source)
     bronze_name = _bronze_asset_name(source)
 
-    @asset(name=raw_name, group_name=source.provider, config_schema=Permissive())
+    # One pool per provider (limit 1 in dagster.yaml): runs sharing a provider's credentials
+    # and quota never call it concurrently, so the in-process limiter holds provider-wide.
+    @asset(
+        name=raw_name,
+        group_name=source.provider,
+        config_schema=Permissive(),
+        pool=f"provider_{source.provider}",
+    )
     def raw_asset(
         context: AssetExecutionContext,
         object_storage: ObjectStorageResource,
