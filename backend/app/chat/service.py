@@ -40,22 +40,22 @@ async def create_conversation(
 
 
 async def get_user_conversations(
-    db: AsyncSession, user_id: str, limit: int = 50, offset: int = 0
+    db: AsyncSession, user_id: str, organization_id: str, limit: int = 50, offset: int = 0
 ) -> List[Conversation]:
-    return await repository.get_user_conversations(db, user_id, limit, offset)
+    return await repository.get_user_conversations(db, user_id, organization_id, limit, offset)
 
 
 async def get_conversation(
-    db: AsyncSession, conversation_id: int, user_id: str
+    db: AsyncSession, conversation_id: int, user_id: str, organization_id: str
 ) -> Optional[Conversation]:
-    return await repository.get_conversation(db, conversation_id, user_id)
+    return await repository.get_conversation(db, conversation_id, user_id, organization_id)
 
 
 async def update_conversation(
-    db: AsyncSession, conversation_id: int, user_id: str, title: str
+    db: AsyncSession, conversation_id: int, user_id: str, organization_id: str, title: str
 ) -> Optional[Conversation]:
     """Update a conversation's title"""
-    conversation = await get_conversation(db, conversation_id, user_id)
+    conversation = await get_conversation(db, conversation_id, user_id, organization_id)
     if not conversation:
         return None
 
@@ -67,21 +67,25 @@ async def update_conversation(
     return conversation
 
 
-async def delete_conversation(db: AsyncSession, conversation_id: int, user_id: str) -> bool:
+async def delete_conversation(
+    db: AsyncSession, conversation_id: int, user_id: str, organization_id: str
+) -> bool:
     """Delete a conversation and all its messages"""
-    conversation = await get_conversation(db, conversation_id, user_id)
+    conversation = await get_conversation(db, conversation_id, user_id, organization_id)
     if not conversation:
         return False
 
-    await repository.delete_conversation_records(db, conversation_id, user_id)
+    await repository.delete_conversation_records(db, conversation_id, user_id, organization_id)
     await db.commit()
     return True
 
 
 async def get_conversation_messages(
-    db: AsyncSession, conversation_id: int, limit: int = 100
+    db: AsyncSession, conversation_id: int, user_id: str, organization_id: str, limit: int = 100
 ) -> List[Message]:
-    return await repository.get_conversation_messages(db, conversation_id, limit)
+    return await repository.get_conversation_messages(
+        db, conversation_id, user_id, organization_id, limit
+    )
 
 
 async def add_message(
@@ -90,8 +94,15 @@ async def add_message(
     role: str,
     content: str,
     meta_data: Optional[dict[str, Any]] = None,
+    *,
+    user_id: str,
+    organization_id: str,
 ) -> Message:
-    """Add a message to a conversation"""
+    """Add a message to a conversation the caller owns; nothing is written otherwise."""
+    conversation = await get_conversation(db, conversation_id, user_id, organization_id)
+    if conversation is None:
+        raise LookupError("Conversation not found")
+
     message = Message(
         conversation_id=conversation_id,
         role=role,
@@ -102,12 +113,10 @@ async def add_message(
     repository.save_message(db, message)
 
     # Update conversation timestamp
-    conversation = await repository.get_conversation_for_message(db, conversation_id)
-    if conversation:
-        conversation.updated_at = datetime.now(timezone.utc)
-        # Auto-generate title from first user message
-        if not conversation.title or conversation.title == "New Conversation":
-            conversation.title = content[:50] + ("..." if len(content) > 50 else "")
+    conversation.updated_at = datetime.now(timezone.utc)
+    # Auto-generate title from first user message
+    if not conversation.title or conversation.title == "New Conversation":
+        conversation.title = content[:50] + ("..." if len(content) > 50 else "")
 
     await db.commit()
     await db.refresh(message)
@@ -119,20 +128,21 @@ async def stream_chat_response(
     conversation_id: int,
     user_message: str,
     user_id: str,
-    organization_id: Optional[str] = None,
+    organization_id: str,
 ) -> AsyncGenerator[str, None]:
     """Stream chat response using Pydantic AI agent via SSE"""
     # Verify conversation ownership
-    conversation = await get_conversation(db, conversation_id, user_id)
+    conversation = await get_conversation(db, conversation_id, user_id, organization_id)
     if not conversation:
         yield f"data: {json.dumps({'type': 'error', 'error': 'Conversation not found'})}\n\n"
         return
+    scope = {"user_id": user_id, "organization_id": organization_id}
 
     # Save user message
-    await add_message(db, conversation_id, "user", user_message)
+    await add_message(db, conversation_id, "user", user_message, **scope)
 
     # Get conversation history
-    messages = await get_conversation_messages(db, conversation_id)
+    messages = await get_conversation_messages(db, conversation_id, **scope)
     message_history = _convert_to_pydantic_messages(messages[:-1])  # Exclude the just-added message
 
     assistant_message = ""
@@ -233,7 +243,9 @@ async def stream_chat_response(
             if not assistant_message:
                 assistant_message = "I added the requested view below."
 
-            await add_message(db, conversation_id, "assistant", assistant_message, meta_data)
+            await add_message(
+                db, conversation_id, "assistant", assistant_message, meta_data, **scope
+            )
 
         yield _sse({"type": "done"})
 
