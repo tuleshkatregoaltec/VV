@@ -148,86 +148,43 @@ def is_rankable_developer_brand(developer_name: str) -> bool:
 SQM_TO_SQFT = 10.7639
 
 
-@dataclass(frozen=True, slots=True)
-class CommunityLocation:
-    """Raw DLD names that make up one community, all lower-case.
+def location_key(name: str) -> str:
+    """Same key as Holocron's market crosswalk: lower-case, single-spaced."""
+    return " ".join(name.lower().split())
 
-    Dubai Pulse rows (to 2025) carry the official DLD area plus a master project; open-data
-    rows (from 2026) carry an upper-case community name in the area column, often without a
-    master project; rentals carry only the official area. `master_projects` and `areas`
-    identify the community itself. `official_areas` are DLD areas that also contain other
-    communities and match only rows without a master project. `note` names what such an area
-    adds, so an answer can disclose it.
+
+@dataclass(frozen=True, slots=True)
+class MarketLocation:
+    """A place name resolved against the canonical market geography (Holocron
+    market_geo_crosswalk). ``communities`` are community keys (DLD master projects);
+    ``districts`` are official DLD district names, lower-case. A community matches only rows
+    placed in it by evidence: a row DLD locates only by a wider district is never counted as
+    a community inside it (see the district-only disclosure in the metrics).
     """
 
     name: str
-    master_projects: tuple[str, ...] = ()
-    areas: tuple[str, ...] = ()
-    official_areas: tuple[str, ...] = ()
-    note: str = ""
+    communities: tuple[str, ...] = ()
+    districts: tuple[str, ...] = ()
 
 
-# Measured on the 2026-09-30 canonical release (served area/master pairs per community).
-COMMUNITY_LOCATIONS = {
-    location.name.lower(): location
-    for location in (
-        CommunityLocation(
-            "Jumeirah Village Circle",
-            master_projects=("jumeirah village circle",),
-            areas=("jumeirah village circle", "al barsha south fourth"),
-        ),
-        CommunityLocation(
-            "Jumeirah Lakes Towers",
-            master_projects=("jumeirah lakes towers",),
-            areas=("jumeirah lakes towers",),
-            official_areas=("al thanyah fifth",),
-            note="DLD area Al Thanyah Fifth also contains Jumeirah Islands, Jumeirah Park "
-            "and DMCC plots; rentals and DXBI-only rows can only be located at that level.",
-        ),
-        CommunityLocation(
-            "Dubai Marina",
-            master_projects=("dubai marina",),
-            areas=("dubai marina",),
-            official_areas=("marsa dubai",),
-            note="DLD area Marsa Dubai also contains JBR, Dubai Harbour and Bluewaters; "
-            "rentals and DXBI-only rows can only be located at that level.",
-        ),
-        CommunityLocation(
-            "Business Bay",
-            master_projects=("business bay",),
-            areas=("business bay",),
-        ),
-        CommunityLocation(
-            "Downtown Dubai",
-            master_projects=("downtown dubai",),
-            areas=("downtown dubai",),
-            official_areas=("burj khalifa",),
-            note="DLD area Burj Khalifa also contains part of the Business Bay master "
-            "project; rentals and open-data rows without a master project are located there.",
-        ),
-        CommunityLocation(
-            "Dubai Hills Estate",
-            master_projects=("dubai hills estate", "dubai hills"),
-            areas=("dubai hills", "dubai hills estate"),
-            official_areas=("hadaeq sheikh mohammed bin rashid",),
-            note="DLD area Hadaeq Sheikh Mohammed Bin Rashid is wider than Dubai Hills Estate.",
-        ),
-        CommunityLocation(
-            "Dubai South",
-            master_projects=("dubai south residential district", "dubai south"),
-            areas=("dubai south",),
-            official_areas=("madinat al mataar",),
-            note="DLD area Madinat Al Mataar also contains Dubai World Central.",
-        ),
-    )
+# Communities whose DLD master-project names differ from what users call them. One table for
+# every consumer (metrics, delivery, chat); per-consumer aliases contradicted each other.
+COMMUNITY_KEYS = {
+    "jumeirah village circle": ("jumeirah village circle",),
+    "jumeirah lakes towers": ("jumeirah lakes towers",),
+    "dubai marina": ("dubai marina",),
+    "business bay": ("business bay",),
+    "downtown dubai": ("downtown dubai",),
+    "dubai hills estate": ("dubai hills estate", "dubai hills"),
+    "dubai south": ("dubai south residential district", "dubai south"),
 }
 
 
-def community_location(name: str) -> CommunityLocation:
-    """Resolve a community name or alias; unknown names match area or master project exactly."""
+def community_location(name: str) -> MarketLocation:
+    """Resolve a community alias; any other name matches a community or a district exactly."""
     canonical = area_search_text(name)
-    found = COMMUNITY_LOCATIONS.get(canonical.lower())
-    if found:
-        return found
-    key = " ".join(name.lower().split())
-    return CommunityLocation(name.strip(), master_projects=(key,), areas=(key,))
+    keys = COMMUNITY_KEYS.get(location_key(canonical))
+    if keys:
+        return MarketLocation(canonical, communities=keys)
+    key = location_key(name)
+    return MarketLocation(name.strip(), communities=(key,), districts=(key,))

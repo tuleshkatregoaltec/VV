@@ -115,7 +115,15 @@ def metric_expressions(ds: Dataset) -> dict[str, str]:
 def group_expressions(ds: Dataset) -> dict[str, tuple[str, str]]:
     """Group name -> (key expression, display label expression)."""
     return {
-        "area": ("lowerUTF8(area_name_en)", "any(area_name_en)"),
+        # Official DLD district and evidence-placed community (canonical geography).
+        "area": (
+            "lowerUTF8(district_name)",
+            "if(any(district_name) = '', '(no district)', any(district_name))",
+        ),
+        "community": (
+            "community_key",
+            "if(any(community_name) = '', '(no community)', any(community_name))",
+        ),
         "master_project": ("lowerUTF8(master_project_en)", "any(master_project_en)"),
         "project": ("lowerUTF8(project_name_en)", "any(project_name_en)"),
         "building": (f"lowerUTF8({ds.building})", f"any({ds.building})"),
@@ -136,9 +144,8 @@ def group_expressions(ds: Dataset) -> dict[str, tuple[str, str]]:
 class MetricFilters:
     start: date
     end: date
-    location_masters: tuple[str, ...] = ()
-    location_areas: tuple[str, ...] = ()
-    location_official_areas: tuple[str, ...] = ()
+    location_communities: tuple[str, ...] = ()
+    location_districts: tuple[str, ...] = ()
     building: str | None = None
     project: str | None = None
     property_type: str | None = None
@@ -157,12 +164,11 @@ def where_clause(
 ) -> tuple[str, dict[str, Any]]:
     clauses = [ds.eligible, f"{ds.event_date} BETWEEN {{start:Date}} AND {{end:Date}}"]
     params: dict[str, Any] = {"start": filters.start, "end": filters.end}
-    if filters.location_masters or filters.location_areas or filters.location_official_areas:
+    if filters.location_communities or filters.location_districts:
         clauses.append(LOCATION_PREDICATE)
         params |= {
-            "loc_masters": list(filters.location_masters),
-            "loc_areas": list(filters.location_areas),
-            "loc_official": list(filters.location_official_areas),
+            "loc_communities": list(filters.location_communities),
+            "loc_districts": list(filters.location_districts),
         }
     if filters.building:
         clauses.append(f"lowerUTF8({ds.building}) = lowerUTF8({{building:String}})")
@@ -260,19 +266,47 @@ async def fetch_bedroom_coverage(dataset: str, filters: MetricFilters) -> dict[s
 
 
 async def fetch_matched_locations(dataset: str, filters: MetricFilters) -> list[dict[str, Any]]:
+    """Raw source names behind the matched rows, with where the crosswalk placed them."""
     ds = DATASETS[dataset]
     where, params = where_clause(ds, filters)
     return await query(
         f"""
-        SELECT area_name_en AS area, master_project_en AS master_project, count() AS records
+        SELECT area_name_en AS area, master_project_en AS master_project,
+               district_name AS district, community_name AS community, geo_method AS method,
+               count() AS records
         FROM {ds.table}
         WHERE {where}
-        GROUP BY area, master_project
+        GROUP BY area, master_project, district, community, method
         ORDER BY records DESC
         LIMIT 10
         """,
         params,
     )
+
+
+async def fetch_district_only_rows(
+    dataset: str, filters: MetricFilters, districts: tuple[str, ...]
+) -> int:
+    """Rows matching every other filter that DLD locates only by one of ``districts``.
+
+    They may belong to the requested community, but no source evidence says so, so they are
+    excluded from a community answer and disclosed instead.
+    """
+    ds = DATASETS[dataset]
+    unlocated = MetricFilters(
+        **{
+            **{f: getattr(filters, f) for f in filters.__dataclass_fields__},
+            "location_communities": (),
+            "location_districts": (),
+        }
+    )
+    where, params = where_clause(ds, unlocated)
+    rows = await query(
+        f"SELECT count() AS records FROM {ds.table} WHERE {where} "
+        "AND community_key = '' AND lowerUTF8(district_name) IN {coarse:Array(String)}",
+        params | {"coarse": [district.lower() for district in districts]},
+    )
+    return int(rows[0]["records"]) if rows else 0
 
 
 async def fetch_source_breakdown(dataset: str, filters: MetricFilters) -> list[dict[str, Any]]:

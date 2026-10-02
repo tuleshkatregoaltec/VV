@@ -101,8 +101,12 @@ async def get_delivery_summary(
     )
     snapshot = await queries.fetch_project_register_snapshot()
     limitations = []
-    if resolved and resolved.note:
-        limitations.append(resolved.note)
+    if resolved and resolved.communities and not resolved.districts:
+        for item in await queries.fetch_district_only_projects(parameters):
+            limitations.append(
+                f"{int(item['projects'])} projects in {item['district']} have no master project "
+                f"and are not counted: DLD does not place them in {resolved.name}."
+            )
     if any(int(item["projects_without_units"]) for item in raw):
         limitations.append("Some projects have no registered unit count and add 0 units.")
     if not by_status_raw:

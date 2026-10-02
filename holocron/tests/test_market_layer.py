@@ -24,8 +24,9 @@ def test_insert_column_lists_match_table_definitions_exactly() -> None:
     # with a default and a stray one would fail the build. release_id is the one deliberate
     # default: the release sets it on each staging table, so no statement can mislabel rows.
     schema = _schema()
-    assert [*transforms.SALE_COLUMNS, "release_id"] == schema["market_sale_events"]
-    assert [*transforms.RENTAL_COLUMNS, "release_id"] == schema["market_rental_events"]
+    geo = list(transforms.GEO_COLUMNS)
+    assert [*transforms.SALE_COLUMNS, "release_id", *geo] == schema["market_sale_events"]
+    assert [*transforms.RENTAL_COLUMNS, "release_id", *geo] == schema["market_rental_events"]
 
 
 def test_label_drift_is_normalised_in_the_serving_layer() -> None:

@@ -88,6 +88,14 @@ FROM {table}
 WHERE match_status = 'dxbi_only'"""
 
 
+def _geo_vocabulary(table: str) -> str:
+    return (
+        f"SELECT countIf(geo_resolution NOT IN ('community', 'district', 'unresolved'))"
+        " + countIf(geo_method NOT IN ('pulse_master', 'project_evidence', 'district_name',"
+        f" 'label_evidence', 'unresolved')) FROM {table}"
+    )
+
+
 CHECKS: tuple[MarketCheck, ...] = (
     # --- sales -------------------------------------------------------------------------
     MarketCheck(
@@ -210,6 +218,33 @@ CHECKS: tuple[MarketCheck, ...] = (
         blocking=False,
         needs_dxbi=True,
     ),
+    MarketCheck(
+        name="sale_geo_crosswalk_keys_unique",
+        asset=_SALES,
+        description="Each name key has one crosswalk entry per kind (no conflicting placements).",
+        sql="SELECT count() - uniqExact((kind, source_key)) FROM market_geo_crosswalk",
+        op="==",
+        threshold=0,
+    ),
+    MarketCheck(
+        name="sale_geo_vocabulary",
+        asset=_SALES,
+        description="Geography resolution and method labels use one vocabulary.",
+        sql=_geo_vocabulary(_SALES),
+        op="==",
+        threshold=0,
+    ),
+    MarketCheck(
+        name="sale_geo_unresolved_share_open_data",
+        asset=_SALES,
+        # 0.012 measured on the 2026-10-03 local copy (open data has no area_id and a second
+        # area vocabulary); a jump means the crosswalk evidence regressed.
+        description="Served open-data sales placed in no district or community.",
+        sql=f"SELECT countIf(geo_resolution = 'unresolved') / count() FROM {_SALES}"
+        " WHERE is_served = 1 AND source_system = 'dld_open_data' AND trans_group_en = 'Sales'",
+        op="<=",
+        threshold=0.03,
+    ),
     # --- rentals -----------------------------------------------------------------------
     MarketCheck(
         name="rental_served_rows_unique",
@@ -293,6 +328,25 @@ CHECKS: tuple[MarketCheck, ...] = (
         op="<=",
         threshold=0.25,
         needs_dxbi=True,
+    ),
+    MarketCheck(
+        name="rental_geo_vocabulary",
+        asset=_RENTALS,
+        description="Geography resolution and method labels use one vocabulary.",
+        sql=_geo_vocabulary(_RENTALS),
+        op="==",
+        threshold=0,
+    ),
+    MarketCheck(
+        name="rental_geo_unresolved_share_dld",
+        asset=_RENTALS,
+        # Every DLD rent row carries an official district (0.000 measured); unresolved rows
+        # mean the served crosswalk is missing or stale.
+        description="Served DLD rent rows placed in no district.",
+        sql=f"SELECT countIf(geo_resolution = 'unresolved') / count() FROM {_RENTALS}"
+        " WHERE is_served = 1 AND source_system != 'dxbi'",
+        op="<=",
+        threshold=0.01,
     ),
     MarketCheck(
         name="rental_version_vocabulary",

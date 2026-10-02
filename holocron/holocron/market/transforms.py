@@ -13,6 +13,9 @@ Rules (measured in docs/data-pipelines/DXBI_RECONCILIATION.md):
   pairing; kept for audit, not served, so nothing is double counted).
 - Label drift is fixed here once: Mortgage -> Mortgages, Renew -> Renewed, off-plan status
   from either DLD field.
+- Geography is resolved here once, through ``market_geo_crosswalk`` (built with each sales
+  release from DLD's own records), into an official DLD district and, where the evidence
+  supports it, a community. Raw source names stay in their original columns.
 
 Statements name the served tables; ``holocron.market.release`` renders them against a run's
 staging tables, so a build never writes to what the backend is reading.
@@ -73,6 +76,203 @@ RENTAL_EXTRA_COLUMNS = (
 
 SALE_COLUMNS = SALE_CONTRACT_COLUMNS + SALE_EXTRA_COLUMNS
 RENTAL_COLUMNS = RENTAL_CONTRACT_COLUMNS + RENTAL_EXTRA_COLUMNS
+# Canonical geography on every event row (both tables, after release_id).
+GEO_COLUMNS = (
+    "district_id", "district_name", "community_key", "community_name", "geo_resolution",
+    "geo_method",
+)  # fmt: skip
+
+
+def _geo_key(expr: str) -> str:
+    """Case- and spacing-insensitive name key ('DUBAI MARINA' and 'Dubai  Marina' agree)."""
+    return f"replaceRegexpAll(lowerUTF8(trimBoth({expr})), '[[:space:]]+', ' ')"
+
+
+# The crosswalk is evidence from DLD itself (see docs/data-pipelines/GEOGRAPHY_CROSSWALK.md):
+# - district:  every area name DLD tags with an area_id (Dubai Pulse history and Ejari) is an
+#              official district; the id is the stable identifier.
+# - community: every Pulse master project; key = normalised name, display = commonest spelling;
+#              its district when >= 80% of its rows sit in one district.
+# - project:   a Pulse project name whose rows sit in one (district, master) >= 80% of >= 3
+#              times locates any later row naming that project.
+# - label:     an open-data area label that is not a district name (e.g. "DUBAI MARINA"):
+#              the community of the same name if DLD has one, else the (district, community)
+#              its project-located rows carry >= 80% of >= 20 times, else only the district if
+#              that alone reaches 80% (JLT: one district, communities split 79/21).
+# Nothing else is inferred: a row naming only a wide district keeps that district and no
+# community, however many communities the district contains.
+_GEO_CROSSWALK_INSERT = """
+INSERT INTO `market_geo_crosswalk`
+    (kind, source_key, district_id, district_name, community_key, community_name,
+     evidence_rows, evidence_share, built_at)"""
+_GEO_DISTRICTS = """(SELECT source_key, district_id, district_name FROM `market_geo_crosswalk`
+     WHERE kind = 'district')"""
+_PULSE_AND_EJARI_AREAS = " UNION ALL ".join(
+    f"""SELECT {_geo_key("area_en")} AS k, area_id, area_en AS name, count() AS n
+        FROM {table} WHERE area_id != 0 AND area_en != '' GROUP BY k, area_id, name"""
+    for table in ("dld_od_transactions_bronze", "dld_od_rents_bronze")
+)
+_PULSE_MASTERS = " UNION ALL ".join(
+    f"""SELECT {_geo_key("master_project_en")} AS ck, master_project_en AS name,
+               {_geo_key("area_en")} AS dk, count() AS n
+        FROM {table}
+        WHERE source_system = 'dubai_pulse' AND master_project_en != '' AND area_id != 0
+        GROUP BY ck, name, dk"""
+    for table in ("dld_od_transactions_bronze", "dld_od_rents_bronze")
+)
+_PULSE_PROJECTS = " UNION ALL ".join(
+    f"""SELECT {_geo_key("project_en")} AS pk, {_geo_key("area_en")} AS dk,
+               {_geo_key("master_project_en")} AS ck, count() AS n
+        FROM {table}
+        WHERE source_system = 'dubai_pulse' AND project_en != '' AND master_project_en != ''
+          AND area_id != 0
+        GROUP BY pk, dk, ck"""
+    for table in ("dld_od_transactions_bronze", "dld_od_rents_bronze")
+)
+_OPEN_DATA_LABELS = f"""(
+    SELECT {_geo_key("area_en")} AS lk, {_geo_key("project_en")} AS pk, count() AS n
+    FROM dld_od_transactions_bronze
+    WHERE source_system = 'dld_open_data' AND area_en != ''
+    GROUP BY lk, pk
+)"""
+_GEO_CROSSWALK_STATEMENTS = (
+    f"""{_GEO_CROSSWALK_INSERT}
+SELECT 'district', k, argMax(area_id, n), argMax(name, n), '', '', sum(n), max(n) / sum(n),
+       now64(3)
+FROM ({_PULSE_AND_EJARI_AREAS})
+GROUP BY k""",
+    f"""{_GEO_CROSSWALK_INSERT}
+SELECT 'community', c.ck, if(c.share >= 0.8, d.district_id, 0),
+       if(c.share >= 0.8, d.district_name, ''), c.ck, names.name, c.total, c.share, now64(3)
+FROM (
+    SELECT ck, argMax(dk, n) AS top_dk, sum(n) AS total, max(n) / sum(n) AS share
+    FROM (SELECT ck, dk, sum(n) AS n FROM ({_PULSE_MASTERS}) GROUP BY ck, dk)
+    GROUP BY ck
+) AS c
+INNER JOIN (
+    SELECT ck, argMax(name, n) AS name
+    FROM (SELECT ck, name, sum(n) AS n FROM ({_PULSE_MASTERS}) GROUP BY ck, name)
+    GROUP BY ck
+) AS names ON names.ck = c.ck
+LEFT JOIN {_GEO_DISTRICTS} AS d ON d.source_key = c.top_dk""",
+    f"""{_GEO_CROSSWALK_INSERT}
+SELECT 'project', e.pk, d.district_id, d.district_name, c.source_key, c.community_name, e.total,
+       e.share, now64(3)
+FROM (
+    SELECT pk, argMax((dk, ck), n) AS top, sum(n) AS total, max(n) / sum(n) AS share
+    FROM (SELECT pk, dk, ck, sum(n) AS n FROM ({_PULSE_PROJECTS}) GROUP BY pk, dk, ck)
+    GROUP BY pk
+    HAVING total >= 3 AND share >= 0.8
+) AS e
+INNER JOIN {_GEO_DISTRICTS} AS d ON d.source_key = tupleElement(e.top, 1)
+INNER JOIN (SELECT source_key, community_name FROM `market_geo_crosswalk`
+            WHERE kind = 'community') AS c ON c.source_key = tupleElement(e.top, 2)""",
+    # Labels that name a DLD community exactly.
+    f"""{_GEO_CROSSWALK_INSERT}
+SELECT 'label', o.lk, c.district_id, c.district_name, c.source_key, c.community_name,
+       sum(o.n), 1, now64(3)
+FROM {_OPEN_DATA_LABELS} AS o
+INNER JOIN (SELECT source_key, district_id, district_name, community_name
+            FROM `market_geo_crosswalk` WHERE kind = 'community') AS c ON c.source_key = o.lk
+WHERE o.lk NOT IN (SELECT source_key FROM {_GEO_DISTRICTS})
+GROUP BY o.lk, c.district_id, c.district_name, c.source_key, c.community_name""",
+    # Other labels, from the rows whose project already locates them.
+    f"""{_GEO_CROSSWALK_INSERT}
+SELECT 'label', lk,
+       tupleElement(district, 1), tupleElement(district, 2),
+       if(pair_share >= 0.8, tupleElement(pair, 3), ''),
+       if(pair_share >= 0.8, tupleElement(pair, 4), ''),
+       total, if(pair_share >= 0.8, pair_share, district_share), now64(3)
+FROM (
+    SELECT lk,
+           argMax(target, n) AS pair, max(n) / sum(n) AS pair_share,
+           sum(n) AS total
+    FROM (
+        SELECT o.lk AS lk,
+               (p.district_id, p.district_name, p.community_key, p.community_name) AS target,
+               sum(o.n) AS n
+        FROM {_OPEN_DATA_LABELS} AS o
+        INNER JOIN (SELECT source_key, district_id, district_name, community_key, community_name
+                    FROM `market_geo_crosswalk` WHERE kind = 'project') AS p
+            ON p.source_key = o.pk
+        WHERE o.lk NOT IN (SELECT source_key FROM `market_geo_crosswalk`
+                           WHERE kind IN ('district', 'label'))
+        GROUP BY lk, target
+    )
+    GROUP BY lk
+    HAVING total >= 20
+) AS pairs
+INNER JOIN (
+    SELECT lk, argMax(district, n) AS district, max(n) / sum(n) AS district_share
+    FROM (
+        SELECT o.lk AS lk, (p.district_id, p.district_name) AS district, sum(o.n) AS n
+        FROM {_OPEN_DATA_LABELS} AS o
+        INNER JOIN (SELECT source_key, district_id, district_name
+                    FROM `market_geo_crosswalk` WHERE kind = 'project') AS p
+            ON p.source_key = o.pk
+        GROUP BY lk, district
+    )
+    GROUP BY lk
+) AS districts USING lk
+WHERE pair_share >= 0.8 OR district_share >= 0.8""",
+)
+
+
+def _geo_joins(*, area: str, project: str, master: str | None = None) -> str:
+    """Crosswalk joins for one event insert; DXBI rows have no master project (master=None)."""
+    entries = "source_key, district_id, district_name, community_key, community_name"
+    communities = (
+        ""
+        if master is None
+        else f"""
+LEFT JOIN (SELECT source_key, community_name FROM market_geo_crosswalk
+           WHERE kind = 'community') AS gc ON gc.source_key = {_geo_key(master)}"""
+    )
+    return f"""LEFT JOIN (SELECT source_key, district_id, district_name FROM market_geo_crosswalk
+           WHERE kind = 'district') AS gd ON gd.source_key = {_geo_key(area)}
+LEFT JOIN (SELECT {entries} FROM market_geo_crosswalk WHERE kind = 'project') AS gp
+    ON gp.source_key = {_geo_key(project)}
+LEFT JOIN (SELECT {entries} FROM market_geo_crosswalk WHERE kind = 'label') AS gl
+    ON gl.source_key = {_geo_key(area)}{communities}"""
+
+
+def _geo_values(*, source: str = "", master: str | None = None) -> str:
+    """GEO_COLUMNS values, first evidence that applies: a Pulse row's own master project,
+    then project evidence, then the row's own district name, then label evidence."""
+    pulse_master = f"({source} = 'dubai_pulse' AND {master} != '')"
+    order = (
+        *(((pulse_master, "gd", "'pulse_master'"),) if master is not None else ()),
+        ("gp.source_key != ''", "gp", "'project_evidence'"),
+        ("gd.source_key != ''", "gd", "'district_name'"),
+        ("gl.source_key != ''", "gl", "'label_evidence'"),
+    )
+
+    def pick(column: str, default: str, *, community: bool = False) -> str:
+        parts = []
+        for condition, alias, _ in order:
+            if not community:
+                value = f"{alias}.{column}"
+            elif condition == pulse_master and master is not None:
+                value = (
+                    _geo_key(master)
+                    if column == "community_key"
+                    else f"if(gc.community_name != '', gc.community_name, {master})"
+                )
+            elif alias == "gd":
+                value = "''"  # a district name alone never implies a community
+            else:
+                value = f"{alias}.{column}"
+            parts.append(f"{condition}, {value}")
+        return f"multiIf({', '.join(parts)}, {default})"
+
+    method = f"multiIf({', '.join(f'{c}, {m}' for c, _, m in order)}, 'unresolved')"
+    return f"""{pick("district_id", "toUInt32(0)")} AS _geo_district_id,
+    {pick("district_name", "''")} AS _geo_district,
+    {pick("community_key", "''", community=True)} AS _geo_community,
+    {pick("community_name", "''", community=True)} AS _geo_community_name,
+    multiIf(_geo_community != '', 'community', _geo_district != '', 'district', 'unresolved'),
+    {method}"""
+
 
 # DLD sales after cut-over and correction handling; one row per transaction_number.
 DLD_SALES_BASE = """
@@ -190,7 +390,7 @@ _REG_TYPE_EN = """multiIf(
     '')"""
 
 _SALE_EVENTS_DLD_SQL = f"""
-INSERT INTO `market_sale_events` ({", ".join(SALE_COLUMNS)})
+INSERT INTO `market_sale_events` ({", ".join(SALE_COLUMNS + GEO_COLUMNS)})
 SELECT
     d.row_key, d.run_id, d.scraped_at,
     if(d.transaction_number != '', d.transaction_number, d.row_key),
@@ -219,12 +419,14 @@ SELECT
     if(m.dxbi_sale_key != '', 'dxbi', 'dld'),
     if(m.dxbi_sale_key != '', 'matched', 'dld_only'),
     1,
-    now64(3)
+    now64(3),
+    {_geo_values(source="d.source_system", master="d.master_project_en")}
 FROM ({DLD_SALES_BASE}) AS d
 LEFT JOIN (SELECT dxbi_sale_key, dld_transaction_number FROM market_sale_matches
            WHERE dld_transaction_number != '') AS m
     ON m.dld_transaction_number = d.transaction_number
 LEFT JOIN ({DXBI_SALES_BASE}) AS x ON x.sale_key = m.dxbi_sale_key
+{_geo_joins(area="d.area_en", master="d.master_project_en", project="d.project_en")}
 """
 
 
@@ -255,7 +457,7 @@ def _learned_name_maps(*, staging: str, dxbi_source: str, dxbi_key: str, staging
 
 
 _SALE_EVENTS_DXBI_SQL = f"""
-INSERT INTO `market_sale_events` ({", ".join(SALE_COLUMNS)})
+INSERT INTO `market_sale_events` ({", ".join(SALE_COLUMNS + GEO_COLUMNS)})
 {
     _learned_name_maps(
         staging="market_sale_events",
@@ -298,11 +500,18 @@ SELECT
     'dxbi', 'dxbi',
     if(m.has_dld_candidate = 1, 'dxbi_probable_duplicate', 'dxbi_only'),
     toUInt8(m.has_dld_candidate = 0),
-    now64(3)
+    now64(3),
+    {_geo_values()}
 FROM market_sale_matches AS m
 INNER JOIN ({DXBI_SALES_BASE}) AS x ON x.sale_key = m.dxbi_sale_key
 LEFT JOIN area_name_map AS am ON am.dxbi_name = x.area_name
 LEFT JOIN project_name_map AS pm ON pm.dxbi_name = x.project_name
+{
+    _geo_joins(
+        area="if(am.dld_name != '', am.dld_name, x.area_name)",
+        project="if(pm.dld_name != '', pm.dld_name, x.project_name)",
+    )
+}
 WHERE m.dld_transaction_number = ''
 """
 
@@ -478,7 +687,7 @@ WHERE dx.contract_key NOT IN (SELECT dxbi_contract_key FROM `market_rental_match
 )
 
 _RENTAL_EVENTS_DLD_SQL = f"""
-INSERT INTO `market_rental_events` ({", ".join(RENTAL_COLUMNS)})
+INSERT INTO `market_rental_events` ({", ".join(RENTAL_COLUMNS + GEO_COLUMNS)})
 SELECT
     d.row_key, d.run_id, d.scraped_at,
     if(d.contract_number != '', d.contract_number, d.row_key), d.contract_number, d.line_number,
@@ -501,17 +710,19 @@ SELECT
     if(m.dxbi_contract_key != '', 'dxbi', 'dld'),
     if(m.dxbi_contract_key != '', 'matched', 'dld_only'),
     1,
-    now64(3)
+    now64(3),
+    {_geo_values(source="d.source_system", master="d.master_project_en")}
 FROM ({DLD_RENTS_BASE}) AS d
 LEFT JOIN (SELECT dxbi_contract_key, dld_rent_key FROM market_rental_matches
            WHERE dld_rent_key != 0) AS m
     ON m.dld_rent_key = d.dld_rent_key
 LEFT JOIN (SELECT * FROM dxbi_rental_events FINAL) AS x ON x.contract_key = m.dxbi_contract_key
+{_geo_joins(area="d.area_en", master="d.master_project_en", project="d.project_en")}
 {_HEAVY_QUERY_SETTINGS}
 """
 
 _RENTAL_EVENTS_DXBI_SQL = f"""
-INSERT INTO `market_rental_events` ({", ".join(RENTAL_COLUMNS)})
+INSERT INTO `market_rental_events` ({", ".join(RENTAL_COLUMNS + GEO_COLUMNS)})
 {
     _learned_name_maps(
         staging="market_rental_events",
@@ -546,11 +757,19 @@ SELECT
     'dxbi', 'dxbi',
     if(m.has_dld_candidate = 1, 'dxbi_probable_duplicate', 'dxbi_only'),
     toUInt8(m.has_dld_candidate = 0),
-    now64(3)
+    now64(3),
+    {_geo_values()}
 FROM market_rental_matches AS m
 INNER JOIN (SELECT * FROM dxbi_rental_events FINAL) AS x ON x.contract_key = m.dxbi_contract_key
 LEFT JOIN area_name_map AS am ON am.dxbi_name = x.area_name
 LEFT JOIN project_name_map AS pm ON pm.dxbi_name = x.project_name
 {_rental_area_joins("x")}
+{
+    _geo_joins(
+        area=f"multiIf({_RENTAL_DLD_AREA} != '', {_RENTAL_DLD_AREA}, am.dld_name != '', "
+        "am.dld_name, x.area_name)",
+        project="if(pm.dld_name != '', pm.dld_name, x.project_name)",
+    )
+}
 WHERE m.dld_rent_key = 0
 """

@@ -11,7 +11,7 @@ async def test_chat_capabilities_execute_real_queries_with_existing_scope(wareho
             project_name_en String, trans_group_en String, property_type_en String,
             property_usage_en String, actual_worth Float64, actual_area Float64,
             meter_sale_price Float64, rooms_en String, reg_type_en String,
-            procedure_area Float64
+            procedure_area Float64, district_name String
         ) ENGINE = MergeTree ORDER BY (area_name_en, instance_date)
     """)
     today = date.today()
@@ -36,6 +36,7 @@ async def test_chat_capabilities_execute_real_queries_with_existing_scope(wareho
                     "1 B/R",
                     "Existing Properties",
                     100,
+                    area,  # canonical district (market layer) ranks the areas
                 ]
             ]
             * 10
@@ -56,6 +57,7 @@ async def test_chat_capabilities_execute_real_queries_with_existing_scope(wareho
             "1 B/R",
             "Existing Properties",
             100,
+            "Area A",
         ]
     )
     await warehouse.insert("ch_transactions", rows)

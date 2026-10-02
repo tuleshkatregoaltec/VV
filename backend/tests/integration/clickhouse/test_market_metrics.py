@@ -23,15 +23,19 @@ SALE_COLUMNS = [
     "procedure_area", "area_name_en", "master_project_en", "property_type_en",
     "property_sub_type_en", "property_usage_en", "rooms_en", "building_name_en",
     "reg_type_en", "source_system", "match_status", "is_served", "built_at", "release_id",
+    "district_name", "community_key", "community_name", "geo_method",
 ]  # fmt: skip
+# Canonical places as Holocron's crosswalk assigns them (raw names stay in area/master).
+JVC = ("Al Barsha South Fourth", "jumeirah village circle", "Jumeirah Village Circle")
 
 
 def sale(key, when, group, price, area_sqm, area, master="", served=1, status="dld_only",
-         source="dld_open_data", rooms="1 B/R", building="Tower A"):  # fmt: skip
+         source="dld_open_data", rooms="1 B/R", building="Tower A", geo=JVC,
+         method="label_evidence"):  # fmt: skip
     return [
         key, key, when, group, price, area_sqm, area, master, "Unit", "Flat", "Residential",
         rooms, building, "Existing Properties", source, status, served,
-        datetime(2026, 10, 2, 6, 0), "r-sales",
+        datetime(2026, 10, 2, 6, 0), "r-sales", *geo, method,
     ]  # fmt: skip
 
 
@@ -54,9 +58,12 @@ SALES = [
     sale("X6", datetime(2026, 10, 1, 0, 0), "Sales", 9_000_000, 100, "JUMEIRAH VILLAGE CIRCLE"),
     # September, another community; JBR inside DLD area Marsa Dubai is not Dubai Marina.
     sale("B1", datetime(2026, 9, 10), "Sales", 7_000_000, 100, "Business Bay", "Business Bay",
-         rooms="2 B/R", building="Tower B"),
+         rooms="2 B/R", building="Tower B",
+         geo=("Business Bay", "business bay", "Business Bay"), method="pulse_master"),
     sale("J1", datetime(2026, 9, 10), "Mortgages", 5_000_000, 100, "Marsa Dubai",
-         "Jumeriah Beach Residence  - JBR"),
+         "Jumeriah Beach Residence  - JBR",
+         geo=("Marsa Dubai", "jumeriah beach residence - jbr", "Jumeriah Beach Residence - JBR"),
+         method="pulse_master"),
 ]  # fmt: skip
 
 RENT_COLUMNS = [
@@ -64,14 +71,18 @@ RENT_COLUMNS = [
     "annual_amount", "contract_amount", "actual_area", "area_name_en", "master_project_en",
     "ejari_property_sub_type_en", "property_usage_en", "version_en", "bedrooms",
     "source_system", "match_status", "is_served", "built_at", "release_id",
+    "district_name", "community_key", "community_name", "geo_method",
 ]  # fmt: skip
+MARINA = ("Marsa Dubai", "dubai marina", "Dubai Marina", "project_evidence")
+MARSA_DISTRICT_ONLY = ("Marsa Dubai", "", "", "district_name")
 
 
-def rent(key, registered, start, end, annual, contract, version, bedrooms, area="Marsa Dubai"):
+def rent(key, registered, start, end, annual, contract, version, bedrooms, area="Marsa Dubai",
+         geo=MARINA):  # fmt: skip
     return [
         key, key, registered, start, end, annual, contract, 80.0, area, "", "Flat",
         "Residential", version, bedrooms, "dld_open_data", "matched" if bedrooms else "dld_only",
-        1, datetime(2026, 10, 2, 6, 0), "r-rent",
+        1, datetime(2026, 10, 2, 6, 0), "r-rent", *geo,
     ]  # fmt: skip
 
 
@@ -86,6 +97,10 @@ RENTS = [
          "New", "2 Bed"),
     rent("R5", datetime(2026, 10, 1), datetime(2026, 10, 1), datetime(2027, 9, 30), 500_000,
          500_000, "New", "2 Bed"),
+    # A 2-bed lease DLD locates only by the district Marsa Dubai (which also holds JBR,
+    # Dubai Harbour and Bluewaters): never counted as Dubai Marina, but disclosed.
+    rent("R6", datetime(2026, 9, 9), datetime(2026, 9, 10), datetime(2027, 9, 9), 95_000, 95_000,
+         "New", "2 Bed", geo=MARSA_DISTRICT_ONLY),
 ]  # fmt: skip
 
 
@@ -249,7 +264,15 @@ async def test_rentals_annual_versus_contract_new_versus_renewed(served):
         ("Renewed", 1, 120_000),
     ]
     assert any("1 of 3 records" in item for item in two_bed.limitations)
-    assert any("Marsa Dubai also contains JBR" in item for item in two_bed.limitations)
+    assert any(
+        item.startswith("1 records matching the other filters are located by DLD only at "
+                        "district level (Marsa Dubai)")
+        for item in two_bed.limitations
+    )  # fmt: skip
+    district = await get_market_metrics(
+        request(dataset="rentals", location="Marsa Dubai", bedrooms=["2"])
+    )
+    assert district.total.count == 3  # the district itself includes R6
 
     long_terms = await get_market_metrics(
         request(dataset="rentals", location="Dubai Marina", min_term_days=367)
@@ -410,3 +433,18 @@ async def test_one_answer_comes_from_one_release(served, monkeypatch):
     result = await get_market_metrics(request(dataset="sales", location="JVC"))
     assert len(calls) == 2 and result.release_id == "r-sales"
     assert not any("release changed" in item for item in result.limitations)
+
+
+async def test_source_vocabularies_meet_in_one_district_and_community(served):
+    """S1 (Pulse: Al Barsha South Fourth + master JVC) and S2 (open data: label
+    JUMEIRAH VILLAGE CIRCLE) are one place; grouping never splits them by raw spelling."""
+    by_area = await get_market_metrics(request(dataset="sales", group_by="area"))
+    assert [(row.group, row.count) for row in by_area.rows] == [
+        ("Al Barsha South Fourth", 3),
+        ("Business Bay", 1),
+    ]
+    by_community = await get_market_metrics(request(dataset="sales", group_by="community"))
+    assert [(row.group, row.count) for row in by_community.rows] == [
+        ("Jumeirah Village Circle", 3),
+        ("Business Bay", 1),
+    ]

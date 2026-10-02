@@ -313,8 +313,10 @@ MarketMetricName = Literal[
     "total_contract_aed",
     "median_contract_aed",
 ]
+# area = official DLD district; community = evidence-placed community (canonical geography).
 MarketMetricGroup = Literal[
     "area",
+    "community",
     "master_project",
     "project",
     "building",
@@ -480,8 +482,13 @@ class MarketCoverage(BaseModel):
 
 
 class MarketLocationMatch(BaseModel):
+    """Raw source names of matched rows and the canonical place the crosswalk gave them."""
+
     area: str
     master_project: str
+    district: str = ""
+    community: str = ""
+    method: str = ""
     records: int
 
 

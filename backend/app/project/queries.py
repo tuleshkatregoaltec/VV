@@ -1,5 +1,5 @@
 from app.clickhouse.client import query
-from app.market.scope import LOCATION_PREDICATE
+from app.market.scope import PROJECT_LOCATION_PREDICATE
 from app.project.radar_queries import _radar_geo_cte
 from app.supply.scope import reelly_dubai_project_scope
 
@@ -339,8 +339,29 @@ DELIVERY_GROUPS = {
 }
 
 
+async def fetch_district_only_projects(parameters: dict) -> list[dict]:
+    """Districts of the located projects, with how many projects there name no master project.
+
+    Such a project may belong to the requested community, but DLD does not say so.
+    """
+    return await query(
+        f"""
+        SELECT area_name_en AS district, countIf(master_project_en = '') AS projects
+        FROM ch_projects
+        WHERE project_status IN {{statuses:Array(String)}}
+          AND lowerUTF8(area_name_en) IN (
+              SELECT lowerUTF8(area_name_en) FROM ch_projects
+              WHERE {PROJECT_LOCATION_PREDICATE} AND master_project_en != '')
+        GROUP BY district
+        HAVING projects > 0
+        ORDER BY district
+        """,
+        parameters,
+    )
+
+
 async def fetch_delivery_summary(parameters: dict, *, group_by: str, located: bool):
-    location = f"AND {LOCATION_PREDICATE}" if located else ""
+    location = f"AND {PROJECT_LOCATION_PREDICATE}" if located else ""
     return await query(
         f"""
         SELECT

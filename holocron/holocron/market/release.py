@@ -55,7 +55,7 @@ LOCK_TTL = timedelta(hours=6)
 
 # Tables of each served dataset in promotion order: the reader-facing events table last.
 GROUPS = {
-    "market_sale_events": ("market_sale_matches", "market_sale_events"),
+    "market_sale_events": ("market_sale_matches", "market_geo_crosswalk", "market_sale_events"),
     "market_rental_events": ("market_rental_matches", "market_rental_events"),
 }
 _EVENT_DATE = {
@@ -508,6 +508,8 @@ def materialize_market_sale_events(
         clickhouse=clickhouse,
         builds={
             "market_sale_matches": (transforms._SALE_MATCHES_SQL,),
+            # Rentals read the served crosswalk, so both datasets place rows the same way.
+            "market_geo_crosswalk": transforms._GEO_CROSSWALK_STATEMENTS,
             "market_sale_events": (
                 transforms._SALE_EVENTS_DLD_SQL,
                 transforms._SALE_EVENTS_DXBI_SQL,
