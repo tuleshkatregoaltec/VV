@@ -12,6 +12,10 @@ not repeated.
 - Not performed: live database, object store, Dagster instance or provider access; backend tests; load tests.
 - Every statement about live state is labelled **UNKNOWN**. Findings marked "confirmed" were verified by reading the exact code path. "Likely" means the code strongly implies it but it needs one runtime check.
 
+**Status since the baseline (2026-10-03):** findings below are kept as audited. Where code has since
+changed, a **Status** line records it. "Code ready" means committed and unit tested in an open PR. It
+does not mean staging accepted or production enabled.
+
 Document set:
 
 | Document | Purpose |
@@ -102,10 +106,10 @@ Full detail: [CURRENT_STATE.md](../architecture/CURRENT_STATE.md).
 | P17 | Bayut | experimental | not in scope for production |
 | P18 | Silver | scheduled, unconsumed | Maintainability FAIL (F07) |
 | P19 | Geography | manual / Mac | PARTIAL |
-| P20 | Serving views/facts | manual scripts | FAIL (F13) |
+| P20 | Serving views/facts | manual scripts | FAIL (F13 fixed in code; still manual, 5A open) |
 | P21 | Local mirror | developer Mac | FAIL as a production mechanism |
 | P22 | CRM rental refresh | Mac / manual | PARTIAL |
-| P23 | Unknown producers | unowned | FAIL (F02) |
+| P23 | Unknown producers | unowned | FAIL (F02; DDL added, producer still missing) |
 | P24 | CRM user uploads | request-coupled | see reference §14 |
 
 ---
@@ -125,6 +129,7 @@ Priority reasoning:
 - **Risk:** CRM owner, ownership and opportunity features read `dxbi_rental_*` / `dxbi_sales_unit_events`. If production has these tables, their provenance is undocumented. If it does not, the features are empty. Laptop sleep, travel or loss stops publication. Raw runs exist only on one host's disk.
 - **Recommendation:** MIGRATION_PLAN 1.2 (establish what production has), then 5C (move into Dagster with raw in object storage), gated on D1.
 - **Priority reasoning:** P0 because customer-facing CRM correctness depends on it and it is unrecoverable if the host disk is lost.
+- **Status (2026-10-03): partial, code ready (#5).** The Dagster asset `dxbi_evidence_bronze` (job `dxbi_evidence_load`, schedule STOPPED) loads completed runs from `DXBI_EVIDENCE_DIR`. It archives raw files to object storage with sha256 manifests and records each run in `dxbi_evidence_load_ledger`. The scraper still runs on ph-box. The production ingestion host (D4) and licence decision (D1) are open. The laptop path stays the only proven publication until cut-over.
 
 ### F02 — Warehouse serving contract is not reproducible from the repository (P0)
 - **Observed (confirmed):**
@@ -135,6 +140,7 @@ Priority reasoning:
 - **Risk:** a restore, a new environment (staging, AWS UAE per the reference) or a fresh developer machine produces a warehouse the backend cannot query. `ensure_schema` on a fresh warehouse may fail at the view referencing the missing table (UNKNOWN; depends on ClickHouse view validation). Backend tests pass against schemas that do not exist in production.
 - **Recommendation:** MIGRATION_PLAN 1.2 (capture live DDL, find the producer), 2.1 (serving-contract test on a fresh warehouse), 5A (codify producers; move serving views into Holocron).
 - **Priority reasoning:** P0, because recoverability and environment creation are launch prerequisites (reference §8, §15 step 9).
+- **Status (2026-10-03): partial (#5).** `clickhouse_schema.sql` now defines `silver_reelly_projects` and `reelly_project_unit_types_bronze`, and a schema test checks that every view reads only objects defined earlier, so the file applies to an empty warehouse. Their producer is still missing, and an empty table is not data completeness. Backend integration fixtures still hand-write DDL. 5A remains open.
 
 ### F03 — Daily DLD incrementals duplicate rows for seven datasets (P0)
 - **Observed (confirmed by code and test):**
@@ -194,6 +200,7 @@ Priority reasoning:
 - **Risk:** silent degradation of plot, planning and map data; provider schema changes become zeros.
 - **Recommendation:** Phase 2.4 check factory plus publisher floors; source-specific fixes in 5F/5G.
 - **Priority reasoning:** P1. Data can be wrong, but only after a provider failure; recoverable from raw.
+- **Status (2026-10-03): open.** The canonical market layer has 22 Dagster asset checks (#5), but they run after `EXCHANGE TABLES`. They observe data that is already published and do not gate publication (S4.1). No other table has checks. Separately, #4 stops two provider changes from failing silently. Property Finder now raises instead of parsing every page as empty. DDA requests only fields the layer still publishes and logs the dropped optional fields. Neither fix is a quality gate.
 
 ### F09 — No retries policy, run queue, or concurrency control (P1)
 - **Observed:** no `RetryPolicy`. `DefaultRunCoordinator` (`holocron/dagster.yaml`). Reelly and PF locations have no request retries. DLD does not retry 429 and uses linear backoff without jitter.
@@ -228,6 +235,7 @@ Priority reasoning:
 - **Risk:** permanently frozen radar/area facts, with no automated refresh.
 - **Recommendation:** MIGRATION_PLAN 1.4 (guard), then 5A (Dagster fact assets).
 - **Priority reasoning:** P1, since it is a manual script; P0 if it is part of any deployment routine (UNKNOWN).
+- **Status (2026-10-03): fixed in code (#5), by repeatable rebuild instead of the 1.4 guard.** `_materialize_fact` rebuilds from the source view wherever the last run left it, swaps the fresh table in, and fails loudly if the view is missing. Three unit tests cover first build, rebuild and missing view. Still open: a changed-input rebuild against a real ClickHouse (Prompt 05); `create_compatibility_views.py` still cannot run while the facts are tables; the `vitevue_dev` password default; the move to Dagster fact assets (5A).
 
 ### F14 — Running code and host-specific configuration outside version control (P1)
 - **Observed:** `dxbi-rentals-repair.service` executes `/root/data/dxbi-rental-repair-20260915/rental_repair_queue.py` with `PYTHONPATH=/root/data/dxbi-rental-v2-experiments-20260905/code`. Units hard-code `/root/...`, the launchd plist and supervisors hard-code `/Users/eier/...`, and the sync script hard-codes a public IP.

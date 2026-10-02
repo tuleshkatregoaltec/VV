@@ -112,6 +112,8 @@ aggregate counts only.
 
 ### 1.4 Guard the fact builder (F13)
 
+> **Superseded (2026-10-03):** #5 fixes F13 by a repeatable rebuild from the source view instead of refusing a second run. Prefer it over the guard below. Still open: a changed-input rebuild on a real ClickHouse (Prompt 05) and the `vitevue_dev` password default.
+
 - **Modify** `backend/scripts/clickhouse/build_fact_tables.py`:
   - Before any DROP, query `system.tables` for `ch_project_fact` and `ch_area_fact`. If either `engine != 'View'`, abort with exit code 2 and print "facts already materialised; recreate views with create_compatibility_views.py first". This stops the second run from dropping `*__source_view`.
   - Replace the `vitevue_dev` password default with a required env var (fail if unset).
@@ -384,6 +386,8 @@ Only deviations are listed.
 
 ### 5A Serving contract and unknown producers (P20, P23, P18 schedules) — F02, F13, F07
 
+> **Status (2026-10-03): partial, code ready in #5.** Done: DDL for `silver_reelly_projects` and `reelly_project_unit_types_bronze`; F13 rebuild; `ch_transactions` / `ch_rent_contracts` now read the canonical market layer. Not done: Reelly producers, serving views and facts moved into Holocron, cache invalidation asset, silver schedule changes (F07), backend fixtures on canonical DDL.
+
 - **Codify P23:**
   - Using `LIVE_BASELINE.md`, add DDL for `silver_reelly_projects`, `reelly_project_unit_types_bronze` and the extra `reelly_projects_bronze` columns to `clickhouse_schema.sql`.
   - Implement their producers as Holocron assets: `holocron/holocron/silver/reelly.py` (derived from `reelly_projects_bronze.raw_json`), registered in `build_silver_assets`.
@@ -421,6 +425,8 @@ Only deviations are listed.
   - The contract test is green.
 
 ### 5C DXBI evidence into Dagster (P05, P06) — F01, F14 — **gated on D1**
+
+> **Status (2026-10-03): partial, code ready in #5.** The evidence-loading half exists as `holocron/holocron/sources/dxbi/evidence.py` (asset `dxbi_evidence_bronze`, job `dxbi_evidence_load`). It loads finished scraper runs with a raw archive and `dxbi_evidence_load_ledger`, and replaces the Mac `.loaded` markers. It reuses the existing loader scripts rather than the `dxbi_reports` package below. Extraction, the repair queue (P06), host-path removal and cut-over remain. External dependencies: scraper on ph-box, production host D4, licence D1.
 
 **If D1 = "automation not permitted":**
 
@@ -599,11 +605,13 @@ Update this table when a phase or pipeline changes state.
 | Phase / pipeline | State | Date | Notes |
 |------------------|-------|------|-------|
 | Phase 0 audit | done | 2026-09-29 | This document set; `var/` dockerignore; DLD doc timezone fix |
-| Phase 1 | not started | | |
+| Phase 1 | partial (code ready) | 2026-10-03 | 1.2: census tool and local-snapshot results (#3); a live production census is still pending. 1.4: F13 fixed by repeatable rebuild (#5). 1.1, 1.3 and 1.5 not started (the `dagster-local` recipe binds loopback for local use only; Compose is unchanged). |
 | Phase 2 | not started | | |
-| P01 DLD pilot (Phase 3) | not started | | |
+| P01 DLD pilot (Phase 3) | not started | 2026-10-03 | Precursor only: three date-column replace fixes (#4). F03 is not proven closed. |
 | Phase 4 | not started | | |
-| 5A–5H | not started | | |
+| 5A | partial (code ready) | 2026-10-03 | #5: DDL, F13, serving views on the canonical layer. Reelly producers are missing. |
+| 5C | partial (code ready) | 2026-10-03 | #5: evidence loader and ledger. Scraper, repair queue and cut-over are open; gated on D1 and D4. |
+| 5B, 5D–5H | not started | | Canonical DXBI/DLD market layer (#5) is new work outside 5A–5H; its checks do not gate publication yet (Phase 2 S4.1). |
 | Phase 6 | not started | | |
 | Phase 7 | not started | | |
 

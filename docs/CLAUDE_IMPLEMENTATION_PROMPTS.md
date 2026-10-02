@@ -25,6 +25,21 @@ The priorities are reliable and efficient data pipelines, a database-grounded MC
 | Source licensing and operator decisions | Migration decision register D1 through D8 | Still open in the available documents. Mock development can proceed; production enablement cannot imply these decisions were resolved. |
 | Branch selection | Current branch `docs/production-first-readiness`; local `origin/HEAD` points at `origin/kian-new`, while the summary names `origin/VV` | Do not assume the PR base is `main` or trust an old symbolic ref without checking the intended integration branch. |
 
+**Update after Prompt 00 (3 October 2026).** The uncommitted work is now preserved as draft PRs against `VV`. PRs #1 and #2 merged into `VV`. The remote default `kian-new` is a May snapshot 117 commits behind, so `VV` is the verified base.
+
+| PR | Scope | Base |
+| --- | --- | --- |
+| #6 | (a) pipeline docs with corrected status, this roadmap, evaluation walkthrough | `VV` |
+| #3 | (b) census tooling/tests and sanitized health summaries | `VV` |
+| #5 | (c) canonical market layer, DXBI evidence loader, schema/serving, F13 fact rebuild | stacked on #3 |
+| #4 | DDA, Property Finder and DLD date-column fixes (outside scopes a–c) | `VV` |
+
+Re-run results:
+- Holocron: 497 passed on the combined tree. Lint passes. Formatting fails on 14 files and `ty` reports 62 diagnostics, both identical on untouched `VV`.
+- Backend: 323 passed, with 3 skips because Bun is unavailable.
+
+Prompt 01 owns the formatting, type and Bun baseline. `docs/bitwarden-platform.env` holds only blank values with placeholder comments, in its single historical commit `6c11eef` and now, so no secret remediation was needed.
+
 The source-only `/home/maan3/vv/VV` snapshot was older and lacked Git metadata and the evaluation changes. It was removed at the user's request. Its 126 differing or old-only files plus two files from the redundant env-backup folder were hash-verified in a private archive under `.local-backups/2026-10-02-repo-consolidation/`. The archive is excluded through `.git/info/exclude`; it must never be committed. The 14 GB `/home/maan3/vv/handoff` was retained because it contains database dumps, warehouse backups and objects. The canonical working tree's existing changes were unchanged by cleanup.
 
 ## Checks executed for this review

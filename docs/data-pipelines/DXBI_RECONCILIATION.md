@@ -301,7 +301,7 @@ first (`C:\Users\maan3\vv-backups\`).
 | Canonical sales | `market_sale_events` (+ ledger `market_sale_matches`) | One row per sale: DLD after the Pulse/open-data cut-over and corrections, enriched with DXBI unit identity; DXBI sales DLD lacks are added as `dxbi_only`; unpairable DXBI rows kept as `dxbi_probable_duplicate` (not served). |
 | Canonical rentals | `market_rental_events` (+ ledger `market_rental_matches`) | Same for rentals, with location-keyed rank pairing (§10.2). |
 | Build | `holocron/holocron/market/`; Dagster job `market_events_refresh` (10:30 Dubai, stopped by default) | Staging table, `OPTIMIZE FINAL`, `EXCHANGE TABLES`; about 2 minutes for both. |
-| Validation | 22 Dagster asset checks (`holocron/holocron/market/checks.py`) | Conservation, uniqueness, labelling, vocabulary, match rate, pair precision, duplicate share, lag. All 22 pass. |
+| Validation | 22 Dagster asset checks (`holocron/holocron/market/checks.py`) | Conservation, uniqueness, labelling, vocabulary, match rate, pair precision, duplicate share, lag. All 22 pass. They run after `EXCHANGE TABLES`, so they observe published data and **do not gate publication** yet (Standards S4.1). |
 | Serving | `ch_transactions` / `ch_rent_contracts` = `SELECT * … WHERE is_served = 1` (`backend/scripts/clickhouse/create_compatibility_views.py`) | Every backend query reads the canonical layer without query changes. |
 | Facts | `backend/scripts/clickhouse/build_fact_tables.py` (F13 fixed) | Rebuilds from the source view; a second run no longer freezes the facts. |
 | DXBI evidence in Holocron | asset `dxbi_evidence_bronze`, job `dxbi_evidence_load` (10:00 Dubai); `holocron/holocron/sources/dxbi/evidence.py` | Loads completed scraper runs from `DXBI_EVIDENCE_DIR`, archives raw files to object storage with sha256 manifests (L13), records loaded / skipped / rejected rows in `dxbi_evidence_load_ledger` (L14), passes credentials by environment. Replaces the Mac `.loaded` marker files. |
@@ -352,6 +352,11 @@ entity admin app and the DXBI coverage report read them (decision D6). Reelly as
 are not copies; their producer is missing (F02).
 
 ### 10.5 Verification
+
+Recorded on 2026-10-01 (historical, not re-measured). The 2026-10-03 re-run of the committed code
+(#5) gave Holocron 495 passed on that branch and 497 with the source fixes (#4). The
+backend gave 323 passed with 3 Bun skips. ClickHouse integration, Dagster runs and API checks were not
+repeated. The §10.3 latencies are single local requests, not p95 load results.
 
 - Holocron: 495 tests pass. Backend fast suite: 323 pass, 3 skipped (they need `bun`). Backend ClickHouse
   integration: 15 pass.

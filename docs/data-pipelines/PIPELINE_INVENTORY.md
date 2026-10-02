@@ -56,6 +56,22 @@ Related documents:
 | P23 | **Unknown producer**: `silver_reelly_projects`, `reelly_project_unit_types_bronze` | Unknown | No `CREATE TABLE` or writer anywhere in the repo | Unknown | ClickHouse | Backend `project/queries.py:87`, `project/radar_queries.py:68`, `supply/queries.py:62`; Holocron `assets/geography.py:652` and schema view `clickhouse_schema.sql:1534` | unowned |
 | P24 | User uploads: CRM owner/contact and inbound spreadsheets | File upload (≤50 MB) + LLM header mapping (OpenRouter) | `backend/app/crm/imports.py`, `inbound_imports.py`, `import_parsing.py`, `ai.py` | User HTTP request | **PG** CRM tables | CRM UI, chat CRM tools | active (request-coupled) |
 
+### Status changes since the baseline
+
+Rows above describe the 2026-09-29 baseline. The changes below are **code ready in open PRs**. None is staging
+accepted or production enabled, and every new schedule defaults to `STOPPED`.
+
+| ID | Change | PR | Still open |
+|----|--------|----|-----------|
+| P01 | `dld_od_projects`, `_developers`, `_valuations` replace by stored date column | #4 | F03 proof for all nine units (Prompt 08) |
+| P05 | `dxbi_evidence_bronze` / `dxbi_evidence_load` load scraper output with a raw archive and `dxbi_evidence_load_ledger` | #5 | Scraper still on ph-box; D1, D4; repair queue (P06) |
+| P09 | Browser route unwraps `props.pageProps`; empty-parse "success" now raises | #4 | Live smoke |
+| P13 | Plot/layer queries request only still-published fields | #4 | Stub rows on plot failure (F08) |
+| P20 | Fact builder rebuilds from source views (F13 fixed); `ch_transactions` / `ch_rent_contracts` read the canonical market layer | #5 | Real-database rebuild test; move to Holocron (5A) |
+| P23 | DDL for `silver_reelly_projects`, `reelly_project_unit_types_bronze` | #5 | Producer still missing (F02) |
+| new | Canonical `market_sale_events` / `market_rental_events` (job `market_events_refresh`) with 22 post-publication asset checks | #5 | Validate before promote (S4.1, Prompt 06) |
+| — | Read-only census (`just census`) and `DATA_SOURCE_HEALTH.{json,md}` | #3 | Re-run against staging |
+
 Out of scope for this inventory: chat/feasibility LLM calls, Stripe, auth, which the platform
 reference covers. They consume data but do not ingest market data.
 
