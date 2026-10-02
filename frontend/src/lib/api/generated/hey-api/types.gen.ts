@@ -5758,12 +5758,20 @@ export type ListingTrendPoint = {
 
 /**
  * MarketCoverage
+ *
+ * Load evidence for the period's days, from the served release's coverage record.
+ *
+ * verified: the source window holding the day was read to the end of its result set (or
+ * the archive it came from is attested), so a day without records is a true zero.
+ * partial: the load covering the day stopped inside its window. unverified: no load
+ * evidence; records may exist but absence proves nothing. complete = every day verified;
+ * unavailable = no evidence and no records.
  */
 export type MarketCoverage = {
     /**
      * Status
      */
-    status: 'complete' | 'partial' | 'unavailable';
+    status: 'complete' | 'partial' | 'unverified' | 'unavailable';
     /**
      * Data From
      */
@@ -5781,9 +5789,47 @@ export type MarketCoverage = {
      */
     covered_to?: string | null;
     /**
+     * Verified Days
+     */
+    verified_days?: number;
+    /**
+     * Partial Days
+     */
+    partial_days?: number;
+    /**
+     * Unverified Days
+     */
+    unverified_days?: number;
+    /**
+     * Ranges
+     */
+    ranges?: Array<MarketCoverageRange>;
+    /**
+     * Evidence Loaded At
+     */
+    evidence_loaded_at?: string | null;
+    /**
      * Note
      */
     note: string;
+};
+
+/**
+ * MarketCoverageRange
+ */
+export type MarketCoverageRange = {
+    /**
+     * Start
+     */
+    start: string;
+    /**
+     * End
+     */
+    end: string;
+    /**
+     * Status
+     */
+    status: 'verified' | 'partial' | 'unverified';
 };
 
 /**
@@ -5844,6 +5890,10 @@ export type MarketMetricRow = {
     values?: {
         [key: string]: number | null;
     };
+    /**
+     * Coverage
+     */
+    coverage?: 'verified' | 'partial' | 'unverified' | null;
 };
 
 /**
@@ -6005,6 +6055,10 @@ export type MarketMetricsResponse = {
     sources?: {
         [key: string]: number;
     };
+    /**
+     * Release Id
+     */
+    release_id?: string | null;
     /**
      * Release Built At
      */

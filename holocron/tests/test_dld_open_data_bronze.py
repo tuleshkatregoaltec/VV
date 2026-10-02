@@ -338,7 +338,16 @@ def test_dld_open_data_bronze_clears_zero_row_windows_from_page_metadata() -> No
     delete_sql = next(sql for sql in clickhouse.commands if f"ALTER TABLE `{table}` DELETE" in sql)
     assert "source_system = 'dld_open_data'" in delete_sql
     assert "toDate(`instance_date`) >= toDate('2026-05-05')" in delete_sql
-    assert not clickhouse.insert_calls
+    # No bronze rows, but the empty day is now evidence: verified empty, not unknown.
+    assert [call["table"] for call in clickhouse.insert_calls] == ["source_load_windows"]
+    window = dict(
+        zip(clickhouse.insert_calls[0]["column_names"], clickhouse.insert_calls[0]["rows"][0])
+    )
+    assert (window["window_start"], window["status"], window["rows"]) == (
+        date(2026, 5, 5),
+        "complete",
+        0,
+    )
 
 
 def test_dld_open_data_bronze_rejects_incomplete_chunks_before_mutation() -> None:

@@ -1,9 +1,12 @@
 """Database-grounded sales and rental metrics shared by the API and the chat tools.
 
 The served canonical tables (ch_transactions / ch_rent_contracts over the market layer) are
-the authority. A period is resolved to Dubai calendar dates first; the release's actual date
-coverage then decides whether the answer is complete, partial or unavailable. Missing data
-stays missing: an uncovered period returns no values rather than zeros.
+the authority. A period is resolved to Dubai calendar dates first. Coverage then comes from
+the served release's load evidence, day by day (see MarketCoverage), not from the first and
+last record dates: records at both ends of a month do not show the middle was loaded.
+Missing data stays missing: a day without evidence is unknown, never a zero, and only a
+fully verified period is complete. One operation answers from one release: if the release
+changes while it runs, the operation is recomputed.
 """
 
 from __future__ import annotations
@@ -15,6 +18,7 @@ from typing import Any
 from app.analytics import market_metric_queries as queries
 from app.analytics.models import (
     MarketCoverage,
+    MarketCoverageRange,
     MarketLocationMatch,
     MarketMetricDefinition,
     MarketMetricRow,
@@ -101,33 +105,64 @@ def _as_date(value: Any) -> date | None:
     return value if isinstance(value, date) else date.fromisoformat(str(value)[:10])
 
 
+def _day_status(release: dict[str, Any]) -> dict[date, str]:
+    status: dict[date, str] = {}
+    for item in (release.get("coverage") or {}).get("ranges", []):
+        day, last = date.fromisoformat(item["from"]), date.fromisoformat(item["to"])
+        while day <= last:
+            status[day] = item["status"]
+            day += timedelta(days=1)
+    return status
+
+
 def _coverage(period: ResolvedPeriod, release: dict[str, Any]) -> MarketCoverage:
     data_from, data_to = _as_date(release.get("data_from")), _as_date(release.get("data_to"))
-    if data_to is None or data_to < period.start or (data_from and data_from > period.end):
-        return MarketCoverage(
-            status="unavailable",
-            data_from=data_from,
-            data_to=data_to,
-            note=(
-                f"The served data has no records for {period.label}"
-                + (f"; it runs from {data_from} to {data_to}." if data_to else ".")
-            ),
-        )
-    covered_from = max(period.start, data_from or period.start)
-    covered_to = min(period.end, data_to)
-    complete = covered_from == period.start and covered_to == period.end
-    note = (
-        f"Data covers all of {period.label}."
-        if complete
-        else f"Data covers {covered_from} to {covered_to} of {period.label} "
-        f"({period.start} to {period.end}); later records are not loaded yet."
+    known = _day_status(release)
+    days, day = [], period.start
+    while day <= period.end:
+        days.append((day, known.get(day, "unverified")))
+        day += timedelta(days=1)
+    ranges: list[MarketCoverageRange] = []
+    for day, state in days:
+        if ranges and ranges[-1].status == state:
+            ranges[-1].end = day
+        else:
+            ranges.append(MarketCoverageRange(start=day, end=day, status=state))
+    counts = {state: sum(1 for _, s in days if s == state) for state in ("verified", "partial")}
+    verified = [day for day, state in days if state == "verified"]
+    has_records = (
+        data_to is not None
+        and data_to >= period.start
+        and (data_from is None or data_from <= period.end)
     )
+    if counts["verified"] == len(days):
+        status, note = "complete", f"Every day of {period.label} is verified as fully loaded."
+    elif counts["verified"] or counts["partial"]:
+        gaps = "; ".join(
+            f"{r.start} to {r.end} {r.status}" for r in ranges if r.status != "verified"
+        )
+        status = "partial"
+        note = f"Not every day of {period.label} is verified as fully loaded: {gaps}."
+    elif has_records:
+        status = "unverified"
+        note = (
+            f"{period.label}: records exist but no load evidence verifies these days, so the "
+            "values are observed records, not established totals."
+        )
+    else:
+        status = "unavailable"
+        note = f"No load evidence and no records for {period.label}."
     return MarketCoverage(
-        status="complete" if complete else "partial",
+        status=status,
         data_from=data_from,
         data_to=data_to,
-        covered_from=covered_from,
-        covered_to=covered_to,
+        covered_from=verified[0] if verified else None,
+        covered_to=verified[-1] if verified else None,
+        verified_days=counts["verified"],
+        partial_days=counts["partial"],
+        unverified_days=len(days) - counts["verified"] - counts["partial"],
+        ranges=ranges,
+        evidence_loaded_at=(release.get("coverage") or {}).get("last_loaded_at"),
         note=note,
     )
 
@@ -203,16 +238,23 @@ def _month_starts(start: date, end: date) -> list[date]:
     return months
 
 
+def _unknown(names: list[str]) -> MarketMetricRow:
+    return MarketMetricRow(count=None, values={name: None for name in names if name != "count"})
+
+
 async def _total(request, names, period, coverage) -> MarketMetricRow:
     if coverage.status == "unavailable":
-        return MarketMetricRow(count=None, values={name: None for name in names if name != "count"})
-    filters = _filters(request, coverage.covered_from, coverage.covered_to)
-    rows = await queries.fetch_metric_rows(request.dataset, filters, tuple(names))
-    return _row(rows[0] if rows else {}, names)
+        return _unknown(names)
+    rows = await queries.fetch_metric_rows(
+        request.dataset, _filters(request, period.start, period.end), tuple(names)
+    )
+    total = _row(rows[0] if rows else {}, names)
+    # No records without load evidence is unknown, not zero.
+    return _unknown(names) if coverage.status == "unverified" and not total.count else total
 
 
-async def _groups(request, names, period, coverage, total) -> list[MarketMetricRow]:
-    filters = _filters(request, coverage.covered_from, coverage.covered_to)
+async def _groups(request, names, period, coverage, total, release) -> list[MarketMetricRow]:
+    filters = _filters(request, period.start, period.end)
     bands = tuple(request.price_bands or ())
     raw = await queries.fetch_metric_rows(
         request.dataset,
@@ -227,12 +269,27 @@ async def _groups(request, names, period, coverage, total) -> list[MarketMetricR
     rows: list[MarketMetricRow] = []
     if request.group_by == "month":
         found = {_as_date(item["group_key"]): item for item in raw}
+        known = _day_status(release)
         for month in _month_starts(period.start, period.end):
-            if month > coverage.covered_to:
-                # Not loaded yet: unknown, not zero.
-                rows.append(MarketMetricRow(group=month.isoformat()[:7], count=None))
+            last = min(period.end, (month + timedelta(days=32)).replace(day=1) - timedelta(days=1))
+            states = set()
+            day = max(month, period.start)
+            while day <= last:
+                states.add(known.get(day, "unverified"))
+                day += timedelta(days=1)
+            state = (
+                "verified"
+                if states == {"verified"}
+                else ("unverified" if states == {"unverified"} else "partial")
+            )
+            item = found.get(month)
+            if item is None and state == "unverified":
+                # No records and no evidence: unknown, not zero.
+                rows.append(MarketMetricRow(group=month.isoformat()[:7], coverage=state))
             else:
-                rows.append(_row(found.get(month, {}), names, month.isoformat()[:7]))
+                row = _row(item or {}, names, month.isoformat()[:7])
+                row.coverage = state
+                rows.append(row)
     elif request.group_by == "price_band":
         found = {int(item["group_key"]): item for item in raw}
         rows = [
@@ -259,11 +316,27 @@ def _change(current: MarketMetricRow, previous: MarketMetricRow) -> dict[str, fl
 
 @operation
 async def get_market_metrics(request: MarketMetricsRequest) -> MarketMetricsResponse:
-    period = _resolve(request)
+    period = _resolve(request)  # an unresolvable period fails before any warehouse query
+    for _ in range(2):
+        release = await queries.fetch_release(request.dataset)
+        response = await _compute(request, period, release)
+        # A publication between the first and last query would mix releases: recompute.
+        # ponytail: before/after identity check; an exchange-and-rollback inside one request
+        # would go unseen. Per-query release ids would close that if it ever matters.
+        if await queries.fetch_release_id(request.dataset) == (release.get("release_id") or ""):
+            return response
+    response.limitations.append(
+        "The served release changed while this answer was computed; repeat the request."
+    )
+    return response
+
+
+async def _compute(
+    request: MarketMetricsRequest, period: ResolvedPeriod, release: dict[str, Any]
+) -> MarketMetricsResponse:
     names = list(dict.fromkeys(["count", *request.metrics]))
     if any("per_sq" in name for name in names):
         names.append("rated_count")
-    release = await queries.fetch_release(request.dataset)
     coverage = _coverage(period, release)
     total = await _total(request, names, period, coverage)
     response = MarketMetricsResponse(
@@ -276,6 +349,7 @@ async def get_market_metrics(request: MarketMetricsRequest) -> MarketMetricsResp
         eligibility=ELIGIBILITY[request.dataset],
         definitions=_definitions(request.dataset, names),
         total=total,
+        release_id=release.get("release_id") or None,
         release_built_at=str(release.get("built_at")) if release.get("built_at") else None,
     )
     limitations = response.limitations
@@ -284,9 +358,9 @@ async def get_market_metrics(request: MarketMetricsRequest) -> MarketMetricsResp
     if coverage.status == "unavailable":
         return response
 
-    filters = _filters(request, coverage.covered_from, coverage.covered_to)
+    filters = _filters(request, period.start, period.end)
     if request.group_by:
-        response.rows = await _groups(request, names, period, coverage, total)
+        response.rows = await _groups(request, names, period, coverage, total, release)
     if request.compare_with_previous_period:
         before = previous_period(period)
         before_coverage = _coverage(before, release)
