@@ -5,7 +5,7 @@ import re
 import unicodedata
 from dataclasses import dataclass
 from difflib import SequenceMatcher
-from typing import Literal, Mapping
+from typing import Literal, Mapping, cast
 
 NORMALIZATION_VERSION = 10
 
@@ -221,7 +221,7 @@ def tower_name_variants(value: str) -> tuple[str, ...]:
     raw = (value or "").strip()
     if not raw:
         return ()
-    variants = [raw]
+    variants: list[str] = [raw]
     outside = _PARENTHETICAL.sub(" ", raw).strip(" -")
     if outside and outside != raw:
         variants.append(outside)
@@ -667,7 +667,8 @@ class GeographyResolver:
         candidate_ids = {
             candidate_id
             for item in unresolved
-            for candidate_id in item.get("candidate_ids", [])
+            # unresolved entries are built above with candidate_ids as a list of ids.
+            for candidate_id in cast(list[object], item.get("candidate_ids", []))
             if isinstance(candidate_id, str)
         }
         if ranked_evidence:

@@ -7,6 +7,7 @@ import tempfile
 import unittest
 from collections.abc import Mapping
 from pathlib import Path
+from typing import Any
 
 from bayut_collection import (
     BLOCKED_RESOURCE_TYPES,
@@ -83,7 +84,7 @@ def card(listing_id: int) -> dict[str, str]:
 
 
 def config(*, roots: tuple[SearchRoot, ...], **overrides: object) -> CollectionConfig:
-    values: dict[str, object] = {
+    values: dict[str, Any] = {
         "roots": roots,
         "max_results_per_shard": 200,
         "request_pause_seconds": 0,
@@ -93,7 +94,7 @@ def config(*, roots: tuple[SearchRoot, ...], **overrides: object) -> CollectionC
         "evidence": "none",
     }
     values.update(overrides)
-    parsed = CollectionConfig(**values)  # type: ignore[arg-type]
+    parsed = CollectionConfig(**values)
     parsed.validate()
     return parsed
 
