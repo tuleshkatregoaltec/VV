@@ -171,7 +171,8 @@ def report_conclusions(request: ReportRequest, components: dict, *, pinned: bool
     if request.kind == "rental_appraisal":
         new = next((row for row in metrics.get("rows", []) if row.get("group") == "New"), None)
         competition = components.get("rent_listings", {}).get("listings", [])
-        if new and new["count"] >= 5 and len(competition) >= 3:
+        supported_listings = [row for row in competition if (row.get("asking_price_aed") or 0) > 0]
+        if new and new["count"] >= 5 and len(supported_listings) >= 3:
             low, high = (new["values"].get(key) for key in ("p25_aed", "p75_aed"))
             if low and high:
                 result["supported_annual_asking_rent_range_aed"] = [low, high]

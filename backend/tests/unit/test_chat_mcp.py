@@ -175,3 +175,64 @@ async def test_private_failure_details_are_never_returned(domain):
         result = await client.direct_call_tool("query_market_metrics", ARGS)
     assert result["error"]["code"] == "capability_unavailable"
     assert "private" not in str(result)
+
+
+async def test_cancellation_closes_release_lease_and_transport(domain, monkeypatch):
+    from contextlib import asynccontextmanager
+
+    from app.market import evidence
+
+    entered, closed = asyncio.Event(), asyncio.Event()
+
+    @asynccontextmanager
+    async def release(context):
+        try:
+            yield None
+        finally:
+            closed.set()
+
+    async def wait_forever(*args, **kwargs):
+        entered.set()
+        await asyncio.Event().wait()
+
+    monkeypatch.setattr(evidence, "acquire_market_release", release)
+    domain.side_effect = wait_forever
+
+    async def run():
+        async with mcp.market_mcp(context(), AsyncMock(return_value=True)) as client:
+            await client.direct_call_tool("query_market_metrics", ARGS)
+
+    task = asyncio.create_task(run())
+    await asyncio.wait_for(entered.wait(), 2)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert closed.is_set()
+
+
+async def test_total_evidence_budget_and_missing_release_sources_fail_closed(domain, monkeypatch):
+    from app.market.evidence import MarketRelease
+
+    monkeypatch.setattr(mcp, "MAX_TURN_BYTES", 1500)
+    domain.return_value = {"sample": "x" * 600}
+    executor = mcp.MarketToolExecutor(context(), AsyncMock(return_value=True))
+    assert (await executor.call("query_market_metrics", ARGS))["status"] == "ok"
+    assert (await executor.call("query_market_metrics", ARGS))["error"][
+        "code"
+    ] == "evidence_budget_exceeded"
+    lease = MarketRelease("rentals-only", frozenset({"rentals"}))
+    executor = mcp.MarketToolExecutor(context(), AsyncMock(return_value=True), lease)
+    assert (await executor.call("query_market_metrics", ARGS))["error"][
+        "code"
+    ] == "release_source_unavailable"
+
+
+def test_discovered_input_schemas_cannot_accept_account_or_release_authority():
+    for tool in mcp.tool_definitions():
+        schema = tool.inputSchema
+        assert schema["additionalProperties"] is False
+        props = schema["properties"]["request"]["properties"]
+        assert (
+            not {"user_id", "organization_id", "reference_date", "release_id", "database", "sql"}
+            & props.keys()
+        )

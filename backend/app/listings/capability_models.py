@@ -25,6 +25,7 @@ class ListingAgeRequest(ListingEvidenceRequest):
 
 
 class ListingRentRequest(ListingEvidenceRequest):
+    property_type: Literal["Apartment", "Villa", "Office", "Shop"] = "Apartment"
     mode: Literal["sale"] = "sale"
     bedrooms: MarketBedrooms
     location: str = Field(min_length=1, max_length=120)

@@ -11,7 +11,7 @@ SIZE_SQFT = """multiIf(
     lowerUTF8(JSON_VALUE(size_json, '$.unit')) IN ('sqm', 'sq m', 'm2'),
         JSONExtractFloat(size_json, 'value') * 10.7639,
     NULL)"""
-ASKING_PRICE = """if(lowerUTF8(JSON_VALUE(price_json, '$.currency')) IN ('aed', ''),
+ASKING_PRICE = """if(lowerUTF8(JSON_VALUE(price_json, '$.currency')) = 'aed',
     toFloat64(JSONExtractInt(price_json, 'value')), NULL)"""
 ANNUAL_RENT = f"""multiIf(
     lowerUTF8(JSON_VALUE(price_json, '$.period')) IN ('year', 'yearly', 'annual', 'annually'),

@@ -63,6 +63,14 @@ class MarketRelease:
     sources: frozenset[str]
     coverage: tuple[SourceCoverage, ...] = ()
 
+    def __post_init__(self):
+        if (
+            not self.release_id
+            or not self.sources
+            or not self.sources <= {"sales", "rentals", "listings", "projects"}
+        ):
+            raise ValueError("A pinned release needs an immutable identity and supported sources")
+
     def covers(self, source: str, start: date, end: date) -> bool:
         return source in self.sources and any(
             item.source == source

@@ -100,7 +100,7 @@ def _strict_schema(schema: dict) -> dict:
     return schema
 
 
-def _tools() -> list[types.Tool]:
+def tool_definitions() -> list[types.Tool]:
     tools = []
     for name, model in TOOL_MODELS.items():
         request = _strict_schema(model.model_json_schema())
@@ -258,6 +258,12 @@ class MarketToolExecutor:
                             "clarification_required", {"required_bindings": missing}
                         )
                     sources = _sources(name, request)
+                    if self.release and not set(sources) <= self.release.sources:
+                        return self.envelope(
+                            "unavailable",
+                            code="release_source_unavailable",
+                            message="The pinned release does not include every requested source.",
+                        )
                     with (
                         market_evidence.bounded_market_read(),
                         market_evidence.use_market_release(self.release),
@@ -395,7 +401,7 @@ async def market_mcp(
 
         @server.list_tools()
         async def list_tools():
-            return _tools()
+            return tool_definitions()
 
         # Typed validation in the executor returns stable, sanitized structured failures.
         @server.call_tool(validate_input=False)

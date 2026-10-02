@@ -87,7 +87,7 @@ async def get_listing_evidence(
         "returned_count": len(rows),
         "sample_order": "Lowest asking price then listing ID; bounded evidence, not total inventory.",
         "definitions": {
-            "asking_price_aed": "Asking sale price or annualized asking rent, AED.",
+            "asking_price_aed": "Asking sale price or annualized asking rent, AED; unknown/non-AED currency is unavailable.",
             "size_sqft": "Source units explicitly converted to sqft; unknown units remain null.",
         },
     }
