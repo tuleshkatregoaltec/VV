@@ -1,5 +1,5 @@
 <script lang="ts">
-	import ProductionLandingPage from '$lib/components/landing/ProductionLandingPage.svelte';
+import ProductionLandingPage from '$lib/components/landing/ProductionLandingPage.svelte'
 </script>
 
 <svelte:head>
