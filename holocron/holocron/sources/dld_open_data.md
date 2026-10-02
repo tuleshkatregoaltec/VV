@@ -55,7 +55,7 @@ Each source has the same job shape:
 - `dld_od_<category>_manual_backfill`: unscheduled raw-only dated backfill.
 - `dld_od_<category>_manual_snapshot`: unscheduled raw-only snapshot.
 
-The daily schedules are staggered between 04:00 and 05:30 UTC. Unit data is
+The daily schedules are staggered between 04:00 and 05:30 Asia/Dubai. Unit data is
 scheduled like the other endpoints even if the provider endpoint is unreliable,
 so the job is ready when the upstream behavior improves.
 
