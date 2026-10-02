@@ -47,7 +47,11 @@ def main() -> None:
                 continue
             manifest = storage.get_json(key=key) or {}
             properties = next(
-                (item for item in manifest.get("files", []) if item.get("path") == "pf_listing_properties.jsonl"),
+                (
+                    item
+                    for item in manifest.get("files", [])
+                    if item.get("path") == "pf_listing_properties.jsonl"
+                ),
                 None,
             )
             if not isinstance(properties, dict) or not properties.get("s3_key"):
@@ -71,9 +75,15 @@ def main() -> None:
             rows += len(batch)
         actual = clickhouse.query(f"SELECT count() FROM `{staging}`").result_rows[0][0]
         if actual != args.expected_count:
-            raise RuntimeError(f"Snapshot count mismatch: expected={args.expected_count} actual={actual}")
+            raise RuntimeError(
+                f"Snapshot count mismatch: expected={args.expected_count} actual={actual}"
+            )
         clickhouse.command(f"EXCHANGE TABLES `{TABLE}` AND `{staging}`")
-        print(json.dumps({"status": "replaced", "rows": rows, "files": files, "start_date": args.start_date}))
+        print(
+            json.dumps(
+                {"status": "replaced", "rows": rows, "files": files, "start_date": args.start_date}
+            )
+        )
     finally:
         clickhouse.command(f"DROP TABLE IF EXISTS `{staging}`")
 

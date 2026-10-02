@@ -62,8 +62,6 @@ def test_coverage_sql_conservatively_removes_only_cross_project_fanout() -> None
 def test_coverage_sql_supports_a_separate_shadow_benchmark_database() -> None:
     report = _load_script()
 
-    sql = report.coverage_sql(
-        "dxbi_rental_events_v2", "`vitevue`.`silver_rent_contracts`"
-    )
+    sql = report.coverage_sql("dxbi_rental_events_v2", "`vitevue`.`silver_rent_contracts`")
 
     assert "FROM `vitevue`.`silver_rent_contracts` FINAL" in sql

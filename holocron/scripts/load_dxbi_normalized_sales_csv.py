@@ -11,7 +11,13 @@ from pathlib import Path
 
 import clickhouse_connect
 
-from load_dxbi_sales_units import COLUMNS, CREATE_SALES_SQL, MATCH_ALTERS, SALES_TABLE, refresh_matches
+from load_dxbi_sales_units import (
+    COLUMNS,
+    CREATE_SALES_SQL,
+    MATCH_ALTERS,
+    SALES_TABLE,
+    refresh_matches,
+)
 from holocron.sources.dxbi.sales_units import location_key
 
 
@@ -28,13 +34,20 @@ def integer(value: str | None) -> int | None:
 
 
 def event(row: dict[str, str], source_file: str) -> dict[str, object] | None:
-    transaction_date, building, area = row.get("transaction_date", ""), row.get("property_name", ""), row.get("area_name", "")
+    transaction_date, building, area = (
+        row.get("transaction_date", ""),
+        row.get("property_name", ""),
+        row.get("area_name", ""),
+    )
     amount, size = integer(row.get("sale_amount_aed")), number(row.get("transaction_size_sqft"))
     if not transaction_date or not building or not area or not amount or not size:
         return None
     unit = row.get("unit_number", "")
     return {
-        "sale_key": row.get("record_key") or hashlib.sha256(f"{transaction_date}|{unit}|{building}|{amount}|{size}".encode()).hexdigest()[:24],
+        "sale_key": row.get("record_key")
+        or hashlib.sha256(
+            f"{transaction_date}|{unit}|{building}|{amount}|{size}".encode()
+        ).hexdigest()[:24],
         "transaction_date": date.fromisoformat(transaction_date),
         "unit_number": unit,
         "building_name": building,
@@ -70,7 +83,13 @@ def main() -> None:
     parser.add_argument("--username", default="default")
     parser.add_argument("--password", default="")
     args = parser.parse_args()
-    client = clickhouse_connect.get_client(host=args.host, port=args.port, database=args.database, username=args.username, password=args.password)
+    client = clickhouse_connect.get_client(
+        host=args.host,
+        port=args.port,
+        database=args.database,
+        username=args.username,
+        password=args.password,
+    )
     client.command(CREATE_SALES_SQL)
     for statement in MATCH_ALTERS:
         client.command(statement)
