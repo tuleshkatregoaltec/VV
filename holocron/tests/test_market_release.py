@@ -196,3 +196,66 @@ def test_invalid_or_partial_staged_release_keeps_last_good_release(warehouse) ->
         "SELECT count() FROM market_sale_events__previous WHERE is_served = 1"
     ).result_rows[0][0]
     assert previous == 100
+
+
+@pytest.mark.skipif(not _LIVE, reason="set HOLOCRON_CLICKHOUSE_INTEGRATION=1 with local ClickHouse")
+def test_corrections_duplicates_and_cut_over_are_served_once(warehouse) -> None:
+    from holocron.platform.clickhouse_schema import ensure_schema
+
+    ensure_schema(clickhouse=warehouse)
+    columns = [
+        "row_key", "run_id", "scraped_at", "transaction_number", "instance_date", "group_en",
+        "trans_value", "procedure_area", "area_en", "is_offplan_en", "source_system",
+    ]  # fmt: skip
+    rows = [
+        # T1 corrected by a later open-data extract: only the later price is served.
+        ("t1-v1", "r1", "2026-09-10T00:00:00", "T1", datetime(2026, 9, 2), "Sales", 1_000_000),
+        ("t1-v2", "r2", "2026-09-12T00:00:00", "T1", datetime(2026, 9, 2), "Sales", 1_100_000),
+        # T2 delivered twice in one run: served once.
+        ("t2-a", "r2", "2026-09-12T00:00:00", "T2", datetime(2026, 9, 3), "Sales", 2_000_000),
+        ("t2-b", "r2", "2026-09-12T00:00:00", "T2", datetime(2026, 9, 3), "Sales", 2_000_000),
+    ]
+    warehouse.insert_rows(
+        table="dld_od_transactions_bronze",
+        column_names=columns,
+        rows=[(*row, 80.0, "Marsa Dubai", "Ready", "dld_open_data") for row in rows],
+    )
+    # Pulse history: kept before the open-data start (2026-09-02), dropped from it on.
+    warehouse.insert_rows(
+        table="dld_od_transactions_bronze",
+        column_names=columns,
+        rows=[
+            (
+                "p-old",
+                "pulse",
+                "2026-05-16T00:00:00",
+                "P1",
+                datetime(2026, 8, 30),
+                "Sales",
+                900_000,
+                80.0,
+                "Marsa Dubai",
+                "Ready",
+                "dubai_pulse",
+            ),
+            (
+                "p-overlap",
+                "pulse",
+                "2026-05-16T00:00:00",
+                "P2",
+                datetime(2026, 9, 2),
+                "Sales",
+                1_000_000,
+                80.0,
+                "Marsa Dubai",
+                "Ready",
+                "dubai_pulse",
+            ),
+        ],  # fmt: skip
+    )
+    release.materialize_market_sale_events(clickhouse=warehouse)
+    served = warehouse.query(
+        "SELECT transaction_id, actual_worth FROM market_sale_events WHERE is_served = 1 "
+        "ORDER BY transaction_id"
+    ).result_rows
+    assert served == [("P1", 900_000), ("T1", 1_100_000), ("T2", 2_000_000)]
