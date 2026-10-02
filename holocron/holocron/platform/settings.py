@@ -30,6 +30,3 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
-
-# Intentional CI failure probe; reverted in the next commit.
-_ci_probe: int = "intentional CI failure"

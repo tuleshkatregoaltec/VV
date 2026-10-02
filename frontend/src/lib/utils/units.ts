@@ -45,6 +45,3 @@ export function formatPricePerArea(value: number, unit: AreaUnit): string {
 		maximumFractionDigits: 2
 	})
 }
-
-// Intentional CI failure probe; reverted in the next commit.
-export const ciProbe: number = 'intentional CI failure'

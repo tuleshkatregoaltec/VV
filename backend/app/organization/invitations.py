@@ -191,7 +191,7 @@ async def invite_user_to_organization(
     active_user_count = await get_member_count(db, organization.id)
     pending_invitation_count = await get_pending_invitation_count(db, organization.id)
     reserved_seat_count = active_user_count + pending_invitation_count
-    if reserved_seat_count > organization.max_users:  # intentional CI failure probe
+    if reserved_seat_count >= organization.max_users:
         raise HTTPException(
             status_code=400,
             detail=(
