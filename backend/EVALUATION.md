@@ -1,5 +1,9 @@
 # AI evaluation and observability
 
+Current implementation: see **MCP prompting, policy and assessment update** and
+**Integrated verification** below. Earlier discovery and observed-run sections are
+historical baselines; they do not describe the current registered toolset.
+
 Discovery base: `9b3303f`, branch `refactor/backend-domain-boundaries`.
 The completed migration and `ARCHITECTURE.md` remain authoritative.
 
@@ -503,7 +507,7 @@ explicit sanitized upload command below to complete account-side validation.
 just ai-inventory
 just ai-benchmark
 just test-evaluation
-just ai-evaluate
+just ai-evaluate --budget-usd APPROVED_CEILING
 just ai-assess --directory /absolute/private/run
 # Review the generated template; record method, reviewer and evidence for each judgment.
 just ai-assess --directory /absolute/private/run --reviews /absolute/private/reviews.json
@@ -598,7 +602,7 @@ still requires account credentials; raw execution evidence remains private and
 excluded from the PR. The migration repair and its manual-backfill/downgrade
 limitations remain documented in `ARCHITECTURE.md` and the migration itself.
 
-## Database capability coverage, 2026-10-03
+## Pre-MCP capability baseline, 2026-10-03
 
 Three chat tools now call public domain operations that the API also serves:
 `query_market_metrics` → `analytics/market_metrics.py` (`POST /api/v1/analytics/market-metrics`),
@@ -791,3 +795,116 @@ four isolated real-Redis tests passed, with no skips. Redis tests used unique
 owned keys and removed only those keys. Combined application/browser checks are
 owned by the lead. No paid evaluation, training, remote telemetry upload,
 application-data modification or deployment was performed by Agent B.
+
+
+## Integrated verification — 2026-10-03
+
+The lead integrated committed prerequisites in `codex/chat-integration-base`
+(`1dd064c940229475894e88148fe76e8b3a357c30`). Its parents include #11
+`09cab4e` (and #3/#5), #9 `99063f8`, #8 `bb7aac5` (and #7), #10 `8a2bc2b`,
+and #12 `f13cd55` (and #6). The implementation branch is
+`codex/database-grounded-chat`; the draft compares against that explicit base.
+No canonical ingestion, schema, publication or migration file changed after the
+base. The fifteen canonical question strings and IDs are unchanged. Claude's
+checkout, branches and databases were not modified.
+
+Web chat now initializes a per-turn authenticated Streamable HTTP MCP client/server
+using the SDK over an ASGI HTTP transport, then performs `tools/list` and `tools/call`.
+The model has no database connection, tenant selector or unrestricted SQL tool.
+Current actor access is rechecked before and after reads and before provider calls.
+Separate source families cannot be combined through successive unpinned tool calls.
+The report operation retains individually labeled evidence but withholds composite
+conclusions without an immutable release. Rendered cards derive only from successful
+MCP results, without another query or raw model-function dispatch.
+
+Request UUIDs are serialized under the owned conversation row lock and recorded
+with turn status in existing message metadata. Completed requests replay saved
+answers/cards without provider calls; conflicts, concurrent turns, cancellation,
+failed streams and crashed stale claims remain explicit. A new UUID is required
+for an intentional retry of an interrupted turn. The updated typed browser client
+sends an ID; legacy callers omitting it cannot recover a request after losing its ID.
+No schema migration was needed beyond the prerequisite #9 migration.
+
+The independently calculated HTTP example executes FastAPI SSE, real MCP,
+shared market services and disposable ClickHouse/PostgreSQL. September 2026 has
+four eligible sales (AED 1m, 1m, 4m and 7m): count **4**, arithmetic mean
+**AED 3.25m**, median **AED 2.5m**, total **AED 13m**, dates **September 1–30**,
+calendar **Asia/Dubai**, units **AED/records**. Duplicate/superseded records,
+mortgages, gifts, zero values and adjacent-month records do not enter those values.
+The API and MCP numerical fields agree; the scripted assistant copies them exactly.
+The MCP coverage is explicitly **unverified**. The inherited API's min/max-derived
+coverage label is not authoritative and is deliberately downgraded by the evidence
+adapter pending Chat 2. This test proves transport and arithmetic, not live reasoning.
+
+Final data acceptance remains blocked on Chat 2 publishing an integrated immutable
+release plus authoritative source/period coverage. Implement
+`market.evidence.acquire_market_release` using a real lease that pins all underlying
+queries to immutable source versions for the whole turn; assigning a release string
+to mutable views does not meet the contract. Supply sales/rentals/listings/projects
+coverage from ingestion manifests, including missing geographic/bedroom coverage.
+Until then yields and cross-source conclusions remain unavailable. Missing
+Bayut/Reelly inputs are never synthesized.
+
+Additional production gates are explicit pricing and approved provider routing,
+durable non-evicting Redis plus legacy-accounting cutover, and the product owner's
+topic policy. Empty `AI_TOPIC_POLICY` means no extra topic restrictions are approved.
+The user approved evaluation up to US$5 and explicitly prohibited training; no
+training, tuned-model comparison, promotion, deployment, merge or Telegram action
+was performed. The OpenRouter adapter has no verified training/tuned-serving path.
+
+
+### Combined checks and measured provider behavior
+
+Final local checks: `just test-backend` **401 passed, zero skips**; Ruff clean;
+PostgreSQL **18 passed**; ClickHouse **33 passed**; Redis/MinIO infrastructure
+**6 passed**; frontend lint/type checks clean, **68 unit tests passed**, production
+build succeeded; **13 Playwright guard/chat recovery tests passed**. Holocron's
+required formatting/lint/type/test recipe passed: **500 passed, two skipped**.
+Those skips are the existing opt-in real ClickHouse publication tests controlled
+by `HOLOCRON_CLICKHOUSE_INTEGRATION`; their implementation was not changed.
+The full authenticated Playwright suite was not run; the relevant changed flows
+were exercised in the guard suite plus authenticated backend integration/evaluation.
+
+Live evaluations used real isolated GoTrue login, ordinary FastAPI guards, HTTP
+SSE, MCP, ClickHouse/PostgreSQL and `google/gemini-3.1-flash-lite` through OpenRouter.
+Only synthetic, independently specified September records were loaded. No production
+or Claude database was changed. Prompt versions and exact tools are captured in
+private runtime manifests. The first setup run made **zero provider calls** and
+exposed SDK-prepared settings rejection plus invalid trace redaction; its corrupt
+traces are invalid evidence and were retained as failures, never reconstructed.
+
+| Private run directory | Scope | Observation |
+| --- | --- | --- |
+| `live-mcp-20261002T224200Z` | v1, all 15 canonical questions | 15 streams/trace chains passed. Assisted numerical review: 5 pass, 1 fail, 9 unassessed; q14 invented inventory zero after a tool error. |
+| `live-mcp-20261002T224751Z` | v2, same 15 and synthetic data | 15 streams/trace chains passed. Numerical review: 4 pass, 1 fail, 10 unassessed. q14 honestly declined the unsupported report; q07 regressed by including delivery statuses beyond the requested horizon. |
+| `live-mcp-20261002T225144Z` | v3, targeted q07/q08/q09/q11/q14 | 5 streams passed. q07 now correctly reports 220 scheduled units: 120/100 and 54.55%/45.45%. q09 calls listing inventory and explains the verified empty snapshot. q14 returns only supported sales evidence and names missing report sections. |
+
+The final target run still exposes model limitations: q11 initially applies the
+AED 1.2m ceiling but drops it in its subsequent rent-comparison call and supplies
+an incomplete period; validation rejects the call before retrieval. The answer
+has no yield because its successful listing query is empty. Inclusive backend
+price caps/bands also cannot silently satisfy strictly worded “below/above” filters;
+reviews retain failures or unassessed status for those semantic mismatches. q14
+still calls the composer after separate tools despite the prompt; the server's
+release gate withholds cross-source evidence/conclusions. These are unresolved
+model-selection/filter issues, not successful full-report acceptance.
+
+Observed corrections are case-specific; they are not an overall quality score or
+an isolated prompt-effect experiment. Tools/runtime guards also changed, and the
+v3 run is a subset. Five independently checked v1 answers matched fixture arithmetic
+(q01/q02/q05/q07/q08); this does not establish filter completeness or market truth.
+Numerical, filters, arguments, completeness, freshness, privacy and clarification
+remain separate. Empty evidence and unavailable releases are never counted as full
+answer passes. Privacy remains unassessed in live quality reviews; deterministic
+privacy/auth tests passed, which is a different claim. No tuned model was produced
+or promoted; promotion remains blocked by incomplete evidence and regressions.
+
+Across the two complete runs and the five-case final run, **65 actual provider
+requests** settled **231,972 input + 21,679 output tokens**, with no unknown
+reservations. The shared ledger accounted **US$0.090536**, below the approved
+US$5 ceiling. This is the configured token-rate estimate, not a provider invoice.
+The final preparation bundle records `database-mcp-v3`, exact tool hashes, eight
+synthetic training examples and four held-out examples. It performed no upload
+or training. Local evidence/reviews remain ignored, mode 0600 in 0700 directories;
+no telemetry upload occurred. Disposable auth/PostgreSQL containers and evaluation
+ClickHouse database were removed; temporary evaluation credentials were deleted.
