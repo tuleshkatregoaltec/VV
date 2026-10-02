@@ -56,8 +56,8 @@ LOGGING_CONFIG: Dict[str, Any] = {
         },
         # SQLAlchemy Engine (The SQL Queries)
         "sqlalchemy.engine": {
-            "handlers": ["file_sql"],  # <--- ONLY to file, not console
-            "level": "INFO",
+            "handlers": ["file_sql"],
+            "level": "WARNING",  # SQL bind values can contain private prompts/records.
             "propagate": False,  # Stop it from bubbling up to console
         },
         # Redis Cache (Your custom logger)

@@ -4,7 +4,7 @@ from datetime import date
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Response, UploadFile
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.core.dependencies import AuthContext, require_active_subscription
+from app.core.dependencies import AuthContext, require_active_subscription, require_ai_execution
 from app.crm.import_models import (
     CrmContactImportRename,
     CrmContactImportResponse,
@@ -87,7 +87,7 @@ from app.crm.workspaces import (
 )
 from app.postgres import get_db_session
 
-router = APIRouter(prefix="/api/v1/crm", tags=["crm"])
+router = APIRouter(prefix="/api/v1/crm", tags=["crm"], dependencies=[Depends(require_ai_execution)])
 
 
 def _auth_ids(auth: AuthContext) -> tuple[str, str]:

@@ -34,7 +34,7 @@ async def stream_chat_events(request: FeasibilityChatRequest) -> AsyncGenerator[
         ):
             yield chunk
     except Exception:
-        logger.exception("Error in feasibility chat stream service")
+        logger.error("Error in feasibility chat stream service")
         yield f"data: {json.dumps({'type': 'error', 'error': 'Internal server error'})}\n\n"
 
 
@@ -103,7 +103,7 @@ async def stream_feasibility_response(
         try:
             history = ModelMessagesTypeAdapter.validate_json(history_json)
         except Exception:
-            logger.exception("Failed to deserialize feasibility history_json")
+            logger.error("Failed to deserialize feasibility history_json")
             yield f"data: {json.dumps({'type': 'warning', 'content': 'Session context reset — conversation history could not be restored.'})}\n\n"
 
     user_turns = [message for message in messages if message.get("role") == "user"]
@@ -136,5 +136,5 @@ async def stream_feasibility_response(
             new_messages_json = run.new_messages_json().decode()
             yield f"data: {json.dumps({'type': 'done', 'new_messages_json': new_messages_json})}\n\n"
     except Exception as exc:
-        logger.exception("Error in feasibility chat stream")
+        logger.error("Error in feasibility chat stream")
         yield f"data: {json.dumps({'type': 'error', 'error': str(exc)})}\n\n"

@@ -1,5 +1,6 @@
 import os
 import warnings
+from decimal import Decimal
 from functools import cached_property
 from pathlib import Path
 from typing import Annotated, Any, Literal
@@ -9,6 +10,7 @@ from pydantic import (
     AnyUrl,
     BeforeValidator,
     EmailStr,
+    Field,
     PostgresDsn,
     computed_field,
     field_validator,
@@ -67,6 +69,24 @@ class Settings(BaseSettings):
     # OpenRouter
     OPENROUTER_API_KEY: str  # Bitwarden Secrets
     DEFAULT_CHAT_MODEL: str  # configMap
+
+    # Shared AI policy: explicit prices and budgets are required before provider use.
+    AI_PRICING_MODEL: str | None = None
+    AI_INPUT_USD_PER_MILLION: Decimal | None = Field(default=None, gt=0)
+    AI_OUTPUT_USD_PER_MILLION: Decimal | None = Field(default=None, gt=0)
+    AI_USER_DAILY_USD: Decimal | None = Field(default=None, gt=0)
+    AI_USER_MONTHLY_USD: Decimal | None = Field(default=None, gt=0)
+    AI_ORG_DAILY_USD: Decimal | None = Field(default=None, gt=0)
+    AI_ORG_MONTHLY_USD: Decimal | None = Field(default=None, gt=0)
+    AI_MAX_INPUT_TOKENS: int = Field(default=65536, ge=1024, le=262144)
+    AI_MAX_OUTPUT_TOKENS: int = Field(default=4096, ge=1, le=16384)
+    AI_REQUESTS_PER_MINUTE: int = Field(default=30, ge=1, le=1000)
+    AI_USER_CONCURRENCY: int = Field(default=2, ge=1, le=20)
+    AI_ORG_CONCURRENCY: int = Field(default=20, ge=1, le=100)
+    AI_MAX_CALLS_PER_EXECUTION: int = Field(default=12, ge=1, le=30)
+    AI_EXECUTION_TIMEOUT_SECONDS: int = Field(default=300, ge=10, le=600)
+    AI_PROVIDER_ALLOWLIST: list[str] = []
+    AI_TOPIC_POLICY: str = ""  # Empty until the product owner supplies approved policy.
 
     # Auth
     AUTH_URL: AnyUrl  # configMap

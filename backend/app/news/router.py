@@ -3,7 +3,7 @@ from fastapi.responses import RedirectResponse
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.decorators import cached_endpoint
-from app.core.dependencies import AuthContext, require_active_subscription
+from app.core.dependencies import AuthContext, require_active_subscription, require_ai_execution
 from app.news.models import NewsListResponse, NewsSummaryResponse
 from app.news.service import fetch_news_articles, fetch_news_summary, fetch_news_thumbnail
 from app.postgres import get_db_session
@@ -22,7 +22,9 @@ async def get_news(
     return await fetch_news_articles(db, limit, offset)
 
 
-@router.get("/summary", response_model=NewsSummaryResponse)
+@router.get(
+    "/summary", response_model=NewsSummaryResponse, dependencies=[Depends(require_ai_execution)]
+)
 @cached_endpoint(prefix="news_summary", expire=900)
 async def get_news_summary(
     context: AuthContext = Depends(require_active_subscription),

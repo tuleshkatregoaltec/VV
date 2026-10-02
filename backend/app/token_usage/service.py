@@ -13,7 +13,22 @@ logger = logging.getLogger(__name__)
 
 class TokenUsageService:
     async def get_today_usage(self, db: AsyncSession, user_id: str) -> Optional[UserTokenUsage]:
-        return await repository.get_usage(db, user_id, date.today())
+        from app.core.ai_policy import reserved_daily_tokens
+
+        today = datetime.now(timezone.utc).date()
+        legacy = await repository.get_usage(db, user_id, today)
+        accounted = await reserved_daily_tokens(user_id, today)
+        if not accounted:
+            return legacy
+        # Existing PostgreSQL totals predate the shared provider ledger. Include
+        # both during the cutover; new calls must never also call record_usage.
+        return UserTokenUsage(
+            user_id=user_id,
+            date=today,
+            total_tokens=accounted + (legacy.total_tokens if legacy else 0),
+            prompt_tokens=legacy.prompt_tokens if legacy else 0,
+            completion_tokens=legacy.completion_tokens if legacy else 0,
+        )
 
     async def create_usage_record(
         self,
@@ -67,7 +82,13 @@ class TokenUsageService:
         completion_tokens: int,
         total_tokens: int,
     ) -> UserTokenUsage:
-        existing = await self.get_today_usage(db, user_id)
+        from sqlalchemy import text
+
+        await db.execute(
+            text("SELECT pg_advisory_xact_lock(hashtextextended(:key, 0))"),
+            {"key": f"token-usage:{user_id}:{datetime.now(timezone.utc).date()}"},
+        )
+        existing = await repository.get_usage(db, user_id, datetime.now(timezone.utc).date())
 
         if existing:
             # Update existing record

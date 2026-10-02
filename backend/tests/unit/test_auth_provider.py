@@ -37,3 +37,31 @@ async def test_magic_link_preserves_redirect_and_creation_flag(monkeypatch):
             },
         }
     )
+
+
+async def test_admin_lookup_preserves_revocation_fields_discarded_by_sdk(monkeypatch):
+    from datetime import datetime, timezone
+
+    import httpx
+
+    payload = {
+        "id": "user-1",
+        "aud": "authenticated",
+        "app_metadata": {},
+        "user_metadata": {},
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "banned_until": "2099-01-01T00:00:00Z",
+    }
+    real_client = httpx.AsyncClient
+    transport = httpx.MockTransport(lambda request: httpx.Response(200, json=payload))
+    monkeypatch.setattr(
+        client.httpx, "AsyncClient", lambda **kwargs: real_client(transport=transport, **kwargs)
+    )
+    user = await client.get_user_by_id("user-1")
+    assert not user.is_authenticated
+    payload["banned_until"] = "2020-01-01T00:00:00Z"
+    assert (await client.get_user_by_id("user-1")).is_authenticated
+    payload["deleted_at"] = "2026-01-01T00:00:00Z"
+    assert not (await client.get_user_by_id("user-1")).is_authenticated
+    payload["banned_until"] = "malformed"
+    assert await client.get_user_by_id("user-1") is None

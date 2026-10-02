@@ -7,7 +7,8 @@ from typing import Any
 import httpx
 
 from app.config import settings
-from app.core.observability import operation, provider_request
+from app.core.ai_policy import direct_provider_request as provider_request
+from app.core.observability import operation
 from app.crm.import_parsing import _CANONICAL_FIELDS, SheetProfile
 from app.crm.inbound_policy import _ALIASES
 
@@ -68,8 +69,6 @@ async def _llm_mapping(profile: SheetProfile) -> SheetProfile:
     except Exception:
         logger.warning(
             "CRM import schema mapping fell back to heuristics",
-            extra={"sheet": profile.name},
-            exc_info=True,
         )
         profile.mapping_source = "heuristic_fallback"
         profile.warnings.append("Automated schema confirmation was unavailable.")

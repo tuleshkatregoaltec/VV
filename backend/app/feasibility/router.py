@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, Query, Response
 from fastapi.responses import StreamingResponse
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.core.dependencies import AuthContext, require_active_subscription
+from app.core.dependencies import AuthContext, require_active_subscription, require_ai_execution
 from app.feasibility.chat import stream_chat_events
 from app.feasibility.generation import generate_hbu_for_plot, generate_seeded_study
 from app.feasibility.models import (
@@ -36,7 +36,9 @@ from app.feasibility.studies import (
 from app.plots.models import LandSaleEvidence, Plot, PlotDetails, Usage
 from app.postgres import get_db_session
 
-router = APIRouter(prefix="/api/v1/feasibility", tags=["feasibility"])
+router = APIRouter(
+    prefix="/api/v1/feasibility", tags=["feasibility"], dependencies=[Depends(require_ai_execution)]
+)
 
 
 def _auth_ids(auth: AuthContext) -> tuple[str, str]:
