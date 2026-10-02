@@ -41,6 +41,7 @@ from app.listings.capability_models import (
 )
 from app.market import evidence as market_evidence
 from app.market.evidence import COVERAGE_NOTE, RELEASE_NOTE, MarketAccessContext
+from app.market.periods import resolve_period
 from app.market.reports import ReportRequest, compose_market_report, required_bindings
 from app.project.delivery import ALL_DELIVERY_STATUSES, get_delivery_summary
 from app.project.evidence import get_project_observation
@@ -252,12 +253,35 @@ class MarketToolExecutor:
                             code="invalid_arguments",
                             message="Reference dates and execution identity are server-owned; use explicit period fields for historical dates.",
                         )
-                    request = TOOL_MODELS[name].model_validate(raw, extra="forbid")
+                    try:
+                        request = TOOL_MODELS[name].model_validate(raw, extra="forbid")
+                        if period := getattr(request, "period", None):
+                            resolve_period(
+                                period.type,
+                                reference_date=self.context.reference_date,
+                                **period.model_dump(exclude={"type"}),
+                            )
+                    except (ValidationError, ValueError, TypeError):
+                        return self.envelope(
+                            "error",
+                            code="invalid_arguments",
+                            message="The typed request is invalid. Check its allowed fields, period and bounds.",
+                        )
                     if missing := _bindings(request):
                         return self.envelope(
                             "clarification_required", {"required_bindings": missing}
                         )
                     sources = _sources(name, request)
+                    if (
+                        self.release is None
+                        and self.observations
+                        and not set(sources) <= self.observations.keys()
+                    ):
+                        return self.envelope(
+                            "unavailable",
+                            code="release_unavailable",
+                            message="A shared immutable release is required before combining different sources in one turn.",
+                        )
                     if self.release and not set(sources) <= self.release.sources:
                         return self.envelope(
                             "unavailable",
@@ -326,12 +350,6 @@ class MarketToolExecutor:
                 code="tool_timeout",
                 message="The bounded retrieval timed out; narrow the request or retry.",
                 retryable=True,
-            )
-        except (ValidationError, ValueError, TypeError):
-            return self.envelope(
-                "error",
-                code="invalid_arguments",
-                message="The typed request is invalid. Check its allowed fields, period and bounds.",
             )
         except Exception:
             # Never expose database SQL, credentials, raw exception content or record payloads.

@@ -236,3 +236,65 @@ def test_discovered_input_schemas_cannot_accept_account_or_release_authority():
             not {"user_id", "organization_id", "reference_date", "release_id", "database", "sql"}
             & props.keys()
         )
+
+
+async def test_downstream_validation_and_serialization_errors_are_not_bad_user_arguments(domain):
+    from pydantic import BaseModel, ValidationError
+
+    class DomainOutput(BaseModel):
+        count: int
+
+    try:
+        DomainOutput.model_validate({"count": "unknown"})
+    except ValidationError as error:
+        domain.side_effect = error
+    async with mcp.market_mcp(context(), AsyncMock(return_value=True)) as client:
+        response = await client.direct_call_tool("query_market_metrics", ARGS)
+        assert response["error"]["code"] == "capability_unavailable"
+    domain.side_effect = None
+    domain.return_value = {"value": float("nan")}
+    async with mcp.market_mcp(context(), AsyncMock(return_value=True)) as client:
+        response = await client.direct_call_tool("query_market_metrics", ARGS)
+        assert response["error"]["code"] == "capability_unavailable"
+
+
+async def test_invalid_calendar_period_is_an_input_error_before_any_read(domain, monkeypatch):
+    observed = AsyncMock()
+    monkeypatch.setattr(mcp, "_observe", observed)
+    async with mcp.market_mcp(context(), AsyncMock(return_value=True)) as client:
+        response = await client.direct_call_tool(
+            "query_market_metrics", {"request": {"dataset": "sales", "period": {"type": "range"}}}
+        )
+        assert response["error"]["code"] == "invalid_arguments"
+    observed.assert_not_awaited()
+    domain.assert_not_awaited()
+
+
+async def test_unpinned_turn_cannot_combine_successive_source_families(domain, monkeypatch):
+    from contextlib import asynccontextmanager
+
+    from app.market import evidence
+
+    observed = AsyncMock(
+        side_effect=lambda sources: {source: {"snapshot": "fixed"} for source in sources}
+    )
+    monkeypatch.setattr(mcp, "_observe", observed)
+    rentals = {"request": {"dataset": "rentals", "period": {"type": "previous_month"}}}
+    async with mcp.market_mcp(context(), AsyncMock(return_value=True)) as client:
+        assert (await client.direct_call_tool("query_market_metrics", ARGS))["status"] == "ok"
+        assert (await client.direct_call_tool("query_market_metrics", ARGS))["status"] == "ok"
+        reads_before = observed.await_count
+        response = await client.direct_call_tool("query_market_metrics", rentals)
+        assert response["status"] == "unavailable"
+        assert response["error"]["code"] == "release_unavailable"
+        assert response["data"] is None
+        assert observed.await_count == reads_before
+
+    @asynccontextmanager
+    async def lease(context):
+        yield evidence.MarketRelease("immutable", frozenset({"sales", "rentals"}))
+
+    monkeypatch.setattr(evidence, "acquire_market_release", lease)
+    async with mcp.market_mcp(context(), AsyncMock(return_value=True)) as client:
+        assert (await client.direct_call_tool("query_market_metrics", ARGS))["status"] == "ok"
+        assert (await client.direct_call_tool("query_market_metrics", rentals))["status"] == "ok"

@@ -235,7 +235,7 @@ async def listing_analytics_from_clickhouse(
         benchmarked_count=_int_or_none(row.get("benchmarked_count")) or 0,
         verified_count=_int_or_none(row.get("verified_count")) or 0,
         area_count=_int_or_none(row.get("area_count")) or 0,
-        snapshot_at=_parse_datetime(row.get("snapshot_at")),
+        snapshot_at=_parse_datetime(row.get("snapshot_at")) if row.get("total") else None,
         trend=[
             ListingTrendPoint(
                 period=str(point.get("period") or ""),

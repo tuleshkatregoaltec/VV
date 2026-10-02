@@ -311,3 +311,35 @@ async def test_project_report_evidence_uses_exact_registered_names_and_discloses
     assert result["payment_plans"] is None
     assert result["unit_prices"] is None
     assert result["unit_sizes"] is None
+
+
+async def test_empty_listing_inventory_returns_zero_count_and_unknown_prices(
+    warehouse, install_serving
+):
+    from app.listings.service import listing_analytics_from_clickhouse
+
+    await install_serving(tables=("pf_listings_bronze",), views=())
+    inventory = await listing_analytics_from_clickhouse(
+        mode="sale", area="Dubai Hills Estate", bedrooms="studio", property_type="Apartment"
+    )
+    assert inventory.total == 0
+    assert inventory.average_price_aed is None
+    assert inventory.median_price_aed is None
+    assert inventory.median_price_per_sqft_aed is None
+    assert inventory.snapshot_at is None
+    json.dumps(inventory.model_dump(mode="json"), allow_nan=False)
+    async with market_mcp(CONTEXT, AsyncMock(return_value=True)) as client:
+        result = await client.direct_call_tool(
+            "get_listing_inventory",
+            {
+                "request": {
+                    "property_type": "Apartment",
+                    "location": "Dubai Hills Estate",
+                    "bedrooms": "studio",
+                    "mode": "sale",
+                }
+            },
+        )
+    assert result["status"] == "ok"
+    assert result["data"]["inventory"]["total"] == 0
+    assert result["data"]["inventory"]["median_price_aed"] is None
