@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, Field, field_validator
-from sqlalchemy import DateTime
+from sqlalchemy import DateTime, Index
 from sqlmodel import JSON, Column, SQLModel
 from sqlmodel import Field as SQLField
 
@@ -625,6 +625,9 @@ class GenerateStudyResponse(BaseModel):
 
 class FeasibilitySavedStudy(SQLModel, table=True):
     __tablename__ = "feasibility_studies"
+    __table_args__ = (
+        Index("ix_feasibility_studies_owner_updated", "user_id", "organization_id", "updated_at"),
+    )
 
     id: int | None = SQLField(default=None, primary_key=True)
     user_id: str = SQLField(index=True)
