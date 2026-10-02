@@ -123,9 +123,7 @@ def test_load_release_to_clickhouse_loads_rows_and_clears_incremental_window() -
         "CREATE TABLE IF NOT EXISTS dxbi_transactions_bronze" in sql for sql in clickhouse.commands
     )
     delete_sql = next(
-        sql
-        for sql in clickhouse.commands
-        if "ALTER TABLE `dxbi_transactions_bronze` DELETE WHERE" in sql
+        sql for sql in clickhouse.commands if "DELETE FROM `dxbi_transactions_bronze` WHERE" in sql
     )
     assert "slice_start_date = toDate('2026-04-29')" in delete_sql
     assert "slice_end_date = toDate('2026-04-29')" in delete_sql

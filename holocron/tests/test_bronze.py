@@ -38,12 +38,12 @@ def test_replace_keyed_rows_chunks_large_delete_predicates(
         column_names=("property_key", "value"),
     )
 
-    delete_commands = [command for command in clickhouse.commands if "DELETE WHERE" in command]
+    delete_commands = [command for command in clickhouse.commands if "DELETE FROM" in command]
     assert delete_commands == [
-        "ALTER TABLE `example_bronze` DELETE WHERE `property_key` IN ('alpha', 'beta') "
-        "SETTINGS mutations_sync = 1",
-        "ALTER TABLE `example_bronze` DELETE WHERE `property_key` IN ('gamma') "
-        "SETTINGS mutations_sync = 1",
+        "DELETE FROM `example_bronze` WHERE `property_key` IN ('alpha', 'beta') "
+        "SETTINGS lightweight_deletes_sync = 2",
+        "DELETE FROM `example_bronze` WHERE `property_key` IN ('gamma') "
+        "SETTINGS lightweight_deletes_sync = 2",
     ]
     assert clickhouse.insert_calls == [
         {

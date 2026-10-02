@@ -122,16 +122,15 @@ def test_reelly_bronze_loads_projects_documents_and_availability() -> None:
         "reelly_matrix_availability_bronze",
     }
     assert any(
-        "ALTER TABLE `reelly_projects_bronze` DELETE WHERE `project_id` IN ('123')" in sql
+        "DELETE FROM `reelly_projects_bronze` WHERE `project_id` IN ('123')" in sql
         for sql in clickhouse.commands
     )
     assert any(
-        "ALTER TABLE `reelly_documents_bronze` DELETE WHERE `project_id` IN ('123')" in sql
+        "DELETE FROM `reelly_documents_bronze` WHERE `project_id` IN ('123')" in sql
         for sql in clickhouse.commands
     )
     assert any(
-        "ALTER TABLE `reelly_matrix_availability_bronze` DELETE WHERE `project_id` IN ('123')"
-        in sql
+        "DELETE FROM `reelly_matrix_availability_bronze` WHERE `project_id` IN ('123')" in sql
         for sql in clickhouse.commands
     )
     project_call = next(
