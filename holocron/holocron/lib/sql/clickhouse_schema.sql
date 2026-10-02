@@ -1446,6 +1446,47 @@ ORDER BY (source_system, source_key, candidate_rank);
 -- Reelly serving tables read by the backend and by the view below. Their producer is not in
 -- this repository (F02); the definitions mirror the live warehouse so a fresh warehouse can
 -- apply this schema and serve the product once the producer is restored.
+-- Typed fields the backend supply queries read, parsed by the Reelly bronze loader from the
+-- project payload (field names as backend app/supply/mapping.py reads them).
+ALTER TABLE reelly_projects_bronze ADD COLUMN IF NOT EXISTS project_name String DEFAULT '';
+ALTER TABLE reelly_projects_bronze ADD COLUMN IF NOT EXISTS developer_name String DEFAULT '';
+ALTER TABLE reelly_projects_bronze ADD COLUMN IF NOT EXISTS sale_status LowCardinality(String) DEFAULT '';
+ALTER TABLE reelly_projects_bronze ADD COLUMN IF NOT EXISTS region String DEFAULT '';
+ALTER TABLE reelly_projects_bronze ADD COLUMN IF NOT EXISTS area_name String DEFAULT '';
+ALTER TABLE reelly_projects_bronze ADD COLUMN IF NOT EXISTS units_in_sale UInt32 DEFAULT 0;
+ALTER TABLE reelly_projects_bronze ADD COLUMN IF NOT EXISTS completion_date String DEFAULT '';
+ALTER TABLE reelly_projects_bronze ADD COLUMN IF NOT EXISTS completion_time String DEFAULT '';
+ALTER TABLE reelly_projects_bronze ADD COLUMN IF NOT EXISTS min_price_aed Nullable(Float64);
+ALTER TABLE reelly_projects_bronze ADD COLUMN IF NOT EXISTS max_price_aed Nullable(Float64);
+ALTER TABLE reelly_projects_bronze ADD COLUMN IF NOT EXISTS readiness_progress Nullable(Float64);
+ALTER TABLE reelly_projects_bronze ADD COLUMN IF NOT EXISTS latitude Nullable(Float64);
+ALTER TABLE reelly_projects_bronze ADD COLUMN IF NOT EXISTS longitude Nullable(Float64);
+ALTER TABLE reelly_projects_bronze ADD COLUMN IF NOT EXISTS website_url String DEFAULT '';
+ALTER TABLE reelly_projects_bronze ADD COLUMN IF NOT EXISTS overview String DEFAULT '';
+
+-- Payment plan steps per project (Reelly "Payment_plans"), replaced per project on each load.
+CREATE TABLE IF NOT EXISTS reelly_project_payment_plans_bronze (
+    payment_plan_key     String,
+    run_id               String,
+    scraped_at           String DEFAULT '',
+    project_key          String DEFAULT '',
+    project_id           String DEFAULT '',
+    payment_plan_index   UInt32 DEFAULT 0,
+    payment_step_index   UInt32 DEFAULT 0,
+    payment_step_id      String DEFAULT '',
+    payment_plan_id      String DEFAULT '',
+    name                 String DEFAULT '',
+    order_index          UInt32 DEFAULT 0,
+    percent_of_payment   Nullable(Float64),
+    payment_time         String DEFAULT '',
+    created_at           String DEFAULT '',
+    source_system        LowCardinality(String) DEFAULT 'reelly',
+    source_file          String DEFAULT '',
+    source_row_index     UInt64 DEFAULT 0,
+    raw_manifest_s3_key  String DEFAULT ''
+) ENGINE = MergeTree
+ORDER BY (run_id, payment_plan_key);
+
 CREATE TABLE IF NOT EXISTS silver_reelly_projects (
     project_key          String,
     project_id           String DEFAULT '',
