@@ -41,7 +41,9 @@ def create_app():
     secrets = tuple(
         str(value)
         for key, value in settings.model_dump().items()
-        if value and any(word in key for word in ("KEY", "SECRET", "PASSWORD", "TOKEN"))
+        if isinstance(value, str)
+        and value
+        and any(word in key for word in ("KEY", "SECRET", "PASSWORD", "TOKEN"))
     )
     provider = TracerProvider(
         resource=Resource.create({"service.name": "vitevue-local-evaluation"})

@@ -183,3 +183,115 @@ def test_unpriced_multimodal_or_builtin_calls_cannot_evade_text_budget():
         CompatibleOpenRouterModel._validate_text_request(
             [], ModelRequestParameters(builtin_tools=[WebSearchTool()])
         )
+
+
+async def test_real_sdk_prepared_reasoning_settings_reach_http_with_privacy(configured):
+    """Agent preparation used to turn valid reasoning into a rejected extra_body."""
+    import json
+
+    from openai import AsyncOpenAI
+    from opentelemetry.sdk.trace import TracerProvider
+    from pydantic_ai import Agent
+    from pydantic_ai.models.instrumented import InstrumentationSettings
+    from pydantic_ai.models.openrouter import OpenRouterModelSettings
+    from pydantic_ai.providers.openrouter import OpenRouterProvider
+
+    requests = []
+
+    def respond(request):
+        body = json.loads(request.content)
+        requests.append(body)
+        if body.get("stream"):
+            chunks = [
+                {
+                    "id": "test",
+                    "object": "chat.completion.chunk",
+                    "created": 1,
+                    "model": policy.settings.DEFAULT_CHAT_MODEL,
+                    "choices": [
+                        {
+                            "index": 0,
+                            "delta": {"role": "assistant", "content": "Grounded answer"},
+                            "finish_reason": None,
+                        }
+                    ],
+                },
+                {
+                    "id": "test",
+                    "object": "chat.completion.chunk",
+                    "created": 1,
+                    "model": policy.settings.DEFAULT_CHAT_MODEL,
+                    "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}],
+                    "usage": {"prompt_tokens": 20, "completion_tokens": 10, "total_tokens": 30},
+                },
+            ]
+            content = (
+                "".join("data: " + json.dumps(chunk) + "\n\n" for chunk in chunks)
+                + "data: [DONE]\n\n"
+            )
+            return httpx.Response(200, text=content, headers={"content-type": "text/event-stream"})
+        return httpx.Response(
+            200,
+            json={
+                "id": "test",
+                "object": "chat.completion",
+                "provider": "Google",
+                "created": 1,
+                "model": policy.settings.DEFAULT_CHAT_MODEL,
+                "choices": [
+                    {
+                        "index": 0,
+                        "message": {"role": "assistant", "content": "Grounded answer"},
+                        "finish_reason": "stop",
+                        "native_finish_reason": "stop",
+                    }
+                ],
+                "usage": {"prompt_tokens": 20, "completion_tokens": 10, "total_tokens": 30},
+            },
+        )
+
+    configured.eval.side_effect = ["ok", 1, "ok", 1]
+    async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as http:
+        model = CompatibleOpenRouterModel(
+            policy.settings.DEFAULT_CHAT_MODEL,
+            provider=OpenRouterProvider(
+                openai_client=AsyncOpenAI(
+                    api_key="mock-only",
+                    base_url="https://openrouter.ai/api/v1",
+                    max_retries=0,
+                    http_client=http,
+                )
+            ),
+        )
+        agent = Agent(
+            model,
+            instrument=InstrumentationSettings(
+                tracer_provider=TracerProvider(), include_content=False
+            ),
+            model_settings=OpenRouterModelSettings(
+                openrouter_reasoning={"effort": "low"}, max_tokens=4096
+            ),
+        )
+        async with scope():
+            assert (await agent.run("Use supplied evidence")).output == "Grounded answer"
+            async with agent.run_stream("Use supplied evidence") as result:
+                assert await result.get_output() == "Grounded answer"
+    assert len(requests) == 2
+    for body in requests:
+        assert body["reasoning"] == {"effort": "low"}
+        assert body["provider"] == policy.provider_privacy()
+        assert body["max_completion_tokens"] == 4096
+    assert configured.eval.await_count == 4
+
+
+def test_sdk_normalization_still_rejects_unapproved_or_conflicting_extra_body():
+    for extra in ({"model": "other"}, {"plugins": [{"id": "web"}]}, {"provider": {"zdr": False}}):
+        with pytest.raises(policy.AIPolicyError, match="override"):
+            policy.safe_model_settings({"extra_body": extra})
+    with pytest.raises(policy.AIPolicyError, match="Conflicting"):
+        policy.safe_model_settings(
+            {
+                "extra_body": {"reasoning": {"effort": "high"}},
+                "openrouter_reasoning": {"effort": "low"},
+            }
+        )

@@ -94,8 +94,21 @@ def provider_privacy():
 
 def safe_model_settings(model_settings):
     supplied = dict(model_settings or {})
-    # Extra bodies, presets and model fallbacks must not override the privacy policy.
-    for key in ("extra_body", "openrouter_models", "openrouter_preset", "openrouter_transforms"):
+    # Pydantic AI may prepare settings before request()/request_stream(), moving
+    # OpenRouter fields into extra_body. Normalize that exact representation so
+    # repeated SDK preparation is safe without admitting arbitrary overrides.
+    extra_body = supplied.pop("extra_body", None) or {}
+    if not isinstance(extra_body, dict) or set(extra_body) - {"provider", "reasoning", "usage"}:
+        raise AIPolicyError("Unapproved provider override")
+    if "provider" in extra_body and extra_body["provider"] != provider_privacy():
+        raise AIPolicyError("Unapproved provider override")
+    for key in ("reasoning", "usage"):
+        if key in extra_body:
+            normalized = f"openrouter_{key}"
+            if normalized in supplied and supplied[normalized] != extra_body[key]:
+                raise AIPolicyError("Conflicting provider settings")
+            supplied[normalized] = extra_body[key]
+    for key in ("openrouter_models", "openrouter_preset", "openrouter_transforms"):
         if supplied.get(key):
             raise AIPolicyError("Unapproved provider override")
     supplied["max_tokens"] = min(
