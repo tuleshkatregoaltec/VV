@@ -22,6 +22,7 @@ from app.chat.agent import _convert_to_pydantic_messages, agent
 from app.chat.artifacts import _artifact_history_context
 from app.chat.events import encode_sse as _sse
 from app.chat.mcp import ChatToolContext, market_mcp
+from app.chat.mcp_artifacts import render_mcp_artifacts
 from app.chat.models import Conversation, Message
 from app.chat.prompts import CHAT_PROMPT_VERSION
 from app.core.ai_policy import ai_execution
@@ -323,6 +324,21 @@ async def stream_chat_response(
                                                 > 196608
                                             ):
                                                 raise ValueError("Evidence exceeds turn limit")
+                                            for artifact in render_mcp_artifacts(
+                                                result.tool_name,
+                                                result.tool_call_id,
+                                                payload,
+                                                created_at=datetime.now(timezone.utc).isoformat(),
+                                            ):
+                                                if len(artifacts) >= 3:
+                                                    break
+                                                artifacts.append(artifact)
+                                                yield _sse(
+                                                    {
+                                                        "type": "artifact_updated",
+                                                        "artifact": artifact,
+                                                    }
+                                                )
                                         yield _sse(
                                             {
                                                 "type": "tool_call_result",

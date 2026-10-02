@@ -152,6 +152,10 @@ async def test_average_sale_price_last_month_through_web_chat(
                     "AED",
                 }
             assert results[0]["evidence"]["coverage"]["status"] == "unverified"
+            cards = [event["artifact"] for event in events if event["type"] == "artifact_updated"]
+            assert len(cards) == 1
+            assert cards[0]["data"]["points"][0]["value"] == 3_250_000
+            assert cards[0]["query"]["coverage"]["status"] == "unverified"
             answer = "".join(event.get("content", "") for event in events)
             assert (
                 answer
@@ -161,6 +165,15 @@ async def test_average_sale_price_last_month_through_web_chat(
             persisted = (await client.get(f"/api/v1/chat/conversations/{cid}/messages")).json()
             assert [message["role"] for message in persisted] == ["user", "assistant"]
             assert persisted[0]["meta_data"]["turn_status"] == "complete"
+            assert persisted[1]["meta_data"]["artifacts"] == cards
+            replay_events = [
+                json.loads(line[6:])
+                for line in replay.text.splitlines()
+                if line.startswith("data: ")
+            ]
+            assert [
+                event["artifact"] for event in replay_events if event["type"] == "artifact_updated"
+            ] == cards
             assert (
                 persisted[1]["meta_data"]["evidence"][0]["result"]["data"]["total"]["values"]
                 == expected
