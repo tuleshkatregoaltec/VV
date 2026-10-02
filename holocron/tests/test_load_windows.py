@@ -88,9 +88,10 @@ def test_latest_window_decides_each_day_and_releases_record_their_coverage(wareh
     warehouse.insert_rows(
         table="dld_od_transactions_bronze",
         column_names=["row_key", "run_id", "transaction_number", "instance_date", "group_en",
-                      "trans_value", "procedure_area", "area_en", "is_offplan_en", "source_system"],
+                      "trans_value", "procedure_area", "area_en", "is_offplan_en", "source_system",
+                      "area_id"],
         rows=[("r1", "run", "T1", datetime(2026, 6, 5), "Sales", 1_000_000, 80.0, "Marsa Dubai",
-               "Ready", "dld_open_data")],
+               "Ready", "dld_open_data", 330)],
     )  # fmt: skip
     published = release.materialize_market_sale_events(clickhouse=warehouse)
     record(date(2026, 6, 15), date(2026, 6, 20), "complete")

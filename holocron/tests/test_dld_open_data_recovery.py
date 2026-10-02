@@ -76,6 +76,7 @@ def _txn(number: str, day: date, price: int = 1_000_000) -> dict[str, Any]:
         "TRANS_VALUE": price,
         "PROCEDURE_AREA": 80.0,
         "AREA_EN": "Marsa Dubai",
+        "AREA_ID": 330,  # DLD's district id, the crosswalk's district evidence
         "IS_OFFPLAN_EN": "Ready",
     }
 
