@@ -6,7 +6,14 @@ from pydantic_ai.messages import ModelMessage, ModelRequest, ModelResponse, Text
 
 from app.chat.artifacts import _artifact_history_context
 from app.chat.models import Message
-from app.chat.tools import get_market_pulse, get_similar_projects, rank_areas
+from app.chat.tools import (
+    get_listing_inventory,
+    get_market_pulse,
+    get_project_delivery_summary,
+    get_similar_projects,
+    query_market_metrics,
+    rank_areas,
+)
 from app.core.openrouter import create_openrouter_model
 
 logger = logging.getLogger(__name__)
@@ -29,6 +36,13 @@ agent = Agent(
         "Important: You work with a set of predefined queries with specific parameters. You select the appropriate queries "
         "and provide the necessary parameters (such as date ranges, location filters, price ranges, etc.) based on the user's question. "
         "You cannot construct arbitrary SQL queries, but you have access to a comprehensive set of query templates designed to answer real estate questions.\n\n"
+        "## Data Grounding\n\n"
+        "Market numbers must come from your tools, which read our stored database. Never substitute figures from websites, news or your own memory, "
+        "and never estimate a value a tool did not return. If a tool reports coverage as unavailable, a null value, or no matching records, "
+        "say that our stored data does not contain it for that scope. Our numbers may differ from public websites; explain what our data shows.\n\n"
+        "State the resolved period (calendar dates in Dubai time), the eligible record count, the metric definition (for example mean versus median, "
+        "AED per sqm versus per sqft, annual rent versus whole-term contract amount, asking versus achieved price) and any partial coverage or limitation "
+        'the tool reports. "Last month" means the previous complete calendar month, not the last 30 days.\n\n'
         "## Core Principles\n\n"
         "**Scope Restriction**: You are specifically designed to answer questions about the Dubai real estate market. "
         "If a user asks about topics outside of this market (questions about other markets, general non-real-estate topics, or unrelated subjects), "
@@ -68,6 +82,9 @@ agent = Agent(
 agent.tool(get_market_pulse)
 agent.tool(rank_areas)
 agent.tool(get_similar_projects)
+agent.tool(query_market_metrics)
+agent.tool(get_listing_inventory)
+agent.tool(get_project_delivery_summary)
 
 
 def _convert_to_pydantic_messages(messages: List[Message]) -> List[ModelMessage]:

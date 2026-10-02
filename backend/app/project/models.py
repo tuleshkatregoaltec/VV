@@ -1,5 +1,5 @@
 from datetime import date
-from typing import List, Optional
+from typing import Dict, List, Literal, Optional
 
 from pydantic import BaseModel
 
@@ -303,3 +303,32 @@ class ProjectRadarOverviewResponse(BaseModel):
     stats: ProjectRadarStats
     areas: List[ProjectRadarArea]
     source_notes: List[str]
+
+
+DeliveryStatus = Literal[
+    "missing_date", "overdue", "scheduled_in_horizon", "scheduled_later", "completed", "cancelled"
+]
+
+
+class DeliveryGroupRow(BaseModel):
+    group: str
+    project_count: int
+    units: int
+    projects_without_units: int
+    share_of_units: Optional[float] = None
+
+
+class DeliverySummaryResponse(BaseModel):
+    location: Optional[str]
+    project_statuses: List[str]
+    delivery_statuses: List[str]
+    group_by: str
+    reference_date: date
+    horizon_end: date
+    definitions: Dict[str, str]
+    by_delivery_status: List[DeliveryGroupRow]
+    rows: List[DeliveryGroupRow]
+    matched_terms: Dict[str, List[str]]
+    source: str
+    source_snapshot_at: Optional[str] = None
+    limitations: List[str] = []

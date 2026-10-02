@@ -48,3 +48,21 @@ def project_filter_clause(filter_type: ProjectScopeType) -> str:
     if filter_type == "virtual_master":
         return "project_name_en LIKE {project_name:String}"
     return "project_name_en = {project_name:String}"
+
+
+# Community predicate over DLD-shaped rows (area_name_en, master_project_en). A known master
+# project wins; an official DLD area that also holds other communities matches only rows
+# without a master project. Terms come from market.reference.community_location.
+LOCATION_PREDICATE = (
+    "(lowerUTF8(master_project_en) IN {loc_masters:Array(String)}"
+    " OR lowerUTF8(area_name_en) IN {loc_areas:Array(String)}"
+    " OR (master_project_en = '' AND lowerUTF8(area_name_en) IN {loc_official:Array(String)}))"
+)
+
+
+def location_parameters(location) -> dict[str, list[str]]:
+    return {
+        "loc_masters": list(location.master_projects),
+        "loc_areas": list(location.areas),
+        "loc_official": list(location.official_areas),
+    }

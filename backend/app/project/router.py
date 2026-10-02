@@ -1,5 +1,6 @@
+from datetime import date
 from enum import IntEnum
-from typing import List, Optional
+from typing import List, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
@@ -7,8 +8,11 @@ from app.core.decorators import cached_endpoint
 from app.core.dependencies import AuthContext, require_active_subscription
 from app.plots.models import DDAOutlineFeature, DDAPlotFeature
 from app.plots.service import get_dda_outlines_for_bounds, get_dda_plots_for_area
+from app.project.delivery import ALL_DELIVERY_STATUSES, get_delivery_summary
 from app.project.models import (
     BuildingDetailResponse,
+    DeliveryStatus,
+    DeliverySummaryResponse,
     MasterProjectResponse,
     ProjectDetailResponse,
     ProjectRadarOverviewResponse,
@@ -40,6 +44,32 @@ class RadarPeriodDays(IntEnum):
     DAYS_90 = 90
     DAYS_180 = 180
     DAYS_365 = 365
+
+
+@router.get("/delivery-summary", response_model=DeliverySummaryResponse)
+async def project_delivery_summary(
+    context: AuthContext = Depends(require_active_subscription),
+    location: Optional[str] = Query(default=None, max_length=120),
+    project_status: List[str] = Query(default=["ACTIVE"]),
+    delivery_status: List[DeliveryStatus] = Query(default=list(ALL_DELIVERY_STATUSES)),
+    group_by: Literal["developer", "delivery_status", "delivery_year", "project"] = "developer",
+    horizon_months: int = Query(default=24, ge=1, le=240),
+    reference_date: Optional[date] = None,
+    limit: int = Query(default=20, ge=1, le=200),
+):
+    """DLD-registered projects by delivery status, developer, year or project."""
+    try:
+        return await get_delivery_summary(
+            location=location,
+            project_statuses=tuple(project_status),
+            delivery_statuses=tuple(delivery_status),
+            group_by=group_by,
+            horizon_months=horizon_months,
+            reference_date=reference_date,
+            limit=limit,
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
 
 
 @router.get("/list", response_model=List[ProjectSearchResult])
