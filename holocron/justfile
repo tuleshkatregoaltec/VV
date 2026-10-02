@@ -37,6 +37,16 @@ dataset-version target +args='':
       *) echo "Unknown dataset-version target: {{target}}. Use prod, raw-test, or host." >&2; exit 2 ;; \
     esac
 
+# Local Dagster on this host against .env.local (`just env local`), UI on 127.0.0.1 only.
+# Schedules keep their code default (STOPPED); nothing runs until started in the UI.
+dagster-local port="3000":
+    mkdir -p var/dagster-home && cp dagster.yaml var/dagster-home/dagster.yaml
+    set -a && . ./.env.local && set +a && DAGSTER_HOME="$PWD/var/dagster-home" uv run dagster dev -h 127.0.0.1 -p {{port}} -m holocron.definitions
+
+# Read-only live data census -> ../docs/data-pipelines/DATA_SOURCE_HEALTH.{json,md}
+census +args='':
+    uv run python -m holocron.platform.census {{args}}
+
 env target="prod" +args='':
     @case "{{target}}" in \
       prod) bash scripts/pull-bitwarden-env.sh {{args}} ;; \
