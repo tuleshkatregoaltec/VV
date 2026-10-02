@@ -1,4 +1,5 @@
 import json
+import os
 import shutil
 import subprocess
 from dataclasses import asdict
@@ -91,6 +92,9 @@ def _base_assumptions() -> dict:
 
 def _frontend_compute_workbook(tmp_path: Path, assumptions: dict) -> dict:
     if shutil.which("bun") is None:
+        # CI must prove parity; a missing runtime there is a setup failure, not a skip.
+        if os.environ.get("CI"):
+            pytest.fail("bun is required for frontend/backend engine parity tests in CI")
         pytest.skip("bun is required for frontend/backend engine parity tests")
 
     script_path = tmp_path / "compute_frontend_engine.ts"
