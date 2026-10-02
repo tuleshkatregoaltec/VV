@@ -1,4 +1,365 @@
 {
+  "bind_market_scope": {
+    "description": "Before retrieval, bind ALL explicit user constraints once. Declare separate cohorts for requested comparisons, retaining paired location/bedroom/price/period constraints. Price flags must state strict or inclusive boundaries. Do not infer scope from tool output or invent missing parameters. Later calls inherit omitted fields and reject conflicts; scope is immutable for this turn.",
+    "schema": {
+      "$defs": {
+        "MarketCohort": {
+          "additionalProperties": false,
+          "properties": {
+            "bedrooms": {
+              "anyOf": [
+                {
+                  "items": {
+                    "enum": [
+                      "studio",
+                      "1",
+                      "2",
+                      "3",
+                      "4",
+                      "5",
+                      "6",
+                      "7"
+                    ],
+                    "type": "string"
+                  },
+                  "maxItems": 8,
+                  "minItems": 1,
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Bedrooms"
+            },
+            "building": {
+              "anyOf": [
+                {
+                  "maxLength": 160,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Building"
+            },
+            "evidence_kind": {
+              "enum": [
+                "listings",
+                "sales",
+                "rentals",
+                "delivery",
+                "report"
+              ],
+              "title": "Evidence Kind",
+              "type": "string"
+            },
+            "id": {
+              "maxLength": 40,
+              "minLength": 1,
+              "pattern": "^[a-zA-Z0-9_-]+$",
+              "title": "Id",
+              "type": "string"
+            },
+            "location": {
+              "anyOf": [
+                {
+                  "maxLength": 120,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Location"
+            },
+            "mode": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "sale",
+                    "rent"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Mode"
+            },
+            "period": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/MarketPeriodRequest"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Explicit requested transaction/comparable-rent period. A listing inventory snapshot has no historical period. Omit when the user did not specify one."
+            },
+            "price_max": {
+              "anyOf": [
+                {
+                  "exclusiveMinimum": 0,
+                  "maximum": 1000000000,
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Price Max"
+            },
+            "price_max_inclusive": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Required with price_max: false for below, true for at most.",
+              "title": "Price Max Inclusive"
+            },
+            "price_min": {
+              "anyOf": [
+                {
+                  "maximum": 1000000000,
+                  "minimum": 0,
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Price Min"
+            },
+            "price_min_inclusive": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Required with price_min: false for above, true for at least.",
+              "title": "Price Min Inclusive"
+            },
+            "project": {
+              "anyOf": [
+                {
+                  "maxLength": 160,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Project"
+            },
+            "projects": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "maxItems": 3,
+                  "minItems": 2,
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Exact supplied project names for an off-plan comparison report.",
+              "title": "Projects"
+            },
+            "property_type": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "apartment",
+                    "hotel_apartment",
+                    "villa",
+                    "townhouse",
+                    "office",
+                    "shop",
+                    "land"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Property Type"
+            }
+          },
+          "required": [
+            "id",
+            "evidence_kind"
+          ],
+          "title": "MarketCohort",
+          "type": "object"
+        },
+        "MarketPeriodRequest": {
+          "additionalProperties": false,
+          "description": "A calendar period, resolved in the Asia/Dubai business timezone.\n\nprevious_month: the calendar month before the reference date's month (\"last month\").\nprevious_quarter: the calendar quarter before (\"last quarter\").\nprevious_months: `months` complete calendar months ending with the previous month.\nmonth / quarter: explicit \"YYYY-MM\" / \"YYYY-Qn\".\nrolling_days: `days` calendar days ending on the reference date (\"last 90 days\").\nrange: explicit inclusive start/end. Required parameters: previous_months needs months; rolling_days needs days; month needs month; quarter needs quarter; range needs start and end. Never guess a missing value or substitute a different period after validation failure.",
+          "properties": {
+            "days": {
+              "anyOf": [
+                {
+                  "maximum": 3660,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Required for rolling_days: requested number of calendar days (1\u20133660).",
+              "title": "Days"
+            },
+            "end": {
+              "anyOf": [
+                {
+                  "format": "date",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Required for range, inclusive end date; must not precede start.",
+              "title": "End"
+            },
+            "month": {
+              "anyOf": [
+                {
+                  "pattern": "^\\d{4}-\\d{2}$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Month"
+            },
+            "months": {
+              "anyOf": [
+                {
+                  "maximum": 120,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Required for previous_months: requested number of complete calendar months (1\u2013120).",
+              "title": "Months"
+            },
+            "quarter": {
+              "anyOf": [
+                {
+                  "pattern": "^\\d{4}-[Qq][1-4]$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Quarter"
+            },
+            "start": {
+              "anyOf": [
+                {
+                  "format": "date",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Required for range, inclusive start date; must not exceed end.",
+              "title": "Start"
+            },
+            "type": {
+              "enum": [
+                "previous_month",
+                "previous_quarter",
+                "previous_months",
+                "month",
+                "quarter",
+                "rolling_days",
+                "range"
+              ],
+              "title": "Type",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "title": "MarketPeriodRequest",
+          "type": "object"
+        }
+      },
+      "additionalProperties": false,
+      "properties": {
+        "request": {
+          "additionalProperties": false,
+          "properties": {
+            "cohorts": {
+              "description": "All explicitly requested cohorts, bound once before retrieval. Keep paired locations, bedroom counts and budgets together. Separate listing bedroom comparisons into individual cohorts. Do not invent missing constraints.",
+              "items": {
+                "$ref": "#/$defs/MarketCohort"
+              },
+              "maxItems": 8,
+              "minItems": 1,
+              "title": "Cohorts",
+              "type": "array"
+            }
+          },
+          "required": [
+            "cohorts"
+          ],
+          "title": "BindMarketScopeRequest",
+          "type": "object"
+        }
+      },
+      "required": [
+        "request"
+      ],
+      "type": "object"
+    }
+  },
   "compare_listing_age": {
     "description": "Sale listings older than a threshold at capture, with unknown ages separately. Compare exact building, bedrooms, property type and 100-sqft size-band newer peers. Posting, first-observation and capture dates are distinct.",
     "schema": {
@@ -80,7 +441,7 @@
                 {
                   "exclusiveMinimum": 0,
                   "maximum": 1000000000,
-                  "type": "integer"
+                  "type": "number"
                 },
                 {
                   "type": "null"
@@ -88,6 +449,30 @@
               ],
               "default": null,
               "title": "Price Max"
+            },
+            "price_max_inclusive": {
+              "default": true,
+              "title": "Price Max Inclusive",
+              "type": "boolean"
+            },
+            "price_min": {
+              "anyOf": [
+                {
+                  "maximum": 1000000000,
+                  "minimum": 0,
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Price Min"
+            },
+            "price_min_inclusive": {
+              "default": true,
+              "title": "Price Min Inclusive",
+              "type": "boolean"
             },
             "property_type": {
               "default": "Apartment",
@@ -104,6 +489,11 @@
           },
           "title": "ListingAgeRequest",
           "type": "object"
+        },
+        "scope_id": {
+          "description": "Id from bind_market_scope. May be omitted only when exactly one cohort matches this capability's evidence_kind. Omitted scoped request fields are inherited; conflicting values are rejected.",
+          "maxLength": 40,
+          "type": "string"
         }
       },
       "required": [
@@ -113,12 +503,12 @@
     }
   },
   "compare_listing_rents": {
-    "description": "Bounded sale listings with comparable registered annual-rent evidence, samples and supported gross-yield IQR. Requires known bedrooms; no silent building fallback. Estimates are withheld without a pinned shared release, complete coverage and at least five contracts.",
+    "description": "Bounded sale listings with comparable registered annual-rent evidence, samples and supported gross-yield IQR. Reuse the listing scope_id: asking-price bounds remain sale-listing filters, not rental-contract amounts. An omitted rent-evidence period defaults to rolling_days with days=90; previous_months REQUIRES months. Requires known bedrooms; no silent building fallback. Estimates are withheld without a pinned shared release, complete coverage and at least five contracts.",
     "schema": {
       "$defs": {
         "MarketPeriodRequest": {
           "additionalProperties": false,
-          "description": "A calendar period, resolved in the Asia/Dubai business timezone.\n\nprevious_month: the calendar month before the reference date's month (\"last month\").\nprevious_quarter: the calendar quarter before (\"last quarter\").\nprevious_months: `months` complete calendar months ending with the previous month.\nmonth / quarter: explicit \"YYYY-MM\" / \"YYYY-Qn\".\nrolling_days: `days` calendar days ending on the reference date (\"last 90 days\").\nrange: explicit inclusive start/end.",
+          "description": "A calendar period, resolved in the Asia/Dubai business timezone.\n\nprevious_month: the calendar month before the reference date's month (\"last month\").\nprevious_quarter: the calendar quarter before (\"last quarter\").\nprevious_months: `months` complete calendar months ending with the previous month.\nmonth / quarter: explicit \"YYYY-MM\" / \"YYYY-Qn\".\nrolling_days: `days` calendar days ending on the reference date (\"last 90 days\").\nrange: explicit inclusive start/end. Required parameters: previous_months needs months; rolling_days needs days; month needs month; quarter needs quarter; range needs start and end. Never guess a missing value or substitute a different period after validation failure.",
           "properties": {
             "days": {
               "anyOf": [
@@ -132,6 +522,7 @@
                 }
               ],
               "default": null,
+              "description": "Required for rolling_days: requested number of calendar days (1\u20133660).",
               "title": "Days"
             },
             "end": {
@@ -145,6 +536,7 @@
                 }
               ],
               "default": null,
+              "description": "Required for range, inclusive end date; must not precede start.",
               "title": "End"
             },
             "month": {
@@ -172,6 +564,7 @@
                 }
               ],
               "default": null,
+              "description": "Required for previous_months: requested number of complete calendar months (1\u2013120).",
               "title": "Months"
             },
             "quarter": {
@@ -198,6 +591,7 @@
                 }
               ],
               "default": null,
+              "description": "Required for range, inclusive start date; must not exceed end.",
               "title": "Start"
             },
             "type": {
@@ -280,7 +674,7 @@
                 {
                   "exclusiveMinimum": 0,
                   "maximum": 1000000000,
-                  "type": "integer"
+                  "type": "number"
                 },
                 {
                   "type": "null"
@@ -288,6 +682,30 @@
               ],
               "default": null,
               "title": "Price Max"
+            },
+            "price_max_inclusive": {
+              "default": true,
+              "title": "Price Max Inclusive",
+              "type": "boolean"
+            },
+            "price_min": {
+              "anyOf": [
+                {
+                  "maximum": 1000000000,
+                  "minimum": 0,
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Price Min"
+            },
+            "price_min_inclusive": {
+              "default": true,
+              "title": "Price Min Inclusive",
+              "type": "boolean"
             },
             "property_type": {
               "default": "Apartment",
@@ -301,12 +719,14 @@
               "type": "string"
             }
           },
-          "required": [
-            "location",
-            "bedrooms"
-          ],
+          "required": [],
           "title": "ListingRentRequest",
           "type": "object"
+        },
+        "scope_id": {
+          "description": "Id from bind_market_scope. May be omitted only when exactly one cohort matches this capability's evidence_kind. Omitted scoped request fields are inherited; conflicting values are rejected.",
+          "maxLength": 40,
+          "type": "string"
         }
       },
       "required": [
@@ -321,7 +741,7 @@
       "$defs": {
         "MarketPeriodRequest": {
           "additionalProperties": false,
-          "description": "A calendar period, resolved in the Asia/Dubai business timezone.\n\nprevious_month: the calendar month before the reference date's month (\"last month\").\nprevious_quarter: the calendar quarter before (\"last quarter\").\nprevious_months: `months` complete calendar months ending with the previous month.\nmonth / quarter: explicit \"YYYY-MM\" / \"YYYY-Qn\".\nrolling_days: `days` calendar days ending on the reference date (\"last 90 days\").\nrange: explicit inclusive start/end.",
+          "description": "A calendar period, resolved in the Asia/Dubai business timezone.\n\nprevious_month: the calendar month before the reference date's month (\"last month\").\nprevious_quarter: the calendar quarter before (\"last quarter\").\nprevious_months: `months` complete calendar months ending with the previous month.\nmonth / quarter: explicit \"YYYY-MM\" / \"YYYY-Qn\".\nrolling_days: `days` calendar days ending on the reference date (\"last 90 days\").\nrange: explicit inclusive start/end. Required parameters: previous_months needs months; rolling_days needs days; month needs month; quarter needs quarter; range needs start and end. Never guess a missing value or substitute a different period after validation failure.",
           "properties": {
             "days": {
               "anyOf": [
@@ -335,6 +755,7 @@
                 }
               ],
               "default": null,
+              "description": "Required for rolling_days: requested number of calendar days (1\u20133660).",
               "title": "Days"
             },
             "end": {
@@ -348,6 +769,7 @@
                 }
               ],
               "default": null,
+              "description": "Required for range, inclusive end date; must not precede start.",
               "title": "End"
             },
             "month": {
@@ -375,6 +797,7 @@
                 }
               ],
               "default": null,
+              "description": "Required for previous_months: requested number of complete calendar months (1\u2013120).",
               "title": "Months"
             },
             "quarter": {
@@ -401,6 +824,7 @@
                 }
               ],
               "default": null,
+              "description": "Required for range, inclusive start date; must not exceed end.",
               "title": "Start"
             },
             "type": {
@@ -518,6 +942,11 @@
           ],
           "title": "ReportRequest",
           "type": "object"
+        },
+        "scope_id": {
+          "description": "Id from bind_market_scope. May be omitted only when exactly one cohort matches this capability's evidence_kind. Omitted scoped request fields are inherited; conflicting values are rejected.",
+          "maxLength": 40,
+          "type": "string"
         }
       },
       "required": [
@@ -603,7 +1032,7 @@
                 {
                   "exclusiveMinimum": 0,
                   "maximum": 1000000000,
-                  "type": "integer"
+                  "type": "number"
                 },
                 {
                   "type": "null"
@@ -611,6 +1040,30 @@
               ],
               "default": null,
               "title": "Price Max"
+            },
+            "price_max_inclusive": {
+              "default": true,
+              "title": "Price Max Inclusive",
+              "type": "boolean"
+            },
+            "price_min": {
+              "anyOf": [
+                {
+                  "maximum": 1000000000,
+                  "minimum": 0,
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Price Min"
+            },
+            "price_min_inclusive": {
+              "default": true,
+              "title": "Price Min Inclusive",
+              "type": "boolean"
             },
             "property_type": {
               "default": "Apartment",
@@ -627,6 +1080,11 @@
           },
           "title": "ListingEvidenceRequest",
           "type": "object"
+        },
+        "scope_id": {
+          "description": "Id from bind_market_scope. May be omitted only when exactly one cohort matches this capability's evidence_kind. Omitted scoped request fields are inherited; conflicting values are rejected.",
+          "maxLength": 40,
+          "type": "string"
         }
       },
       "required": [
@@ -715,6 +1173,11 @@
           },
           "title": "DeliveryRequest",
           "type": "object"
+        },
+        "scope_id": {
+          "description": "Id from bind_market_scope. May be omitted only when exactly one cohort matches this capability's evidence_kind. Omitted scoped request fields are inherited; conflicting values are rejected.",
+          "maxLength": 40,
+          "type": "string"
         }
       },
       "required": [
@@ -729,7 +1192,7 @@
       "$defs": {
         "MarketPeriodRequest": {
           "additionalProperties": false,
-          "description": "A calendar period, resolved in the Asia/Dubai business timezone.\n\nprevious_month: the calendar month before the reference date's month (\"last month\").\nprevious_quarter: the calendar quarter before (\"last quarter\").\nprevious_months: `months` complete calendar months ending with the previous month.\nmonth / quarter: explicit \"YYYY-MM\" / \"YYYY-Qn\".\nrolling_days: `days` calendar days ending on the reference date (\"last 90 days\").\nrange: explicit inclusive start/end.",
+          "description": "A calendar period, resolved in the Asia/Dubai business timezone.\n\nprevious_month: the calendar month before the reference date's month (\"last month\").\nprevious_quarter: the calendar quarter before (\"last quarter\").\nprevious_months: `months` complete calendar months ending with the previous month.\nmonth / quarter: explicit \"YYYY-MM\" / \"YYYY-Qn\".\nrolling_days: `days` calendar days ending on the reference date (\"last 90 days\").\nrange: explicit inclusive start/end. Required parameters: previous_months needs months; rolling_days needs days; month needs month; quarter needs quarter; range needs start and end. Never guess a missing value or substitute a different period after validation failure.",
           "properties": {
             "days": {
               "anyOf": [
@@ -743,6 +1206,7 @@
                 }
               ],
               "default": null,
+              "description": "Required for rolling_days: requested number of calendar days (1\u20133660).",
               "title": "Days"
             },
             "end": {
@@ -756,6 +1220,7 @@
                 }
               ],
               "default": null,
+              "description": "Required for range, inclusive end date; must not precede start.",
               "title": "End"
             },
             "month": {
@@ -783,6 +1248,7 @@
                 }
               ],
               "default": null,
+              "description": "Required for previous_months: requested number of complete calendar months (1\u2013120).",
               "title": "Months"
             },
             "quarter": {
@@ -809,6 +1275,7 @@
                 }
               ],
               "default": null,
+              "description": "Required for range, inclusive start date; must not exceed end.",
               "title": "Start"
             },
             "type": {
@@ -977,8 +1444,13 @@
                 }
               ],
               "default": null,
-              "description": "Sale price or annual rent, exclusive",
+              "description": "Sale price or annual rent upper bound",
               "title": "Max Value Aed"
+            },
+            "max_value_inclusive": {
+              "default": false,
+              "title": "Max Value Inclusive",
+              "type": "boolean"
             },
             "metrics": {
               "items": {
@@ -1037,11 +1509,34 @@
                 }
               ],
               "default": null,
-              "description": "Sale price or annual rent, inclusive",
+              "description": "Sale price or annual rent lower bound",
               "title": "Min Value Aed"
+            },
+            "min_value_inclusive": {
+              "default": true,
+              "title": "Min Value Inclusive",
+              "type": "boolean"
             },
             "period": {
               "$ref": "#/$defs/MarketPeriodRequest"
+            },
+            "price_band_upper_inclusive": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "boolean"
+                  },
+                  "maxItems": 12,
+                  "minItems": 1,
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "One flag per price_bands boundary: true puts equality in the lower band; false puts it in the upper band. Omitted means all false.",
+              "title": "Price Band Upper Inclusive"
             },
             "price_bands": {
               "anyOf": [
@@ -1058,7 +1553,7 @@
                 }
               ],
               "default": null,
-              "description": "Ascending AED boundaries for group_by=price_band: [b0,b1) ... [bn,inf)",
+              "description": "Ascending AED cutoffs for price_band; default upper bounds are exclusive.",
               "title": "Price Bands"
             },
             "project": {
@@ -1149,12 +1644,14 @@
               "title": "Usage"
             }
           },
-          "required": [
-            "dataset",
-            "period"
-          ],
+          "required": [],
           "title": "MarketMetricsRequest",
           "type": "object"
+        },
+        "scope_id": {
+          "description": "Id from bind_market_scope. May be omitted only when exactly one cohort matches this capability's evidence_kind. Omitted scoped request fields are inherited; conflicting values are rejected.",
+          "maxLength": 40,
+          "type": "string"
         }
       },
       "required": [

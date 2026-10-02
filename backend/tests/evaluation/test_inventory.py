@@ -6,6 +6,7 @@ def test_mcp_registration_has_bounded_public_capabilities_and_no_static_graph_cl
 
     definitions = mcp.tool_definitions()
     assert {tool.name for tool in definitions} == {
+        "bind_market_scope",
         "query_market_metrics",
         "get_listing_inventory",
         "get_project_delivery_summary",

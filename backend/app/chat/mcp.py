@@ -28,6 +28,7 @@ from starlette.responses import JSONResponse
 
 from app.analytics.evidence import get_market_evidence, get_market_observation
 from app.analytics.models import MarketMetricsRequest
+from app.chat.scope import BindMarketScopeRequest, ScopeError, TurnScope, validate_period
 from app.listings.capabilities import (
     compare_listing_age,
     compare_listing_rents,
@@ -41,7 +42,6 @@ from app.listings.capability_models import (
 )
 from app.market import evidence as market_evidence
 from app.market.evidence import COVERAGE_NOTE, RELEASE_NOTE, MarketAccessContext
-from app.market.periods import resolve_period
 from app.market.reports import ReportRequest, compose_market_report, required_bindings
 from app.project.delivery import get_delivery_summary
 from app.project.evidence import get_project_observation
@@ -71,6 +71,7 @@ class DeliveryRequest(BaseModel):
 
 
 TOOL_MODELS = {
+    "bind_market_scope": BindMarketScopeRequest,
     "query_market_metrics": MarketMetricsRequest,
     "get_listing_inventory": ListingEvidenceRequest,
     "get_project_delivery_summary": DeliveryRequest,
@@ -79,11 +80,12 @@ TOOL_MODELS = {
     "compose_market_report": ReportRequest,
 }
 DESCRIPTIONS = {
+    "bind_market_scope": "Before retrieval, bind ALL explicit user constraints once. Declare separate cohorts for requested comparisons, retaining paired location/bedroom/price/period constraints. Price flags must state strict or inclusive boundaries. Do not infer scope from tool output or invent missing parameters. Later calls inherit omitted fields and reject conflicts; scope is immutable for this turn.",
     "query_market_metrics": "Shared canonical sales or annual registered-rent metrics. Average=mean_aed; mean, median, total and per-area are distinct. Last month/quarter use previous_month/previous_quarter; last six complete months use previous_months with months=6. Evidence retains units, counts, sources and explicit coverage. Never replace unavailable values.",
     "get_listing_inventory": "Use for current listing counts and median ASKING prices by bedroom, including studio/1/2 comparisons. Current Property Finder inventory; rent is annualized. Snapshot asking prices are not achieved sales. Exact building filters return bounded contact-free listing evidence. Bayut/Reelly are unavailable.",
     "get_project_delivery_summary": "DLD project/unit counts by developer/status/year/project; distinguishes missing/overdue/scheduled delivery. Defaults to ACTIVE and scheduled_in_horizon for the next 24 months. Select missing_date/overdue/scheduled_later explicitly for audits; by_delivery_status also describes all categories. Scheduled dates are not delivery guarantees.",
     "compare_listing_age": "Sale listings older than a threshold at capture, with unknown ages separately. Compare exact building, bedrooms, property type and 100-sqft size-band newer peers. Posting, first-observation and capture dates are distinct.",
-    "compare_listing_rents": "Bounded sale listings with comparable registered annual-rent evidence, samples and supported gross-yield IQR. Requires known bedrooms; no silent building fallback. Estimates are withheld without a pinned shared release, complete coverage and at least five contracts.",
+    "compare_listing_rents": "Bounded sale listings with comparable registered annual-rent evidence, samples and supported gross-yield IQR. Reuse the listing scope_id: asking-price bounds remain sale-listing filters, not rental-contract amounts. An omitted rent-evidence period defaults to rolling_days with days=90; previous_months REQUIRES months. Requires known bedrooms; no silent building fallback. Estimates are withheld without a pinned shared release, complete coverage and at least five contracts.",
     "compose_market_report": "Compose rental_appraisal, seller_competition, monthly_area or off_plan_comparison from domain evidence. Supply explicit building/project bindings; placeholders require clarification. Missing sources/coverage and unpinned composites remain unavailable.",
 }
 
@@ -107,6 +109,11 @@ def tool_definitions() -> list[types.Tool]:
         request = _strict_schema(model.model_json_schema())
         if name == "query_market_metrics":
             request["properties"].pop("reference_date", None)
+        if name != "bind_market_scope" and "required" in request:
+            # These fields may come from a frozen cohort. The merged request still
+            # passes the unchanged domain model and period validation before reads.
+            inherited = {"dataset", "location", "bedrooms", "period"}
+            request["required"] = [field for field in request["required"] if field not in inherited]
         definitions = request.pop("$defs", {})
         schema = {
             "type": "object",
@@ -114,7 +121,27 @@ def tool_definitions() -> list[types.Tool]:
             "required": ["request"],
             "additionalProperties": False,
         }
+        if name != "bind_market_scope":
+            schema["properties"]["scope_id"] = {
+                "type": "string",
+                "description": "Id from bind_market_scope. May be omitted only when exactly one cohort matches this capability's evidence_kind. Omitted scoped request fields are inherited; conflicting values are rejected.",
+                "maxLength": 40,
+            }
         if definitions:
+            period = definitions.get("MarketPeriodRequest")
+            if period:
+                period["description"] += (
+                    " Required parameters: previous_months needs months; rolling_days needs days; "
+                    "month needs month; quarter needs quarter; range needs start and end. "
+                    "Never guess a missing value or substitute a different period after validation failure."
+                )
+                for field, description in {
+                    "months": "Required for previous_months: requested number of complete calendar months (1–120).",
+                    "days": "Required for rolling_days: requested number of calendar days (1–3660).",
+                    "start": "Required for range, inclusive start date; must not exceed end.",
+                    "end": "Required for range, inclusive end date; must not precede start.",
+                }.items():
+                    period["properties"][field]["description"] = description
             schema["$defs"] = definitions
         tools.append(
             types.Tool(
@@ -148,7 +175,7 @@ def _bindings(request: BaseModel) -> list[str]:
     for field in ("building", "project", "location"):
         if fields.get(field) is not None and _placeholder(fields[field]):
             missing.append(field)
-    for index, name in enumerate(fields.get("projects", [])):
+    for index, name in enumerate(fields.get("projects") or []):
         if len(name) > 160 or _placeholder(name):
             missing.append(f"projects[{index}]")
     if isinstance(request, ReportRequest):
@@ -196,6 +223,7 @@ class MarketToolExecutor:
         self.result_bytes = 0
         self.observations = {}
         self.lock = asyncio.Lock()
+        self.scope = TurnScope(context.reference_date)
 
     def envelope(self, status: str, data=None, *, code=None, message=None, retryable=False):
         result = {
@@ -217,6 +245,17 @@ class MarketToolExecutor:
             result["error"] = {"code": code, "message": message, "retryable": retryable}
         return result
 
+    def bounded_result(self, result: dict) -> dict:
+        size = len(json.dumps(result, allow_nan=False).encode())
+        if size > MAX_RESULT_BYTES or self.result_bytes + size > MAX_TURN_BYTES:
+            return self.envelope(
+                "error",
+                code="evidence_budget_exceeded",
+                message="Evidence exceeds this turn's size limit; narrow the request.",
+            )
+        self.result_bytes += size
+        return result
+
     async def call(self, name: str, arguments: dict) -> dict:
         self.calls += 1
         if self.calls > MAX_TOOL_CALLS:
@@ -234,7 +273,12 @@ class MarketToolExecutor:
                             code="unauthorized",
                             message="Current account access does not authorize this operation.",
                         )
-                    if name not in TOOL_MODELS or set(arguments) != {"request"}:
+                    if (
+                        name not in TOOL_MODELS
+                        or "request" not in arguments
+                        or set(arguments) - {"request", "scope_id"}
+                        or ("scope_id" in arguments and not isinstance(arguments["scope_id"], str))
+                    ):
                         return self.envelope(
                             "error",
                             code="invalid_arguments",
@@ -254,19 +298,49 @@ class MarketToolExecutor:
                             message="Reference dates and execution identity are server-owned; use explicit period fields for historical dates.",
                         )
                     try:
+                        if name == "bind_market_scope":
+                            request = BindMarketScopeRequest.model_validate(raw, extra="forbid")
+                            for cohort in request.cohorts:
+                                if missing := _bindings(cohort):
+                                    return self.envelope(
+                                        "clarification_required", {"required_bindings": missing}
+                                    )
+                            self.scope.bind(request)
+                            return self.bounded_result(
+                                self.envelope(
+                                    "ok",
+                                    {
+                                        "cohorts": [
+                                            cohort.model_dump(mode="json", exclude_none=True)
+                                            for cohort in self.scope.cohorts
+                                        ]
+                                    },
+                                )
+                            )
+                        raw, scope = self.scope.apply(
+                            name, raw, TOOL_MODELS[name], arguments.get("scope_id")
+                        )
                         request = TOOL_MODELS[name].model_validate(raw, extra="forbid")
                         if period := getattr(request, "period", None):
-                            resolve_period(
-                                period.type,
-                                reference_date=self.context.reference_date,
-                                **period.model_dump(exclude={"type"}),
-                            )
-                    except (ValidationError, ValueError, TypeError):
-                        return self.envelope(
+                            validate_period(period, self.context.reference_date)
+                    except ScopeError as error:
+                        result = self.envelope("error", code=error.code, message=str(error))
+                        result["error"]["details"] = error.details
+                        return result
+                    except ValidationError as error:
+                        result = self.envelope(
                             "error",
                             code="invalid_arguments",
-                            message="The typed request is invalid. Check its allowed fields, period and bounds.",
+                            message="Correct the indicated fields without removing constraints. Ask for clarification when a required value is unknown.",
                         )
+                        result["error"]["details"] = [
+                            {
+                                "field": ".".join(str(part) for part in issue["loc"]),
+                                "message": issue["msg"],
+                            }
+                            for issue in error.errors(include_url=False, include_input=False)
+                        ]
+                        return result
                     if missing := _bindings(request):
                         return self.envelope(
                             "clarification_required", {"required_bindings": missing}
@@ -327,6 +401,7 @@ class MarketToolExecutor:
                     )
                     result = self.envelope(status, data)
                     result["evidence"]["sources"] = list(sources)
+                    result["evidence"]["scope"] = scope
                     result["evidence"]["coverage"] = data.get(
                         "coverage",
                         {
@@ -335,15 +410,7 @@ class MarketToolExecutor:
                         },
                     )
                     result["evidence"]["limitations"] += data.get("limitations", [])
-                    size = len(json.dumps(result, allow_nan=False).encode())
-                    if size > MAX_RESULT_BYTES or self.result_bytes + size > MAX_TURN_BYTES:
-                        return self.envelope(
-                            "error",
-                            code="evidence_budget_exceeded",
-                            message="Evidence exceeds this turn's size limit; narrow the request.",
-                        )
-                    self.result_bytes += size
-                    return result
+                    return self.bounded_result(result)
         except TimeoutError:
             return self.envelope(
                 "error",

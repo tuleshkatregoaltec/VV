@@ -93,6 +93,8 @@ export interface ListingParams {
 	bedrooms?: string
 	price_min?: number
 	price_max?: number
+	price_min_inclusive?: boolean
+	price_max_inclusive?: boolean
 }
 
 export const listings = {
@@ -108,7 +110,9 @@ export const listings = {
 				property_type: params.property_type,
 				bedrooms: params.bedrooms,
 				price_min: params.price_min,
-				price_max: params.price_max
+				price_max: params.price_max,
+				price_min_inclusive: params.price_min_inclusive,
+				price_max_inclusive: params.price_max_inclusive
 			})
 		),
 
@@ -130,7 +134,9 @@ export const listings = {
 				property_type: params.property_type,
 				bedrooms: params.bedrooms,
 				price_min: params.price_min,
-				price_max: params.price_max
+				price_max: params.price_max,
+				price_min_inclusive: params.price_min_inclusive,
+				price_max_inclusive: params.price_max_inclusive
 			})
 		),
 

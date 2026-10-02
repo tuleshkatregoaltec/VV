@@ -3964,7 +3964,7 @@
 						"schema": {
 							"anyOf": [
 								{
-									"type": "integer",
+									"type": "number",
 									"minimum": 0
 								},
 								{
@@ -3981,7 +3981,7 @@
 						"schema": {
 							"anyOf": [
 								{
-									"type": "integer",
+									"type": "number",
 									"minimum": 0
 								},
 								{
@@ -3990,6 +3990,30 @@
 							],
 							"title": "Price Max"
 						}
+					},
+					{
+						"name": "price_min_inclusive",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "boolean",
+							"description": "False for strictly above the lower price bound.",
+							"default": true,
+							"title": "Price Min Inclusive"
+						},
+						"description": "False for strictly above the lower price bound."
+					},
+					{
+						"name": "price_max_inclusive",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "boolean",
+							"description": "False for strictly below the upper price bound.",
+							"default": true,
+							"title": "Price Max Inclusive"
+						},
+						"description": "False for strictly below the upper price bound."
 					}
 				],
 				"responses": {
@@ -4186,7 +4210,7 @@
 						"schema": {
 							"anyOf": [
 								{
-									"type": "integer",
+									"type": "number",
 									"minimum": 0
 								},
 								{
@@ -4203,7 +4227,7 @@
 						"schema": {
 							"anyOf": [
 								{
-									"type": "integer",
+									"type": "number",
 									"minimum": 0
 								},
 								{
@@ -4212,6 +4236,30 @@
 							],
 							"title": "Price Max"
 						}
+					},
+					{
+						"name": "price_min_inclusive",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "boolean",
+							"description": "False for strictly above the lower price bound.",
+							"default": true,
+							"title": "Price Min Inclusive"
+						},
+						"description": "False for strictly above the lower price bound."
+					},
+					{
+						"name": "price_max_inclusive",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "boolean",
+							"description": "False for strictly below the upper price bound.",
+							"default": true,
+							"title": "Price Max Inclusive"
+						},
+						"description": "False for strictly below the upper price bound."
 					}
 				],
 				"responses": {
@@ -17100,7 +17148,7 @@
 					"price_value": {
 						"anyOf": [
 							{
-								"type": "integer"
+								"type": "number"
 							},
 							{
 								"type": "null"
@@ -17518,7 +17566,7 @@
 					"price_value": {
 						"anyOf": [
 							{
-								"type": "integer"
+								"type": "number"
 							},
 							{
 								"type": "null"
@@ -18107,7 +18155,7 @@
 					"price_min": {
 						"anyOf": [
 							{
-								"type": "integer"
+								"type": "number"
 							},
 							{
 								"type": "null"
@@ -18118,7 +18166,7 @@
 					"price_max": {
 						"anyOf": [
 							{
-								"type": "integer"
+								"type": "number"
 							},
 							{
 								"type": "null"
@@ -18810,7 +18858,7 @@
 							}
 						],
 						"title": "Min Value Aed",
-						"description": "Sale price or annual rent, inclusive"
+						"description": "Sale price or annual rent lower bound"
 					},
 					"max_value_aed": {
 						"anyOf": [
@@ -18823,7 +18871,17 @@
 							}
 						],
 						"title": "Max Value Aed",
-						"description": "Sale price or annual rent, exclusive"
+						"description": "Sale price or annual rent upper bound"
+					},
+					"min_value_inclusive": {
+						"type": "boolean",
+						"title": "Min Value Inclusive",
+						"default": true
+					},
+					"max_value_inclusive": {
+						"type": "boolean",
+						"title": "Max Value Inclusive",
+						"default": false
 					},
 					"group_by": {
 						"anyOf": [
@@ -18863,7 +18921,24 @@
 							}
 						],
 						"title": "Price Bands",
-						"description": "Ascending AED boundaries for group_by=price_band: [b0,b1) ... [bn,inf)"
+						"description": "Ascending AED cutoffs for price_band; default upper bounds are exclusive."
+					},
+					"price_band_upper_inclusive": {
+						"anyOf": [
+							{
+								"items": {
+									"type": "boolean"
+								},
+								"type": "array",
+								"maxItems": 12,
+								"minItems": 1
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Price Band Upper Inclusive",
+						"description": "One flag per price_bands boundary: true puts equality in the lower band; false puts it in the upper band. Omitted means all false."
 					},
 					"sort_by": {
 						"type": "string",

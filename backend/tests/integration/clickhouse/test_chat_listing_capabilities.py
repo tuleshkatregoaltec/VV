@@ -217,6 +217,40 @@ async def test_registered_rent_gross_yield_requires_authoritative_shared_release
     assert any("1 of 6" in note for note in rents["limitations"])
 
 
+async def test_pinned_release_without_period_coverage_or_five_comparables_withholds_yield(
+    inventory,
+):
+    request = ListingRentRequest(
+        location="JVC",
+        bedrooms="1",
+        price_max=1_200_000,
+        price_max_inclusive=False,
+        period={"type": "previous_month"},
+    )
+    no_coverage = evidence.MarketRelease(
+        "disposable-fixture-unverified", frozenset({"listings", "rentals"}), ()
+    )
+    with evidence.use_market_release(no_coverage):
+        result = await compare_listing_rents(request, context=CONTEXT)
+    assert result["status"] == "unavailable"
+    assert result["registered_rents"]["Fixture Tower"]["total"]["count"] == 5
+    assert result["registered_rents"]["Fixture Tower"]["coverage"]["status"] == "unverified"
+    assert all(row["gross_yield_pct"] is None for row in result["listings"])
+    sparse = request.model_copy(
+        update={
+            "period": request.period.model_validate(
+                {"type": "range", "start": "2026-09-01", "end": "2026-09-29"}
+            )
+        }
+    )
+    with evidence.use_market_release(fixture_release()):
+        result = await compare_listing_rents(sparse, context=CONTEXT)
+    assert result["status"] == "unavailable"
+    assert result["registered_rents"]["Fixture Tower"]["total"]["count"] == 4
+    assert result["registered_rents"]["Fixture Tower"]["coverage"]["status"] == "complete"
+    assert all(row["gross_yield_pct"] is None for row in result["listings"])
+
+
 async def test_real_mcp_listing_yield_over_immutable_fixture_release(inventory, monkeypatch):
     closed = []
 
@@ -229,19 +263,41 @@ async def test_real_mcp_listing_yield_over_immutable_fixture_release(inventory, 
 
     monkeypatch.setattr(evidence, "acquire_market_release", pinned)
     async with market_mcp(CONTEXT, AsyncMock(return_value=True)) as client:
-        response = await client.direct_call_tool(
-            "compare_listing_rents",
+        bound = await client.direct_call_tool(
+            "bind_market_scope",
             {
                 "request": {
-                    "location": "JVC",
-                    "bedrooms": "1",
-                    "price_max": 1_200_000,
-                    "period": {"type": "previous_month"},
+                    "cohorts": [
+                        {
+                            "id": "income",
+                            "evidence_kind": "listings",
+                            "location": "JVC",
+                            "building": "Fixture Tower",
+                            "bedrooms": ["1"],
+                            "property_type": "apartment",
+                            "mode": "sale",
+                            "price_max": 1_200_000,
+                            "price_max_inclusive": False,
+                            "period": {"type": "previous_month"},
+                        }
+                    ]
                 }
             },
         )
+        assert bound["status"] == "ok"
+        inventory_result = await client.direct_call_tool("get_listing_inventory", {"request": {}})
+        assert inventory_result["status"] == "ok"
+        bad = await client.direct_call_tool(
+            "compare_listing_rents", {"request": {"period": {"type": "previous_months"}}}
+        )
+        assert bad["error"]["details"][0]["field"] == "period.months"
+        response = await client.direct_call_tool("compare_listing_rents", {"request": {}})
     assert response["status"] == "ok"
     assert response["data"]["listings"][0]["gross_yield_pct"] == 8.0
+    constraints = response["evidence"]["scope"]["constraints"]
+    assert constraints["price_max"] == 1_200_000
+    assert constraints["price_max_inclusive"] is False
+    assert constraints["period"] == {"type": "previous_month"}
     assert response["evidence"]["release"]["id"] == "disposable-fixture-release-1"
     assert closed == ["fixture-turn"]
 
@@ -329,6 +385,23 @@ async def test_empty_listing_inventory_returns_zero_count_and_unknown_prices(
     assert inventory.snapshot_at is None
     json.dumps(inventory.model_dump(mode="json"), allow_nan=False)
     async with market_mcp(CONTEXT, AsyncMock(return_value=True)) as client:
+        await client.direct_call_tool(
+            "bind_market_scope",
+            {
+                "request": {
+                    "cohorts": [
+                        {
+                            "id": "studio",
+                            "evidence_kind": "listings",
+                            "location": "Dubai Hills Estate",
+                            "bedrooms": ["studio"],
+                            "property_type": "apartment",
+                            "mode": "sale",
+                        }
+                    ]
+                }
+            },
+        )
         result = await client.direct_call_tool(
             "get_listing_inventory",
             {

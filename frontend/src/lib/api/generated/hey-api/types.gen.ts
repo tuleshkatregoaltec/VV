@@ -5914,15 +5914,23 @@ export type MarketMetricsRequest = {
     /**
      * Min Value Aed
      *
-     * Sale price or annual rent, inclusive
+     * Sale price or annual rent lower bound
      */
     min_value_aed?: number | null;
     /**
      * Max Value Aed
      *
-     * Sale price or annual rent, exclusive
+     * Sale price or annual rent upper bound
      */
     max_value_aed?: number | null;
+    /**
+     * Min Value Inclusive
+     */
+    min_value_inclusive?: boolean;
+    /**
+     * Max Value Inclusive
+     */
+    max_value_inclusive?: boolean;
     /**
      * Group By
      */
@@ -5930,9 +5938,15 @@ export type MarketMetricsRequest = {
     /**
      * Price Bands
      *
-     * Ascending AED boundaries for group_by=price_band: [b0,b1) ... [bn,inf)
+     * Ascending AED cutoffs for price_band; default upper bounds are exclusive.
      */
     price_bands?: Array<number> | null;
+    /**
+     * Price Band Upper Inclusive
+     *
+     * One flag per price_bands boundary: true puts equality in the lower band; false puts it in the upper band. Omitted means all false.
+     */
+    price_band_upper_inclusive?: Array<boolean> | null;
     /**
      * Sort By
      */
@@ -12079,6 +12093,18 @@ export type ListingsListListingsData = {
          * Price Max
          */
         price_max?: number | null;
+        /**
+         * Price Min Inclusive
+         *
+         * False for strictly above the lower price bound.
+         */
+        price_min_inclusive?: boolean;
+        /**
+         * Price Max Inclusive
+         *
+         * False for strictly below the upper price bound.
+         */
+        price_max_inclusive?: boolean;
     };
     url: '/api/v1/listings';
 };
@@ -12171,6 +12197,18 @@ export type ListingsListingAnalyticsData = {
          * Price Max
          */
         price_max?: number | null;
+        /**
+         * Price Min Inclusive
+         *
+         * False for strictly above the lower price bound.
+         */
+        price_min_inclusive?: boolean;
+        /**
+         * Price Max Inclusive
+         *
+         * False for strictly below the upper price bound.
+         */
+        price_max_inclusive?: boolean;
     };
     url: '/api/v1/listings/analytics';
 };

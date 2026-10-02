@@ -330,6 +330,21 @@ async def test_registered_chat_agent_executes_the_tool_against_the_database(serv
 
     context = ChatToolContext("fixture-user", "fixture-org", REFERENCE, "metric-fixture")
     async with market_mcp(context, AsyncMock(return_value=True)) as tools:
+        await tools.direct_call_tool(
+            "bind_market_scope",
+            {
+                "request": {
+                    "cohorts": [
+                        {
+                            "id": "sales",
+                            "evidence_kind": "sales",
+                            "location": "JVC",
+                            "period": {"type": "previous_month"},
+                        }
+                    ]
+                }
+            },
+        )
         with agent.override(model=FunctionModel(scripted)):
             await agent.run("What was the average sale price in JVC last month?", toolsets=[tools])
 

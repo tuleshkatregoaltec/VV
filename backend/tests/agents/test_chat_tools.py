@@ -14,6 +14,7 @@ async def test_runtime_chat_exposes_only_authenticated_mcp_capabilities():
     async with market_mcp(context, AsyncMock(return_value=True)) as client:
         tools = await client.list_tools()
     assert {tool.name for tool in tools} == {
+        "bind_market_scope",
         "query_market_metrics",
         "get_listing_inventory",
         "get_project_delivery_summary",
