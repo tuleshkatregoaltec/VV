@@ -298,3 +298,23 @@ async def test_unpinned_turn_cannot_combine_successive_source_families(domain, m
     async with mcp.market_mcp(context(), AsyncMock(return_value=True)) as client:
         assert (await client.direct_call_tool("query_market_metrics", ARGS))["status"] == "ok"
         assert (await client.direct_call_tool("query_market_metrics", rentals))["status"] == "ok"
+
+
+def test_default_delivery_ranking_excludes_overdue_and_later_units():
+    # A horizon alone must never rank completed/overdue/later units as upcoming delivery.
+    request = mcp.DeliveryRequest()
+    assert request.delivery_statuses == ["scheduled_in_horizon"]
+    assert mcp.DeliveryRequest(delivery_statuses=["missing_date", "overdue"]).delivery_statuses == [
+        "missing_date",
+        "overdue",
+    ]
+
+
+async def test_unpinned_report_observations_cannot_authorize_followup_source_mixing(domain):
+    executor = mcp.MarketToolExecutor(context(), AsyncMock(return_value=True))
+    # A report's individually observed sources are not an immutable release lease.
+    executor.observations = {"sales": {"built_at": "a"}, "rentals": {"built_at": "a"}}
+    response = await executor.call("query_market_metrics", ARGS)
+    assert response["status"] == "unavailable"
+    assert response["error"]["code"] == "release_unavailable"
+    domain.assert_not_awaited()

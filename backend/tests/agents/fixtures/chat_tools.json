@@ -527,7 +527,7 @@
     }
   },
   "get_listing_inventory": {
-    "description": "Current Property Finder inventory and asking prices; rent is annualized. Snapshot asking prices are not achieved sales. Exact building filters return bounded contact-free listing evidence. Bayut/Reelly are unavailable.",
+    "description": "Use for current listing counts and median ASKING prices by bedroom, including studio/1/2 comparisons. Current Property Finder inventory; rent is annualized. Snapshot asking prices are not achieved sales. Exact building filters return bounded contact-free listing evidence. Bayut/Reelly are unavailable.",
     "schema": {
       "additionalProperties": false,
       "properties": {
@@ -636,7 +636,7 @@
     }
   },
   "get_project_delivery_summary": {
-    "description": "DLD project/unit counts by developer/status/year/project; distinguishes missing/overdue/scheduled delivery. Defaults to ACTIVE, horizon 24 months. Scheduled dates are not delivery guarantees.",
+    "description": "DLD project/unit counts by developer/status/year/project; distinguishes missing/overdue/scheduled delivery. Defaults to ACTIVE and scheduled_in_horizon for the next 24 months. Select missing_date/overdue/scheduled_later explicitly for audits; by_delivery_status also describes all categories. Scheduled dates are not delivery guarantees.",
     "schema": {
       "additionalProperties": false,
       "properties": {
@@ -656,6 +656,7 @@
                 "type": "string"
               },
               "maxItems": 6,
+              "minItems": 1,
               "title": "Delivery Statuses",
               "type": "array"
             },

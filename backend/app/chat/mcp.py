@@ -43,7 +43,7 @@ from app.market import evidence as market_evidence
 from app.market.evidence import COVERAGE_NOTE, RELEASE_NOTE, MarketAccessContext
 from app.market.periods import resolve_period
 from app.market.reports import ReportRequest, compose_market_report, required_bindings
-from app.project.delivery import ALL_DELIVERY_STATUSES, get_delivery_summary
+from app.project.delivery import get_delivery_summary
 from app.project.evidence import get_project_observation
 from app.project.models import DeliveryStatus
 
@@ -61,7 +61,7 @@ class DeliveryRequest(BaseModel):
     location: str | None = Field(default=None, max_length=120)
     group_by: Literal["developer", "delivery_status", "delivery_year", "project"] = "developer"
     delivery_statuses: list[DeliveryStatus] = Field(
-        default_factory=lambda: list(ALL_DELIVERY_STATUSES), max_length=6
+        default_factory=lambda: ["scheduled_in_horizon"], min_length=1, max_length=6
     )
     horizon_months: int = Field(default=24, ge=1, le=120)
     project_statuses: list[Literal["ACTIVE", "NOT_STARTED", "PENDING", "FINISHED"]] = Field(
@@ -80,8 +80,8 @@ TOOL_MODELS = {
 }
 DESCRIPTIONS = {
     "query_market_metrics": "Shared canonical sales or annual registered-rent metrics. Average=mean_aed; mean, median, total and per-area are distinct. Last month/quarter use previous_month/previous_quarter; last six complete months use previous_months with months=6. Evidence retains units, counts, sources and explicit coverage. Never replace unavailable values.",
-    "get_listing_inventory": "Current Property Finder inventory and asking prices; rent is annualized. Snapshot asking prices are not achieved sales. Exact building filters return bounded contact-free listing evidence. Bayut/Reelly are unavailable.",
-    "get_project_delivery_summary": "DLD project/unit counts by developer/status/year/project; distinguishes missing/overdue/scheduled delivery. Defaults to ACTIVE, horizon 24 months. Scheduled dates are not delivery guarantees.",
+    "get_listing_inventory": "Use for current listing counts and median ASKING prices by bedroom, including studio/1/2 comparisons. Current Property Finder inventory; rent is annualized. Snapshot asking prices are not achieved sales. Exact building filters return bounded contact-free listing evidence. Bayut/Reelly are unavailable.",
+    "get_project_delivery_summary": "DLD project/unit counts by developer/status/year/project; distinguishes missing/overdue/scheduled delivery. Defaults to ACTIVE and scheduled_in_horizon for the next 24 months. Select missing_date/overdue/scheduled_later explicitly for audits; by_delivery_status also describes all categories. Scheduled dates are not delivery guarantees.",
     "compare_listing_age": "Sale listings older than a threshold at capture, with unknown ages separately. Compare exact building, bedrooms, property type and 100-sqft size-band newer peers. Posting, first-observation and capture dates are distinct.",
     "compare_listing_rents": "Bounded sale listings with comparable registered annual-rent evidence, samples and supported gross-yield IQR. Requires known bedrooms; no silent building fallback. Estimates are withheld without a pinned shared release, complete coverage and at least five contracts.",
     "compose_market_report": "Compose rental_appraisal, seller_competition, monthly_area or off_plan_comparison from domain evidence. Supply explicit building/project bindings; placeholders require clarification. Missing sources/coverage and unpinned composites remain unavailable.",
@@ -275,7 +275,7 @@ class MarketToolExecutor:
                     if (
                         self.release is None
                         and self.observations
-                        and not set(sources) <= self.observations.keys()
+                        and len(set(sources) | self.observations.keys()) > 1
                     ):
                         return self.envelope(
                             "unavailable",
