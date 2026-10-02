@@ -1,4 +1,4 @@
-"""Guard clauses added after live q11/q14 failures, not a model-quality score.
+"""Guard clauses added after live filter, inventory and report failures, not a model-quality score.
 
 These contracts fail if a future edit removes the instructions required by those
 observed failures. Whether a provider obeys them requires a separate live evaluation.
@@ -47,7 +47,7 @@ async def test_provider_receives_required_composer_and_unpinned_report_rules():
     agent = Agent(FunctionModel(inspect), system_prompt=CHAT_SYSTEM_PROMPT)
     await agent.run("Create a multi-source client report")
     prompt = "\n".join(received)
-    assert CHAT_PROMPT_VERSION == "database-mcp-v2"
+    assert CHAT_PROMPT_VERSION == "database-mcp-v3"
     assert "MUST call compose_market_report" in prompt
     assert (
         "Do not bypass\nit by assembling separate metrics, inventory and delivery calls" in prompt
@@ -57,3 +57,15 @@ async def test_provider_receives_required_composer_and_unpinned_report_rules():
         "Do not present composite conclusions from unpinned sources, even with a disclaimer"
         in prompt
     )
+
+
+def test_delivery_scope_and_listing_source_are_explicit():
+    assert "delivery_statuses=['scheduled_in_horizon']" in CHAT_SYSTEM_PROMPT
+    assert "Project status ACTIVE alone does not mean scheduled" in CHAT_SYSTEM_PROMPT
+    assert "For missing/overdue date audits, explicitly select those" in CHAT_SYSTEM_PROMPT
+    assert (
+        "For current listing counts or asking prices, call get_listing_inventory directly"
+        in CHAT_SYSTEM_PROMPT
+    )
+    assert "Do not call query_market_metrics for listing inventory" in CHAT_SYSTEM_PROMPT
+    assert "or fallback for a listing-only question" in CHAT_SYSTEM_PROMPT
