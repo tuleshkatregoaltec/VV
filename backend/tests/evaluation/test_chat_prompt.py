@@ -58,7 +58,7 @@ async def test_provider_receives_required_composer_and_unpinned_report_rules():
     agent = Agent(FunctionModel(inspect), system_prompt=CHAT_SYSTEM_PROMPT)
     await agent.run("Create a multi-source client report")
     prompt = "\n".join(received)
-    assert CHAT_PROMPT_VERSION == "database-mcp-v5"
+    assert CHAT_PROMPT_VERSION == "database-mcp-v6"
     assert "MUST call compose_market_report" in prompt
     assert (
         "Do not bypass\nit by assembling separate metrics, inventory and delivery calls" in prompt
@@ -104,3 +104,15 @@ def test_inventory_zero_and_yield_unavailability_retain_the_actual_scoped_eviden
         "Claim insufficient sample size only when scoped evidence establishes" in CHAT_SYSTEM_PROMPT
     )
     assert "Five or more contracts" in CHAT_SYSTEM_PROMPT
+
+
+def test_explicit_yield_reason_codes_override_generic_sample_requirement_warnings():
+    assert (
+        "yield_unavailable_reason and unavailability_reasons codes over generic limitations"
+        in CHAT_SYSTEM_PROMPT
+    )
+    assert "A generic minimum-sample warning does not prove" in CHAT_SYSTEM_PROMPT
+    assert (
+        "insufficient_comparables and must never be restated as an observed sample failure"
+        in CHAT_SYSTEM_PROMPT
+    )
