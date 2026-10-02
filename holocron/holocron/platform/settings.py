@@ -27,6 +27,8 @@ class Settings(BaseSettings):
         default="media/news/thumbnails",
         alias="NEWS_THUMBNAIL_PREFIX",
     )
+    # Where the DXBI report scraper writes completed runs: <dir>/{rentals,sales}/run=<date>/.
+    dxbi_evidence_dir: str = Field(default="", alias="DXBI_EVIDENCE_DIR")
 
 
 settings = Settings()

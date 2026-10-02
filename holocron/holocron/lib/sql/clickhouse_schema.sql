@@ -139,65 +139,9 @@ CREATE TABLE IF NOT EXISTS dxbi_transactions_bronze (
 ) ENGINE = MergeTree()
 ORDER BY (slice_start_date, source_table, transaction_key);
 
+-- Active DXBI rental evidence (v2 schema since the activate_dxbi_rental_v2.py cutover).
+-- event_key is an alias of contract_key so the backend contract is unchanged.
 CREATE TABLE IF NOT EXISTS dxbi_rental_events (
-    event_key          String,
-    unit_candidate_key String,
-    unit_cohort_key    String,
-    location_name      String DEFAULT '',
-    building_name      String DEFAULT '',
-    project_name       String DEFAULT '',
-    area_name          LowCardinality(String) DEFAULT '',
-    property_type      LowCardinality(String) DEFAULT '',
-    bedrooms           LowCardinality(String) DEFAULT '',
-    size_sqft          Float64 DEFAULT 0,
-    contract_amount_aed UInt64 DEFAULT 0,
-    contract_term_days UInt32 DEFAULT 0,
-    contract_term_months Float32 DEFAULT 0,
-    annual_rent_aed    UInt64 DEFAULT 0,
-    rent_normalization_version UInt8 DEFAULT 1,
-    address_normalization_version UInt8 DEFAULT 3,
-    purchase_price_aed UInt64 DEFAULT 0,
-    lease_start        Date,
-    lease_end          Date,
-    contract_state     LowCardinality(String) DEFAULT '',
-    source_account     LowCardinality(String) DEFAULT '',
-    source_shard_date  Date,
-    source_file        String DEFAULT '',
-    scraped_at         DateTime64(3, 'UTC'),
-    loaded_at          DateTime64(3, 'UTC') DEFAULT now64(3)
-) ENGINE = ReplacingMergeTree(loaded_at)
-ORDER BY (lease_start, unit_candidate_key, event_key);
-
-CREATE TABLE IF NOT EXISTS dxbi_rental_unit_candidates (
-    unit_candidate_key String,
-    event_key          String,
-    unit_cohort_key    String,
-    location_name      String DEFAULT '',
-    building_name      String DEFAULT '',
-    project_name       String DEFAULT '',
-    area_name          LowCardinality(String) DEFAULT '',
-    property_type      LowCardinality(String) DEFAULT '',
-    bedrooms           LowCardinality(String) DEFAULT '',
-    size_sqft          Float64 DEFAULT 0,
-    contract_amount_aed UInt64 DEFAULT 0,
-    contract_term_days UInt32 DEFAULT 0,
-    contract_term_months Float32 DEFAULT 0,
-    annual_rent_aed    UInt64 DEFAULT 0,
-    rent_normalization_version UInt8 DEFAULT 1,
-    address_normalization_version UInt8 DEFAULT 3,
-    purchase_price_aed UInt64 DEFAULT 0,
-    lease_start        Date,
-    lease_end          Date,
-    contract_state     LowCardinality(String) DEFAULT '',
-    observed_contracts UInt32 DEFAULT 0,
-    last_scraped_at    DateTime64(3, 'UTC'),
-    loaded_at          DateTime64(3, 'UTC') DEFAULT now64(3)
-) ENGINE = ReplacingMergeTree(loaded_at)
-ORDER BY unit_candidate_key;
-
--- Shadow rental tables retain source identity and true row multiplicity. The
--- event_key alias preserves the current backend contract for the v2 cutover.
-CREATE TABLE IF NOT EXISTS dxbi_rental_events_v2 (
     contract_key       String,
     event_key          String ALIAS contract_key,
     source_contract_id String DEFAULT '',
@@ -240,7 +184,7 @@ CREATE TABLE IF NOT EXISTS dxbi_rental_events_v2 (
 ) ENGINE = ReplacingMergeTree(loaded_at)
 ORDER BY (lease_start, contract_key);
 
-CREATE TABLE IF NOT EXISTS dxbi_rental_unit_candidates_v2 (
+CREATE TABLE IF NOT EXISTS dxbi_rental_unit_candidates (
     contract_key       String,
     event_key          String ALIAS contract_key,
     unit_candidate_key String,
@@ -1499,6 +1443,78 @@ CREATE TABLE IF NOT EXISTS offplan_reelly_project_link_candidates (
 ) ENGINE = ReplacingMergeTree(materialized_at)
 ORDER BY (source_system, source_key, candidate_rank);
 
+-- Reelly serving tables read by the backend and by the view below. Their producer is not in
+-- this repository (F02); the definitions mirror the live warehouse so a fresh warehouse can
+-- apply this schema and serve the product once the producer is restored.
+CREATE TABLE IF NOT EXISTS silver_reelly_projects (
+    project_key          String,
+    project_id           String DEFAULT '',
+    project_name         String DEFAULT '',
+    developer_id         String DEFAULT '',
+    developer_name       String DEFAULT '',
+    sale_status          LowCardinality(String) DEFAULT '',
+    region               String DEFAULT '',
+    area_name            String DEFAULT '',
+    city                 String DEFAULT '',
+    units_in_sale        UInt32 DEFAULT 0,
+    last_modified_at     Nullable(DateTime),
+    created_at           Nullable(DateTime),
+    latitude             Nullable(Float64),
+    longitude            Nullable(Float64),
+    delta_reason         LowCardinality(String) DEFAULT '',
+    source_system        LowCardinality(String) DEFAULT 'reelly',
+    source_row_key       String DEFAULT '',
+    raw_manifest_s3_key  String DEFAULT '',
+    scraped_at           String DEFAULT '',
+    completion_date      String DEFAULT '',
+    completion_time      Nullable(DateTime),
+    launch_date          Nullable(DateTime),
+    min_price_aed        Nullable(Float64),
+    max_price_aed        Nullable(Float64),
+    min_area_sqm         Nullable(Float64),
+    max_area_sqm         Nullable(Float64),
+    readiness_progress   Nullable(Float64),
+    service_charge_aed   Nullable(Float64),
+    escrow_number        String DEFAULT '',
+    website_url          String DEFAULT '',
+    overview             String DEFAULT '',
+    floors               String DEFAULT '',
+    furnishing           String DEFAULT '',
+    parking              String DEFAULT '',
+    availability_percent Nullable(Float64),
+    post_handover        UInt8 DEFAULT 0,
+    video_url            String DEFAULT '',
+    video_overview_url   String DEFAULT ''
+) ENGINE = ReplacingMergeTree
+ORDER BY project_key;
+
+CREATE TABLE IF NOT EXISTS reelly_project_unit_types_bronze (
+    unit_type_key        String,
+    run_id               String,
+    scraped_at           String DEFAULT '',
+    project_key          String DEFAULT '',
+    project_id           String DEFAULT '',
+    unit_type_index      UInt32 DEFAULT 0,
+    unit_type            String DEFAULT '',
+    unit_bedrooms        String DEFAULT '',
+    name                 String DEFAULT '',
+    unit_status          LowCardinality(String) DEFAULT '',
+    price_from_aed       Nullable(Float64),
+    price_to_aed         Nullable(Float64),
+    price_from_usd       Nullable(Float64),
+    price_to_usd         Nullable(Float64),
+    area_from_sqm        Nullable(Float64),
+    area_to_sqm          Nullable(Float64),
+    area_from_sqft       Nullable(Float64),
+    area_to_sqft         Nullable(Float64),
+    units_amount         UInt32 DEFAULT 0,
+    source_system        LowCardinality(String) DEFAULT 'reelly',
+    source_file          String DEFAULT '',
+    source_row_index     UInt64 DEFAULT 0,
+    raw_manifest_s3_key  String DEFAULT ''
+) ENGINE = MergeTree
+ORDER BY (run_id, unit_type_key);
+
 CREATE OR REPLACE VIEW offplan_reelly_mapped_source_facts AS
 SELECT
     s.source_system AS source_system,
@@ -1722,3 +1738,207 @@ FROM (
 ) AS o
 LEFT JOIN geo_source_signatures AS s USING (source_system, source_key)
 WHERE s.source_key IS NULL;
+
+-- ---------------------------------------------------------------------------
+-- Canonical market layer: one row per sale / rental event, DXBI + DLD reconciled.
+-- Built by holocron.market (staging + EXCHANGE); served to the backend through
+-- ch_transactions / ch_rent_contracts (WHERE is_served = 1).
+-- match_status: matched | dld_only | dxbi_only | dxbi_probable_duplicate
+-- ---------------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS market_sale_matches (
+    dxbi_sale_key String,
+    dld_transaction_number String,
+    day_gap Int16,
+    size_gap Float64,
+    has_dld_candidate UInt8,
+    built_at DateTime64(3, UTC)
+)
+ENGINE = MergeTree()
+ORDER BY dxbi_sale_key;
+
+CREATE TABLE IF NOT EXISTS market_rental_matches (
+    dxbi_contract_key String,
+    dld_rent_key UInt64,
+    match_tier UInt8,
+    end_day_gap Int32,
+    size_gap Float64,
+    has_dld_candidate UInt8,
+    built_at DateTime64(3, UTC)
+)
+ENGINE = MergeTree()
+ORDER BY dxbi_contract_key;
+
+CREATE TABLE IF NOT EXISTS market_sale_events (
+    row_key String,
+    run_id String,
+    scraped_at String,
+    transaction_id String,
+    transaction_number String,
+    instance_date DateTime,
+    trans_group_id UInt32,
+    trans_group_en LowCardinality(String),
+    trans_group_ar String,
+    procedure_id UInt32,
+    procedure_name_en LowCardinality(String),
+    procedure_name_ar String,
+    procedure_area Float64,
+    actual_area Float64,
+    actual_worth Int64,
+    trans_value Int64,
+    total_buyer UInt32,
+    total_seller UInt32,
+    property_id UInt32,
+    property_type_id UInt32,
+    property_type_en LowCardinality(String),
+    property_type_ar String,
+    property_sub_type_id UInt32,
+    property_sub_type_en LowCardinality(String),
+    property_sub_type_ar String,
+    property_usage_id UInt32,
+    property_usage_en LowCardinality(String),
+    property_usage_ar String,
+    rooms_en LowCardinality(String),
+    rooms_ar String,
+    parking String,
+    has_parking UInt8,
+    building_age UInt32,
+    parcel_id String,
+    area_id UInt32,
+    area_name_en LowCardinality(String),
+    area_name_ar String,
+    project_name_en String,
+    project_name_ar String,
+    master_project_en String,
+    master_project_ar String,
+    is_free_hold UInt8,
+    is_free_hold_en LowCardinality(String),
+    is_free_hold_ar String,
+    is_offplan UInt8,
+    is_offplan_en LowCardinality(String),
+    is_offplan_ar String,
+    nearest_metro_en String,
+    nearest_metro_ar String,
+    nearest_mall_en String,
+    nearest_mall_ar String,
+    nearest_landmark_en String,
+    nearest_landmark_ar String,
+    project_number String,
+    building_name_en String,
+    building_name_ar String,
+    reg_type_id UInt32,
+    reg_type_en LowCardinality(String),
+    reg_type_ar String,
+    meter_sale_price Nullable(Float64),
+    rent_value Float64,
+    meter_rent_price Float64,
+    no_of_parties_role_1 UInt32,
+    no_of_parties_role_2 UInt32,
+    no_of_parties_role_3 UInt32,
+    unit_number String,
+    bedrooms LowCardinality(String),
+    market_status LowCardinality(String),
+    dxbi_sale_key String,
+    dxbi_building_name String,
+    dxbi_transaction_date Nullable(Date),
+    source_system LowCardinality(String),
+    primary_source LowCardinality(String),
+    match_status LowCardinality(String),
+    is_served UInt8,
+    built_at DateTime64(3, UTC)
+)
+ENGINE = MergeTree()
+ORDER BY (trans_group_en, instance_date, transaction_id);
+
+CREATE TABLE IF NOT EXISTS market_rental_events (
+    row_key String,
+    run_id String,
+    scraped_at String,
+    contract_id String,
+    contract_number String,
+    line_number UInt32,
+    registration_date DateTime,
+    contract_start_date DateTime,
+    contract_end_date DateTime,
+    property_id UInt32,
+    land_property_id UInt32,
+    ejari_property_type_id UInt32,
+    ejari_property_sub_type_id UInt32,
+    ejari_property_type_en LowCardinality(String),
+    ejari_property_type_ar String,
+    ejari_property_sub_type_en LowCardinality(String),
+    ejari_property_sub_type_ar String,
+    property_usage_id UInt32,
+    property_usage_en LowCardinality(String),
+    property_usage_ar String,
+    rooms String,
+    rooms_en String,
+    parking String,
+    actual_area Float64,
+    annual_amount Int64,
+    contract_amount Int64,
+    no_of_prop UInt32,
+    version_number UInt32,
+    version_en LowCardinality(String),
+    version_ar String,
+    parcel_id String,
+    area_id UInt32,
+    area_name_en LowCardinality(String),
+    area_name_ar String,
+    project_name_en String,
+    project_name_ar String,
+    master_project_en String,
+    master_project_ar String,
+    is_free_hold UInt8,
+    is_free_hold_en LowCardinality(String),
+    is_free_hold_ar String,
+    nearest_metro_en String,
+    nearest_metro_ar String,
+    nearest_mall_en String,
+    nearest_mall_ar String,
+    nearest_landmark_en String,
+    nearest_landmark_ar String,
+    project_number String,
+    tenant_type_id UInt32,
+    tenant_type_en LowCardinality(String),
+    tenant_type_ar String,
+    contract_reg_type_id UInt32,
+    contract_reg_type_en LowCardinality(String),
+    contract_reg_type_ar String,
+    ejari_bus_property_type_id UInt32,
+    ejari_bus_property_type_en LowCardinality(String),
+    ejari_bus_property_type_ar String,
+    rent_per_sqm Nullable(Float64),
+    unit_number String,
+    bedrooms LowCardinality(String),
+    dxbi_contract_key String,
+    dxbi_building_name String,
+    source_system LowCardinality(String),
+    primary_source LowCardinality(String),
+    match_status LowCardinality(String),
+    is_served UInt8,
+    built_at DateTime64(3, UTC)
+)
+ENGINE = MergeTree()
+ORDER BY (contract_start_date, contract_id);
+
+-- One row per DXBI evidence run loaded by Holocron (replaces the Mac .loaded marker files).
+-- Raw files are archived to object storage first (manifest_key); loader accounting is kept
+-- here so rows dropped at load are measurable afterwards.
+CREATE TABLE IF NOT EXISTS dxbi_evidence_load_ledger (
+    batch_id String,
+    report LowCardinality(String),
+    run_name String,
+    files UInt32,
+    raw_bytes UInt64,
+    manifest_key String,
+    rows_loaded UInt64,
+    rows_skipped UInt64,
+    rows_rejected UInt64,
+    details_json String,
+    status LowCardinality(String),
+    error String,
+    loaded_at DateTime64(3, UTC)
+)
+ENGINE = MergeTree()
+ORDER BY (report, run_name, loaded_at);
