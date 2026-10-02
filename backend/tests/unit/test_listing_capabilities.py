@@ -188,3 +188,95 @@ async def test_complete_manifest_cannot_turn_unknown_domain_values_into_complete
     assert response["total"] == {"count": None, "values": {"mean_aed": None}}
     assert response["coverage"]["status"] == "unavailable"
     assert "Unknown is not zero" in response["coverage"]["note"]
+
+
+@pytest.mark.parametrize(
+    "source,pinned,price,reason",
+    [
+        (rents(), False, 1_000_000, "shared_release_unavailable"),
+        (None, False, None, "shared_release_unavailable"),
+        (None, True, 1_000_000, "registered_rents_unavailable"),
+        (rents(status="unverified"), True, 1_000_000, "coverage_unverified"),
+        (rents(4, status="unverified"), True, 1_000_000, "coverage_unverified"),
+        (rents(4), True, 1_000_000, "insufficient_comparables"),
+        (rents(), True, None, "asking_price_unavailable"),
+    ],
+)
+def test_yield_primary_unavailability_reason_distinguishes_sample_from_release_and_coverage(
+    source, pinned, price, reason
+):
+    result = registered_rent_yield({"asking_price_aed": price}, source, pinned=pinned)
+    assert result == {
+        "gross_yield_pct": None,
+        "gross_yield_range_pct": None,
+        "yield_status": "unavailable",
+        "yield_unavailable_reason": reason,
+    }
+
+
+def test_yield_invalid_rent_values_have_a_distinct_reason_after_support_checks():
+    source = rents()
+    source["total"]["values"]["median_aed"] = None
+    result = registered_rent_yield({"asking_price_aed": 1_000_000}, source, pinned=True)
+    assert result["yield_unavailable_reason"] == "rent_values_unavailable"
+    assert result["gross_yield_pct"] is None
+
+
+@pytest.mark.parametrize(
+    "listings,pinned,expected_status,reasons",
+    [
+        ([], False, "unavailable", ["no_matching_listings"]),
+        (
+            [{"building": "Tower", "asking_price_aed": 1_000_000}],
+            False,
+            "unavailable",
+            ["shared_release_unavailable"],
+        ),
+        ([{"building": "Tower", "asking_price_aed": 1_000_000}], True, "ok", []),
+        (
+            [
+                {"building": "Tower", "asking_price_aed": None},
+                {"building": "", "asking_price_aed": 1_000_000},
+                {"building": "Tower", "asking_price_aed": 1_000_000},
+            ],
+            True,
+            "ok",
+            ["asking_price_unavailable", "registered_rents_unavailable"],
+        ),
+    ],
+)
+async def test_yield_comparison_exposes_sorted_actual_reasons_without_fabricated_errors(
+    monkeypatch, listings, pinned, expected_status, reasons
+):
+    from app.listings import capabilities
+    from app.listings.capability_models import ListingRentRequest
+    from app.market.evidence import MarketAccessContext
+
+    monkeypatch.setattr(
+        capabilities,
+        "get_listing_evidence",
+        AsyncMock(
+            return_value={
+                "listings": listings,
+                "definitions": {},
+                "limitations": [],
+            }
+        ),
+    )
+    market = AsyncMock(return_value=rents())
+    monkeypatch.setattr(capabilities, "get_market_evidence", market)
+    monkeypatch.setattr(capabilities, "has_shared_release", lambda *sources: pinned)
+    result = await capabilities.compare_listing_rents(
+        ListingRentRequest(location="JVC", bedrooms="1"),
+        context=MarketAccessContext(
+            "fixture-user", "fixture-org", date(2026, 10, 3), "fixture-turn"
+        ),
+    )
+    assert result["status"] == expected_status
+    assert result["unavailability_reasons"] == reasons
+    if not listings:
+        market.assert_not_awaited()
+    for listing in result["listings"]:
+        if listing["yield_status"] == "ok":
+            assert "yield_unavailable_reason" not in listing
+            assert listing["gross_yield_pct"] == 8.0

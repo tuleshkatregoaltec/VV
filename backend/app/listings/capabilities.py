@@ -178,6 +178,15 @@ async def compare_listing_rents(
     return result | {
         "status": "ok" if supported else "unavailable",
         "registered_rents": rents,
+        "unavailability_reasons": sorted(
+            {
+                row["yield_unavailable_reason"]
+                for row in result["listings"]
+                if row["yield_status"] == "unavailable"
+            }
+        )
+        if result["listings"]
+        else ["no_matching_listings"],
         "definitions": result["definitions"]
         | {
             "gross_yield_pct": "100 × comparable median annual registered rent / sale asking price; excludes fees, vacancy, service charges and financing. Withheld without a shared immutable release and supported comparable sample.",
@@ -198,16 +207,22 @@ def registered_rent_yield(listing: dict, rents: dict | None, *, pinned: bool) ->
         "gross_yield_range_pct": None,
         "yield_status": "unavailable",
     }
-    if not pinned or not rents or rents["coverage"]["status"] != "complete":
-        return unavailable
+    if not pinned:
+        return unavailable | {"yield_unavailable_reason": "shared_release_unavailable"}
+    if not rents:
+        return unavailable | {"yield_unavailable_reason": "registered_rents_unavailable"}
+    if rents["coverage"]["status"] != "complete":
+        return unavailable | {"yield_unavailable_reason": "coverage_unverified"}
     total = rents["total"]
     price = listing.get("asking_price_aed")
     values = total["values"]
-    if (total.get("count") or 0) < 5 or not price or price <= 0:
-        return unavailable
+    if (total.get("count") or 0) < 5:
+        return unavailable | {"yield_unavailable_reason": "insufficient_comparables"}
+    if not price or price <= 0:
+        return unavailable | {"yield_unavailable_reason": "asking_price_unavailable"}
     numbers = [values.get(key) for key in ("median_aed", "p25_aed", "p75_aed")]
     if any(value is None or value <= 0 or not math.isfinite(value) for value in numbers):
-        return unavailable
+        return unavailable | {"yield_unavailable_reason": "rent_values_unavailable"}
     median, low, high = numbers
     return {
         "gross_yield_pct": round(100 * median / price, 2),
