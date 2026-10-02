@@ -56,29 +56,11 @@ def build_fact_tables(client: Client) -> None:
     the existing canonical views first, then swaps them atomically.
     """
     start = time.time()
-    client.execute(f"DROP TABLE IF EXISTS {PROJECT_FACT_SERVING}")
-    client.execute(f"DROP TABLE IF EXISTS {AREA_FACT_SERVING}")
-    client.execute(f"DROP TABLE IF EXISTS {PROJECT_FACT_BACKUP}")
-    client.execute(f"DROP TABLE IF EXISTS {AREA_FACT_BACKUP}")
-
-    print("Materializing ch_project_fact from the canonical source view...")
-    client.execute(
-        f"CREATE TABLE {PROJECT_FACT_SERVING} ENGINE = MergeTree ORDER BY project_id "
-        f"AS SELECT * FROM {PROJECT_FACT_SOURCE}"
-    )
-    print("Materializing ch_area_fact from the canonical source view...")
-    client.execute(
-        f"CREATE TABLE {AREA_FACT_SERVING} ENGINE = MergeTree ORDER BY area_name_en "
-        f"AS SELECT * FROM {AREA_FACT_SOURCE}"
-    )
-
-    client.execute(
-        "RENAME TABLE "
-        f"{PROJECT_FACT_SOURCE} TO {PROJECT_FACT_BACKUP}, "
-        f"{AREA_FACT_SOURCE} TO {AREA_FACT_BACKUP}, "
-        f"{PROJECT_FACT_SERVING} TO {PROJECT_FACT_SOURCE}, "
-        f"{AREA_FACT_SERVING} TO {AREA_FACT_SOURCE}"
-    )
+    for fact, serving, backup, order_by in (
+        (PROJECT_FACT_SOURCE, PROJECT_FACT_SERVING, PROJECT_FACT_BACKUP, "project_id"),
+        (AREA_FACT_SOURCE, AREA_FACT_SERVING, AREA_FACT_BACKUP, "area_name_en"),
+    ):
+        _materialize_fact(client, fact=fact, serving=serving, backup=backup, order_by=order_by)
 
     project_count = client.execute(f"SELECT count() FROM {PROJECT_FACT_SOURCE}")[0][0]
     area_count = client.execute(f"SELECT count() FROM {AREA_FACT_SOURCE}")[0][0]
@@ -86,6 +68,45 @@ def build_fact_tables(client: Client) -> None:
         f"Built ch_project_fact ({project_count:,} rows) and "
         f"ch_area_fact ({area_count:,} rows) in {time.time() - start:.2f}s"
     )
+
+
+def _materialize_fact(
+    client: Client, *, fact: str, serving: str, backup: str, order_by: str
+) -> None:
+    """Materialize one fact from its canonical view, whatever state the last run left.
+
+    First build (or views just recreated): ``fact`` is the view; it moves to ``backup`` and
+    the new table takes its name. Rebuild: ``fact`` is already a table, so read ``backup`` and
+    swap the fresh table in. The old code dropped ``backup`` and re-copied the stale table,
+    so a second run silently froze the facts (F13).
+    """
+    engines = dict(
+        client.execute(
+            "SELECT name, engine FROM system.tables "
+            "WHERE database = currentDatabase() AND name IN (%(fact)s, %(backup)s)",
+            {"fact": fact, "backup": backup},
+        )
+    )
+    if engines.get(fact) == "View":
+        source = fact
+    elif backup in engines:
+        source = backup
+    else:
+        raise RuntimeError(
+            f"{fact} is materialized but its source view {backup} is missing; "
+            "run scripts.clickhouse.create_compatibility_views first"
+        )
+    print(f"Materializing {fact} from {source}...")
+    client.execute(f"DROP TABLE IF EXISTS {serving}")
+    client.execute(
+        f"CREATE TABLE {serving} ENGINE = MergeTree ORDER BY {order_by} AS SELECT * FROM {source}"
+    )
+    if source == fact:
+        client.execute(f"DROP TABLE IF EXISTS {backup}")
+        client.execute(f"RENAME TABLE {fact} TO {backup}, {serving} TO {fact}")
+    else:
+        client.execute(f"EXCHANGE TABLES {serving} AND {fact}")
+        client.execute(f"DROP TABLE {serving}")
 
 
 def main() -> int:
