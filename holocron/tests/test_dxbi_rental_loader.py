@@ -172,7 +172,7 @@ def test_active_refresh_replaces_hidden_overlap_and_keeps_other_history(tmp_path
     from holocron.sources.dxbi.rental_events import normalize_rental_rows
 
     loader = _load_script("load_dxbi_rental_events.py")
-    loader.TABLE = "dxbi_rental_events"
+    setattr(loader, "TABLE", "dxbi_rental_events")
     hidden = _payload("broad", "12345678901234567890")
     hidden["columns"][0]["text"] = hidden["columns"][0]["text"].replace(", No. 1204", "")
     hidden["source_run_id"] = "old"
@@ -219,7 +219,7 @@ def test_invalid_active_refresh_never_exchanges_canonical_data(tmp_path: Path) -
     from types import SimpleNamespace
 
     loader = _load_script("load_dxbi_rental_events.py")
-    loader.TABLE = "dxbi_rental_events"
+    setattr(loader, "TABLE", "dxbi_rental_events")
 
     class ActiveClient(FakeClient):
         commands: list[str] = []

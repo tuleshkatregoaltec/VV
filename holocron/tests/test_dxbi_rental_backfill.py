@@ -128,12 +128,8 @@ def test_price_and_size_sharding_never_drops_a_capped_page() -> None:
     assert len(price_children_at_exact_size) == 2
     assert price_children_at_exact_size[0]["max_price"] == Decimal("150.00")
     assert price_children_at_exact_size[1]["min_price"] == Decimal("150.01")
-    assert [
-        (child["min_price"], child["max_price"])
-        for child in price_children_at_size_floor
-    ] == [
-        (child["min_price"], child["max_price"])
-        for child in price_children_at_exact_size
+    assert [(child["min_price"], child["max_price"]) for child in price_children_at_size_floor] == [
+        (child["min_price"], child["max_price"]) for child in price_children_at_exact_size
     ]
     assert unsplittable == []
 
@@ -199,9 +195,7 @@ def test_refine_expanded_checkpoint_archives_descendant_tree(tmp_path: Path) -> 
     raw_path.parent.mkdir(parents=True)
     raw_path.write_bytes(b"old child")
     state = {
-        "completed": {
-            old_child_key: {"rows": 300, "path": "shards/old-child.jsonl.gz"}
-        },
+        "completed": {old_child_key: {"rows": 300, "path": "shards/old-child.jsonl.gz"}},
         "expanded": {root_key: {"children": [old_child_key]}},
         "failed": {old_page_key: {"reason": "empty page"}},
         "paged": {old_child_key: {"next_page_start": 301}},
@@ -535,9 +529,7 @@ def test_direct_pagination_follows_response_metadata_without_sharding(
     assert {item["requested_page_start"] for item in state["completed"].values()} == {1, 301}
 
 
-def test_capped_page_followed_by_an_empty_page_fails_closed(
-    monkeypatch, tmp_path: Path
-) -> None:
+def test_capped_page_followed_by_an_empty_page_fails_closed(monkeypatch, tmp_path: Path) -> None:
     scraper = _load_script()
     configuration = {
         **_configuration(),

@@ -12,13 +12,14 @@ fmt:
 test:
     uv run pytest
 
+# The admin extra is installed so apps/entity_admin is checked against its real dependencies.
 typecheck:
-    uv run ty check --error-on-warning
+    uv run --extra admin ty check --error-on-warning
 
 check:
     uv run ruff format --check
     uv run ruff check
-    uv run ty check --error-on-warning
+    uv run --extra admin ty check --error-on-warning
     uv run pytest
 
 replay-bronze target source +args='':
