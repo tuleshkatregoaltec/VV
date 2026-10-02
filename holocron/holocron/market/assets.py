@@ -1,0 +1,66 @@
+from dagster import (
+    AssetCheckResult,
+    AssetCheckSeverity,
+    AssetChecksDefinition,
+    MaterializeResult,
+    asset,
+    asset_check,
+)
+
+from holocron.market.checks import CHECKS, MarketCheck, evaluate
+from holocron.market.transforms import (
+    materialize_market_rental_events,
+    materialize_market_sale_events,
+)
+from holocron.platform.resources import ClickHouseResource
+
+_MARKET_GROUP = "market"
+
+
+@asset(
+    name="market_sale_events",
+    group_name=_MARKET_GROUP,
+    deps=["dld_od_transactions_bronze", "dxbi_evidence_bronze"],
+    description=(
+        "Canonical sales: de-duplicated DLD transactions enriched with DXBI unit identity, plus "
+        "DXBI sales DLD does not hold; every row labelled with its match status."
+    ),
+)
+def market_sale_events_asset(context, clickhouse: ClickHouseResource) -> MaterializeResult:
+    counts = materialize_market_sale_events(clickhouse=clickhouse.client())
+    context.log.info("market_sale_events materialised: %s", counts)
+    return MaterializeResult(metadata={"stage": "market", "table": "market_sale_events", **counts})
+
+
+@asset(
+    name="market_rental_events",
+    group_name=_MARKET_GROUP,
+    # Rental pairing is location-keyed through the area link learned from matched sales.
+    deps=["dld_od_rents_bronze", "dxbi_evidence_bronze", "market_sale_events"],
+    description=(
+        "Canonical rentals: de-duplicated DLD Ejari rows enriched with DXBI unit identity, plus "
+        "DXBI contracts DLD does not hold; every row labelled with its match status."
+    ),
+)
+def market_rental_events_asset(context, clickhouse: ClickHouseResource) -> MaterializeResult:
+    counts = materialize_market_rental_events(clickhouse=clickhouse.client())
+    context.log.info("market_rental_events materialised: %s", counts)
+    return MaterializeResult(
+        metadata={"stage": "market", "table": "market_rental_events", **counts}
+    )
+
+
+def _asset_check(check: MarketCheck) -> AssetChecksDefinition:
+    @asset_check(asset=check.asset, name=check.name, description=check.description)
+    def _run(clickhouse: ClickHouseResource) -> AssetCheckResult:
+        passed, value = evaluate(clickhouse.client(), check)
+        return AssetCheckResult(
+            passed=passed,
+            severity=AssetCheckSeverity.ERROR,
+            metadata={"value": value, "op": check.op, "threshold": check.threshold},
+        )
+
+    return _run
+
+
+MARKET_ASSET_CHECKS = [_asset_check(check) for check in CHECKS]

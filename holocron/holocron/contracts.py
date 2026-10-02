@@ -79,6 +79,10 @@ class ClickHouseCommands(Protocol):
     def command(self, sql: str) -> Any: ...
 
 
+class ClickHouseQuery(Protocol):
+    def query(self, sql: str) -> Any: ...
+
+
 class ClickHouseInserter(ClickHouseCommands, Protocol):
     def insert_rows(
         self,
@@ -101,6 +105,9 @@ class ClickHouseReplacer(ClickHouseCommands, Protocol):
 
 
 class ClickHouseWriter(ClickHouseInserter, ClickHouseReplacer, Protocol): ...
+
+
+class ClickHouseQueryInserter(ClickHouseInserter, ClickHouseQuery, Protocol): ...
 
 
 class BronzeLoader(Protocol):
