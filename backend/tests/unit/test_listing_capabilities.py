@@ -154,3 +154,37 @@ async def test_legacy_event_extrema_never_claim_verified_coverage(monkeypatch):
     assert evidence.market_metrics.get_market_metrics.call_args.args[0].reference_date == date(
         2026, 10, 3
     )
+
+
+async def test_complete_manifest_cannot_turn_unknown_domain_values_into_complete_numbers(
+    monkeypatch,
+):
+    from app.analytics import evidence
+    from app.analytics.models import MarketMetricsRequest
+    from app.market.evidence import MarketAccessContext
+
+    payload = {
+        "total": {"count": None, "values": {"mean_aed": None}},
+        "coverage": {"status": "unavailable", "note": "No observations"},
+        "comparison_coverage": None,
+        "change_pct": {},
+        "limitations": [],
+    }
+    period = SimpleNamespace(start=date(2026, 9, 1), end=date(2026, 9, 30))
+    result = SimpleNamespace(model_dump=lambda **kwargs: payload, period=period)
+    monkeypatch.setattr(
+        evidence.market_metrics, "get_market_metrics", AsyncMock(return_value=result)
+    )
+    release = MarketRelease(
+        "immutable-but-empty",
+        frozenset({"sales"}),
+        (SourceCoverage("sales", period.start, period.end, "complete"),),
+    )
+    with use_market_release(release):
+        response = await evidence.get_market_evidence(
+            MarketMetricsRequest(dataset="sales", period={"type": "previous_month"}),
+            context=MarketAccessContext("u", "o", date(2026, 10, 3), "t"),
+        )
+    assert response["total"] == {"count": None, "values": {"mean_aed": None}}
+    assert response["coverage"]["status"] == "unavailable"
+    assert "Unknown is not zero" in response["coverage"]["note"]

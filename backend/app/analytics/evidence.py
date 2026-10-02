@@ -19,12 +19,25 @@ async def get_market_evidence(
     data = result.model_dump(mode="json")
     release = current_market_release()
     verified = {}
+    authoritative = {}
     for key in ("coverage", "comparison_coverage"):
         if data.get(key):
             period = result.period if key == "coverage" else result.comparison_period
-            verified[key] = bool(
+            manifest_complete = bool(
                 release and period and release.covers(request.dataset, period.start, period.end)
             )
+            authoritative[key] = manifest_complete
+            metric_row = data.get("total" if key == "coverage" else "comparison")
+            has_result = metric_row is not None and metric_row.get("count") is not None
+            verified[key] = manifest_complete and has_result
+            if manifest_complete and not has_result:
+                data[key] = {
+                    **data[key],
+                    "status": "unavailable",
+                    "note": "The pinned manifest declares coverage, but the shared metric service returned unknown values. Unknown is not zero; no complete numerical result is available.",
+                }
+                data["limitations"].append(data[key]["note"])
+                continue
             if verified[key]:
                 data[key] = {
                     **data[key],
@@ -41,7 +54,9 @@ async def get_market_evidence(
         data["change_pct"] = {}
     data["limitations"] = [
         note for note in data["limitations"] if not note.startswith("Data covers ")
-    ] + ([] if verified.get("coverage") else [COVERAGE_NOTE])
+    ] + ([] if authoritative.get("coverage") else [COVERAGE_NOTE])
     if request.compare_with_previous_period and not data["change_pct"]:
-        data["limitations"].append("Period changes are withheld until coverage is authoritative.")
+        data["limitations"].append(
+            "Period changes require authoritative complete coverage and supported metric rows for both periods."
+        )
     return data
