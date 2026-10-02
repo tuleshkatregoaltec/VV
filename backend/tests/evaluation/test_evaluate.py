@@ -194,3 +194,112 @@ def test_trace_coverage_rejects_missing_infrastructure_parents():
     record, observed, runtime = inputs()
     observed["trace_missing_parents"] = ["unrecorded-fastapi-parent"]
     assert evaluate_case(record, observed, runtime, {})["trace_coverage"]["status"] == "fail"
+
+
+def test_each_requested_quality_dimension_stays_unassessed_after_successful_stream():
+    record, observed, runtime = inputs()
+    checks = evaluate_case(record, observed, runtime, {})
+    for dimension in (
+        "numerical_correctness",
+        "filters",
+        "tool_arguments",
+        "completeness",
+        "clarification",
+        "freshness",
+        "privacy",
+    ):
+        assert checks[dimension]["status"] == "unassessed"
+
+
+def test_explicit_clarification_can_complete_without_a_provider_trace():
+    record, observed, runtime = inputs()
+    record["unbound_parameters"] = ["building"]
+    record["persisted_messages"][1]["meta_data"] = {
+        "clarification_required": True,
+        "required_bindings": ["building"],
+    }
+    observed["models"] = []
+    checks = evaluate_case(record, observed, runtime, {})
+    assert checks["clarification"]["status"] == "pass"
+    assert checks["trace_coverage"]["status"] == "pass"
+    assert checks["numerical_correctness"]["status"] == "unassessed"
+
+
+def test_reference_selector_requires_unique_row_and_never_proves_answer_correctness():
+    from scripts.evaluation.evaluate import apply_dimension_suites
+
+    observed = {
+        "tools": [
+            {
+                "name": "compare_listing_age",
+                "arguments": {"request": {"bedrooms": "2"}},
+                "result": {"rows": [{"id": "old", "age": 122}]},
+            }
+        ]
+    }
+    refs = [
+        {
+            "tool": "compare_listing_age",
+            "path": ["tools", 0, "result", "rows", {"where": {"id": "old"}}, "age"],
+            "kind": "exact",
+            "expected": 122,
+            "source": "independent fixture",
+        }
+    ]
+    checks = {}
+    apply_references(checks, observed, refs)
+    assert checks["reference_evidence_0"]["status"] == "pass"
+    assert "numerical_correctness" not in checks
+    observed["tools"][0]["result"]["rows"].append({"id": "old", "age": 122})
+    apply_references(checks, observed, refs)
+    assert checks["reference_evidence_0"]["status"] == "fail"
+    with pytest.raises(ValueError, match="complete"):
+        apply_dimension_suites(checks, {"filters": {"references": [0], "source": "fixture"}})
+    with pytest.raises(ValueError, match="complete"):
+        apply_dimension_suites(
+            checks,
+            {"numerical_correctness": {"references": [0], "source": "fixture", "complete": True}},
+        )
+
+
+def test_mcp_unavailable_is_not_evidence_success():
+    record, observed, runtime = inputs()
+    observed["tools"] = [
+        {
+            "name": "compare_listing_rents",
+            "arguments": {},
+            "result": {"status": "unavailable", "data": None},
+            "error": False,
+        }
+    ]
+    runtime["tools"]["compare_listing_rents"] = {"schema": {"type": "object"}}
+    checks = evaluate_case(record, observed, runtime, {})
+    assert checks["evidence_availability"]["status"] == "unassessed"
+    assert checks["numerical_correctness"]["status"] == "unassessed"
+
+
+def test_persisted_mcp_evidence_mismatch_is_not_silently_replaced():
+    record = {
+        "trace_ids": {"stream": "abc"},
+        "persisted_messages": [
+            {
+                "role": "assistant",
+                "meta_data": {"evidence": [{"tool": "metric", "result": {"count": 3}}]},
+            }
+        ],
+    }
+    spans = [
+        {
+            "context": {"trace_id": "abc", "span_id": "one"},
+            "name": "tool",
+            "status": {"status_code": "OK"},
+            "attributes": {
+                "gen_ai.tool.name": "metric",
+                "tool_arguments": "{}",
+                "tool_response": '{"count":4}',
+            },
+        }
+    ]
+    observed = observation(record, spans)
+    assert observed["evidence_consistency"] is False
+    assert observed["tools"][0]["result"] == {"count": 4}

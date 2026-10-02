@@ -413,9 +413,11 @@ async def generate_seeded_study(request: GenerateStudyRequest) -> GenerateStudyR
         )
     except HTTPException:
         raise
-    except Exception as e:
-        logger.exception("generate_hbu_study failed for plot %s: %s", request.plot_number, e)
-        raise HTTPException(status_code=500, detail=str(e)) from e
+    except Exception:
+        logger.error("Feasibility generation failed")
+        raise HTTPException(
+            status_code=500, detail="AI study generation could not be completed"
+        ) from None
     plot = await get_plot_details_or_404(request.plot_number)
     return GenerateStudyResponse(
         plot_data=plot,

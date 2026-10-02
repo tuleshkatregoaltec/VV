@@ -632,3 +632,162 @@ The pulse tool no longer counts mortgages and gifts as sales and now reports rea
 Bayut: the collector writes raw JSONL evidence only. There is no ClickHouse table, loader, serving
 view or backend consumer, and runs stop on CAPTCHA by design. Bayut inventory is therefore
 unavailable to every capability above until a licensed, validated bronze-to-serving path exists.
+## MCP prompting, policy and assessment update — 2026-10-03
+
+This section supersedes the historical local-function capability status above.
+The canonical `benchmark.json` remains byte-for-byte unchanged: q01–q15 keep their
+original IDs, questions and unresolved entity placeholders. Prompt version
+`database-mcp-v1` lives in `app/chat/prompts.py`. It requires database evidence,
+correct calendar windows and units, clarification, explicit coverage and release
+limits, and separation of user claims from verified facts. Retrieved text cannot
+authorize actions. `AI_TOPIC_POLICY` defaults empty; no product-topic ban is approved.
+
+The production agent consumes the actual Streamable HTTP MCP toolset; runtime
+capture reads the same `tool_definitions()` schemas registered by `tools/list`.
+The static inventory continues to mark dynamic dispatch as uncertain rather than
+inventing local call-graph edges. Assessments compare captured tool results with
+persisted assistant `meta_data.evidence`; contradictory results cannot be silently
+replaced. Explicit server metadata proves no-model clarification for unbound cases.
+
+| Cases | Capability now available | Remaining qualification |
+| --- | --- | --- |
+| q01 | Sales price bands, counts and shares | Stored-source coverage and documented band boundaries. |
+| q02 | Building/bedroom ranking, calendar quarter, median AED and AED/sqft | Missing source building names remain a data limitation. |
+| q03 | Filtered sale p25/p75 | Geographic/bedroom match limits must remain disclosed. |
+| q04 | New/renewed annual-rent evidence | Bedroom/geographic coverage; percentage claims need backend-supported values. |
+| q05 | Long-term rental aggregates and annual/whole-term definitions | Individual contract records are still not exposed. |
+| q06 | Six complete months of studio rent/count evidence | Missing bedroom coverage and uncovered months remain unavailable. |
+| q07–q08 | Developer delivery concentration and separate missing/overdue/future status | DLD register coverage, raw developer names and scheduled-date uncertainty. |
+| q09 | Bedroom inventory and asking prices | Current Property Finder snapshots only; asking versus achieved definitions. |
+| q10 | Posting age at capture, unknown age, bounded exact comparable selection | First observation is not posting date; missing size units cannot support per-area comparisons. |
+| q11 | Registered-rent comparables and gross-yield evidence | Yield is withheld without a shared immutable release, authoritative coverage and adequate samples. |
+| q12–q13 | Rental-appraisal and seller-competition composition | Original unbound inputs require building clarification; conclusions remain support-gated. |
+| q14 | Calendar-month multi-source area report | Comparisons require consistent release and authoritative period coverage. |
+| q15 | Bound project-comparison composition | Original names remain unbound; missing Reelly prices/payment plans are unavailable. |
+
+Numerical correctness, filters, tool arguments, completeness, clarification,
+freshness and privacy are separate findings. An executed stream, valid schema,
+registered capability, positive judge, or passing evidence field does not prove
+an answer correct. Missing/unassessed/unsupported dimensions remain explicit and
+cannot enter a pass denominator. `fixture_references.json` adds independently
+calculated q10/q11 references for the committed disposable listing fixtures only:
+122-day age, three newer peers with median AED 1,100/sqft and 36.36% difference;
+five annual rents with median AED 80,000 and IQR AED 70,000–90,000, yielding 8%
+and 7–9% against the fixture's AED 1 million asking price. These values are not
+production market estimates. The reference date is 2026-10-03 and the required
+release is `disposable-fixture-release-1`; the rental reference uses September.
+Do not apply them to a differently scoped live warehouse or different tool period.
+
+References support exact/range/record checks, named tools and unique row selectors
+(`{"where":{"listing_id":"old"}}`). Duplicate selectors fail. Optional
+`dimension_suites` may attest a complete authored set of filter/tool-argument/
+freshness references; they require `complete:true`, source and reference indices.
+They cannot upgrade numerical prose, completeness or privacy from one selected
+field. Attributed review remains necessary for those dimensions, and cannot
+override a failing deterministic reference. Reference matching and comparisons
+use the explicit Dubai `reference_date`, dataset digest and release context.
+
+### Shared provider policy and operational limits
+
+All Pydantic AI OpenRouter requests and direct CRM POSTs require `ai_execution`
+with trusted user/organization/execution identity. CRM, feasibility and news
+summary routes establish this scope from authenticated subscription dependencies;
+each actual provider call rechecks current identity/membership/subscription.
+Admin identity lookup preserves GoTrue `banned_until`/`deleted_at`, which the
+installed SDK otherwise drops. Banned, deleted, malformed or unavailable identities
+fail closed. Product scope is not granted by model arguments.
+
+Lua scripts reserve and reconcile user/organization daily/monthly microdollar
+budgets, user token quota, per-minute rates and active-call leases atomically.
+Request IDs include trusted user and organization. Every call requires a configured
+`AI_PRICING_MODEL` matching `DEFAULT_CHAT_MODEL`, positive input/output prices,
+and four explicit USD budgets. Missing configuration or ledger connectivity fails
+closed before provider work. Nonlocal environments also require a provider allowlist.
+Requests force ZDR, deny collection, forbid unapproved model fallback/override,
+bound text/output size, calls and time, and disable hidden SDK retries. Unpriced
+multimodal inputs and built-in web tools are rejected. No credential, prompt, tool
+result or exception payload is stored in quota metadata or new logs.
+
+Completed requests settle token-rated cost; this is an application accounting
+estimate, not a provider invoice. Cancellation or unknown usage retains the full
+reservation and releases concurrency. Repeated settlement cannot double refund.
+A process crash leaves the charge reserved and the active lease expires. Redis
+is authoritative for new usage; existing token-usage read APIs include its totals,
+and old PostgreSQL totals remain visible. Do not also call the legacy PostgreSQL
+writer for new guarded requests. Prompt/completion subtotals in historical rows
+are legacy-only; authoritative total tokens include uncertain reservations.
+
+**Deployment gate:** the ledger needs persistent Redis with `noeviction`, protected
+key access and an explicit retention/reconciliation procedure. Counters and unknown
+reservations intentionally do not expire. Existing developer Redis uses volume-backed
+RDB snapshots; crash-loss durability and managed-service failover are not verified.
+Do not claim financial durability from the Lua tests alone. Cutover must account
+for existing-day legacy PostgreSQL usage in the starting token allowance; those
+historical tokens are displayed but are not automatically imported into the Redis
+admission counter. No shared service configuration was changed or restarted.
+
+### Reproducible model-improvement preparation
+
+The actual configured runtime was verified as `google/gemini-3.1-flash-lite`,
+canonical model `google/gemini-3.1-flash-lite-20260507`, through the public
+[OpenRouter model catalog](https://openrouter.ai/api/v1/models). It advertises
+`tools`, `tool_choice` and `max_tokens`; published text rates at verification were
+US$0.25/million input and US$1.50/million completion/reasoning tokens. The older
+Flash Preview model in the architecture study is not the current runtime selector.
+Prices must be reverified when model/routing changes.
+
+[OpenRouter documents inference tool calling](https://openrouter.ai/docs/guides/features/tool-calling),
+but the deployed adapter has no verified training endpoint or tuned-model serving
+route. [Google's direct Gemini API tuning documentation](https://ai.google.dev/gemini-api/docs/model-tuning)
+states no available tuning model there. Google Cloud separately documents
+[Gemini 3.1 Flash-Lite tuning](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/gemini/3-1-flash-lite)
+and [function-calling tuning](https://cloud.google.com/vertex-ai/generative-ai/docs/models/tune-function-calling).
+Using that path requires a separately approved provider integration, regional
+privacy agreement, serving endpoint, credentials and budget. It is not enabled
+by an OpenRouter key or by the coding agent's model.
+
+`behavioral_examples.json` contains eight manually authored synthetic training
+examples and four separate held-out examples. Families and exact prompts do not
+cross splits or reuse the canonical benchmark. They teach tool selection, calendar
+arguments, missing bindings, unsupported evidence and instruction boundaries;
+there are no customer records or memorized market-price targets. Preparation
+validates actual MCP argument schemas and rejects obvious credentials/identifiers.
+This small curated corpus is a preparation fixture, not evidence of training quality;
+automatic redaction is not a substitute for human review of future source examples.
+
+The existing CLI supports offline `prepare` and read-only `promote` commands:
+
+```sh
+# Preparation is local, writes private 0700/0600 artifacts, and makes no provider call.
+cd backend
+uv run python -m scripts.evaluation prepare --directory /absolute/private/new-preparation
+uv run python -m scripts.evaluation promote --baseline /absolute/baseline.json --candidate /absolute/candidate.json
+```
+
+Prepared artifacts include prompt/tool/corpus/split hashes and provider-support
+metadata. They are explicitly runtime-neutral staging records, not a pretend
+provider-upload format. There is no training/upload command. **The user authorized
+up to US$5 for evaluation and no training.** No training or model promotion has run.
+
+Live evaluation now requires `just ai-evaluate --budget-usd 5 ...` and verified
+pricing configuration. The child process caps all four existing budgets at the
+explicit ceiling; reservations share the authoritative ledger rather than resetting
+on each run. Use dedicated disposable PostgreSQL, ClickHouse and auth configuration
+for this task. The runner never migrates or provisions databases itself. A reference
+label alone does not create an immutable warehouse. Local scripted-model tests prove
+plumbing; only an actual provider run with reviewed references can measure live quality.
+
+Promotion requires identical canonical questions, bindings, reference date, immutable
+release, criteria, evaluator/reference versions and review methods, at least one
+measured quality improvement, all required candidate dimensions assessed passing,
+and no lost pass or privacy regression. Unknown/unsupported coverage blocks automatic
+promotion. The gate only emits a decision; it changes no runtime settings. Record the
+baseline model, prompt commit/version, provider allowlist, price configuration and
+policy version for rollback; restore that approved bundle together if a candidate
+regresses. Retain the improved prompted baseline until all gates pass.
+
+Agent B verification: 55 evaluation tests, three focused auth-provider tests and
+four isolated real-Redis tests passed, with no skips. Redis tests used unique
+owned keys and removed only those keys. Combined application/browser checks are
+owned by the lead. No paid evaluation, training, remote telemetry upload,
+application-data modification or deployment was performed by Agent B.

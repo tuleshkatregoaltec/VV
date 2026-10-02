@@ -135,6 +135,6 @@ async def stream_feasibility_response(
                                 yield f"data: {json.dumps({'type': 'show_research', 'tab': _RESEARCH_TOOLS[part.tool_name], 'data': payload}, default=str)}\n\n"
             new_messages_json = run.new_messages_json().decode()
             yield f"data: {json.dumps({'type': 'done', 'new_messages_json': new_messages_json})}\n\n"
-    except Exception as exc:
+    except Exception:
         logger.error("Error in feasibility chat stream")
-        yield f"data: {json.dumps({'type': 'error', 'error': str(exc)})}\n\n"
+        yield f"data: {json.dumps({'type': 'error', 'error': 'AI response could not be completed'})}\n\n"

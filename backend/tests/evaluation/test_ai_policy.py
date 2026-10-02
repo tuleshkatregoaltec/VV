@@ -55,7 +55,7 @@ async def test_actual_usage_reconciles_once_and_context_is_reset(configured):
         ) as reservation:
             reservation.reconcile(20, 10)
     settlement = configured.eval.call_args.args
-    assert settlement[13:16] == (40, 30, "settled")
+    assert settlement[-7:-4] == (40, 30, "settled")
     assert policy._scope.get() is None
     assert configured.eval.await_count == 2
     configured.aclose.assert_awaited_once()
@@ -69,7 +69,7 @@ async def test_cancellation_keeps_unknown_charge_and_cleans_up(configured):
             ) as reservation:
                 raise asyncio.CancelledError
     settlement = configured.eval.call_args.args
-    assert settlement[13:16] == (reservation.reserved_cost, reservation.reserved_tokens, "unknown")
+    assert settlement[-7:-4] == (reservation.reserved_cost, reservation.reserved_tokens, "unknown")
     assert policy._scope.get() is None
     configured.aclose.assert_awaited_once()
 
@@ -166,3 +166,20 @@ async def test_model_factory_stream_and_nonstream_use_shared_reservations(config
             pass
     assert len(seen) == 2
     assert all(item["openrouter_provider"]["zdr"] for item in seen)
+
+
+def test_unpriced_multimodal_or_builtin_calls_cannot_evade_text_budget():
+    from pydantic_ai import ImageUrl
+    from pydantic_ai.builtin_tools import WebSearchTool
+    from pydantic_ai.messages import ModelRequest, UserPromptPart
+    from pydantic_ai.models import ModelRequestParameters
+
+    with pytest.raises(policy.AIPolicyError, match="multimodal"):
+        CompatibleOpenRouterModel._validate_text_request(
+            [ModelRequest(parts=[UserPromptPart([ImageUrl("https://example.test/large.png")])])],
+            ModelRequestParameters(),
+        )
+    with pytest.raises(policy.AIPolicyError, match="built-in"):
+        CompatibleOpenRouterModel._validate_text_request(
+            [], ModelRequestParameters(builtin_tools=[WebSearchTool()])
+        )

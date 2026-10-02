@@ -15,7 +15,11 @@ async def test_explicit_binding_reaches_stream_and_persistence_without_changing_
         if request.method == "DELETE":
             return httpx.Response(204)
         if request.url.path.endswith("/stream"):
-            assert json.loads(request.content) == {"message": "Compare Explicit Tower"}
+            from uuid import UUID
+
+            payload = json.loads(request.content)
+            assert payload["message"] == "Compare Explicit Tower"
+            assert UUID(payload["request_id"])
             return httpx.Response(
                 200, text='data: {"type":"content","content":"Answer"}\n\ndata: {"type":"done"}\n\n'
             )
@@ -61,3 +65,13 @@ async def test_stream_failure_still_cleans_up_only_its_created_conversation():
     assert result["error_type"] == "HTTPStatusError"
     assert calls[-1].method == "DELETE"
     assert calls[-1].url.path.endswith("owned-evaluation-conversation")
+
+
+async def test_live_run_cannot_start_without_explicit_budget_or_with_nonfinite_budget():
+    import pytest
+
+    from scripts.evaluation.run import run_benchmark
+
+    for budget in (None, "NaN", "Infinity", "-1", "0"):
+        with pytest.raises(ValueError, match="budget"):
+            await run_benchmark(max_spend_usd=budget)

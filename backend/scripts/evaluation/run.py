@@ -8,6 +8,7 @@ import subprocess
 import sys
 import time
 from datetime import datetime, timezone
+from decimal import Decimal
 from pathlib import Path
 from uuid import uuid4
 
@@ -22,6 +23,7 @@ ROOT = Path(__file__).resolve().parents[3]
 async def execute_case(client, case, timeout, parameters=None):
     record = {
         "case_id": case.id,
+        "request_id": str(uuid4()),
         "question": case.bind(parameters),
         "parameters": parameters or {},
         "unbound_parameters": case.parameters if parameters is None else [],
@@ -44,7 +46,7 @@ async def execute_case(client, case, timeout, parameters=None):
             async with client.stream(
                 "POST",
                 f"/api/v1/chat/conversations/{conversation_id}/messages/stream",
-                json={"message": record["question"]},
+                json={"message": record["question"], "request_id": record["request_id"]},
             ) as response:
                 record["http_status"] = response.status_code
                 record["trace_ids"]["stream"] = response.headers.get("x-evaluation-trace-id")
@@ -85,9 +87,21 @@ async def run_benchmark(
     timeout=180,
     data_context="local-mutable-warehouse",
     bindings_path=None,
+    max_spend_usd=None,
 ):
     from app.config import settings
 
+    if max_spend_usd is None:
+        raise ValueError("Live evaluation requires an explicit approved --budget-usd ceiling")
+    approved_budget = Decimal(str(max_spend_usd))
+    if not approved_budget.is_finite() or approved_budget <= 0:
+        raise ValueError("Evaluation budget must be finite and positive")
+    if settings.AI_PRICING_MODEL != settings.DEFAULT_CHAT_MODEL:
+        raise ValueError(
+            "Configure verified pricing for the actual runtime model before evaluation"
+        )
+    if settings.AI_INPUT_USD_PER_MILLION is None or settings.AI_OUTPUT_USD_PER_MILLION is None:
+        raise ValueError("Configure verified input/output token prices before evaluation")
     if settings.ENVIRONMENT != "local":
         raise ValueError("Evaluation requires the local environment")
     if not settings.FIRST_SUPERUSER or not settings.FIRST_SUPERUSER_PASSWORD:
@@ -113,8 +127,11 @@ async def run_benchmark(
         raise ValueError("Use a new evidence directory; existing runs are immutable")
     private_directory(directory)
     run_id = str(uuid4())
+    from app.market.periods import business_today
+
     manifest = {
         "run_id": run_id,
+        "reference_date": business_today().isoformat(),
         "started_at": datetime.now(timezone.utc).isoformat(),
         "git_sha": subprocess.check_output(
             ["git", "rev-parse", "HEAD"], cwd=ROOT, text=True
@@ -127,6 +144,12 @@ async def run_benchmark(
         "case_ids": [case.id for case in cases],
         "data_context": data_context,
         "remote_telemetry": False,
+        "approved_budget_usd": str(approved_budget),
+        "pricing": {
+            "model": settings.AI_PRICING_MODEL,
+            "input_usd_per_million": str(settings.AI_INPUT_USD_PER_MILLION),
+            "output_usd_per_million": str(settings.AI_OUTPUT_USD_PER_MILLION),
+        },
         "results": [],
     }
     private_write(directory / "run.json", manifest)
@@ -135,6 +158,16 @@ async def run_benchmark(
     listener.listen()
     port = listener.getsockname()[1]
     env = {**os.environ, "VV_EVALUATION_DIRECTORY": str(directory.resolve())}
+    for name in (
+        "AI_USER_DAILY_USD",
+        "AI_USER_MONTHLY_USD",
+        "AI_ORG_DAILY_USD",
+        "AI_ORG_MONTHLY_USD",
+    ):
+        configured = getattr(settings, name)
+        env[name] = str(
+            min(configured, approved_budget) if configured is not None else approved_budget
+        )
     log_fd = os.open(directory / "server.log", os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     with os.fdopen(log_fd, "w") as log:
         process = subprocess.Popen(

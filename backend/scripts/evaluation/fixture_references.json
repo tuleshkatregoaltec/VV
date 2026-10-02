@@ -1,0 +1,360 @@
+{
+  "version": 1,
+  "dataset_sha256": "4a508b3b8451260cf2b015828e0af96fb097298864598c3962e20ca4c42d2432",
+  "date": "2026-10-03",
+  "data_context": "disposable-fixture-release-1",
+  "warning": "Only valid for the named independent disposable fixture and explicit September rental period. Do not apply to production warehouse runs or to canonical q01 using its different rolling window. Evidence checks do not grade answer prose.",
+  "cases": {
+    "q10": [
+      {
+        "tool": "compare_listing_age",
+        "path": [
+          "tools",
+          0,
+          "arguments",
+          "request",
+          "location"
+        ],
+        "kind": "exact",
+        "expected": "Dubai Marina",
+        "source": "Hand-calculated independent fixtures: tests/integration/clickhouse/test_chat_listing_capabilities.py, immutable fixture release, never production estimates",
+        "dimension": "filters"
+      },
+      {
+        "tool": "compare_listing_age",
+        "path": [
+          "tools",
+          0,
+          "arguments",
+          "request",
+          "bedrooms"
+        ],
+        "kind": "exact",
+        "expected": "2",
+        "source": "Hand-calculated independent fixtures: tests/integration/clickhouse/test_chat_listing_capabilities.py, immutable fixture release, never production estimates",
+        "dimension": "filters"
+      },
+      {
+        "tool": "compare_listing_age",
+        "path": [
+          "tools",
+          0,
+          "result",
+          "data",
+          "age_groups",
+          {
+            "where": {
+              "age_group": "older"
+            }
+          },
+          "count"
+        ],
+        "kind": "exact",
+        "expected": 2,
+        "source": "Hand-calculated independent fixtures: tests/integration/clickhouse/test_chat_listing_capabilities.py, immutable fixture release, never production estimates"
+      },
+      {
+        "tool": "compare_listing_age",
+        "path": [
+          "tools",
+          0,
+          "result",
+          "data",
+          "age_groups",
+          {
+            "where": {
+              "age_group": "newer"
+            }
+          },
+          "count"
+        ],
+        "kind": "exact",
+        "expected": 5,
+        "source": "Hand-calculated independent fixtures: tests/integration/clickhouse/test_chat_listing_capabilities.py, immutable fixture release, never production estimates"
+      },
+      {
+        "tool": "compare_listing_age",
+        "path": [
+          "tools",
+          0,
+          "result",
+          "data",
+          "age_groups",
+          {
+            "where": {
+              "age_group": "unknown"
+            }
+          },
+          "count"
+        ],
+        "kind": "exact",
+        "expected": 2,
+        "source": "Hand-calculated independent fixtures: tests/integration/clickhouse/test_chat_listing_capabilities.py, immutable fixture release, never production estimates"
+      },
+      {
+        "tool": "compare_listing_age",
+        "path": [
+          "tools",
+          0,
+          "result",
+          "data",
+          "older_listings",
+          {
+            "where": {
+              "listing_id": "old"
+            }
+          },
+          "age_days_at_capture"
+        ],
+        "kind": "exact",
+        "expected": 122,
+        "source": "Hand-calculated independent fixtures: tests/integration/clickhouse/test_chat_listing_capabilities.py, immutable fixture release, never production estimates"
+      },
+      {
+        "tool": "compare_listing_age",
+        "path": [
+          "tools",
+          0,
+          "result",
+          "data",
+          "older_listings",
+          {
+            "where": {
+              "listing_id": "old"
+            }
+          },
+          "first_observed_at"
+        ],
+        "kind": "exact",
+        "expected": null,
+        "source": "Hand-calculated independent fixtures: tests/integration/clickhouse/test_chat_listing_capabilities.py, immutable fixture release, never production estimates"
+      },
+      {
+        "tool": "compare_listing_age",
+        "path": [
+          "tools",
+          0,
+          "result",
+          "data",
+          "older_listings",
+          {
+            "where": {
+              "listing_id": "old"
+            }
+          },
+          "newer_comparable_count"
+        ],
+        "kind": "exact",
+        "expected": 3,
+        "source": "Hand-calculated independent fixtures: tests/integration/clickhouse/test_chat_listing_capabilities.py, immutable fixture release, never production estimates"
+      },
+      {
+        "tool": "compare_listing_age",
+        "path": [
+          "tools",
+          0,
+          "result",
+          "data",
+          "older_listings",
+          {
+            "where": {
+              "listing_id": "old"
+            }
+          },
+          "newer_comparable_median_aed_per_sqft"
+        ],
+        "kind": "exact",
+        "expected": 1100,
+        "source": "Hand-calculated independent fixtures: tests/integration/clickhouse/test_chat_listing_capabilities.py, immutable fixture release, never production estimates"
+      },
+      {
+        "tool": "compare_listing_age",
+        "path": [
+          "tools",
+          0,
+          "result",
+          "data",
+          "older_listings",
+          {
+            "where": {
+              "listing_id": "old"
+            }
+          },
+          "asking_difference_pct"
+        ],
+        "kind": "exact",
+        "expected": 36.36,
+        "source": "Hand-calculated independent fixtures: tests/integration/clickhouse/test_chat_listing_capabilities.py, immutable fixture release, never production estimates"
+      }
+    ],
+    "q11": [
+      {
+        "tool": "compare_listing_rents",
+        "path": [
+          "tools",
+          0,
+          "arguments",
+          "request",
+          "location"
+        ],
+        "kind": "exact",
+        "expected": "JVC",
+        "source": "Hand-calculated independent fixtures: tests/integration/clickhouse/test_chat_listing_capabilities.py, immutable fixture release, never production estimates",
+        "dimension": "filters"
+      },
+      {
+        "tool": "compare_listing_rents",
+        "path": [
+          "tools",
+          0,
+          "arguments",
+          "request",
+          "bedrooms"
+        ],
+        "kind": "exact",
+        "expected": "1",
+        "source": "Hand-calculated independent fixtures: tests/integration/clickhouse/test_chat_listing_capabilities.py, immutable fixture release, never production estimates",
+        "dimension": "filters"
+      },
+      {
+        "tool": "compare_listing_rents",
+        "path": [
+          "tools",
+          0,
+          "arguments",
+          "request",
+          "price_max"
+        ],
+        "kind": "exact",
+        "expected": 1200000,
+        "source": "Hand-calculated independent fixtures: tests/integration/clickhouse/test_chat_listing_capabilities.py, immutable fixture release, never production estimates",
+        "dimension": "filters"
+      },
+      {
+        "tool": "compare_listing_rents",
+        "path": [
+          "tools",
+          0,
+          "result",
+          "data",
+          "listings",
+          {
+            "where": {
+              "listing_id": "yield-1"
+            }
+          },
+          "gross_yield_pct"
+        ],
+        "kind": "exact",
+        "expected": 8.0,
+        "source": "Hand-calculated independent fixtures: tests/integration/clickhouse/test_chat_listing_capabilities.py, immutable fixture release, never production estimates"
+      },
+      {
+        "tool": "compare_listing_rents",
+        "path": [
+          "tools",
+          0,
+          "result",
+          "data",
+          "listings",
+          {
+            "where": {
+              "listing_id": "yield-1"
+            }
+          },
+          "gross_yield_range_pct"
+        ],
+        "kind": "exact",
+        "expected": [
+          7.0,
+          9.0
+        ],
+        "source": "Hand-calculated independent fixtures: tests/integration/clickhouse/test_chat_listing_capabilities.py, immutable fixture release, never production estimates"
+      },
+      {
+        "tool": "compare_listing_rents",
+        "path": [
+          "tools",
+          0,
+          "result",
+          "data",
+          "listings",
+          {
+            "where": {
+              "listing_id": "yield-1"
+            }
+          },
+          "yield_status"
+        ],
+        "kind": "exact",
+        "expected": "ok",
+        "source": "Hand-calculated independent fixtures: tests/integration/clickhouse/test_chat_listing_capabilities.py, immutable fixture release, never production estimates"
+      },
+      {
+        "tool": "compare_listing_rents",
+        "path": [
+          "tools",
+          0,
+          "result",
+          "data",
+          "registered_rents",
+          "Fixture Tower",
+          "total",
+          "count"
+        ],
+        "kind": "exact",
+        "expected": 5,
+        "source": "Hand-calculated independent fixtures: tests/integration/clickhouse/test_chat_listing_capabilities.py, immutable fixture release, never production estimates"
+      },
+      {
+        "tool": "compare_listing_rents",
+        "path": [
+          "tools",
+          0,
+          "result",
+          "data",
+          "registered_rents",
+          "Fixture Tower",
+          "total",
+          "values",
+          "median_aed"
+        ],
+        "kind": "exact",
+        "expected": 80000,
+        "source": "Hand-calculated independent fixtures: tests/integration/clickhouse/test_chat_listing_capabilities.py, immutable fixture release, never production estimates"
+      },
+      {
+        "tool": "compare_listing_rents",
+        "path": [
+          "tools",
+          0,
+          "result",
+          "data",
+          "registered_rents",
+          "Fixture Tower",
+          "period",
+          "start"
+        ],
+        "kind": "exact",
+        "expected": "2026-09-01",
+        "source": "Hand-calculated independent fixtures: tests/integration/clickhouse/test_chat_listing_capabilities.py, immutable fixture release, never production estimates"
+      },
+      {
+        "tool": "compare_listing_rents",
+        "path": [
+          "tools",
+          0,
+          "result",
+          "data",
+          "registered_rents",
+          "Fixture Tower",
+          "period",
+          "end"
+        ],
+        "kind": "exact",
+        "expected": "2026-09-30",
+        "source": "Hand-calculated independent fixtures: tests/integration/clickhouse/test_chat_listing_capabilities.py, immutable fixture release, never production estimates"
+      }
+    ]
+  }
+}

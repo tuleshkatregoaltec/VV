@@ -138,6 +138,7 @@ def export_payload(directory: Path, assessment: dict):
                 "calendar_window",
                 "capability_support",
                 "parameter_binding",
+                "evidence_consistency",
             }
             if dimension not in known and not re.fullmatch(r"reference_evidence_[0-9]+", dimension):
                 raise ValueError("Unknown feedback dimension")
@@ -147,6 +148,8 @@ def export_payload(directory: Path, assessment: dict):
                 "source_review",
                 "human",
                 "assisted_review",
+                "independent_reference",
+                "server_contract",
             }:
                 raise ValueError("Unknown feedback status/method")
             checks.append(

@@ -13,11 +13,12 @@ logger = logging.getLogger(__name__)
 
 class TokenUsageService:
     async def get_today_usage(self, db: AsyncSession, user_id: str) -> Optional[UserTokenUsage]:
+        from app.config import settings
         from app.core.ai_policy import reserved_daily_tokens
 
         today = datetime.now(timezone.utc).date()
         legacy = await repository.get_usage(db, user_id, today)
-        accounted = await reserved_daily_tokens(user_id, today)
+        accounted = await reserved_daily_tokens(user_id, today) if settings.AI_PRICING_MODEL else 0
         if not accounted:
             return legacy
         # Existing PostgreSQL totals predate the shared provider ledger. Include
@@ -107,7 +108,24 @@ class TokenUsageService:
     async def get_usage_records(
         self, db: AsyncSession, day: date, user_ids: list[str] | None = None
     ):
-        return await repository.get_usage_records(db, day, user_ids)
+        from app.config import settings
+        from app.core.ai_policy import reserved_token_records
+
+        legacy = await repository.get_usage_records(db, day, user_ids)
+        if not settings.AI_PRICING_MODEL:
+            return legacy
+        accounted = await reserved_token_records(day, user_ids)
+        by_user = {row.user_id: row for row in legacy}
+        for user_id, tokens in accounted.items():
+            old = by_user.get(user_id)
+            by_user[user_id] = UserTokenUsage(
+                user_id=user_id,
+                date=day,
+                total_tokens=tokens + (old.total_tokens if old else 0),
+                prompt_tokens=old.prompt_tokens if old else 0,
+                completion_tokens=old.completion_tokens if old else 0,
+            )
+        return list(by_user.values())
 
 
 token_usage_service = TokenUsageService()

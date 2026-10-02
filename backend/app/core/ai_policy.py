@@ -41,6 +41,8 @@ class Execution:
     daily_token_limit: int
     authorize: Callable[[], Awaitable[None]] | None = None
     calls: int = 0
+    prompt_version: str | None = None
+    data_release: str | None = None
 
 
 _scope: ContextVar[Execution | None] = ContextVar("ai_execution", default=None)
@@ -106,13 +108,26 @@ def safe_model_settings(model_settings):
 
 @asynccontextmanager
 async def ai_execution(
-    *, user_id, organization_id, execution_id, daily_token_limit, authorize=None
+    *,
+    user_id,
+    organization_id,
+    execution_id,
+    daily_token_limit,
+    authorize=None,
+    prompt_version=None,
+    data_release=None,
 ):
     if not user_id or not organization_id or not execution_id or daily_token_limit <= 0:
         raise AIPolicyError("Authenticated AI execution context is required")
     token = _scope.set(
         Execution(
-            str(user_id), str(organization_id), str(execution_id), daily_token_limit, authorize
+            str(user_id),
+            str(organization_id),
+            str(execution_id),
+            daily_token_limit,
+            authorize,
+            prompt_version=prompt_version,
+            data_release=data_release,
         )
     )
     try:
@@ -142,6 +157,9 @@ for i=2,6 do redis.call('INCRBY', KEYS[i], ARGV[i]) end
 for i=7,8 do redis.call('ZADD', KEYS[i], ARGV[16], ARGV[1]) end
 for i=9,10 do redis.call('INCR', KEYS[i]); redis.call('EXPIRE', KEYS[i], 120) end
 redis.call('HSET', KEYS[1], 'status', 'reserved', 'cost', ARGV[2], 'tokens', ARGV[6])
+redis.call('SADD', KEYS[11], ARGV[17])
+redis.call('HSET', KEYS[1], 'execution_id', ARGV[18], 'prompt_version', ARGV[19],
+ 'data_release', ARGV[20], 'provider', 'openrouter', 'endpoint', 'chat/completions')
 return 'ok'
 """
 _SETTLE = """
@@ -245,6 +263,7 @@ async def provider_reservation(model: str, payload, *, output_tokens: int):
         f"{prefix}active:org:{org}",
         f"{prefix}rate:user:{user}:{int(time.time() // 60)}",
         f"{prefix}rate:org:{org}:{int(time.time() // 60)}",
+        f"{prefix}users:{now:%Y-%m-%d}",
     ]
     connection = client()
     reservation = Reservation(connection, keys, identifier, model, reserved_cost, reserved_tokens)
@@ -264,6 +283,10 @@ async def provider_reservation(model: str, payload, *, output_tokens: int):
                 settings.AI_ORG_CONCURRENCY,
                 settings.AI_REQUESTS_PER_MINUTE,
                 time.time() + settings.AI_EXECUTION_TIMEOUT_SECONDS + 30,
+                scope.user_id,
+                scope.execution_id,
+                scope.prompt_version or "unversioned",
+                scope.data_release or "unverified",
             )
         except Exception:
             raise AIPolicyError("AI accounting is unavailable") from None
@@ -315,6 +338,27 @@ async def reserved_daily_tokens(user_id: str, day):
         return int(
             await connection.get(f"{LEDGER_PREFIX}tokens:{_identity(user_id)}:{day:%Y-%m-%d}") or 0
         )
+    except Exception:
+        raise AIPolicyError("AI accounting is unavailable") from None
+    finally:
+        await connection.aclose()
+
+
+async def reserved_token_records(day, user_ids=None):
+    """Batched private usage reads for the existing authorized admin service."""
+    connection = client()
+    try:
+        identities = (
+            list(user_ids)
+            if user_ids is not None
+            else sorted(await connection.smembers(f"{LEDGER_PREFIX}users:{day:%Y-%m-%d}"))
+        )
+        if not identities:
+            return {}
+        values = await connection.mget(
+            [f"{LEDGER_PREFIX}tokens:{_identity(user_id)}:{day:%Y-%m-%d}" for user_id in identities]
+        )
+        return {user_id: int(value or 0) for user_id, value in zip(identities, values, strict=True)}
     except Exception:
         raise AIPolicyError("AI accounting is unavailable") from None
     finally:

@@ -10,12 +10,25 @@ from scripts.evaluation.inventory import build_inventory
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "command", choices=["inventory", "dataset", "run", "assess", "compare", "export"]
+        "command",
+        choices=[
+            "inventory",
+            "dataset",
+            "run",
+            "assess",
+            "compare",
+            "export",
+            "prepare",
+            "promote",
+        ],
     )
     parser.add_argument("--directory")
     parser.add_argument("--case", action="append", dest="case_ids")
     parser.add_argument("--data-context", default="local-mutable-warehouse")
     parser.add_argument("--bindings")
+    parser.add_argument(
+        "--budget-usd", help="Explicit approved ceiling for live provider evaluation"
+    )
     parser.add_argument("--references")
     parser.add_argument("--reviews")
     parser.add_argument("--baseline")
@@ -23,6 +36,28 @@ def main():
     parser.add_argument("--assessment")
     parser.add_argument("--upload", action="store_true")
     args = parser.parse_args()
+    if args.command == "prepare":
+        from pathlib import Path
+
+        from scripts.evaluation.improvement import prepare
+
+        if not args.directory:
+            parser.error("prepare requires --directory")
+        print(json.dumps(prepare(Path(args.directory)), indent=2))
+        return
+    if args.command == "promote":
+        from pathlib import Path
+
+        from scripts.evaluation.improvement import promotion_gate
+
+        if not args.baseline or not args.candidate:
+            parser.error("promote requires --baseline and --candidate")
+        result = promotion_gate(
+            json.loads(Path(args.baseline).read_text()),
+            json.loads(Path(args.candidate).read_text()),
+        )
+        print(json.dumps(result, indent=2))
+        raise SystemExit(0 if result["promote"] else 1)
     if args.command == "export":
         from pathlib import Path
 
@@ -82,6 +117,7 @@ def main():
                 args.case_ids,
                 data_context=args.data_context,
                 bindings_path=args.bindings,
+                max_spend_usd=args.budget_usd,
             )
         )
         return

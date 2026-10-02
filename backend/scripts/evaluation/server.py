@@ -86,11 +86,16 @@ def create_app():
     from app.postgres import get_postgres_engine
 
     instrument_postgres(get_postgres_engine(), tracer)
+    from app.chat import mcp as chat_mcp
     from app.chat.agent import agent
+    from app.chat.prompts import CHAT_PROMPT_VERSION
 
+    # These are the exact schemas registered by the MCP server's tools/list
+    # handler, not a guessed static call graph or local-function toolset.
+    definitions = chat_mcp.tool_definitions()
     tools = {
-        name: {"description": tool.description, "schema": tool.function_schema.json_schema}
-        for name, tool in agent._function_toolset.tools.items()
+        tool.name: {"description": tool.description, "schema": tool.inputSchema}
+        for tool in definitions
     }
     private_write(
         directory / "runtime.json",
@@ -100,6 +105,9 @@ def create_app():
             "agent": "app.chat.agent.agent",
             "agent_name": agent.name,
             "prompt_sha256": fingerprint(agent._system_prompts),
+            "prompt_version": CHAT_PROMPT_VERSION,
+            "transport": "mcp-streamable-http",
+            "policy_version": "ai-policy-v1",
             "tools_sha256": fingerprint(tools),
             "tools": tools,
             "model_settings": {"openrouter_reasoning": {"effort": "low"}},

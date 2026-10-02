@@ -1,32 +1,28 @@
 from scripts.evaluation.inventory import build_inventory
 
 
-def test_actual_chat_registration_links_to_public_capabilities_and_warehouse():
-    inventory = build_inventory()
-    chat = next(agent for agent in inventory["agents"] if agent["id"] == "app.chat.agent.agent")
-    assert {tool["function"] for tool in chat["tools"]} == {
-        "app.chat.tools.get_market_pulse",
-        "app.chat.tools.rank_areas",
-        "app.chat.tools.get_similar_projects",
-        "app.chat.tools.query_market_metrics",
-        "app.chat.tools.get_listing_inventory",
-        "app.chat.tools.get_project_delivery_summary",
+def test_mcp_registration_has_bounded_public_capabilities_and_no_static_graph_claim():
+    from app.chat import mcp
+
+    definitions = mcp.tool_definitions()
+    assert {tool.name for tool in definitions} == {
+        "query_market_metrics",
+        "get_listing_inventory",
+        "get_project_delivery_summary",
+        "compare_listing_age",
+        "compare_listing_rents",
+        "compose_market_report",
     }
-    reachable = set(chat["possible_reachable_functions"])
-    assert {
-        "app.analytics.service.get_market_pulse",
-        "app.analytics.queries.fetch_market_pulse",
-        "app.project.service.get_similar_projects",
-        "app.project.queries.fetch_similar_projects",
-        "app.clickhouse.client.query",
-        "app.analytics.market_metrics.get_market_metrics",
-        "app.analytics.market_metric_queries.fetch_metric_rows",
-        "app.project.delivery.get_delivery_summary",
-        "app.listings.service.listing_analytics_from_clickhouse",
-    } <= reachable
-    assert "app.listings.service.list_listings_from_clickhouse" not in reachable
-    pulse = inventory["functions"]["app.analytics.queries.fetch_market_pulse"]
-    assert pulse["sql_source_candidates"] == ["ch_transactions"]
+    for tool in definitions:
+        assert tool.inputSchema["additionalProperties"] is False
+        assert tool.inputSchema["required"] == ["request"]
+        properties = tool.inputSchema["properties"]["request"]["properties"]
+        assert not {"user_id", "organization_id", "reference_date", "sql"} & properties.keys()
+    inventory = build_inventory()
+    # MCP is dynamically scoped per turn; a static map must retain uncertainty.
+    assert "app.chat.mcp.market_mcp" in inventory["functions"]
+    assert "app.analytics.market_metrics.get_market_metrics" in inventory["functions"]
+    assert "app.listings.capabilities.compare_listing_rents" in inventory["functions"]
 
 
 def test_declared_legacy_hbu_tools_are_not_assigned_to_selected_production_agents():

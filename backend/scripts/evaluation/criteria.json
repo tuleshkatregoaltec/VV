@@ -1,126 +1,154 @@
 {
-  "version": 1,
-  "capability_tools_sha256": "0c40345dce4aedf5fafc7c891e40102b5b41d8e1db18826ecf732c1ab0168ffd",
+  "version": 2,
+  "capability_tools_sha256": "008b27a5fd1fd488629d88807751495a2373623e94146c41650fc0b96ece02da",
   "cases": {
     "q01": {
       "required_sources": [
         "transactions"
       ],
-      "missing_capabilities": [
-        "price bracket and apartment filters"
+      "missing_capabilities": [],
+      "calendar_window": null,
+      "required_tools": [
+        "query_market_metrics"
       ],
-      "calendar_window": null
+      "evidence_limitations": "Authoritative release and period coverage required; unknown coverage never earns freshness credit."
     },
     "q02": {
       "required_sources": [
         "transactions"
       ],
-      "missing_capabilities": [
-        "building/bedroom grouping and calendar quarter"
+      "missing_capabilities": [],
+      "calendar_window": "previous_quarter",
+      "required_tools": [
+        "query_market_metrics"
       ],
-      "calendar_window": "previous_quarter"
+      "evidence_limitations": "Authoritative release and period coverage required; unknown coverage never earns freshness credit."
     },
     "q03": {
       "required_sources": [
         "transactions"
       ],
-      "missing_capabilities": [
-        "bedroom filter and quartiles"
+      "missing_capabilities": [],
+      "calendar_window": null,
+      "required_tools": [
+        "query_market_metrics"
       ],
-      "calendar_window": null
+      "evidence_limitations": "Authoritative release and period coverage required; unknown coverage never earns freshness credit."
     },
     "q04": {
       "required_sources": [
         "registered_rents"
       ],
-      "missing_capabilities": [
-        "rental contract type and bedroom filters"
+      "missing_capabilities": [],
+      "calendar_window": null,
+      "required_tools": [
+        "query_market_metrics"
       ],
-      "calendar_window": null
+      "evidence_limitations": "Authoritative release and period coverage required; unknown coverage never earns freshness credit."
     },
     "q05": {
       "required_sources": [
         "registered_rents"
       ],
       "missing_capabilities": [
-        "rental term and annualization evidence"
+        "individual rental-contract evidence is not exposed"
       ],
-      "calendar_window": null
+      "calendar_window": null,
+      "required_tools": [
+        "query_market_metrics"
+      ],
+      "evidence_limitations": "Authoritative release and period coverage required; unknown coverage never earns freshness credit."
     },
     "q06": {
       "required_sources": [
         "registered_rents"
       ],
-      "missing_capabilities": [
-        "studio rental monthly time series"
+      "missing_capabilities": [],
+      "calendar_window": "six_complete_months",
+      "required_tools": [
+        "query_market_metrics"
       ],
-      "calendar_window": "six_complete_months"
+      "evidence_limitations": "Authoritative release and period coverage required; unknown coverage never earns freshness credit."
     },
     "q07": {
       "required_sources": [
         "projects"
       ],
-      "missing_capabilities": [
-        "developer delivery concentration"
+      "missing_capabilities": [],
+      "calendar_window": null,
+      "required_tools": [
+        "get_project_delivery_summary"
       ],
-      "calendar_window": null
+      "evidence_limitations": "Authoritative release and period coverage required; unknown coverage never earns freshness credit."
     },
     "q08": {
       "required_sources": [
         "projects"
       ],
-      "missing_capabilities": [
-        "project completion-date status counts"
+      "missing_capabilities": [],
+      "calendar_window": null,
+      "required_tools": [
+        "get_project_delivery_summary"
       ],
-      "calendar_window": null
+      "evidence_limitations": "Authoritative release and period coverage required; unknown coverage never earns freshness credit."
     },
     "q09": {
       "required_sources": [
         "listings"
       ],
-      "missing_capabilities": [
-        "bedroom listing inventory aggregates"
+      "missing_capabilities": [],
+      "calendar_window": null,
+      "required_tools": [
+        "get_listing_inventory"
       ],
-      "calendar_window": null
+      "evidence_limitations": "Authoritative release and period coverage required; unknown coverage never earns freshness credit."
     },
     "q10": {
       "required_sources": [
         "listings"
       ],
-      "missing_capabilities": [
-        "listing age-at-capture and comparables"
+      "missing_capabilities": [],
+      "calendar_window": null,
+      "required_tools": [
+        "compare_listing_age"
       ],
-      "calendar_window": null
+      "evidence_limitations": "Authoritative release and period coverage required; unknown coverage never earns freshness credit."
     },
     "q11": {
       "required_sources": [
         "listings",
         "registered_rents"
       ],
-      "missing_capabilities": [
-        "listing-to-rental yield evidence"
+      "missing_capabilities": [],
+      "calendar_window": null,
+      "required_tools": [
+        "compare_listing_rents"
       ],
-      "calendar_window": null
+      "evidence_limitations": "Authoritative release and period coverage required; unknown coverage never earns freshness credit."
     },
     "q12": {
       "required_sources": [
         "registered_rents",
         "listings"
       ],
-      "missing_capabilities": [
-        "building appraisal and competing rental evidence"
+      "missing_capabilities": [],
+      "calendar_window": null,
+      "required_tools": [
+        "compose_market_report"
       ],
-      "calendar_window": null
+      "evidence_limitations": "Authoritative release and period coverage required; unknown coverage never earns freshness credit."
     },
     "q13": {
       "required_sources": [
         "listings",
         "transactions"
       ],
-      "missing_capabilities": [
-        "building competition and achieved sales report"
+      "missing_capabilities": [],
+      "calendar_window": null,
+      "required_tools": [
+        "compose_market_report"
       ],
-      "calendar_window": null
+      "evidence_limitations": "Authoritative release and period coverage required; unknown coverage never earns freshness credit."
     },
     "q14": {
       "required_sources": [
@@ -129,10 +157,12 @@
         "listings",
         "projects"
       ],
-      "missing_capabilities": [
-        "multi-source calendar-month report"
+      "missing_capabilities": [],
+      "calendar_window": "previous_month",
+      "required_tools": [
+        "compose_market_report"
       ],
-      "calendar_window": "previous_month"
+      "evidence_limitations": "Authoritative release and period coverage required; unknown coverage never earns freshness credit."
     },
     "q15": {
       "required_sources": [
@@ -140,9 +170,13 @@
         "transactions"
       ],
       "missing_capabilities": [
-        "project prices/payment plans/progress/delivery comparison"
+        "Reelly prices, payment plans and unit configuration data unavailable"
       ],
-      "calendar_window": null
+      "calendar_window": null,
+      "required_tools": [
+        "compose_market_report"
+      ],
+      "evidence_limitations": "Authoritative release and period coverage required; unknown coverage never earns freshness credit."
     }
   }
 }

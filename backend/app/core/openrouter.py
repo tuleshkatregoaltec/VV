@@ -24,9 +24,25 @@ class CompatibleOpenRouterModel(OpenRouterModel):
     so strip the incompatible field before delegating to its OpenRouter handling.
     """
 
+    @staticmethod
+    def _validate_text_request(messages, parameters):
+        from pydantic_ai.messages import ModelRequest, UserPromptPart
+
+        from app.core.ai_policy import AIPolicyError
+
+        if parameters.builtin_tools:
+            raise AIPolicyError("Unpriced built-in provider tools are disabled")
+        for message in messages:
+            if isinstance(message, ModelRequest):
+                for part in message.parts:
+                    if isinstance(part, UserPromptPart) and not isinstance(part.content, str):
+                        if any(not isinstance(item, str) for item in part.content):
+                            raise AIPolicyError("Unpriced multimodal provider input is disabled")
+
     async def request(self, messages, model_settings, model_request_parameters):
         from app.core.ai_policy import provider_reservation, safe_model_settings
 
+        self._validate_text_request(messages, model_request_parameters)
         policy = safe_model_settings(model_settings)
         async with provider_reservation(
             self.model_name,
@@ -43,6 +59,7 @@ class CompatibleOpenRouterModel(OpenRouterModel):
     ):
         from app.core.ai_policy import provider_reservation, safe_model_settings
 
+        self._validate_text_request(messages, model_request_parameters)
         policy = safe_model_settings(model_settings)
         async with provider_reservation(
             self.model_name,
