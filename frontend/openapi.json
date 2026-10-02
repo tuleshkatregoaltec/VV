@@ -1107,6 +1107,46 @@
 				}
 			}
 		},
+		"/api/v1/analytics/market-metrics": {
+			"post": {
+				"tags": ["analytics", "analytics"],
+				"summary": "Get Market Metrics Endpoint",
+				"description": "Sales or rental metrics with explicit period, coverage, definitions and evidence.\n\nThe same operation backs the chat tool, so API and chat answers agree.",
+				"operationId": "analytics-get_market_metrics_endpoint",
+				"requestBody": {
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/MarketMetricsRequest"
+							}
+						}
+					},
+					"required": true
+				},
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/MarketMetricsResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
 		"/api/v1/areas": {
 			"get": {
 				"tags": ["areas", "areas"],
@@ -4916,6 +4956,148 @@
 				}
 			}
 		},
+		"/api/v1/projects/delivery-summary": {
+			"get": {
+				"tags": ["projects", "projects"],
+				"summary": "Project Delivery Summary",
+				"description": "DLD-registered projects by delivery status, developer, year or project.",
+				"operationId": "projects-project_delivery_summary",
+				"parameters": [
+					{
+						"name": "location",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "string",
+									"maxLength": 120
+								},
+								{
+									"type": "null"
+								}
+							],
+							"title": "Location"
+						}
+					},
+					{
+						"name": "project_status",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "array",
+							"items": {
+								"type": "string"
+							},
+							"default": ["ACTIVE"],
+							"title": "Project Status"
+						}
+					},
+					{
+						"name": "delivery_status",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "array",
+							"items": {
+								"enum": [
+									"missing_date",
+									"overdue",
+									"scheduled_in_horizon",
+									"scheduled_later",
+									"completed",
+									"cancelled"
+								],
+								"type": "string"
+							},
+							"default": [
+								"missing_date",
+								"overdue",
+								"scheduled_in_horizon",
+								"scheduled_later",
+								"completed",
+								"cancelled"
+							],
+							"title": "Delivery Status"
+						}
+					},
+					{
+						"name": "group_by",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"enum": ["developer", "delivery_status", "delivery_year", "project"],
+							"type": "string",
+							"default": "developer",
+							"title": "Group By"
+						}
+					},
+					{
+						"name": "horizon_months",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer",
+							"maximum": 240,
+							"minimum": 1,
+							"default": 24,
+							"title": "Horizon Months"
+						}
+					},
+					{
+						"name": "reference_date",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "string",
+									"format": "date"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"title": "Reference Date"
+						}
+					},
+					{
+						"name": "limit",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer",
+							"maximum": 200,
+							"minimum": 1,
+							"default": 20,
+							"title": "Limit"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/DeliverySummaryResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
 		"/api/v1/projects/list": {
 			"get": {
 				"tags": ["projects", "projects"],
@@ -4966,11 +5148,9 @@
 						"in": "query",
 						"required": false,
 						"schema": {
-							"enum": [30, 90, 180, 365],
-							"type": "integer",
+							"$ref": "#/components/schemas/RadarPeriodDays",
 							"description": "Trailing DLD/Ejari activity window in days (maximum 365)",
-							"default": 365,
-							"title": "Period Days"
+							"default": 365
 						},
 						"description": "Trailing DLD/Ejari activity window in days (maximum 365)"
 					}
@@ -5011,11 +5191,9 @@
 						"in": "query",
 						"required": false,
 						"schema": {
-							"enum": [30, 90, 180, 365],
-							"type": "integer",
+							"$ref": "#/components/schemas/RadarPeriodDays",
 							"description": "Trailing DLD/Ejari activity window in days (maximum 365)",
-							"default": 365,
-							"title": "Period Days"
+							"default": 365
 						},
 						"description": "Trailing DLD/Ejari activity window in days (maximum 365)"
 					}
@@ -5186,11 +5364,9 @@
 						"in": "query",
 						"required": false,
 						"schema": {
-							"enum": [30, 90, 180, 365],
-							"type": "integer",
+							"$ref": "#/components/schemas/RadarPeriodDays",
 							"description": "Trailing DLD/Ejari activity window in days (maximum 365)",
-							"default": 365,
-							"title": "Period Days"
+							"default": 365
 						},
 						"description": "Trailing DLD/Ejari activity window in days (maximum 365)"
 					}
@@ -5206,6 +5382,119 @@
 										"$ref": "#/components/schemas/ProjectRadarProject"
 									},
 									"title": "Response Projects-Project Radar Pins"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/projects/radar/building-pins": {
+			"get": {
+				"tags": ["projects", "projects"],
+				"summary": "Radar Building Pins",
+				"description": "Get Property Finder tower pins and linked market evidence for a viewport.",
+				"operationId": "projects-radar_building_pins",
+				"parameters": [
+					{
+						"name": "west",
+						"in": "query",
+						"required": true,
+						"schema": {
+							"type": "number",
+							"maximum": 57,
+							"minimum": 54,
+							"description": "Viewport west longitude",
+							"title": "West"
+						},
+						"description": "Viewport west longitude"
+					},
+					{
+						"name": "south",
+						"in": "query",
+						"required": true,
+						"schema": {
+							"type": "number",
+							"maximum": 26,
+							"minimum": 24,
+							"description": "Viewport south latitude",
+							"title": "South"
+						},
+						"description": "Viewport south latitude"
+					},
+					{
+						"name": "east",
+						"in": "query",
+						"required": true,
+						"schema": {
+							"type": "number",
+							"maximum": 57,
+							"minimum": 54,
+							"description": "Viewport east longitude",
+							"title": "East"
+						},
+						"description": "Viewport east longitude"
+					},
+					{
+						"name": "north",
+						"in": "query",
+						"required": true,
+						"schema": {
+							"type": "number",
+							"maximum": 26,
+							"minimum": 24,
+							"description": "Viewport north latitude",
+							"title": "North"
+						},
+						"description": "Viewport north latitude"
+					},
+					{
+						"name": "limit",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer",
+							"maximum": 10000,
+							"minimum": 10,
+							"description": "Maximum tower pins",
+							"default": 3000,
+							"title": "Limit"
+						},
+						"description": "Maximum tower pins"
+					},
+					{
+						"name": "period_days",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"$ref": "#/components/schemas/RadarPeriodDays",
+							"description": "Trailing DLD/Ejari activity window in days (maximum 365)",
+							"default": 365
+						},
+						"description": "Trailing DLD/Ejari activity window in days (maximum 365)"
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "array",
+									"items": {
+										"$ref": "#/components/schemas/RadarBuildingPin"
+									},
+									"title": "Response Projects-Radar Building Pins"
 								}
 							}
 						}
@@ -13153,6 +13442,152 @@
 				"title": "DDAPlotFeature",
 				"description": "DDA GIS plot polygon for map overlay."
 			},
+			"DeliveryGroupRow": {
+				"properties": {
+					"group": {
+						"type": "string",
+						"title": "Group"
+					},
+					"project_count": {
+						"type": "integer",
+						"title": "Project Count"
+					},
+					"units": {
+						"type": "integer",
+						"title": "Units"
+					},
+					"projects_without_units": {
+						"type": "integer",
+						"title": "Projects Without Units"
+					},
+					"share_of_units": {
+						"anyOf": [
+							{
+								"type": "number"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Share Of Units"
+					}
+				},
+				"type": "object",
+				"required": ["group", "project_count", "units", "projects_without_units"],
+				"title": "DeliveryGroupRow"
+			},
+			"DeliverySummaryResponse": {
+				"properties": {
+					"location": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Location"
+					},
+					"project_statuses": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"title": "Project Statuses"
+					},
+					"delivery_statuses": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"title": "Delivery Statuses"
+					},
+					"group_by": {
+						"type": "string",
+						"title": "Group By"
+					},
+					"reference_date": {
+						"type": "string",
+						"format": "date",
+						"title": "Reference Date"
+					},
+					"horizon_end": {
+						"type": "string",
+						"format": "date",
+						"title": "Horizon End"
+					},
+					"definitions": {
+						"additionalProperties": {
+							"type": "string"
+						},
+						"type": "object",
+						"title": "Definitions"
+					},
+					"by_delivery_status": {
+						"items": {
+							"$ref": "#/components/schemas/DeliveryGroupRow"
+						},
+						"type": "array",
+						"title": "By Delivery Status"
+					},
+					"rows": {
+						"items": {
+							"$ref": "#/components/schemas/DeliveryGroupRow"
+						},
+						"type": "array",
+						"title": "Rows"
+					},
+					"matched_terms": {
+						"additionalProperties": {
+							"items": {
+								"type": "string"
+							},
+							"type": "array"
+						},
+						"type": "object",
+						"title": "Matched Terms"
+					},
+					"source": {
+						"type": "string",
+						"title": "Source"
+					},
+					"source_snapshot_at": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Source Snapshot At"
+					},
+					"limitations": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"title": "Limitations",
+						"default": []
+					}
+				},
+				"type": "object",
+				"required": [
+					"location",
+					"project_statuses",
+					"delivery_statuses",
+					"group_by",
+					"reference_date",
+					"horizon_end",
+					"definitions",
+					"by_delivery_status",
+					"rows",
+					"matched_terms",
+					"source"
+				],
+				"title": "DeliverySummaryResponse"
+			},
 			"DeveloperRankingCriterionResponse": {
 				"properties": {
 					"key": {
@@ -18045,6 +18480,673 @@
 				"required": ["period"],
 				"title": "ListingTrendPoint"
 			},
+			"MarketCoverage": {
+				"properties": {
+					"status": {
+						"type": "string",
+						"enum": ["complete", "partial", "unavailable"],
+						"title": "Status"
+					},
+					"data_from": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "date"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Data From"
+					},
+					"data_to": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "date"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Data To"
+					},
+					"covered_from": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "date"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Covered From"
+					},
+					"covered_to": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "date"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Covered To"
+					},
+					"note": {
+						"type": "string",
+						"title": "Note"
+					}
+				},
+				"type": "object",
+				"required": ["status", "note"],
+				"title": "MarketCoverage"
+			},
+			"MarketLocationMatch": {
+				"properties": {
+					"area": {
+						"type": "string",
+						"title": "Area"
+					},
+					"master_project": {
+						"type": "string",
+						"title": "Master Project"
+					},
+					"records": {
+						"type": "integer",
+						"title": "Records"
+					}
+				},
+				"type": "object",
+				"required": ["area", "master_project", "records"],
+				"title": "MarketLocationMatch"
+			},
+			"MarketMetricDefinition": {
+				"properties": {
+					"name": {
+						"type": "string",
+						"title": "Name"
+					},
+					"unit": {
+						"type": "string",
+						"title": "Unit"
+					},
+					"definition": {
+						"type": "string",
+						"title": "Definition"
+					}
+				},
+				"type": "object",
+				"required": ["name", "unit", "definition"],
+				"title": "MarketMetricDefinition"
+			},
+			"MarketMetricRow": {
+				"properties": {
+					"group": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Group"
+					},
+					"count": {
+						"anyOf": [
+							{
+								"type": "integer"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Count"
+					},
+					"share_of_count": {
+						"anyOf": [
+							{
+								"type": "number"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Share Of Count"
+					},
+					"values": {
+						"additionalProperties": {
+							"anyOf": [
+								{
+									"type": "number"
+								},
+								{
+									"type": "null"
+								}
+							]
+						},
+						"type": "object",
+						"title": "Values"
+					}
+				},
+				"type": "object",
+				"title": "MarketMetricRow"
+			},
+			"MarketMetricsRequest": {
+				"properties": {
+					"dataset": {
+						"type": "string",
+						"enum": ["sales", "rentals"],
+						"title": "Dataset"
+					},
+					"metrics": {
+						"items": {
+							"type": "string",
+							"enum": [
+								"count",
+								"total_aed",
+								"mean_aed",
+								"median_aed",
+								"p25_aed",
+								"p75_aed",
+								"mean_aed_per_sqm",
+								"median_aed_per_sqm",
+								"weighted_aed_per_sqm",
+								"mean_aed_per_sqft",
+								"median_aed_per_sqft",
+								"weighted_aed_per_sqft",
+								"total_contract_aed",
+								"median_contract_aed"
+							]
+						},
+						"type": "array",
+						"maxItems": 14,
+						"minItems": 1,
+						"title": "Metrics"
+					},
+					"period": {
+						"$ref": "#/components/schemas/MarketPeriodRequest"
+					},
+					"location": {
+						"anyOf": [
+							{
+								"type": "string",
+								"maxLength": 120
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Location",
+						"description": "Community or DLD area, e.g. JVC"
+					},
+					"building": {
+						"anyOf": [
+							{
+								"type": "string",
+								"maxLength": 160
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Building"
+					},
+					"project": {
+						"anyOf": [
+							{
+								"type": "string",
+								"maxLength": 160
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Project"
+					},
+					"property_type": {
+						"anyOf": [
+							{
+								"type": "string",
+								"enum": ["apartment", "hotel_apartment", "villa", "office", "shop", "land"]
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Property Type"
+					},
+					"usage": {
+						"anyOf": [
+							{
+								"type": "string",
+								"enum": ["residential", "commercial"]
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Usage"
+					},
+					"bedrooms": {
+						"anyOf": [
+							{
+								"items": {
+									"type": "string",
+									"enum": ["studio", "1", "2", "3", "4", "5", "6", "7"]
+								},
+								"type": "array",
+								"maxItems": 8
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Bedrooms"
+					},
+					"registration": {
+						"anyOf": [
+							{
+								"type": "string",
+								"enum": ["off_plan", "ready"]
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Registration",
+						"description": "Sales only"
+					},
+					"contract_version": {
+						"anyOf": [
+							{
+								"type": "string",
+								"enum": ["new", "renewed"]
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Contract Version",
+						"description": "Rentals only"
+					},
+					"min_term_days": {
+						"anyOf": [
+							{
+								"type": "integer",
+								"minimum": 1.0
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Min Term Days",
+						"description": "Rentals only"
+					},
+					"max_term_days": {
+						"anyOf": [
+							{
+								"type": "integer",
+								"minimum": 1.0
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Max Term Days",
+						"description": "Rentals only"
+					},
+					"min_value_aed": {
+						"anyOf": [
+							{
+								"type": "number",
+								"minimum": 0.0
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Min Value Aed",
+						"description": "Sale price or annual rent, inclusive"
+					},
+					"max_value_aed": {
+						"anyOf": [
+							{
+								"type": "number",
+								"exclusiveMinimum": 0.0
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Max Value Aed",
+						"description": "Sale price or annual rent, exclusive"
+					},
+					"group_by": {
+						"anyOf": [
+							{
+								"type": "string",
+								"enum": [
+									"area",
+									"master_project",
+									"project",
+									"building",
+									"month",
+									"bedrooms",
+									"property_type",
+									"price_band",
+									"registration",
+									"contract_version"
+								]
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Group By"
+					},
+					"price_bands": {
+						"anyOf": [
+							{
+								"items": {
+									"type": "number"
+								},
+								"type": "array",
+								"maxItems": 12,
+								"minItems": 1
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Price Bands",
+						"description": "Ascending AED boundaries for group_by=price_band: [b0,b1) ... [bn,inf)"
+					},
+					"sort_by": {
+						"type": "string",
+						"enum": [
+							"count",
+							"total_aed",
+							"mean_aed",
+							"median_aed",
+							"p25_aed",
+							"p75_aed",
+							"mean_aed_per_sqm",
+							"median_aed_per_sqm",
+							"weighted_aed_per_sqm",
+							"mean_aed_per_sqft",
+							"median_aed_per_sqft",
+							"weighted_aed_per_sqft",
+							"total_contract_aed",
+							"median_contract_aed"
+						],
+						"title": "Sort By",
+						"default": "count"
+					},
+					"limit": {
+						"type": "integer",
+						"maximum": 200.0,
+						"minimum": 1.0,
+						"title": "Limit",
+						"default": 20
+					},
+					"min_group_count": {
+						"type": "integer",
+						"maximum": 10000.0,
+						"minimum": 1.0,
+						"title": "Min Group Count",
+						"default": 1
+					},
+					"compare_with_previous_period": {
+						"type": "boolean",
+						"title": "Compare With Previous Period",
+						"default": false
+					},
+					"reference_date": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "date"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Reference Date",
+						"description": "Defaults to today in Asia/Dubai"
+					}
+				},
+				"type": "object",
+				"required": ["dataset", "period"],
+				"title": "MarketMetricsRequest",
+				"description": "Sales or rental metrics over served canonical records (DLD + reconciled DXBI)."
+			},
+			"MarketMetricsResponse": {
+				"properties": {
+					"dataset": {
+						"type": "string",
+						"enum": ["sales", "rentals"],
+						"title": "Dataset"
+					},
+					"period": {
+						"$ref": "#/components/schemas/MarketResolvedPeriod"
+					},
+					"coverage": {
+						"$ref": "#/components/schemas/MarketCoverage"
+					},
+					"filters": {
+						"additionalProperties": true,
+						"type": "object",
+						"title": "Filters"
+					},
+					"eligibility": {
+						"type": "string",
+						"title": "Eligibility"
+					},
+					"definitions": {
+						"items": {
+							"$ref": "#/components/schemas/MarketMetricDefinition"
+						},
+						"type": "array",
+						"title": "Definitions"
+					},
+					"total": {
+						"$ref": "#/components/schemas/MarketMetricRow"
+					},
+					"rows": {
+						"items": {
+							"$ref": "#/components/schemas/MarketMetricRow"
+						},
+						"type": "array",
+						"title": "Rows"
+					},
+					"comparison_period": {
+						"anyOf": [
+							{
+								"$ref": "#/components/schemas/MarketResolvedPeriod"
+							},
+							{
+								"type": "null"
+							}
+						]
+					},
+					"comparison_coverage": {
+						"anyOf": [
+							{
+								"$ref": "#/components/schemas/MarketCoverage"
+							},
+							{
+								"type": "null"
+							}
+						]
+					},
+					"comparison": {
+						"anyOf": [
+							{
+								"$ref": "#/components/schemas/MarketMetricRow"
+							},
+							{
+								"type": "null"
+							}
+						]
+					},
+					"change_pct": {
+						"additionalProperties": {
+							"anyOf": [
+								{
+									"type": "number"
+								},
+								{
+									"type": "null"
+								}
+							]
+						},
+						"type": "object",
+						"title": "Change Pct"
+					},
+					"matched_locations": {
+						"items": {
+							"$ref": "#/components/schemas/MarketLocationMatch"
+						},
+						"type": "array",
+						"title": "Matched Locations"
+					},
+					"sources": {
+						"additionalProperties": {
+							"type": "integer"
+						},
+						"type": "object",
+						"title": "Sources"
+					},
+					"release_built_at": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Release Built At"
+					},
+					"limitations": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"title": "Limitations"
+					}
+				},
+				"type": "object",
+				"required": [
+					"dataset",
+					"period",
+					"coverage",
+					"filters",
+					"eligibility",
+					"definitions",
+					"total"
+				],
+				"title": "MarketMetricsResponse"
+			},
+			"MarketPeriodRequest": {
+				"properties": {
+					"type": {
+						"type": "string",
+						"enum": [
+							"previous_month",
+							"previous_quarter",
+							"previous_months",
+							"month",
+							"quarter",
+							"rolling_days",
+							"range"
+						],
+						"title": "Type"
+					},
+					"months": {
+						"anyOf": [
+							{
+								"type": "integer",
+								"maximum": 120.0,
+								"minimum": 1.0
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Months"
+					},
+					"days": {
+						"anyOf": [
+							{
+								"type": "integer",
+								"maximum": 3660.0,
+								"minimum": 1.0
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Days"
+					},
+					"month": {
+						"anyOf": [
+							{
+								"type": "string",
+								"pattern": "^\\d{4}-\\d{2}$"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Month"
+					},
+					"quarter": {
+						"anyOf": [
+							{
+								"type": "string",
+								"pattern": "^\\d{4}-[Qq][1-4]$"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Quarter"
+					},
+					"start": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "date"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Start"
+					},
+					"end": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "date"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "End"
+					}
+				},
+				"type": "object",
+				"required": ["type"],
+				"title": "MarketPeriodRequest",
+				"description": "A calendar period, resolved in the Asia/Dubai business timezone.\n\nprevious_month: the calendar month before the reference date's month (\"last month\").\nprevious_quarter: the calendar quarter before (\"last quarter\").\nprevious_months: `months` complete calendar months ending with the previous month.\nmonth / quarter: explicit \"YYYY-MM\" / \"YYYY-Qn\".\nrolling_days: `days` calendar days ending on the reference date (\"last 90 days\").\nrange: explicit inclusive start/end."
+			},
 			"MarketPricingRow": {
 				"properties": {
 					"unit_type": {
@@ -18074,6 +19176,40 @@
 				"type": "object",
 				"required": ["unit_type", "transaction_count", "median_price_sqm"],
 				"title": "MarketPricingRow"
+			},
+			"MarketResolvedPeriod": {
+				"properties": {
+					"start": {
+						"type": "string",
+						"format": "date",
+						"title": "Start"
+					},
+					"end": {
+						"type": "string",
+						"format": "date",
+						"title": "End"
+					},
+					"label": {
+						"type": "string",
+						"title": "Label"
+					},
+					"type": {
+						"type": "string",
+						"title": "Type"
+					},
+					"reference_date": {
+						"type": "string",
+						"format": "date",
+						"title": "Reference Date"
+					},
+					"timezone": {
+						"type": "string",
+						"title": "Timezone"
+					}
+				},
+				"type": "object",
+				"required": ["start", "end", "label", "type", "reference_date", "timezone"],
+				"title": "MarketResolvedPeriod"
 			},
 			"MarketTrendPoint": {
 				"properties": {
@@ -20801,6 +21937,39 @@
 						"title": "Land Point Count",
 						"default": 0
 					},
+					"entity_source": {
+						"type": "string",
+						"title": "Entity Source",
+						"default": "legacy_project"
+					},
+					"supply_status": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Supply Status"
+					},
+					"supply_completion_date": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "date"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Supply Completion Date"
+					},
+					"units_in_sale": {
+						"type": "integer",
+						"title": "Units In Sale",
+						"default": 0
+					},
 					"completion_status": {
 						"type": "string",
 						"title": "Completion Status"
@@ -21381,6 +22550,131 @@
 				"type": "object",
 				"required": ["property_type", "count", "avg_price", "pct_of_total"],
 				"title": "PropertyTypeBreakdown"
+			},
+			"RadarBuildingPin": {
+				"properties": {
+					"location_id": {
+						"type": "string",
+						"title": "Location Id"
+					},
+					"source_location_id": {
+						"type": "string",
+						"title": "Source Location Id"
+					},
+					"building_name": {
+						"type": "string",
+						"title": "Building Name"
+					},
+					"project_name": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Project Name"
+					},
+					"area_name": {
+						"type": "string",
+						"title": "Area Name"
+					},
+					"latitude": {
+						"type": "number",
+						"title": "Latitude"
+					},
+					"longitude": {
+						"type": "number",
+						"title": "Longitude"
+					},
+					"coordinate_source": {
+						"type": "string",
+						"title": "Coordinate Source",
+						"default": "property_finder"
+					},
+					"coordinate_precision": {
+						"type": "string",
+						"title": "Coordinate Precision",
+						"default": "tower"
+					},
+					"matched_source_signatures": {
+						"type": "integer",
+						"title": "Matched Source Signatures",
+						"default": 0
+					},
+					"sales_transaction_count": {
+						"type": "integer",
+						"title": "Sales Transaction Count",
+						"default": 0
+					},
+					"rental_contract_count": {
+						"type": "integer",
+						"title": "Rental Contract Count",
+						"default": 0
+					},
+					"total_sales_volume": {
+						"type": "number",
+						"title": "Total Sales Volume",
+						"default": 0.0
+					},
+					"median_sale_price": {
+						"anyOf": [
+							{
+								"type": "number"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Median Sale Price"
+					},
+					"median_annual_rent": {
+						"anyOf": [
+							{
+								"type": "number"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Median Annual Rent"
+					},
+					"listing_inventory_count": {
+						"type": "integer",
+						"title": "Listing Inventory Count",
+						"default": 0
+					},
+					"last_activity_date": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "date"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Last Activity Date"
+					}
+				},
+				"type": "object",
+				"required": [
+					"location_id",
+					"source_location_id",
+					"building_name",
+					"area_name",
+					"latitude",
+					"longitude"
+				],
+				"title": "RadarBuildingPin",
+				"description": "Property Finder tower coordinate with linked DLD/Ejari activity."
+			},
+			"RadarPeriodDays": {
+				"type": "integer",
+				"enum": [30, 90, 180, 365],
+				"title": "RadarPeriodDays",
+				"description": "Supported Radar windows, parsed from their query-string representation."
 			},
 			"RegTypeBreakdown": {
 				"properties": {

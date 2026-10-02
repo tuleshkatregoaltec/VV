@@ -22,8 +22,9 @@ HTTP domain and does not change the placement or dependency rules below.
   `app/clickhouse` contains the client, not business query templates.
 - Cross-domain calls use public application operations or contracts. Do not import
   another domain's repository, private helper, router or internal query module.
-- `market/reference.py` owns shared market names/units; `market/scope.py` owns
-  canonical transaction/project scope predicates. Supply owns its public Reelly
+- `market/reference.py` owns shared market names/units and community name terms;
+  `market/scope.py` owns canonical transaction/project scope and location predicates;
+  `market/periods.py` owns Asia/Dubai calendar periods. Supply owns its public Reelly
   eligibility predicate. These pure helpers are explicit cross-domain exceptions.
 - Chat owns conversation/turn lifecycle, agent setup, thin tools, artifact rendering
   and events. Tools call domain capabilities; domains never import chat.
@@ -228,6 +229,8 @@ uncapped selection path, separate from the 50,000-row filtered-export limit.
 | --- | --- | --- | --- |
 | Conversations and turns | `chat/service.py` | `chat/repository.py` | `agent.py`, thin `tools.py`, `artifacts.py`, `events.py` |
 | Analytics and charts | `analytics/service.py`, `charts.py` | `queries.py`, `chart_queries.py` | `metrics.py` |
+| Market metrics (sales/rentals) | `analytics/market_metrics.py` | `market_metric_queries.py` | `market/periods.py`, `market/reference.py` community names, `market/scope.py` location predicate |
+| Project delivery | `project/delivery.py` | `project/queries.py` | Shared `market` period and location helpers |
 | Identity and profile | `auth/service.py`, `profile.py` | Public account operations | `providers/auth/client.py` |
 | Organization and invites | `organization/service.py`, `invitations.py` | `repository.py` | Request/response contracts in `models.py` |
 | Billing and usage | `billing/service.py`, `token_usage/service.py` | Each domain's `repository.py` | `billing/stripe_gateway.py` |

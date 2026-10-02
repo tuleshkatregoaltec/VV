@@ -7,6 +7,10 @@ def test_registered_chat_tools_preserve_existing_capabilities():
         "get_market_pulse",
         "rank_areas",
         "get_similar_projects",
+        # Database-grounded market capabilities; each calls one public domain operation.
+        "query_market_metrics",
+        "get_listing_inventory",
+        "get_project_delivery_summary",
     }
 
 

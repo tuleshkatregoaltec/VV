@@ -1,4 +1,5 @@
 from app.clickhouse.client import query
+from app.market.scope import LOCATION_PREDICATE
 from app.project.radar_queries import _radar_geo_cte
 from app.supply.scope import reelly_dubai_project_scope
 
@@ -317,4 +318,51 @@ async def fetch_market_snapshot(parameters):
         LIMIT 1
         """,
         parameters,
+    )
+
+
+# Delivery status of a DLD-registered project on the reference date. Completion and
+# cancellation recorded by DLD take precedence over the planned end date.
+_DELIVERY_STATUS = """multiIf(
+    cancellation_date IS NOT NULL, 'cancelled',
+    completion_date IS NOT NULL, 'completed',
+    project_end_date IS NULL, 'missing_date',
+    toDate(project_end_date) < {reference_date:Date}, 'overdue',
+    toDate(project_end_date) <= {horizon_end:Date}, 'scheduled_in_horizon',
+    'scheduled_later')"""
+
+DELIVERY_GROUPS = {
+    "delivery_status": "delivery_status",
+    "developer": "if(developer_name != '', developer_name, developer_name_en)",
+    "delivery_year": "toString(toYear(project_end_date))",
+    "project": "project_name_en",
+}
+
+
+async def fetch_delivery_summary(parameters: dict, *, group_by: str, located: bool):
+    location = f"AND {LOCATION_PREDICATE}" if located else ""
+    return await query(
+        f"""
+        SELECT
+            {DELIVERY_GROUPS[group_by]} AS group_key,
+            count() AS project_count,
+            sum(no_of_units) AS units,
+            countIf(no_of_units = 0) AS projects_without_units
+        FROM (
+            SELECT *, {_DELIVERY_STATUS} AS delivery_status
+            FROM ch_projects
+            WHERE project_status IN {{statuses:Array(String)}} {location}
+        )
+        WHERE delivery_status IN {{delivery_statuses:Array(String)}}
+        GROUP BY group_key
+        ORDER BY units DESC, group_key
+        LIMIT {{limit:UInt32}}
+        """,
+        parameters,
+    )
+
+
+async def fetch_project_register_snapshot():
+    return await query(
+        "SELECT max(scraped_at) AS snapshot_at, count() AS projects FROM ch_projects"
     )

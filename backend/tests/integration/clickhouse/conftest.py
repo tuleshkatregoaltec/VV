@@ -1,5 +1,7 @@
 """Real ClickHouse execution against a database owned by this test only."""
 
+import re
+from pathlib import Path
 from uuid import uuid4
 
 import clickhouse_connect
@@ -31,3 +33,30 @@ async def warehouse(monkeypatch):
         await isolated.close()
         await admin.command(f"DROP DATABASE {database} SYNC")
         await admin.close()
+
+
+SCHEMA = Path(__file__).parents[4] / "holocron/holocron/lib/sql/clickhouse_schema.sql"
+
+
+@pytest.fixture
+def install_serving(warehouse):
+    """Create tables from the repository warehouse schema and the backend serving views.
+
+    Uses the production DDL (CREATE plus later ALTER ... ADD COLUMN) instead of fixture DDL.
+    """
+    from scripts.clickhouse.create_compatibility_views import VIEW_DDL
+
+    async def install(*, tables: tuple[str, ...], views: tuple[str, ...]):
+        text = SCHEMA.read_text(encoding="utf-8")
+        for table in tables:
+            statements = re.findall(
+                rf"^(?:CREATE TABLE IF NOT EXISTS|ALTER TABLE) {table}\b.*?;", text, re.S | re.M
+            )
+            assert statements and statements[0].startswith("CREATE"), table
+            for statement in statements:
+                await warehouse.command(statement.rstrip(";"))
+        ddl = dict(VIEW_DDL)
+        for view in views:
+            await warehouse.command(ddl[view])
+
+    return install

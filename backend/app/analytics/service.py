@@ -831,9 +831,9 @@ async def get_sales_analytics(
         transaction_count=row["transaction_count"],
         total_volume=float(row["total_volume"]),
         avg_price=float(row["avg_price"]),
-        avg_price_sqft=float(row.get("median_price_per_sqm", 0)),  # Use available field
-        min_price=float(row.get("median_price", 0)),  # Use median as approximation
-        max_price=float(row.get("avg_price", 0)),  # Use avg as approximation
+        avg_price_sqft=float(row.get("avg_price_sqft") or 0),
+        min_price=float(row.get("min_price") or 0),
+        max_price=float(row.get("max_price") or 0),
     )
 
     # For now, return basic response with just summary
@@ -934,9 +934,9 @@ async def get_rental_analytics(
         contract_count=row["contract_count"],
         total_annual_value=float(row["total_annual_value"]),
         avg_annual_rent=float(row["avg_rent"]),
-        avg_rent_sqft=float(row.get("median_rent_per_sqm", 0)),
-        min_annual_rent=float(row.get("median_rent", 0)),  # Use median as approximation
-        max_annual_rent=float(row.get("avg_rent", 0)),  # Use avg as approximation
+        avg_rent_sqft=float(row.get("avg_rent_sqft") or 0),
+        min_annual_rent=float(row.get("min_rent") or 0),
+        max_annual_rent=float(row.get("max_rent") or 0),
     )
 
     # For now, return basic response with just summary

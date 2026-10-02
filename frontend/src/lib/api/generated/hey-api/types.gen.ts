@@ -2853,6 +2853,94 @@ export type DdaPlotFeature = {
 };
 
 /**
+ * DeliveryGroupRow
+ */
+export type DeliveryGroupRow = {
+    /**
+     * Group
+     */
+    group: string;
+    /**
+     * Project Count
+     */
+    project_count: number;
+    /**
+     * Units
+     */
+    units: number;
+    /**
+     * Projects Without Units
+     */
+    projects_without_units: number;
+    /**
+     * Share Of Units
+     */
+    share_of_units?: number | null;
+};
+
+/**
+ * DeliverySummaryResponse
+ */
+export type DeliverySummaryResponse = {
+    /**
+     * Location
+     */
+    location: string | null;
+    /**
+     * Project Statuses
+     */
+    project_statuses: Array<string>;
+    /**
+     * Delivery Statuses
+     */
+    delivery_statuses: Array<string>;
+    /**
+     * Group By
+     */
+    group_by: string;
+    /**
+     * Reference Date
+     */
+    reference_date: string;
+    /**
+     * Horizon End
+     */
+    horizon_end: string;
+    /**
+     * Definitions
+     */
+    definitions: {
+        [key: string]: string;
+    };
+    /**
+     * By Delivery Status
+     */
+    by_delivery_status: Array<DeliveryGroupRow>;
+    /**
+     * Rows
+     */
+    rows: Array<DeliveryGroupRow>;
+    /**
+     * Matched Terms
+     */
+    matched_terms: {
+        [key: string]: Array<string>;
+    };
+    /**
+     * Source
+     */
+    source: string;
+    /**
+     * Source Snapshot At
+     */
+    source_snapshot_at?: string | null;
+    /**
+     * Limitations
+     */
+    limitations?: Array<string>;
+};
+
+/**
  * DeveloperRankingCriterionResponse
  */
 export type DeveloperRankingCriterionResponse = {
@@ -5669,6 +5757,308 @@ export type ListingTrendPoint = {
 };
 
 /**
+ * MarketCoverage
+ */
+export type MarketCoverage = {
+    /**
+     * Status
+     */
+    status: 'complete' | 'partial' | 'unavailable';
+    /**
+     * Data From
+     */
+    data_from?: string | null;
+    /**
+     * Data To
+     */
+    data_to?: string | null;
+    /**
+     * Covered From
+     */
+    covered_from?: string | null;
+    /**
+     * Covered To
+     */
+    covered_to?: string | null;
+    /**
+     * Note
+     */
+    note: string;
+};
+
+/**
+ * MarketLocationMatch
+ */
+export type MarketLocationMatch = {
+    /**
+     * Area
+     */
+    area: string;
+    /**
+     * Master Project
+     */
+    master_project: string;
+    /**
+     * Records
+     */
+    records: number;
+};
+
+/**
+ * MarketMetricDefinition
+ */
+export type MarketMetricDefinition = {
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Unit
+     */
+    unit: string;
+    /**
+     * Definition
+     */
+    definition: string;
+};
+
+/**
+ * MarketMetricRow
+ */
+export type MarketMetricRow = {
+    /**
+     * Group
+     */
+    group?: string | null;
+    /**
+     * Count
+     */
+    count?: number | null;
+    /**
+     * Share Of Count
+     */
+    share_of_count?: number | null;
+    /**
+     * Values
+     */
+    values?: {
+        [key: string]: number | null;
+    };
+};
+
+/**
+ * MarketMetricsRequest
+ *
+ * Sales or rental metrics over served canonical records (DLD + reconciled DXBI).
+ */
+export type MarketMetricsRequest = {
+    /**
+     * Dataset
+     */
+    dataset: 'sales' | 'rentals';
+    /**
+     * Metrics
+     */
+    metrics?: Array<'count' | 'total_aed' | 'mean_aed' | 'median_aed' | 'p25_aed' | 'p75_aed' | 'mean_aed_per_sqm' | 'median_aed_per_sqm' | 'weighted_aed_per_sqm' | 'mean_aed_per_sqft' | 'median_aed_per_sqft' | 'weighted_aed_per_sqft' | 'total_contract_aed' | 'median_contract_aed'>;
+    period: MarketPeriodRequest;
+    /**
+     * Location
+     *
+     * Community or DLD area, e.g. JVC
+     */
+    location?: string | null;
+    /**
+     * Building
+     */
+    building?: string | null;
+    /**
+     * Project
+     */
+    project?: string | null;
+    /**
+     * Property Type
+     */
+    property_type?: 'apartment' | 'hotel_apartment' | 'villa' | 'office' | 'shop' | 'land' | null;
+    /**
+     * Usage
+     */
+    usage?: 'residential' | 'commercial' | null;
+    /**
+     * Bedrooms
+     */
+    bedrooms?: Array<'studio' | '1' | '2' | '3' | '4' | '5' | '6' | '7'> | null;
+    /**
+     * Registration
+     *
+     * Sales only
+     */
+    registration?: 'off_plan' | 'ready' | null;
+    /**
+     * Contract Version
+     *
+     * Rentals only
+     */
+    contract_version?: 'new' | 'renewed' | null;
+    /**
+     * Min Term Days
+     *
+     * Rentals only
+     */
+    min_term_days?: number | null;
+    /**
+     * Max Term Days
+     *
+     * Rentals only
+     */
+    max_term_days?: number | null;
+    /**
+     * Min Value Aed
+     *
+     * Sale price or annual rent, inclusive
+     */
+    min_value_aed?: number | null;
+    /**
+     * Max Value Aed
+     *
+     * Sale price or annual rent, exclusive
+     */
+    max_value_aed?: number | null;
+    /**
+     * Group By
+     */
+    group_by?: 'area' | 'master_project' | 'project' | 'building' | 'month' | 'bedrooms' | 'property_type' | 'price_band' | 'registration' | 'contract_version' | null;
+    /**
+     * Price Bands
+     *
+     * Ascending AED boundaries for group_by=price_band: [b0,b1) ... [bn,inf)
+     */
+    price_bands?: Array<number> | null;
+    /**
+     * Sort By
+     */
+    sort_by?: 'count' | 'total_aed' | 'mean_aed' | 'median_aed' | 'p25_aed' | 'p75_aed' | 'mean_aed_per_sqm' | 'median_aed_per_sqm' | 'weighted_aed_per_sqm' | 'mean_aed_per_sqft' | 'median_aed_per_sqft' | 'weighted_aed_per_sqft' | 'total_contract_aed' | 'median_contract_aed';
+    /**
+     * Limit
+     */
+    limit?: number;
+    /**
+     * Min Group Count
+     */
+    min_group_count?: number;
+    /**
+     * Compare With Previous Period
+     */
+    compare_with_previous_period?: boolean;
+    /**
+     * Reference Date
+     *
+     * Defaults to today in Asia/Dubai
+     */
+    reference_date?: string | null;
+};
+
+/**
+ * MarketMetricsResponse
+ */
+export type MarketMetricsResponse = {
+    /**
+     * Dataset
+     */
+    dataset: 'sales' | 'rentals';
+    period: MarketResolvedPeriod;
+    coverage: MarketCoverage;
+    /**
+     * Filters
+     */
+    filters: {
+        [key: string]: unknown;
+    };
+    /**
+     * Eligibility
+     */
+    eligibility: string;
+    /**
+     * Definitions
+     */
+    definitions: Array<MarketMetricDefinition>;
+    total: MarketMetricRow;
+    /**
+     * Rows
+     */
+    rows?: Array<MarketMetricRow>;
+    comparison_period?: MarketResolvedPeriod | null;
+    comparison_coverage?: MarketCoverage | null;
+    comparison?: MarketMetricRow | null;
+    /**
+     * Change Pct
+     */
+    change_pct?: {
+        [key: string]: number | null;
+    };
+    /**
+     * Matched Locations
+     */
+    matched_locations?: Array<MarketLocationMatch>;
+    /**
+     * Sources
+     */
+    sources?: {
+        [key: string]: number;
+    };
+    /**
+     * Release Built At
+     */
+    release_built_at?: string | null;
+    /**
+     * Limitations
+     */
+    limitations?: Array<string>;
+};
+
+/**
+ * MarketPeriodRequest
+ *
+ * A calendar period, resolved in the Asia/Dubai business timezone.
+ *
+ * previous_month: the calendar month before the reference date's month ("last month").
+ * previous_quarter: the calendar quarter before ("last quarter").
+ * previous_months: `months` complete calendar months ending with the previous month.
+ * month / quarter: explicit "YYYY-MM" / "YYYY-Qn".
+ * rolling_days: `days` calendar days ending on the reference date ("last 90 days").
+ * range: explicit inclusive start/end.
+ */
+export type MarketPeriodRequest = {
+    /**
+     * Type
+     */
+    type: 'previous_month' | 'previous_quarter' | 'previous_months' | 'month' | 'quarter' | 'rolling_days' | 'range';
+    /**
+     * Months
+     */
+    months?: number | null;
+    /**
+     * Days
+     */
+    days?: number | null;
+    /**
+     * Month
+     */
+    month?: string | null;
+    /**
+     * Quarter
+     */
+    quarter?: string | null;
+    /**
+     * Start
+     */
+    start?: string | null;
+    /**
+     * End
+     */
+    end?: string | null;
+};
+
+/**
  * MarketPricingRow
  */
 export type MarketPricingRow = {
@@ -5688,6 +6078,36 @@ export type MarketPricingRow = {
      * Avg Area Sqm
      */
     avg_area_sqm?: number | null;
+};
+
+/**
+ * MarketResolvedPeriod
+ */
+export type MarketResolvedPeriod = {
+    /**
+     * Start
+     */
+    start: string;
+    /**
+     * End
+     */
+    end: string;
+    /**
+     * Label
+     */
+    label: string;
+    /**
+     * Type
+     */
+    type: string;
+    /**
+     * Reference Date
+     */
+    reference_date: string;
+    /**
+     * Timezone
+     */
+    timezone: string;
 };
 
 /**
@@ -7374,6 +7794,22 @@ export type ProjectRadarProject = {
      */
     land_point_count?: number;
     /**
+     * Entity Source
+     */
+    entity_source?: string;
+    /**
+     * Supply Status
+     */
+    supply_status?: string | null;
+    /**
+     * Supply Completion Date
+     */
+    supply_completion_date?: string | null;
+    /**
+     * Units In Sale
+     */
+    units_in_sale?: number;
+    /**
      * Completion Status
      */
     completion_status: string;
@@ -7757,6 +8193,89 @@ export type PropertyTypeBreakdown = {
      */
     pct_of_total: number;
 };
+
+/**
+ * RadarBuildingPin
+ *
+ * Property Finder tower coordinate with linked DLD/Ejari activity.
+ */
+export type RadarBuildingPin = {
+    /**
+     * Location Id
+     */
+    location_id: string;
+    /**
+     * Source Location Id
+     */
+    source_location_id: string;
+    /**
+     * Building Name
+     */
+    building_name: string;
+    /**
+     * Project Name
+     */
+    project_name?: string | null;
+    /**
+     * Area Name
+     */
+    area_name: string;
+    /**
+     * Latitude
+     */
+    latitude: number;
+    /**
+     * Longitude
+     */
+    longitude: number;
+    /**
+     * Coordinate Source
+     */
+    coordinate_source?: string;
+    /**
+     * Coordinate Precision
+     */
+    coordinate_precision?: string;
+    /**
+     * Matched Source Signatures
+     */
+    matched_source_signatures?: number;
+    /**
+     * Sales Transaction Count
+     */
+    sales_transaction_count?: number;
+    /**
+     * Rental Contract Count
+     */
+    rental_contract_count?: number;
+    /**
+     * Total Sales Volume
+     */
+    total_sales_volume?: number;
+    /**
+     * Median Sale Price
+     */
+    median_sale_price?: number | null;
+    /**
+     * Median Annual Rent
+     */
+    median_annual_rent?: number | null;
+    /**
+     * Listing Inventory Count
+     */
+    listing_inventory_count?: number;
+    /**
+     * Last Activity Date
+     */
+    last_activity_date?: string | null;
+};
+
+/**
+ * RadarPeriodDays
+ *
+ * Supported Radar windows, parsed from their query-string representation.
+ */
+export type RadarPeriodDays = 30 | 90 | 180 | 365;
 
 /**
  * RegTypeBreakdown
@@ -9903,6 +10422,31 @@ export type AnalyticsGetProjectPriceDistributionEndpointResponses = {
 };
 
 export type AnalyticsGetProjectPriceDistributionEndpointResponse = AnalyticsGetProjectPriceDistributionEndpointResponses[keyof AnalyticsGetProjectPriceDistributionEndpointResponses];
+
+export type AnalyticsGetMarketMetricsEndpointData = {
+    body: MarketMetricsRequest;
+    path?: never;
+    query?: never;
+    url: '/api/v1/analytics/market-metrics';
+};
+
+export type AnalyticsGetMarketMetricsEndpointErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type AnalyticsGetMarketMetricsEndpointError = AnalyticsGetMarketMetricsEndpointErrors[keyof AnalyticsGetMarketMetricsEndpointErrors];
+
+export type AnalyticsGetMarketMetricsEndpointResponses = {
+    /**
+     * Successful Response
+     */
+    200: MarketMetricsResponse;
+};
+
+export type AnalyticsGetMarketMetricsEndpointResponse = AnalyticsGetMarketMetricsEndpointResponses[keyof AnalyticsGetMarketMetricsEndpointResponses];
 
 export type AreasAreasListData = {
     body?: never;
@@ -12149,6 +12693,60 @@ export type OrganizationUpdateUserResponses = {
 
 export type OrganizationUpdateUserResponse = OrganizationUpdateUserResponses[keyof OrganizationUpdateUserResponses];
 
+export type ProjectsProjectDeliverySummaryData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Location
+         */
+        location?: string | null;
+        /**
+         * Project Status
+         */
+        project_status?: Array<string>;
+        /**
+         * Delivery Status
+         */
+        delivery_status?: Array<'missing_date' | 'overdue' | 'scheduled_in_horizon' | 'scheduled_later' | 'completed' | 'cancelled'>;
+        /**
+         * Group By
+         */
+        group_by?: 'developer' | 'delivery_status' | 'delivery_year' | 'project';
+        /**
+         * Horizon Months
+         */
+        horizon_months?: number;
+        /**
+         * Reference Date
+         */
+        reference_date?: string | null;
+        /**
+         * Limit
+         */
+        limit?: number;
+    };
+    url: '/api/v1/projects/delivery-summary';
+};
+
+export type ProjectsProjectDeliverySummaryErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ProjectsProjectDeliverySummaryError = ProjectsProjectDeliverySummaryErrors[keyof ProjectsProjectDeliverySummaryErrors];
+
+export type ProjectsProjectDeliverySummaryResponses = {
+    /**
+     * Successful Response
+     */
+    200: DeliverySummaryResponse;
+};
+
+export type ProjectsProjectDeliverySummaryResponse = ProjectsProjectDeliverySummaryResponses[keyof ProjectsProjectDeliverySummaryResponses];
+
 export type ProjectsListProjectsData = {
     body?: never;
     path?: never;
@@ -12178,11 +12776,9 @@ export type ProjectsProjectRadarData = {
          */
         limit?: number;
         /**
-         * Period Days
-         *
          * Trailing DLD/Ejari activity window in days (maximum 365)
          */
-        period_days?: 30 | 90 | 180 | 365;
+        period_days?: RadarPeriodDays;
     };
     url: '/api/v1/projects/radar';
 };
@@ -12210,11 +12806,9 @@ export type ProjectsProjectRadarOverviewData = {
     path?: never;
     query?: {
         /**
-         * Period Days
-         *
          * Trailing DLD/Ejari activity window in days (maximum 365)
          */
-        period_days?: 30 | 90 | 180 | 365;
+        period_days?: RadarPeriodDays;
     };
     url: '/api/v1/projects/radar/overview';
 };
@@ -12284,11 +12878,9 @@ export type ProjectsProjectRadarPinsData = {
          */
         limit?: number;
         /**
-         * Period Days
-         *
          * Trailing DLD/Ejari activity window in days (maximum 365)
          */
-        period_days?: 30 | 90 | 180 | 365;
+        period_days?: RadarPeriodDays;
     };
     url: '/api/v1/projects/radar/pins';
 };
@@ -12312,6 +12904,68 @@ export type ProjectsProjectRadarPinsResponses = {
 };
 
 export type ProjectsProjectRadarPinsResponse = ProjectsProjectRadarPinsResponses[keyof ProjectsProjectRadarPinsResponses];
+
+export type ProjectsRadarBuildingPinsData = {
+    body?: never;
+    path?: never;
+    query: {
+        /**
+         * West
+         *
+         * Viewport west longitude
+         */
+        west: number;
+        /**
+         * South
+         *
+         * Viewport south latitude
+         */
+        south: number;
+        /**
+         * East
+         *
+         * Viewport east longitude
+         */
+        east: number;
+        /**
+         * North
+         *
+         * Viewport north latitude
+         */
+        north: number;
+        /**
+         * Limit
+         *
+         * Maximum tower pins
+         */
+        limit?: number;
+        /**
+         * Trailing DLD/Ejari activity window in days (maximum 365)
+         */
+        period_days?: RadarPeriodDays;
+    };
+    url: '/api/v1/projects/radar/building-pins';
+};
+
+export type ProjectsRadarBuildingPinsErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ProjectsRadarBuildingPinsError = ProjectsRadarBuildingPinsErrors[keyof ProjectsRadarBuildingPinsErrors];
+
+export type ProjectsRadarBuildingPinsResponses = {
+    /**
+     * Response Projects-Radar Building Pins
+     *
+     * Successful Response
+     */
+    200: Array<RadarBuildingPin>;
+};
+
+export type ProjectsRadarBuildingPinsResponse = ProjectsRadarBuildingPinsResponses[keyof ProjectsRadarBuildingPinsResponses];
 
 export type ProjectsMasterProjectData = {
     body?: never;

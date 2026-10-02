@@ -1,0 +1,302 @@
+"""Warehouse SQL for database-grounded sales and rental metrics.
+
+Every user value is a bound parameter. Metric, grouping and dataset names reach SQL only
+through the fixed fragments below, selected by validated Literal names.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from datetime import date
+from typing import Any
+
+from app.clickhouse import query
+from app.market.reference import SQM_TO_SQFT
+from app.market.scope import LOCATION_PREDICATE
+
+
+@dataclass(frozen=True, slots=True)
+class Dataset:
+    table: str
+    event_date: str
+    value: str
+    area_sqm: str
+    eligible: str
+    bedrooms: str
+    building: str
+    property_types: dict[str, str]
+
+
+SALES = Dataset(
+    table="ch_transactions",
+    # DLD instance_date is the registration date as recorded (Dubai local time).
+    event_date="toDate(instance_date)",
+    value="toFloat64(actual_worth)",
+    area_sqm="procedure_area",
+    # Achieved sale prices only: mortgages, gifts and zero-value records are not sales.
+    eligible="trans_group_en = 'Sales' AND actual_worth > 0",
+    bedrooms="rooms_en",
+    building="if(building_name_en != '', building_name_en, dxbi_building_name)",
+    property_types={
+        "apartment": "property_sub_type_en = 'Flat'",
+        "hotel_apartment": "property_sub_type_en = 'Hotel Apartment'",
+        "villa": "property_sub_type_en = 'Villa'",
+        "office": "property_sub_type_en = 'Office'",
+        "shop": "property_sub_type_en = 'Shop'",
+        "land": "property_type_en = 'Land'",
+    },
+)
+
+RENTALS = Dataset(
+    table="ch_rent_contracts",
+    # A contract is observed when it is registered; start dates can lie in the future.
+    event_date="toDate(registration_date)",
+    # DLD annual_amount is the annualised rent; contract_amount is the whole-term value.
+    value="toFloat64(annual_amount)",
+    area_sqm="actual_area",
+    eligible="annual_amount > 0 AND contract_end_date > contract_start_date",
+    # DLD open-data rentals carry no bedroom count; DXBI-matched rows and Ejari "Studio"
+    # sub-types do. Rows without either stay unknown ('') and are reported as coverage.
+    bedrooms="""multiIf(
+        bedrooms = 'Studio' OR ejari_property_sub_type_en = 'Studio', 'Studio',
+        match(bedrooms, '^[0-9]+ Beds?$'), concat(extract(bedrooms, '^([0-9]+)'), ' B/R'),
+        '')""",
+    # DLD rentals name the project (usually the building); DXBI-matched rows name the building.
+    building="if(dxbi_building_name != '', dxbi_building_name, project_name_en)",
+    property_types={
+        "apartment": "ejari_property_sub_type_en IN ('Flat', 'Studio')",
+        "hotel_apartment": "ejari_property_sub_type_en = 'Hotel Apartment'",
+        "villa": "ejari_property_sub_type_en IN ('Villa', 'Complex Villas')",
+        "office": "ejari_property_sub_type_en = 'Office'",
+        "shop": "ejari_property_sub_type_en = 'Shop'",
+        "land": "0",
+    },
+)
+
+DATASETS = {"sales": SALES, "rentals": RENTALS}
+
+
+def _rate(ds: Dataset) -> str:
+    return f"{ds.value} / {ds.area_sqm}"
+
+
+def metric_expressions(ds: Dataset) -> dict[str, str]:
+    rated = f"{ds.area_sqm} > 0"
+    expressions = {
+        "count": "toFloat64(count())",
+        "total_aed": f"sum({ds.value})",
+        "mean_aed": f"avg({ds.value})",
+        # Linear interpolation between order statistics (PERCENTILE.INC): the median of an
+        # even count is the mean of the two middle values.
+        "median_aed": f"quantileExactInclusive(0.5)({ds.value})",
+        "p25_aed": f"quantileExactInclusive(0.25)({ds.value})",
+        "p75_aed": f"quantileExactInclusive(0.75)({ds.value})",
+        "rated_count": f"toFloat64(countIf({rated}))",
+        "mean_aed_per_sqm": f"avgIf({_rate(ds)}, {rated})",
+        "median_aed_per_sqm": f"quantileExactInclusiveIf(0.5)({_rate(ds)}, {rated})",
+        "weighted_aed_per_sqm": f"sumIf({ds.value}, {rated}) / sumIf({ds.area_sqm}, {rated})",
+    }
+    for name in ("mean", "median", "weighted"):
+        expressions[f"{name}_aed_per_sqft"] = (
+            f"({expressions[f'{name}_aed_per_sqm']}) / {SQM_TO_SQFT}"
+        )
+    if ds is RENTALS:
+        expressions["total_contract_aed"] = "sum(toFloat64(contract_amount))"
+        expressions["median_contract_aed"] = (
+            "quantileExactInclusive(0.5)(toFloat64(contract_amount))"
+        )
+    return expressions
+
+
+def group_expressions(ds: Dataset) -> dict[str, tuple[str, str]]:
+    """Group name -> (key expression, display label expression)."""
+    return {
+        "area": ("lowerUTF8(area_name_en)", "any(area_name_en)"),
+        "master_project": ("lowerUTF8(master_project_en)", "any(master_project_en)"),
+        "project": ("lowerUTF8(project_name_en)", "any(project_name_en)"),
+        "building": (f"lowerUTF8({ds.building})", f"any({ds.building})"),
+        "month": (f"toStartOfMonth({ds.event_date})", f"toString(toStartOfMonth({ds.event_date}))"),
+        "bedrooms": (ds.bedrooms, f"any({ds.bedrooms})"),
+        "property_type": (
+            "property_sub_type_en" if ds is SALES else "ejari_property_sub_type_en",
+            "any(property_sub_type_en)" if ds is SALES else "any(ejari_property_sub_type_en)",
+        ),
+    } | (
+        {"registration": ("reg_type_en", "any(reg_type_en)")}
+        if ds is SALES
+        else {"contract_version": ("version_en", "any(version_en)")}
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class MetricFilters:
+    start: date
+    end: date
+    location_masters: tuple[str, ...] = ()
+    location_areas: tuple[str, ...] = ()
+    location_official_areas: tuple[str, ...] = ()
+    building: str | None = None
+    project: str | None = None
+    property_type: str | None = None
+    usage: str | None = None
+    bedrooms: tuple[str, ...] = ()
+    registration: str | None = None
+    contract_version: str | None = None
+    min_term_days: int | None = None
+    max_term_days: int | None = None
+    value_min: float | None = None
+    value_max: float | None = None
+
+
+def where_clause(
+    ds: Dataset, filters: MetricFilters, *, include_bedrooms: bool = True
+) -> tuple[str, dict[str, Any]]:
+    clauses = [ds.eligible, f"{ds.event_date} BETWEEN {{start:Date}} AND {{end:Date}}"]
+    params: dict[str, Any] = {"start": filters.start, "end": filters.end}
+    if filters.location_masters or filters.location_areas or filters.location_official_areas:
+        clauses.append(LOCATION_PREDICATE)
+        params |= {
+            "loc_masters": list(filters.location_masters),
+            "loc_areas": list(filters.location_areas),
+            "loc_official": list(filters.location_official_areas),
+        }
+    if filters.building:
+        clauses.append(f"lowerUTF8({ds.building}) = lowerUTF8({{building:String}})")
+        params["building"] = filters.building.strip()
+    if filters.project:
+        clauses.append("lowerUTF8(project_name_en) = lowerUTF8({project:String})")
+        params["project"] = filters.project.strip()
+    if filters.property_type:
+        clauses.append(ds.property_types[filters.property_type])
+    if filters.usage:
+        clauses.append("lowerUTF8(property_usage_en) = {usage:String}")
+        params["usage"] = filters.usage
+    if include_bedrooms and filters.bedrooms:
+        clauses.append(f"{ds.bedrooms} IN {{bedrooms:Array(String)}}")
+        params["bedrooms"] = list(filters.bedrooms)
+    if filters.registration:
+        clauses.append("reg_type_en = {registration:String}")
+        params["registration"] = filters.registration
+    if filters.contract_version:
+        clauses.append("version_en = {contract_version:String}")
+        params["contract_version"] = filters.contract_version
+    term = "dateDiff('day', toDate(contract_start_date), toDate(contract_end_date)) + 1"
+    if filters.min_term_days is not None:
+        clauses.append(f"{term} >= {{min_term:Int32}}")
+        params["min_term"] = filters.min_term_days
+    if filters.max_term_days is not None:
+        clauses.append(f"{term} <= {{max_term:Int32}}")
+        params["max_term"] = filters.max_term_days
+    if filters.value_min is not None:
+        clauses.append(f"{ds.value} >= {{value_min:Float64}}")
+        params["value_min"] = filters.value_min
+    if filters.value_max is not None:
+        clauses.append(f"{ds.value} < {{value_max:Float64}}")
+        params["value_max"] = filters.value_max
+    return " AND ".join(clauses), params
+
+
+def _band_expression(ds: Dataset, bands: tuple[float, ...]) -> tuple[str, str]:
+    # Bands are [b0, b1), [b1, b2) ... ; boundaries are bound as parameters.
+    conditions = ", ".join(
+        f"{ds.value} < {{band_{index}:Float64}}, {index}" for index in range(len(bands))
+    )
+    key = f"multiIf({conditions}, {len(bands)})"
+    return key, key
+
+
+async def fetch_metric_rows(
+    dataset: str,
+    filters: MetricFilters,
+    metrics: tuple[str, ...],
+    *,
+    group_by: str | None = None,
+    price_bands: tuple[float, ...] = (),
+    min_group_count: int = 1,
+    order_by: str = "count",
+    limit: int = 50,
+) -> list[dict[str, Any]]:
+    ds = DATASETS[dataset]
+    expressions = metric_expressions(ds)
+    where, params = where_clause(ds, filters)
+    names = dict.fromkeys(("count", *metrics))
+    selected = ", ".join(f"{expressions[name]} AS {name}" for name in names)
+    if group_by is None:
+        return await query(f"SELECT {selected} FROM {ds.table} WHERE {where}", params)
+    if group_by == "price_band":
+        key, label = _band_expression(ds, price_bands)
+        params |= {f"band_{index}": value for index, value in enumerate(price_bands)}
+    else:
+        key, label = group_expressions(ds)[group_by]
+    params |= {"min_group_count": min_group_count, "limit": limit}
+    return await query(
+        f"""
+        SELECT {key} AS group_key, {label} AS group_label, {selected}
+        FROM {ds.table}
+        WHERE {where}
+        GROUP BY group_key
+        HAVING count() >= {{min_group_count:UInt32}}
+        ORDER BY {order_by} DESC, group_key
+        LIMIT {{limit:UInt32}}
+        """,
+        params,
+    )
+
+
+async def fetch_bedroom_coverage(dataset: str, filters: MetricFilters) -> dict[str, Any]:
+    """Rows matching every filter except bedrooms, and how many have no bedroom count."""
+    ds = DATASETS[dataset]
+    where, params = where_clause(ds, filters, include_bedrooms=False)
+    rows = await query(
+        f"SELECT count() AS rows, countIf({ds.bedrooms} = '') AS unknown_bedrooms "
+        f"FROM {ds.table} WHERE {where}",
+        params,
+    )
+    return rows[0] if rows else {"rows": 0, "unknown_bedrooms": 0}
+
+
+async def fetch_matched_locations(dataset: str, filters: MetricFilters) -> list[dict[str, Any]]:
+    ds = DATASETS[dataset]
+    where, params = where_clause(ds, filters)
+    return await query(
+        f"""
+        SELECT area_name_en AS area, master_project_en AS master_project, count() AS records
+        FROM {ds.table}
+        WHERE {where}
+        GROUP BY area, master_project
+        ORDER BY records DESC
+        LIMIT 10
+        """,
+        params,
+    )
+
+
+async def fetch_source_breakdown(dataset: str, filters: MetricFilters) -> list[dict[str, Any]]:
+    ds = DATASETS[dataset]
+    where, params = where_clause(ds, filters)
+    return await query(
+        f"""
+        SELECT source_system, match_status, count() AS records
+        FROM {ds.table}
+        WHERE {where}
+        GROUP BY source_system, match_status
+        ORDER BY records DESC
+        """,
+        params,
+    )
+
+
+async def fetch_release(dataset: str) -> dict[str, Any]:
+    """Date coverage and build identity of the served release for the dataset."""
+    ds = DATASETS[dataset]
+    rows = await query(
+        f"""
+        SELECT min({ds.event_date}) AS data_from,
+               max({ds.event_date}) AS data_to,
+               max(built_at) AS built_at
+        FROM {ds.table}
+        WHERE {ds.eligible} AND {ds.event_date} <= today()
+        """,
+        {},
+    )
+    return rows[0] if rows else {}
