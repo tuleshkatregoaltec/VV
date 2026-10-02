@@ -249,9 +249,11 @@ def evaluate_case(record, observed, runtime, criteria):
         if observed["queries"]
         else "no query executed",
     )
+    # Binding describes interpreted intent; it contains no retrieved market evidence.
+    retrievals = [tool for tool in tools if tool["name"] != "bind_market_scope"]
     empty = [
         tool
-        for tool in tools
+        for tool in retrievals
         if isinstance(tool["result"], dict)
         and (
             tool["result"].get("transaction_count") == 0
@@ -262,9 +264,9 @@ def evaluate_case(record, observed, runtime, criteria):
         "failed"
         if failed_tools
         else "none"
-        if not tools
+        if not retrievals
         else "empty"
-        if len(empty) == len(tools)
+        if len(empty) == len(retrievals)
         else "partial"
         if empty
         else "present"

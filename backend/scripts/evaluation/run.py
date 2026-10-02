@@ -88,6 +88,7 @@ async def run_benchmark(
     data_context="local-mutable-warehouse",
     bindings_path=None,
     max_spend_usd=None,
+    dataset_path=None,
 ):
     from app.config import settings
 
@@ -109,7 +110,7 @@ async def run_benchmark(
     auth_url = str(settings.AUTH_URL).rstrip("/")
     if httpx.URL(auth_url).host not in {"localhost", "127.0.0.1", "::1"}:
         raise ValueError("Benchmark login must use local auth")
-    benchmark = load_benchmark()
+    benchmark = load_benchmark(Path(dataset_path)) if dataset_path else load_benchmark()
     cases = [case for case in benchmark.cases if case_ids is None or case.id in case_ids]
     if not cases or (case_ids and set(case_ids) != {case.id for case in cases}):
         raise ValueError("Unknown/empty case selection")

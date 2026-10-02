@@ -11,15 +11,26 @@ from pydantic_ai.models.function import FunctionModel
 from app.chat.prompts import CHAT_PROMPT_VERSION, CHAT_SYSTEM_PROMPT
 
 
-def test_retry_scope_keeps_price_bounds_and_inventory_evidence_type():
-    assert "Copy EVERY explicit filter into EVERY applicable tool call" in CHAT_SYSTEM_PROMPT
+def test_binding_covers_all_explicit_constraints_and_keeps_cohorts_paired():
+    assert "Before any retrieval, call bind_market_scope once" in CHAT_SYSTEM_PROMPT
     assert (
-        "price_max into both get_listing_inventory and compare_listing_rents" in CHAT_SYSTEM_PROMPT
+        "location, building/project, bedrooms, property_type, sale/rent mode, price bounds"
+        in CHAT_SYSTEM_PROMPT
     )
-    assert "never permits dropping a price bound" in CHAT_SYSTEM_PROMPT
-    assert "substituting registered sales for listing inventory" in CHAT_SYSTEM_PROMPT
-    assert "State inclusive/exclusive price-band boundaries" in CHAT_SYSTEM_PROMPT
-    assert "requested strict boundary is unsupported, disclose the mismatch" in CHAT_SYSTEM_PROMPT
+    assert "Copy EVERY explicit filter into EVERY applicable tool call" in CHAT_SYSTEM_PROMPT
+    assert "never mix values from different cohorts" in CHAT_SYSTEM_PROMPT
+    assert "outer scope_id on retrieval calls" in CHAT_SYSTEM_PROMPT
+    assert "Do not infer a property type, location" in CHAT_SYSTEM_PROMPT
+
+
+def test_validation_repair_never_guesses_or_changes_bound_population():
+    assert "Read error.details field paths and repair only the" in CHAT_SYSTEM_PROMPT
+    assert "A missing period.months requires the user's explicit month count" in CHAT_SYSTEM_PROMPT
+    assert "never guess a value or broaden the period" in CHAT_SYSTEM_PROMPT
+    assert "conflicting values, including null clearing" in CHAT_SYSTEM_PROMPT
+    assert "never become bounds on registered rents" in CHAT_SYSTEM_PROMPT
+    assert "above/below are false, at least/at most" in CHAT_SYSTEM_PROMPT
+    assert "price_band_upper_inclusive=[false,true]" in CHAT_SYSTEM_PROMPT
 
 
 def test_unavailable_or_error_cannot_be_rewritten_as_zero_from_release_metadata():
@@ -47,7 +58,7 @@ async def test_provider_receives_required_composer_and_unpinned_report_rules():
     agent = Agent(FunctionModel(inspect), system_prompt=CHAT_SYSTEM_PROMPT)
     await agent.run("Create a multi-source client report")
     prompt = "\n".join(received)
-    assert CHAT_PROMPT_VERSION == "database-mcp-v3"
+    assert CHAT_PROMPT_VERSION == "database-mcp-v4"
     assert "MUST call compose_market_report" in prompt
     assert (
         "Do not bypass\nit by assembling separate metrics, inventory and delivery calls" in prompt

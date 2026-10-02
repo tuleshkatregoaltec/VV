@@ -90,8 +90,35 @@ async def test_average_sale_price_last_month_through_web_chat(
         if not returned:
             yield {
                 0: DeltaToolCall(
+                    name="bind_market_scope",
+                    json_args=json.dumps(
+                        {
+                            "request": {
+                                "cohorts": [
+                                    {
+                                        "id": "sales",
+                                        "evidence_kind": "sales",
+                                        "period": {"type": "previous_month"},
+                                    }
+                                ]
+                            }
+                        }
+                    ),
+                    tool_call_id="scope",
+                )
+            }
+        elif returned[-1].tool_name == "bind_market_scope":
+            bound = returned[-1].content
+            if isinstance(bound, str):
+                bound = json.loads(bound)
+            assert bound["status"] == "ok"
+            # The model omits the bound period; execution must preserve September.
+            yield {
+                0: DeltaToolCall(
                     name="query_market_metrics",
-                    json_args=json.dumps({"request": request}),
+                    json_args=json.dumps(
+                        {"request": {k: v for k, v in request.items() if k != "period"}}
+                    ),
                     tool_call_id="sales",
                 )
             }
@@ -134,7 +161,7 @@ async def test_average_sale_price_last_month_through_web_chat(
             ]
             assert events[-1] == {"type": "done"}, events
             assert {"initialize", "tools/list", "tools/call"} <= set(methods)
-            assert methods.count("tools/call") == 1  # Retry never calls model/tools again.
+            assert methods.count("tools/call") == 2  # Retry never calls model/tools again.
             assert len(results) == 1
             expected = {
                 "mean_aed": 3_250_000.0,
@@ -174,9 +201,11 @@ async def test_average_sale_price_last_month_through_web_chat(
             assert [
                 event["artifact"] for event in replay_events if event["type"] == "artifact_updated"
             ] == cards
-            assert (
-                persisted[1]["meta_data"]["evidence"][0]["result"]["data"]["total"]["values"]
-                == expected
-            )
+            evidence = persisted[1]["meta_data"]["evidence"]
+            assert [item["tool"] for item in evidence] == [
+                "bind_market_scope",
+                "query_market_metrics",
+            ]
+            assert evidence[1]["result"]["data"]["total"]["values"] == expected
     finally:
         app.dependency_overrides.clear()

@@ -1,0 +1,217 @@
+{
+  "version": 1,
+  "origin": "Manually authored held-out user paraphrases and intent constraints; no provider output, private records, market-price targets or training. Cohort ids are illustrative; assess constraint associations, not id wording.",
+  "cases": {
+    "q101": {
+      "cohorts": [
+        {
+          "id": "jvc",
+          "evidence_kind": "listings",
+          "location": "Jumeirah Village Circle",
+          "bedrooms": [
+            "1"
+          ],
+          "property_type": "apartment",
+          "mode": "sale",
+          "price_max": 1200000,
+          "price_max_inclusive": false,
+          "period": {
+            "type": "previous_months",
+            "months": 6
+          }
+        }
+      ],
+      "review_notes": "Preserve the strict asking-price ceiling across inventory and rent comparison. The six-month period applies to registered comparables, not current inventory. An unavailable shared release means no yield claim."
+    },
+    "q102": {
+      "cohorts": [
+        {
+          "id": "business-bay",
+          "evidence_kind": "listings",
+          "location": "Business Bay",
+          "bedrooms": [
+            "2"
+          ],
+          "property_type": "apartment",
+          "mode": "sale",
+          "price_min": 1500000,
+          "price_min_inclusive": true,
+          "price_max": 2500000,
+          "price_max_inclusive": true,
+          "period": {
+            "type": "month",
+            "month": "2026-09"
+          }
+        }
+      ],
+      "review_notes": "Both inclusive asking bounds stay with the listing population; do not apply them to annual rent amounts."
+    },
+    "q103": {
+      "cohorts": [
+        {
+          "id": "sales",
+          "evidence_kind": "sales",
+          "location": "JVC",
+          "property_type": "apartment",
+          "period": {
+            "type": "rolling_days",
+            "days": 90
+          }
+        }
+      ],
+      "review_notes": "This is one sales population with a price partition, not three incompatible overall price scopes. Exactly1m and exactly2m belong to the middle band; fractional values immediately below/above must retain their interval.",
+      "retrieval_example": {
+        "tool": "query_market_metrics",
+        "arguments": {
+          "request": {
+            "dataset": "sales",
+            "location": "JVC",
+            "property_type": "apartment",
+            "period": {
+              "type": "rolling_days",
+              "days": 90
+            },
+            "metrics": [
+              "count"
+            ],
+            "group_by": "price_band",
+            "price_bands": [
+              1000000,
+              2000000
+            ],
+            "price_band_upper_inclusive": [
+              false,
+              true
+            ]
+          }
+        }
+      }
+    },
+    "q104": {
+      "cohorts": [
+        {
+          "id": "bed-studio",
+          "evidence_kind": "listings",
+          "location": "Dubai Hills Estate",
+          "bedrooms": [
+            "studio"
+          ],
+          "property_type": "apartment",
+          "mode": "sale"
+        },
+        {
+          "id": "bed-1",
+          "evidence_kind": "listings",
+          "location": "Dubai Hills Estate",
+          "bedrooms": [
+            "1"
+          ],
+          "property_type": "apartment",
+          "mode": "sale"
+        },
+        {
+          "id": "bed-2",
+          "evidence_kind": "listings",
+          "location": "Dubai Hills Estate",
+          "bedrooms": [
+            "2"
+          ],
+          "property_type": "apartment",
+          "mode": "sale"
+        }
+      ],
+      "review_notes": "Three separate bedroom cohorts must remain allowed. Request current inventory, never historical achieved sales. No user period is present; do not bind one. Empty inventory cannot test positive median accuracy."
+    },
+    "q105": {
+      "cohorts": [
+        {
+          "id": "jvc",
+          "evidence_kind": "listings",
+          "location": "JVC",
+          "bedrooms": [
+            "1"
+          ],
+          "property_type": "apartment",
+          "mode": "sale",
+          "price_max": 1100000,
+          "price_max_inclusive": false,
+          "period": {
+            "type": "previous_quarter"
+          }
+        },
+        {
+          "id": "business-bay",
+          "evidence_kind": "listings",
+          "location": "Business Bay",
+          "bedrooms": [
+            "2"
+          ],
+          "property_type": "apartment",
+          "mode": "sale",
+          "price_max": 2300000,
+          "price_max_inclusive": true,
+          "period": {
+            "type": "previous_quarter"
+          }
+        }
+      ],
+      "review_notes": "Keep location,bedrooms,price and inclusivity paired with the correct cohort. A Cartesian mix of independently allowed values is invalid. Shared release and comparable sample gates still apply."
+    },
+    "q106": {
+      "cohorts": [
+        {
+          "id": "villas",
+          "evidence_kind": "sales",
+          "location": "Arabian Ranches",
+          "property_type": "villa",
+          "price_min": 3000000,
+          "price_min_inclusive": false,
+          "price_max": 4500000,
+          "price_max_inclusive": true,
+          "period": {
+            "type": "previous_quarter"
+          }
+        }
+      ],
+      "review_notes": "Analytics must map price bounds to min_value_aed/max_value_aed and preserve false/true endpoint flags; defaults are not equivalent."
+    },
+    "q107": {
+      "cohorts": [
+        {
+          "id": "registered-rents",
+          "evidence_kind": "rentals",
+          "location": "Dubai Marina",
+          "bedrooms": [
+            "2"
+          ],
+          "property_type": "apartment",
+          "price_min": 90000,
+          "price_min_inclusive": true,
+          "price_max": 160000,
+          "price_max_inclusive": false,
+          "period": {
+            "type": "previous_month"
+          }
+        }
+      ],
+      "review_notes": "These are registered annual-rent bounds, not listing asking prices or whole-term contract amounts. Retain explicit apartment and two-bedroom scope; disclose the shared DLD area limitation."
+    },
+    "q108": {
+      "cohorts": [
+        {
+          "id": "jvc",
+          "evidence_kind": "listings",
+          "location": "JVC",
+          "bedrooms": [
+            "1"
+          ],
+          "property_type": "apartment",
+          "mode": "sale",
+          "price_max": 1200000,
+          "price_max_inclusive": false
+        }
+      ],
+      "review_notes": "No period is specified. Do not invent six months or emit previous_months without months. A documented default may apply transparently; unavailable evidence means no yield estimate."
+    }
+  }
+}

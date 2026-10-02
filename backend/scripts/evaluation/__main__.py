@@ -23,6 +23,9 @@ def main():
         ],
     )
     parser.add_argument("--directory")
+    parser.add_argument(
+        "--dataset", help="Explicit alternative dataset; canonical benchmark stays unchanged"
+    )
     parser.add_argument("--case", action="append", dest="case_ids")
     parser.add_argument("--data-context", default="local-mutable-warehouse")
     parser.add_argument("--bindings")
@@ -118,13 +121,16 @@ def main():
                 data_context=args.data_context,
                 bindings_path=args.bindings,
                 max_spend_usd=args.budget_usd,
+                dataset_path=args.dataset,
             )
         )
         return
     if args.command == "inventory":
         result = build_inventory()
     else:
-        benchmark = load_benchmark()
+        from pathlib import Path
+
+        benchmark = load_benchmark(Path(args.dataset)) if args.dataset else load_benchmark()
         result = {"sha256": benchmark.digest, **benchmark.model_dump()}
     print(json.dumps(result, indent=2, ensure_ascii=False))
 

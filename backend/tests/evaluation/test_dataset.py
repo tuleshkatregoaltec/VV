@@ -55,3 +55,20 @@ def test_dataset_can_grow_and_fingerprint_tracks_content_not_json_format(tmp_pat
     benchmark.cases.append(Case(id="q16", title="Additional case", question="User-added question"))
     assert benchmark.digest != original
     assert len(benchmark.cases) == 16
+
+
+def test_scope_heldout_inputs_are_separate_from_canonical_and_training_examples():
+    from scripts.evaluation.dataset import BENCHMARK
+
+    heldout = load_benchmark(BENCHMARK.with_name("scope_heldout.json"))
+    canonical = load_benchmark()
+    prepared = json.loads(BENCHMARK.with_name("behavioral_examples.json").read_text())
+    expectations = json.loads(BENCHMARK.with_name("scope_heldout_expectations.json").read_text())
+    assert heldout.digest != canonical.digest
+    assert not {case.id for case in heldout.cases} & {case.id for case in canonical.cases}
+    assert not {case.question for case in heldout.cases} & {
+        example["user"] for split in ("train", "heldout") for example in prepared[split]
+    }
+    assert {case.id for case in heldout.cases} == set(expectations["cases"])
+    # Exact inputs survive existing binding/execution; this does not grade model interpretation.
+    assert all(case.bind() == case.question and not case.parameters for case in heldout.cases)

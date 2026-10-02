@@ -303,3 +303,36 @@ def test_persisted_mcp_evidence_mismatch_is_not_silently_replaced():
     observed = observation(record, spans)
     assert observed["evidence_consistency"] is False
     assert observed["tools"][0]["result"] == {"count": 4}
+
+
+@pytest.mark.parametrize("unavailable_retrieval", [False, True])
+def test_binding_success_cannot_turn_absent_or_unavailable_evidence_into_pass(
+    unavailable_retrieval,
+):
+    record, observed, runtime = inputs()
+    observed["tools"] = [
+        {
+            "name": "bind_market_scope",
+            "arguments": {},
+            "error": False,
+            "result": {
+                "status": "ok",
+                "data": {"cohorts": [{"id": "scope", "evidence_kind": "listings"}]},
+            },
+        }
+    ]
+    if unavailable_retrieval:
+        observed["tools"].append(
+            {
+                "name": "get_listing_inventory",
+                "arguments": {},
+                "error": False,
+                "result": {"status": "unavailable", "data": None},
+            }
+        )
+    runtime["tools"] = {tool["name"]: {"schema": {"type": "object"}} for tool in observed["tools"]}
+    checks = evaluate_case(record, observed, runtime, {"required_sources": ["listings"]})
+    assert checks["tool_execution"]["status"] == "pass"
+    assert checks["evidence_availability"]["status"] == "unassessed"
+    assert checks["source_coverage"]["status"] == "fail"
+    assert checks["numerical_correctness"]["status"] == "unassessed"

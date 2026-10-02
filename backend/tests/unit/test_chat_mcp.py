@@ -32,6 +32,16 @@ def domain(monkeypatch):
 ARGS = {"request": {"dataset": "sales", "period": {"type": "previous_month"}}}
 
 
+async def bind_scope(client, cohorts=None):
+    """Bind through the real tool before exercising an existing retrieval contract."""
+    call = getattr(client, "direct_call_tool", None) or client.call
+    result = await call(
+        "bind_market_scope",
+        {"request": {"cohorts": cohorts or [{"id": "sales", "evidence_kind": "sales"}]}},
+    )
+    assert result["status"] == "ok", result
+
+
 async def test_sdk_streamable_http_initialize_list_call_with_trusted_context(domain, monkeypatch):
     methods = []
     handle = mcp.AuthenticatedMCPApp.__call__
@@ -51,6 +61,8 @@ async def test_sdk_streamable_http_initialize_list_call_with_trusted_context(dom
     auth = AsyncMock(return_value=True)
     actor = context()
     async with mcp.market_mcp(actor, auth) as client:
+        await bind_scope(client)
+        auth.reset_mock()
         tools = await client.list_tools()
         assert {tool.name for tool in tools} == set(mcp.TOOL_MODELS)
         result = await client.direct_call_tool("query_market_metrics", ARGS)
@@ -66,6 +78,7 @@ async def test_sdk_streamable_http_initialize_list_call_with_trusted_context(dom
 
 async def test_invalid_and_spoofed_arguments_are_rejected_over_protocol(domain):
     async with mcp.market_mcp(context(), AsyncMock(return_value=True)) as client:
+        await bind_scope(client)
         for request in [
             ARGS | {"organization_id": "other"},
             {"request": ARGS["request"] | {"user_id": "other"}},
@@ -85,7 +98,10 @@ async def test_disabled_access_cannot_read_and_revocation_cannot_disclose(domain
         result = await client.direct_call_tool("query_market_metrics", ARGS)
         assert result["error"]["code"] == "unauthorized"
     domain.assert_not_awaited()
-    async with mcp.market_mcp(context(), AsyncMock(side_effect=[True, False])) as client:
+    auth = AsyncMock(return_value=True)
+    async with mcp.market_mcp(context(), auth) as client:
+        await bind_scope(client)
+        auth.side_effect = [True, False]
         result = await client.direct_call_tool("query_market_metrics", ARGS)
         assert result["error"]["code"] == "unauthorized"
         assert result["data"] is None
@@ -116,6 +132,7 @@ async def test_concurrent_tenants_keep_separate_trusted_contexts(domain):
 
     async def run(user, org):
         async with mcp.market_mcp(context(user, org), AsyncMock(return_value=True)) as client:
+            await bind_scope(client)
             return await client.direct_call_tool("query_market_metrics", ARGS)
 
     results = await asyncio.gather(run("a", "one"), run("b", "two"))
@@ -125,6 +142,10 @@ async def test_concurrent_tenants_keep_separate_trusted_contexts(domain):
 
 async def test_placeholders_do_not_trigger_domain_reads(domain):
     async with mcp.market_mcp(context(), AsyncMock(return_value=True)) as client:
+        await bind_scope(
+            client,
+            [{"id": "report", "evidence_kind": "report", "location": "JLT", "bedrooms": ["2"]}],
+        )
         result = await client.direct_call_tool(
             "compose_market_report",
             {
@@ -143,6 +164,7 @@ async def test_placeholders_do_not_trigger_domain_reads(domain):
 
 async def test_timeout_release_change_result_and_call_budgets(domain, monkeypatch):
     executor = mcp.MarketToolExecutor(context(), AsyncMock(return_value=True))
+    await bind_scope(executor)
     monkeypatch.setattr(mcp, "TOOL_TIMEOUT_SECONDS", 0.01)
 
     async def slow(*args, **kwargs):
@@ -157,6 +179,7 @@ async def test_timeout_release_change_result_and_call_budgets(domain, monkeypatc
         AsyncMock(side_effect=[{"sales": {"built_at": "a"}}, {"sales": {"built_at": "b"}}]),
     )
     executor = mcp.MarketToolExecutor(context(), AsyncMock(return_value=True))
+    await bind_scope(executor)
     assert (await executor.call("query_market_metrics", ARGS))["error"]["code"] == "release_changed"
     monkeypatch.setattr(mcp, "_observe", AsyncMock(return_value={}))
     domain.return_value = {"large": "x" * mcp.MAX_RESULT_BYTES}
@@ -172,6 +195,7 @@ async def test_timeout_release_change_result_and_call_budgets(domain, monkeypatc
 async def test_private_failure_details_are_never_returned(domain):
     domain.side_effect = RuntimeError("SELECT secret FROM contacts password=private")
     async with mcp.market_mcp(context(), AsyncMock(return_value=True)) as client:
+        await bind_scope(client)
         result = await client.direct_call_tool("query_market_metrics", ARGS)
     assert result["error"]["code"] == "capability_unavailable"
     assert "private" not in str(result)
@@ -200,6 +224,7 @@ async def test_cancellation_closes_release_lease_and_transport(domain, monkeypat
 
     async def run():
         async with mcp.market_mcp(context(), AsyncMock(return_value=True)) as client:
+            await bind_scope(client)
             await client.direct_call_tool("query_market_metrics", ARGS)
 
     task = asyncio.create_task(run())
@@ -213,15 +238,18 @@ async def test_cancellation_closes_release_lease_and_transport(domain, monkeypat
 async def test_total_evidence_budget_and_missing_release_sources_fail_closed(domain, monkeypatch):
     from app.market.evidence import MarketRelease
 
-    monkeypatch.setattr(mcp, "MAX_TURN_BYTES", 1500)
+    monkeypatch.setattr(mcp, "MAX_TURN_BYTES", 10000)
     domain.return_value = {"sample": "x" * 600}
     executor = mcp.MarketToolExecutor(context(), AsyncMock(return_value=True))
+    await bind_scope(executor)
     assert (await executor.call("query_market_metrics", ARGS))["status"] == "ok"
+    monkeypatch.setattr(mcp, "MAX_TURN_BYTES", executor.result_bytes + 1)
     assert (await executor.call("query_market_metrics", ARGS))["error"][
         "code"
     ] == "evidence_budget_exceeded"
     lease = MarketRelease("rentals-only", frozenset({"rentals"}))
     executor = mcp.MarketToolExecutor(context(), AsyncMock(return_value=True), lease)
+    await bind_scope(executor)
     assert (await executor.call("query_market_metrics", ARGS))["error"][
         "code"
     ] == "release_source_unavailable"
@@ -249,11 +277,13 @@ async def test_downstream_validation_and_serialization_errors_are_not_bad_user_a
     except ValidationError as error:
         domain.side_effect = error
     async with mcp.market_mcp(context(), AsyncMock(return_value=True)) as client:
+        await bind_scope(client)
         response = await client.direct_call_tool("query_market_metrics", ARGS)
         assert response["error"]["code"] == "capability_unavailable"
     domain.side_effect = None
     domain.return_value = {"value": float("nan")}
     async with mcp.market_mcp(context(), AsyncMock(return_value=True)) as client:
+        await bind_scope(client)
         response = await client.direct_call_tool("query_market_metrics", ARGS)
         assert response["error"]["code"] == "capability_unavailable"
 
@@ -262,6 +292,7 @@ async def test_invalid_calendar_period_is_an_input_error_before_any_read(domain,
     observed = AsyncMock()
     monkeypatch.setattr(mcp, "_observe", observed)
     async with mcp.market_mcp(context(), AsyncMock(return_value=True)) as client:
+        await bind_scope(client)
         response = await client.direct_call_tool(
             "query_market_metrics", {"request": {"dataset": "sales", "period": {"type": "range"}}}
         )
@@ -281,6 +312,13 @@ async def test_unpinned_turn_cannot_combine_successive_source_families(domain, m
     monkeypatch.setattr(mcp, "_observe", observed)
     rentals = {"request": {"dataset": "rentals", "period": {"type": "previous_month"}}}
     async with mcp.market_mcp(context(), AsyncMock(return_value=True)) as client:
+        await bind_scope(
+            client,
+            [
+                {"id": "sales", "evidence_kind": "sales"},
+                {"id": "rentals", "evidence_kind": "rentals"},
+            ],
+        )
         assert (await client.direct_call_tool("query_market_metrics", ARGS))["status"] == "ok"
         assert (await client.direct_call_tool("query_market_metrics", ARGS))["status"] == "ok"
         reads_before = observed.await_count
@@ -296,6 +334,13 @@ async def test_unpinned_turn_cannot_combine_successive_source_families(domain, m
 
     monkeypatch.setattr(evidence, "acquire_market_release", lease)
     async with mcp.market_mcp(context(), AsyncMock(return_value=True)) as client:
+        await bind_scope(
+            client,
+            [
+                {"id": "sales", "evidence_kind": "sales"},
+                {"id": "rentals", "evidence_kind": "rentals"},
+            ],
+        )
         assert (await client.direct_call_tool("query_market_metrics", ARGS))["status"] == "ok"
         assert (await client.direct_call_tool("query_market_metrics", rentals))["status"] == "ok"
 
@@ -312,6 +357,7 @@ def test_default_delivery_ranking_excludes_overdue_and_later_units():
 
 async def test_unpinned_report_observations_cannot_authorize_followup_source_mixing(domain):
     executor = mcp.MarketToolExecutor(context(), AsyncMock(return_value=True))
+    await bind_scope(executor)
     # A report's individually observed sources are not an immutable release lease.
     executor.observations = {"sales": {"built_at": "a"}, "rentals": {"built_at": "a"}}
     response = await executor.call("query_market_metrics", ARGS)

@@ -908,3 +908,31 @@ synthetic training examples and four held-out examples. It performed no upload
 or training. Local evidence/reviews remain ignored, mode 0600 in 0700 directories;
 no telemetry upload occurred. Disposable auth/PostgreSQL containers and evaluation
 ClickHouse database were removed; temporary evaluation credentials were deleted.
+
+
+### Scope preservation follow-up
+
+Prompt `database-mcp-v4` binds all interpreted user cohorts through the actual
+`bind_market_scope` MCP tool before retrieval. The server restores omitted bound
+constraints and rejects conflicts; this protects an established interpretation.
+It does **not** prove that the model extracted every user constraint correctly.
+Evaluate the initial binding against the user's words as well as later effective
+query scope. A binding response is setup, not retrieved market evidence, and does
+not pass evidence availability when no usable retrieval follows.
+
+`scope_heldout.json` contains separate, manually authored scope paraphrases.
+`scope_heldout_expectations.json` records their intended constraints and boundary
+semantics for attributed review; example cohort IDs are illustrative. Neither file
+is training data. They cover strict/inclusive price intervals, a boundary partition,
+multiple bedroom cohorts, paired locations/budgets, explicit comparable periods,
+and a request with no period to invent. Positive values and exact-boundary behavior
+still require independent populated database fixtures; an empty listing sample
+cannot prove correct yield, median or boundary arithmetic.
+
+The existing runner accepts `--dataset scripts/evaluation/scope_heldout.json` for
+this separate dataset and records its own digest. Omitting `--dataset` continues to
+use the unchanged canonical q01–q15 benchmark. Both use the same authenticated HTTP,
+MCP, evidence, budget and assessment pipeline. A paid run still requires an explicit
+approved `--budget-usd`, and all runs remain within the existing overall approval.
+Different dataset digests, subsets or tool schemas do not establish a controlled
+full-benchmark improvement. No training or model promotion is authorized here.
