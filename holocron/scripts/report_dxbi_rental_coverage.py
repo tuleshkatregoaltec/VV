@@ -17,9 +17,7 @@ import clickhouse_connect
 COMPARABLE_SCOPES = {"residential_home", "commercial"}
 
 
-def coverage_sql(
-    dxbi_table: str, benchmark_table: str = "silver_rent_contracts"
-) -> str:
+def coverage_sql(dxbi_table: str, benchmark_table: str = "silver_rent_contracts") -> str:
     return f"""
     WITH
     dxbi AS (

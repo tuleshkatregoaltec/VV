@@ -12,6 +12,8 @@ from app.chat.service import (
     get_conversation_messages,
 )
 
+OWNER = {"user_id": "user-1", "organization_id": "org-1"}
+
 
 @pytest.fixture
 async def db_session():
@@ -36,13 +38,15 @@ async def test_delete_conversation_deletes_messages(db_session):
     )
     assert conversation.id is not None
 
-    await add_message(db_session, conversation.id, "user", "show me some sales listings")
-    await add_message(db_session, conversation.id, "assistant", "Here are matching listings")
+    await add_message(db_session, conversation.id, "user", "show me some sales listings", **OWNER)
+    await add_message(
+        db_session, conversation.id, "assistant", "Here are matching listings", **OWNER
+    )
 
-    assert await delete_conversation(db_session, conversation.id, "user-1") is True
+    assert await delete_conversation(db_session, conversation.id, "user-1", "org-1") is True
 
-    assert await get_conversation(db_session, conversation.id, "user-1") is None
-    assert await get_conversation_messages(db_session, conversation.id) == []
+    assert await get_conversation(db_session, conversation.id, "user-1", "org-1") is None
+    assert await get_conversation_messages(db_session, conversation.id, **OWNER) == []
 
 
 @pytest.mark.asyncio
@@ -54,9 +58,9 @@ async def test_delete_conversation_enforces_owner(db_session):
         title="Private conversation",
     )
     assert conversation.id is not None
-    await add_message(db_session, conversation.id, "user", "private message")
+    await add_message(db_session, conversation.id, "user", "private message", **OWNER)
 
-    assert await delete_conversation(db_session, conversation.id, "user-2") is False
+    assert await delete_conversation(db_session, conversation.id, "user-2", "org-1") is False
 
-    assert await get_conversation(db_session, conversation.id, "user-1") is not None
-    assert len(await get_conversation_messages(db_session, conversation.id)) == 1
+    assert await get_conversation(db_session, conversation.id, "user-1", "org-1") is not None
+    assert len(await get_conversation_messages(db_session, conversation.id, **OWNER)) == 1

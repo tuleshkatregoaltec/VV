@@ -327,8 +327,16 @@ function registryPath(lead: CrmLead) {
 }
 
 function hasCanonicalAddressChange(lead: CrmLead) {
-	const canonical = [lead.building_name, lead.project_name, lead.area_name].filter(Boolean).join('|')
-	const registry = [lead.registry_building_name, lead.registry_project_name, lead.registry_area_name].filter(Boolean).join('|')
+	const canonical = [lead.building_name, lead.project_name, lead.area_name]
+		.filter(Boolean)
+		.join('|')
+	const registry = [
+		lead.registry_building_name,
+		lead.registry_project_name,
+		lead.registry_area_name
+	]
+		.filter(Boolean)
+		.join('|')
 	return Boolean(registry && canonical !== registry)
 }
 

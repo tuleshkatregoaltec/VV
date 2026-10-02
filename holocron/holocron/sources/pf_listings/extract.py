@@ -240,7 +240,9 @@ class PropertyFinderBrowserListingsClient:
         )
 
     def _search_url(self, *, params: Sequence[tuple[str, str]]) -> str:
-        return f"{self._base_url}/{self._config.locale}/search?{urlencode(list(params), doseq=True)}"
+        return (
+            f"{self._base_url}/{self._config.locale}/search?{urlencode(list(params), doseq=True)}"
+        )
 
     def fetch_detail(self, *, details_path: str) -> dict[str, Any]:
         page = self._detail_page_or_new()

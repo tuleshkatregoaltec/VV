@@ -201,8 +201,10 @@ def split_capped_shard(shard: dict[str, Any]) -> list[dict[str, Any]]:
             {**shard, "min_size": minimum, "max_size": maximum} for minimum, maximum in SIZE_BUCKETS
         ]
 
-    if max_size is None or max_size - min_size > CENT or (
-        min_size > 0 and max_size - min_size == CENT
+    if (
+        max_size is None
+        or max_size - min_size > CENT
+        or (min_size > 0 and max_size - min_size == CENT)
     ):
         ranges = bisect_range(min_size, max_size)
         return [{**shard, "min_size": minimum, "max_size": maximum} for minimum, maximum in ranges]
@@ -213,8 +215,7 @@ def split_capped_shard(shard: dict[str, Any]) -> list[dict[str, Any]]:
     if max_price is None or max_price - min_price >= CENT:
         ranges = bisect_range(min_price, max_price)
         return [
-            {**shard, "min_price": minimum, "max_price": maximum}
-            for minimum, maximum in ranges
+            {**shard, "min_price": minimum, "max_price": maximum} for minimum, maximum in ranges
         ]
     return []
 
@@ -230,9 +231,7 @@ def refine_paged_checkpoint(
     """Replace previously paged rows when a capped shard can now be split further."""
     page_prefix = f"{root_key}|page="
     superseded_keys = [
-        key
-        for key in state["completed"]
-        if key == root_key or key.startswith(page_prefix)
+        key for key in state["completed"] if key == root_key or key.startswith(page_prefix)
     ]
     for key in superseded_keys:
         item = state["completed"].pop(key)
@@ -253,9 +252,7 @@ def refine_paged_checkpoint(
             state["failed"].pop(key)
     state["paged"].pop(root_key, None)
     state["expanded"][root_key] = {
-        "children": [
-            checkpoint_key(configuration, shard_key(child)) for child in children
-        ],
+        "children": [checkpoint_key(configuration, shard_key(child)) for child in children],
         "expanded_at": utc_now(),
         "reason": "refined_previously_paged_capped_shard",
     }
@@ -284,8 +281,7 @@ def refine_expanded_checkpoint(
         key
         for key in state["completed"]
         if any(
-            key == descendant or key.startswith(f"{descendant}|page=")
-            for descendant in descendants
+            key == descendant or key.startswith(f"{descendant}|page=") for descendant in descendants
         )
     ]
     for key in completed_keys:
@@ -304,8 +300,7 @@ def refine_expanded_checkpoint(
 
     for key in list(state["failed"]):
         if any(
-            key == descendant or key.startswith(f"{descendant}|page=")
-            for descendant in descendants
+            key == descendant or key.startswith(f"{descendant}|page=") for descendant in descendants
         ):
             state["failed"].pop(key)
     for key in list(state["paged"]):
@@ -316,9 +311,7 @@ def refine_expanded_checkpoint(
             state["expanded"].pop(key)
 
     state["expanded"][root_key] = {
-        "children": [
-            checkpoint_key(configuration, shard_key(child)) for child in children
-        ],
+        "children": [checkpoint_key(configuration, shard_key(child)) for child in children],
         "expanded_at": utc_now(),
         "reason": "refined_saved_expansion",
     }
@@ -1165,11 +1158,7 @@ def scrape_configuration(
             key = checkpoint_key(configuration, local_key)
             root_key = checkpoint_key(configuration, local_root_key)
             if key == root_key and root_key in state["paged"]:
-                children = (
-                    split_capped_shard(shard)
-                    if collection_strategy == "split"
-                    else []
-                )
+                children = split_capped_shard(shard) if collection_strategy == "split" else []
                 if children:
                     refine_paged_checkpoint(
                         output_dir=output_dir,
@@ -1567,6 +1556,7 @@ def main() -> int:
                 return 0
 
             if manifest:
+
                 def selected_ids(raw: str, records: list[dict[str, Any]]) -> set[str] | None:
                     values = {value.strip() for value in raw.split(",") if value.strip()}
                     if not values:
@@ -1581,7 +1571,9 @@ def main() -> int:
                     manifest,
                     account=account,
                     validation_candidates=args.coverage_validation,
-                    profile_ids=selected_ids(args.profile_ids, list(manifest.get("profiles") or [])),
+                    profile_ids=selected_ids(
+                        args.profile_ids, list(manifest.get("profiles") or [])
+                    ),
                     location_ids=selected_ids(
                         args.location_ids, list(manifest.get("locations") or [])
                     ),

@@ -24,6 +24,10 @@ class MarketCheck:
     sql: str
     op: str
     threshold: float
+    # Blocking checks are evaluated on the staged release and stop publication. Source-health
+    # signals (DXBI lag, coverage, match rate) stay as post-publication asset checks: a
+    # lagging DXBI feed must not freeze fresh DLD data.
+    blocking: bool = True
 
 
 def evaluate(clickhouse: ClickHouseQuery, check: MarketCheck) -> tuple[bool, float]:
@@ -99,6 +103,7 @@ CHECKS: tuple[MarketCheck, ...] = (
         " AND coalesce(dxbi_transaction_date, toDate(instance_date)) >= '2022-01-01'",
         op=">=",
         threshold=0.80,
+        blocking=False,
     ),
     MarketCheck(
         name="sale_dxbi_monthly_coverage_min",
@@ -107,6 +112,7 @@ CHECKS: tuple[MarketCheck, ...] = (
         sql=_SALE_MONTHLY_COVERAGE,
         op=">=",
         threshold=0.80,
+        blocking=False,
     ),
     MarketCheck(
         name="sale_probable_duplicate_share",
@@ -116,6 +122,7 @@ CHECKS: tuple[MarketCheck, ...] = (
         f" FROM {_SALES}",
         op="<=",
         threshold=0.15,
+        blocking=False,
     ),
     MarketCheck(
         name="sale_dxbi_only_share",
@@ -171,6 +178,7 @@ CHECKS: tuple[MarketCheck, ...] = (
         "   WHERE source_system != 'dxbi' AND trans_group_en = 'Sales')))",
         op="<=",
         threshold=7,
+        blocking=False,
     ),
     # --- rentals -----------------------------------------------------------------------
     MarketCheck(
@@ -212,6 +220,7 @@ CHECKS: tuple[MarketCheck, ...] = (
         f" FROM {_RENTALS}",
         op=">=",
         threshold=0.60,
+        blocking=False,
     ),
     MarketCheck(
         name="rental_probable_duplicate_share",
@@ -222,6 +231,7 @@ CHECKS: tuple[MarketCheck, ...] = (
         f" / countIf(dxbi_contract_key != '') FROM {_RENTALS}",
         op="<=",
         threshold=0.40,
+        blocking=False,
     ),
     MarketCheck(
         name="rental_pair_size_agreement",
@@ -270,5 +280,6 @@ CHECKS: tuple[MarketCheck, ...] = (
         "   WHERE source_system != 'dxbi' AND registration_date <= now())))",
         op="<=",
         threshold=7,
+        blocking=False,
     ),
 )

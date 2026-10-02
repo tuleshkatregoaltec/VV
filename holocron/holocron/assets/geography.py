@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, cast
 
 from dagster import MaterializeResult, asset
 
@@ -764,7 +764,8 @@ def _offplan_transaction_consensus(
     decisions: dict[tuple[str, str], OffplanProjectDecision],
 ) -> dict[tuple[str, str], tuple[str, int, int]]:
     """Use exact date/value/area DLD pairs to corroborate DXBI catalogue identity."""
-    dxbi_by_raw = {
+    # Keys are tuple[str, ...] because they are looked up by slices of query rows.
+    dxbi_by_raw: dict[tuple[str, ...], tuple[str, str]] = {
         (
             signature.area_name,
             signature.project_name,
@@ -774,7 +775,7 @@ def _offplan_transaction_consensus(
         for signature in signatures
         if signature.source_system == "dxbi_sales"
     }
-    dld_targets_by_raw: dict[tuple[str, str, str, str, str], set[str]] = {}
+    dld_targets_by_raw: dict[tuple[str, ...], set[str]] = {}
     for signature in signatures:
         if signature.source_system != "dld_transactions":
             continue
@@ -856,8 +857,11 @@ def _offplan_candidate_rows(
         candidates = evidence.get("ranked_candidates", [])
         if not isinstance(candidates, list):
             continue
-        for rank, candidate in enumerate(candidates, start=1):
-            if not isinstance(candidate, dict) or not candidate.get("reelly_project_id"):
+        for rank, raw_candidate in enumerate(candidates, start=1):
+            if not isinstance(raw_candidate, dict):
+                continue
+            candidate = cast(dict[str, Any], raw_candidate)
+            if not candidate.get("reelly_project_id"):
                 continue
             rows.append(
                 (
@@ -1178,8 +1182,11 @@ def _candidate_rows(link_rows: list[tuple[Any, ...]]) -> list[tuple[Any, ...]]:
         candidates = evidence.get("ranked_candidates", [])
         if not isinstance(candidates, list):
             continue
-        for rank, candidate in enumerate(candidates, start=1):
-            if not isinstance(candidate, dict) or not candidate.get("canonical_location_id"):
+        for rank, raw_candidate in enumerate(candidates, start=1):
+            if not isinstance(raw_candidate, dict):
+                continue
+            candidate = cast(dict[str, Any], raw_candidate)
+            if not candidate.get("canonical_location_id"):
                 continue
             rows.append(
                 (

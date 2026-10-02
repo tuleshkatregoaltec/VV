@@ -153,7 +153,9 @@ function buildFacetFilterParams(localFilterOverrides: Partial<RentalsLocalFilter
 
 // Keep the filter controls responsive by fetching their shared facets once,
 // rather than issuing four full rental-table scans beside the data request.
-const facetOptionsQuery = createQuery(() => transactionQueries.rentalFilterOptions(buildFacetFilterParams()))
+const facetOptionsQuery = createQuery(() =>
+	transactionQueries.rentalFilterOptions(buildFacetFilterParams())
+)
 
 // ========================================
 // Derived Values

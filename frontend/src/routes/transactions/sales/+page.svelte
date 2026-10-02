@@ -107,7 +107,9 @@ const transactionsQuery = createQuery(() => transactionQueries.sales(salesApiFil
 // One shared facet payload avoids four concurrent full-table scans on first
 // load. The selected value stays available in the control until the next
 // filter refresh, while the table can render immediately.
-const facetOptionsQuery = createQuery(() => transactionQueries.salesFilterOptions(buildFacetFilterParams()))
+const facetOptionsQuery = createQuery(() =>
+	transactionQueries.salesFilterOptions(buildFacetFilterParams())
+)
 
 let columns = $derived(
 	propertyType.current === PROPERTY_USAGE.RESIDENTIAL ? RESIDENTIAL_COLUMNS : COMMERCIAL_COLUMNS

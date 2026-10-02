@@ -13,12 +13,12 @@ Rules (measured in docs/data-pipelines/DXBI_RECONCILIATION.md):
   pairing; kept for audit, not served, so nothing is double counted).
 - Label drift is fixed here once: Mortgage -> Mortgages, Renew -> Renewed, off-plan status
   from either DLD field.
+
+Statements name the served tables; ``holocron.market.release`` renders them against a run's
+staging tables, so a build never writes to what the backend is reading.
 """
 
 from __future__ import annotations
-
-from holocron.platform.clickhouse import ClickHouseClient
-from holocron.platform.clickhouse_schema import ensure_schema
 
 SQFT_PER_SQM = 10.7639
 # Large joins and sorts spill to disk instead of failing when memory is tight.
@@ -123,7 +123,7 @@ DXBI_SALES_BASE = """
 """
 
 _SALE_MATCHES_SQL = f"""
-INSERT INTO `market_sale_matches_staging`
+INSERT INTO `market_sale_matches`
     (dxbi_sale_key, dld_transaction_number, day_gap, size_gap, has_dld_candidate, built_at)
 WITH
     dld_sales AS (
@@ -190,7 +190,7 @@ _REG_TYPE_EN = """multiIf(
     '')"""
 
 _SALE_EVENTS_DLD_SQL = f"""
-INSERT INTO `market_sale_events_staging` ({", ".join(SALE_COLUMNS)})
+INSERT INTO `market_sale_events` ({", ".join(SALE_COLUMNS)})
 SELECT
     d.row_key, d.run_id, d.scraped_at,
     if(d.transaction_number != '', d.transaction_number, d.row_key),
@@ -255,10 +255,10 @@ def _learned_name_maps(*, staging: str, dxbi_source: str, dxbi_key: str, staging
 
 
 _SALE_EVENTS_DXBI_SQL = f"""
-INSERT INTO `market_sale_events_staging` ({", ".join(SALE_COLUMNS)})
+INSERT INTO `market_sale_events` ({", ".join(SALE_COLUMNS)})
 {
     _learned_name_maps(
-        staging="market_sale_events_staging",
+        staging="market_sale_events",
         dxbi_source=DXBI_SALES_BASE,
         dxbi_key="sale_key",
         staging_key="dxbi_sale_key",
@@ -396,7 +396,7 @@ def _rental_rank_pairing_sql(
     partition = ", ".join(f"k{i}" for i in range(len(dx_keys)))
     join_on = " AND ".join(f"a.k{i} = b.k{i}" for i in range(len(dx_keys)))
     return f"""
-INSERT INTO `market_rental_matches_staging`
+INSERT INTO `market_rental_matches`
     (dxbi_contract_key, dld_rent_key, match_tier, end_day_gap, size_gap, has_dld_candidate, built_at)
 WITH {_RENTAL_MATCH_INPUTS}
 SELECT a.contract_key, b.dld_rent_key, {tier}, toInt32(abs(dateDiff('day', b.e, a.lease_end))),
@@ -406,14 +406,14 @@ FROM (
            row_number() OVER (PARTITION BY {partition} ORDER BY size_sqft, contract_key) AS rn
     FROM dx
     WHERE {dx_filter}
-      AND contract_key NOT IN (SELECT dxbi_contract_key FROM `market_rental_matches_staging`)
+      AND contract_key NOT IN (SELECT dxbi_contract_key FROM `market_rental_matches`)
 ) AS a
 INNER JOIN (
     SELECT dld_rent_key, e, sqft, {dld_cols},
            row_number() OVER (PARTITION BY {partition} ORDER BY sqft, dld_rent_key) AS rn
     FROM dld
     WHERE {dld_filter}
-      AND dld_rent_key NOT IN (SELECT dld_rent_key FROM `market_rental_matches_staging`)
+      AND dld_rent_key NOT IN (SELECT dld_rent_key FROM `market_rental_matches`)
 ) AS b ON {join_on} AND a.rn = b.rn
 {_HEAVY_QUERY_SETTINGS}
 """
@@ -456,7 +456,7 @@ _RENTAL_MATCH_STATEMENTS = (
     # Every DXBI rental left unpaired gets its ledger row. A DLD row with the same start and
     # amount, or the same period and floor area (±1 m²), means DLD already holds the contract.
     f"""
-INSERT INTO `market_rental_matches_staging`
+INSERT INTO `market_rental_matches`
     (dxbi_contract_key, dld_rent_key, match_tier, end_day_gap, size_gap, has_dld_candidate, built_at)
 WITH {_RENTAL_MATCH_INPUTS}
 SELECT dx.contract_key, 0, 255, -1, -1.0,
@@ -472,13 +472,13 @@ SELECT dx.contract_key, 0, 255, -1, -1.0,
        ),
        now64(3)
 FROM dx
-WHERE dx.contract_key NOT IN (SELECT dxbi_contract_key FROM `market_rental_matches_staging`)
+WHERE dx.contract_key NOT IN (SELECT dxbi_contract_key FROM `market_rental_matches`)
 {_HEAVY_QUERY_SETTINGS}
 """,
 )
 
 _RENTAL_EVENTS_DLD_SQL = f"""
-INSERT INTO `market_rental_events_staging` ({", ".join(RENTAL_COLUMNS)})
+INSERT INTO `market_rental_events` ({", ".join(RENTAL_COLUMNS)})
 SELECT
     d.row_key, d.run_id, d.scraped_at,
     if(d.contract_number != '', d.contract_number, d.row_key), d.contract_number, d.line_number,
@@ -511,10 +511,10 @@ LEFT JOIN (SELECT * FROM dxbi_rental_events FINAL) AS x ON x.contract_key = m.dx
 """
 
 _RENTAL_EVENTS_DXBI_SQL = f"""
-INSERT INTO `market_rental_events_staging` ({", ".join(RENTAL_COLUMNS)})
+INSERT INTO `market_rental_events` ({", ".join(RENTAL_COLUMNS)})
 {
     _learned_name_maps(
-        staging="market_rental_events_staging",
+        staging="market_rental_events",
         dxbi_source="SELECT * FROM dxbi_rental_events FINAL",
         dxbi_key="contract_key",
         staging_key="dxbi_contract_key",
@@ -554,65 +554,3 @@ LEFT JOIN project_name_map AS pm ON pm.dxbi_name = x.project_name
 {_rental_area_joins("x")}
 WHERE m.dld_rent_key = 0
 """
-
-
-def _rebuild(*, clickhouse: ClickHouseClient, table: str, statements: tuple[str, ...]) -> int:
-    """Fill `<table>_staging` with `statements`, compact it, then swap it in atomically."""
-    staging = f"{table}_staging"
-    clickhouse.command(f"DROP TABLE IF EXISTS `{staging}`")
-    clickhouse.command(f"CREATE TABLE `{staging}` AS `{table}`")
-    try:
-        for statement in statements:
-            clickhouse.command(statement)
-        # A fresh INSERT ... SELECT leaves dozens of parts; the backend's ordered LIMIT queries
-        # read every part, so the served table is merged before it goes live.
-        clickhouse.command(f"OPTIMIZE TABLE `{staging}` FINAL")
-        clickhouse.command(f"EXCHANGE TABLES `{table}` AND `{staging}`")
-    finally:
-        clickhouse.command(f"DROP TABLE IF EXISTS `{staging}`")
-    return _count(clickhouse, f"SELECT count() FROM `{table}`")
-
-
-def _count(clickhouse: ClickHouseClient, sql: str) -> int:
-    return int(clickhouse.query(sql).result_rows[0][0])
-
-
-def _status_counts(clickhouse: ClickHouseClient, table: str) -> dict[str, int]:
-    rows = clickhouse.query(
-        f"SELECT match_status, count() FROM `{table}` GROUP BY match_status"
-    ).result_rows
-    return {str(status): int(count) for status, count in rows}
-
-
-def materialize_market_sale_events(*, clickhouse: ClickHouseClient) -> dict[str, int]:
-    ensure_schema(clickhouse=clickhouse)
-    matches = _rebuild(
-        clickhouse=clickhouse, table="market_sale_matches", statements=(_SALE_MATCHES_SQL,)
-    )
-    events = _rebuild(
-        clickhouse=clickhouse,
-        table="market_sale_events",
-        statements=(_SALE_EVENTS_DLD_SQL, _SALE_EVENTS_DXBI_SQL),
-    )
-    return {
-        "match_rows": matches,
-        "row_count": events,
-        **_status_counts(clickhouse, "market_sale_events"),
-    }
-
-
-def materialize_market_rental_events(*, clickhouse: ClickHouseClient) -> dict[str, int]:
-    ensure_schema(clickhouse=clickhouse)
-    matches = _rebuild(
-        clickhouse=clickhouse, table="market_rental_matches", statements=_RENTAL_MATCH_STATEMENTS
-    )
-    events = _rebuild(
-        clickhouse=clickhouse,
-        table="market_rental_events",
-        statements=(_RENTAL_EVENTS_DLD_SQL, _RENTAL_EVENTS_DXBI_SQL),
-    )
-    return {
-        "match_rows": matches,
-        "row_count": events,
-        **_status_counts(clickhouse, "market_rental_events"),
-    }

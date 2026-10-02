@@ -1,4 +1,5 @@
 import json
+from typing import Any, cast
 
 import pytest
 
@@ -7,6 +8,7 @@ from holocron.domain.geography import (
     GeographyResolver,
     LinkOverride,
     LocationNode,
+    LocationType,
     SourceSignature,
     decision_from_override,
     is_generic_leaf_name,
@@ -519,7 +521,7 @@ def test_transaction_consensus_alias_requires_dominance_coverage_and_one_context
                 ]
             )
 
-    assert _transaction_consensus_aliases(ClickHouse()) == [
+    assert _transaction_consensus_aliases(cast(Any, ClickHouse())) == [
         ("pf:tower-a-alpha", "Verified Alias", "Tower A", 99, 100, 100)
     ]
 
@@ -766,7 +768,7 @@ def _nodes() -> list[LocationNode]:
 
 def _node(
     location_id: str,
-    location_type: str,
+    location_type: LocationType,
     name: str,
     path_ids: tuple[str, ...],
     *,
