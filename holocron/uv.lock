@@ -716,6 +716,7 @@ dependencies = [
 
 [package.optional-dependencies]
 admin = [
+    { name = "pandas" },
     { name = "python-dotenv" },
     { name = "pyyaml" },
     { name = "streamlit" },
@@ -741,6 +742,7 @@ requires-dist = [
     { name = "dagster", specifier = ">=1.13.3" },
     { name = "dagster-postgres", specifier = ">=0.29.3" },
     { name = "dagster-webserver", specifier = ">=1.13.3" },
+    { name = "pandas", marker = "extra == 'admin'", specifier = ">=2.0" },
     { name = "playwright", specifier = ">=1.59.0" },
     { name = "psycopg", extras = ["binary"], specifier = ">=3.3.4" },
     { name = "pydantic-settings", specifier = ">=2.14.0" },
