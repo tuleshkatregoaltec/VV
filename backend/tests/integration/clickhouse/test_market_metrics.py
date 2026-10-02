@@ -108,13 +108,17 @@ def verified(*ranges: tuple[str, str]) -> list[dict[str, str]]:
     return [{"from": a, "to": b, "status": "verified"} for a, b in ranges]
 
 
-async def publish_coverage(warehouse, release_id: str, dataset: str, ranges: list[dict]) -> None:
-    """The ledger entry Holocron writes for a published release (coverage part only)."""
+async def publish_coverage(
+    warehouse, release_id: str, dataset: str, ranges: list[dict], state: str = "published"
+) -> None:
+    """The ledger entry Holocron writes for a release (state and coverage only)."""
     await warehouse.insert(
         "market_release_ledger",
         # Each call is a newer version of the entry (ReplacingMergeTree keeps the latest).
-        [[release_id, dataset, "published", json.dumps({"ranges": ranges}), datetime.now()]],
-        column_names=["release_id", "dataset", "state", "coverage_json", "updated_at"],
+        [[release_id, dataset, state, json.dumps({"ranges": ranges}), datetime.now(),
+          datetime.now()]],
+        column_names=["release_id", "dataset", "state", "coverage_json", "started_at",
+                      "updated_at"],
     )  # fmt: skip
 
 
@@ -448,3 +452,69 @@ async def test_source_vocabularies_meet_in_one_district_and_community(served):
         ("Jumeirah Village Circle", 3),
         ("Business Bay", 1),
     ]
+
+
+async def publish_version(warehouse, release_id: str) -> None:
+    """A Holocron publication: an immutable copy of the served rows plus its ledger entry."""
+    version = f"market_sale_events__r{release_id}"
+    await warehouse.command(f"CREATE TABLE {version} AS market_sale_events")
+    await warehouse.command(
+        f"INSERT INTO {version} SELECT * REPLACE ('{release_id}' AS release_id) "
+        "FROM market_sale_events"
+    )
+    await publish_coverage(
+        warehouse, release_id, "market_sale_events", verified(("2026-08-31", "2026-10-01"))
+    )
+
+
+async def test_a_pinned_operation_reads_one_immutable_release_throughout(served):
+    """PR #13's lease contract: every query under one pin reads the same immutable versions,
+    even when a new release is published and the serving view changes mid-operation."""
+    from app.market.releases import ReleaseUnavailable, pin_market_release
+
+    await publish_version(served, "a1a1a1a1a1a1")
+    async with pin_market_release() as pin:
+        assert pin.release_id == "sales=a1a1a1a1a1a1" and pin.missing == ("rentals",)
+        assert ("sales", date(2026, 8, 31), date(2026, 10, 1), "complete") in pin.coverage()
+        first = await get_market_metrics(request(dataset="sales", location="JVC"))
+
+        # A new release goes live: one more September JVC sale, in its own version and in
+        # the mutable serving table the dashboards read.
+        newer = sale(
+            "S4", datetime(2026, 9, 20), "Sales", 2_000_000, 100, "JUMEIRAH VILLAGE CIRCLE"
+        )
+        await served.insert("market_sale_events", [newer], column_names=SALE_COLUMNS)
+        await publish_version(served, "b2b2b2b2b2b2")
+        await publish_coverage(
+            served, "a1a1a1a1a1a1", "market_sale_events",
+            verified(("2026-08-31", "2026-10-01")), state="superseded",
+        )  # fmt: skip
+        again = await get_market_metrics(request(dataset="sales", location="JVC", group_by="month"))
+
+        assert first.total.count == again.total.count == 3
+        assert first.release_id == again.release_id == "a1a1a1a1a1a1"
+        assert first.coverage.status == "complete"
+        with pytest.raises(ReleaseUnavailable):
+            await get_market_metrics(request(dataset="rentals"))
+
+    async with pin_market_release(("sales",)) as later:
+        assert later.release_id == "sales=b2b2b2b2b2b2"
+        assert (await get_market_metrics(request(dataset="sales", location="JVC"))).total.count == 4
+
+
+async def test_an_expired_pin_fails_closed_instead_of_reading_a_dropped_version(served):
+    from datetime import UTC, timedelta
+
+    from app.market import releases
+
+    await publish_version(served, "a1a1a1a1a1a1")
+    async with releases.pin_market_release(("sales",)) as pin:
+        expired = releases.PinnedRelease(
+            pin.versions, pin.acquired_at, datetime.now(UTC) - timedelta(seconds=1)
+        )
+        token = releases._pinned.set(expired)
+        try:
+            with pytest.raises(releases.ReleaseLeaseExpired):
+                await get_market_metrics(request(dataset="sales"))
+        finally:
+            releases._pinned.reset(token)

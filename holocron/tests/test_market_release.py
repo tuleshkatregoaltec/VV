@@ -372,6 +372,48 @@ def test_crash_between_ledger_and_events_exchange_serves_one_consistent_release(
 
 
 @live
+def test_published_versions_stay_immutable_until_no_reader_can_hold_them(warehouse) -> None:
+    from datetime import UTC
+
+    _dld_sales(warehouse, [(f"T{i}", "Sales", 1_000_000 + i) for i in range(40)])
+    r1 = str(release.materialize_market_sale_events(clickhouse=warehouse)["release_id"])
+    v1 = release.version_table("market_sale_events", r1)
+    _dld_sales(warehouse, [("T40", "Sales", 3_000_000)])
+    r2 = str(release.materialize_market_sale_events(clickhouse=warehouse)["release_id"])
+    v2 = release.version_table("market_sale_events", r2)
+
+    # A reader pinned on r1 keeps reading exactly r1, although r2 now serves 41 rows.
+    assert _served(warehouse, v1) == 40 and _served(warehouse, v2) == _served(warehouse) == 41
+    assert warehouse.query(f"SELECT DISTINCT release_id FROM {v1}").result_rows == [(r1,)]
+
+    # A release that never went live leaves no pinnable version behind.
+    _dld_sales(warehouse, [("T41", "Sales", 3_000_000)])
+    crashing = _CrashAfter(warehouse, "EXCHANGE TABLES `market_sale_matches` AND")
+    with pytest.raises(ConnectionError):
+        release.materialize_market_sale_events(clickhouse=cast(Any, crashing))
+    r3 = next(rid for rid, state in _ledger(warehouse).items() if state == "publishing")
+    assert release.version_table("market_sale_events", r3) in _tables(warehouse)
+    with release.release_lock(warehouse, owner="test"):
+        release.recover(warehouse)
+        dropped = release.cleanup_versions(warehouse)
+    assert any(r3 in item for item in dropped)
+
+    # Superseded versions survive retention (a pin lasts at most MAX_READER_LEASE) ...
+    assert release.RELEASE_RETENTION > release.MAX_READER_LEASE * 10
+    with release.release_lock(warehouse, owner="test"):
+        assert release.cleanup_versions(warehouse) == []
+        later = datetime.now(UTC) + release.RELEASE_RETENTION + timedelta(minutes=1)
+        dropped = release.cleanup_versions(warehouse, now=later)
+    # ... and then go; the published version never does.
+    assert [item.split(":")[0] for item in dropped] == [v1]
+    assert v2 in _tables(warehouse) and v1 not in _tables(warehouse)
+
+    # Rolling back to a release whose version aged out recreates it for readers.
+    assert release.rollback(warehouse, "market_sale_events") == r1
+    assert _served(warehouse, v1) == 40
+
+
+@live
 def test_corrections_duplicates_and_cut_over_are_served_once(warehouse) -> None:
     columns = [
         "row_key", "run_id", "scraped_at", "transaction_number", "instance_date", "group_en",
