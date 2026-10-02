@@ -936,3 +936,97 @@ MCP, evidence, budget and assessment pipeline. A paid run still requires an expl
 approved `--budget-usd`, and all runs remain within the existing overall approval.
 Different dataset digests, subsets or tool schemas do not establish a controlled
 full-benchmark improvement. No training or model promotion is authorized here.
+
+### PR #13 scoped corrections — 2026-10-03 reference date
+
+The v3 defects above are historical. Current runtime prompt is `database-mcp-v6`.
+`bind_market_scope` now freezes separate, typed cohorts before retrieval. Omitted
+location, bedrooms, property type, price bounds and periods inherit the bound
+values; conflicts and null clearing fail before reads. Period interpretation is
+required (explicit period or null), incomplete periods identify the missing field,
+and contradictory source/mode bindings fail before freezing. This guards a bound
+interpretation; it does not certify the model's initial reading of the user.
+
+Boundary changes are additive application contracts, not canonical schema changes:
+
+- Analytics keeps `min_value_aed` inclusive and `max_value_aed` exclusive by default.
+  `min_value_inclusive`/`max_value_inclusive` explicitly change equality ownership.
+- Listings keep inclusive defaults; `price_min`/`price_max` accept fractional AED
+  and `price_min_inclusive`/`price_max_inclusive` express strict bounds. Shared
+  grid/aggregate services, public routes and generated frontend contracts agree.
+- `price_band_upper_inclusive` has one boolean per `price_bands` cutoff; omitted
+  remains all false. Under 1m, inclusive 1–2m, above 2m uses `[false,true]`.
+- Unsupported yields carry a deterministic `yield_unavailable_reason`; composition
+  returns `unavailability_reasons`. These distinguish missing release, unverified
+  coverage, insufficient comparables and missing values without changing gates.
+
+Independent disposable fixtures verify listing amounts immediately below/at/above
+AED1.2m, analytics integer records around cutoffs plus fractional thresholds, and
+all four inclusive/exclusive bracket partitions. Six canonical boundary rows give
+counts **1/4/1** for under1m/inclusive1–2m/above2m. A real MCP sequence preserves the
+strict ceiling through inventory, an invalid incomplete-period call, and repaired
+rent comparison. The immutable fixture lease supports **8% gross yield, 7–9% IQR**
+from five annual rents (60k/70k/80k/90k/100k) against a 1m asking price. Separate real
+fixture checks with no lease, no authoritative coverage, or only four comparables
+withhold yields. Rejection alone is never counted as successful question coverage.
+
+Only targeted live runs were added; the canonical fifteen questions are unchanged:
+
+| Private run suffix (UTC) | Version / cases | Reviewed outcome |
+| --- | --- | --- |
+| `233019Z` | v4: q01/q09/q11 | q01 uses correct mixed boundaries (0/2/3 observed sales, 0/40/60%). q11's attempted inclusive relaxation is rejected, then corrected; no live yield without release. q09 incorrectly calls scoped zero counts unavailable. |
+| `233113Z` | v4: eight held-out paraphrases | Finds omitted initial comparable periods, an incorrect evidence kind, and a fabricated global-observation listing count. Failures retained. |
+| `233634Z`, `233700Z` | v5: q09/q11 and q101/q102/q104/q105 only | Correct zero counts; strict q11 ceiling retained; explicit rent periods and paired location/bedroom/budget cohorts retained. Invalid period/type/cohort-id calls still require correction. q11 binds the documented 90-day default as intent despite no user period; initial-interpretation review remains failed. |
+| `234126Z` | v6: q101 only | Retains six complete months and strict ceiling; correctly explains missing release despite five matched rents. A lowercase property-type call is rejected then repaired, so tool-argument review remains failed. |
+
+All suffixes belong to `live-mcp-20261002T...`. Latest q101 disclosure is corrected,
+not a successful live yield. Empty cohorts do not verify positive median/yield
+accuracy. Some canonical-metric live traces still lack observed SQL lineage, so
+source-coverage checks remain failed/unassessed rather than inferred from tool
+prose. Initial interpretation, malformed calls, unavailable releases and unassessed
+privacy remain explicit limitations. No overall quality pass or controlled model
+improvement claim follows from these subsets. Private attributed reviews preserve
+failed attempts rather than overwriting them with successful retries.
+
+The follow-up used 63 provider requests; cumulative accounting including prior runs
+is **US$0.230440 of US$5**, with zero unknown reservations. This is configured
+usage accounting, not a provider invoice. No training, upload or promotion ran.
+The disposable auth/PostgreSQL containers, warehouse and temporary credentials
+were removed. Local traces and reviews remain private and ignored.
+
+Verification for this correction: backend **463 passed**, ClickHouse **41 passed**,
+frontend **68 passed**, type/lint checks clean, and **13 Playwright guard/chat tests
+passed**. The final reason-code change additionally passed 27 focused unit/prompt
+checks and six real listing/MCP fixture checks. Full authenticated browser tests,
+local PostgreSQL/infrastructure suites and local Holocron suites were not repeated
+for this correction; their prior results above are historical. Final hosted CI is
+reported on the PR commit, not inferred from these local checks.
+
+#### Exact Chat 2 integration handoff
+
+`app.market.evidence.acquire_market_release(context)` is unchanged and still yields
+None in production. Chat 2 must implement its async lease provider, yielding
+`MarketRelease(release_id, sources, coverage)` and retaining it until the entire
+turn exits, including cancellation. It must bind **every underlying domain query**
+to immutable sales/rentals/listings/projects versions for that lease, with isolated
+routing for concurrent turns. A label around mutable views, an unchanged `built_at`,
+or a process-global database switch does not satisfy this requirement.
+
+Supply `SourceCoverage(source, start, end, status)` from authoritative manifests;
+for sales/rentals, `complete` must cover the inclusive requested Dubai registration-date
+period. Listing/project manifests must describe their pinned snapshots and gaps.
+Current coverage is source/period-wide, not geography/bedroom-scoped: do not promote
+a partial ingestion declaration to global completeness. If manifests are scoped,
+coordinate an explicit coverage-contract extension before enabling completeness.
+Retain source identity, correction/deduplication semantics, snapshot freshness and
+missing-field disclosures. Yield support additionally requires exact community,
+building, property type and known bedroom matching; at least five eligible annual
+registered rents with finite median/IQR and a positive same-release asking price.
+Missing geographic/bedroom mappings, Bayut or Reelly evidence remain unavailable.
+
+The additive bound flags and fractional listing-price responses above are the
+shared API/service handoff to Claude; they require no new canonical columns or
+DDL. Canonical ingestion, publication, migrations and Claude's checkout/databases
+were not changed. PR #13 stays draft on `codex/chat-integration-base` at
+`1dd064c940229475894e88148fe76e8b3a357c30`. Final combined acceptance waits for Chat 2's
+integrated release and a scoped verification against that actual release.
