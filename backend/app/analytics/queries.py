@@ -967,7 +967,11 @@ def sales_summary(
             round(avg(actual_worth), 2) as avg_price,
             round(sum(actual_worth), 2) as total_volume,
             round(median(meter_sale_price), 2) as median_price_per_sqm,
-            round(median(procedure_area), 2) as median_area_sqm
+            round(median(procedure_area), 2) as median_area_sqm,
+            round(min(actual_worth), 2) as min_price,
+            round(max(actual_worth), 2) as max_price,
+            round(avgIf(actual_worth / procedure_area, procedure_area > 0) / 10.7639, 2)
+                as avg_price_sqft
         FROM ch_transactions
         WHERE {where_clause}
     """
@@ -1070,7 +1074,11 @@ def rentals_summary(
             round(avg(annual_amount), 2) as avg_rent,
             round(sum(annual_amount), 2) as total_annual_value,
             round(median(annual_amount / nullIf(actual_area, 0)), 2) as median_rent_per_sqm,
-            round(median(actual_area), 2) as median_area_sqm
+            round(median(actual_area), 2) as median_area_sqm,
+            round(min(annual_amount), 2) as min_rent,
+            round(max(annual_amount), 2) as max_rent,
+            round(avgIf(annual_amount / actual_area, actual_area > 0) / 10.7639, 2)
+                as avg_rent_sqft
         FROM ch_rent_contracts
         WHERE {where_clause}
     """
@@ -1081,16 +1089,17 @@ GET_MARKET_PULSE_SQL = """
         count(*) as transaction_count,
         round(median(actual_worth), 0) as median_price,
         round(avg(actual_worth), 0) as avg_price,
-        round(median(actual_area), 1) as median_area_sqft,
-        round(median(actual_worth / actual_area), 0) as median_price_per_sqft,
+        round(median(procedure_area) * 10.7639, 1) as median_area_sqft,
+        round(median(actual_worth / procedure_area) / 10.7639, 0) as median_price_per_sqft,
         min(instance_date) as period_start,
         max(instance_date) as period_end
     FROM ch_transactions
     WHERE
         area_name_en = {area:String}
+        AND trans_group_en = 'Sales'
         AND instance_date >= today() - {period_days:Int32}
         AND actual_worth > 0
-        AND actual_area > 0
+        AND procedure_area > 0
     """
 
 
@@ -1106,6 +1115,7 @@ RANK_AREAS_VOLUME_SQL = """
         FROM ch_transactions
         WHERE
             instance_date >= today() - {period_days:Int32}
+            AND trans_group_en = 'Sales'
             AND actual_worth > 0
             AND area_name_en != ''
         GROUP BY area_name_en
@@ -1122,6 +1132,7 @@ RANK_AREAS_PRICE_SQL = """
         FROM ch_transactions
         WHERE
             instance_date >= today() - {period_days:Int32}
+            AND trans_group_en = 'Sales'
             AND actual_worth > 0
             AND area_name_en != ''
         GROUP BY area_name_en
@@ -1140,6 +1151,7 @@ RANK_AREAS_GROWTH_SQL = """
                 FROM ch_transactions
                 WHERE
                     instance_date >= today() - {period_days:Int32}
+                    AND trans_group_en = 'Sales'
                     AND actual_worth > 0
                     AND area_name_en != ''
                 GROUP BY area_name_en
@@ -1153,6 +1165,7 @@ RANK_AREAS_GROWTH_SQL = """
                 WHERE
                     instance_date >= today() - {period_days:Int32} * 2
                     AND instance_date < today() - {period_days:Int32}
+                    AND trans_group_en = 'Sales'
                     AND actual_worth > 0
                     AND area_name_en != ''
                 GROUP BY area_name_en

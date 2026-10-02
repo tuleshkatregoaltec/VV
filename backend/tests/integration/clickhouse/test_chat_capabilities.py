@@ -10,7 +10,8 @@ async def test_chat_capabilities_execute_real_queries_with_existing_scope(wareho
             instance_date Date, area_name_en String, master_project_en String,
             project_name_en String, trans_group_en String, property_type_en String,
             property_usage_en String, actual_worth Float64, actual_area Float64,
-            meter_sale_price Float64, rooms_en String, reg_type_en String
+            meter_sale_price Float64, rooms_en String, reg_type_en String,
+            procedure_area Float64
         ) ENGINE = MergeTree ORDER BY (area_name_en, instance_date)
     """)
     today = date.today()
@@ -34,11 +35,12 @@ async def test_chat_capabilities_execute_real_queries_with_existing_scope(wareho
                     price / 100,
                     "1 B/R",
                     "Existing Properties",
+                    100,
                 ]
             ]
             * 10
         )
-    # The pulse tool historically includes non-sales; the chart excludes them.
+    # A mortgage is not an achieved sale price: neither the pulse nor the chart counts it.
     rows.append(
         [
             today,
@@ -53,16 +55,24 @@ async def test_chat_capabilities_execute_real_queries_with_existing_scope(wareho
             10000,
             "1 B/R",
             "Existing Properties",
+            100,
         ]
     )
     await warehouse.insert("ch_transactions", rows)
     pulse = await service.get_market_pulse("Area A")
     assert pulse["success"] is True
-    assert pulse["transaction_count"] == 11
+    assert pulse["transaction_count"] == 10
     assert pulse["median_price_aed"] == 1000000
+    # 100 sqm = 1,076.4 sqft; AED 1,000,000 / 1,076.39 sqft = AED 929 per sqft.
+    assert pulse["median_area_sqft"] == 1076.4
+    assert pulse["median_price_per_sqft_aed"] == 929
     ranked = await service.rank_areas("volume", 2)
     assert ranked["success"] is True
-    assert ranked["top_areas"][0]["area"] == "Area A"
+    # The mortgage in Area A is not a sale, so both areas rank on 10 sales.
+    assert {item["area"]: item["transaction_count"] for item in ranked["top_areas"]} == {
+        "Area A": 10,
+        "Area B": 10,
+    }
     chart = await charts.sales_chart(
         {"group_by": "area", "metric": "transaction_count", "min_records": 1}
     )
