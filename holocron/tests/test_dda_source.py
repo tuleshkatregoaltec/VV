@@ -58,3 +58,25 @@ def test_extract_release_counts_large_csv_fields(tmp_path: Path) -> None:
     )
 
     assert release.files[0].row_count == 1
+
+
+def test_plot_query_requests_only_fields_the_layer_still_publishes() -> None:
+    # DDA removed four plot fields in 2026 and ArcGIS rejects any query naming a missing
+    # field, which failed every weekly run; the optional fields must drop out, not the run.
+    import httpx
+
+    from holocron.sources.dda.extract import _PLOT_FIELDS, _published_fields
+
+    layer = {
+        "fields": [{"name": "OBJECTID"}, {"name": "PLOT_NUMBER"}, {"name": "OLD_PLOT_NUMBERS"}]
+    }
+    client = httpx.Client(
+        transport=httpx.MockTransport(lambda request: httpx.Response(200, json=layer))
+    )
+    assert _published_fields(client, "t", 13, _PLOT_FIELDS) == ["PLOT_NUMBER", "OLD_PLOT_NUMBERS"]
+
+    no_key = httpx.Client(
+        transport=httpx.MockTransport(lambda request: httpx.Response(200, json={"fields": []}))
+    )
+    with pytest.raises(RuntimeError, match="key field"):
+        _published_fields(no_key, "t", 13, _PLOT_FIELDS)

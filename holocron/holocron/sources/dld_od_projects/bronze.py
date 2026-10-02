@@ -100,4 +100,5 @@ load_release_to_clickhouse = build_open_data_bronze_loader(
     source_name=_SOURCE_NAME,
     column_names=_COLUMNS,
     row_builder=_row_tuple,
+    replace_date_column="adoption_date",
 )
