@@ -85,6 +85,13 @@ build-frontend:
 format-frontend:
 	cd frontend && bun run format
 
+# Read-only frontend checks: Biome lint/format check and Svelte/TypeScript diagnostics.
+lint-frontend:
+	cd frontend && bun run lint
+
+check-frontend:
+	cd frontend && bun run check
+
 check-all:
 	just format-backend
 	just format-frontend
