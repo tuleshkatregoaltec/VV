@@ -230,7 +230,7 @@ def _card_from_row(row: Any) -> ListingCardResponse:
         title=title,
         reference=row.get("reference") or raw_property.get("reference"),
         property_type=property_type,
-        price_value=_int_or_none(price.get("value")),
+        price_value=_float_or_none(price.get("value")),
         price_currency=price.get("currency"),
         price_period=price.get("period"),
         size_value=_float_or_none(size.get("value")),

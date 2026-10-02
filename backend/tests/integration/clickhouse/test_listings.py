@@ -80,16 +80,12 @@ async def test_json_inventory_annual_filter_benchmark_and_detail_mapping(warehou
     assert detail.source_run_id == "test-run"
 
 
-async def test_monthly_price_expression_preserves_known_local_clickhouse_type_failure(warehouse):
-    import pytest
-    from clickhouse_connect.driver.exceptions import DatabaseError
-
+async def test_monthly_price_expression_preserves_fractional_annual_prices(warehouse):
     from app.listings.queries import MONTHLY_PRICE_EXPR
 
-    # Confirmed against the identical pre-migration expression. Fix is outside this structural migration.
-    with pytest.raises(DatabaseError, match="NO_COMMON_TYPE"):
-        await warehouse.query(
-            "SELECT "
-            + MONTHLY_PRICE_EXPR
-            + ' FROM (SELECT \'{"value":120000,"period":"yearly"}\' AS price_json)'
-        )
+    result = await warehouse.query(
+        "SELECT "
+        + MONTHLY_PRICE_EXPR
+        + ' FROM (SELECT \'{"value":120000.12,"period":"yearly"}\' AS price_json)'
+    )
+    assert result.result_rows[0][0] == 10000.01

@@ -72,7 +72,7 @@ async def fetch_inventory_freshness(parameters):
 
 LISTINGS_TABLE = "pf_listings_bronze"
 
-PRICE_VALUE_EXPR = "JSONExtractInt(price_json, 'value')"
+PRICE_VALUE_EXPR = "JSONExtractFloat(price_json, 'value')"
 
 PRICE_PERIOD_EXPR = "lower(JSON_VALUE(price_json, '$.period'))"
 
@@ -166,11 +166,13 @@ def _where_sql(
     property_type: str | None,
     bedrooms: str | None,
     bedrooms_in: list[str] | None,
-    price_min: int | None,
-    price_max: int | None,
+    price_min: float | None,
+    price_max: float | None,
     asset_class: ListingAssetClass | None = None,
     price_period: str | None = None,
     price_basis: str = "raw",
+    price_min_inclusive: bool = True,
+    price_max_inclusive: bool = True,
 ) -> tuple[str, dict[str, Any]]:
     clauses = ["category_id IN {category_ids:Array(UInt16)}", "is_available = 1"]
     params: dict[str, Any] = {"category_ids": list(_category_ids(mode, asset_class))}
@@ -206,10 +208,12 @@ def _where_sql(
         clauses.append(f"{PRICE_PERIOD_EXPR} = {{price_period:String}}")
         params["price_period"] = normalized_period
     if price_min is not None:
-        clauses.append(f"{price_filter_expr} >= {{price_min:Int64}}")
+        operator = ">=" if price_min_inclusive else ">"
+        clauses.append(f"{price_filter_expr} {operator} {{price_min:Float64}}")
         params["price_min"] = price_min
     if price_max is not None:
-        clauses.append(f"{price_filter_expr} <= {{price_max:Int64}}")
+        operator = "<=" if price_max_inclusive else "<"
+        clauses.append(f"{price_filter_expr} {operator} {{price_max:Float64}}")
         params["price_max"] = price_max
     return " AND ".join(clauses), params
 

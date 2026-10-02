@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import math
 from datetime import date, timedelta
+from decimal import Decimal
 from typing import Any
 
 from app.analytics import market_metric_queries as queries
@@ -184,15 +185,22 @@ def _filters(request: MarketMetricsRequest, start: date, end: date) -> queries.M
         max_term_days=request.max_term_days,
         value_min=request.min_value_aed,
         value_max=request.max_value_aed,
+        min_value_inclusive=request.min_value_inclusive,
+        max_value_inclusive=request.max_value_inclusive,
     )
 
 
-def _band_label(index: int, bands: list[float]) -> str:
+def _band_label(index: int, bands: list[float], upper_inclusive: tuple[bool, ...] = ()) -> str:
+    flags = upper_inclusive or (False,) * len(bands)
+    # Decimal(str(...)) preserves the supplied threshold, including fractional AED.
+    labels = [format(Decimal(str(value)).normalize(), ",f") for value in bands]
     if index == 0:
-        return f"under {bands[0]:,.0f}"
+        return f"up to and including {labels[0]}" if flags[0] else f"under {labels[0]}"
     if index == len(bands):
-        return f"{bands[-1]:,.0f} and above"
-    return f"{bands[index - 1]:,.0f} to under {bands[index]:,.0f}"
+        return f"over {labels[-1]}" if flags[-1] else f"{labels[-1]} and above"
+    lower = f"over {labels[index - 1]}" if flags[index - 1] else labels[index - 1]
+    upper = f"including {labels[index]}" if flags[index] else f"under {labels[index]}"
+    return f"{lower} to {upper}"
 
 
 def _month_starts(start: date, end: date) -> list[date]:
@@ -214,12 +222,14 @@ async def _total(request, names, period, coverage) -> MarketMetricRow:
 async def _groups(request, names, period, coverage, total) -> list[MarketMetricRow]:
     filters = _filters(request, coverage.covered_from, coverage.covered_to)
     bands = tuple(request.price_bands or ())
+    upper_inclusive = tuple(request.price_band_upper_inclusive or ())
     raw = await queries.fetch_metric_rows(
         request.dataset,
         filters,
         tuple(names),
         group_by=request.group_by,
         price_bands=bands,
+        price_band_upper_inclusive=upper_inclusive,
         min_group_count=request.min_group_count,
         order_by=request.sort_by,
         limit=request.limit if request.group_by not in {"month", "price_band"} else 500,
@@ -236,7 +246,7 @@ async def _groups(request, names, period, coverage, total) -> list[MarketMetricR
     elif request.group_by == "price_band":
         found = {int(item["group_key"]): item for item in raw}
         rows = [
-            _row(found.get(index, {}), names, _band_label(index, list(bands)))
+            _row(found.get(index, {}), names, _band_label(index, list(bands), upper_inclusive))
             for index in range(len(bands) + 1)
         ]
     else:

@@ -146,6 +146,8 @@ class MetricFilters:
     max_term_days: int | None = None
     value_min: float | None = None
     value_max: float | None = None
+    min_value_inclusive: bool = True
+    max_value_inclusive: bool = False
 
 
 def where_clause(
@@ -188,18 +190,24 @@ def where_clause(
         clauses.append(f"{term} <= {{max_term:Int32}}")
         params["max_term"] = filters.max_term_days
     if filters.value_min is not None:
-        clauses.append(f"{ds.value} >= {{value_min:Float64}}")
+        operator = ">=" if filters.min_value_inclusive else ">"
+        clauses.append(f"{ds.value} {operator} {{value_min:Float64}}")
         params["value_min"] = filters.value_min
     if filters.value_max is not None:
-        clauses.append(f"{ds.value} < {{value_max:Float64}}")
+        operator = "<=" if filters.max_value_inclusive else "<"
+        clauses.append(f"{ds.value} {operator} {{value_max:Float64}}")
         params["value_max"] = filters.value_max
     return " AND ".join(clauses), params
 
 
-def _band_expression(ds: Dataset, bands: tuple[float, ...]) -> tuple[str, str]:
-    # Bands are [b0, b1), [b1, b2) ... ; boundaries are bound as parameters.
+def _band_expression(
+    ds: Dataset, bands: tuple[float, ...], upper_inclusive: tuple[bool, ...] = ()
+) -> tuple[str, str]:
+    # The first matching bound owns equality; every value belongs to exactly one band.
+    flags = upper_inclusive or (False,) * len(bands)
     conditions = ", ".join(
-        f"{ds.value} < {{band_{index}:Float64}}, {index}" for index in range(len(bands))
+        f"{ds.value} {'<=' if inclusive else '<'} {{band_{index}:Float64}}, {index}"
+        for index, inclusive in enumerate(flags)
     )
     key = f"multiIf({conditions}, {len(bands)})"
     return key, key
@@ -212,6 +220,7 @@ async def fetch_metric_rows(
     *,
     group_by: str | None = None,
     price_bands: tuple[float, ...] = (),
+    price_band_upper_inclusive: tuple[bool, ...] = (),
     min_group_count: int = 1,
     order_by: str = "count",
     limit: int = 50,
@@ -224,7 +233,7 @@ async def fetch_metric_rows(
     if group_by is None:
         return await query(f"SELECT {selected} FROM {ds.table} WHERE {where}", params)
     if group_by == "price_band":
-        key, label = _band_expression(ds, price_bands)
+        key, label = _band_expression(ds, price_bands, price_band_upper_inclusive)
         params |= {f"band_{index}": value for index, value in enumerate(price_bands)}
     else:
         key, label = group_expressions(ds)[group_by]

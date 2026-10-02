@@ -12,7 +12,7 @@ SIZE_SQFT = """multiIf(
         JSONExtractFloat(size_json, 'value') * 10.7639,
     NULL)"""
 ASKING_PRICE = """if(lowerUTF8(JSON_VALUE(price_json, '$.currency')) = 'aed',
-    toFloat64(JSONExtractInt(price_json, 'value')), NULL)"""
+    JSONExtractFloat(price_json, 'value'), NULL)"""
 ANNUAL_RENT = f"""multiIf(
     lowerUTF8(JSON_VALUE(price_json, '$.period')) IN ('year', 'yearly', 'annual', 'annually'),
         {ASKING_PRICE},
@@ -30,8 +30,11 @@ def _inventory(request: ListingEvidenceRequest, area: str | None):
         property_type=request.property_type,
         bedrooms=request.bedrooms,
         bedrooms_in=None,
-        price_min=None,
+        price_min=request.price_min,
         price_max=request.price_max,
+        price_min_inclusive=request.price_min_inclusive,
+        price_max_inclusive=request.price_max_inclusive,
+        price_basis="annual" if request.mode == "rent" else "raw",
         asset_class=None,
     )
     if request.building:

@@ -1,5 +1,6 @@
 """Analytics schemas for API responses"""
 
+import math
 from datetime import date
 from typing import Literal, Optional
 
@@ -382,17 +383,28 @@ class MarketMetricsRequest(BaseModel):
     min_term_days: Optional[int] = Field(default=None, ge=1, description="Rentals only")
     max_term_days: Optional[int] = Field(default=None, ge=1, description="Rentals only")
     min_value_aed: Optional[float] = Field(
-        default=None, ge=0, description="Sale price or annual rent, inclusive"
+        default=None, ge=0, allow_inf_nan=False, description="Sale price or annual rent lower bound"
     )
     max_value_aed: Optional[float] = Field(
-        default=None, gt=0, description="Sale price or annual rent, exclusive"
+        default=None, gt=0, allow_inf_nan=False, description="Sale price or annual rent upper bound"
     )
+    min_value_inclusive: bool = True
+    max_value_inclusive: bool = False
     group_by: Optional[MarketMetricGroup] = None
     price_bands: Optional[list[float]] = Field(
         default=None,
         min_length=1,
         max_length=12,
-        description="Ascending AED boundaries for group_by=price_band: [b0,b1) ... [bn,inf)",
+        description="Ascending AED cutoffs for price_band; default upper bounds are exclusive.",
+    )
+    price_band_upper_inclusive: Optional[list[bool]] = Field(
+        default=None,
+        min_length=1,
+        max_length=12,
+        description=(
+            "One flag per price_bands boundary: true puts equality in the lower band; "
+            "false puts it in the upper band. Omitted means all false."
+        ),
     )
     sort_by: MarketMetricName = "count"
     limit: int = Field(default=20, ge=1, le=200)
@@ -417,10 +429,20 @@ class MarketMetricsRequest(BaseModel):
                 raise ValueError("land is not a rental property type")
         if self.group_by == "price_band":
             bands = self.price_bands or []
-            if not bands or bands != sorted(set(bands)):
-                raise ValueError("price_band grouping needs strictly ascending price_bands")
-        elif self.price_bands:
-            raise ValueError("price_bands require group_by=price_band")
+            if (
+                not bands
+                or bands != sorted(set(bands))
+                or any(not math.isfinite(value) for value in bands)
+            ):
+                raise ValueError("price_band grouping needs finite strictly ascending price_bands")
+            if self.price_band_upper_inclusive is not None and len(
+                self.price_band_upper_inclusive
+            ) != len(bands):
+                raise ValueError("price_band_upper_inclusive must match price_bands length")
+        elif self.price_bands or self.price_band_upper_inclusive is not None:
+            raise ValueError(
+                "price_bands and price_band_upper_inclusive require group_by=price_band"
+            )
         if self.sort_by not in {"count", *self.metrics}:
             raise ValueError("sort_by must be count or one of the requested metrics")
         return self

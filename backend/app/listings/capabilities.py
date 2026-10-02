@@ -68,7 +68,10 @@ async def get_listing_inventory(
         area=_area(request),
         bedrooms=request.bedrooms,
         property_type=request.property_type,
+        price_min=request.price_min,
         price_max=request.price_max,
+        price_min_inclusive=request.price_min_inclusive,
+        price_max_inclusive=request.price_max_inclusive,
     )
     return _base(request, context) | {
         "inventory": result.model_dump(mode="json", exclude={"trend"}),
