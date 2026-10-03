@@ -192,6 +192,12 @@ async def _list(db, context, request, *, due_before=None):
         "has_more": getattr(request, "offset", 0) + len(rows) < total,
         "enquiries": projected,
         "definitions": {
+            "scope": (
+                "Enquiries assigned to you, plus enquiries you created that are still unassigned. "
+                "Enquiries you created but assigned to another broker are excluded."
+                if request.scope == "mine"
+                else "Enquiries across your current organization, authorized by your owner role."
+            ),
             "enquiry_count": "All records matching this authorized filter, before pagination.",
             "unique_contact_count": "Distinct CRM contact IDs among those enquiries, not an inferred real-world person deduplication.",
             "counts_by_status": "Full authorized filtered counts before pagination; absent statuses have zero matching enquiries. Distinct-contact counts per status may overlap and must not be summed.",

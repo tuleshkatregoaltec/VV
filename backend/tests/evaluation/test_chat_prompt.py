@@ -61,7 +61,7 @@ async def test_provider_receives_required_composer_and_unpinned_report_rules():
     agent = Agent(FunctionModel(inspect), system_prompt=CHAT_SYSTEM_PROMPT)
     await agent.run("Create a multi-source client report")
     prompt = "\n".join(received)
-    assert CHAT_PROMPT_VERSION == "database-mcp-v8"
+    assert CHAT_PROMPT_VERSION == "database-mcp-v9"
     assert "MUST call compose_market_report" in prompt
     assert (
         "Do not bypass\nit by assembling separate metrics, inventory and delivery calls" in prompt
@@ -170,4 +170,10 @@ def test_prompt_leaves_room_for_broker_tool_results_under_the_context_limit():
     # The live fifteen-tool follow-up exceeded the byte-based admission bound.
     # The integrated provider regression covers the complete payload; this prevents
     # restoring the verbose prompt while silently consuming its recovered headroom.
-    assert len(CHAT_SYSTEM_PROMPT.encode("utf-8")) <= 9800
+    assert len(CHAT_SYSTEM_PROMPT.encode("utf-8")) <= 10000
+
+
+def test_enquiry_scope_wording_does_not_broaden_creator_access():
+    assert "Preserve definitions.scope exactly in prose" in CHAT_SYSTEM_PROMPT
+    assert "self-created enquiries ONLY while still unassigned" in CHAT_SYSTEM_PROMPT
+    assert "never all enquiries you created" in CHAT_SYSTEM_PROMPT

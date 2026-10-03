@@ -103,9 +103,12 @@ async def test_broker_ownership_counts_paging_and_reassignment_revoke_creator(
         1,
     )
     assert listed["has_more"] is True
+    assert "still unassigned" in listed["definitions"]["scope"]
+    assert "assigned to another broker are excluded" in listed["definitions"]["scope"]
     assert "private-" not in str(listed)
     all_org = await broker._list(pg_session, owner, BrokerListRequest(scope="organization"))
     assert (all_org["enquiry_count"], all_org["unique_contact_count"]) == (4, 3)
+    assert "current organization" in all_org["definitions"]["scope"]
     for action in [
         broker.require_enquiry(pg_session, actor, rows[2].id),
         broker.require_enquiry(pg_session, actor, rows[3].id),
