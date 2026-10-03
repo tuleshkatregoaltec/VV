@@ -151,6 +151,7 @@ def test_broker_documents_use_private_saved_versions_and_backend_quote_totals():
     assert "Do not recompute totals or alter amounts in prose or PDF" in CHAT_SYSTEM_PROMPT
     assert "PDF must refer to the same saved version" in CHAT_SYSTEM_PROMPT
     assert "Document creation does not mean it was sent" in CHAT_SYSTEM_PROMPT
+    assert 'Omit missing charges only on explicit "Charges complete: yes"' in CHAT_SYSTEM_PROMPT
 
 
 def test_quote_fees_require_user_provenance_and_drafts_remain_unsent():

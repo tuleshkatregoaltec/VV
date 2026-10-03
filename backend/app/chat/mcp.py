@@ -101,6 +101,10 @@ DESCRIPTIONS.update(DOCUMENT_DESCRIPTIONS)
 
 
 def _strict_schema(schema: dict) -> dict:
+    # Generated display titles repeat field names across all tools and consume the
+    # shared provider context budget. Keep descriptions and every validation keyword.
+    if isinstance(schema.get("title"), str):
+        schema.pop("title")
     if schema.get("type") == "object":
         schema["additionalProperties"] = False
     for value in schema.values():

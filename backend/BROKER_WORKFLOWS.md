@@ -11,7 +11,9 @@ the broker operations use the existing CRM services and stored candidates.
    you, plus self-created enquiries that remain unassigned. Reassignment revokes
    the creator's access. Organization scope requires current owner membership.
    Counts distinguish enquiries from distinct stored contact IDs; they are not
-   an inferred deduplication of real people.
+   an inferred deduplication of real people. Status counts cover the full authorized
+   filter before pagination. `order=latest` uses recorded enquiry date descending
+   with a stable ID tie-break; an explicit page limit controls the displayed list.
 2. Request properties for a buy/rent enquiry, or clients for a sell/let property
    enquiry. Existing matching supplies candidates. Every populated requirement
    is checked; unknown/unsupported requirements stay under review, not suitable.

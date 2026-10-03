@@ -365,3 +365,31 @@ async def test_unpinned_report_observations_cannot_authorize_followup_source_mix
     assert response["status"] == "unavailable"
     assert response["error"]["code"] == "release_unavailable"
     domain.assert_not_awaited()
+
+
+def test_compact_schema_keeps_descriptions_constraints_and_title_fields():
+    schema = {
+        "type": "object",
+        "title": "Generated model name",
+        "properties": {
+            "title": {
+                "type": "string",
+                "title": "Generated field label",
+                "description": "User-specified document title",
+                "minLength": 1,
+            },
+        },
+        "required": ["title"],
+    }
+    assert mcp._strict_schema(schema) == {
+        "type": "object",
+        "additionalProperties": False,
+        "properties": {
+            "title": {
+                "type": "string",
+                "description": "User-specified document title",
+                "minLength": 1,
+            },
+        },
+        "required": ["title"],
+    }

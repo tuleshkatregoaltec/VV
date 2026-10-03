@@ -390,3 +390,84 @@ async def test_reassignment_during_seller_assembly_prevents_snapshot_disclosure(
         )
     assert denied.value.status_code == 404
     assert await document_repository.get_request(db, context, "seller-revoked") is None
+
+
+async def test_shortlist_document_followups_fit_unchanged_provider_context_budget(workflow):
+    """All registered tools must leave room for actual CRM/document evidence and an answer."""
+    import json
+
+    from pydantic_ai import Agent
+    from pydantic_ai.messages import ModelResponse, TextPart, ToolCallPart, ToolReturnPart
+    from pydantic_ai.models.function import FunctionModel
+    from pydantic_core import to_jsonable_python
+
+    from app.chat.prompts import CHAT_SYSTEM_PROMPT
+
+    _, context, enquiry, matches, _, _ = workflow
+    payload_sizes = []
+
+    class ContextCheckedModel(FunctionModel):
+        async def request(self, messages, model_settings, model_request_parameters):
+            # Same conservative UTF-8 byte bound and framing margin as ai_policy;
+            # no provider call, budget override, or dropped evidence.
+            size = (
+                len(
+                    json.dumps(
+                        to_jsonable_python((messages, model_request_parameters)), ensure_ascii=False
+                    ).encode()
+                )
+                + 4096
+            )
+            payload_sizes.append(size)
+            assert size <= 65536, payload_sizes
+            return await super().request(messages, model_settings, model_request_parameters)
+
+    def scripted(messages, _info):
+        returns = [
+            part
+            for message in messages
+            for part in message.parts
+            if isinstance(part, ToolReturnPart)
+        ]
+        for part in returns:
+            assert part.content["status"] == "ok", part.content
+        if not returns:
+            return ModelResponse(
+                parts=[
+                    ToolCallPart("match_client_properties", {"request": {"enquiry_id": enquiry.id}})
+                ]
+            )
+        if len(returns) == 1:
+            return ModelResponse(
+                parts=[
+                    ToolCallPart(
+                        "create_broker_document",
+                        {
+                            "request": {
+                                "enquiry_id": enquiry.id,
+                                "kind": "quotation",
+                                "match_ids": [matches[0].id],
+                                "reference": "CONTEXT-1",
+                                "idempotency_key": "context-test",
+                                "charges": [
+                                    {
+                                        "label": "Brokerage",
+                                        "percent_of_asking": "2",
+                                        "status": "known",
+                                    }
+                                ],
+                            }
+                        },
+                    )
+                ]
+            )
+        return ModelResponse(parts=[TextPart("Scripted queued document; no live quality claim")])
+
+    instruction = "Shortlist my enquiry and prepare a quotation. Brokerage: 2%"
+    async with mcp.market_mcp(
+        context, AsyncMock(return_value=True), user_instruction=instruction
+    ) as client:
+        await Agent(
+            ContextCheckedModel(scripted), system_prompt=CHAT_SYSTEM_PROMPT, toolsets=[client]
+        ).run(instruction)
+    assert len(payload_sizes) == 3

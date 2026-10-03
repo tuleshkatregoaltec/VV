@@ -2,7 +2,7 @@
   "version": 1,
   "origin": "Manually authored synthetic broker workflow evaluation inputs. No customer data, provider responses or training. Run with the existing --dataset option and explicit disposable-fixture bindings. Expected tool names guide attributed review, not automatic model-quality passing.",
   "review_boundaries": [
-    "Original q01-q15 remain unchanged. No broker live provider evaluation has been run.",
+    "Original q01-q15 remain unchanged. Only q201/q203 received targeted live smoke runs; consult EVALUATION.md for failures, corrections and limits.",
     "Count, filter, authorization and decimal expectations require independently seeded fixtures. Missing evidence is unassessed, not pass.",
     "Authorization denial and missing-input cases may correctly make no tool call. Stream completion is not task completion.",
     "Proposal-only tools never authorize human confirmation, sending or status changes. REST mutation, persistence and PDF agreement require separate integration evidence.",
@@ -15,10 +15,12 @@
       ],
       "review_notes": [
         "Use the server-authorized mine population. Total and status counts must cover the filtered population, not five returned rows.",
+        "Latest five requires order=latest and limit=5; compare recorded enquiry_date descending with ID descending for ties. Fewer than five seeded records cannot independently establish ordering.",
         "Do not equate an open or qualified status with current interest."
       ],
       "related_fixture_sources": [
-        "tests/integration/postgres/test_crm_broker.py::test_broker_ownership_counts_paging_and_reassignment_revoke_creator"
+        "tests/integration/postgres/test_crm_broker.py::test_broker_ownership_counts_paging_and_reassignment_revoke_creator",
+        "tests/integration/postgres/test_crm_broker.py::test_broker_latest_five_preserves_full_authorized_counts_by_status"
       ]
     },
     "q202": {

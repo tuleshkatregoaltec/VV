@@ -30,8 +30,7 @@
                   "type": "null"
                 }
               ],
-              "default": null,
-              "title": "Bedrooms"
+              "default": null
             },
             "building": {
               "anyOf": [
@@ -44,8 +43,7 @@
                   "type": "null"
                 }
               ],
-              "default": null,
-              "title": "Building"
+              "default": null
             },
             "evidence_kind": {
               "description": "Use listings for inventory, listing age AND listing-to-rent gross yields. Use sales/rentals only for achieved transaction metrics; delivery for projects; report for composed reports. Listing yield requests keep their asking bounds and comparable-rent period in the SAME listings cohort.",
@@ -56,14 +54,12 @@
                 "delivery",
                 "report"
               ],
-              "title": "Evidence Kind",
               "type": "string"
             },
             "id": {
               "maxLength": 40,
               "minLength": 1,
               "pattern": "^[a-zA-Z0-9_-]+$",
-              "title": "Id",
               "type": "string"
             },
             "location": {
@@ -77,8 +73,7 @@
                   "type": "null"
                 }
               ],
-              "default": null,
-              "title": "Location"
+              "default": null
             },
             "mode": {
               "anyOf": [
@@ -93,8 +88,7 @@
                   "type": "null"
                 }
               ],
-              "default": null,
-              "title": "Mode"
+              "default": null
             },
             "period": {
               "anyOf": [
@@ -118,8 +112,7 @@
                   "type": "null"
                 }
               ],
-              "default": null,
-              "title": "Price Max"
+              "default": null
             },
             "price_max_inclusive": {
               "anyOf": [
@@ -131,8 +124,7 @@
                 }
               ],
               "default": null,
-              "description": "Required with price_max: false for below, true for at most.",
-              "title": "Price Max Inclusive"
+              "description": "Required with price_max: false for below, true for at most."
             },
             "price_min": {
               "anyOf": [
@@ -145,8 +137,7 @@
                   "type": "null"
                 }
               ],
-              "default": null,
-              "title": "Price Min"
+              "default": null
             },
             "price_min_inclusive": {
               "anyOf": [
@@ -158,8 +149,7 @@
                 }
               ],
               "default": null,
-              "description": "Required with price_min: false for above, true for at least.",
-              "title": "Price Min Inclusive"
+              "description": "Required with price_min: false for above, true for at least."
             },
             "project": {
               "anyOf": [
@@ -172,8 +162,7 @@
                   "type": "null"
                 }
               ],
-              "default": null,
-              "title": "Project"
+              "default": null
             },
             "projects": {
               "anyOf": [
@@ -190,8 +179,7 @@
                 }
               ],
               "default": null,
-              "description": "Exact supplied project names for an off-plan comparison report.",
-              "title": "Projects"
+              "description": "Exact supplied project names for an off-plan comparison report."
             },
             "property_type": {
               "anyOf": [
@@ -211,8 +199,7 @@
                   "type": "null"
                 }
               ],
-              "default": null,
-              "title": "Property Type"
+              "default": null
             }
           },
           "required": [
@@ -220,7 +207,6 @@
             "evidence_kind",
             "period"
           ],
-          "title": "MarketCohort",
           "type": "object"
         },
         "MarketPeriodRequest": {
@@ -239,8 +225,7 @@
                 }
               ],
               "default": null,
-              "description": "Required for rolling_days: requested number of calendar days (1\u20133660).",
-              "title": "Days"
+              "description": "Required for rolling_days: requested number of calendar days (1–3660)."
             },
             "end": {
               "anyOf": [
@@ -253,8 +238,7 @@
                 }
               ],
               "default": null,
-              "description": "Required for range, inclusive end date; must not precede start.",
-              "title": "End"
+              "description": "Required for range, inclusive end date; must not precede start."
             },
             "month": {
               "anyOf": [
@@ -266,8 +250,7 @@
                   "type": "null"
                 }
               ],
-              "default": null,
-              "title": "Month"
+              "default": null
             },
             "months": {
               "anyOf": [
@@ -281,8 +264,7 @@
                 }
               ],
               "default": null,
-              "description": "Required for previous_months: requested number of complete calendar months (1\u2013120).",
-              "title": "Months"
+              "description": "Required for previous_months: requested number of complete calendar months (1–120)."
             },
             "quarter": {
               "anyOf": [
@@ -294,8 +276,7 @@
                   "type": "null"
                 }
               ],
-              "default": null,
-              "title": "Quarter"
+              "default": null
             },
             "start": {
               "anyOf": [
@@ -308,8 +289,7 @@
                 }
               ],
               "default": null,
-              "description": "Required for range, inclusive start date; must not exceed end.",
-              "title": "Start"
+              "description": "Required for range, inclusive start date; must not exceed end."
             },
             "type": {
               "enum": [
@@ -321,14 +301,12 @@
                 "rolling_days",
                 "range"
               ],
-              "title": "Type",
               "type": "string"
             }
           },
           "required": [
             "type"
           ],
-          "title": "MarketPeriodRequest",
           "type": "object"
         }
       },
@@ -344,14 +322,12 @@
               },
               "maxItems": 8,
               "minItems": 1,
-              "title": "Cohorts",
               "type": "array"
             }
           },
           "required": [
             "cohorts"
           ],
-          "title": "BindMarketScopeRequest",
           "type": "object"
         }
       },
@@ -379,8 +355,7 @@
                   "type": "null"
                 }
               ],
-              "default": null,
-              "title": "Due Before"
+              "default": null
             },
             "enquiry_id": {
               "anyOf": [
@@ -392,14 +367,12 @@
                   "type": "null"
                 }
               ],
-              "default": null,
-              "title": "Enquiry Id"
+              "default": null
             },
             "limit": {
               "default": 20,
               "maximum": 25,
               "minimum": 1,
-              "title": "Limit",
               "type": "integer"
             },
             "match_id": {
@@ -412,8 +385,7 @@
                   "type": "null"
                 }
               ],
-              "default": null,
-              "title": "Match Id"
+              "default": null
             },
             "mode": {
               "default": "daily",
@@ -422,7 +394,6 @@
                 "viewing_brief",
                 "draft_message"
               ],
-              "title": "Mode",
               "type": "string"
             },
             "scope": {
@@ -431,11 +402,9 @@
                 "mine",
                 "organization"
               ],
-              "title": "Scope",
               "type": "string"
             }
           },
-          "title": "BrokerFollowUpRequest",
           "type": "object"
         }
       },
@@ -472,8 +441,7 @@
                   "type": "null"
                 }
               ],
-              "default": null,
-              "title": "Bedrooms"
+              "default": null
             },
             "building": {
               "anyOf": [
@@ -485,14 +453,12 @@
                   "type": "null"
                 }
               ],
-              "default": null,
-              "title": "Building"
+              "default": null
             },
             "limit": {
               "default": 10,
               "maximum": 20,
               "minimum": 1,
-              "title": "Limit",
               "type": "integer"
             },
             "location": {
@@ -505,20 +471,17 @@
                   "type": "null"
                 }
               ],
-              "default": null,
-              "title": "Location"
+              "default": null
             },
             "mode": {
               "const": "sale",
               "default": "sale",
-              "title": "Mode",
               "type": "string"
             },
             "older_than_days": {
               "default": 90,
               "maximum": 3660,
               "minimum": 1,
-              "title": "Older Than Days",
               "type": "integer"
             },
             "price_max": {
@@ -532,12 +495,10 @@
                   "type": "null"
                 }
               ],
-              "default": null,
-              "title": "Price Max"
+              "default": null
             },
             "price_max_inclusive": {
               "default": true,
-              "title": "Price Max Inclusive",
               "type": "boolean"
             },
             "price_min": {
@@ -551,12 +512,10 @@
                   "type": "null"
                 }
               ],
-              "default": null,
-              "title": "Price Min"
+              "default": null
             },
             "price_min_inclusive": {
               "default": true,
-              "title": "Price Min Inclusive",
               "type": "boolean"
             },
             "property_type": {
@@ -568,11 +527,9 @@
                 "Office",
                 "Shop"
               ],
-              "title": "Property Type",
               "type": "string"
             }
           },
-          "title": "ListingAgeRequest",
           "type": "object"
         },
         "scope_id": {
@@ -607,8 +564,7 @@
                 }
               ],
               "default": null,
-              "description": "Required for rolling_days: requested number of calendar days (1\u20133660).",
-              "title": "Days"
+              "description": "Required for rolling_days: requested number of calendar days (1–3660)."
             },
             "end": {
               "anyOf": [
@@ -621,8 +577,7 @@
                 }
               ],
               "default": null,
-              "description": "Required for range, inclusive end date; must not precede start.",
-              "title": "End"
+              "description": "Required for range, inclusive end date; must not precede start."
             },
             "month": {
               "anyOf": [
@@ -634,8 +589,7 @@
                   "type": "null"
                 }
               ],
-              "default": null,
-              "title": "Month"
+              "default": null
             },
             "months": {
               "anyOf": [
@@ -649,8 +603,7 @@
                 }
               ],
               "default": null,
-              "description": "Required for previous_months: requested number of complete calendar months (1\u2013120).",
-              "title": "Months"
+              "description": "Required for previous_months: requested number of complete calendar months (1–120)."
             },
             "quarter": {
               "anyOf": [
@@ -662,8 +615,7 @@
                   "type": "null"
                 }
               ],
-              "default": null,
-              "title": "Quarter"
+              "default": null
             },
             "start": {
               "anyOf": [
@@ -676,8 +628,7 @@
                 }
               ],
               "default": null,
-              "description": "Required for range, inclusive start date; must not exceed end.",
-              "title": "Start"
+              "description": "Required for range, inclusive start date; must not exceed end."
             },
             "type": {
               "enum": [
@@ -689,14 +640,12 @@
                 "rolling_days",
                 "range"
               ],
-              "title": "Type",
               "type": "string"
             }
           },
           "required": [
             "type"
           ],
-          "title": "MarketPeriodRequest",
           "type": "object"
         }
       },
@@ -716,7 +665,6 @@
                 "6",
                 "7"
               ],
-              "title": "Bedrooms",
               "type": "string"
             },
             "building": {
@@ -729,26 +677,22 @@
                   "type": "null"
                 }
               ],
-              "default": null,
-              "title": "Building"
+              "default": null
             },
             "limit": {
               "default": 5,
               "maximum": 8,
               "minimum": 1,
-              "title": "Limit",
               "type": "integer"
             },
             "location": {
               "maxLength": 120,
               "minLength": 1,
-              "title": "Location",
               "type": "string"
             },
             "mode": {
               "const": "sale",
               "default": "sale",
-              "title": "Mode",
               "type": "string"
             },
             "period": {
@@ -765,12 +709,10 @@
                   "type": "null"
                 }
               ],
-              "default": null,
-              "title": "Price Max"
+              "default": null
             },
             "price_max_inclusive": {
               "default": true,
-              "title": "Price Max Inclusive",
               "type": "boolean"
             },
             "price_min": {
@@ -784,12 +726,10 @@
                   "type": "null"
                 }
               ],
-              "default": null,
-              "title": "Price Min"
+              "default": null
             },
             "price_min_inclusive": {
               "default": true,
-              "title": "Price Min Inclusive",
               "type": "boolean"
             },
             "property_type": {
@@ -800,12 +740,10 @@
                 "Office",
                 "Shop"
               ],
-              "title": "Property Type",
               "type": "string"
             }
           },
           "required": [],
-          "title": "ListingRentRequest",
           "type": "object"
         },
         "scope_id": {
@@ -840,8 +778,7 @@
                 }
               ],
               "default": null,
-              "description": "Required for rolling_days: requested number of calendar days (1\u20133660).",
-              "title": "Days"
+              "description": "Required for rolling_days: requested number of calendar days (1–3660)."
             },
             "end": {
               "anyOf": [
@@ -854,8 +791,7 @@
                 }
               ],
               "default": null,
-              "description": "Required for range, inclusive end date; must not precede start.",
-              "title": "End"
+              "description": "Required for range, inclusive end date; must not precede start."
             },
             "month": {
               "anyOf": [
@@ -867,8 +803,7 @@
                   "type": "null"
                 }
               ],
-              "default": null,
-              "title": "Month"
+              "default": null
             },
             "months": {
               "anyOf": [
@@ -882,8 +817,7 @@
                 }
               ],
               "default": null,
-              "description": "Required for previous_months: requested number of complete calendar months (1\u2013120).",
-              "title": "Months"
+              "description": "Required for previous_months: requested number of complete calendar months (1–120)."
             },
             "quarter": {
               "anyOf": [
@@ -895,8 +829,7 @@
                   "type": "null"
                 }
               ],
-              "default": null,
-              "title": "Quarter"
+              "default": null
             },
             "start": {
               "anyOf": [
@@ -909,8 +842,7 @@
                 }
               ],
               "default": null,
-              "description": "Required for range, inclusive start date; must not exceed end.",
-              "title": "Start"
+              "description": "Required for range, inclusive start date; must not exceed end."
             },
             "type": {
               "enum": [
@@ -922,14 +854,12 @@
                 "rolling_days",
                 "range"
               ],
-              "title": "Type",
               "type": "string"
             }
           },
           "required": [
             "type"
           ],
-          "title": "MarketPeriodRequest",
           "type": "object"
         }
       },
@@ -949,8 +879,7 @@
                   "type": "null"
                 }
               ],
-              "default": null,
-              "title": "Asking Price Aed"
+              "default": null
             },
             "bedrooms": {
               "anyOf": [
@@ -971,8 +900,7 @@
                   "type": "null"
                 }
               ],
-              "default": null,
-              "title": "Bedrooms"
+              "default": null
             },
             "building": {
               "anyOf": [
@@ -984,8 +912,7 @@
                   "type": "null"
                 }
               ],
-              "default": null,
-              "title": "Building"
+              "default": null
             },
             "kind": {
               "enum": [
@@ -994,7 +921,6 @@
                 "monthly_area",
                 "off_plan_comparison"
               ],
-              "title": "Kind",
               "type": "string"
             },
             "location": {
@@ -1007,8 +933,7 @@
                   "type": "null"
                 }
               ],
-              "default": null,
-              "title": "Location"
+              "default": null
             },
             "period": {
               "$ref": "#/$defs/MarketPeriodRequest"
@@ -1018,14 +943,12 @@
                 "type": "string"
               },
               "maxItems": 3,
-              "title": "Projects",
               "type": "array"
             }
           },
           "required": [
             "kind"
           ],
-          "title": "ReportRequest",
           "type": "object"
         },
         "scope_id": {
@@ -1062,13 +985,11 @@
                   "type": "null"
                 }
               ],
-              "default": null,
-              "title": "Amount"
+              "default": null
             },
             "label": {
               "maxLength": 80,
               "minLength": 1,
-              "title": "Label",
               "type": "string"
             },
             "percent_of_asking": {
@@ -1086,8 +1007,7 @@
                   "type": "null"
                 }
               ],
-              "default": null,
-              "title": "Percent Of Asking"
+              "default": null
             },
             "status": {
               "enum": [
@@ -1095,7 +1015,6 @@
                 "estimate",
                 "missing"
               ],
-              "title": "Status",
               "type": "string"
             }
           },
@@ -1103,7 +1022,6 @@
             "label",
             "status"
           ],
-          "title": "QuotationCharge",
           "type": "object"
         }
       },
@@ -1118,24 +1036,20 @@
                 "$ref": "#/$defs/QuotationCharge"
               },
               "maxItems": 16,
-              "title": "Charges",
               "type": "array"
             },
             "currency": {
               "const": "AED",
               "default": "AED",
-              "title": "Currency",
               "type": "string"
             },
             "enquiry_id": {
               "exclusiveMinimum": 0,
-              "title": "Enquiry Id",
               "type": "integer"
             },
             "idempotency_key": {
               "maxLength": 100,
               "minLength": 1,
-              "title": "Idempotency Key",
               "type": "string"
             },
             "kind": {
@@ -1145,7 +1059,6 @@
                 "seller_evidence",
                 "quotation"
               ],
-              "title": "Kind",
               "type": "string"
             },
             "match_ids": {
@@ -1155,7 +1068,6 @@
               },
               "maxItems": 6,
               "minItems": 1,
-              "title": "Match Ids",
               "type": "array"
             },
             "media_ids": {
@@ -1164,7 +1076,6 @@
                 "type": "string"
               },
               "maxItems": 12,
-              "title": "Media Ids",
               "type": "array"
             },
             "missing_charges": {
@@ -1172,13 +1083,11 @@
                 "type": "string"
               },
               "maxItems": 16,
-              "title": "Missing Charges",
               "type": "array"
             },
             "reference": {
               "maxLength": 80,
               "minLength": 1,
-              "title": "Reference",
               "type": "string"
             },
             "scope": {
@@ -1187,7 +1096,6 @@
                 "mine",
                 "organization"
               ],
-              "title": "Scope",
               "type": "string"
             },
             "valid_until": {
@@ -1200,14 +1108,12 @@
                   "type": "null"
                 }
               ],
-              "default": null,
-              "title": "Valid Until"
+              "default": null
             },
             "version": {
               "default": 1,
               "maximum": 9999,
               "minimum": 1,
-              "title": "Version",
               "type": "integer"
             }
           },
@@ -1218,7 +1124,6 @@
             "reference",
             "idempotency_key"
           ],
-          "title": "BrokerDocumentCreate",
           "type": "object"
         }
       },
@@ -1239,14 +1144,12 @@
             "document_id": {
               "maxLength": 36,
               "minLength": 36,
-              "title": "Document Id",
               "type": "string"
             }
           },
           "required": [
             "document_id"
           ],
-          "title": "BrokerDocumentGet",
           "type": "object"
         }
       },
@@ -1266,7 +1169,6 @@
           "properties": {
             "enquiry_id": {
               "exclusiveMinimum": 0,
-              "title": "Enquiry Id",
               "type": "integer"
             },
             "scope": {
@@ -1275,14 +1177,12 @@
                 "mine",
                 "organization"
               ],
-              "title": "Scope",
               "type": "string"
             }
           },
           "required": [
             "enquiry_id"
           ],
-          "title": "BrokerEnquiryRequest",
           "type": "object"
         }
       },
@@ -1319,8 +1219,7 @@
                   "type": "null"
                 }
               ],
-              "default": null,
-              "title": "Bedrooms"
+              "default": null
             },
             "building": {
               "anyOf": [
@@ -1332,14 +1231,12 @@
                   "type": "null"
                 }
               ],
-              "default": null,
-              "title": "Building"
+              "default": null
             },
             "limit": {
               "default": 10,
               "maximum": 20,
               "minimum": 1,
-              "title": "Limit",
               "type": "integer"
             },
             "location": {
@@ -1352,8 +1249,7 @@
                   "type": "null"
                 }
               ],
-              "default": null,
-              "title": "Location"
+              "default": null
             },
             "mode": {
               "default": "sale",
@@ -1361,7 +1257,6 @@
                 "sale",
                 "rent"
               ],
-              "title": "Mode",
               "type": "string"
             },
             "price_max": {
@@ -1375,12 +1270,10 @@
                   "type": "null"
                 }
               ],
-              "default": null,
-              "title": "Price Max"
+              "default": null
             },
             "price_max_inclusive": {
               "default": true,
-              "title": "Price Max Inclusive",
               "type": "boolean"
             },
             "price_min": {
@@ -1394,12 +1287,10 @@
                   "type": "null"
                 }
               ],
-              "default": null,
-              "title": "Price Min"
+              "default": null
             },
             "price_min_inclusive": {
               "default": true,
-              "title": "Price Min Inclusive",
               "type": "boolean"
             },
             "property_type": {
@@ -1411,11 +1302,9 @@
                 "Office",
                 "Shop"
               ],
-              "title": "Property Type",
               "type": "string"
             }
           },
-          "title": "ListingEvidenceRequest",
           "type": "object"
         },
         "scope_id": {
@@ -1452,7 +1341,6 @@
               },
               "maxItems": 6,
               "minItems": 1,
-              "title": "Delivery Statuses",
               "type": "array"
             },
             "group_by": {
@@ -1463,21 +1351,18 @@
                 "delivery_year",
                 "project"
               ],
-              "title": "Group By",
               "type": "string"
             },
             "horizon_months": {
               "default": 24,
               "maximum": 120,
               "minimum": 1,
-              "title": "Horizon Months",
               "type": "integer"
             },
             "limit": {
               "default": 20,
               "maximum": 50,
               "minimum": 1,
-              "title": "Limit",
               "type": "integer"
             },
             "location": {
@@ -1490,8 +1375,7 @@
                   "type": "null"
                 }
               ],
-              "default": null,
-              "title": "Location"
+              "default": null
             },
             "project_statuses": {
               "items": {
@@ -1504,11 +1388,9 @@
                 "type": "string"
               },
               "maxItems": 4,
-              "title": "Project Statuses",
               "type": "array"
             }
           },
-          "title": "DeliveryRequest",
           "type": "object"
         },
         "scope_id": {
@@ -1524,7 +1406,7 @@
     }
   },
   "list_broker_enquiries": {
-    "description": "List your assigned enquiries or your own unassigned enquiries with exact enquiry and distinct-contact counts. Organization scope requires the current owner role. Open or recent records do not prove current interest; explicit confirmation and its date are shown separately.",
+    "description": "List your assigned enquiries or your own unassigned enquiries with exact enquiry and distinct-contact counts, including full counts by status before pagination. Set limit to the requested number and order='latest' for most recent recorded enquiries (latest five: limit=5, order='latest'); the default is due-date order. Organization scope requires the current owner role. Open or recent records do not prove current interest; explicit confirmation and its date are shown separately.",
     "schema": {
       "additionalProperties": false,
       "properties": {
@@ -1547,22 +1429,29 @@
                   "type": "null"
                 }
               ],
-              "default": null,
-              "title": "Intent"
+              "default": null
             },
             "limit": {
               "default": 20,
+              "description": "Requested number of records, e.g. 5 for latest five; counts always cover the full authorized filter.",
               "maximum": 25,
               "minimum": 1,
-              "title": "Limit",
               "type": "integer"
             },
             "offset": {
               "default": 0,
               "maximum": 500,
               "minimum": 0,
-              "title": "Offset",
               "type": "integer"
+            },
+            "order": {
+              "default": "due",
+              "description": "latest: recorded enquiry_date descending, then ID descending. due: follow-up date ascending, nulls last, then ID ascending.",
+              "enum": [
+                "due",
+                "latest"
+              ],
+              "type": "string"
             },
             "scope": {
               "default": "mine",
@@ -1570,7 +1459,6 @@
                 "mine",
                 "organization"
               ],
-              "title": "Scope",
               "type": "string"
             },
             "statuses": {
@@ -1603,11 +1491,9 @@
                   "type": "null"
                 }
               ],
-              "default": null,
-              "title": "Statuses"
+              "default": null
             }
           },
-          "title": "BrokerListRequest",
           "type": "object"
         }
       },
@@ -1636,8 +1522,7 @@
                   "type": "null"
                 }
               ],
-              "default": null,
-              "title": "Bedrooms Max"
+              "default": null
             },
             "bedrooms_min": {
               "anyOf": [
@@ -1650,8 +1535,7 @@
                   "type": "null"
                 }
               ],
-              "default": null,
-              "title": "Bedrooms Min"
+              "default": null
             },
             "budget_max_aed": {
               "anyOf": [
@@ -1664,12 +1548,10 @@
                   "type": "null"
                 }
               ],
-              "default": null,
-              "title": "Budget Max Aed"
+              "default": null
             },
             "budget_max_inclusive": {
               "default": true,
-              "title": "Budget Max Inclusive",
               "type": "boolean"
             },
             "budget_min_aed": {
@@ -1683,12 +1565,10 @@
                   "type": "null"
                 }
               ],
-              "default": null,
-              "title": "Budget Min Aed"
+              "default": null
             },
             "budget_min_inclusive": {
               "default": true,
-              "title": "Budget Min Inclusive",
               "type": "boolean"
             },
             "building": {
@@ -1702,8 +1582,7 @@
                   "type": "null"
                 }
               ],
-              "default": null,
-              "title": "Building"
+              "default": null
             },
             "locations": {
               "anyOf": [
@@ -1719,8 +1598,7 @@
                   "type": "null"
                 }
               ],
-              "default": null,
-              "title": "Locations"
+              "default": null
             },
             "project": {
               "anyOf": [
@@ -1733,8 +1611,7 @@
                   "type": "null"
                 }
               ],
-              "default": null,
-              "title": "Project"
+              "default": null
             },
             "property_type": {
               "anyOf": [
@@ -1747,11 +1624,9 @@
                   "type": "null"
                 }
               ],
-              "default": null,
-              "title": "Property Type"
+              "default": null
             }
           },
-          "title": "BrokerRequirements",
           "type": "object"
         }
       },
@@ -1762,19 +1637,16 @@
           "properties": {
             "enquiry_id": {
               "exclusiveMinimum": 0,
-              "title": "Enquiry Id",
               "type": "integer"
             },
             "limit": {
               "default": 10,
               "maximum": 20,
               "minimum": 1,
-              "title": "Limit",
               "type": "integer"
             },
             "refresh": {
               "default": false,
-              "title": "Refresh",
               "type": "boolean"
             },
             "requirements": {
@@ -1794,14 +1666,12 @@
                 "mine",
                 "organization"
               ],
-              "title": "Scope",
               "type": "string"
             }
           },
           "required": [
             "enquiry_id"
           ],
-          "title": "BrokerMatchRequest",
           "type": "object"
         }
       },
@@ -1830,8 +1700,7 @@
                   "type": "null"
                 }
               ],
-              "default": null,
-              "title": "Bedrooms Max"
+              "default": null
             },
             "bedrooms_min": {
               "anyOf": [
@@ -1844,8 +1713,7 @@
                   "type": "null"
                 }
               ],
-              "default": null,
-              "title": "Bedrooms Min"
+              "default": null
             },
             "budget_max_aed": {
               "anyOf": [
@@ -1858,12 +1726,10 @@
                   "type": "null"
                 }
               ],
-              "default": null,
-              "title": "Budget Max Aed"
+              "default": null
             },
             "budget_max_inclusive": {
               "default": true,
-              "title": "Budget Max Inclusive",
               "type": "boolean"
             },
             "budget_min_aed": {
@@ -1877,12 +1743,10 @@
                   "type": "null"
                 }
               ],
-              "default": null,
-              "title": "Budget Min Aed"
+              "default": null
             },
             "budget_min_inclusive": {
               "default": true,
-              "title": "Budget Min Inclusive",
               "type": "boolean"
             },
             "building": {
@@ -1896,8 +1760,7 @@
                   "type": "null"
                 }
               ],
-              "default": null,
-              "title": "Building"
+              "default": null
             },
             "locations": {
               "anyOf": [
@@ -1913,8 +1776,7 @@
                   "type": "null"
                 }
               ],
-              "default": null,
-              "title": "Locations"
+              "default": null
             },
             "project": {
               "anyOf": [
@@ -1927,8 +1789,7 @@
                   "type": "null"
                 }
               ],
-              "default": null,
-              "title": "Project"
+              "default": null
             },
             "property_type": {
               "anyOf": [
@@ -1941,11 +1802,9 @@
                   "type": "null"
                 }
               ],
-              "default": null,
-              "title": "Property Type"
+              "default": null
             }
           },
-          "title": "BrokerRequirements",
           "type": "object"
         }
       },
@@ -1956,19 +1815,16 @@
           "properties": {
             "enquiry_id": {
               "exclusiveMinimum": 0,
-              "title": "Enquiry Id",
               "type": "integer"
             },
             "limit": {
               "default": 10,
               "maximum": 20,
               "minimum": 1,
-              "title": "Limit",
               "type": "integer"
             },
             "refresh": {
               "default": false,
-              "title": "Refresh",
               "type": "boolean"
             },
             "requirements": {
@@ -1988,14 +1844,12 @@
                 "mine",
                 "organization"
               ],
-              "title": "Scope",
               "type": "string"
             }
           },
           "required": [
             "enquiry_id"
           ],
-          "title": "BrokerMatchRequest",
           "type": "object"
         }
       },
@@ -2018,7 +1872,6 @@
                 "note",
                 "follow_up"
               ],
-              "title": "Action",
               "type": "string"
             },
             "body": {
@@ -2032,8 +1885,7 @@
                   "type": "null"
                 }
               ],
-              "default": null,
-              "title": "Body"
+              "default": null
             },
             "due_date": {
               "anyOf": [
@@ -2045,12 +1897,10 @@
                   "type": "null"
                 }
               ],
-              "default": null,
-              "title": "Due Date"
+              "default": null
             },
             "enquiry_id": {
               "exclusiveMinimum": 0,
-              "title": "Enquiry Id",
               "type": "integer"
             },
             "scope": {
@@ -2059,7 +1909,6 @@
                 "mine",
                 "organization"
               ],
-              "title": "Scope",
               "type": "string"
             }
           },
@@ -2067,7 +1916,6 @@
             "enquiry_id",
             "action"
           ],
-          "title": "BrokerActionRequest",
           "type": "object"
         }
       },
@@ -2097,8 +1945,7 @@
                 }
               ],
               "default": null,
-              "description": "Required for rolling_days: requested number of calendar days (1\u20133660).",
-              "title": "Days"
+              "description": "Required for rolling_days: requested number of calendar days (1–3660)."
             },
             "end": {
               "anyOf": [
@@ -2111,8 +1958,7 @@
                 }
               ],
               "default": null,
-              "description": "Required for range, inclusive end date; must not precede start.",
-              "title": "End"
+              "description": "Required for range, inclusive end date; must not precede start."
             },
             "month": {
               "anyOf": [
@@ -2124,8 +1970,7 @@
                   "type": "null"
                 }
               ],
-              "default": null,
-              "title": "Month"
+              "default": null
             },
             "months": {
               "anyOf": [
@@ -2139,8 +1984,7 @@
                 }
               ],
               "default": null,
-              "description": "Required for previous_months: requested number of complete calendar months (1\u2013120).",
-              "title": "Months"
+              "description": "Required for previous_months: requested number of complete calendar months (1–120)."
             },
             "quarter": {
               "anyOf": [
@@ -2152,8 +1996,7 @@
                   "type": "null"
                 }
               ],
-              "default": null,
-              "title": "Quarter"
+              "default": null
             },
             "start": {
               "anyOf": [
@@ -2166,8 +2009,7 @@
                 }
               ],
               "default": null,
-              "description": "Required for range, inclusive start date; must not exceed end.",
-              "title": "Start"
+              "description": "Required for range, inclusive start date; must not exceed end."
             },
             "type": {
               "enum": [
@@ -2179,14 +2021,12 @@
                 "rolling_days",
                 "range"
               ],
-              "title": "Type",
               "type": "string"
             }
           },
           "required": [
             "type"
           ],
-          "title": "MarketPeriodRequest",
           "type": "object"
         }
       },
@@ -2219,8 +2059,7 @@
                   "type": "null"
                 }
               ],
-              "default": null,
-              "title": "Bedrooms"
+              "default": null
             },
             "building": {
               "anyOf": [
@@ -2232,12 +2071,10 @@
                   "type": "null"
                 }
               ],
-              "default": null,
-              "title": "Building"
+              "default": null
             },
             "compare_with_previous_period": {
               "default": false,
-              "title": "Compare With Previous Period",
               "type": "boolean"
             },
             "contract_version": {
@@ -2254,15 +2091,13 @@
                 }
               ],
               "default": null,
-              "description": "Rentals only",
-              "title": "Contract Version"
+              "description": "Rentals only"
             },
             "dataset": {
               "enum": [
                 "sales",
                 "rentals"
               ],
-              "title": "Dataset",
               "type": "string"
             },
             "group_by": {
@@ -2286,14 +2121,12 @@
                   "type": "null"
                 }
               ],
-              "default": null,
-              "title": "Group By"
+              "default": null
             },
             "limit": {
               "default": 20,
               "maximum": 200,
               "minimum": 1,
-              "title": "Limit",
               "type": "integer"
             },
             "location": {
@@ -2307,8 +2140,7 @@
                 }
               ],
               "default": null,
-              "description": "Community or DLD area, e.g. JVC",
-              "title": "Location"
+              "description": "Community or DLD area, e.g. JVC"
             },
             "max_term_days": {
               "anyOf": [
@@ -2321,8 +2153,7 @@
                 }
               ],
               "default": null,
-              "description": "Rentals only",
-              "title": "Max Term Days"
+              "description": "Rentals only"
             },
             "max_value_aed": {
               "anyOf": [
@@ -2335,12 +2166,10 @@
                 }
               ],
               "default": null,
-              "description": "Sale price or annual rent upper bound",
-              "title": "Max Value Aed"
+              "description": "Sale price or annual rent upper bound"
             },
             "max_value_inclusive": {
               "default": false,
-              "title": "Max Value Inclusive",
               "type": "boolean"
             },
             "metrics": {
@@ -2365,14 +2194,12 @@
               },
               "maxItems": 14,
               "minItems": 1,
-              "title": "Metrics",
               "type": "array"
             },
             "min_group_count": {
               "default": 1,
               "maximum": 10000,
               "minimum": 1,
-              "title": "Min Group Count",
               "type": "integer"
             },
             "min_term_days": {
@@ -2386,8 +2213,7 @@
                 }
               ],
               "default": null,
-              "description": "Rentals only",
-              "title": "Min Term Days"
+              "description": "Rentals only"
             },
             "min_value_aed": {
               "anyOf": [
@@ -2400,12 +2226,10 @@
                 }
               ],
               "default": null,
-              "description": "Sale price or annual rent lower bound",
-              "title": "Min Value Aed"
+              "description": "Sale price or annual rent lower bound"
             },
             "min_value_inclusive": {
               "default": true,
-              "title": "Min Value Inclusive",
               "type": "boolean"
             },
             "period": {
@@ -2426,8 +2250,7 @@
                 }
               ],
               "default": null,
-              "description": "One flag per price_bands boundary: true puts equality in the lower band; false puts it in the upper band. Omitted means all false.",
-              "title": "Price Band Upper Inclusive"
+              "description": "One flag per price_bands boundary: true puts equality in the lower band; false puts it in the upper band. Omitted means all false."
             },
             "price_bands": {
               "anyOf": [
@@ -2444,8 +2267,7 @@
                 }
               ],
               "default": null,
-              "description": "Ascending AED cutoffs for price_band; default upper bounds are exclusive.",
-              "title": "Price Bands"
+              "description": "Ascending AED cutoffs for price_band; default upper bounds are exclusive."
             },
             "project": {
               "anyOf": [
@@ -2457,8 +2279,7 @@
                   "type": "null"
                 }
               ],
-              "default": null,
-              "title": "Project"
+              "default": null
             },
             "property_type": {
               "anyOf": [
@@ -2477,8 +2298,7 @@
                   "type": "null"
                 }
               ],
-              "default": null,
-              "title": "Property Type"
+              "default": null
             },
             "registration": {
               "anyOf": [
@@ -2494,8 +2314,7 @@
                 }
               ],
               "default": null,
-              "description": "Sales only",
-              "title": "Registration"
+              "description": "Sales only"
             },
             "sort_by": {
               "default": "count",
@@ -2515,7 +2334,6 @@
                 "total_contract_aed",
                 "median_contract_aed"
               ],
-              "title": "Sort By",
               "type": "string"
             },
             "usage": {
@@ -2531,12 +2349,10 @@
                   "type": "null"
                 }
               ],
-              "default": null,
-              "title": "Usage"
+              "default": null
             }
           },
           "required": [],
-          "title": "MarketMetricsRequest",
           "type": "object"
         },
         "scope_id": {
