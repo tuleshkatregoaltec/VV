@@ -138,6 +138,7 @@ async def refresh_inbound_matches(
     enquiry_id: int,
     organization_id: str,
     expand_units: bool = False,
+    demand_candidates: list[CrmInboundEnquiry] | None = None,
 ) -> InboundMatchesResponse:
     enquiry = await match_repository.get_crm_inbound_enquiry(db, enquiry_id)
     if not enquiry or enquiry.organization_id != organization_id:
@@ -359,14 +360,22 @@ async def refresh_inbound_matches(
                 )
                 if item:
                     generated.append(item)
-        reverse_result = await match_repository.list_reverse_demand(
-            db, enquiry, organization_id, reverse_intent
+        reverse_result = (
+            demand_candidates
+            if demand_candidates is not None
+            else (
+                await match_repository.list_reverse_demand(
+                    db, enquiry, organization_id, reverse_intent
+                )
+            )
         )
         subject_locations = _locations(criteria)
         if not subject_locations and building:
             subject_locations = [building]
         subject_value = criteria.get("expected_price_aed") or criteria.get("budget_max_aed")
         for demand in reverse_result:
+            if demand.organization_id != organization_id or demand.intent != reverse_intent:
+                continue
             locations = _locations(demand.criteria)
             location = (
                 20
@@ -424,7 +433,11 @@ async def refresh_inbound_matches(
             bedrooms=str(criteria.get("bedrooms_min"))
             if criteria.get("bedrooms_min") is not None
             else None,
+            price_min=criteria.get("budget_min_aed"),
             price_max=criteria.get("budget_max_aed"),
+            price_min_inclusive=criteria.get("budget_min_inclusive", True),
+            price_max_inclusive=criteria.get("budget_max_inclusive", True),
+            price_basis="annual" if enquiry.intent == "rent" else "raw",
         )
         for listing in listings.listings:
             location, location_reason = _location_fit(

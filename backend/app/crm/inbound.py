@@ -715,7 +715,8 @@ async def update_inbound_enquiry(
     organization_id: str,
     user_id: str,
     payload: InboundEnquiryUpdate,
-) -> InboundEnquiryResponse:
+    commit: bool = True,
+) -> InboundEnquiryResponse | None:
     enquiry = await inbound_repository.get_crm_inbound_enquiry(db, enquiry_id)
     if not enquiry or enquiry.organization_id != organization_id:
         raise HTTPException(status_code=404, detail="Inbound enquiry not found")
@@ -784,6 +785,9 @@ async def update_inbound_enquiry(
                 created_at=enquiry.updated_at,
             ),
         )
+    if not commit:
+        await db.flush()
+        return None
     await db.commit()
     await db.refresh(enquiry)
     return await _enquiry_response(
@@ -792,8 +796,14 @@ async def update_inbound_enquiry(
 
 
 async def add_inbound_note(
-    db: AsyncSession, *, enquiry_id: int, organization_id: str, user_id: str, body: str
-) -> InboundEnquiryResponse:
+    db: AsyncSession,
+    *,
+    enquiry_id: int,
+    organization_id: str,
+    user_id: str,
+    body: str,
+    commit: bool = True,
+) -> InboundEnquiryResponse | None:
     enquiry = await inbound_repository.get_crm_inbound_enquiry(db, enquiry_id)
     if not enquiry or enquiry.organization_id != organization_id:
         raise HTTPException(status_code=404, detail="Inbound enquiry not found")
@@ -821,6 +831,9 @@ async def add_inbound_note(
             created_at=enquiry.updated_at,
         ),
     )
+    if not commit:
+        await db.flush()
+        return None
     await db.commit()
     return await _enquiry_response(
         db, enquiry, include_registry_profiles=True, include_history=True
