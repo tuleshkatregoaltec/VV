@@ -66,8 +66,21 @@ class BrokerMatchRequest(BrokerEnquiryRequest):
 
 
 class BrokerFollowUpRequest(BrokerRequest):
+    mode: Literal["daily", "viewing_brief", "draft_message"] = "daily"
+    enquiry_id: int | None = Field(default=None, gt=0)
+    match_id: int | None = Field(default=None, gt=0)
     due_before: date | None = None
     limit: int = Field(default=20, ge=1, le=25)
+
+    @model_validator(mode="after")
+    def required_brief_fields(self):
+        if self.mode != "daily" and self.enquiry_id is None:
+            raise ValueError("A viewing brief or draft message requires enquiry_id")
+        if self.mode == "daily" and (self.enquiry_id is not None or self.match_id is not None):
+            raise ValueError("Use viewing_brief or draft_message for a specific enquiry")
+        if self.mode != "daily" and self.due_before is not None:
+            raise ValueError("due_before only applies to the daily summary")
+        return self
 
 
 class BrokerActionRequest(BrokerEnquiryRequest):

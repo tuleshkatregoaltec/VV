@@ -6,6 +6,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.crm.broker_models import CrmBrokerAction
 from app.crm.inbound_models import (
+    CrmInboundActivity,
     CrmInboundContact,
     CrmInboundEnquiry,
     CrmInboundMatch,
@@ -151,3 +152,36 @@ async def action(db: AsyncSession, context, proposal_id):
             .with_for_update()
         )
     ).first()
+
+
+async def activities(db: AsyncSession, enquiry):
+    return (
+        await db.exec(
+            select(CrmInboundActivity)
+            .where(
+                CrmInboundActivity.enquiry_id == enquiry.id,
+                CrmInboundActivity.organization_id == enquiry.organization_id,
+            )
+            .order_by(CrmInboundActivity.created_at.desc(), CrmInboundActivity.id.desc())
+            .limit(10)
+        )
+    ).all()
+
+
+async def match_summary(db: AsyncSession, enquiry):
+    rows = (
+        await db.exec(
+            select(CrmInboundMatch.state, func.count())
+            .where(
+                CrmInboundMatch.enquiry_id == enquiry.id,
+                CrmInboundMatch.organization_id == enquiry.organization_id,
+            )
+            .group_by(CrmInboundMatch.state)
+        )
+    ).all()
+    counts = {state: count for state, count in rows}
+    return {
+        "stored_count": sum(counts.values()),
+        "by_state": counts,
+        "note": "Stored candidate counts do not verify suitability or availability.",
+    }
