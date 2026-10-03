@@ -51,8 +51,14 @@ class BrokerRequirements(BaseModel):
     bedrooms_max: int | None = Field(default=None, ge=0, le=10)
     budget_min_aed: float | None = Field(default=None, ge=0, le=1_000_000_000)
     budget_max_aed: float | None = Field(default=None, gt=0, le=1_000_000_000)
-    budget_min_inclusive: bool = True
-    budget_max_inclusive: bool = True
+    budget_min_inclusive: bool = Field(
+        default=True,
+        description="False: strictly above the minimum. True: at least (equality included).",
+    )
+    budget_max_inclusive: bool = Field(
+        default=True,
+        description="False: strictly below the maximum, never up to. True: at most (equality included).",
+    )
 
     @model_validator(mode="after")
     def valid_ranges(self):

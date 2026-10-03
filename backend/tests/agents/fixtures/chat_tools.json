@@ -1552,6 +1552,7 @@
             },
             "budget_max_inclusive": {
               "default": true,
+              "description": "False: strictly below the maximum, never up to. True: at most (equality included).",
               "type": "boolean"
             },
             "budget_min_aed": {
@@ -1569,6 +1570,7 @@
             },
             "budget_min_inclusive": {
               "default": true,
+              "description": "False: strictly above the minimum. True: at least (equality included).",
               "type": "boolean"
             },
             "building": {
@@ -1730,6 +1732,7 @@
             },
             "budget_max_inclusive": {
               "default": true,
+              "description": "False: strictly below the maximum, never up to. True: at most (equality included).",
               "type": "boolean"
             },
             "budget_min_aed": {
@@ -1747,6 +1750,7 @@
             },
             "budget_min_inclusive": {
               "default": true,
+              "description": "False: strictly above the minimum. True: at least (equality included).",
               "type": "boolean"
             },
             "building": {

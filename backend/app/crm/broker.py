@@ -198,6 +198,7 @@ async def _list(db, context, request, *, due_before=None):
                 if request.scope == "mine"
                 else "Enquiries across your current organization, authorized by your owner role."
             ),
+            "budget_bounds": "A false budget_max_inclusive means strictly below, not up to; false budget_min_inclusive means strictly above. True includes equality.",
             "enquiry_count": "All records matching this authorized filter, before pagination.",
             "unique_contact_count": "Distinct CRM contact IDs among those enquiries, not an inferred real-world person deduplication.",
             "counts_by_status": "Full authorized filtered counts before pagination; absent statuses have zero matching enquiries. Distinct-contact counts per status may overlap and must not be summed.",
