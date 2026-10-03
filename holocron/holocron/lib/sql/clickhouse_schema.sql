@@ -1789,7 +1789,7 @@ WHERE s.source_key IS NULL;
 
 CREATE TABLE IF NOT EXISTS market_sale_matches (
     dxbi_sale_key String,
-    dld_transaction_number String,
+    dld_transaction_number String,  -- DLD sale line id (transforms.DLD_SALES_BASE.line_id)
     day_gap Int16,
     size_gap Float64,
     has_dld_candidate UInt8,

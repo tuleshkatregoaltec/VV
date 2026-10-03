@@ -451,3 +451,57 @@ def test_corrections_duplicates_and_cut_over_are_served_once(warehouse) -> None:
         "ORDER BY transaction_id"
     ).result_rows
     assert served == [("P1", 900_000), ("T1", 1_100_000), ("T2", 2_000_000)]
+
+
+@live
+def test_every_line_of_a_multi_line_dld_number_is_served_once(warehouse) -> None:
+    """Open data registers a Lease-to-Own sale and its mortgage under one number. One row
+    per number served one of them at random; the sale must be a sale and the mortgage a
+    mortgage, and a re-extract of the number replaces both lines."""
+    columns = [*_SALE_COLUMNS, "scraped_at", "procedure_en"]
+
+    def lines(scraped: str, sale: int, mortgage: int) -> list[tuple]:
+        return [
+            (f"{scraped}-s", "run", "110-421-2026", datetime(2026, 9, 3), "Sales", sale, 130.0,
+             "Marsa Dubai", "Ready", "dld_open_data", MARSA_DUBAI_ID, scraped,
+             "Lease to Own Registration"),
+            (f"{scraped}-m", "run", "110-421-2026", datetime(2026, 9, 3), "Mortgage", mortgage,
+             130.0, "Marsa Dubai", "Ready", "dld_open_data", MARSA_DUBAI_ID, scraped,
+             "Lease to Own Registration"),
+            # The same sale line delivered twice in one extract is one line.
+            (f"{scraped}-s2", "run", "110-421-2026", datetime(2026, 9, 3), "Sales", sale, 130.0,
+             "Marsa Dubai", "Ready", "dld_open_data", MARSA_DUBAI_ID, scraped,
+             "Lease to Own Registration"),
+        ]  # fmt: skip
+
+    warehouse.insert_rows(
+        table="dld_od_transactions_bronze",
+        column_names=columns,
+        rows=lines("2026-09-06T00:00:00", 1_265_000, 1_000_000),
+    )
+    release.materialize_market_sale_events(clickhouse=warehouse)
+
+    def served() -> list[tuple]:
+        return warehouse.query(
+            "SELECT trans_group_en, actual_worth, transaction_number FROM market_sale_events "
+            "WHERE is_served = 1 ORDER BY trans_group_en"
+        ).result_rows
+
+    assert served() == [
+        ("Mortgages", 1_000_000, "110-421-2026"),
+        ("Sales", 1_265_000, "110-421-2026"),
+    ]
+    ids = warehouse.query("SELECT transaction_id FROM market_sale_events").result_rows
+    assert len({row[0] for row in ids}) == 2 and all("#" in row[0] for row in ids)
+
+    # A later extract corrects the sale price: both lines come from it, none from the old one.
+    warehouse.insert_rows(
+        table="dld_od_transactions_bronze",
+        column_names=columns,
+        rows=lines("2026-09-08T00:00:00", 1_300_000, 1_000_000),
+    )
+    release.materialize_market_sale_events(clickhouse=warehouse)
+    assert served() == [
+        ("Mortgages", 1_000_000, "110-421-2026"),
+        ("Sales", 1_300_000, "110-421-2026"),
+    ]

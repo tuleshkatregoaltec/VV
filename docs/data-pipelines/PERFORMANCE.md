@@ -42,6 +42,11 @@ geography build to 55.5 s after the crosswalk changes. That is the same order as
 107.7 s for `market_events_refresh` before this work. A release's immutable version
 (`__r<id>`, for pinned readers) is a hard-link attach: 0.15 s for 10.8M rental rows.
 
+Serving every line of multi-line DLD transaction numbers (correctness fix, see
+`DLD_SALES_BASE`) raised the sales release to 80.9 s (DXBI match ledger 46 s, events 21 s)
+for 2,875 more served lines (1,832,267). It is accepted for correctness. The latest-extract
+`IN` subquery is the first thing to optimise if the daily budget needs it.
+
 Candidates not changed for lack of a demonstrated problem: `OPTIMIZE FINAL` on staged rentals
 (19–25 s, needed so ordered LIMIT queries do not read dozens of parts), and the DXBI sale
 match ledger's 61-day price-probe join.
