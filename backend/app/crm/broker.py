@@ -443,7 +443,7 @@ async def _reverse(db, context, request):
     }
 
 
-async def _follow_up(db, context, request):
+async def _follow_up(db, context, request, *, requirements: BrokerRequirements | None = None):
     if request.mode == "daily":
         return await _list(
             db, context, request, due_before=request.due_before or context.reference_date
@@ -463,7 +463,16 @@ async def _follow_up(db, context, request):
     if request.mode == "viewing_brief" and request.match_id is None:
         return {"status": "clarification_required", "required_bindings": ["match_id"]}
     selected = (
-        (await require_matches(db, context, enquiry.id, [request.match_id], request.scope))[0]
+        (
+            await require_matches(
+                db,
+                context,
+                enquiry.id,
+                [request.match_id],
+                request.scope,
+                requirements=requirements,
+            )
+        )[0]
         if request.match_id
         else None
     )
@@ -568,7 +577,9 @@ async def confirm_broker_action(db, context, payload: BrokerActionConfirmation) 
     return {"status": "completed", "proposal": _proposal(proposal), "already_completed": False}
 
 
-async def execute_broker_tool(name, request, context: MarketAccessContext) -> dict:
+async def execute_broker_tool(
+    name, request, context: MarketAccessContext, *, requirements: BrokerRequirements | None = None
+) -> dict:
     if name not in BROKER_TOOL_MODELS:
         raise HTTPException(422, "Unknown broker capability")
     if not isinstance(request, BROKER_TOOL_MODELS[name]):
@@ -579,7 +590,7 @@ async def execute_broker_tool(name, request, context: MarketAccessContext) -> di
                 if name == "list_broker_enquiries":
                     result = await _list(db, context, request)
                 elif name == "broker_follow_up_summary":
-                    result = await _follow_up(db, context, request)
+                    result = await _follow_up(db, context, request, requirements=requirements)
                 elif name == "get_broker_enquiry":
                     enquiry = await require_enquiry(db, context, request.enquiry_id, request.scope)
                     result = {

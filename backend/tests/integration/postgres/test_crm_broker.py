@@ -347,3 +347,35 @@ async def test_broker_reverse_matching_cannot_disclose_a_colleagues_demand(
     assert result["clients"][0]["enquiry"]["enquiry_id"] == rows[0].id
     assert result["clients"][0]["enquiry"]["interest"]["status"] == "recorded_open"
     assert "secret" not in str(result)
+
+
+@pytest.mark.parametrize("mode", ["viewing_brief", "draft_message"])
+async def test_broker_follow_up_preserves_frozen_shortlist_requirements(
+    pg_session, broker_fixture, monkeypatch, mode
+):
+    actor, _, _, _, enquiries = broker_fixture
+    matches = await add_matches(pg_session, enquiries[0])
+    monkeypatch.setattr(broker, "get_postgres_engine", lambda: pg_session.bind)
+    request = BrokerFollowUpRequest(mode=mode, enquiry_id=enquiries[0].id, match_id=matches[0].id)
+    # This property satisfies the stored brief, but a follow-up must retain the
+    # narrower budget from the current shortlist, including its strict boundary.
+    for requirements in (
+        BrokerRequirements(budget_max_aed=1_100_000),
+        BrokerRequirements(budget_max_aed=1_199_999.99, budget_max_inclusive=False),
+    ):
+        with pytest.raises(HTTPException) as error:
+            await broker.execute_broker_tool(
+                "broker_follow_up_summary", request, actor, requirements=requirements
+            )
+        assert error.value.status_code == 409
+    result = await broker.execute_broker_tool(
+        "broker_follow_up_summary",
+        request,
+        actor,
+        requirements=BrokerRequirements(budget_max_aed=1_199_999.99),
+    )
+    assert result["property_match"]["property"]["price_aed"] == 1_199_999.99
+    assert result["property_match"]["fit"] == "supported"
+    assert result["message_sent"] is False
+    await pg_session.refresh(enquiries[0])
+    assert enquiries[0].contact_attempt_count == 0
