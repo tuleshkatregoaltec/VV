@@ -53,6 +53,7 @@ dependencies = [
     "langsmith[otel]>=0.14.1",
     "opentelemetry-sdk==1.39.1",
     "opentelemetry-exporter-otlp-proto-http==1.39.1",
+    "reportlab>=5.0.1",
 ]
 
 [tool.uv]
@@ -119,4 +120,9 @@ select = [
 ]
 ignore = [
     "E501",
+]
+
+[dependency-groups]
+dev = [
+    "pypdf>=6.19.0",
 ]

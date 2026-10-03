@@ -161,3 +161,7 @@ ai-prepare *args:
 
 ai-promote *args:
 	cd backend && uv run python -m scripts.evaluation promote {{args}}
+
+# Run a bounded durable CRM document worker; no ingestion or publication work.
+broker-documents-worker *args:
+    set -a && source .env.dev && set +a && cd backend && uv run python -m scripts.crm.document_worker "$@"

@@ -120,7 +120,7 @@ async function download() {
 					{#each quote.lines as line}
 						<div class="rounded border border-border p-2"><p class="flex justify-between gap-2"><span>{line.label} ({line.status})</span><span>{line.amount === null ? 'Not available' : `${quote.currency} ${line.amount}`}</span></p><p class="mt-1 text-xs text-fg-4">{line.basis}</p></div>
 					{/each}
-					<dl class="space-y-1"><div class="flex justify-between gap-2"><dt>Known charges</dt><dd>{quote.currency} {quote.known_total}</dd></div><div class="flex justify-between gap-2"><dt>Estimated charges</dt><dd>{quote.currency} {quote.estimated_total}</dd></div><div class="flex justify-between gap-2 font-semibold"><dt>Total</dt><dd>{quote.total === null ? 'Not available — charges are missing' : `${quote.currency} ${quote.total}`}</dd></div></dl>
+					<dl class="space-y-1"><div class="flex justify-between gap-2"><dt>Known subtotal</dt><dd>{quote.currency} {quote.known_total}</dd></div><div class="flex justify-between gap-2"><dt>Estimated charges</dt><dd>{quote.currency} {quote.estimated_total}</dd></div><div class="flex justify-between gap-2 font-semibold"><dt>Total including estimates</dt><dd>{quote.total === null ? 'Not available — charges are missing' : `${quote.currency} ${quote.total}`}</dd></div></dl>
 					{#if quote.missing_charges.length}<p class="text-xs text-fg-4">Missing charges: {quote.missing_charges.join(', ')}</p>{/if}
 				</section>
 			{/if}

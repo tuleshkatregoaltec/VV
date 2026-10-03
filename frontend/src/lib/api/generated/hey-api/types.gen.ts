@@ -472,6 +472,36 @@ export type AuthMeResponse = {
 };
 
 /**
+ * Body_crm-crm_approve_broker_media
+ */
+export type BodyCrmCrmApproveBrokerMedia = {
+    /**
+     * Enquiry Id
+     */
+    enquiry_id: number;
+    /**
+     * Match Id
+     */
+    match_id: number;
+    /**
+     * Kind
+     */
+    kind: 'image' | 'floor_plan';
+    /**
+     * Scope
+     */
+    scope?: 'mine' | 'organization';
+    /**
+     * Approved For Client
+     */
+    approved_for_client: 'true';
+    /**
+     * File
+     */
+    file: Blob | File;
+};
+
+/**
  * Body_crm-crm_contact_import
  */
 export type BodyCrmCrmContactImport = {
@@ -529,6 +559,262 @@ export type BodyUploadUploadChunked = {
      * Chunk
      */
     chunk: Blob | File;
+};
+
+/**
+ * BrokerActionConfirmation
+ */
+export type BrokerActionConfirmation = {
+    /**
+     * Proposal Id
+     */
+    proposal_id: string;
+};
+
+/**
+ * BrokerActionProposal
+ */
+export type BrokerActionProposal = {
+    /**
+     * Proposal Id
+     */
+    proposal_id: string;
+    /**
+     * Enquiry Id
+     */
+    enquiry_id: number;
+    /**
+     * Scope
+     */
+    scope: 'mine' | 'organization';
+    /**
+     * Action
+     */
+    action: 'note' | 'follow_up';
+    /**
+     * Body
+     */
+    body: string | null;
+    /**
+     * Due Date
+     */
+    due_date: string | null;
+    /**
+     * Status
+     */
+    status: 'proposed' | 'completed';
+    /**
+     * Expected Updated At
+     */
+    expected_updated_at: string;
+    /**
+     * Created At
+     */
+    created_at: string;
+};
+
+/**
+ * BrokerActionResult
+ */
+export type BrokerActionResult = {
+    /**
+     * Status
+     */
+    status: 'proposal' | 'completed';
+    proposal: BrokerActionProposal;
+    /**
+     * Requires Confirmation
+     */
+    requires_confirmation?: boolean | null;
+    /**
+     * Already Completed
+     */
+    already_completed?: boolean | null;
+};
+
+/**
+ * BrokerDocumentCreate
+ */
+export type BrokerDocumentCreate = {
+    /**
+     * Enquiry Id
+     */
+    enquiry_id: number;
+    /**
+     * Scope
+     */
+    scope?: 'mine' | 'organization';
+    /**
+     * Kind
+     */
+    kind: 'presentation' | 'comparison' | 'seller_evidence' | 'quotation';
+    /**
+     * Match Ids
+     *
+     * Selected authorized property match IDs; never contact/owner IDs.
+     */
+    match_ids: Array<number>;
+    /**
+     * Reference
+     */
+    reference: string;
+    /**
+     * Version
+     */
+    version?: number;
+    /**
+     * Valid Until
+     */
+    valid_until?: string | null;
+    /**
+     * Currency
+     */
+    currency?: 'AED';
+    /**
+     * Charges
+     *
+     * Only broker-explicit amounts or percentages. No default or invented fees; omitted charges remain unknown.
+     */
+    charges?: Array<QuotationCharge>;
+    /**
+     * Missing Charges
+     */
+    missing_charges?: Array<string>;
+    /**
+     * Media Ids
+     *
+     * Previously approved uploaded media IDs; remote URLs are never accepted.
+     */
+    media_ids?: Array<string>;
+    /**
+     * Idempotency Key
+     */
+    idempotency_key: string;
+};
+
+/**
+ * BrokerDocumentData
+ */
+export type BrokerDocumentDataInput = {
+    /**
+     * Brand
+     */
+    brand: string;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Reference
+     */
+    reference: string;
+    /**
+     * Version
+     */
+    version: number;
+    /**
+     * Valid Until
+     */
+    valid_until: string | null;
+    /**
+     * Prepared At
+     */
+    prepared_at: string;
+    /**
+     * Properties
+     */
+    properties: Array<DocumentProperty>;
+    /**
+     * Sections
+     */
+    sections?: Array<DocumentSection>;
+    quotation?: DocumentQuotation | null;
+    /**
+     * Limitations
+     */
+    limitations: Array<string>;
+};
+
+/**
+ * BrokerDocumentData
+ */
+export type BrokerDocumentDataOutput = {
+    /**
+     * Brand
+     */
+    brand: string;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Reference
+     */
+    reference: string;
+    /**
+     * Version
+     */
+    version: number;
+    /**
+     * Valid Until
+     */
+    valid_until: string | null;
+    /**
+     * Prepared At
+     */
+    prepared_at: string;
+    /**
+     * Properties
+     */
+    properties: Array<DocumentProperty>;
+    /**
+     * Sections
+     */
+    sections?: Array<DocumentSection>;
+    quotation?: DocumentQuotation | null;
+    /**
+     * Limitations
+     */
+    limitations: Array<string>;
+};
+
+/**
+ * BrokerDocumentResponse
+ */
+export type BrokerDocumentResponse = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Status
+     */
+    status: 'queued' | 'running' | 'completed' | 'failed';
+    /**
+     * Kind
+     */
+    kind: 'presentation' | 'comparison' | 'seller_evidence' | 'quotation';
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Version
+     */
+    version: number;
+    document: BrokerDocumentDataOutput;
+    /**
+     * Error
+     */
+    error?: string | null;
+    /**
+     * Created At
+     */
+    created_at: string;
+    /**
+     * Download Url
+     */
+    download_url?: string | null;
 };
 
 /**
@@ -3135,6 +3421,132 @@ export type DimensionBreakdown = {
      * Pct Of Total
      */
     pct_of_total?: number | null;
+};
+
+/**
+ * DocumentField
+ */
+export type DocumentField = {
+    /**
+     * Label
+     */
+    label: string;
+    /**
+     * Value
+     */
+    value: string;
+};
+
+/**
+ * DocumentMedia
+ */
+export type DocumentMedia = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Kind
+     */
+    kind: 'image' | 'floor_plan';
+    /**
+     * Caption
+     */
+    caption: string;
+};
+
+/**
+ * DocumentProperty
+ */
+export type DocumentProperty = {
+    /**
+     * Reference
+     */
+    reference: string;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Facts
+     */
+    facts: Array<DocumentField>;
+    /**
+     * Evidence Date
+     */
+    evidence_date: string;
+    /**
+     * Asking Price
+     */
+    asking_price: string | null;
+    /**
+     * Currency
+     */
+    currency: string;
+    /**
+     * Price Unit
+     */
+    price_unit: string;
+    /**
+     * Selling Points
+     */
+    selling_points: Array<string>;
+    /**
+     * Trade Offs
+     */
+    trade_offs: Array<string>;
+    /**
+     * Missing Information
+     */
+    missing_information: Array<string>;
+    /**
+     * Media
+     */
+    media?: Array<DocumentMedia>;
+};
+
+/**
+ * DocumentQuotation
+ */
+export type DocumentQuotation = {
+    /**
+     * Currency
+     */
+    currency: string;
+    /**
+     * Lines
+     */
+    lines: Array<QuotationLine>;
+    /**
+     * Known Total
+     */
+    known_total: string;
+    /**
+     * Estimated Total
+     */
+    estimated_total: string;
+    /**
+     * Total
+     */
+    total: string | null;
+    /**
+     * Missing Charges
+     */
+    missing_charges: Array<string>;
+};
+
+/**
+ * DocumentSection
+ */
+export type DocumentSection = {
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Rows
+     */
+    rows: Array<DocumentField>;
 };
 
 /**
@@ -8209,6 +8621,50 @@ export type PropertyTypeBreakdown = {
 };
 
 /**
+ * QuotationCharge
+ */
+export type QuotationCharge = {
+    /**
+     * Label
+     */
+    label: string;
+    /**
+     * Amount
+     */
+    amount?: number | string | null;
+    /**
+     * Percent Of Asking
+     */
+    percent_of_asking?: number | string | null;
+    /**
+     * Status
+     */
+    status: 'known' | 'estimate' | 'missing';
+};
+
+/**
+ * QuotationLine
+ */
+export type QuotationLine = {
+    /**
+     * Label
+     */
+    label: string;
+    /**
+     * Amount
+     */
+    amount: string | null;
+    /**
+     * Status
+     */
+    status: 'known' | 'estimate' | 'missing';
+    /**
+     * Basis
+     */
+    basis: string;
+};
+
+/**
  * RadarBuildingPin
  *
  * Property Finder tower coordinate with linked DLD/Ejari activity.
@@ -11822,6 +12278,171 @@ export type CrmCrmDeleteSavedLeadResponses = {
 };
 
 export type CrmCrmDeleteSavedLeadResponse = CrmCrmDeleteSavedLeadResponses[keyof CrmCrmDeleteSavedLeadResponses];
+
+export type CrmCrmCreateBrokerDocumentData = {
+    body: BrokerDocumentCreate;
+    path?: never;
+    query?: never;
+    url: '/api/v1/crm/broker/documents';
+};
+
+export type CrmCrmCreateBrokerDocumentErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmCreateBrokerDocumentError = CrmCrmCreateBrokerDocumentErrors[keyof CrmCrmCreateBrokerDocumentErrors];
+
+export type CrmCrmCreateBrokerDocumentResponses = {
+    /**
+     * Successful Response
+     */
+    202: BrokerDocumentResponse;
+};
+
+export type CrmCrmCreateBrokerDocumentResponse = CrmCrmCreateBrokerDocumentResponses[keyof CrmCrmCreateBrokerDocumentResponses];
+
+export type CrmCrmBrokerDocumentData = {
+    body?: never;
+    path: {
+        /**
+         * Document Id
+         */
+        document_id: string;
+    };
+    query?: never;
+    url: '/api/v1/crm/broker/documents/{document_id}';
+};
+
+export type CrmCrmBrokerDocumentErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmBrokerDocumentError = CrmCrmBrokerDocumentErrors[keyof CrmCrmBrokerDocumentErrors];
+
+export type CrmCrmBrokerDocumentResponses = {
+    /**
+     * Successful Response
+     */
+    200: BrokerDocumentResponse;
+};
+
+export type CrmCrmBrokerDocumentResponse = CrmCrmBrokerDocumentResponses[keyof CrmCrmBrokerDocumentResponses];
+
+export type CrmCrmBrokerDocumentDownloadData = {
+    body?: never;
+    path: {
+        /**
+         * Document Id
+         */
+        document_id: string;
+    };
+    query?: never;
+    url: '/api/v1/crm/broker/documents/{document_id}/download';
+};
+
+export type CrmCrmBrokerDocumentDownloadErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmBrokerDocumentDownloadError = CrmCrmBrokerDocumentDownloadErrors[keyof CrmCrmBrokerDocumentDownloadErrors];
+
+export type CrmCrmBrokerDocumentDownloadResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
+
+export type CrmCrmApproveBrokerMediaData = {
+    body: BodyCrmCrmApproveBrokerMedia;
+    path?: never;
+    query?: never;
+    url: '/api/v1/crm/broker/media';
+};
+
+export type CrmCrmApproveBrokerMediaErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmApproveBrokerMediaError = CrmCrmApproveBrokerMediaErrors[keyof CrmCrmApproveBrokerMediaErrors];
+
+export type CrmCrmApproveBrokerMediaResponses = {
+    /**
+     * Successful Response
+     */
+    201: DocumentMedia;
+};
+
+export type CrmCrmApproveBrokerMediaResponse = CrmCrmApproveBrokerMediaResponses[keyof CrmCrmApproveBrokerMediaResponses];
+
+export type CrmCrmBrokerDocumentMediaData = {
+    body?: never;
+    path: {
+        /**
+         * Document Id
+         */
+        document_id: string;
+        /**
+         * Media Id
+         */
+        media_id: string;
+    };
+    query?: never;
+    url: '/api/v1/crm/broker/documents/{document_id}/media/{media_id}';
+};
+
+export type CrmCrmBrokerDocumentMediaErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmBrokerDocumentMediaError = CrmCrmBrokerDocumentMediaErrors[keyof CrmCrmBrokerDocumentMediaErrors];
+
+export type CrmCrmBrokerDocumentMediaResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
+
+export type CrmCrmConfirmBrokerActionData = {
+    body: BrokerActionConfirmation;
+    path?: never;
+    query?: never;
+    url: '/api/v1/crm/broker/actions/confirm';
+};
+
+export type CrmCrmConfirmBrokerActionErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmConfirmBrokerActionError = CrmCrmConfirmBrokerActionErrors[keyof CrmCrmConfirmBrokerActionErrors];
+
+export type CrmCrmConfirmBrokerActionResponses = {
+    /**
+     * Successful Response
+     */
+    200: BrokerActionResult;
+};
+
+export type CrmCrmConfirmBrokerActionResponse = CrmCrmConfirmBrokerActionResponses[keyof CrmCrmConfirmBrokerActionResponses];
 
 export type FiltersGetSalesFilterOptionsData = {
     body?: never;

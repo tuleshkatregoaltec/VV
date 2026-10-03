@@ -3446,6 +3446,238 @@
 				}
 			}
 		},
+		"/api/v1/crm/broker/documents": {
+			"post": {
+				"tags": ["crm", "crm"],
+				"summary": "Crm Create Broker Document",
+				"operationId": "crm-crm_create_broker_document",
+				"requestBody": {
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/BrokerDocumentCreate"
+							}
+						}
+					},
+					"required": true
+				},
+				"responses": {
+					"202": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/BrokerDocumentResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/crm/broker/documents/{document_id}": {
+			"get": {
+				"tags": ["crm", "crm"],
+				"summary": "Crm Broker Document",
+				"operationId": "crm-crm_broker_document",
+				"parameters": [
+					{
+						"name": "document_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"title": "Document Id"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/BrokerDocumentResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/crm/broker/documents/{document_id}/download": {
+			"get": {
+				"tags": ["crm", "crm"],
+				"summary": "Crm Broker Document Download",
+				"operationId": "crm-crm_broker_document_download",
+				"parameters": [
+					{
+						"name": "document_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"title": "Document Id"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response"
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/crm/broker/media": {
+			"post": {
+				"tags": ["crm", "crm"],
+				"summary": "Crm Approve Broker Media",
+				"operationId": "crm-crm_approve_broker_media",
+				"requestBody": {
+					"content": {
+						"multipart/form-data": {
+							"schema": {
+								"$ref": "#/components/schemas/Body_crm-crm_approve_broker_media"
+							}
+						}
+					},
+					"required": true
+				},
+				"responses": {
+					"201": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/DocumentMedia"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/crm/broker/documents/{document_id}/media/{media_id}": {
+			"get": {
+				"tags": ["crm", "crm"],
+				"summary": "Crm Broker Document Media",
+				"operationId": "crm-crm_broker_document_media",
+				"parameters": [
+					{
+						"name": "document_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"title": "Document Id"
+						}
+					},
+					{
+						"name": "media_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"title": "Media Id"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response"
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/crm/broker/actions/confirm": {
+			"post": {
+				"tags": ["crm", "crm"],
+				"summary": "Crm Confirm Broker Action",
+				"operationId": "crm-crm_confirm_broker_action",
+				"requestBody": {
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/BrokerActionConfirmation"
+							}
+						}
+					},
+					"required": true
+				},
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/BrokerActionResult"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
 		"/api/v1/filters/sales": {
 			"get": {
 				"tags": ["filters", "filters"],
@@ -9384,6 +9616,44 @@
 				],
 				"title": "AuthMeResponse"
 			},
+			"Body_crm-crm_approve_broker_media": {
+				"properties": {
+					"enquiry_id": {
+						"type": "integer",
+						"exclusiveMinimum": 0.0,
+						"title": "Enquiry Id"
+					},
+					"match_id": {
+						"type": "integer",
+						"exclusiveMinimum": 0.0,
+						"title": "Match Id"
+					},
+					"kind": {
+						"type": "string",
+						"enum": ["image", "floor_plan"],
+						"title": "Kind"
+					},
+					"scope": {
+						"type": "string",
+						"enum": ["mine", "organization"],
+						"title": "Scope",
+						"default": "mine"
+					},
+					"approved_for_client": {
+						"type": "string",
+						"const": "true",
+						"title": "Approved For Client"
+					},
+					"file": {
+						"type": "string",
+						"format": "binary",
+						"title": "File"
+					}
+				},
+				"type": "object",
+				"required": ["enquiry_id", "match_id", "kind", "approved_for_client", "file"],
+				"title": "Body_crm-crm_approve_broker_media"
+			},
 			"Body_crm-crm_contact_import": {
 				"properties": {
 					"file": {
@@ -9461,6 +9731,446 @@
 				"type": "object",
 				"required": ["chunk"],
 				"title": "Body_upload-upload_chunked"
+			},
+			"BrokerActionConfirmation": {
+				"properties": {
+					"proposal_id": {
+						"type": "string",
+						"format": "uuid",
+						"title": "Proposal Id"
+					}
+				},
+				"additionalProperties": false,
+				"type": "object",
+				"required": ["proposal_id"],
+				"title": "BrokerActionConfirmation"
+			},
+			"BrokerActionProposal": {
+				"properties": {
+					"proposal_id": {
+						"type": "string",
+						"format": "uuid",
+						"title": "Proposal Id"
+					},
+					"enquiry_id": {
+						"type": "integer",
+						"title": "Enquiry Id"
+					},
+					"scope": {
+						"type": "string",
+						"enum": ["mine", "organization"],
+						"title": "Scope"
+					},
+					"action": {
+						"type": "string",
+						"enum": ["note", "follow_up"],
+						"title": "Action"
+					},
+					"body": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Body"
+					},
+					"due_date": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "date"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Due Date"
+					},
+					"status": {
+						"type": "string",
+						"enum": ["proposed", "completed"],
+						"title": "Status"
+					},
+					"expected_updated_at": {
+						"type": "string",
+						"format": "date-time",
+						"title": "Expected Updated At"
+					},
+					"created_at": {
+						"type": "string",
+						"format": "date-time",
+						"title": "Created At"
+					}
+				},
+				"type": "object",
+				"required": [
+					"proposal_id",
+					"enquiry_id",
+					"scope",
+					"action",
+					"body",
+					"due_date",
+					"status",
+					"expected_updated_at",
+					"created_at"
+				],
+				"title": "BrokerActionProposal"
+			},
+			"BrokerActionResult": {
+				"properties": {
+					"status": {
+						"type": "string",
+						"enum": ["proposal", "completed"],
+						"title": "Status"
+					},
+					"proposal": {
+						"$ref": "#/components/schemas/BrokerActionProposal"
+					},
+					"requires_confirmation": {
+						"anyOf": [
+							{
+								"type": "boolean"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Requires Confirmation"
+					},
+					"already_completed": {
+						"anyOf": [
+							{
+								"type": "boolean"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Already Completed"
+					}
+				},
+				"type": "object",
+				"required": ["status", "proposal"],
+				"title": "BrokerActionResult"
+			},
+			"BrokerDocumentCreate": {
+				"properties": {
+					"enquiry_id": {
+						"type": "integer",
+						"exclusiveMinimum": 0.0,
+						"title": "Enquiry Id"
+					},
+					"scope": {
+						"type": "string",
+						"enum": ["mine", "organization"],
+						"title": "Scope",
+						"default": "mine"
+					},
+					"kind": {
+						"type": "string",
+						"enum": ["presentation", "comparison", "seller_evidence", "quotation"],
+						"title": "Kind"
+					},
+					"match_ids": {
+						"items": {
+							"type": "integer"
+						},
+						"type": "array",
+						"maxItems": 6,
+						"minItems": 1,
+						"title": "Match Ids",
+						"description": "Selected authorized property match IDs; never contact/owner IDs."
+					},
+					"reference": {
+						"type": "string",
+						"maxLength": 80,
+						"minLength": 1,
+						"title": "Reference"
+					},
+					"version": {
+						"type": "integer",
+						"maximum": 9999.0,
+						"minimum": 1.0,
+						"title": "Version",
+						"default": 1
+					},
+					"valid_until": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "date"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Valid Until"
+					},
+					"currency": {
+						"type": "string",
+						"const": "AED",
+						"title": "Currency",
+						"default": "AED"
+					},
+					"charges": {
+						"items": {
+							"$ref": "#/components/schemas/QuotationCharge"
+						},
+						"type": "array",
+						"maxItems": 16,
+						"title": "Charges",
+						"description": "Only broker-explicit amounts or percentages. No default or invented fees; omitted charges remain unknown."
+					},
+					"missing_charges": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"maxItems": 16,
+						"title": "Missing Charges"
+					},
+					"media_ids": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"maxItems": 12,
+						"title": "Media Ids",
+						"description": "Previously approved uploaded media IDs; remote URLs are never accepted."
+					},
+					"idempotency_key": {
+						"type": "string",
+						"maxLength": 100,
+						"minLength": 1,
+						"title": "Idempotency Key"
+					}
+				},
+				"additionalProperties": false,
+				"type": "object",
+				"required": ["enquiry_id", "kind", "match_ids", "reference", "idempotency_key"],
+				"title": "BrokerDocumentCreate"
+			},
+			"BrokerDocumentData-Input": {
+				"properties": {
+					"brand": {
+						"type": "string",
+						"title": "Brand"
+					},
+					"title": {
+						"type": "string",
+						"title": "Title"
+					},
+					"reference": {
+						"type": "string",
+						"title": "Reference"
+					},
+					"version": {
+						"type": "integer",
+						"title": "Version"
+					},
+					"valid_until": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "date"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Valid Until"
+					},
+					"prepared_at": {
+						"type": "string",
+						"format": "date-time",
+						"title": "Prepared At"
+					},
+					"properties": {
+						"items": {
+							"$ref": "#/components/schemas/DocumentProperty"
+						},
+						"type": "array",
+						"title": "Properties"
+					},
+					"sections": {
+						"items": {
+							"$ref": "#/components/schemas/DocumentSection"
+						},
+						"type": "array",
+						"title": "Sections"
+					},
+					"quotation": {
+						"anyOf": [
+							{
+								"$ref": "#/components/schemas/DocumentQuotation"
+							},
+							{
+								"type": "null"
+							}
+						]
+					},
+					"limitations": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"title": "Limitations"
+					}
+				},
+				"type": "object",
+				"required": [
+					"brand",
+					"title",
+					"reference",
+					"version",
+					"valid_until",
+					"prepared_at",
+					"properties",
+					"limitations"
+				],
+				"title": "BrokerDocumentData"
+			},
+			"BrokerDocumentData-Output": {
+				"properties": {
+					"brand": {
+						"type": "string",
+						"title": "Brand"
+					},
+					"title": {
+						"type": "string",
+						"title": "Title"
+					},
+					"reference": {
+						"type": "string",
+						"title": "Reference"
+					},
+					"version": {
+						"type": "integer",
+						"title": "Version"
+					},
+					"valid_until": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "date"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Valid Until"
+					},
+					"prepared_at": {
+						"type": "string",
+						"format": "date-time",
+						"title": "Prepared At"
+					},
+					"properties": {
+						"items": {
+							"$ref": "#/components/schemas/DocumentProperty"
+						},
+						"type": "array",
+						"title": "Properties"
+					},
+					"sections": {
+						"items": {
+							"$ref": "#/components/schemas/DocumentSection"
+						},
+						"type": "array",
+						"title": "Sections"
+					},
+					"quotation": {
+						"anyOf": [
+							{
+								"$ref": "#/components/schemas/DocumentQuotation"
+							},
+							{
+								"type": "null"
+							}
+						]
+					},
+					"limitations": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"title": "Limitations"
+					}
+				},
+				"type": "object",
+				"required": [
+					"brand",
+					"title",
+					"reference",
+					"version",
+					"valid_until",
+					"prepared_at",
+					"properties",
+					"limitations"
+				],
+				"title": "BrokerDocumentData"
+			},
+			"BrokerDocumentResponse": {
+				"properties": {
+					"id": {
+						"type": "string",
+						"title": "Id"
+					},
+					"status": {
+						"type": "string",
+						"enum": ["queued", "running", "completed", "failed"],
+						"title": "Status"
+					},
+					"kind": {
+						"type": "string",
+						"enum": ["presentation", "comparison", "seller_evidence", "quotation"],
+						"title": "Kind"
+					},
+					"title": {
+						"type": "string",
+						"title": "Title"
+					},
+					"version": {
+						"type": "integer",
+						"title": "Version"
+					},
+					"document": {
+						"$ref": "#/components/schemas/BrokerDocumentData-Output"
+					},
+					"error": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Error"
+					},
+					"created_at": {
+						"type": "string",
+						"format": "date-time",
+						"title": "Created At"
+					},
+					"download_url": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Download Url"
+					}
+				},
+				"type": "object",
+				"required": ["id", "status", "kind", "title", "version", "document", "created_at"],
+				"title": "BrokerDocumentResponse"
 			},
 			"BtrUnitConfig": {
 				"properties": {
@@ -13959,6 +14669,194 @@
 				"required": ["dimension_value", "transaction_count", "total_volume", "avg_price_sqft"],
 				"title": "DimensionBreakdown",
 				"description": "Breakdown by a specific dimension (property_type, rooms, etc.)"
+			},
+			"DocumentField": {
+				"properties": {
+					"label": {
+						"type": "string",
+						"title": "Label"
+					},
+					"value": {
+						"type": "string",
+						"title": "Value"
+					}
+				},
+				"type": "object",
+				"required": ["label", "value"],
+				"title": "DocumentField"
+			},
+			"DocumentMedia": {
+				"properties": {
+					"id": {
+						"type": "string",
+						"title": "Id"
+					},
+					"kind": {
+						"type": "string",
+						"enum": ["image", "floor_plan"],
+						"title": "Kind"
+					},
+					"caption": {
+						"type": "string",
+						"title": "Caption"
+					}
+				},
+				"type": "object",
+				"required": ["id", "kind", "caption"],
+				"title": "DocumentMedia"
+			},
+			"DocumentProperty": {
+				"properties": {
+					"reference": {
+						"type": "string",
+						"title": "Reference"
+					},
+					"title": {
+						"type": "string",
+						"title": "Title"
+					},
+					"facts": {
+						"items": {
+							"$ref": "#/components/schemas/DocumentField"
+						},
+						"type": "array",
+						"title": "Facts"
+					},
+					"evidence_date": {
+						"type": "string",
+						"title": "Evidence Date"
+					},
+					"asking_price": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Asking Price"
+					},
+					"currency": {
+						"type": "string",
+						"title": "Currency"
+					},
+					"price_unit": {
+						"type": "string",
+						"title": "Price Unit"
+					},
+					"selling_points": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"title": "Selling Points"
+					},
+					"trade_offs": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"title": "Trade Offs"
+					},
+					"missing_information": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"title": "Missing Information"
+					},
+					"media": {
+						"items": {
+							"$ref": "#/components/schemas/DocumentMedia"
+						},
+						"type": "array",
+						"title": "Media"
+					}
+				},
+				"type": "object",
+				"required": [
+					"reference",
+					"title",
+					"facts",
+					"evidence_date",
+					"asking_price",
+					"currency",
+					"price_unit",
+					"selling_points",
+					"trade_offs",
+					"missing_information"
+				],
+				"title": "DocumentProperty"
+			},
+			"DocumentQuotation": {
+				"properties": {
+					"currency": {
+						"type": "string",
+						"title": "Currency"
+					},
+					"lines": {
+						"items": {
+							"$ref": "#/components/schemas/QuotationLine"
+						},
+						"type": "array",
+						"title": "Lines"
+					},
+					"known_total": {
+						"type": "string",
+						"title": "Known Total"
+					},
+					"estimated_total": {
+						"type": "string",
+						"title": "Estimated Total"
+					},
+					"total": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Total"
+					},
+					"missing_charges": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"title": "Missing Charges"
+					}
+				},
+				"type": "object",
+				"required": [
+					"currency",
+					"lines",
+					"known_total",
+					"estimated_total",
+					"total",
+					"missing_charges"
+				],
+				"title": "DocumentQuotation"
+			},
+			"DocumentSection": {
+				"properties": {
+					"title": {
+						"type": "string",
+						"title": "Title"
+					},
+					"rows": {
+						"items": {
+							"$ref": "#/components/schemas/DocumentField"
+						},
+						"type": "array",
+						"title": "Rows"
+					}
+				},
+				"type": "object",
+				"required": ["title", "rows"],
+				"title": "DocumentSection"
 			},
 			"FeasibilityAssumptions": {
 				"properties": {
@@ -22625,6 +23523,90 @@
 				"type": "object",
 				"required": ["property_type", "count", "avg_price", "pct_of_total"],
 				"title": "PropertyTypeBreakdown"
+			},
+			"QuotationCharge": {
+				"properties": {
+					"label": {
+						"type": "string",
+						"maxLength": 80,
+						"minLength": 1,
+						"title": "Label"
+					},
+					"amount": {
+						"anyOf": [
+							{
+								"type": "number",
+								"maximum": 1000000000.0,
+								"minimum": 0.0
+							},
+							{
+								"type": "string",
+								"pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,14}|(?=[\\d.]{1,17}0*$)\\d{0,14}\\.\\d{0,2}0*$)"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Amount"
+					},
+					"percent_of_asking": {
+						"anyOf": [
+							{
+								"type": "number",
+								"maximum": 100.0,
+								"minimum": 0.0
+							},
+							{
+								"type": "string",
+								"pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,4}|(?=[\\d.]{1,9}0*$)\\d{0,4}\\.\\d{0,4}0*$)"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Percent Of Asking"
+					},
+					"status": {
+						"type": "string",
+						"enum": ["known", "estimate", "missing"],
+						"title": "Status"
+					}
+				},
+				"additionalProperties": false,
+				"type": "object",
+				"required": ["label", "status"],
+				"title": "QuotationCharge"
+			},
+			"QuotationLine": {
+				"properties": {
+					"label": {
+						"type": "string",
+						"title": "Label"
+					},
+					"amount": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Amount"
+					},
+					"status": {
+						"type": "string",
+						"enum": ["known", "estimate", "missing"],
+						"title": "Status"
+					},
+					"basis": {
+						"type": "string",
+						"title": "Basis"
+					}
+				},
+				"type": "object",
+				"required": ["label", "amount", "status", "basis"],
+				"title": "QuotationLine"
 			},
 			"RadarBuildingPin": {
 				"properties": {

@@ -162,7 +162,8 @@ or percentages in the current user message. If validation requests fee provenanc
 ask for unambiguous lines such as "Brokerage: 2%; Administration (estimate): AED
 500.50" and copy their labels, values and known/estimate status exactly. Never reuse
 fees from a tool result or invent them to bypass validation. Do not copy user-stated
-prices into verified property facts.
+prices into verified property facts. Omit missing charges only when the broker
+explicitly states "Charges complete: yes"; otherwise preserve unknown charges.
 Use the persisted structured document as the authority for its displayed version,
 property facts, source dates, limitations and exact decimal quote totals. Known,
 estimated and missing charges must remain distinct; a missing total is not zero.

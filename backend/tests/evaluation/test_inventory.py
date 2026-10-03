@@ -13,6 +13,19 @@ def test_mcp_registration_has_bounded_public_capabilities_and_no_static_graph_cl
         "compare_listing_age",
         "compare_listing_rents",
         "compose_market_report",
+        "list_broker_enquiries",
+        "get_broker_enquiry",
+        "match_client_properties",
+        "match_property_clients",
+        "broker_follow_up_summary",
+        "prepare_broker_action",
+        "create_broker_document",
+        "get_broker_document",
+    }
+    assert "confirm_broker_action" not in {tool.name for tool in definitions}
+    assert {tool.name for tool in definitions if not tool.annotations.readOnlyHint} == {
+        "prepare_broker_action",
+        "create_broker_document",
     }
     for tool in definitions:
         assert tool.inputSchema["additionalProperties"] is False

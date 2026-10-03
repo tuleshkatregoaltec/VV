@@ -108,6 +108,8 @@ class Settings(BaseSettings):
     OBJECT_STORAGE_ACCESS_KEY_ID: str  # Bitwarden Secrets
     OBJECT_STORAGE_SECRET_ACCESS_KEY: str  # Bitwarden Secrets
     OBJECT_STORAGE_BUCKET: str  # configMap
+    # Must be a private bucket; generated CRM documents never use the public media bucket.
+    BROKER_DOCUMENT_STORAGE_BUCKET: str | None = None
     OBJECT_STORAGE_REGION: str = "auto"  # configMap
     OBJECT_STORAGE_USE_PATH_STYLE: bool = True  # configMap
 

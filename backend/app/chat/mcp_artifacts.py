@@ -251,7 +251,20 @@ def render_mcp_artifacts(
     evidence = envelope.get("evidence") or {}
     identifier = f"mcp:{tool_name}:{tool_call_id}"
     candidates = []
-    if tool_name == "query_market_metrics":
+    if tool_name in {"create_broker_document", "get_broker_document", "prepare_broker_action"}:
+        kind = "broker_action" if tool_name == "prepare_broker_action" else "broker_document"
+        candidates.append(
+            {
+                "id": identifier,
+                "type": kind,
+                "status": "ready",
+                "title": data.get("title", "Confirm CRM action"),
+                "created_at": created_at,
+                "query": {},
+                "data": deepcopy(data),
+            }
+        )
+    elif tool_name == "query_market_metrics":
         candidates.append(_metric_artifact(data, evidence, identifier, created_at))
     elif tool_name in {"get_listing_inventory", "compare_listing_age", "compare_listing_rents"}:
         candidates.append(_listing_artifact(data, evidence, identifier, created_at))

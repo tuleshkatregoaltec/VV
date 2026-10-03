@@ -6,6 +6,31 @@
       "CREATE INDEX ix_conversations_user_id ON conversations (user_id)"
     ]
   },
+  "crm_broker_actions": {
+    "ddl": "\nCREATE TABLE crm_broker_actions (\n\tid VARCHAR NOT NULL, \n\torganization_id VARCHAR NOT NULL, \n\tuser_id VARCHAR NOT NULL, \n\tenquiry_id INTEGER NOT NULL, \n\tscope VARCHAR NOT NULL, \n\tkind VARCHAR NOT NULL, \n\tbody TEXT, \n\tnext_follow_up DATE, \n\texpected_updated_at TIMESTAMP WITH TIME ZONE NOT NULL, \n\tstatus VARCHAR NOT NULL, \n\tcreated_at TIMESTAMP WITH TIME ZONE NOT NULL, \n\tcompleted_at TIMESTAMP WITH TIME ZONE, \n\tPRIMARY KEY (id), \n\tFOREIGN KEY(enquiry_id) REFERENCES crm_inbound_enquiries (id) ON DELETE CASCADE\n)\n\n",
+    "indexes": [
+      "CREATE INDEX ix_crm_broker_actions_enquiry_id ON crm_broker_actions (enquiry_id)",
+      "CREATE INDEX ix_crm_broker_actions_organization_id ON crm_broker_actions (organization_id)",
+      "CREATE INDEX ix_crm_broker_actions_user_id ON crm_broker_actions (user_id)"
+    ]
+  },
+  "crm_broker_documents": {
+    "ddl": "\nCREATE TABLE crm_broker_documents (\n\tid VARCHAR NOT NULL, \n\torganization_id VARCHAR NOT NULL, \n\tuser_id VARCHAR NOT NULL, \n\tenquiry_id INTEGER NOT NULL, \n\tscope VARCHAR NOT NULL, \n\tkind VARCHAR NOT NULL, \n\tstatus VARCHAR NOT NULL, \n\tidempotency_key VARCHAR NOT NULL, \n\tinput_hash VARCHAR NOT NULL, \n\tdocument_json JSON NOT NULL, \n\tattempt_count INTEGER NOT NULL, \n\tlease_until TIMESTAMP WITH TIME ZONE, \n\tclaim_token VARCHAR, \n\tobject_key VARCHAR, \n\tsha256 VARCHAR, \n\terror VARCHAR, \n\tcreated_at TIMESTAMP WITH TIME ZONE NOT NULL, \n\tupdated_at TIMESTAMP WITH TIME ZONE NOT NULL, \n\tPRIMARY KEY (id), \n\tCONSTRAINT uq_broker_document_request UNIQUE (organization_id, user_id, idempotency_key), \n\tFOREIGN KEY(enquiry_id) REFERENCES crm_inbound_enquiries (id)\n)\n\n",
+    "indexes": [
+      "CREATE INDEX ix_crm_broker_documents_enquiry_id ON crm_broker_documents (enquiry_id)",
+      "CREATE INDEX ix_crm_broker_documents_organization_id ON crm_broker_documents (organization_id)",
+      "CREATE INDEX ix_crm_broker_documents_status ON crm_broker_documents (status)",
+      "CREATE INDEX ix_crm_broker_documents_user_id ON crm_broker_documents (user_id)"
+    ]
+  },
+  "crm_broker_media": {
+    "ddl": "\nCREATE TABLE crm_broker_media (\n\tid VARCHAR NOT NULL, \n\torganization_id VARCHAR NOT NULL, \n\tuser_id VARCHAR NOT NULL, \n\tenquiry_id INTEGER NOT NULL, \n\tmatch_id INTEGER NOT NULL, \n\tkind VARCHAR NOT NULL, \n\tobject_key VARCHAR NOT NULL, \n\tsha256 VARCHAR NOT NULL, \n\tcreated_at TIMESTAMP WITH TIME ZONE NOT NULL, \n\tPRIMARY KEY (id), \n\tFOREIGN KEY(enquiry_id) REFERENCES crm_inbound_enquiries (id), \n\tFOREIGN KEY(match_id) REFERENCES crm_inbound_matches (id)\n)\n\n",
+    "indexes": [
+      "CREATE INDEX ix_crm_broker_media_enquiry_id ON crm_broker_media (enquiry_id)",
+      "CREATE INDEX ix_crm_broker_media_match_id ON crm_broker_media (match_id)",
+      "CREATE INDEX ix_crm_broker_media_organization_id ON crm_broker_media (organization_id)"
+    ]
+  },
   "crm_contact_imports": {
     "ddl": "\nCREATE TABLE crm_contact_imports (\n\tid SERIAL NOT NULL, \n\torganization_id VARCHAR NOT NULL, \n\tcreated_by_user_id VARCHAR NOT NULL, \n\tname VARCHAR NOT NULL, \n\toriginal_filename VARCHAR NOT NULL, \n\tsha256 VARCHAR NOT NULL, \n\tsize_bytes INTEGER NOT NULL, \n\tstatus VARCHAR NOT NULL, \n\tmapping JSON NOT NULL, \n\tsummary JSON NOT NULL, \n\terror_message TEXT, \n\tcreated_at TIMESTAMP WITH TIME ZONE NOT NULL, \n\tcompleted_at TIMESTAMP WITH TIME ZONE, \n\tPRIMARY KEY (id), \n\tCONSTRAINT uq_crm_contact_import_organization_hash UNIQUE (organization_id, sha256)\n)\n\n",
     "indexes": [

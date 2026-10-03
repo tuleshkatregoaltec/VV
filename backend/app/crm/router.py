@@ -1,10 +1,15 @@
 import json
 from datetime import date
+from typing import Literal
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Response, UploadFile
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.dependencies import AuthContext, require_active_subscription, require_ai_execution
+from app.crm import documents as broker_documents
+from app.crm.broker import confirm_broker_action
+from app.crm.broker_models import BrokerActionConfirmation, BrokerActionResult
+from app.crm.document_models import BrokerDocumentCreate, BrokerDocumentResponse, DocumentMedia
 from app.crm.import_models import (
     CrmContactImportRename,
     CrmContactImportResponse,
@@ -723,3 +728,105 @@ async def crm_delete_saved_lead(
         organization_id=organization_id,
     )
     return Response(status_code=204)
+
+
+# Broker-assistant routes share CRM services and require an active authenticated account.
+def _broker_context(context: AuthContext):
+    from uuid import uuid4
+
+    from app.market.evidence import MarketAccessContext
+    from app.market.periods import business_today
+
+    return MarketAccessContext(
+        user_id=str(context.user.id),
+        organization_id=str(context.organization.id),
+        reference_date=business_today(),
+        execution_id=str(uuid4()),
+    )
+
+
+@router.post("/broker/documents", response_model=BrokerDocumentResponse, status_code=202)
+async def crm_create_broker_document(
+    payload: BrokerDocumentCreate,
+    context: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
+):
+    return await broker_documents.create_document(db, payload, _broker_context(context))
+
+
+@router.get("/broker/documents/{document_id}", response_model=BrokerDocumentResponse)
+async def crm_broker_document(
+    document_id: str,
+    context: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
+):
+    record = await broker_documents.authorized_document(db, _broker_context(context), document_id)
+    return broker_documents.response(record)
+
+
+@router.get("/broker/documents/{document_id}/download", response_class=Response)
+async def crm_broker_document_download(
+    document_id: str,
+    context: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
+):
+    data = await broker_documents.document_download(db, _broker_context(context), document_id)
+    return Response(
+        data,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": 'attachment; filename="property-document.pdf"',
+            "Cache-Control": "private, no-store",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
+
+
+@router.post("/broker/media", response_model=DocumentMedia, status_code=201)
+async def crm_approve_broker_media(
+    enquiry_id: int = Form(gt=0),
+    match_id: int = Form(gt=0),
+    kind: Literal["image", "floor_plan"] = Form(),
+    scope: Literal["mine", "organization"] = Form(default="mine"),
+    approved_for_client: Literal["true"] = Form(),
+    file: UploadFile = File(),
+    context: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
+):
+    data = await file.read(4 * 1024 * 1024 + 1)
+    return await broker_documents.approve_media(
+        db,
+        _broker_context(context),
+        enquiry_id=enquiry_id,
+        match_id=match_id,
+        kind=kind,
+        data=data,
+        scope=scope,
+    )
+
+
+@router.get("/broker/documents/{document_id}/media/{media_id}", response_class=Response)
+async def crm_broker_document_media(
+    document_id: str,
+    media_id: str,
+    context: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
+):
+    data = await broker_documents.document_media(
+        db, _broker_context(context), document_id, media_id
+    )
+    return Response(
+        data,
+        media_type="image/jpeg",
+        headers={"Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff"},
+    )
+
+
+@router.post("/broker/actions/confirm", response_model=BrokerActionResult)
+async def crm_confirm_broker_action(
+    payload: BrokerActionConfirmation,
+    context: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
+):
+    # Only this authenticated user gesture commits; confirmation is not an MCP capability.
+    return await confirm_broker_action(db, _broker_context(context), payload)

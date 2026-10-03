@@ -16,7 +16,6 @@ from app.crm.broker_models import (
     BrokerListRequest,
     BrokerMatchRequest,
     BrokerRequirements,
-    CrmBrokerAction,
 )
 from app.crm.inbound_models import (
     CrmInboundContact,
@@ -30,9 +29,6 @@ from app.organization.models import Organization, OrganizationMembership
 
 @pytest.fixture
 async def broker_fixture(pg_session):
-    await pg_session.run_sync(
-        lambda session: CrmBrokerAction.__table__.create(session.get_bind(), checkfirst=True)
-    )
     org, other_org, member, colleague, owner = (str(uuid4()) for _ in range(5))
     now = datetime(2026, 10, 3, 10, tzinfo=timezone.utc)
     pg_session.add_all(

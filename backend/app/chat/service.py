@@ -272,7 +272,7 @@ async def stream_chat_response(
                     daily_token_limit=daily_token_limit,
                     authorize=authorize_provider,
                 ),
-                market_mcp(context, authorize) as toolset,
+                market_mcp(context, authorize, user_instruction=user_message) as toolset,
             ):
                 async with agent.iter(
                     user_message,

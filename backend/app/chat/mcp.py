@@ -17,6 +17,7 @@ from contextlib import asynccontextmanager
 from typing import Any, Literal
 
 import httpx
+from fastapi import HTTPException
 from mcp import types
 from mcp.client.streamable_http import streamable_http_client
 from mcp.server.lowlevel import Server
@@ -28,7 +29,10 @@ from starlette.responses import JSONResponse
 
 from app.analytics.evidence import get_market_evidence, get_market_observation
 from app.analytics.models import MarketMetricsRequest
+from app.chat.broker_scope import BrokerTurnScope, verify_quotation_charges
 from app.chat.scope import BindMarketScopeRequest, ScopeError, TurnScope, validate_period
+from app.crm.broker import BROKER_DESCRIPTIONS, BROKER_TOOL_MODELS, execute_broker_tool
+from app.crm.documents import DOCUMENT_DESCRIPTIONS, DOCUMENT_TOOL_MODELS, execute_document_tool
 from app.listings.capabilities import (
     compare_listing_age,
     compare_listing_rents,
@@ -90,6 +94,12 @@ DESCRIPTIONS = {
 }
 
 
+CRM_TOOL_MODELS = {**BROKER_TOOL_MODELS, **DOCUMENT_TOOL_MODELS}
+TOOL_MODELS.update(CRM_TOOL_MODELS)
+DESCRIPTIONS.update(BROKER_DESCRIPTIONS)
+DESCRIPTIONS.update(DOCUMENT_DESCRIPTIONS)
+
+
 def _strict_schema(schema: dict) -> dict:
     if schema.get("type") == "object":
         schema["additionalProperties"] = False
@@ -109,7 +119,7 @@ def tool_definitions() -> list[types.Tool]:
         request = _strict_schema(model.model_json_schema())
         if name == "query_market_metrics":
             request["properties"].pop("reference_date", None)
-        if name != "bind_market_scope" and "required" in request:
+        if name not in CRM_TOOL_MODELS and name != "bind_market_scope" and "required" in request:
             # These fields may come from a frozen cohort. The merged request still
             # passes the unchanged domain model and period validation before reads.
             inherited = {"dataset", "location", "bedrooms", "period"}
@@ -121,7 +131,7 @@ def tool_definitions() -> list[types.Tool]:
             "required": ["request"],
             "additionalProperties": False,
         }
-        if name != "bind_market_scope":
+        if name not in CRM_TOOL_MODELS and name != "bind_market_scope":
             schema["properties"]["scope_id"] = {
                 "type": "string",
                 "description": "Id from bind_market_scope. May be omitted only when exactly one cohort matches this capability's evidence_kind. Omitted scoped request fields are inherited; conflicting values are rejected.",
@@ -149,9 +159,9 @@ def tool_definitions() -> list[types.Tool]:
                 description=DESCRIPTIONS[name],
                 inputSchema=schema,
                 annotations=types.ToolAnnotations(
-                    readOnlyHint=True,
+                    readOnlyHint=name not in {"prepare_broker_action", "create_broker_document"},
                     destructiveHint=False,
-                    idempotentHint=True,
+                    idempotentHint=name != "prepare_broker_action",
                     openWorldHint=False,
                 ),
             )
@@ -215,8 +225,16 @@ async def _observe(sources: tuple[str, ...]) -> dict:
 class MarketToolExecutor:
     """One server owns one authorization scope, sequential release observations and budgets."""
 
-    def __init__(self, context: ChatToolContext, authorize: AuthorizeChatTool, release=None):
+    def __init__(
+        self,
+        context: ChatToolContext,
+        authorize: AuthorizeChatTool,
+        release=None,
+        *,
+        user_instruction=None,
+    ):
         self.context = context
+        self.user_instruction = user_instruction
         self.authorize = authorize
         self.release = release
         self.calls = 0
@@ -224,6 +242,7 @@ class MarketToolExecutor:
         self.observations = {}
         self.lock = asyncio.Lock()
         self.scope = TurnScope(context.reference_date)
+        self.broker_scope = BrokerTurnScope()
 
     def envelope(self, status: str, data=None, *, code=None, message=None, retryable=False):
         result = {
@@ -298,6 +317,71 @@ class MarketToolExecutor:
                             message="Reference dates and execution identity are server-owned; use explicit period fields for historical dates.",
                         )
                     try:
+                        if name in CRM_TOOL_MODELS:
+                            if "scope_id" in arguments:
+                                raise HTTPException(
+                                    422,
+                                    "Broker tools use authorized enquiry IDs, not market cohorts",
+                                )
+                            request = TOOL_MODELS[name].model_validate(raw, extra="forbid")
+                            request = self.broker_scope.apply(request)
+                            if name == "create_broker_document":
+                                verify_quotation_charges(
+                                    request.charges,
+                                    self.user_instruction,
+                                    request.missing_charges
+                                    if request.kind == "quotation"
+                                    else None,
+                                )
+                            operation = (
+                                execute_document_tool
+                                if name in DOCUMENT_TOOL_MODELS
+                                else execute_broker_tool
+                            )
+                            with (
+                                market_evidence.bounded_market_read(),
+                                market_evidence.use_market_release(self.release),
+                            ):
+                                if name in DOCUMENT_TOOL_MODELS:
+                                    data = await operation(
+                                        name,
+                                        request,
+                                        self.context,
+                                        requirements=self.broker_scope.for_enquiry(
+                                            getattr(request, "enquiry_id", None)
+                                        ),
+                                    )
+                                else:
+                                    data = await operation(
+                                        name,
+                                        request,
+                                        self.context,
+                                        requirements=self.broker_scope.for_enquiry(
+                                            getattr(request, "enquiry_id", None)
+                                        ),
+                                    )
+                            if await self.authorize(self.context) is not True:
+                                return self.envelope(
+                                    "error",
+                                    code="unauthorized",
+                                    message="Account access changed during retrieval.",
+                                )
+                            result = self.envelope(
+                                data.get("status")
+                                if data.get("status")
+                                in {"error", "unavailable", "clarification_required"}
+                                else "ok",
+                                data,
+                            )
+                            result["evidence"].update(
+                                sources=["crm"],
+                                coverage={
+                                    "status": "recorded",
+                                    "note": "Authorized stored CRM records; current interest and availability require explicit evidence.",
+                                },
+                                limitations=data.get("limitations", []),
+                            )
+                            return self.bounded_result(result)
                         if name == "bind_market_scope":
                             request = BindMarketScopeRequest.model_validate(raw, extra="forbid")
                             for cohort in request.cohorts:
@@ -411,6 +495,17 @@ class MarketToolExecutor:
                     )
                     result["evidence"]["limitations"] += data.get("limitations", [])
                     return self.bounded_result(result)
+        except HTTPException as error:
+            return self.envelope(
+                "error",
+                code="unauthorized"
+                if error.status_code in {403, 404}
+                else "invalid_arguments"
+                if error.status_code in {409, 422}
+                else "capability_unavailable",
+                message=str(error.detail),
+                retryable=False,
+            )
         except TimeoutError:
             return self.envelope(
                 "error",
@@ -477,11 +572,13 @@ class MarketMCPClient(MCPServerStreamableHTTP):
 
 @asynccontextmanager
 async def market_mcp(
-    context: ChatToolContext, authorize: AuthorizeChatTool
+    context: ChatToolContext, authorize: AuthorizeChatTool, *, user_instruction: str | None = None
 ) -> AsyncIterator[MCPServerStreamableHTTP]:
     """Create and close a real authenticated MCP server/client for exactly one chat turn."""
     async with market_evidence.acquire_market_release(context) as release:
-        executor = MarketToolExecutor(context, authorize, release)
+        executor = MarketToolExecutor(
+            context, authorize, release, user_instruction=user_instruction
+        )
         server = Server("vitevue-market", version="1")
 
         @server.list_tools()
