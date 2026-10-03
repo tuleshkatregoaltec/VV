@@ -16,7 +16,9 @@
       "review_notes": [
         "Use the server-authorized mine population. Total and status counts must cover the filtered population, not five returned rows.",
         "Latest five requires order=latest and limit=5; compare recorded enquiry_date descending with ID descending for ties. Fewer than five seeded records cannot independently establish ordering.",
-        "Do not equate an open or qualified status with current interest."
+        "Do not equate an open or qualified status with current interest.",
+        "The answer must retain the self-created AND still-unassigned condition. Correct returned counts do not excuse prose that claims access to all self-created enquiries.",
+        "If volunteering requirements, preserve strict stored budget flags in prose too: false upper inclusivity means strictly below, never up to or at most."
       ],
       "related_fixture_sources": [
         "tests/integration/postgres/test_crm_broker.py::test_broker_ownership_counts_paging_and_reassignment_revoke_creator",

@@ -1040,9 +1040,9 @@ match and document placeholders only to disposable authorized fixture records;
 unbound inputs exercise clarification. The quotation case requires a stored
 AED 1,100,000.00 asking price and explicitly supplied charges. Related fixtures
 are evidence for individual service invariants, not automatic case or model passes.
-No live broker provider evaluation or training has run.
+Only the q201/q203 live smoke cases described below have run; no training ran.
 
-Prompt `database-mcp-v7` covers authorized broker counts, strict matching,
+Prompt `database-mcp-v10` covers authorized broker counts, strict matching,
 evidence of interest, unsent drafts, human-confirmed proposals and saved document
 versions. Quotation fees require explicit current-message input such as
 `Brokerage: AED 22,000.00; Administration (estimate): AED 500.50`. It retains the
@@ -1055,3 +1055,99 @@ quote totals, escaped proposal content and no mutation on render. Two mocked
 Playwright flows exercise document completion/download and action
 confirmation/error/retry/success. Their PDF payload is a transport fixture;
 PDF contents and persistence require the separate backend integration evidence.
+
+
+### Targeted broker smoke findings and corrections
+
+The first q201/q203 live smoke at `464e6b2` selected the correct MCP capabilities
+and obtained authorized fixture evidence, but both follow-up provider requests
+failed the unchanged conservative context limit. Neither case counts as successful
+question coverage. That run consumed $0.004433 across two settled provider calls,
+with zero unknown reservations. q201 also omitted its requested five-record limit;
+the prior list contract could not express latest-by-enquiry-date order or expose a
+complete status breakdown independently of its page.
+
+The correction adds `order=latest` (recorded enquiry date descending, then ID
+descending), explicit limit guidance and full authorized counts by status before
+pagination. A disposable PostgreSQL regression with more than five enquiries and
+inaccessible colleagues verifies the page, stable ordering and complete counts.
+The default due-date order is preserved. Generated schema titles are omitted while
+all validation constraints and descriptions remain; prompt v8 removes repeated
+wording while preserving market scope/release and broker authorization/action
+requirements. Provider limits, pricing, reservation and reconciliation are unchanged.
+A scripted real-MCP shortlist → quotation → final-answer exchange verifies the
+actual request tuple fits the existing 65,536-byte conservative bound, including
+its 4,096-byte framing allowance. Larger conversations/results remain subject to
+the same fail-closed limit; this is not a claim that arbitrary histories fit.
+
+
+Implementation verification at `21a2264`: hosted backend **495 passed**; hosted
+frontend **77 passed**, Svelte/TypeScript **0 errors, 0 warnings**, and all three
+CI jobs (backend, frontend, Holocron) passed. Local final focused checks added
+**83 MCP/scope/matching/rendering/accounting tests** and **20 document/prompt tests**,
+all passing, with no selected-test skips. Earlier local real PostgreSQL/private
+MinIO checks passed **10 tests**; after the list correction the agent reran the
+broker PostgreSQL selection (**9 passed**, including schema bootstrap, no skips).
+These selections overlap and should not be summed into a unique test count.
+The 15 browser guard/artifact checks had **14 initial passes** and one existing
+admin-redirect timeout that passed on an isolated rerun; both new broker flows
+passed initially. Full live benchmark, production services and deployed browser
+workflows were not rerun. No overall model-quality pass is asserted.
+
+
+At `21a2264`/prompt v8, the two-case correction rerun completed and persisted both
+answers with one schema-valid MCP call each. q201 supplied `limit=5, order=latest`
+and correctly reported two enquiries, one distinct contact and full status counts,
+excluding the reassigned decoy. Its introductory prose still omitted the unassigned
+condition for self-created enquiries, so **grounding remained failed** despite
+correct retrieval. q203 supported only AED 1,199,999.99, excluding both exactly
+AED 1,200,000.00 and AED 1,200,000.01. Its independently supported boundary and
+numerical assertions passed. Privacy/freshness/clarification and broader coverage
+were not promoted from unassessed based on these two tiny cases. With only two
+visible enquiries, live q201 cannot independently prove five-row ordering; the
+larger PostgreSQL fixture establishes that property separately.
+
+This rerun cost $0.009859. Including the initial failures, the expansion had spent
+$0.014292 over six settled requests (48,700 tokens), zero unknown reservations;
+cumulative evaluation spend was $0.244732 of the approved $5. These are configured
+application-ledger amounts, not a provider invoice. Disposable databases,
+containers and credentials were removed and verified; private traces/reviews and
+the durable budget audit remain ignored and local.
+
+The q201 wording correction at `1817119` adds an explicit `definitions.scope`
+population label and prompt v9's instruction to preserve the unassigned qualifier.
+It does not widen authorization. **21 document/prompt checks and two real PostgreSQL
+ownership/latest-page checks passed**, with no selected-test skips. Only q201 was
+authorized for another live verification; q203 and the complete benchmark were
+not repeatedly rerun.
+
+
+The v9 q201-only run corrected the ownership wording and retained correct counts,
+status totals, `limit=5` and `order=latest`. It volunteered a requirements summary
+that called exclusive stored ceilings "up to," so **grounding still failed**.
+That attempt cost $0.005145; expansion spending reached $0.019437 over eight
+settled requests (65,147 tokens), cumulative $0.249877, zero unknown reservations.
+The correction at `3655304` makes both CRM inclusive flags explicit in typed tool
+descriptions, returned budget definitions and prompt v10. False means strictly
+below/above in stored-brief summaries as well as matching; inclusive wording is
+reserved for true flags. **32 focused document, context, broker, prompt and schema
+checks passed**. Provider limits and accounting remain unchanged.
+
+
+The final q201-only run at `3655304`/v10 completed and persisted a correct
+count/status/scope answer using one valid `scope=mine, order=latest, limit=5` call.
+It reported two enquiries, New 1/Qualified 1, latest IDs 2/1, and explicitly kept
+the self-created **still-unassigned** condition. Grounding passed for those stated
+facts. It did not volunteer budget summaries, so **the v10 strict-budget prose
+correction was not exercised live**; the v9 failure remains recorded, not erased.
+No further provider calls were made. q203's earlier independently checked strict
+boundary result remains the matching evidence; neither run establishes all broker
+workflows or the original market benchmark under the new prompt.
+
+The final run cost $0.004642. Total expansion evaluation spend was **$0.024079**;
+combined with the prior $0.230440, cumulative spend is **$0.254519 / $5**. All
+reservations settled with zero unknown; no training, model promotion, production
+change or outbound messaging occurred. Selected unavailable/denied calls are safe
+handling only, never successful question coverage. Final CI is reported on draft
+PR #25's final pushed revision. Combined canonical-data acceptance still waits
+for Chat 2's immutable-release integration described above.
