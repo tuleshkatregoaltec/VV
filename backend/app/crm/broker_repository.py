@@ -81,16 +81,41 @@ async def list_enquiries(
             ).where(*conditions)
         )
     ).one()
+    status_counts = (
+        await db.exec(
+            select(
+                CrmInboundEnquiry.status,
+                func.count(CrmInboundEnquiry.id),
+                func.count(func.distinct(CrmInboundEnquiry.contact_id)),
+            )
+            .where(*conditions)
+            .group_by(CrmInboundEnquiry.status)
+            .order_by(CrmInboundEnquiry.status)
+        )
+    ).all()
+    order = (
+        (CrmInboundEnquiry.enquiry_date.desc(), CrmInboundEnquiry.id.desc())
+        if getattr(request, "order", "due") == "latest"
+        else (CrmInboundEnquiry.next_follow_up.asc().nullslast(), CrmInboundEnquiry.id)
+    )
     rows = (
         await db.exec(
             select(CrmInboundEnquiry)
             .where(*conditions)
-            .order_by(CrmInboundEnquiry.next_follow_up.asc().nullslast(), CrmInboundEnquiry.id)
+            .order_by(*order)
             .limit(request.limit)
             .offset(getattr(request, "offset", 0))
         )
     ).all()
-    return list(rows), int(counts[0]), int(counts[1])
+    return (
+        list(rows),
+        int(counts[0]),
+        int(counts[1]),
+        {
+            status: {"enquiry_count": int(total), "unique_contact_count": int(contacts)}
+            for status, total, contacts in status_counts
+        },
+    )
 
 
 async def contact(db: AsyncSession, enquiry):

@@ -22,7 +22,16 @@ class BrokerRequest(BaseModel):
 class BrokerListRequest(BrokerRequest):
     intent: InboundIntent | None = None
     statuses: list[InboundStatus] | None = Field(default=None, min_length=1, max_length=14)
-    limit: int = Field(default=20, ge=1, le=25)
+    order: Literal["due", "latest"] = Field(
+        default="due",
+        description="latest: recorded enquiry_date descending, then ID descending. due: follow-up date ascending, nulls last, then ID ascending.",
+    )
+    limit: int = Field(
+        default=20,
+        ge=1,
+        le=25,
+        description="Requested number of records, e.g. 5 for latest five; counts always cover the full authorized filter.",
+    )
     offset: int = Field(default=0, ge=0, le=500)
 
 

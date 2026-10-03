@@ -375,3 +375,69 @@ async def test_broker_follow_up_preserves_frozen_shortlist_requirements(
     assert result["message_sent"] is False
     await pg_session.refresh(enquiries[0])
     assert enquiries[0].contact_attempt_count == 0
+
+
+async def test_broker_latest_five_preserves_full_authorized_counts_by_status(
+    pg_session, broker_fixture, monkeypatch
+):
+    actor, _, colleague, contacts, enquiries = broker_fixture
+    added = []
+    for index, status in enumerate(["new", "qualified", "active", "qualified", "new", "active"]):
+        row = CrmInboundEnquiry(
+            organization_id=actor.organization_id,
+            contact_id=contacts[index % 2].id,
+            created_by_user_id=colleague if index % 2 else actor.user_id,
+            assigned_user_id=actor.user_id if index % 2 else None,
+            intent="buy",
+            status=status,
+            criteria=enquiries[0].criteria,
+            enquiry_date=datetime(2026, 9, 29 - index, tzinfo=timezone.utc),
+            next_follow_up=date(2026, 10, 9 - index),
+            created_at=enquiries[0].created_at,
+            updated_at=enquiries[0].updated_at,
+        )
+        pg_session.add(row)
+        added.append(row)
+    await pg_session.commit()
+    monkeypatch.setattr(broker, "get_postgres_engine", lambda: pg_session.bind)
+    result = await broker.execute_broker_tool(
+        "list_broker_enquiries", BrokerListRequest(order="latest", limit=5), actor
+    )
+    assert result["order"] == "latest"
+    assert [item["enquiry_id"] for item in result["enquiries"]] == [
+        enquiries[1].id,
+        enquiries[0].id,
+        added[0].id,
+        added[1].id,
+        added[2].id,
+    ]
+    assert (result["enquiry_count"], result["unique_contact_count"], result["returned_count"]) == (
+        8,
+        2,
+        5,
+    )
+    assert result["has_more"] is True
+    assert result["counts_by_status"] == {
+        "qualified": {"enquiry_count": 4, "unique_contact_count": 2},
+        "new": {"enquiry_count": 2, "unique_contact_count": 1},
+        "active": {"enquiry_count": 2, "unique_contact_count": 2},
+    }
+    # Pagination and ordering affect only returned records; status filters apply
+    # to both full counts and records, without including colleagues' enquiries.
+    filtered = await broker.execute_broker_tool(
+        "list_broker_enquiries",
+        BrokerListRequest(order="latest", limit=1, statuses=["new"]),
+        actor,
+    )
+    assert filtered["enquiry_count"] == 2
+    assert filtered["counts_by_status"] == {"new": {"enquiry_count": 2, "unique_contact_count": 1}}
+    assert [item["enquiry_id"] for item in filtered["enquiries"]] == [added[0].id]
+    default = await broker.execute_broker_tool(
+        "list_broker_enquiries", BrokerListRequest(limit=3), actor
+    )
+    assert default["order"] == "due"
+    assert [item["enquiry_id"] for item in default["enquiries"]] == [
+        enquiries[0].id,
+        enquiries[1].id,
+        added[5].id,
+    ]
