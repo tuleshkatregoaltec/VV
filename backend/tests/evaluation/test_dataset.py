@@ -72,3 +72,26 @@ def test_scope_heldout_inputs_are_separate_from_canonical_and_training_examples(
     assert {case.id for case in heldout.cases} == set(expectations["cases"])
     # Exact inputs survive existing binding/execution; this does not grade model interpretation.
     assert all(case.bind() == case.question and not case.parameters for case in heldout.cases)
+
+
+def test_broker_workflows_use_existing_runner_bindings_without_changing_canonical_cases():
+    from scripts.evaluation.dataset import BENCHMARK
+
+    broker = load_benchmark(BENCHMARK.with_name("broker_workflows.json"))
+    expectations = json.loads(BENCHMARK.with_name("broker_workflow_expectations.json").read_text())
+    assert [case.id for case in broker.cases] == [f"q{number}" for number in range(201, 215)]
+    assert set(expectations["cases"]) == {case.id for case in broker.cases}
+    assert not {case.id for case in broker.cases} & {case.id for case in load_benchmark().cases}
+    # Identifiers come from a disposable authorized fixture, never invented model records.
+    for case in broker.cases:
+        assert case.bind() == case.question
+        if case.parameters:
+            bound = case.bind(dict.fromkeys(case.parameters, "fixture-reference"))
+            assert "[" not in bound
+            with pytest.raises(ValueError, match="exactly"):
+                case.bind({})
+        assert expectations["cases"][case.id]["review_notes"]
+    quote = next(case for case in broker.cases if case.id == "q209")
+    assert "1,100,000.00" in quote.question and "500.50" in quote.question
+    assert "transfer charge unknown" in quote.question
+    assert "total null" in " ".join(expectations["cases"]["q209"]["review_notes"])

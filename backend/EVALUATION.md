@@ -1030,3 +1030,28 @@ DDL. Canonical ingestion, publication, migrations and Claude's checkout/database
 were not changed. PR #13 stays draft on `codex/chat-integration-base` at
 `1dd064c940229475894e88148fe76e8b3a357c30`. Final combined acceptance waits for Chat 2's
 integrated release and a scoped verification against that actual release.
+
+## Broker workflow evaluation additions
+
+`broker_workflows.json` adds q201–q214 to the existing runner through its `--dataset`
+option; the original q01–q15 are unchanged. `broker_workflow_expectations.json`
+records review criteria and relevant independent fixture tests. Bind enquiry,
+match and document placeholders only to disposable authorized fixture records;
+unbound inputs exercise clarification. The quotation case requires a stored
+AED 1,100,000.00 asking price and explicitly supplied charges. Related fixtures
+are evidence for individual service invariants, not automatic case or model passes.
+No live broker provider evaluation or training has run.
+
+Prompt `database-mcp-v7` covers authorized broker counts, strict matching,
+evidence of interest, unsent drafts, human-confirmed proposals and saved document
+versions. Quotation fees require explicit current-message input such as
+`Brokerage: AED 22,000.00; Administration (estimate): AED 500.50`. It retains the
+market scope and release requirements. The actual MCP schema snapshot now also
+includes the broker and document tools; a schema fingerprint is not a quality score.
+
+Focused frontend checks cover pending-only polling, explicit failed states,
+authenticated ID-based PDF download, exact saved decimal strings, incomplete
+quote totals, escaped proposal content and no mutation on render. Two mocked
+Playwright flows exercise document completion/download and action
+confirmation/error/retry/success. Their PDF payload is a transport fixture;
+PDF contents and persistence require the separate backend integration evidence.

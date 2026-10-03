@@ -21,6 +21,14 @@ async def test_runtime_chat_exposes_only_authenticated_mcp_capabilities():
         "compare_listing_age",
         "compare_listing_rents",
         "compose_market_report",
+        "list_broker_enquiries",
+        "get_broker_enquiry",
+        "match_client_properties",
+        "match_property_clients",
+        "broker_follow_up_summary",
+        "prepare_broker_action",
+        "create_broker_document",
+        "get_broker_document",
     }
     expected = json.loads((Path(__file__).parent / "fixtures/chat_tools.json").read_text())
     actual = {

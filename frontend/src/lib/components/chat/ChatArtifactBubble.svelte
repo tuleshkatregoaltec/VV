@@ -15,6 +15,7 @@ import { cubicOut } from 'svelte/easing'
 import { fade, fly } from 'svelte/transition'
 import type { ListingCardResponse } from '$lib/api/generated/hey-api/types.gen'
 import type { ChatArtifact } from '$lib/chat/artifacts'
+import ChatBrokerArtifact from './ChatBrokerArtifact.svelte'
 import ChatCustomChartArtifact from './ChatCustomChartArtifact.svelte'
 import ChatMarketTrendArtifact from './ChatMarketTrendArtifact.svelte'
 
@@ -66,6 +67,7 @@ function listingImage(listing: ListingCardResponse): string | null {
 }
 
 function resultSummary(): string {
+	if (artifact.type === 'broker_document' || artifact.type === 'broker_action') return ''
 	if (artifact.type === 'listing_results') {
 		const total = artifact.data?.total
 		return typeof total === 'number' ? `${total.toLocaleString()} matches` : 'Matching records'
@@ -82,6 +84,9 @@ function resultSummary(): string {
 }
 </script>
 
+{#if artifact.type === 'broker_document' || artifact.type === 'broker_action'}
+	<ChatBrokerArtifact {artifact} />
+{:else}
 <section
 	class="overflow-hidden rounded-lg border border-border bg-white shadow-sm"
 	in:fly={{ y: 8, duration: 180, easing: cubicOut }}
@@ -239,3 +244,4 @@ function resultSummary(): string {
 		{/if}
 	</div>
 </section>
+{/if}

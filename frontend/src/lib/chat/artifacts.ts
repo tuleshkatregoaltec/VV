@@ -1,10 +1,11 @@
+import type { BrokerActionResponse, BrokerDocumentResponse } from '$lib/api/broker'
 import type { ListingListResponse, MarketTrendResponse } from '$lib/api/generated/hey-api/types.gen'
 
 export type ChatArtifactStatus = 'loading' | 'ready' | 'error' | 'stale'
 
 export interface ChatArtifactBase {
 	id: string
-	type: 'listing_results' | 'market_trend' | 'custom_chart'
+	type: 'listing_results' | 'market_trend' | 'custom_chart' | 'broker_document' | 'broker_action'
 	status: ChatArtifactStatus
 	title: string
 	subtitle?: string | null
@@ -58,7 +59,22 @@ export interface CustomChartArtifact extends ChatArtifactBase {
 	data?: CustomChartData | null
 }
 
-export type ChatArtifact = ListingResultsArtifact | MarketTrendArtifact | CustomChartArtifact
+export interface BrokerDocumentArtifact extends ChatArtifactBase {
+	type: 'broker_document'
+	data?: BrokerDocumentResponse | null
+}
+
+export interface BrokerActionArtifact extends ChatArtifactBase {
+	type: 'broker_action'
+	data?: BrokerActionResponse | null
+}
+
+export type ChatArtifact =
+	| ListingResultsArtifact
+	| MarketTrendArtifact
+	| CustomChartArtifact
+	| BrokerDocumentArtifact
+	| BrokerActionArtifact
 
 export interface ChatArtifactStreamEvent {
 	type: 'artifact_opened' | 'artifact_updated'
@@ -72,7 +88,9 @@ export function isChatArtifact(value: unknown): value is ChatArtifact {
 		typeof candidate.id === 'string' &&
 		(candidate.type === 'listing_results' ||
 			candidate.type === 'market_trend' ||
-			candidate.type === 'custom_chart') &&
+			candidate.type === 'custom_chart' ||
+			candidate.type === 'broker_document' ||
+			candidate.type === 'broker_action') &&
 		(candidate.status === 'loading' ||
 			candidate.status === 'ready' ||
 			candidate.status === 'error' ||

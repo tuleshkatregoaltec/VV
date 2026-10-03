@@ -12,7 +12,10 @@ from app.chat.prompts import CHAT_PROMPT_VERSION, CHAT_SYSTEM_PROMPT
 
 
 def test_binding_covers_all_explicit_constraints_and_keeps_cohorts_paired():
-    assert "Before any retrieval, successfully call bind_market_scope once" in CHAT_SYSTEM_PROMPT
+    assert (
+        "Before any market retrieval, successfully call bind_market_scope once"
+        in CHAT_SYSTEM_PROMPT
+    )
     assert (
         "location, building/project, bedrooms, property_type, sale/rent mode, price bounds"
         in CHAT_SYSTEM_PROMPT
@@ -58,7 +61,7 @@ async def test_provider_receives_required_composer_and_unpinned_report_rules():
     agent = Agent(FunctionModel(inspect), system_prompt=CHAT_SYSTEM_PROMPT)
     await agent.run("Create a multi-source client report")
     prompt = "\n".join(received)
-    assert CHAT_PROMPT_VERSION == "database-mcp-v6"
+    assert CHAT_PROMPT_VERSION == "database-mcp-v7"
     assert "MUST call compose_market_report" in prompt
     assert (
         "Do not bypass\nit by assembling separate metrics, inventory and delivery calls" in prompt
@@ -116,3 +119,47 @@ def test_explicit_yield_reason_codes_override_generic_sample_requirement_warning
         "insufficient_comparables and must never be restated as an observed sample failure"
         in CHAT_SYSTEM_PROMPT
     )
+
+
+def test_broker_matching_preserves_recorded_scope_without_inventing_interest_or_probability():
+    assert (
+        "These broker tools and document tools do not require bind_market_scope"
+        in CHAT_SYSTEM_PROMPT
+    )
+    assert (
+        "Use returned total counts and status summaries, not the length of a limited page"
+        in CHAT_SYSTEM_PROMPT
+    )
+    assert "Open or qualified enquiries do not establish current interest" in CHAT_SYSTEM_PROMPT
+    assert "preserve saved client criteria and all explicitly" in CHAT_SYSTEM_PROMPT
+    assert "A fit ranking is not a conversion probability" in CHAT_SYSTEM_PROMPT
+
+
+def test_broker_actions_remain_explicit_human_confirmed_proposals():
+    assert "Only an explicit request to add a note or schedule a follow-up" in CHAT_SYSTEM_PROMPT
+    assert "That tool returns a proposal, not a saved note or task" in CHAT_SYSTEM_PROMPT
+    assert "Never\nconfirm it autonomously" in CHAT_SYSTEM_PROMPT
+    assert (
+        "Do not send messages, change enquiry/contact status or contact clients"
+        in CHAT_SYSTEM_PROMPT
+    )
+
+
+def test_broker_documents_use_private_saved_versions_and_backend_quote_totals():
+    assert "out of client-facing material" in CHAT_SYSTEM_PROMPT
+    assert "exact decimal quote totals" in CHAT_SYSTEM_PROMPT
+    assert "Do not recompute totals or alter amounts in prose or PDF" in CHAT_SYSTEM_PROMPT
+    assert "PDF must refer to the same saved version" in CHAT_SYSTEM_PROMPT
+    assert "Document creation does not mean it was sent" in CHAT_SYSTEM_PROMPT
+
+
+def test_quote_fees_require_user_provenance_and_drafts_remain_unsent():
+    assert "Brokerage: 2%; Administration (estimate): AED" in CHAT_SYSTEM_PROMPT
+    assert (
+        "Never reuse\nfees from a tool result or invent them to bypass validation"
+        in CHAT_SYSTEM_PROMPT
+    )
+    assert (
+        "asking prices come from those saved\nrecords, never a model override" in CHAT_SYSTEM_PROMPT
+    )
+    assert "Drafts require review and are never\nsent" in CHAT_SYSTEM_PROMPT

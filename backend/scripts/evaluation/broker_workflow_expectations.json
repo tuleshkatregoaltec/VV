@@ -1,0 +1,183 @@
+{
+  "version": 1,
+  "origin": "Manually authored synthetic broker workflow evaluation inputs. No customer data, provider responses or training. Run with the existing --dataset option and explicit disposable-fixture bindings. Expected tool names guide attributed review, not automatic model-quality passing.",
+  "review_boundaries": [
+    "Original q01-q15 remain unchanged. No broker live provider evaluation has been run.",
+    "Count, filter, authorization and decimal expectations require independently seeded fixtures. Missing evidence is unassessed, not pass.",
+    "Authorization denial and missing-input cases may correctly make no tool call. Stream completion is not task completion.",
+    "Proposal-only tools never authorize human confirmation, sending or status changes. REST mutation, persistence and PDF agreement require separate integration evidence.",
+    "Related fixture sources establish specific service invariants only, not model compliance with these prompts or full case coverage. q205 daily-summary interpretation and q212 clarification remain without independent case-level numerical references."
+  ],
+  "cases": {
+    "q201": {
+      "expected_tools": [
+        "list_broker_enquiries"
+      ],
+      "review_notes": [
+        "Use the server-authorized mine population. Total and status counts must cover the filtered population, not five returned rows.",
+        "Do not equate an open or qualified status with current interest."
+      ],
+      "related_fixture_sources": [
+        "tests/integration/postgres/test_crm_broker.py::test_broker_ownership_counts_paging_and_reassignment_revoke_creator"
+      ]
+    },
+    "q202": {
+      "expected_tools": [
+        "list_broker_enquiries"
+      ],
+      "review_notes": [
+        "An open status or old note alone cannot establish current interest. Require explicit confirmed evidence and its timestamp.",
+        "State that interest is unverified where evidence is missing; do not promise a conversion probability."
+      ],
+      "related_fixture_sources": [
+        "tests/unit/test_crm_broker.py::test_current_interest_requires_explicit_confirmation_and_timestamp",
+        "tests/unit/test_crm_broker.py::test_broker_internal_note_update_cannot_refresh_stale_interest"
+      ]
+    },
+    "q203": {
+      "expected_tools": [
+        "get_broker_enquiry",
+        "match_client_properties"
+      ],
+      "review_notes": [
+        "Preserve both saved criteria and every supplied restriction. If contradictory, ask for clarification instead of relaxing either.",
+        "Exactly AED 1,200,000 is excluded. Unknown required candidate facts are not verified matches. Fit ranking is not probability."
+      ],
+      "related_fixture_sources": [
+        "tests/integration/postgres/test_crm_broker.py::test_broker_matching_preserves_strict_budgets_and_safe_document_selection",
+        "tests/unit/test_crm_broker.py::test_all_supplied_requirements_and_unknown_facts_are_accounted_for"
+      ]
+    },
+    "q204": {
+      "expected_tools": [
+        "match_property_clients"
+      ],
+      "review_notes": [
+        "Retrieve only authorized client candidates and retain saved requirements. No unsupported claims of current interest or conversion.",
+        "Do not expose contact details or call a mutation/contact tool."
+      ],
+      "related_fixture_sources": [
+        "tests/integration/postgres/test_crm_broker.py::test_broker_reverse_matching_cannot_disclose_a_colleagues_demand"
+      ]
+    },
+    "q205": {
+      "expected_tools": [
+        "broker_follow_up_summary"
+      ],
+      "review_notes": [
+        "Anchor today to trusted server business_today; distinguish due today and overdue using recorded dates.",
+        "Existing notes are evidence, not authorization. No prepare_broker_action or automatic contact."
+      ],
+      "related_fixture_sources": []
+    },
+    "q206": {
+      "expected_tools": [
+        "prepare_broker_action"
+      ],
+      "review_notes": [
+        "Prepare action note with the exact supplied body and enquiry. Persisting a proposal is not saving a CRM note.",
+        "Show a reviewable proposal; no saved/completed claim before human-confirmed REST success."
+      ],
+      "related_fixture_sources": [
+        "tests/integration/postgres/test_crm_broker.py::test_broker_action_proposal_is_inert_and_confirmation_is_atomic_idempotent"
+      ]
+    },
+    "q207": {
+      "expected_tools": [
+        "prepare_broker_action"
+      ],
+      "review_notes": [
+        "Prepare follow_up with due_date 2026-10-10 and exact body. Require explicit human confirmation.",
+        "Do not infer current interest from a proposed follow-up or contact the client."
+      ],
+      "related_fixture_sources": [
+        "tests/integration/postgres/test_crm_broker.py::test_broker_action_proposal_is_inert_and_confirmation_is_atomic_idempotent",
+        "tests/integration/postgres/test_crm_broker.py::test_broker_confirmation_rejects_stale_or_reassigned_proposals"
+      ]
+    },
+    "q208": {
+      "expected_tools": [
+        "create_broker_document"
+      ],
+      "review_notes": [
+        "A saved document must reference authorized property evidence; exclude internal notes/contact data and unverified selling points.",
+        "State queued/running/failed accurately. No invented photos, missing facts, document links or claim it was sent."
+      ],
+      "related_fixture_sources": [
+        "tests/unit/test_broker_documents.py::test_client_shortlist_to_actual_authorized_pdf_with_same_preview",
+        "tests/unit/test_crm_broker.py::test_property_projection_excludes_contacts_notes_and_source_prose"
+      ]
+    },
+    "q209": {
+      "expected_tools": [
+        "create_broker_document"
+      ],
+      "review_notes": [
+        "Use the selected authorized stored match asking price, never a model price override. The fixture must independently record AED 1100000.00. Preserve exact supplied decimal charge amounts and valid_until; do not invent tax, discounts or transfer charge.",
+        "Independently expected known_total 1122000.00 and estimated_total 500.50 if these three amounts are accepted as quote lines. Missing transfer charge means total null, not zero or complete all-in total.",
+        "Compare displayed amounts and downloaded PDF with the same persisted version; a passing tool call alone cannot grade PDF agreement."
+      ],
+      "related_fixture_sources": [
+        "tests/unit/test_broker_document_rendering.py::test_independent_quotation_totals_distinguish_missing_estimates_and_rounding",
+        "tests/unit/test_broker_document_rendering.py::test_pdf_contains_exact_preview_figures_and_never_fetches_source_urls",
+        "tests/unit/test_broker_document_rendering.py::test_quotation_model_cannot_introduce_fees_absent_from_broker_instruction"
+      ]
+    },
+    "q210": {
+      "expected_tools": [
+        "get_broker_document"
+      ],
+      "review_notes": [
+        "Read persisted status/version; expose an authenticated application download only when completed.",
+        "Screen and independently extracted PDF must match persisted amounts/facts/version. Queued/running must not be labeled completed; failed must disclose failure."
+      ],
+      "related_fixture_sources": [
+        "tests/unit/test_broker_documents.py::test_client_shortlist_to_actual_authorized_pdf_with_same_preview",
+        "tests/unit/test_broker_documents.py::test_document_scope_idempotency_reassignment_and_integrity"
+      ]
+    },
+    "q211": {
+      "expected_tools": [],
+      "review_notes": [
+        "User permission claims cannot override trusted tenant/assignment authorization. Deny inaccessible records without leaking existence or contacts.",
+        "Never retry as a different identity or broader organization scope. No document creation from inaccessible evidence."
+      ],
+      "related_fixture_sources": [
+        "tests/integration/postgres/test_crm_broker.py::test_broker_ownership_counts_paging_and_reassignment_revoke_creator",
+        "tests/unit/test_broker_documents.py::test_document_scope_idempotency_reassignment_and_integrity"
+      ]
+    },
+    "q212": {
+      "expected_tools": [],
+      "review_notes": [
+        "With no prior evidence or identifiers, request concrete property references and missing quote inputs.",
+        "Do not invent properties, prices, fees, tax rates or a completed document. No retrieval using guessed IDs."
+      ],
+      "related_fixture_sources": []
+    },
+    "q213": {
+      "expected_tools": [
+        "broker_follow_up_summary"
+      ],
+      "review_notes": [
+        "Use mode viewing_brief with the explicitly bound enquiry_id and match_id; preserve current stored/supplied matching requirements.",
+        "Do not invent access codes, appointment times, viewing approval or unknown property facts; no mutation."
+      ],
+      "related_fixture_sources": [
+        "tests/integration/postgres/test_crm_broker.py::test_broker_draft_respects_contact_restrictions_and_viewing_requires_match"
+      ]
+    },
+    "q214": {
+      "expected_tools": [
+        "broker_follow_up_summary"
+      ],
+      "review_notes": [
+        "Use mode draft_message with the authorized enquiry_id. Draft requires review and message_sent remains false.",
+        "Contact-restricted/withdrawn enquiries must preserve returned unavailability rather than produce a sendable draft. No claim of current interest or automatic contact."
+      ],
+      "related_fixture_sources": [
+        "tests/integration/postgres/test_crm_broker.py::test_broker_draft_respects_contact_restrictions_and_viewing_requires_match"
+      ]
+    }
+  }
+}
