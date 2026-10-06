@@ -312,6 +312,41 @@ def _skip_if_done(output: Path, label: str) -> bool:
     return False
 
 
+_PLOT_FIELDS = (
+    "PLOT_NUMBER",
+    "OLD_PLOT_NUMBERS",
+    "LANDUSE_SYMBOLS",
+    "GFA_TYPE",
+    "IS_VERIFIED",
+    "VERIFY_COMMENTS",
+)
+
+
+def _published_fields(
+    client: httpx.Client, token: str, layer_id: int, wanted: tuple[str, ...]
+) -> list[str]:
+    """The wanted fields the layer still publishes.
+
+    ArcGIS rejects a whole query (400) when any requested field is missing. DDA dropped
+    LANDUSE_SYMBOLS, GFA_TYPE, IS_VERIFIED and VERIFY_COMMENTS from the plot layer in 2026,
+    and GFA fields from the frozen-plot layer, which stopped the weekly run; missing optional
+    columns are now left empty with a warning.
+    """
+    response = client.get(
+        f"{_BASE_URL}/server/rest/services/DIS/MAIN_MAP/MapServer/{layer_id}",
+        params={"f": "json", "token": token},
+        headers=_HEADERS,
+    )
+    response.raise_for_status()
+    published = {field["name"] for field in response.json().get("fields", [])}
+    if wanted[0] not in published:
+        raise RuntimeError(f"DDA layer {layer_id} no longer publishes key field {wanted[0]}")
+    missing = [field for field in wanted if field not in published]
+    if missing:
+        logger.warning("dda: layer %s no longer publishes %s; left empty", layer_id, missing)
+    return [field for field in wanted if field in published]
+
+
 def _scrape_plots(output: Path, *, concurrency: int, max_plots: int | None) -> None:
     done_plots: set[str] = set()
     if output.exists():
@@ -327,7 +362,7 @@ def _scrape_plots(output: Path, *, concurrency: int, max_plots: int | None) -> N
             client,
             token,
             _PLOTS_LAYER_ID,
-            out_fields="PLOT_NUMBER,OLD_PLOT_NUMBERS,LANDUSE_SYMBOLS,GFA_TYPE,IS_VERIFIED,VERIFY_COMMENTS",
+            out_fields=",".join(_published_fields(client, token, _PLOTS_LAYER_ID, _PLOT_FIELDS)),
             out_sr=None,
             return_geometry=False,
             limit=fetch_limit,
@@ -357,7 +392,11 @@ def _scrape_layer(client: httpx.Client, token: str, output: Path, spec: LayerSpe
         client,
         token,
         spec.layer_id,
-        out_fields=spec.out_fields,
+        out_fields=spec.out_fields
+        if spec.out_fields == "*"
+        else ",".join(
+            _published_fields(client, token, spec.layer_id, tuple(spec.out_fields.split(",")))
+        ),
         label=spec.label,
     )
     rows = [spec.row_builder(feature) for feature in features]

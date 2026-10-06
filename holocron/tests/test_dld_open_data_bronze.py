@@ -131,9 +131,15 @@ def test_dld_open_data_bronze_loaders_map_rows(source: str, row_file: str, table
     assert any(f"CREATE TABLE IF NOT EXISTS {table}" in sql for sql in clickhouse.commands)
     delete_sql = next(sql for sql in clickhouse.commands if f"ALTER TABLE `{table}` DELETE" in sql)
     assert "source_system = 'dld_open_data'" in delete_sql
+    # Datasets whose API date filter maps to a stored column must replace by that column:
+    # exact-window matching left duplicates every day the 3-day lookback windows overlapped.
+    # Buildings/lands/units/brokers have no such column, so they keep window matching.
     replace_date_columns = {
         "dld_od_transactions": "instance_date",
         "dld_od_rents": "start_date",
+        "dld_od_projects": "adoption_date",
+        "dld_od_developers": "registration_date",
+        "dld_od_valuations": "instance_date",
     }
     if source in replace_date_columns:
         date_column = replace_date_columns[source]
