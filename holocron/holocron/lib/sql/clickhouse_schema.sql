@@ -2063,3 +2063,60 @@ CREATE TABLE IF NOT EXISTS dxbi_evidence_load_ledger (
 )
 ENGINE = MergeTree()
 ORDER BY (report, run_name, loaded_at);
+
+-- Bayut full-collection snapshots (holocron.sources.bayut_listings.bronze). Acquisition is
+-- manual and gated on access/licensing (D1); loading never fetches from Bayut.
+CREATE TABLE IF NOT EXISTS bayut_listings_bronze (
+    snapshot_id   String,
+    listing_id    String,
+    purpose       LowCardinality(String),
+    property_type LowCardinality(String),
+    title         String,
+    listing_url   String,
+    price_aed     Nullable(Float64),
+    size_sqft     Nullable(Float64),
+    search_path   String,
+    root_name     String,
+    observed_at   String,
+    raw_json      String,
+    loaded_at     DateTime64(3, UTC) DEFAULT now64(3)
+)
+ENGINE = MergeTree()
+ORDER BY (snapshot_id, listing_id);
+
+-- status: published (coverage certified) | partial (kept for inspection, never served).
+CREATE TABLE IF NOT EXISTS bayut_listing_snapshots (
+    snapshot_id     String,
+    status          LowCardinality(String),
+    coverage_status LowCardinality(String),
+    listing_count   UInt64,
+    summary_json    String,
+    export_sha256   String,
+    loaded_at       DateTime64(3, UTC) DEFAULT now64(3)
+)
+ENGINE = ReplacingMergeTree(loaded_at)
+ORDER BY snapshot_id;
+
+-- The inventory is the latest certified snapshot; a partial crawl never replaces it.
+CREATE OR REPLACE VIEW bayut_listings_current AS
+SELECT b.*
+FROM bayut_listings_bronze AS b
+WHERE b.snapshot_id = (
+    SELECT argMax(snapshot_id, loaded_at) FROM bayut_listing_snapshots FINAL
+    WHERE status = 'published'
+);
+
+-- Listings in the previous certified snapshot that the latest certified one no longer has.
+CREATE OR REPLACE VIEW bayut_listing_withdrawals AS
+WITH published AS (
+    SELECT snapshot_id, loaded_at FROM bayut_listing_snapshots FINAL
+    WHERE status = 'published' ORDER BY loaded_at DESC LIMIT 2
+)
+SELECT b.*
+FROM bayut_listings_bronze AS b
+WHERE b.snapshot_id = (SELECT snapshot_id FROM published ORDER BY loaded_at ASC LIMIT 1)
+  AND (SELECT count() FROM published) = 2
+  AND b.listing_id NOT IN (
+      SELECT listing_id FROM bayut_listings_bronze
+      WHERE snapshot_id = (SELECT snapshot_id FROM published ORDER BY loaded_at DESC LIMIT 1)
+  );
