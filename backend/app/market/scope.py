@@ -51,10 +51,13 @@ def project_filter_clause(filter_type: ProjectScopeType) -> str:
 
 
 # Location predicate over canonical market rows (ch_transactions / ch_rent_contracts), whose
-# community_key and district_name come from Holocron's evidence crosswalk. Terms come from
-# market.reference.community_location.
+# community_key and district_name come from Holocron's evidence crosswalk; location_name is
+# the uniform display location (DXBI's community name), which also places DXBI-only rows the
+# crosswalk cannot. Terms come from market.reference.community_location.
 LOCATION_PREDICATE = (
     "(community_key IN {loc_communities:Array(String)}"
+    " OR replaceRegexpAll(lowerUTF8(trimBoth(location_name)), '[[:space:]]+', ' ')"
+    " IN {loc_communities:Array(String)}"
     " OR lowerUTF8(district_name) IN {loc_districts:Array(String)})"
 )
 # The same terms over the DLD project register (ch_projects), which names the official

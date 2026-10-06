@@ -24,6 +24,8 @@ SALE_COLUMNS = [
     "property_sub_type_en", "property_usage_en", "rooms_en", "building_name_en",
     "reg_type_en", "source_system", "match_status", "is_served", "built_at", "release_id",
     "district_name", "community_key", "community_name", "geo_method",
+    # Uniform layer columns, as Holocron writes them (size, one type list, display location).
+    "size_sqm", "property_type", "location_name",
 ]  # fmt: skip
 # Canonical places as Holocron's crosswalk assigns them (raw names stay in area/master).
 JVC = ("Al Barsha South Fourth", "jumeirah village circle", "Jumeirah Village Circle")
@@ -36,6 +38,7 @@ def sale(key, when, group, price, area_sqm, area, master="", served=1, status="d
         key, key, when, group, price, area_sqm, area, master, "Unit", "Flat", "Residential",
         rooms, building, "Existing Properties", source, status, served,
         datetime(2026, 10, 2, 6, 0), "r-sales", *geo, method,
+        area_sqm, "Apartment", geo[2] or geo[0],
     ]  # fmt: skip
 
 
@@ -72,6 +75,7 @@ RENT_COLUMNS = [
     "ejari_property_sub_type_en", "property_usage_en", "version_en", "bedrooms",
     "source_system", "match_status", "is_served", "built_at", "release_id",
     "district_name", "community_key", "community_name", "geo_method",
+    "size_sqm", "property_type", "rooms_en", "location_name",
 ]  # fmt: skip
 MARINA = ("Marsa Dubai", "dubai marina", "Dubai Marina", "project_evidence")
 MARSA_DISTRICT_ONLY = ("Marsa Dubai", "", "", "district_name")
@@ -83,6 +87,8 @@ def rent(key, registered, start, end, annual, contract, version, bedrooms, area=
         key, key, registered, start, end, annual, contract, 80.0, area, "", "Flat",
         "Residential", version, bedrooms, "dld_open_data", "matched" if bedrooms else "dld_only",
         1, datetime(2026, 10, 2, 6, 0), "r-rent", *geo,
+        # Uniform bedroom label: DXBI's "2 Bed" / "2 Beds" are one label; unknown stays ''.
+        80.0, "Apartment", f"{bedrooms.split()[0]} B/R" if bedrooms else "", geo[2] or geo[0],
     ]  # fmt: skip
 
 

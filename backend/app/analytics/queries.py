@@ -1089,17 +1089,17 @@ GET_MARKET_PULSE_SQL = """
         count(*) as transaction_count,
         round(median(actual_worth), 0) as median_price,
         round(avg(actual_worth), 0) as avg_price,
-        round(median(procedure_area) * 10.7639, 1) as median_area_sqft,
-        round(median(actual_worth / procedure_area) / 10.7639, 0) as median_price_per_sqft,
+        round(median(size_sqm) * 10.7639, 1) as median_area_sqft,
+        round(median(actual_worth / size_sqm) / 10.7639, 0) as median_price_per_sqft,
         min(instance_date) as period_start,
         max(instance_date) as period_end
     FROM ch_transactions
     WHERE
-        area_name_en = {area:String}
+        location_name = {area:String}
         AND trans_group_en = 'Sales'
         AND instance_date >= today() - {period_days:Int32}
         AND actual_worth > 0
-        AND procedure_area > 0
+        AND size_sqm > 0
     """
 
 
@@ -1107,10 +1107,11 @@ async def fetch_market_pulse(parameters: dict):
     return await query(GET_MARKET_PULSE_SQL, parameters)
 
 
-# Ranked by official DLD district (canonical geography; one vocabulary across sources).
+# Ranked by location in the uniform vocabulary (DXBI community names; the names market
+# pulse and the Transactions page filter on).
 RANK_AREAS_VOLUME_SQL = """
         SELECT
-            district_name as area,
+            location_name as area,
             count(*) as transaction_count,
             round(median(actual_worth), 0) as median_price
         FROM ch_transactions
@@ -1118,8 +1119,8 @@ RANK_AREAS_VOLUME_SQL = """
             instance_date >= today() - {period_days:Int32}
             AND trans_group_en = 'Sales'
             AND actual_worth > 0
-            AND district_name != ''
-        GROUP BY district_name
+            AND location_name != ''
+        GROUP BY location_name
         ORDER BY transaction_count DESC
         LIMIT {limit:Int32}
         """
@@ -1127,7 +1128,7 @@ RANK_AREAS_VOLUME_SQL = """
 
 RANK_AREAS_PRICE_SQL = """
         SELECT
-            district_name as area,
+            location_name as area,
             round(median(actual_worth), 0) as median_price,
             count(*) as transaction_count
         FROM ch_transactions
@@ -1135,8 +1136,8 @@ RANK_AREAS_PRICE_SQL = """
             instance_date >= today() - {period_days:Int32}
             AND trans_group_en = 'Sales'
             AND actual_worth > 0
-            AND district_name != ''
-        GROUP BY district_name
+            AND location_name != ''
+        GROUP BY location_name
         HAVING transaction_count >= 10
         ORDER BY median_price DESC
         LIMIT {limit:Int32}
@@ -1147,20 +1148,20 @@ RANK_AREAS_GROWTH_SQL = """
         WITH
             current_period AS (
                 SELECT
-                    district_name as area,
+                    location_name as area,
                     median(actual_worth) as current_median
                 FROM ch_transactions
                 WHERE
                     instance_date >= today() - {period_days:Int32}
                     AND trans_group_en = 'Sales'
                     AND actual_worth > 0
-                    AND district_name != ''
-                GROUP BY district_name
+                    AND location_name != ''
+                GROUP BY location_name
                 HAVING count(*) >= 10
             ),
             previous_period AS (
                 SELECT
-                    district_name as area,
+                    location_name as area,
                     median(actual_worth) as previous_median
                 FROM ch_transactions
                 WHERE
@@ -1168,8 +1169,8 @@ RANK_AREAS_GROWTH_SQL = """
                     AND instance_date < today() - {period_days:Int32}
                     AND trans_group_en = 'Sales'
                     AND actual_worth > 0
-                    AND district_name != ''
-                GROUP BY district_name
+                    AND location_name != ''
+                GROUP BY location_name
                 HAVING count(*) >= 10
             )
         SELECT
