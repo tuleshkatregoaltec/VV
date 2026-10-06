@@ -274,17 +274,37 @@ def _geo_values(*, source: str = "", master: str | None = None) -> str:
     {method}"""
 
 
-# DLD sales after cut-over and correction handling; one row per transaction_number.
-DLD_SALES_BASE = """
-    SELECT *
-    FROM dld_od_transactions_bronze
-    WHERE source_system = 'dld_open_data'
+# DLD sales after cut-over and correction handling. A transaction number is not a line
+# identity: open data registers several lines under one number (473 Sale + Mortgage pairs from
+# "Lease to Own Registration", and multi-unit deals; 722 numbers / 3,614 lines measured on
+# 2026-10-03). Every distinct line of a number's latest extract is kept; an older extract of
+# the number is a superseded version; identical lines in one extract are one line.
+# ponytail: two genuinely identical units in one deal collapse to one line (DLD open data has
+# no unit identifier to tell them apart from a repeated page row).
+_DLD_SALE_SCOPE = """(source_system = 'dld_open_data'
        OR toDate(instance_date) < ifNull(
             (SELECT minOrNull(toDate(instance_date)) FROM dld_od_transactions_bronze
              WHERE source_system = 'dld_open_data'),
-            toDate('2149-01-01'))
-    ORDER BY transaction_number, scraped_at DESC
-    LIMIT 1 BY transaction_number
+            toDate('2149-01-01')))"""
+_DLD_SALE_NUMBER = "if(transaction_number != '', transaction_number, row_key)"
+_DLD_SALE_LINE = """cityHash64(group_en, procedure_id, procedure_en, trans_value, procedure_area,
+        actual_area, property_id, prop_type_en, prop_sb_type_en, usage_en, rooms_en, area_en,
+        project_en, master_project_en, building_name_en, instance_date, is_offplan_en,
+        reg_type_en)"""
+DLD_SALES_BASE = f"""
+    SELECT *,
+           if(count() OVER (PARTITION BY txn_key) > 1,
+              concat(txn_key, '#', lower(hex(line_key))), txn_key) AS line_id
+    FROM (
+        SELECT *, {_DLD_SALE_NUMBER} AS txn_key, {_DLD_SALE_LINE} AS line_key
+        FROM dld_od_transactions_bronze
+        WHERE {_DLD_SALE_SCOPE}
+          AND ({_DLD_SALE_NUMBER}, scraped_at) IN (
+              SELECT {_DLD_SALE_NUMBER}, max(scraped_at) FROM dld_od_transactions_bronze
+              WHERE {_DLD_SALE_SCOPE} GROUP BY 1)
+        ORDER BY txn_key, line_key
+        LIMIT 1 BY txn_key, line_key
+    )
 """
 
 # DLD rents after cut-over (by registration date, as the silver layer) and exact-duplicate
@@ -327,7 +347,7 @@ INSERT INTO `market_sale_matches`
     (dxbi_sale_key, dld_transaction_number, day_gap, size_gap, has_dld_candidate, built_at)
 WITH
     dld_sales AS (
-        SELECT transaction_number AS dld_key, toDate(instance_date) AS d,
+        SELECT line_id AS dld_key, toDate(instance_date) AS d,
                toUInt64(trans_value) AS price, procedure_area * {SQFT_PER_SQM} AS sqft
         FROM ({DLD_SALES_BASE})
         WHERE group_en = 'Sales' AND trans_value > 0
@@ -393,7 +413,7 @@ _SALE_EVENTS_DLD_SQL = f"""
 INSERT INTO `market_sale_events` ({", ".join(SALE_COLUMNS + GEO_COLUMNS)})
 SELECT
     d.row_key, d.run_id, d.scraped_at,
-    if(d.transaction_number != '', d.transaction_number, d.row_key),
+    d.line_id,
     d.transaction_number, d.instance_date,
     d.group_id, if(d.group_en = 'Mortgage', 'Mortgages', d.group_en), d.group_ar,
     d.procedure_id, d.procedure_en, d.procedure_ar,
@@ -424,7 +444,7 @@ SELECT
 FROM ({DLD_SALES_BASE}) AS d
 LEFT JOIN (SELECT dxbi_sale_key, dld_transaction_number FROM market_sale_matches
            WHERE dld_transaction_number != '') AS m
-    ON m.dld_transaction_number = d.transaction_number
+    ON m.dld_transaction_number = d.line_id
 LEFT JOIN ({DXBI_SALES_BASE}) AS x ON x.sale_key = m.dxbi_sale_key
 {_geo_joins(area="d.area_en", master="d.master_project_en", project="d.project_en")}
 """
