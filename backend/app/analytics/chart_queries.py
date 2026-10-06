@@ -17,6 +17,18 @@ from app.analytics.queries import price_trends
 from app.clickhouse.client import query as ch_query
 from app.market.reference import SQM_TO_SQFT, area_search_text
 
+# Every area-based figure is per square foot. A request for a per-square-metre metric (the
+# model or an old saved chart) gets its per-square-foot counterpart, not a different metric.
+_SQM_METRICS = {
+    "avg_price_sqm": "avg_price_sqft",
+    "median_price_sqm": "median_price_sqft",
+    "median_rent_sqm": "median_rent_sqft",
+}
+
+
+def _per_sqft(metric: str) -> str:
+    return _SQM_METRICS.get(metric, metric)
+
 
 async def _resolve_transaction_area(area: str | None) -> str | None:
     if not area:
@@ -394,7 +406,7 @@ async def fetch_sales_chart_rows(args: dict[str, Any]):
     days = _chart_days(args.get("days"))
     limit = clamp_int(args.get("limit"), default=8, min_value=1, max_value=20)
     group_by = str(args.get("group_by") or "area").lower()
-    metric = str(args.get("metric") or "transaction_count").lower()
+    metric = _per_sqft(str(args.get("metric") or "transaction_count").lower())
     sort_direction = _chart_sort_direction(args.get("sort_direction"))
     property_usage = _optional_chart_filter(args.get("property_usage")) or "Residential"
     property_type = _sales_property_type(args.get("property_type"))
@@ -427,8 +439,6 @@ async def fetch_sales_chart_rows(args: dict[str, Any]):
         "total_volume": "round(sum(actual_worth), 0)",
         "avg_price": "round(avg(actual_worth), 0)",
         "median_price": "round(median(actual_worth), 0)",
-        "avg_price_sqm": "round(avg(meter_sale_price), 0)",
-        "median_price_sqm": "round(median(meter_sale_price), 0)",
         "avg_price_sqft": f"round(avg(meter_sale_price) / {SQM_TO_SQFT}, 0)",
         "median_price_sqft": f"round(median(meter_sale_price) / {SQM_TO_SQFT}, 0)",
     }
@@ -572,7 +582,7 @@ async def fetch_rental_chart_rows(args: dict[str, Any]):
     days = _chart_days(args.get("days"))
     limit = clamp_int(args.get("limit"), default=8, min_value=1, max_value=20)
     group_by = str(args.get("group_by") or "area").lower()
-    metric = str(args.get("metric") or "contract_count").lower()
+    metric = _per_sqft(str(args.get("metric") or "contract_count").lower())
     sort_direction = _chart_sort_direction(args.get("sort_direction"))
     property_usage = _optional_chart_filter(args.get("property_usage")) or "Residential"
     property_type = _rental_property_type(args.get("property_type"))
@@ -604,7 +614,6 @@ async def fetch_rental_chart_rows(args: dict[str, Any]):
         "total_annual_value": "round(sum(annual_amount), 0)",
         "avg_rent": "round(avg(annual_amount), 0)",
         "median_rent": "round(median(annual_amount), 0)",
-        "median_rent_sqm": "round(median(annual_amount / nullIf(size_sqm, 0)), 0)",
         "median_rent_sqft": f"round(median(annual_amount / nullIf(size_sqm, 0)) / {SQM_TO_SQFT}, 0)",
     }
     if metric not in metric_exprs:

@@ -12,16 +12,16 @@ import {
 	TIMEFRAME_MAPPING
 } from '$lib/constants/transactions'
 
-// Bands are half-open: '50-100' is 50 up to (not including) 100, '500+' is 500 and above, so a
-// value on a boundary belongs to exactly one band.
+// Bands are half-open: '500-1,000' is 500 up to (not including) 1,000 and '5,000+' is 5,000 and
+// above, so a value on a boundary belongs to exactly one band. Sizes are in sq ft.
 type Band = { min?: number; max?: number }
 
 const SIZE_BANDS: Record<string, Band> = {
-	'<50': { max: 50 },
-	'50-100': { min: 50, max: 100 },
-	'100-200': { min: 100, max: 200 },
-	'200-500': { min: 200, max: 500 },
-	'500+': { min: 500 }
+	'<500': { max: 500 },
+	'500-1,000': { min: 500, max: 1_000 },
+	'1,000-2,000': { min: 1_000, max: 2_000 },
+	'2,000-5,000': { min: 2_000, max: 5_000 },
+	'5,000+': { min: 5_000 }
 }
 
 const SALES_PRICE_BANDS: Record<string, Band> = {
@@ -32,11 +32,11 @@ const SALES_PRICE_BANDS: Record<string, Band> = {
 	'5M+': { min: 5_000_000 }
 }
 
-const SALES_PRICE_SQM_BANDS: Record<string, Band> = {
-	'<10,000': { max: 10_000 },
-	'10,000-20,000': { min: 10_000, max: 20_000 },
-	'20,000-30,000': { min: 20_000, max: 30_000 },
-	'30,000+': { min: 30_000 }
+const SALES_PRICE_SQFT_BANDS: Record<string, Band> = {
+	'<1,000': { max: 1_000 },
+	'1,000-2,000': { min: 1_000, max: 2_000 },
+	'2,000-3,000': { min: 2_000, max: 3_000 },
+	'3,000+': { min: 3_000 }
 }
 
 const RENT_BANDS: Record<string, Band> = {
@@ -48,7 +48,7 @@ const RENT_BANDS: Record<string, Band> = {
 
 export const SIZE_OPTIONS = ['All', ...Object.keys(SIZE_BANDS)]
 export const SALES_PRICE_OPTIONS = ['All', ...Object.keys(SALES_PRICE_BANDS)]
-export const SALES_PRICE_SQM_OPTIONS = ['All', ...Object.keys(SALES_PRICE_SQM_BANDS)]
+export const SALES_PRICE_SQFT_OPTIONS = ['All', ...Object.keys(SALES_PRICE_SQFT_BANDS)]
 export const RENT_OPTIONS = ['All', ...Object.keys(RENT_BANDS)]
 
 export interface SalesLocalFilters {
@@ -59,7 +59,7 @@ export interface SalesLocalFilters {
 	selectedStatus: string
 	sizeRange: string
 	priceRange: string
-	pricePerSqMRange: string
+	pricePerSqFtRange: string
 }
 
 export interface RentalsLocalFilters {
@@ -80,7 +80,7 @@ export const DEFAULT_SALES_LOCAL_FILTERS: SalesLocalFilters = {
 	selectedStatus: 'All',
 	sizeRange: 'All',
 	priceRange: 'All',
-	pricePerSqMRange: 'All'
+	pricePerSqFtRange: 'All'
 }
 
 export const DEFAULT_RENTALS_LOCAL_FILTERS: RentalsLocalFilters = {
@@ -149,10 +149,10 @@ export function buildSalesFilterParams(
 	applyBand(filters, local.priceRange, SALES_PRICE_BANDS, 'price_min', 'price_max')
 	applyBand(
 		filters,
-		local.pricePerSqMRange,
-		SALES_PRICE_SQM_BANDS,
-		'price_per_sqm_min',
-		'price_per_sqm_max'
+		local.pricePerSqFtRange,
+		SALES_PRICE_SQFT_BANDS,
+		'price_per_sqft_min',
+		'price_per_sqft_max'
 	)
 	return filters
 }
@@ -209,7 +209,7 @@ export interface SaleRow {
 	bedrooms: string
 	size: number | null
 	price: number | null
-	pricePerSqM: number | null
+	pricePerSqFt: number | null
 	status: string
 }
 
@@ -240,9 +240,9 @@ export function toSaleRow(sale: TransactionResponseOutput): SaleRow {
 		project: sale.project_name ?? '-',
 		propertyType: sale.property_type ?? '-',
 		bedrooms: sale.bedrooms ?? '-',
-		size: sale.size_sqm ?? null,
+		size: sale.size_sqft ?? null,
 		price: sale.price_aed ?? null,
-		pricePerSqM: sale.price_per_sqm_aed ?? null,
+		pricePerSqFt: sale.price_per_sqft_aed ?? null,
 		status: sale.status ?? '-'
 	}
 }
@@ -258,7 +258,7 @@ export function toRentalRow(lease: RentalContractResponseOutput): RentalRow {
 		project: lease.project_name ?? '-',
 		propertyType: lease.property_type ?? '-',
 		bedrooms: lease.bedrooms ?? '-',
-		size: lease.size_sqm ?? null,
+		size: lease.size_sqft ?? null,
 		annualRent: lease.annual_rent_aed ?? null,
 		contractAmount: lease.contract_amount_aed ?? null,
 		termMonths: lease.term_months ?? null,

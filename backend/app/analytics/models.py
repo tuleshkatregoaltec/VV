@@ -95,7 +95,7 @@ class MarketTrendPoint(BaseModel):
     date: date
     transaction_count: int
     avg_price: float
-    avg_price_sqm: float
+    avg_price_sqft: float
 
 
 class MarketTrendResponse(BaseModel):
@@ -104,7 +104,7 @@ class MarketTrendResponse(BaseModel):
     data: list[MarketTrendPoint]
     total_transactions: int
     avg_price_change_pct: Optional[float] = None
-    avg_price_sqm_change_pct: Optional[float] = None
+    avg_price_sqft_change_pct: Optional[float] = None
 
 
 # =============================================================================
@@ -130,7 +130,7 @@ class ProjectSalesSummary(BaseModel):
     transaction_count: int
     total_volume: float
     avg_price: float
-    avg_price_sqm: float
+    avg_price_sqft: float
     median_price: float
 
 
@@ -138,7 +138,7 @@ class ProjectRentalSummary(BaseModel):
     contract_count: int
     total_annual_value: float
     median_annual_rent: float
-    median_rent_sqm: float
+    median_rent_sqft: float
 
 
 class RoomAnalytics(BaseModel):
@@ -147,10 +147,10 @@ class RoomAnalytics(BaseModel):
     rooms: str
     sale_count: int
     avg_sale_price: float
-    avg_sale_price_sqm: float
+    avg_sale_price_sqft: float
     rental_count: int
     median_annual_rent: float
-    median_rent_sqm: float
+    median_rent_sqft: float
     gross_yield_pct: Optional[float] = None
 
 
@@ -162,11 +162,11 @@ class ProjectConfigurationRow(BaseModel):
     sales_last_12m: int
     avg_sale_price: float
     median_sale_price: float
-    avg_sale_price_sqm: float
-    avg_unit_size_sqm: float
+    avg_sale_price_sqft: float
+    avg_unit_size_sqft: float
     rental_count: int
     median_annual_rent: float
-    median_rent_sqm: float
+    median_rent_sqft: float
     gross_yield_pct: Optional[float] = None
     price_change_yoy_pct: Optional[float] = None
     sales_momentum_pct: Optional[float] = None
@@ -194,7 +194,7 @@ class AnalyticsUnitComposition(BaseModel):
     rooms: str
     count: int
     pct_of_total: float
-    avg_unit_size_sqm: float = 0.0
+    avg_unit_size_sqft: float = 0.0
 
 
 class ProjectAnalyticsResponse(BaseModel):
@@ -215,7 +215,7 @@ class ProjectTrendPoint(BaseModel):
     date: date
     transaction_count: int
     avg_price: float
-    avg_price_sqm: float
+    avg_price_sqft: float
 
 
 class ProjectTrendsResponse(BaseModel):
@@ -225,7 +225,7 @@ class ProjectTrendsResponse(BaseModel):
 class ProjectForecastPoint(BaseModel):
     date: date
     avg_price: float
-    avg_price_sqm: float
+    avg_price_sqft: float
     series: Literal["historical", "forecast"]
 
 
@@ -263,8 +263,8 @@ class PriceDistributionBucket(BaseModel):
     p50_price: float = 0.0
     p75_price: float = 0.0
     p95_price: float = 0.0
-    mean_price_sqm: float
-    std_price_sqm: float
+    mean_price_sqft: float
+    std_price_sqft: float
 
 
 class ProjectPriceDistributionResponse(BaseModel):
@@ -304,9 +304,6 @@ MarketMetricName = Literal[
     "median_aed",
     "p25_aed",
     "p75_aed",
-    "mean_aed_per_sqm",
-    "median_aed_per_sqm",
-    "weighted_aed_per_sqm",
     "mean_aed_per_sqft",
     "median_aed_per_sqft",
     "weighted_aed_per_sqft",

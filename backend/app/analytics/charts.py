@@ -32,15 +32,15 @@ async def market_trend(args: dict[str, Any]) -> dict[str, Any]:
             "date": str(row["period"]),
             "transaction_count": int(row["transaction_count"]),
             "avg_price": float(row["avg_price"] or 0),
-            "avg_price_sqm": float(row["avg_price_sqm"] or 0),
+            "avg_price_sqft": float(row["avg_price_sqft"] or 0),
         }
         for row in rows
     ]
-    first = next((point for point in points if point["avg_price_sqm"] > 0), None)
-    last = next((point for point in reversed(points) if point["avg_price_sqm"] > 0), None)
+    first = next((point for point in points if point["avg_price_sqft"] > 0), None)
+    last = next((point for point in reversed(points) if point["avg_price_sqft"] > 0), None)
     change_pct = (
-        round((last["avg_price_sqm"] - first["avg_price_sqm"]) / first["avg_price_sqm"] * 100, 1)
-        if first and last and first["avg_price_sqm"]
+        round((last["avg_price_sqft"] - first["avg_price_sqft"]) / first["avg_price_sqft"] * 100, 1)
+        if first and last and first["avg_price_sqft"]
         else None
     )
     total_transactions = sum(point["transaction_count"] for point in points)
@@ -56,7 +56,7 @@ async def market_trend(args: dict[str, Any]) -> dict[str, Any]:
         "data": {
             "data": points,
             "total_transactions": total_transactions,
-            "avg_price_sqm_change_pct": change_pct,
+            "avg_price_sqft_change_pct": change_pct,
         },
     }
 

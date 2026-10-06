@@ -24,7 +24,7 @@ let {
 	allProjects?: ProjectSearchResult[]
 } = $props()
 
-type TrendMode = 'avg_price' | 'avg_price_sqm'
+type TrendMode = 'avg_price' | 'avg_price_sqft'
 type DeltaMode = 'pct_change' | 'points'
 
 let trendMode = $state<TrendMode>('avg_price')
@@ -207,7 +207,7 @@ function getKpis(summary: ProjectAnalyticsResponse) {
 		{
 			label: 'Avg sale price',
 			value: fmtCurrency(summary.sales.avg_price),
-			detail: `${fmtCurrency(summary.sales.avg_price_sqm)}/sqm`
+			detail: `${fmtCurrency(summary.sales.avg_price_sqft)}/sq ft`
 		},
 		{
 			label: 'Median rent',
@@ -255,10 +255,10 @@ function getMetricRows(
 			deltaMode: 'pct_change' as DeltaMode
 		},
 		{
-			label: 'Avg price / sqm',
-			a: summaryLeft.sales.avg_price_sqm,
-			b: summaryRight.sales.avg_price_sqm,
-			format: (value: number | null | undefined) => `${fmtCurrency(value)}/sqm`,
+			label: 'Avg price / sq ft',
+			a: summaryLeft.sales.avg_price_sqft,
+			b: summaryRight.sales.avg_price_sqft,
+			format: (value: number | null | undefined) => `${fmtCurrency(value)}/sq ft`,
 			deltaMode: 'pct_change' as DeltaMode
 		},
 		{
@@ -314,7 +314,7 @@ function getShortName(
 }
 
 function trendValue(point: ProjectTrendPoint): number {
-	return trendMode === 'avg_price' ? point.avg_price : point.avg_price_sqm
+	return trendMode === 'avg_price' ? point.avg_price : point.avg_price_sqft
 }
 
 function buildTrendChart() {
@@ -393,7 +393,7 @@ function buildTrendChart() {
 						label: (context) =>
 							trendMode === 'avg_price'
 								? ` ${context.dataset.label}: ${fmtCurrency(Number(context.parsed.y ?? 0))}`
-								: ` ${context.dataset.label}: AED ${fmtNumber(Number(context.parsed.y ?? 0), 0)}/sqm`
+								: ` ${context.dataset.label}: AED ${fmtNumber(Number(context.parsed.y ?? 0), 0)}/sq ft`
 					}
 				}
 			},
@@ -586,10 +586,10 @@ onMount(() => {
 					<button
 						type="button"
 						class="ui-segmented-item px-3 py-1.5 text-sm"
-						data-active={trendMode === 'avg_price_sqm'}
-						onclick={() => (trendMode = 'avg_price_sqm')}
+						data-active={trendMode === 'avg_price_sqft'}
+						onclick={() => (trendMode = 'avg_price_sqft')}
 					>
-						AED / sqm
+						AED / sq ft
 					</button>
 				</div>
 			</div>
@@ -806,8 +806,8 @@ onMount(() => {
 							<p class="mt-1 font-semibold text-fg-2">{fmtCurrency(row.avg_sale_price)}</p>
 						</div>
 						<div>
-							<p class="uppercase tracking-[0.12em] text-fg-5">Price / sqm</p>
-							<p class="mt-1 font-semibold text-fg-2">{fmtCurrency(row.avg_sale_price_sqm)}</p>
+							<p class="uppercase tracking-[0.12em] text-fg-5">Price / sq ft</p>
+							<p class="mt-1 font-semibold text-fg-2">{fmtCurrency(row.avg_sale_price_sqft)}</p>
 						</div>
 						<div>
 							<p class="uppercase tracking-[0.12em] text-fg-5">Yield</p>

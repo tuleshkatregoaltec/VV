@@ -5,6 +5,8 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
+from app.market.units import SQM_TO_SQFT as SQM_TO_SQFT
+
 AREA_ALIASES = {
     "jvc": "Jumeirah Village Circle",
     "jumeirah village circle": "Jumeirah Village Circle",
@@ -143,9 +145,6 @@ def developer_filter_names(developer_name: str) -> list[str]:
 
 def is_rankable_developer_brand(developer_name: str) -> bool:
     return DEVELOPER_LEGAL_ENTITY_PATTERN.search(developer_name) is None
-
-
-SQM_TO_SQFT = 10.7639
 
 
 def location_key(name: str) -> str:

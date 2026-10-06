@@ -134,9 +134,9 @@ export type AnalyticsUnitComposition = {
      */
     pct_of_total: number;
     /**
-     * Avg Unit Size Sqm
+     * Avg Unit Size Sqft
      */
-    avg_unit_size_sqm?: number;
+    avg_unit_size_sqft?: number;
 };
 
 /**
@@ -204,13 +204,13 @@ export type AreaDetailResponse = {
      */
     median_annual_rent: number | null;
     /**
-     * Avg Sale Price Sqm 12M
+     * Avg Sale Price Sqft 12M
      */
-    avg_sale_price_sqm_12m: number | null;
+    avg_sale_price_sqft_12m: number | null;
     /**
-     * Avg Rent Price Sqm 12M
+     * Avg Rent Price Sqft 12M
      */
-    avg_rent_price_sqm_12m: number | null;
+    avg_rent_price_sqft_12m: number | null;
     /**
      * Gross Yield Pct
      */
@@ -324,13 +324,13 @@ export type AreaListItem = {
      */
     median_annual_rent: number | null;
     /**
-     * Avg Sale Price Sqm 12M
+     * Avg Sale Price Sqft 12M
      */
-    avg_sale_price_sqm_12m: number | null;
+    avg_sale_price_sqft_12m: number | null;
     /**
-     * Avg Rent Price Sqm 12M
+     * Avg Rent Price Sqft 12M
      */
-    avg_rent_price_sqm_12m: number | null;
+    avg_rent_price_sqft_12m: number | null;
     /**
      * Gross Yield Pct
      */
@@ -644,9 +644,9 @@ export type BuildingUnitType = {
      */
     percentage: number;
     /**
-     * Avg Area Sqm
+     * Avg Area Sqft
      */
-    avg_area_sqm: number | null;
+    avg_area_sqft: number | null;
 };
 
 /**
@@ -5911,7 +5911,7 @@ export type MarketMetricsRequest = {
     /**
      * Metrics
      */
-    metrics?: Array<'count' | 'total_aed' | 'mean_aed' | 'median_aed' | 'p25_aed' | 'p75_aed' | 'mean_aed_per_sqm' | 'median_aed_per_sqm' | 'weighted_aed_per_sqm' | 'mean_aed_per_sqft' | 'median_aed_per_sqft' | 'weighted_aed_per_sqft' | 'total_contract_aed' | 'median_contract_aed'>;
+    metrics?: Array<'count' | 'total_aed' | 'mean_aed' | 'median_aed' | 'p25_aed' | 'p75_aed' | 'mean_aed_per_sqft' | 'median_aed_per_sqft' | 'weighted_aed_per_sqft' | 'total_contract_aed' | 'median_contract_aed'>;
     period: MarketPeriodRequest;
     /**
      * Location
@@ -5988,7 +5988,7 @@ export type MarketMetricsRequest = {
     /**
      * Sort By
      */
-    sort_by?: 'count' | 'total_aed' | 'mean_aed' | 'median_aed' | 'p25_aed' | 'p75_aed' | 'mean_aed_per_sqm' | 'median_aed_per_sqm' | 'weighted_aed_per_sqm' | 'mean_aed_per_sqft' | 'median_aed_per_sqft' | 'weighted_aed_per_sqft' | 'total_contract_aed' | 'median_contract_aed';
+    sort_by?: 'count' | 'total_aed' | 'mean_aed' | 'median_aed' | 'p25_aed' | 'p75_aed' | 'mean_aed_per_sqft' | 'median_aed_per_sqft' | 'weighted_aed_per_sqft' | 'total_contract_aed' | 'median_contract_aed';
     /**
      * Limit
      */
@@ -6185,9 +6185,9 @@ export type MarketTrendPoint = {
      */
     avg_price: number;
     /**
-     * Avg Price Sqm
+     * Avg Price Sqft
      */
-    avg_price_sqm: number;
+    avg_price_sqft: number;
 };
 
 /**
@@ -6209,9 +6209,9 @@ export type MarketTrendResponse = {
      */
     avg_price_change_pct?: number | null;
     /**
-     * Avg Price Sqm Change Pct
+     * Avg Price Sqft Change Pct
      */
-    avg_price_sqm_change_pct?: number | null;
+    avg_price_sqft_change_pct?: number | null;
 };
 
 /**
@@ -7266,13 +7266,13 @@ export type PriceDistributionBucket = {
      */
     p95_price?: number;
     /**
-     * Mean Price Sqm
+     * Mean Price Sqft
      */
-    mean_price_sqm: number;
+    mean_price_sqft: number;
     /**
-     * Std Price Sqm
+     * Std Price Sqft
      */
-    std_price_sqm: number;
+    std_price_sqft: number;
 };
 
 /**
@@ -7343,13 +7343,13 @@ export type ProjectConfigurationRow = {
      */
     median_sale_price: number;
     /**
-     * Avg Sale Price Sqm
+     * Avg Sale Price Sqft
      */
-    avg_sale_price_sqm: number;
+    avg_sale_price_sqft: number;
     /**
-     * Avg Unit Size Sqm
+     * Avg Unit Size Sqft
      */
-    avg_unit_size_sqm: number;
+    avg_unit_size_sqft: number;
     /**
      * Rental Count
      */
@@ -7359,9 +7359,9 @@ export type ProjectConfigurationRow = {
      */
     median_annual_rent: number;
     /**
-     * Median Rent Sqm
+     * Median Rent Sqft
      */
-    median_rent_sqm: number;
+    median_rent_sqft: number;
     /**
      * Gross Yield Pct
      */
@@ -7510,9 +7510,9 @@ export type ProjectForecastPoint = {
      */
     avg_price: number;
     /**
-     * Avg Price Sqm
+     * Avg Price Sqft
      */
-    avg_price_sqm: number;
+    avg_price_sqft: number;
     /**
      * Series
      */
@@ -7717,13 +7717,13 @@ export type ProjectRadarArea = {
      */
     median_annual_rent: number | null;
     /**
-     * Avg Sale Price Sqm 12M
+     * Avg Sale Price Sqft 12M
      */
-    avg_sale_price_sqm_12m: number | null;
+    avg_sale_price_sqft_12m: number | null;
     /**
-     * Avg Rent Price Sqm 12M
+     * Avg Rent Price Sqft 12M
      */
-    avg_rent_price_sqm_12m: number | null;
+    avg_rent_price_sqft_12m: number | null;
     /**
      * Gross Yield Pct
      */
@@ -7741,13 +7741,13 @@ export type ProjectRadarArea = {
      */
     dda_plot_count: number;
     /**
-     * Dda Total Plot Area Sqm
+     * Dda Total Plot Area Sqft
      */
-    dda_total_plot_area_sqm: number;
+    dda_total_plot_area_sqft: number;
     /**
-     * Dda Total Gfa Sqm
+     * Dda Total Gfa Sqft
      */
-    dda_total_gfa_sqm: number;
+    dda_total_gfa_sqft: number;
     /**
      * Dda Dominant Land Uses
      */
@@ -7765,13 +7765,13 @@ export type ProjectRadarArea = {
      */
     total_sales_volume?: number;
     /**
-     * Avg Sale Price Sqm
+     * Avg Sale Price Sqft
      */
-    avg_sale_price_sqm?: number | null;
+    avg_sale_price_sqft?: number | null;
     /**
-     * Avg Rent Price Sqm
+     * Avg Rent Price Sqft
      */
-    avg_rent_price_sqm?: number | null;
+    avg_rent_price_sqft?: number | null;
 };
 
 /**
@@ -7918,13 +7918,13 @@ export type ProjectRadarProject = {
      */
     gross_yield_pct: number | null;
     /**
-     * Avg Sale Price Sqm 12M
+     * Avg Sale Price Sqft 12M
      */
-    avg_sale_price_sqm_12m: number | null;
+    avg_sale_price_sqft_12m: number | null;
     /**
-     * Avg Rent Price Sqm 12M
+     * Avg Rent Price Sqft 12M
      */
-    avg_rent_price_sqm_12m: number | null;
+    avg_rent_price_sqft_12m: number | null;
     /**
      * Sales Transaction Count
      */
@@ -7938,13 +7938,13 @@ export type ProjectRadarProject = {
      */
     total_sales_volume?: number;
     /**
-     * Avg Sale Price Sqm
+     * Avg Sale Price Sqft
      */
-    avg_sale_price_sqm?: number | null;
+    avg_sale_price_sqft?: number | null;
     /**
-     * Avg Rent Price Sqm
+     * Avg Rent Price Sqft
      */
-    avg_rent_price_sqm?: number | null;
+    avg_rent_price_sqft?: number | null;
 };
 
 /**
@@ -8015,13 +8015,13 @@ export type ProjectRadarStats = {
      */
     dda_plot_count: number;
     /**
-     * Dda Total Plot Area Sqm
+     * Dda Total Plot Area Sqft
      */
-    dda_total_plot_area_sqm: number;
+    dda_total_plot_area_sqft: number;
     /**
-     * Dda Total Gfa Sqm
+     * Dda Total Gfa Sqft
      */
-    dda_total_gfa_sqm: number;
+    dda_total_gfa_sqft: number;
     /**
      * Activity Period Days
      */
@@ -8081,9 +8081,9 @@ export type ProjectRentalSummary = {
      */
     median_annual_rent: number;
     /**
-     * Median Rent Sqm
+     * Median Rent Sqft
      */
-    median_rent_sqm: number;
+    median_rent_sqft: number;
 };
 
 /**
@@ -8103,9 +8103,9 @@ export type ProjectSalesSummary = {
      */
     avg_price: number;
     /**
-     * Avg Price Sqm
+     * Avg Price Sqft
      */
-    avg_price_sqm: number;
+    avg_price_sqft: number;
     /**
      * Median Price
      */
@@ -8189,9 +8189,9 @@ export type ProjectTrendPoint = {
      */
     avg_price: number;
     /**
-     * Avg Price Sqm
+     * Avg Price Sqft
      */
-    avg_price_sqm: number;
+    avg_price_sqft: number;
 };
 
 /**
@@ -8223,9 +8223,9 @@ export type ProjectUnitComposition = {
      */
     percentage: number;
     /**
-     * Avg Area Sqm
+     * Avg Area Sqft
      */
-    avg_area_sqm: number | null;
+    avg_area_sqft: number | null;
 };
 
 /**
@@ -8463,7 +8463,7 @@ export type RentalContractListResponse = {
 /**
  * RentalContractResponse
  *
- * One DXBI lease of one unit (dxbi_rental_events): sizes in m², amounts in AED.
+ * One DXBI lease of one unit (dxbi_rental_events): sizes in sq ft, amounts in AED.
  */
 export type RentalContractResponse = {
     /**
@@ -8503,9 +8503,9 @@ export type RentalContractResponse = {
      */
     bedrooms?: string | null;
     /**
-     * Size Sqm
+     * Size Sqft
      */
-    size_sqm?: number | null;
+    size_sqft?: number | null;
     /**
      * Annual Rent Aed
      */
@@ -8671,9 +8671,9 @@ export type RoomAnalytics = {
      */
     avg_sale_price: number;
     /**
-     * Avg Sale Price Sqm
+     * Avg Sale Price Sqft
      */
-    avg_sale_price_sqm: number;
+    avg_sale_price_sqft: number;
     /**
      * Rental Count
      */
@@ -8683,9 +8683,9 @@ export type RoomAnalytics = {
      */
     median_annual_rent: number;
     /**
-     * Median Rent Sqm
+     * Median Rent Sqft
      */
-    median_rent_sqm: number;
+    median_rent_sqft: number;
     /**
      * Gross Yield Pct
      */
@@ -9403,7 +9403,7 @@ export type TransactionListResponse = {
 /**
  * TransactionResponse
  *
- * One DXBI sale (dxbi_sales_unit_events): sizes in m², prices in AED.
+ * One DXBI sale (dxbi_sales_unit_events): sizes in sq ft, prices in AED.
  */
 export type TransactionResponse = {
     /**
@@ -9443,17 +9443,17 @@ export type TransactionResponse = {
      */
     status?: string | null;
     /**
-     * Size Sqm
+     * Size Sqft
      */
-    size_sqm?: number | null;
+    size_sqft?: number | null;
     /**
      * Price Aed
      */
     price_aed?: number | null;
     /**
-     * Price Per Sqm Aed
+     * Price Per Sqft Aed
      */
-    price_per_sqm_aed?: number | null;
+    price_per_sqft_aed?: number | null;
 };
 
 /**
@@ -11882,13 +11882,13 @@ export type FiltersGetSalesFilterOptionsData = {
         /**
          * Size Min
          *
-         * Minimum size (sq.m), inclusive
+         * Minimum size (sq ft), inclusive
          */
         size_min?: number | null;
         /**
          * Size Max
          *
-         * Maximum size (sq.m), exclusive
+         * Maximum size (sq ft), exclusive
          */
         size_max?: number | null;
         /**
@@ -11904,17 +11904,17 @@ export type FiltersGetSalesFilterOptionsData = {
          */
         price_max?: number | null;
         /**
-         * Price Per Sqm Min
+         * Price Per Sqft Min
          *
-         * Minimum price per sq.m (AED), inclusive
+         * Minimum price per sq ft (AED), inclusive
          */
-        price_per_sqm_min?: number | null;
+        price_per_sqft_min?: number | null;
         /**
-         * Price Per Sqm Max
+         * Price Per Sqft Max
          *
-         * Maximum price per sq.m (AED), exclusive
+         * Maximum price per sq ft (AED), exclusive
          */
-        price_per_sqm_max?: number | null;
+        price_per_sqft_max?: number | null;
     };
     url: '/api/v1/filters/sales';
 };
@@ -11986,13 +11986,13 @@ export type FiltersGetRentalFilterOptionsData = {
         /**
          * Size Min
          *
-         * Minimum size (sq.m), inclusive
+         * Minimum size (sq ft), inclusive
          */
         size_min?: number | null;
         /**
          * Size Max
          *
-         * Maximum size (sq.m), exclusive
+         * Maximum size (sq ft), exclusive
          */
         size_max?: number | null;
         /**
@@ -13394,13 +13394,13 @@ export type TransactionsGetSalesTransactionsData = {
         /**
          * Size Min
          *
-         * Minimum size (sq.m), inclusive
+         * Minimum size (sq ft), inclusive
          */
         size_min?: number | null;
         /**
          * Size Max
          *
-         * Maximum size (sq.m), exclusive
+         * Maximum size (sq ft), exclusive
          */
         size_max?: number | null;
         /**
@@ -13416,17 +13416,17 @@ export type TransactionsGetSalesTransactionsData = {
          */
         price_max?: number | null;
         /**
-         * Price Per Sqm Min
+         * Price Per Sqft Min
          *
-         * Minimum price per sq.m (AED), inclusive
+         * Minimum price per sq ft (AED), inclusive
          */
-        price_per_sqm_min?: number | null;
+        price_per_sqft_min?: number | null;
         /**
-         * Price Per Sqm Max
+         * Price Per Sqft Max
          *
-         * Maximum price per sq.m (AED), exclusive
+         * Maximum price per sq ft (AED), exclusive
          */
-        price_per_sqm_max?: number | null;
+        price_per_sqft_max?: number | null;
     };
     url: '/api/v1/transactions/sales';
 };
@@ -13510,13 +13510,13 @@ export type TransactionsGetRentalContractsData = {
         /**
          * Size Min
          *
-         * Minimum size (sq.m), inclusive
+         * Minimum size (sq ft), inclusive
          */
         size_min?: number | null;
         /**
          * Size Max
          *
-         * Maximum size (sq.m), exclusive
+         * Maximum size (sq ft), exclusive
          */
         size_max?: number | null;
         /**
@@ -13614,13 +13614,13 @@ export type TransactionsExportSalesTransactionsEndpointData = {
         /**
          * Size Min
          *
-         * Minimum size (sq.m), inclusive
+         * Minimum size (sq ft), inclusive
          */
         size_min?: number | null;
         /**
          * Size Max
          *
-         * Maximum size (sq.m), exclusive
+         * Maximum size (sq ft), exclusive
          */
         size_max?: number | null;
         /**
@@ -13636,17 +13636,17 @@ export type TransactionsExportSalesTransactionsEndpointData = {
          */
         price_max?: number | null;
         /**
-         * Price Per Sqm Min
+         * Price Per Sqft Min
          *
-         * Minimum price per sq.m (AED), inclusive
+         * Minimum price per sq ft (AED), inclusive
          */
-        price_per_sqm_min?: number | null;
+        price_per_sqft_min?: number | null;
         /**
-         * Price Per Sqm Max
+         * Price Per Sqft Max
          *
-         * Maximum price per sq.m (AED), exclusive
+         * Maximum price per sq ft (AED), exclusive
          */
-        price_per_sqm_max?: number | null;
+        price_per_sqft_max?: number | null;
     };
     url: '/api/v1/transactions/sales/export';
 };
@@ -13728,13 +13728,13 @@ export type TransactionsExportRentalContractsEndpointData = {
         /**
          * Size Min
          *
-         * Minimum size (sq.m), inclusive
+         * Minimum size (sq ft), inclusive
          */
         size_min?: number | null;
         /**
          * Size Max
          *
-         * Maximum size (sq.m), exclusive
+         * Maximum size (sq ft), exclusive
          */
         size_max?: number | null;
         /**

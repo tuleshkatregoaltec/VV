@@ -77,7 +77,7 @@ async def test_land_evidence_preserves_usage_fallback_units_and_far_calculation(
                 "Comparable",
                 "Sell",
                 "Commercial",
-                10764,
+                1000,  # procedure_area is in m² (DLD); the market layer pairs it x 10.7639 with DXBI sq ft
                 2000000,
                 "",
                 "Sales",

@@ -106,7 +106,7 @@ let filterDefinitions = $derived<FilterDefinition[]>([
 		type: 'standard',
 		options: ['All', ...(options?.contract_types ?? [])]
 	},
-	{ id: 'sizeRange', label: 'Size (sq.m)', type: 'standard', options: SIZE_OPTIONS },
+	{ id: 'sizeRange', label: 'Size (sq ft)', type: 'standard', options: SIZE_OPTIONS },
 	{ id: 'rentRange', label: 'Annual Rent (AED)', type: 'standard', options: RENT_OPTIONS }
 ])
 

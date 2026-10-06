@@ -17,9 +17,9 @@ SALES_ROW = {
     "property_usage": "Residential",
     "bedrooms": "2 Beds",
     "status": "Ready",
-    "size_sqm": 100.0,
+    "size_sqft": 1_000.0,
     "price_aed": 1_500_000,
-    "price_per_sqm": 15_000,
+    "price_per_sqft": 1_500,
 }
 
 RENTAL_ROW = {
@@ -33,7 +33,7 @@ RENTAL_ROW = {
     "property_type": "Apartment",
     "property_usage": "Residential",
     "bedrooms": "1 Bed",
-    "size_sqm": 100.0,
+    "size_sqft": 1_000.0,
     "annual_rent_aed": 120_000,
     "contract_amount_aed": 120_000,
     "term_months": 12.0,
@@ -72,7 +72,7 @@ async def test_sales_excel_export_names_dxbi_and_caps_rows(monkeypatch):
     assert "location=Dubai Marina" in metadata["B7"].value
     sheet = workbook["Sales Transactions"]
     assert [cell.value for cell in sheet[6]] == transaction_service.SALES_EXPORT_HEADERS
-    assert (sheet["A7"].value, sheet["C7"].value, sheet["L7"].value) == ("T-1", "1904", 15_000)
+    assert (sheet["A7"].value, sheet["C7"].value, sheet["L7"].value) == ("T-1", "1904", 1_500)
 
 
 async def test_sales_csv_export_is_the_raw_rows_without_workbook_metadata(monkeypatch):

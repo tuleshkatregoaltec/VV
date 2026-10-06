@@ -1,7 +1,8 @@
 <script lang="ts">
 import Modal from '$lib/components/ui/Modal.svelte'
-import { formatAed, formatSqm } from '$lib/constants/transactions'
+import { formatAed } from '$lib/constants/transactions'
 import type { SaleRow } from '$lib/utils/transactionPages'
+import { formatSqft } from '$lib/utils/units'
 
 let {
 	transaction,
@@ -24,9 +25,9 @@ const fields = $derived(
 				{ label: 'Property Type', value: transaction.propertyType },
 				{ label: 'Bedrooms', value: transaction.bedrooms },
 				{ label: 'Status', value: transaction.status },
-				{ label: 'Size', value: `${formatSqm(transaction.size)} m²` },
+				{ label: 'Size', value: `${formatSqft(transaction.size)} sq ft` },
 				{ label: 'Price', value: `${formatAed(transaction.price)} AED` },
-				{ label: 'Price/m²', value: `${formatAed(transaction.pricePerSqM)} AED/m²` }
+				{ label: 'Price/sq ft', value: `${formatAed(transaction.pricePerSqFt)} AED/sq ft` }
 			]
 		: []
 )
@@ -45,7 +46,7 @@ const fields = $derived(
 				{/each}
 			</div>
 			<p class="mt-3 text-xs text-fg-4">
-				Source: DXBInteract (DXBI) sold-transaction record. Price/m² is the price divided by
+				Source: DXBInteract (DXBI) sold-transaction record. Price/sq ft is the price divided by
 				the size.
 			</p>
 		</div>

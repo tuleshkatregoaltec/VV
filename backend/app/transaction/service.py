@@ -34,9 +34,9 @@ def sale_response(row: dict) -> TransactionResponse:
         property_type=_text(row["property_type"]),
         bedrooms=_text(row["bedrooms"]),
         status=_text(row["status"]),
-        size_sqm=row["size_sqm"],
+        size_sqft=row["size_sqft"],
         price_aed=_whole(row["price_aed"]),
-        price_per_sqm_aed=_whole(row["price_per_sqm"]),
+        price_per_sqft_aed=_whole(row["price_per_sqft"]),
     )
 
 
@@ -51,7 +51,7 @@ def rental_response(row: dict) -> RentalContractResponse:
         location_name=_text(row["location_name"]),
         property_type=_text(row["property_type"]),
         bedrooms=_text(row["bedrooms"]),
-        size_sqm=row["size_sqm"],
+        size_sqft=row["size_sqft"],
         annual_rent_aed=_whole(row["annual_rent_aed"]),
         contract_amount_aed=_whole(row["contract_amount_aed"]),
         term_months=row["term_months"] or None,

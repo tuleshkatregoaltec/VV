@@ -47,8 +47,8 @@ function createChart() {
 			),
 			datasets: [
 				{
-					label: 'Avg AED / sqm',
-					data: points.map((point) => point.avg_price_sqm),
+					label: 'Avg AED / sq ft',
+					data: points.map((point) => point.avg_price_sqft),
 					borderColor: theme.line,
 					backgroundColor: theme.fill,
 					borderWidth: 2,
@@ -74,7 +74,7 @@ function createChart() {
 					titleColor: theme.tooltipText,
 					bodyColor: theme.tooltipText,
 					callbacks: {
-						label: (context) => `Avg AED / sqm: ${formatNumber(Number(context.parsed.y ?? 0))}`
+						label: (context) => `Avg AED / sq ft: ${formatNumber(Number(context.parsed.y ?? 0))}`
 					}
 				}
 			},
@@ -125,21 +125,21 @@ $effect(() => {
 				</p>
 			</div>
 			<div class="rounded-md border border-border bg-card p-2.5">
-				<p class="text-[10px] font-semibold uppercase tracking-[0.12em] text-fg-5">Latest / sqm</p>
+				<p class="text-[10px] font-semibold uppercase tracking-[0.12em] text-fg-5">Latest / sq ft</p>
 				<p class="mt-1 text-sm font-semibold text-fg-1">
-					{formatNumber(points[points.length - 1]?.avg_price_sqm)}
+					{formatNumber(points[points.length - 1]?.avg_price_sqft)}
 				</p>
 			</div>
 			<div class="rounded-md border border-border bg-card p-2.5">
 				<p class="text-[10px] font-semibold uppercase tracking-[0.12em] text-fg-5">Change</p>
 				<p
-					class="mt-1 text-sm font-semibold {(artifact.data?.avg_price_sqm_change_pct ?? 0) >= 0
+					class="mt-1 text-sm font-semibold {(artifact.data?.avg_price_sqft_change_pct ?? 0) >= 0
 						? 'text-success'
 						: 'text-error'}"
 				>
-					{artifact.data?.avg_price_sqm_change_pct == null
+					{artifact.data?.avg_price_sqft_change_pct == null
 						? '-'
-						: `${artifact.data.avg_price_sqm_change_pct > 0 ? '+' : ''}${artifact.data.avg_price_sqm_change_pct}%`}
+						: `${artifact.data.avg_price_sqft_change_pct > 0 ? '+' : ''}${artifact.data.avg_price_sqft_change_pct}%`}
 				</p>
 			</div>
 		</div>

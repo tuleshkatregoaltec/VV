@@ -1,5 +1,6 @@
 <script lang="ts">
 import type { BuildingDetailResponse } from '$lib/api/projects'
+import { formatSqft } from '$lib/utils/units'
 
 let {
 	building,
@@ -72,8 +73,8 @@ let {
 						<div class="flex items-center justify-between mb-1">
 							<span class="text-sm font-medium text-slate-700">{unit.rooms_en}</span>
 							<div class="flex items-center gap-2">
-								{#if unit.avg_area_sqm}
-									<span class="text-xs text-slate-400">{unit.avg_area_sqm} m²</span>
+								{#if unit.avg_area_sqft}
+									<span class="text-xs text-slate-400">{formatSqft(unit.avg_area_sqft)} sq ft</span>
 								{/if}
 								<span class="text-xs text-slate-500">{unit.count} · {unit.percentage}%</span>
 							</div>

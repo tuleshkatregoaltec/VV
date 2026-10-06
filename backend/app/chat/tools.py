@@ -78,7 +78,7 @@ async def query_market_metrics(
 ) -> dict[str, Any]:
     """Compute sales or rental metrics from the stored DLD/DXBI records.
 
-    Use this for counts, totals, averages (mean_aed), medians, quartiles, prices per sqm/sqft,
+    Use this for counts, totals, averages (mean_aed), medians, quartiles, prices per sq ft,
     price brackets, rankings by building/project/community/area (area = official DLD
     district), monthly series and new-versus-renewed rents. Periods are calendar periods in
     Dubai time: "last month" is {"type": "previous_month"}, "last quarter"
