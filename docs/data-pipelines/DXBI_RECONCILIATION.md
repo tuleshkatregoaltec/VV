@@ -384,3 +384,17 @@ repeated. The §10.3 latencies are single local requests, not p95 load results.
   `JUMEIRAH VILLAGE CIRCLE`, `BUSINESS BAY`) beside Pulse's official areas (`Marsa Dubai`, `Al Barsha South
   Fourth`). #11 resolves communities across both in the new metrics capability; existing area lists and
   rankings still split them until the market layer gets a reviewed crosswalk.
+
+## 11. Status after the Chat 2 data-layer stack (2026-10-03, code ready, not deployed)
+
+- Publication is serialized and recoverable, with a durable ledger, and validation rejects a
+  missing week (#15). Readers can pin immutable release
+  versions (#20; `MARKET_RELEASE_CONTRACT.md`).
+- Coverage is established from load evidence, not event extremes
+  (#17).
+- The open-data area vocabulary is reconciled through `market_geo_crosswalk`
+  (#18; `GEOGRAPHY_CROSSWALK.md`).
+- Multi-line DLD transaction numbers had been collapsed to one row: 722 numbers / 3,614 lines.
+  They are now served line by line (#23). Served sales rows
+  go from 1,829,392 to 1,832,267 on the local copy, and the shared API matches an independent
+  bronze query exactly for 1–19 September 2026 (7,363 lines, AED 19,302,851,296).
