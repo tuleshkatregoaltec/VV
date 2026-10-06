@@ -17,6 +17,15 @@ transaction; instead every table names its release, cleanup only drops tables th
 failed release itself, and ``recover`` (run before every build) reconciles the ledger,
 realigns a match ledger left ahead of its events and returns a displaced good release to
 ``__previous``. ``rollback`` swaps a dataset back to its previous release.
+
+Immutable versions for readers: just before its events table goes live, every release is
+also kept as ``<events table>__r<release_id>``, a hard-linked copy of the staged parts (no
+data copy) that nothing writes to again. A reader that must give one consistent answer
+across several queries (a chat turn, an MCP call, a report) pins the published versions and
+reads only those tables (backend ``app.market.releases``). Pins hold at most
+``MAX_READER_LEASE``; a superseded version is dropped only ``RELEASE_RETENTION`` after it
+stopped being published, so a version can never disappear under a reader that pinned it
+while it was current. Versions of releases that never went live are dropped at once.
 """
 
 from __future__ import annotations
@@ -63,6 +72,9 @@ _EVENT_DATE = {
     "market_rental_events": "toDate(registration_date)",
 }
 _GOOD_STATES = {"published", "superseded", "rolled_back"}
+# Must equal backend app.market.releases.MAX_LEASE; retention must stay far above it.
+MAX_READER_LEASE = timedelta(minutes=30)
+RELEASE_RETENTION = timedelta(hours=24)
 # The bronze table and date each dataset's metrics count by; coverage is claimed on that date.
 _COVERAGE_BASIS = {
     "market_sale_events": ("dld_od_transactions_bronze", "instance_date"),
@@ -202,6 +214,53 @@ def _promote(clickhouse: ClickHouseClient, table: str, staging: str, has_previou
         clickhouse.command(f"RENAME TABLE `{staging}` TO `{table}__previous`")
 
 
+def version_table(served: str, release_id: str) -> str:
+    return f"{served}__r{release_id}"
+
+
+def _snapshot(clickhouse: ClickHouseClient, source: str, target: str, release_id: str) -> None:
+    """Immutable copy of ``source`` as ``target``: parts are hard-linked, not rewritten."""
+    clickhouse.command(f"DROP TABLE IF EXISTS `{target}`")
+    clickhouse.command(f"CREATE TABLE `{target}` AS `{source}`")
+    clickhouse.command(f"ALTER TABLE `{target}` MODIFY COMMENT {sql_string(release_id)}")
+    partitions = clickhouse.query(
+        "SELECT DISTINCT partition_id FROM system.parts WHERE active "
+        f"AND database = currentDatabase() AND table = {sql_string(source)}"
+    ).result_rows
+    for (partition_id,) in partitions:
+        clickhouse.command(
+            f"ALTER TABLE `{target}` ATTACH PARTITION ID {sql_string(partition_id)} FROM `{source}`"
+        )
+    copied = _scalar(clickhouse, f"SELECT count() FROM `{target}`")
+    expected = _scalar(clickhouse, f"SELECT count() FROM `{source}`")
+    if copied != expected:
+        raise RuntimeError(f"{target}: snapshot holds {copied} of {expected} rows")
+
+
+def cleanup_versions(clickhouse: ClickHouseClient, *, now: datetime | None = None) -> list[str]:
+    """Drop immutable versions no reader can still hold. Caller holds the lock."""
+    now = now or _now()
+    dropped = []
+    tables = _market_tables(clickhouse)
+    for served in GROUPS:
+        ledger = _ledger(clickhouse, served)
+        prefix = f"{served}__r"
+        for name in [n for n in tables if n.startswith(prefix)]:
+            entry = ledger.get(name.removeprefix(prefix))
+            state = entry["state"] if entry else ""
+            if state == "published" or tables.get(served) == name.removeprefix(prefix):
+                continue
+            if (
+                entry
+                and state in {"superseded", "rolled_back"}
+                and (now - entry["updated_at"].replace(tzinfo=UTC) < RELEASE_RETENTION)
+            ):
+                continue
+            clickhouse.command(f"DROP TABLE IF EXISTS `{name}`")
+            dropped.append(f"{name}: dropped ({state or 'unknown'} release)")
+    return dropped
+
+
 def _drop_own_staging(clickhouse: ClickHouseClient, release_id: str) -> None:
     for name, comment in _market_tables(clickhouse).items():
         if "__staging_" in name and comment == release_id:
@@ -232,10 +291,21 @@ def recover(clickhouse: ClickHouseClient) -> list[str]:
                 if state == "published" and entry["previous_release_id"] in ledger:
                     _record(clickhouse, ledger[entry["previous_release_id"]], state="superseded")
 
-        # A match ledger exchanged ahead of its events goes back to the served release.
+        # A table exchanged ahead of its events goes back to the served release, which sits in
+        # __previous, or still in a staging name if the crash came right after the exchange.
         for table in group[:-1]:
-            if tables.get(table, "") != live and tables.get(f"{table}__previous") == live:
-                clickhouse.command(f"EXCHANGE TABLES `{table}` AND `{table}__previous`")
+            if tables.get(table, "") == live:
+                continue
+            holder = next(
+                (
+                    name
+                    for name in (f"{table}__previous", *_staging_names(tables, table))
+                    if name in tables and tables[name] == live
+                ),
+                None,
+            )
+            if holder:
+                clickhouse.command(f"EXCHANGE TABLES `{table}` AND `{holder}`")
                 actions.append(f"{table}: realigned to served release {live or '(legacy)'}")
         tables = _market_tables(clickhouse)
 
@@ -288,6 +358,9 @@ def rollback(clickhouse: ClickHouseClient, served: str, *, owner: str | None = N
             )
         for table in group:
             clickhouse.command(f"EXCHANGE TABLES `{table}` AND `{table}__previous`")
+        if version_table(served, target) not in tables:
+            # Its version may have aged out of retention; readers can only pin what exists.
+            _snapshot(clickhouse, served, version_table(served, target), target)
         ledger = _ledger(clickhouse, served)
         if current in ledger:
             _record(clickhouse, ledger[current], state="rolled_back", detail="operator rollback")
@@ -421,6 +494,10 @@ def publish_validated(
 ) -> dict[str, int | str]:
     owner = owner or _owner()
     with release_lock(clickhouse, owner=owner):
+        # Runtime DDL under the lock: two publishers installing views at once collide.
+        # ponytail: other writers (bronze loaders) still run ensure_schema unlocked until
+        # versioned warehouse migrations replace it (PIPELINE_STANDARDS S4.2).
+        ensure_schema(clickhouse=clickhouse)
         recovered = recover(clickhouse)
         release_id = uuid4().hex[:12]
         staged = {table: f"{table}__staging_{release_id}" for table in builds}
@@ -470,6 +547,13 @@ def publish_validated(
 
             _record(clickhouse, entry, state="publishing", checks_json=json.dumps(results),
                     served_rows=served_rows)  # fmt: skip
+            # The pinnable immutable version exists before the release can be read at all.
+            _snapshot(
+                clickhouse,
+                staged[served_table],
+                version_table(served_table, release_id),
+                release_id,
+            )
             for table in builds:
                 _promote(clickhouse, table, staged[table], f"{table}__previous" in tables)
             _record(clickhouse, entry, state="published")
@@ -484,6 +568,7 @@ def publish_validated(
             raise
         finally:
             _drop_own_staging(clickhouse, release_id)
+        cleanup_versions(clickhouse)
 
     rows = clickhouse.query(
         f"SELECT match_status, count() FROM `{served_table}` GROUP BY match_status"
@@ -503,7 +588,6 @@ def _checks_for(asset: str) -> tuple[MarketCheck, ...]:
 def materialize_market_sale_events(
     *, clickhouse: ClickHouseClient, owner: str | None = None
 ) -> dict[str, int | str]:
-    ensure_schema(clickhouse=clickhouse)
     return publish_validated(
         clickhouse=clickhouse,
         builds={
@@ -524,7 +608,6 @@ def materialize_market_sale_events(
 def materialize_market_rental_events(
     *, clickhouse: ClickHouseClient, owner: str | None = None
 ) -> dict[str, int | str]:
-    ensure_schema(clickhouse=clickhouse)
     return publish_validated(
         clickhouse=clickhouse,
         builds={
@@ -559,7 +642,8 @@ def main(argv: list[str] | None = None) -> int:
         print(f"{args.table} now serves release {rollback(clickhouse, args.table)}")
     else:
         with release_lock(clickhouse, owner=_owner()):
-            for action in recover(clickhouse) or ["nothing to recover"]:
+            actions = recover(clickhouse) + cleanup_versions(clickhouse)
+            for action in actions or ["nothing to recover"]:
                 print(action)
     return 0
 

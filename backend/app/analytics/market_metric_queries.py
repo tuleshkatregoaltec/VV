@@ -13,6 +13,7 @@ from typing import Any
 
 from app.clickhouse import query
 from app.market.reference import SQM_TO_SQFT
+from app.market.releases import pinned_table
 from app.market.scope import LOCATION_PREDICATE
 
 
@@ -78,6 +79,12 @@ RENTALS = Dataset(
 )
 
 DATASETS = {"sales": SALES, "rentals": RENTALS}
+
+
+def _from(dataset: str) -> str:
+    """The served rows to read: the pinned immutable release inside a pin, else the view."""
+    table = pinned_table(dataset)
+    return f"(SELECT * FROM `{table}` WHERE is_served = 1)" if table else DATASETS[dataset].table
 
 
 def _rate(ds: Dataset) -> str:
@@ -232,7 +239,7 @@ async def fetch_metric_rows(
     names = dict.fromkeys(("count", *metrics))
     selected = ", ".join(f"{expressions[name]} AS {name}" for name in names)
     if group_by is None:
-        return await query(f"SELECT {selected} FROM {ds.table} WHERE {where}", params)
+        return await query(f"SELECT {selected} FROM {_from(dataset)} WHERE {where}", params)
     if group_by == "price_band":
         key, label = _band_expression(ds, price_bands)
         params |= {f"band_{index}": value for index, value in enumerate(price_bands)}
@@ -242,7 +249,7 @@ async def fetch_metric_rows(
     return await query(
         f"""
         SELECT {key} AS group_key, {label} AS group_label, {selected}
-        FROM {ds.table}
+        FROM {_from(dataset)}
         WHERE {where}
         GROUP BY group_key
         HAVING count() >= {{min_group_count:UInt32}}
@@ -259,7 +266,7 @@ async def fetch_bedroom_coverage(dataset: str, filters: MetricFilters) -> dict[s
     where, params = where_clause(ds, filters, include_bedrooms=False)
     rows = await query(
         f"SELECT count() AS rows, countIf({ds.bedrooms} = '') AS unknown_bedrooms "
-        f"FROM {ds.table} WHERE {where}",
+        f"FROM {_from(dataset)} WHERE {where}",
         params,
     )
     return rows[0] if rows else {"rows": 0, "unknown_bedrooms": 0}
@@ -274,7 +281,7 @@ async def fetch_matched_locations(dataset: str, filters: MetricFilters) -> list[
         SELECT area_name_en AS area, master_project_en AS master_project,
                district_name AS district, community_name AS community, geo_method AS method,
                count() AS records
-        FROM {ds.table}
+        FROM {_from(dataset)}
         WHERE {where}
         GROUP BY area, master_project, district, community, method
         ORDER BY records DESC
@@ -302,7 +309,7 @@ async def fetch_district_only_rows(
     )
     where, params = where_clause(ds, unlocated)
     rows = await query(
-        f"SELECT count() AS records FROM {ds.table} WHERE {where} "
+        f"SELECT count() AS records FROM {_from(dataset)} WHERE {where} "
         "AND community_key = '' AND lowerUTF8(district_name) IN {coarse:Array(String)}",
         params | {"coarse": [district.lower() for district in districts]},
     )
@@ -315,7 +322,7 @@ async def fetch_source_breakdown(dataset: str, filters: MetricFilters) -> list[d
     return await query(
         f"""
         SELECT source_system, match_status, count() AS records
-        FROM {ds.table}
+        FROM {_from(dataset)}
         WHERE {where}
         GROUP BY source_system, match_status
         ORDER BY records DESC
@@ -326,7 +333,7 @@ async def fetch_source_breakdown(dataset: str, filters: MetricFilters) -> list[d
 
 async def fetch_release_id(dataset: str) -> str:
     """The release the served table holds right now ('' before releases had ids)."""
-    rows = await query(f"SELECT any(release_id) AS release_id FROM {DATASETS[dataset].table}", {})
+    rows = await query(f"SELECT any(release_id) AS release_id FROM {_from(dataset)}", {})
     return str(rows[0]["release_id"]) if rows else ""
 
 
@@ -339,7 +346,7 @@ async def fetch_release(dataset: str) -> dict[str, Any]:
                min({ds.event_date}) AS data_from,
                max({ds.event_date}) AS data_to,
                max(built_at) AS built_at
-        FROM {ds.table}
+        FROM {_from(dataset)}
         WHERE {ds.eligible} AND {ds.event_date} <= today()
         """,
         {},
