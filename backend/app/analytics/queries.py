@@ -245,7 +245,7 @@ def project_rentals_by_rooms(filter_type: ProjectScopeType = "project") -> str:
         FROM (
             SELECT any(ar.rooms_en) AS rooms_en, annual_amount, actual_area
             FROM ch_rent_contracts
-            INNER JOIN (
+            CROSS JOIN (
                 SELECT
                     rooms_en,
                     quantile(0.25)(actual_area) AS lo,
@@ -257,8 +257,11 @@ def project_rentals_by_rooms(filter_type: ProjectScopeType = "project") -> str:
                   AND actual_area > 0
                 GROUP BY rooms_en
                 HAVING n >= 3
-            ) AS ar ON actual_area BETWEEN ar.lo AND ar.hi
-            WHERE {rent_filter}
+            ) AS ar
+            -- A range condition cannot be a JOIN key in ClickHouse 24.8 (error 403), which failed
+            -- every project and community summary; ar holds one row per bedroom type.
+            WHERE actual_area BETWEEN ar.lo AND ar.hi
+              AND {rent_filter}
               AND property_usage_en = 'Residential'
               AND annual_amount > 0
               AND actual_area > 0
