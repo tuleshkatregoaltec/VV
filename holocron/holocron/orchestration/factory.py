@@ -1,4 +1,5 @@
 from dagster import (
+    AssetChecksDefinition,
     AssetExecutionContext,
     AssetIn,
     AssetsDefinition,
@@ -64,7 +65,13 @@ from holocron.sources.news_feeds.assets import (
     hydrate_news_thumbnail_assets,
     publish_news_to_platform,
 )
+from holocron.market.assets import (
+    MARKET_ASSET_CHECKS,
+    market_rental_events_asset,
+    market_sale_events_asset,
+)
 from holocron.silver.assets import silver_rent_contracts_asset, silver_transactions_asset
+from holocron.sources.dxbi.evidence_assets import dxbi_evidence_bronze
 from holocron.sources.reelly_supply.document_assets import (
     ReellyDocumentAssetHydrationConfig,
     hydrate_reelly_document_assets,
@@ -597,6 +604,18 @@ def build_silver_assets() -> list[AssetsDefinition]:
     return [silver_transactions_asset, silver_rent_contracts_asset]
 
 
+def build_dxbi_evidence_assets() -> list[AssetsDefinition]:
+    return [dxbi_evidence_bronze]
+
+
+def build_market_assets() -> list[AssetsDefinition]:
+    return [market_sale_events_asset, market_rental_events_asset]
+
+
+def build_market_asset_checks() -> list[AssetChecksDefinition]:
+    return list(MARKET_ASSET_CHECKS)
+
+
 def build_geography_assets() -> list[AssetsDefinition]:
     return [
         geo_location_nodes_asset,
@@ -862,6 +881,15 @@ def build_operational_jobs(sources: Mapping[str, SourceSpec]) -> list[AssetJobDe
             selection=["silver_transactions", "silver_rent_contracts"],
         ),
         define_asset_job(
+            name="dxbi_evidence_load",
+            selection=["dxbi_evidence_bronze"],
+        ),
+        # Asset checks on the market tables run with every rebuild.
+        define_asset_job(
+            name="market_events_refresh",
+            selection=["market_sale_events", "market_rental_events"],
+        ),
+        define_asset_job(
             name="geography_crosswalk_refresh",
             selection=[
                 "geo_location_nodes",
@@ -891,6 +919,10 @@ def build_operational_schedules(
         "silver_rent_contracts_refresh": "10 6 * * *",
         # The combined silver refresh remains available for full warehouse refreshes.
         "silver_refresh": "0 6 * * *",
+        # DXBI report runs finish on the scraper host in the morning (Dubai).
+        "dxbi_evidence_load": "0 10 * * *",
+        # Canonical market layer after DLD (04:00-05:30) and DXBI evidence (10:00).
+        "market_events_refresh": "30 10 * * *",
     }
     return [
         ScheduleDefinition(
