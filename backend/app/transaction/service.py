@@ -19,7 +19,7 @@ def _text(value: object) -> Optional[str]:
     return str(value) if value not in (None, "") else None
 
 
-def _whole(value: object) -> Optional[int]:
+def _whole(value: float | int | None) -> Optional[int]:
     return int(value) if value is not None else None
 
 
