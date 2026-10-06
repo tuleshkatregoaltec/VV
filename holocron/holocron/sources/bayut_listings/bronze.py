@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -31,6 +32,7 @@ _COLUMNS = (
 )  # fmt: skip
 _SNAPSHOT_COLUMNS = (
     "snapshot_id", "status", "coverage_status", "listing_count", "summary_json", "export_sha256",
+    "collected_at",
 )  # fmt: skip
 
 
@@ -43,6 +45,24 @@ def _number(value: Any) -> float | None:
         return float(value) if value not in (None, "") else None
     except (TypeError, ValueError):
         return None
+
+
+def _collected_at(observed: list[str]) -> datetime:
+    """When the crawl last saw a listing: the snapshot's place in time.
+
+    Load time cannot order snapshots: reloading last week's export would make it the newest
+    inventory again. The latest listing observation is fixed by the export's content.
+    """
+    times = []
+    for value in observed:
+        try:
+            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError:
+            continue
+        times.append(parsed if parsed.tzinfo else parsed.replace(tzinfo=UTC))
+    if not times:
+        raise ValueError("export has no listing scraped_at: its collection time is unknown")
+    return max(times).astimezone(UTC)
 
 
 def load_export(
@@ -76,6 +96,15 @@ def load_export(
             json.dumps(item, sort_keys=True, separators=(",", ":")),
         ))  # fmt: skip
     status = "published" if coverage in CERTIFIED else "partial"
+    if status == "published":
+        if not rows:
+            raise BayutSnapshotNotCertified(
+                "a certified export with no listings cannot be published"
+            )
+        collected_at = _collected_at([row[10] for row in rows.values()])
+    else:
+        # Never served, so its place in time only labels it; load time is enough.
+        collected_at = datetime.now(UTC)
     quoted = sql_string(snapshot_id)
     clickhouse.command(
         f"DELETE FROM bayut_listings_bronze WHERE snapshot_id = {quoted} "
@@ -88,7 +117,9 @@ def load_export(
     # The snapshot record is written last: a crash before it leaves rows no view serves.
     clickhouse.insert_rows(
         table="bayut_listing_snapshots",
-        rows=[(snapshot_id, status, coverage, len(rows), json.dumps(summary), digest)],
+        rows=[
+            (snapshot_id, status, coverage, len(rows), json.dumps(summary), digest, collected_at)
+        ],  # fmt: skip
         column_names=_SNAPSHOT_COLUMNS,
     )
     return {"snapshot_id": snapshot_id, "status": status, "listings": len(rows)}

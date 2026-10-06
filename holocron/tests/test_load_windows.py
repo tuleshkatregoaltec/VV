@@ -8,7 +8,12 @@ from datetime import UTC, date, datetime, timedelta
 
 import pytest
 
-from holocron.platform.load_windows import coverage, record_load_windows, window_evidence
+from holocron.platform.load_windows import (
+    coverage,
+    record_load_windows,
+    window_evidence,
+    window_statuses,
+)
 from tests.test_market_release import database, warehouse  # noqa: F401 (fixtures)
 
 
@@ -46,6 +51,53 @@ def test_window_evidence_reads_pagination_to_tell_complete_from_partial() -> Non
         (date(2026, 6, 15), "complete", 0, ""),
         (date(2026, 6, 16), "complete", 0, "continued from skip=4"),
     }
+
+
+def test_window_evidence_records_the_rows_each_load_read_and_rejects_shifted_totals() -> None:
+    pages = [
+        _page("2026-07-01", "2026-07-31", skip=0, take=2, received=2, total=5),
+        _page("2026-07-01", "2026-07-31", skip=2, take=2, received=2, total=6),
+    ]
+    (window,) = window_evidence(pages, [])
+    # Rows were registered mid-crawl: skip/take pages shifted, so nothing here is proven.
+    assert window["status"] == "partial" and "TOTAL changed" in window["evidence"]
+    assert (window["first_row"], window["end_row"], window["total_rows"]) == (0, 4, -1)
+
+
+JUNE = (date(2026, 6, 1), date(2026, 6, 30))
+
+
+def _load(status: str, first: int, end: int, total: int = 9, evidence: str = ""):
+    return (*JUNE, status, evidence, first, end, total)
+
+
+def test_a_resumed_chunk_proves_a_window_only_after_the_rows_before_it_were_loaded() -> None:
+    # Chunk 1 (rows 0-4) reached bronze, chunk 2 read the rest: the window is proven.
+    assert [s for *_, s in window_statuses([_load("partial", 0, 5), _load("complete", 5, 9)])] == [
+        "partial",
+        "verified",
+    ]
+    # Chunk 1's bronze load failed, so only chunk 2 is recorded: rows 0-4 are missing from
+    # bronze although chunk 2 reached the end of the result set.
+    assert [s for *_, s in window_statuses([_load("complete", 5, 9)])] == ["partial"]
+    # A gap between chunks, or a TOTAL that moved between them, breaks the chain too.
+    assert window_statuses([_load("partial", 0, 4), _load("complete", 5, 9)])[-1][2] == "partial"
+    assert window_statuses([_load("partial", 0, 5), _load("complete", 5, 10, 10)])[-1][2] == (
+        "partial"
+    )
+    # A later skip-0 load replaces the window and starts a new chain.
+    loads = [_load("complete", 5, 9), _load("partial", 0, 5), _load("complete", 5, 9)]
+    assert [s for *_, s in window_statuses(loads)] == ["partial", "partial", "verified"]
+
+
+def test_loads_recorded_before_row_offsets_keep_their_meaning() -> None:
+    legacy_full = (*JUNE, "complete", "", -1, -1, -1)
+    legacy_resumed = (*JUNE, "complete", "continued from skip=4", -1, -1, -1)
+    attested = (*JUNE, "attested", "Pulse archive manifest", -1, -1, -1)
+    assert window_statuses([legacy_full])[0][2] == "verified"
+    # Nothing shows the earlier chunk reached bronze: fail closed.
+    assert window_statuses([legacy_resumed])[0][2] == "partial"
+    assert window_statuses([attested])[0][2] == "verified"
 
 
 @pytest.mark.skipif(
