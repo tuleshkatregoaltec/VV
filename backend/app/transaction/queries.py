@@ -32,7 +32,7 @@ async def fetch_sales_transactions_rows(
         params["property_usage"] = property_usage
 
     if property_type:
-        where_clauses.append("property_type_en = {property_type:String}")
+        where_clauses.append("property_type = {property_type:String}")
         params["property_type"] = property_type
 
     if property_sub_type:
@@ -48,7 +48,7 @@ async def fetch_sales_transactions_rows(
         params["registration_type"] = registration_type
 
     if area:
-        where_clauses.append("area_name_en = {area:String}")
+        where_clauses.append("location_name = {area:String}")
         params["area"] = area
 
     if project:
@@ -60,15 +60,15 @@ async def fetch_sales_transactions_rows(
         params["building"] = building
 
     if timeframe_days is not None:
-        where_clauses.append("instance_date >= today() - {timeframe_days:Int32}")
+        where_clauses.append("instance_date BETWEEN today() - {timeframe_days:Int32} AND today()")
         params["timeframe_days"] = timeframe_days
 
     if area_min is not None:
-        where_clauses.append("procedure_area >= {area_min:Decimal64(2)}")
+        where_clauses.append("size_sqm >= {area_min:Decimal64(2)}")
         params["area_min"] = area_min
 
     if area_max is not None:
-        where_clauses.append("procedure_area <= {area_max:Decimal64(2)}")
+        where_clauses.append("size_sqm <= {area_max:Decimal64(2)}")
         params["area_max"] = area_max
 
     if price_min is not None:
@@ -109,14 +109,14 @@ async def fetch_sales_transactions_rows(
             property_usage_en,
             trans_group_en,
             procedure_name_en,
-            property_type_en,
+            property_type AS property_type_en,
             property_sub_type_en,
             rooms_en,
             procedure_area,
             actual_worth,
             meter_sale_price,
             reg_type_en,
-            area_name_en,
+            location_name AS area_name_en,
             project_name_en,
             building_name_en,
             nearest_landmark_en,
@@ -157,7 +157,7 @@ async def fetch_rental_contracts_rows(
         params["property_usage"] = property_usage
 
     if property_type:
-        where_clauses.append("ejari_property_type_en = {property_type:String}")
+        where_clauses.append("property_type = {property_type:String}")
         params["property_type"] = property_type
 
     if property_sub_type:
@@ -173,7 +173,7 @@ async def fetch_rental_contracts_rows(
         params["contract_reg_type"] = contract_reg_type
 
     if area:
-        where_clauses.append("area_name_en = {area:String}")
+        where_clauses.append("location_name = {area:String}")
         params["area"] = area
 
     if project:
@@ -181,15 +181,17 @@ async def fetch_rental_contracts_rows(
         params["project_name"] = project + " - %" if filter_type == "virtual_master" else project
 
     if timeframe_days is not None:
-        where_clauses.append("contract_start_date >= today() - {timeframe_days:Int32}")
+        where_clauses.append(
+            "contract_start_date BETWEEN today() - {timeframe_days:Int32} AND today()"
+        )
         params["timeframe_days"] = timeframe_days
 
     if area_min is not None:
-        where_clauses.append("actual_area >= {area_min:Decimal64(2)}")
+        where_clauses.append("size_sqm >= {area_min:Decimal64(2)}")
         params["area_min"] = area_min
 
     if area_max is not None:
-        where_clauses.append("actual_area <= {area_max:Decimal64(2)}")
+        where_clauses.append("size_sqm <= {area_max:Decimal64(2)}")
         params["area_max"] = area_max
 
     if rent_min is not None:
@@ -222,13 +224,13 @@ async def fetch_rental_contracts_rows(
             contract_end_date,
             property_usage_en,
             contract_reg_type_en,
-            ejari_property_type_en,
+            property_type AS ejari_property_type_en,
             ejari_property_sub_type_en,
             tenant_type_en,
             actual_area,
             annual_amount,
             contract_amount,
-            area_name_en,
+            location_name AS area_name_en,
             project_name_en,
             nearest_landmark_en,
             nearest_metro_en,
@@ -282,7 +284,7 @@ async def export_sales_transactions_rows(
             params["property_usage"] = property_usage
 
         if property_type:
-            where_clauses.append("property_type_en = {property_type:String}")
+            where_clauses.append("property_type = {property_type:String}")
             params["property_type"] = property_type
 
         if property_sub_type:
@@ -298,7 +300,7 @@ async def export_sales_transactions_rows(
             params["registration_type"] = registration_type
 
         if area:
-            where_clauses.append("area_name_en = {area:String}")
+            where_clauses.append("location_name = {area:String}")
             params["area"] = area
 
         if project:
@@ -312,15 +314,17 @@ async def export_sales_transactions_rows(
             params["building"] = building
 
         if timeframe_days is not None:
-            where_clauses.append("instance_date >= today() - {timeframe_days:Int32}")
+            where_clauses.append(
+                "instance_date BETWEEN today() - {timeframe_days:Int32} AND today()"
+            )
             params["timeframe_days"] = timeframe_days
 
         if area_min is not None:
-            where_clauses.append("procedure_area >= {area_min:Decimal64(2)}")
+            where_clauses.append("size_sqm >= {area_min:Decimal64(2)}")
             params["area_min"] = area_min
 
         if area_max is not None:
-            where_clauses.append("procedure_area <= {area_max:Decimal64(2)}")
+            where_clauses.append("size_sqm <= {area_max:Decimal64(2)}")
             params["area_max"] = area_max
 
         if price_min is not None:
@@ -355,14 +359,14 @@ async def export_sales_transactions_rows(
             property_usage_en,
             trans_group_en,
             procedure_name_en,
-            property_type_en,
+            property_type AS property_type_en,
             property_sub_type_en,
             rooms_en,
             procedure_area,
             actual_worth,
             meter_sale_price,
             reg_type_en,
-            area_name_en,
+            location_name AS area_name_en,
             project_name_en,
             building_name_en,
             nearest_landmark_en,
@@ -411,7 +415,7 @@ async def export_rental_contracts_rows(
             params["property_usage"] = property_usage
 
         if property_type:
-            where_clauses.append("ejari_property_type_en = {property_type:String}")
+            where_clauses.append("property_type = {property_type:String}")
             params["property_type"] = property_type
 
         if property_sub_type:
@@ -427,7 +431,7 @@ async def export_rental_contracts_rows(
             params["contract_reg_type"] = contract_reg_type
 
         if area:
-            where_clauses.append("area_name_en = {area:String}")
+            where_clauses.append("location_name = {area:String}")
             params["area"] = area
 
         if project:
@@ -437,15 +441,17 @@ async def export_rental_contracts_rows(
             )
 
         if timeframe_days is not None:
-            where_clauses.append("contract_start_date >= today() - {timeframe_days:Int32}")
+            where_clauses.append(
+                "contract_start_date BETWEEN today() - {timeframe_days:Int32} AND today()"
+            )
             params["timeframe_days"] = timeframe_days
 
         if area_min is not None:
-            where_clauses.append("actual_area >= {area_min:Decimal64(2)}")
+            where_clauses.append("size_sqm >= {area_min:Decimal64(2)}")
             params["area_min"] = area_min
 
         if area_max is not None:
-            where_clauses.append("actual_area <= {area_max:Decimal64(2)}")
+            where_clauses.append("size_sqm <= {area_max:Decimal64(2)}")
             params["area_max"] = area_max
 
         if rent_min is not None:
@@ -472,13 +478,13 @@ async def export_rental_contracts_rows(
             contract_end_date,
             property_usage_en,
             contract_reg_type_en,
-            ejari_property_type_en,
+            property_type AS ejari_property_type_en,
             ejari_property_sub_type_en,
             tenant_type_en,
             actual_area,
             annual_amount,
             contract_amount,
-            area_name_en,
+            location_name AS area_name_en,
             project_name_en,
             nearest_landmark_en,
             nearest_metro_en,
@@ -529,11 +535,13 @@ def _append_common_transaction_filters(
         params["property_sub_type"] = property_sub_type
 
     if area:
-        where_clauses.append("area_name_en = {area:String}")
+        where_clauses.append("location_name = {area:String}")
         params["area"] = area
 
     if timeframe_days is not None:
-        where_clauses.append(f"{timeframe_field} >= today() - {{timeframe_days:Int32}}")
+        where_clauses.append(
+            f"{timeframe_field} BETWEEN today() - {{timeframe_days:Int32}} AND today()"
+        )
         params["timeframe_days"] = timeframe_days
 
     if area_min is not None:
@@ -572,14 +580,14 @@ async def fetch_sales_facets(
         property_usage=property_usage,
         project=project,
         filter_type=filter_type,
-        property_type_field="property_type_en",
+        property_type_field="property_type",
         property_type=property_type,
         property_sub_type_field="property_sub_type_en",
         property_sub_type=property_sub_type,
         area=area,
         timeframe_field="instance_date",
         timeframe_days=timeframe_days,
-        area_field="procedure_area",
+        area_field="size_sqm",
         area_min=area_min,
         area_max=area_max,
     )
@@ -616,9 +624,9 @@ async def fetch_sales_facets(
 
     property_types_result = await query(
         f"""
-        SELECT DISTINCT property_type_en
+        SELECT DISTINCT property_type AS property_type_en
         FROM ch_transactions
-        WHERE {where_clause} AND property_type_en != ''
+        WHERE {where_clause} AND property_type != ''
         ORDER BY property_type_en
         """,
         params,
@@ -651,9 +659,9 @@ async def fetch_sales_facets(
     )
     areas_result = await query(
         f"""
-        SELECT DISTINCT area_name_en
+        SELECT DISTINCT location_name AS area_name_en
         FROM ch_transactions
-        WHERE {where_clause} AND area_name_en != ''
+        WHERE {where_clause} AND location_name != ''
         ORDER BY area_name_en
         """,
         params,
@@ -712,14 +720,14 @@ async def fetch_rental_facets(
         property_usage=property_usage,
         project=project,
         filter_type=filter_type,
-        property_type_field="ejari_property_type_en",
+        property_type_field="property_type",
         property_type=property_type,
         property_sub_type_field="ejari_property_sub_type_en",
         property_sub_type=property_sub_type,
         area=area,
         timeframe_field="contract_start_date",
         timeframe_days=timeframe_days,
-        area_field="actual_area",
+        area_field="size_sqm",
         area_min=area_min,
         area_max=area_max,
     )
@@ -744,9 +752,9 @@ async def fetch_rental_facets(
 
     property_types_result = await query(
         f"""
-        SELECT DISTINCT ejari_property_type_en
+        SELECT DISTINCT property_type AS ejari_property_type_en
         FROM ch_rent_contracts
-        WHERE {where_clause} AND ejari_property_type_en != ''
+        WHERE {where_clause} AND property_type != ''
         ORDER BY ejari_property_type_en
         """,
         params,
@@ -780,9 +788,9 @@ async def fetch_rental_facets(
     )
     areas_result = await query(
         f"""
-        SELECT DISTINCT area_name_en
+        SELECT DISTINCT location_name AS area_name_en
         FROM ch_rent_contracts
-        WHERE {where_clause} AND area_name_en != ''
+        WHERE {where_clause} AND location_name != ''
         ORDER BY area_name_en
         """,
         params,

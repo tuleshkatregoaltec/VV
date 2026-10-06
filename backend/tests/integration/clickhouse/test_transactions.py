@@ -26,8 +26,12 @@ async def test_sales_scoping_facets_paging_and_explicit_id_csv_export(warehouse)
         "nearest_landmark_en",
         "nearest_metro_en",
         "nearest_mall_en",
+        # Uniform layer columns (holocron market_sale_events): the page filters and lists these.
+        "location_name",
+        "property_type",
+        "size_sqm",
     ]
-    numeric = {"procedure_area", "actual_worth", "meter_sale_price"}
+    numeric = {"procedure_area", "actual_worth", "meter_sale_price", "size_sqm"}
     columns = ", ".join(
         f"{name} {'Date' if name == 'instance_date' else 'Decimal(18, 2)' if name in numeric else 'String'}"
         for name in fields
@@ -49,7 +53,11 @@ async def test_sales_scoping_facets_paging_and_explicit_id_csv_export(warehouse)
             procedure_area=Decimal("70"),
             actual_worth=Decimal("700000"),
             meter_sale_price=Decimal("10000"),
-            area_name_en="Test Area",
+            # DLD's official district differs from the location the page shows and filters on.
+            area_name_en="Marsa Dubai",
+            location_name="Test Area",
+            property_type="Apartment",
+            size_sqm=Decimal("70"),
             project_name_en="=unsafe()",
             building_name_en="Tower",
             reg_type_en="Existing",
@@ -65,6 +73,9 @@ async def test_sales_scoping_facets_paging_and_explicit_id_csv_export(warehouse)
     assert [r.transaction_id for r in page.transactions] == ["b"]
     options = await facets.get_sales_filter_options(area="Test Area")
     assert options.rooms == ["Studio", "2 B/R"]
+    # One vocabulary: the area and type options are the uniform values, not DLD's raw ones.
+    assert (options.areas, options.property_types) == (["Test Area"], ["Apartment"])
+    assert page.transactions[0].area_name_en == "Test Area"
     filtered = await exports.export_sales_transactions(area="Test Area", file_format="csv")
     rows = list(csv.DictReader(io.StringIO(filtered.getvalue().decode("utf-8-sig"))))
     assert [r["Transaction ID"] for r in rows] == ["a", "b"]
