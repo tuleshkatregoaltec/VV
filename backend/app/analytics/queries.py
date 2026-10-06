@@ -81,7 +81,7 @@ def project_sales_summary(
             round(coalesce(sum(actual_worth), 0), 2) as total_volume,
             round(coalesce(avg(actual_worth), 0), 2) as avg_price,
             round(coalesce(avg(meter_sale_price), 0) / 10.7639, 2) as avg_price_sqft,
-            round(coalesce(median(actual_worth), 0), 2) as median_price
+            round(coalesce(medianExact(actual_worth), 0), 2) as median_price
         FROM ch_transactions
         WHERE {_project_filter(filter_type)}
           AND trans_group_en = 'Sales'
@@ -101,7 +101,7 @@ def project_sales_by_rooms(
             rooms_en,
             count() as sale_count,
             round(avg(actual_worth), 2) as avg_sale_price,
-            round(median(actual_worth), 2) as median_sale_price,
+            round(medianExact(actual_worth), 2) as median_sale_price,
             round(avg(meter_sale_price) / 10.7639, 2) as avg_sale_price_sqft
         FROM ch_transactions
         WHERE {_project_filter(filter_type)}
@@ -154,11 +154,11 @@ def project_configuration_sales(
                 AND instance_date < addDays(latest_sale_date, -90)
             ) AS sales_prev_90d,
             round(avg(actual_worth), 2) AS avg_sale_price,
-            round(median(actual_worth), 2) AS median_sale_price,
+            round(medianExact(actual_worth), 2) AS median_sale_price,
             round(avg(meter_sale_price) / 10.7639, 2) AS avg_sale_price_sqft,
-            round(quantile(0.25)(actual_worth), 2) AS price_p25,
-            round(median(actual_worth), 2) AS price_p50,
-            round(quantile(0.75)(actual_worth), 2) AS price_p75,
+            round(quantileExact(0.25)(actual_worth), 2) AS price_p25,
+            round(medianExact(actual_worth), 2) AS price_p50,
+            round(quantileExact(0.75)(actual_worth), 2) AS price_p75,
             round(avgIf(meter_sale_price / 10.7639, instance_date >= addYears(latest_sale_date, -1)), 2) AS avg_price_sqft_last_12m,
             round(
                 avgIf(
@@ -213,8 +213,8 @@ def project_rentals_summary(filter_type: ProjectScopeType = "project") -> str:
         SELECT
             count() as contract_count,
             round(coalesce(sum(annual_amount), 0), 2) as total_annual_value,
-            round(coalesce(median(annual_amount), 0), 2) as median_annual_rent,
-            round(coalesce(median(annual_amount / nullIf(actual_area * 10.7639, 0)), 0), 2) as median_rent_sqft
+            round(coalesce(medianExact(annual_amount), 0), 2) as median_annual_rent,
+            round(coalesce(medianExact(annual_amount / nullIf(actual_area * 10.7639, 0)), 0), 2) as median_rent_sqft
         FROM ch_rent_contracts
         WHERE {_project_filter(filter_type)}
           AND property_usage_en = 'Residential'
@@ -240,16 +240,16 @@ def project_rentals_by_rooms(filter_type: ProjectScopeType = "project") -> str:
         SELECT
             rooms_en,
             count() AS rental_count,
-            round(median(annual_amount), 2) AS median_annual_rent,
-            round(median(annual_amount / nullIf(actual_area * 10.7639, 0)), 2) AS median_rent_sqft
+            round(medianExact(annual_amount), 2) AS median_annual_rent,
+            round(medianExact(annual_amount / nullIf(actual_area * 10.7639, 0)), 2) AS median_rent_sqft
         FROM (
             SELECT any(ar.rooms_en) AS rooms_en, annual_amount, actual_area
             FROM ch_rent_contracts
             CROSS JOIN (
                 SELECT
                     rooms_en,
-                    quantile(0.25)(actual_area) AS lo,
-                    quantile(0.75)(actual_area) AS hi,
+                    quantileExact(0.25)(actual_area) AS lo,
+                    quantileExact(0.75)(actual_area) AS hi,
                     count() AS n
                 FROM ch_units
                 WHERE {unit_filter}
@@ -542,11 +542,11 @@ def project_price_distribution(
             round(stddevPop(actual_worth), 2) as std_price,
             round(avg(log(actual_worth)), 6) as log_mean_price,
             round(stddevPop(log(actual_worth)), 6) as log_std_price,
-            round(quantile(0.05)(actual_worth), 2) as p05_price,
-            round(quantile(0.25)(actual_worth), 2) as p25_price,
-            round(quantile(0.50)(actual_worth), 2) as p50_price,
-            round(quantile(0.75)(actual_worth), 2) as p75_price,
-            round(quantile(0.95)(actual_worth), 2) as p95_price,
+            round(quantileExact(0.05)(actual_worth), 2) as p05_price,
+            round(quantileExact(0.25)(actual_worth), 2) as p25_price,
+            round(quantileExact(0.50)(actual_worth), 2) as p50_price,
+            round(quantileExact(0.75)(actual_worth), 2) as p75_price,
+            round(quantileExact(0.95)(actual_worth), 2) as p95_price,
             round(avg(meter_sale_price) / 10.7639, 2) as mean_price_sqft,
             round(stddevPop(meter_sale_price) / 10.7639, 2) as std_price_sqft
         FROM ch_transactions
@@ -566,11 +566,11 @@ def project_price_distribution(
             round(stddevPop(actual_worth), 2) as std_price,
             round(avg(log(actual_worth)), 6) as log_mean_price,
             round(stddevPop(log(actual_worth)), 6) as log_std_price,
-            round(quantile(0.05)(actual_worth), 2) as p05_price,
-            round(quantile(0.25)(actual_worth), 2) as p25_price,
-            round(quantile(0.50)(actual_worth), 2) as p50_price,
-            round(quantile(0.75)(actual_worth), 2) as p75_price,
-            round(quantile(0.95)(actual_worth), 2) as p95_price,
+            round(quantileExact(0.05)(actual_worth), 2) as p05_price,
+            round(quantileExact(0.25)(actual_worth), 2) as p25_price,
+            round(quantileExact(0.50)(actual_worth), 2) as p50_price,
+            round(quantileExact(0.75)(actual_worth), 2) as p75_price,
+            round(quantileExact(0.95)(actual_worth), 2) as p95_price,
             round(avg(meter_sale_price) / 10.7639, 2) as mean_price_sqft,
             round(stddevPop(meter_sale_price) / 10.7639, 2) as std_price_sqft
         FROM ch_transactions
@@ -735,12 +735,12 @@ async def fetch_get_market_summary_rows(parameters: dict):
                 0
             ) AS avg_sale_price,
             avgOrNull(pf.avg_sale_price_sqm_12m) / 10.7639 AS avg_sale_price_sqft,
-            median(pf.median_sale_price) AS median_sale_price,
+            medianExact(pf.median_sale_price) AS median_sale_price,
             sum(pf.rental_contract_count_12m) AS rental_count,
             sum(pf.median_annual_rent * pf.rental_contract_count_12m) AS rental_value,
-            median(pf.median_annual_rent) AS median_annual_rent,
+            medianExact(pf.median_annual_rent) AS median_annual_rent,
             avgOrNull(pf.avg_rent_price_sqm_12m) / 10.7639 AS median_rent_sqft,
-            median(pf.gross_yield_pct) AS gross_yield_pct,
+            medianExact(pf.gross_yield_pct) AS gross_yield_pct,
             sum(pf.no_of_units) AS unit_count
         FROM ch_project_fact AS pf
         """,
@@ -1090,10 +1090,10 @@ def rentals_summary(
 GET_MARKET_PULSE_SQL = """
     SELECT
         count(*) as transaction_count,
-        round(median(actual_worth), 0) as median_price,
+        round(medianExact(actual_worth), 0) as median_price,
         round(avg(actual_worth), 0) as avg_price,
-        round(median(size_sqm) * 10.7639, 1) as median_area_sqft,
-        round(median(actual_worth / size_sqm) / 10.7639, 0) as median_price_per_sqft,
+        round(medianExact(size_sqm) * 10.7639, 1) as median_area_sqft,
+        round(medianExact(actual_worth / size_sqm) / 10.7639, 0) as median_price_per_sqft,
         min(instance_date) as period_start,
         max(instance_date) as period_end
     FROM ch_transactions
@@ -1116,7 +1116,7 @@ RANK_AREAS_VOLUME_SQL = """
         SELECT
             location_name as area,
             count(*) as transaction_count,
-            round(median(actual_worth), 0) as median_price
+            round(medianExact(actual_worth), 0) as median_price
         FROM ch_transactions
         WHERE
             instance_date >= today() - {period_days:Int32}
@@ -1132,7 +1132,7 @@ RANK_AREAS_VOLUME_SQL = """
 RANK_AREAS_PRICE_SQL = """
         SELECT
             location_name as area,
-            round(median(actual_worth), 0) as median_price,
+            round(medianExact(actual_worth), 0) as median_price,
             count(*) as transaction_count
         FROM ch_transactions
         WHERE
@@ -1152,7 +1152,7 @@ RANK_AREAS_GROWTH_SQL = """
             current_period AS (
                 SELECT
                     location_name as area,
-                    median(actual_worth) as current_median
+                    medianExact(actual_worth) as current_median
                 FROM ch_transactions
                 WHERE
                     instance_date >= today() - {period_days:Int32}
@@ -1165,7 +1165,7 @@ RANK_AREAS_GROWTH_SQL = """
             previous_period AS (
                 SELECT
                     location_name as area,
-                    median(actual_worth) as previous_median
+                    medianExact(actual_worth) as previous_median
                 FROM ch_transactions
                 WHERE
                     instance_date >= today() - {period_days:Int32} * 2
