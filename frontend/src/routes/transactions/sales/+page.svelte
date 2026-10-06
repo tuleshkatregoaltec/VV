@@ -152,7 +152,7 @@ let filterDefinitions = $derived<FilterDefinition[]>([
 	},
 	{
 		id: 'areaRange',
-		label: 'Area (sq.m)',
+		label: 'Size (sq.m)',
 		type: 'standard',
 		options: [...SALES_AREA_OPTIONS]
 	},
@@ -227,7 +227,7 @@ function buildActiveFilterChips(): FilterChip[] {
 		localFilters.selectedBedroomsOrSubType
 	)
 	addSelectedChip(chips, 'Registration', localFilters.selectedRegistration)
-	addSelectedChip(chips, 'Area', localFilters.areaRange)
+	addSelectedChip(chips, 'Size', localFilters.areaRange)
 	addSelectedChip(chips, 'Price', localFilters.priceRange)
 	addSelectedChip(chips, 'Price/sq.m', localFilters.pricePerSqMRange)
 

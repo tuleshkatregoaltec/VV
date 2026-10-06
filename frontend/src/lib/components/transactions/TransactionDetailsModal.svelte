@@ -125,7 +125,7 @@ function formatDate(dateStr: string | null | undefined): string {
 					<p class="font-medium text-fg-1">{transaction.date}</p>
 				</div>
 				<div>
-					<span class="text-sm text-fg-4">Area</span>
+					<span class="text-sm text-fg-4">Location</span>
 					<p class="font-medium text-fg-1">{transaction.area_name || 'N/A'}</p>
 				</div>
 				<div>
