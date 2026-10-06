@@ -6,6 +6,7 @@ through the fixed fragments below, selected by validated Literal names.
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from datetime import date
 from typing import Any
@@ -18,6 +19,7 @@ from app.market.scope import LOCATION_PREDICATE
 @dataclass(frozen=True, slots=True)
 class Dataset:
     table: str
+    release_table: str
     event_date: str
     value: str
     area_sqm: str
@@ -29,6 +31,7 @@ class Dataset:
 
 SALES = Dataset(
     table="ch_transactions",
+    release_table="market_sale_events",
     # DLD instance_date is the registration date as recorded (Dubai local time).
     event_date="toDate(instance_date)",
     value="toFloat64(actual_worth)",
@@ -49,6 +52,7 @@ SALES = Dataset(
 
 RENTALS = Dataset(
     table="ch_rent_contracts",
+    release_table="market_rental_events",
     # A contract is observed when it is registered; start dates can lie in the future.
     event_date="toDate(registration_date)",
     # DLD annual_amount is the annualised rent; contract_amount is the whole-term value.
@@ -286,12 +290,19 @@ async def fetch_source_breakdown(dataset: str, filters: MetricFilters) -> list[d
     )
 
 
+async def fetch_release_id(dataset: str) -> str:
+    """The release the served table holds right now ('' before releases had ids)."""
+    rows = await query(f"SELECT any(release_id) AS release_id FROM {DATASETS[dataset].table}", {})
+    return str(rows[0]["release_id"]) if rows else ""
+
+
 async def fetch_release(dataset: str) -> dict[str, Any]:
-    """Date coverage and build identity of the served release for the dataset."""
+    """Identity, record dates and load-evidence coverage of the served release."""
     ds = DATASETS[dataset]
     rows = await query(
         f"""
-        SELECT min({ds.event_date}) AS data_from,
+        SELECT any(release_id) AS release_id,
+               min({ds.event_date}) AS data_from,
                max({ds.event_date}) AS data_to,
                max(built_at) AS built_at
         FROM {ds.table}
@@ -299,4 +310,14 @@ async def fetch_release(dataset: str) -> dict[str, Any]:
         """,
         {},
     )
-    return rows[0] if rows else {}
+    release = dict(rows[0]) if rows else {}
+    release["coverage"] = {}
+    if release.get("release_id"):
+        ledger = await query(
+            "SELECT coverage_json FROM market_release_ledger FINAL "
+            "WHERE dataset = {dataset:String} AND release_id = {release_id:String}",
+            {"dataset": ds.release_table, "release_id": release["release_id"]},
+        )
+        if ledger:
+            release["coverage"] = json.loads(ledger[0]["coverage_json"] or "{}")
+    return release

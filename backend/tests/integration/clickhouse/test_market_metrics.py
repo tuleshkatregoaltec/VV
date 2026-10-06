@@ -3,8 +3,10 @@
 Expected numbers are worked out by hand from the fixture rows below, not produced by the
 code under test. The tables come from Holocron's schema file and the views from the backend
 serving script, so the test exercises the production definitions rather than fixture DDL.
+Coverage comes from the served release's ledger entry, as Holocron publishes it.
 """
 
+import json
 from datetime import date, datetime
 
 import pytest
@@ -20,7 +22,7 @@ SALE_COLUMNS = [
     "row_key", "transaction_id", "instance_date", "trans_group_en", "actual_worth",
     "procedure_area", "area_name_en", "master_project_en", "property_type_en",
     "property_sub_type_en", "property_usage_en", "rooms_en", "building_name_en",
-    "reg_type_en", "source_system", "match_status", "is_served", "built_at",
+    "reg_type_en", "source_system", "match_status", "is_served", "built_at", "release_id",
 ]  # fmt: skip
 
 
@@ -29,7 +31,7 @@ def sale(key, when, group, price, area_sqm, area, master="", served=1, status="d
     return [
         key, key, when, group, price, area_sqm, area, master, "Unit", "Flat", "Residential",
         rooms, building, "Existing Properties", source, status, served,
-        datetime(2026, 10, 2, 6, 0),
+        datetime(2026, 10, 2, 6, 0), "r-sales",
     ]  # fmt: skip
 
 
@@ -61,7 +63,7 @@ RENT_COLUMNS = [
     "row_key", "contract_id", "registration_date", "contract_start_date", "contract_end_date",
     "annual_amount", "contract_amount", "actual_area", "area_name_en", "master_project_en",
     "ejari_property_sub_type_en", "property_usage_en", "version_en", "bedrooms",
-    "source_system", "match_status", "is_served", "built_at",
+    "source_system", "match_status", "is_served", "built_at", "release_id",
 ]  # fmt: skip
 
 
@@ -69,7 +71,7 @@ def rent(key, registered, start, end, annual, contract, version, bedrooms, area=
     return [
         key, key, registered, start, end, annual, contract, 80.0, area, "", "Flat",
         "Residential", version, bedrooms, "dld_open_data", "matched" if bedrooms else "dld_only",
-        1, datetime(2026, 10, 2, 6, 0),
+        1, datetime(2026, 10, 2, 6, 0), "r-rent",
     ]  # fmt: skip
 
 
@@ -87,14 +89,35 @@ RENTS = [
 ]  # fmt: skip
 
 
+def verified(*ranges: tuple[str, str]) -> list[dict[str, str]]:
+    return [{"from": a, "to": b, "status": "verified"} for a, b in ranges]
+
+
+async def publish_coverage(warehouse, release_id: str, dataset: str, ranges: list[dict]) -> None:
+    """The ledger entry Holocron writes for a published release (coverage part only)."""
+    await warehouse.insert(
+        "market_release_ledger",
+        # Each call is a newer version of the entry (ReplacingMergeTree keeps the latest).
+        [[release_id, dataset, "published", json.dumps({"ranges": ranges}), datetime.now()]],
+        column_names=["release_id", "dataset", "state", "coverage_json", "updated_at"],
+    )  # fmt: skip
+
+
 @pytest.fixture
 async def served(warehouse, install_serving):
     await install_serving(
-        tables=("market_sale_events", "market_rental_events"),
+        tables=("market_sale_events", "market_rental_events", "market_release_ledger"),
         views=("ch_transactions", "ch_rent_contracts"),
     )
     await warehouse.insert("market_sale_events", SALES, column_names=SALE_COLUMNS)
     await warehouse.insert("market_rental_events", RENTS, column_names=RENT_COLUMNS)
+    # Every day from the first to the last loaded record was loaded in full.
+    await publish_coverage(
+        warehouse, "r-sales", "market_sale_events", verified(("2026-08-31", "2026-10-01"))
+    )
+    await publish_coverage(
+        warehouse, "r-rent", "market_rental_events", verified(("2026-09-05", "2026-10-01"))
+    )
     return warehouse
 
 
@@ -320,3 +343,70 @@ async def test_registered_chat_agent_executes_the_tool_against_the_database(serv
     assert returned and json.loads(json.dumps(returned[0])) == api
     assert api["total"]["count"] == 3
     assert api["total"]["values"] == {"mean_aed": 2_000_000, "median_aed": 1_000_000}
+
+
+async def test_missing_week_between_populated_dates_is_not_complete(served):
+    # Records on 1 and 30 September span the whole month, yet 11-17 September were never
+    # loaded. First/last dates would call the month complete; the evidence does not.
+    await publish_coverage(
+        served,
+        "r-sales",
+        "market_sale_events",
+        verified(("2026-08-31", "2026-09-10"), ("2026-09-18", "2026-10-01")),
+    )
+    result = await get_market_metrics(request(dataset="sales", location="JVC"))
+    assert result.coverage.status == "partial"
+    assert (result.coverage.verified_days, result.coverage.unverified_days) == (23, 7)
+    gap = [r for r in result.coverage.ranges if r.status != "verified"]
+    assert [(r.start, r.end) for r in gap] == [(date(2026, 9, 11), date(2026, 9, 17))]
+    assert result.total.count == 3  # observed records, reported as partial
+    assert any("2026-09-11 to 2026-09-17 unverified" in item for item in result.limitations)
+
+
+async def test_verified_empty_month_is_zero_but_an_unverified_one_is_unknown(served):
+    period = {"type": "range", "start": date(2026, 6, 1), "end": date(2026, 7, 31)}
+    unknown = await get_market_metrics(request(dataset="sales", period=period, group_by="month"))
+    assert unknown.coverage.status == "unavailable"
+    assert unknown.total.count is None
+
+    # June is now verified as fully loaded with no sales; July still has no evidence.
+    await publish_coverage(
+        served,
+        "r-sales",
+        "market_sale_events",
+        verified(("2026-06-01", "2026-06-30"), ("2026-08-31", "2026-10-01")),
+    )
+    result = await get_market_metrics(request(dataset="sales", period=period, group_by="month"))
+    assert result.coverage.status == "partial"
+    assert [(row.group, row.count, row.coverage) for row in result.rows] == [
+        ("2026-06", 0, "verified"),
+        ("2026-07", None, "unverified"),
+    ]
+
+
+async def test_records_without_any_load_evidence_are_unverified_not_complete(served):
+    await publish_coverage(served, "r-sales", "market_sale_events", [])
+    result = await get_market_metrics(request(dataset="sales", location="JVC"))
+    assert result.coverage.status == "unverified"
+    assert result.total.count == 3
+    assert result.change_pct == {} and result.coverage.note in result.limitations
+
+
+async def test_one_answer_comes_from_one_release(served, monkeypatch):
+    """A publication during the operation makes it recompute against the new release."""
+    from app.analytics import market_metric_queries
+
+    real = market_metric_queries.fetch_release_id
+    calls = []
+
+    async def publication_mid_request(dataset):
+        calls.append(dataset)
+        if len(calls) == 1:
+            # The first check sees a new release: the computed answer is discarded.
+            return "r-new"
+        return await real(dataset)
+
+    monkeypatch.setattr(market_metric_queries, "fetch_release_id", publication_mid_request)
+    result = await get_market_metrics(request(dataset="sales", location="JVC"))
+    assert len(calls) == 2 and result.release_id == "r-sales"
+    assert not any("release changed" in item for item in result.limitations)

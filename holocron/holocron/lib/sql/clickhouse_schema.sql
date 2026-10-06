@@ -1948,6 +1948,28 @@ CREATE TABLE IF NOT EXISTS market_release_ledger (
 ENGINE = ReplacingMergeTree(updated_at)
 ORDER BY (dataset, release_id);
 
+-- Day ranges each release can vouch for, from source_load_windows (JSON, see market.release).
+ALTER TABLE market_release_ledger ADD COLUMN IF NOT EXISTS coverage_json String DEFAULT '{}';
+
+-- One row per date window a bronze load replaced: the evidence that a day was loaded in
+-- full. status: complete (pagination reached the end of the window), partial (the load
+-- stopped inside the window), attested (an operator-recorded archive, e.g. Dubai Pulse).
+-- The latest window covering a day decides its status.
+CREATE TABLE IF NOT EXISTS source_load_windows (
+    bronze_table LowCardinality(String),
+    date_field LowCardinality(String),
+    window_start Date,
+    window_end Date,
+    status LowCardinality(String),
+    rows UInt64,
+    run_id String,
+    manifest_key String,
+    evidence String,
+    loaded_at DateTime64(3, UTC) DEFAULT now64(3)
+)
+ENGINE = MergeTree()
+ORDER BY (bronze_table, date_field, window_start, loaded_at);
+
 -- One row per DXBI evidence run loaded by Holocron (replaces the Mac .loaded marker files).
 -- Raw files are archived to object storage first (manifest_key); loader accounting is kept
 -- here so rows dropped at load are measurable afterwards.

@@ -18484,7 +18484,7 @@
 				"properties": {
 					"status": {
 						"type": "string",
-						"enum": ["complete", "partial", "unavailable"],
+						"enum": ["complete", "partial", "unverified", "unavailable"],
 						"title": "Status"
 					},
 					"data_from": {
@@ -18535,6 +18535,39 @@
 						],
 						"title": "Covered To"
 					},
+					"verified_days": {
+						"type": "integer",
+						"title": "Verified Days",
+						"default": 0
+					},
+					"partial_days": {
+						"type": "integer",
+						"title": "Partial Days",
+						"default": 0
+					},
+					"unverified_days": {
+						"type": "integer",
+						"title": "Unverified Days",
+						"default": 0
+					},
+					"ranges": {
+						"items": {
+							"$ref": "#/components/schemas/MarketCoverageRange"
+						},
+						"type": "array",
+						"title": "Ranges"
+					},
+					"evidence_loaded_at": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Evidence Loaded At"
+					},
 					"note": {
 						"type": "string",
 						"title": "Note"
@@ -18542,7 +18575,30 @@
 				},
 				"type": "object",
 				"required": ["status", "note"],
-				"title": "MarketCoverage"
+				"title": "MarketCoverage",
+				"description": "Load evidence for the period's days, from the served release's coverage record.\n\nverified: the source window holding the day was read to the end of its result set (or\nthe archive it came from is attested), so a day without records is a true zero.\npartial: the load covering the day stopped inside its window. unverified: no load\nevidence; records may exist but absence proves nothing. complete = every day verified;\nunavailable = no evidence and no records."
+			},
+			"MarketCoverageRange": {
+				"properties": {
+					"start": {
+						"type": "string",
+						"format": "date",
+						"title": "Start"
+					},
+					"end": {
+						"type": "string",
+						"format": "date",
+						"title": "End"
+					},
+					"status": {
+						"type": "string",
+						"enum": ["verified", "partial", "unverified"],
+						"title": "Status"
+					}
+				},
+				"type": "object",
+				"required": ["start", "end", "status"],
+				"title": "MarketCoverageRange"
 			},
 			"MarketLocationMatch": {
 				"properties": {
@@ -18630,6 +18686,18 @@
 						},
 						"type": "object",
 						"title": "Values"
+					},
+					"coverage": {
+						"anyOf": [
+							{
+								"type": "string",
+								"enum": ["verified", "partial", "unverified"]
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Coverage"
 					}
 				},
 				"type": "object",
@@ -19020,6 +19088,17 @@
 						},
 						"type": "object",
 						"title": "Sources"
+					},
+					"release_id": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Release Id"
 					},
 					"release_built_at": {
 						"anyOf": [

@@ -437,6 +437,8 @@ class MarketMetricRow(BaseModel):
     count: Optional[int] = None
     share_of_count: Optional[float] = None
     values: dict[str, Optional[float]] = Field(default_factory=dict)
+    # Month rows: evidence for the month's days (see MarketCoverage).
+    coverage: Optional[Literal["verified", "partial", "unverified"]] = None
 
 
 class MarketResolvedPeriod(BaseModel):
@@ -448,12 +450,32 @@ class MarketResolvedPeriod(BaseModel):
     timezone: str
 
 
+class MarketCoverageRange(BaseModel):
+    start: date
+    end: date
+    status: Literal["verified", "partial", "unverified"]
+
+
 class MarketCoverage(BaseModel):
-    status: Literal["complete", "partial", "unavailable"]
+    """Load evidence for the period's days, from the served release's coverage record.
+
+    verified: the source window holding the day was read to the end of its result set (or
+    the archive it came from is attested), so a day without records is a true zero.
+    partial: the load covering the day stopped inside its window. unverified: no load
+    evidence; records may exist but absence proves nothing. complete = every day verified;
+    unavailable = no evidence and no records.
+    """
+
+    status: Literal["complete", "partial", "unverified", "unavailable"]
     data_from: Optional[date] = None
     data_to: Optional[date] = None
     covered_from: Optional[date] = None
     covered_to: Optional[date] = None
+    verified_days: int = 0
+    partial_days: int = 0
+    unverified_days: int = 0
+    ranges: list[MarketCoverageRange] = Field(default_factory=list)
+    evidence_loaded_at: Optional[str] = None
     note: str
 
 
@@ -478,5 +500,6 @@ class MarketMetricsResponse(BaseModel):
     change_pct: dict[str, Optional[float]] = Field(default_factory=dict)
     matched_locations: list[MarketLocationMatch] = Field(default_factory=list)
     sources: dict[str, int] = Field(default_factory=dict)
+    release_id: Optional[str] = None
     release_built_at: Optional[str] = None
     limitations: list[str] = Field(default_factory=list)

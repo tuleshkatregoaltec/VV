@@ -37,6 +37,7 @@ from holocron.market import transforms
 from holocron.market.checks import CHECKS, MarketCheck, dxbi_input_rows, evaluate
 from holocron.platform.clickhouse import ClickHouseClient, sql_string
 from holocron.platform.clickhouse_schema import ensure_schema
+from holocron.platform.load_windows import coverage
 
 # A served-row floor is a coarse guard only: DLD does not delete registered records, so a
 # release serving clearly fewer rows than the live one means truncated input. It cannot prove
@@ -62,6 +63,11 @@ _EVENT_DATE = {
     "market_rental_events": "toDate(registration_date)",
 }
 _GOOD_STATES = {"published", "superseded", "rolled_back"}
+# The bronze table and date each dataset's metrics count by; coverage is claimed on that date.
+_COVERAGE_BASIS = {
+    "market_sale_events": ("dld_od_transactions_bronze", "instance_date"),
+    "market_rental_events": ("dld_od_rents_bronze", "registration_date"),
+}
 
 
 class MarketReleaseRejected(RuntimeError):
@@ -135,6 +141,7 @@ def release_lock(clickhouse: ClickHouseClient, *, owner: str) -> Iterator[None]:
 _LEDGER_COLUMNS = (
     "release_id", "dataset", "state", "owner", "started_at", "updated_at", "served_rows",
     "previous_release_id", "depends_on_json", "inputs_json", "checks_json", "detail",
+    "coverage_json",
 )  # fmt: skip
 
 
@@ -161,6 +168,7 @@ def _new_entry(release_id: str, dataset: str, owner: str) -> dict[str, Any]:
         "release_id": release_id, "dataset": dataset, "state": "building", "owner": owner,
         "started_at": now, "updated_at": now, "served_rows": 0, "previous_release_id": "",
         "depends_on_json": "{}", "inputs_json": "{}", "checks_json": "[]", "detail": "",
+        "coverage_json": "{}",
     }  # fmt: skip
 
 
@@ -387,6 +395,18 @@ def _inputs(clickhouse: ClickHouseClient, served: str) -> dict[str, Any]:
     }
 
 
+def _release_coverage(
+    clickhouse: ClickHouseClient, served: str, entry: dict[str, Any]
+) -> dict[str, Any]:
+    bronze_table, date_field = _COVERAGE_BASIS[served]
+    return coverage(
+        clickhouse,
+        bronze_table=bronze_table,
+        date_field=date_field,
+        loaded_before=entry["started_at"],
+    )
+
+
 # --- publication ----------------------------------------------------------------------------
 
 
@@ -412,6 +432,8 @@ def publish_validated(
             previous_release_id=tables.get(served_table, ""),
             depends_on_json=json.dumps({name: tables.get(name, "") for name in depends_on}),
             inputs_json=json.dumps(_inputs(clickhouse, served_table)),
+            # Windows loaded before this build started: the days this release can vouch for.
+            coverage_json=json.dumps(_release_coverage(clickhouse, served_table, entry)),
             detail="; ".join(recovered),
         )
         try:
