@@ -230,7 +230,7 @@ def build(client: ClickHouseClient, before_sales: str, before_rentals: str) -> s
 
 | Finding | Evidence | Handling |
 |---|---|---|
-| DLD repeats a multi-unit rental contract's whole rent on every unit line | Matched tier-2 rentals (same lease and floor area): {_n(tier2[0])} rows, {_n(tier2[1])} multi-unit; DLD rent on them AED {_n(tier2[2])} vs DXBI's per-unit AED {_n(tier2[3])} | DXBI's per-unit rent wins where DXBI holds the unit (this is most of the rental value change above). DLD-only multi-unit rows are **unchanged; decision needed** (table below). |
+| DLD repeats a multi-unit rental contract's whole rent on every unit line | Matched tier-2 rentals (same lease and floor area): {_n(tier2[0])} rows, {_n(tier2[1])} multi-unit; DLD rent on them AED {_n(tier2[2])} vs DXBI's per-unit AED {_n(tier2[3])} | Each DLD row now carries its unit's share (contract rent / units; decided 2026-10-06), and DXBI's own per-unit rent wins where DXBI holds the unit. This is most of the rental value change above: the old totals counted each contract's rent once per unit. |
 | Off-plan villas registered by DLD against the plot ("Land") | {_n(land_villa[0])} matched sales typed Land by DLD and Villa by DXBI ({_n(land_villa[1])} of them "Delayed Sell") | DXBI's Villa wins; sales typed Plot fall and Villa rises accordingly. |
 | DXBI dates 21% of matched sales one business day before DLD registration | table above | DXBI's date served; DLD's kept hidden for validation. |
 | DLD's bedroom column holds type words ('Office', 'Shop', 'NA', 'PENTHOUSE') | sales bedroom coverage before counts them | Treated as unknown bedrooms (coverage drops from the "before" figure for that reason). |
@@ -241,12 +241,13 @@ def build(client: ClickHouseClient, before_sales: str, before_rentals: str) -> s
 | Transactions rentals "last N days" included leases starting in the future | 164 of 34,170 JVC residential leases (365 days) | Window bounded at today, as Analytics already was; the two pages now agree. |
 | Summary medians were sampled (changed between refreshes) | 70.79 vs 70.61 m² on identical requests | Exact medians on the summaries. |
 
-### DLD-only multi-unit rentals still carrying whole-contract rent
+### DLD-only multi-unit rentals (rent now split per unit)
 
 {_table_md(["Year", "Multi-unit DLD rows", "All DLD-only rows", "Share of DLD-only annual value"], [[str(y), _n(m), _n(n), f"{float(v) * 100:.1f}%"] for y, m, n, v in multi_unit])}
 
-Rental value totals and averages that include these rows overstate rent. Options: split the
-contract rent across its units, exclude multi-unit lines from rent values, or keep and label.
+Before the split, these lines carried most of DLD's annual rent value although they are a
+fifth of the rows. Splitting keeps every contract's total (its rows add up to its rent) and
+gives each unit a realistic rent.
 """
     now = datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC")
     return f"""# Uniform market layer: what changed
@@ -290,8 +291,10 @@ record. What changes is which source supplies each record and its values.
 
 {_yearly(client, before=br, after=r, date="contract_start_date", value="annual_amount", where="1", since=2021)}
 
-Year-to-year movements come from DXBI's dates and amounts replacing DLD's on matched records
-(see below), not from added or removed records.
+Record counts do not move. Sales value moves only where DXBI's price or date replaces DLD's.
+Rental value falls because a multi-unit contract's rent was counted once per unit (see "Data
+errors found"): each row now carries its unit's share, and DXBI's per-unit rent where it
+holds the unit.
 
 ## Which source supplies each record (hidden label)
 

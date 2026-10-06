@@ -269,3 +269,40 @@ def test_one_location_spelling_per_place_in_dxbi_words(warehouse) -> None:  # no
         "AL KHAWANEEJ DISTRICT": "Al Khawaneej District",
         "DIFC": "DIFC",
     }
+
+
+@live
+def test_multi_unit_dld_rent_is_split_across_its_units(warehouse) -> None:  # noqa: F811
+    # DLD writes one row per unit of a multi-unit contract and repeats the whole contract rent
+    # on each; served as is, a 3-unit AED 300k contract counted as AED 900k of rent.
+    warehouse.insert_rows(
+        table="dld_od_transactions_bronze",
+        column_names=_DLD_SALE,
+        rows=[_dld_sale(f"A{i}", date(2023, 5, 1), 1_000_000 + i) for i in range(5)],
+    )
+    release.materialize_market_sale_events(clickhouse=warehouse)
+    begin = datetime(2023, 5, 1)
+    warehouse.insert_rows(
+        table="dld_od_rents_bronze",
+        column_names=[*_DLD_RENT, "total_properties", "property_id"],
+        rows=[
+            (f"M{i}", "run", begin, begin, begin.replace(year=2024), 300_000, 300_000, 50.0 + i,
+             "Marsa Dubai", MARSA_DUBAI_ID, "dld_open_data", "Unit", "Labor Camps",
+             "Residential", "New", 3, i)
+            for i in range(3)
+        ] + [
+            # A single-unit contract keeps its rent.
+            ("S1", "run", begin, begin, begin.replace(year=2024), 80_000, 80_000, 60.0,
+             "Marsa Dubai", MARSA_DUBAI_ID, "dld_open_data", "Unit", "Flat", "Residential",
+             "New", 1, 9),
+        ],
+    )  # fmt: skip
+    release.materialize_market_rental_events(clickhouse=warehouse)
+    served = dict(
+        warehouse.query(
+            "SELECT row_key, annual_amount FROM market_rental_events WHERE is_served = 1"
+        ).result_rows
+    )
+    assert served == {"M0": 100_000, "M1": 100_000, "M2": 100_000, "S1": 80_000}
+    # The contract's rows still add up to its rent.
+    assert sum(served[f"M{i}"] for i in range(3)) == 300_000

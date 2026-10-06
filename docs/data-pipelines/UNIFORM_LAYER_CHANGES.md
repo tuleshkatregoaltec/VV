@@ -1,10 +1,10 @@
 # Uniform market layer: what changed
 
-Generated 2026-10-06 16:26 UTC by `holocron/scripts/report_uniform_layer_changes.py` on the local warehouse
+Generated 2026-10-06 17:43 UTC by `holocron/scripts/report_uniform_layer_changes.py` on the local warehouse
 copy (handoff snapshot). Before = frozen copy of the release built with the code on `VV` before
 this change (`uniform_baseline_sale_events`, `uniform_baseline_rental_events`); after = the published uniform release
 (sales `4cd2ea3a9088`, rentals
-`3eaa987cb78a`). These are local pre-production numbers; re-run
+`9b7aaabe3002`). These are local pre-production numbers; re-run
 the script on staging/production after deployment. Aggregates only.
 
 ## Rules (decided 2026-10-06)
@@ -49,15 +49,17 @@ record. What changes is which source supplies each record and its values.
 
 | Year | Records before | Records after | Change | Change % | Value before (AED) | Value after (AED) | Value change % |
 |---|---|---|---|---|---|---|---|
-| 2021 | 769,364 | 769,364 | 0 | +0.00% | 210,451,447,553 | 210,451,447,553 | +0.00% |
-| 2022 | 895,096 | 895,096 | 0 | +0.00% | 211,371,239,401 | 211,371,239,401 | +0.00% |
-| 2023 | 998,946 | 998,946 | 0 | +0.00% | 343,246,339,519 | 343,246,339,519 | +0.00% |
-| 2024 | 1,147,786 | 1,147,786 | 0 | +0.00% | 361,981,473,416 | 361,981,473,416 | +0.00% |
-| 2025 | 1,224,285 | 1,224,285 | 0 | +0.00% | 487,876,895,089 | 384,697,203,426 | -21.15% |
-| 2026 | 672,978 | 672,978 | 0 | +0.00% | 110,304,799,184 | 93,427,477,929 | -15.30% |
+| 2021 | 769,364 | 769,364 | 0 | +0.00% | 210,451,447,553 | 54,460,734,905 | -74.12% |
+| 2022 | 895,096 | 895,096 | 0 | +0.00% | 211,371,239,401 | 60,921,675,455 | -71.18% |
+| 2023 | 998,946 | 998,946 | 0 | +0.00% | 343,246,339,519 | 77,068,961,541 | -77.55% |
+| 2024 | 1,147,786 | 1,147,786 | 0 | +0.00% | 361,981,473,416 | 86,279,311,885 | -76.16% |
+| 2025 | 1,224,285 | 1,224,285 | 0 | +0.00% | 487,876,895,089 | 106,447,097,290 | -78.18% |
+| 2026 | 672,978 | 672,978 | 0 | +0.00% | 110,304,799,184 | 74,520,825,325 | -32.44% |
 
-Year-to-year movements come from DXBI's dates and amounts replacing DLD's on matched records
-(see below), not from added or removed records.
+Record counts do not move. Sales value moves only where DXBI's price or date replaces DLD's.
+Rental value falls because a multi-unit contract's rent was counted once per unit (see "Data
+errors found"): each row now carries its unit's share, and DXBI's per-unit rent where it
+holds the unit.
 
 ## Which source supplies each record (hidden label)
 
@@ -103,7 +105,7 @@ Matched rows in the DXBI period: **1,133,227**.
 
 | Column | DXBI value replaced DLD's | % of matched | DLD filled empty DXBI | % of matched |
 |---|---|---|---|---|
-| annual_amount | 143,615 | 12.7% | 10 | 0.0% |
+| annual_amount | 154,922 | 13.7% | 10 | 0.0% |
 | contract_end_date | 6,334 | 0.6% | 0 | 0.0% |
 | property_type | 16,625 | 1.5% | 333,883 | 29.5% |
 | rooms_en | 0 | 0.0% | 9,528 | 0.8% |
@@ -179,7 +181,7 @@ Hills 2`/`DAMAC HILLS 2`, `Dubailand`/`Dubai Land` merged), DLD names only where
 
 | Finding | Evidence | Handling |
 |---|---|---|
-| DLD repeats a multi-unit rental contract's whole rent on every unit line | Matched tier-2 rentals (same lease and floor area): 95,542 rows, 80,160 multi-unit; DLD rent on them AED 125,511,946,813 vs DXBI's per-unit AED 6,506,389,625 | DXBI's per-unit rent wins where DXBI holds the unit (this is most of the rental value change above). DLD-only multi-unit rows are **unchanged; decision needed** (table below). |
+| DLD repeats a multi-unit rental contract's whole rent on every unit line | Matched tier-2 rentals (same lease and floor area): 95,542 rows, 80,160 multi-unit; DLD rent on them AED 125,511,946,813 vs DXBI's per-unit AED 6,505,997,456 | Each DLD row now carries its unit's share (contract rent / units; decided 2026-10-06), and DXBI's own per-unit rent wins where DXBI holds the unit. This is most of the rental value change above: the old totals counted each contract's rent once per unit. |
 | Off-plan villas registered by DLD against the plot ("Land") | 46,319 matched sales typed Land by DLD and Villa by DXBI (39,109 of them "Delayed Sell") | DXBI's Villa wins; sales typed Plot fall and Villa rises accordingly. |
 | DXBI dates 21% of matched sales one business day before DLD registration | table above | DXBI's date served; DLD's kept hidden for validation. |
 | DLD's bedroom column holds type words ('Office', 'Shop', 'NA', 'PENTHOUSE') | sales bedroom coverage before counts them | Treated as unknown bedrooms (coverage drops from the "before" figure for that reason). |
@@ -190,16 +192,17 @@ Hills 2`/`DAMAC HILLS 2`, `Dubailand`/`Dubai Land` merged), DLD names only where
 | Transactions rentals "last N days" included leases starting in the future | 164 of 34,170 JVC residential leases (365 days) | Window bounded at today, as Analytics already was; the two pages now agree. |
 | Summary medians were sampled (changed between refreshes) | 70.79 vs 70.61 m² on identical requests | Exact medians on the summaries. |
 
-### DLD-only multi-unit rentals still carrying whole-contract rent
+### DLD-only multi-unit rentals (rent now split per unit)
 
 | Year | Multi-unit DLD rows | All DLD-only rows | Share of DLD-only annual value |
 |---|---|---|---|
-| 2021 | 134,077 | 769,364 | 77.0% |
-| 2022 | 153,671 | 895,096 | 74.2% |
-| 2023 | 180,991 | 998,946 | 79.8% |
-| 2024 | 210,644 | 1,147,786 | 78.7% |
-| 2025 | 115,253 | 302,728 | 96.4% |
-| 2026 | 13,477 | 213,521 | 45.2% |
+| 2021 | 134,077 | 769,364 | 10.9% |
+| 2022 | 153,671 | 895,096 | 10.6% |
+| 2023 | 180,991 | 998,946 | 10.0% |
+| 2024 | 210,644 | 1,147,786 | 10.5% |
+| 2025 | 115,253 | 302,728 | 29.1% |
+| 2026 | 13,477 | 213,521 | 6.3% |
 
-Rental value totals and averages that include these rows overstate rent. Options: split the
-contract rent across its units, exclude multi-unit lines from rent values, or keep and label.
+Before the split, these lines carried most of DLD's annual rent value although they are a
+fifth of the rows. Splitting keeps every contract's total (its rows add up to its rent) and
+gives each unit a realistic rent.

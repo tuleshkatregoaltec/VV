@@ -1017,6 +1017,17 @@ WHERE dx.contract_key NOT IN (SELECT dxbi_contract_key FROM `market_rental_match
 """,
 )
 
+
+# DLD puts one row per unit of a multi-unit contract and repeats the whole contract's rent on
+# each (measured: 224,466 of 224,543 Pulse multi-unit contracts have exactly one row per unit;
+# those rows held 74-80% of DLD's annual rent value). Each row is served its unit's share, so
+# a contract's rows still add up to its rent. Floor area is already per row and is not split.
+def _per_unit(amount: str) -> str:
+    return f"toInt64(round({amount} / greatest(d.total_properties, 1)))"
+
+
+_DLD_ANNUAL = _per_unit("d.annual_amount")
+_DLD_CONTRACT = _per_unit("d.contract_amount")
 _DXBI_RENT_ROOMS = _ROOMS_FROM_BEDROOMS.format(beds="x.bedrooms")
 # DLD rent rows carry no bedroom count (its numeric "rooms" is set on 0.3% of rows and its
 # meaning is undocumented); only an Ejari "Studio" type says it.
@@ -1055,8 +1066,8 @@ SELECT
             {_DXBI_RENT_ROOMS}) AS _rooms,
     d.parking,
     if(_dxw AND {_DXBI_RENT_SQM} > 0, {_DXBI_RENT_SQM}, d.actual_area) AS _size_sqm,
-    if(_dxw AND x.annual_rent_aed > 0, toInt64(x.annual_rent_aed), d.annual_amount) AS _annual,
-    if(_dxw AND x.contract_amount_aed > 0, toInt64(x.contract_amount_aed), d.contract_amount),
+    if(_dxw AND x.annual_rent_aed > 0, toInt64(x.annual_rent_aed), {_DLD_ANNUAL}) AS _annual,
+    if(_dxw AND x.contract_amount_aed > 0, toInt64(x.contract_amount_aed), {_DLD_CONTRACT}),
     d.total_properties, d.version_number,
     multiIf(_dxw AND x.contract_state IN ('New', 'Renewed'), x.contract_state,
             d.version_en = 'Renew', 'Renewed', d.version_en) AS _version,
@@ -1099,7 +1110,7 @@ SELECT
         ("contract_end_date", "toDate(d.end_date) != x.lease_end"),
         (
             "annual_amount",
-            "x.annual_rent_aed > 0 AND d.annual_amount != toInt64(x.annual_rent_aed)",
+            f"x.annual_rent_aed > 0 AND {_DLD_ANNUAL} != toInt64(x.annual_rent_aed)",
         ),
         (
             "size_sqm",
