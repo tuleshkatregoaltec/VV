@@ -21,10 +21,11 @@ def test_canonical_tables_keep_every_legacy_serving_column() -> None:
 
 def test_insert_column_lists_match_table_definitions_exactly() -> None:
     # INSERT ... (columns) SELECT maps by position; an unlisted table column would be filled
-    # with a default and a stray one would fail the build.
+    # with a default and a stray one would fail the build. release_id is the one deliberate
+    # default: the release sets it on each staging table, so no statement can mislabel rows.
     schema = _schema()
-    assert list(transforms.SALE_COLUMNS) == schema["market_sale_events"]
-    assert list(transforms.RENTAL_COLUMNS) == schema["market_rental_events"]
+    assert [*transforms.SALE_COLUMNS, "release_id"] == schema["market_sale_events"]
+    assert [*transforms.RENTAL_COLUMNS, "release_id"] == schema["market_rental_events"]
 
 
 def test_label_drift_is_normalised_in_the_serving_layer() -> None:

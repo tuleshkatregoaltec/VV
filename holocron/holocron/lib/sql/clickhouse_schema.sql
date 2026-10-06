@@ -1922,6 +1922,32 @@ CREATE TABLE IF NOT EXISTS market_rental_events (
 ENGINE = MergeTree()
 ORDER BY (contract_start_date, contract_id);
 
+-- Every canonical market table carries the release that built it: each reader query can
+-- report which release answered it, and staging/previous tables stay identifiable.
+ALTER TABLE market_sale_matches ADD COLUMN IF NOT EXISTS release_id LowCardinality(String) DEFAULT '';
+ALTER TABLE market_rental_matches ADD COLUMN IF NOT EXISTS release_id LowCardinality(String) DEFAULT '';
+ALTER TABLE market_sale_events ADD COLUMN IF NOT EXISTS release_id LowCardinality(String) DEFAULT '';
+ALTER TABLE market_rental_events ADD COLUMN IF NOT EXISTS release_id LowCardinality(String) DEFAULT '';
+
+-- Durable publication record, one version per state change (latest updated_at wins).
+-- state: building | rejected | failed | publishing | published | superseded | rolled_back
+CREATE TABLE IF NOT EXISTS market_release_ledger (
+    release_id String,
+    dataset LowCardinality(String),
+    state LowCardinality(String),
+    owner String,
+    started_at DateTime64(3, UTC),
+    updated_at DateTime64(3, UTC),
+    served_rows UInt64,
+    previous_release_id String,
+    depends_on_json String,
+    inputs_json String,
+    checks_json String,
+    detail String
+)
+ENGINE = ReplacingMergeTree(updated_at)
+ORDER BY (dataset, release_id);
+
 -- One row per DXBI evidence run loaded by Holocron (replaces the Mac .loaded marker files).
 -- Raw files are archived to object storage first (manifest_key); loader accounting is kept
 -- here so rows dropped at load are measurable afterwards.

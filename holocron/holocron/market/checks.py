@@ -7,6 +7,7 @@ this layer; a failing check means the data moved outside what has been observed 
 
 from __future__ import annotations
 
+import math
 import operator
 from dataclasses import dataclass
 
@@ -28,6 +29,9 @@ class MarketCheck:
     # signals (DXBI lag, coverage, match rate) stay as post-publication asset checks: a
     # lagging DXBI feed must not freeze fresh DLD data.
     blocking: bool = True
+    # Measures DXBI evidence: with no DXBI input loaded at all the ratio has nothing to
+    # measure and is recorded as not applicable. Unmeasurable with DXBI input, it fails.
+    needs_dxbi: bool = False
 
 
 def evaluate(clickhouse: ClickHouseQuery, check: MarketCheck) -> tuple[bool, float]:
@@ -37,6 +41,24 @@ def evaluate(clickhouse: ClickHouseQuery, check: MarketCheck) -> tuple[bool, flo
         return False, float("nan")
     value = float(raw)
     return _OPS[check.op](value, check.threshold), value
+
+
+_DXBI_INPUT = {
+    "market_sale_events": "dxbi_sales_unit_events",
+    "market_rental_events": "dxbi_rental_events",
+}
+
+
+def dxbi_input_rows(clickhouse: ClickHouseQuery, asset: str) -> int:
+    return int(clickhouse.query(f"SELECT count() FROM {_DXBI_INPUT[asset]}").result_rows[0][0])
+
+
+def outcome(clickhouse: ClickHouseQuery, check: MarketCheck) -> tuple[str, float]:
+    """passed / failed / not_applicable for a published-table check."""
+    passed, value = evaluate(clickhouse, check)
+    if math.isnan(value) and check.needs_dxbi and not dxbi_input_rows(clickhouse, check.asset):
+        return "not_applicable", value
+    return ("passed" if passed else "failed"), value
 
 
 _SALES = "market_sale_events"
@@ -57,10 +79,11 @@ SELECT min(dxbi / dld) FROM (
 
 
 def _off_vocabulary_share(table: str) -> str:
+    # No DXBI-only rows means nothing off-vocabulary is served: 0, not an unmeasurable 0/0.
     return f"""
-SELECT countIf(area_name_en NOT IN (
+SELECT if(count() = 0, 0, countIf(area_name_en NOT IN (
            SELECT DISTINCT area_name_en FROM {table} WHERE source_system != 'dxbi'))
-       / count()
+       / count())
 FROM {table}
 WHERE match_status = 'dxbi_only'"""
 
@@ -104,6 +127,7 @@ CHECKS: tuple[MarketCheck, ...] = (
         op=">=",
         threshold=0.80,
         blocking=False,
+        needs_dxbi=True,
     ),
     MarketCheck(
         name="sale_dxbi_monthly_coverage_min",
@@ -113,6 +137,7 @@ CHECKS: tuple[MarketCheck, ...] = (
         op=">=",
         threshold=0.80,
         blocking=False,
+        needs_dxbi=True,
     ),
     MarketCheck(
         name="sale_probable_duplicate_share",
@@ -123,6 +148,7 @@ CHECKS: tuple[MarketCheck, ...] = (
         op="<=",
         threshold=0.15,
         blocking=False,
+        needs_dxbi=True,
     ),
     MarketCheck(
         name="sale_dxbi_only_share",
@@ -132,6 +158,7 @@ CHECKS: tuple[MarketCheck, ...] = (
         f" FROM {_SALES}",
         op="<=",
         threshold=0.08,
+        needs_dxbi=True,
     ),
     MarketCheck(
         name="sale_label_vocabulary",
@@ -149,6 +176,7 @@ CHECKS: tuple[MarketCheck, ...] = (
         sql=_off_vocabulary_share(_SALES),
         op="<=",
         threshold=0.25,
+        needs_dxbi=True,
     ),
     MarketCheck(
         name="sale_offplan_status_missing_share",
@@ -167,6 +195,7 @@ CHECKS: tuple[MarketCheck, ...] = (
         " WHERE dld_transaction_number != ''",
         op=">=",
         threshold=0.95,
+        needs_dxbi=True,
     ),
     MarketCheck(
         name="sale_dxbi_lag_days",
@@ -179,6 +208,7 @@ CHECKS: tuple[MarketCheck, ...] = (
         op="<=",
         threshold=7,
         blocking=False,
+        needs_dxbi=True,
     ),
     # --- rentals -----------------------------------------------------------------------
     MarketCheck(
@@ -221,6 +251,7 @@ CHECKS: tuple[MarketCheck, ...] = (
         op=">=",
         threshold=0.60,
         blocking=False,
+        needs_dxbi=True,
     ),
     MarketCheck(
         name="rental_probable_duplicate_share",
@@ -232,6 +263,7 @@ CHECKS: tuple[MarketCheck, ...] = (
         op="<=",
         threshold=0.40,
         blocking=False,
+        needs_dxbi=True,
     ),
     MarketCheck(
         name="rental_pair_size_agreement",
@@ -241,6 +273,7 @@ CHECKS: tuple[MarketCheck, ...] = (
         " WHERE dld_rent_key != 0",
         op=">=",
         threshold=0.80,
+        needs_dxbi=True,
     ),
     MarketCheck(
         name="rental_dxbi_only_share",
@@ -250,6 +283,7 @@ CHECKS: tuple[MarketCheck, ...] = (
         f" FROM {_RENTALS}",
         op="<=",
         threshold=0.05,
+        needs_dxbi=True,
     ),
     MarketCheck(
         name="rental_dxbi_only_area_off_vocabulary_share",
@@ -258,6 +292,7 @@ CHECKS: tuple[MarketCheck, ...] = (
         sql=_off_vocabulary_share(_RENTALS),
         op="<=",
         threshold=0.25,
+        needs_dxbi=True,
     ),
     MarketCheck(
         name="rental_version_vocabulary",
@@ -281,5 +316,6 @@ CHECKS: tuple[MarketCheck, ...] = (
         op="<=",
         threshold=7,
         blocking=False,
+        needs_dxbi=True,
     ),
 )
