@@ -33,12 +33,13 @@ export interface ListingIntelligenceFields {
 	urgency_terms: string[]
 }
 
+// The backend always serializes these defaulted fields; the generated types mark them optional.
 export interface ListingCardResponse
-	extends GeneratedListingCardResponse,
+	extends Omit<GeneratedListingCardResponse, keyof ListingIntelligenceFields>,
 		ListingIntelligenceFields {}
 
 export interface ListingDetailResponse
-	extends GeneratedListingDetailResponse,
+	extends Omit<GeneratedListingDetailResponse, keyof ListingIntelligenceFields>,
 		ListingIntelligenceFields {}
 
 export interface ListingFiltersResponse extends GeneratedListingFiltersResponse {
