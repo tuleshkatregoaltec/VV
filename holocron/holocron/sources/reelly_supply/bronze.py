@@ -20,9 +20,13 @@ from holocron.platform.bronze import (
 )
 from holocron.platform.clickhouse_schema import ensure_schema
 from holocron.platform.raw_files import manifest_files_by_name, string_value
+from holocron.sources.reelly_supply import serving
 from holocron.sources.reelly_supply.source import REELLY_SUPPLY_SOURCE_NAME
 
 _PROJECTS_TABLE = "reelly_projects_bronze"
+_UNIT_TYPES_TABLE = "reelly_project_unit_types_bronze"
+_PAYMENT_PLANS_TABLE = "reelly_project_payment_plans_bronze"
+_SILVER_PROJECTS_TABLE = "silver_reelly_projects"
 _DOCUMENTS_TABLE = "reelly_documents_bronze"
 _AVAILABILITY_TABLE = "reelly_matrix_availability_bronze"
 _PROJECT_DETAILS_FILE = "reelly_supply_project_details.jsonl"
@@ -52,7 +56,12 @@ _PROJECT_COLUMNS = (
     "delta_reason",
     "list_item_json",
     "raw_json",
+    *serving.PROJECT_FIELDS,
 )
+_SILVER_COLUMNS = (
+    "project_key", "project_id", "delta_reason", "scraped_at", "raw_manifest_s3_key",
+    "source_row_key", *serving.PROJECT_FIELDS,
+)  # fmt: skip
 _DOCUMENT_COLUMNS = (
     "document_key",
     "run_id",
@@ -136,11 +145,16 @@ def load_release_to_clickhouse(
         row for row in availability_rows if string_value(row[3]) in dubai_project_ids
     ]
 
+    manifest_key = string_value(raw_manifest.get("manifest_s3_key"))
+    unit_rows, payment_rows, silver_rows = _serving_rows(project_rows, manifest_key=manifest_key)
+
     ensure_schema(clickhouse=clickhouse)
     table_row_counts = {
         _PROJECTS_TABLE: len(project_rows),
         _DOCUMENTS_TABLE: len(document_rows),
         _AVAILABILITY_TABLE: len(availability_rows),
+        _UNIT_TYPES_TABLE: len(unit_rows),
+        _PAYMENT_PLANS_TABLE: len(payment_rows),
     }
     replace_keyed_rows(
         clickhouse=clickhouse,
@@ -166,7 +180,58 @@ def load_release_to_clickhouse(
         rows=availability_rows,
         column_names=_AVAILABILITY_COLUMNS,
     )
+    # Unit prices and payment plans are replaced per loaded project, like the project row, so
+    # a project whose plan changed or disappeared never keeps stale steps.
+    for table, rows, columns in (
+        (_UNIT_TYPES_TABLE, unit_rows, serving.UNIT_TYPE_COLUMNS),
+        (_PAYMENT_PLANS_TABLE, payment_rows, serving.PAYMENT_COLUMNS),
+    ):
+        replace_keyed_rows(
+            clickhouse=clickhouse,
+            table=table,
+            key_column="project_id",
+            key_values=sorted(all_project_ids),
+            rows=rows,
+            column_names=columns,
+        )
+    # silver_reelly_projects (ReplacingMergeTree by project_key): latest project version.
+    if silver_rows:
+        clickhouse.insert_rows(
+            table=_SILVER_PROJECTS_TABLE, rows=silver_rows, column_names=_SILVER_COLUMNS
+        )
     return bronze_load_result(source=source_name, run_id=run_id, table_row_counts=table_row_counts)
+
+
+def _serving_rows(
+    project_rows: list[tuple[Any, ...]], *, manifest_key: str
+) -> tuple[list[tuple[Any, ...]], list[tuple[Any, ...]], list[tuple[Any, ...]]]:
+    unit_rows, payment_rows, silver_rows = [], [], []
+    typed_offset = len(_PROJECT_COLUMNS) - len(serving.PROJECT_FIELDS)
+    for row in project_rows:
+        project_key, run_id, scraped_at, project_id, delta_reason = row[:5]
+        list_item, raw = json.loads(str(row[5]) or "{}"), json.loads(str(row[6]) or "{}")
+        provenance = ("reelly", serving.SOURCE_FILE, manifest_key)
+        for unit in serving.unit_prices(list_item, raw):
+            unit_rows.append((
+                serving.key(project_id, unit["unit_type_index"]), run_id, scraped_at,
+                project_key, project_id, unit["unit_type_index"], unit["unit_type"],
+                unit["unit_type"], unit["price_from_aed"], unit["price_to_aed"], *provenance,
+            ))  # fmt: skip
+        for step in serving.payment_steps(raw):
+            payment_rows.append((
+                serving.key(project_id, step["payment_plan_index"], step["payment_step_index"]),
+                run_id, scraped_at, project_key, project_id, step["payment_plan_index"],
+                step["payment_step_index"], step["name"], step["order_index"],
+                step["percent_of_payment"], step["payment_time"], *provenance,
+            ))  # fmt: skip
+        typed = dict(zip(serving.PROJECT_FIELDS, row[typed_offset:], strict=True))
+        # silver keeps completion_time as DateTime; bronze keeps Reelly's text.
+        typed["completion_time"] = serving.as_datetime(typed["completion_time"])
+        silver_rows.append(
+            (project_key, project_id, delta_reason, scraped_at, manifest_key, project_key,
+             *typed.values())
+        )  # fmt: skip
+    return unit_rows, payment_rows, silver_rows
 
 
 def _is_dubai_project_row(row: tuple[Any, ...]) -> bool:
@@ -242,6 +307,10 @@ def _project_row_tuple(raw_row: dict[str, Any], *, fallback_run_id: str) -> tupl
     raw_json = _json(raw_row.get("raw"))
     project_id = string_value(raw_row.get("project_id"))
     project_key = project_id or _hash_key(raw_json)
+    raw, list_item = raw_row.get("raw"), raw_row.get("list_item")
+    typed = serving.typed_project(
+        list_item if isinstance(list_item, dict) else {}, raw if isinstance(raw, dict) else {}
+    )
     return (
         project_key,
         string_value(raw_row.get("_run_id")) or fallback_run_id,
@@ -250,6 +319,7 @@ def _project_row_tuple(raw_row: dict[str, Any], *, fallback_run_id: str) -> tupl
         string_value(raw_row.get("delta_reason")),
         _json(raw_row.get("list_item")),
         raw_json,
+        *(typed[field] for field in serving.PROJECT_FIELDS),
     )
 
 
