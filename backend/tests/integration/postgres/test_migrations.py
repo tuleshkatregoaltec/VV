@@ -3,6 +3,7 @@ from pathlib import Path
 
 import pytest
 import sqlalchemy as sa
+from alembic.autogenerate import compare_metadata
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
 
@@ -63,3 +64,50 @@ async def test_repair_preserves_an_existing_organization_assignment(pg_session):
         await connection.run_sync(verify)
     finally:
         await pg_session.rollback()
+
+
+async def test_runtime_models_match_the_migrated_schema(pg_session):
+    """The migration chain is the schema authority; models must not describe another schema.
+
+    create_all/model-contract checks cannot see drift such as INTEGER amounts that the
+    migrations store as BIGINT, or migration-owned indexes the model omits.
+    """
+    from sqlmodel import SQLModel
+
+    import app.postgres.models  # noqa: F401 - registers every managed table
+
+    connection = await pg_session.connection()
+
+    def diff(sync):
+        context = MigrationContext.configure(
+            sync,
+            opts={
+                "compare_type": True,
+                "include_object": lambda obj, name, type_, reflected, compare_to: (
+                    type_ != "table" or name in SQLModel.metadata.tables
+                ),
+            },
+        )
+        return compare_metadata(context, SQLModel.metadata)
+
+    changes = await connection.run_sync(diff)
+    # PostgreSQL rewrites expression-index text (casts, spacing), so an expression index
+    # declared in both places shows up as remove+add of the same name. Columns and names of
+    # those indexes are still compared; anything else is real drift.
+    # ponytail: compared by name, not expression text; render via pg_get_indexdef if needed.
+    by_name = {}
+    for change in changes:
+        if change[0] in {"add_index", "remove_index"}:
+            by_name.setdefault(change[1].name, set()).add(change[0])
+    rendering_only = {
+        name for name, kinds in by_name.items() if kinds == {"add_index", "remove_index"}
+    }
+    assert rendering_only <= {
+        "ix_crm_claim_owner_property_preference",
+        "ix_crm_claim_list_owner_property_preference",
+    }
+    assert [
+        change
+        for change in changes
+        if not (change[0] in {"add_index", "remove_index"} and change[1].name in rendering_only)
+    ] == []

@@ -63,7 +63,11 @@ async def list_conversations(
 ):
     """Get all conversations for current user"""
     conversations = await get_user_conversations(
-        db=db, user_id=context.user.id, limit=limit, offset=offset
+        db=db,
+        user_id=context.user.id,
+        organization_id=context.organization.id,
+        limit=limit,
+        offset=offset,
     )
     return ConversationListResponse(
         conversations=[ConversationResponse.model_validate(c) for c in conversations],
@@ -83,6 +87,7 @@ async def update_conversation_endpoint(
         db=db,
         conversation_id=conversation_id,
         user_id=context.user.id,
+        organization_id=context.organization.id,
         title=request.title,
     )
     if not conversation:
@@ -98,7 +103,10 @@ async def delete_conversation_endpoint(
 ):
     """Delete a conversation"""
     success = await delete_conversation(
-        db=db, conversation_id=conversation_id, user_id=context.user.id
+        db=db,
+        conversation_id=conversation_id,
+        user_id=context.user.id,
+        organization_id=context.organization.id,
     )
     if not success:
         raise HTTPException(status_code=404, detail="Conversation not found")
@@ -113,11 +121,19 @@ async def get_conversation_messages_endpoint(
 ):
     """Get messages for a conversation"""
     # Verify ownership
-    conversation = await get_conversation(db, conversation_id, context.user.id)
+    conversation = await get_conversation(
+        db, conversation_id, context.user.id, context.organization.id
+    )
     if not conversation:
         raise HTTPException(status_code=404, detail="Conversation not found")
 
-    messages = await get_conversation_messages(db=db, conversation_id=conversation_id, limit=limit)
+    messages = await get_conversation_messages(
+        db=db,
+        conversation_id=conversation_id,
+        user_id=context.user.id,
+        organization_id=context.organization.id,
+        limit=limit,
+    )
     return [MessageResponse.model_validate(m) for m in messages]
 
 
