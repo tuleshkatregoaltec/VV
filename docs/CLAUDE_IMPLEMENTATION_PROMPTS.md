@@ -42,6 +42,17 @@ Prompt 01 owns the formatting, type and Bun baseline. `docs/bitwarden-platform.e
 
 The source-only `/home/maan3/vv/VV` snapshot was older and lacked Git metadata and the evaluation changes. It was removed at the user's request. Its 126 differing or old-only files plus two files from the redundant env-backup folder were hash-verified in a private archive under `.local-backups/2026-10-02-repo-consolidation/`. The archive is excluded through `.git/info/exclude`; it must never be committed. The 14 GB `/home/maan3/vv/handoff` was retained because it contains database dumps, warehouse backups and objects. The canonical working tree's existing changes were unchanged by cleanup.
 
+**Update after the data-layer work (3 October 2026).** Code ready in draft PRs; nothing deployed.
+
+| PR | Scope | Base | Prompt coverage |
+| --- | --- | --- | --- |
+| #9 | Chat repository scoped to user and organization; models aligned with the migrated schema (BIGINT CRM amounts, migration-owned indexes) with a drift test | `VV` | 02 (conversation column already fixed by `a34d19c0b621`), 03 chat part |
+| #10 | Validate the staged canonical release before publishing; keep the previous release | #5 | 06 for the market layer |
+| #11 | Shared sales/rental metrics with Dubai calendar periods and coverage, delivery summary, listing inventory tool; pulse/ranking/summary semantics corrected; `ch_projects` deduplicated | #5 | 19A/19B/19D in part, 19C q09; no MCP (18 open) |
+
+The "Canonical publication checks" and "Chat organization isolation" rows above are addressed by #10 and #9.
+Benchmark coverage per question, with data versus functionality gaps, is in `backend/EVALUATION.md` on #11.
+
 ## Checks executed for this review
 
 | Check | Result on 2 October 2026 |

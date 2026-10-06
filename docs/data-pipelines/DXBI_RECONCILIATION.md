@@ -373,3 +373,14 @@ repeated. The §10.3 latencies are single local requests, not p95 load results.
 - The DXBI sales loader still skips hidden-unit sales. DLD now supplies them (`dld_only`) and the skipped
   count is recorded.
 - Retiring silver waits on D6. The Reelly producer (F02) is still missing.
+
+### 10.7 Update, 2026-10-03 (code ready in draft PRs, not deployed)
+
+- The 22 checks no longer run only after publication: #10 validates the staged release (blocking
+  integrity checks and a 99% served-row floor) before `EXCHANGE TABLES` and keeps the previous release.
+  DXBI lag, coverage and match-rate checks stay post-publication signals. Real-ClickHouse tests cover
+  partial input, invalid vocabulary, corrected DLD records, in-run duplicates and the Pulse cut-over.
+- Open-data sales since 2026-01-01 carry `area_id = 0` and a second area vocabulary (`DUBAI MARINA`,
+  `JUMEIRAH VILLAGE CIRCLE`, `BUSINESS BAY`) beside Pulse's official areas (`Marsa Dubai`, `Al Barsha South
+  Fourth`). #11 resolves communities across both in the new metrics capability; existing area lists and
+  rankings still split them until the market layer gets a reviewed crosswalk.
