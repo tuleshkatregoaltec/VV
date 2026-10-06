@@ -17,8 +17,17 @@ DLD_OPEN_DATA_CHUNK_DEFAULTS = {
     "max_pages": 1,
     "slice_days": 366,
 }
-DLD_OPEN_DATA_INCREMENTAL_DEFAULTS = {
+# Daily runs resume from the last *complete, loaded* window end minus the overlap, so an
+# outage of any length is caught up (a fixed lookback silently skipped days beyond it); the
+# lookback applies only before the first successful run.
+DLD_OPEN_DATA_DATED_INCREMENTAL_DEFAULTS = {
     "mode": "incremental",
+    "checkpointed_incremental": True,
+    "incremental_overlap_days": 7,
+    "lookback_days": 14,
+}
+DLD_OPEN_DATA_INCREMENTAL_DEFAULTS = {
+    **DLD_OPEN_DATA_DATED_INCREMENTAL_DEFAULTS,
     "page_size": 10000,
     "slice_days": 14,
 }
@@ -164,18 +173,60 @@ def write_open_data_checkpoint(
     manifest_key: str,
     object_storage_client: Any,
 ) -> None:
-    metadata = dict(raw_release.metadata)
+    """Chunk cursor for snapshot/backfill, written when the raw release is stored.
+
+    The incremental watermark is not written here: it may only advance once the window is
+    loaded into bronze (``write_open_data_watermark``), or a failed load would be skipped.
+    """
+    if str(raw_release.metadata.get("stage") or "") == "incremental":
+        return
+    _write_checkpoint(
+        source=raw_release.source,
+        run_id=raw_release.run_id,
+        metadata=dict(raw_release.metadata),
+        manifest_key=manifest_key,
+        object_storage_client=object_storage_client,
+    )
+
+
+def write_open_data_watermark(
+    *, raw_manifest: Mapping[str, Any], object_storage_client: Any
+) -> None:
+    """Advance the incremental watermark after a successful bronze load of a complete run."""
+    metadata = dict(raw_manifest.get("metadata") or {})
+    if str(metadata.get("stage") or "") != "incremental":
+        return
+    _write_checkpoint(
+        source=str(raw_manifest["source"]),
+        run_id=str(raw_manifest["run_id"]),
+        metadata=metadata,
+        manifest_key=str(raw_manifest.get("manifest_s3_key") or ""),
+        object_storage_client=object_storage_client,
+    )
+
+
+def _write_checkpoint(
+    *,
+    source: str,
+    run_id: str,
+    metadata: dict[str, Any],
+    manifest_key: str,
+    object_storage_client: Any,
+) -> None:
     mode = str(metadata.get("stage") or "")
     config = metadata.get("config")
     if not isinstance(config, Mapping):
         config = {}
     if mode == "incremental" and not bool(config.get("checkpointed_incremental")):
         return
+    if mode == "incremental" and not bool(metadata.get("completed_result_set")):
+        # A capped or partial run must never replace the last complete watermark.
+        return
     if mode not in {"snapshot", "backfill", "incremental"}:
         return
     write_checkpoint(
         object_storage_client,
-        source=raw_release.source,
+        source=source,
         operation=open_data_checkpoint_operation(mode),
         payload={
             "mode": mode,
@@ -197,7 +248,7 @@ def write_open_data_checkpoint(
             "slice_days": config.get("slice_days"),
             "filters": dict(config.get("filters") or {}),
             "sort": config.get("sort") or "",
-            "last_run_id": raw_release.run_id,
+            "last_run_id": run_id,
             "last_manifest_s3_key": manifest_key,
             "updated_at": utc_now().isoformat(),
         },
