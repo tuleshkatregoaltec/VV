@@ -15,6 +15,8 @@ _LOCATION_SUFFIX = re.compile(
     r"\s+(?P<status>Offplan|Ready)\s+(?P<property_type>.+?),\s*Floor\b.*$",
     re.IGNORECASE,
 )
+# Plot rows carry no market status: "Al Jafliya Plot, Floor u-hidden, No. 630".
+_PLOT_SUFFIX = re.compile(r"\s+(?P<property_type>Plot),\s*Floor\b.*$", re.IGNORECASE)
 _BEDROOMS = re.compile(r"(?P<count>\d+)\s*Beds?\b", re.IGNORECASE)
 _SIZE = re.compile(r"(?P<size>[\d,]+(?:\.\d+)?)\s*sqft", re.IGNORECASE)
 _PRICE = re.compile(r"AED\s*(?P<price>[\d,]+)", re.IGNORECASE)
@@ -49,17 +51,19 @@ def normalize_sales_row(payload: dict[str, Any], *, source_file: str = "") -> di
         else ""
     )
     location = _AGENT_PREFIX.sub("", raw_location)
-    suffix = _LOCATION_SUFFIX.search(location)
+    suffix = _LOCATION_SUFFIX.search(location) or _PLOT_SUFFIX.search(location)
     property_type = ""
     market_status = ""
     if suffix:
         property_type = suffix.group("property_type").strip()
-        market_status = suffix.group("status").strip().title()
+        market_status = (suffix.groupdict().get("status") or "").strip().title()
         location = location[: suffix.start()].strip(" ,")
 
     parts = [part.strip() for part in location.split(",") if part.strip()]
     building_name = parts[0] if parts else ""
-    area_name = canonical_area_name(parts[-1]) if len(parts) >= 2 else ""
+    # A plot named by its area alone ("Al Jafliya Plot") is in that area.
+    area_part = parts[-1] if len(parts) >= 2 or property_type == "Plot" else ""
+    area_name = canonical_area_name(area_part) if area_part else ""
     project_name = ", ".join(parts[1:-1]) if len(parts) >= 3 else ""
     specs = str(payload.get("specs_text") or "")
     bedrooms = _bedroom_label(specs)
