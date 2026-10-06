@@ -31,9 +31,7 @@ _SOLD_BY = re.compile(
     r"(?:\s+\((?P<count>\d+)\s+Times?\))?",
     re.IGNORECASE,
 )
-_SALE_DATE = re.compile(
-    r"(?P<day>\d{1,2}),\s*(?P<month>[A-Za-z]{3})\s*(?P<year>\d{4})"
-)
+_SALE_DATE = re.compile(r"(?P<day>\d{1,2}),\s*(?P<month>[A-Za-z]{3})\s*(?P<year>\d{4})")
 _UNIT_NUMBER = re.compile(r"\bNo\.\s*(?P<unit>[A-Za-z0-9][A-Za-z0-9/-]*)", re.IGNORECASE)
 
 

@@ -127,9 +127,9 @@ def migrate(client) -> None:
     client.command(
         f"""
         ALTER TABLE dxbi_sales_unit_events UPDATE
-            area_name = {_canonical_area('area_name')},
+            area_name = {_canonical_area("area_name")},
             area_key = replaceRegexpAll(
-                replaceAll(lowerUTF8({_canonical_area('area_name')}), 'jumeriah', 'jumeirah'),
+                replaceAll(lowerUTF8({_canonical_area("area_name")}), 'jumeriah', 'jumeirah'),
                 '[^a-z0-9]+',
                 ''
             ),

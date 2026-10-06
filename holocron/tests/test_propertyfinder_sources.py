@@ -386,9 +386,10 @@ def test_pf_listings_browser_client_uses_html_search_route() -> None:
     client._base_url = "https://www.propertyfinder.ae"
     client._config = PropertyFinderListingsConfig(locale="en")
 
-    assert client._search_url(
-        params=(("c", "2"), ("l", "1"), ("page", "3"), ("ob", "nd"))
-    ) == "https://www.propertyfinder.ae/en/search?c=2&l=1&page=3&ob=nd"
+    assert (
+        client._search_url(params=(("c", "2"), ("l", "1"), ("page", "3"), ("ob", "nd")))
+        == "https://www.propertyfinder.ae/en/search?c=2&l=1&page=3&ob=nd"
+    )
 
 
 def test_pf_listings_browser_client_unwraps_html_next_data_for_the_parsers() -> None:

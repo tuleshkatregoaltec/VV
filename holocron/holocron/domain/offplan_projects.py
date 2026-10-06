@@ -297,10 +297,11 @@ class OffplanProjectResolver:
                 )
             )
         )
-        evidence = {
+        ranked_candidates = [candidate.evidence() for candidate in candidates[:5]]
+        evidence: dict[str, object] = {
             "top_score": top.score,
             "score_margin": margin,
-            "ranked_candidates": [candidate.evidence() for candidate in candidates[:5]],
+            "ranked_candidates": ranked_candidates,
         }
         if auto_approved:
             return OffplanProjectDecision(
@@ -315,7 +316,7 @@ class OffplanProjectResolver:
 
         umbrella = self._area_umbrella_decision(
             signature,
-            specific_candidates=evidence["ranked_candidates"],
+            specific_candidates=ranked_candidates,
         )
         if umbrella is not None:
             return umbrella
@@ -413,7 +414,7 @@ class OffplanProjectResolver:
         return sorted(best_by_project.values(), key=self._sort_key)[:10]
 
     @staticmethod
-    def _sort_key(candidate: OffplanProjectCandidate) -> tuple[object, ...]:
+    def _sort_key(candidate: OffplanProjectCandidate) -> tuple[int, int, int, str]:
         field_priority = {"building": 0, "project": 1, "master_project": 2}
         return (
             -candidate.score,

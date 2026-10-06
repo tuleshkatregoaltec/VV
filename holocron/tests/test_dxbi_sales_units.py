@@ -7,8 +7,7 @@ def test_normalize_sales_row_preserves_unit_and_purchase_evidence() -> None:
     payload = {
         "unit_number": "R08",
         "location_text": (
-            "Buyer's agent Binghatti Hillcrest, Arjan Offplan Apartment, "
-            "Floor u-hidden, No. R08"
+            "Buyer's agent Binghatti Hillcrest, Arjan Offplan Apartment, Floor u-hidden, No. R08"
         ),
         "amount_text": "AED 1,315,999 (-) AED 1,823 /sqft u-hidden% LTV",
         "specs_text": "722 sqft • - sqft BUA 1 Bed Balcony 149 sqft",
@@ -48,9 +47,7 @@ def test_sales_area_uses_same_canonical_vocabulary_as_rentals() -> None:
     event = normalize_sales_row(
         {
             "unit_number": "602",
-            "location_text": (
-                "Tower 108, Jumeirah Village Circle (JVC) Ready Apartment, Floor 6"
-            ),
+            "location_text": ("Tower 108, Jumeirah Village Circle (JVC) Ready Apartment, Floor 6"),
             "amount_text": "AED 900,000 AED 2,000 /sqft",
             "specs_text": "450 sqft Studio",
             "date_text": "01, Jan 2026 Individual",
@@ -87,8 +84,7 @@ def test_compact_payload_adapts_current_raw_report_columns() -> None:
     assert payload == {
         "unit_number": "604-S",
         "location_text": (
-            "Buyer's agent Tower One, Business Bay Ready Apartment, "
-            "Floor u-hidden, No. 604-S"
+            "Buyer's agent Tower One, Business Bay Ready Apartment, Floor u-hidden, No. 604-S"
         ),
         "amount_text": "AED 2,250,000 (+73%) AED 1,712 /sqft 80% LTV",
         "specs_text": "1,314 sqft 2 Beds",
