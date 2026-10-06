@@ -18,6 +18,7 @@ from app.feasibility.normalization import (
     Stage,
     normalize_project_stage,
 )
+from app.market.units import SQM_TO_SQFT
 from app.plots.models import PlotDetails, Usage
 
 
@@ -246,16 +247,22 @@ async def get_off_plan_pricing_curve(
     ]
 
 
+def _sqft_label(area_sqm: float, *, unit: bool = True) -> str:
+    value = f"{round(area_sqm * SQM_TO_SQFT):,}"
+    return f"{value} sq ft" if unit else value
+
+
 async def get_rental_rates_by_size_band(
     area_name: str,
     days: int = 365,
 ) -> list[RentalRateBySizeBand]:
+    # Bands are defined in m² (the warehouse unit) and labelled in sq ft, as the product shows.
     size_bands = [
-        ("studio", "< 55 sqm", 0, 55),
-        ("1br", "55–90 sqm", 55, 90),
-        ("2br", "90–140 sqm", 90, 140),
-        ("3br", "140–200 sqm", 140, 200),
-        ("4br+", "> 200 sqm", 200, 99999),
+        ("studio", f"< {_sqft_label(55)}", 0, 55),
+        ("1br", f"{_sqft_label(55, unit=False)}–{_sqft_label(90)}", 55, 90),
+        ("2br", f"{_sqft_label(90, unit=False)}–{_sqft_label(140)}", 90, 140),
+        ("3br", f"{_sqft_label(140, unit=False)}–{_sqft_label(200)}", 140, 200),
+        ("4br+", f"> {_sqft_label(200)}", 200, 99999),
     ]
     results: list[RentalRateBySizeBand] = []
     for unit_type, label, lo, hi in size_bands:

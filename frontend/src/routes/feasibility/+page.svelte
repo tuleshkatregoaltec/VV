@@ -7,6 +7,7 @@ import NewStudySetup from '$lib/components/feasibility/NewStudySetup.svelte'
 import AppFrame from '$lib/components/layout/AppFrame.svelte'
 import PageContainer from '$lib/components/layout/PageContainer.svelte'
 import { feasibilityKeys, feasibilityQueries } from '$lib/queries/feasibility'
+import { toSqft } from '$lib/utils/units'
 
 type PageMode = 'overview' | 'new'
 
@@ -206,11 +207,11 @@ async function renameStudy(study: (typeof studies)[number]) {
 										<div class="mt-4 grid grid-cols-2 gap-3 text-sm">
 											<div>
 												<p class="text-xs uppercase tracking-[0.14em] text-fg-4">Plot area</p>
-												<p class="mt-1 font-semibold text-fg-1">{study.plot_data.plot_area_sqm.toLocaleString('en-AE', { maximumFractionDigits: 0 })} sqm</p>
+												<p class="mt-1 font-semibold text-fg-1">{toSqft(study.plot_data.plot_area_sqm).toLocaleString('en-AE', { maximumFractionDigits: 0 })} sq ft</p>
 											</div>
 											<div>
 												<p class="text-xs uppercase tracking-[0.14em] text-fg-4">Max GFA</p>
-												<p class="mt-1 font-semibold text-fg-1">{study.plot_data.max_gfa_sqm.toLocaleString('en-AE', { maximumFractionDigits: 0 })} sqm</p>
+												<p class="mt-1 font-semibold text-fg-1">{toSqft(study.plot_data.max_gfa_sqm).toLocaleString('en-AE', { maximumFractionDigits: 0 })} sq ft</p>
 											</div>
 										</div>
 

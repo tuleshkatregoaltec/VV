@@ -5,6 +5,7 @@ import {
 	normalizeCoordinates,
 	pointsToAttribute
 } from '$lib/utils/plotGeometry'
+import { toSqft } from '$lib/utils/units'
 
 const WIDTH = 1000
 const HEIGHT = 620
@@ -71,9 +72,9 @@ function fillColor(plot: DdaPlotFeature) {
 }
 
 function areaLabel(plot: DdaPlotFeature) {
-	const sqm = plot.plot_area_sqm
-	if (!Number.isFinite(sqm)) return ''
-	return sqm >= 1000 ? `${(sqm / 1000).toFixed(1)}k sqm` : `${Math.round(sqm)} sqm`
+	const sqft = toSqft(plot.plot_area_sqm)
+	if (!Number.isFinite(sqft)) return ''
+	return sqft >= 1000 ? `${(sqft / 1000).toFixed(1)}k sq ft` : `${Math.round(sqft)} sq ft`
 }
 
 function selectPlot(plot: DdaPlotFeature) {

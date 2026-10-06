@@ -3,7 +3,7 @@ import type {
 	PlotResearchOutput as PlotResearch,
 	StudyContext
 } from '$lib/api/generated/hey-api/types.gen'
-import { SQM_TO_SQFT } from '$lib/utils/units'
+import { perSqft, toSqft } from '$lib/utils/units'
 import type { WorkbookOutputs } from './engine'
 import type { FeasibilityAssumptions } from './models'
 import type { ValidationResult } from './validation'
@@ -31,6 +31,17 @@ function round(value: number | null | undefined, digits = 0): number | null {
 	if (value === null || value === undefined || !Number.isFinite(value)) return null
 	const factor = 10 ** digits
 	return Math.round(value * factor) / factor
+}
+
+// The workbook model is in m²; the export, like the screens, is in square feet.
+function areaSqft(valueSqm: number | null | undefined, digits = 0): number | null {
+	return valueSqm === null || valueSqm === undefined ? null : round(toSqft(valueSqm), digits)
+}
+
+function rateSqft(valuePerSqm: number | null | undefined, digits = 0): number | null {
+	return valuePerSqm === null || valuePerSqm === undefined
+		? null
+		: round(perSqft(valuePerSqm), digits)
 }
 
 function pct(value: number | null | undefined, digits = 2): number | null {
@@ -120,7 +131,7 @@ function buildSummarySheet(input: FeasibilityWorkbookExportInput): SheetSpec {
 	rows.push(row('Gross Sale Price', round(btr.exit.grossSalePriceAed), 'AED'))
 	rows.push(row('Total Profit', round(btr.returns.totalProfitAed), 'AED'))
 	rows.push(row('Total Units', btr.program.totalUnits, 'units'))
-	rows.push(row('Total Leasable Area', round(btr.program.totalAreaSqm), 'sqm'))
+	rows.push(row('Total Leasable Area', areaSqft(btr.program.totalAreaSqm), 'sq ft'))
 
 	section(rows, 'Readiness Note')
 	rows.push([
@@ -136,18 +147,20 @@ function buildAssumptionsSheet(input: FeasibilityWorkbookExportInput): SheetSpec
 	const rows: SheetRow[] = [['BTR KEY ASSUMPTIONS'], ['Line Item', 'Value', 'Unit', 'Basis']]
 
 	section(rows, 'Area and Program')
-	rows.push(row('Plot Area', round(a.plotAreaSqm), 'sqm'))
-	rows.push(row('Maximum GFA', round(a.maxGfaSqm), 'sqm'))
-	rows.push(row('Costable BUA', round(input.outputs.area.totalCostableBua), 'sqm'))
+	rows.push(row('Plot Area', areaSqft(a.plotAreaSqm), 'sq ft'))
+	rows.push(row('Maximum GFA', areaSqft(a.maxGfaSqm), 'sq ft'))
+	rows.push(row('Costable BUA', areaSqft(input.outputs.area.totalCostableBua), 'sq ft'))
 	rows.push(row('Total Rental Units', btr.program.totalUnits, 'units'))
-	rows.push(row('Total Leasable Area', round(btr.program.totalAreaSqm), 'sqm'))
-	rows.push(row('Weighted Avg Rent', round(btr.program.weightedAvgRentPsqmMonth, 2), 'AED/sqm/mo'))
+	rows.push(row('Total Leasable Area', areaSqft(btr.program.totalAreaSqm), 'sq ft'))
+	rows.push(
+		row('Weighted Avg Rent', rateSqft(btr.program.weightedAvgRentPsqmMonth, 2), 'AED/sq ft/mo')
+	)
 
 	section(rows, 'Rental Unit Mix')
 	rows.push([
 		'Unit Type',
 		'Units',
-		'Avg Size (sqm)',
+		'Avg Size (sq ft)',
 		'Monthly Rent (AED)',
 		'Annual Rent (AED)',
 		'Parking Spaces'
@@ -156,7 +169,7 @@ function buildAssumptionsSheet(input: FeasibilityWorkbookExportInput): SheetSpec
 		rows.push([
 			unit.label,
 			unit.units,
-			round(unit.avgSizeSqm),
+			areaSqft(unit.avgSizeSqm),
 			round(unit.monthlyRentAed),
 			round(unit.annualRentAed),
 			unit.parkingSpaces
@@ -180,13 +193,15 @@ function buildAssumptionsSheet(input: FeasibilityWorkbookExportInput): SheetSpec
 	rows.push(row('General Vacancy', pct(a.btrGeneralVacancyPct), '%'))
 	rows.push(row('Credit Loss', pct(a.btrCreditLossPct), '%'))
 	rows.push(row('Property Management', pct(a.btrPropertyManagementPct), '% of EGR'))
-	rows.push(row('Repairs and Maintenance', round(a.btrRepairsMaintenancePsqm), 'AED/sqm/yr'))
-	rows.push(row('Payroll and Staffing', round(a.btrPayrollPsqm), 'AED/sqm/yr'))
+	rows.push(
+		row('Repairs and Maintenance', rateSqft(a.btrRepairsMaintenancePsqm, 2), 'AED/sq ft/yr')
+	)
+	rows.push(row('Payroll and Staffing', rateSqft(a.btrPayrollPsqm, 2), 'AED/sq ft/yr'))
 	rows.push(row('General and Administrative', pct(a.btrGeneralAdminPct), '% of EGR'))
-	rows.push(row('Contract Services', round(a.btrContractServicesPsqm), 'AED/sqm/yr'))
-	rows.push(row('Insurance', round(a.btrInsurancePsqm), 'AED/sqm/yr'))
-	rows.push(row('Service Charge', round(a.btrServiceChargePsqm), 'AED/sqm/yr'))
-	rows.push(row('Utilities', round(a.btrUtilitiesPsqm), 'AED/sqm/yr'))
+	rows.push(row('Contract Services', rateSqft(a.btrContractServicesPsqm, 2), 'AED/sq ft/yr'))
+	rows.push(row('Insurance', rateSqft(a.btrInsurancePsqm, 2), 'AED/sq ft/yr'))
+	rows.push(row('Service Charge', rateSqft(a.btrServiceChargePsqm, 2), 'AED/sq ft/yr'))
+	rows.push(row('Utilities', rateSqft(a.btrUtilitiesPsqm, 2), 'AED/sq ft/yr'))
 	rows.push(row('Marketing and Leasing', pct(a.btrMarketingLeasingPct), '% of EGR'))
 	rows.push(row('CapEx Reserve', pct(a.btrCapexReservePct), '% of NOI'))
 
@@ -218,20 +233,20 @@ function buildSiteMassingSheet(input: FeasibilityWorkbookExportInput): SheetSpec
 	]
 
 	rows.push(row('Building form', m.buildingForm, '', 'Classified from max storeys'))
-	rows.push(row('Plot area', round(m.plotAreaSqm), 'sqm'))
-	rows.push(row('Maximum GFA', round(m.maxGfaSqm), 'sqm'))
+	rows.push(row('Plot area', areaSqft(m.plotAreaSqm), 'sq ft'))
+	rows.push(row('Maximum GFA', areaSqft(m.maxGfaSqm), 'sq ft'))
 	rows.push(row('GIS max coverage', pct(a.maxCoveragePct), '%'))
 	rows.push(row('Target coverage', pct(a.targetCoveragePct), '%'))
 	rows.push(row('Applied coverage', pct(m.appliedCoveragePct), '%'))
-	rows.push(row('Covered footprint', round(m.coveredFootprintSqm), 'sqm'))
-	rows.push(row('Total modelled footprint', round(m.totalFootprintSqm), 'sqm'))
+	rows.push(row('Covered footprint', areaSqft(m.coveredFootprintSqm), 'sq ft'))
+	rows.push(row('Total modelled footprint', areaSqft(m.totalFootprintSqm), 'sq ft'))
 	rows.push(row('Coverage utilization', pct(m.coverageUtilizationPct), '%'))
 	rows.push(row('Building count', m.buildingCount, 'buildings'))
-	rows.push(row('Typical gross floorplate', round(m.typicalGrossFloorplateSqm), 'sqm'))
-	rows.push(row('Weighted average unit size', round(m.weightedAvgUnitSizeSqm, 1), 'sqm'))
+	rows.push(row('Typical gross floorplate', areaSqft(m.typicalGrossFloorplateSqm), 'sq ft'))
+	rows.push(row('Weighted average unit size', areaSqft(m.weightedAvgUnitSizeSqm), 'sq ft'))
 	rows.push(row('Target unit count', m.targetUnitCount, 'units'))
 	rows.push(row('Physical unit capacity', m.totalPhysicalUnitCapacity, 'units'))
-	rows.push(row('Allocated GFA', round(m.totalAllocatedGfaSqm), 'sqm'))
+	rows.push(row('Allocated GFA', areaSqft(m.totalAllocatedGfaSqm), 'sq ft'))
 	rows.push(row('GFA utilization', pct(m.gfaUtilizationPct), '%'))
 	rows.push(row('Estimated maximum height', round(m.estimatedMaxHeightM, 1), 'm'))
 
@@ -243,16 +258,16 @@ function buildSiteMassingSheet(input: FeasibilityWorkbookExportInput): SheetSpec
 	rows.push(
 		row(
 			'Max efficient tower floorplate',
-			round(a.maxEfficientTowerFloorplateSqm),
-			'sqm',
+			areaSqft(a.maxEfficientTowerFloorplateSqm),
+			'sq ft',
 			'Blank = benchmark'
 		)
 	)
 	rows.push(
 		row(
 			'Min efficient tower floorplate',
-			round(a.minEfficientTowerFloorplateSqm),
-			'sqm',
+			areaSqft(a.minEfficientTowerFloorplateSqm),
+			'sq ft',
 			'Blank = benchmark'
 		)
 	)
@@ -265,10 +280,10 @@ function buildSiteMassingSheet(input: FeasibilityWorkbookExportInput): SheetSpec
 	rows.push([
 		'Building',
 		'Type',
-		'Footprint sqm',
-		'Gross floorplate sqm',
-		'Net floorplate sqm',
-		'Allocated GFA sqm',
+		'Footprint sq ft',
+		'Gross floorplate sq ft',
+		'Net floorplate sq ft',
+		'Allocated GFA sq ft',
 		'Residential floors',
 		'Podium floors',
 		'Amenity floors',
@@ -281,10 +296,10 @@ function buildSiteMassingSheet(input: FeasibilityWorkbookExportInput): SheetSpec
 		rows.push([
 			building.label,
 			building.buildingType,
-			round(building.footprintSqm),
-			round(building.grossFloorplateSqm),
-			round(building.netFloorplateSqm),
-			round(building.allocatedGfaSqm),
+			areaSqft(building.footprintSqm),
+			areaSqft(building.grossFloorplateSqm),
+			areaSqft(building.netFloorplateSqm),
+			areaSqft(building.allocatedGfaSqm),
 			building.residentialFloors,
 			building.podiumFloors,
 			building.amenityFloors,
@@ -321,7 +336,7 @@ function buildBudgetSheet(input: FeasibilityWorkbookExportInput): SheetSpec {
 		rows.push([label, round(amount), basis, round((amount / total) * 100, 2)])
 
 	section(rows, 'Land Acquisition')
-	budgetRow('Land acquisition', d.landAcquisitionAed, `${round(a.landPricePsqm)} AED/sqm plot`)
+	budgetRow('Land acquisition', d.landAcquisitionAed, `${rateSqft(a.landPricePsqm)} AED/sq ft plot`)
 	budgetRow(
 		'Land transfer fee',
 		d.landTransferFeeAed,
@@ -335,7 +350,7 @@ function buildBudgetSheet(input: FeasibilityWorkbookExportInput): SheetSpec {
 	budgetRow(
 		'Hard cost',
 		d.hardCostAed,
-		`${round(a.constructionCostPsqmBua)} AED/sqm BUA, escalated`
+		`${rateSqft(a.constructionCostPsqmBua)} AED/sq ft BUA, escalated`
 	)
 	budgetRow('Permit fees', d.permitFeesAed, `${pct((a.permitFeesPct ?? 0) * 100)}% of hard cost`)
 	budgetRow('Soft cost / design', d.softCostAed, `${pct((a.softCostPct ?? 0) * 100)}% of hard cost`)
@@ -1006,7 +1021,7 @@ function buildPricingEvidenceSheet(input: FeasibilityWorkbookExportInput): Sheet
 		['Market Area', r?.market_area ?? input.assumptions.communityName ?? ''],
 		['Headline', input.studyContext?.headline ?? r?.headline ?? ''],
 		['Total Units', btr.program.totalUnits],
-		['Total Leasable Area', round(btr.program.totalAreaSqm), 'sqm'],
+		['Total Leasable Area', areaSqft(btr.program.totalAreaSqm), 'sq ft'],
 		['Gross Potential Rent', round(btr.program.grossPotentialRentAed), 'AED/yr']
 	]
 
@@ -1016,8 +1031,8 @@ function buildPricingEvidenceSheet(input: FeasibilityWorkbookExportInput): Sheet
 			'Unit Type',
 			'Size Band',
 			'Contracts',
-			'Median AED/sqm/yr',
-			'Median AED/sqft/mo',
+			'Median AED/sq ft/yr',
+			'Median AED/sq ft/mo',
 			'Median Annual Rent'
 		])
 		for (const band of r.rental_rates_by_size_band) {
@@ -1025,8 +1040,8 @@ function buildPricingEvidenceSheet(input: FeasibilityWorkbookExportInput): Sheet
 				band.unit_type_proxy,
 				band.size_band_label,
 				band.contract_count,
-				round(band.median_rent_psm_annual),
-				round((band.median_rent_psm_annual * 0.092903) / 12, 2),
+				rateSqft(band.median_rent_psm_annual, 2),
+				rateSqft(band.median_rent_psm_annual / 12, 2),
 				round(band.median_annual_rent)
 			])
 		}
@@ -1036,11 +1051,14 @@ function buildPricingEvidenceSheet(input: FeasibilityWorkbookExportInput): Sheet
 		section(rows, 'Master Community Rental Averages')
 		rows.push(['Metric', 'Value'])
 		rows.push(['Rental contracts 12m', r.rental_market_summary.rental_contract_count_12m])
-		rows.push(['Avg rent AED/sqm/yr', round(r.rental_market_summary.avg_rent_price_sqm_12m)])
 		rows.push([
-			'Avg rent AED/sqft/mo',
+			'Avg rent AED/sq ft/yr',
+			rateSqft(r.rental_market_summary.avg_rent_price_sqm_12m, 2)
+		])
+		rows.push([
+			'Avg rent AED/sq ft/mo',
 			r.rental_market_summary.avg_rent_price_sqm_12m
-				? round((r.rental_market_summary.avg_rent_price_sqm_12m * 0.092903) / 12, 2)
+				? rateSqft(r.rental_market_summary.avg_rent_price_sqm_12m / 12, 2)
 				: null
 		])
 		rows.push(['Median annual rent', round(r.rental_market_summary.median_annual_rent)])
@@ -1057,8 +1075,8 @@ function buildPricingEvidenceSheet(input: FeasibilityWorkbookExportInput): Sheet
 			'Project',
 			'Area',
 			'Similarity',
-			'Rent AED/sqm/yr',
-			'Rent AED/sqft/mo',
+			'Rent AED/sq ft/yr',
+			'Rent AED/sq ft/mo',
 			'Median Annual Rent',
 			'Yield'
 		])
@@ -1067,10 +1085,8 @@ function buildPricingEvidenceSheet(input: FeasibilityWorkbookExportInput): Sheet
 				comp.project_name,
 				comp.area_name,
 				round(comp.score, 1),
-				round(comp.avg_rent_price_sqm_12m),
-				comp.avg_rent_price_sqm_12m
-					? round((comp.avg_rent_price_sqm_12m * 0.092903) / 12, 2)
-					: null,
+				rateSqft(comp.avg_rent_price_sqm_12m, 2),
+				comp.avg_rent_price_sqm_12m ? rateSqft(comp.avg_rent_price_sqm_12m / 12, 2) : null,
 				round(comp.median_annual_rent),
 				pct(comp.gross_yield_pct)
 			])
@@ -1084,10 +1100,10 @@ function buildPricingEvidenceSheet(input: FeasibilityWorkbookExportInput): Sheet
 			'Project',
 			'Area',
 			'Usage',
-			'Plot Area sqm',
+			'Plot Area sq ft',
 			'Price AED',
-			'AED/plot sqm',
-			'AED/GFA sqm'
+			'AED/plot sq ft',
+			'AED/GFA sq ft'
 		])
 		for (const sale of r.land_sales_evidence.slice(0, 20)) {
 			rows.push([
@@ -1095,19 +1111,19 @@ function buildPricingEvidenceSheet(input: FeasibilityWorkbookExportInput): Sheet
 				sale.project_name || sale.procedure_name || '',
 				sale.area_name,
 				sale.property_usage,
-				round(sale.plot_area_sqm),
+				areaSqft(sale.plot_area_sqm),
 				round(sale.price_aed),
-				round(sale.price_sqm),
-				round(sale.price_per_gfa_sqm)
+				rateSqft(sale.price_sqm),
+				rateSqft(sale.price_per_gfa_sqm)
 			])
 		}
 	}
 
 	rows.push([])
 	rows.push(['Area Bridge'])
-	rows.push(['Plot Area sqft', round(input.outputs.area.plotAreaSqm * SQM_TO_SQFT)])
-	rows.push(['Max GFA sqft', round(input.outputs.area.maxGfaSqm * SQM_TO_SQFT)])
-	rows.push(['Costable BUA sqft', round(input.outputs.area.totalCostableBua * SQM_TO_SQFT)])
+	rows.push(['Plot Area sqft', areaSqft(input.outputs.area.plotAreaSqm)])
+	rows.push(['Max GFA sqft', areaSqft(input.outputs.area.maxGfaSqm)])
+	rows.push(['Costable BUA sqft', areaSqft(input.outputs.area.totalCostableBua)])
 
 	return { name: 'Pricing Evidence', rows, widths: [26, 26, 16, 18, 16, 18, 18, 18] }
 }

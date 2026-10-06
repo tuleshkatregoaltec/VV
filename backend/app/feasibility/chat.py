@@ -13,6 +13,7 @@ from app.feasibility.chat_agent import (
     WorkspaceUnitMixUpdate,
     workspace_chat_agent,
 )
+from app.feasibility.chat_units import price_per_sqm, to_workbook_units
 from app.feasibility.models import (
     FeasibilityChatRequest,
     FeasibilityPaymentPlan,
@@ -49,18 +50,24 @@ _MUTATION_TOOLS = {
 }
 
 
+def _unit_mix_row(row: WorkspaceUnitMixUpdate | WorkspaceUnitMixReplacement) -> dict[str, Any]:
+    """The chat proposes sq ft and AED per sq ft; the workbook takes m² and AED per m²."""
+    return to_workbook_units(row.model_dump(exclude_none=True))
+
+
 def _extract_payload(part: ToolCallPart) -> Any:
     args = part.args_as_dict()
     if part.tool_name == "update_prices":
-        return args.get("prices", args)
+        prices = args.get("prices", args)
+        return {unit: price_per_sqm(value) for unit, value in prices.items()}
     if part.tool_name == "update_unit_mix":
         raw = args.get("unit_mix", args)
-        return [WorkspaceUnitMixUpdate(**row).model_dump(exclude_none=True) for row in raw]
+        return [_unit_mix_row(WorkspaceUnitMixUpdate(**row)) for row in raw]
     if part.tool_name == "replace_unit_mix":
         raw = args.get("unit_mix", args)
-        return [WorkspaceUnitMixReplacement(**row).model_dump(exclude_none=True) for row in raw]
+        return [_unit_mix_row(WorkspaceUnitMixReplacement(**row)) for row in raw]
     if part.tool_name == "update_assumptions":
-        return args.get("assumptions", args)
+        return to_workbook_units(args.get("assumptions", args))
     if part.tool_name == "update_payment_plan":
         raw = args.get("payment_plan", args)
         return FeasibilityPaymentPlan(**raw).model_dump()

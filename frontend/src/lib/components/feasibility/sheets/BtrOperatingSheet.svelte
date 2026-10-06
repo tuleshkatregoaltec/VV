@@ -1,6 +1,7 @@
 <script lang="ts">
 import type { BtrOperatingYear } from '$lib/feasibility/workbook/engine'
 import { workbookStore } from '$lib/feasibility/workbook/store.svelte'
+import { toSqft } from '$lib/utils/units'
 
 function fmt(value: number | null | undefined, digits = 0) {
 	if (value === null || value === undefined || !Number.isFinite(value)) return '—'
@@ -305,8 +306,8 @@ function noiMargin(yr: BtrOperatingYear): number {
 		<tr class="bg-[#D6DCE4] border-b border-[#B8C4CE]">
 			<th class="px-2 py-[4px] text-left text-[9px] font-semibold text-slate-600 uppercase tracking-wider">Type</th>
 			<th class="px-2 py-[4px] text-right text-[9px] font-semibold text-slate-600 uppercase tracking-wider">Units</th>
-			<th class="px-2 py-[4px] text-right text-[9px] font-semibold text-slate-600 uppercase tracking-wider">Avg Size (sqm)</th>
-			<th class="px-2 py-[4px] text-right text-[9px] font-semibold text-slate-600 uppercase tracking-wider">Total Area (sqm)</th>
+			<th class="px-2 py-[4px] text-right text-[9px] font-semibold text-slate-600 uppercase tracking-wider">Avg Size (sq ft)</th>
+			<th class="px-2 py-[4px] text-right text-[9px] font-semibold text-slate-600 uppercase tracking-wider">Total Area (sq ft)</th>
 			<th class="px-2 py-[4px] text-right text-[9px] font-semibold text-slate-600 uppercase tracking-wider">Monthly Rent</th>
 			<th class="px-2 py-[4px] text-right text-[9px] font-semibold text-slate-600 uppercase tracking-wider">Annual Rent</th>
 			<th class="px-2 py-[4px] text-right text-[9px] font-semibold text-slate-600 uppercase tracking-wider">Parking</th>
@@ -315,8 +316,8 @@ function noiMargin(yr: BtrOperatingYear): number {
 			<tr class="border-b border-[#D9D9D9] hover:bg-slate-50/60">
 				<td class="px-2 py-[3px] text-left text-[10px] text-slate-800">{row.label}</td>
 				<td class="px-2 py-[3px] text-right tabular-nums text-slate-900">{row.units}</td>
-				<td class="px-2 py-[3px] text-right tabular-nums text-slate-900">{fmt(row.avgSizeSqm, 0)}</td>
-				<td class="px-2 py-[3px] text-right tabular-nums text-slate-900">{fmt(row.totalAreaSqm, 0)}</td>
+				<td class="px-2 py-[3px] text-right tabular-nums text-slate-900">{fmt(toSqft(row.avgSizeSqm), 0)}</td>
+				<td class="px-2 py-[3px] text-right tabular-nums text-slate-900">{fmt(toSqft(row.totalAreaSqm), 0)}</td>
 				<td class="px-2 py-[3px] text-right tabular-nums text-[#1565C0]">{fmt(row.monthlyRentAed, 0)}</td>
 				<td class="px-2 py-[3px] text-right tabular-nums text-slate-900">{fmt(row.annualRentAed, 0)}</td>
 				<td class="px-2 py-[3px] text-right tabular-nums text-slate-900">{row.parkingSpaces}</td>
@@ -326,7 +327,7 @@ function noiMargin(yr: BtrOperatingYear): number {
 			<td class="px-2 py-[4px] text-left text-[10px] text-slate-900">Total</td>
 			<td class="px-2 py-[4px] text-right tabular-nums text-slate-900">{btr.program.totalUnits}</td>
 			<td class="px-2 py-[4px] text-right tabular-nums text-slate-500">—</td>
-			<td class="px-2 py-[4px] text-right tabular-nums text-slate-900">{fmt(btr.program.totalAreaSqm, 0)}</td>
+			<td class="px-2 py-[4px] text-right tabular-nums text-slate-900">{fmt(toSqft(btr.program.totalAreaSqm), 0)}</td>
 			<td class="px-2 py-[4px] text-right tabular-nums text-slate-500">—</td>
 			<td class="px-2 py-[4px] text-right tabular-nums text-slate-900">{fmt(btr.program.grossPotentialRentAed, 0)}</td>
 			<td class="px-2 py-[4px] text-right tabular-nums text-slate-900">{btr.program.totalParkingSpaces}</td>

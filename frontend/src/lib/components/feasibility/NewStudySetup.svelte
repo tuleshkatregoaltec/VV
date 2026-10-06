@@ -23,6 +23,7 @@ import {
 } from '$lib/queries/feasibility'
 import { projectQueries } from '$lib/queries/projects'
 import { feasibilityStudy } from '$lib/stores/feasibilityStudy.svelte'
+import { fromSqft, toSqft } from '$lib/utils/units'
 import PlotParcelMap from './PlotParcelMap.svelte'
 
 type UsageFilter = 'all' | 'residential' | 'commercial' | 'mixed'
@@ -143,7 +144,8 @@ function inferUsage(plot: Plot): UsageFilter {
 }
 
 const visiblePlots = $derived.by(() => {
-	const minAreaValue = Number(minPlotArea)
+	// Typed in sq ft; plot areas are stored in m².
+	const minAreaValue = fromSqft(Number(minPlotArea))
 	let rows = plots.filter((plot) => {
 		if (verifiedOnly && !plot.is_verified) return false
 		if (usageFilter !== 'all') {
@@ -177,7 +179,7 @@ const ddaPlots = $derived<DdaPlotFeature[]>(ddaQueryParams ? (ddaPlotsQuery.data
 
 function searchPlots() {
 	error = ''
-	const minPlotAreaSqm = Number(minPlotArea)
+	const minPlotAreaSqm = fromSqft(Number(minPlotArea))
 	plotSearchParams = {
 		q: plotSearch.trim() || undefined,
 		community: community.trim() || undefined,
@@ -407,11 +409,11 @@ async function createStudy() {
 							<div class="grid grid-cols-2 gap-3">
 								<div class="rounded-md bg-panel p-3">
 									<p class="text-xs uppercase tracking-[0.14em] text-fg-4">Plot area</p>
-									<p class="mt-1 text-sm font-semibold text-fg-1">{selectedPlot.plot_area_sqm.toLocaleString('en-AE', { maximumFractionDigits: 0 })} sqm</p>
+									<p class="mt-1 text-sm font-semibold text-fg-1">{toSqft(selectedPlot.plot_area_sqm).toLocaleString('en-AE', { maximumFractionDigits: 0 })} sq ft</p>
 								</div>
 								<div class="rounded-md bg-panel p-3">
 									<p class="text-xs uppercase tracking-[0.14em] text-fg-4">Max GFA</p>
-									<p class="mt-1 text-sm font-semibold text-fg-1">{selectedPlot.max_gfa_sqm.toLocaleString('en-AE', { maximumFractionDigits: 0 })} sqm</p>
+									<p class="mt-1 text-sm font-semibold text-fg-1">{toSqft(selectedPlot.max_gfa_sqm).toLocaleString('en-AE', { maximumFractionDigits: 0 })} sq ft</p>
 								</div>
 							</div>
 						{:else}
@@ -452,7 +454,7 @@ async function createStudy() {
 				<div class="grid gap-3 md:grid-cols-[minmax(220px,1fr)_minmax(160px,220px)_120px_120px]">
 					<input bind:value={plotSearch} placeholder="Plot, project, community" class="ui-field h-10 px-3 text-sm" onkeydown={(event) => event.key === 'Enter' && void searchPlots()} />
 					<input bind:value={community} placeholder="Community" class="ui-field h-10 px-3 text-sm" />
-					<input bind:value={minPlotArea} type="number" min="0" placeholder="Min area" class="ui-field h-10 px-3 text-sm" />
+					<input bind:value={minPlotArea} type="number" min="0" placeholder="Min area (sq ft)" class="ui-field h-10 px-3 text-sm" />
 					<button type="button" data-variant="primary" class="ui-button h-10 px-4 text-sm" onclick={() => void searchPlots()}>{loading ? 'Searching...' : 'Search'}</button>
 				</div>
 				<div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
@@ -493,7 +495,7 @@ async function createStudy() {
 												<span class="rounded-md bg-panel px-2 py-0.5 text-xs text-fg-3">{plot.plot_number}</span>
 											</div>
 											<p class="text-sm text-fg-3">{plot.community_name}</p>
-											<p class="text-xs text-fg-4">{plot.plot_area_sqm.toLocaleString('en-AE', { maximumFractionDigits: 0 })} sqm · {plot.max_gfa_sqm.toLocaleString('en-AE', { maximumFractionDigits: 0 })} sqm GFA · {inferUsage(plot)}</p>
+											<p class="text-xs text-fg-4">{toSqft(plot.plot_area_sqm).toLocaleString('en-AE', { maximumFractionDigits: 0 })} sq ft · {toSqft(plot.max_gfa_sqm).toLocaleString('en-AE', { maximumFractionDigits: 0 })} sq ft GFA · {inferUsage(plot)}</p>
 										</button>
 									{/each}
 								</div>

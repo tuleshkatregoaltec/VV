@@ -14,6 +14,7 @@ from app.feasibility.models import (
     RentalRateBySizeBand,
 )
 from app.feasibility.normalization import normalize_unit_type
+from app.market.units import SQM_TO_SQFT
 from app.plots.models import PlotDetails, Usage
 
 
@@ -106,8 +107,7 @@ def _land_anchor_summary(
         g25 = _percentile(gfa_prices, 0.25)
         g50 = _percentile(gfa_prices, 0.5)
         g75 = _percentile(gfa_prices, 0.75)
-        # Convert sqm to sqft for the prompt (Dubai convention)
-        SQM_TO_SQFT = 10.764
+        # Also per sq ft for the prompt (Dubai convention), with the shared factor.
         lines.append(
             f"FAR-normalised (AED/GFA sqm):    p25={g25:,.0f}  median={g50:,.0f}  p75={g75:,.0f}  "
             f"[AED/sqft: p25={g25 / SQM_TO_SQFT:,.0f}  median={g50 / SQM_TO_SQFT:,.0f}  p75={g75 / SQM_TO_SQFT:,.0f}]"
@@ -539,10 +539,11 @@ def _enforce_land_price_floor(
 
     bounded_price = round(bounded_price, 2)
     bounded_cost = round(plot_area_sqm * bounded_price, 2)
+    # Shown to the user, so in AED per sq ft of plot like every other rate.
     warning = (
-        f"Land acquisition was bounded to AED {bounded_price:,.0f}/plot sqm "
+        f"Land acquisition was bounded to AED {bounded_price / SQM_TO_SQFT:,.0f}/plot sq ft "
         f"(total AED {bounded_cost:,.0f}) because the generated land basis "
-        f"(AED {current_land_price:,.0f}/plot sqm) was {reason}."
+        f"(AED {current_land_price / SQM_TO_SQFT:,.0f}/plot sq ft) was {reason}."
     )
     return (
         assumptions.model_copy(
