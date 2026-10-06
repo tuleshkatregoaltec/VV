@@ -81,6 +81,14 @@ _LOCATION = r"""multiIf(
         location_spelling.1, location_spelling.2, area_name))"""
 
 
+# A size no real home has is shown as missing (2026-10-06). DXBI writes 11 sq ft as a placeholder
+# on 18,394 leases (other leases of the same units are ~1,100 sq ft at the same rent) and lists
+# hotel rooms such as Ciel at ~90 sq ft (DLD registers ~9 m^2); their price or rent per sq ft is
+# 4-40x the building's. Floors: apartments 108 sq ft (10 m^2), villas and townhouses 500 sq ft.
+_REAL_SIZE = """(size_sqft > 0 AND size_sqft >= multiIf(
+        property_type IN ('Villa', 'Townhouse'), 500,
+        property_type IN ('Apartment', 'Hotel Apartment'), 108, 0))"""
+
 def _sales_source(date_clause: str) -> str:
     """One row per DXBI sale, in DXBI's own units: sizes in sq ft, prices in AED.
 
@@ -109,9 +117,9 @@ def _sales_source(date_clause: str) -> str:
             {_BEDROOMS} AS bedrooms,
             multiIf(market_status = 'Offplan', 'Off-Plan', market_status = 'Ready', 'Ready', '')
                 AS status,
-            if(size_sqft > 0, size_sqft, NULL) AS size_sqft,
+            if({_REAL_SIZE}, size_sqft, NULL) AS size_sqft,
             sale_amount_aed AS price_aed,
-            if(size_sqft > 0, toInt64(round(sale_amount_aed / size_sqft)), NULL) AS price_per_sqft
+            if({_REAL_SIZE}, toInt64(round(sale_amount_aed / size_sqft)), NULL) AS price_per_sqft
         FROM (
             SELECT *, {same_sale} AS same_sale
             FROM (
@@ -154,7 +162,7 @@ def _rentals_source(date_clause: str) -> str:
             property_type,
             {_USAGE} AS property_usage,
             {_BEDROOMS} AS bedrooms,
-            if(size_sqft > 0, size_sqft, NULL) AS size_sqft,
+            if({_REAL_SIZE}, size_sqft, NULL) AS size_sqft,
             if(annual_rent_aed > 0, annual_rent_aed, NULL) AS annual_rent_aed,
             if(contract_amount_aed > 0, contract_amount_aed, NULL) AS contract_amount_aed,
             contract_term_months AS term_months,
