@@ -8,7 +8,7 @@ from dagster import (
 )
 
 from holocron.market.checks import CHECKS, MarketCheck, evaluate
-from holocron.market.transforms import (
+from holocron.market.release import (
     materialize_market_rental_events,
     materialize_market_sale_events,
 )
