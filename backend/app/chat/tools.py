@@ -79,17 +79,19 @@ async def query_market_metrics(
     """Compute sales or rental metrics from the stored DLD/DXBI records.
 
     Use this for counts, totals, averages (mean_aed), medians, quartiles, prices per sqm/sqft,
-    price brackets, rankings by building/project/area, monthly series and new-versus-renewed
-    rents. Periods are calendar periods in Dubai time: "last month" is
-    {"type": "previous_month"}, "last quarter" {"type": "previous_quarter"}, "last 90 days"
-    {"type": "rolling_days", "days": 90}, "last six complete months"
-    {"type": "previous_months", "months": 6}. "Average" means mean_aed unless the user asks
-    for the median.
+    price brackets, rankings by building/project/community/area (area = official DLD
+    district), monthly series and new-versus-renewed rents. Periods are calendar periods in
+    Dubai time: "last month" is {"type": "previous_month"}, "last quarter"
+    {"type": "previous_quarter"}, "last 90 days" {"type": "rolling_days", "days": 90}, "last
+    six complete months" {"type": "previous_months", "months": 6}. "Average" means mean_aed
+    unless the user asks for the median.
 
-    The result states the resolved dates, coverage (complete, partial or unavailable),
-    eligible record count, metric definitions, sources and limitations. Report those with the
-    numbers. If coverage is unavailable or a value is null, say the stored data does not
-    contain it; never fill the gap from other sources.
+    The result states the resolved dates, coverage (complete, partial, unverified or
+    unavailable; only complete means every day is verified as loaded), eligible record
+    count, metric definitions, sources, release_id and limitations. Report those with the
+    numbers. A community answer leaves out records DLD locates only by a wider district; the
+    limitations say how many. If coverage is unavailable or a value is null, say the stored
+    data does not contain it; never fill the gap from other sources.
     """
     result = await market_metrics.get_market_metrics(request)
     return result.model_dump(mode="json")

@@ -1929,6 +1929,38 @@ ALTER TABLE market_rental_matches ADD COLUMN IF NOT EXISTS release_id LowCardina
 ALTER TABLE market_sale_events ADD COLUMN IF NOT EXISTS release_id LowCardinality(String) DEFAULT '';
 ALTER TABLE market_rental_events ADD COLUMN IF NOT EXISTS release_id LowCardinality(String) DEFAULT '';
 
+-- Canonical geography (see market.transforms): official DLD district and, where evidence
+-- supports it, community, with the method that placed the row. Raw names stay unchanged.
+ALTER TABLE market_sale_events ADD COLUMN IF NOT EXISTS district_id UInt32 DEFAULT 0;
+ALTER TABLE market_sale_events ADD COLUMN IF NOT EXISTS district_name LowCardinality(String) DEFAULT '';
+ALTER TABLE market_sale_events ADD COLUMN IF NOT EXISTS community_key LowCardinality(String) DEFAULT '';
+ALTER TABLE market_sale_events ADD COLUMN IF NOT EXISTS community_name LowCardinality(String) DEFAULT '';
+ALTER TABLE market_sale_events ADD COLUMN IF NOT EXISTS geo_resolution LowCardinality(String) DEFAULT '';
+ALTER TABLE market_sale_events ADD COLUMN IF NOT EXISTS geo_method LowCardinality(String) DEFAULT '';
+ALTER TABLE market_rental_events ADD COLUMN IF NOT EXISTS district_id UInt32 DEFAULT 0;
+ALTER TABLE market_rental_events ADD COLUMN IF NOT EXISTS district_name LowCardinality(String) DEFAULT '';
+ALTER TABLE market_rental_events ADD COLUMN IF NOT EXISTS community_key LowCardinality(String) DEFAULT '';
+ALTER TABLE market_rental_events ADD COLUMN IF NOT EXISTS community_name LowCardinality(String) DEFAULT '';
+ALTER TABLE market_rental_events ADD COLUMN IF NOT EXISTS geo_resolution LowCardinality(String) DEFAULT '';
+ALTER TABLE market_rental_events ADD COLUMN IF NOT EXISTS geo_method LowCardinality(String) DEFAULT '';
+
+-- Source-specific name evidence behind those columns, rebuilt with each sales release.
+-- kind: district | community | project | label (see market.transforms).
+CREATE TABLE IF NOT EXISTS market_geo_crosswalk (
+    kind LowCardinality(String),
+    source_key String,
+    district_id UInt32,
+    district_name String,
+    community_key String,
+    community_name String,
+    evidence_rows UInt64,
+    evidence_share Float64,
+    built_at DateTime64(3, UTC),
+    release_id LowCardinality(String) DEFAULT ''
+)
+ENGINE = MergeTree()
+ORDER BY (kind, source_key);
+
 -- Durable publication record, one version per state change (latest updated_at wins).
 -- state: building | rejected | failed | publishing | published | superseded | rolled_back
 CREATE TABLE IF NOT EXISTS market_release_ledger (

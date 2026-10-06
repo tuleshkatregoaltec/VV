@@ -111,8 +111,9 @@ def warehouse(database):
 
 _SALE_COLUMNS = [
     "row_key", "run_id", "transaction_number", "instance_date", "group_en",
-    "trans_value", "procedure_area", "area_en", "is_offplan_en", "source_system",
+    "trans_value", "procedure_area", "area_en", "is_offplan_en", "source_system", "area_id",
 ]  # fmt: skip
+MARSA_DUBAI_ID = 330  # DLD area_id: the evidence that makes "Marsa Dubai" a district
 
 
 def _dld_sales(client, rows: list[tuple[str, str, int]], day: datetime | None = None) -> None:
@@ -121,7 +122,7 @@ def _dld_sales(client, rows: list[tuple[str, str, int]], day: datetime | None = 
         column_names=_SALE_COLUMNS,
         rows=[
             (f"r-{number}", "run", number, day or datetime(2026, 9, 10), group, price, 80.0,
-             "Marsa Dubai", "Ready", "dld_open_data")
+             "Marsa Dubai", "Ready", "dld_open_data", MARSA_DUBAI_ID)
             for number, group, price in rows
         ],
     )  # fmt: skip
@@ -133,7 +134,7 @@ def _daily_sales(client, days: list[date], per_day: int, prefix: str = "D") -> N
         column_names=_SALE_COLUMNS,
         rows=[
             (f"r-{prefix}{d}-{i}", "run", f"{prefix}{d}-{i}", datetime.combine(d, datetime.min.time()),
-             "Sales", 1_000_000 + i, 80.0, "Marsa Dubai", "Ready", "dld_open_data")
+             "Sales", 1_000_000 + i, 80.0, "Marsa Dubai", "Ready", "dld_open_data", MARSA_DUBAI_ID)
             for d in days
             for i in range(per_day)
         ],
@@ -374,7 +375,7 @@ def test_crash_between_ledger_and_events_exchange_serves_one_consistent_release(
 def test_corrections_duplicates_and_cut_over_are_served_once(warehouse) -> None:
     columns = [
         "row_key", "run_id", "scraped_at", "transaction_number", "instance_date", "group_en",
-        "trans_value", "procedure_area", "area_en", "is_offplan_en", "source_system",
+        "trans_value", "procedure_area", "area_en", "is_offplan_en", "source_system", "area_id",
     ]  # fmt: skip
     rows = [
         # T1 corrected by a later open-data extract: only the later price is served.
@@ -387,7 +388,9 @@ def test_corrections_duplicates_and_cut_over_are_served_once(warehouse) -> None:
     warehouse.insert_rows(
         table="dld_od_transactions_bronze",
         column_names=columns,
-        rows=[(*row, 80.0, "Marsa Dubai", "Ready", "dld_open_data") for row in rows],
+        rows=[
+            (*row, 80.0, "Marsa Dubai", "Ready", "dld_open_data", MARSA_DUBAI_ID) for row in rows
+        ],
     )
     # Pulse history: kept before the open-data start (2026-09-02), dropped from it on.
     warehouse.insert_rows(
@@ -395,9 +398,9 @@ def test_corrections_duplicates_and_cut_over_are_served_once(warehouse) -> None:
         column_names=columns,
         rows=[
             ("p-old", "pulse", "2026-05-16T00:00:00", "P1", datetime(2026, 8, 30), "Sales",
-             900_000, 80.0, "Marsa Dubai", "Ready", "dubai_pulse"),
+             900_000, 80.0, "Marsa Dubai", "Ready", "dubai_pulse", MARSA_DUBAI_ID),
             ("p-overlap", "pulse", "2026-05-16T00:00:00", "P2", datetime(2026, 9, 2), "Sales",
-             1_000_000, 80.0, "Marsa Dubai", "Ready", "dubai_pulse"),
+             1_000_000, 80.0, "Marsa Dubai", "Ready", "dubai_pulse", MARSA_DUBAI_ID),
         ],
     )  # fmt: skip
     release.materialize_market_sale_events(clickhouse=warehouse)

@@ -5834,6 +5834,8 @@ export type MarketCoverageRange = {
 
 /**
  * MarketLocationMatch
+ *
+ * Raw source names of matched rows and the canonical place the crosswalk gave them.
  */
 export type MarketLocationMatch = {
     /**
@@ -5844,6 +5846,18 @@ export type MarketLocationMatch = {
      * Master Project
      */
     master_project: string;
+    /**
+     * District
+     */
+    district?: string;
+    /**
+     * Community
+     */
+    community?: string;
+    /**
+     * Method
+     */
+    method?: string;
     /**
      * Records
      */
@@ -5976,7 +5990,7 @@ export type MarketMetricsRequest = {
     /**
      * Group By
      */
-    group_by?: 'area' | 'master_project' | 'project' | 'building' | 'month' | 'bedrooms' | 'property_type' | 'price_band' | 'registration' | 'contract_version' | null;
+    group_by?: 'area' | 'community' | 'master_project' | 'project' | 'building' | 'month' | 'bedrooms' | 'property_type' | 'price_band' | 'registration' | 'contract_version' | null;
     /**
      * Price Bands
      *

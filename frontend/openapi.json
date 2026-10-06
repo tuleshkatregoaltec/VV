@@ -18610,6 +18610,21 @@
 						"type": "string",
 						"title": "Master Project"
 					},
+					"district": {
+						"type": "string",
+						"title": "District",
+						"default": ""
+					},
+					"community": {
+						"type": "string",
+						"title": "Community",
+						"default": ""
+					},
+					"method": {
+						"type": "string",
+						"title": "Method",
+						"default": ""
+					},
 					"records": {
 						"type": "integer",
 						"title": "Records"
@@ -18617,7 +18632,8 @@
 				},
 				"type": "object",
 				"required": ["area", "master_project", "records"],
-				"title": "MarketLocationMatch"
+				"title": "MarketLocationMatch",
+				"description": "Raw source names of matched rows and the canonical place the crosswalk gave them."
 			},
 			"MarketMetricDefinition": {
 				"properties": {
@@ -18899,6 +18915,7 @@
 								"type": "string",
 								"enum": [
 									"area",
+									"community",
 									"master_project",
 									"project",
 									"building",

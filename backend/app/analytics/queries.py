@@ -1107,9 +1107,10 @@ async def fetch_market_pulse(parameters: dict):
     return await query(GET_MARKET_PULSE_SQL, parameters)
 
 
+# Ranked by official DLD district (canonical geography; one vocabulary across sources).
 RANK_AREAS_VOLUME_SQL = """
         SELECT
-            area_name_en as area,
+            district_name as area,
             count(*) as transaction_count,
             round(median(actual_worth), 0) as median_price
         FROM ch_transactions
@@ -1117,8 +1118,8 @@ RANK_AREAS_VOLUME_SQL = """
             instance_date >= today() - {period_days:Int32}
             AND trans_group_en = 'Sales'
             AND actual_worth > 0
-            AND area_name_en != ''
-        GROUP BY area_name_en
+            AND district_name != ''
+        GROUP BY district_name
         ORDER BY transaction_count DESC
         LIMIT {limit:Int32}
         """
@@ -1126,7 +1127,7 @@ RANK_AREAS_VOLUME_SQL = """
 
 RANK_AREAS_PRICE_SQL = """
         SELECT
-            area_name_en as area,
+            district_name as area,
             round(median(actual_worth), 0) as median_price,
             count(*) as transaction_count
         FROM ch_transactions
@@ -1134,8 +1135,8 @@ RANK_AREAS_PRICE_SQL = """
             instance_date >= today() - {period_days:Int32}
             AND trans_group_en = 'Sales'
             AND actual_worth > 0
-            AND area_name_en != ''
-        GROUP BY area_name_en
+            AND district_name != ''
+        GROUP BY district_name
         HAVING transaction_count >= 10
         ORDER BY median_price DESC
         LIMIT {limit:Int32}
@@ -1146,20 +1147,20 @@ RANK_AREAS_GROWTH_SQL = """
         WITH
             current_period AS (
                 SELECT
-                    area_name_en as area,
+                    district_name as area,
                     median(actual_worth) as current_median
                 FROM ch_transactions
                 WHERE
                     instance_date >= today() - {period_days:Int32}
                     AND trans_group_en = 'Sales'
                     AND actual_worth > 0
-                    AND area_name_en != ''
-                GROUP BY area_name_en
+                    AND district_name != ''
+                GROUP BY district_name
                 HAVING count(*) >= 10
             ),
             previous_period AS (
                 SELECT
-                    area_name_en as area,
+                    district_name as area,
                     median(actual_worth) as previous_median
                 FROM ch_transactions
                 WHERE
@@ -1167,8 +1168,8 @@ RANK_AREAS_GROWTH_SQL = """
                     AND instance_date < today() - {period_days:Int32}
                     AND trans_group_en = 'Sales'
                     AND actual_worth > 0
-                    AND area_name_en != ''
-                GROUP BY area_name_en
+                    AND district_name != ''
+                GROUP BY district_name
                 HAVING count(*) >= 10
             )
         SELECT

@@ -203,9 +203,8 @@ def _filters(request: MarketMetricsRequest, start: date, end: date) -> queries.M
     return queries.MetricFilters(
         start=start,
         end=end,
-        location_masters=location.master_projects if location else (),
-        location_areas=location.areas if location else (),
-        location_official_areas=location.official_areas if location else (),
+        location_communities=location.communities if location else (),
+        location_districts=location.districts if location else (),
         building=request.building,
         project=request.project,
         property_type=request.property_type,
@@ -377,9 +376,17 @@ async def _compute(
         location = community_location(request.location)
         matched = await queries.fetch_matched_locations(request.dataset, filters)
         response.matched_locations = [MarketLocationMatch(**item) for item in matched]
-        official = set(location.official_areas)
-        if location.note and any(m.area.lower() in official for m in response.matched_locations):
-            limitations.append(location.note)
+        containing = tuple(
+            sorted({m.district for m in response.matched_locations if m.community and m.district})
+        )
+        if location.communities and not location.districts and containing:
+            coarse = await queries.fetch_district_only_rows(request.dataset, filters, containing)
+            if coarse:
+                limitations.append(
+                    f"{coarse} records matching the other filters are located by DLD only at "
+                    f"district level ({', '.join(containing)}); they may include "
+                    f"{location.name} but are not counted, because no source places them there."
+                )
     sources = await queries.fetch_source_breakdown(request.dataset, filters)
     response.sources = {
         f"{item['source_system']}/{item['match_status']}": int(item["records"]) for item in sources
