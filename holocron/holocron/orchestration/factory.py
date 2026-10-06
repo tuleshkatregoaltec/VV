@@ -931,6 +931,12 @@ def build_operational_jobs(sources: Mapping[str, SourceSpec]) -> list[AssetJobDe
     ]
 
 
+# Provider schedules stay STOPPED until their source is approved (licensing, quotas, hosts).
+# The market rebuild calls no provider: it republishes what bronze already holds, and the app's
+# ch_transactions / ch_rent_contracts read its release, so it must run wherever they are served.
+_RUNNING_BY_DEFAULT = frozenset({"market_events_refresh"})
+
+
 def build_operational_schedules(
     jobs_by_name: Mapping[str, AssetJobDefinition],
 ) -> list[ScheduleDefinition]:
@@ -959,7 +965,11 @@ def build_operational_schedules(
             job=jobs_by_name[job_name],
             cron_schedule=cron_schedule,
             execution_timezone=_DUBAI_TIMEZONE,
-            default_status=DefaultScheduleStatus.STOPPED,
+            default_status=(
+                DefaultScheduleStatus.RUNNING
+                if job_name in _RUNNING_BY_DEFAULT
+                else DefaultScheduleStatus.STOPPED
+            ),
         )
         for job_name, cron_schedule in schedule_specs.items()
     ]

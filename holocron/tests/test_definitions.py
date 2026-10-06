@@ -211,12 +211,14 @@ def test_definitions_expose_only_recurring_operational_schedules() -> None:
             "Asia/Dubai",
             DefaultScheduleStatus.STOPPED,
         ),
-        # The market rebuild must start after the evidence load it depends on.
+        # The market rebuild must start after the evidence load it depends on. It is the only
+        # schedule running by default: the served ch_* views read its release, so a stopped
+        # rebuild would freeze sales and rentals in the app; it calls no external provider.
         "market_events_refresh_schedule": (
             "market_events_refresh",
             "30 10 * * *",
             "Asia/Dubai",
-            DefaultScheduleStatus.STOPPED,
+            DefaultScheduleStatus.RUNNING,
         ),
     }
 

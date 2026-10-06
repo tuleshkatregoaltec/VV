@@ -2042,6 +2042,12 @@ CREATE TABLE IF NOT EXISTS source_load_windows (
 )
 ENGINE = MergeTree()
 ORDER BY (bronze_table, date_field, window_start, loaded_at);
+-- Rows of the window this load read (first_row..end_row of total_rows), so a load that
+-- resumed mid-window proves coverage only when it continues an unbroken chain. -1: unknown
+-- (loads recorded before these columns, and attested archives).
+ALTER TABLE source_load_windows ADD COLUMN IF NOT EXISTS first_row Int64 DEFAULT -1;
+ALTER TABLE source_load_windows ADD COLUMN IF NOT EXISTS end_row Int64 DEFAULT -1;
+ALTER TABLE source_load_windows ADD COLUMN IF NOT EXISTS total_rows Int64 DEFAULT -1;
 
 -- One row per DXBI evidence run loaded by Holocron (replaces the Mac .loaded marker files).
 -- Raw files are archived to object storage first (manifest_key); loader accounting is kept
@@ -2096,27 +2102,33 @@ CREATE TABLE IF NOT EXISTS bayut_listing_snapshots (
 )
 ENGINE = ReplacingMergeTree(loaded_at)
 ORDER BY snapshot_id;
+-- Snapshots are ordered by when the crawl observed them, never by load time: reloading an
+-- older export must not make it the current inventory. Rows loaded before this column
+-- existed fall back to their load time.
+ALTER TABLE bayut_listing_snapshots ADD COLUMN IF NOT EXISTS collected_at DateTime64(3, 'UTC') DEFAULT loaded_at;
 
 -- The inventory is the latest certified snapshot; a partial crawl never replaces it.
 CREATE OR REPLACE VIEW bayut_listings_current AS
 SELECT b.*
 FROM bayut_listings_bronze AS b
 WHERE b.snapshot_id = (
-    SELECT argMax(snapshot_id, loaded_at) FROM bayut_listing_snapshots FINAL
+    SELECT argMax(snapshot_id, (collected_at, snapshot_id)) FROM bayut_listing_snapshots FINAL
     WHERE status = 'published'
 );
 
 -- Listings in the previous certified snapshot that the latest certified one no longer has.
 CREATE OR REPLACE VIEW bayut_listing_withdrawals AS
 WITH published AS (
-    SELECT snapshot_id, loaded_at FROM bayut_listing_snapshots FINAL
-    WHERE status = 'published' ORDER BY loaded_at DESC LIMIT 2
+    SELECT snapshot_id, collected_at FROM bayut_listing_snapshots FINAL
+    WHERE status = 'published' ORDER BY collected_at DESC, snapshot_id DESC LIMIT 2
 )
 SELECT b.*
 FROM bayut_listings_bronze AS b
-WHERE b.snapshot_id = (SELECT snapshot_id FROM published ORDER BY loaded_at ASC LIMIT 1)
+WHERE b.snapshot_id = (
+      SELECT snapshot_id FROM published ORDER BY collected_at ASC, snapshot_id ASC LIMIT 1)
   AND (SELECT count() FROM published) = 2
   AND b.listing_id NOT IN (
       SELECT listing_id FROM bayut_listings_bronze
-      WHERE snapshot_id = (SELECT snapshot_id FROM published ORDER BY loaded_at DESC LIMIT 1)
+      WHERE snapshot_id = (
+          SELECT snapshot_id FROM published ORDER BY collected_at DESC, snapshot_id DESC LIMIT 1)
   );

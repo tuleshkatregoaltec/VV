@@ -545,6 +545,53 @@ def get_client():
     )
 
 
+# Views served from the canonical market layer, and the Holocron table each one reads.
+MARKET_BACKED_VIEWS = {
+    "ch_transactions": "market_sale_events",
+    "ch_rent_contracts": "market_rental_events",
+}
+
+
+class MarketLayerNotPublished(RuntimeError):
+    """A market-backed view would serve an empty or never-published table."""
+
+
+def require_published_market_layer(client) -> None:
+    """Refuse to point the app at a market table no validated release has filled.
+
+    The views read Holocron's canonical release. On a warehouse where the market rebuild has
+    never published (fresh install, schedule never run), creating them would silently empty
+    every sales and rentals endpoint, so nothing is changed and the operator is told why.
+    """
+    problems = []
+    for view, table in MARKET_BACKED_VIEWS.items():
+        exists = client.query(
+            "SELECT count() FROM system.tables "
+            "WHERE database = currentDatabase() AND name IN ({table:String}, 'market_release_ledger')",
+            parameters={"table": table},
+        ).result_rows[0][0]
+        if exists < 2:
+            problems.append(f"{view}: {table} or market_release_ledger does not exist")
+            continue
+        published = client.query(
+            "SELECT count() FROM market_release_ledger FINAL "
+            "WHERE dataset = {table:String} AND state = 'published'",
+            parameters={"table": table},
+        ).result_rows[0][0]
+        served = client.query(f"SELECT count() FROM `{table}` WHERE is_served = 1").result_rows[0][
+            0
+        ]
+        if not published or not served:
+            problems.append(
+                f"{view}: {table} has {published} published release(s) and {served} served rows"
+            )
+    if problems:
+        raise MarketLayerNotPublished(
+            "views not changed; run Holocron's market_events_refresh job first: "
+            + "; ".join(problems)
+        )
+
+
 def main() -> None:
     args = parse_args()
     if args.dry_run:
@@ -553,6 +600,7 @@ def main() -> None:
         return
 
     client = get_client()
+    require_published_market_layer(client)
     started = time.time()
     for name, ddl in VIEW_DDL:
         client.command(ddl)

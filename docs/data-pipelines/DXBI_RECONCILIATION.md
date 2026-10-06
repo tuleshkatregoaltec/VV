@@ -300,7 +300,7 @@ first (`C:\Users\maan3\vv-backups\`).
 |---|---|---|
 | Canonical sales | `market_sale_events` (+ ledger `market_sale_matches`) | One row per sale: DLD after the Pulse/open-data cut-over and corrections, enriched with DXBI unit identity; DXBI sales DLD lacks are added as `dxbi_only`; unpairable DXBI rows kept as `dxbi_probable_duplicate` (not served). |
 | Canonical rentals | `market_rental_events` (+ ledger `market_rental_matches`) | Same for rentals, with location-keyed rank pairing (§10.2). |
-| Build | `holocron/holocron/market/`; Dagster job `market_events_refresh` (10:30 Dubai, stopped by default) | Staging table, `OPTIMIZE FINAL`, `EXCHANGE TABLES`; about 2 minutes for both. |
+| Build | `holocron/holocron/market/`; Dagster job `market_events_refresh` (10:30 Dubai; running by default since 2026-10-06, the only schedule that is, because the served `ch_*` views read its release) | Staging table, `OPTIMIZE FINAL`, `EXCHANGE TABLES`; about 2 minutes for both. |
 | Validation | 22 Dagster asset checks (`holocron/holocron/market/checks.py`) | Conservation, uniqueness, labelling, vocabulary, match rate, pair precision, duplicate share, lag. All 22 pass. They run after `EXCHANGE TABLES`, so they observe published data and **do not gate publication** yet (Standards S4.1). |
 | Serving | `ch_transactions` / `ch_rent_contracts` = `SELECT * … WHERE is_served = 1` (`backend/scripts/clickhouse/create_compatibility_views.py`) | Every backend query reads the canonical layer without query changes. |
 | Facts | `backend/scripts/clickhouse/build_fact_tables.py` (F13 fixed) | Rebuilds from the source view; a second run no longer freezes the facts. |
