@@ -1985,6 +1985,31 @@ ALTER TABLE market_rental_events ADD COLUMN IF NOT EXISTS community_name LowCard
 ALTER TABLE market_rental_events ADD COLUMN IF NOT EXISTS geo_resolution LowCardinality(String) DEFAULT '';
 ALTER TABLE market_rental_events ADD COLUMN IF NOT EXISTS geo_method LowCardinality(String) DEFAULT '';
 
+-- Uniform DXBI-primary layer (holocron.market.transforms, decision 2026-10-06). One vocabulary
+-- and one column per concept for both tables: property_type (transforms.PROPERTY_TYPES),
+-- size_sqm (DXBI's size where it is primary, else DLD's), location_name (DXBI's community name
+-- where known, else the canonical community, else the official district). filled_from_dld /
+-- dld_disagrees list the uniform columns where DLD filled an empty DXBI value or held a
+-- different one on a DXBI-primary row: audit only, never shown in the product.
+ALTER TABLE market_sale_events ADD COLUMN IF NOT EXISTS property_type LowCardinality(String) DEFAULT '';
+ALTER TABLE market_sale_events ADD COLUMN IF NOT EXISTS size_sqm Float64 DEFAULT 0;
+ALTER TABLE market_sale_events ADD COLUMN IF NOT EXISTS location_name LowCardinality(String) DEFAULT '';
+ALTER TABLE market_sale_events ADD COLUMN IF NOT EXISTS filled_from_dld Array(LowCardinality(String)) DEFAULT [];
+ALTER TABLE market_sale_events ADD COLUMN IF NOT EXISTS dld_disagrees Array(LowCardinality(String)) DEFAULT [];
+ALTER TABLE market_rental_events ADD COLUMN IF NOT EXISTS property_type LowCardinality(String) DEFAULT '';
+ALTER TABLE market_rental_events ADD COLUMN IF NOT EXISTS size_sqm Float64 DEFAULT 0;
+ALTER TABLE market_rental_events ADD COLUMN IF NOT EXISTS location_name LowCardinality(String) DEFAULT '';
+ALTER TABLE market_rental_events ADD COLUMN IF NOT EXISTS filled_from_dld Array(LowCardinality(String)) DEFAULT [];
+ALTER TABLE market_rental_events ADD COLUMN IF NOT EXISTS dld_disagrees Array(LowCardinality(String)) DEFAULT [];
+-- DLD's registration date on sales with a DLD record (instance_date carries DXBI's date where
+-- DXBI is primary); release validation compares per-day completeness on it.
+ALTER TABLE market_sale_events ADD COLUMN IF NOT EXISTS dld_instance_date Nullable(DateTime) DEFAULT NULL;
+-- Inside the DXBI period an unpaired DXBI record and an unpaired DLD record with the same price
+-- (sales, within 30 days) or start and contract amount (rentals) are paired loosely so the DLD
+-- one is not served beside the DXBI one (it becomes dld_probable_duplicate).
+ALTER TABLE market_sale_matches ADD COLUMN IF NOT EXISTS loose_dld_key String DEFAULT '';
+ALTER TABLE market_rental_matches ADD COLUMN IF NOT EXISTS loose_dld_rent_key UInt64 DEFAULT 0;
+
 -- Source-specific name evidence behind those columns, rebuilt with each sales release.
 -- kind: district | community | project | label (see market.transforms).
 CREATE TABLE IF NOT EXISTS market_geo_crosswalk (
