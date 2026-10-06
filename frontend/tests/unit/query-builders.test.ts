@@ -59,9 +59,9 @@ describe('shared query builders', () => {
 		const rentalFiltersSpy = vi.spyOn(filters, 'rentals').mockResolvedValue({} as never)
 
 		const params = {
-			property_usage: 'residential',
-			project: 'Downtown Views',
-			filter_type: 'project',
+			property_usage: 'Residential',
+			location: 'Downtown Dubai',
+			building: 'Burj Vista 1',
 			limit: 50,
 			offset: 0
 		}
@@ -90,7 +90,7 @@ describe('shared query builders', () => {
 		await rentalsQuery.queryFn()
 		expect(rentalsSpy).toHaveBeenCalledWith(params)
 
-		const filterParams = { property_usage: 'commercial', property_type: 'Office' }
+		const filterParams = { property_usage: 'Commercial', property_type: 'Office' }
 		const salesFilterOptionsQuery = transactionQueries.salesFilterOptions(filterParams)
 		expect(salesFilterOptionsQuery.queryKey).toEqual(
 			transactionKeys.filterOptions('sales', filterParams)

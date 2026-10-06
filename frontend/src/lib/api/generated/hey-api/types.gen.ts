@@ -3959,13 +3959,13 @@ export type FeasibilityVatApplicability = {
 /**
  * FilterOptionsResponse
  *
- * Filter options for transactions and rentals - dynamically narrowed by selections.
+ * Filter options for the DXBI sales or rentals page, narrowed by the current filters.
  */
 export type FilterOptionsResponse = {
     /**
-     * Projects
+     * Locations
      */
-    projects?: Array<string>;
+    locations?: Array<string>;
     /**
      * Buildings
      */
@@ -3975,29 +3975,17 @@ export type FilterOptionsResponse = {
      */
     property_types?: Array<string>;
     /**
-     * Property Sub Types
+     * Bedrooms
      */
-    property_sub_types?: Array<string>;
+    bedrooms?: Array<string>;
     /**
-     * Rooms
+     * Statuses
      */
-    rooms?: Array<string>;
+    statuses?: Array<string>;
     /**
-     * Registration Types
+     * Contract Types
      */
-    registration_types?: Array<string>;
-    /**
-     * Tenant Types
-     */
-    tenant_types?: Array<string>;
-    /**
-     * Contract Reg Types
-     */
-    contract_reg_types?: Array<string>;
-    /**
-     * Areas
-     */
-    areas?: Array<string>;
+    contract_types?: Array<string>;
 };
 
 /**
@@ -8474,6 +8462,8 @@ export type RentalContractListResponse = {
 
 /**
  * RentalContractResponse
+ *
+ * One DXBI lease of one unit (dxbi_rental_events): sizes in m², amounts in AED.
  */
 export type RentalContractResponse = {
     /**
@@ -8481,69 +8471,57 @@ export type RentalContractResponse = {
      */
     contract_id: string;
     /**
-     * Contract Start Date
+     * Lease Start
      */
-    contract_start_date?: string | null;
+    lease_start?: string | null;
     /**
-     * Contract End Date
+     * Lease End
      */
-    contract_end_date?: string | null;
+    lease_end?: string | null;
     /**
-     * Ejari Property Type En
+     * Unit Number
      */
-    ejari_property_type_en?: string | null;
+    unit_number?: string | null;
     /**
-     * Ejari Property Sub Type En
+     * Building Name
      */
-    ejari_property_sub_type_en?: string | null;
+    building_name?: string | null;
     /**
-     * Tenant Type En
+     * Project Name
      */
-    tenant_type_en?: string | null;
+    project_name?: string | null;
     /**
-     * Contract Reg Type En
+     * Location Name
      */
-    contract_reg_type_en?: string | null;
+    location_name?: string | null;
     /**
-     * Area Name En
+     * Property Type
      */
-    area_name_en?: string | null;
+    property_type?: string | null;
     /**
-     * Project Name En
+     * Bedrooms
      */
-    project_name_en?: string | null;
+    bedrooms?: string | null;
     /**
-     * Actual Area
+     * Size Sqm
      */
-    actual_area?: number | null;
+    size_sqm?: number | null;
     /**
-     * Annual Amount
+     * Annual Rent Aed
      */
-    annual_amount?: number | null;
+    annual_rent_aed?: number | null;
     /**
-     * Contract Amount
+     * Contract Amount Aed
      */
-    contract_amount?: number | null;
+    contract_amount_aed?: number | null;
     /**
-     * No Of Prop
+     * Term Months
      */
-    no_of_prop?: number | null;
+    term_months?: number | null;
     /**
-     * Is Free Hold
+     * Contract Type
      */
-    is_free_hold?: boolean | null;
-    /**
-     * Nearest Landmark En
-     */
-    nearest_landmark_en?: string | null;
-    /**
-     * Nearest Metro En
-     */
-    nearest_metro_en?: string | null;
-    /**
-     * Nearest Mall En
-     */
-    nearest_mall_en?: string | null;
+    contract_type?: string | null;
 };
 
 /**
@@ -9424,6 +9402,8 @@ export type TransactionListResponse = {
 
 /**
  * TransactionResponse
+ *
+ * One DXBI sale (dxbi_sales_unit_events): sizes in m², prices in AED.
  */
 export type TransactionResponse = {
     /**
@@ -9431,69 +9411,49 @@ export type TransactionResponse = {
      */
     transaction_id: string;
     /**
-     * Instance Date
+     * Transaction Date
      */
-    instance_date?: string | null;
+    transaction_date?: string | null;
     /**
-     * Trans Group En
+     * Unit Number
      */
-    trans_group_en?: string | null;
+    unit_number?: string | null;
     /**
-     * Procedure Name En
+     * Building Name
      */
-    procedure_name_en?: string | null;
+    building_name?: string | null;
     /**
-     * Property Type En
+     * Project Name
      */
-    property_type_en?: string | null;
+    project_name?: string | null;
     /**
-     * Property Sub Type En
+     * Location Name
      */
-    property_sub_type_en?: string | null;
+    location_name?: string | null;
     /**
-     * Rooms En
+     * Property Type
      */
-    rooms_en?: string | null;
+    property_type?: string | null;
     /**
-     * Area Name En
+     * Bedrooms
      */
-    area_name_en?: string | null;
+    bedrooms?: string | null;
     /**
-     * Project Name En
+     * Status
      */
-    project_name_en?: string | null;
+    status?: string | null;
     /**
-     * Building Name En
+     * Size Sqm
      */
-    building_name_en?: string | null;
+    size_sqm?: number | null;
     /**
-     * Procedure Area
+     * Price Aed
      */
-    procedure_area?: number | null;
+    price_aed?: number | null;
     /**
-     * Actual Worth
+     * Price Per Sqm Aed
      */
-    actual_worth?: number | null;
-    /**
-     * Meter Sale Price
-     */
-    meter_sale_price?: number | null;
-    /**
-     * Reg Type En
-     */
-    reg_type_en?: string | null;
-    /**
-     * Nearest Landmark En
-     */
-    nearest_landmark_en?: string | null;
-    /**
-     * Nearest Metro En
-     */
-    nearest_metro_en?: string | null;
-    /**
-     * Nearest Mall En
-     */
-    nearest_mall_en?: string | null;
+    price_per_sqm_aed?: number | null;
 };
 
 /**
@@ -11880,99 +11840,81 @@ export type FiltersGetSalesFilterOptionsData = {
         /**
          * Property Usage
          *
-         * Residential or Commercial
+         * Residential or Commercial (grouped from DXBI property types)
          */
-        property_usage?: string;
-        /**
-         * Project
-         *
-         * Filter buildings by project
-         */
-        project?: string;
-        /**
-         * Filter Type
-         *
-         * Project filter type: master, virtual_master, or project
-         */
-        filter_type?: string;
+        property_usage?: string | null;
         /**
          * Property Type
          *
-         * Filter subtypes and rooms
+         * DXBI property type
          */
-        property_type?: string;
+        property_type?: string | null;
         /**
-         * Property Sub Type
+         * Bedrooms
          *
-         * Filter by property sub-type
+         * 'Studio', '1 Bed', '2 Beds', ...
          */
-        property_sub_type?: string;
+        bedrooms?: string | null;
         /**
-         * Rooms
+         * Status
          *
-         * Filter by room count
+         * Off-Plan or Ready
          */
-        rooms?: string;
+        status?: string | null;
         /**
-         * Registration Type
+         * Location
          *
-         * Filter by registration type
+         * DXBI location (community)
          */
-        registration_type?: string;
-        /**
-         * Area
-         *
-         * Filter by area
-         */
-        area?: string;
+        location?: string | null;
         /**
          * Building
          *
-         * Filter by building
+         * DXBI building name
          */
-        building?: string;
+        building?: string | null;
         /**
          * Timeframe Days
          *
-         * Days back from today
+         * Last N calendar days, today included
          */
-        timeframe_days?: number;
+        timeframe_days?: number | null;
         /**
-         * Area Min
+         * Size Min
          *
-         * Minimum property area (sqm)
+         * Minimum size (sq.m), inclusive
          */
-        area_min?: number;
+        size_min?: number | null;
         /**
-         * Area Max
+         * Size Max
          *
-         * Maximum property area (sqm)
+         * Maximum size (sq.m), exclusive
          */
-        area_max?: number;
+        size_max?: number | null;
         /**
          * Price Min
          *
-         * Minimum price
+         * Minimum price (AED), inclusive
          */
-        price_min?: number;
+        price_min?: number | null;
         /**
          * Price Max
          *
-         * Maximum price
+         * Maximum price (AED), exclusive
          */
-        price_max?: number;
+        price_max?: number | null;
         /**
          * Price Per Sqm Min
          *
-         * Minimum price per sqm
+         * Minimum price per sq.m (AED), inclusive
          */
-        price_per_sqm_min?: number;
+        price_per_sqm_min?: number | null;
         /**
          * Price Per Sqm Max
          *
-         * Maximum price per sqm
+         * Maximum price per sq.m (AED), exclusive
          */
-        price_per_sqm_max?: number;
+        price_per_sqm_max?: number | null;
     };
     url: '/api/v1/filters/sales';
 };
@@ -12002,81 +11944,69 @@ export type FiltersGetRentalFilterOptionsData = {
         /**
          * Property Usage
          *
-         * Residential or Commercial
+         * Residential or Commercial (grouped from DXBI property types)
          */
-        property_usage?: string;
-        /**
-         * Project
-         *
-         * Filter buildings by project
-         */
-        project?: string;
-        /**
-         * Filter Type
-         *
-         * Project filter type: master, virtual_master, or project
-         */
-        filter_type?: string;
+        property_usage?: string | null;
         /**
          * Property Type
          *
-         * Filter subtypes
+         * DXBI property type
          */
-        property_type?: string;
+        property_type?: string | null;
         /**
-         * Property Sub Type
+         * Bedrooms
          *
-         * Filter by property sub-type
+         * 'Studio', '1 Bed', '2 Beds', ...
          */
-        property_sub_type?: string;
+        bedrooms?: string | null;
         /**
-         * Tenant Type
+         * Contract Type
          *
-         * Filter by tenant type
+         * New or Renewed
          */
-        tenant_type?: string;
+        contract_type?: string | null;
         /**
-         * Contract Reg Type
+         * Location
          *
-         * Filter by contract registration type
+         * DXBI location (community)
          */
-        contract_reg_type?: string;
+        location?: string | null;
         /**
-         * Area
+         * Building
          *
-         * Filter by area
+         * DXBI building name
          */
-        area?: string;
+        building?: string | null;
         /**
          * Timeframe Days
          *
-         * Days back from today
+         * Leases starting in the last N calendar days, today included
          */
-        timeframe_days?: number;
+        timeframe_days?: number | null;
         /**
-         * Area Min
+         * Size Min
          *
-         * Minimum property area (sqm)
+         * Minimum size (sq.m), inclusive
          */
-        area_min?: number;
+        size_min?: number | null;
         /**
-         * Area Max
+         * Size Max
          *
-         * Maximum property area (sqm)
+         * Maximum size (sq.m), exclusive
          */
-        area_max?: number;
+        size_max?: number | null;
         /**
          * Rent Min
          *
-         * Minimum annual rent
+         * Minimum annual rent (AED), inclusive
          */
-        rent_min?: number;
+        rent_min?: number | null;
         /**
          * Rent Max
          *
-         * Maximum annual rent
+         * Maximum annual rent (AED), exclusive
          */
-        rent_max?: number;
+        rent_max?: number | null;
     };
     url: '/api/v1/filters/rentals';
 };
@@ -13422,99 +13352,81 @@ export type TransactionsGetSalesTransactionsData = {
         /**
          * Property Usage
          *
-         * Residential or Commercial
+         * Residential or Commercial (grouped from DXBI property types)
          */
-        property_usage?: string;
+        property_usage?: string | null;
         /**
          * Property Type
          *
-         * Property type
+         * DXBI property type
          */
-        property_type?: string;
+        property_type?: string | null;
         /**
-         * Property Sub Type
+         * Bedrooms
          *
-         * Property sub-type
+         * 'Studio', '1 Bed', '2 Beds', ...
          */
-        property_sub_type?: string;
+        bedrooms?: string | null;
         /**
-         * Rooms
+         * Status
          *
-         * Number of rooms
+         * Off-Plan or Ready
          */
-        rooms?: string;
+        status?: string | null;
         /**
-         * Registration Type
+         * Location
          *
-         * Registration type
+         * DXBI location (community)
          */
-        registration_type?: string;
-        /**
-         * Area
-         *
-         * Area name
-         */
-        area?: string;
-        /**
-         * Project
-         *
-         * Project name
-         */
-        project?: string;
-        /**
-         * Filter Type
-         *
-         * Project filter type: master, virtual_master, or project
-         */
-        filter_type?: string;
+        location?: string | null;
         /**
          * Building
          *
-         * Building name
+         * DXBI building name
          */
-        building?: string;
+        building?: string | null;
         /**
          * Timeframe Days
          *
-         * Days back from today
+         * Last N calendar days, today included
          */
-        timeframe_days?: number;
+        timeframe_days?: number | null;
         /**
-         * Area Min
+         * Size Min
          *
-         * Minimum property area (sqm)
+         * Minimum size (sq.m), inclusive
          */
-        area_min?: number;
+        size_min?: number | null;
         /**
-         * Area Max
+         * Size Max
          *
-         * Maximum property area (sqm)
+         * Maximum size (sq.m), exclusive
          */
-        area_max?: number;
+        size_max?: number | null;
         /**
          * Price Min
          *
-         * Minimum price
+         * Minimum price (AED), inclusive
          */
-        price_min?: number;
+        price_min?: number | null;
         /**
          * Price Max
          *
-         * Maximum price
+         * Maximum price (AED), exclusive
          */
-        price_max?: number;
+        price_max?: number | null;
         /**
          * Price Per Sqm Min
          *
-         * Minimum price per sqm
+         * Minimum price per sq.m (AED), inclusive
          */
-        price_per_sqm_min?: number;
+        price_per_sqm_min?: number | null;
         /**
          * Price Per Sqm Max
          *
-         * Maximum price per sqm
+         * Maximum price per sq.m (AED), exclusive
          */
-        price_per_sqm_max?: number;
+        price_per_sqm_max?: number | null;
     };
     url: '/api/v1/transactions/sales';
 };
@@ -13556,81 +13468,69 @@ export type TransactionsGetRentalContractsData = {
         /**
          * Property Usage
          *
-         * Residential or Commercial
+         * Residential or Commercial (grouped from DXBI property types)
          */
-        property_usage?: string;
+        property_usage?: string | null;
         /**
          * Property Type
          *
-         * Property type (ejari)
+         * DXBI property type
          */
-        property_type?: string;
+        property_type?: string | null;
         /**
-         * Property Sub Type
+         * Bedrooms
          *
-         * Property sub-type (ejari)
+         * 'Studio', '1 Bed', '2 Beds', ...
          */
-        property_sub_type?: string;
+        bedrooms?: string | null;
         /**
-         * Tenant Type
+         * Contract Type
          *
-         * Tenant type
+         * New or Renewed
          */
-        tenant_type?: string;
+        contract_type?: string | null;
         /**
-         * Contract Reg Type
+         * Location
          *
-         * Contract registration type
+         * DXBI location (community)
          */
-        contract_reg_type?: string;
+        location?: string | null;
         /**
-         * Area
+         * Building
          *
-         * Area name
+         * DXBI building name
          */
-        area?: string;
-        /**
-         * Project
-         *
-         * Project name
-         */
-        project?: string;
-        /**
-         * Filter Type
-         *
-         * Project filter type: master, virtual_master, or project
-         */
-        filter_type?: string;
+        building?: string | null;
         /**
          * Timeframe Days
          *
-         * Days back from today
+         * Leases starting in the last N calendar days, today included
          */
-        timeframe_days?: number;
+        timeframe_days?: number | null;
         /**
-         * Area Min
+         * Size Min
          *
-         * Minimum property area (sqm)
+         * Minimum size (sq.m), inclusive
          */
-        area_min?: number;
+        size_min?: number | null;
         /**
-         * Area Max
+         * Size Max
          *
-         * Maximum property area (sqm)
+         * Maximum size (sq.m), exclusive
          */
-        area_max?: number;
+        size_max?: number | null;
         /**
          * Rent Min
          *
-         * Minimum annual rent
+         * Minimum annual rent (AED), inclusive
          */
-        rent_min?: number;
+        rent_min?: number | null;
         /**
          * Rent Max
          *
-         * Maximum annual rent
+         * Maximum annual rent (AED), exclusive
          */
-        rent_max?: number;
+        rent_max?: number | null;
     };
     url: '/api/v1/transactions/rentals';
 };
@@ -13668,103 +13568,85 @@ export type TransactionsExportSalesTransactionsEndpointData = {
          *
          * Comma-separated transaction IDs (overrides filters and limit)
          */
-        transaction_ids?: string;
+        transaction_ids?: string | null;
         /**
          * Property Usage
          *
-         * Residential or Commercial
+         * Residential or Commercial (grouped from DXBI property types)
          */
-        property_usage?: string;
+        property_usage?: string | null;
         /**
          * Property Type
          *
-         * Property type
+         * DXBI property type
          */
-        property_type?: string;
+        property_type?: string | null;
         /**
-         * Property Sub Type
+         * Bedrooms
          *
-         * Property sub-type
+         * 'Studio', '1 Bed', '2 Beds', ...
          */
-        property_sub_type?: string;
+        bedrooms?: string | null;
         /**
-         * Rooms
+         * Status
          *
-         * Number of rooms
+         * Off-Plan or Ready
          */
-        rooms?: string;
+        status?: string | null;
         /**
-         * Registration Type
+         * Location
          *
-         * Registration type
+         * DXBI location (community)
          */
-        registration_type?: string;
-        /**
-         * Area
-         *
-         * Area name
-         */
-        area?: string;
-        /**
-         * Project
-         *
-         * Project name
-         */
-        project?: string;
-        /**
-         * Filter Type
-         *
-         * Project filter type: master, virtual_master, or project
-         */
-        filter_type?: string;
+        location?: string | null;
         /**
          * Building
          *
-         * Building name
+         * DXBI building name
          */
-        building?: string;
+        building?: string | null;
         /**
          * Timeframe Days
          *
-         * Days back from today
+         * Last N calendar days, today included
          */
-        timeframe_days?: number;
+        timeframe_days?: number | null;
         /**
-         * Area Min
+         * Size Min
          *
-         * Minimum property area (sqm)
+         * Minimum size (sq.m), inclusive
          */
-        area_min?: number;
+        size_min?: number | null;
         /**
-         * Area Max
+         * Size Max
          *
-         * Maximum property area (sqm)
+         * Maximum size (sq.m), exclusive
          */
-        area_max?: number;
+        size_max?: number | null;
         /**
          * Price Min
          *
-         * Minimum price
+         * Minimum price (AED), inclusive
          */
-        price_min?: number;
+        price_min?: number | null;
         /**
          * Price Max
          *
-         * Maximum price
+         * Maximum price (AED), exclusive
          */
-        price_max?: number;
+        price_max?: number | null;
         /**
          * Price Per Sqm Min
          *
-         * Minimum price per sqm
+         * Minimum price per sq.m (AED), inclusive
          */
-        price_per_sqm_min?: number;
+        price_per_sqm_min?: number | null;
         /**
          * Price Per Sqm Max
          *
-         * Maximum price per sqm
+         * Maximum price per sq.m (AED), exclusive
          */
-        price_per_sqm_max?: number;
+        price_per_sqm_max?: number | null;
     };
     url: '/api/v1/transactions/sales/export';
 };
@@ -13800,85 +13682,73 @@ export type TransactionsExportRentalContractsEndpointData = {
          *
          * Comma-separated contract IDs (overrides filters and limit)
          */
-        contract_ids?: string;
+        contract_ids?: string | null;
         /**
          * Property Usage
          *
-         * Residential or Commercial
+         * Residential or Commercial (grouped from DXBI property types)
          */
-        property_usage?: string;
+        property_usage?: string | null;
         /**
          * Property Type
          *
-         * Property type (ejari)
+         * DXBI property type
          */
-        property_type?: string;
+        property_type?: string | null;
         /**
-         * Property Sub Type
+         * Bedrooms
          *
-         * Property sub-type (ejari)
+         * 'Studio', '1 Bed', '2 Beds', ...
          */
-        property_sub_type?: string;
+        bedrooms?: string | null;
         /**
-         * Tenant Type
+         * Contract Type
          *
-         * Tenant type
+         * New or Renewed
          */
-        tenant_type?: string;
+        contract_type?: string | null;
         /**
-         * Contract Reg Type
+         * Location
          *
-         * Contract registration type
+         * DXBI location (community)
          */
-        contract_reg_type?: string;
+        location?: string | null;
         /**
-         * Area
+         * Building
          *
-         * Area name
+         * DXBI building name
          */
-        area?: string;
-        /**
-         * Project
-         *
-         * Project name
-         */
-        project?: string;
-        /**
-         * Filter Type
-         *
-         * Project filter type: master, virtual_master, or project
-         */
-        filter_type?: string;
+        building?: string | null;
         /**
          * Timeframe Days
          *
-         * Days back from today
+         * Leases starting in the last N calendar days, today included
          */
-        timeframe_days?: number;
+        timeframe_days?: number | null;
         /**
-         * Area Min
+         * Size Min
          *
-         * Minimum property area (sqm)
+         * Minimum size (sq.m), inclusive
          */
-        area_min?: number;
+        size_min?: number | null;
         /**
-         * Area Max
+         * Size Max
          *
-         * Maximum property area (sqm)
+         * Maximum size (sq.m), exclusive
          */
-        area_max?: number;
+        size_max?: number | null;
         /**
          * Rent Min
          *
-         * Minimum annual rent
+         * Minimum annual rent (AED), inclusive
          */
-        rent_min?: number;
+        rent_min?: number | null;
         /**
          * Rent Max
          *
-         * Maximum annual rent
+         * Maximum annual rent (AED), exclusive
          */
-        rent_max?: number;
+        rent_max?: number | null;
     };
     url: '/api/v1/transactions/rentals/export';
 };
