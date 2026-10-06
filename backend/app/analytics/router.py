@@ -3,11 +3,14 @@
 from datetime import date
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 
+from app.analytics import market_metrics
 from app.analytics import service as analytics_service
 from app.analytics.models import (
     AnalyticsResponse,
+    MarketMetricsRequest,
+    MarketMetricsResponse,
     MarketTrendResponse,
     ProjectAnalyticsResponse,
     ProjectForecastResponse,
@@ -297,3 +300,18 @@ async def get_project_price_distribution_endpoint(
         filter_type=resolved_filter_type,
         reg_type=reg_type,
     )
+
+
+@router.post("/market-metrics", response_model=MarketMetricsResponse)
+async def get_market_metrics_endpoint(
+    request: MarketMetricsRequest,
+    context: AuthContext = Depends(require_active_subscription),
+):
+    """Sales or rental metrics with explicit period, coverage, definitions and evidence.
+
+    The same operation backs the chat tool, so API and chat answers agree.
+    """
+    try:
+        return await market_metrics.get_market_metrics(request)
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error

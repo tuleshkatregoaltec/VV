@@ -597,3 +597,38 @@ artifacts were retained without another billed model run. LangSmith ingestion
 still requires account credentials; raw execution evidence remains private and
 excluded from the PR. The migration repair and its manual-backfill/downgrade
 limitations remain documented in `ARCHITECTURE.md` and the migration itself.
+
+## Database capability coverage, 2026-10-03
+
+Three chat tools now call public domain operations that the API also serves:
+`query_market_metrics` → `analytics/market_metrics.py` (`POST /api/v1/analytics/market-metrics`),
+`get_project_delivery_summary` → `project/delivery.py` (`GET /api/v1/projects/delivery-summary`),
+`get_listing_inventory` → the existing `listing_analytics_from_clickhouse`. They are local Pydantic AI
+tools; no MCP client or server is connected. Results carry the resolved Dubai calendar period,
+coverage (`complete`, `partial`, `unavailable`), eligible count, metric definitions, matched DLD names,
+source/match-status counts, release build time and limitations. Real ClickHouse tests check
+hand-computed values through the operation, the HTTP route and the registered chat agent.
+
+The pulse tool no longer counts mortgages and gifts as sales and now reports real square feet
+(it labelled square metres as sqft). Area ranking excludes non-sales.
+
+| ID | Supported by | Remaining gap and its kind |
+| --- | --- | --- |
+| q01 | metrics: sales, JVC, apartment, `rolling_days` 90, `group_by=price_band` [1m, 2m] | None for counts/shares. |
+| q02 | metrics: sales, Business Bay, bedrooms 2, `previous_quarter`, `group_by=building`, median AED and AED/sqft | Building names: DLD open data names fewer buildings than DXBI-matched rows (data). |
+| q03 | metrics: sales, Downtown Dubai, apartment, 1 bed, p25/p75 | Downtown rows without a master project resolve to DLD area Burj Khalifa (data granularity, disclosed). |
+| q04 | metrics: rentals, JLT, bedrooms 2, `rolling_days` 90, `group_by=contract_version` | Percentage difference is arithmetic on two returned medians. DLD open-data rentals carry no bedrooms; only DXBI-matched or Ejari "Studio" rows qualify, and the count excluded is reported (data). JLT rentals locate only to DLD area Al Thanyah Fifth (data). |
+| q05 | metrics: rentals, Dubai Marina, `min_term_days` 367, annual versus whole-term amounts | Aggregates only; no contract-level list tool (functionality). |
+| q06 | metrics: rentals, Business Bay, studio, `previous_months` 6, `group_by=month` | Same bedroom coverage limit as q04 (data). Uncovered months are null, empty months 0. |
+| q07 | delivery: Dubai South, `scheduled_in_horizon`, 24 months, by developer | Raw DLD developer names; brand grouping is not applied (decision). |
+| q08 | delivery: JVC, by delivery status | None for counts; DLD register only. |
+| q09 | listings: sale, Dubai Hills Estate, one call per bedroom | Medians are t-digest approximations; asking prices from the latest Property Finder snapshot. |
+| q10 | — | No listing-age split or per-listing comparison tool (functionality). |
+| q11 | — | No listing-to-registered-rent comparable join exposed to chat (functionality). |
+| q12–q13 | Partly: rental/sales metrics by building, listing inventory | Unbound `[building]` parameter; rentals name projects rather than buildings in DLD open data (data); no report composer (functionality). |
+| q14 | Partly: last-month sales and rentals, delivery, listing inventory | Report composition and month-over-month narrative are not a tool (functionality); change is withheld when a compared month is partial. |
+| q15 | Partly: delivery dates/units | Unbound project names; payment plans and unit prices need Reelly producers (F02, data); construction progress is DLD `percent_completed` only. |
+
+Bayut: the collector writes raw JSONL evidence only. There is no ClickHouse table, loader, serving
+view or backend consumer, and runs stop on CAPTCHA by design. Bayut inventory is therefore
+unavailable to every capability above until a licensed, validated bronze-to-serving path exists.

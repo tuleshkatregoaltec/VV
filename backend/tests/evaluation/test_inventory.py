@@ -8,6 +8,9 @@ def test_actual_chat_registration_links_to_public_capabilities_and_warehouse():
         "app.chat.tools.get_market_pulse",
         "app.chat.tools.rank_areas",
         "app.chat.tools.get_similar_projects",
+        "app.chat.tools.query_market_metrics",
+        "app.chat.tools.get_listing_inventory",
+        "app.chat.tools.get_project_delivery_summary",
     }
     reachable = set(chat["possible_reachable_functions"])
     assert {
@@ -16,6 +19,10 @@ def test_actual_chat_registration_links_to_public_capabilities_and_warehouse():
         "app.project.service.get_similar_projects",
         "app.project.queries.fetch_similar_projects",
         "app.clickhouse.client.query",
+        "app.analytics.market_metrics.get_market_metrics",
+        "app.analytics.market_metric_queries.fetch_metric_rows",
+        "app.project.delivery.get_delivery_summary",
+        "app.listings.service.listing_analytics_from_clickhouse",
     } <= reachable
     assert "app.listings.service.list_listings_from_clickhouse" not in reachable
     pulse = inventory["functions"]["app.analytics.queries.fetch_market_pulse"]

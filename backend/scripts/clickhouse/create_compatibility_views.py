@@ -89,7 +89,19 @@ VIEW_DDL: Sequence[tuple[str, str]] = (
             row_key,
             run_id,
             scraped_at
-        FROM dld_od_projects_bronze
+        -- One row per DLD project number: the bronze table keeps the Pulse snapshot and
+        -- every open-data snapshot (and repeated rows within one run), which double counted
+        -- projects and units. The latest snapshot wins; open data carries no project_id, so
+        -- the Pulse id is kept for the same project number.
+        FROM (
+            SELECT * REPLACE (
+                if(project_id != 0, project_id, max(project_id) OVER (PARTITION BY project_number))
+                    AS project_id
+            )
+            FROM dld_od_projects_bronze
+            ORDER BY project_number, scraped_at DESC, row_key
+            LIMIT 1 BY project_number
+        )
         """,
     ),
     (
