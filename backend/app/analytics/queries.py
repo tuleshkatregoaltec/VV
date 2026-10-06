@@ -85,7 +85,7 @@ def project_sales_summary(
         FROM ch_transactions
         WHERE {_project_filter(filter_type)}
           AND trans_group_en = 'Sales'
-          AND property_type_en IN ('Unit', 'Villa')
+          AND property_type NOT IN ('Plot', 'Building', '')
           AND property_usage_en = 'Residential'
           AND actual_worth > 0
           {reg_filter}
@@ -106,7 +106,7 @@ def project_sales_by_rooms(
         FROM ch_transactions
         WHERE {_project_filter(filter_type)}
           AND trans_group_en = 'Sales'
-          AND property_type_en IN ('Unit', 'Villa')
+          AND property_type NOT IN ('Plot', 'Building', '')
           AND property_usage_en = 'Residential'
           AND rooms_en IS NOT NULL
           AND actual_worth > 0
@@ -130,7 +130,7 @@ def project_configuration_sales(
             FROM ch_transactions
             WHERE {_project_filter(filter_type)}
               AND trans_group_en = 'Sales'
-              AND property_type_en IN ('Unit', 'Villa')
+              AND property_type NOT IN ('Plot', 'Building', '')
               AND property_usage_en = 'Residential'
               AND rooms_en IS NOT NULL
               AND actual_worth > 0
@@ -178,13 +178,13 @@ def project_configuration_sales(
 def project_sales_by_property_type(filter_type: ProjectScopeType = "project") -> str:
     return f"""
         SELECT
-            property_type_en,
+            property_type AS property_type_en,
             count() as count,
             round(avg(actual_worth), 2) as avg_price
         FROM ch_transactions
         WHERE {_project_filter(filter_type)}
           AND trans_group_en = 'Sales'
-          AND property_type_en IS NOT NULL
+          AND property_type != ''
           AND actual_worth > 0
         GROUP BY property_type_en
         ORDER BY count DESC
@@ -200,7 +200,7 @@ def project_sales_by_reg_type(filter_type: ProjectScopeType = "project") -> str:
         FROM ch_transactions
         WHERE {_project_filter(filter_type)}
           AND trans_group_en = 'Sales'
-          AND property_type_en IN ('Unit', 'Villa')
+          AND property_type NOT IN ('Plot', 'Building', '')
           AND property_usage_en = 'Residential'
           AND reg_type_en IS NOT NULL
         GROUP BY reg_type_en
@@ -549,7 +549,7 @@ def project_price_distribution(
         FROM ch_transactions
         WHERE {project_filter}
           AND trans_group_en = 'Sales'
-          AND property_type_en IN ('Unit', 'Villa')
+          AND property_type NOT IN ('Plot', 'Building', '')
           AND property_usage_en = 'Residential'
           AND rooms_en IS NOT NULL
           AND actual_worth > 0
@@ -573,7 +573,7 @@ def project_price_distribution(
         FROM ch_transactions
         WHERE {project_filter}
           AND trans_group_en = 'Sales'
-          AND property_type_en IN ('Unit', 'Villa')
+          AND property_type NOT IN ('Plot', 'Building', '')
           AND property_usage_en = 'Residential'
           AND actual_worth > 0
           {reg_filter}
@@ -602,7 +602,7 @@ def project_price_trends(
         FROM ch_transactions
         WHERE {_project_filter(filter_type)}
           AND trans_group_en = 'Sales'
-          AND property_type_en IN ('Unit', 'Villa')
+          AND property_type NOT IN ('Plot', 'Building', '')
           AND property_usage_en = 'Residential'
           AND instance_date BETWEEN {{start_date:Date}} AND {{end_date:Date}}
           AND actual_worth > 0
@@ -644,7 +644,7 @@ def project_offplan_price_curve(
         LEFT JOIN ch_projects p ON t.project_name_en = p.project_name_en
         WHERE {project_where}
           AND t.trans_group_en = 'Sales'
-          AND t.property_type_en IN ('Unit', 'Villa')
+          AND t.property_type NOT IN ('Plot', 'Building', '')
           AND t.property_usage_en = 'Residential'
           AND t.reg_type_en = 'Off-Plan Properties'
           AND t.instance_date BETWEEN {{start_date:Date}} AND {{end_date:Date}}
@@ -944,13 +944,13 @@ def sales_summary(
     if master_project is not None:
         where_clauses.append("master_project_en = {master_project:String}")
     if property_type is not None:
-        where_clauses.append("property_type_en = {property_type:String}")
+        where_clauses.append("property_type = {property_type:String}")
     if property_sub_type is not None:
         where_clauses.append("property_sub_type_en = {property_sub_type:String}")
     if rooms is not None:
         where_clauses.append("rooms_en = {rooms:String}")
     if area_name is not None:
-        where_clauses.append("area_name_en = {area_name:String}")
+        where_clauses.append("location_name = {area_name:String}")
     if reg_type is not None:
         where_clauses.append("reg_type_en = {reg_type:String}")
     if price_bucket is not None:
@@ -963,14 +963,14 @@ def sales_summary(
     return f"""
         SELECT
             count() as transaction_count,
-            round(median(actual_worth), 2) as median_price,
+            round(medianExact(actual_worth), 2) as median_price,
             round(avg(actual_worth), 2) as avg_price,
             round(sum(actual_worth), 2) as total_volume,
-            round(median(meter_sale_price), 2) as median_price_per_sqm,
-            round(median(procedure_area), 2) as median_area_sqm,
+            round(medianExact(meter_sale_price), 2) as median_price_per_sqm,
+            round(medianExactIf(size_sqm, size_sqm > 0), 2) as median_area_sqm,
             round(min(actual_worth), 2) as min_price,
             round(max(actual_worth), 2) as max_price,
-            round(avgIf(actual_worth / procedure_area, procedure_area > 0) / 10.7639, 2)
+            round(avgIf(actual_worth / size_sqm, size_sqm > 0) / 10.7639, 2)
                 as avg_price_sqft
         FROM ch_transactions
         WHERE {where_clause}
@@ -1020,9 +1020,9 @@ def price_trends(
     if master_project is not None:
         where_clauses.append("master_project_en = {master_project:String}")
     if property_type is not None:
-        where_clauses.append("property_type_en = {property_type:String}")
+        where_clauses.append("property_type = {property_type:String}")
     if area_name is not None:
-        where_clauses.append("area_name_en = {area_name:String}")
+        where_clauses.append("location_name = {area_name:String}")
 
     where_clause = " AND ".join(where_clauses)
 
@@ -1061,23 +1061,23 @@ def rentals_summary(
     if master_project is not None:
         where_clauses.append("master_project_en = {master_project:String}")
     if property_type is not None:
-        where_clauses.append("ejari_property_type_en = {property_type:String}")
+        where_clauses.append("property_type = {property_type:String}")
     if area_name is not None:
-        where_clauses.append("area_name_en = {area_name:String}")
+        where_clauses.append("location_name = {area_name:String}")
 
     where_clause = " AND ".join(where_clauses)
 
     return f"""
         SELECT
             count() as contract_count,
-            round(median(annual_amount), 2) as median_rent,
+            round(medianExact(annual_amount), 2) as median_rent,
             round(avg(annual_amount), 2) as avg_rent,
             round(sum(annual_amount), 2) as total_annual_value,
-            round(median(annual_amount / nullIf(actual_area, 0)), 2) as median_rent_per_sqm,
-            round(median(actual_area), 2) as median_area_sqm,
+            round(medianExact(annual_amount / nullIf(size_sqm, 0)), 2) as median_rent_per_sqm,
+            round(medianExactIf(size_sqm, size_sqm > 0), 2) as median_area_sqm,
             round(min(annual_amount), 2) as min_rent,
             round(max(annual_amount), 2) as max_rent,
-            round(avgIf(annual_amount / actual_area, actual_area > 0) / 10.7639, 2)
+            round(avgIf(annual_amount / size_sqm, size_sqm > 0) / 10.7639, 2)
                 as avg_rent_sqft
         FROM ch_rent_contracts
         WHERE {where_clause}
@@ -1089,17 +1089,17 @@ GET_MARKET_PULSE_SQL = """
         count(*) as transaction_count,
         round(median(actual_worth), 0) as median_price,
         round(avg(actual_worth), 0) as avg_price,
-        round(median(procedure_area) * 10.7639, 1) as median_area_sqft,
-        round(median(actual_worth / procedure_area) / 10.7639, 0) as median_price_per_sqft,
+        round(median(size_sqm) * 10.7639, 1) as median_area_sqft,
+        round(median(actual_worth / size_sqm) / 10.7639, 0) as median_price_per_sqft,
         min(instance_date) as period_start,
         max(instance_date) as period_end
     FROM ch_transactions
     WHERE
-        area_name_en = {area:String}
+        location_name = {area:String}
         AND trans_group_en = 'Sales'
         AND instance_date >= today() - {period_days:Int32}
         AND actual_worth > 0
-        AND procedure_area > 0
+        AND size_sqm > 0
     """
 
 
@@ -1107,10 +1107,11 @@ async def fetch_market_pulse(parameters: dict):
     return await query(GET_MARKET_PULSE_SQL, parameters)
 
 
-# Ranked by official DLD district (canonical geography; one vocabulary across sources).
+# Ranked by location in the uniform vocabulary (DXBI community names; the names market
+# pulse and the Transactions page filter on).
 RANK_AREAS_VOLUME_SQL = """
         SELECT
-            district_name as area,
+            location_name as area,
             count(*) as transaction_count,
             round(median(actual_worth), 0) as median_price
         FROM ch_transactions
@@ -1118,8 +1119,8 @@ RANK_AREAS_VOLUME_SQL = """
             instance_date >= today() - {period_days:Int32}
             AND trans_group_en = 'Sales'
             AND actual_worth > 0
-            AND district_name != ''
-        GROUP BY district_name
+            AND location_name != ''
+        GROUP BY location_name
         ORDER BY transaction_count DESC
         LIMIT {limit:Int32}
         """
@@ -1127,7 +1128,7 @@ RANK_AREAS_VOLUME_SQL = """
 
 RANK_AREAS_PRICE_SQL = """
         SELECT
-            district_name as area,
+            location_name as area,
             round(median(actual_worth), 0) as median_price,
             count(*) as transaction_count
         FROM ch_transactions
@@ -1135,8 +1136,8 @@ RANK_AREAS_PRICE_SQL = """
             instance_date >= today() - {period_days:Int32}
             AND trans_group_en = 'Sales'
             AND actual_worth > 0
-            AND district_name != ''
-        GROUP BY district_name
+            AND location_name != ''
+        GROUP BY location_name
         HAVING transaction_count >= 10
         ORDER BY median_price DESC
         LIMIT {limit:Int32}
@@ -1147,20 +1148,20 @@ RANK_AREAS_GROWTH_SQL = """
         WITH
             current_period AS (
                 SELECT
-                    district_name as area,
+                    location_name as area,
                     median(actual_worth) as current_median
                 FROM ch_transactions
                 WHERE
                     instance_date >= today() - {period_days:Int32}
                     AND trans_group_en = 'Sales'
                     AND actual_worth > 0
-                    AND district_name != ''
-                GROUP BY district_name
+                    AND location_name != ''
+                GROUP BY location_name
                 HAVING count(*) >= 10
             ),
             previous_period AS (
                 SELECT
-                    district_name as area,
+                    location_name as area,
                     median(actual_worth) as previous_median
                 FROM ch_transactions
                 WHERE
@@ -1168,8 +1169,8 @@ RANK_AREAS_GROWTH_SQL = """
                     AND instance_date < today() - {period_days:Int32}
                     AND trans_group_en = 'Sales'
                     AND actual_worth > 0
-                    AND district_name != ''
-                GROUP BY district_name
+                    AND location_name != ''
+                GROUP BY location_name
                 HAVING count(*) >= 10
             )
         SELECT

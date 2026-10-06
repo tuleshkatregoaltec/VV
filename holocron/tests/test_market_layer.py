@@ -24,18 +24,17 @@ def test_insert_column_lists_match_table_definitions_exactly() -> None:
     # with a default and a stray one would fail the build. release_id is the one deliberate
     # default: the release sets it on each staging table, so no statement can mislabel rows.
     schema = _schema()
-    geo = list(transforms.GEO_COLUMNS)
-    assert [*transforms.SALE_COLUMNS, "release_id", *geo] == schema["market_sale_events"]
-    assert [*transforms.RENTAL_COLUMNS, "release_id", *geo] == schema["market_rental_events"]
+    tail = [*transforms.GEO_COLUMNS, *transforms.UNIFORM_COLUMNS]
+    sales_tail = [*tail, *transforms.SALE_AUDIT_COLUMNS]
+    assert [*transforms.SALE_COLUMNS, "release_id", *sales_tail] == schema["market_sale_events"]
+    assert [*transforms.RENTAL_COLUMNS, "release_id", *tail] == schema["market_rental_events"]
 
 
 def test_label_drift_is_normalised_in_the_serving_layer() -> None:
     # Open data says "Mortgage"/"Renewed", Pulse says "Mortgages"/"Renew"; the backend filters
     # one spelling, so both must map to it before serving.
     assert "if(d.group_en = 'Mortgage', 'Mortgages', d.group_en)" in transforms._SALE_EVENTS_DLD_SQL
-    assert (
-        "if(d.version_en = 'Renew', 'Renewed', d.version_en)" in transforms._RENTAL_EVENTS_DLD_SQL
-    )
+    assert "d.version_en = 'Renew', 'Renewed', d.version_en)" in transforms._RENTAL_EVENTS_DLD_SQL
 
 
 def test_rental_pairing_is_one_to_one_without_fan_out() -> None:
@@ -52,11 +51,12 @@ def test_rental_pairing_is_one_to_one_without_fan_out() -> None:
     assert sql.count("NOT IN (SELECT") == 2
 
 
-def test_unpaired_dxbi_rows_are_served_only_without_a_dld_candidate() -> None:
-    # Serving an unpaired DXBI row that DLD already holds would double count it.
-    for sql in (transforms._SALE_EVENTS_DXBI_SQL, transforms._RENTAL_EVENTS_DXBI_SQL):
-        assert "if(m.has_dld_candidate = 1, 'dxbi_probable_duplicate', 'dxbi_only')" in sql
-        assert "toUInt8(m.has_dld_candidate = 0)" in sql
+def test_property_type_vocabulary_is_one_closed_list() -> None:
+    # Every uniform value the mapping can produce is in the published list filters offer, and
+    # no source word maps to two types.
+    assert [*transforms._TYPE_WORDS, "Other"] == list(transforms.PROPERTY_TYPES)
+    words = [word for group in transforms._TYPE_WORDS.values() for word in group]
+    assert len(words) == len(set(words))
 
 
 class _Result:

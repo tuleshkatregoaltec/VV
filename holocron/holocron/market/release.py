@@ -68,7 +68,9 @@ GROUPS = {
     "market_rental_events": ("market_rental_matches", "market_rental_events"),
 }
 _EVENT_DATE = {
-    "market_sale_events": "toDate(instance_date)",
+    # DLD's registration date where the row has one: instance_date may carry DXBI's date
+    # (one business day earlier on 21% of matched sales), which would read as a lost day.
+    "market_sale_events": "toDate(ifNull(dld_instance_date, instance_date))",
     "market_rental_events": "toDate(registration_date)",
 }
 _GOOD_STATES = {"published", "superseded", "rolled_back"}

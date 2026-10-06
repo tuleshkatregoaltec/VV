@@ -72,7 +72,7 @@ async def test_resolve_transaction_area_uses_master_project_alias(monkeypatch):
     async def fake_query(sql: str, params: dict[str, object]):
         seen["sql"] = sql
         seen["params"] = params
-        return [{"area_name_en": "Marsa Dubai"}]
+        return [{"location_name": "Marsa Dubai"}]
 
     monkeypatch.setattr(chart_queries, "ch_query", fake_query)
 
@@ -106,8 +106,8 @@ async def test_latest_transaction_date_applies_market_filters(monkeypatch):
 
     assert max_date == date(2026, 1, 20)
     assert "property_usage_en = {property_usage:String}" in str(seen["sql"])
-    assert "property_type_en = {property_type:String}" in str(seen["sql"])
-    assert "area_name_en = {area_name:String}" in str(seen["sql"])
+    assert "property_type = {property_type:String}" in str(seen["sql"])
+    assert "location_name = {area_name:String}" in str(seen["sql"])
     assert seen["params"] == {
         "property_usage": "Residential",
         "property_type": "Unit",
@@ -341,7 +341,7 @@ async def test_custom_sales_chart_artifact_uses_agent_selected_dimension_and_met
         "area": None,
         "master_project": "Jumeirah Village Circle",
     }
-    assert "property_type_en AS label" in str(seen["sql"])
+    assert "property_type AS label" in str(seen["sql"])
     assert "round(avg(meter_sale_price), 0) AS value" in str(seen["sql"])
     assert seen["params"]["start_date"] == "2025-11-02"
     assert seen["params"]["end_date"] == "2026-01-31"

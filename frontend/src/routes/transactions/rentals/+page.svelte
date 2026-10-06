@@ -56,7 +56,7 @@ type FilterChip = {
 const RENTAL_COLUMNS = [
 	{ id: 'startDate', label: 'Start Date', align: 'left' as const, defaultVisible: true },
 	{ id: 'endDate', label: 'End Date', align: 'left' as const, defaultVisible: true },
-	{ id: 'area_name', label: 'Area', align: 'left' as const, defaultVisible: false },
+	{ id: 'area_name', label: 'Location', align: 'left' as const, defaultVisible: false },
 	{ id: 'project', label: 'Project', align: 'left' as const, defaultVisible: true },
 	{ id: 'propertyType', label: 'Property Type', align: 'left' as const, defaultVisible: true },
 	{ id: 'propertySubType', label: 'Sub Type', align: 'left' as const, defaultVisible: true },
@@ -69,7 +69,7 @@ const RENTAL_COLUMNS = [
 	},
 	{
 		id: 'area',
-		label: 'Area (sq.m)',
+		label: 'Size (sq.m)',
 		align: 'right' as const,
 		format: (val: number) => val.toLocaleString(),
 		defaultVisible: true
@@ -193,7 +193,7 @@ let filterDefinitions = $derived<FilterDefinition[]>([
 	},
 	{
 		id: 'areaRange',
-		label: 'Area (sq.m)',
+		label: 'Size (sq.m)',
 		type: 'standard',
 		options: [...SALES_AREA_OPTIONS]
 	},
@@ -264,7 +264,7 @@ function buildActiveFilterChips(): FilterChip[] {
 	addSelectedChip(chips, 'Sub type', localFilters.selectedPropertySubType)
 	addSelectedChip(chips, 'Tenant type', localFilters.selectedTenantType)
 	addSelectedChip(chips, 'Registration', localFilters.selectedRegistration)
-	addSelectedChip(chips, 'Area', localFilters.areaRange)
+	addSelectedChip(chips, 'Size', localFilters.areaRange)
 	addSelectedChip(chips, 'Annual rent', localFilters.rentRange)
 
 	return chips

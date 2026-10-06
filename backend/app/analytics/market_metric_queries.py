@@ -30,52 +30,47 @@ class Dataset:
     property_types: dict[str, str]
 
 
+# Capability property types on the uniform property_type column (one list for both datasets
+# and both sources; holocron.market.transforms.PROPERTY_TYPES).
+UNIFORM_PROPERTY_TYPES = {
+    "apartment": "property_type = 'Apartment'",
+    "hotel_apartment": "property_type = 'Hotel Apartment'",
+    "villa": "property_type = 'Villa'",
+    "office": "property_type = 'Office'",
+    "shop": "property_type = 'Shop'",
+    "land": "property_type = 'Plot'",
+}
+
 SALES = Dataset(
     table="ch_transactions",
     release_table="market_sale_events",
     # DLD instance_date is the registration date as recorded (Dubai local time).
     event_date="toDate(instance_date)",
     value="toFloat64(actual_worth)",
-    area_sqm="procedure_area",
+    area_sqm="size_sqm",
     # Achieved sale prices only: mortgages, gifts and zero-value records are not sales.
     eligible="trans_group_en = 'Sales' AND actual_worth > 0",
     bedrooms="rooms_en",
     building="if(building_name_en != '', building_name_en, dxbi_building_name)",
-    property_types={
-        "apartment": "property_sub_type_en = 'Flat'",
-        "hotel_apartment": "property_sub_type_en = 'Hotel Apartment'",
-        "villa": "property_sub_type_en = 'Villa'",
-        "office": "property_sub_type_en = 'Office'",
-        "shop": "property_sub_type_en = 'Shop'",
-        "land": "property_type_en = 'Land'",
-    },
+    property_types=UNIFORM_PROPERTY_TYPES,
 )
 
 RENTALS = Dataset(
     table="ch_rent_contracts",
     release_table="market_rental_events",
-    # A contract is observed when it is registered; start dates can lie in the future.
-    event_date="toDate(registration_date)",
+    # Rentals are dated by contract start on every page (uniform layer); DXBI has no
+    # registration date. Leases starting after the requested period are not in it.
+    event_date="toDate(contract_start_date)",
     # DLD annual_amount is the annualised rent; contract_amount is the whole-term value.
     value="toFloat64(annual_amount)",
-    area_sqm="actual_area",
+    area_sqm="size_sqm",
     eligible="annual_amount > 0 AND contract_end_date > contract_start_date",
-    # DLD open-data rentals carry no bedroom count; DXBI-matched rows and Ejari "Studio"
-    # sub-types do. Rows without either stay unknown ('') and are reported as coverage.
-    bedrooms="""multiIf(
-        bedrooms = 'Studio' OR ejari_property_sub_type_en = 'Studio', 'Studio',
-        match(bedrooms, '^[0-9]+ Beds?$'), concat(extract(bedrooms, '^([0-9]+)'), ' B/R'),
-        '')""",
+    # Uniform label from the market layer: DXBI's count where it has one, Ejari "Studio";
+    # DLD rentals carry no count, so those rows stay unknown ('') and are reported as coverage.
+    bedrooms="rooms_en",
     # DLD rentals name the project (usually the building); DXBI-matched rows name the building.
     building="if(dxbi_building_name != '', dxbi_building_name, project_name_en)",
-    property_types={
-        "apartment": "ejari_property_sub_type_en IN ('Flat', 'Studio')",
-        "hotel_apartment": "ejari_property_sub_type_en = 'Hotel Apartment'",
-        "villa": "ejari_property_sub_type_en IN ('Villa', 'Complex Villas')",
-        "office": "ejari_property_sub_type_en = 'Office'",
-        "shop": "ejari_property_sub_type_en = 'Shop'",
-        "land": "0",
-    },
+    property_types=UNIFORM_PROPERTY_TYPES,
 )
 
 DATASETS = {"sales": SALES, "rentals": RENTALS}

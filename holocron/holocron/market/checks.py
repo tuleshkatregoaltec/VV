@@ -11,7 +11,12 @@ import math
 import operator
 from dataclasses import dataclass
 
-from holocron.market.transforms import DLD_RENTS_BASE, DLD_SALES_BASE, DXBI_SALES_BASE
+from holocron.market.transforms import (
+    DLD_RENTS_BASE,
+    DLD_SALES_BASE,
+    DXBI_SALES_BASE,
+    PROPERTY_TYPES,
+)
 from holocron.contracts import ClickHouseQuery
 
 _OPS = {"==": operator.eq, "<=": operator.le, ">=": operator.ge}
@@ -86,6 +91,42 @@ SELECT if(count() = 0, 0, countIf(area_name_en NOT IN (
        / count())
 FROM {table}
 WHERE match_status = 'dxbi_only'"""
+
+
+def _uniform_vocabulary(table: str) -> str:
+    """Served rows whose uniform type or bedroom label is outside the published vocabulary."""
+    types = ", ".join(f"'{name}'" for name in PROPERTY_TYPES)
+    return (
+        f"SELECT countIf(property_type NOT IN ({types}, ''))"
+        " + countIf(NOT match(rooms_en, '^([0-9]+ B/R|Studio)?$'))"
+        f" FROM {table} WHERE is_served = 1"
+    )
+
+
+def _uniform_checks(prefix: str, table: str, matches: str, loose_key: str, empty: str) -> tuple:
+    return (
+        MarketCheck(
+            name=f"{prefix}_uniform_vocabulary",
+            asset=table,
+            description="Served rows use one property-type list and one bedroom label format.",
+            sql=_uniform_vocabulary(table),
+            op="==",
+            threshold=0,
+        ),
+        MarketCheck(
+            name=f"{prefix}_loose_pairs_hide_one_dld_row_each",
+            asset=table,
+            # A DLD row hidden as dld_probable_duplicate must be standing in for exactly one
+            # served DXBI record; otherwise a hidden row is a silently dropped record.
+            description="Every DLD row hidden in the DXBI period has exactly one served DXBI partner.",
+            sql=f"SELECT abs((SELECT countIf(match_status = 'dld_probable_duplicate') FROM {table})"
+            f" - (SELECT uniqExact({loose_key}) FROM {matches} WHERE {loose_key} != {empty}))"
+            f" + (SELECT countIf({loose_key} != {empty}) - uniqExact({loose_key})"
+            f"    FROM {matches} WHERE {loose_key} != {empty})",
+            op="==",
+            threshold=0,
+        ),
+    )
 
 
 def _geo_vocabulary(table: str) -> str:
@@ -245,6 +286,7 @@ CHECKS: tuple[MarketCheck, ...] = (
         op="<=",
         threshold=0.03,
     ),
+    *_uniform_checks("sale", _SALES, "market_sale_matches", "loose_dld_key", "''"),
     # --- rentals -----------------------------------------------------------------------
     MarketCheck(
         name="rental_served_rows_unique",
@@ -372,4 +414,5 @@ CHECKS: tuple[MarketCheck, ...] = (
         blocking=False,
         needs_dxbi=True,
     ),
+    *_uniform_checks("rental", _RENTALS, "market_rental_matches", "loose_dld_rent_key", "0"),
 )
