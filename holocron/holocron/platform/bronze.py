@@ -24,6 +24,12 @@ from holocron.platform.raw_files import (
 
 _FALSE_STRINGS = {"", "0", "false", "no", "n", "none"}
 _MAX_REPLACE_KEYED_DELETE_BYTES = 200_000
+# A lightweight delete masks the rows at once and drops them at the next merge, instead of the
+# ALTER ... DELETE mutation that rewrites every part holding a matching row. Replacing a 14-day
+# window of dld_od_rents_bronze (48,916 of 10.5M rows) took 62 s as a mutation and 0.2 s this
+# way, with the same rows remaining (docs/data-pipelines/PERFORMANCE.md). Sync = 2 returns
+# only once every replica has applied the mask, so the following insert never overlaps it.
+LIGHTWEIGHT_DELETE = "SETTINGS lightweight_deletes_sync = 2"
 
 
 def validate_raw_manifest(raw_manifest: RawManifest, *, expected_source: str) -> tuple[str, str]:
@@ -100,8 +106,7 @@ def replace_run_rows(
 ) -> None:
     quoted_table = quote_clickhouse_identifier(table)
     clickhouse.command(
-        f"ALTER TABLE {quoted_table} DELETE WHERE run_id = {sql_string(run_id)} "
-        "SETTINGS mutations_sync = 1"
+        f"DELETE FROM {quoted_table} WHERE run_id = {sql_string(run_id)} {LIGHTWEIGHT_DELETE}"
     )
     if rows:
         clickhouse.insert_rows(table=table, rows=rows, column_names=column_names)
@@ -116,9 +121,7 @@ def replace_where_rows(
     column_names: Sequence[str],
 ) -> None:
     quoted_table = quote_clickhouse_identifier(table)
-    clickhouse.command(
-        f"ALTER TABLE {quoted_table} DELETE WHERE {predicate} SETTINGS mutations_sync = 1"
-    )
+    clickhouse.command(f"DELETE FROM {quoted_table} WHERE {predicate} {LIGHTWEIGHT_DELETE}")
     if rows:
         clickhouse.insert_rows(table=table, rows=rows, column_names=column_names)
 
