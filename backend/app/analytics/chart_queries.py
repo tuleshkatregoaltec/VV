@@ -438,9 +438,9 @@ async def fetch_sales_chart_rows(args: dict[str, Any]):
         "transaction_count": "count()",
         "total_volume": "round(sum(actual_worth), 0)",
         "avg_price": "round(avg(actual_worth), 0)",
-        "median_price": "round(median(actual_worth), 0)",
+        "median_price": "round(medianExact(actual_worth), 0)",
         "avg_price_sqft": f"round(avg(meter_sale_price) / {SQM_TO_SQFT}, 0)",
-        "median_price_sqft": f"round(median(meter_sale_price) / {SQM_TO_SQFT}, 0)",
+        "median_price_sqft": f"round(medianExact(meter_sale_price) / {SQM_TO_SQFT}, 0)",
     }
     if metric not in metric_exprs:
         metric = "transaction_count"
@@ -613,8 +613,8 @@ async def fetch_rental_chart_rows(args: dict[str, Any]):
         "contract_count": "count()",
         "total_annual_value": "round(sum(annual_amount), 0)",
         "avg_rent": "round(avg(annual_amount), 0)",
-        "median_rent": "round(median(annual_amount), 0)",
-        "median_rent_sqft": f"round(median(annual_amount / nullIf(size_sqm, 0)) / {SQM_TO_SQFT}, 0)",
+        "median_rent": "round(medianExact(annual_amount), 0)",
+        "median_rent_sqft": f"round(medianExact(annual_amount / nullIf(size_sqm, 0)) / {SQM_TO_SQFT}, 0)",
     }
     if metric not in metric_exprs:
         metric = "contract_count"
@@ -924,7 +924,7 @@ async def fetch_area_yield_chart_rows(args: dict[str, Any]):
             sales AS (
                 SELECT
                     location_name AS area,
-                    median(actual_worth) AS median_sale_price,
+                    medianExact(actual_worth) AS median_sale_price,
                     count() AS sales_count
                 FROM ch_transactions
                 WHERE {" AND ".join(sales_where)}
@@ -934,7 +934,7 @@ async def fetch_area_yield_chart_rows(args: dict[str, Any]):
             rentals AS (
                 SELECT
                     location_name AS area,
-                    median(annual_amount) AS median_annual_rent,
+                    medianExact(annual_amount) AS median_annual_rent,
                     count() AS rental_count
                 FROM ch_rent_contracts
                 WHERE {" AND ".join(rental_where)}

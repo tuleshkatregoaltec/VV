@@ -4,6 +4,7 @@ import { onMount } from 'svelte'
 import type { MarketTrendArtifact } from '$lib/chat/artifacts'
 import { colorTheme } from '$lib/stores/preferences.svelte'
 import { getChartTheme } from '$lib/utils/chartTheme'
+import { perSqft } from '$lib/utils/units'
 
 Chart.register(...registerables)
 
@@ -13,6 +14,19 @@ let canvas = $state<HTMLCanvasElement | undefined>()
 let chart: Chart | null = null
 const resolvedTheme = $derived(colorTheme.resolved)
 const points = $derived(artifact.data?.data ?? [])
+
+// Charts saved in a conversation before the switch to square feet hold per-m² fields.
+type SavedPoint = { avg_price_sqft?: number | null; avg_price_sqm?: number | null }
+function pricePerSqft(point: SavedPoint | undefined): number | null {
+	if (point?.avg_price_sqft != null) return point.avg_price_sqft
+	return point?.avg_price_sqm != null ? perSqft(point.avg_price_sqm) : null
+}
+const changePct = $derived(
+	artifact.data?.avg_price_sqft_change_pct ??
+		(artifact.data as { avg_price_sqm_change_pct?: number | null } | null | undefined)
+			?.avg_price_sqm_change_pct ??
+		null
+)
 
 function formatMoney(value: number | null | undefined): string {
 	const amount = Number(value ?? 0)
@@ -48,7 +62,7 @@ function createChart() {
 			datasets: [
 				{
 					label: 'Avg AED / sq ft',
-					data: points.map((point) => point.avg_price_sqft),
+					data: points.map((point) => pricePerSqft(point)),
 					borderColor: theme.line,
 					backgroundColor: theme.fill,
 					borderWidth: 2,
@@ -127,19 +141,17 @@ $effect(() => {
 			<div class="rounded-md border border-border bg-card p-2.5">
 				<p class="text-[10px] font-semibold uppercase tracking-[0.12em] text-fg-5">Latest / sq ft</p>
 				<p class="mt-1 text-sm font-semibold text-fg-1">
-					{formatNumber(points[points.length - 1]?.avg_price_sqft)}
+					{formatNumber(pricePerSqft(points[points.length - 1]))}
 				</p>
 			</div>
 			<div class="rounded-md border border-border bg-card p-2.5">
 				<p class="text-[10px] font-semibold uppercase tracking-[0.12em] text-fg-5">Change</p>
 				<p
-					class="mt-1 text-sm font-semibold {(artifact.data?.avg_price_sqft_change_pct ?? 0) >= 0
+					class="mt-1 text-sm font-semibold {(changePct ?? 0) >= 0
 						? 'text-success'
 						: 'text-error'}"
 				>
-					{artifact.data?.avg_price_sqft_change_pct == null
-						? '-'
-						: `${artifact.data.avg_price_sqft_change_pct > 0 ? '+' : ''}${artifact.data.avg_price_sqft_change_pct}%`}
+					{changePct == null ? '-' : `${changePct > 0 ? '+' : ''}${changePct}%`}
 				</p>
 			</div>
 		</div>
