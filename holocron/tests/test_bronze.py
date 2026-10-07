@@ -52,3 +52,23 @@ def test_replace_keyed_rows_chunks_large_delete_predicates(
             "column_names": ("property_key", "value"),
         }
     ]
+
+
+def test_dld_times_are_stored_as_written_in_any_machine_timezone(monkeypatch) -> None:
+    # A load run on a machine in London summer time stored 178,502 DLD lease start dates as
+    # 23:00 the day before: the client reads a naive datetime in the machine's timezone.
+    import time
+    from datetime import UTC, datetime
+
+    from holocron.platform.bronze import iso_datetime_or_default, iso_datetime_or_none
+
+    monkeypatch.setenv("TZ", "Europe/London")
+    time.tzset()
+    try:
+        midnight = datetime(2026, 6, 1, tzinfo=UTC).timestamp()
+        assert iso_datetime_or_default("2026-06-01T00:00:00").timestamp() == midnight
+        assert iso_datetime_or_none("2026-06-01T00:00:00").timestamp() == midnight
+        assert iso_datetime_or_default("").timestamp() == 0
+    finally:
+        monkeypatch.undo()
+        time.tzset()
