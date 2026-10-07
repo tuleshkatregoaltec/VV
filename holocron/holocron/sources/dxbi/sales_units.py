@@ -45,7 +45,9 @@ _SOLD_BY = re.compile(
     re.IGNORECASE,
 )
 _SALE_DATE = re.compile(r"(?P<day>\d{1,2}),\s*(?P<month>[A-Za-z]{3})\s*(?P<year>\d{4})")
-_UNIT_NUMBER = re.compile(r"\bNo\.\s*(?P<unit>[A-Za-z0-9][A-Za-z0-9/-]*)", re.IGNORECASE)
+# The last "No. <unit>" of the location text; units can hold spaces ("No. RETAIL 06"), as the
+# sales scraper (dxbi_sales_dynamic_bucket_runner.js) reads them.
+_UNIT_NUMBER = re.compile(r"\bNo\.\s*(?P<unit>[^,]+)", re.IGNORECASE)
 
 
 def normalize_sales_row(payload: dict[str, Any], *, source_file: str = "") -> dict[str, Any] | None:
@@ -179,7 +181,8 @@ def compact_payload(line: str) -> dict[str, Any]:
         return {**record, "location_title": title} if title else record
 
     location_text = str(columns.get("PATH_NAME", {}).get("text") or "")
-    unit_match = _UNIT_NUMBER.search(location_text)
+    units = [match.group("unit").strip() for match in _UNIT_NUMBER.finditer(location_text)]
+    units = [unit for unit in units if unit.lower() != "u-hidden"]
     detail_url = ""
     for column in columns.values():
         for link in column.get("links") or []:
@@ -190,7 +193,7 @@ def compact_payload(line: str) -> dict[str, Any]:
         if detail_url:
             break
     return {
-        "unit_number": unit_match.group("unit") if unit_match else "",
+        "unit_number": units[-1] if units else "",
         "location_text": location_text,
         "amount_text": str(columns.get("TOTAL_PRICE", {}).get("text") or ""),
         "specs_text": str(columns.get("BEDROOM", {}).get("text") or ""),

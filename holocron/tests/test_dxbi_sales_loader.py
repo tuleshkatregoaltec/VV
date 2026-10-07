@@ -117,3 +117,48 @@ def test_a_reloaded_sale_with_a_corrected_building_is_kept_once(database: str) -
         f"SELECT sale_key, building_name FROM {loader.SALES_TABLE} FINAL ORDER BY sale_key"
     ).result_rows == [("k1", "Binghatti Royale"), ("k2", "Tower One")]
     assert loader.remove_superseded_sales(client) == 0
+
+
+@live
+def test_a_complete_rescrape_replaces_its_window(database: str) -> None:  # noqa: F811
+    """August 1-10 came from DXBI's CSV export: no units and some dates a day off, under keys no
+    scraped row shares. DXBI also moves sales between days: on 2026-09-13 (a Sunday) the old load
+    held 29 sales DXBI now dates Monday, and lists none that day. A complete re-scrape of a window
+    must replace all of it, empty days included, and leave other dates alone."""
+    import clickhouse_connect
+
+    loader = _load_script("load_dxbi_sales_units.py")
+    settings = _settings(database)
+    client = clickhouse_connect.get_client(
+        host=settings.clickhouse_host,
+        port=settings.clickhouse_port,
+        username=settings.clickhouse_user,
+        password=settings.clickhouse_password,
+        database=database,
+    )
+    client.command(loader.CREATE_SALES_SQL)
+    columns = ["sale_key", "transaction_date", "unit_number", "building_name", "building_key"]
+    client.insert(
+        loader.SALES_TABLE,
+        [
+            ["csv-1", date(2026, 8, 1), "", "Tower One", "towerone"],
+            ["moved", date(2026, 8, 2), "1503", "15 Cascade", "15cascade"],
+            ["kept", date(2026, 7, 31), "604", "Tower One", "towerone"],
+        ],
+        column_names=columns,
+    )
+    started = loader.load_clock(client)
+    client.insert(
+        loader.SALES_TABLE,
+        [["t-abc", date(2026, 8, 1), "1203", "Tower One", "towerone"]],
+        column_names=columns,
+    )
+
+    removed = loader.replace_window(
+        client, loaded_since=started, first=date(2026, 8, 1), last=date(2026, 8, 2)
+    )
+
+    assert removed == 2
+    assert client.query(
+        f"SELECT sale_key FROM {loader.SALES_TABLE} FINAL ORDER BY sale_key"
+    ).result_rows == [("kept",), ("t-abc",)]

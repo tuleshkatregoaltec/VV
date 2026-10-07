@@ -8,6 +8,7 @@ import gzip
 import logging
 import os
 from collections import Counter
+from datetime import date
 from pathlib import Path
 
 import clickhouse_connect
@@ -396,6 +397,35 @@ def load_files(files: list[Path], *, client, batch_size: int) -> dict[str, int]:
     return {"loaded": loaded, "skipped": skipped, "errors": errors, "without_unit": without_unit}
 
 
+def load_clock(client) -> str:
+    """The server's time to the millisecond, as text so no client time zone touches it."""
+    return str(client.query("SELECT toString(now64(3, 'UTC'))").result_rows[0][0])
+
+
+def replace_window(client, *, loaded_since: str, first: date, last: date) -> int:
+    """Delete rows loaded before ``loaded_since`` dated ``first`` to ``last`` (inclusive).
+
+    For a complete re-scrape of those dates: DXBI's latest listing replaces what was loaded for
+    them before. That includes rows no key ties to the new ones (a CSV-export row without a
+    unit, or a sale without a DXBI link whose building or unit DXBI has since corrected), and
+    sales DXBI has since moved to another day: a day DXBI now lists nothing on is emptied too
+    (2026-09-13: 29 Sunday sales DXBI now dates Monday). Return how many rows were removed.
+    """
+    older = (
+        "loaded_at < toDateTime64({loaded_since:String}, 3, 'UTC') "
+        "AND transaction_date BETWEEN {first:Date} AND {last:Date}"
+    )
+    parameters = {"loaded_since": loaded_since, "first": first, "last": last}
+    stale = int(
+        client.query(
+            f"SELECT count() FROM {SALES_TABLE} WHERE {older}", parameters=parameters
+        ).result_rows[0][0]
+    )
+    if stale:
+        client.command(f"DELETE FROM {SALES_TABLE} WHERE {older}", parameters=parameters)
+    return stale
+
+
 def remove_superseded_sales(client) -> int:
     """Delete the older loads of re-normalised sales; return how many rows were removed."""
     stale = int(client.query(f"SELECT count() FROM ({SUPERSEDED_SALES_SQL})").result_rows[0][0])
@@ -461,6 +491,13 @@ def main() -> None:
     parser.add_argument("--password", default=os.getenv("CLICKHOUSE_PASSWORD", ""))
     parser.add_argument("--batch-size", type=int, default=10_000)
     parser.add_argument("--refresh-matches-only", action="store_true")
+    parser.add_argument(
+        "--replace-window",
+        nargs=2,
+        type=date.fromisoformat,
+        metavar=("FIRST", "LAST"),
+        help="The inputs are a complete scrape of these dates: replace earlier rows on them.",
+    )
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 
@@ -479,8 +516,16 @@ def main() -> None:
         if not files:
             raise SystemExit("No DXB sales JSONL files found")
         logger.info("Discovered %s sales files", len(files))
+        load_started = load_clock(client)
         totals = load_files(files, client=client, batch_size=args.batch_size)
         if not totals["errors"]:
+            if args.replace_window and not totals["loaded"]:
+                raise SystemExit("--replace-window with nothing loaded would empty the window")
+            if args.replace_window:
+                first, last = args.replace_window
+                totals["replaced"] = replace_window(
+                    client, loaded_since=load_started, first=first, last=last
+                )
             client.command(f"OPTIMIZE TABLE {SALES_TABLE} FINAL")
             totals["superseded"] = remove_superseded_sales(client)
         logger.info(

@@ -282,3 +282,26 @@ def test_a_row_cut_off_inside_its_columns_keeps_its_text_fields() -> None:
         "unit_number": "302",
         "location_text": "Tower, Area Ready Apartment, Floor 2",
     }
+
+
+def test_a_unit_number_with_a_space_is_read_whole() -> None:
+    """Shops and offices carry units such as "RETAIL 06" (44,185 sales). Cut at the space, every
+    retail unit in a building read as the same unit "RETAIL"."""
+    payload = compact_payload(
+        json.dumps(
+            {
+                "transaction_type": "sales",
+                "columns": [
+                    {
+                        "id": "PATH_NAME",
+                        "text": (
+                            "Buyer's agent Sobha Solis Tower B, Al Hebiah First Offplan Shop, "
+                            "Floor u-hidden, No. RETAIL 06"
+                        ),
+                    }
+                ],
+            }
+        )
+    )
+
+    assert payload["unit_number"] == "RETAIL 06"
