@@ -3,8 +3,8 @@
 The Transactions pages show DXBI records only (app.transaction.queries). This script recomputes
 the last 365 days in pandas straight from dxbi_sales_unit_events and dxbi_rental_events, with the
 page's rules re-implemented here rather than imported (one row per sale or lease, the location
-spelling, Residential / Commercial grouping, bedroom labels, sizes in sq ft, price per sq ft, half-open
-bands, the date window), and compares the live API with it:
+spelling, Residential / Commercial grouping, bedroom labels, sizes in sq ft (a size no home of its type
+can have is missing), price per sq ft, half-open bands, the date window), and compares the live API with it:
 
 - totals and the first, a middle and the last page of every period (7-365 days) and usage;
 - every field of every compared row;
@@ -57,6 +57,8 @@ PRICE_BANDS = [
 ]
 PRICE_SQFT_BANDS = [(None, 1_000), (1_000, 2_000), (2_000, 3_000), (3_000, None)]
 RENT_BANDS = [(None, 50_000), (50_000, 100_000), (100_000, 200_000), (200_000, None)]
+# The smallest size a home of each type can have (sq ft); a smaller one is shown as missing.
+MIN_HOME_SQFT = {"Apartment": 108, "Hotel Apartment": 108, "Villa": 500, "Townhouse": 500}
 
 
 class Verifier:
@@ -178,10 +180,10 @@ class Verifier:
         sales["status"] = sales.market_status.map({"Offplan": "Off-Plan", "Ready": "Ready"}).fillna(
             ""
         )
-        sales["size"] = [s if s > 0 else None for s in sales.size_sqft]
+        sales["size"] = [_size(s, t) for s, t in zip(sales.size_sqft, sales.property_type)]
         sales["ppsqft"] = [
-            int(round(p / s)) if s > 0 else None
-            for p, s in zip(sales.sale_amount_aed, sales.size_sqft)
+            None if _missing(s) is None else int(round(p / s))
+            for p, s in zip(sales.sale_amount_aed, sales["size"])
         ]
         sales["d"] = pd.to_datetime(sales.transaction_date).dt.date
         return sales
@@ -227,7 +229,7 @@ class Verifier:
         rentals["location"] = rentals.area_name.map(self._location)
         rentals["usage"] = rentals.property_type.map(_usage)
         rentals["beds"] = rentals.bedrooms.map(_bedrooms)
-        rentals["size"] = [s if s > 0 else None for s in rentals.size_sqft]
+        rentals["size"] = [_size(s, t) for s, t in zip(rentals.size_sqft, rentals.property_type)]
         rentals["d"] = pd.to_datetime(rentals.lease_start).dt.date
         return rentals
 
@@ -402,6 +404,10 @@ def _bedrooms(value: str) -> str:
     if not match:
         return ""
     return f"{match.group(1)} Bed" + ("" if match.group(1) == "1" else "s")
+
+
+def _size(size_sqft: float, property_type: str) -> float | None:
+    return size_sqft if size_sqft > 0 and size_sqft >= MIN_HOME_SQFT.get(property_type, 0) else None
 
 
 def _missing(value):

@@ -118,7 +118,7 @@ number. DXBI holds about half of the most recent month's leases.
 | Same place spelled two ways | 5 names (`City of Arabia`, `Dubai islands`, `Dubai Land`, `Al Yufrah1`, `Jumeirah Village Circle Dubai`) | merged as above |
 | Misspellings DXBI uses beside the right name | e.g. `Jumeirah Villlage Circle` (4 sales), `Al Barshaa South 2`, `Al Thanayah 4`, `Nad Al Shiba 1` / `Nad Al Sheba 1`; DXBI also uses both `Marsa Dubai` and `Dubai Marina` | not merged (would be a guess); they show as separate locations |
 | Building names differing only in capitals | 3 (`Serenz by Danube - Tower B` / `TOWER B`, two `Raw District 2` names) | not merged |
-| Implausible sizes | sales under 108 sq ft (10 m²): 289 apartments; leases under 108 sq ft: 8,253 apartments, 1,652 villas; leases over 53,800 sq ft (5,000 m²): 1,044 villas | shown as DXBI records them; their price per sq ft is therefore extreme. Recommendation: treat sizes under 108 sq ft as missing on the page |
+| Implausible sizes | sales under 108 sq ft (10 m²): 289 apartments; leases under 108 sq ft: 8,253 apartments, 1,652 villas; leases over 53,800 sq ft (5,000 m²): 1,044 villas | small sizes are shown as missing since 2026-10-07 (see "Sizes no home can have" below); the large villa leases are still shown as DXBI records them |
 | DXBI's own price per sq ft uses built-up area for some villas | 3,235 villas | the page divides by DXBI's size, so for these villas its price per sq ft differs from DXBI's listing |
 | Missing values | sales: project 89%, unit 2%; leases: building 66%, project 88%, bedrooms 34%, unit 7% | shown as `-` |
 
@@ -131,3 +131,34 @@ units and the feasibility workbook keeps its model in m²; both convert where th
 shows them. After the change the verifier above passed again (358 checks, 0 failures), and a browser
 sweep of every page (Dashboard, Transactions, Analytics, Radar, Projects, Upcoming, Developers,
 Listings, CRM, Profile, and every Feasibility sheet on a fixture study) found no square-metre text.
+
+## Sizes no home can have (2026-10-07)
+
+Apartments and hotel apartments under 108 sq ft (10 m²) and villas and townhouses under 500 sq ft
+have no size and no price per sq ft, on the Transactions pages and in the combined layer behind
+Analytics and the chatbot. Their price, rent, date and every other field are kept. Other types
+(offices, shops, partitions) keep any size: small business-centre leases are real.
+
+What these sizes are, measured on the local copy:
+
+- **A placeholder.** DLD's rent register records 1 m² on 139,381 apartment and 45,456 villa leases
+  before 2025. DXBI shows the same placeholder converted, 11 sq ft (1 m² = 10.76 sq ft), on 18,394
+  leases; other leases of the same units are ~1,100 sq ft at the same rent. These are not square
+  metres to convert: the true size is unknown.
+- **Hotel-room registrations.** Both DLD and DXBI list most Ciel studios at ~9 m² (~90 sq ft) and
+  some Sky Bay Hotel and The First Collection rooms at 9-14 m², while other rooms in the same
+  buildings are 300-400 sq ft.
+- **Part shares.** A few hundred sales of a share of a unit, where price and size are both a
+  fraction.
+- About 350 leases look like m² typed as sq ft (×10.76 matches another lease of the same unit);
+  they fall under the floor and show no size.
+
+Effect, last 12 months, combined layer (projected on the served rows; rebuilding the layer can also
+fill a placeholder with DLD's real size for the same lease): average rent per sq ft 167 → 90 AED
+for apartments and 647 → 69 AED for villas; by area, for example, Al Nahda 2 545 → 55 and Mirdif
+520 → 50. Medians barely move (apartments 78 → 77). Sales move little (hotel apartments 2,578 →
+2,500); Ciel itself trades at ~6,000 AED/sq ft even for its 300-400 sq ft rooms.
+
+The rule is `MIN_HOME_SQFT` in `holocron/holocron/market/transforms.py` and `_REAL_SIZE` in
+`backend/app/transaction/queries.py`; the verifier re-implements it and passed again (358 checks,
+0 failures).
