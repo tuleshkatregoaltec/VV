@@ -53,6 +53,23 @@ def test_cleanup_never_drops_a_staging_name_that_holds_another_release() -> None
     assert client.commands == ["DROP TABLE IF EXISTS `market_sale_matches__staging_new`"]
 
 
+def test_only_named_failures_with_a_reason_are_accepted() -> None:
+    # A deliberate date correction moves leases between days and trips the day-loss guard;
+    # the operator accepts that one failure by name, and every other failure still blocks.
+    failures = [
+        "days_lost=1 (first: 2026-04-11: 69 of 352)",
+        "rental_dxbi_only_share=0.06 (needs <= 0.05)",
+    ]
+    blocking, accepted = release.accepted_failures(
+        failures, {"days_lost": "DLD dates corrected", "served_rows": "not failing"}
+    )
+    assert blocking == ["rental_dxbi_only_share=0.06 (needs <= 0.05)"]
+    assert accepted == ["accepted days_lost=1 (first: 2026-04-11: 69 of 352): DLD dates corrected"]
+    # No reason, no acceptance; no names, nothing accepted.
+    assert release.accepted_failures(failures, {"days_lost": "  "}) == (failures, [])
+    assert release.accepted_failures(failures, None) == (failures, [])
+
+
 # --- real ClickHouse -----------------------------------------------------------------------
 
 _LIVE = os.environ.get("HOLOCRON_CLICKHOUSE_INTEGRATION") == "1"

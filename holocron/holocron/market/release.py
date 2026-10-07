@@ -35,7 +35,7 @@ import math
 import os
 import re
 import socket
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
@@ -485,6 +485,27 @@ def _release_coverage(
 # --- publication ----------------------------------------------------------------------------
 
 
+def accepted_failures(
+    failures: list[str], accept: Mapping[str, str] | None
+) -> tuple[list[str], list[str]]:
+    """Split failures into (still blocking, accepted by an operator with a reason).
+
+    A failure is accepted only by its exact name (the text before '=') and only with a
+    non-empty reason, e.g. after a deliberate correction of source dates moves rows between
+    days. Every other failure still rejects the release; accepted ones are recorded.
+    """
+    reasons = {name: why.strip() for name, why in (accept or {}).items() if why.strip()}
+    blocking: list[str] = []
+    accepted: list[str] = []
+    for failure in failures:
+        name = failure.split("=", 1)[0]
+        if name in reasons:
+            accepted.append(f"accepted {failure}: {reasons[name]}")
+        else:
+            blocking.append(failure)
+    return blocking, accepted
+
+
 def publish_validated(
     *,
     clickhouse: ClickHouseClient,
@@ -493,6 +514,7 @@ def publish_validated(
     checks: tuple[MarketCheck, ...],
     owner: str | None = None,
     depends_on: tuple[str, ...] = (),
+    accept: Mapping[str, str] | None = None,
 ) -> dict[str, int | str]:
     owner = owner or _owner()
     with release_lock(clickhouse, owner=owner):
@@ -538,8 +560,9 @@ def publish_validated(
                 checks=checks,
                 has_dxbi=dxbi_input_rows(clickhouse, served_table) > 0,
             )
+            failures, accepted = accepted_failures(failures, accept)
             if failures:
-                detail = "; ".join(failures)
+                detail = "; ".join(failures + accepted)
                 _record(clickhouse, entry, state="rejected", checks_json=json.dumps(results),
                         served_rows=served_rows, detail=detail)  # fmt: skip
                 raise MarketReleaseRejected(
@@ -548,7 +571,7 @@ def publish_validated(
                 )
 
             _record(clickhouse, entry, state="publishing", checks_json=json.dumps(results),
-                    served_rows=served_rows)  # fmt: skip
+                    served_rows=served_rows, detail="; ".join(accepted))  # fmt: skip
             # The pinnable immutable version exists before the release can be read at all.
             _snapshot(
                 clickhouse,
@@ -588,7 +611,10 @@ def _checks_for(asset: str) -> tuple[MarketCheck, ...]:
 
 
 def materialize_market_sale_events(
-    *, clickhouse: ClickHouseClient, owner: str | None = None
+    *,
+    clickhouse: ClickHouseClient,
+    owner: str | None = None,
+    accept: Mapping[str, str] | None = None,
 ) -> dict[str, int | str]:
     return publish_validated(
         clickhouse=clickhouse,
@@ -604,11 +630,15 @@ def materialize_market_sale_events(
         served_table="market_sale_events",
         checks=_checks_for("market_sale_events"),
         owner=owner,
+        accept=accept,
     )
 
 
 def materialize_market_rental_events(
-    *, clickhouse: ClickHouseClient, owner: str | None = None
+    *,
+    clickhouse: ClickHouseClient,
+    owner: str | None = None,
+    accept: Mapping[str, str] | None = None,
 ) -> dict[str, int | str]:
     return publish_validated(
         clickhouse=clickhouse,
@@ -624,6 +654,7 @@ def materialize_market_rental_events(
         owner=owner,
         # Rental areas are learned from the served sales release; the lock keeps it fixed.
         depends_on=("market_sale_events",),
+        accept=accept,
     )
 
 
