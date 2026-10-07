@@ -804,7 +804,8 @@ async def get_sales_analytics(
         logger.error(f"Error executing sales analytics query: {str(e)}")
         result = []
 
-    if not result:
+    # An aggregate over no sales is one row with a zero count and NaN averages (not JSON).
+    if not result or not result[0].get("transaction_count"):
         # Return empty analytics response
         summary = AnalyticsSummary(
             transaction_count=0,
@@ -909,7 +910,8 @@ async def get_rental_analytics(
         property_type=property_type,
     )
 
-    if not result:
+    # An aggregate over no leases is one row with a zero count and NaN averages (not JSON).
+    if not result or not result[0].get("contract_count"):
         # Return empty rental analytics response
         summary = RentalSummary(
             contract_count=0,
