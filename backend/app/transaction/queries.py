@@ -89,6 +89,7 @@ _REAL_SIZE = """(size_sqft > 0 AND size_sqft >= multiIf(
         property_type IN ('Villa', 'Townhouse'), 500,
         property_type IN ('Apartment', 'Hotel Apartment'), 108, 0))"""
 
+
 def _sales_source(date_clause: str) -> str:
     """One row per DXBI sale, in DXBI's own units: sizes in sq ft, prices in AED.
 
