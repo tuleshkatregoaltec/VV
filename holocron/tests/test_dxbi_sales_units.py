@@ -1,3 +1,4 @@
+import json
 from datetime import date
 
 from holocron.sources.dxbi.sales_units import compact_payload, location_key, normalize_sales_row
@@ -161,3 +162,123 @@ def test_plot_rows_without_market_status_keep_their_area_and_type() -> None:
     apartment = plot("Binghatti Hillcrest, Arjan Offplan Apartment, Floor 3, No. 301")
     assert (apartment["property_type"], apartment["market_status"]) == ("Apartment", "Offplan")
     assert (apartment["building_name"], apartment["area_name"]) == ("Binghatti Hillcrest", "Arjan")
+
+
+def test_a_sale_dxbi_lists_without_its_unit_is_kept() -> None:
+    """DXBI hides the unit of some sales (114,466 from 2014 to 2026, audit leak L1). DXBInteract
+    still counts them, and dropping them left our sales totals about 10% short."""
+    hidden = normalize_sales_row(
+        {
+            "unit_number": "u-hidden",
+            "location_text": "Burj Vista Tower 1, Downtown Dubai Ready Apartment, Floor u-hidden",
+            "amount_text": "AED 3,100,000 (+27%) AED 2,113 /sqft",
+            "specs_text": "1,467 sqft 2 Beds",
+            "date_text": "31, Aug 2026 Individual (1 Time)",
+        }
+    )
+    assert hidden is not None
+    assert (hidden["unit_number"], hidden["building_name"], hidden["area_name"]) == (
+        "",
+        "Burj Vista Tower 1",
+        "Downtown Dubai",
+    )
+    assert (hidden["property_type"], hidden["sale_amount_aed"]) == ("Apartment", 3_100_000)
+
+    # A whole building has no floor or unit, so its type ends the location text.
+    building = normalize_sales_row(
+        {
+            "unit_number": "",
+            "location_text": "Emaar Square 3, Downtown Dubai Ready Building",
+            "amount_text": "AED 725,000,000 (+44%) AED 1,914 /sqft",
+            "specs_text": "378,885 sqft",
+            "date_text": "27, Aug 2026 Individual (2 Times)",
+        }
+    )
+    assert building is not None
+    assert (building["building_name"], building["area_name"]) == (
+        "Emaar Square 3",
+        "Downtown Dubai",
+    )
+    assert (building["property_type"], building["market_status"]) == ("Building", "Ready")
+
+
+def _location_cell(title: str, text: str) -> dict:
+    # The location cell as DXBI's sales report renders it (row HTML read on 2026-10-07).
+    return {
+        "id": "PATH_NAME",
+        "text": text,
+        "html": (
+            '<div class="margin-left-sm locationsPath">\n<a href="/sold/t-abc">\n'
+            f'<span class="bold-title" title="{title}">\n    {title} </span>\n'
+            '<p title="Ready Apartment">\n    <span class="bg-ready">Ready</span> Apartment'
+            '<span class="u-hidden padding-none">, Floor u-hidden</span>'
+            '<span class="lock-access 1203">, No. 1203</span>\n</p>\n</a>\n</div>'
+        ),
+    }
+
+
+def test_the_location_dxbi_shows_wins_over_an_agent_name_glued_to_the_building() -> None:
+    """The cell's text also holds what DXBI hides on screen, such as the buyer's agent's name
+    right before the building: "Hajar Binghatti Royale" for DXBI's "Binghatti Royale" (about 2% of
+    sales since 2022). The title attribute holds the location DXBI shows."""
+    text = (
+        "Buyer's agent Hajar Binghatti Royale, Jumeirah Village Circle (JVC) Ready Apartment, "
+        "Floor u-hidden, No. 1203"
+    )
+    line = json.dumps(
+        {
+            "transaction_type": "sales",
+            "bucket_date": "2026-06-20",
+            "unit_number": "1203",
+            "location_text": text,
+            "amount_text": "AED 1,050,000 (+5%) AED 1,500 /sqft",
+            "specs_text": "700 sqft 1 Bed",
+            "date_text": "20, Jun 2026 Individual (2 Times)",
+            "detail_url": "https://dxbinteract.com/sold/t-abc",
+            "columns": [
+                _location_cell("Binghatti Royale, Jumeirah Village Circle (JVC)", text),
+                {"id": "TOTAL_PRICE", "text": "AED 1,050,000 (+5%) AED 1,500 /sqft", "html": ""},
+            ],
+        }
+    )
+
+    event = normalize_sales_row(compact_payload(line))
+
+    assert event is not None
+    assert (event["building_name"], event["building_key"]) == (
+        "Binghatti Royale",
+        "binghattiroyale",
+    )
+    assert (event["area_name"], event["unit_number"]) == ("Jumeirah Village Circle", "1203")
+    assert (event["property_type"], event["market_status"], event["agent_side"]) == (
+        "Apartment",
+        "Ready",
+        "buyer",
+    )
+
+    escaped = compact_payload(
+        json.dumps(
+            {
+                "transaction_type": "sales",
+                "columns": [
+                    _location_cell(
+                        "Seven Hotel &amp; Apartments The Palm - A, Palm Jumeirah",
+                        "Seven Hotel & Apartments The Palm - A, Palm Jumeirah Ready Apartment",
+                    )
+                ],
+            }
+        )
+    )
+    assert escaped["location_title"] == "Seven Hotel & Apartments The Palm - A, Palm Jumeirah"
+
+
+def test_a_row_cut_off_inside_its_columns_keeps_its_text_fields() -> None:
+    payload = compact_payload(
+        '{"unit_number":"302","location_text":"Tower, Area Ready Apartment, Floor 2",'
+        '"columns":[{"id":"PATH_NAME","html":"<span cla'
+    )
+
+    assert payload == {
+        "unit_number": "302",
+        "location_text": "Tower, Area Ready Apartment, Floor 2",
+    }

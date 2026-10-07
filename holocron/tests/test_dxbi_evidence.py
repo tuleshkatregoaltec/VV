@@ -83,9 +83,12 @@ def test_raw_files_are_archived_with_checksums_before_loading(tmp_path: Path) ->
 
 def test_loader_accounting_is_parsed_so_dropped_rows_stay_measurable() -> None:
     sales = evidence.parse_loader_output(
-        "sales", "INFO Sales load complete loaded=120 skipped=15 errors=0"
+        "sales",
+        "INFO Sales load complete loaded=120 skipped=15 errors=0 without_unit=30 superseded=4",
     )
     assert (sales.rows_loaded, sales.rows_skipped, sales.rows_rejected) == (120, 15, 0)
+    assert sales.details["without_unit"] == 30
+    assert sales.details["superseded"] == 4
     rentals = evidence.parse_loader_output(
         "rentals",
         'INFO Complete {"loaded_contracts": 90, "out_of_scope_rows": 4, '

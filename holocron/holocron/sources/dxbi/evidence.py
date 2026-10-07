@@ -114,7 +114,9 @@ def parse_loader_output(report: str, output: str) -> LoaderResult:
     """Read the loaders' own accounting lines.
 
     Rentals log ``Complete {json totals}``; sales log
-    ``Sales load complete loaded=N skipped=N errors=N`` (skipped = hidden unit, leak L1).
+    ``Sales load complete loaded=N skipped=N errors=N without_unit=N superseded=N``: skipped rows
+    lack a location, date, size or price; ``without_unit`` sales are loaded with DXBI's unit
+    hidden; ``superseded`` rows are older loads of sales a later load re-normalised.
     """
     if report == "rentals":
         match = re.search(r"Complete (\{.*\})", output)
@@ -126,13 +128,16 @@ def parse_loader_output(report: str, output: str) -> LoaderResult:
             rows_rejected=int(totals.get("quarantined_rows", 0)),
             details=totals,
         )
-    match = re.search(r"Sales load complete loaded=(\d+) skipped=(\d+) errors=(\d+)", output)
-    loaded, skipped, errors = (int(value) for value in match.groups()) if match else (0, 0, 0)
+    match = re.search(r"Sales load complete ((?:\w+=\d+\s*)+)", output)
+    totals = {
+        name: int(value)
+        for name, value in re.findall(r"(\w+)=(\d+)", match.group(1) if match else "")
+    }
     return LoaderResult(
-        rows_loaded=loaded,
-        rows_skipped=skipped,
-        rows_rejected=errors,
-        details={"loaded": loaded, "skipped_hidden_or_no_unit": skipped, "errors": errors},
+        rows_loaded=totals.get("loaded", 0),
+        rows_skipped=totals.get("skipped", 0),
+        rows_rejected=totals.get("errors", 0),
+        details=totals,
     )
 
 

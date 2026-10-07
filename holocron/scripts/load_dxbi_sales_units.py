@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Load unit-bearing DXB sales rows and match them to rental candidates."""
+"""Load DXB sales rows and match the unit-bearing ones to rental candidates."""
 
 from __future__ import annotations
 
@@ -7,6 +7,7 @@ import argparse
 import gzip
 import logging
 import os
+from collections import Counter
 from pathlib import Path
 
 import clickhouse_connect
@@ -142,7 +143,8 @@ matched AS (
         AND s.bedrooms = c.bedrooms
         AND s.size_key = c.size_key
     WHERE
-        s.sale_amount_aed BETWEEN c.purchase_price_aed * 0.985 AND c.purchase_price_aed * 1.015
+        s.unit_number != ''
+        AND s.sale_amount_aed BETWEEN c.purchase_price_aed * 0.985 AND c.purchase_price_aed * 1.015
 ),
 grouped AS (
     SELECT
@@ -258,6 +260,16 @@ SELECT
 FROM grouped
 WHERE matching_units > 1
 """
+# Older loads of a sale that a later load re-normalised. The table's sort key holds the building
+# and size, so FINAL keeps both versions when a later load changes them (DXBI's own building name
+# replacing one with an agent's name glued to it, for example), and anything that counts rows
+# would count the sale twice.
+SUPERSEDED_SALES_SQL = """
+SELECT sale_key, arrayJoin(arrayPopFront(arrayReverseSort(groupUniqArray(loaded_at)))) AS older
+FROM dxbi_sales_unit_events
+GROUP BY sale_key
+HAVING uniqExact(loaded_at) > 1
+"""
 SALES_ALTERS = [
     "ALTER TABLE dxbi_sales_unit_events ADD COLUMN IF NOT EXISTS address_normalization_version UInt8 DEFAULT 0 AFTER area_key",
     "ALTER TABLE dxbi_sales_unit_events ADD COLUMN IF NOT EXISTS market_status LowCardinality(String) DEFAULT '' AFTER property_type",
@@ -324,28 +336,43 @@ def discover_files(inputs: list[Path]) -> list[Path]:
     return sorted(files)
 
 
-def load_files(files: list[Path], *, client, batch_size: int) -> tuple[int, int, int]:
-    loaded = skipped = errors = 0
+def load_files(files: list[Path], *, client, batch_size: int) -> dict[str, int]:
+    """Load sales rows; the counts say how many were loaded, without a unit, skipped or bad.
+
+    A sale DXBI lists without its unit or link is keyed by its terms. Two such sales with the
+    same date, building, price and size in one search result are two sales, so the second and
+    later ones get their position as a suffix. The scraper splits a day by price, so one sale can
+    appear in two neighbouring searches; counting within a search keeps it one sale.
+    """
+    loaded = skipped = errors = without_unit = 0
     batch: list[list[object]] = []
     for index, path in enumerate(files, start=1):
         opener = gzip.open if path.name.endswith(".gz") else open
+        seen_in_search: Counter[tuple[object, ...]] = Counter()
         try:
             with opener(path, "rt", encoding="utf-8") as handle:
                 for line in handle:
-                    if '"unit_number":""' in line or '"unit_number":"u-hidden"' in line:
-                        skipped += 1
-                        continue
                     try:
-                        event = normalize_sales_row(
-                            compact_payload(line),
-                            source_file=path.name,
-                        )
+                        payload = compact_payload(line)
+                        event = normalize_sales_row(payload, source_file=path.name)
                     except (TypeError, ValueError):
                         errors += 1
                         continue
                     if not event:
                         skipped += 1
                         continue
+                    if not event["unit_number"]:
+                        without_unit += 1
+                        if not event["detail_url"]:
+                            search = (
+                                payload.get("bucket_date"),
+                                payload.get("bucket_min_price"),
+                                payload.get("bucket_max_price"),
+                                event["sale_key"],
+                            )
+                            seen_in_search[search] += 1
+                            if seen_in_search[search] > 1:
+                                event["sale_key"] += f"-{seen_in_search[search]}"
                     batch.append([event[column] for column in COLUMNS])
                     if len(batch) >= batch_size:
                         client.insert(SALES_TABLE, batch, column_names=COLUMNS)
@@ -366,7 +393,17 @@ def load_files(files: list[Path], *, client, batch_size: int) -> tuple[int, int,
     if batch:
         client.insert(SALES_TABLE, batch, column_names=COLUMNS)
         loaded += len(batch)
-    return loaded, skipped, errors
+    return {"loaded": loaded, "skipped": skipped, "errors": errors, "without_unit": without_unit}
+
+
+def remove_superseded_sales(client) -> int:
+    """Delete the older loads of re-normalised sales; return how many rows were removed."""
+    stale = int(client.query(f"SELECT count() FROM ({SUPERSEDED_SALES_SQL})").result_rows[0][0])
+    if stale:
+        client.command(
+            f"DELETE FROM {SALES_TABLE} WHERE (sale_key, loaded_at) IN ({SUPERSEDED_SALES_SQL})"
+        )
+    return stale
 
 
 def refresh_matches(
@@ -442,11 +479,15 @@ def main() -> None:
         if not files:
             raise SystemExit("No DXB sales JSONL files found")
         logger.info("Discovered %s sales files", len(files))
-        loaded, skipped, errors = load_files(files, client=client, batch_size=args.batch_size)
-        logger.info("Sales load complete loaded=%s skipped=%s errors=%s", loaded, skipped, errors)
-        if errors:
+        totals = load_files(files, client=client, batch_size=args.batch_size)
+        if not totals["errors"]:
+            client.command(f"OPTIMIZE TABLE {SALES_TABLE} FINAL")
+            totals["superseded"] = remove_superseded_sales(client)
+        logger.info(
+            "Sales load complete %s", " ".join(f"{name}={value}" for name, value in totals.items())
+        )
+        if totals["errors"]:
             raise SystemExit("Sales import had errors; completed-run markers must not advance")
-        client.command(f"OPTIMIZE TABLE {SALES_TABLE} FINAL")
     refresh_matches(client)
 
 
