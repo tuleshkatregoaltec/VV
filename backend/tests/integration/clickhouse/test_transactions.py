@@ -23,6 +23,7 @@ SALE_COLUMNS = (
     "bedrooms",
     "size_sqft",
     "sale_amount_aed",
+    "price_per_sqft_aed",
     "detail_url",
     "loaded_at",
 )
@@ -71,6 +72,7 @@ def sale(key: str, **values) -> list:
         "bedrooms": "1 Bed",
         "size_sqft": 800.0,
         "sale_amount_aed": 1_600_000,
+        "price_per_sqft_aed": None,
         "detail_url": f"https://dxbinteract.com/sold/{key}",
         "loaded_at": LOADED,
         **values,
@@ -128,7 +130,7 @@ async def dxbi(warehouse, install_serving):
     return insert
 
 
-async def test_each_dxbi_sale_appears_once_with_its_unit_in_square_metres(dxbi):
+async def test_each_dxbi_sale_appears_once_with_its_unit_in_square_feet(dxbi):
     await dxbi(
         sales=[
             sale("plain", unit_number="1904"),
@@ -182,6 +184,37 @@ async def test_each_dxbi_sale_appears_once_with_its_unit_in_square_metres(dxbi):
     assert second_page.total == 5
     assert not {r.transaction_id for r in second_page.transactions} & {
         r.transaction_id for r in first_two.transactions
+    }
+
+
+async def test_size_and_price_per_sqft_are_the_figures_dxbi_shows(dxbi):
+    # The page mirrors DXBInteract: DXBI prices this villa per sq ft of built-up area (AED 3,710),
+    # not per sq ft of the 20,224 sq ft it shows (AED 2,225), and lists a Ciel hotel room at
+    # 86 sq ft. Both are shown as DXBI shows them; a sale without DXBI's figure gets price / size.
+    await dxbi(
+        sales=[
+            sale(
+                "villa",
+                building_key="frondo",
+                property_type="Villa",
+                size_sqft=20_224.0,
+                sale_amount_aed=45_000_000,
+                price_per_sqft_aed=3_710.0,
+            ),
+            sale("hotel-room", building_key="ciel", size_sqft=86.0, sale_amount_aed=675_000),
+            sale("no-size", building_key="plot", size_sqft=0.0),
+        ]
+    )
+
+    page = await service.fetch_sales_transactions(SalesFilters(timeframe_days=30), 30, 0)
+
+    shown = {
+        row.transaction_id: (row.size_sqft, row.price_per_sqft_aed) for row in page.transactions
+    }
+    assert shown == {
+        "villa": (20_224.0, 3_710),
+        "hotel-room": (86.0, 7_849),  # 675,000 / 86
+        "no-size": (None, None),
     }
 
 
@@ -255,11 +288,14 @@ async def test_numbered_units_hold_one_copy_of_a_lease_and_unnumbered_rows_all_c
             lease("lease-1"),
             # The report repeated the row while paging: same unit, dates, amount and state.
             lease("lease-1-repeat", occurrence_index=2),
+            # DXBI's other report view lists the same lease without its unit: it is lease-1.
+            lease("lease-1-unitless", unit_number="", filter_profile_id="default"),
             # Another unit on the same lease terms is another lease.
             lease("lease-2", unit_number="1102"),
-            # Identical rows without a unit number cannot be told apart: all are kept.
-            lease("hidden-1", unit_number=""),
-            lease("hidden-2", unit_number="", occurrence_index=2),
+            # Identical rows without a unit number that match no numbered lease cannot be told
+            # apart: all are kept.
+            lease("hidden-1", unit_number="", size_sqft=900.0),
+            lease("hidden-2", unit_number="", size_sqft=900.0, occurrence_index=2),
             lease("starts-today", lease_start=TODAY, unit_number="9"),
             lease("starts-30-days-ago", lease_start=TODAY - timedelta(days=30), unit_number="8"),
             lease("starts-next-week", lease_start=TODAY + timedelta(days=7), unit_number="7"),

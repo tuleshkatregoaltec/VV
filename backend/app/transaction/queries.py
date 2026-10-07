@@ -81,14 +81,6 @@ _LOCATION = r"""multiIf(
         location_spelling.1, location_spelling.2, area_name))"""
 
 
-# A size no real home has is shown as missing (2026-10-06). DXBI writes 11 sq ft as a placeholder
-# on 18,394 leases (other leases of the same units are ~1,100 sq ft at the same rent) and lists
-# hotel rooms such as Ciel at ~90 sq ft (DLD registers ~9 m^2); their price or rent per sq ft is
-# 4-40x the building's. Floors: apartments 108 sq ft (10 m^2), villas and townhouses 500 sq ft.
-_REAL_SIZE = """(size_sqft > 0 AND size_sqft >= multiIf(
-        property_type IN ('Villa', 'Townhouse'), 500,
-        property_type IN ('Apartment', 'Hotel Apartment'), 108, 0))"""
-
 def _sales_source(date_clause: str) -> str:
     """One row per DXBI sale, in DXBI's own units: sizes in sq ft, prices in AED.
 
@@ -98,6 +90,10 @@ def _sales_source(date_clause: str) -> str:
     more complete listing wins (location, bedrooms and status present, then the shorter building
     name). A sale loaded both from a CSV export (no DXBI link) and from a scrape has two keys; one
     real unit sold on the same day at the same price is one sale.
+
+    Size and price per sq ft are DXBI's own figures, as DXBInteract shows them (decision
+    2026-10-07). For some villas DXBI divides the price by the built-up area rather than the size
+    it shows; only a sale without DXBI's figure gets price / size.
     """
     same_sale = (
         "if(match(unit_number, '[0-9]'), concat(building_key, '|', unit_number, '|', "
@@ -117,9 +113,11 @@ def _sales_source(date_clause: str) -> str:
             {_BEDROOMS} AS bedrooms,
             multiIf(market_status = 'Offplan', 'Off-Plan', market_status = 'Ready', 'Ready', '')
                 AS status,
-            if({_REAL_SIZE}, size_sqft, NULL) AS size_sqft,
+            if(size_sqft > 0, size_sqft, NULL) AS size_sqft,
             sale_amount_aed AS price_aed,
-            if({_REAL_SIZE}, toInt64(round(sale_amount_aed / size_sqft)), NULL) AS price_per_sqft
+            multiIf(price_per_sqft_aed > 0, toInt64(round(price_per_sqft_aed)),
+                    size_sqft > 0, toInt64(round(sale_amount_aed / size_sqft)), NULL)
+                AS price_per_sqft
         FROM (
             SELECT *, {same_sale} AS same_sale
             FROM (
@@ -141,9 +139,16 @@ def _rentals_source(date_clause: str) -> str:
 
     DXBI lists a multi-unit lease once per unit. Its report can also repeat one row (identical
     unit, dates, amount and state, same raw fingerprint) when paging shifts during a scrape: a
-    numbered unit cannot hold two identical leases, so those collapse to one. Identical rows
-    without a unit number cannot be told apart and are all kept.
+    numbered unit cannot hold two identical leases, so those collapse to one. DXBI also lists
+    some leases both with their unit number and without it (two report views): a lease without
+    a unit whose area, type, bedrooms, size, dates, amount and state equal a numbered lease's is
+    that lease (2026-10-07: 90 of Business Bay's 2,121 leases in June 2026). Other identical
+    rows without a unit number cannot be told apart and are all kept.
     """
+    lease_terms = (
+        "cityHash64(area_name, property_type, bedrooms, size_sqft, lease_start, lease_end, "
+        "contract_amount_aed, contract_state)"
+    )
     same_lease = (
         "if(unit_number != '', cityHash64(unit_number, location_name, property_type, bedrooms, "
         "size_sqft, lease_start, lease_end, contract_amount_aed, contract_state), "
@@ -162,7 +167,7 @@ def _rentals_source(date_clause: str) -> str:
             property_type,
             {_USAGE} AS property_usage,
             {_BEDROOMS} AS bedrooms,
-            if({_REAL_SIZE}, size_sqft, NULL) AS size_sqft,
+            if(size_sqft > 0, size_sqft, NULL) AS size_sqft,
             if(annual_rent_aed > 0, annual_rent_aed, NULL) AS annual_rent_aed,
             if(contract_amount_aed > 0, contract_amount_aed, NULL) AS contract_amount_aed,
             contract_term_months AS term_months,
@@ -171,6 +176,9 @@ def _rentals_source(date_clause: str) -> str:
             SELECT *, {same_lease} AS same_lease
             FROM dxbi_rental_events FINAL
             WHERE {date_clause}
+              AND (unit_number != '' OR {lease_terms} NOT IN (
+                  SELECT {lease_terms} FROM dxbi_rental_events FINAL
+                  WHERE {date_clause} AND unit_number != ''))
             ORDER BY same_lease, occurrence_index, contract_key
             LIMIT 1 BY same_lease
         )

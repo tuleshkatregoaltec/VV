@@ -25,7 +25,7 @@ counts (see "Transactions versus Analytics").
 | Both | Bedrooms | `bedrooms` | `Studio`, `1 Bed`, `2 Beds`, … (DXBI writes `2 Bed` and `2 Beds` for the same count) |
 | Both | Size (sq ft) | `size_sqft` | DXBI's own square feet, shown in whole sq ft; no size is shown as `-` |
 | Sales | Price (AED) | `sale_amount_aed` | as recorded |
-| Sales | Price/sq ft (AED) | — | price ÷ size in sq ft, rounded to whole AED (matches DXBI's own price per sq ft on 98% of sales) |
+| Sales | Price/sq ft (AED) | `price_per_sqft_aed` | DXBI's own price per sq ft, as DXBInteract shows it (for some villas DXBI divides by the built-up area, not the size it shows); price ÷ size only when DXBI gives none |
 | Sales | Status | `market_status` | `Off-Plan` / `Ready` |
 | Rentals | Start / End Date | `lease_start`, `lease_end` | the page is dated by lease start |
 | Rentals | Unit | `unit_number` | new column |
@@ -118,7 +118,7 @@ number. DXBI holds about half of the most recent month's leases.
 | Same place spelled two ways | 5 names (`City of Arabia`, `Dubai islands`, `Dubai Land`, `Al Yufrah1`, `Jumeirah Village Circle Dubai`) | merged as above |
 | Misspellings DXBI uses beside the right name | e.g. `Jumeirah Villlage Circle` (4 sales), `Al Barshaa South 2`, `Al Thanayah 4`, `Nad Al Shiba 1` / `Nad Al Sheba 1`; DXBI also uses both `Marsa Dubai` and `Dubai Marina` | not merged (would be a guess); they show as separate locations |
 | Building names differing only in capitals | 3 (`Serenz by Danube - Tower B` / `TOWER B`, two `Raw District 2` names) | not merged |
-| Implausible sizes | sales under 108 sq ft (10 m²): 289 apartments; leases under 108 sq ft: 8,253 apartments, 1,652 villas; leases over 53,800 sq ft (5,000 m²): 1,044 villas | small sizes are shown as missing since 2026-10-07 (see "Sizes no home can have" below); the large villa leases are still shown as DXBI records them |
+| Implausible sizes | sales under 108 sq ft (10 m²): 289 apartments; leases under 108 sq ft: 8,253 apartments, 1,652 villas; leases over 53,800 sq ft (5,000 m²): 1,044 villas | the Transactions pages show them as DXBI does; the combined layer behind Analytics treats the small ones as having no size (see "Sizes no home can have" below) |
 | DXBI's own price per sq ft uses built-up area for some villas | 3,235 villas | the page divides by DXBI's size, so for these villas its price per sq ft differs from DXBI's listing |
 | Missing values | sales: project 89%, unit 2%; leases: building 66%, project 88%, bedrooms 34%, unit 7% | shown as `-` |
 
@@ -134,10 +134,11 @@ Listings, CRM, Profile, and every Feasibility sheet on a fixture study) found no
 
 ## Sizes no home can have (2026-10-07)
 
-Apartments and hotel apartments under 108 sq ft (10 m²) and villas and townhouses under 500 sq ft
-have no size and no price per sq ft, on the Transactions pages and in the combined layer behind
-Analytics and the chatbot. Their price, rent, date and every other field are kept. Other types
-(offices, shops, partitions) keep any size: small business-centre leases are real.
+In the combined layer behind Analytics and the chatbot, apartments and hotel apartments under
+108 sq ft (10 m²) and villas and townhouses under 500 sq ft have no size and no price per sq ft;
+their price, rent, date and every other field are kept, and other types (offices, shops,
+partitions) keep any size. The Transactions pages mirror DXBInteract and show DXBI's own size and
+price per sq ft for every record (decision 2026-10-07, after the reconciliation below).
 
 What these sizes are, measured on the local copy:
 
@@ -159,6 +160,55 @@ for apartments and 647 → 69 AED for villas; by area, for example, Al Nahda 2 5
 520 → 50. Medians barely move (apartments 78 → 77). Sales move little (hotel apartments 2,578 →
 2,500); Ciel itself trades at ~6,000 AED/sq ft even for its 300-400 sq ft rooms.
 
-The rule is `MIN_HOME_SQFT` in `holocron/holocron/market/transforms.py` and `_REAL_SIZE` in
-`backend/app/transaction/queries.py`; the verifier re-implements it and passed again (358 checks,
-0 failures).
+The rule is `MIN_HOME_SQFT` in `holocron/holocron/market/transforms.py`.
+
+## Reconciled against dxbinteract.com (2026-10-07)
+
+Signed in to DXBInteract and compared its own figures with the local copy (read-only, ~40 page
+views). The local copy's DXBI sales end on 19 September 2026 and its leases on 20 September, so
+periods end before that.
+
+**Totals.** DXBI's summary cards (all types, sale date) against the Sales page:
+
+| Area, period | DXBI sales | Page | Median price DXBI / page | Median AED/sq ft DXBI / page |
+|---|---:|---:|---|---|
+| Business Bay, 1 Jan – 18 Sep 2026 | 4,829 | 4,781 | 2,264,000 / 2,250,000 | 2,490 / 2,478 |
+| Business Bay, 1 – 18 Sep 2026 | 285 | 292 | 2,000,000 / 2,000,000 | 2,190 / 2,182 |
+| Downtown Dubai, 1 Jan – 18 Sep 2026 | 1,598 | 1,505 | 3,150,000 / 3,150,000 | 2,830 / 2,903 |
+| Downtown Dubai, August 2026 | 163 | 142 | 3,130,000 / 3,100,000 | 2,560 / 2,705 |
+| Jumeirah Village Circle, 1 Jan – 18 Sep 2026 | 7,560 | 6,917 | 1,025,000 / 1,012,000 | 1,470 / 1,441 |
+| Dubai Marina, 1 Jan – 18 Sep 2026 | 1,542 | 1,630 | 1,850,000 / 1,990,000 | 2,000 / 1,976 |
+| Palm Jumeirah, 2025 | 1,693 | 1,539 | 5,000,000 / 5,062,000 | 3,190 / 3,217 |
+| Dubai South, July 2026 | 2,371 | 2,342 | 730,000 / 730,000 | 1,700 / 1,699 |
+
+DXBI's rental cards ("Avg. annual rent" is a median; it equals the page's median exactly in 11 of
+12 cases): Business Bay June 2026 new 1,128 / renewed 854 against the page's 1,211 / 910 before
+the fix below; Jumeirah Village Circle June 1,382 / 942 against 1,570 / 971.
+
+**Row by row.** Every DXBI row of a search was read and matched to the page by DXBI link (or
+building, date and price for CSV-loaded rows):
+
+- JVC sales 19 – 30 June 2026 (299 DXBI rows): every matched row agrees on unit, date, price,
+  size, price per sq ft, bedrooms, status and type. 23 of DXBI's rows are on the page under the
+  area DXBI prints on the row ("Al Barsha South 4", or none for villas listed by community): DXBI's
+  area search groups by its own location id, the page by the printed area. 1 sale was not loaded.
+- Downtown Dubai sales August 2026 (163 DXBI rows): 117 matched with identical price, date,
+  status and type (size and price per sq ft differ on 1 row DXBI has since corrected). 46 sales are
+  missing: 11 and 18 August are absent or partial, and 1 – 10 August exist only as CSV-export
+  rows, which carry no unit number and whose date is a day off DXBI's for a third of them.
+  29 rows have no bedroom count where DXBI now shows one (DXBI added it after the scrape).
+- Business Bay leases 25 – 30 June 2026 (300 DXBI rows): 297 matched; rent and dates agree;
+  size differs on 3, bedrooms are empty on 11 where DXBI now shows them, and DXBI has renamed
+  34 buildings since the scrape ("Peninsula Five -3" is now "Peninsula Five Tower 3").
+
+**Fixed after the reconciliation.** Price per sq ft is DXBI's own figure (it differed on 2,564
+villa sales a year, where DXBI divides by the built-up area); sizes are shown exactly as DXBI shows
+them; a lease DXBI lists both with and without its unit is counted once (90 of Business Bay's
+2,121 June leases were such copies; the page's June totals are now 2,031 against DXBI's 1,982 in
+Business Bay and 2,307 against 2,324 in JVC).
+
+**Not fixable in the page.** Gaps that need the loader or a re-scrape: sales after 19 September
+2026; 11 and 18 August; August's CSV-only rows (no unit, some dates a day off); sales whose unit
+DXBI hides when they are scraped (`normalize_sales_row` drops them, see the code review); bedroom
+counts and building names DXBI improved after the scrape. Area totals also differ because DXBI's
+area search uses its own location ids.
