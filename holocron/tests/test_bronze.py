@@ -67,7 +67,8 @@ def test_dld_times_are_stored_as_written_in_any_machine_timezone(monkeypatch) ->
     try:
         midnight = datetime(2026, 6, 1, tzinfo=UTC).timestamp()
         assert iso_datetime_or_default("2026-06-01T00:00:00").timestamp() == midnight
-        assert iso_datetime_or_none("2026-06-01T00:00:00").timestamp() == midnight
+        parsed = iso_datetime_or_none("2026-06-01T00:00:00")
+        assert parsed is not None and parsed.timestamp() == midnight
         assert iso_datetime_or_default("").timestamp() == 0
     finally:
         monkeypatch.undo()
