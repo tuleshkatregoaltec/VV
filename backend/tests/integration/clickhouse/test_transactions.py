@@ -18,6 +18,7 @@ SALE_COLUMNS = (
     "building_key",
     "project_name",
     "area_name",
+    "area_key",
     "property_type",
     "market_status",
     "bedrooms",
@@ -67,6 +68,7 @@ def sale(key: str, **values) -> list:
         "building_key": "towera",
         "project_name": "",
         "area_name": "Downtown Dubai",
+        "area_key": "",
         "property_type": "Apartment",
         "market_status": "Ready",
         "bedrooms": "1 Bed",
@@ -115,7 +117,15 @@ def lease(key: str, **values) -> list:
 
 @pytest.fixture
 async def dxbi(warehouse, install_serving):
-    await install_serving(tables=("dxbi_sales_unit_events", "dxbi_rental_events"), views=())
+    await install_serving(
+        tables=(
+            "dxbi_sales_unit_events",
+            "dxbi_rental_events",
+            "dxbi_locations",
+            "dxbi_location_members",
+        ),
+        views=(),
+    )
 
     async def insert(*, sales=(), leases=()):
         if sales:
@@ -280,6 +290,87 @@ async def test_sales_filters_bands_usage_and_locations(dxbi):
     )
     row = next(r for r in misread.transactions if r.transaction_id == "misread")
     assert (row.location_name, row.property_type, row.unit_number) == (None, None, "630")
+
+
+async def test_a_location_holds_what_dxbi_area_page_counts(dxbi, warehouse):
+    """Location choices are DXBI's own areas and communities, holding what DXBI's area pages
+    count (decision 2026-10-07: totals match the website). Those pages can count a sale under a
+    different place than the area printed on it: JVC's page counts buildings printed only
+    "Al Barsha South 4", and Dubai Marina's leaves out some sales printed "Dubai Marina". A JVC
+    sale is on the page of JVC's DLD area too."""
+    await warehouse.insert(
+        "dxbi_locations",
+        [
+            [31498, "Al Barsha South Fourth", "albarshasouth4", ["Al Barsha South Fourth"]],
+            [36510, "Jumeirah Village Circle", "jumeirahvillagecircle",
+             ["Jumeirah Village Circle", "Al Barsha South Fourth"]],
+            [31385, "Marsa Dubai", "marsadubai", ["Marsa Dubai"]],
+            [31987, "Dubai Marina", "dubaimarina", ["Dubai Marina", "Marsa Dubai"]],
+        ],
+        column_names=["location_id", "name", "name_key", "lineage"],
+    )  # fmt: skip
+    swept = [
+        # (location, sale, building key, area key) as the last sweep found them.
+        (36510, "Jumeirah Village Circle", "royale-1", "binghattiroyale", "albarshasouth4"),
+        (31498, "Al Barsha South Fourth", "royale-1", "binghattiroyale", "albarshasouth4"),
+        (31385, "Marsa Dubai", "shores", "marinashores", "dubaimarina"),
+    ]
+    await warehouse.insert(
+        "dxbi_location_members",
+        [
+            [location_id, name, key, TODAY, building, area, TODAY, TODAY]
+            for location_id, name, key, building, area in swept
+        ],
+        column_names=["location_id", "location_name", "sale_key", "transaction_date",
+                      "building_key", "area_key", "window_start", "window_end"],
+    )  # fmt: skip
+    royale = {"building_name": "Binghatti Royale", "building_key": "binghattiroyale",
+              "area_name": "Al Barsha South 4", "area_key": "albarshasouth4"}  # fmt: skip
+    await dxbi(
+        sales=[
+            sale("royale-1", unit_number="1203", **royale),
+            # Not swept (a later sale): its building's swept sales place it.
+            sale("royale-2", unit_number="1204", **royale),
+            # Printed "Dubai Marina", but DXBI's Dubai Marina page does not count it.
+            sale("shores", unit_number="5", building_name="Marina Shores",
+                 building_key="marinashores", area_name="Dubai Marina", area_key="dubaimarina"),
+            # A building the sweep never saw: its printed area and the areas above it.
+            sale("iris", unit_number="6", building_name="Iris Blue", building_key="irisblue",
+                 area_name="Dubai Marina", area_key="dubaimarina"),
+            # A place DXBI's list does not name keeps its printed area.
+            sale("arjan", unit_number="7", area_name="Arjan", area_key="arjan"),
+        ],
+        leases=[lease("royale-lease", building_name="Binghatti Royale",
+                      area_name="Al Barsha South 4", location_name="Binghatti Royale")],
+    )  # fmt: skip
+
+    async def ids(**filters):
+        page = await service.fetch_sales_transactions(
+            SalesFilters(timeframe_days=7, **filters), 100, 0
+        )
+        assert page.total == len(page.transactions)
+        return sorted(row.transaction_id for row in page.transactions)
+
+    assert await ids(location="Jumeirah Village Circle") == ["royale-1", "royale-2"]
+    assert await ids(location="Al Barsha South Fourth") == ["royale-1", "royale-2"]
+    assert await ids(location="Dubai Marina") == ["iris"]
+    assert await ids(location="Marsa Dubai") == ["iris", "shores"]
+    assert await ids(location="Arjan") == ["arjan"]
+    # The row still shows the area DXBI prints on it.
+    rows = await service.fetch_sales_transactions(SalesFilters(location="Marsa Dubai"), 100, 0)
+    assert {row.location_name for row in rows.transactions} == {"Dubai Marina"}
+
+    options = await facets.get_sales_filter_options(SalesFilters(timeframe_days=7))
+    assert options.locations == [
+        "Al Barsha South Fourth", "Arjan", "Dubai Marina", "Jumeirah Village Circle",
+        "Marsa Dubai",
+    ]  # fmt: skip
+
+    # A lease takes its building's locations from the sales sweep.
+    leases = await service.fetch_rental_contracts(
+        RentalFilters(timeframe_days=7, location="Jumeirah Village Circle"), 100, 0
+    )
+    assert [row.contract_id for row in leases.contracts] == ["royale-lease"]
 
 
 async def test_numbered_units_hold_one_copy_of_a_lease_and_unnumbered_rows_all_count(dxbi):

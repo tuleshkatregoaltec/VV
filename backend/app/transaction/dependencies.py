@@ -14,7 +14,9 @@ def sales_filters(
     property_type: Optional[str] = Query(default=None, description="DXBI property type"),
     bedrooms: Optional[str] = Query(default=None, description="'Studio', '1 Bed', '2 Beds', ..."),
     status: Optional[str] = Query(default=None, description="Off-Plan or Ready"),
-    location: Optional[str] = Query(default=None, description="DXBI location (community)"),
+    location: Optional[str] = Query(
+        default=None, description="DXBI area or community: every record its DXBI area page counts"
+    ),
     building: Optional[str] = Query(default=None, description="DXBI building name"),
     timeframe_days: Optional[int] = Query(
         default=None, ge=1, description="Last N calendar days, today included"
@@ -54,7 +56,9 @@ def rental_filters(
     property_type: Optional[str] = Query(default=None, description="DXBI property type"),
     bedrooms: Optional[str] = Query(default=None, description="'Studio', '1 Bed', '2 Beds', ..."),
     contract_type: Optional[str] = Query(default=None, description="New or Renewed"),
-    location: Optional[str] = Query(default=None, description="DXBI location (community)"),
+    location: Optional[str] = Query(
+        default=None, description="DXBI area or community: every record its DXBI area page counts"
+    ),
     building: Optional[str] = Query(default=None, description="DXBI building name"),
     timeframe_days: Optional[int] = Query(
         default=None,

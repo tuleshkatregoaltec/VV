@@ -15,7 +15,9 @@ class SalesFilters(BaseModel):
     property_type: Optional[str] = Field(default=None, description="DXBI property type")
     bedrooms: Optional[str] = Field(default=None, description="'Studio', '1 Bed', '2 Beds', ...")
     status: Optional[str] = Field(default=None, description="Off-Plan or Ready")
-    location: Optional[str] = Field(default=None, description="DXBI location (community)")
+    location: Optional[str] = Field(
+        default=None, description="DXBI area or community: every record its DXBI area page counts"
+    )
     building: Optional[str] = Field(default=None, description="DXBI building name")
     timeframe_days: Optional[int] = Field(
         default=None, ge=1, description="Last N calendar days, today included"
@@ -39,7 +41,9 @@ class RentalFilters(BaseModel):
     property_type: Optional[str] = Field(default=None, description="DXBI property type")
     bedrooms: Optional[str] = Field(default=None, description="'Studio', '1 Bed', '2 Beds', ...")
     contract_type: Optional[str] = Field(default=None, description="New or Renewed")
-    location: Optional[str] = Field(default=None, description="DXBI location (community)")
+    location: Optional[str] = Field(
+        default=None, description="DXBI area or community: every record its DXBI area page counts"
+    )
     building: Optional[str] = Field(default=None, description="DXBI building name")
     timeframe_days: Optional[int] = Field(
         default=None,

@@ -11864,7 +11864,7 @@ export type FiltersGetSalesFilterOptionsData = {
         /**
          * Location
          *
-         * DXBI location (community)
+         * DXBI area or community: every record its DXBI area page counts
          */
         location?: string | null;
         /**
@@ -11968,7 +11968,7 @@ export type FiltersGetRentalFilterOptionsData = {
         /**
          * Location
          *
-         * DXBI location (community)
+         * DXBI area or community: every record its DXBI area page counts
          */
         location?: string | null;
         /**
@@ -13376,7 +13376,7 @@ export type TransactionsGetSalesTransactionsData = {
         /**
          * Location
          *
-         * DXBI location (community)
+         * DXBI area or community: every record its DXBI area page counts
          */
         location?: string | null;
         /**
@@ -13492,7 +13492,7 @@ export type TransactionsGetRentalContractsData = {
         /**
          * Location
          *
-         * DXBI location (community)
+         * DXBI area or community: every record its DXBI area page counts
          */
         location?: string | null;
         /**
@@ -13596,7 +13596,7 @@ export type TransactionsExportSalesTransactionsEndpointData = {
         /**
          * Location
          *
-         * DXBI location (community)
+         * DXBI area or community: every record its DXBI area page counts
          */
         location?: string | null;
         /**
@@ -13710,7 +13710,7 @@ export type TransactionsExportRentalContractsEndpointData = {
         /**
          * Location
          *
-         * DXBI location (community)
+         * DXBI area or community: every record its DXBI area page counts
          */
         location?: string | null;
         /**
