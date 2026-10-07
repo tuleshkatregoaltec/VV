@@ -276,7 +276,9 @@ let selectedCardIds = $state<CardId[]>(loadCardIds())
 const marketTrendQuery = createQuery(() => analyticsQueries.marketTrend(365))
 const latestSalesTransactionQuery = createQuery(() => ({
 	queryKey: ['dashboard', 'latest-sales-transaction', 'Residential'] as const,
-	queryFn: () => transactions.sales({ property_usage: 'Residential', limit: 1 }),
+	// The last 90 days: an unbounded request de-duplicates all DXBI history for one date.
+	queryFn: () =>
+		transactions.sales({ property_usage: 'Residential', limit: 1, timeframe_days: 90 }),
 	staleTime: 30 * 60 * 1000
 }))
 const marketTrendLastPoint = $derived(
