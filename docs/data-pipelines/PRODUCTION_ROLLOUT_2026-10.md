@@ -54,9 +54,12 @@ older runs held: locally, 3,943 August leases from a test run put some areas 10-
 
 ## 5. Location sweeps
 
-Follow `holocron/docs/runbooks/dxbi-location-sweep.md`: sweep sales and leases (`--report
-rentals`) over the last 12 months, then `load_dxbi_location_members.py <run dir>` for each.
-Re-run monthly.
+Follow `holocron/docs/runbooks/dxbi-location-sweep.md`:
+1. Sweep sales and leases (`--report rentals`) over the last 12 months once, by hand, and load
+   each with `load_dxbi_location_members.py <run dir>`.
+2. Install and enable `dxbi-sales-sweep.timer` (03:30 Dubai) and `dxbi-rentals-sweep.timer`
+   (06:30 Dubai). From then on the 10:00 Dubai evidence load picks up each night's 14-day sweep,
+   and complete scrape runs replace their window automatically.
 
 ## 6. Market releases
 

@@ -2,7 +2,8 @@
 
 Replaces the developer-Mac chain (rsync -> scripts/sync_dxbi_daily_runs.sh -> .loaded marker
 files, F01). The DXBI report scraper writes completed runs to
-``<DXBI_EVIDENCE_DIR>/{rentals,sales}/run=<date>/`` with a ``_SUCCESS`` marker. For each run
+``<DXBI_EVIDENCE_DIR>/{rentals,sales}/run=<date>/`` and the nightly location sweeps to
+``<DXBI_EVIDENCE_DIR>/{sales,rentals}-sweep/run=<date>/``, each with a ``_SUCCESS`` marker. For each run
 not yet in ``dxbi_evidence_load_ledger`` this module:
 
 1. archives the raw files to object storage with a sha256 manifest, so loads are replayable;
@@ -22,18 +23,24 @@ import subprocess
 import sys
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any, Protocol
 
 from holocron.contracts import ClickHouseQuery, ClickHouseQueryInserter
 from holocron.platform.clickhouse_schema import ensure_schema
 
-REPORTS = ("rentals", "sales")
+# Scrapes first, then the location sweeps (scripts/dxbi_location_sweep.py) that group them.
+REPORTS = ("rentals", "sales", "sales-sweep", "rentals-sweep")
 LEDGER_TABLE = "dxbi_evidence_load_ledger"
 RAW_PREFIX = "raw/source=dxbi_evidence"
 _SCRIPTS_DIR = Path(__file__).resolve().parents[3] / "scripts"
-_LOADERS = {"rentals": "load_dxbi_rental_events.py", "sales": "load_dxbi_sales_units.py"}
+_LOADERS = {
+    "rentals": "load_dxbi_rental_events.py",
+    "sales": "load_dxbi_sales_units.py",
+    "sales-sweep": "load_dxbi_location_members.py",
+    "rentals-sweep": "load_dxbi_location_members.py",
+}
 _LEDGER_COLUMNS = (
     "batch_id", "report", "run_name", "files", "raw_bytes", "manifest_key", "rows_loaded",
     "rows_skipped", "rows_rejected", "details_json", "status", "error", "loaded_at",
@@ -113,11 +120,24 @@ def archive_run(object_storage: ObjectUploader, run: EvidenceRun) -> dict[str, A
 def parse_loader_output(report: str, output: str) -> LoaderResult:
     """Read the loaders' own accounting lines.
 
-    Rentals log ``Complete {json totals}``; sales log
+    Sweeps log ``Location members loaded runs=N members=N replaced=N skipped=N``. Rentals log
+    ``Complete {json totals}``; sales log
     ``Sales load complete loaded=N skipped=N errors=N without_unit=N superseded=N``: skipped rows
     lack a location, date, size or price; ``without_unit`` sales are loaded with DXBI's unit
     hidden; ``superseded`` rows are older loads of sales a later load re-normalised.
     """
+    if report.endswith("-sweep"):
+        match = re.search(r"Location members loaded ((?:\w+=\d+\s*)+)", output)
+        totals = {
+            name: int(value)
+            for name, value in re.findall(r"(\w+)=(\d+)", match.group(1) if match else "")
+        }
+        return LoaderResult(
+            rows_loaded=totals.get("members", 0),
+            rows_skipped=totals.get("skipped", 0),
+            rows_rejected=0,
+            details=totals,
+        )
     if report == "rentals":
         match = re.search(r"Complete (\{.*\})", output)
         totals = json.loads(match.group(1)) if match else {}
@@ -141,6 +161,32 @@ def parse_loader_output(report: str, output: str) -> LoaderResult:
     )
 
 
+def scrape_window(run: EvidenceRun) -> tuple[str, str] | None:
+    """The dates a scrape run listed completely, as (first, last), or None.
+
+    A run is authoritative for its window only when every configuration finished every day of
+    an unbroken range (``reconciliation.json``). Then DXBI's listing replaces what was stored for
+    those dates (2026-10-08: merging kept leases only older runs held, up to 20% above DXBI, and
+    sales DXBI had moved to another day). Anything less is loaded by merging, as before.
+    """
+    path = run.path / "reconciliation.json"
+    if run.report not in ("sales", "rentals") or not path.is_file():
+        return None
+    reconciliation = json.loads(path.read_text())
+    statuses = list((reconciliation.get("terminal_partition_status") or {}).values())
+    if reconciliation.get("status") != "success" or not statuses:
+        return None
+    days = set(statuses[0])
+    if any(set(days_status) != days for days_status in statuses) or any(
+        status != "complete" for days_status in statuses for status in days_status.values()
+    ):
+        return None
+    ordered = sorted(date.fromisoformat(day) for day in days)
+    if (ordered[-1] - ordered[0]).days + 1 != len(ordered):
+        return None
+    return ordered[0].isoformat(), ordered[-1].isoformat()
+
+
 def run_loader(
     report: str,
     runs: Sequence[EvidenceRun],
@@ -148,9 +194,46 @@ def run_loader(
     env: Mapping[str, str],
     python: str = sys.executable,
 ) -> LoaderResult:
+    """Load a report's pending runs.
+
+    A scrape run with a complete window is loaded on its own with ``--replace-window``, oldest
+    first, so a later run wins where two overlap and two runs never replace the days between
+    them. Other scrape runs load together by merging. Sweep runs load together; each replaces
+    the members inside its own window.
+    """
+    windowed = [(run, scrape_window(run)) for run in runs]
+    batches: list[tuple[list[EvidenceRun], tuple[str, str] | None]] = [
+        ([run], window) for run, window in windowed if window
+    ]
+    merged = [run for run, window in windowed if not window]
+    if merged:
+        batches.insert(0, (merged, None))
+    results = [
+        _run_batch(report, batch, window, env=env, python=python) for batch, window in batches
+    ]
+    if len(results) == 1:
+        return results[0]
+    return LoaderResult(
+        rows_loaded=sum(result.rows_loaded for result in results),
+        rows_skipped=sum(result.rows_skipped for result in results),
+        rows_rejected=sum(result.rows_rejected for result in results),
+        details={"batches": [result.details for result in results]},
+    )
+
+
+def _run_batch(
+    report: str,
+    runs: Sequence[EvidenceRun],
+    window: tuple[str, str] | None,
+    *,
+    env: Mapping[str, str],
+    python: str,
+) -> LoaderResult:
     command = [python, str(_SCRIPTS_DIR / _LOADERS[report])]
     if report == "rentals":
         command += ["--target", "active", "--run-id", f"holocron-{_stamp()}"]
+    if window:
+        command += ["--replace-window", *window]
     command += [str(run.path) for run in runs]
     result = subprocess.run(  # noqa: S603 - fixed interpreter and repository scripts
         command, env=dict(env), capture_output=True, text=True, check=False
@@ -158,7 +241,10 @@ def run_loader(
     output = result.stdout + result.stderr
     if result.returncode != 0:
         raise RuntimeError(f"{report} loader failed ({result.returncode}): {output[-2000:]}")
-    return parse_loader_output(report, output)
+    parsed = parse_loader_output(report, output)
+    if window:
+        parsed.details["replaced_window"] = list(window)
+    return parsed
 
 
 def loader_environment(clickhouse_settings: Mapping[str, Any]) -> dict[str, str]:

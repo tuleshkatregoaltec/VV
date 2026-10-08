@@ -1,0 +1,12 @@
+[Unit]
+Description=ViteVue nightly DXBI sales location sweep
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+WorkingDirectory=/root/repos/vitevue-platform
+ExecStart=/usr/local/sbin/dxbi-location-sweep sales
+TimeoutStartSec=4h
+Nice=5

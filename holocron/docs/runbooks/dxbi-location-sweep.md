@@ -59,3 +59,45 @@ The sweep reproduces DXBI's summary cards: for August 2026, JVC (location 36510)
 sales and Dubai Marina (31987) 154, the same as the cards on their area pages.
 `backend/scripts/clickhouse/verify_dxbi_transactions.py` re-implements the rule and checks the API
 against it.
+
+## Nightly in production (Dubai time)
+
+Every DXBI job keys on Dubai's calendar (`TZ=Asia/Dubai`), although the servers run in UTC. Dubai
+is UTC+4 all year (no daylight saving).
+
+| Dubai time (GST) | UTC | Job | Account | Typical length |
+|---|---|---|---|---|
+| 02:30 | 22:30 (day before) | `dxbi-sales-daily`: sales scrape of the last 7 days | a | ~15 min |
+| 03:30 | 23:30 (day before) | `dxbi-sales-sweep`: sales sweep of the last 14 days | a | ~45-60 min |
+| 04:30 | 00:30 | `dxbi-rentals-daily`: lease scrape of the last 14 days | b | ~1-3 h |
+| 06:30 | 02:30 | `dxbi-rentals-sweep`: lease sweep of the last 14 days | b | ~1 h |
+| Sun 06:00 | Sun 02:00 | `dxbi-rentals-weekly`: leases 15-180 days back | b | up to 12 h |
+| 10:00 | 06:00 | Dagster `dxbi_evidence_load`: archives and loads every finished run | - | minutes |
+| 10:30 | 06:30 | Dagster `market_events_refresh`: rebuilds the Analytics releases | - | ~5 min |
+
+- **One session per account.** A sweep takes its report's scrape lock
+  (`/run/lock/vitevue-dxbi-<report>.lock`), so it waits while that account's scrape runs, and a
+  late scrape delays its sweep rather than overlapping it.
+- **Loading.** The evidence load takes each finished run (`_SUCCESS`) once (ledger
+  `dxbi_evidence_load_ledger`) and archives its raw files to object storage first.
+  - A scrape run that completed every day of an unbroken window loads alone with
+    `--replace-window` (oldest first, so two runs never replace the days between them).
+  - A sweep run replaces only the memberships dated in its window, so nights add to the first
+    12-month run and a re-run is harmless.
+- **Failures.** A run that fails or times out writes `_FAILURE` and is never loaded. The
+  previous night's data keeps serving, and the next night's 14-day window covers the missed
+  days. DXBI's Cloudflare answers 520/522 at times; the scraper retries each request 3 times.
+
+**Install** (as for the existing DXBI units):
+
+```bash
+install -m 0755 holocron/deploy/systemd/dxbi-location-sweep.sh /usr/local/sbin/dxbi-location-sweep
+install -m 0644 holocron/deploy/systemd/dxbi-{sales,rentals}-sweep.{service,timer} /etc/systemd/system/
+systemctl daemon-reload
+systemctl enable --now dxbi-sales-sweep.timer dxbi-rentals-sweep.timer
+systemctl list-timers 'dxbi-*'   # next runs, shown in UTC
+```
+
+Before the first night, run the 12-month sweep once per report by hand (above): about 6 hours
+for sales and about 15 for leases. `DXBI_SWEEP_WINDOW_DAYS` (default 14) and
+`DXBI_SWEEP_TIMEOUT` (default 3h) tune the nightly run.
