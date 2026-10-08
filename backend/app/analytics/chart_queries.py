@@ -494,7 +494,7 @@ async def fetch_sales_chart_rows(args: dict[str, Any]):
     where = [
         "trans_group_en = 'Sales'",
         "actual_worth > 0",
-        "instance_date BETWEEN {start_date:Date} AND {end_date:Date}",
+        "toDate(instance_date) BETWEEN {start_date:Date} AND {end_date:Date}",
     ]
     if property_usage:
         where.append("property_usage_en = {property_usage:String}")
@@ -668,7 +668,7 @@ async def fetch_rental_chart_rows(args: dict[str, Any]):
     where = [
         "annual_amount > 0",
         "contract_start_date <= today()",
-        "contract_start_date BETWEEN {start_date:Date} AND {end_date:Date}",
+        "toDate(contract_start_date) BETWEEN {start_date:Date} AND {end_date:Date}",
     ]
     if property_usage:
         where.append("property_usage_en = {property_usage:String}")
@@ -892,14 +892,14 @@ async def fetch_area_yield_chart_rows(args: dict[str, Any]):
         "actual_worth > 0",
         "location_name != ''",
         "lower(location_name) != 'unknown'",
-        "instance_date BETWEEN {start_date:Date} AND {end_date:Date}",
+        "toDate(instance_date) BETWEEN {start_date:Date} AND {end_date:Date}",
     ]
     rental_where = [
         "annual_amount > 0",
         "location_name != ''",
         "lower(location_name) != 'unknown'",
         "contract_start_date <= today()",
-        "contract_start_date BETWEEN {start_date:Date} AND {end_date:Date}",
+        "toDate(contract_start_date) BETWEEN {start_date:Date} AND {end_date:Date}",
     ]
     params: dict[str, Any] = {
         "start_date": start_date.isoformat(),

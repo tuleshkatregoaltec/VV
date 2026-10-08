@@ -992,7 +992,8 @@ async def get_market_trend(
 
     end_date = date.today()
     start_date = end_date - timedelta(days=days)
-    prev_end = start_date
+    # The equal period just before: both cover whole days and share none.
+    prev_end = start_date - timedelta(days=1)
     prev_start = prev_end - timedelta(days=days)
 
     if days <= 30:

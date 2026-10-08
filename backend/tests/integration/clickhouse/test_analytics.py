@@ -145,3 +145,42 @@ async def test_market_types_select_on_the_uniform_type_and_their_own_group(wareh
     assert await sold("gifts") == 1
     trend = await service.get_market_trend(days=30, market_type="villas")
     assert trend.total_transactions == 3
+
+
+async def test_a_date_range_holds_its_whole_last_day(warehouse):
+    """DLD open-data sales carry a registration time (about 30% of a weekday's sales). A range
+    ending on a date compared the timestamp with that date's midnight and dropped them."""
+    from datetime import date, datetime
+
+    from app.analytics import service
+
+    await warehouse.command("""
+        CREATE TABLE ch_transactions (
+            trans_group_en String, property_usage_en String, property_type String,
+            actual_worth Float64, meter_sale_price Float64, size_sqm Float64,
+            instance_date DateTime, master_project_en String DEFAULT '',
+            location_name String DEFAULT '', rooms_en String DEFAULT '',
+            reg_type_en String DEFAULT '', price_bucket String DEFAULT '',
+            area_bucket String DEFAULT ''
+        ) ENGINE = MergeTree ORDER BY instance_date
+    """)
+    await warehouse.insert(
+        "ch_transactions",
+        [
+            ["Sales", "Residential", "Apartment", 1_000_000, 10_000, 100, when]
+            for when in (
+                datetime(2026, 9, 1, 0, 0),
+                datetime(2026, 9, 10, 0, 0),
+                datetime(2026, 9, 10, 14, 30),  # registered in the afternoon of the last day
+                datetime(2026, 9, 11, 9, 0),
+            )
+        ],
+        column_names=["trans_group_en", "property_usage_en", "property_type", "actual_worth",
+                      "meter_sale_price", "size_sqm", "instance_date"],
+    )  # fmt: skip
+
+    response = await service.get_sales_analytics(
+        start_date=date(2026, 9, 1), end_date=date(2026, 9, 10)
+    )
+
+    assert response.summary.transaction_count == 3

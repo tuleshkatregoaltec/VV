@@ -607,7 +607,7 @@ def project_price_trends(
           AND trans_group_en = 'Sales'
           AND property_type NOT IN ('Plot', 'Building', '')
           AND property_usage_en = 'Residential'
-          AND instance_date BETWEEN {{start_date:Date}} AND {{end_date:Date}}
+          AND toDate(instance_date) BETWEEN {{start_date:Date}} AND {{end_date:Date}}
           AND actual_worth > 0
         GROUP BY period
         ORDER BY period ASC
@@ -650,7 +650,7 @@ def project_offplan_price_curve(
           AND t.property_type NOT IN ('Plot', 'Building', '')
           AND t.property_usage_en = 'Residential'
           AND t.reg_type_en = 'Off-Plan Properties'
-          AND t.instance_date BETWEEN {{start_date:Date}} AND {{end_date:Date}}
+          AND toDate(t.instance_date) BETWEEN {{start_date:Date}} AND {{end_date:Date}}
           AND t.actual_worth > 0
           AND coalesce(p.completion_date, p.project_end_date) IS NOT NULL
           AND dateDiff('month', t.instance_date, coalesce(p.completion_date, p.project_end_date)) >= 0
@@ -923,7 +923,7 @@ def sales_summary(
     MARKET_FILTERS entry (trusted, not user input): its group and predicate.
     """
     where_clauses = _market_clauses(market) + [
-        "instance_date BETWEEN {start_date:Date} AND {end_date:Date}",
+        "toDate(instance_date) BETWEEN {start_date:Date} AND {end_date:Date}",
     ]
     if property_usage is not None:
         where_clauses.append("property_usage_en = {property_usage:String}")
@@ -995,7 +995,7 @@ def price_trends(
         time_group = "toStartOfMonth(instance_date)"
 
     where_clauses = _market_clauses(market) + [
-        "instance_date BETWEEN {start_date:Date} AND {end_date:Date}",
+        "toDate(instance_date) BETWEEN {start_date:Date} AND {end_date:Date}",
     ]
     if property_usage is not None:
         where_clauses.append("property_usage_en = {property_usage:String}")
@@ -1038,7 +1038,7 @@ def rentals_summary(
     """
     where_clauses = [
         "property_usage_en = {property_usage:String}",
-        "contract_start_date BETWEEN {start_date:Date} AND {end_date:Date}",
+        "toDate(contract_start_date) BETWEEN {start_date:Date} AND {end_date:Date}",
     ]
 
     if master_project is not None:
