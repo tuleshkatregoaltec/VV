@@ -1,22 +1,33 @@
-"""Normalize unit-bearing rows from the DXB sales backfill."""
+"""Normalize rows from the DXB sales backfill."""
 
 from __future__ import annotations
 
 import hashlib
+import json
 import re
 from datetime import date, datetime
+from html import unescape
 from pathlib import Path
 from typing import Any
 
 from holocron.sources.dxbi.rental_events import canonical_area_name
 
 _AGENT_PREFIX = re.compile(r"^(?:Buyer's|Seller's)\s+agent\s+", re.IGNORECASE)
+# "<location> Ready Apartment, Floor 3, No. 301". A sale whose unit DXBI hides, or of a whole
+# building, can end at the type: "Emaar Square 3, Downtown Dubai Ready Building".
 _LOCATION_SUFFIX = re.compile(
-    r"\s+(?P<status>Offplan|Ready)\s+(?P<property_type>.+?),\s*Floor\b.*$",
+    r"\s+(?P<status>Offplan|Ready)\s+(?P<property_type>[^,]+?)\s*(?:,\s*(?:Floor|No\.)\b.*)?$",
     re.IGNORECASE,
 )
 # Plot rows carry no market status: "Al Jafliya Plot, Floor u-hidden, No. 630".
-_PLOT_SUFFIX = re.compile(r"\s+(?P<property_type>Plot),\s*Floor\b.*$", re.IGNORECASE)
+_PLOT_SUFFIX = re.compile(
+    r"\s+(?P<property_type>Plot)\s*(?:,\s*(?:Floor|No\.)\b.*)?$", re.IGNORECASE
+)
+# The location as DXBI shows it: <span class="bold-title" title="Burj Vista Tower 1, Downtown
+# Dubai">. The cell's text also holds what DXBI hides on screen, such as the buyer's agent's name
+# right before the building ("Hajar Binghatti Royale").
+_LOCATION_TAG = re.compile(r'<span\b(?=[^>]*\bclass="[^"]*\bbold-title\b)[^>]*>', re.IGNORECASE)
+_TITLE_ATTRIBUTE = re.compile(r'\btitle="(?P<title>[^"]*)"', re.IGNORECASE)
 _BEDROOMS = re.compile(r"(?P<count>\d+)\s*Beds?\b", re.IGNORECASE)
 _SIZE = re.compile(r"(?P<size>[\d,]+(?:\.\d+)?)\s*sqft", re.IGNORECASE)
 _PRICE = re.compile(r"AED\s*(?P<price>[\d,]+)", re.IGNORECASE)
@@ -34,13 +45,20 @@ _SOLD_BY = re.compile(
     re.IGNORECASE,
 )
 _SALE_DATE = re.compile(r"(?P<day>\d{1,2}),\s*(?P<month>[A-Za-z]{3})\s*(?P<year>\d{4})")
-_UNIT_NUMBER = re.compile(r"\bNo\.\s*(?P<unit>[A-Za-z0-9][A-Za-z0-9/-]*)", re.IGNORECASE)
+# The last "No. <unit>" of the location text; units can hold spaces ("No. RETAIL 06"), as the
+# sales scraper (dxbi_sales_dynamic_bucket_runner.js) reads them.
+_UNIT_NUMBER = re.compile(r"\bNo\.\s*(?P<unit>[^,]+)", re.IGNORECASE)
 
 
 def normalize_sales_row(payload: dict[str, Any], *, source_file: str = "") -> dict[str, Any] | None:
+    """One DXBI sale, or None when the row lacks a location, date, size or price.
+
+    A sale whose unit DXBI hides is kept with an empty unit number: it is still a sale on the
+    date and at the price DXBI lists, and DXBInteract counts it.
+    """
     unit_number = str(payload.get("unit_number") or "").strip()
-    if not unit_number or unit_number.lower() == "u-hidden":
-        return None
+    if unit_number.lower() == "u-hidden":
+        unit_number = ""
 
     raw_location = str(payload.get("location_text") or "").strip()
     agent_side = (
@@ -58,6 +76,7 @@ def normalize_sales_row(payload: dict[str, Any], *, source_file: str = "") -> di
         property_type = suffix.group("property_type").strip()
         market_status = (suffix.groupdict().get("status") or "").strip().title()
         location = location[: suffix.start()].strip(" ,")
+    location = str(payload.get("location_title") or "").strip() or location
 
     parts = [part.strip() for part in location.split(",") if part.strip()]
     building_name = parts[0] if parts else ""
@@ -142,22 +161,28 @@ def normalize_sales_row(payload: dict[str, Any], *, source_file: str = "") -> di
 
 
 def compact_payload(line: str) -> dict[str, Any]:
-    """Return the normalized input shape from old compact or current raw rows."""
-    prefix = line.split(',"columns":', 1)[0]
-    import json
+    """Return the normalized input shape from old compact or current raw rows.
 
-    compact = json.loads(f"{prefix}}}")
-    if "unit_number" in compact:
-        return compact
-
-    record = json.loads(line)
+    Both shapes keep DXBI's report cells in ``columns``; the location cell's HTML gives the
+    location as DXBI shows it (``location_title``). A row whose ``columns`` array is cut off keeps
+    its text fields.
+    """
+    try:
+        record = json.loads(line)
+    except ValueError:
+        record = json.loads(line.split(',"columns":', 1)[0] + "}")
     columns = {
         str(column.get("id") or ""): column
-        for column in record.get("columns") or []
+        for column in record.pop("columns", None) or []
         if isinstance(column, dict)
     }
+    title = _location_title(str(columns.get("PATH_NAME", {}).get("html") or ""))
+    if "unit_number" in record:
+        return {**record, "location_title": title} if title else record
+
     location_text = str(columns.get("PATH_NAME", {}).get("text") or "")
-    unit_match = _UNIT_NUMBER.search(location_text)
+    units = [match.group("unit").strip() for match in _UNIT_NUMBER.finditer(location_text)]
+    units = [unit for unit in units if unit.lower() != "u-hidden"]
     detail_url = ""
     for column in columns.values():
         for link in column.get("links") or []:
@@ -168,13 +193,20 @@ def compact_payload(line: str) -> dict[str, Any]:
         if detail_url:
             break
     return {
-        "unit_number": unit_match.group("unit") if unit_match else "",
+        "unit_number": units[-1] if units else "",
         "location_text": location_text,
         "amount_text": str(columns.get("TOTAL_PRICE", {}).get("text") or ""),
         "specs_text": str(columns.get("BEDROOM", {}).get("text") or ""),
         "date_text": str(columns.get("SOLD_BY", {}).get("text") or ""),
         "detail_url": detail_url,
+        **({"location_title": title} if title else {}),
     }
+
+
+def _location_title(cell_html: str) -> str:
+    tag = _LOCATION_TAG.search(cell_html)
+    title = _TITLE_ATTRIBUTE.search(tag.group(0)) if tag else None
+    return " ".join(unescape(title.group("title")).split()) if title else ""
 
 
 def location_key(value: str) -> str:

@@ -115,6 +115,8 @@ number. DXBI holds about half of the most recent month's leases.
 | Issue | Size (last 365 days unless stated) | Handling |
 |---|---|---|
 | 2026 plot sales misread by the loader (`Al Jafliya Plot, Floor u-hidden, No. 630`: the plot number became the area, the type was lost) | 256 sales | Loader fixed (`holocron/sources/dxbi/sales_units.py`, tested); rows already loaded show no location or type until they are re-ingested |
+| Sales whose unit DXBI hides were dropped by the loader (audit leak L1) | 114,466 sales 2014–2026 (about 10% of DLD's count) | Loader fixed 2026-10-07: they load with an empty unit and show `-`; two such sales with the same date, building, price and size in one search stay two sales. They reach the page once the raw files are re-loaded or re-scraped |
+| A buyer's agent's name glued to the building (`Hajar Binghatti Royale` for DXBI's `Binghatti Royale`): the row's text also holds names DXBI hides on screen | about 2% of sales since 2022 | Loader fixed 2026-10-07: the building and area come from the location DXBI shows (the `title` of the row's location). The loader then deletes the older copy of each re-loaded sale, so nothing counts a sale twice. Rows already loaded keep the glued names until re-loaded |
 | Same place spelled two ways | 5 names (`City of Arabia`, `Dubai islands`, `Dubai Land`, `Al Yufrah1`, `Jumeirah Village Circle Dubai`) | merged as above |
 | Misspellings DXBI uses beside the right name | e.g. `Jumeirah Villlage Circle` (4 sales), `Al Barshaa South 2`, `Al Thanayah 4`, `Nad Al Shiba 1` / `Nad Al Sheba 1`; DXBI also uses both `Marsa Dubai` and `Dubai Marina` | not merged (would be a guess); they show as separate locations |
 | Building names differing only in capitals | 3 (`Serenz by Danube - Tower B` / `TOWER B`, two `Raw District 2` names) | not merged |
@@ -209,6 +211,10 @@ Business Bay and 2,307 against 2,324 in JVC).
 
 **Not fixable in the page.** Gaps that need the loader or a re-scrape: sales after 19 September
 2026; 11 and 18 August; August's CSV-only rows (no unit, some dates a day off); sales whose unit
-DXBI hides when they are scraped (`normalize_sales_row` drops them, see the code review); bedroom
-counts and building names DXBI improved after the scrape. Area totals also differ because DXBI's
-area search uses its own location ids.
+DXBI hides when they are scraped (the loader keeps them since 2026-10-07; the rows already loaded
+predate that); bedroom counts and building names DXBI improved after the scrape. Area totals also
+differ because DXBI's area search uses its own location ids. DXBI's report rows carry no location
+id of their own (none in the sales row HTML read on 2026-10-07, none in the stored row attributes
+of 1.6M leases); the only id is the one the scraper searches with, which is Dubai for the full
+sweep. Grouping by DXBI's areas needs a search per area that records which area each building
+falls in.
