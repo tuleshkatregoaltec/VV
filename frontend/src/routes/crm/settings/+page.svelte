@@ -41,10 +41,10 @@ function onkeydown(e: KeyboardEvent, i: number) {
 }
 </script>
 
-<svelte:head><title>Settings · CRM Beta</title></svelte:head>
+<svelte:head><title>Manager view · CRM Beta</title></svelte:head>
 
 <PageHeader
-	title="Settings"
+	title="Manager view"
 	facts={handout.data
 		? `Lead handout: ${handout.data.options.find((o) => o.id === handout.data?.mode)?.label.toLowerCase()} · default not decided`
 		: ''}

@@ -240,7 +240,14 @@
 		}
 		.logo i {
 			font-style: normal;
-			color: var(--l-vv);
+			background: linear-gradient(110deg, #29576f 30%, #4cb8b1 70%);
+			-webkit-background-clip: text;
+			background-clip: text;
+			color: transparent;
+		}
+		.sb-switch {
+			flex: 1;
+			min-width: 0;
 		}
 		.sb nav {
 			flex: 1;
@@ -2619,7 +2626,8 @@
 				.sb .lbltxt,
 				.sb .ct,
 				.sb .sb-grp,
-				.sb-foot .who {
+				.sb-foot .who,
+				.sb-switch {
 					display: none;
 				}
 				.sb-head {
@@ -2740,7 +2748,8 @@
 			&.app .sb-foot .who {
 				display: initial;
 			}
-			&.app .sb-grp {
+			&.app .sb-grp,
+			&.app .sb-switch {
 				display: block;
 			}
 			&.app .logo .lt {

@@ -1,14 +1,16 @@
 <script lang="ts">
 import Building2 from 'lucide-svelte/icons/building-2'
 import CalendarDays from 'lucide-svelte/icons/calendar-days'
+import ChartNoAxesColumn from 'lucide-svelte/icons/chart-no-axes-column'
 import CircleDot from 'lucide-svelte/icons/circle-dot'
 import FileText from 'lucide-svelte/icons/file-text'
 import House from 'lucide-svelte/icons/house'
 import Inbox from 'lucide-svelte/icons/inbox'
 import LayoutGrid from 'lucide-svelte/icons/layout-grid'
-import SlidersHorizontal from 'lucide-svelte/icons/sliders-horizontal'
+import Send from 'lucide-svelte/icons/send'
 import User from 'lucide-svelte/icons/user'
 import { page } from '$app/state'
+import SectionSwitch from '$lib/components/navigation/SectionSwitch.svelte'
 import type { Me, NavCounts } from '../../api/types'
 import { chrome } from '../../stores/chrome.svelte'
 
@@ -23,9 +25,10 @@ interface Item {
 }
 
 /**
- * v2 sidebar (6 Oct): Agent · Home, Leads, Inbox, Matches, Owners, Deals, Calendar; Assets stays
- * until the founders decide (open question 3). Manager · Settings holds the lead handout setting
- * the Inbox depends on. Counts: new leads, inbox waiting for me, open deals, today's events.
+ * v2 sidebar (6 Oct): Agent · Home, Leads, Inbox, Matches, Owners, Deals, Calendar, Assistant; Assets
+ * stays until the founders decide (open question 3). Manager · Manager view (8 Oct) opens the lead
+ * handout setting the Inbox depends on; the rest of Manager view is out of this build.
+ * Counts: new leads, inbox waiting for me, open deals, today's events.
  */
 const groups = $derived<{ label: string; items: Item[] }[]>([
 	{
@@ -62,6 +65,7 @@ const groups = $derived<{ label: string; items: Item[] }[]>([
 				count: counts?.events_today ?? null,
 				countLabel: 'today'
 			},
+			{ href: '/crm/assistant', label: 'Assistant', icon: Send, count: null },
 			{ href: '/crm/assets', label: 'Assets', icon: LayoutGrid, count: null }
 		]
 	},
@@ -70,8 +74,8 @@ const groups = $derived<{ label: string; items: Item[] }[]>([
 		items: [
 			{
 				href: '/crm/settings',
-				label: 'Settings',
-				icon: SlidersHorizontal,
+				label: 'Manager view',
+				icon: ChartNoAxesColumn,
 				count: counts?.waiting ?? null,
 				countLabel: 'waiting to assign'
 			}
@@ -85,6 +89,7 @@ const path = $derived(page.url.pathname.replace(/\/$/, ''))
 <aside class="sb" aria-label="CRM">
 	<div class="sb-head">
 		<a class="logo" href="/crm" aria-label="Vitevue CRM home"><i>V</i><span class="lt">itevue</span></a>
+		<div class="sb-switch"><SectionSwitch current="crm" /></div>
 	</div>
 	<nav aria-label="CRM sections">
 		{#each groups as g (g.label)}

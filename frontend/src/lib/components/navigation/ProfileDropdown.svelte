@@ -89,8 +89,8 @@ function handleAvatarError() {
 
 	{#if isOpen}
 		<div
-			class="ui-menu absolute right-0 z-50 mt-2 w-64 overflow-hidden"
-			in:fly={{ y: -10, duration: 200, easing: quintOut }}
+			class="ui-menu absolute bottom-full left-0 z-50 mb-2 w-64 overflow-hidden"
+			in:fly={{ y: 10, duration: 200, easing: quintOut }}
 			out:fade={{ duration: 150 }}
 		>
 			<div class="border-b border-border bg-panel px-3 py-3">
