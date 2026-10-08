@@ -100,6 +100,22 @@ def _prefer(primary: str, fallback: str) -> str:
     )
 
 
+# The smallest size a home of each uniform type can have, in sq ft (decision 2026-10-07).
+# DXBI writes 11 sq ft as a placeholder on 18,394 leases (other leases of the same units are
+# ~1,100 sq ft at the same rent) and both sources list hotel rooms such as Ciel at ~9 m^2; their
+# price or rent per area was 4-40x the building's. A smaller size is no size: on a matched row
+# DLD's size fills it when that one is real, else the event has no size and no price per area.
+MIN_HOME_SQFT = {"Apartment": 108, "Hotel Apartment": 108, "Villa": 500, "Townhouse": 500}
+
+
+def _real_sqm(sqm: str, uniform_type: str) -> str:
+    """``sqm`` (m^2) when a home of ``uniform_type`` can have that size, else 0."""
+    names = ", ".join(f"'{name}'" for name in MIN_HOME_SQFT)
+    floors = ", ".join(f"{sqft} / {SQFT_PER_SQM}" for sqft in MIN_HOME_SQFT.values())
+    floor = f"transform({uniform_type}, [{names}], [{floors}], 0.0)"
+    return f"if({sqm} > 0 AND {sqm} >= {floor}, {sqm}, 0)"
+
+
 def _audit(*entries: tuple[str, str]) -> str:
     """Array of the column names whose condition holds (empty array when none does)."""
     items = ", ".join(f"if({condition}, '{name}', '')" for name, condition in entries)
@@ -530,6 +546,9 @@ _DXBI_OFFPLAN_EN = (
     "multiIf(x.market_status = 'Offplan', 'Off-Plan', x.market_status = 'Ready', 'Ready', '')"
 )
 _DXBI_SALE_TYPE = _uniform_type("x.property_type")
+# Sizes as served on a DLD row: each source's size only when it is real for the served type.
+_DXBI_SALE_REAL_SQM = _real_sqm(_DXBI_SALE_SQM, "_type")
+_DLD_SALE_REAL_SQM = _real_sqm("d.procedure_area", "_type")
 
 
 def _location_map(
@@ -627,7 +646,7 @@ SELECT
        toDateTime(x.transaction_date), d.instance_date),
     d.group_id, if(d.group_en = 'Mortgage', 'Mortgages', d.group_en), d.group_ar,
     d.procedure_id, d.procedure_en, d.procedure_ar,
-    if(_dxw AND {_DXBI_SALE_SQM} > 0, {_DXBI_SALE_SQM}, d.procedure_area) AS _size_sqm,
+    if(_dxw AND {_DXBI_SALE_REAL_SQM} > 0, {_DXBI_SALE_SQM}, {_DLD_SALE_REAL_SQM}) AS _size_sqm,
     d.actual_area,
     if(_dxw AND x.sale_amount_aed > 0, toInt64(x.sale_amount_aed), d.trans_value) AS _price,
     _price,
@@ -674,7 +693,7 @@ SELECT
     {_DLD_ROW_LOCATION},
     if(_dxw, {
     _audit(
-        ("size_sqm", f"{_DXBI_SALE_SQM} = 0 AND d.procedure_area > 0"),
+        ("size_sqm", f"{_DXBI_SALE_REAL_SQM} = 0 AND _size_sqm > 0"),
         (
             "property_type",
             f"{_DXBI_SALE_TYPE} IN {_GENERIC_TYPES} AND _type NOT IN {_GENERIC_TYPES}",
@@ -690,7 +709,7 @@ SELECT
         ("actual_worth", "x.sale_amount_aed > 0 AND d.trans_value != toInt64(x.sale_amount_aed)"),
         (
             "size_sqm",
-            f"{_DXBI_SALE_SQM} > 0 AND d.procedure_area > 0"
+            f"{_DXBI_SALE_REAL_SQM} > 0 AND {_DLD_SALE_REAL_SQM} > 0"
             f" AND abs({_DXBI_SALE_SQM} - d.procedure_area) / d.procedure_area > 0.01",
         ),
         (
@@ -767,7 +786,7 @@ SELECT
     concat('dxbi:', x.sale_key), '', '', concat('dxbi:', x.sale_key), '',
     toDateTime(x.transaction_date),
     0, 'Sales', '', 0, '', '',
-    x.size_sqft / {SQFT_PER_SQM}, x.size_sqft / {SQFT_PER_SQM},
+    {_real_sqm(_DXBI_SALE_SQM, _DXBI_SALE_TYPE)} AS _size_sqm, _size_sqm,
     toInt64(x.sale_amount_aed), toInt64(x.sale_amount_aed),
     0, 0, 0, 0,
     multiIf(x.property_type IN ('Villa', 'Townhouse'), 'Villa', x.property_type = 'Plot', 'Land',
@@ -791,7 +810,7 @@ SELECT
     multiIf(x.market_status = 'Offplan', 'Off-Plan Properties',
             x.market_status = 'Ready', 'Existing Properties', ''),
     '',
-    x.sale_amount_aed / nullIf(x.size_sqft / {SQFT_PER_SQM}, 0),
+    x.sale_amount_aed / nullIf(_size_sqm, 0),
     0, 0, 0, 0, 0,
     x.unit_number, x.bedrooms, x.market_status, x.sale_key, x.building_name, x.transaction_date,
     'dxbi', 'dxbi',
@@ -806,7 +825,7 @@ SELECT
     now64(3),
     {_geo_values()},
     {_DXBI_SALE_TYPE},
-    {_DXBI_SALE_SQM},
+    _size_sqm,
     {_DXBI_ROW_LOCATION},
     [], [],
     NULL
@@ -1034,6 +1053,8 @@ _DXBI_RENT_ROOMS = _ROOMS_FROM_BEDROOMS.format(beds="x.bedrooms")
 _DLD_RENT_ROOMS = "if(d.prop_type_en = 'Studio' OR d.prop_sub_type_en = 'Studio', 'Studio', '')"
 _DXBI_RENT_SQM = f"if(x.size_sqft > 0, x.size_sqft / {SQFT_PER_SQM}, 0)"
 _DXBI_RENT_TYPE = _uniform_type("x.property_type")
+_DXBI_RENT_REAL_SQM = _real_sqm(_DXBI_RENT_SQM, "_type")
+_DLD_RENT_REAL_SQM = _real_sqm("d.actual_area", "_type")
 
 _RENTAL_EVENTS_DLD_SQL = f"""
 INSERT INTO `market_rental_events` ({", ".join(RENTAL_COLUMNS + GEO_COLUMNS + UNIFORM_COLUMNS)})
@@ -1065,7 +1086,7 @@ SELECT
             {_DLD_RENT_ROOMS} != '', {_DLD_RENT_ROOMS},
             {_DXBI_RENT_ROOMS}) AS _rooms,
     d.parking,
-    if(_dxw AND {_DXBI_RENT_SQM} > 0, {_DXBI_RENT_SQM}, d.actual_area) AS _size_sqm,
+    if(_dxw AND {_DXBI_RENT_REAL_SQM} > 0, {_DXBI_RENT_SQM}, {_DLD_RENT_REAL_SQM}) AS _size_sqm,
     if(_dxw AND x.annual_rent_aed > 0, toInt64(x.annual_rent_aed), {_DLD_ANNUAL}) AS _annual,
     if(_dxw AND x.contract_amount_aed > 0, toInt64(x.contract_amount_aed), {_DLD_CONTRACT}),
     d.total_properties, d.version_number,
@@ -1095,7 +1116,7 @@ SELECT
     {_DLD_ROW_LOCATION},
     if(_dxw, {
     _audit(
-        ("size_sqm", f"{_DXBI_RENT_SQM} = 0 AND d.actual_area > 0"),
+        ("size_sqm", f"{_DXBI_RENT_REAL_SQM} = 0 AND _size_sqm > 0"),
         (
             "property_type",
             f"{_DXBI_RENT_TYPE} IN {_GENERIC_TYPES} AND _type NOT IN {_GENERIC_TYPES}",
@@ -1114,7 +1135,7 @@ SELECT
         ),
         (
             "size_sqm",
-            f"{_DXBI_RENT_SQM} > 0 AND d.actual_area > 0"
+            f"{_DXBI_RENT_REAL_SQM} > 0 AND {_DLD_RENT_REAL_SQM} > 0"
             f" AND abs({_DXBI_RENT_SQM} - d.actual_area) / d.actual_area > 0.05",
         ),
         (
@@ -1161,7 +1182,8 @@ SELECT
             x.property_type = 'Commercial', 'Commercial', ''),
     -- usage_ar, rooms, rooms_en (DXBI's bedroom count; it was left empty before), parking
     '', '', {_DXBI_RENT_ROOMS}, '',
-    x.size_sqft / {SQFT_PER_SQM}, toInt64(x.annual_rent_aed), toInt64(x.contract_amount_aed),
+    {_real_sqm(_DXBI_RENT_SQM, _DXBI_RENT_TYPE)} AS _size_sqm,
+    toInt64(x.annual_rent_aed), toInt64(x.contract_amount_aed),
     1, 0, x.contract_state, '', '', 0,
     -- Same area resolution as pairing, then the rental-learned map, else DXBI's own name.
     multiIf({_RENTAL_DLD_AREA} != '', {
@@ -1171,7 +1193,7 @@ SELECT
     if(pm.dld_name != '', pm.dld_name, x.project_name), '', '', '',
     0, '', '', '', '', '', '', '', '', '',
     0, '', '', 0, '', '', 0, '', '',
-    x.annual_rent_aed / nullIf(x.size_sqft / {SQFT_PER_SQM}, 0),
+    x.annual_rent_aed / nullIf(_size_sqm, 0),
     x.unit_number, x.bedrooms, x.contract_key, x.building_name,
     'dxbi', 'dxbi',
     -- Same rule as sales (loose pairs exist only inside the DXBI period). DXBI lists a
@@ -1184,7 +1206,7 @@ SELECT
     now64(3),
     {_geo_values()},
     {_DXBI_RENT_TYPE},
-    {_DXBI_RENT_SQM},
+    _size_sqm,
     {_DXBI_ROW_LOCATION},
     [], []
 FROM market_rental_matches AS m

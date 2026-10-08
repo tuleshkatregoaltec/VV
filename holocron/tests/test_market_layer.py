@@ -59,6 +59,23 @@ def test_property_type_vocabulary_is_one_closed_list() -> None:
     assert len(words) == len(set(words))
 
 
+def test_sizes_no_home_can_have_are_not_served() -> None:
+    # DXBI's 11 sq ft placeholder and ~9 m^2 hotel-room listings put price per area at 4-40x the
+    # building's. A floor keyed on a type name the vocabulary no longer has would stop applying.
+    assert set(transforms.MIN_HOME_SQFT) <= set(transforms.PROPERTY_TYPES)
+    sources_per_statement = {
+        transforms._SALE_EVENTS_DLD_SQL: 2,  # DXBI's size, else DLD's: each must be real
+        transforms._SALE_EVENTS_DXBI_SQL: 1,
+        transforms._RENTAL_EVENTS_DLD_SQL: 2,
+        transforms._RENTAL_EVENTS_DXBI_SQL: 1,
+    }
+    for sql, sources in sources_per_statement.items():
+        served_size = sql.split(" AS _size_sqm")[0].rsplit("\n", 1)[-1]
+        assert served_size.count("transform(") == sources
+        # The price per area divides by the served size, so a dropped size drops it too.
+        assert "/ nullIf(_size_sqm, 0)" in sql
+
+
 class _Result:
     def __init__(self, value: Any) -> None:
         self.result_rows = [(value,)]
