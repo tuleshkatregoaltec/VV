@@ -111,7 +111,7 @@ def project_sales_by_rooms(
           AND trans_group_en = 'Sales'
           AND property_type NOT IN ('Plot', 'Building', '')
           AND property_usage_en = 'Residential'
-          AND rooms_en IS NOT NULL
+          AND rooms_en != ''
           AND actual_worth > 0
           {reg_filter}
         GROUP BY rooms_en
@@ -135,7 +135,7 @@ def project_configuration_sales(
               AND trans_group_en = 'Sales'
               AND property_type NOT IN ('Plot', 'Building', '')
               AND property_usage_en = 'Residential'
-              AND rooms_en IS NOT NULL
+              AND rooms_en != ''
               AND actual_worth > 0
               {reg_filter}
         ),
@@ -239,6 +239,11 @@ def project_rentals_by_rooms(filter_type: ProjectScopeType = "project") -> str:
 
     rent_filter = _project_filter(filter_type)
 
+    # A lease counts under its own bedrooms (DXBI gives them on most leases since 2025). Only a
+    # lease without them is placed by size: inside exactly one bedroom type's interquartile size
+    # range among the scope's registered units. Placing every lease by size dropped those whose
+    # size fits two types' ranges, which citywide is nearly all of them (Dubai showed 0 studio,
+    # 1-bed and 4-bed leases).
     return f"""
         SELECT
             rooms_en,
@@ -246,8 +251,15 @@ def project_rentals_by_rooms(filter_type: ProjectScopeType = "project") -> str:
             round(medianExact(annual_amount), 2) AS median_annual_rent,
             round(medianExact(annual_amount / nullIf(actual_area * 10.7639, 0)), 2) AS median_rent_sqft
         FROM (
-            SELECT any(ar.rooms_en) AS rooms_en, annual_amount, actual_area
+            SELECT rooms_en, annual_amount, actual_area
             FROM ch_rent_contracts
+            WHERE {rent_filter}
+              AND property_usage_en = 'Residential'
+              AND annual_amount > 0
+              AND rooms_en != ''
+            UNION ALL
+            SELECT any(ar.rooms_en) AS rooms_en, annual_amount, actual_area
+            FROM ch_rent_contracts AS rc
             CROSS JOIN (
                 SELECT
                     rooms_en,
@@ -256,7 +268,7 @@ def project_rentals_by_rooms(filter_type: ProjectScopeType = "project") -> str:
                     count() AS n
                 FROM ch_units
                 WHERE {unit_filter}
-                  AND (rooms_en LIKE '% B/R' OR rooms_en = 'Studio' OR rooms_en LIKE '%ENTHOUSE')
+                  AND (rooms_en LIKE '% B/R' OR rooms_en = 'Studio')
                   AND actual_area > 0
                 GROUP BY rooms_en
                 HAVING n >= 3
@@ -268,6 +280,7 @@ def project_rentals_by_rooms(filter_type: ProjectScopeType = "project") -> str:
               AND property_usage_en = 'Residential'
               AND annual_amount > 0
               AND actual_area > 0
+              AND rc.rooms_en = ''
             GROUP BY contract_id, line_number, annual_amount, actual_area
             HAVING count(DISTINCT ar.rooms_en) = 1
         )
@@ -294,7 +307,7 @@ def project_units_composition(filter_type: ProjectScopeType = "project") -> str:
             round(avgIf(actual_area, actual_area > 0) * 10.7639, 2) as avg_unit_size_sqft
         FROM ch_units
         WHERE {where}
-          AND rooms_en IS NOT NULL
+          AND rooms_en != ''
         GROUP BY rooms_en
         ORDER BY unit_count DESC
     """
@@ -557,7 +570,7 @@ def project_price_distribution(
           AND trans_group_en = 'Sales'
           AND property_type NOT IN ('Plot', 'Building', '')
           AND property_usage_en = 'Residential'
-          AND rooms_en IS NOT NULL
+          AND rooms_en != ''
           AND actual_worth > 0
           {reg_filter}
         GROUP BY rooms_en
@@ -723,14 +736,6 @@ async def fetch_search_projects(parameters: dict):
 
 async def fetch_search_sub_projects(parameters: dict, filter_type: ProjectFilterType = "master"):
     return await query(search_sub_projects(filter_type), parameters)
-
-
-async def fetch_get_market_summary_rows(parameters: dict):
-    """The registered unit count of every project; the market's figures use the served rows."""
-    return await query(
-        "SELECT sum(pf.no_of_units) AS unit_count FROM ch_project_fact AS pf",
-        parameters,
-    )
 
 
 async def fetch_project_meta(parameters: dict, filter_type):

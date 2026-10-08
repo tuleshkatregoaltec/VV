@@ -240,3 +240,51 @@ async def test_bucket_filters_are_half_open_ranges(warehouse):
     with pytest.raises(HTTPException) as refused:
         await sold(price_bucket="cheap")
     assert refused.value.status_code == 422
+
+
+async def test_leases_count_under_their_own_bedrooms_before_any_size_guess(warehouse):
+    """Every lease used to be placed by size inside one bedroom type's range of registered unit
+    sizes, and dropped when its size fit two ranges. Citywide the ranges overlap, so the Dubai
+    view showed 0 studio, 1-bed and 4-bed leases. A lease that states its bedrooms (DXBI) counts
+    under them; only a lease without them is placed by size, and only when one range holds it."""
+    from app.analytics.queries import project_rentals_by_rooms
+
+    await warehouse.command("""
+        CREATE TABLE ch_units (
+            project_name_en String, master_project_en String, rooms_en String,
+            actual_area Float64
+        ) ENGINE = MergeTree ORDER BY rooms_en
+    """)
+    await warehouse.command("""
+        CREATE TABLE ch_rent_contracts (
+            contract_id String, line_number UInt32, project_name_en String,
+            master_project_en String, property_usage_en String, annual_amount Float64,
+            actual_area Float64, rooms_en String
+        ) ENGINE = MergeTree ORDER BY contract_id
+    """)
+    # Registered sizes whose middle halves touch: studios 45-60 m², one-beds 60-80 m².
+    await warehouse.insert(
+        "ch_units",
+        [["Tower", "Master", rooms, area]
+         for rooms, areas in (("Studio", (35, 45, 55, 60)), ("1 B/R", (50, 60, 70, 80)))
+         for area in areas],
+        column_names=["project_name_en", "master_project_en", "rooms_en", "actual_area"],
+    )  # fmt: skip
+    await warehouse.insert(
+        "ch_rent_contracts",
+        [
+            # States its bedrooms: counts under them, whatever its size.
+            ["c1", 1, "Tower", "Master", "Residential", 50_000, 55, "Studio"],
+            ["c2", 1, "Tower", "Master", "Residential", 70_000, 56, "1 B/R"],
+            # No bedrooms, size only in the one-bed range: placed by size.
+            ["c3", 1, "Tower", "Master", "Residential", 80_000, 75, ""],
+            # No bedrooms, size in both ranges: cannot be placed.
+            ["c4", 1, "Tower", "Master", "Residential", 60_000, 60, ""],
+        ],
+        column_names=["contract_id", "line_number", "project_name_en", "master_project_en",
+                      "property_usage_en", "annual_amount", "actual_area", "rooms_en"],
+    )  # fmt: skip
+
+    rows = await query(project_rentals_by_rooms("market"))
+
+    assert {row["rooms_en"]: row["rental_count"] for row in rows} == {"Studio": 1, "1 B/R": 2}
