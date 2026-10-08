@@ -8,7 +8,9 @@ ft, half-open bands, the date window), and compares the live API with it:
 
 - totals and the first, a middle and the last page of every period (7-365 days) and usage;
 - every field of every compared row;
-- one page per filter value (types, bedrooms, status / contract type, top locations, buildings);
+- one page per filter value (types, bedrooms, status / contract type, top locations, buildings),
+  a location holding every record DXBI's area page counts (dxbi_location_members, then the
+  record's building, then its printed area and the areas above it);
 - every size, price, price per sq ft and rent band, and that the bands' totals add up to the rows
   that have a value (no overlap, no gap);
 - the filter options.
@@ -106,9 +108,33 @@ class Verifier:
             .set_index("k")
             .area_name.to_dict()
         )
+        members = self.ch.query_df(
+            "SELECT location_name, sale_key, building_key, area_key FROM dxbi_location_members"
+        )
+        self.by_sale = members.groupby("sale_key").location_name.agg(set).to_dict()
+        swept = members[members.building_key != ""]
+        self.by_building = (
+            swept.groupby(["building_key", "area_key"]).location_name.agg(set).to_dict()
+        )
+        lineages = self.ch.query_df("SELECT name_key, lineage FROM dxbi_locations")
+        self.by_printed: dict[str, set] = {}
+        for key, lineage in zip(lineages.name_key, lineages.lineage):
+            self.by_printed.setdefault(key, set()).update(lineage)
         start = self.today - timedelta(days=364)
         self.sales = self._sales(start)
         self.rentals = self._rentals(start)
+
+    def _dxbi_locations(
+        self, sale_key, building_key: str, area_key: str, printed: str
+    ) -> frozenset:
+        """The Location choices whose DXBI area page counts the record."""
+        found = (
+            self.by_sale.get(sale_key)
+            or (self.by_building.get((building_key, area_key)) if building_key else None)
+            or self.by_printed.get(area_key)
+            or ({printed} if printed else set())
+        )
+        return frozenset(found)
 
     def _location(self, area: str) -> str:
         if area == "" or area.startswith("No."):
@@ -122,7 +148,8 @@ class Verifier:
     def _sales(self, start: date) -> pd.DataFrame:
         sales = self.ch.query_df(
             "SELECT sale_key, transaction_date, unit_number, building_name, building_key, "
-            "project_name, area_name, property_type, market_status, bedrooms, size_sqft, size_key, "
+            "project_name, area_name, area_key, property_type, market_status, bedrooms, size_sqft, "
+            "size_key, "
             "sale_amount_aed, price_per_sqft_aed, detail_url, loaded_at FROM dxbi_sales_unit_events "
             f"WHERE transaction_date BETWEEN '{start}' AND '{self.today}'"
         )
@@ -173,6 +200,10 @@ class Verifier:
             "copies removed)"
         )
         sales["location"] = sales.area_name.map(self._location)
+        sales["locations"] = [
+            self._dxbi_locations(*values)
+            for values in zip(sales.sale_key, sales.building_key, sales.area_key, sales.location)
+        ]
         sales["usage"] = sales.property_type.map(_usage)
         sales["beds"] = sales.bedrooms.map(_bedrooms)
         sales["status"] = sales.market_status.map({"Offplan": "Off-Plan", "Ready": "Ready"}).fillna(
@@ -249,6 +280,12 @@ class Verifier:
             f"{current - copies - len(rentals)} repeated numbered-unit rows removed)"
         )
         rentals["location"] = rentals.area_name.map(self._location)
+        rentals["locations"] = [
+            self._dxbi_locations(None, _search_key(building), _search_key(area), printed)
+            for building, area, printed in zip(
+                rentals.building_name, rentals.area_name, rentals.location
+            )
+        ]
         rentals["usage"] = rentals.property_type.map(_usage)
         rentals["beds"] = rentals.bedrooms.map(_bedrooms)
         rentals["size"] = [s if s > 0 else None for s in rentals.size_sqft]
@@ -266,13 +303,14 @@ class Verifier:
             ("usage", "property_usage"),
             ("property_type", "property_type"),
             ("beds", "bedrooms"),
-            ("location", "location"),
             ("building_name", "building"),
             ("status", "status") if sales else ("contract_state", "contract_type"),
         ]
         for column, name in equal:
             if f.get(name):
                 frame = frame[frame[column] == f[name]]
+        if f.get("location"):
+            frame = frame[[f["location"] in locations for locations in frame.locations]]
         bands = (
             [("size", "size"), ("sale_amount_aed", "price"), ("ppsqft", "price_per_sqft")]
             if sales
@@ -320,7 +358,7 @@ class Verifier:
         expected = self.expected(kind, days, **filters)
         alphabetical = _alphabetical
         want = {
-            "locations": alphabetical(expected.location),
+            "locations": alphabetical(set().union(*expected.locations)),
             "buildings": alphabetical(v.strip() for v in expected.building_name),
             "property_types": alphabetical(expected.property_type),
             "bedrooms": sorted(
@@ -366,7 +404,7 @@ class Verifier:
             for name, column in fields:
                 for value in sorted(v for v in frame[column].unique() if v):
                     self.compare_page(kind, 365, 0, {name: value})
-            for value in frame.location.value_counts().index[:8]:
+            for value in frame.locations.explode().value_counts().index[:8]:
                 self.compare_page(kind, 365, 0, {"location": value})
             buildings = frame[frame.building_name != ""].building_name.value_counts().index[:4]
             for value in buildings:
@@ -409,6 +447,18 @@ class Verifier:
 
 def _alphabetical(values) -> list[str]:
     return sorted({v for v in values if v}, key=lambda v: (v.casefold(), v))
+
+
+def _search_key(name: str) -> str:
+    """holocron sales_units.location_key: how sales key their building and area."""
+    key = name.lower()
+    for source, target in (
+        ("jumeriah", "jumeirah"),
+        ("residences", "residence"),
+        ("apartments", "apartment"),
+    ):
+        key = key.replace(source, target)
+    return re.sub(r"[^a-z0-9]+", "", key)
 
 
 def _letters(name: str) -> str:

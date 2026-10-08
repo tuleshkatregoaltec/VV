@@ -81,6 +81,36 @@ _LOCATION = r"""multiIf(
         location_spelling.1, location_spelling.2, area_name))"""
 
 
+# DXBI's Location choices are its own areas, sub-areas and master communities, and a record
+# belongs to them as DXBI's area pages count it (decision 2026-10-07: totals match the website).
+# Those pages can count a record under a different place than the area printed on it: JVC's page
+# counts buildings printed "Al Barsha South 4", and Dubai Marina's leaves out 27 of 181 sales
+# printed "Dubai Marina" (August 2026). dxbi_location_members holds the sales each location's
+# search returned over the last sweep (holocron/scripts/dxbi_location_sweep.py). A record takes,
+# in order: the locations that returned it; else those that returned other sales in its building;
+# else the location named like its printed area, with the areas above it.
+_SEARCH_KEY = r"""replaceRegexpAll(replaceAll(replaceAll(replaceAll(lowerUTF8({value}),
+    'jumeriah', 'jumeirah'), 'residences', 'residence'), 'apartments', 'apartment'),
+    '[^a-z0-9]+', '')"""
+_BUILDING_LOCATIONS = """(
+        SELECT building_key AS swept_building_key, area_key AS swept_area_key,
+               groupUniqArray(location_name) AS building_locations
+        FROM dxbi_location_members
+        WHERE building_key != ''
+        GROUP BY building_key, area_key
+    )"""
+_PRINTED_LOCATIONS = """(
+        SELECT name_key AS printed_key,
+               arrayDistinct(arrayFlatten(groupArray(lineage))) AS printed_locations
+        FROM dxbi_locations
+        GROUP BY name_key
+    )"""
+_DXBI_LOCATIONS = """multiIf(
+            notEmpty(building_locations), building_locations,
+            notEmpty(printed_locations), printed_locations,
+            location_name != '', [location_name], [])"""
+
+
 def _sales_source(date_clause: str) -> str:
     """One row per DXBI sale, in DXBI's own units: sizes in sq ft, prices in AED.
 
@@ -117,7 +147,8 @@ def _sales_source(date_clause: str) -> str:
             sale_amount_aed AS price_aed,
             multiIf(price_per_sqft_aed > 0, toInt64(round(price_per_sqft_aed)),
                     size_sqft > 0, toInt64(round(sale_amount_aed / size_sqft)), NULL)
-                AS price_per_sqft
+                AS price_per_sqft,
+            if(notEmpty(sale_locations), sale_locations, {_DXBI_LOCATIONS}) AS dxbi_locations
         FROM (
             SELECT *, {same_sale} AS same_sale
             FROM (
@@ -130,7 +161,16 @@ def _sales_source(date_clause: str) -> str:
             )
             ORDER BY same_sale, detail_url = '', loaded_at DESC, sale_key
             LIMIT 1 BY same_sale
-        )
+        ) AS sale
+        LEFT JOIN (
+            SELECT sale_key AS swept_sale_key, groupUniqArray(location_name) AS sale_locations
+            FROM dxbi_location_members
+            GROUP BY sale_key
+        ) AS swept_sale ON swept_sale.swept_sale_key = sale.sale_key
+        LEFT JOIN {_BUILDING_LOCATIONS} AS swept_building
+            ON swept_building.swept_building_key = sale.building_key
+            AND swept_building.swept_area_key = sale.area_key
+        LEFT JOIN {_PRINTED_LOCATIONS} AS printed ON printed.printed_key = sale.area_key
     """
 
 
@@ -154,6 +194,9 @@ def _rentals_source(date_clause: str) -> str:
         "size_sqft, lease_start, lease_end, contract_amount_aed, contract_state), "
         "cityHash64(contract_key))"
     )
+    # A lease's building and area keyed as the sales loader keys them (sales_units.location_key).
+    building_key = _SEARCH_KEY.format(value="building_name")
+    area_key = _SEARCH_KEY.format(value="area_name")
     return rf"""
         WITH {_LOCATION_SPELLING}
         SELECT
@@ -171,9 +214,11 @@ def _rentals_source(date_clause: str) -> str:
             if(annual_rent_aed > 0, annual_rent_aed, NULL) AS annual_rent_aed,
             if(contract_amount_aed > 0, contract_amount_aed, NULL) AS contract_amount_aed,
             contract_term_months AS term_months,
-            contract_state AS contract_type
+            contract_state AS contract_type,
+            {_DXBI_LOCATIONS} AS dxbi_locations
         FROM (
-            SELECT *, {same_lease} AS same_lease
+            SELECT *, {same_lease} AS same_lease,
+                   {building_key} AS lease_building_key, {area_key} AS lease_area_key
             FROM dxbi_rental_events FINAL
             WHERE {date_clause}
               AND (unit_number != '' OR {lease_terms} NOT IN (
@@ -181,7 +226,11 @@ def _rentals_source(date_clause: str) -> str:
                   WHERE {date_clause} AND unit_number != ''))
             ORDER BY same_lease, occurrence_index, contract_key
             LIMIT 1 BY same_lease
-        )
+        ) AS lease
+        LEFT JOIN {_BUILDING_LOCATIONS} AS swept_building
+            ON swept_building.swept_building_key = lease.lease_building_key
+            AND swept_building.swept_area_key = lease.lease_area_key
+        LEFT JOIN {_PRINTED_LOCATIONS} AS printed ON printed.printed_key = lease.lease_area_key
     """
 
 
@@ -197,6 +246,13 @@ def _equals(clauses: list[str], params: dict, column: str, name: str, value) -> 
     if value:
         clauses.append(f"{column} = {{{name}:String}}")
         params[name] = value
+
+
+def _location(clauses: list[str], params: dict, value) -> None:
+    """A DXBI location holds every record its area page counts (``dxbi_locations``)."""
+    if value:
+        clauses.append("has(dxbi_locations, {location:String})")
+        params["location"] = value
 
 
 def _band(clauses: list[str], params: dict, column: str, name: str, low, high) -> None:
@@ -215,7 +271,7 @@ def _sales_where(filters: SalesFilters, params: dict) -> str:
     _equals(clauses, params, "property_type", "property_type", filters.property_type)
     _equals(clauses, params, "bedrooms", "bedrooms", filters.bedrooms)
     _equals(clauses, params, "status", "status", filters.status)
-    _equals(clauses, params, "location_name", "location", filters.location)
+    _location(clauses, params, filters.location)
     _equals(clauses, params, "building_name", "building", filters.building)
     _band(clauses, params, "size_sqft", "size", filters.size_min, filters.size_max)
     _band(clauses, params, "price_aed", "price", filters.price_min, filters.price_max)
@@ -236,7 +292,7 @@ def _rentals_where(filters: RentalFilters, params: dict) -> str:
     _equals(clauses, params, "property_type", "property_type", filters.property_type)
     _equals(clauses, params, "bedrooms", "bedrooms", filters.bedrooms)
     _equals(clauses, params, "contract_type", "contract_type", filters.contract_type)
-    _equals(clauses, params, "location_name", "location", filters.location)
+    _location(clauses, params, filters.location)
     _equals(clauses, params, "building_name", "building", filters.building)
     _band(clauses, params, "size_sqft", "size", filters.size_min, filters.size_max)
     _band(clauses, params, "annual_rent_aed", "rent", filters.rent_min, filters.rent_max)
@@ -355,7 +411,7 @@ async def fetch_sales_facets(filters: SalesFilters) -> dict:
             groupUniqArrayIf(property_type, property_type != '') AS property_type_options,
             groupUniqArrayIf(bedrooms, bedrooms != '') AS bedroom_options,
             groupUniqArrayIf(status, status != '') AS status_options,
-            groupUniqArrayIf(location_name, location_name != '') AS location_options,
+            groupUniqArrayArray(dxbi_locations) AS location_options,
             groupUniqArrayIf(building_name, building_name != '') AS building_options
         FROM ({source})
         WHERE {_sales_where(filters, params)}
@@ -375,7 +431,7 @@ async def fetch_rental_facets(filters: RentalFilters) -> dict:
             groupUniqArrayIf(property_type, property_type != '') AS property_type_options,
             groupUniqArrayIf(bedrooms, bedrooms != '') AS bedroom_options,
             groupUniqArrayIf(contract_type, contract_type != '') AS contract_type_options,
-            groupUniqArrayIf(location_name, location_name != '') AS location_options,
+            groupUniqArrayArray(dxbi_locations) AS location_options,
             groupUniqArrayIf(building_name, building_name != '') AS building_options
         FROM ({source})
         WHERE {_rentals_where(filters, params)}

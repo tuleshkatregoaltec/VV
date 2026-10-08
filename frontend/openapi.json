@@ -3538,10 +3538,10 @@
 									"type": "null"
 								}
 							],
-							"description": "DXBI location (community)",
+							"description": "DXBI area or community: every record its DXBI area page counts",
 							"title": "Location"
 						},
-						"description": "DXBI location (community)"
+						"description": "DXBI area or community: every record its DXBI area page counts"
 					},
 					{
 						"name": "building",
@@ -3805,10 +3805,10 @@
 									"type": "null"
 								}
 							],
-							"description": "DXBI location (community)",
+							"description": "DXBI area or community: every record its DXBI area page counts",
 							"title": "Location"
 						},
-						"description": "DXBI location (community)"
+						"description": "DXBI area or community: every record its DXBI area page counts"
 					},
 					{
 						"name": "building",
@@ -6415,10 +6415,10 @@
 									"type": "null"
 								}
 							],
-							"description": "DXBI location (community)",
+							"description": "DXBI area or community: every record its DXBI area page counts",
 							"title": "Location"
 						},
-						"description": "DXBI location (community)"
+						"description": "DXBI area or community: every record its DXBI area page counts"
 					},
 					{
 						"name": "building",
@@ -6709,10 +6709,10 @@
 									"type": "null"
 								}
 							],
-							"description": "DXBI location (community)",
+							"description": "DXBI area or community: every record its DXBI area page counts",
 							"title": "Location"
 						},
-						"description": "DXBI location (community)"
+						"description": "DXBI area or community: every record its DXBI area page counts"
 					},
 					{
 						"name": "building",
@@ -6971,10 +6971,10 @@
 									"type": "null"
 								}
 							],
-							"description": "DXBI location (community)",
+							"description": "DXBI area or community: every record its DXBI area page counts",
 							"title": "Location"
 						},
-						"description": "DXBI location (community)"
+						"description": "DXBI area or community: every record its DXBI area page counts"
 					},
 					{
 						"name": "building",
@@ -7262,10 +7262,10 @@
 									"type": "null"
 								}
 							],
-							"description": "DXBI location (community)",
+							"description": "DXBI area or community: every record its DXBI area page counts",
 							"title": "Location"
 						},
-						"description": "DXBI location (community)"
+						"description": "DXBI area or community: every record its DXBI area page counts"
 					},
 					{
 						"name": "building",

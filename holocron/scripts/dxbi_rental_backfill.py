@@ -674,6 +674,8 @@ def fetch_rows(
     payload = {
         "template": template,
         "date": shard["date"],
+        # A shard is one day unless it names its own end (dxbi_location_sweep.py's windows).
+        "endDate": shard.get("end_date") or shard["date"],
         "minPrice": decimal_text(shard["min_price"]),
         "maxPrice": decimal_text(shard["max_price"]),
         "minSize": decimal_text(shard["min_size"]),
@@ -700,7 +702,7 @@ def fetch_rows(
                     item.v = input.filterOverrides[item.n];
                 }
                 if (item.n === 'P74_START_DATE') item.v = input.date;
-                if (item.n === 'P74_END_DATE') item.v = input.date;
+                if (item.n === 'P74_END_DATE') item.v = input.endDate;
                 if (item.n === 'P74_MIN_PRICE') item.v = input.minPrice;
                 if (item.n === 'P74_MAX_PRICE') item.v = input.maxPrice;
                 if (item.n === 'P74_MIN_SIZE') item.v = input.minSize;

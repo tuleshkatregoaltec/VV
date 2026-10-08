@@ -293,6 +293,39 @@ CREATE TABLE IF NOT EXISTS dxbi_sales_unit_events (
 ) ENGINE = ReplacingMergeTree(loaded_at)
 ORDER BY (building_key, bedrooms, size_key, transaction_date, sale_key);
 
+-- DXBI's areas (A), sub-areas (U) and master communities (M), from the location list its search
+-- box loads. name_key matches the area a DXBI row prints (location_key of canonical_area_name);
+-- lineage is the location and the areas above it, the Location choices a row belongs to.
+CREATE TABLE IF NOT EXISTS dxbi_locations (
+    location_id   UInt32,
+    name          String,
+    display_name  String DEFAULT '',
+    slug          String DEFAULT '',
+    flag          LowCardinality(String) DEFAULT '',
+    parent_id     UInt32 DEFAULT 0,
+    name_key      String DEFAULT '',
+    lineage       Array(String),
+    source_run_id String DEFAULT '',
+    loaded_at     DateTime64(3, 'UTC') DEFAULT now64(3)
+) ENGINE = ReplacingMergeTree(loaded_at)
+ORDER BY location_id;
+
+-- The sales DXBI's search returns for each location over a window (scripts/dxbi_location_sweep.py):
+-- how DXBI's area pages group sales, which can differ from the area printed on a row.
+CREATE TABLE IF NOT EXISTS dxbi_location_members (
+    location_id      UInt32,
+    location_name    String,
+    sale_key         String,
+    transaction_date Date,
+    building_key     String DEFAULT '',
+    area_key         String DEFAULT '',
+    window_start     Date,
+    window_end       Date,
+    source_run_id    String DEFAULT '',
+    loaded_at        DateTime64(3, 'UTC') DEFAULT now64(3)
+) ENGINE = ReplacingMergeTree(loaded_at)
+ORDER BY (location_id, sale_key);
+
 CREATE TABLE IF NOT EXISTS dxbi_rental_sale_matches (
     unit_candidate_key             String,
     unit_number                    String DEFAULT '',
