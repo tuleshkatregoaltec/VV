@@ -65,3 +65,41 @@ async def test_market_trend_change_of_a_period_without_sizes_is_empty(monkeypatc
     assert response.total_transactions == 1
     assert (response.avg_price_change_pct, response.avg_price_sqft_change_pct) == (None, None)
     json.dumps(response.model_dump(mode="json"), allow_nan=False)
+
+
+async def test_project_without_sales_or_leases_has_no_figures(monkeypatch):
+    """Compare opens on projects such as off-plan launches with no sale or lease yet: their
+    summary and price distribution are empty, not an HTTP 500 that breaks the page."""
+
+    async def rows(*args, **kwargs):
+        return []
+
+    async def no_sales(*args, **kwargs):
+        return [{"transaction_count": 0, "total_volume": 0, "avg_price": NAN,
+                 "avg_price_sqft": NAN, "median_price": NAN}]  # fmt: skip
+
+    async def no_leases(*args, **kwargs):
+        return [{"contract_count": 0, "total_annual_value": 0, "median_annual_rent": NAN,
+                 "median_rent_sqft": NAN}]  # fmt: skip
+
+    async def all_rooms_of_no_sales(*args, **kwargs):
+        statistics = ("mean_price", "std_price", "log_mean_price", "log_std_price", "p05_price",
+                      "p25_price", "p50_price", "p75_price", "p95_price", "mean_price_sqft",
+                      "std_price_sqft")  # fmt: skip
+        return [{"rooms_en": "__all__", "sale_count": 0, **dict.fromkeys(statistics, NAN)}]
+
+    for name in dir(queries):
+        if name.startswith("fetch_project_") or name == "fetch_project_developers_by_scope":
+            monkeypatch.setattr(queries, name, rows)
+    monkeypatch.setattr(queries, "fetch_project_sales_summary", no_sales)
+    monkeypatch.setattr(queries, "fetch_project_rentals_summary", no_leases)
+    monkeypatch.setattr(queries, "fetch_project_price_distribution", all_rooms_of_no_sales)
+
+    summary = await service.get_project_summary(project_name="1wood", filter_type="project")
+    distribution = await service.get_project_price_distribution(project_name="1wood")
+
+    assert (summary.sales.transaction_count, summary.sales.avg_price) == (0, 0)
+    assert (summary.rentals.contract_count, summary.rentals.median_annual_rent) == (0, 0)
+    assert distribution.all is None
+    json.dumps(summary.model_dump(mode="json"), allow_nan=False)
+    json.dumps(distribution.model_dump(mode="json"), allow_nan=False)
