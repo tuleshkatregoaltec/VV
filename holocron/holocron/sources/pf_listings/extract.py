@@ -225,7 +225,7 @@ class PropertyFinderBrowserListingsClient:
                 elif status >= 400:
                     raise RuntimeError(f"Property Finder search failed status={status} url={url}")
                 else:
-                    return _next_data_from_page(page=page, url=url)
+                    return _page_props_payload(_next_data_from_page(page=page, url=url), url=url)
             except Exception as exc:  # noqa: BLE001
                 last_error = str(exc)
                 if attempt == _MAX_FETCH_ATTEMPTS:
@@ -240,7 +240,9 @@ class PropertyFinderBrowserListingsClient:
         )
 
     def _search_url(self, *, params: Sequence[tuple[str, str]]) -> str:
-        return f"{self._base_url}/{self._config.locale}/search?{urlencode(list(params), doseq=True)}"
+        return (
+            f"{self._base_url}/{self._config.locale}/search?{urlencode(list(params), doseq=True)}"
+        )
 
     def fetch_detail(self, *, details_path: str) -> dict[str, Any]:
         page = self._detail_page_or_new()
@@ -248,7 +250,7 @@ class PropertyFinderBrowserListingsClient:
         page.goto(
             url, wait_until="domcontentloaded", timeout=int(self._config.timeout_seconds * 1000)
         )
-        return _next_data_from_page(page=page, url=url)
+        return _page_props_payload(_next_data_from_page(page=page, url=url), url=url)
 
     def _ensure_search_build_id(self) -> str:
         if self._search_build_id:
@@ -2613,6 +2615,18 @@ def _next_data_from_page(*, page: Page, url: str) -> dict[str, Any]:
     if not isinstance(payload, dict):
         raise ValueError(f"Property Finder __NEXT_DATA__ must be an object: {url}")
     return payload
+
+
+def _page_props_payload(next_data: dict[str, Any], *, url: str) -> dict[str, Any]:
+    """Unwrap HTML __NEXT_DATA__ ({props: {pageProps}}) to the data-route shape ({pageProps}).
+
+    The parsers read payload["pageProps"]; returning __NEXT_DATA__ unwrapped made every
+    search and detail page parse as empty while the run still reported success.
+    """
+    props = next_data.get("props")
+    if not isinstance(props, dict) or not isinstance(props.get("pageProps"), dict):
+        raise RuntimeError(f"Property Finder __NEXT_DATA__ has no props.pageProps: {url}")
+    return props
 
 
 def _first_string(*containers: Mapping[str, Any], keys: Sequence[str]) -> str:

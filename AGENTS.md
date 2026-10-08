@@ -77,6 +77,16 @@ This repo is developed on Linux and macOS. On macOS, use Homebrew for CLI prereq
 - Treat Docker Compose as local external services only, not the production runtime model.
 - Prefer host tooling for source-code tasks such as linting, formatting, tests, code generation, and git hooks.
 
+## Production-First Development
+- Use `production-readiness-2026-09-29.md` as the detailed production architecture and deployment reference.
+- Target the agreed production architecture in all future code changes, not just local development.
+- Before changes with production implications, inspect the relevant requirements in that reference.
+- Prefer production-safe implementations; avoid temporary or local-only shortcuts that require rewriting before deployment.
+- Consider security, tenant isolation, persistence, failure handling, observability, migrations, secrets, scalability, and deployment impact where relevant.
+- Build for Phase 1: one enterprise with ~150 users, without unnecessary over-engineering.
+- Identify conflicts between a requested change and the production architecture before implementing it.
+- Run relevant tests/checks after changes and report remaining production risks.
+
 ## Coding Conventions
 - Match existing naming, formatting, and file placement before introducing a new pattern.
 - Keep Svelte components in `PascalCase`, stores/utilities in `camelCase`, and route folders aligned with URL paths.

@@ -2,62 +2,17 @@ from datetime import datetime
 from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, Field, field_validator
-from sqlalchemy import DateTime
+from sqlalchemy import DateTime, Index
 from sqlmodel import JSON, Column, SQLModel
 from sqlmodel import Field as SQLField
 
-Usage = Literal["residential", "commercial", "mixed_use", "unknown"]
+from app.plots.models import LandSaleEvidence, PlotDetails, Usage
+
 DevelopmentModel = Literal[
     "build_to_sell_residential",
     "build_to_rent_residential",
     "build_to_lease_commercial",
 ]
-
-
-class GISLandUse(BaseModel):
-    type: str
-    use: str
-
-
-class Plot(BaseModel):
-    plot_number: str
-    community_name: str
-    project_name: str
-    plot_area_sqm: float
-    max_gfa_sqm: float
-    max_height: str
-    max_coverage: str
-    gfa_type: str
-    is_verified: bool
-    land_use_summary: list[str] = Field(default_factory=list)
-
-
-class LandPlot(Plot):
-    """Backward-compatible alias for older feasibility imports."""
-
-
-class PlotDetails(BaseModel):
-    plot_number: str
-    community_name: str
-    project_name: str
-    master_developer: str | None = None
-    plot_area_sqm: float
-    max_gfa_sqm: float
-    max_gfa_sqft: float
-    max_height: str
-    max_coverage: str
-    gfa_type: str
-    far: float | None = None
-    inferred_usage: Usage
-    site_plan_issue_date: str | None = None
-    site_plan_expiry_date: str | None = None
-    is_verified: bool
-    verify_comments: str | None = None
-    land_use: list[GISLandUse] = Field(default_factory=list)
-    general_notes: list[str] = Field(default_factory=list)
-    setbacks: dict[str, str] = Field(default_factory=dict)
-    coordinates: list[list[float]] = Field(default_factory=list)
-    warnings: list[str] = Field(default_factory=list)
 
 
 class MarketPricingRow(BaseModel):
@@ -129,23 +84,9 @@ class OffPlanUnitPricingBenchmark(BaseModel):
     note: str
 
 
-class LandSaleEvidence(BaseModel):
-    transaction_id: str
-    instance_date: str
-    area_name: str
-    project_name: str
-    procedure_name: str
-    property_usage: str
-    plot_area_sqm: float
-    price_aed: float
-    price_sqm: float
-    price_per_gfa_sqm: float | None = None
-    nearest_landmark: str | None = None
-
-
 class RentalRateBySizeBand(BaseModel):
     unit_type_proxy: str  # studio / 1br / 2br / 3br / 4br+
-    size_band_label: str  # e.g. "< 55 sqm"
+    size_band_label: str  # e.g. "< 592 sq ft"
     median_rent_psm_annual: float
     median_annual_rent: float
     contract_count: int
@@ -684,6 +625,9 @@ class GenerateStudyResponse(BaseModel):
 
 class FeasibilitySavedStudy(SQLModel, table=True):
     __tablename__ = "feasibility_studies"
+    __table_args__ = (
+        Index("ix_feasibility_studies_owner_updated", "user_id", "organization_id", "updated_at"),
+    )
 
     id: int | None = SQLField(default=None, primary_key=True)
     user_id: str = SQLField(index=True)

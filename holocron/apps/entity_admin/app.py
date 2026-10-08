@@ -262,9 +262,7 @@ def _page_aliases() -> None:
         with col_del:
             st.markdown("**Remove**")
             if aliases:
-                to_del = st.selectbox(
-                    "Alias to remove", sorted(aliases.keys()), key="area_del_sel"
-                )
+                to_del = st.selectbox("Alias to remove", sorted(aliases.keys()), key="area_del_sel")
                 st.caption(f"→ {aliases.get(to_del, '')}")
                 if st.button("Remove", type="secondary", key="area_del_btn"):
                     del aliases[to_del]

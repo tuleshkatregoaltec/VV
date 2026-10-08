@@ -69,6 +69,9 @@ def test_definitions_expose_source_assets() -> None:
         "geo_source_signatures",
         "geo_entity_links",
         "offplan_reelly_project_links",
+        "dxbi_evidence_bronze",
+        "market_sale_events",
+        "market_rental_events",
     }
 
 
@@ -124,6 +127,8 @@ def test_definitions_expose_named_operational_jobs() -> None:
         "silver_rent_contracts_refresh",
         "silver_refresh",
         "geography_crosswalk_refresh",
+        "dxbi_evidence_load",
+        "market_events_refresh",
     }
 
 
@@ -199,6 +204,21 @@ def test_definitions_expose_only_recurring_operational_schedules() -> None:
             "10 6 * * *",
             "Asia/Dubai",
             DefaultScheduleStatus.STOPPED,
+        ),
+        "dxbi_evidence_load_schedule": (
+            "dxbi_evidence_load",
+            "0 10 * * *",
+            "Asia/Dubai",
+            DefaultScheduleStatus.STOPPED,
+        ),
+        # The market rebuild must start after the evidence load it depends on. It is the only
+        # schedule running by default: the served ch_* views read its release, so a stopped
+        # rebuild would freeze sales and rentals in the app; it calls no external provider.
+        "market_events_refresh_schedule": (
+            "market_events_refresh",
+            "30 10 * * *",
+            "Asia/Dubai",
+            DefaultScheduleStatus.RUNNING,
         ),
     }
 

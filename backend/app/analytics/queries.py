@@ -1,8 +1,13 @@
-from typing import Literal, Optional
+from typing import Optional
 
-from app.clickhouse.queries import ProjectFilterType, ProjectScopeType, _project_filter
+from app.analytics.models import TrendInterval
+from app.clickhouse.client import query
+from app.market.scope import MARKET_FILTERS as MARKET_FILTERS
+from app.market.scope import ProjectFilterType, ProjectScopeType
+from app.market.scope import project_filter_clause as _project_filter
 
-TrendInterval = Literal["day", "week", "month"]
+# Half-open bounds of a range filter: (low or None, high or None).
+Bounds = tuple[Optional[float], Optional[float]]
 
 
 def search_projects() -> str:
@@ -78,12 +83,12 @@ def project_sales_summary(
             count() as transaction_count,
             round(coalesce(sum(actual_worth), 0), 2) as total_volume,
             round(coalesce(avg(actual_worth), 0), 2) as avg_price,
-            round(coalesce(avg(meter_sale_price), 0), 2) as avg_price_sqm,
-            round(coalesce(median(actual_worth), 0), 2) as median_price
+            round(coalesce(avg(meter_sale_price), 0) / 10.7639, 2) as avg_price_sqft,
+            round(coalesce(medianExact(actual_worth), 0), 2) as median_price
         FROM ch_transactions
         WHERE {_project_filter(filter_type)}
           AND trans_group_en = 'Sales'
-          AND property_type_en IN ('Unit', 'Villa')
+          AND property_type NOT IN ('Plot', 'Building', '')
           AND property_usage_en = 'Residential'
           AND actual_worth > 0
           {reg_filter}
@@ -99,14 +104,14 @@ def project_sales_by_rooms(
             rooms_en,
             count() as sale_count,
             round(avg(actual_worth), 2) as avg_sale_price,
-            round(median(actual_worth), 2) as median_sale_price,
-            round(avg(meter_sale_price), 2) as avg_sale_price_sqm
+            round(medianExact(actual_worth), 2) as median_sale_price,
+            round(avg(meter_sale_price) / 10.7639, 2) as avg_sale_price_sqft
         FROM ch_transactions
         WHERE {_project_filter(filter_type)}
           AND trans_group_en = 'Sales'
-          AND property_type_en IN ('Unit', 'Villa')
+          AND property_type NOT IN ('Plot', 'Building', '')
           AND property_usage_en = 'Residential'
-          AND rooms_en IS NOT NULL
+          AND rooms_en != ''
           AND actual_worth > 0
           {reg_filter}
         GROUP BY rooms_en
@@ -128,9 +133,9 @@ def project_configuration_sales(
             FROM ch_transactions
             WHERE {_project_filter(filter_type)}
               AND trans_group_en = 'Sales'
-              AND property_type_en IN ('Unit', 'Villa')
+              AND property_type NOT IN ('Plot', 'Building', '')
               AND property_usage_en = 'Residential'
-              AND rooms_en IS NOT NULL
+              AND rooms_en != ''
               AND actual_worth > 0
               {reg_filter}
         ),
@@ -152,20 +157,20 @@ def project_configuration_sales(
                 AND instance_date < addDays(latest_sale_date, -90)
             ) AS sales_prev_90d,
             round(avg(actual_worth), 2) AS avg_sale_price,
-            round(median(actual_worth), 2) AS median_sale_price,
-            round(avg(meter_sale_price), 2) AS avg_sale_price_sqm,
-            round(quantile(0.25)(actual_worth), 2) AS price_p25,
-            round(median(actual_worth), 2) AS price_p50,
-            round(quantile(0.75)(actual_worth), 2) AS price_p75,
-            round(avgIf(meter_sale_price, instance_date >= addYears(latest_sale_date, -1)), 2) AS avg_price_sqm_last_12m,
+            round(medianExact(actual_worth), 2) AS median_sale_price,
+            round(avg(meter_sale_price) / 10.7639, 2) AS avg_sale_price_sqft,
+            round(quantileExact(0.25)(actual_worth), 2) AS price_p25,
+            round(medianExact(actual_worth), 2) AS price_p50,
+            round(quantileExact(0.75)(actual_worth), 2) AS price_p75,
+            round(avgIf(meter_sale_price / 10.7639, instance_date >= addYears(latest_sale_date, -1)), 2) AS avg_price_sqft_last_12m,
             round(
                 avgIf(
-                    meter_sale_price,
+                    meter_sale_price / 10.7639,
                     instance_date >= addYears(latest_sale_date, -2)
                     AND instance_date < addYears(latest_sale_date, -1)
                 ),
                 2
-            ) AS avg_price_sqm_prev_12m
+            ) AS avg_price_sqft_prev_12m
         FROM scoped_sales
         CROSS JOIN anchor
         GROUP BY rooms_en, latest_sale_date
@@ -176,13 +181,13 @@ def project_configuration_sales(
 def project_sales_by_property_type(filter_type: ProjectScopeType = "project") -> str:
     return f"""
         SELECT
-            property_type_en,
+            property_type AS property_type_en,
             count() as count,
             round(avg(actual_worth), 2) as avg_price
         FROM ch_transactions
         WHERE {_project_filter(filter_type)}
           AND trans_group_en = 'Sales'
-          AND property_type_en IS NOT NULL
+          AND property_type != ''
           AND actual_worth > 0
         GROUP BY property_type_en
         ORDER BY count DESC
@@ -198,7 +203,7 @@ def project_sales_by_reg_type(filter_type: ProjectScopeType = "project") -> str:
         FROM ch_transactions
         WHERE {_project_filter(filter_type)}
           AND trans_group_en = 'Sales'
-          AND property_type_en IN ('Unit', 'Villa')
+          AND property_type NOT IN ('Plot', 'Building', '')
           AND property_usage_en = 'Residential'
           AND reg_type_en IS NOT NULL
         GROUP BY reg_type_en
@@ -211,8 +216,8 @@ def project_rentals_summary(filter_type: ProjectScopeType = "project") -> str:
         SELECT
             count() as contract_count,
             round(coalesce(sum(annual_amount), 0), 2) as total_annual_value,
-            round(coalesce(median(annual_amount), 0), 2) as median_annual_rent,
-            round(coalesce(median(annual_amount / nullIf(actual_area, 0)), 0), 2) as median_rent_sqm
+            round(coalesce(medianExact(annual_amount), 0), 2) as median_annual_rent,
+            round(coalesce(medianExact(annual_amount / nullIf(actual_area * 10.7639, 0)), 0), 2) as median_rent_sqft
         FROM ch_rent_contracts
         WHERE {_project_filter(filter_type)}
           AND property_usage_en = 'Residential'
@@ -234,34 +239,57 @@ def project_rentals_by_rooms(filter_type: ProjectScopeType = "project") -> str:
 
     rent_filter = _project_filter(filter_type)
 
+    # A lease counts under its own bedrooms (DXBI gives them on most leases since 2025). Only a
+    # lease without them is placed by size: inside exactly one bedroom type's interquartile size
+    # range among the scope's registered units. Placing every lease by size dropped those whose
+    # size fits two types' ranges, which citywide is nearly all of them (Dubai showed 0 studio,
+    # 1-bed and 4-bed leases).
     return f"""
         SELECT
             rooms_en,
             count() AS rental_count,
-            round(median(annual_amount), 2) AS median_annual_rent,
-            round(median(annual_amount / nullIf(actual_area, 0)), 2) AS median_rent_sqm
+            round(medianExact(annual_amount), 2) AS median_annual_rent,
+            round(medianExact(annual_amount / nullIf(actual_area * 10.7639, 0)), 2) AS median_rent_sqft
         FROM (
-            SELECT any(ar.rooms_en) AS rooms_en, annual_amount, actual_area
+            SELECT rooms_en, annual_amount, actual_area
             FROM ch_rent_contracts
-            INNER JOIN (
-                SELECT
-                    rooms_en,
-                    quantile(0.25)(actual_area) AS lo,
-                    quantile(0.75)(actual_area) AS hi,
-                    count() AS n
-                FROM ch_units
-                WHERE {unit_filter}
-                  AND (rooms_en LIKE '% B/R' OR rooms_en = 'Studio' OR rooms_en LIKE '%ENTHOUSE')
-                  AND actual_area > 0
-                GROUP BY rooms_en
-                HAVING n >= 3
-            ) AS ar ON actual_area BETWEEN ar.lo AND ar.hi
             WHERE {rent_filter}
               AND property_usage_en = 'Residential'
               AND annual_amount > 0
-              AND actual_area > 0
-            GROUP BY contract_id, line_number, annual_amount, actual_area
-            HAVING count(DISTINCT ar.rooms_en) = 1
+              AND rooms_en != ''
+            UNION ALL
+            SELECT fits[1].1 AS rooms_en, annual_amount, actual_area
+            FROM (
+                -- (bedroom type, lower and upper quartile size) of the scope's registered units,
+                -- held as one array: matching each lease against it avoids joining millions of
+                -- leases to every type (Dubai: 5 s -> 0.4 s, same figures).
+                WITH (
+                    SELECT groupArray((rooms_en, lo, hi)) FROM (
+                        SELECT
+                            rooms_en,
+                            quantileExact(0.25)(actual_area) AS lo,
+                            quantileExact(0.75)(actual_area) AS hi,
+                            count() AS n
+                        FROM ch_units
+                        WHERE {unit_filter}
+                          AND (rooms_en LIKE '% B/R' OR rooms_en = 'Studio')
+                          AND actual_area > 0
+                        GROUP BY rooms_en
+                        HAVING n >= 3
+                    )
+                ) AS ranges
+                SELECT
+                    annual_amount,
+                    actual_area,
+                    arrayFilter(r -> actual_area BETWEEN r.2 AND r.3, ranges) AS fits
+                FROM ch_rent_contracts
+                WHERE {rent_filter}
+                  AND property_usage_en = 'Residential'
+                  AND annual_amount > 0
+                  AND actual_area > 0
+                  AND rooms_en = ''
+            )
+            WHERE length(fits) = 1
         )
         GROUP BY rooms_en
         ORDER BY rental_count DESC
@@ -283,10 +311,10 @@ def project_units_composition(filter_type: ProjectScopeType = "project") -> str:
         SELECT
             rooms_en,
             count() as unit_count,
-            round(avgIf(actual_area, actual_area > 0), 2) as avg_unit_size_sqm
+            round(avgIf(actual_area, actual_area > 0) * 10.7639, 2) as avg_unit_size_sqft
         FROM ch_units
         WHERE {where}
-          AND rooms_en IS NOT NULL
+          AND rooms_en != ''
         GROUP BY rooms_en
         ORDER BY unit_count DESC
     """
@@ -537,19 +565,19 @@ def project_price_distribution(
             round(stddevPop(actual_worth), 2) as std_price,
             round(avg(log(actual_worth)), 6) as log_mean_price,
             round(stddevPop(log(actual_worth)), 6) as log_std_price,
-            round(quantile(0.05)(actual_worth), 2) as p05_price,
-            round(quantile(0.25)(actual_worth), 2) as p25_price,
-            round(quantile(0.50)(actual_worth), 2) as p50_price,
-            round(quantile(0.75)(actual_worth), 2) as p75_price,
-            round(quantile(0.95)(actual_worth), 2) as p95_price,
-            round(avg(meter_sale_price), 2) as mean_price_sqm,
-            round(stddevPop(meter_sale_price), 2) as std_price_sqm
+            round(quantileExact(0.05)(actual_worth), 2) as p05_price,
+            round(quantileExact(0.25)(actual_worth), 2) as p25_price,
+            round(quantileExact(0.50)(actual_worth), 2) as p50_price,
+            round(quantileExact(0.75)(actual_worth), 2) as p75_price,
+            round(quantileExact(0.95)(actual_worth), 2) as p95_price,
+            round(avg(meter_sale_price) / 10.7639, 2) as mean_price_sqft,
+            round(stddevPop(meter_sale_price) / 10.7639, 2) as std_price_sqft
         FROM ch_transactions
         WHERE {project_filter}
           AND trans_group_en = 'Sales'
-          AND property_type_en IN ('Unit', 'Villa')
+          AND property_type NOT IN ('Plot', 'Building', '')
           AND property_usage_en = 'Residential'
-          AND rooms_en IS NOT NULL
+          AND rooms_en != ''
           AND actual_worth > 0
           {reg_filter}
         GROUP BY rooms_en
@@ -561,17 +589,17 @@ def project_price_distribution(
             round(stddevPop(actual_worth), 2) as std_price,
             round(avg(log(actual_worth)), 6) as log_mean_price,
             round(stddevPop(log(actual_worth)), 6) as log_std_price,
-            round(quantile(0.05)(actual_worth), 2) as p05_price,
-            round(quantile(0.25)(actual_worth), 2) as p25_price,
-            round(quantile(0.50)(actual_worth), 2) as p50_price,
-            round(quantile(0.75)(actual_worth), 2) as p75_price,
-            round(quantile(0.95)(actual_worth), 2) as p95_price,
-            round(avg(meter_sale_price), 2) as mean_price_sqm,
-            round(stddevPop(meter_sale_price), 2) as std_price_sqm
+            round(quantileExact(0.05)(actual_worth), 2) as p05_price,
+            round(quantileExact(0.25)(actual_worth), 2) as p25_price,
+            round(quantileExact(0.50)(actual_worth), 2) as p50_price,
+            round(quantileExact(0.75)(actual_worth), 2) as p75_price,
+            round(quantileExact(0.95)(actual_worth), 2) as p95_price,
+            round(avg(meter_sale_price) / 10.7639, 2) as mean_price_sqft,
+            round(stddevPop(meter_sale_price) / 10.7639, 2) as std_price_sqft
         FROM ch_transactions
         WHERE {project_filter}
           AND trans_group_en = 'Sales'
-          AND property_type_en IN ('Unit', 'Villa')
+          AND property_type NOT IN ('Plot', 'Building', '')
           AND property_usage_en = 'Residential'
           AND actual_worth > 0
           {reg_filter}
@@ -596,13 +624,13 @@ def project_price_trends(
             {time_group} as period,
             count() as transaction_count,
             round(avg(actual_worth), 2) as avg_price,
-            round(avg(meter_sale_price), 2) as avg_price_sqm
+            round(avg(meter_sale_price) / 10.7639, 2) as avg_price_sqft
         FROM ch_transactions
         WHERE {_project_filter(filter_type)}
           AND trans_group_en = 'Sales'
-          AND property_type_en IN ('Unit', 'Villa')
+          AND property_type NOT IN ('Plot', 'Building', '')
           AND property_usage_en = 'Residential'
-          AND instance_date BETWEEN {{start_date:Date}} AND {{end_date:Date}}
+          AND toDate(instance_date) BETWEEN {{start_date:Date}} AND {{end_date:Date}}
           AND actual_worth > 0
         GROUP BY period
         ORDER BY period ASC
@@ -633,7 +661,7 @@ def project_offplan_price_curve(
             {time_group} as period,
             count() as transaction_count,
             round(avg(t.actual_worth), 2) as avg_price,
-            round(avg(t.meter_sale_price), 2) as avg_price_sqm,
+            round(avg(t.meter_sale_price) / 10.7639, 2) as avg_price_sqft,
             round(
                 avg(dateDiff('month', t.instance_date, coalesce(p.completion_date, p.project_end_date))),
                 2
@@ -642,10 +670,10 @@ def project_offplan_price_curve(
         LEFT JOIN ch_projects p ON t.project_name_en = p.project_name_en
         WHERE {project_where}
           AND t.trans_group_en = 'Sales'
-          AND t.property_type_en IN ('Unit', 'Villa')
+          AND t.property_type NOT IN ('Plot', 'Building', '')
           AND t.property_usage_en = 'Residential'
           AND t.reg_type_en = 'Off-Plan Properties'
-          AND t.instance_date BETWEEN {{start_date:Date}} AND {{end_date:Date}}
+          AND toDate(t.instance_date) BETWEEN {{start_date:Date}} AND {{end_date:Date}}
           AND t.actual_worth > 0
           AND coalesce(p.completion_date, p.project_end_date) IS NOT NULL
           AND dateDiff('month', t.instance_date, coalesce(p.completion_date, p.project_end_date)) >= 0
@@ -694,3 +722,495 @@ def area_supply_projects(filter_by_area: bool = True) -> str:
           coalesce(p.no_of_units, 0) > 0
           AND p.cancellation_date IS NULL
     """
+
+
+async def fetch_latest_sales_anchor_date_rows(parameters: dict):
+    return await query(
+        """
+        SELECT max(instance_date) AS latest_sales_date
+        FROM ch_transactions
+        WHERE trans_group_en = 'Sales'
+          AND actual_worth > 0
+          AND instance_date <= today()
+        """,
+        parameters,
+    )
+
+
+async def fetch_search_projects(parameters: dict):
+    return await query(search_projects(), parameters)
+
+
+async def fetch_search_sub_projects(parameters: dict, filter_type: ProjectFilterType = "master"):
+    return await query(search_sub_projects(filter_type), parameters)
+
+
+async def fetch_project_meta(parameters: dict, filter_type):
+    meta_fn = {
+        "master": project_meta_by_master,
+        "virtual_master": project_meta_by_virtual_master,
+        "project": project_meta_by_name,
+    }[filter_type]
+    return await query(meta_fn(), parameters)
+
+
+async def fetch_project_developers_by_scope(
+    parameters: dict, filter_type: ProjectFilterType = "master"
+):
+    return await query(project_developers_by_scope(filter_type), parameters)
+
+
+async def fetch_project_sales_summary(
+    parameters: dict, filter_type: ProjectScopeType = "project", reg_type: Optional[str] = None
+):
+    return await query(project_sales_summary(filter_type, reg_type), parameters)
+
+
+async def fetch_project_sales_by_rooms(
+    parameters: dict, filter_type: ProjectScopeType = "project", reg_type: Optional[str] = None
+):
+    return await query(project_sales_by_rooms(filter_type, reg_type), parameters)
+
+
+async def fetch_project_configuration_sales(
+    parameters: dict, filter_type: ProjectScopeType = "project", reg_type: Optional[str] = None
+):
+    return await query(project_configuration_sales(filter_type, reg_type), parameters)
+
+
+async def fetch_project_sales_by_property_type(
+    parameters: dict, filter_type: ProjectScopeType = "project"
+):
+    return await query(project_sales_by_property_type(filter_type), parameters)
+
+
+async def fetch_project_sales_by_reg_type(
+    parameters: dict, filter_type: ProjectScopeType = "project"
+):
+    return await query(project_sales_by_reg_type(filter_type), parameters)
+
+
+async def fetch_project_rentals_summary(
+    parameters: dict, filter_type: ProjectScopeType = "project"
+):
+    return await query(project_rentals_summary(filter_type), parameters)
+
+
+async def fetch_project_rentals_by_rooms(
+    parameters: dict, filter_type: ProjectScopeType = "project"
+):
+    return await query(project_rentals_by_rooms(filter_type), parameters)
+
+
+async def fetch_project_units_composition(
+    parameters: dict, filter_type: ProjectScopeType = "project"
+):
+    return await query(project_units_composition(filter_type), parameters)
+
+
+async def fetch_project_price_trends(
+    parameters: dict, interval: TrendInterval = "month", filter_type: ProjectScopeType = "project"
+):
+    return await query(project_price_trends(interval, filter_type), parameters)
+
+
+async def fetch_project_offplan_price_curve(
+    parameters: dict, interval: TrendInterval = "month", filter_type: ProjectScopeType = "project"
+):
+    return await query(project_offplan_price_curve(interval, filter_type), parameters)
+
+
+async def fetch_area_supply_projects(parameters: dict, filter_by_area: bool = True):
+    return await query(area_supply_projects(filter_by_area), parameters)
+
+
+async def fetch_project_price_distribution(
+    parameters: dict, filter_type: ProjectScopeType = "project", reg_type: Optional[str] = None
+):
+    return await query(project_price_distribution(filter_type, reg_type), parameters)
+
+
+async def fetch_sales_summary(
+    parameters: dict,
+    property_usage: Optional[str],
+    start_date: str,
+    end_date: str,
+    master_project: Optional[str] = None,
+    property_type: Optional[str] = None,
+    property_sub_type: Optional[str] = None,
+    rooms: Optional[str] = None,
+    area_name: Optional[str] = None,
+    reg_type: Optional[str] = None,
+    price_range: Optional[Bounds] = None,
+    area_range: Optional[Bounds] = None,
+    market: Optional[dict[str, str]] = None,
+):
+    return await query(
+        sales_summary(
+            property_usage,
+            start_date,
+            end_date,
+            master_project,
+            property_type,
+            property_sub_type,
+            rooms,
+            area_name,
+            reg_type,
+            price_range,
+            area_range,
+            market,
+        ),
+        parameters,
+    )
+
+
+async def fetch_rentals_summary(
+    parameters: dict,
+    property_usage: str,
+    start_date: str,
+    end_date: str,
+    master_project: Optional[str] = None,
+    property_type: Optional[str] = None,
+    area_name: Optional[str] = None,
+    rent_range: Optional[Bounds] = None,
+    area_range: Optional[Bounds] = None,
+):
+    return await query(
+        rentals_summary(
+            property_usage,
+            start_date,
+            end_date,
+            master_project,
+            property_type,
+            area_name,
+            rent_range,
+            area_range,
+        ),
+        parameters,
+    )
+
+
+async def fetch_price_trends(
+    parameters: dict,
+    property_usage: Optional[str],
+    start_date: str,
+    end_date: str,
+    interval: str = "month",
+    master_project: Optional[str] = None,
+    property_type: Optional[str] = None,
+    area_name: Optional[str] = None,
+    market: Optional[dict[str, str]] = None,
+):
+    return await query(
+        price_trends(
+            property_usage,
+            start_date,
+            end_date,
+            interval,
+            master_project,
+            property_type,
+            area_name,
+            market,
+        ),
+        parameters,
+    )
+
+
+def _range_clauses(expression: str, name: str, bounds: Optional[Bounds]) -> list[str]:
+    """``expression`` in the half-open [low, high); bounds bind as ``{name}_min``/``_max``."""
+    if bounds is None:
+        return []
+    low, high = bounds
+    clauses = []
+    if low is not None:
+        clauses.append(f"{expression} >= {{{name}_min:Float64}}")
+    if high is not None:
+        clauses.append(f"{expression} < {{{name}_max:Float64}}")
+    return clauses
+
+
+def _market_clauses(market: Optional[dict[str, str]]) -> list[str]:
+    """Sales by default; a market type's own group and predicate otherwise (trusted)."""
+    if market is None:
+        return ["trans_group_en = 'Sales'"]
+    return [f"trans_group_en = '{market['trans_group_en']}'", f"({market['where']})"]
+
+
+def sales_summary(
+    property_usage: Optional[str],
+    start_date: str,
+    end_date: str,
+    master_project: Optional[str] = None,
+    property_type: Optional[str] = None,
+    property_sub_type: Optional[str] = None,
+    rooms: Optional[str] = None,
+    area_name: Optional[str] = None,
+    reg_type: Optional[str] = None,
+    price_range: Optional[Bounds] = None,
+    area_range: Optional[Bounds] = None,
+    market: Optional[dict[str, str]] = None,
+) -> str:
+    """
+    Get sales analytics summary for a date range.
+
+    Returns: transaction_count, median_price, avg_price, total_volume,
+             median_price_per_sqft, median_area_sqft
+
+    All filtering uses parameter binding - no SQL injection risk. ``market`` is a
+    MARKET_FILTERS entry (trusted, not user input): its group and predicate.
+    """
+    where_clauses = _market_clauses(market) + [
+        "toDate(instance_date) BETWEEN {start_date:Date} AND {end_date:Date}",
+    ]
+    if property_usage is not None:
+        where_clauses.append("property_usage_en = {property_usage:String}")
+
+    if master_project is not None:
+        where_clauses.append("master_project_en = {master_project:String}")
+    if property_type is not None:
+        where_clauses.append("property_type = {property_type:String}")
+    if property_sub_type is not None:
+        where_clauses.append("property_sub_type_en = {property_sub_type:String}")
+    if rooms is not None:
+        where_clauses.append("rooms_en = {rooms:String}")
+    if area_name is not None:
+        where_clauses.append("location_name = {area_name:String}")
+    if reg_type is not None:
+        where_clauses.append("reg_type_en = {reg_type:String}")
+    where_clauses += _range_clauses("actual_worth", "price", price_range)
+    where_clauses += _range_clauses("size_sqm * 10.7639", "area_sqft", area_range)
+
+    where_clause = " AND ".join(where_clauses)
+
+    return f"""
+        SELECT
+            count() as transaction_count,
+            round(medianExact(actual_worth), 2) as median_price,
+            round(avg(actual_worth), 2) as avg_price,
+            round(sum(actual_worth), 2) as total_volume,
+            round(medianExact(meter_sale_price) / 10.7639, 2) as median_price_per_sqft,
+            round(medianExactIf(size_sqm, size_sqm > 0) * 10.7639, 2) as median_area_sqft,
+            round(min(actual_worth), 2) as min_price,
+            round(max(actual_worth), 2) as max_price,
+            round(avgIf(actual_worth / size_sqm, size_sqm > 0) / 10.7639, 2)
+                as avg_price_sqft
+        FROM ch_transactions
+        WHERE {where_clause}
+    """
+
+
+def price_trends(
+    property_usage: Optional[str],
+    start_date: str,
+    end_date: str,
+    interval: str = "month",
+    master_project: Optional[str] = None,
+    property_type: Optional[str] = None,
+    area_name: Optional[str] = None,
+    market: Optional[dict[str, str]] = None,
+) -> str:
+    """
+    Get price trends over time (grouped by day, week, or month).
+
+    Args:
+        interval: 'day', 'week', or 'month'
+
+    Returns: period, transaction_count, avg_price, avg_price_sqft
+    ``market`` is a MARKET_FILTERS entry (trusted, not user input).
+    """
+    # SAFE: interval is controlled by application, not user input
+    if interval not in ("day", "week", "month"):
+        raise ValueError("interval must be 'day', 'week', or 'month'")
+
+    if interval == "day":
+        time_group = "toDate(instance_date)"
+    elif interval == "week":
+        time_group = "toStartOfWeek(instance_date)"
+    else:
+        time_group = "toStartOfMonth(instance_date)"
+
+    where_clauses = _market_clauses(market) + [
+        "toDate(instance_date) BETWEEN {start_date:Date} AND {end_date:Date}",
+    ]
+    if property_usage is not None:
+        where_clauses.append("property_usage_en = {property_usage:String}")
+
+    if master_project is not None:
+        where_clauses.append("master_project_en = {master_project:String}")
+    if property_type is not None:
+        where_clauses.append("property_type = {property_type:String}")
+    if area_name is not None:
+        where_clauses.append("location_name = {area_name:String}")
+
+    where_clause = " AND ".join(where_clauses)
+
+    return f"""
+        SELECT
+            {time_group} as period,
+            count() as transaction_count,
+            round(avg(actual_worth), 2) as avg_price,
+            round(avg(meter_sale_price) / 10.7639, 2) as avg_price_sqft
+        FROM ch_transactions
+        WHERE {where_clause}
+        GROUP BY period
+        ORDER BY period ASC
+    """
+
+
+def rentals_summary(
+    property_usage: str,
+    start_date: str,
+    end_date: str,
+    master_project: Optional[str] = None,
+    property_type: Optional[str] = None,
+    area_name: Optional[str] = None,
+    rent_range: Optional[Bounds] = None,
+    area_range: Optional[Bounds] = None,
+) -> str:
+    """
+    Get rental analytics summary for a date range.
+
+    Returns: contract_count, median_rent, avg_rent, total_annual_value,
+             median_rent_per_sqft, median_area_sqft
+    """
+    where_clauses = [
+        "property_usage_en = {property_usage:String}",
+        "toDate(contract_start_date) BETWEEN {start_date:Date} AND {end_date:Date}",
+    ]
+
+    if master_project is not None:
+        where_clauses.append("master_project_en = {master_project:String}")
+    if property_type is not None:
+        where_clauses.append("property_type = {property_type:String}")
+    if area_name is not None:
+        where_clauses.append("location_name = {area_name:String}")
+    where_clauses += _range_clauses("annual_amount", "rent", rent_range)
+    where_clauses += _range_clauses("size_sqm * 10.7639", "area_sqft", area_range)
+
+    where_clause = " AND ".join(where_clauses)
+
+    return f"""
+        SELECT
+            count() as contract_count,
+            round(medianExact(annual_amount), 2) as median_rent,
+            round(avg(annual_amount), 2) as avg_rent,
+            round(sum(annual_amount), 2) as total_annual_value,
+            round(medianExact(annual_amount / nullIf(size_sqm * 10.7639, 0)), 2) as median_rent_per_sqft,
+            round(medianExactIf(size_sqm, size_sqm > 0) * 10.7639, 2) as median_area_sqft,
+            round(min(annual_amount), 2) as min_rent,
+            round(max(annual_amount), 2) as max_rent,
+            round(avgIf(annual_amount / size_sqm, size_sqm > 0) / 10.7639, 2)
+                as avg_rent_sqft
+        FROM ch_rent_contracts
+        WHERE {where_clause}
+    """
+
+
+GET_MARKET_PULSE_SQL = """
+    SELECT
+        count(*) as transaction_count,
+        round(medianExact(actual_worth), 0) as median_price,
+        round(avg(actual_worth), 0) as avg_price,
+        round(medianExact(size_sqm) * 10.7639, 1) as median_area_sqft,
+        round(medianExact(actual_worth / size_sqm) / 10.7639, 0) as median_price_per_sqft,
+        min(instance_date) as period_start,
+        max(instance_date) as period_end
+    FROM ch_transactions
+    WHERE
+        location_name = {area:String}
+        AND trans_group_en = 'Sales'
+        AND instance_date >= today() - {period_days:Int32}
+        AND actual_worth > 0
+        AND size_sqm > 0
+    """
+
+
+async def fetch_market_pulse(parameters: dict):
+    return await query(GET_MARKET_PULSE_SQL, parameters)
+
+
+# Ranked by location in the uniform vocabulary (DXBI community names; the names market
+# pulse and the Transactions page filter on).
+RANK_AREAS_VOLUME_SQL = """
+        SELECT
+            location_name as area,
+            count(*) as transaction_count,
+            round(medianExact(actual_worth), 0) as median_price
+        FROM ch_transactions
+        WHERE
+            instance_date >= today() - {period_days:Int32}
+            AND trans_group_en = 'Sales'
+            AND actual_worth > 0
+            AND location_name != ''
+        GROUP BY location_name
+        ORDER BY transaction_count DESC
+        LIMIT {limit:Int32}
+        """
+
+
+RANK_AREAS_PRICE_SQL = """
+        SELECT
+            location_name as area,
+            round(medianExact(actual_worth), 0) as median_price,
+            count(*) as transaction_count
+        FROM ch_transactions
+        WHERE
+            instance_date >= today() - {period_days:Int32}
+            AND trans_group_en = 'Sales'
+            AND actual_worth > 0
+            AND location_name != ''
+        GROUP BY location_name
+        HAVING transaction_count >= 10
+        ORDER BY median_price DESC
+        LIMIT {limit:Int32}
+        """
+
+
+RANK_AREAS_GROWTH_SQL = """
+        WITH
+            current_period AS (
+                SELECT
+                    location_name as area,
+                    medianExact(actual_worth) as current_median
+                FROM ch_transactions
+                WHERE
+                    instance_date >= today() - {period_days:Int32}
+                    AND trans_group_en = 'Sales'
+                    AND actual_worth > 0
+                    AND location_name != ''
+                GROUP BY location_name
+                HAVING count(*) >= 10
+            ),
+            previous_period AS (
+                SELECT
+                    location_name as area,
+                    medianExact(actual_worth) as previous_median
+                FROM ch_transactions
+                WHERE
+                    instance_date >= today() - {period_days:Int32} * 2
+                    AND instance_date < today() - {period_days:Int32}
+                    AND trans_group_en = 'Sales'
+                    AND actual_worth > 0
+                    AND location_name != ''
+                GROUP BY location_name
+                HAVING count(*) >= 10
+            )
+        SELECT
+            c.area,
+            round(c.current_median, 0) as current_median_price,
+            round(p.previous_median, 0) as previous_median_price,
+            round(((c.current_median - p.previous_median) / p.previous_median) * 100, 2) as growth_percentage
+        FROM current_period c
+        INNER JOIN previous_period p ON c.area = p.area
+        ORDER BY growth_percentage DESC
+        LIMIT {limit:Int32}
+        """
+
+
+async def fetch_rank_areas(metric: str, parameters: dict):
+    statement = {
+        "volume": RANK_AREAS_VOLUME_SQL,
+        "price": RANK_AREAS_PRICE_SQL,
+        "growth": RANK_AREAS_GROWTH_SQL,
+    }[metric]
+    return await query(statement, parameters)

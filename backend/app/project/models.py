@@ -1,5 +1,5 @@
 from datetime import date
-from typing import List, Optional
+from typing import Dict, List, Literal, Optional
 
 from pydantic import BaseModel
 
@@ -75,7 +75,7 @@ class ProjectUnitComposition(BaseModel):
     property_sub_type: str  # "Studio", "1 B/R", "2 B/R", "3 B/R", "Penthouse"
     count: int
     percentage: float  # 0-100
-    avg_area_sqm: Optional[float]
+    avg_area_sqft: Optional[float]
 
 
 class BuildingUnitType(BaseModel):
@@ -84,7 +84,7 @@ class BuildingUnitType(BaseModel):
     rooms_en: str  # "Studio", "1 B/R", "2 B/R", etc.
     count: int
     percentage: float
-    avg_area_sqm: Optional[float]
+    avg_area_sqft: Optional[float]
 
 
 class BuildingDetailResponse(BaseModel):
@@ -98,55 +98,6 @@ class BuildingDetailResponse(BaseModel):
     area_name: str
     total_units: int
     unit_composition: List[BuildingUnitType]
-
-
-class DDAPlotFeature(BaseModel):
-    """DDA GIS plot polygon for map overlay."""
-
-    plot_number: str
-    project_name: str
-    community_name: str
-    plot_area_sqm: float
-    coordinates: List[List[float]]  # closed ring [[lng, lat], ...]
-    land_use_summary: List[str] = []
-    max_gfa_sqm: Optional[float] = None
-    max_height: Optional[str] = None
-    max_coverage: Optional[str] = None
-    land_use: Optional[str] = None
-    gfa_type: Optional[str] = None
-    is_verified: bool = False
-    valuation_rate_min_aed_sqft: Optional[float] = None
-    valuation_rate_max_aed_sqft: Optional[float] = None
-    valuation_min_aed: Optional[float] = None
-    valuation_max_aed: Optional[float] = None
-    valuation_confidence: Optional[str] = None
-    valuation_note: Optional[str] = None
-    development_status: str = "no_observed_asset"
-    development_confidence: str = "low"
-    development_method: str = "no_observed_asset"
-    development_note: Optional[str] = None
-    linked_asset_count: int = 0
-    linked_physical_asset_count: int = 0
-    subdivision_plot_count: int = 0
-    subdivision_confirmed_count: int = 0
-
-
-class DDAOutlineFeature(BaseModel):
-    """Coarse DDA planning outline for low-zoom map overlay."""
-
-    name: str
-    kind: str
-    plot_count: int
-    total_plot_area_sqm: float
-    total_gfa_sqm: float
-    coordinates: List[List[float]]  # closed ring [[lng, lat], ...]
-    land_use_summary: List[str] = []
-    developed_confirmed_count: int = 0
-    developed_probable_count: int = 0
-    planned_unbuilt_count: int = 0
-    no_observed_asset_count: int = 0
-    non_developable_count: int = 0
-    developed_share: float = 0.0
 
 
 class ProjectDetailResponse(BaseModel):
@@ -205,8 +156,8 @@ class ProjectMarketSnapshotResponse(BaseModel):
     median_sale_price: Optional[float]
     median_annual_rent: Optional[float]
     gross_yield_pct: Optional[float]
-    avg_sale_price_sqm_12m: Optional[float]
-    avg_rent_price_sqm_12m: Optional[float]
+    avg_sale_price_sqft_12m: Optional[float]
+    avg_rent_price_sqft_12m: Optional[float]
 
 
 class ProjectRadarStats(BaseModel):
@@ -222,8 +173,8 @@ class ProjectRadarStats(BaseModel):
     rental_contract_count_12m: int
     total_sales_volume_12m: float
     dda_plot_count: int
-    dda_total_plot_area_sqm: float
-    dda_total_gfa_sqm: float
+    dda_total_plot_area_sqft: float
+    dda_total_gfa_sqft: float
     activity_period_days: int = 365
     activity_period_start: Optional[date] = None
     activity_period_end: Optional[date] = None
@@ -269,13 +220,13 @@ class ProjectRadarProject(BaseModel):
     median_sale_price: Optional[float]
     median_annual_rent: Optional[float]
     gross_yield_pct: Optional[float]
-    avg_sale_price_sqm_12m: Optional[float]
-    avg_rent_price_sqm_12m: Optional[float]
+    avg_sale_price_sqft_12m: Optional[float]
+    avg_rent_price_sqft_12m: Optional[float]
     sales_transaction_count: int = 0
     rental_contract_count: int = 0
     total_sales_volume: float = 0.0
-    avg_sale_price_sqm: Optional[float] = None
-    avg_rent_price_sqm: Optional[float] = None
+    avg_sale_price_sqft: Optional[float] = None
+    avg_rent_price_sqft: Optional[float] = None
 
 
 class RadarBuildingPin(BaseModel):
@@ -321,20 +272,20 @@ class ProjectRadarArea(BaseModel):
     total_sales_volume_12m: float
     median_sale_price: Optional[float]
     median_annual_rent: Optional[float]
-    avg_sale_price_sqm_12m: Optional[float]
-    avg_rent_price_sqm_12m: Optional[float]
+    avg_sale_price_sqft_12m: Optional[float]
+    avg_rent_price_sqft_12m: Optional[float]
     gross_yield_pct: Optional[float]
     top_developers: List[str]
     top_master_projects: List[str]
     dda_plot_count: int
-    dda_total_plot_area_sqm: float
-    dda_total_gfa_sqm: float
+    dda_total_plot_area_sqft: float
+    dda_total_gfa_sqft: float
     dda_dominant_land_uses: List[str]
     sales_transaction_count: int = 0
     rental_contract_count: int = 0
     total_sales_volume: float = 0.0
-    avg_sale_price_sqm: Optional[float] = None
-    avg_rent_price_sqm: Optional[float] = None
+    avg_sale_price_sqft: Optional[float] = None
+    avg_rent_price_sqft: Optional[float] = None
 
 
 class ProjectRadarResponse(BaseModel):
@@ -352,3 +303,32 @@ class ProjectRadarOverviewResponse(BaseModel):
     stats: ProjectRadarStats
     areas: List[ProjectRadarArea]
     source_notes: List[str]
+
+
+DeliveryStatus = Literal[
+    "missing_date", "overdue", "scheduled_in_horizon", "scheduled_later", "completed", "cancelled"
+]
+
+
+class DeliveryGroupRow(BaseModel):
+    group: str
+    project_count: int
+    units: int
+    projects_without_units: int
+    share_of_units: Optional[float] = None
+
+
+class DeliverySummaryResponse(BaseModel):
+    location: Optional[str]
+    project_statuses: List[str]
+    delivery_statuses: List[str]
+    group_by: str
+    reference_date: date
+    horizon_end: date
+    definitions: Dict[str, str]
+    by_delivery_status: List[DeliveryGroupRow]
+    rows: List[DeliveryGroupRow]
+    matched_terms: Dict[str, List[str]]
+    source: str
+    source_snapshot_at: Optional[str] = None
+    limitations: List[str] = []

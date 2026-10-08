@@ -1,39 +1,38 @@
 import { describe, expect, it } from 'vitest'
 
-import type { ProjectSearchItem } from '$lib/api/analytics'
-import { PROPERTY_USAGE } from '$lib/constants/transactions'
+import {
+	formatAed,
+	PROPERTY_USAGE,
+	RENTAL_COLUMNS,
+	SALES_COLUMNS
+} from '$lib/constants/transactions'
 import {
 	buildRentalsApiFilters,
 	buildRentalsFilterParams,
 	buildSalesApiFilters,
 	buildSalesFilterParams,
+	DEFAULT_RENTALS_LOCAL_FILTERS,
+	DEFAULT_SALES_LOCAL_FILTERS,
+	toRentalRow,
+	toSaleRow,
 	withSelectedIds
 } from '$lib/utils/transactionPages'
 
-function makeProject(overrides: Partial<ProjectSearchItem> = {}): ProjectSearchItem {
-	return {
-		name: 'Downtown Views',
-		filter_type: 'master',
-		...overrides
-	}
-}
-
-describe('transaction page helpers', () => {
-	it('builds sales filters for residential pages and selected transaction exports', () => {
+describe('DXBI transaction page filters', () => {
+	it('sends every selected sales filter, with half-open bands and the requested page', () => {
 		const filters = buildSalesApiFilters({
 			propertyUsage: PROPERTY_USAGE.RESIDENTIAL,
 			timeframe: 'Last Month',
 			currentPage: 2,
-			selectedProject: makeProject(),
-			selectedSubProject: null,
 			localFilters: {
-				selectedBuilding: 'Tower A',
+				selectedLocation: 'Jumeirah Village Circle',
+				selectedBuilding: 'Binghatti Heights',
 				selectedPropertyType: 'Apartment',
-				selectedBedroomsOrSubType: '2BR',
-				selectedRegistration: 'Freehold',
-				areaRange: '100-200',
+				selectedBedrooms: '2 Beds',
+				selectedStatus: 'Ready',
+				sizeRange: '1,000-2,000',
 				priceRange: '1M-2M',
-				pricePerSqMRange: '20000-30000'
+				pricePerSqFtRange: '1,000-2,000'
 			}
 		})
 
@@ -42,93 +41,77 @@ describe('transaction page helpers', () => {
 			timeframe_days: 30,
 			limit: 30,
 			offset: 30,
-			project: 'Downtown Views',
-			filter_type: 'master',
-			building: 'Tower A',
+			location: 'Jumeirah Village Circle',
+			building: 'Binghatti Heights',
 			property_type: 'Apartment',
-			rooms: '2BR',
-			registration_type: 'Freehold',
-			area_min: 100,
-			area_max: 200,
-			price_min: 1000000,
-			price_max: 2000000,
-			price_per_sqm_min: 20000,
-			price_per_sqm_max: 30000
+			bedrooms: '2 Beds',
+			status: 'Ready',
+			size_min: 1_000,
+			size_max: 2_000,
+			price_min: 1_000_000,
+			price_max: 2_000_000,
+			price_per_sqft_min: 1_000,
+			price_per_sqft_max: 2_000
 		})
-
 		expect(withSelectedIds(filters, 'transaction_ids', new Set(['tx-1', 'tx-2']))).toMatchObject({
 			transaction_ids: 'tx-1,tx-2'
 		})
 	})
 
-	it('builds sales filters for commercial pages and filter-option requests', () => {
-		const selectedProject = makeProject({ name: 'Business Bay', filter_type: 'virtual_master' })
-		const filters = buildSalesApiFilters({
-			propertyUsage: PROPERTY_USAGE.COMMERCIAL,
+	it('sends no usage for All, so plots and untyped DXBI records are included', () => {
+		const params = buildSalesFilterParams({
+			propertyUsage: PROPERTY_USAGE.ALL,
 			timeframe: 'Last Year',
-			currentPage: 1,
-			selectedProject,
-			selectedSubProject: 'The Binary',
+			localFilters: { ...DEFAULT_SALES_LOCAL_FILTERS, selectedPropertyType: 'Plot' }
+		})
+
+		expect(params).toEqual({ timeframe_days: 365, property_type: 'Plot' })
+	})
+
+	it('opens the top bands upward and the bottom bands downward only', () => {
+		const top = buildSalesFilterParams({
+			propertyUsage: PROPERTY_USAGE.COMMERCIAL,
+			timeframe: 'Last Week',
 			localFilters: {
-				selectedBuilding: 'All',
-				selectedPropertyType: 'Office',
-				selectedBedroomsOrSubType: 'Shell & Core',
-				selectedRegistration: 'All',
-				areaRange: 'All',
-				priceRange: 'All',
-				pricePerSqMRange: 'All'
+				...DEFAULT_SALES_LOCAL_FILTERS,
+				sizeRange: '5,000+',
+				priceRange: '5M+',
+				pricePerSqFtRange: '3,000+'
 			}
 		})
-
-		expect(filters).toEqual({
+		expect(top).toEqual({
 			property_usage: 'Commercial',
-			timeframe_days: 365,
-			limit: 30,
-			offset: 0,
-			project: 'The Binary',
-			filter_type: 'project',
-			property_type: 'Office',
-			property_sub_type: 'Shell & Core'
+			timeframe_days: 7,
+			size_min: 5_000,
+			price_min: 5_000_000,
+			price_per_sqft_min: 3_000
 		})
 
-		expect(
-			buildSalesFilterParams({
-				propertyUsage: PROPERTY_USAGE.COMMERCIAL,
-				timeframe: 'Last Year',
-				selectedProject,
-				selectedSubProject: 'The Binary',
-				localFilters: {
-					selectedBuilding: 'All',
-					selectedPropertyType: 'Office',
-					selectedBedroomsOrSubType: 'All',
-					selectedRegistration: 'All',
-					areaRange: 'All',
-					priceRange: 'All',
-					pricePerSqMRange: 'All'
-				}
-			})
-		).toEqual({
-			property_usage: 'Commercial',
-			timeframe_days: 365,
-			project: 'The Binary',
-			filter_type: 'project',
-			property_type: 'Office'
+		const bottom = buildSalesFilterParams({
+			propertyUsage: PROPERTY_USAGE.RESIDENTIAL,
+			timeframe: 'Last Week',
+			localFilters: { ...DEFAULT_SALES_LOCAL_FILTERS, sizeRange: '<500', priceRange: '<500k' }
+		})
+		expect(bottom).toEqual({
+			property_usage: 'Residential',
+			timeframe_days: 7,
+			size_max: 500,
+			price_max: 500_000
 		})
 	})
 
-	it('builds rentals filters and selected contract exports', () => {
+	it('sends every selected rentals filter and the selected contracts for export', () => {
 		const filters = buildRentalsApiFilters({
 			propertyUsage: PROPERTY_USAGE.RESIDENTIAL,
 			timeframe: 'Last 6 Months',
 			currentPage: 3,
-			selectedProject: makeProject({ name: 'Marina Gate', filter_type: 'project' }),
-			selectedSubProject: null,
 			localFilters: {
+				selectedLocation: 'Dubai Marina',
+				selectedBuilding: 'Marina Gate 1',
 				selectedPropertyType: 'Apartment',
-				selectedPropertySubType: 'Furnished',
-				selectedTenantType: 'Individual',
-				selectedRegistration: 'Ejari',
-				areaRange: '50-100',
+				selectedBedrooms: '1 Bed',
+				selectedContractType: 'Renewed',
+				sizeRange: '500-1,000',
 				rentRange: '50k-100k'
 			}
 		})
@@ -138,18 +121,16 @@ describe('transaction page helpers', () => {
 			timeframe_days: 180,
 			limit: 30,
 			offset: 60,
-			project: 'Marina Gate',
-			filter_type: 'project',
+			location: 'Dubai Marina',
+			building: 'Marina Gate 1',
 			property_type: 'Apartment',
-			property_sub_type: 'Furnished',
-			tenant_type: 'Individual',
-			contract_reg_type: 'Ejari',
-			area_min: 50,
-			area_max: 100,
-			rent_min: 50000,
-			rent_max: 100000
+			bedrooms: '1 Bed',
+			contract_type: 'Renewed',
+			size_min: 500,
+			size_max: 1_000,
+			rent_min: 50_000,
+			rent_max: 100_000
 		})
-
 		expect(withSelectedIds(filters, 'contract_ids', new Set(['c-1']))).toMatchObject({
 			contract_ids: 'c-1'
 		})
@@ -157,23 +138,84 @@ describe('transaction page helpers', () => {
 			buildRentalsFilterParams({
 				propertyUsage: PROPERTY_USAGE.RESIDENTIAL,
 				timeframe: 'Last 6 Months',
-				selectedProject: makeProject({ name: 'Marina Gate', filter_type: 'project' }),
-				selectedSubProject: null,
-				localFilters: {
-					selectedPropertyType: 'Apartment',
-					selectedPropertySubType: 'All',
-					selectedTenantType: 'All',
-					selectedRegistration: 'All',
-					areaRange: 'All',
-					rentRange: 'All'
-				}
+				localFilters: { ...DEFAULT_RENTALS_LOCAL_FILTERS, rentRange: '200k+' }
 			})
-		).toEqual({
-			property_usage: 'Residential',
-			timeframe_days: 180,
-			project: 'Marina Gate',
-			filter_type: 'project',
-			property_type: 'Apartment'
+		).toEqual({ property_usage: 'Residential', timeframe_days: 180, rent_min: 200_000 })
+	})
+})
+
+describe('DXBI transaction rows', () => {
+	it('shows the DXBI unit number and keeps missing values visibly missing', () => {
+		const row = toSaleRow({
+			transaction_id: 'sale-1',
+			transaction_date: '2026-09-15',
+			unit_number: '1904',
+			building_name: '29 Boulevard Tower 2',
+			project_name: null,
+			location_name: 'Downtown Dubai',
+			property_type: 'Apartment',
+			bedrooms: '1 Bed',
+			status: 'Ready',
+			size_sqft: 799,
+			price_aed: 1_750_000,
+			price_per_sqft_aed: 2_190
 		})
+
+		expect(row).toEqual({
+			transaction_id: 'sale-1',
+			date: '2026-09-15',
+			unit: '1904',
+			building: '29 Boulevard Tower 2',
+			location: 'Downtown Dubai',
+			project: '-',
+			propertyType: 'Apartment',
+			bedrooms: '1 Bed',
+			size: 799,
+			price: 1_750_000,
+			pricePerSqFt: 2_190,
+			status: 'Ready'
+		})
+		expect(SALES_COLUMNS.map((column) => column.id)).toContain('unit')
+	})
+
+	it('maps a lease with its unit, annual rent and whole-contract amount', () => {
+		const row = toRentalRow({
+			contract_id: 'lease-1',
+			lease_start: '2026-09-01',
+			lease_end: '2028-08-31',
+			unit_number: 'G29',
+			building_name: null,
+			project_name: null,
+			location_name: 'Al Mamzer',
+			property_type: 'Commercial',
+			bedrooms: null,
+			size_sqft: 4_174,
+			annual_rent_aed: 220_000,
+			contract_amount_aed: 440_000,
+			term_months: 24,
+			contract_type: 'Renewed'
+		})
+
+		expect(row).toMatchObject({
+			unit: 'G29',
+			building: '-',
+			bedrooms: '-',
+			annualRent: 220_000,
+			contractAmount: 440_000,
+			termMonths: 24,
+			contractType: 'Renewed'
+		})
+		expect(RENTAL_COLUMNS.map((column) => column.id)).toContain('unit')
+	})
+
+	it('formats amounts identically in every browser locale and shows sizes in sq ft', () => {
+		expect(formatAed(1_179_900)).toBe('1,179,900')
+		expect(formatAed(null)).toBe('-')
+		const size = SALES_COLUMNS.find((column) => column.id === 'size')
+		expect(size?.label).toBe('Size (sq ft)')
+		expect(size?.format?.(822.6)).toBe('823')
+		expect(SALES_COLUMNS.find((column) => column.id === 'pricePerSqFt')?.label).toBe(
+			'Price/sq ft (AED)'
+		)
 	})
 })

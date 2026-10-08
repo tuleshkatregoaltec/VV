@@ -17,9 +17,7 @@ import clickhouse_connect
 COMPARABLE_SCOPES = {"residential_home", "commercial"}
 
 
-def coverage_sql(
-    dxbi_table: str, benchmark_table: str = "silver_rent_contracts"
-) -> str:
+def coverage_sql(dxbi_table: str, benchmark_table: str = "silver_rent_contracts") -> str:
     return f"""
     WITH
     dxbi AS (
@@ -198,7 +196,8 @@ def main() -> None:
     parser.add_argument("--password", default=os.getenv("CLICKHOUSE_PASSWORD", ""))
     parser.add_argument("--start-date", type=date.fromisoformat, default=date(2025, 1, 1))
     parser.add_argument("--end-date", type=date.fromisoformat, required=True)
-    parser.add_argument("--table", default="dxbi_rental_events_v2")
+    # The v2 cutover moved v2 into the active table; the _v2 shadow no longer exists.
+    parser.add_argument("--table", default="dxbi_rental_events")
     parser.add_argument("--output", type=Path)
     args = parser.parse_args()
     if args.start_date > args.end_date:

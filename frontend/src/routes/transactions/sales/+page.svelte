@@ -1,207 +1,134 @@
 <script lang="ts">
 import { createQuery } from '@tanstack/svelte-query'
 import { RotateCcw } from 'lucide-svelte'
-import type { ProjectSearchItem } from '$lib/api/analytics'
-import {
-	type TransactionExportFormat,
-	type TransactionResponseOutput,
-	transactions
-} from '$lib/api/transactions'
-import ProjectSelector from '$lib/components/analytics/ProjectSelector.svelte'
-import SearchableDropdown from '$lib/components/dropdowns/SearchableDropdown.svelte'
+import { type TransactionExportFormat, transactions } from '$lib/api/transactions'
 import FilterPanel from '$lib/components/filters/FilterPanel.svelte'
 import { propertyType, timeframe } from '$lib/components/filters/globalFilters.svelte'
 import DataPanel from '$lib/components/transactions/DataPanel.svelte'
 import TransactionDetailsModal from '$lib/components/transactions/TransactionDetailsModal.svelte'
 import Pagination from '$lib/components/ui/Pagination.svelte'
 import {
-	COMMERCIAL_COLUMNS,
 	DEFAULT_ITEMS_PER_PAGE,
+	formatCount,
 	PROPERTY_USAGE,
-	RESIDENTIAL_COLUMNS
+	SALES_COLUMNS
 } from '$lib/constants/transactions'
-import { analyticsQueries } from '$lib/queries/analytics'
 import { transactionQueries } from '$lib/queries/transactions'
 import type { FilterDefinition } from '$lib/types/filters'
 import {
 	buildSalesApiFilters,
 	buildSalesFilterParams,
 	DEFAULT_SALES_LOCAL_FILTERS,
-	SALES_AREA_OPTIONS,
 	SALES_PRICE_OPTIONS,
-	SALES_PRICE_SQM_OPTIONS,
+	SALES_PRICE_SQFT_OPTIONS,
+	type SaleRow,
 	type SalesLocalFilters,
+	SIZE_OPTIONS,
+	toSaleRow,
 	withSelectedIds
 } from '$lib/utils/transactionPages'
-
-interface TransformedTransaction {
-	transaction_id: string
-	date: string
-	area_name: string
-	project: string
-	building: string
-	propertyType: string
-	propertySubType: string
-	bedrooms: string
-	area: number
-	price: number
-	pricePerSqM: number
-	registration: string
-	trans_group: string
-	procedure_name: string
-	landmark: string
-	metro: string
-	mall: string
-}
 
 type FilterChip = {
 	label: string
 	value: string
 }
 
-// Dropdown context is provided by transactions/+layout.svelte
-
+// DXBI sales only (dxbi_sales_unit_events): no DLD row or value is shown on this page.
 let currentPage = $state(1)
 let selectedTransactionIds = $state(new Set<string>())
-let selectedTransaction = $state<TransformedTransaction | null>(null)
-
-// Project selection (outside FilterPanel — uses canonical groupings)
-let selectedProject = $state<ProjectSearchItem | null>(null)
-let selectedSubProject = $state<string | null>(null)
+let selectedTransaction = $state<SaleRow | null>(null)
 
 let localFilters = $state<SalesLocalFilters>({ ...DEFAULT_SALES_LOCAL_FILTERS })
 
-// Sub-projects query — enabled when a master or virtual_master is selected
-const subProjectsQuery = createQuery(() =>
-	analyticsQueries.subProjects(selectedProject?.name ?? null, selectedProject?.filter_type ?? null)
-)
-
-const subProjectOptions = $derived(subProjectsQuery.data?.sub_projects.map((p) => p.name) ?? [])
+const isCommercial = $derived(propertyType.current === PROPERTY_USAGE.COMMERCIAL)
 
 function buildApiFilters() {
 	return buildSalesApiFilters({
 		propertyUsage: propertyType.current,
 		timeframe: timeframe.current,
 		currentPage,
-		selectedProject,
-		selectedSubProject,
 		localFilters
 	})
 }
 
 const salesApiFilters = $derived(buildApiFilters())
 
-function buildFacetFilterParams(localFilterOverrides: Partial<SalesLocalFilters> = {}) {
-	return buildSalesFilterParams({
-		propertyUsage: propertyType.current,
-		timeframe: timeframe.current,
-		selectedProject,
-		selectedSubProject,
-		localFilters: { ...localFilters, ...localFilterOverrides }
-	})
-}
-
 // Main transactions query
 const transactionsQuery = createQuery(() => transactionQueries.sales(salesApiFilters))
 
-// One shared facet payload avoids four concurrent full-table scans on first
-// load. The selected value stays available in the control until the next
-// filter refresh, while the table can render immediately.
-const facetOptionsQuery = createQuery(() => transactionQueries.salesFilterOptions(buildFacetFilterParams()))
-
-let columns = $derived(
-	propertyType.current === PROPERTY_USAGE.RESIDENTIAL ? RESIDENTIAL_COLUMNS : COMMERCIAL_COLUMNS
+// One shared facet payload: every option list in a single scan, narrowed by the filters applied.
+const facetOptionsQuery = createQuery(() =>
+	transactionQueries.salesFilterOptions(
+		buildSalesFilterParams({
+			propertyUsage: propertyType.current,
+			timeframe: timeframe.current,
+			localFilters
+		})
+	)
 )
 
-const buildingOptions = $derived(facetOptionsQuery.data)
-const propertyTypeOptions = $derived(facetOptionsQuery.data)
-const bedroomsOrSubTypeOptions = $derived(facetOptionsQuery.data)
-const registrationOptions = $derived(facetOptionsQuery.data)
+const options = $derived(facetOptionsQuery.data)
+
+// Bedrooms describe homes: the Commercial view has neither the filter nor the column.
+const columns = $derived(
+	isCommercial ? SALES_COLUMNS.filter((column) => column.id !== 'bedrooms') : SALES_COLUMNS
+)
 
 let filterDefinitions = $derived<FilterDefinition[]>([
+	{
+		id: 'selectedLocation',
+		label: 'Location',
+		type: 'searchable',
+		options: ['All', ...(options?.locations ?? [])]
+	},
 	{
 		id: 'selectedBuilding',
 		label: 'Building',
 		type: 'searchable',
-		options: ['All', ...(buildingOptions?.buildings ?? [])]
+		options: ['All', ...(options?.buildings ?? [])]
 	},
 	{
 		id: 'selectedPropertyType',
 		label: 'Property Type',
 		type: 'standard',
-		options: ['All', ...(propertyTypeOptions?.property_types ?? [])]
+		options: ['All', ...(options?.property_types ?? [])]
 	},
+	...(isCommercial
+		? []
+		: [
+				{
+					id: 'selectedBedrooms',
+					label: 'Bedrooms',
+					type: 'standard' as const,
+					options: ['All', ...(options?.bedrooms ?? [])]
+				}
+			]),
 	{
-		id: 'selectedBedroomsOrSubType',
-		label: propertyType.current === PROPERTY_USAGE.RESIDENTIAL ? 'Bedrooms' : 'Sub Type',
+		id: 'selectedStatus',
+		label: 'Status',
 		type: 'standard',
-		options: [
-			'All',
-			...(propertyType.current === PROPERTY_USAGE.RESIDENTIAL
-				? (bedroomsOrSubTypeOptions?.rooms ?? [])
-				: (bedroomsOrSubTypeOptions?.property_sub_types ?? []))
-		]
+		options: ['All', ...(options?.statuses ?? [])]
 	},
+	{ id: 'sizeRange', label: 'Size (sq ft)', type: 'standard', options: SIZE_OPTIONS },
+	{ id: 'priceRange', label: 'Price (AED)', type: 'standard', options: SALES_PRICE_OPTIONS },
 	{
-		id: 'selectedRegistration',
-		label: 'Registration',
+		id: 'pricePerSqFtRange',
+		label: 'Price/sq ft (AED)',
 		type: 'standard',
-		options: ['All', ...(registrationOptions?.registration_types ?? [])]
-	},
-	{
-		id: 'areaRange',
-		label: 'Area (sq.m)',
-		type: 'standard',
-		options: [...SALES_AREA_OPTIONS]
-	},
-	{
-		id: 'priceRange',
-		label: 'Price (AED)',
-		type: 'standard',
-		options: [...SALES_PRICE_OPTIONS]
-	},
-	{
-		id: 'pricePerSqMRange',
-		label: 'Price/sq.m (AED)',
-		type: 'standard',
-		options: [...SALES_PRICE_SQM_OPTIONS]
+		options: SALES_PRICE_SQFT_OPTIONS
 	}
 ])
 
-function transformTransaction(t: TransactionResponseOutput): TransformedTransaction {
-	return {
-		transaction_id: t.transaction_id,
-		date: t.instance_date ?? '-',
-		area_name: t.area_name_en ?? '-',
-		project: t.project_name_en ?? '-',
-		building: t.building_name_en ?? '-',
-		propertyType: t.property_type_en ?? '-',
-		propertySubType: t.property_sub_type_en ?? '-',
-		bedrooms: t.rooms_en ?? '-',
-		area: t.procedure_area ?? 0,
-		price: t.actual_worth ?? 0,
-		pricePerSqM: t.meter_sale_price ?? 0,
-		registration: t.reg_type_en ?? '-',
-		trans_group: t.trans_group_en ?? '-',
-		procedure_name: t.procedure_name_en ?? '-',
-		landmark: t.nearest_landmark_en ?? '-',
-		metro: t.nearest_metro_en ?? '-',
-		mall: t.nearest_mall_en ?? '-'
-	}
-}
-
-function getRowId(row: TransformedTransaction): string {
+function getRowId(row: SaleRow): string {
 	return row.transaction_id
 }
 
-let displayData = $derived(transactionsQuery.data?.transactions.map(transformTransaction) ?? [])
+let displayData = $derived(transactionsQuery.data?.transactions.map(toSaleRow) ?? [])
 
 let totalRecords = $derived(transactionsQuery.data?.total ?? 0)
 let totalPages = $derived(Math.ceil(totalRecords / DEFAULT_ITEMS_PER_PAGE))
 
 function resetFilters() {
-	selectedProject = null
-	selectedSubProject = null
 	localFilters = { ...DEFAULT_SALES_LOCAL_FILTERS }
 	currentPage = 1
 }
@@ -213,46 +140,29 @@ function addSelectedChip(chips: FilterChip[], label: string, value: string) {
 function buildActiveFilterChips(): FilterChip[] {
 	const chips: FilterChip[] = [
 		{ label: 'Dataset', value: propertyType.current },
-		{ label: 'Period', value: timeframe.current },
-		{ label: 'Project', value: selectedSubProject ?? selectedProject?.name ?? 'All projects' }
+		{ label: 'Period', value: timeframe.current }
 	]
 
+	addSelectedChip(chips, 'Location', localFilters.selectedLocation)
 	addSelectedChip(chips, 'Building', localFilters.selectedBuilding)
 	addSelectedChip(chips, 'Property type', localFilters.selectedPropertyType)
-	addSelectedChip(
-		chips,
-		propertyType.current === PROPERTY_USAGE.RESIDENTIAL ? 'Bedrooms' : 'Sub type',
-		localFilters.selectedBedroomsOrSubType
-	)
-	addSelectedChip(chips, 'Registration', localFilters.selectedRegistration)
-	addSelectedChip(chips, 'Area', localFilters.areaRange)
+	if (!isCommercial) addSelectedChip(chips, 'Bedrooms', localFilters.selectedBedrooms)
+	addSelectedChip(chips, 'Status', localFilters.selectedStatus)
+	addSelectedChip(chips, 'Size', localFilters.sizeRange)
 	addSelectedChip(chips, 'Price', localFilters.priceRange)
-	addSelectedChip(chips, 'Price/sq.m', localFilters.pricePerSqMRange)
+	addSelectedChip(chips, 'Price/sq ft', localFilters.pricePerSqFtRange)
 
 	return chips
 }
 
 let activeFilterChips = $derived(buildActiveFilterChips())
 
-function handleRowClick(row: TransformedTransaction) {
+function handleRowClick(row: SaleRow) {
 	selectedTransaction = row
 }
 
 // Track filter changes to reset page
-let filterKey = $derived(
-	JSON.stringify({
-		project: selectedProject?.name,
-		filterType: selectedProject?.filter_type,
-		subProject: selectedSubProject,
-		building: localFilters.selectedBuilding,
-		propertyType: localFilters.selectedPropertyType,
-		bedroomsOrSubType: localFilters.selectedBedroomsOrSubType,
-		registration: localFilters.selectedRegistration,
-		areaRange: localFilters.areaRange,
-		priceRange: localFilters.priceRange,
-		pricePerSqMRange: localFilters.pricePerSqMRange
-	})
-)
+let filterKey = $derived(JSON.stringify(localFilters))
 
 let lastFilterKey = ''
 
@@ -313,37 +223,6 @@ async function handleExport(format: TransactionExportFormat) {
 	</div>
 {/if}
 
-{#snippet desktopProjectControls()}
-	<div class="flex flex-col gap-2">
-		<label for="sales-project-desktop" class="block text-sm font-medium text-fg-1">Project</label>
-		<ProjectSelector
-			bind:value={selectedProject}
-			placeholder="Search project..."
-			onSelect={() => {
-				selectedSubProject = null;
-				currentPage = 1;
-			}}
-		/>
-	</div>
-	{#if selectedProject && selectedProject.filter_type !== 'project'}
-		<div class="flex flex-col gap-2">
-			<label for="sales-sub-project-desktop-button" class="block text-sm font-medium text-fg-1">
-				Sub-project
-			</label>
-			<SearchableDropdown
-				id="sales-sub-project-desktop"
-				ariaLabel="Sub-project"
-				options={['All', ...subProjectOptions]}
-				value={selectedSubProject ?? 'All'}
-				onchange={(v) => {
-					selectedSubProject = v === 'All' ? null : v;
-					currentPage = 1;
-				}}
-			/>
-		</div>
-	{/if}
-{/snippet}
-
 <div class="ui-surface relative z-20 p-4 sm:p-5">
 	<div class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
 		<div>
@@ -351,7 +230,7 @@ async function handleExport(format: TransactionExportFormat) {
 				Market controls
 			</p>
 			<p class="mt-1 text-sm text-fg-3">
-				Scope the dataset and apply local transaction filters.
+				DXBI sales records. Filter by location, building, unit type, size and price.
 			</p>
 		</div>
 		<button
@@ -364,36 +243,6 @@ async function handleExport(format: TransactionExportFormat) {
 			Reset filters
 		</button>
 	</div>
-	<div class="mb-4 grid grid-cols-1 gap-3 border-b border-border pb-4 sm:grid-cols-2 lg:hidden">
-		<div class="flex flex-col gap-2">
-			<label for="sales-project" class="block text-sm font-medium text-fg-1">Project</label>
-			<ProjectSelector
-				bind:value={selectedProject}
-				placeholder="Search project..."
-				onSelect={() => {
-					selectedSubProject = null;
-					currentPage = 1;
-				}}
-			/>
-		</div>
-		{#if selectedProject && selectedProject.filter_type !== 'project'}
-			<div class="flex flex-col gap-2">
-				<label for="sales-sub-project-button" class="block text-sm font-medium text-fg-1">
-					Sub-project
-				</label>
-				<SearchableDropdown
-					id="sales-sub-project"
-					ariaLabel="Sub-project"
-					options={['All', ...subProjectOptions]}
-					value={selectedSubProject ?? 'All'}
-					onchange={(v) => {
-						selectedSubProject = v === 'All' ? null : v;
-						currentPage = 1;
-					}}
-				/>
-			</div>
-		{/if}
-	</div>
 	<div class="hidden lg:block">
 		<FilterPanel
 			{filterDefinitions}
@@ -402,7 +251,6 @@ async function handleExport(format: TransactionExportFormat) {
 			embedded={true}
 			showHeader={false}
 			idPrefix="sales-filters-desktop"
-			prefix={desktopProjectControls}
 		/>
 	</div>
 	<details class="ui-panel overflow-hidden lg:hidden">
@@ -437,15 +285,15 @@ async function handleExport(format: TransactionExportFormat) {
 		</div>
 	</div>
 	<div class="shrink-0 text-sm font-medium text-fg-2">
-		{totalRecords.toLocaleString()} matching transactions
+		{formatCount(totalRecords)} matching transactions
 	</div>
 </div>
 
 <DataPanel
 	title="Sales records"
 	description={selectedTransactionIds.size > 0
-		? `Exporting ${selectedTransactionIds.size} selected rows as Excel or raw CSV.`
-		: 'Export filtered rows as DLD-metadata Excel or raw CSV, up to 50,000 rows.'}
+		? `Exporting ${selectedTransactionIds.size} selected rows as Excel or CSV.`
+		: 'Export the filtered DXBI rows as Excel or CSV, up to 50,000 rows.'}
 	exportActions={[
 		{
 			label: 'Excel',

@@ -1,20 +1,16 @@
 from datetime import date
 
-from app.crm.service import (
-    _LEAD_CTE,
+from app.crm.opportunities import _dld_rooms, _empty_dashboard, _lead_from_row
+from app.crm.opportunity_queries import _LEAD_CTE, _filter_metadata_sql, _where_clause
+from app.crm.reports import (
     _commercial_mix_series,
-    _dld_rooms,
-    _empty_dashboard,
-    _filter_metadata_sql,
     _fixed_mix_series,
-    _lead_from_row,
     _quarter_label,
     _rebase_series,
     _same_building,
     _select_rental_comparables,
     _select_sales_comparables,
     _unit_series,
-    _where_clause,
 )
 
 

@@ -200,12 +200,11 @@ def test_pf_listings_bronze_loads_property_and_detail_rows() -> None:
         "pf_listing_details_bronze",
     }
     assert any(
-        "ALTER TABLE `pf_listings_bronze` DELETE WHERE `property_key` "
-        "IN ('listing_id:listing-1')" in sql
+        "DELETE FROM `pf_listings_bronze` WHERE `property_key` IN ('listing_id:listing-1')" in sql
         for sql in clickhouse.commands
     )
     assert any(
-        "ALTER TABLE `pf_listing_details_bronze` DELETE WHERE `property_key` "
+        "DELETE FROM `pf_listing_details_bronze` WHERE `property_key` "
         "IN ('listing_id:listing-1')" in sql
         for sql in clickhouse.commands
     )

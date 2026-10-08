@@ -1,252 +1,252 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
-	import { ArrowDownRight, Mail } from 'lucide-svelte';
+import { ArrowDownRight, Mail } from 'lucide-svelte'
+import { onMount } from 'svelte'
 
-	const accessHref = 'mailto:contact@vitevue.com?subject=Vitevue%20access';
-	const contactHref =
-		"mailto:contact@vitevue.com?subject=Vitevue%20access&body=Tell%20us%20about%20your%20team%20and%20what%20you're%20working%20on.";
+const accessHref = 'mailto:contact@vitevue.com?subject=Vitevue%20access'
+const contactHref =
+	"mailto:contact@vitevue.com?subject=Vitevue%20access&body=Tell%20us%20about%20your%20team%20and%20what%20you're%20working%20on."
 
-	let root: HTMLElement;
-	let isNavScrolled = $state(false);
+let root: HTMLElement
+let isNavScrolled = $state(false)
 
-	function scrollToPageSection(event: MouseEvent) {
-		const link = event.currentTarget as HTMLAnchorElement;
-		const sectionId = link.hash ? decodeURIComponent(link.hash.slice(1)) : '';
-		const target = sectionId ? document.getElementById(sectionId) : null;
-		if (!target) return;
+function scrollToPageSection(event: MouseEvent) {
+	const link = event.currentTarget as HTMLAnchorElement
+	const sectionId = link.hash ? decodeURIComponent(link.hash.slice(1)) : ''
+	const target = sectionId ? document.getElementById(sectionId) : null
+	if (!target) return
 
-		event.preventDefault();
-		const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-		target.scrollIntoView({ behavior: reduced ? 'auto' : 'smooth', block: 'start' });
+	event.preventDefault()
+	const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+	target.scrollIntoView({ behavior: reduced ? 'auto' : 'smooth', block: 'start' })
+}
+
+const personas = [
+	{
+		number: '/ 01',
+		title: 'Brokers',
+		accent: '& agents',
+		body: 'Verify pricing with ease, generate leads, automate listing descriptions and stand out to clients with commercial-grade analysis.'
+	},
+	{
+		number: '/ 02',
+		title: 'Developers',
+		body: 'Pressure-test projects against live supply, pricing dynamics and configuration opportunities well before the feasibility study lands.'
+	},
+	{
+		number: '/ 03',
+		title: 'Investors',
+		accent: '& advisory',
+		body: 'Build evidence packs, run sub-market screens and ship client-ready narratives without rebuilding the comp set every time.'
+	}
+]
+
+onMount(() => {
+	if (!root) return
+
+	const cleanups: Array<() => void> = []
+	const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+	const motion = 1
+
+	function addWindowListener(
+		event: 'scroll' | 'resize' | 'load',
+		handler: EventListener,
+		options?: AddEventListenerOptions
+	) {
+		window.addEventListener(event, handler, options)
+		cleanups.push(() => window.removeEventListener(event, handler))
 	}
 
-	const personas = [
-		{
-			number: '/ 01',
-			title: 'Brokers',
-			accent: '& agents',
-			body: 'Verify pricing with ease, generate leads, automate listing descriptions and stand out to clients with commercial-grade analysis.'
-		},
-		{
-			number: '/ 02',
-			title: 'Developers',
-			body: 'Pressure-test projects against live supply, pricing dynamics and configuration opportunities well before the feasibility study lands.'
-		},
-		{
-			number: '/ 03',
-			title: 'Investors',
-			accent: '& advisory',
-			body: 'Build evidence packs, run sub-market screens and ship client-ready narratives without rebuilding the comp set every time.'
-		}
-	];
+	function fireCount(el: HTMLElement) {
+		if (!el.dataset.count || el.dataset.counted === 'true') return
 
-	onMount(() => {
-		if (!root) return;
+		el.dataset.counted = 'true'
+		const target = Number.parseFloat(el.dataset.count)
+		const decimals = Number.parseInt(el.dataset.countDecimals || '0', 10)
+		const suffix = el.dataset.countSuffix || ''
+		const prefix = el.dataset.countPrefix || ''
+		const duration = reduced ? 0 : 1100
+		const start = performance.now()
 
-		const cleanups: Array<() => void> = [];
-		const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-		const motion = 1;
-
-		function addWindowListener(
-			event: 'scroll' | 'resize' | 'load',
-			handler: EventListener,
-			options?: AddEventListenerOptions
-		) {
-			window.addEventListener(event, handler, options);
-			cleanups.push(() => window.removeEventListener(event, handler));
+		function format(value: number) {
+			return (
+				prefix +
+				value.toLocaleString('en-US', {
+					minimumFractionDigits: decimals,
+					maximumFractionDigits: decimals
+				}) +
+				suffix
+			)
 		}
 
-		function fireCount(el: HTMLElement) {
-			if (!el.dataset.count || el.dataset.counted === 'true') return;
-
-			el.dataset.counted = 'true';
-			const target = Number.parseFloat(el.dataset.count);
-			const decimals = Number.parseInt(el.dataset.countDecimals || '0', 10);
-			const suffix = el.dataset.countSuffix || '';
-			const prefix = el.dataset.countPrefix || '';
-			const duration = reduced ? 0 : 1100;
-			const start = performance.now();
-
-			function format(value: number) {
-				return (
-					prefix +
-					value.toLocaleString('en-US', {
-						minimumFractionDigits: decimals,
-						maximumFractionDigits: decimals
-					}) +
-					suffix
-				);
-			}
-
-			if (duration === 0) {
-				el.textContent = format(target);
-				return;
-			}
-
-			function tick(now: number) {
-				const progress = Math.min(1, (now - start) / duration);
-				const eased = 1 - Math.pow(1 - progress, 3);
-				el.textContent = format(target * eased);
-
-				if (progress < 1) {
-					requestAnimationFrame(tick);
-				} else {
-					el.textContent = format(target);
-				}
-			}
-
-			requestAnimationFrame(tick);
+		if (duration === 0) {
+			el.textContent = format(target)
+			return
 		}
 
-		function initReveals() {
-			const elements = Array.from(root.querySelectorAll<HTMLElement>('[data-reveal]'));
+		function tick(now: number) {
+			const progress = Math.min(1, (now - start) / duration)
+			const eased = 1 - (1 - progress) ** 3
+			el.textContent = format(target * eased)
 
-			root.querySelectorAll<HTMLElement>('[data-reveal-group]').forEach((group) => {
-				const step = Number.parseInt(group.dataset.revealStep || '90', 10);
-				Array.from(group.children).forEach((child, index) => {
-					const element = child as HTMLElement;
-					if (!element.dataset.reveal) element.dataset.reveal = 'up';
-					if (!element.dataset.revealDelay) element.dataset.revealDelay = String(index * step);
-					if (!elements.includes(element)) elements.push(element);
-				});
-			});
+			if (progress < 1) {
+				requestAnimationFrame(tick)
+			} else {
+				el.textContent = format(target)
+			}
+		}
+
+		requestAnimationFrame(tick)
+	}
+
+	function initReveals() {
+		const elements = Array.from(root.querySelectorAll<HTMLElement>('[data-reveal]'))
+
+		root.querySelectorAll<HTMLElement>('[data-reveal-group]').forEach((group) => {
+			const step = Number.parseInt(group.dataset.revealStep || '90', 10)
+			Array.from(group.children).forEach((child, index) => {
+				const element = child as HTMLElement
+				if (!element.dataset.reveal) element.dataset.reveal = 'up'
+				if (!element.dataset.revealDelay) element.dataset.revealDelay = String(index * step)
+				if (!elements.includes(element)) elements.push(element)
+			})
+		})
+
+		elements.forEach((element) => {
+			const delay = Number.parseInt(element.dataset.revealDelay || '0', 10)
+			element.style.transitionDelay = `${delay * motion}ms`
+			element.classList.add('rv')
+		})
+
+		if (reduced) {
+			elements.forEach((element) => {
+				element.classList.add('rv-in')
+				fireCount(element)
+			})
+			return
+		}
+
+		function check() {
+			const viewportHeight = window.innerHeight
 
 			elements.forEach((element) => {
-				const delay = Number.parseInt(element.dataset.revealDelay || '0', 10);
-				element.style.transitionDelay = `${delay * motion}ms`;
-				element.classList.add('rv');
-			});
+				const rect = element.getBoundingClientRect()
+				const inView = rect.top < viewportHeight * 0.9 && rect.bottom > viewportHeight * 0.04
 
-			if (reduced) {
-				elements.forEach((element) => {
-					element.classList.add('rv-in');
-					fireCount(element);
-				});
-				return;
-			}
-
-			function check() {
-				const viewportHeight = window.innerHeight;
-
-				elements.forEach((element) => {
-					const rect = element.getBoundingClientRect();
-					const inView = rect.top < viewportHeight * 0.9 && rect.bottom > viewportHeight * 0.04;
-
-					if (inView) {
-						element.classList.add('rv-in');
-					} else if (element.dataset.revealRepeat !== undefined && rect.top >= viewportHeight) {
-						element.classList.remove('rv-in');
-					}
-				});
-			}
-
-			let ticking = false;
-			const onScroll = () => {
-				if (ticking) return;
-				ticking = true;
-				requestAnimationFrame(() => {
-					check();
-					ticking = false;
-				});
-			};
-
-			addWindowListener('scroll', onScroll, { passive: true });
-			addWindowListener('resize', check);
-			addWindowListener('load', check);
-			check();
-			setTimeout(check, 400);
+				if (inView) {
+					element.classList.add('rv-in')
+				} else if (element.dataset.revealRepeat !== undefined && rect.top >= viewportHeight) {
+					element.classList.remove('rv-in')
+				}
+			})
 		}
 
-		function initCounts() {
-			const nodes = Array.from(root.querySelectorAll<HTMLElement>('[data-count]'));
-			if (!nodes.length) return;
-
-			if (reduced) {
-				nodes.forEach(fireCount);
-				return;
-			}
-
-			function check() {
-				const viewportHeight = window.innerHeight;
-
-				nodes.forEach((node) => {
-					const rect = node.getBoundingClientRect();
-					const inView = rect.top < viewportHeight * 0.98 && rect.bottom > 0;
-
-					if (inView) {
-						fireCount(node);
-					} else if (rect.top >= viewportHeight && node.dataset.revealRepeat !== undefined) {
-						delete node.dataset.counted;
-						node.textContent = '0';
-					}
-				});
-			}
-
-			let ticking = false;
-			const onScroll = () => {
-				if (ticking) return;
-				ticking = true;
-				requestAnimationFrame(() => {
-					check();
-					ticking = false;
-				});
-			};
-
-			addWindowListener('scroll', onScroll, { passive: true });
-			addWindowListener('resize', check);
-			check();
+		let ticking = false
+		const onScroll = () => {
+			if (ticking) return
+			ticking = true
+			requestAnimationFrame(() => {
+				check()
+				ticking = false
+			})
 		}
 
-		function initParallax() {
-			if (reduced) return;
+		addWindowListener('scroll', onScroll, { passive: true })
+		addWindowListener('resize', check)
+		addWindowListener('load', check)
+		check()
+		setTimeout(check, 400)
+	}
 
-			const nodes = Array.from(root.querySelectorAll<HTMLElement>('[data-parallax]'));
-			if (!nodes.length) return;
+	function initCounts() {
+		const nodes = Array.from(root.querySelectorAll<HTMLElement>('[data-count]'))
+		if (!nodes.length) return
 
-			function update() {
-				const viewportHeight = window.innerHeight;
-
-				nodes.forEach((node) => {
-					const rect = node.getBoundingClientRect();
-					const center = rect.top + rect.height / 2;
-					const offset = (center - viewportHeight / 2) / viewportHeight;
-					const factor = Number.parseFloat(node.dataset.parallax || '0.1');
-					node.style.transform = `translate3d(0,${(-offset * factor * 100 * motion).toFixed(2)}px,0)`;
-				});
-			}
-
-			let ticking = false;
-			const onScroll = () => {
-				if (ticking) return;
-				ticking = true;
-				requestAnimationFrame(() => {
-					update();
-					ticking = false;
-				});
-			};
-
-			addWindowListener('scroll', onScroll, { passive: true });
-			update();
+		if (reduced) {
+			nodes.forEach(fireCount)
+			return
 		}
 
-		function initNav() {
-			function onScroll() {
-				isNavScrolled = window.scrollY > 12;
-			}
+		function check() {
+			const viewportHeight = window.innerHeight
 
-			addWindowListener('scroll', onScroll, { passive: true });
-			onScroll();
+			nodes.forEach((node) => {
+				const rect = node.getBoundingClientRect()
+				const inView = rect.top < viewportHeight * 0.98 && rect.bottom > 0
+
+				if (inView) {
+					fireCount(node)
+				} else if (rect.top >= viewportHeight && node.dataset.revealRepeat !== undefined) {
+					delete node.dataset.counted
+					node.textContent = '0'
+				}
+			})
 		}
 
-		initReveals();
-		initCounts();
-		initParallax();
-		initNav();
+		let ticking = false
+		const onScroll = () => {
+			if (ticking) return
+			ticking = true
+			requestAnimationFrame(() => {
+				check()
+				ticking = false
+			})
+		}
 
-		return () => {
-			cleanups.forEach((cleanup) => cleanup());
-		};
-	});
+		addWindowListener('scroll', onScroll, { passive: true })
+		addWindowListener('resize', check)
+		check()
+	}
+
+	function initParallax() {
+		if (reduced) return
+
+		const nodes = Array.from(root.querySelectorAll<HTMLElement>('[data-parallax]'))
+		if (!nodes.length) return
+
+		function update() {
+			const viewportHeight = window.innerHeight
+
+			nodes.forEach((node) => {
+				const rect = node.getBoundingClientRect()
+				const center = rect.top + rect.height / 2
+				const offset = (center - viewportHeight / 2) / viewportHeight
+				const factor = Number.parseFloat(node.dataset.parallax || '0.1')
+				node.style.transform = `translate3d(0,${(-offset * factor * 100 * motion).toFixed(2)}px,0)`
+			})
+		}
+
+		let ticking = false
+		const onScroll = () => {
+			if (ticking) return
+			ticking = true
+			requestAnimationFrame(() => {
+				update()
+				ticking = false
+			})
+		}
+
+		addWindowListener('scroll', onScroll, { passive: true })
+		update()
+	}
+
+	function initNav() {
+		function onScroll() {
+			isNavScrolled = window.scrollY > 12
+		}
+
+		addWindowListener('scroll', onScroll, { passive: true })
+		onScroll()
+	}
+
+	initReveals()
+	initCounts()
+	initParallax()
+	initNav()
+
+	return () => {
+		for (const cleanup of cleanups) cleanup()
+	}
+})
 </script>
 
 {#snippet BrandLogo(variant: 'dark' | 'light' = 'dark')}

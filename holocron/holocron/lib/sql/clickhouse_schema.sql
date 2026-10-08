@@ -139,65 +139,9 @@ CREATE TABLE IF NOT EXISTS dxbi_transactions_bronze (
 ) ENGINE = MergeTree()
 ORDER BY (slice_start_date, source_table, transaction_key);
 
+-- Active DXBI rental evidence (v2 schema since the activate_dxbi_rental_v2.py cutover).
+-- event_key is an alias of contract_key so the backend contract is unchanged.
 CREATE TABLE IF NOT EXISTS dxbi_rental_events (
-    event_key          String,
-    unit_candidate_key String,
-    unit_cohort_key    String,
-    location_name      String DEFAULT '',
-    building_name      String DEFAULT '',
-    project_name       String DEFAULT '',
-    area_name          LowCardinality(String) DEFAULT '',
-    property_type      LowCardinality(String) DEFAULT '',
-    bedrooms           LowCardinality(String) DEFAULT '',
-    size_sqft          Float64 DEFAULT 0,
-    contract_amount_aed UInt64 DEFAULT 0,
-    contract_term_days UInt32 DEFAULT 0,
-    contract_term_months Float32 DEFAULT 0,
-    annual_rent_aed    UInt64 DEFAULT 0,
-    rent_normalization_version UInt8 DEFAULT 1,
-    address_normalization_version UInt8 DEFAULT 3,
-    purchase_price_aed UInt64 DEFAULT 0,
-    lease_start        Date,
-    lease_end          Date,
-    contract_state     LowCardinality(String) DEFAULT '',
-    source_account     LowCardinality(String) DEFAULT '',
-    source_shard_date  Date,
-    source_file        String DEFAULT '',
-    scraped_at         DateTime64(3, 'UTC'),
-    loaded_at          DateTime64(3, 'UTC') DEFAULT now64(3)
-) ENGINE = ReplacingMergeTree(loaded_at)
-ORDER BY (lease_start, unit_candidate_key, event_key);
-
-CREATE TABLE IF NOT EXISTS dxbi_rental_unit_candidates (
-    unit_candidate_key String,
-    event_key          String,
-    unit_cohort_key    String,
-    location_name      String DEFAULT '',
-    building_name      String DEFAULT '',
-    project_name       String DEFAULT '',
-    area_name          LowCardinality(String) DEFAULT '',
-    property_type      LowCardinality(String) DEFAULT '',
-    bedrooms           LowCardinality(String) DEFAULT '',
-    size_sqft          Float64 DEFAULT 0,
-    contract_amount_aed UInt64 DEFAULT 0,
-    contract_term_days UInt32 DEFAULT 0,
-    contract_term_months Float32 DEFAULT 0,
-    annual_rent_aed    UInt64 DEFAULT 0,
-    rent_normalization_version UInt8 DEFAULT 1,
-    address_normalization_version UInt8 DEFAULT 3,
-    purchase_price_aed UInt64 DEFAULT 0,
-    lease_start        Date,
-    lease_end          Date,
-    contract_state     LowCardinality(String) DEFAULT '',
-    observed_contracts UInt32 DEFAULT 0,
-    last_scraped_at    DateTime64(3, 'UTC'),
-    loaded_at          DateTime64(3, 'UTC') DEFAULT now64(3)
-) ENGINE = ReplacingMergeTree(loaded_at)
-ORDER BY unit_candidate_key;
-
--- Shadow rental tables retain source identity and true row multiplicity. The
--- event_key alias preserves the current backend contract for the v2 cutover.
-CREATE TABLE IF NOT EXISTS dxbi_rental_events_v2 (
     contract_key       String,
     event_key          String ALIAS contract_key,
     source_contract_id String DEFAULT '',
@@ -240,7 +184,7 @@ CREATE TABLE IF NOT EXISTS dxbi_rental_events_v2 (
 ) ENGINE = ReplacingMergeTree(loaded_at)
 ORDER BY (lease_start, contract_key);
 
-CREATE TABLE IF NOT EXISTS dxbi_rental_unit_candidates_v2 (
+CREATE TABLE IF NOT EXISTS dxbi_rental_unit_candidates (
     contract_key       String,
     event_key          String ALIAS contract_key,
     unit_candidate_key String,
@@ -348,6 +292,53 @@ CREATE TABLE IF NOT EXISTS dxbi_sales_unit_events (
     loaded_at          DateTime64(3, 'UTC') DEFAULT now64(3)
 ) ENGINE = ReplacingMergeTree(loaded_at)
 ORDER BY (building_key, bedrooms, size_key, transaction_date, sale_key);
+
+-- DXBI's areas (A), sub-areas (U) and master communities (M), from the location list its search
+-- box loads. name_key matches the area a DXBI row prints (location_key of canonical_area_name);
+-- lineage is the location and the areas above it, the Location choices a row belongs to.
+CREATE TABLE IF NOT EXISTS dxbi_locations (
+    location_id   UInt32,
+    name          String,
+    display_name  String DEFAULT '',
+    slug          String DEFAULT '',
+    flag          LowCardinality(String) DEFAULT '',
+    parent_id     UInt32 DEFAULT 0,
+    name_key      String DEFAULT '',
+    lineage       Array(String),
+    source_run_id String DEFAULT '',
+    loaded_at     DateTime64(3, 'UTC') DEFAULT now64(3)
+) ENGINE = ReplacingMergeTree(loaded_at)
+ORDER BY location_id;
+
+-- The sales DXBI's search returns for each location over a window (scripts/dxbi_location_sweep.py):
+-- how DXBI's area pages group sales, which can differ from the area printed on a row.
+CREATE TABLE IF NOT EXISTS dxbi_location_members (
+    location_id      UInt32,
+    location_name    String,
+    sale_key         String,
+    transaction_date Date,
+    building_key     String DEFAULT '',
+    area_key         String DEFAULT '',
+    window_start     Date,
+    window_end       Date,
+    source_run_id    String DEFAULT '',
+    loaded_at        DateTime64(3, 'UTC') DEFAULT now64(3)
+) ENGINE = ReplacingMergeTree(loaded_at)
+ORDER BY (location_id, sale_key);
+
+-- The leases DXBI's search returns for each location over a window (scripts/dxbi_location_sweep.py
+-- --report rentals), by the lease's contract_key in dxbi_rental_events.
+CREATE TABLE IF NOT EXISTS dxbi_location_lease_members (
+    location_id      UInt32,
+    location_name    String,
+    contract_key     String,
+    lease_start      Date,
+    window_start     Date,
+    window_end       Date,
+    source_run_id    String DEFAULT '',
+    loaded_at        DateTime64(3, 'UTC') DEFAULT now64(3)
+) ENGINE = ReplacingMergeTree(loaded_at)
+ORDER BY (location_id, contract_key);
 
 CREATE TABLE IF NOT EXISTS dxbi_rental_sale_matches (
     unit_candidate_key             String,
@@ -1499,6 +1490,119 @@ CREATE TABLE IF NOT EXISTS offplan_reelly_project_link_candidates (
 ) ENGINE = ReplacingMergeTree(materialized_at)
 ORDER BY (source_system, source_key, candidate_rank);
 
+-- Reelly serving tables read by the backend and by the view below. Their producer is not in
+-- this repository (F02); the definitions mirror the live warehouse so a fresh warehouse can
+-- apply this schema and serve the product once the producer is restored.
+-- Typed fields the backend supply queries read, parsed by the Reelly bronze loader from the
+-- project payload (field names as backend app/supply/mapping.py reads them).
+ALTER TABLE reelly_projects_bronze ADD COLUMN IF NOT EXISTS project_name String DEFAULT '';
+ALTER TABLE reelly_projects_bronze ADD COLUMN IF NOT EXISTS developer_name String DEFAULT '';
+ALTER TABLE reelly_projects_bronze ADD COLUMN IF NOT EXISTS sale_status LowCardinality(String) DEFAULT '';
+ALTER TABLE reelly_projects_bronze ADD COLUMN IF NOT EXISTS region String DEFAULT '';
+ALTER TABLE reelly_projects_bronze ADD COLUMN IF NOT EXISTS area_name String DEFAULT '';
+ALTER TABLE reelly_projects_bronze ADD COLUMN IF NOT EXISTS units_in_sale UInt32 DEFAULT 0;
+ALTER TABLE reelly_projects_bronze ADD COLUMN IF NOT EXISTS completion_date String DEFAULT '';
+ALTER TABLE reelly_projects_bronze ADD COLUMN IF NOT EXISTS completion_time String DEFAULT '';
+ALTER TABLE reelly_projects_bronze ADD COLUMN IF NOT EXISTS min_price_aed Nullable(Float64);
+ALTER TABLE reelly_projects_bronze ADD COLUMN IF NOT EXISTS max_price_aed Nullable(Float64);
+ALTER TABLE reelly_projects_bronze ADD COLUMN IF NOT EXISTS readiness_progress Nullable(Float64);
+ALTER TABLE reelly_projects_bronze ADD COLUMN IF NOT EXISTS latitude Nullable(Float64);
+ALTER TABLE reelly_projects_bronze ADD COLUMN IF NOT EXISTS longitude Nullable(Float64);
+ALTER TABLE reelly_projects_bronze ADD COLUMN IF NOT EXISTS website_url String DEFAULT '';
+ALTER TABLE reelly_projects_bronze ADD COLUMN IF NOT EXISTS overview String DEFAULT '';
+
+-- Payment plan steps per project (Reelly "Payment_plans"), replaced per project on each load.
+CREATE TABLE IF NOT EXISTS reelly_project_payment_plans_bronze (
+    payment_plan_key     String,
+    run_id               String,
+    scraped_at           String DEFAULT '',
+    project_key          String DEFAULT '',
+    project_id           String DEFAULT '',
+    payment_plan_index   UInt32 DEFAULT 0,
+    payment_step_index   UInt32 DEFAULT 0,
+    payment_step_id      String DEFAULT '',
+    payment_plan_id      String DEFAULT '',
+    name                 String DEFAULT '',
+    order_index          UInt32 DEFAULT 0,
+    percent_of_payment   Nullable(Float64),
+    payment_time         String DEFAULT '',
+    created_at           String DEFAULT '',
+    source_system        LowCardinality(String) DEFAULT 'reelly',
+    source_file          String DEFAULT '',
+    source_row_index     UInt64 DEFAULT 0,
+    raw_manifest_s3_key  String DEFAULT ''
+) ENGINE = MergeTree
+ORDER BY (run_id, payment_plan_key);
+
+CREATE TABLE IF NOT EXISTS silver_reelly_projects (
+    project_key          String,
+    project_id           String DEFAULT '',
+    project_name         String DEFAULT '',
+    developer_id         String DEFAULT '',
+    developer_name       String DEFAULT '',
+    sale_status          LowCardinality(String) DEFAULT '',
+    region               String DEFAULT '',
+    area_name            String DEFAULT '',
+    city                 String DEFAULT '',
+    units_in_sale        UInt32 DEFAULT 0,
+    last_modified_at     Nullable(DateTime),
+    created_at           Nullable(DateTime),
+    latitude             Nullable(Float64),
+    longitude            Nullable(Float64),
+    delta_reason         LowCardinality(String) DEFAULT '',
+    source_system        LowCardinality(String) DEFAULT 'reelly',
+    source_row_key       String DEFAULT '',
+    raw_manifest_s3_key  String DEFAULT '',
+    scraped_at           String DEFAULT '',
+    completion_date      String DEFAULT '',
+    completion_time      Nullable(DateTime),
+    launch_date          Nullable(DateTime),
+    min_price_aed        Nullable(Float64),
+    max_price_aed        Nullable(Float64),
+    min_area_sqm         Nullable(Float64),
+    max_area_sqm         Nullable(Float64),
+    readiness_progress   Nullable(Float64),
+    service_charge_aed   Nullable(Float64),
+    escrow_number        String DEFAULT '',
+    website_url          String DEFAULT '',
+    overview             String DEFAULT '',
+    floors               String DEFAULT '',
+    furnishing           String DEFAULT '',
+    parking              String DEFAULT '',
+    availability_percent Nullable(Float64),
+    post_handover        UInt8 DEFAULT 0,
+    video_url            String DEFAULT '',
+    video_overview_url   String DEFAULT ''
+) ENGINE = ReplacingMergeTree
+ORDER BY project_key;
+
+CREATE TABLE IF NOT EXISTS reelly_project_unit_types_bronze (
+    unit_type_key        String,
+    run_id               String,
+    scraped_at           String DEFAULT '',
+    project_key          String DEFAULT '',
+    project_id           String DEFAULT '',
+    unit_type_index      UInt32 DEFAULT 0,
+    unit_type            String DEFAULT '',
+    unit_bedrooms        String DEFAULT '',
+    name                 String DEFAULT '',
+    unit_status          LowCardinality(String) DEFAULT '',
+    price_from_aed       Nullable(Float64),
+    price_to_aed         Nullable(Float64),
+    price_from_usd       Nullable(Float64),
+    price_to_usd         Nullable(Float64),
+    area_from_sqm        Nullable(Float64),
+    area_to_sqm          Nullable(Float64),
+    area_from_sqft       Nullable(Float64),
+    area_to_sqft         Nullable(Float64),
+    units_amount         UInt32 DEFAULT 0,
+    source_system        LowCardinality(String) DEFAULT 'reelly',
+    source_file          String DEFAULT '',
+    source_row_index     UInt64 DEFAULT 0,
+    raw_manifest_s3_key  String DEFAULT ''
+) ENGINE = MergeTree
+ORDER BY (run_id, unit_type_key);
+
 CREATE OR REPLACE VIEW offplan_reelly_mapped_source_facts AS
 SELECT
     s.source_system AS source_system,
@@ -1722,3 +1826,381 @@ FROM (
 ) AS o
 LEFT JOIN geo_source_signatures AS s USING (source_system, source_key)
 WHERE s.source_key IS NULL;
+
+-- ---------------------------------------------------------------------------
+-- Canonical market layer: one row per sale / rental event, DXBI + DLD reconciled.
+-- Built by holocron.market (staging + EXCHANGE); served to the backend through
+-- ch_transactions / ch_rent_contracts (WHERE is_served = 1).
+-- match_status: matched | dld_only | dxbi_only | dxbi_probable_duplicate
+-- ---------------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS market_sale_matches (
+    dxbi_sale_key String,
+    dld_transaction_number String,  -- DLD sale line id (transforms.DLD_SALES_BASE.line_id)
+    day_gap Int16,
+    size_gap Float64,
+    has_dld_candidate UInt8,
+    built_at DateTime64(3, UTC)
+)
+ENGINE = MergeTree()
+ORDER BY dxbi_sale_key;
+
+CREATE TABLE IF NOT EXISTS market_rental_matches (
+    dxbi_contract_key String,
+    dld_rent_key UInt64,
+    match_tier UInt8,
+    end_day_gap Int32,
+    size_gap Float64,
+    has_dld_candidate UInt8,
+    built_at DateTime64(3, UTC)
+)
+ENGINE = MergeTree()
+ORDER BY dxbi_contract_key;
+
+CREATE TABLE IF NOT EXISTS market_sale_events (
+    row_key String,
+    run_id String,
+    scraped_at String,
+    transaction_id String,
+    transaction_number String,
+    instance_date DateTime,
+    trans_group_id UInt32,
+    trans_group_en LowCardinality(String),
+    trans_group_ar String,
+    procedure_id UInt32,
+    procedure_name_en LowCardinality(String),
+    procedure_name_ar String,
+    procedure_area Float64,
+    actual_area Float64,
+    actual_worth Int64,
+    trans_value Int64,
+    total_buyer UInt32,
+    total_seller UInt32,
+    property_id UInt32,
+    property_type_id UInt32,
+    property_type_en LowCardinality(String),
+    property_type_ar String,
+    property_sub_type_id UInt32,
+    property_sub_type_en LowCardinality(String),
+    property_sub_type_ar String,
+    property_usage_id UInt32,
+    property_usage_en LowCardinality(String),
+    property_usage_ar String,
+    rooms_en LowCardinality(String),
+    rooms_ar String,
+    parking String,
+    has_parking UInt8,
+    building_age UInt32,
+    parcel_id String,
+    area_id UInt32,
+    area_name_en LowCardinality(String),
+    area_name_ar String,
+    project_name_en String,
+    project_name_ar String,
+    master_project_en String,
+    master_project_ar String,
+    is_free_hold UInt8,
+    is_free_hold_en LowCardinality(String),
+    is_free_hold_ar String,
+    is_offplan UInt8,
+    is_offplan_en LowCardinality(String),
+    is_offplan_ar String,
+    nearest_metro_en String,
+    nearest_metro_ar String,
+    nearest_mall_en String,
+    nearest_mall_ar String,
+    nearest_landmark_en String,
+    nearest_landmark_ar String,
+    project_number String,
+    building_name_en String,
+    building_name_ar String,
+    reg_type_id UInt32,
+    reg_type_en LowCardinality(String),
+    reg_type_ar String,
+    meter_sale_price Nullable(Float64),
+    rent_value Float64,
+    meter_rent_price Float64,
+    no_of_parties_role_1 UInt32,
+    no_of_parties_role_2 UInt32,
+    no_of_parties_role_3 UInt32,
+    unit_number String,
+    bedrooms LowCardinality(String),
+    market_status LowCardinality(String),
+    dxbi_sale_key String,
+    dxbi_building_name String,
+    dxbi_transaction_date Nullable(Date),
+    source_system LowCardinality(String),
+    primary_source LowCardinality(String),
+    match_status LowCardinality(String),
+    is_served UInt8,
+    built_at DateTime64(3, UTC)
+)
+ENGINE = MergeTree()
+ORDER BY (trans_group_en, instance_date, transaction_id);
+
+CREATE TABLE IF NOT EXISTS market_rental_events (
+    row_key String,
+    run_id String,
+    scraped_at String,
+    contract_id String,
+    contract_number String,
+    line_number UInt32,
+    registration_date DateTime,
+    contract_start_date DateTime,
+    contract_end_date DateTime,
+    property_id UInt32,
+    land_property_id UInt32,
+    ejari_property_type_id UInt32,
+    ejari_property_sub_type_id UInt32,
+    ejari_property_type_en LowCardinality(String),
+    ejari_property_type_ar String,
+    ejari_property_sub_type_en LowCardinality(String),
+    ejari_property_sub_type_ar String,
+    property_usage_id UInt32,
+    property_usage_en LowCardinality(String),
+    property_usage_ar String,
+    rooms String,
+    rooms_en String,
+    parking String,
+    actual_area Float64,
+    annual_amount Int64,
+    contract_amount Int64,
+    no_of_prop UInt32,
+    version_number UInt32,
+    version_en LowCardinality(String),
+    version_ar String,
+    parcel_id String,
+    area_id UInt32,
+    area_name_en LowCardinality(String),
+    area_name_ar String,
+    project_name_en String,
+    project_name_ar String,
+    master_project_en String,
+    master_project_ar String,
+    is_free_hold UInt8,
+    is_free_hold_en LowCardinality(String),
+    is_free_hold_ar String,
+    nearest_metro_en String,
+    nearest_metro_ar String,
+    nearest_mall_en String,
+    nearest_mall_ar String,
+    nearest_landmark_en String,
+    nearest_landmark_ar String,
+    project_number String,
+    tenant_type_id UInt32,
+    tenant_type_en LowCardinality(String),
+    tenant_type_ar String,
+    contract_reg_type_id UInt32,
+    contract_reg_type_en LowCardinality(String),
+    contract_reg_type_ar String,
+    ejari_bus_property_type_id UInt32,
+    ejari_bus_property_type_en LowCardinality(String),
+    ejari_bus_property_type_ar String,
+    rent_per_sqm Nullable(Float64),
+    unit_number String,
+    bedrooms LowCardinality(String),
+    dxbi_contract_key String,
+    dxbi_building_name String,
+    source_system LowCardinality(String),
+    primary_source LowCardinality(String),
+    match_status LowCardinality(String),
+    is_served UInt8,
+    built_at DateTime64(3, UTC)
+)
+ENGINE = MergeTree()
+ORDER BY (contract_start_date, contract_id);
+
+-- Every canonical market table carries the release that built it: each reader query can
+-- report which release answered it, and staging/previous tables stay identifiable.
+ALTER TABLE market_sale_matches ADD COLUMN IF NOT EXISTS release_id LowCardinality(String) DEFAULT '';
+ALTER TABLE market_rental_matches ADD COLUMN IF NOT EXISTS release_id LowCardinality(String) DEFAULT '';
+ALTER TABLE market_sale_events ADD COLUMN IF NOT EXISTS release_id LowCardinality(String) DEFAULT '';
+ALTER TABLE market_rental_events ADD COLUMN IF NOT EXISTS release_id LowCardinality(String) DEFAULT '';
+
+-- Canonical geography (see market.transforms): official DLD district and, where evidence
+-- supports it, community, with the method that placed the row. Raw names stay unchanged.
+ALTER TABLE market_sale_events ADD COLUMN IF NOT EXISTS district_id UInt32 DEFAULT 0;
+ALTER TABLE market_sale_events ADD COLUMN IF NOT EXISTS district_name LowCardinality(String) DEFAULT '';
+ALTER TABLE market_sale_events ADD COLUMN IF NOT EXISTS community_key LowCardinality(String) DEFAULT '';
+ALTER TABLE market_sale_events ADD COLUMN IF NOT EXISTS community_name LowCardinality(String) DEFAULT '';
+ALTER TABLE market_sale_events ADD COLUMN IF NOT EXISTS geo_resolution LowCardinality(String) DEFAULT '';
+ALTER TABLE market_sale_events ADD COLUMN IF NOT EXISTS geo_method LowCardinality(String) DEFAULT '';
+ALTER TABLE market_rental_events ADD COLUMN IF NOT EXISTS district_id UInt32 DEFAULT 0;
+ALTER TABLE market_rental_events ADD COLUMN IF NOT EXISTS district_name LowCardinality(String) DEFAULT '';
+ALTER TABLE market_rental_events ADD COLUMN IF NOT EXISTS community_key LowCardinality(String) DEFAULT '';
+ALTER TABLE market_rental_events ADD COLUMN IF NOT EXISTS community_name LowCardinality(String) DEFAULT '';
+ALTER TABLE market_rental_events ADD COLUMN IF NOT EXISTS geo_resolution LowCardinality(String) DEFAULT '';
+ALTER TABLE market_rental_events ADD COLUMN IF NOT EXISTS geo_method LowCardinality(String) DEFAULT '';
+
+-- Uniform DXBI-primary layer (holocron.market.transforms, decision 2026-10-06). One vocabulary
+-- and one column per concept for both tables: property_type (transforms.PROPERTY_TYPES),
+-- size_sqm (DXBI's size where it is primary, else DLD's), location_name (DXBI's community name
+-- where known, else the canonical community, else the official district). filled_from_dld /
+-- dld_disagrees list the uniform columns where DLD filled an empty DXBI value or held a
+-- different one on a DXBI-primary row: audit only, never shown in the product.
+ALTER TABLE market_sale_events ADD COLUMN IF NOT EXISTS property_type LowCardinality(String) DEFAULT '';
+ALTER TABLE market_sale_events ADD COLUMN IF NOT EXISTS size_sqm Float64 DEFAULT 0;
+ALTER TABLE market_sale_events ADD COLUMN IF NOT EXISTS location_name LowCardinality(String) DEFAULT '';
+ALTER TABLE market_sale_events ADD COLUMN IF NOT EXISTS filled_from_dld Array(LowCardinality(String)) DEFAULT [];
+ALTER TABLE market_sale_events ADD COLUMN IF NOT EXISTS dld_disagrees Array(LowCardinality(String)) DEFAULT [];
+ALTER TABLE market_rental_events ADD COLUMN IF NOT EXISTS property_type LowCardinality(String) DEFAULT '';
+ALTER TABLE market_rental_events ADD COLUMN IF NOT EXISTS size_sqm Float64 DEFAULT 0;
+ALTER TABLE market_rental_events ADD COLUMN IF NOT EXISTS location_name LowCardinality(String) DEFAULT '';
+ALTER TABLE market_rental_events ADD COLUMN IF NOT EXISTS filled_from_dld Array(LowCardinality(String)) DEFAULT [];
+ALTER TABLE market_rental_events ADD COLUMN IF NOT EXISTS dld_disagrees Array(LowCardinality(String)) DEFAULT [];
+-- DLD's registration date on sales with a DLD record (instance_date carries DXBI's date where
+-- DXBI is primary); release validation compares per-day completeness on it.
+ALTER TABLE market_sale_events ADD COLUMN IF NOT EXISTS dld_instance_date Nullable(DateTime) DEFAULT NULL;
+-- Inside the DXBI period an unpaired DXBI record and an unpaired DLD record with the same price
+-- (sales, within 30 days) or start and contract amount (rentals) are paired loosely so the DLD
+-- one is not served beside the DXBI one (it becomes dld_probable_duplicate).
+ALTER TABLE market_sale_matches ADD COLUMN IF NOT EXISTS loose_dld_key String DEFAULT '';
+ALTER TABLE market_rental_matches ADD COLUMN IF NOT EXISTS loose_dld_rent_key UInt64 DEFAULT 0;
+
+-- Source-specific name evidence behind those columns, rebuilt with each sales release.
+-- kind: district | community | project | label (see market.transforms).
+CREATE TABLE IF NOT EXISTS market_geo_crosswalk (
+    kind LowCardinality(String),
+    source_key String,
+    district_id UInt32,
+    district_name String,
+    community_key String,
+    community_name String,
+    evidence_rows UInt64,
+    evidence_share Float64,
+    built_at DateTime64(3, UTC),
+    release_id LowCardinality(String) DEFAULT ''
+)
+ENGINE = MergeTree()
+ORDER BY (kind, source_key);
+
+-- Durable publication record, one version per state change (latest updated_at wins).
+-- state: building | rejected | failed | publishing | published | superseded | rolled_back
+CREATE TABLE IF NOT EXISTS market_release_ledger (
+    release_id String,
+    dataset LowCardinality(String),
+    state LowCardinality(String),
+    owner String,
+    started_at DateTime64(3, UTC),
+    updated_at DateTime64(3, UTC),
+    served_rows UInt64,
+    previous_release_id String,
+    depends_on_json String,
+    inputs_json String,
+    checks_json String,
+    detail String
+)
+ENGINE = ReplacingMergeTree(updated_at)
+ORDER BY (dataset, release_id);
+
+-- Day ranges each release can vouch for, from source_load_windows (JSON, see market.release).
+ALTER TABLE market_release_ledger ADD COLUMN IF NOT EXISTS coverage_json String DEFAULT '{}';
+
+-- One row per date window a bronze load replaced: the evidence that a day was loaded in
+-- full. status: complete (pagination reached the end of the window), partial (the load
+-- stopped inside the window), attested (an operator-recorded archive, e.g. Dubai Pulse).
+-- The latest window covering a day decides its status.
+CREATE TABLE IF NOT EXISTS source_load_windows (
+    bronze_table LowCardinality(String),
+    date_field LowCardinality(String),
+    window_start Date,
+    window_end Date,
+    status LowCardinality(String),
+    rows UInt64,
+    run_id String,
+    manifest_key String,
+    evidence String,
+    loaded_at DateTime64(3, UTC) DEFAULT now64(3)
+)
+ENGINE = MergeTree()
+ORDER BY (bronze_table, date_field, window_start, loaded_at);
+-- Rows of the window this load read (first_row..end_row of total_rows), so a load that
+-- resumed mid-window proves coverage only when it continues an unbroken chain. -1: unknown
+-- (loads recorded before these columns, and attested archives).
+ALTER TABLE source_load_windows ADD COLUMN IF NOT EXISTS first_row Int64 DEFAULT -1;
+ALTER TABLE source_load_windows ADD COLUMN IF NOT EXISTS end_row Int64 DEFAULT -1;
+ALTER TABLE source_load_windows ADD COLUMN IF NOT EXISTS total_rows Int64 DEFAULT -1;
+
+-- One row per DXBI evidence run loaded by Holocron (replaces the Mac .loaded marker files).
+-- Raw files are archived to object storage first (manifest_key); loader accounting is kept
+-- here so rows dropped at load are measurable afterwards.
+CREATE TABLE IF NOT EXISTS dxbi_evidence_load_ledger (
+    batch_id String,
+    report LowCardinality(String),
+    run_name String,
+    files UInt32,
+    raw_bytes UInt64,
+    manifest_key String,
+    rows_loaded UInt64,
+    rows_skipped UInt64,
+    rows_rejected UInt64,
+    details_json String,
+    status LowCardinality(String),
+    error String,
+    loaded_at DateTime64(3, UTC)
+)
+ENGINE = MergeTree()
+ORDER BY (report, run_name, loaded_at);
+
+-- Bayut full-collection snapshots (holocron.sources.bayut_listings.bronze). Acquisition is
+-- manual and gated on access/licensing (D1); loading never fetches from Bayut.
+CREATE TABLE IF NOT EXISTS bayut_listings_bronze (
+    snapshot_id   String,
+    listing_id    String,
+    purpose       LowCardinality(String),
+    property_type LowCardinality(String),
+    title         String,
+    listing_url   String,
+    price_aed     Nullable(Float64),
+    size_sqft     Nullable(Float64),
+    search_path   String,
+    root_name     String,
+    observed_at   String,
+    raw_json      String,
+    loaded_at     DateTime64(3, UTC) DEFAULT now64(3)
+)
+ENGINE = MergeTree()
+ORDER BY (snapshot_id, listing_id);
+
+-- status: published (coverage certified) | partial (kept for inspection, never served).
+CREATE TABLE IF NOT EXISTS bayut_listing_snapshots (
+    snapshot_id     String,
+    status          LowCardinality(String),
+    coverage_status LowCardinality(String),
+    listing_count   UInt64,
+    summary_json    String,
+    export_sha256   String,
+    loaded_at       DateTime64(3, UTC) DEFAULT now64(3)
+)
+ENGINE = ReplacingMergeTree(loaded_at)
+ORDER BY snapshot_id;
+-- Snapshots are ordered by when the crawl observed them, never by load time: reloading an
+-- older export must not make it the current inventory. Rows loaded before this column
+-- existed fall back to their load time.
+ALTER TABLE bayut_listing_snapshots ADD COLUMN IF NOT EXISTS collected_at DateTime64(3, 'UTC') DEFAULT loaded_at;
+
+-- The inventory is the latest certified snapshot; a partial crawl never replaces it.
+CREATE OR REPLACE VIEW bayut_listings_current AS
+SELECT b.*
+FROM bayut_listings_bronze AS b
+WHERE b.snapshot_id = (
+    SELECT argMax(snapshot_id, (collected_at, snapshot_id)) FROM bayut_listing_snapshots FINAL
+    WHERE status = 'published'
+);
+
+-- Listings in the previous certified snapshot that the latest certified one no longer has.
+CREATE OR REPLACE VIEW bayut_listing_withdrawals AS
+WITH published AS (
+    SELECT snapshot_id, collected_at FROM bayut_listing_snapshots FINAL
+    WHERE status = 'published' ORDER BY collected_at DESC, snapshot_id DESC LIMIT 2
+)
+SELECT b.*
+FROM bayut_listings_bronze AS b
+WHERE b.snapshot_id = (
+      SELECT snapshot_id FROM published ORDER BY collected_at ASC, snapshot_id ASC LIMIT 1)
+  AND (SELECT count() FROM published) = 2
+  AND b.listing_id NOT IN (
+      SELECT listing_id FROM bayut_listings_bronze
+      WHERE snapshot_id = (
+          SELECT snapshot_id FROM published ORDER BY collected_at DESC, snapshot_id DESC LIMIT 1)
+  );

@@ -1,6 +1,6 @@
 <script lang="ts">
 import { workbookStore } from '$lib/feasibility/workbook/store.svelte'
-import { toSqft } from '$lib/utils/units'
+import { perSqft, perSqm, toSqft } from '$lib/utils/units'
 import AmountInput from '../AmountInput.svelte'
 
 function fmt(value: number, digits = 0): string {
@@ -226,7 +226,7 @@ $effect(() => {
 					</td>
 					<td class="px-2 py-[3px] text-right tabular-nums text-[10px] text-slate-500">
 						{btr.devCosts.landAcquisitionAed > 0 && s.inputs.plotAreaSqm > 0
-							? `${fmt(btr.devCosts.landAcquisitionAed / s.inputs.plotAreaSqm, 0)} AED/sqm plot`
+							? `${fmt(btr.devCosts.landAcquisitionAed / toSqft(s.inputs.plotAreaSqm), 0)} AED/sq ft plot`
 							: 'Manual AED'}
 					</td>
 					<td class="px-2 py-[3px] text-right tabular-nums text-[10px] text-slate-500">
@@ -305,8 +305,8 @@ $effect(() => {
 							step="10"
 							min="0"
 							class={INPUT}
-							value={Math.round(s.inputs.constructionCostPsqmBua * 0.092903)}
-							oninput={(e) => s.updateInputs({ constructionCostPsqmBua: (Number(e.currentTarget.value) || 0) / 0.092903, constructionCostOverrideAed: null })}
+							value={Math.round(perSqft(s.inputs.constructionCostPsqmBua))}
+							oninput={(e) => s.updateInputs({ constructionCostPsqmBua: perSqm(Number(e.currentTarget.value) || 0), constructionCostOverrideAed: null })}
 						/>
 					</td>
 					<td class="px-2 py-[3px] text-right tabular-nums text-[10px] text-slate-500">
@@ -315,8 +315,8 @@ $effect(() => {
 				</tr>
 				<tr class="border-b border-[#D9D9D9] bg-[#F9F9F9]">
 					<td class="pl-8 pr-2 py-[3px] text-slate-500 italic text-[10px]">↳ Costable BUA</td>
-					<td class="px-2 py-[3px] text-right tabular-nums text-[10px] text-slate-500">{fmt(toSqft(s.totalBuaSqm), 0)} sqft</td>
-					<td class="px-2 py-[3px] text-right tabular-nums text-[10px] text-slate-500">AED / sqft BUA</td>
+					<td class="px-2 py-[3px] text-right tabular-nums text-[10px] text-slate-500">{fmt(toSqft(s.totalBuaSqm), 0)} sq ft</td>
+					<td class="px-2 py-[3px] text-right tabular-nums text-[10px] text-slate-500">AED / sq ft BUA</td>
 					<td></td>
 				</tr>
 				<tr class="border-b border-[#D9D9D9] hover:bg-slate-50/60">
@@ -657,7 +657,7 @@ $effect(() => {
 			<td class={VALUE_BLACK}>{s.maxGfaSqm > 0 ? fmt(s.plotAcquisitionCost / toSqft(s.maxGfaSqm), 0) : '—'}</td>
 			<td class={PCT_COL}>{fmtPct(pct(s.plotAcquisitionCost))}</td>
 			<td class={VALUE_BLACK}>{fmtAed(outputs?.costs.vatLandAed ?? 0)}</td>
-			<td class={UNIT}>AED / sqft GFA</td>
+			<td class={UNIT}>AED / sq ft GFA</td>
 		</tr>
 
 		<tr class={ROW_INDENT}>
@@ -774,17 +774,17 @@ $effect(() => {
 				data-feasibility-field={fieldTokens('constructionCostPsqmBua', 'constructionCostOverrideAed')}
 			>
 				<input type="number" step="10" class={INPUT}
-					value={Math.round(s.inputs.constructionCostPsqmBua * 0.092903)}
-					oninput={(e) => s.updateInputs({ constructionCostPsqmBua: (Number(e.currentTarget.value) || 0) / 0.092903 })} />
+					value={Math.round(perSqft(s.inputs.constructionCostPsqmBua))}
+					oninput={(e) => s.updateInputs({ constructionCostPsqmBua: perSqm(Number(e.currentTarget.value) || 0) })} />
 			</td>
 			<td class={PCT_COL}>{fmtPct(pct(s.constructionCostInclInflation))}</td>
 			<td class={VALUE_BLACK}>{fmtAed(outputs?.costs.vatHardCostAed ?? 0)}</td>
-			<td class={UNIT}>AED / sqft BUA</td>
+			<td class={UNIT}>AED / sq ft BUA</td>
 		</tr>
 
 		<tr class={ROW_INDENT}>
 			<td></td>
-			<td class={LABEL_INDENT}>↳ BUA ({fmt(toSqft(s.totalBuaSqm), 0)} sqft = GFA × {s.inputs.buaMultiplier}x + parking)</td>
+			<td class={LABEL_INDENT}>↳ BUA ({fmt(toSqft(s.totalBuaSqm), 0)} sq ft = GFA × {s.inputs.buaMultiplier}x + parking)</td>
 			<td></td>
 			<td class={VALUE_BLACK}></td>
 			<td class={PCT_COL}></td>
@@ -967,7 +967,7 @@ $effect(() => {
 			</td>
 			<td class={PCT_COL}>{fmtPct(pct(s.inputs.infrastructureCostAed))}</td>
 			<td class={PCT_COL}>—</td>
-			<td class={UNIT}>AED / sqft plot</td>
+			<td class={UNIT}>AED / sq ft plot</td>
 		</tr>
 
 		<tr class={ROW_STD}>
@@ -986,7 +986,7 @@ $effect(() => {
 			</td>
 			<td class={PCT_COL}>{fmtPct(pct(s.inputs.governmentFeesAed))}</td>
 			<td class={VALUE_BLACK}>{fmtAed(outputs?.costs.vatPermitFeesAed ?? 0)}</td>
-			<td class={UNIT}>AED / sqft GFA</td>
+			<td class={UNIT}>AED / sq ft GFA</td>
 		</tr>
 
 		<tr class={ROW_STD}>
@@ -1005,7 +1005,7 @@ $effect(() => {
 			</td>
 			<td class={PCT_COL}>{fmtPct(pct(s.inputs.masterCommunityFeesAed))}</td>
 			<td class={PCT_COL}>—</td>
-			<td class={UNIT}>AED / sqft plot</td>
+			<td class={UNIT}>AED / sq ft plot</td>
 		</tr>
 
 		{#if s.inputs.ffeOsePreopeningCostAed > 0}
@@ -1175,7 +1175,7 @@ $effect(() => {
 			<div class="text-[11px] font-bold text-slate-900 tabular-nums">{s.totalUnits > 0 ? fmtAed(profitPerUnitAed) : '—'}</div>
 		</div>
 		<div class="px-2 py-1.5 flex-1">
-			<div class="text-[9px] uppercase tracking-wider text-slate-500 font-semibold">Cost / sqft BUA</div>
+			<div class="text-[9px] uppercase tracking-wider text-slate-500 font-semibold">Cost / sq ft BUA</div>
 			<div class="text-[11px] font-bold text-slate-900 tabular-nums">{s.totalBuaSqm > 0 ? fmt(costPerSqftBua, 0) : '—'} <span class="text-slate-400 font-normal">AED</span></div>
 		</div>
 		<div class="px-2 py-1.5 flex-1">

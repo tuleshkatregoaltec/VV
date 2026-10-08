@@ -26,17 +26,17 @@ const avgPrice = $derived(
 		<div class="rounded-xl border border-navy-pale bg-navy-pale p-4">
 			<p class="mb-1 text-sm text-fg-4">Average</p>
 			<p class="text-2xl font-bold text-fg-1">{formatCurrency(avgPrice)}</p>
-			<p class="mt-1 text-xs text-fg-4">per sq.m</p>
+			<p class="mt-1 text-xs text-fg-4">per sq ft</p>
 		</div>
 		<div class="rounded-xl border border-[rgba(17,122,72,0.2)] bg-success-bg p-4">
 			<p class="mb-1 text-sm text-fg-4">Highest</p>
 			<p class="text-2xl font-bold text-fg-1">{formatCurrency(maxPrice)}</p>
-			<p class="mt-1 text-xs text-fg-4">per sq.m</p>
+			<p class="mt-1 text-xs text-fg-4">per sq ft</p>
 		</div>
 		<div class="rounded-xl border border-[rgba(165,90,19,0.2)] bg-warning-bg p-4">
 			<p class="mb-1 text-sm text-fg-4">Lowest</p>
 			<p class="text-2xl font-bold text-fg-1">{formatCurrency(minPrice)}</p>
-			<p class="mt-1 text-xs text-fg-4">per sq.m</p>
+			<p class="mt-1 text-xs text-fg-4">per sq ft</p>
 		</div>
 	</div>
 

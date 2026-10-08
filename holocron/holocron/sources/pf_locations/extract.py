@@ -14,6 +14,7 @@ import httpx
 
 from holocron.contracts import RawFile, RawRelease
 from holocron.platform.execution import build_raw_release, new_run_id, utc_now
+from holocron.platform.http_retry import provider_limiter, send
 from holocron.platform.metadata import safe_config_metadata
 from holocron.platform.raw_files import write_jsonl_raw_file as _write_jsonl_raw_file
 from holocron.sources.pf_locations.source import PropertyFinderLocationsConfig, SOURCE
@@ -45,10 +46,14 @@ class PropertyFinderLocationsApiClient:
         self._base_url = base_url.rstrip("/")
         self._static_assets_base_url = static_assets_base_url.rstrip("/")
         self._country_code = country_code
+        self.limiter = provider_limiter("propertyfinder", min_interval_seconds=1.0)
 
     def fetch_locations(self, *, page: int, limit: int, locale: str) -> dict[str, Any]:
-        response = self._client.get(
+        response = send(
+            self._client,
+            "GET",
             f"{self._base_url}/api/pwa/locations",
+            limiter=self.limiter,
             params={
                 "locale": locale,
                 "pagination.limit": limit,
@@ -56,21 +61,22 @@ class PropertyFinderLocationsApiClient:
             },
             headers=_headers(),
         )
-        response.raise_for_status()
         payload = response.json()
         if not isinstance(payload, dict):
             raise ValueError("Property Finder locations response must be a JSON object")
         return payload
 
     def fetch_filter_settings(self, *, category: int, locale: str) -> dict[str, Any]:
-        response = self._client.get(
+        response = send(
+            self._client,
+            "GET",
             (
                 f"{self._static_assets_base_url}/filters/form-settings/v4/"
                 f"{locale}/{category}.data.{self._country_code}.json"
             ),
+            limiter=self.limiter,
             headers=_headers(),
         )
-        response.raise_for_status()
         payload = response.json()
         if not isinstance(payload, dict):
             raise ValueError("Property Finder filter settings response must be a JSON object")

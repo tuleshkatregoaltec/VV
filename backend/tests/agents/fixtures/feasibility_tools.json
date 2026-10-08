@@ -1,0 +1,396 @@
+{
+  "get_current_plot": {
+    "description": null,
+    "schema": {
+      "additionalProperties": false,
+      "properties": {},
+      "type": "object"
+    }
+  },
+  "get_area_market_data": {
+    "description": null,
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "area": {
+          "type": "string"
+        },
+        "usage": {
+          "default": "residential",
+          "enum": [
+            "residential",
+            "commercial",
+            "mixed_use",
+            "unknown"
+          ],
+          "type": "string"
+        },
+        "stage": {
+          "default": "existing",
+          "enum": [
+            "existing",
+            "off_plan",
+            "upcoming",
+            "all"
+          ],
+          "type": "string"
+        },
+        "days": {
+          "default": 365,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "area"
+      ],
+      "type": "object"
+    }
+  },
+  "rank_pricing_comparables": {
+    "description": null,
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "usage": {
+          "default": "residential",
+          "enum": [
+            "residential",
+            "commercial",
+            "mixed_use",
+            "unknown"
+          ],
+          "type": "string"
+        },
+        "limit": {
+          "default": 5,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    }
+  },
+  "rank_pipeline_comparables": {
+    "description": null,
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "usage": {
+          "default": "residential",
+          "enum": [
+            "residential",
+            "commercial",
+            "mixed_use",
+            "unknown"
+          ],
+          "type": "string"
+        },
+        "limit": {
+          "default": 5,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    }
+  },
+  "get_plot_land_sales": {
+    "description": null,
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "days": {
+          "default": 1825,
+          "type": "integer"
+        },
+        "limit": {
+          "default": 12,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    }
+  },
+  "show_transactions": {
+    "description": null,
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "area": {
+          "type": "string"
+        },
+        "unit_type": {
+          "default": "",
+          "type": "string"
+        },
+        "usage": {
+          "default": "residential",
+          "enum": [
+            "residential",
+            "commercial",
+            "mixed_use",
+            "unknown"
+          ],
+          "type": "string"
+        },
+        "stage": {
+          "default": "existing",
+          "enum": [
+            "existing",
+            "off_plan",
+            "upcoming",
+            "all"
+          ],
+          "type": "string"
+        },
+        "days": {
+          "default": 365,
+          "type": "integer"
+        },
+        "limit": {
+          "default": 50,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "area"
+      ],
+      "type": "object"
+    }
+  },
+  "show_analytics": {
+    "description": null,
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "area": {
+          "default": "",
+          "type": "string"
+        },
+        "project_name": {
+          "default": "",
+          "type": "string"
+        },
+        "usage": {
+          "default": "residential",
+          "enum": [
+            "residential",
+            "commercial",
+            "mixed_use",
+            "unknown"
+          ],
+          "type": "string"
+        },
+        "stage": {
+          "default": "existing",
+          "enum": [
+            "existing",
+            "off_plan",
+            "upcoming",
+            "all"
+          ],
+          "type": "string"
+        },
+        "days": {
+          "default": 365,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    }
+  },
+  "update_prices": {
+    "description": "Propose selling prices in AED per sq ft, keyed by unit type id.",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "prices": {
+          "additionalProperties": {
+            "type": "number"
+          },
+          "type": "object"
+        }
+      },
+      "required": [
+        "prices"
+      ],
+      "type": "object"
+    }
+  },
+  "update_unit_mix": {
+    "description": "Patch only the listed unit types, keeping unmentioned unit types unchanged.",
+    "schema": {
+      "$defs": {
+        "WorkspaceUnitMixUpdate": {
+          "description": "Sizes in sq ft and prices in AED per sq ft, as the user sees them.",
+          "properties": {
+            "type": {
+              "type": "string"
+            },
+            "count": {
+              "minimum": 0,
+              "type": "integer"
+            },
+            "avgSizeSqft": {
+              "anyOf": [
+                {
+                  "exclusiveMinimum": 0,
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "price_sqft": {
+              "anyOf": [
+                {
+                  "exclusiveMinimum": 0,
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "parkingRatio": {
+              "anyOf": [
+                {
+                  "minimum": 0,
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            }
+          },
+          "required": [
+            "type",
+            "count"
+          ],
+          "title": "WorkspaceUnitMixUpdate",
+          "type": "object"
+        }
+      },
+      "additionalProperties": false,
+      "properties": {
+        "unit_mix": {
+          "items": {
+            "$ref": "#/$defs/WorkspaceUnitMixUpdate"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "unit_mix"
+      ],
+      "type": "object"
+    }
+  },
+  "replace_unit_mix": {
+    "description": "Replace the full unit mix with exactly the listed unit types.",
+    "schema": {
+      "$defs": {
+        "WorkspaceUnitMixReplacement": {
+          "description": "Sizes in sq ft and prices in AED per sq ft, as the user sees them.",
+          "properties": {
+            "type": {
+              "type": "string"
+            },
+            "count": {
+              "minimum": 0,
+              "type": "integer"
+            },
+            "avgSizeSqft": {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            "price_sqft": {
+              "anyOf": [
+                {
+                  "exclusiveMinimum": 0,
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "parkingRatio": {
+              "anyOf": [
+                {
+                  "minimum": 0,
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            }
+          },
+          "required": [
+            "type",
+            "count",
+            "avgSizeSqft"
+          ],
+          "title": "WorkspaceUnitMixReplacement",
+          "type": "object"
+        }
+      },
+      "additionalProperties": false,
+      "properties": {
+        "unit_mix": {
+          "items": {
+            "$ref": "#/$defs/WorkspaceUnitMixReplacement"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "unit_mix"
+      ],
+      "type": "object"
+    }
+  },
+  "update_assumptions": {
+    "description": "Propose assumption changes; areas and rates use their sq ft keys (e.g. constructionCostPsqftBua).",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "assumptions": {
+          "additionalProperties": true,
+          "type": "object"
+        }
+      },
+      "required": [
+        "assumptions"
+      ],
+      "type": "object"
+    }
+  },
+  "update_payment_plan": {
+    "description": null,
+    "schema": {
+      "properties": {
+        "depositPct": {
+          "default": 10.0,
+          "type": "number"
+        },
+        "constructionPct": {
+          "default": 30.0,
+          "type": "number"
+        },
+        "handoverPct": {
+          "default": 60.0,
+          "type": "number"
+        }
+      },
+      "title": "FeasibilityPaymentPlan",
+      "type": "object"
+    }
+  }
+}

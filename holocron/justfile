@@ -12,13 +12,14 @@ fmt:
 test:
     uv run pytest
 
+# The admin extra is installed so apps/entity_admin is checked against its real dependencies.
 typecheck:
-    uv run ty check --error-on-warning
+    uv run --extra admin ty check --error-on-warning
 
 check:
     uv run ruff format --check
     uv run ruff check
-    uv run ty check --error-on-warning
+    uv run --extra admin ty check --error-on-warning
     uv run pytest
 
 replay-bronze target source +args='':
@@ -36,6 +37,16 @@ dataset-version target +args='':
       host) uv run python -m holocron.platform.dataset_versions {{args}} ;; \
       *) echo "Unknown dataset-version target: {{target}}. Use prod, raw-test, or host." >&2; exit 2 ;; \
     esac
+
+# Local Dagster on this host against .env.local (`just env local`), UI on 127.0.0.1 only.
+# Schedules keep their code default (STOPPED); nothing runs until started in the UI.
+dagster-local port="3000":
+    mkdir -p var/dagster-home && cp dagster.yaml var/dagster-home/dagster.yaml
+    set -a && . ./.env.local && set +a && DAGSTER_HOME="$PWD/var/dagster-home" uv run dagster dev -h 127.0.0.1 -p {{port}} -m holocron.definitions
+
+# Read-only live data census -> ../docs/data-pipelines/DATA_SOURCE_HEALTH.{json,md}
+census +args='':
+    uv run python -m holocron.platform.census {{args}}
 
 env target="prod" +args='':
     @case "{{target}}" in \

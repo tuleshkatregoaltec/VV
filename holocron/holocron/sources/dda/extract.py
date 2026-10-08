@@ -5,7 +5,6 @@ from __future__ import annotations
 import csv
 import logging
 import re
-import time
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
@@ -16,6 +15,7 @@ import httpx
 
 from holocron.contracts import RawFile, RawRelease
 from holocron.platform.execution import build_raw_release, new_run_id, utc_now
+from holocron.platform.http_retry import SourceAccessDenied, provider_limiter, send
 from holocron.platform.metadata import safe_config_metadata
 from holocron.platform.raw_files import build_raw_file_from_path, count_csv_rows
 from holocron.sources.dda.parse import (
@@ -51,6 +51,13 @@ _PAGE_SIZE = 2000
 _MAX_RETRIES = 3
 _PLOTS_FILE = "dda_plots.csv"
 _PLOTS_LAYER_ID = 13
+# Plot pages are fetched concurrently; the limiter caps them at the configured concurrency.
+_LIMITER = provider_limiter("dda", min_interval_seconds=0.1, max_concurrency=8)
+
+
+def _get(client: httpx.Client, url: str, **kwargs) -> httpx.Response:
+    return send(client, "GET", url, limiter=_LIMITER, **kwargs)
+
 
 _HEADERS = {
     "User-Agent": (
@@ -161,8 +168,7 @@ _LAYER_SPECS = (
 
 def _fetch_token(client: httpx.Client) -> str:
     logger.info("dda: fetching planning map token")
-    response = client.get(f"{_BASE_URL}/DIS", headers=_HEADERS)
-    response.raise_for_status()
+    response = _get(client, f"{_BASE_URL}/DIS", headers=_HEADERS)
     match = re.search(r'"AGSToken"\s*:\s*"([^"]+)"', response.text)
     if match is None:
         raise RuntimeError("Could not extract AGSToken from DIS page HTML")
@@ -185,29 +191,19 @@ def _fetch_plot_info(client: httpx.Client, plot: dict) -> dict:
         "verify_comments": plot.get("VERIFY_COMMENTS") or "",
     }
 
-    for attempt in range(1, _MAX_RETRIES + 1):
-        try:
-            response = client.get(
-                f"{_BASE_URL}/DIS",
-                params={"handler": "PlotInfo", "plotNumber": plot_number},
-                headers=_HEADERS,
-                timeout=30,
-            )
-            response.raise_for_status()
-            if "form-info-dda" not in response.text:
-                raise ValueError("Unexpected response (possible WAF block)")
-            return {**base, **parse_plot_info(response.text, plot_number)}
-        except (httpx.HTTPError, ValueError) as exc:
-            if attempt == _MAX_RETRIES:
-                logger.warning(
-                    "dda: plot %s failed after %s attempts: %r",
-                    plot_number,
-                    _MAX_RETRIES,
-                    exc,
-                )
-                return base
-            time.sleep(2**attempt)
-    return base
+    # Transient errors and 429s are retried inside _get. A page without the plot form is a
+    # WAF challenge: the run stops instead of writing success-shaped stub rows (F08) that a
+    # full replace would publish over good planning data.
+    response = _get(
+        client,
+        f"{_BASE_URL}/DIS",
+        params={"handler": "PlotInfo", "plotNumber": plot_number},
+        headers=_HEADERS,
+        timeout=30,
+    )
+    if "form-info-dda" not in response.text:
+        raise SourceAccessDenied(f"DDA plot {plot_number}: no plot form (possible WAF block)")
+    return {**base, **parse_plot_info(response.text, plot_number)}
 
 
 def _fetch_all_layer_features(
@@ -242,12 +238,12 @@ def _fetch_all_layer_features(
         if out_sr is not None:
             params["outSR"] = str(out_sr)
 
-        response = client.get(
+        response = _get(
+            client,
             f"{_BASE_URL}/server/rest/services/DIS/MAIN_MAP/MapServer/{layer_id}/query",
             params=params,
             headers=_HEADERS,
         )
-        response.raise_for_status()
         data = response.json()
         if _is_token_error(data):
             token_refreshes += 1
@@ -312,6 +308,41 @@ def _skip_if_done(output: Path, label: str) -> bool:
     return False
 
 
+_PLOT_FIELDS = (
+    "PLOT_NUMBER",
+    "OLD_PLOT_NUMBERS",
+    "LANDUSE_SYMBOLS",
+    "GFA_TYPE",
+    "IS_VERIFIED",
+    "VERIFY_COMMENTS",
+)
+
+
+def _published_fields(
+    client: httpx.Client, token: str, layer_id: int, wanted: tuple[str, ...]
+) -> list[str]:
+    """The wanted fields the layer still publishes.
+
+    ArcGIS rejects a whole query (400) when any requested field is missing. DDA dropped
+    LANDUSE_SYMBOLS, GFA_TYPE, IS_VERIFIED and VERIFY_COMMENTS from the plot layer in 2026,
+    and GFA fields from the frozen-plot layer, which stopped the weekly run; missing optional
+    columns are now left empty with a warning.
+    """
+    response = _get(
+        client,
+        f"{_BASE_URL}/server/rest/services/DIS/MAIN_MAP/MapServer/{layer_id}",
+        params={"f": "json", "token": token},
+        headers=_HEADERS,
+    )
+    published = {field["name"] for field in response.json().get("fields", [])}
+    if wanted[0] not in published:
+        raise RuntimeError(f"DDA layer {layer_id} no longer publishes key field {wanted[0]}")
+    missing = [field for field in wanted if field not in published]
+    if missing:
+        logger.warning("dda: layer %s no longer publishes %s; left empty", layer_id, missing)
+    return [field for field in wanted if field in published]
+
+
 def _scrape_plots(output: Path, *, concurrency: int, max_plots: int | None) -> None:
     done_plots: set[str] = set()
     if output.exists():
@@ -327,7 +358,7 @@ def _scrape_plots(output: Path, *, concurrency: int, max_plots: int | None) -> N
             client,
             token,
             _PLOTS_LAYER_ID,
-            out_fields="PLOT_NUMBER,OLD_PLOT_NUMBERS,LANDUSE_SYMBOLS,GFA_TYPE,IS_VERIFIED,VERIFY_COMMENTS",
+            out_fields=",".join(_published_fields(client, token, _PLOTS_LAYER_ID, _PLOT_FIELDS)),
             out_sr=None,
             return_geometry=False,
             limit=fetch_limit,
@@ -357,7 +388,11 @@ def _scrape_layer(client: httpx.Client, token: str, output: Path, spec: LayerSpe
         client,
         token,
         spec.layer_id,
-        out_fields=spec.out_fields,
+        out_fields=spec.out_fields
+        if spec.out_fields == "*"
+        else ",".join(
+            _published_fields(client, token, spec.layer_id, tuple(spec.out_fields.split(",")))
+        ),
         label=spec.label,
     )
     rows = [spec.row_builder(feature) for feature in features]

@@ -7,6 +7,7 @@ from pathlib import Path
 def test_adjacent_positive_size_values_split_before_unreachable_pagination():
     path = Path(__file__).parents[1] / "scripts/dxbi_rental_backfill.py"
     spec = importlib.util.spec_from_file_location("dense_rental_scraper", path)
+    assert spec and spec.loader
     scraper = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(scraper)
     shard = {

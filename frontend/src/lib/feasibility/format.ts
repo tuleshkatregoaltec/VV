@@ -45,11 +45,3 @@ export function monthsBetween(startIso: string, endIso: string): number | null {
 	if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return null
 	return (end.getFullYear() - start.getFullYear()) * 12 + (end.getMonth() - start.getMonth())
 }
-
-export function ratePerSqmToSqft(aedPerSqm: number): number {
-	return aedPerSqm * 0.092903
-}
-
-export function areaSqmToSqft(sqm: number): number {
-	return sqm / 0.092903
-}

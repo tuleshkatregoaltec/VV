@@ -1107,6 +1107,46 @@
 				}
 			}
 		},
+		"/api/v1/analytics/market-metrics": {
+			"post": {
+				"tags": ["analytics", "analytics"],
+				"summary": "Get Market Metrics Endpoint",
+				"description": "Sales or rental metrics with explicit period, coverage, definitions and evidence.\n\nThe same operation backs the chat tool, so API and chat answers agree.",
+				"operationId": "analytics-get_market_metrics_endpoint",
+				"requestBody": {
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/MarketMetricsRequest"
+							}
+						}
+					},
+					"required": true
+				},
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/MarketMetricsResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
 		"/api/v1/areas": {
 			"get": {
 				"tags": ["areas", "areas"],
@@ -3410,7 +3450,7 @@
 			"get": {
 				"tags": ["filters", "filters"],
 				"summary": "Get Sales Filter Options",
-				"description": "Get filter options for sales transactions.\n\nOptimized for ClickHouse LowCardinality columns (<10ms queries).\nSupports dynamic narrowing (e.g., project \u2192 buildings in that project).",
+				"description": "Options for the DXBI sales filters, narrowed by the filters already applied.",
 				"operationId": "filters-get_sales_filter_options",
 				"parameters": [
 					{
@@ -3418,177 +3458,235 @@
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "string",
-							"description": "Residential or Commercial",
+							"anyOf": [
+								{
+									"type": "string"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "Residential or Commercial (grouped from DXBI property types)",
 							"title": "Property Usage"
 						},
-						"description": "Residential or Commercial"
-					},
-					{
-						"name": "project",
-						"in": "query",
-						"required": false,
-						"schema": {
-							"type": "string",
-							"description": "Filter buildings by project",
-							"title": "Project"
-						},
-						"description": "Filter buildings by project"
-					},
-					{
-						"name": "filter_type",
-						"in": "query",
-						"required": false,
-						"schema": {
-							"type": "string",
-							"description": "Project filter type: master, virtual_master, or project",
-							"default": "project",
-							"title": "Filter Type"
-						},
-						"description": "Project filter type: master, virtual_master, or project"
+						"description": "Residential or Commercial (grouped from DXBI property types)"
 					},
 					{
 						"name": "property_type",
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "string",
-							"description": "Filter subtypes and rooms",
+							"anyOf": [
+								{
+									"type": "string"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "DXBI property type",
 							"title": "Property Type"
 						},
-						"description": "Filter subtypes and rooms"
+						"description": "DXBI property type"
 					},
 					{
-						"name": "property_sub_type",
+						"name": "bedrooms",
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "string",
-							"description": "Filter by property sub-type",
-							"title": "Property Sub Type"
+							"anyOf": [
+								{
+									"type": "string"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "'Studio', '1 Bed', '2 Beds', ...",
+							"title": "Bedrooms"
 						},
-						"description": "Filter by property sub-type"
+						"description": "'Studio', '1 Bed', '2 Beds', ..."
 					},
 					{
-						"name": "rooms",
+						"name": "status",
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "string",
-							"description": "Filter by room count",
-							"title": "Rooms"
+							"anyOf": [
+								{
+									"type": "string"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "Off-Plan or Ready",
+							"title": "Status"
 						},
-						"description": "Filter by room count"
+						"description": "Off-Plan or Ready"
 					},
 					{
-						"name": "registration_type",
+						"name": "location",
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "string",
-							"description": "Filter by registration type",
-							"title": "Registration Type"
+							"anyOf": [
+								{
+									"type": "string"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "DXBI area or community: every record its DXBI area page counts",
+							"title": "Location"
 						},
-						"description": "Filter by registration type"
-					},
-					{
-						"name": "area",
-						"in": "query",
-						"required": false,
-						"schema": {
-							"type": "string",
-							"description": "Filter by area",
-							"title": "Area"
-						},
-						"description": "Filter by area"
+						"description": "DXBI area or community: every record its DXBI area page counts"
 					},
 					{
 						"name": "building",
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "string",
-							"description": "Filter by building",
+							"anyOf": [
+								{
+									"type": "string"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "DXBI building name",
 							"title": "Building"
 						},
-						"description": "Filter by building"
+						"description": "DXBI building name"
 					},
 					{
 						"name": "timeframe_days",
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "integer",
-							"description": "Days back from today",
+							"anyOf": [
+								{
+									"type": "integer",
+									"minimum": 1
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "Last N calendar days, today included",
 							"title": "Timeframe Days"
 						},
-						"description": "Days back from today"
+						"description": "Last N calendar days, today included"
 					},
 					{
-						"name": "area_min",
+						"name": "size_min",
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "number",
-							"description": "Minimum property area (sqm)",
-							"title": "Area Min"
+							"anyOf": [
+								{
+									"type": "number"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "Minimum size (sq ft), inclusive",
+							"title": "Size Min"
 						},
-						"description": "Minimum property area (sqm)"
+						"description": "Minimum size (sq ft), inclusive"
 					},
 					{
-						"name": "area_max",
+						"name": "size_max",
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "number",
-							"description": "Maximum property area (sqm)",
-							"title": "Area Max"
+							"anyOf": [
+								{
+									"type": "number"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "Maximum size (sq ft), exclusive",
+							"title": "Size Max"
 						},
-						"description": "Maximum property area (sqm)"
+						"description": "Maximum size (sq ft), exclusive"
 					},
 					{
 						"name": "price_min",
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "number",
-							"description": "Minimum price",
+							"anyOf": [
+								{
+									"type": "number"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "Minimum price (AED), inclusive",
 							"title": "Price Min"
 						},
-						"description": "Minimum price"
+						"description": "Minimum price (AED), inclusive"
 					},
 					{
 						"name": "price_max",
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "number",
-							"description": "Maximum price",
+							"anyOf": [
+								{
+									"type": "number"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "Maximum price (AED), exclusive",
 							"title": "Price Max"
 						},
-						"description": "Maximum price"
+						"description": "Maximum price (AED), exclusive"
 					},
 					{
-						"name": "price_per_sqm_min",
+						"name": "price_per_sqft_min",
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "number",
-							"description": "Minimum price per sqm",
-							"title": "Price Per Sqm Min"
+							"anyOf": [
+								{
+									"type": "number"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "Minimum price per sq ft (AED), inclusive",
+							"title": "Price Per Sqft Min"
 						},
-						"description": "Minimum price per sqm"
+						"description": "Minimum price per sq ft (AED), inclusive"
 					},
 					{
-						"name": "price_per_sqm_max",
+						"name": "price_per_sqft_max",
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "number",
-							"description": "Maximum price per sqm",
-							"title": "Price Per Sqm Max"
+							"anyOf": [
+								{
+									"type": "number"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "Maximum price per sq ft (AED), exclusive",
+							"title": "Price Per Sqft Max"
 						},
-						"description": "Maximum price per sqm"
+						"description": "Maximum price per sq ft (AED), exclusive"
 					}
 				],
 				"responses": {
@@ -3619,7 +3717,7 @@
 			"get": {
 				"tags": ["filters", "filters"],
 				"summary": "Get Rental Filter Options",
-				"description": "Get filter options for rental contracts.\n\nOptimized for ClickHouse LowCardinality columns (<10ms queries).",
+				"description": "Options for the DXBI rental filters, narrowed by the filters already applied.",
 				"operationId": "filters-get_rental_filter_options",
 				"parameters": [
 					{
@@ -3627,144 +3725,199 @@
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "string",
-							"description": "Residential or Commercial",
+							"anyOf": [
+								{
+									"type": "string"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "Residential or Commercial (grouped from DXBI property types)",
 							"title": "Property Usage"
 						},
-						"description": "Residential or Commercial"
-					},
-					{
-						"name": "project",
-						"in": "query",
-						"required": false,
-						"schema": {
-							"type": "string",
-							"description": "Filter buildings by project",
-							"title": "Project"
-						},
-						"description": "Filter buildings by project"
-					},
-					{
-						"name": "filter_type",
-						"in": "query",
-						"required": false,
-						"schema": {
-							"type": "string",
-							"description": "Project filter type: master, virtual_master, or project",
-							"default": "project",
-							"title": "Filter Type"
-						},
-						"description": "Project filter type: master, virtual_master, or project"
+						"description": "Residential or Commercial (grouped from DXBI property types)"
 					},
 					{
 						"name": "property_type",
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "string",
-							"description": "Filter subtypes",
+							"anyOf": [
+								{
+									"type": "string"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "DXBI property type",
 							"title": "Property Type"
 						},
-						"description": "Filter subtypes"
+						"description": "DXBI property type"
 					},
 					{
-						"name": "property_sub_type",
+						"name": "bedrooms",
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "string",
-							"description": "Filter by property sub-type",
-							"title": "Property Sub Type"
+							"anyOf": [
+								{
+									"type": "string"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "'Studio', '1 Bed', '2 Beds', ...",
+							"title": "Bedrooms"
 						},
-						"description": "Filter by property sub-type"
+						"description": "'Studio', '1 Bed', '2 Beds', ..."
 					},
 					{
-						"name": "tenant_type",
+						"name": "contract_type",
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "string",
-							"description": "Filter by tenant type",
-							"title": "Tenant Type"
+							"anyOf": [
+								{
+									"type": "string"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "New or Renewed",
+							"title": "Contract Type"
 						},
-						"description": "Filter by tenant type"
+						"description": "New or Renewed"
 					},
 					{
-						"name": "contract_reg_type",
+						"name": "location",
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "string",
-							"description": "Filter by contract registration type",
-							"title": "Contract Reg Type"
+							"anyOf": [
+								{
+									"type": "string"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "DXBI area or community: every record its DXBI area page counts",
+							"title": "Location"
 						},
-						"description": "Filter by contract registration type"
+						"description": "DXBI area or community: every record its DXBI area page counts"
 					},
 					{
-						"name": "area",
+						"name": "building",
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "string",
-							"description": "Filter by area",
-							"title": "Area"
+							"anyOf": [
+								{
+									"type": "string"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "DXBI building name",
+							"title": "Building"
 						},
-						"description": "Filter by area"
+						"description": "DXBI building name"
 					},
 					{
 						"name": "timeframe_days",
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "integer",
-							"description": "Days back from today",
+							"anyOf": [
+								{
+									"type": "integer",
+									"minimum": 1
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "Leases starting in the last N calendar days, today included",
 							"title": "Timeframe Days"
 						},
-						"description": "Days back from today"
+						"description": "Leases starting in the last N calendar days, today included"
 					},
 					{
-						"name": "area_min",
+						"name": "size_min",
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "number",
-							"description": "Minimum property area (sqm)",
-							"title": "Area Min"
+							"anyOf": [
+								{
+									"type": "number"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "Minimum size (sq ft), inclusive",
+							"title": "Size Min"
 						},
-						"description": "Minimum property area (sqm)"
+						"description": "Minimum size (sq ft), inclusive"
 					},
 					{
-						"name": "area_max",
+						"name": "size_max",
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "number",
-							"description": "Maximum property area (sqm)",
-							"title": "Area Max"
+							"anyOf": [
+								{
+									"type": "number"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "Maximum size (sq ft), exclusive",
+							"title": "Size Max"
 						},
-						"description": "Maximum property area (sqm)"
+						"description": "Maximum size (sq ft), exclusive"
 					},
 					{
 						"name": "rent_min",
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "number",
-							"description": "Minimum annual rent",
+							"anyOf": [
+								{
+									"type": "number"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "Minimum annual rent (AED), inclusive",
 							"title": "Rent Min"
 						},
-						"description": "Minimum annual rent"
+						"description": "Minimum annual rent (AED), inclusive"
 					},
 					{
 						"name": "rent_max",
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "number",
-							"description": "Maximum annual rent",
+							"anyOf": [
+								{
+									"type": "number"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "Maximum annual rent (AED), exclusive",
 							"title": "Rent Max"
 						},
-						"description": "Maximum annual rent"
+						"description": "Maximum annual rent (AED), exclusive"
 					}
 				],
 				"responses": {
@@ -4916,6 +5069,148 @@
 				}
 			}
 		},
+		"/api/v1/projects/delivery-summary": {
+			"get": {
+				"tags": ["projects", "projects"],
+				"summary": "Project Delivery Summary",
+				"description": "DLD-registered projects by delivery status, developer, year or project.",
+				"operationId": "projects-project_delivery_summary",
+				"parameters": [
+					{
+						"name": "location",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "string",
+									"maxLength": 120
+								},
+								{
+									"type": "null"
+								}
+							],
+							"title": "Location"
+						}
+					},
+					{
+						"name": "project_status",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "array",
+							"items": {
+								"type": "string"
+							},
+							"default": ["ACTIVE"],
+							"title": "Project Status"
+						}
+					},
+					{
+						"name": "delivery_status",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "array",
+							"items": {
+								"enum": [
+									"missing_date",
+									"overdue",
+									"scheduled_in_horizon",
+									"scheduled_later",
+									"completed",
+									"cancelled"
+								],
+								"type": "string"
+							},
+							"default": [
+								"missing_date",
+								"overdue",
+								"scheduled_in_horizon",
+								"scheduled_later",
+								"completed",
+								"cancelled"
+							],
+							"title": "Delivery Status"
+						}
+					},
+					{
+						"name": "group_by",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"enum": ["developer", "delivery_status", "delivery_year", "project"],
+							"type": "string",
+							"default": "developer",
+							"title": "Group By"
+						}
+					},
+					{
+						"name": "horizon_months",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer",
+							"maximum": 240,
+							"minimum": 1,
+							"default": 24,
+							"title": "Horizon Months"
+						}
+					},
+					{
+						"name": "reference_date",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "string",
+									"format": "date"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"title": "Reference Date"
+						}
+					},
+					{
+						"name": "limit",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer",
+							"maximum": 200,
+							"minimum": 1,
+							"default": 20,
+							"title": "Limit"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/DeliverySummaryResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
 		"/api/v1/projects/list": {
 			"get": {
 				"tags": ["projects", "projects"],
@@ -4966,11 +5261,9 @@
 						"in": "query",
 						"required": false,
 						"schema": {
-							"enum": [30, 90, 180, 365],
-							"type": "integer",
+							"$ref": "#/components/schemas/RadarPeriodDays",
 							"description": "Trailing DLD/Ejari activity window in days (maximum 365)",
-							"default": 365,
-							"title": "Period Days"
+							"default": 365
 						},
 						"description": "Trailing DLD/Ejari activity window in days (maximum 365)"
 					}
@@ -5011,11 +5304,9 @@
 						"in": "query",
 						"required": false,
 						"schema": {
-							"enum": [30, 90, 180, 365],
-							"type": "integer",
+							"$ref": "#/components/schemas/RadarPeriodDays",
 							"description": "Trailing DLD/Ejari activity window in days (maximum 365)",
-							"default": 365,
-							"title": "Period Days"
+							"default": 365
 						},
 						"description": "Trailing DLD/Ejari activity window in days (maximum 365)"
 					}
@@ -5186,11 +5477,9 @@
 						"in": "query",
 						"required": false,
 						"schema": {
-							"enum": [30, 90, 180, 365],
-							"type": "integer",
+							"$ref": "#/components/schemas/RadarPeriodDays",
 							"description": "Trailing DLD/Ejari activity window in days (maximum 365)",
-							"default": 365,
-							"title": "Period Days"
+							"default": 365
 						},
 						"description": "Trailing DLD/Ejari activity window in days (maximum 365)"
 					}
@@ -5206,6 +5495,119 @@
 										"$ref": "#/components/schemas/ProjectRadarProject"
 									},
 									"title": "Response Projects-Project Radar Pins"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/projects/radar/building-pins": {
+			"get": {
+				"tags": ["projects", "projects"],
+				"summary": "Radar Building Pins",
+				"description": "Get Property Finder tower pins and linked market evidence for a viewport.",
+				"operationId": "projects-radar_building_pins",
+				"parameters": [
+					{
+						"name": "west",
+						"in": "query",
+						"required": true,
+						"schema": {
+							"type": "number",
+							"maximum": 57,
+							"minimum": 54,
+							"description": "Viewport west longitude",
+							"title": "West"
+						},
+						"description": "Viewport west longitude"
+					},
+					{
+						"name": "south",
+						"in": "query",
+						"required": true,
+						"schema": {
+							"type": "number",
+							"maximum": 26,
+							"minimum": 24,
+							"description": "Viewport south latitude",
+							"title": "South"
+						},
+						"description": "Viewport south latitude"
+					},
+					{
+						"name": "east",
+						"in": "query",
+						"required": true,
+						"schema": {
+							"type": "number",
+							"maximum": 57,
+							"minimum": 54,
+							"description": "Viewport east longitude",
+							"title": "East"
+						},
+						"description": "Viewport east longitude"
+					},
+					{
+						"name": "north",
+						"in": "query",
+						"required": true,
+						"schema": {
+							"type": "number",
+							"maximum": 26,
+							"minimum": 24,
+							"description": "Viewport north latitude",
+							"title": "North"
+						},
+						"description": "Viewport north latitude"
+					},
+					{
+						"name": "limit",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer",
+							"maximum": 10000,
+							"minimum": 10,
+							"description": "Maximum tower pins",
+							"default": 3000,
+							"title": "Limit"
+						},
+						"description": "Maximum tower pins"
+					},
+					{
+						"name": "period_days",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"$ref": "#/components/schemas/RadarPeriodDays",
+							"description": "Trailing DLD/Ejari activity window in days (maximum 365)",
+							"default": 365
+						},
+						"description": "Trailing DLD/Ejari activity window in days (maximum 365)"
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "array",
+									"items": {
+										"$ref": "#/components/schemas/RadarBuildingPin"
+									},
+									"title": "Response Projects-Radar Building Pins"
 								}
 							}
 						}
@@ -5898,7 +6300,7 @@
 			"get": {
 				"tags": ["transactions", "transactions"],
 				"summary": "Get Sales Transactions",
-				"description": "List sales transactions with filtering and pagination.\n\nDefault sort: instance_date DESC (most recent first), split by property_usage_en.",
+				"description": "DXBI sales, newest first (transaction date, then id).",
 				"operationId": "transactions-get_sales_transactions",
 				"parameters": [
 					{
@@ -5933,177 +6335,235 @@
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "string",
-							"description": "Residential or Commercial",
+							"anyOf": [
+								{
+									"type": "string"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "Residential or Commercial (grouped from DXBI property types)",
 							"title": "Property Usage"
 						},
-						"description": "Residential or Commercial"
+						"description": "Residential or Commercial (grouped from DXBI property types)"
 					},
 					{
 						"name": "property_type",
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "string",
-							"description": "Property type",
+							"anyOf": [
+								{
+									"type": "string"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "DXBI property type",
 							"title": "Property Type"
 						},
-						"description": "Property type"
+						"description": "DXBI property type"
 					},
 					{
-						"name": "property_sub_type",
+						"name": "bedrooms",
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "string",
-							"description": "Property sub-type",
-							"title": "Property Sub Type"
+							"anyOf": [
+								{
+									"type": "string"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "'Studio', '1 Bed', '2 Beds', ...",
+							"title": "Bedrooms"
 						},
-						"description": "Property sub-type"
+						"description": "'Studio', '1 Bed', '2 Beds', ..."
 					},
 					{
-						"name": "rooms",
+						"name": "status",
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "string",
-							"description": "Number of rooms",
-							"title": "Rooms"
+							"anyOf": [
+								{
+									"type": "string"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "Off-Plan or Ready",
+							"title": "Status"
 						},
-						"description": "Number of rooms"
+						"description": "Off-Plan or Ready"
 					},
 					{
-						"name": "registration_type",
+						"name": "location",
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "string",
-							"description": "Registration type",
-							"title": "Registration Type"
+							"anyOf": [
+								{
+									"type": "string"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "DXBI area or community: every record its DXBI area page counts",
+							"title": "Location"
 						},
-						"description": "Registration type"
-					},
-					{
-						"name": "area",
-						"in": "query",
-						"required": false,
-						"schema": {
-							"type": "string",
-							"description": "Area name",
-							"title": "Area"
-						},
-						"description": "Area name"
-					},
-					{
-						"name": "project",
-						"in": "query",
-						"required": false,
-						"schema": {
-							"type": "string",
-							"description": "Project name",
-							"title": "Project"
-						},
-						"description": "Project name"
-					},
-					{
-						"name": "filter_type",
-						"in": "query",
-						"required": false,
-						"schema": {
-							"type": "string",
-							"description": "Project filter type: master, virtual_master, or project",
-							"default": "project",
-							"title": "Filter Type"
-						},
-						"description": "Project filter type: master, virtual_master, or project"
+						"description": "DXBI area or community: every record its DXBI area page counts"
 					},
 					{
 						"name": "building",
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "string",
-							"description": "Building name",
+							"anyOf": [
+								{
+									"type": "string"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "DXBI building name",
 							"title": "Building"
 						},
-						"description": "Building name"
+						"description": "DXBI building name"
 					},
 					{
 						"name": "timeframe_days",
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "integer",
-							"description": "Days back from today",
+							"anyOf": [
+								{
+									"type": "integer",
+									"minimum": 1
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "Last N calendar days, today included",
 							"title": "Timeframe Days"
 						},
-						"description": "Days back from today"
+						"description": "Last N calendar days, today included"
 					},
 					{
-						"name": "area_min",
+						"name": "size_min",
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "number",
-							"description": "Minimum property area (sqm)",
-							"title": "Area Min"
+							"anyOf": [
+								{
+									"type": "number"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "Minimum size (sq ft), inclusive",
+							"title": "Size Min"
 						},
-						"description": "Minimum property area (sqm)"
+						"description": "Minimum size (sq ft), inclusive"
 					},
 					{
-						"name": "area_max",
+						"name": "size_max",
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "number",
-							"description": "Maximum property area (sqm)",
-							"title": "Area Max"
+							"anyOf": [
+								{
+									"type": "number"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "Maximum size (sq ft), exclusive",
+							"title": "Size Max"
 						},
-						"description": "Maximum property area (sqm)"
+						"description": "Maximum size (sq ft), exclusive"
 					},
 					{
 						"name": "price_min",
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "number",
-							"description": "Minimum price",
+							"anyOf": [
+								{
+									"type": "number"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "Minimum price (AED), inclusive",
 							"title": "Price Min"
 						},
-						"description": "Minimum price"
+						"description": "Minimum price (AED), inclusive"
 					},
 					{
 						"name": "price_max",
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "number",
-							"description": "Maximum price",
+							"anyOf": [
+								{
+									"type": "number"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "Maximum price (AED), exclusive",
 							"title": "Price Max"
 						},
-						"description": "Maximum price"
+						"description": "Maximum price (AED), exclusive"
 					},
 					{
-						"name": "price_per_sqm_min",
+						"name": "price_per_sqft_min",
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "number",
-							"description": "Minimum price per sqm",
-							"title": "Price Per Sqm Min"
+							"anyOf": [
+								{
+									"type": "number"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "Minimum price per sq ft (AED), inclusive",
+							"title": "Price Per Sqft Min"
 						},
-						"description": "Minimum price per sqm"
+						"description": "Minimum price per sq ft (AED), inclusive"
 					},
 					{
-						"name": "price_per_sqm_max",
+						"name": "price_per_sqft_max",
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "number",
-							"description": "Maximum price per sqm",
-							"title": "Price Per Sqm Max"
+							"anyOf": [
+								{
+									"type": "number"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "Maximum price per sq ft (AED), exclusive",
+							"title": "Price Per Sqft Max"
 						},
-						"description": "Maximum price per sqm"
+						"description": "Maximum price per sq ft (AED), exclusive"
 					}
 				],
 				"responses": {
@@ -6134,7 +6594,7 @@
 			"get": {
 				"tags": ["transactions", "transactions"],
 				"summary": "Get Rental Contracts",
-				"description": "List rental contracts with filtering and pagination.\n\nDefault sort: contract_start_date DESC (most recent first), split by property_usage_en.",
+				"description": "DXBI leases, latest start first (lease start, then id).",
 				"operationId": "transactions-get_rental_contracts",
 				"parameters": [
 					{
@@ -6169,144 +6629,199 @@
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "string",
-							"description": "Residential or Commercial",
+							"anyOf": [
+								{
+									"type": "string"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "Residential or Commercial (grouped from DXBI property types)",
 							"title": "Property Usage"
 						},
-						"description": "Residential or Commercial"
+						"description": "Residential or Commercial (grouped from DXBI property types)"
 					},
 					{
 						"name": "property_type",
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "string",
-							"description": "Property type (ejari)",
+							"anyOf": [
+								{
+									"type": "string"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "DXBI property type",
 							"title": "Property Type"
 						},
-						"description": "Property type (ejari)"
+						"description": "DXBI property type"
 					},
 					{
-						"name": "property_sub_type",
+						"name": "bedrooms",
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "string",
-							"description": "Property sub-type (ejari)",
-							"title": "Property Sub Type"
+							"anyOf": [
+								{
+									"type": "string"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "'Studio', '1 Bed', '2 Beds', ...",
+							"title": "Bedrooms"
 						},
-						"description": "Property sub-type (ejari)"
+						"description": "'Studio', '1 Bed', '2 Beds', ..."
 					},
 					{
-						"name": "tenant_type",
+						"name": "contract_type",
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "string",
-							"description": "Tenant type",
-							"title": "Tenant Type"
+							"anyOf": [
+								{
+									"type": "string"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "New or Renewed",
+							"title": "Contract Type"
 						},
-						"description": "Tenant type"
+						"description": "New or Renewed"
 					},
 					{
-						"name": "contract_reg_type",
+						"name": "location",
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "string",
-							"description": "Contract registration type",
-							"title": "Contract Reg Type"
+							"anyOf": [
+								{
+									"type": "string"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "DXBI area or community: every record its DXBI area page counts",
+							"title": "Location"
 						},
-						"description": "Contract registration type"
+						"description": "DXBI area or community: every record its DXBI area page counts"
 					},
 					{
-						"name": "area",
+						"name": "building",
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "string",
-							"description": "Area name",
-							"title": "Area"
+							"anyOf": [
+								{
+									"type": "string"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "DXBI building name",
+							"title": "Building"
 						},
-						"description": "Area name"
-					},
-					{
-						"name": "project",
-						"in": "query",
-						"required": false,
-						"schema": {
-							"type": "string",
-							"description": "Project name",
-							"title": "Project"
-						},
-						"description": "Project name"
-					},
-					{
-						"name": "filter_type",
-						"in": "query",
-						"required": false,
-						"schema": {
-							"type": "string",
-							"description": "Project filter type: master, virtual_master, or project",
-							"default": "project",
-							"title": "Filter Type"
-						},
-						"description": "Project filter type: master, virtual_master, or project"
+						"description": "DXBI building name"
 					},
 					{
 						"name": "timeframe_days",
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "integer",
-							"description": "Days back from today",
+							"anyOf": [
+								{
+									"type": "integer",
+									"minimum": 1
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "Leases starting in the last N calendar days, today included",
 							"title": "Timeframe Days"
 						},
-						"description": "Days back from today"
+						"description": "Leases starting in the last N calendar days, today included"
 					},
 					{
-						"name": "area_min",
+						"name": "size_min",
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "number",
-							"description": "Minimum property area (sqm)",
-							"title": "Area Min"
+							"anyOf": [
+								{
+									"type": "number"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "Minimum size (sq ft), inclusive",
+							"title": "Size Min"
 						},
-						"description": "Minimum property area (sqm)"
+						"description": "Minimum size (sq ft), inclusive"
 					},
 					{
-						"name": "area_max",
+						"name": "size_max",
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "number",
-							"description": "Maximum property area (sqm)",
-							"title": "Area Max"
+							"anyOf": [
+								{
+									"type": "number"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "Maximum size (sq ft), exclusive",
+							"title": "Size Max"
 						},
-						"description": "Maximum property area (sqm)"
+						"description": "Maximum size (sq ft), exclusive"
 					},
 					{
 						"name": "rent_min",
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "number",
-							"description": "Minimum annual rent",
+							"anyOf": [
+								{
+									"type": "number"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "Minimum annual rent (AED), inclusive",
 							"title": "Rent Min"
 						},
-						"description": "Minimum annual rent"
+						"description": "Minimum annual rent (AED), inclusive"
 					},
 					{
 						"name": "rent_max",
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "number",
-							"description": "Maximum annual rent",
+							"anyOf": [
+								{
+									"type": "number"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "Maximum annual rent (AED), exclusive",
 							"title": "Rent Max"
 						},
-						"description": "Maximum annual rent"
+						"description": "Maximum annual rent (AED), exclusive"
 					}
 				],
 				"responses": {
@@ -6337,7 +6852,7 @@
 			"get": {
 				"tags": ["transactions", "transactions"],
 				"summary": "Export Sales Transactions Endpoint",
-				"description": "Export sales transactions to Excel or CSV.\n\nLimit: 50,000 rows max (or specific transaction_ids if provided).",
+				"description": "DXBI sales as Excel or CSV: up to 50,000 filtered rows, or the selected ids.",
 				"operationId": "transactions-export_sales_transactions_endpoint",
 				"parameters": [
 					{
@@ -6358,7 +6873,14 @@
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "string",
+							"anyOf": [
+								{
+									"type": "string"
+								},
+								{
+									"type": "null"
+								}
+							],
 							"description": "Comma-separated transaction IDs (overrides filters and limit)",
 							"title": "Transaction Ids"
 						},
@@ -6369,177 +6891,235 @@
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "string",
-							"description": "Residential or Commercial",
+							"anyOf": [
+								{
+									"type": "string"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "Residential or Commercial (grouped from DXBI property types)",
 							"title": "Property Usage"
 						},
-						"description": "Residential or Commercial"
+						"description": "Residential or Commercial (grouped from DXBI property types)"
 					},
 					{
 						"name": "property_type",
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "string",
-							"description": "Property type",
+							"anyOf": [
+								{
+									"type": "string"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "DXBI property type",
 							"title": "Property Type"
 						},
-						"description": "Property type"
+						"description": "DXBI property type"
 					},
 					{
-						"name": "property_sub_type",
+						"name": "bedrooms",
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "string",
-							"description": "Property sub-type",
-							"title": "Property Sub Type"
+							"anyOf": [
+								{
+									"type": "string"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "'Studio', '1 Bed', '2 Beds', ...",
+							"title": "Bedrooms"
 						},
-						"description": "Property sub-type"
+						"description": "'Studio', '1 Bed', '2 Beds', ..."
 					},
 					{
-						"name": "rooms",
+						"name": "status",
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "string",
-							"description": "Number of rooms",
-							"title": "Rooms"
+							"anyOf": [
+								{
+									"type": "string"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "Off-Plan or Ready",
+							"title": "Status"
 						},
-						"description": "Number of rooms"
+						"description": "Off-Plan or Ready"
 					},
 					{
-						"name": "registration_type",
+						"name": "location",
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "string",
-							"description": "Registration type",
-							"title": "Registration Type"
+							"anyOf": [
+								{
+									"type": "string"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "DXBI area or community: every record its DXBI area page counts",
+							"title": "Location"
 						},
-						"description": "Registration type"
-					},
-					{
-						"name": "area",
-						"in": "query",
-						"required": false,
-						"schema": {
-							"type": "string",
-							"description": "Area name",
-							"title": "Area"
-						},
-						"description": "Area name"
-					},
-					{
-						"name": "project",
-						"in": "query",
-						"required": false,
-						"schema": {
-							"type": "string",
-							"description": "Project name",
-							"title": "Project"
-						},
-						"description": "Project name"
-					},
-					{
-						"name": "filter_type",
-						"in": "query",
-						"required": false,
-						"schema": {
-							"type": "string",
-							"description": "Project filter type: master, virtual_master, or project",
-							"default": "project",
-							"title": "Filter Type"
-						},
-						"description": "Project filter type: master, virtual_master, or project"
+						"description": "DXBI area or community: every record its DXBI area page counts"
 					},
 					{
 						"name": "building",
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "string",
-							"description": "Building name",
+							"anyOf": [
+								{
+									"type": "string"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "DXBI building name",
 							"title": "Building"
 						},
-						"description": "Building name"
+						"description": "DXBI building name"
 					},
 					{
 						"name": "timeframe_days",
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "integer",
-							"description": "Days back from today",
+							"anyOf": [
+								{
+									"type": "integer",
+									"minimum": 1
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "Last N calendar days, today included",
 							"title": "Timeframe Days"
 						},
-						"description": "Days back from today"
+						"description": "Last N calendar days, today included"
 					},
 					{
-						"name": "area_min",
+						"name": "size_min",
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "number",
-							"description": "Minimum property area (sqm)",
-							"title": "Area Min"
+							"anyOf": [
+								{
+									"type": "number"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "Minimum size (sq ft), inclusive",
+							"title": "Size Min"
 						},
-						"description": "Minimum property area (sqm)"
+						"description": "Minimum size (sq ft), inclusive"
 					},
 					{
-						"name": "area_max",
+						"name": "size_max",
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "number",
-							"description": "Maximum property area (sqm)",
-							"title": "Area Max"
+							"anyOf": [
+								{
+									"type": "number"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "Maximum size (sq ft), exclusive",
+							"title": "Size Max"
 						},
-						"description": "Maximum property area (sqm)"
+						"description": "Maximum size (sq ft), exclusive"
 					},
 					{
 						"name": "price_min",
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "number",
-							"description": "Minimum price",
+							"anyOf": [
+								{
+									"type": "number"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "Minimum price (AED), inclusive",
 							"title": "Price Min"
 						},
-						"description": "Minimum price"
+						"description": "Minimum price (AED), inclusive"
 					},
 					{
 						"name": "price_max",
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "number",
-							"description": "Maximum price",
+							"anyOf": [
+								{
+									"type": "number"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "Maximum price (AED), exclusive",
 							"title": "Price Max"
 						},
-						"description": "Maximum price"
+						"description": "Maximum price (AED), exclusive"
 					},
 					{
-						"name": "price_per_sqm_min",
+						"name": "price_per_sqft_min",
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "number",
-							"description": "Minimum price per sqm",
-							"title": "Price Per Sqm Min"
+							"anyOf": [
+								{
+									"type": "number"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "Minimum price per sq ft (AED), inclusive",
+							"title": "Price Per Sqft Min"
 						},
-						"description": "Minimum price per sqm"
+						"description": "Minimum price per sq ft (AED), inclusive"
 					},
 					{
-						"name": "price_per_sqm_max",
+						"name": "price_per_sqft_max",
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "number",
-							"description": "Maximum price per sqm",
-							"title": "Price Per Sqm Max"
+							"anyOf": [
+								{
+									"type": "number"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "Maximum price per sq ft (AED), exclusive",
+							"title": "Price Per Sqft Max"
 						},
-						"description": "Maximum price per sqm"
+						"description": "Maximum price per sq ft (AED), exclusive"
 					}
 				],
 				"responses": {
@@ -6563,7 +7143,7 @@
 			"get": {
 				"tags": ["transactions", "transactions"],
 				"summary": "Export Rental Contracts Endpoint",
-				"description": "Export rental contracts to Excel or CSV.\n\nLimit: 50,000 rows max (or specific contract_ids if provided).",
+				"description": "DXBI leases as Excel or CSV: up to 50,000 filtered rows, or the selected ids.",
 				"operationId": "transactions-export_rental_contracts_endpoint",
 				"parameters": [
 					{
@@ -6584,7 +7164,14 @@
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "string",
+							"anyOf": [
+								{
+									"type": "string"
+								},
+								{
+									"type": "null"
+								}
+							],
 							"description": "Comma-separated contract IDs (overrides filters and limit)",
 							"title": "Contract Ids"
 						},
@@ -6595,144 +7182,199 @@
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "string",
-							"description": "Residential or Commercial",
+							"anyOf": [
+								{
+									"type": "string"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "Residential or Commercial (grouped from DXBI property types)",
 							"title": "Property Usage"
 						},
-						"description": "Residential or Commercial"
+						"description": "Residential or Commercial (grouped from DXBI property types)"
 					},
 					{
 						"name": "property_type",
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "string",
-							"description": "Property type (ejari)",
+							"anyOf": [
+								{
+									"type": "string"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "DXBI property type",
 							"title": "Property Type"
 						},
-						"description": "Property type (ejari)"
+						"description": "DXBI property type"
 					},
 					{
-						"name": "property_sub_type",
+						"name": "bedrooms",
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "string",
-							"description": "Property sub-type (ejari)",
-							"title": "Property Sub Type"
+							"anyOf": [
+								{
+									"type": "string"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "'Studio', '1 Bed', '2 Beds', ...",
+							"title": "Bedrooms"
 						},
-						"description": "Property sub-type (ejari)"
+						"description": "'Studio', '1 Bed', '2 Beds', ..."
 					},
 					{
-						"name": "tenant_type",
+						"name": "contract_type",
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "string",
-							"description": "Tenant type",
-							"title": "Tenant Type"
+							"anyOf": [
+								{
+									"type": "string"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "New or Renewed",
+							"title": "Contract Type"
 						},
-						"description": "Tenant type"
+						"description": "New or Renewed"
 					},
 					{
-						"name": "contract_reg_type",
+						"name": "location",
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "string",
-							"description": "Contract registration type",
-							"title": "Contract Reg Type"
+							"anyOf": [
+								{
+									"type": "string"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "DXBI area or community: every record its DXBI area page counts",
+							"title": "Location"
 						},
-						"description": "Contract registration type"
+						"description": "DXBI area or community: every record its DXBI area page counts"
 					},
 					{
-						"name": "area",
+						"name": "building",
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "string",
-							"description": "Area name",
-							"title": "Area"
+							"anyOf": [
+								{
+									"type": "string"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "DXBI building name",
+							"title": "Building"
 						},
-						"description": "Area name"
-					},
-					{
-						"name": "project",
-						"in": "query",
-						"required": false,
-						"schema": {
-							"type": "string",
-							"description": "Project name",
-							"title": "Project"
-						},
-						"description": "Project name"
-					},
-					{
-						"name": "filter_type",
-						"in": "query",
-						"required": false,
-						"schema": {
-							"type": "string",
-							"description": "Project filter type: master, virtual_master, or project",
-							"default": "project",
-							"title": "Filter Type"
-						},
-						"description": "Project filter type: master, virtual_master, or project"
+						"description": "DXBI building name"
 					},
 					{
 						"name": "timeframe_days",
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "integer",
-							"description": "Days back from today",
+							"anyOf": [
+								{
+									"type": "integer",
+									"minimum": 1
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "Leases starting in the last N calendar days, today included",
 							"title": "Timeframe Days"
 						},
-						"description": "Days back from today"
+						"description": "Leases starting in the last N calendar days, today included"
 					},
 					{
-						"name": "area_min",
+						"name": "size_min",
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "number",
-							"description": "Minimum property area (sqm)",
-							"title": "Area Min"
+							"anyOf": [
+								{
+									"type": "number"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "Minimum size (sq ft), inclusive",
+							"title": "Size Min"
 						},
-						"description": "Minimum property area (sqm)"
+						"description": "Minimum size (sq ft), inclusive"
 					},
 					{
-						"name": "area_max",
+						"name": "size_max",
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "number",
-							"description": "Maximum property area (sqm)",
-							"title": "Area Max"
+							"anyOf": [
+								{
+									"type": "number"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "Maximum size (sq ft), exclusive",
+							"title": "Size Max"
 						},
-						"description": "Maximum property area (sqm)"
+						"description": "Maximum size (sq ft), exclusive"
 					},
 					{
 						"name": "rent_min",
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "number",
-							"description": "Minimum annual rent",
+							"anyOf": [
+								{
+									"type": "number"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "Minimum annual rent (AED), inclusive",
 							"title": "Rent Min"
 						},
-						"description": "Minimum annual rent"
+						"description": "Minimum annual rent (AED), inclusive"
 					},
 					{
 						"name": "rent_max",
 						"in": "query",
 						"required": false,
 						"schema": {
-							"type": "number",
-							"description": "Maximum annual rent",
+							"anyOf": [
+								{
+									"type": "number"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "Maximum annual rent (AED), exclusive",
 							"title": "Rent Max"
 						},
-						"description": "Maximum annual rent"
+						"description": "Maximum annual rent (AED), exclusive"
 					}
 				],
 				"responses": {
@@ -8424,9 +9066,9 @@
 						"type": "number",
 						"title": "Pct Of Total"
 					},
-					"avg_unit_size_sqm": {
+					"avg_unit_size_sqft": {
 						"type": "number",
-						"title": "Avg Unit Size Sqm",
+						"title": "Avg Unit Size Sqft",
 						"default": 0.0
 					}
 				},
@@ -8531,7 +9173,7 @@
 						],
 						"title": "Median Annual Rent"
 					},
-					"avg_sale_price_sqm_12m": {
+					"avg_sale_price_sqft_12m": {
 						"anyOf": [
 							{
 								"type": "number"
@@ -8540,9 +9182,9 @@
 								"type": "null"
 							}
 						],
-						"title": "Avg Sale Price Sqm 12M"
+						"title": "Avg Sale Price Sqft 12M"
 					},
-					"avg_rent_price_sqm_12m": {
+					"avg_rent_price_sqft_12m": {
 						"anyOf": [
 							{
 								"type": "number"
@@ -8551,7 +9193,7 @@
 								"type": "null"
 							}
 						],
-						"title": "Avg Rent Price Sqm 12M"
+						"title": "Avg Rent Price Sqft 12M"
 					},
 					"gross_yield_pct": {
 						"anyOf": [
@@ -8610,8 +9252,8 @@
 					"total_sales_volume_12m",
 					"median_sale_price",
 					"median_annual_rent",
-					"avg_sale_price_sqm_12m",
-					"avg_rent_price_sqm_12m",
+					"avg_sale_price_sqft_12m",
+					"avg_rent_price_sqft_12m",
 					"gross_yield_pct"
 				],
 				"title": "AreaDetailResponse"
@@ -8753,7 +9395,7 @@
 						],
 						"title": "Median Annual Rent"
 					},
-					"avg_sale_price_sqm_12m": {
+					"avg_sale_price_sqft_12m": {
 						"anyOf": [
 							{
 								"type": "number"
@@ -8762,9 +9404,9 @@
 								"type": "null"
 							}
 						],
-						"title": "Avg Sale Price Sqm 12M"
+						"title": "Avg Sale Price Sqft 12M"
 					},
-					"avg_rent_price_sqm_12m": {
+					"avg_rent_price_sqft_12m": {
 						"anyOf": [
 							{
 								"type": "number"
@@ -8773,7 +9415,7 @@
 								"type": "null"
 							}
 						],
-						"title": "Avg Rent Price Sqm 12M"
+						"title": "Avg Rent Price Sqft 12M"
 					},
 					"gross_yield_pct": {
 						"anyOf": [
@@ -8811,8 +9453,8 @@
 					"total_sales_volume_12m",
 					"median_sale_price",
 					"median_annual_rent",
-					"avg_sale_price_sqm_12m",
-					"avg_rent_price_sqm_12m",
+					"avg_sale_price_sqft_12m",
+					"avg_rent_price_sqft_12m",
 					"gross_yield_pct"
 				],
 				"title": "AreaListItem"
@@ -9285,7 +9927,7 @@
 						"type": "number",
 						"title": "Percentage"
 					},
-					"avg_area_sqm": {
+					"avg_area_sqft": {
 						"anyOf": [
 							{
 								"type": "number"
@@ -9294,11 +9936,11 @@
 								"type": "null"
 							}
 						],
-						"title": "Avg Area Sqm"
+						"title": "Avg Area Sqft"
 					}
 				},
 				"type": "object",
-				"required": ["rooms_en", "count", "percentage", "avg_area_sqm"],
+				"required": ["rooms_en", "count", "percentage", "avg_area_sqft"],
 				"title": "BuildingUnitType",
 				"description": "Bedroom/type breakdown for a specific building"
 			},
@@ -13153,6 +13795,152 @@
 				"title": "DDAPlotFeature",
 				"description": "DDA GIS plot polygon for map overlay."
 			},
+			"DeliveryGroupRow": {
+				"properties": {
+					"group": {
+						"type": "string",
+						"title": "Group"
+					},
+					"project_count": {
+						"type": "integer",
+						"title": "Project Count"
+					},
+					"units": {
+						"type": "integer",
+						"title": "Units"
+					},
+					"projects_without_units": {
+						"type": "integer",
+						"title": "Projects Without Units"
+					},
+					"share_of_units": {
+						"anyOf": [
+							{
+								"type": "number"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Share Of Units"
+					}
+				},
+				"type": "object",
+				"required": ["group", "project_count", "units", "projects_without_units"],
+				"title": "DeliveryGroupRow"
+			},
+			"DeliverySummaryResponse": {
+				"properties": {
+					"location": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Location"
+					},
+					"project_statuses": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"title": "Project Statuses"
+					},
+					"delivery_statuses": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"title": "Delivery Statuses"
+					},
+					"group_by": {
+						"type": "string",
+						"title": "Group By"
+					},
+					"reference_date": {
+						"type": "string",
+						"format": "date",
+						"title": "Reference Date"
+					},
+					"horizon_end": {
+						"type": "string",
+						"format": "date",
+						"title": "Horizon End"
+					},
+					"definitions": {
+						"additionalProperties": {
+							"type": "string"
+						},
+						"type": "object",
+						"title": "Definitions"
+					},
+					"by_delivery_status": {
+						"items": {
+							"$ref": "#/components/schemas/DeliveryGroupRow"
+						},
+						"type": "array",
+						"title": "By Delivery Status"
+					},
+					"rows": {
+						"items": {
+							"$ref": "#/components/schemas/DeliveryGroupRow"
+						},
+						"type": "array",
+						"title": "Rows"
+					},
+					"matched_terms": {
+						"additionalProperties": {
+							"items": {
+								"type": "string"
+							},
+							"type": "array"
+						},
+						"type": "object",
+						"title": "Matched Terms"
+					},
+					"source": {
+						"type": "string",
+						"title": "Source"
+					},
+					"source_snapshot_at": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Source Snapshot At"
+					},
+					"limitations": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"title": "Limitations",
+						"default": []
+					}
+				},
+				"type": "object",
+				"required": [
+					"location",
+					"project_statuses",
+					"delivery_statuses",
+					"group_by",
+					"reference_date",
+					"horizon_end",
+					"definitions",
+					"by_delivery_status",
+					"rows",
+					"matched_terms",
+					"source"
+				],
+				"title": "DeliverySummaryResponse"
+			},
 			"DeveloperRankingCriterionResponse": {
 				"properties": {
 					"key": {
@@ -14638,12 +15426,12 @@
 			},
 			"FilterOptionsResponse": {
 				"properties": {
-					"projects": {
+					"locations": {
 						"items": {
 							"type": "string"
 						},
 						"type": "array",
-						"title": "Projects",
+						"title": "Locations",
 						"default": []
 					},
 					"buildings": {
@@ -14662,58 +15450,34 @@
 						"title": "Property Types",
 						"default": []
 					},
-					"property_sub_types": {
+					"bedrooms": {
 						"items": {
 							"type": "string"
 						},
 						"type": "array",
-						"title": "Property Sub Types",
+						"title": "Bedrooms",
 						"default": []
 					},
-					"rooms": {
+					"statuses": {
 						"items": {
 							"type": "string"
 						},
 						"type": "array",
-						"title": "Rooms",
+						"title": "Statuses",
 						"default": []
 					},
-					"registration_types": {
+					"contract_types": {
 						"items": {
 							"type": "string"
 						},
 						"type": "array",
-						"title": "Registration Types",
-						"default": []
-					},
-					"tenant_types": {
-						"items": {
-							"type": "string"
-						},
-						"type": "array",
-						"title": "Tenant Types",
-						"default": []
-					},
-					"contract_reg_types": {
-						"items": {
-							"type": "string"
-						},
-						"type": "array",
-						"title": "Contract Reg Types",
-						"default": []
-					},
-					"areas": {
-						"items": {
-							"type": "string"
-						},
-						"type": "array",
-						"title": "Areas",
+						"title": "Contract Types",
 						"default": []
 					}
 				},
 				"type": "object",
 				"title": "FilterOptionsResponse",
-				"description": "Filter options for transactions and rentals - dynamically narrowed by selections."
+				"description": "Filter options for the DXBI sales or rentals page, narrowed by the current filters."
 			},
 			"GISLandUse": {
 				"properties": {
@@ -18045,6 +18809,772 @@
 				"required": ["period"],
 				"title": "ListingTrendPoint"
 			},
+			"MarketCoverage": {
+				"properties": {
+					"status": {
+						"type": "string",
+						"enum": ["complete", "partial", "unverified", "unavailable"],
+						"title": "Status"
+					},
+					"data_from": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "date"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Data From"
+					},
+					"data_to": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "date"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Data To"
+					},
+					"covered_from": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "date"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Covered From"
+					},
+					"covered_to": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "date"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Covered To"
+					},
+					"verified_days": {
+						"type": "integer",
+						"title": "Verified Days",
+						"default": 0
+					},
+					"partial_days": {
+						"type": "integer",
+						"title": "Partial Days",
+						"default": 0
+					},
+					"unverified_days": {
+						"type": "integer",
+						"title": "Unverified Days",
+						"default": 0
+					},
+					"ranges": {
+						"items": {
+							"$ref": "#/components/schemas/MarketCoverageRange"
+						},
+						"type": "array",
+						"title": "Ranges"
+					},
+					"evidence_loaded_at": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Evidence Loaded At"
+					},
+					"note": {
+						"type": "string",
+						"title": "Note"
+					}
+				},
+				"type": "object",
+				"required": ["status", "note"],
+				"title": "MarketCoverage",
+				"description": "Load evidence for the period's days, from the served release's coverage record.\n\nverified: the source window holding the day was read to the end of its result set (or\nthe archive it came from is attested), so a day without records is a true zero.\npartial: the load covering the day stopped inside its window. unverified: no load\nevidence; records may exist but absence proves nothing. complete = every day verified;\nunavailable = no evidence and no records."
+			},
+			"MarketCoverageRange": {
+				"properties": {
+					"start": {
+						"type": "string",
+						"format": "date",
+						"title": "Start"
+					},
+					"end": {
+						"type": "string",
+						"format": "date",
+						"title": "End"
+					},
+					"status": {
+						"type": "string",
+						"enum": ["verified", "partial", "unverified"],
+						"title": "Status"
+					}
+				},
+				"type": "object",
+				"required": ["start", "end", "status"],
+				"title": "MarketCoverageRange"
+			},
+			"MarketLocationMatch": {
+				"properties": {
+					"area": {
+						"type": "string",
+						"title": "Area"
+					},
+					"master_project": {
+						"type": "string",
+						"title": "Master Project"
+					},
+					"district": {
+						"type": "string",
+						"title": "District",
+						"default": ""
+					},
+					"community": {
+						"type": "string",
+						"title": "Community",
+						"default": ""
+					},
+					"method": {
+						"type": "string",
+						"title": "Method",
+						"default": ""
+					},
+					"records": {
+						"type": "integer",
+						"title": "Records"
+					}
+				},
+				"type": "object",
+				"required": ["area", "master_project", "records"],
+				"title": "MarketLocationMatch",
+				"description": "Raw source names of matched rows and the canonical place the crosswalk gave them."
+			},
+			"MarketMetricDefinition": {
+				"properties": {
+					"name": {
+						"type": "string",
+						"title": "Name"
+					},
+					"unit": {
+						"type": "string",
+						"title": "Unit"
+					},
+					"definition": {
+						"type": "string",
+						"title": "Definition"
+					}
+				},
+				"type": "object",
+				"required": ["name", "unit", "definition"],
+				"title": "MarketMetricDefinition"
+			},
+			"MarketMetricRow": {
+				"properties": {
+					"group": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Group"
+					},
+					"count": {
+						"anyOf": [
+							{
+								"type": "integer"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Count"
+					},
+					"share_of_count": {
+						"anyOf": [
+							{
+								"type": "number"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Share Of Count"
+					},
+					"values": {
+						"additionalProperties": {
+							"anyOf": [
+								{
+									"type": "number"
+								},
+								{
+									"type": "null"
+								}
+							]
+						},
+						"type": "object",
+						"title": "Values"
+					},
+					"coverage": {
+						"anyOf": [
+							{
+								"type": "string",
+								"enum": ["verified", "partial", "unverified"]
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Coverage"
+					}
+				},
+				"type": "object",
+				"title": "MarketMetricRow"
+			},
+			"MarketMetricsRequest": {
+				"properties": {
+					"dataset": {
+						"type": "string",
+						"enum": ["sales", "rentals"],
+						"title": "Dataset"
+					},
+					"metrics": {
+						"items": {
+							"type": "string",
+							"enum": [
+								"count",
+								"total_aed",
+								"mean_aed",
+								"median_aed",
+								"p25_aed",
+								"p75_aed",
+								"mean_aed_per_sqft",
+								"median_aed_per_sqft",
+								"weighted_aed_per_sqft",
+								"total_contract_aed",
+								"median_contract_aed"
+							]
+						},
+						"type": "array",
+						"maxItems": 14,
+						"minItems": 1,
+						"title": "Metrics"
+					},
+					"period": {
+						"$ref": "#/components/schemas/MarketPeriodRequest"
+					},
+					"location": {
+						"anyOf": [
+							{
+								"type": "string",
+								"maxLength": 120
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Location",
+						"description": "Community or DLD area, e.g. JVC"
+					},
+					"building": {
+						"anyOf": [
+							{
+								"type": "string",
+								"maxLength": 160
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Building"
+					},
+					"project": {
+						"anyOf": [
+							{
+								"type": "string",
+								"maxLength": 160
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Project"
+					},
+					"property_type": {
+						"anyOf": [
+							{
+								"type": "string",
+								"enum": [
+									"apartment",
+									"hotel_apartment",
+									"villa",
+									"townhouse",
+									"office",
+									"shop",
+									"land"
+								]
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Property Type",
+						"description": "villa includes townhouses; townhouse is townhouses only"
+					},
+					"usage": {
+						"anyOf": [
+							{
+								"type": "string",
+								"enum": ["residential", "commercial"]
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Usage"
+					},
+					"bedrooms": {
+						"anyOf": [
+							{
+								"items": {
+									"type": "string",
+									"enum": ["studio", "1", "2", "3", "4", "5", "6", "7"]
+								},
+								"type": "array",
+								"maxItems": 8
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Bedrooms"
+					},
+					"registration": {
+						"anyOf": [
+							{
+								"type": "string",
+								"enum": ["off_plan", "ready"]
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Registration",
+						"description": "Sales only"
+					},
+					"contract_version": {
+						"anyOf": [
+							{
+								"type": "string",
+								"enum": ["new", "renewed"]
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Contract Version",
+						"description": "Rentals only"
+					},
+					"min_term_days": {
+						"anyOf": [
+							{
+								"type": "integer",
+								"minimum": 1.0
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Min Term Days",
+						"description": "Rentals only"
+					},
+					"max_term_days": {
+						"anyOf": [
+							{
+								"type": "integer",
+								"minimum": 1.0
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Max Term Days",
+						"description": "Rentals only"
+					},
+					"min_value_aed": {
+						"anyOf": [
+							{
+								"type": "number",
+								"minimum": 0.0
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Min Value Aed",
+						"description": "Sale price or annual rent, inclusive"
+					},
+					"max_value_aed": {
+						"anyOf": [
+							{
+								"type": "number",
+								"exclusiveMinimum": 0.0
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Max Value Aed",
+						"description": "Sale price or annual rent, exclusive"
+					},
+					"group_by": {
+						"anyOf": [
+							{
+								"type": "string",
+								"enum": [
+									"area",
+									"community",
+									"master_project",
+									"project",
+									"building",
+									"month",
+									"bedrooms",
+									"property_type",
+									"price_band",
+									"registration",
+									"contract_version"
+								]
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Group By"
+					},
+					"price_bands": {
+						"anyOf": [
+							{
+								"items": {
+									"type": "number"
+								},
+								"type": "array",
+								"maxItems": 12,
+								"minItems": 1
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Price Bands",
+						"description": "Ascending AED boundaries for group_by=price_band: [b0,b1) ... [bn,inf)"
+					},
+					"sort_by": {
+						"type": "string",
+						"enum": [
+							"count",
+							"total_aed",
+							"mean_aed",
+							"median_aed",
+							"p25_aed",
+							"p75_aed",
+							"mean_aed_per_sqft",
+							"median_aed_per_sqft",
+							"weighted_aed_per_sqft",
+							"total_contract_aed",
+							"median_contract_aed"
+						],
+						"title": "Sort By",
+						"default": "count"
+					},
+					"limit": {
+						"type": "integer",
+						"maximum": 200.0,
+						"minimum": 1.0,
+						"title": "Limit",
+						"default": 20
+					},
+					"min_group_count": {
+						"type": "integer",
+						"maximum": 10000.0,
+						"minimum": 1.0,
+						"title": "Min Group Count",
+						"default": 1
+					},
+					"compare_with_previous_period": {
+						"type": "boolean",
+						"title": "Compare With Previous Period",
+						"default": false
+					},
+					"reference_date": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "date"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Reference Date",
+						"description": "Defaults to today in Asia/Dubai"
+					}
+				},
+				"type": "object",
+				"required": ["dataset", "period"],
+				"title": "MarketMetricsRequest",
+				"description": "Sales or rental metrics over served canonical records (DLD + reconciled DXBI)."
+			},
+			"MarketMetricsResponse": {
+				"properties": {
+					"dataset": {
+						"type": "string",
+						"enum": ["sales", "rentals"],
+						"title": "Dataset"
+					},
+					"period": {
+						"$ref": "#/components/schemas/MarketResolvedPeriod"
+					},
+					"coverage": {
+						"$ref": "#/components/schemas/MarketCoverage"
+					},
+					"filters": {
+						"additionalProperties": true,
+						"type": "object",
+						"title": "Filters"
+					},
+					"eligibility": {
+						"type": "string",
+						"title": "Eligibility"
+					},
+					"definitions": {
+						"items": {
+							"$ref": "#/components/schemas/MarketMetricDefinition"
+						},
+						"type": "array",
+						"title": "Definitions"
+					},
+					"total": {
+						"$ref": "#/components/schemas/MarketMetricRow"
+					},
+					"rows": {
+						"items": {
+							"$ref": "#/components/schemas/MarketMetricRow"
+						},
+						"type": "array",
+						"title": "Rows"
+					},
+					"comparison_period": {
+						"anyOf": [
+							{
+								"$ref": "#/components/schemas/MarketResolvedPeriod"
+							},
+							{
+								"type": "null"
+							}
+						]
+					},
+					"comparison_coverage": {
+						"anyOf": [
+							{
+								"$ref": "#/components/schemas/MarketCoverage"
+							},
+							{
+								"type": "null"
+							}
+						]
+					},
+					"comparison": {
+						"anyOf": [
+							{
+								"$ref": "#/components/schemas/MarketMetricRow"
+							},
+							{
+								"type": "null"
+							}
+						]
+					},
+					"change_pct": {
+						"additionalProperties": {
+							"anyOf": [
+								{
+									"type": "number"
+								},
+								{
+									"type": "null"
+								}
+							]
+						},
+						"type": "object",
+						"title": "Change Pct"
+					},
+					"matched_locations": {
+						"items": {
+							"$ref": "#/components/schemas/MarketLocationMatch"
+						},
+						"type": "array",
+						"title": "Matched Locations"
+					},
+					"sources": {
+						"additionalProperties": {
+							"type": "integer"
+						},
+						"type": "object",
+						"title": "Sources"
+					},
+					"release_id": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Release Id"
+					},
+					"release_built_at": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Release Built At"
+					},
+					"limitations": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"title": "Limitations"
+					}
+				},
+				"type": "object",
+				"required": [
+					"dataset",
+					"period",
+					"coverage",
+					"filters",
+					"eligibility",
+					"definitions",
+					"total"
+				],
+				"title": "MarketMetricsResponse"
+			},
+			"MarketPeriodRequest": {
+				"properties": {
+					"type": {
+						"type": "string",
+						"enum": [
+							"previous_month",
+							"previous_quarter",
+							"previous_months",
+							"month",
+							"quarter",
+							"rolling_days",
+							"range"
+						],
+						"title": "Type"
+					},
+					"months": {
+						"anyOf": [
+							{
+								"type": "integer",
+								"maximum": 120.0,
+								"minimum": 1.0
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Months"
+					},
+					"days": {
+						"anyOf": [
+							{
+								"type": "integer",
+								"maximum": 3660.0,
+								"minimum": 1.0
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Days"
+					},
+					"month": {
+						"anyOf": [
+							{
+								"type": "string",
+								"pattern": "^\\d{4}-\\d{2}$"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Month"
+					},
+					"quarter": {
+						"anyOf": [
+							{
+								"type": "string",
+								"pattern": "^\\d{4}-[Qq][1-4]$"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Quarter"
+					},
+					"start": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "date"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Start"
+					},
+					"end": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "date"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "End"
+					}
+				},
+				"type": "object",
+				"required": ["type"],
+				"title": "MarketPeriodRequest",
+				"description": "A calendar period, resolved in the Asia/Dubai business timezone.\n\nprevious_month: the calendar month before the reference date's month (\"last month\").\nprevious_quarter: the calendar quarter before (\"last quarter\").\nprevious_months: `months` complete calendar months ending with the previous month.\nmonth / quarter: explicit \"YYYY-MM\" / \"YYYY-Qn\".\nrolling_days: `days` calendar days ending on the reference date (\"last 90 days\").\nrange: explicit inclusive start/end."
+			},
 			"MarketPricingRow": {
 				"properties": {
 					"unit_type": {
@@ -18075,6 +19605,40 @@
 				"required": ["unit_type", "transaction_count", "median_price_sqm"],
 				"title": "MarketPricingRow"
 			},
+			"MarketResolvedPeriod": {
+				"properties": {
+					"start": {
+						"type": "string",
+						"format": "date",
+						"title": "Start"
+					},
+					"end": {
+						"type": "string",
+						"format": "date",
+						"title": "End"
+					},
+					"label": {
+						"type": "string",
+						"title": "Label"
+					},
+					"type": {
+						"type": "string",
+						"title": "Type"
+					},
+					"reference_date": {
+						"type": "string",
+						"format": "date",
+						"title": "Reference Date"
+					},
+					"timezone": {
+						"type": "string",
+						"title": "Timezone"
+					}
+				},
+				"type": "object",
+				"required": ["start", "end", "label", "type", "reference_date", "timezone"],
+				"title": "MarketResolvedPeriod"
+			},
 			"MarketTrendPoint": {
 				"properties": {
 					"date": {
@@ -18090,13 +19654,20 @@
 						"type": "number",
 						"title": "Avg Price"
 					},
-					"avg_price_sqm": {
-						"type": "number",
-						"title": "Avg Price Sqm"
+					"avg_price_sqft": {
+						"anyOf": [
+							{
+								"type": "number"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Avg Price Sqft"
 					}
 				},
 				"type": "object",
-				"required": ["date", "transaction_count", "avg_price", "avg_price_sqm"],
+				"required": ["date", "transaction_count", "avg_price"],
 				"title": "MarketTrendPoint",
 				"description": "Single data point for the market trend chart"
 			},
@@ -18124,7 +19695,7 @@
 						],
 						"title": "Avg Price Change Pct"
 					},
-					"avg_price_sqm_change_pct": {
+					"avg_price_sqft_change_pct": {
 						"anyOf": [
 							{
 								"type": "number"
@@ -18133,7 +19704,7 @@
 								"type": "null"
 							}
 						],
-						"title": "Avg Price Sqm Change Pct"
+						"title": "Avg Price Sqft Change Pct"
 					}
 				},
 				"type": "object",
@@ -19726,13 +21297,13 @@
 						"title": "P95 Price",
 						"default": 0.0
 					},
-					"mean_price_sqm": {
+					"mean_price_sqft": {
 						"type": "number",
-						"title": "Mean Price Sqm"
+						"title": "Mean Price Sqft"
 					},
-					"std_price_sqm": {
+					"std_price_sqft": {
 						"type": "number",
-						"title": "Std Price Sqm"
+						"title": "Std Price Sqft"
 					}
 				},
 				"type": "object",
@@ -19741,8 +21312,8 @@
 					"sale_count",
 					"mean_price",
 					"std_price",
-					"mean_price_sqm",
-					"std_price_sqm"
+					"mean_price_sqft",
+					"std_price_sqft"
 				],
 				"title": "PriceDistributionBucket",
 				"description": "Mean + population std dev for a single bedroom type."
@@ -19856,13 +21427,13 @@
 						"type": "number",
 						"title": "Median Sale Price"
 					},
-					"avg_sale_price_sqm": {
+					"avg_sale_price_sqft": {
 						"type": "number",
-						"title": "Avg Sale Price Sqm"
+						"title": "Avg Sale Price Sqft"
 					},
-					"avg_unit_size_sqm": {
+					"avg_unit_size_sqft": {
 						"type": "number",
-						"title": "Avg Unit Size Sqm"
+						"title": "Avg Unit Size Sqft"
 					},
 					"rental_count": {
 						"type": "integer",
@@ -19872,9 +21443,9 @@
 						"type": "number",
 						"title": "Median Annual Rent"
 					},
-					"median_rent_sqm": {
+					"median_rent_sqft": {
 						"type": "number",
-						"title": "Median Rent Sqm"
+						"title": "Median Rent Sqft"
 					},
 					"gross_yield_pct": {
 						"anyOf": [
@@ -19942,11 +21513,11 @@
 					"sales_last_12m",
 					"avg_sale_price",
 					"median_sale_price",
-					"avg_sale_price_sqm",
-					"avg_unit_size_sqm",
+					"avg_sale_price_sqft",
+					"avg_unit_size_sqft",
 					"rental_count",
 					"median_annual_rent",
-					"median_rent_sqm",
+					"median_rent_sqft",
 					"price_p25",
 					"price_p50",
 					"price_p75"
@@ -20227,9 +21798,9 @@
 						"type": "number",
 						"title": "Avg Price"
 					},
-					"avg_price_sqm": {
+					"avg_price_sqft": {
 						"type": "number",
-						"title": "Avg Price Sqm"
+						"title": "Avg Price Sqft"
 					},
 					"series": {
 						"type": "string",
@@ -20238,7 +21809,7 @@
 					}
 				},
 				"type": "object",
-				"required": ["date", "avg_price", "avg_price_sqm", "series"],
+				"required": ["date", "avg_price", "avg_price_sqft", "series"],
 				"title": "ProjectForecastPoint"
 			},
 			"ProjectForecastResponse": {
@@ -20560,7 +22131,7 @@
 						],
 						"title": "Median Annual Rent"
 					},
-					"avg_sale_price_sqm_12m": {
+					"avg_sale_price_sqft_12m": {
 						"anyOf": [
 							{
 								"type": "number"
@@ -20569,9 +22140,9 @@
 								"type": "null"
 							}
 						],
-						"title": "Avg Sale Price Sqm 12M"
+						"title": "Avg Sale Price Sqft 12M"
 					},
-					"avg_rent_price_sqm_12m": {
+					"avg_rent_price_sqft_12m": {
 						"anyOf": [
 							{
 								"type": "number"
@@ -20580,7 +22151,7 @@
 								"type": "null"
 							}
 						],
-						"title": "Avg Rent Price Sqm 12M"
+						"title": "Avg Rent Price Sqft 12M"
 					},
 					"gross_yield_pct": {
 						"anyOf": [
@@ -20611,13 +22182,13 @@
 						"type": "integer",
 						"title": "Dda Plot Count"
 					},
-					"dda_total_plot_area_sqm": {
+					"dda_total_plot_area_sqft": {
 						"type": "number",
-						"title": "Dda Total Plot Area Sqm"
+						"title": "Dda Total Plot Area Sqft"
 					},
-					"dda_total_gfa_sqm": {
+					"dda_total_gfa_sqft": {
 						"type": "number",
-						"title": "Dda Total Gfa Sqm"
+						"title": "Dda Total Gfa Sqft"
 					},
 					"dda_dominant_land_uses": {
 						"items": {
@@ -20641,7 +22212,7 @@
 						"title": "Total Sales Volume",
 						"default": 0.0
 					},
-					"avg_sale_price_sqm": {
+					"avg_sale_price_sqft": {
 						"anyOf": [
 							{
 								"type": "number"
@@ -20650,9 +22221,9 @@
 								"type": "null"
 							}
 						],
-						"title": "Avg Sale Price Sqm"
+						"title": "Avg Sale Price Sqft"
 					},
-					"avg_rent_price_sqm": {
+					"avg_rent_price_sqft": {
 						"anyOf": [
 							{
 								"type": "number"
@@ -20661,7 +22232,7 @@
 								"type": "null"
 							}
 						],
-						"title": "Avg Rent Price Sqm"
+						"title": "Avg Rent Price Sqft"
 					}
 				},
 				"type": "object",
@@ -20684,14 +22255,14 @@
 					"total_sales_volume_12m",
 					"median_sale_price",
 					"median_annual_rent",
-					"avg_sale_price_sqm_12m",
-					"avg_rent_price_sqm_12m",
+					"avg_sale_price_sqft_12m",
+					"avg_rent_price_sqft_12m",
 					"gross_yield_pct",
 					"top_developers",
 					"top_master_projects",
 					"dda_plot_count",
-					"dda_total_plot_area_sqm",
-					"dda_total_gfa_sqm",
+					"dda_total_plot_area_sqft",
+					"dda_total_gfa_sqft",
 					"dda_dominant_land_uses"
 				],
 				"title": "ProjectRadarArea",
@@ -20801,6 +22372,39 @@
 						"title": "Land Point Count",
 						"default": 0
 					},
+					"entity_source": {
+						"type": "string",
+						"title": "Entity Source",
+						"default": "legacy_project"
+					},
+					"supply_status": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Supply Status"
+					},
+					"supply_completion_date": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "date"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Supply Completion Date"
+					},
+					"units_in_sale": {
+						"type": "integer",
+						"title": "Units In Sale",
+						"default": 0
+					},
 					"completion_status": {
 						"type": "string",
 						"title": "Completion Status"
@@ -20888,7 +22492,7 @@
 						],
 						"title": "Gross Yield Pct"
 					},
-					"avg_sale_price_sqm_12m": {
+					"avg_sale_price_sqft_12m": {
 						"anyOf": [
 							{
 								"type": "number"
@@ -20897,9 +22501,9 @@
 								"type": "null"
 							}
 						],
-						"title": "Avg Sale Price Sqm 12M"
+						"title": "Avg Sale Price Sqft 12M"
 					},
-					"avg_rent_price_sqm_12m": {
+					"avg_rent_price_sqft_12m": {
 						"anyOf": [
 							{
 								"type": "number"
@@ -20908,7 +22512,7 @@
 								"type": "null"
 							}
 						],
-						"title": "Avg Rent Price Sqm 12M"
+						"title": "Avg Rent Price Sqft 12M"
 					},
 					"sales_transaction_count": {
 						"type": "integer",
@@ -20925,7 +22529,7 @@
 						"title": "Total Sales Volume",
 						"default": 0.0
 					},
-					"avg_sale_price_sqm": {
+					"avg_sale_price_sqft": {
 						"anyOf": [
 							{
 								"type": "number"
@@ -20934,9 +22538,9 @@
 								"type": "null"
 							}
 						],
-						"title": "Avg Sale Price Sqm"
+						"title": "Avg Sale Price Sqft"
 					},
-					"avg_rent_price_sqm": {
+					"avg_rent_price_sqft": {
 						"anyOf": [
 							{
 								"type": "number"
@@ -20945,7 +22549,7 @@
 								"type": "null"
 							}
 						],
-						"title": "Avg Rent Price Sqm"
+						"title": "Avg Rent Price Sqft"
 					}
 				},
 				"type": "object",
@@ -20971,8 +22575,8 @@
 					"median_sale_price",
 					"median_annual_rent",
 					"gross_yield_pct",
-					"avg_sale_price_sqm_12m",
-					"avg_rent_price_sqm_12m"
+					"avg_sale_price_sqft_12m",
+					"avg_rent_price_sqft_12m"
 				],
 				"title": "ProjectRadarProject",
 				"description": "Mapped project pin with market and delivery signals."
@@ -21051,13 +22655,13 @@
 						"type": "integer",
 						"title": "Dda Plot Count"
 					},
-					"dda_total_plot_area_sqm": {
+					"dda_total_plot_area_sqft": {
 						"type": "number",
-						"title": "Dda Total Plot Area Sqm"
+						"title": "Dda Total Plot Area Sqft"
 					},
-					"dda_total_gfa_sqm": {
+					"dda_total_gfa_sqft": {
 						"type": "number",
-						"title": "Dda Total Gfa Sqm"
+						"title": "Dda Total Gfa Sqft"
 					},
 					"activity_period_days": {
 						"type": "integer",
@@ -21136,8 +22740,8 @@
 					"rental_contract_count_12m",
 					"total_sales_volume_12m",
 					"dda_plot_count",
-					"dda_total_plot_area_sqm",
-					"dda_total_gfa_sqm"
+					"dda_total_plot_area_sqft",
+					"dda_total_gfa_sqft"
 				],
 				"title": "ProjectRadarStats",
 				"description": "Top-level metrics for the projects radar map."
@@ -21156,9 +22760,9 @@
 						"type": "number",
 						"title": "Median Annual Rent"
 					},
-					"median_rent_sqm": {
+					"median_rent_sqft": {
 						"type": "number",
-						"title": "Median Rent Sqm"
+						"title": "Median Rent Sqft"
 					}
 				},
 				"type": "object",
@@ -21166,7 +22770,7 @@
 					"contract_count",
 					"total_annual_value",
 					"median_annual_rent",
-					"median_rent_sqm"
+					"median_rent_sqft"
 				],
 				"title": "ProjectRentalSummary"
 			},
@@ -21184,9 +22788,9 @@
 						"type": "number",
 						"title": "Avg Price"
 					},
-					"avg_price_sqm": {
+					"avg_price_sqft": {
 						"type": "number",
-						"title": "Avg Price Sqm"
+						"title": "Avg Price Sqft"
 					},
 					"median_price": {
 						"type": "number",
@@ -21198,7 +22802,7 @@
 					"transaction_count",
 					"total_volume",
 					"avg_price",
-					"avg_price_sqm",
+					"avg_price_sqft",
 					"median_price"
 				],
 				"title": "ProjectSalesSummary"
@@ -21305,13 +22909,13 @@
 						"type": "number",
 						"title": "Avg Price"
 					},
-					"avg_price_sqm": {
+					"avg_price_sqft": {
 						"type": "number",
-						"title": "Avg Price Sqm"
+						"title": "Avg Price Sqft"
 					}
 				},
 				"type": "object",
-				"required": ["date", "transaction_count", "avg_price", "avg_price_sqm"],
+				"required": ["date", "transaction_count", "avg_price", "avg_price_sqft"],
 				"title": "ProjectTrendPoint"
 			},
 			"ProjectTrendsResponse": {
@@ -21342,7 +22946,7 @@
 						"type": "number",
 						"title": "Percentage"
 					},
-					"avg_area_sqm": {
+					"avg_area_sqft": {
 						"anyOf": [
 							{
 								"type": "number"
@@ -21351,11 +22955,11 @@
 								"type": "null"
 							}
 						],
-						"title": "Avg Area Sqm"
+						"title": "Avg Area Sqft"
 					}
 				},
 				"type": "object",
-				"required": ["property_sub_type", "count", "percentage", "avg_area_sqm"],
+				"required": ["property_sub_type", "count", "percentage", "avg_area_sqft"],
 				"title": "ProjectUnitComposition",
 				"description": "Unit type breakdown"
 			},
@@ -21381,6 +22985,131 @@
 				"type": "object",
 				"required": ["property_type", "count", "avg_price", "pct_of_total"],
 				"title": "PropertyTypeBreakdown"
+			},
+			"RadarBuildingPin": {
+				"properties": {
+					"location_id": {
+						"type": "string",
+						"title": "Location Id"
+					},
+					"source_location_id": {
+						"type": "string",
+						"title": "Source Location Id"
+					},
+					"building_name": {
+						"type": "string",
+						"title": "Building Name"
+					},
+					"project_name": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Project Name"
+					},
+					"area_name": {
+						"type": "string",
+						"title": "Area Name"
+					},
+					"latitude": {
+						"type": "number",
+						"title": "Latitude"
+					},
+					"longitude": {
+						"type": "number",
+						"title": "Longitude"
+					},
+					"coordinate_source": {
+						"type": "string",
+						"title": "Coordinate Source",
+						"default": "property_finder"
+					},
+					"coordinate_precision": {
+						"type": "string",
+						"title": "Coordinate Precision",
+						"default": "tower"
+					},
+					"matched_source_signatures": {
+						"type": "integer",
+						"title": "Matched Source Signatures",
+						"default": 0
+					},
+					"sales_transaction_count": {
+						"type": "integer",
+						"title": "Sales Transaction Count",
+						"default": 0
+					},
+					"rental_contract_count": {
+						"type": "integer",
+						"title": "Rental Contract Count",
+						"default": 0
+					},
+					"total_sales_volume": {
+						"type": "number",
+						"title": "Total Sales Volume",
+						"default": 0.0
+					},
+					"median_sale_price": {
+						"anyOf": [
+							{
+								"type": "number"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Median Sale Price"
+					},
+					"median_annual_rent": {
+						"anyOf": [
+							{
+								"type": "number"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Median Annual Rent"
+					},
+					"listing_inventory_count": {
+						"type": "integer",
+						"title": "Listing Inventory Count",
+						"default": 0
+					},
+					"last_activity_date": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "date"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Last Activity Date"
+					}
+				},
+				"type": "object",
+				"required": [
+					"location_id",
+					"source_location_id",
+					"building_name",
+					"area_name",
+					"latitude",
+					"longitude"
+				],
+				"title": "RadarBuildingPin",
+				"description": "Property Finder tower coordinate with linked DLD/Ejari activity."
+			},
+			"RadarPeriodDays": {
+				"type": "integer",
+				"enum": [30, 90, 180, 365],
+				"title": "RadarPeriodDays",
+				"description": "Supported Radar windows, parsed from their query-string representation."
 			},
 			"RegTypeBreakdown": {
 				"properties": {
@@ -21585,7 +23314,7 @@
 						"type": "string",
 						"title": "Contract Id"
 					},
-					"contract_start_date": {
+					"lease_start": {
 						"anyOf": [
 							{
 								"type": "string",
@@ -21595,9 +23324,9 @@
 								"type": "null"
 							}
 						],
-						"title": "Contract Start Date"
+						"title": "Lease Start"
 					},
-					"contract_end_date": {
+					"lease_end": {
 						"anyOf": [
 							{
 								"type": "string",
@@ -21607,9 +23336,9 @@
 								"type": "null"
 							}
 						],
-						"title": "Contract End Date"
+						"title": "Lease End"
 					},
-					"ejari_property_type_en": {
+					"unit_number": {
 						"anyOf": [
 							{
 								"type": "string"
@@ -21618,9 +23347,9 @@
 								"type": "null"
 							}
 						],
-						"title": "Ejari Property Type En"
+						"title": "Unit Number"
 					},
-					"ejari_property_sub_type_en": {
+					"building_name": {
 						"anyOf": [
 							{
 								"type": "string"
@@ -21629,9 +23358,9 @@
 								"type": "null"
 							}
 						],
-						"title": "Ejari Property Sub Type En"
+						"title": "Building Name"
 					},
-					"tenant_type_en": {
+					"project_name": {
 						"anyOf": [
 							{
 								"type": "string"
@@ -21640,9 +23369,9 @@
 								"type": "null"
 							}
 						],
-						"title": "Tenant Type En"
+						"title": "Project Name"
 					},
-					"contract_reg_type_en": {
+					"location_name": {
 						"anyOf": [
 							{
 								"type": "string"
@@ -21651,9 +23380,9 @@
 								"type": "null"
 							}
 						],
-						"title": "Contract Reg Type En"
+						"title": "Location Name"
 					},
-					"area_name_en": {
+					"property_type": {
 						"anyOf": [
 							{
 								"type": "string"
@@ -21662,9 +23391,9 @@
 								"type": "null"
 							}
 						],
-						"title": "Area Name En"
+						"title": "Property Type"
 					},
-					"project_name_en": {
+					"bedrooms": {
 						"anyOf": [
 							{
 								"type": "string"
@@ -21673,9 +23402,9 @@
 								"type": "null"
 							}
 						],
-						"title": "Project Name En"
+						"title": "Bedrooms"
 					},
-					"actual_area": {
+					"size_sqft": {
 						"anyOf": [
 							{
 								"type": "number"
@@ -21684,31 +23413,9 @@
 								"type": "null"
 							}
 						],
-						"title": "Actual Area"
+						"title": "Size Sqft"
 					},
-					"annual_amount": {
-						"anyOf": [
-							{
-								"type": "number"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Annual Amount"
-					},
-					"contract_amount": {
-						"anyOf": [
-							{
-								"type": "number"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Contract Amount"
-					},
-					"no_of_prop": {
+					"annual_rent_aed": {
 						"anyOf": [
 							{
 								"type": "integer"
@@ -21717,42 +23424,31 @@
 								"type": "null"
 							}
 						],
-						"title": "No Of Prop"
+						"title": "Annual Rent Aed"
 					},
-					"is_free_hold": {
+					"contract_amount_aed": {
 						"anyOf": [
 							{
-								"type": "boolean"
+								"type": "integer"
 							},
 							{
 								"type": "null"
 							}
 						],
-						"title": "Is Free Hold"
+						"title": "Contract Amount Aed"
 					},
-					"nearest_landmark_en": {
+					"term_months": {
 						"anyOf": [
 							{
-								"type": "string"
+								"type": "number"
 							},
 							{
 								"type": "null"
 							}
 						],
-						"title": "Nearest Landmark En"
+						"title": "Term Months"
 					},
-					"nearest_metro_en": {
-						"anyOf": [
-							{
-								"type": "string"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Nearest Metro En"
-					},
-					"nearest_mall_en": {
+					"contract_type": {
 						"anyOf": [
 							{
 								"type": "string"
@@ -21761,12 +23457,13 @@
 								"type": "null"
 							}
 						],
-						"title": "Nearest Mall En"
+						"title": "Contract Type"
 					}
 				},
 				"type": "object",
 				"required": ["contract_id"],
-				"title": "RentalContractResponse"
+				"title": "RentalContractResponse",
+				"description": "One DXBI lease of one unit (dxbi_rental_events): sizes in sq ft, amounts in AED."
 			},
 			"RentalDimensionBreakdown": {
 				"properties": {
@@ -21973,9 +23670,9 @@
 						"type": "number",
 						"title": "Avg Sale Price"
 					},
-					"avg_sale_price_sqm": {
+					"avg_sale_price_sqft": {
 						"type": "number",
-						"title": "Avg Sale Price Sqm"
+						"title": "Avg Sale Price Sqft"
 					},
 					"rental_count": {
 						"type": "integer",
@@ -21985,9 +23682,9 @@
 						"type": "number",
 						"title": "Median Annual Rent"
 					},
-					"median_rent_sqm": {
+					"median_rent_sqft": {
 						"type": "number",
-						"title": "Median Rent Sqm"
+						"title": "Median Rent Sqft"
 					},
 					"gross_yield_pct": {
 						"anyOf": [
@@ -22006,10 +23703,10 @@
 					"rooms",
 					"sale_count",
 					"avg_sale_price",
-					"avg_sale_price_sqm",
+					"avg_sale_price_sqft",
 					"rental_count",
 					"median_annual_rent",
-					"median_rent_sqm"
+					"median_rent_sqft"
 				],
 				"title": "RoomAnalytics",
 				"description": "Combined sales + rental + yield metrics per bedroom count"
@@ -23312,7 +25009,7 @@
 						"type": "string",
 						"title": "Transaction Id"
 					},
-					"instance_date": {
+					"transaction_date": {
 						"anyOf": [
 							{
 								"type": "string",
@@ -23322,9 +25019,9 @@
 								"type": "null"
 							}
 						],
-						"title": "Instance Date"
+						"title": "Transaction Date"
 					},
-					"trans_group_en": {
+					"unit_number": {
 						"anyOf": [
 							{
 								"type": "string"
@@ -23333,9 +25030,9 @@
 								"type": "null"
 							}
 						],
-						"title": "Trans Group En"
+						"title": "Unit Number"
 					},
-					"procedure_name_en": {
+					"building_name": {
 						"anyOf": [
 							{
 								"type": "string"
@@ -23344,9 +25041,9 @@
 								"type": "null"
 							}
 						],
-						"title": "Procedure Name En"
+						"title": "Building Name"
 					},
-					"property_type_en": {
+					"project_name": {
 						"anyOf": [
 							{
 								"type": "string"
@@ -23355,9 +25052,9 @@
 								"type": "null"
 							}
 						],
-						"title": "Property Type En"
+						"title": "Project Name"
 					},
-					"property_sub_type_en": {
+					"location_name": {
 						"anyOf": [
 							{
 								"type": "string"
@@ -23366,9 +25063,9 @@
 								"type": "null"
 							}
 						],
-						"title": "Property Sub Type En"
+						"title": "Location Name"
 					},
-					"rooms_en": {
+					"property_type": {
 						"anyOf": [
 							{
 								"type": "string"
@@ -23377,9 +25074,9 @@
 								"type": "null"
 							}
 						],
-						"title": "Rooms En"
+						"title": "Property Type"
 					},
-					"area_name_en": {
+					"bedrooms": {
 						"anyOf": [
 							{
 								"type": "string"
@@ -23388,9 +25085,9 @@
 								"type": "null"
 							}
 						],
-						"title": "Area Name En"
+						"title": "Bedrooms"
 					},
-					"project_name_en": {
+					"status": {
 						"anyOf": [
 							{
 								"type": "string"
@@ -23399,20 +25096,9 @@
 								"type": "null"
 							}
 						],
-						"title": "Project Name En"
+						"title": "Status"
 					},
-					"building_name_en": {
-						"anyOf": [
-							{
-								"type": "string"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Building Name En"
-					},
-					"procedure_area": {
+					"size_sqft": {
 						"anyOf": [
 							{
 								"type": "number"
@@ -23421,78 +25107,35 @@
 								"type": "null"
 							}
 						],
-						"title": "Procedure Area"
+						"title": "Size Sqft"
 					},
-					"actual_worth": {
+					"price_aed": {
 						"anyOf": [
 							{
-								"type": "number"
+								"type": "integer"
 							},
 							{
 								"type": "null"
 							}
 						],
-						"title": "Actual Worth"
+						"title": "Price Aed"
 					},
-					"meter_sale_price": {
+					"price_per_sqft_aed": {
 						"anyOf": [
 							{
-								"type": "number"
+								"type": "integer"
 							},
 							{
 								"type": "null"
 							}
 						],
-						"title": "Meter Sale Price"
-					},
-					"reg_type_en": {
-						"anyOf": [
-							{
-								"type": "string"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Reg Type En"
-					},
-					"nearest_landmark_en": {
-						"anyOf": [
-							{
-								"type": "string"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Nearest Landmark En"
-					},
-					"nearest_metro_en": {
-						"anyOf": [
-							{
-								"type": "string"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Nearest Metro En"
-					},
-					"nearest_mall_en": {
-						"anyOf": [
-							{
-								"type": "string"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Nearest Mall En"
+						"title": "Price Per Sqft Aed"
 					}
 				},
 				"type": "object",
 				"required": ["transaction_id"],
-				"title": "TransactionResponse"
+				"title": "TransactionResponse",
+				"description": "One DXBI sale (dxbi_sales_unit_events): sizes in sq ft, prices in AED."
 			},
 			"TrendPoint": {
 				"properties": {

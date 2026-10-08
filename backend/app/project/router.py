@@ -1,14 +1,18 @@
+from datetime import date
 from enum import IntEnum
-from typing import List, Optional
+from typing import List, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.core.decorators import cached_endpoint
 from app.core.dependencies import AuthContext, require_active_subscription
+from app.plots.models import DDAOutlineFeature, DDAPlotFeature
+from app.plots.service import get_dda_outlines_for_bounds, get_dda_plots_for_area
+from app.project.delivery import ALL_DELIVERY_STATUSES, get_delivery_summary
 from app.project.models import (
     BuildingDetailResponse,
-    DDAOutlineFeature,
-    DDAPlotFeature,
+    DeliveryStatus,
+    DeliverySummaryResponse,
     MasterProjectResponse,
     ProjectDetailResponse,
     ProjectRadarOverviewResponse,
@@ -17,16 +21,16 @@ from app.project.models import (
     ProjectSearchResult,
     RadarBuildingPin,
 )
-from app.project.service import (
-    get_building_details,
-    get_dda_outlines_for_bounds,
-    get_dda_plots_for_area,
-    get_master_project,
-    get_project_details,
+from app.project.radar import (
     get_project_radar,
     get_project_radar_overview,
     get_project_radar_pins,
     get_radar_building_pins,
+)
+from app.project.service import (
+    get_building_details,
+    get_master_project,
+    get_project_details,
     list_all_projects,
 )
 
@@ -42,6 +46,32 @@ class RadarPeriodDays(IntEnum):
     DAYS_365 = 365
 
 
+@router.get("/delivery-summary", response_model=DeliverySummaryResponse)
+async def project_delivery_summary(
+    context: AuthContext = Depends(require_active_subscription),
+    location: Optional[str] = Query(default=None, max_length=120),
+    project_status: List[str] = Query(default=["ACTIVE"]),
+    delivery_status: List[DeliveryStatus] = Query(default=list(ALL_DELIVERY_STATUSES)),
+    group_by: Literal["developer", "delivery_status", "delivery_year", "project"] = "developer",
+    horizon_months: int = Query(default=24, ge=1, le=240),
+    reference_date: Optional[date] = None,
+    limit: int = Query(default=20, ge=1, le=200),
+):
+    """DLD-registered projects by delivery status, developer, year or project."""
+    try:
+        return await get_delivery_summary(
+            location=location,
+            project_statuses=tuple(project_status),
+            delivery_statuses=tuple(delivery_status),
+            group_by=group_by,
+            horizon_months=horizon_months,
+            reference_date=reference_date,
+            limit=limit,
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+
+
 @router.get("/list", response_model=List[ProjectSearchResult])
 @cached_endpoint(prefix="project_list", expire=3600)  # 1 hour
 async def list_projects(context: AuthContext = Depends(require_active_subscription)):
@@ -50,7 +80,7 @@ async def list_projects(context: AuthContext = Depends(require_active_subscripti
 
 
 @router.get("/radar", response_model=ProjectRadarResponse)
-@cached_endpoint(prefix="project_radar_ph_box", expire=1800)
+@cached_endpoint(prefix="project_radar_ph_box_v2", expire=1800)
 async def project_radar(
     limit: int = Query(default=1400, ge=100, le=5000, description="Maximum mapped projects"),
     period_days: RadarPeriodDays = Query(
@@ -64,7 +94,7 @@ async def project_radar(
 
 
 @router.get("/radar/overview", response_model=ProjectRadarOverviewResponse)
-@cached_endpoint(prefix="project_radar_overview_ph_box", expire=1800)
+@cached_endpoint(prefix="project_radar_overview_ph_box_v2", expire=1800)
 async def project_radar_overview(
     period_days: RadarPeriodDays = Query(
         default=365,
@@ -77,7 +107,7 @@ async def project_radar_overview(
 
 
 @router.get("/radar/pins", response_model=List[ProjectRadarProject])
-@cached_endpoint(prefix="project_radar_pins_ph_box", expire=600)
+@cached_endpoint(prefix="project_radar_pins_ph_box_v2", expire=600)
 async def project_radar_pins(
     west: Optional[float] = Query(None, ge=54, le=57, description="Viewport west longitude"),
     south: Optional[float] = Query(None, ge=24, le=26, description="Viewport south latitude"),
@@ -140,7 +170,7 @@ async def radar_building_pins(
 
 
 @router.get("/master", response_model=MasterProjectResponse)
-@cached_endpoint(prefix="master_project", expire=1800)  # 30 minutes
+@cached_endpoint(prefix="master_project_v2", expire=1800)  # 30 minutes
 async def master_project(
     name: str = Query(..., description="master_project_en value"),
     context: AuthContext = Depends(require_active_subscription),
@@ -153,7 +183,7 @@ async def master_project(
 
 
 @router.get("/building/{property_id}", response_model=BuildingDetailResponse)
-@cached_endpoint(prefix="building_details", expire=1800)  # 30 minutes
+@cached_endpoint(prefix="building_details_v2", expire=1800)  # 30 minutes
 async def building_details(
     property_id: int, context: AuthContext = Depends(require_active_subscription)
 ):
@@ -216,7 +246,7 @@ async def get_dda_outlines(
 
 
 @router.get("/{project_id}", response_model=ProjectDetailResponse)
-@cached_endpoint(prefix="project_details_ph_box", expire=1800)  # 30 minutes
+@cached_endpoint(prefix="project_details_ph_box_v2", expire=1800)  # 30 minutes
 async def project_details(
     project_id: int, context: AuthContext = Depends(require_active_subscription)
 ):

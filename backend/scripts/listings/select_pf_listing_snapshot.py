@@ -23,9 +23,10 @@ def main() -> None:
     temporary = args.output.with_suffix(".csv.tmp")
     rows = 0
     modes: Counter[str] = Counter()
-    with args.input.open(encoding="utf-8", newline="") as source, temporary.open(
-        "w", encoding="utf-8", newline=""
-    ) as destination:
+    with (
+        args.input.open(encoding="utf-8", newline="") as source,
+        temporary.open("w", encoding="utf-8", newline="") as destination,
+    ):
         reader = csv.DictReader(source)
         if not reader.fieldnames:
             raise ValueError("Input CSV has no header")

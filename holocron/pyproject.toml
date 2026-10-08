@@ -25,6 +25,7 @@ dev = [
     "ty>=0.0.35",
 ]
 admin = [
+    "pandas>=2.0",
     "streamlit>=1.42.0",
     "pyyaml>=6.0",
     "python-dotenv>=1.0.0",
@@ -42,6 +43,9 @@ line-length = 100
 target-version = "py311"
 
 [tool.pytest.ini_options]
+# handoff/bayut_standalone is a live standalone deliverable: tests/ import it and its own
+# tests run with the suite.
+testpaths = ["tests", "handoff"]
 filterwarnings = [
     "ignore:The 'u' type code is deprecated and will be removed in Python 3\\.16:DeprecationWarning",
     "ignore:The `__fields__` attribute is deprecated, use the `model_fields` class property instead:pydantic.warnings.PydanticDeprecatedSince20:dagster_shared\\.dagster_model\\.pydantic_compat_layer",

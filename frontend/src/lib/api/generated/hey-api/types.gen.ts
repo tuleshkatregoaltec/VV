@@ -134,9 +134,9 @@ export type AnalyticsUnitComposition = {
      */
     pct_of_total: number;
     /**
-     * Avg Unit Size Sqm
+     * Avg Unit Size Sqft
      */
-    avg_unit_size_sqm?: number;
+    avg_unit_size_sqft?: number;
 };
 
 /**
@@ -204,13 +204,13 @@ export type AreaDetailResponse = {
      */
     median_annual_rent: number | null;
     /**
-     * Avg Sale Price Sqm 12M
+     * Avg Sale Price Sqft 12M
      */
-    avg_sale_price_sqm_12m: number | null;
+    avg_sale_price_sqft_12m: number | null;
     /**
-     * Avg Rent Price Sqm 12M
+     * Avg Rent Price Sqft 12M
      */
-    avg_rent_price_sqm_12m: number | null;
+    avg_rent_price_sqft_12m: number | null;
     /**
      * Gross Yield Pct
      */
@@ -324,13 +324,13 @@ export type AreaListItem = {
      */
     median_annual_rent: number | null;
     /**
-     * Avg Sale Price Sqm 12M
+     * Avg Sale Price Sqft 12M
      */
-    avg_sale_price_sqm_12m: number | null;
+    avg_sale_price_sqft_12m: number | null;
     /**
-     * Avg Rent Price Sqm 12M
+     * Avg Rent Price Sqft 12M
      */
-    avg_rent_price_sqm_12m: number | null;
+    avg_rent_price_sqft_12m: number | null;
     /**
      * Gross Yield Pct
      */
@@ -644,9 +644,9 @@ export type BuildingUnitType = {
      */
     percentage: number;
     /**
-     * Avg Area Sqm
+     * Avg Area Sqft
      */
-    avg_area_sqm: number | null;
+    avg_area_sqft: number | null;
 };
 
 /**
@@ -2853,6 +2853,94 @@ export type DdaPlotFeature = {
 };
 
 /**
+ * DeliveryGroupRow
+ */
+export type DeliveryGroupRow = {
+    /**
+     * Group
+     */
+    group: string;
+    /**
+     * Project Count
+     */
+    project_count: number;
+    /**
+     * Units
+     */
+    units: number;
+    /**
+     * Projects Without Units
+     */
+    projects_without_units: number;
+    /**
+     * Share Of Units
+     */
+    share_of_units?: number | null;
+};
+
+/**
+ * DeliverySummaryResponse
+ */
+export type DeliverySummaryResponse = {
+    /**
+     * Location
+     */
+    location: string | null;
+    /**
+     * Project Statuses
+     */
+    project_statuses: Array<string>;
+    /**
+     * Delivery Statuses
+     */
+    delivery_statuses: Array<string>;
+    /**
+     * Group By
+     */
+    group_by: string;
+    /**
+     * Reference Date
+     */
+    reference_date: string;
+    /**
+     * Horizon End
+     */
+    horizon_end: string;
+    /**
+     * Definitions
+     */
+    definitions: {
+        [key: string]: string;
+    };
+    /**
+     * By Delivery Status
+     */
+    by_delivery_status: Array<DeliveryGroupRow>;
+    /**
+     * Rows
+     */
+    rows: Array<DeliveryGroupRow>;
+    /**
+     * Matched Terms
+     */
+    matched_terms: {
+        [key: string]: Array<string>;
+    };
+    /**
+     * Source
+     */
+    source: string;
+    /**
+     * Source Snapshot At
+     */
+    source_snapshot_at?: string | null;
+    /**
+     * Limitations
+     */
+    limitations?: Array<string>;
+};
+
+/**
  * DeveloperRankingCriterionResponse
  */
 export type DeveloperRankingCriterionResponse = {
@@ -3871,13 +3959,13 @@ export type FeasibilityVatApplicability = {
 /**
  * FilterOptionsResponse
  *
- * Filter options for transactions and rentals - dynamically narrowed by selections.
+ * Filter options for the DXBI sales or rentals page, narrowed by the current filters.
  */
 export type FilterOptionsResponse = {
     /**
-     * Projects
+     * Locations
      */
-    projects?: Array<string>;
+    locations?: Array<string>;
     /**
      * Buildings
      */
@@ -3887,29 +3975,17 @@ export type FilterOptionsResponse = {
      */
     property_types?: Array<string>;
     /**
-     * Property Sub Types
+     * Bedrooms
      */
-    property_sub_types?: Array<string>;
+    bedrooms?: Array<string>;
     /**
-     * Rooms
+     * Statuses
      */
-    rooms?: Array<string>;
+    statuses?: Array<string>;
     /**
-     * Registration Types
+     * Contract Types
      */
-    registration_types?: Array<string>;
-    /**
-     * Tenant Types
-     */
-    tenant_types?: Array<string>;
-    /**
-     * Contract Reg Types
-     */
-    contract_reg_types?: Array<string>;
-    /**
-     * Areas
-     */
-    areas?: Array<string>;
+    contract_types?: Array<string>;
 };
 
 /**
@@ -5669,6 +5745,378 @@ export type ListingTrendPoint = {
 };
 
 /**
+ * MarketCoverage
+ *
+ * Load evidence for the period's days, from the served release's coverage record.
+ *
+ * verified: the source window holding the day was read to the end of its result set (or
+ * the archive it came from is attested), so a day without records is a true zero.
+ * partial: the load covering the day stopped inside its window. unverified: no load
+ * evidence; records may exist but absence proves nothing. complete = every day verified;
+ * unavailable = no evidence and no records.
+ */
+export type MarketCoverage = {
+    /**
+     * Status
+     */
+    status: 'complete' | 'partial' | 'unverified' | 'unavailable';
+    /**
+     * Data From
+     */
+    data_from?: string | null;
+    /**
+     * Data To
+     */
+    data_to?: string | null;
+    /**
+     * Covered From
+     */
+    covered_from?: string | null;
+    /**
+     * Covered To
+     */
+    covered_to?: string | null;
+    /**
+     * Verified Days
+     */
+    verified_days?: number;
+    /**
+     * Partial Days
+     */
+    partial_days?: number;
+    /**
+     * Unverified Days
+     */
+    unverified_days?: number;
+    /**
+     * Ranges
+     */
+    ranges?: Array<MarketCoverageRange>;
+    /**
+     * Evidence Loaded At
+     */
+    evidence_loaded_at?: string | null;
+    /**
+     * Note
+     */
+    note: string;
+};
+
+/**
+ * MarketCoverageRange
+ */
+export type MarketCoverageRange = {
+    /**
+     * Start
+     */
+    start: string;
+    /**
+     * End
+     */
+    end: string;
+    /**
+     * Status
+     */
+    status: 'verified' | 'partial' | 'unverified';
+};
+
+/**
+ * MarketLocationMatch
+ *
+ * Raw source names of matched rows and the canonical place the crosswalk gave them.
+ */
+export type MarketLocationMatch = {
+    /**
+     * Area
+     */
+    area: string;
+    /**
+     * Master Project
+     */
+    master_project: string;
+    /**
+     * District
+     */
+    district?: string;
+    /**
+     * Community
+     */
+    community?: string;
+    /**
+     * Method
+     */
+    method?: string;
+    /**
+     * Records
+     */
+    records: number;
+};
+
+/**
+ * MarketMetricDefinition
+ */
+export type MarketMetricDefinition = {
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Unit
+     */
+    unit: string;
+    /**
+     * Definition
+     */
+    definition: string;
+};
+
+/**
+ * MarketMetricRow
+ */
+export type MarketMetricRow = {
+    /**
+     * Group
+     */
+    group?: string | null;
+    /**
+     * Count
+     */
+    count?: number | null;
+    /**
+     * Share Of Count
+     */
+    share_of_count?: number | null;
+    /**
+     * Values
+     */
+    values?: {
+        [key: string]: number | null;
+    };
+    /**
+     * Coverage
+     */
+    coverage?: 'verified' | 'partial' | 'unverified' | null;
+};
+
+/**
+ * MarketMetricsRequest
+ *
+ * Sales or rental metrics over served canonical records (DLD + reconciled DXBI).
+ */
+export type MarketMetricsRequest = {
+    /**
+     * Dataset
+     */
+    dataset: 'sales' | 'rentals';
+    /**
+     * Metrics
+     */
+    metrics?: Array<'count' | 'total_aed' | 'mean_aed' | 'median_aed' | 'p25_aed' | 'p75_aed' | 'mean_aed_per_sqft' | 'median_aed_per_sqft' | 'weighted_aed_per_sqft' | 'total_contract_aed' | 'median_contract_aed'>;
+    period: MarketPeriodRequest;
+    /**
+     * Location
+     *
+     * Community or DLD area, e.g. JVC
+     */
+    location?: string | null;
+    /**
+     * Building
+     */
+    building?: string | null;
+    /**
+     * Project
+     */
+    project?: string | null;
+    /**
+     * Property Type
+     *
+     * villa includes townhouses; townhouse is townhouses only
+     */
+    property_type?: 'apartment' | 'hotel_apartment' | 'villa' | 'townhouse' | 'office' | 'shop' | 'land' | null;
+    /**
+     * Usage
+     */
+    usage?: 'residential' | 'commercial' | null;
+    /**
+     * Bedrooms
+     */
+    bedrooms?: Array<'studio' | '1' | '2' | '3' | '4' | '5' | '6' | '7'> | null;
+    /**
+     * Registration
+     *
+     * Sales only
+     */
+    registration?: 'off_plan' | 'ready' | null;
+    /**
+     * Contract Version
+     *
+     * Rentals only
+     */
+    contract_version?: 'new' | 'renewed' | null;
+    /**
+     * Min Term Days
+     *
+     * Rentals only
+     */
+    min_term_days?: number | null;
+    /**
+     * Max Term Days
+     *
+     * Rentals only
+     */
+    max_term_days?: number | null;
+    /**
+     * Min Value Aed
+     *
+     * Sale price or annual rent, inclusive
+     */
+    min_value_aed?: number | null;
+    /**
+     * Max Value Aed
+     *
+     * Sale price or annual rent, exclusive
+     */
+    max_value_aed?: number | null;
+    /**
+     * Group By
+     */
+    group_by?: 'area' | 'community' | 'master_project' | 'project' | 'building' | 'month' | 'bedrooms' | 'property_type' | 'price_band' | 'registration' | 'contract_version' | null;
+    /**
+     * Price Bands
+     *
+     * Ascending AED boundaries for group_by=price_band: [b0,b1) ... [bn,inf)
+     */
+    price_bands?: Array<number> | null;
+    /**
+     * Sort By
+     */
+    sort_by?: 'count' | 'total_aed' | 'mean_aed' | 'median_aed' | 'p25_aed' | 'p75_aed' | 'mean_aed_per_sqft' | 'median_aed_per_sqft' | 'weighted_aed_per_sqft' | 'total_contract_aed' | 'median_contract_aed';
+    /**
+     * Limit
+     */
+    limit?: number;
+    /**
+     * Min Group Count
+     */
+    min_group_count?: number;
+    /**
+     * Compare With Previous Period
+     */
+    compare_with_previous_period?: boolean;
+    /**
+     * Reference Date
+     *
+     * Defaults to today in Asia/Dubai
+     */
+    reference_date?: string | null;
+};
+
+/**
+ * MarketMetricsResponse
+ */
+export type MarketMetricsResponse = {
+    /**
+     * Dataset
+     */
+    dataset: 'sales' | 'rentals';
+    period: MarketResolvedPeriod;
+    coverage: MarketCoverage;
+    /**
+     * Filters
+     */
+    filters: {
+        [key: string]: unknown;
+    };
+    /**
+     * Eligibility
+     */
+    eligibility: string;
+    /**
+     * Definitions
+     */
+    definitions: Array<MarketMetricDefinition>;
+    total: MarketMetricRow;
+    /**
+     * Rows
+     */
+    rows?: Array<MarketMetricRow>;
+    comparison_period?: MarketResolvedPeriod | null;
+    comparison_coverage?: MarketCoverage | null;
+    comparison?: MarketMetricRow | null;
+    /**
+     * Change Pct
+     */
+    change_pct?: {
+        [key: string]: number | null;
+    };
+    /**
+     * Matched Locations
+     */
+    matched_locations?: Array<MarketLocationMatch>;
+    /**
+     * Sources
+     */
+    sources?: {
+        [key: string]: number;
+    };
+    /**
+     * Release Id
+     */
+    release_id?: string | null;
+    /**
+     * Release Built At
+     */
+    release_built_at?: string | null;
+    /**
+     * Limitations
+     */
+    limitations?: Array<string>;
+};
+
+/**
+ * MarketPeriodRequest
+ *
+ * A calendar period, resolved in the Asia/Dubai business timezone.
+ *
+ * previous_month: the calendar month before the reference date's month ("last month").
+ * previous_quarter: the calendar quarter before ("last quarter").
+ * previous_months: `months` complete calendar months ending with the previous month.
+ * month / quarter: explicit "YYYY-MM" / "YYYY-Qn".
+ * rolling_days: `days` calendar days ending on the reference date ("last 90 days").
+ * range: explicit inclusive start/end.
+ */
+export type MarketPeriodRequest = {
+    /**
+     * Type
+     */
+    type: 'previous_month' | 'previous_quarter' | 'previous_months' | 'month' | 'quarter' | 'rolling_days' | 'range';
+    /**
+     * Months
+     */
+    months?: number | null;
+    /**
+     * Days
+     */
+    days?: number | null;
+    /**
+     * Month
+     */
+    month?: string | null;
+    /**
+     * Quarter
+     */
+    quarter?: string | null;
+    /**
+     * Start
+     */
+    start?: string | null;
+    /**
+     * End
+     */
+    end?: string | null;
+};
+
+/**
  * MarketPricingRow
  */
 export type MarketPricingRow = {
@@ -5691,6 +6139,36 @@ export type MarketPricingRow = {
 };
 
 /**
+ * MarketResolvedPeriod
+ */
+export type MarketResolvedPeriod = {
+    /**
+     * Start
+     */
+    start: string;
+    /**
+     * End
+     */
+    end: string;
+    /**
+     * Label
+     */
+    label: string;
+    /**
+     * Type
+     */
+    type: string;
+    /**
+     * Reference Date
+     */
+    reference_date: string;
+    /**
+     * Timezone
+     */
+    timezone: string;
+};
+
+/**
  * MarketTrendPoint
  *
  * Single data point for the market trend chart
@@ -5709,9 +6187,9 @@ export type MarketTrendPoint = {
      */
     avg_price: number;
     /**
-     * Avg Price Sqm
+     * Avg Price Sqft
      */
-    avg_price_sqm: number;
+    avg_price_sqft?: number | null;
 };
 
 /**
@@ -5733,9 +6211,9 @@ export type MarketTrendResponse = {
      */
     avg_price_change_pct?: number | null;
     /**
-     * Avg Price Sqm Change Pct
+     * Avg Price Sqft Change Pct
      */
-    avg_price_sqm_change_pct?: number | null;
+    avg_price_sqft_change_pct?: number | null;
 };
 
 /**
@@ -6790,13 +7268,13 @@ export type PriceDistributionBucket = {
      */
     p95_price?: number;
     /**
-     * Mean Price Sqm
+     * Mean Price Sqft
      */
-    mean_price_sqm: number;
+    mean_price_sqft: number;
     /**
-     * Std Price Sqm
+     * Std Price Sqft
      */
-    std_price_sqm: number;
+    std_price_sqft: number;
 };
 
 /**
@@ -6867,13 +7345,13 @@ export type ProjectConfigurationRow = {
      */
     median_sale_price: number;
     /**
-     * Avg Sale Price Sqm
+     * Avg Sale Price Sqft
      */
-    avg_sale_price_sqm: number;
+    avg_sale_price_sqft: number;
     /**
-     * Avg Unit Size Sqm
+     * Avg Unit Size Sqft
      */
-    avg_unit_size_sqm: number;
+    avg_unit_size_sqft: number;
     /**
      * Rental Count
      */
@@ -6883,9 +7361,9 @@ export type ProjectConfigurationRow = {
      */
     median_annual_rent: number;
     /**
-     * Median Rent Sqm
+     * Median Rent Sqft
      */
-    median_rent_sqm: number;
+    median_rent_sqft: number;
     /**
      * Gross Yield Pct
      */
@@ -7034,9 +7512,9 @@ export type ProjectForecastPoint = {
      */
     avg_price: number;
     /**
-     * Avg Price Sqm
+     * Avg Price Sqft
      */
-    avg_price_sqm: number;
+    avg_price_sqft: number;
     /**
      * Series
      */
@@ -7241,13 +7719,13 @@ export type ProjectRadarArea = {
      */
     median_annual_rent: number | null;
     /**
-     * Avg Sale Price Sqm 12M
+     * Avg Sale Price Sqft 12M
      */
-    avg_sale_price_sqm_12m: number | null;
+    avg_sale_price_sqft_12m: number | null;
     /**
-     * Avg Rent Price Sqm 12M
+     * Avg Rent Price Sqft 12M
      */
-    avg_rent_price_sqm_12m: number | null;
+    avg_rent_price_sqft_12m: number | null;
     /**
      * Gross Yield Pct
      */
@@ -7265,13 +7743,13 @@ export type ProjectRadarArea = {
      */
     dda_plot_count: number;
     /**
-     * Dda Total Plot Area Sqm
+     * Dda Total Plot Area Sqft
      */
-    dda_total_plot_area_sqm: number;
+    dda_total_plot_area_sqft: number;
     /**
-     * Dda Total Gfa Sqm
+     * Dda Total Gfa Sqft
      */
-    dda_total_gfa_sqm: number;
+    dda_total_gfa_sqft: number;
     /**
      * Dda Dominant Land Uses
      */
@@ -7289,13 +7767,13 @@ export type ProjectRadarArea = {
      */
     total_sales_volume?: number;
     /**
-     * Avg Sale Price Sqm
+     * Avg Sale Price Sqft
      */
-    avg_sale_price_sqm?: number | null;
+    avg_sale_price_sqft?: number | null;
     /**
-     * Avg Rent Price Sqm
+     * Avg Rent Price Sqft
      */
-    avg_rent_price_sqm?: number | null;
+    avg_rent_price_sqft?: number | null;
 };
 
 /**
@@ -7374,6 +7852,22 @@ export type ProjectRadarProject = {
      */
     land_point_count?: number;
     /**
+     * Entity Source
+     */
+    entity_source?: string;
+    /**
+     * Supply Status
+     */
+    supply_status?: string | null;
+    /**
+     * Supply Completion Date
+     */
+    supply_completion_date?: string | null;
+    /**
+     * Units In Sale
+     */
+    units_in_sale?: number;
+    /**
      * Completion Status
      */
     completion_status: string;
@@ -7426,13 +7920,13 @@ export type ProjectRadarProject = {
      */
     gross_yield_pct: number | null;
     /**
-     * Avg Sale Price Sqm 12M
+     * Avg Sale Price Sqft 12M
      */
-    avg_sale_price_sqm_12m: number | null;
+    avg_sale_price_sqft_12m: number | null;
     /**
-     * Avg Rent Price Sqm 12M
+     * Avg Rent Price Sqft 12M
      */
-    avg_rent_price_sqm_12m: number | null;
+    avg_rent_price_sqft_12m: number | null;
     /**
      * Sales Transaction Count
      */
@@ -7446,13 +7940,13 @@ export type ProjectRadarProject = {
      */
     total_sales_volume?: number;
     /**
-     * Avg Sale Price Sqm
+     * Avg Sale Price Sqft
      */
-    avg_sale_price_sqm?: number | null;
+    avg_sale_price_sqft?: number | null;
     /**
-     * Avg Rent Price Sqm
+     * Avg Rent Price Sqft
      */
-    avg_rent_price_sqm?: number | null;
+    avg_rent_price_sqft?: number | null;
 };
 
 /**
@@ -7523,13 +8017,13 @@ export type ProjectRadarStats = {
      */
     dda_plot_count: number;
     /**
-     * Dda Total Plot Area Sqm
+     * Dda Total Plot Area Sqft
      */
-    dda_total_plot_area_sqm: number;
+    dda_total_plot_area_sqft: number;
     /**
-     * Dda Total Gfa Sqm
+     * Dda Total Gfa Sqft
      */
-    dda_total_gfa_sqm: number;
+    dda_total_gfa_sqft: number;
     /**
      * Activity Period Days
      */
@@ -7589,9 +8083,9 @@ export type ProjectRentalSummary = {
      */
     median_annual_rent: number;
     /**
-     * Median Rent Sqm
+     * Median Rent Sqft
      */
-    median_rent_sqm: number;
+    median_rent_sqft: number;
 };
 
 /**
@@ -7611,9 +8105,9 @@ export type ProjectSalesSummary = {
      */
     avg_price: number;
     /**
-     * Avg Price Sqm
+     * Avg Price Sqft
      */
-    avg_price_sqm: number;
+    avg_price_sqft: number;
     /**
      * Median Price
      */
@@ -7697,9 +8191,9 @@ export type ProjectTrendPoint = {
      */
     avg_price: number;
     /**
-     * Avg Price Sqm
+     * Avg Price Sqft
      */
-    avg_price_sqm: number;
+    avg_price_sqft: number;
 };
 
 /**
@@ -7731,9 +8225,9 @@ export type ProjectUnitComposition = {
      */
     percentage: number;
     /**
-     * Avg Area Sqm
+     * Avg Area Sqft
      */
-    avg_area_sqm: number | null;
+    avg_area_sqft: number | null;
 };
 
 /**
@@ -7757,6 +8251,89 @@ export type PropertyTypeBreakdown = {
      */
     pct_of_total: number;
 };
+
+/**
+ * RadarBuildingPin
+ *
+ * Property Finder tower coordinate with linked DLD/Ejari activity.
+ */
+export type RadarBuildingPin = {
+    /**
+     * Location Id
+     */
+    location_id: string;
+    /**
+     * Source Location Id
+     */
+    source_location_id: string;
+    /**
+     * Building Name
+     */
+    building_name: string;
+    /**
+     * Project Name
+     */
+    project_name?: string | null;
+    /**
+     * Area Name
+     */
+    area_name: string;
+    /**
+     * Latitude
+     */
+    latitude: number;
+    /**
+     * Longitude
+     */
+    longitude: number;
+    /**
+     * Coordinate Source
+     */
+    coordinate_source?: string;
+    /**
+     * Coordinate Precision
+     */
+    coordinate_precision?: string;
+    /**
+     * Matched Source Signatures
+     */
+    matched_source_signatures?: number;
+    /**
+     * Sales Transaction Count
+     */
+    sales_transaction_count?: number;
+    /**
+     * Rental Contract Count
+     */
+    rental_contract_count?: number;
+    /**
+     * Total Sales Volume
+     */
+    total_sales_volume?: number;
+    /**
+     * Median Sale Price
+     */
+    median_sale_price?: number | null;
+    /**
+     * Median Annual Rent
+     */
+    median_annual_rent?: number | null;
+    /**
+     * Listing Inventory Count
+     */
+    listing_inventory_count?: number;
+    /**
+     * Last Activity Date
+     */
+    last_activity_date?: string | null;
+};
+
+/**
+ * RadarPeriodDays
+ *
+ * Supported Radar windows, parsed from their query-string representation.
+ */
+export type RadarPeriodDays = 30 | 90 | 180 | 365;
 
 /**
  * RegTypeBreakdown
@@ -7887,6 +8464,8 @@ export type RentalContractListResponse = {
 
 /**
  * RentalContractResponse
+ *
+ * One DXBI lease of one unit (dxbi_rental_events): sizes in sq ft, amounts in AED.
  */
 export type RentalContractResponse = {
     /**
@@ -7894,69 +8473,57 @@ export type RentalContractResponse = {
      */
     contract_id: string;
     /**
-     * Contract Start Date
+     * Lease Start
      */
-    contract_start_date?: string | null;
+    lease_start?: string | null;
     /**
-     * Contract End Date
+     * Lease End
      */
-    contract_end_date?: string | null;
+    lease_end?: string | null;
     /**
-     * Ejari Property Type En
+     * Unit Number
      */
-    ejari_property_type_en?: string | null;
+    unit_number?: string | null;
     /**
-     * Ejari Property Sub Type En
+     * Building Name
      */
-    ejari_property_sub_type_en?: string | null;
+    building_name?: string | null;
     /**
-     * Tenant Type En
+     * Project Name
      */
-    tenant_type_en?: string | null;
+    project_name?: string | null;
     /**
-     * Contract Reg Type En
+     * Location Name
      */
-    contract_reg_type_en?: string | null;
+    location_name?: string | null;
     /**
-     * Area Name En
+     * Property Type
      */
-    area_name_en?: string | null;
+    property_type?: string | null;
     /**
-     * Project Name En
+     * Bedrooms
      */
-    project_name_en?: string | null;
+    bedrooms?: string | null;
     /**
-     * Actual Area
+     * Size Sqft
      */
-    actual_area?: number | null;
+    size_sqft?: number | null;
     /**
-     * Annual Amount
+     * Annual Rent Aed
      */
-    annual_amount?: number | null;
+    annual_rent_aed?: number | null;
     /**
-     * Contract Amount
+     * Contract Amount Aed
      */
-    contract_amount?: number | null;
+    contract_amount_aed?: number | null;
     /**
-     * No Of Prop
+     * Term Months
      */
-    no_of_prop?: number | null;
+    term_months?: number | null;
     /**
-     * Is Free Hold
+     * Contract Type
      */
-    is_free_hold?: boolean | null;
-    /**
-     * Nearest Landmark En
-     */
-    nearest_landmark_en?: string | null;
-    /**
-     * Nearest Metro En
-     */
-    nearest_metro_en?: string | null;
-    /**
-     * Nearest Mall En
-     */
-    nearest_mall_en?: string | null;
+    contract_type?: string | null;
 };
 
 /**
@@ -8106,9 +8673,9 @@ export type RoomAnalytics = {
      */
     avg_sale_price: number;
     /**
-     * Avg Sale Price Sqm
+     * Avg Sale Price Sqft
      */
-    avg_sale_price_sqm: number;
+    avg_sale_price_sqft: number;
     /**
      * Rental Count
      */
@@ -8118,9 +8685,9 @@ export type RoomAnalytics = {
      */
     median_annual_rent: number;
     /**
-     * Median Rent Sqm
+     * Median Rent Sqft
      */
-    median_rent_sqm: number;
+    median_rent_sqft: number;
     /**
      * Gross Yield Pct
      */
@@ -8837,6 +9404,8 @@ export type TransactionListResponse = {
 
 /**
  * TransactionResponse
+ *
+ * One DXBI sale (dxbi_sales_unit_events): sizes in sq ft, prices in AED.
  */
 export type TransactionResponse = {
     /**
@@ -8844,69 +9413,49 @@ export type TransactionResponse = {
      */
     transaction_id: string;
     /**
-     * Instance Date
+     * Transaction Date
      */
-    instance_date?: string | null;
+    transaction_date?: string | null;
     /**
-     * Trans Group En
+     * Unit Number
      */
-    trans_group_en?: string | null;
+    unit_number?: string | null;
     /**
-     * Procedure Name En
+     * Building Name
      */
-    procedure_name_en?: string | null;
+    building_name?: string | null;
     /**
-     * Property Type En
+     * Project Name
      */
-    property_type_en?: string | null;
+    project_name?: string | null;
     /**
-     * Property Sub Type En
+     * Location Name
      */
-    property_sub_type_en?: string | null;
+    location_name?: string | null;
     /**
-     * Rooms En
+     * Property Type
      */
-    rooms_en?: string | null;
+    property_type?: string | null;
     /**
-     * Area Name En
+     * Bedrooms
      */
-    area_name_en?: string | null;
+    bedrooms?: string | null;
     /**
-     * Project Name En
+     * Status
      */
-    project_name_en?: string | null;
+    status?: string | null;
     /**
-     * Building Name En
+     * Size Sqft
      */
-    building_name_en?: string | null;
+    size_sqft?: number | null;
     /**
-     * Procedure Area
+     * Price Aed
      */
-    procedure_area?: number | null;
+    price_aed?: number | null;
     /**
-     * Actual Worth
+     * Price Per Sqft Aed
      */
-    actual_worth?: number | null;
-    /**
-     * Meter Sale Price
-     */
-    meter_sale_price?: number | null;
-    /**
-     * Reg Type En
-     */
-    reg_type_en?: string | null;
-    /**
-     * Nearest Landmark En
-     */
-    nearest_landmark_en?: string | null;
-    /**
-     * Nearest Metro En
-     */
-    nearest_metro_en?: string | null;
-    /**
-     * Nearest Mall En
-     */
-    nearest_mall_en?: string | null;
+    price_per_sqft_aed?: number | null;
 };
 
 /**
@@ -9903,6 +10452,31 @@ export type AnalyticsGetProjectPriceDistributionEndpointResponses = {
 };
 
 export type AnalyticsGetProjectPriceDistributionEndpointResponse = AnalyticsGetProjectPriceDistributionEndpointResponses[keyof AnalyticsGetProjectPriceDistributionEndpointResponses];
+
+export type AnalyticsGetMarketMetricsEndpointData = {
+    body: MarketMetricsRequest;
+    path?: never;
+    query?: never;
+    url: '/api/v1/analytics/market-metrics';
+};
+
+export type AnalyticsGetMarketMetricsEndpointErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type AnalyticsGetMarketMetricsEndpointError = AnalyticsGetMarketMetricsEndpointErrors[keyof AnalyticsGetMarketMetricsEndpointErrors];
+
+export type AnalyticsGetMarketMetricsEndpointResponses = {
+    /**
+     * Successful Response
+     */
+    200: MarketMetricsResponse;
+};
+
+export type AnalyticsGetMarketMetricsEndpointResponse = AnalyticsGetMarketMetricsEndpointResponses[keyof AnalyticsGetMarketMetricsEndpointResponses];
 
 export type AreasAreasListData = {
     body?: never;
@@ -11268,99 +11842,81 @@ export type FiltersGetSalesFilterOptionsData = {
         /**
          * Property Usage
          *
-         * Residential or Commercial
+         * Residential or Commercial (grouped from DXBI property types)
          */
-        property_usage?: string;
-        /**
-         * Project
-         *
-         * Filter buildings by project
-         */
-        project?: string;
-        /**
-         * Filter Type
-         *
-         * Project filter type: master, virtual_master, or project
-         */
-        filter_type?: string;
+        property_usage?: string | null;
         /**
          * Property Type
          *
-         * Filter subtypes and rooms
+         * DXBI property type
          */
-        property_type?: string;
+        property_type?: string | null;
         /**
-         * Property Sub Type
+         * Bedrooms
          *
-         * Filter by property sub-type
+         * 'Studio', '1 Bed', '2 Beds', ...
          */
-        property_sub_type?: string;
+        bedrooms?: string | null;
         /**
-         * Rooms
+         * Status
          *
-         * Filter by room count
+         * Off-Plan or Ready
          */
-        rooms?: string;
+        status?: string | null;
         /**
-         * Registration Type
+         * Location
          *
-         * Filter by registration type
+         * DXBI area or community: every record its DXBI area page counts
          */
-        registration_type?: string;
-        /**
-         * Area
-         *
-         * Filter by area
-         */
-        area?: string;
+        location?: string | null;
         /**
          * Building
          *
-         * Filter by building
+         * DXBI building name
          */
-        building?: string;
+        building?: string | null;
         /**
          * Timeframe Days
          *
-         * Days back from today
+         * Last N calendar days, today included
          */
-        timeframe_days?: number;
+        timeframe_days?: number | null;
         /**
-         * Area Min
+         * Size Min
          *
-         * Minimum property area (sqm)
+         * Minimum size (sq ft), inclusive
          */
-        area_min?: number;
+        size_min?: number | null;
         /**
-         * Area Max
+         * Size Max
          *
-         * Maximum property area (sqm)
+         * Maximum size (sq ft), exclusive
          */
-        area_max?: number;
+        size_max?: number | null;
         /**
          * Price Min
          *
-         * Minimum price
+         * Minimum price (AED), inclusive
          */
-        price_min?: number;
+        price_min?: number | null;
         /**
          * Price Max
          *
-         * Maximum price
+         * Maximum price (AED), exclusive
          */
-        price_max?: number;
+        price_max?: number | null;
         /**
-         * Price Per Sqm Min
+         * Price Per Sqft Min
          *
-         * Minimum price per sqm
+         * Minimum price per sq ft (AED), inclusive
          */
-        price_per_sqm_min?: number;
+        price_per_sqft_min?: number | null;
         /**
-         * Price Per Sqm Max
+         * Price Per Sqft Max
          *
-         * Maximum price per sqm
+         * Maximum price per sq ft (AED), exclusive
          */
-        price_per_sqm_max?: number;
+        price_per_sqft_max?: number | null;
     };
     url: '/api/v1/filters/sales';
 };
@@ -11390,81 +11946,69 @@ export type FiltersGetRentalFilterOptionsData = {
         /**
          * Property Usage
          *
-         * Residential or Commercial
+         * Residential or Commercial (grouped from DXBI property types)
          */
-        property_usage?: string;
-        /**
-         * Project
-         *
-         * Filter buildings by project
-         */
-        project?: string;
-        /**
-         * Filter Type
-         *
-         * Project filter type: master, virtual_master, or project
-         */
-        filter_type?: string;
+        property_usage?: string | null;
         /**
          * Property Type
          *
-         * Filter subtypes
+         * DXBI property type
          */
-        property_type?: string;
+        property_type?: string | null;
         /**
-         * Property Sub Type
+         * Bedrooms
          *
-         * Filter by property sub-type
+         * 'Studio', '1 Bed', '2 Beds', ...
          */
-        property_sub_type?: string;
+        bedrooms?: string | null;
         /**
-         * Tenant Type
+         * Contract Type
          *
-         * Filter by tenant type
+         * New or Renewed
          */
-        tenant_type?: string;
+        contract_type?: string | null;
         /**
-         * Contract Reg Type
+         * Location
          *
-         * Filter by contract registration type
+         * DXBI area or community: every record its DXBI area page counts
          */
-        contract_reg_type?: string;
+        location?: string | null;
         /**
-         * Area
+         * Building
          *
-         * Filter by area
+         * DXBI building name
          */
-        area?: string;
+        building?: string | null;
         /**
          * Timeframe Days
          *
-         * Days back from today
+         * Leases starting in the last N calendar days, today included
          */
-        timeframe_days?: number;
+        timeframe_days?: number | null;
         /**
-         * Area Min
+         * Size Min
          *
-         * Minimum property area (sqm)
+         * Minimum size (sq ft), inclusive
          */
-        area_min?: number;
+        size_min?: number | null;
         /**
-         * Area Max
+         * Size Max
          *
-         * Maximum property area (sqm)
+         * Maximum size (sq ft), exclusive
          */
-        area_max?: number;
+        size_max?: number | null;
         /**
          * Rent Min
          *
-         * Minimum annual rent
+         * Minimum annual rent (AED), inclusive
          */
-        rent_min?: number;
+        rent_min?: number | null;
         /**
          * Rent Max
          *
-         * Maximum annual rent
+         * Maximum annual rent (AED), exclusive
          */
-        rent_max?: number;
+        rent_max?: number | null;
     };
     url: '/api/v1/filters/rentals';
 };
@@ -12149,6 +12693,60 @@ export type OrganizationUpdateUserResponses = {
 
 export type OrganizationUpdateUserResponse = OrganizationUpdateUserResponses[keyof OrganizationUpdateUserResponses];
 
+export type ProjectsProjectDeliverySummaryData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Location
+         */
+        location?: string | null;
+        /**
+         * Project Status
+         */
+        project_status?: Array<string>;
+        /**
+         * Delivery Status
+         */
+        delivery_status?: Array<'missing_date' | 'overdue' | 'scheduled_in_horizon' | 'scheduled_later' | 'completed' | 'cancelled'>;
+        /**
+         * Group By
+         */
+        group_by?: 'developer' | 'delivery_status' | 'delivery_year' | 'project';
+        /**
+         * Horizon Months
+         */
+        horizon_months?: number;
+        /**
+         * Reference Date
+         */
+        reference_date?: string | null;
+        /**
+         * Limit
+         */
+        limit?: number;
+    };
+    url: '/api/v1/projects/delivery-summary';
+};
+
+export type ProjectsProjectDeliverySummaryErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ProjectsProjectDeliverySummaryError = ProjectsProjectDeliverySummaryErrors[keyof ProjectsProjectDeliverySummaryErrors];
+
+export type ProjectsProjectDeliverySummaryResponses = {
+    /**
+     * Successful Response
+     */
+    200: DeliverySummaryResponse;
+};
+
+export type ProjectsProjectDeliverySummaryResponse = ProjectsProjectDeliverySummaryResponses[keyof ProjectsProjectDeliverySummaryResponses];
+
 export type ProjectsListProjectsData = {
     body?: never;
     path?: never;
@@ -12178,11 +12776,9 @@ export type ProjectsProjectRadarData = {
          */
         limit?: number;
         /**
-         * Period Days
-         *
          * Trailing DLD/Ejari activity window in days (maximum 365)
          */
-        period_days?: 30 | 90 | 180 | 365;
+        period_days?: RadarPeriodDays;
     };
     url: '/api/v1/projects/radar';
 };
@@ -12210,11 +12806,9 @@ export type ProjectsProjectRadarOverviewData = {
     path?: never;
     query?: {
         /**
-         * Period Days
-         *
          * Trailing DLD/Ejari activity window in days (maximum 365)
          */
-        period_days?: 30 | 90 | 180 | 365;
+        period_days?: RadarPeriodDays;
     };
     url: '/api/v1/projects/radar/overview';
 };
@@ -12284,11 +12878,9 @@ export type ProjectsProjectRadarPinsData = {
          */
         limit?: number;
         /**
-         * Period Days
-         *
          * Trailing DLD/Ejari activity window in days (maximum 365)
          */
-        period_days?: 30 | 90 | 180 | 365;
+        period_days?: RadarPeriodDays;
     };
     url: '/api/v1/projects/radar/pins';
 };
@@ -12312,6 +12904,68 @@ export type ProjectsProjectRadarPinsResponses = {
 };
 
 export type ProjectsProjectRadarPinsResponse = ProjectsProjectRadarPinsResponses[keyof ProjectsProjectRadarPinsResponses];
+
+export type ProjectsRadarBuildingPinsData = {
+    body?: never;
+    path?: never;
+    query: {
+        /**
+         * West
+         *
+         * Viewport west longitude
+         */
+        west: number;
+        /**
+         * South
+         *
+         * Viewport south latitude
+         */
+        south: number;
+        /**
+         * East
+         *
+         * Viewport east longitude
+         */
+        east: number;
+        /**
+         * North
+         *
+         * Viewport north latitude
+         */
+        north: number;
+        /**
+         * Limit
+         *
+         * Maximum tower pins
+         */
+        limit?: number;
+        /**
+         * Trailing DLD/Ejari activity window in days (maximum 365)
+         */
+        period_days?: RadarPeriodDays;
+    };
+    url: '/api/v1/projects/radar/building-pins';
+};
+
+export type ProjectsRadarBuildingPinsErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ProjectsRadarBuildingPinsError = ProjectsRadarBuildingPinsErrors[keyof ProjectsRadarBuildingPinsErrors];
+
+export type ProjectsRadarBuildingPinsResponses = {
+    /**
+     * Response Projects-Radar Building Pins
+     *
+     * Successful Response
+     */
+    200: Array<RadarBuildingPin>;
+};
+
+export type ProjectsRadarBuildingPinsResponse = ProjectsRadarBuildingPinsResponses[keyof ProjectsRadarBuildingPinsResponses];
 
 export type ProjectsMasterProjectData = {
     body?: never;
@@ -12700,99 +13354,81 @@ export type TransactionsGetSalesTransactionsData = {
         /**
          * Property Usage
          *
-         * Residential or Commercial
+         * Residential or Commercial (grouped from DXBI property types)
          */
-        property_usage?: string;
+        property_usage?: string | null;
         /**
          * Property Type
          *
-         * Property type
+         * DXBI property type
          */
-        property_type?: string;
+        property_type?: string | null;
         /**
-         * Property Sub Type
+         * Bedrooms
          *
-         * Property sub-type
+         * 'Studio', '1 Bed', '2 Beds', ...
          */
-        property_sub_type?: string;
+        bedrooms?: string | null;
         /**
-         * Rooms
+         * Status
          *
-         * Number of rooms
+         * Off-Plan or Ready
          */
-        rooms?: string;
+        status?: string | null;
         /**
-         * Registration Type
+         * Location
          *
-         * Registration type
+         * DXBI area or community: every record its DXBI area page counts
          */
-        registration_type?: string;
-        /**
-         * Area
-         *
-         * Area name
-         */
-        area?: string;
-        /**
-         * Project
-         *
-         * Project name
-         */
-        project?: string;
-        /**
-         * Filter Type
-         *
-         * Project filter type: master, virtual_master, or project
-         */
-        filter_type?: string;
+        location?: string | null;
         /**
          * Building
          *
-         * Building name
+         * DXBI building name
          */
-        building?: string;
+        building?: string | null;
         /**
          * Timeframe Days
          *
-         * Days back from today
+         * Last N calendar days, today included
          */
-        timeframe_days?: number;
+        timeframe_days?: number | null;
         /**
-         * Area Min
+         * Size Min
          *
-         * Minimum property area (sqm)
+         * Minimum size (sq ft), inclusive
          */
-        area_min?: number;
+        size_min?: number | null;
         /**
-         * Area Max
+         * Size Max
          *
-         * Maximum property area (sqm)
+         * Maximum size (sq ft), exclusive
          */
-        area_max?: number;
+        size_max?: number | null;
         /**
          * Price Min
          *
-         * Minimum price
+         * Minimum price (AED), inclusive
          */
-        price_min?: number;
+        price_min?: number | null;
         /**
          * Price Max
          *
-         * Maximum price
+         * Maximum price (AED), exclusive
          */
-        price_max?: number;
+        price_max?: number | null;
         /**
-         * Price Per Sqm Min
+         * Price Per Sqft Min
          *
-         * Minimum price per sqm
+         * Minimum price per sq ft (AED), inclusive
          */
-        price_per_sqm_min?: number;
+        price_per_sqft_min?: number | null;
         /**
-         * Price Per Sqm Max
+         * Price Per Sqft Max
          *
-         * Maximum price per sqm
+         * Maximum price per sq ft (AED), exclusive
          */
-        price_per_sqm_max?: number;
+        price_per_sqft_max?: number | null;
     };
     url: '/api/v1/transactions/sales';
 };
@@ -12834,81 +13470,69 @@ export type TransactionsGetRentalContractsData = {
         /**
          * Property Usage
          *
-         * Residential or Commercial
+         * Residential or Commercial (grouped from DXBI property types)
          */
-        property_usage?: string;
+        property_usage?: string | null;
         /**
          * Property Type
          *
-         * Property type (ejari)
+         * DXBI property type
          */
-        property_type?: string;
+        property_type?: string | null;
         /**
-         * Property Sub Type
+         * Bedrooms
          *
-         * Property sub-type (ejari)
+         * 'Studio', '1 Bed', '2 Beds', ...
          */
-        property_sub_type?: string;
+        bedrooms?: string | null;
         /**
-         * Tenant Type
+         * Contract Type
          *
-         * Tenant type
+         * New or Renewed
          */
-        tenant_type?: string;
+        contract_type?: string | null;
         /**
-         * Contract Reg Type
+         * Location
          *
-         * Contract registration type
+         * DXBI area or community: every record its DXBI area page counts
          */
-        contract_reg_type?: string;
+        location?: string | null;
         /**
-         * Area
+         * Building
          *
-         * Area name
+         * DXBI building name
          */
-        area?: string;
-        /**
-         * Project
-         *
-         * Project name
-         */
-        project?: string;
-        /**
-         * Filter Type
-         *
-         * Project filter type: master, virtual_master, or project
-         */
-        filter_type?: string;
+        building?: string | null;
         /**
          * Timeframe Days
          *
-         * Days back from today
+         * Leases starting in the last N calendar days, today included
          */
-        timeframe_days?: number;
+        timeframe_days?: number | null;
         /**
-         * Area Min
+         * Size Min
          *
-         * Minimum property area (sqm)
+         * Minimum size (sq ft), inclusive
          */
-        area_min?: number;
+        size_min?: number | null;
         /**
-         * Area Max
+         * Size Max
          *
-         * Maximum property area (sqm)
+         * Maximum size (sq ft), exclusive
          */
-        area_max?: number;
+        size_max?: number | null;
         /**
          * Rent Min
          *
-         * Minimum annual rent
+         * Minimum annual rent (AED), inclusive
          */
-        rent_min?: number;
+        rent_min?: number | null;
         /**
          * Rent Max
          *
-         * Maximum annual rent
+         * Maximum annual rent (AED), exclusive
          */
-        rent_max?: number;
+        rent_max?: number | null;
     };
     url: '/api/v1/transactions/rentals';
 };
@@ -12946,103 +13570,85 @@ export type TransactionsExportSalesTransactionsEndpointData = {
          *
          * Comma-separated transaction IDs (overrides filters and limit)
          */
-        transaction_ids?: string;
+        transaction_ids?: string | null;
         /**
          * Property Usage
          *
-         * Residential or Commercial
+         * Residential or Commercial (grouped from DXBI property types)
          */
-        property_usage?: string;
+        property_usage?: string | null;
         /**
          * Property Type
          *
-         * Property type
+         * DXBI property type
          */
-        property_type?: string;
+        property_type?: string | null;
         /**
-         * Property Sub Type
+         * Bedrooms
          *
-         * Property sub-type
+         * 'Studio', '1 Bed', '2 Beds', ...
          */
-        property_sub_type?: string;
+        bedrooms?: string | null;
         /**
-         * Rooms
+         * Status
          *
-         * Number of rooms
+         * Off-Plan or Ready
          */
-        rooms?: string;
+        status?: string | null;
         /**
-         * Registration Type
+         * Location
          *
-         * Registration type
+         * DXBI area or community: every record its DXBI area page counts
          */
-        registration_type?: string;
-        /**
-         * Area
-         *
-         * Area name
-         */
-        area?: string;
-        /**
-         * Project
-         *
-         * Project name
-         */
-        project?: string;
-        /**
-         * Filter Type
-         *
-         * Project filter type: master, virtual_master, or project
-         */
-        filter_type?: string;
+        location?: string | null;
         /**
          * Building
          *
-         * Building name
+         * DXBI building name
          */
-        building?: string;
+        building?: string | null;
         /**
          * Timeframe Days
          *
-         * Days back from today
+         * Last N calendar days, today included
          */
-        timeframe_days?: number;
+        timeframe_days?: number | null;
         /**
-         * Area Min
+         * Size Min
          *
-         * Minimum property area (sqm)
+         * Minimum size (sq ft), inclusive
          */
-        area_min?: number;
+        size_min?: number | null;
         /**
-         * Area Max
+         * Size Max
          *
-         * Maximum property area (sqm)
+         * Maximum size (sq ft), exclusive
          */
-        area_max?: number;
+        size_max?: number | null;
         /**
          * Price Min
          *
-         * Minimum price
+         * Minimum price (AED), inclusive
          */
-        price_min?: number;
+        price_min?: number | null;
         /**
          * Price Max
          *
-         * Maximum price
+         * Maximum price (AED), exclusive
          */
-        price_max?: number;
+        price_max?: number | null;
         /**
-         * Price Per Sqm Min
+         * Price Per Sqft Min
          *
-         * Minimum price per sqm
+         * Minimum price per sq ft (AED), inclusive
          */
-        price_per_sqm_min?: number;
+        price_per_sqft_min?: number | null;
         /**
-         * Price Per Sqm Max
+         * Price Per Sqft Max
          *
-         * Maximum price per sqm
+         * Maximum price per sq ft (AED), exclusive
          */
-        price_per_sqm_max?: number;
+        price_per_sqft_max?: number | null;
     };
     url: '/api/v1/transactions/sales/export';
 };
@@ -13078,85 +13684,73 @@ export type TransactionsExportRentalContractsEndpointData = {
          *
          * Comma-separated contract IDs (overrides filters and limit)
          */
-        contract_ids?: string;
+        contract_ids?: string | null;
         /**
          * Property Usage
          *
-         * Residential or Commercial
+         * Residential or Commercial (grouped from DXBI property types)
          */
-        property_usage?: string;
+        property_usage?: string | null;
         /**
          * Property Type
          *
-         * Property type (ejari)
+         * DXBI property type
          */
-        property_type?: string;
+        property_type?: string | null;
         /**
-         * Property Sub Type
+         * Bedrooms
          *
-         * Property sub-type (ejari)
+         * 'Studio', '1 Bed', '2 Beds', ...
          */
-        property_sub_type?: string;
+        bedrooms?: string | null;
         /**
-         * Tenant Type
+         * Contract Type
          *
-         * Tenant type
+         * New or Renewed
          */
-        tenant_type?: string;
+        contract_type?: string | null;
         /**
-         * Contract Reg Type
+         * Location
          *
-         * Contract registration type
+         * DXBI area or community: every record its DXBI area page counts
          */
-        contract_reg_type?: string;
+        location?: string | null;
         /**
-         * Area
+         * Building
          *
-         * Area name
+         * DXBI building name
          */
-        area?: string;
-        /**
-         * Project
-         *
-         * Project name
-         */
-        project?: string;
-        /**
-         * Filter Type
-         *
-         * Project filter type: master, virtual_master, or project
-         */
-        filter_type?: string;
+        building?: string | null;
         /**
          * Timeframe Days
          *
-         * Days back from today
+         * Leases starting in the last N calendar days, today included
          */
-        timeframe_days?: number;
+        timeframe_days?: number | null;
         /**
-         * Area Min
+         * Size Min
          *
-         * Minimum property area (sqm)
+         * Minimum size (sq ft), inclusive
          */
-        area_min?: number;
+        size_min?: number | null;
         /**
-         * Area Max
+         * Size Max
          *
-         * Maximum property area (sqm)
+         * Maximum size (sq ft), exclusive
          */
-        area_max?: number;
+        size_max?: number | null;
         /**
          * Rent Min
          *
-         * Minimum annual rent
+         * Minimum annual rent (AED), inclusive
          */
-        rent_min?: number;
+        rent_min?: number | null;
         /**
          * Rent Max
          *
-         * Maximum annual rent
+         * Maximum annual rent (AED), exclusive
          */
-        rent_max?: number;
+        rent_max?: number | null;
     };
     url: '/api/v1/transactions/rentals/export';
 };

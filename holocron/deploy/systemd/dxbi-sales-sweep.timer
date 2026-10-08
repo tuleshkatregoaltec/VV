@@ -1,0 +1,15 @@
+[Unit]
+Description=Schedule the ViteVue DXBI sales location sweep nightly (Dubai time)
+
+[Timer]
+# 03:30 Dubai (GST, UTC+4, no daylight saving) = 23:30 UTC the day before. Runs after the
+# 02:30 Dubai sales scrape on the same account (the shared lock makes it wait if the scrape is
+# still running); about an hour, so done by ~04:30 Dubai, well before Holocron loads DXBI
+# evidence at 10:00 Dubai and before the working day.
+OnCalendar=*-*-* 03:30:00 Asia/Dubai
+Persistent=true
+RandomizedDelaySec=5min
+Unit=dxbi-sales-sweep.service
+
+[Install]
+WantedBy=timers.target

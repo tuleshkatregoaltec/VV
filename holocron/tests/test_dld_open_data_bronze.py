@@ -129,11 +129,17 @@ def test_dld_open_data_bronze_loaders_map_rows(source: str, row_file: str, table
 
     assert result["table_row_counts"] == {table: 1}
     assert any(f"CREATE TABLE IF NOT EXISTS {table}" in sql for sql in clickhouse.commands)
-    delete_sql = next(sql for sql in clickhouse.commands if f"ALTER TABLE `{table}` DELETE" in sql)
+    delete_sql = next(sql for sql in clickhouse.commands if f"DELETE FROM `{table}`" in sql)
     assert "source_system = 'dld_open_data'" in delete_sql
+    # Datasets whose API date filter maps to a stored column must replace by that column:
+    # exact-window matching left duplicates every day the 3-day lookback windows overlapped.
+    # Buildings/lands/units/brokers have no such column, so they keep window matching.
     replace_date_columns = {
         "dld_od_transactions": "instance_date",
         "dld_od_rents": "start_date",
+        "dld_od_projects": "adoption_date",
+        "dld_od_developers": "registration_date",
+        "dld_od_valuations": "instance_date",
     }
     if source in replace_date_columns:
         date_column = replace_date_columns[source]
@@ -188,7 +194,7 @@ def test_dld_rents_bronze_can_replace_by_manifest_configured_registration_date()
     )
 
     assert result["table_row_counts"] == {table: 1}
-    delete_sql = next(sql for sql in clickhouse.commands if f"ALTER TABLE `{table}` DELETE" in sql)
+    delete_sql = next(sql for sql in clickhouse.commands if f"DELETE FROM `{table}`" in sql)
     assert "toDate(`registration_date`) >= toDate('2026-05-05')" in delete_sql
     assert "toDate(`registration_date`) <= toDate('2026-05-06')" in delete_sql
     assert "toDate(`start_date`)" not in delete_sql
@@ -329,10 +335,19 @@ def test_dld_open_data_bronze_clears_zero_row_windows_from_page_metadata() -> No
     )
 
     assert result["table_row_counts"] == {table: 0}
-    delete_sql = next(sql for sql in clickhouse.commands if f"ALTER TABLE `{table}` DELETE" in sql)
+    delete_sql = next(sql for sql in clickhouse.commands if f"DELETE FROM `{table}`" in sql)
     assert "source_system = 'dld_open_data'" in delete_sql
     assert "toDate(`instance_date`) >= toDate('2026-05-05')" in delete_sql
-    assert not clickhouse.insert_calls
+    # No bronze rows, but the empty day is now evidence: verified empty, not unknown.
+    assert [call["table"] for call in clickhouse.insert_calls] == ["source_load_windows"]
+    window = dict(
+        zip(clickhouse.insert_calls[0]["column_names"], clickhouse.insert_calls[0]["rows"][0])
+    )
+    assert (window["window_start"], window["status"], window["rows"]) == (
+        date(2026, 5, 5),
+        "complete",
+        0,
+    )
 
 
 def test_dld_open_data_bronze_rejects_incomplete_chunks_before_mutation() -> None:
@@ -400,7 +415,7 @@ def test_dld_open_data_bronze_loads_first_manual_snapshot_chunk_as_replacement()
     )
 
     delete_sql = next(
-        sql for sql in clickhouse.commands if "ALTER TABLE `dld_od_units_bronze` DELETE" in sql
+        sql for sql in clickhouse.commands if "DELETE FROM `dld_od_units_bronze`" in sql
     )
     assert "source_system = 'dld_open_data'" in delete_sql
     assert "1 = 1" in delete_sql
@@ -449,7 +464,7 @@ def test_dld_open_data_bronze_loads_later_manual_snapshot_chunk_by_row_key() -> 
     )
 
     delete_sql = next(
-        sql for sql in clickhouse.commands if "ALTER TABLE `dld_od_units_bronze` DELETE" in sql
+        sql for sql in clickhouse.commands if "DELETE FROM `dld_od_units_bronze`" in sql
     )
     assert "source_system = 'dld_open_data'" in delete_sql
     assert "`row_key` IN" in delete_sql

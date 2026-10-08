@@ -1,6 +1,8 @@
 import pytest
 
-from app.project import service as project_service
+from app.project import mapping as project_mapping
+from app.project import radar as project_radar
+from app.project import radar_queries as project_radar_queries
 
 
 def test_radar_yield_uses_existing_sale_median_denominator():
@@ -11,12 +13,12 @@ def test_radar_yield_uses_existing_sale_median_denominator():
         "yield_median_annual_rent": 75_000,
     }
 
-    assert project_service._radar_gross_yield_pct(row) == 7.5
+    assert project_radar._radar_gross_yield_pct(row) == 7.5
 
 
 def test_radar_yield_blanks_implausible_or_thin_samples():
     assert (
-        project_service._radar_gross_yield_pct(
+        project_radar._radar_gross_yield_pct(
             {
                 "yield_existing_sale_count": 50,
                 "yield_rental_contract_count": 50,
@@ -27,7 +29,7 @@ def test_radar_yield_blanks_implausible_or_thin_samples():
         is None
     )
     assert (
-        project_service._radar_gross_yield_pct(
+        project_radar._radar_gross_yield_pct(
             {
                 "yield_existing_sale_count": 4,
                 "yield_rental_contract_count": 50,
@@ -40,7 +42,7 @@ def test_radar_yield_blanks_implausible_or_thin_samples():
 
 
 def test_radar_developer_display_prefers_english_and_drops_unmapped_arabic():
-    lookup = project_service._developer_lookup(
+    lookup = project_mapping._developer_lookup(
         [
             {
                 "developer_name_ar": "شركة نخيل (ش.م.خ)",
@@ -49,26 +51,26 @@ def test_radar_developer_display_prefers_english_and_drops_unmapped_arabic():
         ]
     )
 
-    assert project_service._developer_display_name("شركة نخيل (ش.م.خ)", lookup) == "Nakheel"
-    assert project_service._developer_display_name("Meraas", lookup) == "Meraas"
-    assert project_service._developer_display_name("مطور غير معروف", lookup) is None
-    assert project_service._developer_display_list(
+    assert project_mapping._developer_display_name("شركة نخيل (ش.م.خ)", lookup) == "Nakheel"
+    assert project_mapping._developer_display_name("Meraas", lookup) == "Meraas"
+    assert project_mapping._developer_display_name("مطور غير معروف", lookup) is None
+    assert project_mapping._developer_display_list(
         ["شركة نخيل (ش.م.خ)", "Nakheel", "مطور غير معروف", "Meraas"],
         lookup,
     ) == ["Nakheel", "Meraas"]
 
 
 def test_radar_activity_period_is_limited_to_supported_ttm_windows():
-    assert project_service._validated_radar_period_days(30) == 30
-    assert project_service._validated_radar_period_days(365) == 365
+    assert project_radar._validated_radar_period_days(30) == 30
+    assert project_radar._validated_radar_period_days(365) == 365
 
     with pytest.raises(ValueError, match="30, 90, 180, or 365"):
-        project_service._validated_radar_period_days(730)
+        project_radar._validated_radar_period_days(730)
 
 
 def test_radar_queries_use_detailed_activity_sources_and_bound_period_parameter():
-    area_sql = project_service._radar_area_sql(project_service._radar_geo_cte())
-    stats_sql = project_service._radar_stats_sql(project_service._radar_geo_cte())
+    area_sql = project_radar_queries._radar_area_sql(project_radar_queries._radar_geo_cte())
+    stats_sql = project_radar_queries._radar_stats_sql(project_radar_queries._radar_geo_cte())
 
     for sql in (area_sql, stats_sql):
         assert "dxbi_sales_unit_events" in sql
@@ -78,7 +80,7 @@ def test_radar_queries_use_detailed_activity_sources_and_bound_period_parameter(
 
 
 def test_radar_project_coordinates_require_unique_nearby_pf_or_reelly_match():
-    geo_sql = project_service._radar_geo_cte()
+    geo_sql = project_radar_queries._radar_geo_cte()
 
     assert "lowerUTF8(trim(region)) = 'dubai'" in geo_sql
     assert "uniqExact(candidate.canonical_location_id) = 1" in geo_sql
@@ -94,7 +96,7 @@ def test_radar_project_coordinates_require_unique_nearby_pf_or_reelly_match():
 
 
 def test_radar_project_sales_use_approved_offplan_reelly_crosswalk():
-    sql = project_service._radar_project_pins_sql(project_service._radar_geo_cte(), "1")
+    sql = project_radar_queries._radar_project_pins_sql(project_radar_queries._radar_geo_cte(), "1")
 
     assert "offplan_reelly_mapped_source_facts" in sql
     assert "orm.match_status IN ('auto_approved', 'manual_approved')" in sql
@@ -102,7 +104,7 @@ def test_radar_project_sales_use_approved_offplan_reelly_crosswalk():
 
 
 def test_radar_building_query_uses_only_approved_tower_links_and_ready_sales():
-    sql = project_service._radar_building_pins_sql()
+    sql = project_radar_queries._radar_building_pins_sql()
 
     assert "location_type = 'TOWER'" in sql
     assert "gm.target_grain = 'tower'" in sql
@@ -113,7 +115,7 @@ def test_radar_building_query_uses_only_approved_tower_links_and_ready_sales():
 
 
 def test_radar_stats_expose_selected_period_and_compatibility_totals():
-    stats = project_service._radar_stats_from_row(
+    stats = project_radar._radar_stats_from_row(
         {
             "sales_transaction_count": 120,
             "rental_contract_count": 340,

@@ -1,6 +1,6 @@
 <script lang="ts">
 import { workbookStore } from '$lib/feasibility/workbook/store.svelte'
-import { toSqft } from '$lib/utils/units'
+import { fromSqft, perSqft, perSqm, toSqft } from '$lib/utils/units'
 
 function fmt(value: number, digits = 0): string {
 	return value.toLocaleString('en-AE', {
@@ -149,6 +149,22 @@ function setBtrNumber<K extends string>(key: K, raw: string) {
 	const v = Number(raw)
 	s.updateInputs({ [key]: Number.isFinite(v) ? v : 0 } as any)
 }
+
+// The workbook model is in m². This sheet shows and takes square feet: areas typed in sq ft and
+// rates typed in AED per sq ft are stored converted.
+function setAreaFromSqft<K extends keyof typeof workbookStore.inputs>(key: K, raw: string) {
+	const v = Number(raw)
+	workbookStore.updateInputs({ [key]: Number.isFinite(v) ? fromSqft(v) : 0 })
+}
+
+function setBtrRateFromSqft<K extends string>(key: K, raw: string) {
+	const v = Number(raw)
+	s.updateInputs({ [key]: Number.isFinite(v) ? perSqm(v) : 0 } as any)
+}
+
+function round2(value: number): number {
+	return Math.round(value * 100) / 100
+}
 </script>
 
 <div
@@ -240,7 +256,7 @@ function setBtrNumber<K extends string>(key: K, raw: string) {
 			</tr>
 			<tr class={ROW_STD}>
 				<td class="px-1 py-[3px] text-slate-400 text-[10px] text-center">f</td>
-				<td class={LABEL}>BUA <span class="text-slate-400 font-normal italic">(GFA × BUA Multiple + 350 sf × Spaces)</span></td>
+				<td class={LABEL}>BUA <span class="text-slate-400 font-normal italic">(GFA × BUA Multiple + {fmt(toSqft(s.inputs.parkingAreaPerSpaceSqm ?? 30), 0)} sq ft × Spaces)</span></td>
 				<td class={VALUE_BLACK}>{fmt(buaSqft, 0)}</td>
 				<td class={UNIT}>sq ft</td>
 			</tr>
@@ -348,11 +364,11 @@ function setBtrNumber<K extends string>(key: K, raw: string) {
 					data-feasibility-field="parkingAreaPerSpaceSqm"
 				>
 					<input type="number" step="1" min="0" class={INPUT}
-						value={s.inputs.parkingAreaPerSpaceSqm ?? 30}
-						oninput={(e) => setNumber('parkingAreaPerSpaceSqm', e.currentTarget.value)}
+						value={Math.round(toSqft(s.inputs.parkingAreaPerSpaceSqm ?? 30))}
+						oninput={(e) => setAreaFromSqft('parkingAreaPerSpaceSqm', e.currentTarget.value)}
 					/>
 				</td>
-				<td class={UNIT}>sqm</td>
+				<td class={UNIT}>sq ft</td>
 			</tr>
 			<tr class={ROW_STD}>
 				<td class="px-1 py-[3px] text-slate-400 text-[10px] text-center">g</td>
@@ -406,11 +422,11 @@ function setBtrNumber<K extends string>(key: K, raw: string) {
 			<tr class="bg-[#EEF2F7] border-b border-[#B8C4CE]">
 				<th class="px-2 py-[4px] text-left text-[10px] font-semibold text-slate-600 uppercase tracking-wider border-r border-[#D9D9D9]">Type</th>
 				<th class="px-2 py-[4px] text-right text-[10px] font-semibold text-slate-600 uppercase tracking-wider border-r border-[#D9D9D9]">Units</th>
-				<th class="px-2 py-[4px] text-right text-[10px] font-semibold text-slate-600 uppercase tracking-wider border-r border-[#D9D9D9]">Avg Size (sqm)</th>
+				<th class="px-2 py-[4px] text-right text-[10px] font-semibold text-slate-600 uppercase tracking-wider border-r border-[#D9D9D9]">Avg Size (sq ft)</th>
 				<th class="px-2 py-[4px] text-right text-[10px] font-semibold text-slate-600 uppercase tracking-wider border-r border-[#D9D9D9]">Monthly Rent (AED)</th>
 				<th class="px-2 py-[4px] text-right text-[10px] font-semibold text-slate-600 uppercase tracking-wider border-r border-[#D9D9D9]">Annual Rent (AED)</th>
 				<th class="px-2 py-[4px] text-right text-[10px] font-semibold text-slate-600 uppercase tracking-wider border-r border-[#D9D9D9]">Parking</th>
-				<th class="px-2 py-[4px] text-right text-[10px] font-semibold text-slate-600 uppercase tracking-wider">Total Area (sqm)</th>
+				<th class="px-2 py-[4px] text-right text-[10px] font-semibold text-slate-600 uppercase tracking-wider">Total Area (sq ft)</th>
 			</tr>
 		</thead>
 		<tbody>
@@ -423,8 +439,8 @@ function setBtrNumber<K extends string>(key: K, raw: string) {
 						/>
 					</td>
 					<td class="p-0 border-r border-[#E8E8E8]">
-						<input type="number" step="1" class={INPUT} value={cfg.avgSizeSqm}
-							oninput={(e) => updateBtrUnitConfig(cfg.id, { avgSizeSqm: Number(e.currentTarget.value) || 0 })}
+						<input type="number" step="1" class={INPUT} value={Math.round(toSqft(cfg.avgSizeSqm))}
+							oninput={(e) => updateBtrUnitConfig(cfg.id, { avgSizeSqm: fromSqft(Number(e.currentTarget.value) || 0) })}
 						/>
 					</td>
 					<td class="p-0 border-r border-[#E8E8E8]">
@@ -438,7 +454,7 @@ function setBtrNumber<K extends string>(key: K, raw: string) {
 							oninput={(e) => updateBtrUnitConfig(cfg.id, { parkingRatio: Number(e.currentTarget.value) || 0 })}
 						/>
 					</td>
-					<td class="px-2 py-[3px] text-right tabular-nums text-slate-900">{fmt(cfg.units * cfg.avgSizeSqm, 0)}</td>
+					<td class="px-2 py-[3px] text-right tabular-nums text-slate-900">{fmt(toSqft(cfg.units * cfg.avgSizeSqm), 0)}</td>
 				</tr>
 			{/each}
 			{#if btrConfigs.length > 0}
@@ -449,7 +465,7 @@ function setBtrNumber<K extends string>(key: K, raw: string) {
 				<td class="border-r border-[#E8E8E8]"></td>
 				<td class="px-2 py-[3px] text-right tabular-nums text-slate-900 font-semibold border-r border-[#E8E8E8]">{fmtAed(btrConfigs.reduce((acc, c) => acc + c.units * c.monthlyRentAed * 12, 0))}</td>
 				<td class="border-r border-[#E8E8E8]"></td>
-				<td class="px-2 py-[3px] text-right tabular-nums text-slate-900 font-semibold">{fmt(btrConfigs.reduce((acc, c) => acc + c.units * c.avgSizeSqm, 0), 0)}</td>
+				<td class="px-2 py-[3px] text-right tabular-nums text-slate-900 font-semibold">{fmt(toSqft(btrConfigs.reduce((acc, c) => acc + c.units * c.avgSizeSqm, 0)), 0)}</td>
 			</tr>
 			{:else}
 			<tr class="border-b border-[#EBEBEB]">
@@ -462,8 +478,8 @@ function setBtrNumber<K extends string>(key: K, raw: string) {
 	</table>
 	<div class="px-3 py-1.5 text-[10px] bg-[#FFFDE7] border-b border-[#D9D9D9] text-slate-600">
 		<span class="font-medium">Efficiency:</span>
-		Total GLA {fmt(btrTotalGlaSqm, 0)} sqm ({fmt(toSqft(btrTotalGlaSqm), 0)} sf)
-		vs GFA {fmt(s.maxGfaSqm, 0)} sqm ({fmt(gfaSqft, 0)} sf)
+		Total GLA {fmt(toSqft(btrTotalGlaSqm), 0)} sq ft
+		vs GFA {fmt(gfaSqft, 0)} sq ft
 		&nbsp;=&nbsp;
 		<span class={btrGlaAsPctOfGfa > 100 ? 'text-rose-700 font-semibold' : btrGlaAsPctOfGfa >= 75 ? 'text-slate-900 font-semibold' : 'text-amber-700 font-semibold'}>
 			{fmt(btrGlaAsPctOfGfa, 1)}% of GFA
@@ -496,7 +512,7 @@ function setBtrNumber<K extends string>(key: K, raw: string) {
 			{#each s.unitConfigs as cfg (cfg.id)}
 				{@const unitConfigField = `unitConfig:${cfg.id}`}
 				{@const gsaSf = toSqft(cfg.avgSizeSqm)}
-				{@const ppsf = cfg.sellingRatePsqm * 0.092903}
+				{@const ppsf = perSqft(cfg.sellingRatePsqm)}
 				{@const totalGsaSf = toSqft(cfg.units * cfg.avgSizeSqm)}
 				{@const totalRev = cfg.units * cfg.avgSizeSqm * cfg.sellingRatePsqm}
 				<tr class="border-b border-[#EBEBEB]">
@@ -522,7 +538,7 @@ function setBtrNumber<K extends string>(key: K, raw: string) {
 							step="1"
 							class={INPUT}
 							value={Math.round(gsaSf)}
-							oninput={(e) => s.updateUnitConfig(cfg.id, { avgSizeSqm: (Number(e.currentTarget.value) || 0) * 0.092903 })}
+							oninput={(e) => s.updateUnitConfig(cfg.id, { avgSizeSqm: fromSqft(Number(e.currentTarget.value) || 0) })}
 						/>
 					</td>
 					<td
@@ -534,7 +550,7 @@ function setBtrNumber<K extends string>(key: K, raw: string) {
 							step="1"
 							class={INPUT}
 							value={Math.round(ppsf)}
-							oninput={(e) => s.updateUnitConfig(cfg.id, { sellingRatePsqm: (Number(e.currentTarget.value) || 0) / 0.092903 })}
+							oninput={(e) => s.updateUnitConfig(cfg.id, { sellingRatePsqm: perSqm(Number(e.currentTarget.value) || 0) })}
 						/>
 					</td>
 					<td
@@ -560,7 +576,7 @@ function setBtrNumber<K extends string>(key: K, raw: string) {
 				<td class="px-2 py-[4px] text-right tabular-nums font-semibold text-slate-900 border-r border-[#D9D9D9]">{fmt(s.totalUnits, 0)}</td>
 				<td class="px-2 py-[4px] text-right tabular-nums text-slate-500 border-r border-[#D9D9D9]">—</td>
 				<td class="px-2 py-[4px] text-right tabular-nums font-semibold text-slate-900 border-r border-[#D9D9D9]">
-					{s.totalConfiguredAreaSqm > 0 ? fmt(s.averageSellingPricePsqm * 0.092903, 0) : '—'}
+					{s.totalConfiguredAreaSqm > 0 ? fmt(perSqft(s.averageSellingPricePsqm), 0) : '—'}
 				</td>
 				<td class="px-2 py-[4px] text-right tabular-nums font-semibold text-slate-900 border-r border-[#D9D9D9]">{fmt(s.totalParkingSpaces, 0)}</td>
 				<td class="px-2 py-[4px] text-right tabular-nums font-semibold text-slate-900 border-r border-[#D9D9D9]">{fmt(toSqft(s.totalConfiguredAreaSqm), 0)}</td>
@@ -571,8 +587,8 @@ function setBtrNumber<K extends string>(key: K, raw: string) {
 	<!-- GSA vs GFA constraint note -->
 	<div class="px-3 py-1.5 text-[10px] bg-[#FFFDE7] border-b border-[#D9D9D9] text-slate-600">
 		<span class="font-medium">Saleable area:</span>
-		Total GSA {fmt(toSqft(s.totalConfiguredAreaSqm), 0)} sf
-		vs GFA {fmt(gfaSqft, 0)} sf
+		Total GSA {fmt(toSqft(s.totalConfiguredAreaSqm), 0)} sq ft
+		vs GFA {fmt(gfaSqft, 0)} sq ft
 		&nbsp;=&nbsp;
 		<span class={gsaAsPctOfGfa > 100 ? 'text-rose-700 font-semibold' : gsaAsPctOfGfa >= 75 ? 'text-slate-900 font-semibold' : 'text-amber-700 font-semibold'}>
 			{fmt(gsaAsPctOfGfa, 1)}% of GFA
@@ -749,30 +765,30 @@ function setBtrNumber<K extends string>(key: K, raw: string) {
 		<tr class={ROW_STD}>
 			<td class="px-1 py-[3px] text-slate-400 text-[10px] text-center">b</td>
 			<td class={LABEL}>Repairs & Maintenance</td>
-			<td class="p-0"><input type="number" step="5" min="0" class={INPUT} value={s.inputs.btrRepairsMaintenancePsqm ?? 50}
-				oninput={(e) => setBtrNumber('btrRepairsMaintenancePsqm', e.currentTarget.value)} /></td>
-			<td class={UNIT}>AED/sqm/yr</td>
+			<td class="p-0"><input type="number" step="0.5" min="0" class={INPUT} value={round2(perSqft(s.inputs.btrRepairsMaintenancePsqm ?? 50))}
+				oninput={(e) => setBtrRateFromSqft('btrRepairsMaintenancePsqm', e.currentTarget.value)} /></td>
+			<td class={UNIT}>AED/sq ft/yr</td>
 		</tr>
 		<tr class={ROW_STD}>
 			<td class="px-1 py-[3px] text-slate-400 text-[10px] text-center">c</td>
 			<td class={LABEL}>Insurance</td>
-			<td class="p-0"><input type="number" step="1" min="0" class={INPUT} value={s.inputs.btrInsurancePsqm ?? 10}
-				oninput={(e) => setBtrNumber('btrInsurancePsqm', e.currentTarget.value)} /></td>
-			<td class={UNIT}>AED/sqm/yr</td>
+			<td class="p-0"><input type="number" step="0.5" min="0" class={INPUT} value={round2(perSqft(s.inputs.btrInsurancePsqm ?? 10))}
+				oninput={(e) => setBtrRateFromSqft('btrInsurancePsqm', e.currentTarget.value)} /></td>
+			<td class={UNIT}>AED/sq ft/yr</td>
 		</tr>
 		<tr class={ROW_STD}>
 			<td class="px-1 py-[3px] text-slate-400 text-[10px] text-center">d</td>
 			<td class={LABEL}>Service Charge (RERA)</td>
-			<td class="p-0"><input type="number" step="5" min="0" class={INPUT} value={s.inputs.btrServiceChargePsqm ?? 80}
-				oninput={(e) => setBtrNumber('btrServiceChargePsqm', e.currentTarget.value)} /></td>
-			<td class={UNIT}>AED/sqm/yr</td>
+			<td class="p-0"><input type="number" step="0.5" min="0" class={INPUT} value={round2(perSqft(s.inputs.btrServiceChargePsqm ?? 80))}
+				oninput={(e) => setBtrRateFromSqft('btrServiceChargePsqm', e.currentTarget.value)} /></td>
+			<td class={UNIT}>AED/sq ft/yr</td>
 		</tr>
 		<tr class={ROW_STD}>
 			<td class="px-1 py-[3px] text-slate-400 text-[10px] text-center">e</td>
 			<td class={LABEL}>Utilities</td>
-			<td class="p-0"><input type="number" step="5" min="0" class={INPUT} value={s.inputs.btrUtilitiesPsqm ?? 30}
-				oninput={(e) => setBtrNumber('btrUtilitiesPsqm', e.currentTarget.value)} /></td>
-			<td class={UNIT}>AED/sqm/yr</td>
+			<td class="p-0"><input type="number" step="0.5" min="0" class={INPUT} value={round2(perSqft(s.inputs.btrUtilitiesPsqm ?? 30))}
+				oninput={(e) => setBtrRateFromSqft('btrUtilitiesPsqm', e.currentTarget.value)} /></td>
+			<td class={UNIT}>AED/sq ft/yr</td>
 		</tr>
 		<tr class={ROW_STD}>
 			<td class="px-1 py-[3px] text-slate-400 text-[10px] text-center">f</td>
@@ -791,9 +807,9 @@ function setBtrNumber<K extends string>(key: K, raw: string) {
 		<tr class={ROW_STD}>
 			<td class="px-1 py-[3px] text-slate-400 text-[10px] text-center">h</td>
 			<td class={LABEL}>Payroll &amp; Staffing</td>
-			<td class="p-0"><input type="number" step="5" min="0" class={INPUT} value={s.inputs.btrPayrollPsqm ?? 40}
-				oninput={(e) => setBtrNumber('btrPayrollPsqm', e.currentTarget.value)} /></td>
-			<td class={UNIT}>AED/sqm/yr</td>
+			<td class="p-0"><input type="number" step="0.5" min="0" class={INPUT} value={round2(perSqft(s.inputs.btrPayrollPsqm ?? 40))}
+				oninput={(e) => setBtrRateFromSqft('btrPayrollPsqm', e.currentTarget.value)} /></td>
+			<td class={UNIT}>AED/sq ft/yr</td>
 		</tr>
 		<tr class={ROW_STD}>
 			<td class="px-1 py-[3px] text-slate-400 text-[10px] text-center">i</td>
@@ -805,9 +821,9 @@ function setBtrNumber<K extends string>(key: K, raw: string) {
 		<tr class={ROW_STD}>
 			<td class="px-1 py-[3px] text-slate-400 text-[10px] text-center">j</td>
 			<td class={LABEL}>Contract Services</td>
-			<td class="p-0"><input type="number" step="5" min="0" class={INPUT} value={s.inputs.btrContractServicesPsqm ?? 25}
-				oninput={(e) => setBtrNumber('btrContractServicesPsqm', e.currentTarget.value)} /></td>
-			<td class={UNIT}>AED/sqm/yr</td>
+			<td class="p-0"><input type="number" step="0.5" min="0" class={INPUT} value={round2(perSqft(s.inputs.btrContractServicesPsqm ?? 25))}
+				oninput={(e) => setBtrRateFromSqft('btrContractServicesPsqm', e.currentTarget.value)} /></td>
+			<td class={UNIT}>AED/sq ft/yr</td>
 		</tr>
 			</tbody>
 		</table>
@@ -1044,16 +1060,16 @@ function setBtrNumber<K extends string>(key: K, raw: string) {
 			<td class={LABEL_INDENT}>
 				↳ Weighted Avg Rate
 			</td>
-			<td class={VALUE_BLACK}>{s.totalConfiguredAreaSqm > 0 ? fmt(s.totalConfiguredRevenue / s.totalConfiguredAreaSqm, 0) : '—'}</td>
-			<td class={UNIT}>AED/sqm</td>
+			<td class={VALUE_BLACK}>{s.totalConfiguredAreaSqm > 0 ? fmt(perSqft(s.totalConfiguredRevenue / s.totalConfiguredAreaSqm), 0) : '—'}</td>
+			<td class={UNIT}>AED/sq ft</td>
 		</tr>
 		<tr class={ROW_INDENT}>
 			<td class="px-1 py-[3px]"></td>
 			<td class={LABEL_INDENT}>
 				↳ Modelled saleable area
 			</td>
-			<td class={VALUE_BLACK}>{fmt(s.totalConfiguredAreaSqm, 0)}</td>
-			<td class={UNIT}>sqm</td>
+			<td class={VALUE_BLACK}>{fmt(toSqft(s.totalConfiguredAreaSqm), 0)}</td>
+			<td class={UNIT}>sq ft</td>
 		</tr>
 		<tr class={ROW_TOTAL}>
 			<td class="px-1 py-[3px] text-slate-400 text-[10px] text-center">c</td>
@@ -1340,7 +1356,7 @@ function setBtrNumber<K extends string>(key: K, raw: string) {
 			<td class="px-1 py-[3px]"></td>
 			<td class={LABEL_INDENT}>↳ Implied rate</td>
 			<td class={VALUE_BLACK}>{s.maxGfaSqm > 0 ? fmtAed(s.plotAcquisitionCost / toSqft(s.maxGfaSqm)) : '—'}</td>
-			<td class="px-2 py-[3px] text-slate-400 text-[10px] whitespace-nowrap">AED / sqft GFA</td>
+			<td class="px-2 py-[3px] text-slate-400 text-[10px] whitespace-nowrap">AED / sq ft GFA</td>
 		</tr>
 		<tr class={ROW_STD}>
 			<td class="px-1 py-[3px] text-slate-400 text-[10px] text-center">b</td>
@@ -1408,7 +1424,7 @@ function setBtrNumber<K extends string>(key: K, raw: string) {
 		<tr class={ROW_INDENT}>
 			<td class="px-1 py-[3px]"></td>
 			<td class={LABEL_INDENT}>↳ Construction Cost Rate</td>
-			<td class={VALUE_GREEN}>{Math.round(s.inputs.constructionCostPsqmBua * 0.092903)}</td>
+			<td class={VALUE_GREEN}>{Math.round(perSqft(s.inputs.constructionCostPsqmBua))}</td>
 			<td class="px-2 py-[3px] text-slate-400 text-[10px] whitespace-nowrap">↗ Budget</td>
 		</tr>
 		<tr class={ROW_STD}>
@@ -1493,7 +1509,7 @@ function setBtrNumber<K extends string>(key: K, raw: string) {
 				<td class="px-1 py-[3px]"></td>
 				<td class={LABEL}>BUA Rate — All-in (incl. VAT)</td>
 				<td class={VALUE_BLACK}>{fmt(s.buaRateAllIn, 0)}</td>
-				<td class={UNIT}>AED / sqft</td>
+				<td class={UNIT}>AED / sq ft</td>
 			</tr>
 			</tbody>
 		</table>

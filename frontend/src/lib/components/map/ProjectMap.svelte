@@ -10,6 +10,7 @@ import type {
 	ProjectRadarProject
 } from '$lib/api/projects'
 import { colorTheme } from '$lib/stores/preferences.svelte'
+import { toSqft } from '$lib/utils/units'
 
 const LIGHT_MAP_STYLE = 'https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json'
 const DARK_MAP_STYLE = 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json'
@@ -238,9 +239,11 @@ function formatAedCompact(value: number) {
 	return `AED ${(value / 1_000).toFixed(0)}K`
 }
 
-function formatSqmCompact(value: number) {
-	if (!Number.isFinite(value) || value <= 0) return '~'
-	return value >= 1000 ? `${(value / 1000).toFixed(1)}k sqm` : `${Math.round(value)} sqm`
+// DDA plot areas arrive in m²; the map shows square feet like every other page.
+function formatSqftCompact(valueSqm: number) {
+	const sqft = toSqft(valueSqm)
+	if (!Number.isFinite(sqft) || sqft <= 0) return '~'
+	return sqft >= 1000 ? `${(sqft / 1000).toFixed(1)}k sq ft` : `${Math.round(sqft)} sq ft`
 }
 
 function escapeHtml(value: unknown) {
@@ -265,15 +268,15 @@ function ddaParcelPopupHtml(props: Record<string, unknown>) {
 		valuationMin > 0 && valuationMax > 0
 			? `${formatAedCompact(valuationMin)} - ${formatAedCompact(valuationMax)}`
 			: '~'
-	const rateLabel = rateMin > 0 && rateMax > 0 ? `AED ${rateMin}-${rateMax} / sqft` : '~'
+	const rateLabel = rateMin > 0 && rateMax > 0 ? `AED ${rateMin}-${rateMax} / sq ft` : '~'
 	return (
 		`<div style="min-width:210px;font-size:12px;line-height:1.55;">` +
 		`<div style="font-weight:700;color:var(--color-map-popup-fg);">Plot ${plotNumber}</div>` +
-		`<div style="color:var(--color-map-popup-muted);margin-top:2px;">${formatSqmCompact(areaSqm)} · ${communityName}</div>` +
+		`<div style="color:var(--color-map-popup-muted);margin-top:2px;">${formatSqftCompact(areaSqm)} · ${communityName}</div>` +
 		`<div style="margin-top:8px;border-top:1px solid color-mix(in srgb,var(--color-map-popup-muted) 20%,transparent);padding-top:7px;">` +
 		`<div style="color:var(--color-map-popup-muted);">Indicative valuation</div>` +
 		`<div style="font-weight:700;color:var(--color-map-popup-fg);font-size:13px;">${valuationLabel}</div>` +
-		`<div style="color:var(--color-map-popup-muted);margin-top:2px;">${formatSqmCompact(maxGfaSqm)} max GFA · ${rateLabel}</div>` +
+		`<div style="color:var(--color-map-popup-muted);margin-top:2px;">${formatSqftCompact(maxGfaSqm)} max GFA · ${rateLabel}</div>` +
 		`</div>` +
 		`</div>`
 	)

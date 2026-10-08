@@ -5,7 +5,7 @@ import re
 import unicodedata
 from dataclasses import dataclass
 from difflib import SequenceMatcher
-from typing import Literal, Mapping
+from typing import Literal, Mapping, cast
 
 NORMALIZATION_VERSION = 10
 
@@ -221,7 +221,7 @@ def tower_name_variants(value: str) -> tuple[str, ...]:
     raw = (value or "").strip()
     if not raw:
         return ()
-    variants = [raw]
+    variants: list[str] = [raw]
     outside = _PARENTHETICAL.sub(" ", raw).strip(" -")
     if outside and outside != raw:
         variants.append(outside)
@@ -230,16 +230,12 @@ def tower_name_variants(value: str) -> tuple[str, ...]:
 
 
 def tower_match_tokens(value: str) -> tuple[str, ...]:
-    return tuple(
-        word for word in _normalized_words(value) if word not in _TOWER_MATCH_STOP_TOKENS
-    )
+    return tuple(word for word in _normalized_words(value) if word not in _TOWER_MATCH_STOP_TOKENS)
 
 
 def landed_match_tokens(value: str) -> tuple[str, ...]:
     """Return identity-bearing tokens for a villa/townhouse community or phase."""
-    return tuple(
-        word for word in _normalized_words(value) if word not in _LANDED_MATCH_STOP_TOKENS
-    )
+    return tuple(word for word in _normalized_words(value) if word not in _LANDED_MATCH_STOP_TOKENS)
 
 
 def tower_identity_tokens(value: str) -> frozenset[str]:
@@ -406,10 +402,7 @@ class GeographyResolver:
         self,
         nodes: list[LocationNode],
         tower_aliases: Mapping[str, tuple[str, ...]] | None = None,
-        authoritative_tower_aliases: Mapping[
-            tuple[str, str], tuple[str, ...]
-        ]
-        | None = None,
+        authoritative_tower_aliases: Mapping[tuple[str, str], tuple[str, ...]] | None = None,
     ) -> None:
         self._nodes_by_id = {node.canonical_location_id: node for node in nodes}
         self._ancestor_names_by_id = {
@@ -470,9 +463,7 @@ class GeographyResolver:
             self._tower_variants[node.canonical_location_id] = variants
             for variant in variants:
                 for token in set(tower_match_tokens(variant)):
-                    self._tower_token_index.setdefault(token, set()).add(
-                        node.canonical_location_id
-                    )
+                    self._tower_token_index.setdefault(token, set()).add(node.canonical_location_id)
 
     def resolve(self, signature: SourceSignature) -> CrosswalkDecision:
         context = signature.normalized_context
@@ -500,9 +491,7 @@ class GeographyResolver:
                     ),
                     raw_value=signature.building_name,
                     match_method="authoritative_tower_alias",
-                    extra_evidence={
-                        "alias_provenance": "reviewed_or_dld_transaction_consensus"
-                    },
+                    extra_evidence={"alias_provenance": "reviewed_or_dld_transaction_consensus"},
                 )
 
             exact_decision, exact_unresolved = self._resolve_exact_tower(
@@ -647,7 +636,8 @@ class GeographyResolver:
                     extra_evidence={"ranked_candidates": ranked_evidence},
                 )
             if len(candidates) == 1 and (
-                candidates[0].location_type == "COMMUNITY" or source_field == "area"
+                candidates[0].location_type == "COMMUNITY"
+                or source_field == "area"
                 or (
                     signature.is_landed_phase
                     and source_field in {"project", "building_aggregate"}
@@ -677,7 +667,8 @@ class GeographyResolver:
         candidate_ids = {
             candidate_id
             for item in unresolved
-            for candidate_id in item.get("candidate_ids", [])
+            # unresolved entries are built above with candidate_ids as a list of ids.
+            for candidate_id in cast(list[object], item.get("candidate_ids", []))
             if isinstance(candidate_id, str)
         }
         if ranked_evidence:
@@ -792,12 +783,9 @@ class GeographyResolver:
         return None, {
             "source_field": "building",
             "source_value": raw_value,
-            "candidate_ids": [
-                candidate.canonical_location_id for candidate in exact_candidates
-            ],
+            "candidate_ids": [candidate.canonical_location_id for candidate in exact_candidates],
             "parent_supported_ids": [
-                candidate.canonical_location_id
-                for candidate in (supported or structural_supported)
+                candidate.canonical_location_id for candidate in (supported or structural_supported)
             ],
         }
 
@@ -865,9 +853,7 @@ class GeographyResolver:
                     match = _RankedTowerMatch(
                         candidate=candidate,
                         score=score,
-                        method=(
-                            f"alias_{method}" if target_variant != candidate.name else method
-                        ),
+                        method=(f"alias_{method}" if target_variant != candidate.name else method),
                         context_supported=self._has_ancestor_context(candidate, context),
                         source_variant=source_variant,
                         target_variant=target_variant,
@@ -1157,7 +1143,9 @@ class GeographyResolver:
     def _has_ancestor_context(self, candidate: LocationNode, context: set[str]) -> bool:
         if not context:
             return False
-        return bool(self._ancestor_names_by_id.get(candidate.canonical_location_id, set()) & context)
+        return bool(
+            self._ancestor_names_by_id.get(candidate.canonical_location_id, set()) & context
+        )
 
     @staticmethod
     def _approved(

@@ -1,4 +1,5 @@
 from dagster import (
+    AssetChecksDefinition,
     AssetExecutionContext,
     AssetIn,
     AssetsDefinition,
@@ -35,11 +36,13 @@ from holocron.platform.manifests import manifest_s3_key, raw_file_s3_key, raw_ma
 from holocron.platform.resources import ClickHouseResource, ObjectStorageResource
 from holocron.sources.dld_open_data_orchestration import (
     DLD_OPEN_DATA_CHUNK_DEFAULTS,
+    DLD_OPEN_DATA_DATED_INCREMENTAL_DEFAULTS,
     DLD_OPEN_DATA_INCREMENTAL_DEFAULTS,
     DLD_OPEN_DATA_RENTS_FULL_DEFAULTS,
     DLD_OPEN_DATA_RENTS_INCREMENTAL_DEFAULTS,
     resolve_open_data_config,
     write_open_data_checkpoint,
+    write_open_data_watermark,
 )
 from holocron.sources.dld_pulse_historic.assets import (
     DldPulseHistoricBronzeConfig,
@@ -64,7 +67,13 @@ from holocron.sources.news_feeds.assets import (
     hydrate_news_thumbnail_assets,
     publish_news_to_platform,
 )
+from holocron.market.assets import (
+    MARKET_ASSET_CHECKS,
+    market_rental_events_asset,
+    market_sale_events_asset,
+)
 from holocron.silver.assets import silver_rent_contracts_asset, silver_transactions_asset
+from holocron.sources.dxbi.evidence_assets import dxbi_evidence_bronze
 from holocron.sources.reelly_supply.document_assets import (
     ReellyDocumentAssetHydrationConfig,
     hydrate_reelly_document_assets,
@@ -96,10 +105,25 @@ _DLD_OPEN_DATA_JOB_SPECS = (
         DLD_OPEN_DATA_RENTS_INCREMENTAL_DEFAULTS,
         DLD_OPEN_DATA_RENTS_FULL_DEFAULTS,
     ),
-    ("projects", "20 4 * * *", {"mode": "incremental"}, DLD_OPEN_DATA_CHUNK_DEFAULTS),
-    ("valuations", "30 4 * * *", {"mode": "incremental"}, DLD_OPEN_DATA_CHUNK_DEFAULTS),
+    (
+        "projects",
+        "20 4 * * *",
+        DLD_OPEN_DATA_DATED_INCREMENTAL_DEFAULTS,
+        DLD_OPEN_DATA_CHUNK_DEFAULTS,
+    ),
+    (
+        "valuations",
+        "30 4 * * *",
+        DLD_OPEN_DATA_DATED_INCREMENTAL_DEFAULTS,
+        DLD_OPEN_DATA_CHUNK_DEFAULTS,
+    ),
     ("buildings", "40 4 * * *", {"mode": "incremental"}, DLD_OPEN_DATA_CHUNK_DEFAULTS),
-    ("developers", "50 4 * * *", {"mode": "incremental"}, DLD_OPEN_DATA_CHUNK_DEFAULTS),
+    (
+        "developers",
+        "50 4 * * *",
+        DLD_OPEN_DATA_DATED_INCREMENTAL_DEFAULTS,
+        DLD_OPEN_DATA_CHUNK_DEFAULTS,
+    ),
     ("lands", "10 5 * * *", {"mode": "incremental"}, DLD_OPEN_DATA_CHUNK_DEFAULTS),
     ("units", "20 5 * * *", {"mode": "incremental"}, DLD_OPEN_DATA_CHUNK_DEFAULTS),
     ("brokers", "30 5 * * *", {"mode": "incremental"}, DLD_OPEN_DATA_CHUNK_DEFAULTS),
@@ -347,6 +371,11 @@ def _run_bronze_loader(
         s3=object_storage.client(),
         clickhouse=clickhouse.client(),
     )
+    if source.name.startswith("dld_od_"):
+        # The incremental watermark moves only once the window is in bronze.
+        write_open_data_watermark(
+            raw_manifest=raw_manifest, object_storage_client=object_storage.client()
+        )
     return MaterializeResult(
         metadata={
             "source": source.name,
@@ -369,7 +398,14 @@ def build_assets_for_source(source: SourceSpec) -> list[AssetsDefinition]:
     raw_name = _raw_asset_name(source)
     bronze_name = _bronze_asset_name(source)
 
-    @asset(name=raw_name, group_name=source.provider, config_schema=Permissive())
+    # One pool per provider (limit 1 in dagster.yaml): runs sharing a provider's credentials
+    # and quota never call it concurrently, so the in-process limiter holds provider-wide.
+    @asset(
+        name=raw_name,
+        group_name=source.provider,
+        config_schema=Permissive(),
+        pool=f"provider_{source.provider}",
+    )
     def raw_asset(
         context: AssetExecutionContext,
         object_storage: ObjectStorageResource,
@@ -595,6 +631,18 @@ def build_news_feed_assets() -> list[AssetsDefinition]:
 
 def build_silver_assets() -> list[AssetsDefinition]:
     return [silver_transactions_asset, silver_rent_contracts_asset]
+
+
+def build_dxbi_evidence_assets() -> list[AssetsDefinition]:
+    return [dxbi_evidence_bronze]
+
+
+def build_market_assets() -> list[AssetsDefinition]:
+    return [market_sale_events_asset, market_rental_events_asset]
+
+
+def build_market_asset_checks() -> list[AssetChecksDefinition]:
+    return list(MARKET_ASSET_CHECKS)
 
 
 def build_geography_assets() -> list[AssetsDefinition]:
@@ -862,6 +910,15 @@ def build_operational_jobs(sources: Mapping[str, SourceSpec]) -> list[AssetJobDe
             selection=["silver_transactions", "silver_rent_contracts"],
         ),
         define_asset_job(
+            name="dxbi_evidence_load",
+            selection=["dxbi_evidence_bronze"],
+        ),
+        # Asset checks on the market tables run with every rebuild.
+        define_asset_job(
+            name="market_events_refresh",
+            selection=["market_sale_events", "market_rental_events"],
+        ),
+        define_asset_job(
             name="geography_crosswalk_refresh",
             selection=[
                 "geo_location_nodes",
@@ -872,6 +929,12 @@ def build_operational_jobs(sources: Mapping[str, SourceSpec]) -> list[AssetJobDe
             ],
         ),
     ]
+
+
+# Provider schedules stay STOPPED until their source is approved (licensing, quotas, hosts).
+# The market rebuild calls no provider: it republishes what bronze already holds, and the app's
+# ch_transactions / ch_rent_contracts read its release, so it must run wherever they are served.
+_RUNNING_BY_DEFAULT = frozenset({"market_events_refresh"})
 
 
 def build_operational_schedules(
@@ -891,6 +954,10 @@ def build_operational_schedules(
         "silver_rent_contracts_refresh": "10 6 * * *",
         # The combined silver refresh remains available for full warehouse refreshes.
         "silver_refresh": "0 6 * * *",
+        # DXBI report runs finish on the scraper host in the morning (Dubai).
+        "dxbi_evidence_load": "0 10 * * *",
+        # Canonical market layer after DLD (04:00-05:30) and DXBI evidence (10:00).
+        "market_events_refresh": "30 10 * * *",
     }
     return [
         ScheduleDefinition(
@@ -898,7 +965,11 @@ def build_operational_schedules(
             job=jobs_by_name[job_name],
             cron_schedule=cron_schedule,
             execution_timezone=_DUBAI_TIMEZONE,
-            default_status=DefaultScheduleStatus.STOPPED,
+            default_status=(
+                DefaultScheduleStatus.RUNNING
+                if job_name in _RUNNING_BY_DEFAULT
+                else DefaultScheduleStatus.STOPPED
+            ),
         )
         for job_name, cron_schedule in schedule_specs.items()
     ]

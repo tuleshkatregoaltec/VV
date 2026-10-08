@@ -95,12 +95,13 @@ Use `just --list` for the current command list. The main recipes are:
 | `just dev-backend` | Start the FastAPI backend on the host. |
 | `just dev-frontend` | Start the SvelteKit frontend on the host. |
 | `just check-all` | Format backend/frontend, lint backend/frontend, then run backend/frontend tests. This may modify files. |
-| `just test-backend` | Apply migrations and run backend tests. |
+| `just test-backend [args...]` | Run fast backend tests, or the exact pytest selection provided. |
 | `just test-frontend` | Run frontend unit tests. |
 | `just test-e2e` | Run the Playwright e2e suite. |
 | `just test-guards` | Run the mocked route-guard Playwright suite. |
 | `just lint-backend` / `just format-backend` | Run backend Ruff checks or fixes. |
 | `just lint-frontend` / `just format-frontend` | Run frontend Biome checks or formatting. |
+| `just check-frontend` | Run read-only Svelte/TypeScript diagnostics. |
 | `just build-frontend` | Run the frontend production build. |
 | `just generate-client` | Regenerate the frontend API types from the backend OpenAPI schema. |
 | `just load-clickhouse-local` | Load local ClickHouse data and rebuild fact tables. |
@@ -124,7 +125,9 @@ Useful verification pattern:
 Important details:
 
 - `just check-all` is not read-only. It runs format recipes before linting and tests, so inspect `git diff` afterward and stage any intentional formatting changes.
-- `just test-backend` applies migrations before running backend tests.
+- `just test-backend` runs fast tests without migrating the application database.
+- `just test-backend-postgres`, `just test-backend-clickhouse`, and `just test-backend-infrastructure` run real-service integration tests. PostgreSQL and ClickHouse fixtures create uniquely named disposable databases on local services; PostgreSQL applies the complete migration chain. Missing services are failures, not skips.
+- Use the host Node version required by the locked Vite/Svelte dependencies (Node 20.19 or newer); Node 18 cannot run the frontend baseline.
 - Backend tests expect the local service stack to be available when tests need Postgres, auth, ClickHouse, Redis, or object storage.
 - Playwright e2e tests expect local services and the backend to be available. The Playwright config can reuse a running frontend or start the frontend dev server for the test run.
 - Use `just test-e2e` for real browser coverage and `just test-guards` for the mocked route-guard suite.
@@ -134,6 +137,20 @@ Generated client policy:
 - Run `just generate-client` after changing backend routes, request schemas, or response schemas.
 - The script generates `frontend/openapi.json`, runs the frontend OpenAPI generator, and keeps only the generated TypeScript types used by the hand-written frontend API layer.
 - If generated types change, update the relevant files in `frontend/src/lib/api` and `frontend/src/lib/queries` in the same change.
+
+## Continuous Integration
+
+GitHub Actions runs the same `just` recipes offline on every pull request, on pushes to `VV` and on manual dispatch. Jobs use locked dependencies and dummy configuration (`backend/tests/evaluation/offline.env`), make no model calls or telemetry uploads, and fail if a check modifies tracked files.
+
+| Check name | Workflow | Runs |
+| --- | --- | --- |
+| `backend-offline` | `.github/workflows/ai-evaluation.yml` | `just test-backend` (full fast suite including evaluation, architecture and Bun engine parity), `just lint-backend` |
+| `holocron-check` | `.github/workflows/holocron.yml` | `just holocron check` on Python 3.11 with the `admin` extra and `UV_LOCKED=1` |
+| `frontend-check` | `.github/workflows/frontend.yml` | `just lint-frontend`, `just check-frontend`, `just test-frontend`, `just build-frontend` |
+
+These three check names are stable and should become required status checks on `VV`. A repository admin must make that branch-protection change separately. The workflows deliberately have no path filters, because a path-filtered required check never reports and blocks the PR. In CI the engine parity tests fail rather than skip when Bun is missing.
+
+Real-service database integration (`just test-backend-postgres`, `-clickhouse`, `-infrastructure`) and Playwright browser suites are not yet in CI.
 
 ## Git Hooks
 
@@ -222,3 +239,23 @@ Production deployment is separate from the local Compose environment:
 - The frontend production build is for Cloudflare Pages with environment variables injected by that platform.
 - The backend production image is built from `backend/Dockerfile`.
 - Managed production services such as databases, caches, and object storage are external and are not provisioned by this repo.
+
+## AI evaluation and observability
+
+`just ai-benchmark` validates the canonical questions; `just ai-inventory` generates
+the source-derived capability map. Both are offline. `just test-evaluation` checks
+the evaluation infrastructure without model calls or remote telemetry.
+
+`just ai-evaluate` runs real authenticated local HTTP/SSE conversations with the
+configured model, incurring ordinary model usage. Full private evidence goes under
+Git-ignored `.evaluation/`. `just ai-assess --directory /absolute/run` generates
+separate per-dimension findings and a private report; `--reviews` attaches attributed
+semantic review. `just ai-compare --baseline FILE --candidate FILE` checks compatible
+assessments and rejects mutable/unmatched data contexts.
+
+`just ai-export --directory /absolute/run --assessment /absolute/assessment.json`
+creates a metadata-only preview. Only an explicit `--upload` with a locally configured
+LangSmith key publishes it. Production telemetry separately requires
+`AI_TELEMETRY_ENABLED=true`; it defaults off. See [backend/EVALUATION.md](backend/EVALUATION.md)
+for the actual baselines, parameter bindings, privacy boundary, extension workflow,
+remaining remote-ingestion verification and known product capability gaps.

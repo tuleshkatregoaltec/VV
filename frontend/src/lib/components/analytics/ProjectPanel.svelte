@@ -21,7 +21,7 @@ let { selection }: { selection: ProjectSearchItem } = $props()
 
 type AnalysisMode = 'sales' | 'rentals'
 type ConfigSegment = 'all' | 'off_plan' | 'secondary'
-type TrendChartPoint = Pick<ProjectTrendPoint, 'date' | 'avg_price' | 'avg_price_sqm'>
+type TrendChartPoint = Pick<ProjectTrendPoint, 'date' | 'avg_price' | 'avg_price_sqft'>
 
 let subProject = $state<string | null>(null)
 let mode = $state<AnalysisMode>('sales')
@@ -331,9 +331,9 @@ function fmtSignedPct(n: number | null | undefined, digits = 1): string {
 	return `${n > 0 ? '+' : n < 0 ? '−' : ''}${value}%`
 }
 
-function fmtPsf(pricePerSqm: number | null | undefined): string {
-	if (!pricePerSqm || !Number.isFinite(pricePerSqm)) return ''
-	return `AED ${fmtNumber(pricePerSqm / 10.764, 0)} psf`
+function fmtPsf(pricePerSqft: number | null | undefined): string {
+	if (!pricePerSqft || !Number.isFinite(pricePerSqft)) return ''
+	return `AED ${fmtNumber(pricePerSqft, 0)}/sq ft`
 }
 
 function pctTone(value: number | null | undefined) {
@@ -369,7 +369,7 @@ function trendDateKey(point: TrendChartPoint | ProjectForecastPoint): string {
 }
 
 function trendMetric(point: TrendChartPoint | ProjectForecastPoint): number {
-	return mode === 'sales' ? point.avg_price : point.avg_price_sqm
+	return mode === 'sales' ? point.avg_price : point.avg_price_sqft
 }
 
 function getRecordedTrendSeries(): TrendChartPoint[] {
@@ -545,7 +545,7 @@ function buildTrendChart() {
 						label: (context) =>
 							mode === 'sales'
 								? ` ${fmtCurrency(Number(context.parsed.y ?? 0))}`
-								: ` AED ${fmtNumber(Number(context.parsed.y ?? 0), 0)}/sqm`
+								: ` AED ${fmtNumber(Number(context.parsed.y ?? 0), 0)}/sq ft`
 					}
 				}
 			},
@@ -1163,7 +1163,7 @@ onMount(() => {
 				<p class="mt-2.5 text-3xl font-semibold text-fg-1">
 					{fmtCurrency(summary.sales.avg_price)}
 				</p>
-				<p class="mt-1.5 text-sm text-fg-4">{fmtCurrency(summary.sales.avg_price_sqm)}/sqm</p>
+				<p class="mt-1.5 text-sm text-fg-4">{fmtCurrency(summary.sales.avg_price_sqft)}/sq ft</p>
 			</div>
 			<div class="rounded-lg border border-border bg-card px-5 py-4">
 				<p class="text-[11px] uppercase tracking-[0.18em] text-fg-4">Median Annual Rent</p>
@@ -1209,7 +1209,7 @@ onMount(() => {
 							class="rounded-lg px-4 py-1.5 text-sm font-medium transition-colors {mode === 'rentals' ? 'bg-card text-fg-1 shadow-sm' : 'text-fg-3 hover:text-fg-2'}"
 							onclick={() => (mode = 'rentals')}
 						>
-							Price / sqm
+							Price / sq ft
 						</button>
 					</div>
 				</div>
@@ -1362,7 +1362,7 @@ onMount(() => {
 								<th class="border-b border-border pb-2.5 pr-6 text-[11px] font-semibold uppercase tracking-[0.14em] text-fg-4">Config</th>
 								<th class="border-b border-border pb-2.5 pr-6 text-right text-[11px] font-semibold uppercase tracking-[0.14em] text-fg-4">Sales</th>
 								<th class="border-b border-border pb-2.5 pr-6 text-right text-[11px] font-semibold uppercase tracking-[0.14em] text-fg-4">Avg Price</th>
-								<th class="border-b border-border pb-2.5 pr-6 text-right text-[11px] font-semibold uppercase tracking-[0.14em] text-fg-5">Size sqm</th>
+								<th class="border-b border-border pb-2.5 pr-6 text-right text-[11px] font-semibold uppercase tracking-[0.14em] text-fg-5">Size sq ft</th>
 								<th class="border-b border-border pb-2.5 pr-6 text-right text-[11px] font-semibold uppercase tracking-[0.14em] text-fg-4">
 									Momentum<br /><span class="font-normal normal-case tracking-normal text-fg-5">90d shift</span>
 								</th>
@@ -1385,12 +1385,12 @@ onMount(() => {
 									</td>
 									<td class="border-b border-border py-3 pr-6 text-right group-hover:bg-panel">
 										<span class="font-medium text-fg-1">{fmtCurrency(row.avg_sale_price)}</span>
-										{#if row.avg_sale_price_sqm > 0}
-											<br /><span class="text-[11px] text-fg-4">{fmtPsf(row.avg_sale_price_sqm)}</span>
+										{#if row.avg_sale_price_sqft > 0}
+											<br /><span class="text-[11px] text-fg-4">{fmtPsf(row.avg_sale_price_sqft)}</span>
 										{/if}
 									</td>
 									<td class="border-b border-border py-3 pr-6 text-right text-fg-5 group-hover:bg-panel">
-										{row.avg_unit_size_sqm > 0 ? fmtNumber(row.avg_unit_size_sqm, 0) : '—'}
+										{row.avg_unit_size_sqft > 0 ? fmtNumber(row.avg_unit_size_sqft, 0) : '—'}
 									</td>
 									<td class="border-b border-border py-3 pr-6 text-right group-hover:bg-panel">
 										{#if row.sales_momentum_pct == null || !Number.isFinite(row.sales_momentum_pct)}
@@ -1445,7 +1445,7 @@ onMount(() => {
 								<th class="border-b border-border pb-2.5 pr-6 text-[11px] font-semibold uppercase tracking-[0.14em] text-fg-4">Config</th>
 								<th class="border-b border-border pb-2.5 pr-6 text-right text-[11px] font-semibold uppercase tracking-[0.14em] text-fg-4">Contracts</th>
 								<th class="border-b border-border pb-2.5 pr-6 text-right text-[11px] font-semibold uppercase tracking-[0.14em] text-fg-4">Median Rent</th>
-								<th class="border-b border-border pb-2.5 pr-6 text-right text-[11px] font-semibold uppercase tracking-[0.14em] text-fg-4">Rent / sqm</th>
+								<th class="border-b border-border pb-2.5 pr-6 text-right text-[11px] font-semibold uppercase tracking-[0.14em] text-fg-4">Rent / sq ft</th>
 								<th class="border-b border-border pb-2.5 text-right text-[11px] font-semibold uppercase tracking-[0.14em] text-primary">Gross Yield</th>
 							</tr>
 						</thead>
@@ -1456,7 +1456,7 @@ onMount(() => {
 									<td class="border-b border-border py-3 pr-6 text-right text-fg-3 group-hover:bg-panel">{fmtNumber(row.rental_count)}</td>
 									<td class="border-b border-border py-3 pr-6 text-right font-medium text-fg-1 group-hover:bg-panel">{fmtCurrency(row.median_annual_rent)}</td>
 									<td class="border-b border-border py-3 pr-6 text-right text-fg-3 group-hover:bg-panel">
-										{row.median_rent_sqm > 0 ? `AED ${fmtNumber(row.median_rent_sqm, 0)}/sqm` : '—'}
+										{row.median_rent_sqft > 0 ? `AED ${fmtNumber(row.median_rent_sqft, 0)}/sq ft` : '—'}
 									</td>
 									<td class="border-b border-border py-3 text-right font-semibold {pctTone(row.gross_yield_pct)} group-hover:bg-panel">
 										{fmtPct(row.gross_yield_pct)}

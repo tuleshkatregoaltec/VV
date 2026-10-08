@@ -1,8 +1,6 @@
 """PostgreSQL models for application state (not analytics data).
 
-This module re-exports SQLModel classes from their feature modules so Alembic
-and any code importing from `app.postgres.models` continue to work during the
-migration.
+This module explicitly registers domain SQLModel classes for Alembic migrations. Runtime callers import models from their owning domains.
 """
 
 from app.billing.models import Subscription
@@ -15,6 +13,7 @@ from app.crm.import_models import (
     CrmPropertyContactClaim,
 )
 from app.crm.inbound_models import (
+    CrmInboundActivity,
     CrmInboundContact,
     CrmInboundEnquiry,
     CrmInboundImport,
@@ -24,12 +23,14 @@ from app.crm.inbound_models import (
 from app.crm.models import CrmLeadNote, CrmLeadWorkspace, CrmSavedLead
 from app.feasibility.models import FeasibilitySavedStudy
 from app.news.models import NewsArticle
-from app.organization.models import Organization
+from app.organization.models import Organization, OrganizationInvitation, OrganizationMembership
 from app.token_usage.models import UserTokenUsage
 
 __all__ = [
     # Auth & User Management
     "Organization",
+    "OrganizationMembership",
+    "OrganizationInvitation",
     "UserTokenUsage",
     # Billing
     "Subscription",
@@ -51,6 +52,7 @@ __all__ = [
     "CrmInboundContact",
     "CrmInboundEnquiry",
     "CrmInboundNote",
+    "CrmInboundActivity",
     "CrmInboundMatch",
     # Feasibility
     "FeasibilitySavedStudy",

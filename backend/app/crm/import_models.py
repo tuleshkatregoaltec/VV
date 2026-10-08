@@ -2,7 +2,7 @@ from datetime import date, datetime
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field
-from sqlalchemy import DateTime, ForeignKey, Text, UniqueConstraint
+from sqlalchemy import BigInteger, DateTime, ForeignKey, Index, Text, UniqueConstraint, text
 from sqlmodel import JSON, Column, SQLModel
 from sqlmodel import Field as SQLField
 
@@ -73,8 +73,18 @@ class CrmContactList(SQLModel, table=True):
     updated_at: datetime = SQLField(sa_column=Column(DateTime(timezone=True), nullable=False))
 
 
+_CLAIM_PREFERENCE = (
+    "CASE ownership_status WHEN 'former_owner' THEN 6 WHEN 'verified_current_owner' THEN 5"
+    " WHEN 'probable_current_owner' THEN 4 WHEN 'unit_linked_unverified' THEN 3"
+    " WHEN 'conflicting_claim' THEN 2 ELSE 1 END"
+)
+
+
 class CrmPropertyContactClaim(SQLModel, table=True):
     __tablename__ = "crm_property_contact_claims"
+    # Indexes and BIGINT amounts mirror migrations b7d2f4a8c1e6 and d9f4b6c8e3a2, which are the
+    # schema authority; tests compare this model with a freshly migrated database. The ranking
+    # indexes use PostgreSQL-only syntax, so SQLite unit fixtures skip them.
     __table_args__ = (
         UniqueConstraint(
             "import_id",
@@ -82,6 +92,27 @@ class CrmPropertyContactClaim(SQLModel, table=True):
             "source_row_number",
             name="uq_crm_property_contact_claim_source_row",
         ),
+        Index("ix_crm_claim_org_owner", "organization_id", "owner_key"),
+        Index("ix_crm_claim_org_owner_property", "organization_id", "owner_key", "property_key"),
+        Index(
+            "ix_crm_claim_owner_property_preference",
+            "organization_id",
+            "owner_key",
+            "property_key",
+            text(f"({_CLAIM_PREFERENCE}) DESC"),
+            text("confidence_score DESC"),
+            text("transaction_date DESC NULLS LAST"),
+        ).ddl_if(dialect="postgresql"),
+        Index(
+            "ix_crm_claim_list_owner_property_preference",
+            "organization_id",
+            "list_id",
+            "owner_key",
+            "property_key",
+            text(f"({_CLAIM_PREFERENCE}) DESC"),
+            text("confidence_score DESC"),
+            text("transaction_date DESC NULLS LAST"),
+        ).ddl_if(dialect="postgresql"),
     )
 
     id: int | None = SQLField(default=None, primary_key=True)
@@ -103,8 +134,8 @@ class CrmPropertyContactClaim(SQLModel, table=True):
     source_sheet: str
     source_row_number: int
     row_fingerprint: str = SQLField(index=True)
-    owner_key: str = SQLField(index=True)
-    property_key: str = SQLField(index=True)
+    owner_key: str
+    property_key: str
     contact_name: str
     phone_primary: str | None = None
     phone_alternate: str | None = None
@@ -115,7 +146,7 @@ class CrmPropertyContactClaim(SQLModel, table=True):
     unit_number: str = ""
     property_type: str = ""
     transaction_date: date | None = None
-    transaction_price_aed: int | None = None
+    transaction_price_aed: int | None = SQLField(default=None, sa_type=BigInteger)
     party_role: str = ""
     procedure_type: str = ""
     ownership_status: str = SQLField(index=True)
@@ -124,10 +155,10 @@ class CrmPropertyContactClaim(SQLModel, table=True):
     lead_id: str | None = SQLField(default=None, index=True)
     unit_candidate_key: str | None = SQLField(default=None, index=True)
     latest_sale_date: date | None = None
-    latest_sale_price_aed: int | None = None
+    latest_sale_price_aed: int | None = SQLField(default=None, sa_type=BigInteger)
     later_sale_date: date | None = None
     lease_end: date | None = None
-    annual_rent_aed: int | None = None
+    annual_rent_aed: int | None = SQLField(default=None, sa_type=BigInteger)
     evidence: dict[str, Any] = SQLField(
         default_factory=dict,
         sa_column=Column(JSON, nullable=False),
@@ -208,17 +239,17 @@ class CrmContactClaimResponse(BaseModel):
     unit_number: str
     property_type: str
     transaction_date: date | None = None
-    transaction_price_aed: int | None = None
+    transaction_price_aed: int | None = SQLField(default=None, sa_type=BigInteger)
     ownership_status: CrmOwnershipStatus
     confidence_score: int
     match_reason: str
     lead_id: str | None = None
     unit_candidate_key: str | None = None
     latest_sale_date: date | None = None
-    latest_sale_price_aed: int | None = None
+    latest_sale_price_aed: int | None = SQLField(default=None, sa_type=BigInteger)
     later_sale_date: date | None = None
     lease_end: date | None = None
-    annual_rent_aed: int | None = None
+    annual_rent_aed: int | None = SQLField(default=None, sa_type=BigInteger)
     owner_key: str
     duplicate_count: int = 1
     source_rows: list[str] = Field(default_factory=list)
@@ -267,7 +298,7 @@ class CrmOwnerProperty(BaseModel):
     imported_transaction_price_aed: int | None = None
     imported_property_type: str = ""
     latest_sale_date: date | None = None
-    latest_sale_price_aed: int | None = None
+    latest_sale_price_aed: int | None = SQLField(default=None, sa_type=BigInteger)
     registry_sale_date: date | None = None
     registry_sale_price_aed: int | None = None
     registry_property_type: str | None = None
@@ -278,7 +309,7 @@ class CrmOwnerProperty(BaseModel):
     registry_market_status: str | None = None
     later_sale_date: date | None = None
     lease_end: date | None = None
-    annual_rent_aed: int | None = None
+    annual_rent_aed: int | None = SQLField(default=None, sa_type=BigInteger)
     duplicate_count: int = 1
     source_lists: list[str] = Field(default_factory=list)
     source_rows: list[str] = Field(default_factory=list)
@@ -383,15 +414,18 @@ class CrmOwnerWorkspaceSummary(BaseModel):
 
 class CrmOwnerBulkUpdate(BaseModel):
     owner_keys: list[str] = Field(min_length=1, max_length=200)
-    pipeline_status: Literal[
-        "new",
-        "researching",
-        "contact_ready",
-        "contacted",
-        "qualified",
-        "nurture",
-        "won",
-        "closed",
-    ] | None = None
+    pipeline_status: (
+        Literal[
+            "new",
+            "researching",
+            "contact_ready",
+            "contacted",
+            "qualified",
+            "nurture",
+            "won",
+            "closed",
+        ]
+        | None
+    ) = None
     highlight_color: Literal["none", "amber", "green", "blue", "red", "purple"] | None = None
     note: str | None = Field(default=None, max_length=4_000)

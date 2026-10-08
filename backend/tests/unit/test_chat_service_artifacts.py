@@ -2,10 +2,12 @@ from datetime import date
 
 import pytest
 
-from app.chat import service as chat_service
+from app.analytics import chart_queries
+from app.chat import agent as chat_agent
+from app.chat import artifacts as chat_artifacts
 from app.chat.models import Message
-from app.core.market_constants import SQM_TO_SQFT
 from app.listings.models import ListingFiltersResponse, ListingListResponse
+from app.market.reference import SQM_TO_SQFT
 
 
 def test_pydantic_history_includes_rendered_artifact_context():
@@ -51,7 +53,7 @@ def test_pydantic_history_includes_rendered_artifact_context():
         )
     ]
 
-    history = chat_service._convert_to_pydantic_messages(messages)
+    history = chat_agent._convert_to_pydantic_messages(messages)
 
     content = history[0].parts[0].content
     assert "[Rendered card context for follow-up references]" in content
@@ -70,11 +72,11 @@ async def test_resolve_transaction_area_uses_master_project_alias(monkeypatch):
     async def fake_query(sql: str, params: dict[str, object]):
         seen["sql"] = sql
         seen["params"] = params
-        return [{"area_name_en": "Marsa Dubai"}]
+        return [{"location_name": "Marsa Dubai"}]
 
-    monkeypatch.setattr(chat_service, "ch_query", fake_query)
+    monkeypatch.setattr(chart_queries, "ch_query", fake_query)
 
-    area = await chat_service._resolve_transaction_area("Dubai Marina")
+    area = await chart_queries._resolve_transaction_area("Dubai Marina")
 
     assert area == "Marsa Dubai"
     assert "master_project_en" in str(seen["sql"])
@@ -94,9 +96,9 @@ async def test_latest_transaction_date_applies_market_filters(monkeypatch):
         seen["params"] = params
         return [{"max_date": "2026-01-20"}]
 
-    monkeypatch.setattr(chat_service, "ch_query", fake_query)
+    monkeypatch.setattr(chart_queries, "ch_query", fake_query)
 
-    max_date = await chat_service._latest_transaction_date(
+    max_date = await chart_queries._latest_transaction_date(
         property_usage="Residential",
         property_type="Unit",
         area="Marsa Dubai",
@@ -104,8 +106,8 @@ async def test_latest_transaction_date_applies_market_filters(monkeypatch):
 
     assert max_date == date(2026, 1, 20)
     assert "property_usage_en = {property_usage:String}" in str(seen["sql"])
-    assert "property_type_en = {property_type:String}" in str(seen["sql"])
-    assert "area_name_en = {area_name:String}" in str(seen["sql"])
+    assert "property_type = {property_type:String}" in str(seen["sql"])
+    assert "location_name = {area_name:String}" in str(seen["sql"])
     assert seen["params"] == {
         "property_usage": "Residential",
         "property_type": "Unit",
@@ -142,21 +144,21 @@ async def test_market_trend_artifact_anchors_to_latest_matching_transaction_date
                 "period": date(2025, 1, 1),
                 "transaction_count": 10,
                 "avg_price": 1_000_000,
-                "avg_price_sqm": 10_000,
+                "avg_price_sqft": 10_000,
             },
             {
                 "period": date(2026, 1, 1),
                 "transaction_count": 20,
                 "avg_price": 1_200_000,
-                "avg_price_sqm": 12_000,
+                "avg_price_sqft": 12_000,
             },
         ]
 
-    monkeypatch.setattr(chat_service, "_resolve_transaction_area", fake_resolve_area)
-    monkeypatch.setattr(chat_service, "_latest_transaction_date", fake_latest_date)
-    monkeypatch.setattr(chat_service, "ch_query", fake_query)
+    monkeypatch.setattr(chart_queries, "_resolve_transaction_area", fake_resolve_area)
+    monkeypatch.setattr(chart_queries, "_latest_transaction_date", fake_latest_date)
+    monkeypatch.setattr(chart_queries, "ch_query", fake_query)
 
-    artifact = await chat_service._fetch_market_trend_artifact(
+    artifact = await chat_artifacts._fetch_market_trend_artifact(
         {
             "id": "artifact-1",
             "type": "market_trend",
@@ -183,7 +185,7 @@ async def test_market_trend_artifact_anchors_to_latest_matching_transaction_date
     assert artifact["status"] == "ready"
     assert artifact["query"]["area"] == "Marsa Dubai"
     assert artifact["data"]["total_transactions"] == 30
-    assert artifact["data"]["avg_price_sqm_change_pct"] == 20.0
+    assert artifact["data"]["avg_price_sqft_change_pct"] == 20.0
 
 
 @pytest.mark.asyncio
@@ -203,12 +205,12 @@ async def test_listing_artifact_coerces_generic_sale_tool_call_to_rent(monkeypat
             filters=ListingFiltersResponse(),
         )
 
-    monkeypatch.setattr(chat_service, "_resolve_listing_area", fake_resolve_listing_area)
+    monkeypatch.setattr(chat_artifacts, "_resolve_listing_area", fake_resolve_listing_area)
     monkeypatch.setattr(
-        chat_service, "list_listings_from_clickhouse", fake_list_listings_from_clickhouse
+        chat_artifacts, "list_listings_from_clickhouse", fake_list_listings_from_clickhouse
     )
 
-    artifact = await chat_service._fetch_listing_artifact(
+    artifact = await chat_artifacts._fetch_listing_artifact(
         db=object(),
         artifact={
             "id": "artifact-1",
@@ -247,12 +249,12 @@ async def test_listing_artifact_keeps_explicit_sale_request_strict(monkeypatch):
             filters=ListingFiltersResponse(),
         )
 
-    monkeypatch.setattr(chat_service, "_resolve_listing_area", fake_resolve_listing_area)
+    monkeypatch.setattr(chat_artifacts, "_resolve_listing_area", fake_resolve_listing_area)
     monkeypatch.setattr(
-        chat_service, "list_listings_from_clickhouse", fake_list_listings_from_clickhouse
+        chat_artifacts, "list_listings_from_clickhouse", fake_list_listings_from_clickhouse
     )
 
-    artifact = await chat_service._fetch_listing_artifact(
+    artifact = await chat_artifacts._fetch_listing_artifact(
         db=object(),
         artifact={
             "id": "artifact-1",
@@ -309,11 +311,11 @@ async def test_custom_sales_chart_artifact_uses_agent_selected_dimension_and_met
             {"label": "Villa", "value": 850, "record_count": 12},
         ]
 
-    monkeypatch.setattr(chat_service, "_resolve_transaction_scope", fake_resolve_scope)
-    monkeypatch.setattr(chat_service, "_latest_transaction_date", fake_latest_date)
-    monkeypatch.setattr(chat_service, "ch_query", fake_query)
+    monkeypatch.setattr(chart_queries, "_resolve_transaction_scope", fake_resolve_scope)
+    monkeypatch.setattr(chart_queries, "_latest_transaction_date", fake_latest_date)
+    monkeypatch.setattr(chart_queries, "ch_query", fake_query)
 
-    artifact = await chat_service._fetch_custom_chart_artifact(
+    artifact = await chat_artifacts._fetch_custom_chart_artifact(
         {
             "id": "artifact-1",
             "type": "custom_chart",
@@ -339,15 +341,16 @@ async def test_custom_sales_chart_artifact_uses_agent_selected_dimension_and_met
         "area": None,
         "master_project": "Jumeirah Village Circle",
     }
-    assert "property_type_en AS label" in str(seen["sql"])
-    assert "round(avg(meter_sale_price), 0) AS value" in str(seen["sql"])
+    assert "property_type AS label" in str(seen["sql"])
+    # Asked per m², answered per sq ft: one unit everywhere.
+    assert "round(avg(meter_sale_price) / 10.7639, 0) AS value" in str(seen["sql"])
     assert seen["params"]["start_date"] == "2025-11-02"
     assert seen["params"]["end_date"] == "2026-01-31"
     assert artifact["status"] == "ready"
     assert artifact["query"]["area"] == "Jumeirah Village Circle"
     assert artifact["query"]["master_project"] == "Jumeirah Village Circle"
     assert artifact["query"]["chart_type"] == "doughnut"
-    assert artifact["data"]["metric_label"] == "Average price / sqm"
+    assert artifact["data"]["metric_label"] == "Average price / sq ft"
     assert artifact["data"]["points"][0]["label"] == "Unit"
     assert artifact["data"]["summary"]["total_records"] == 52
 
@@ -385,11 +388,11 @@ async def test_custom_sales_chart_artifact_can_rank_bottom_areas_by_sqft_metric(
             {"label": "Dubai Investment Park", "value": 560, "record_count": 80},
         ]
 
-    monkeypatch.setattr(chat_service, "_resolve_transaction_scope", fake_resolve_scope)
-    monkeypatch.setattr(chat_service, "_latest_transaction_date", fake_latest_date)
-    monkeypatch.setattr(chat_service, "ch_query", fake_query)
+    monkeypatch.setattr(chart_queries, "_resolve_transaction_scope", fake_resolve_scope)
+    monkeypatch.setattr(chart_queries, "_latest_transaction_date", fake_latest_date)
+    monkeypatch.setattr(chart_queries, "ch_query", fake_query)
 
-    artifact = await chat_service._fetch_custom_chart_artifact(
+    artifact = await chat_artifacts._fetch_custom_chart_artifact(
         {
             "id": "artifact-1",
             "type": "custom_chart",
@@ -416,7 +419,7 @@ async def test_custom_sales_chart_artifact_can_rank_bottom_areas_by_sqft_metric(
     assert seen["params"]["min_records"] == 25
     assert artifact["query"]["sort_direction"] == "asc"
     assert artifact["query"]["days"] == 365
-    assert artifact["data"]["metric_label"] == "Average price / sqft"
+    assert artifact["data"]["metric_label"] == "Average price / sq ft"
     assert artifact["data"]["sort_direction"] == "asc"
     assert [point["label"] for point in artifact["data"]["points"]] == [
         "International City",
@@ -446,11 +449,11 @@ async def test_custom_area_yield_chart_recomputes_yield_from_sales_and_rentals(
             {"label": "Jabal Ali Industrial Second", "value": 8.62, "record_count": 505},
         ]
 
-    monkeypatch.setattr(chat_service, "_latest_transaction_date", fake_latest_sales_date)
-    monkeypatch.setattr(chat_service, "_latest_rental_contract_date", fake_latest_rental_date)
-    monkeypatch.setattr(chat_service, "ch_query", fake_query)
+    monkeypatch.setattr(chart_queries, "_latest_transaction_date", fake_latest_sales_date)
+    monkeypatch.setattr(chart_queries, "_latest_rental_contract_date", fake_latest_rental_date)
+    monkeypatch.setattr(chart_queries, "ch_query", fake_query)
 
-    artifact = await chat_service._fetch_custom_chart_artifact(
+    artifact = await chat_artifacts._fetch_custom_chart_artifact(
         {
             "id": "artifact-1",
             "type": "custom_chart",
@@ -505,9 +508,9 @@ async def test_latest_rental_contract_date_ignores_future_contracts(monkeypatch)
         seen["params"] = params
         return [{"max_date": "2026-05-13"}]
 
-    monkeypatch.setattr(chat_service, "ch_query", fake_query)
+    monkeypatch.setattr(chart_queries, "ch_query", fake_query)
 
-    max_date = await chat_service._latest_rental_contract_date(
+    max_date = await chart_queries._latest_rental_contract_date(
         property_usage="Residential",
         property_type="Flat",
         area=None,
@@ -555,11 +558,11 @@ async def test_custom_rental_chart_artifact_filters_out_future_contracts(monkeyp
             {"label": "Shop", "value": 5775, "record_count": 5775},
         ]
 
-    monkeypatch.setattr(chat_service, "_resolve_transaction_scope", fake_resolve_scope)
-    monkeypatch.setattr(chat_service, "_latest_rental_contract_date", fake_latest_date)
-    monkeypatch.setattr(chat_service, "ch_query", fake_query)
+    monkeypatch.setattr(chart_queries, "_resolve_transaction_scope", fake_resolve_scope)
+    monkeypatch.setattr(chart_queries, "_latest_rental_contract_date", fake_latest_date)
+    monkeypatch.setattr(chart_queries, "ch_query", fake_query)
 
-    artifact = await chat_service._fetch_custom_chart_artifact(
+    artifact = await chat_artifacts._fetch_custom_chart_artifact(
         {
             "id": "artifact-1",
             "type": "custom_chart",
@@ -644,11 +647,11 @@ async def test_custom_rental_chart_artifact_supports_multi_area_time_series(monk
             },
         ]
 
-    monkeypatch.setattr(chat_service, "_resolve_transaction_scope", fake_resolve_scope)
-    monkeypatch.setattr(chat_service, "_latest_rental_contract_date_for_scopes", fake_latest_date)
-    monkeypatch.setattr(chat_service, "ch_query", fake_query)
+    monkeypatch.setattr(chart_queries, "_resolve_transaction_scope", fake_resolve_scope)
+    monkeypatch.setattr(chart_queries, "_latest_rental_contract_date_for_scopes", fake_latest_date)
+    monkeypatch.setattr(chart_queries, "ch_query", fake_query)
 
-    artifact = await chat_service._fetch_custom_chart_artifact(
+    artifact = await chat_artifacts._fetch_custom_chart_artifact(
         {
             "id": "artifact-1",
             "type": "custom_chart",

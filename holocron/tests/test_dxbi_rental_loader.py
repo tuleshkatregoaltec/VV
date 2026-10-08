@@ -172,7 +172,7 @@ def test_active_refresh_replaces_hidden_overlap_and_keeps_other_history(tmp_path
     from holocron.sources.dxbi.rental_events import normalize_rental_rows
 
     loader = _load_script("load_dxbi_rental_events.py")
-    loader.TABLE = "dxbi_rental_events"
+    setattr(loader, "TABLE", "dxbi_rental_events")
     hidden = _payload("broad", "12345678901234567890")
     hidden["columns"][0]["text"] = hidden["columns"][0]["text"].replace(", No. 1204", "")
     hidden["source_run_id"] = "old"
@@ -219,7 +219,7 @@ def test_invalid_active_refresh_never_exchanges_canonical_data(tmp_path: Path) -
     from types import SimpleNamespace
 
     loader = _load_script("load_dxbi_rental_events.py")
-    loader.TABLE = "dxbi_rental_events"
+    setattr(loader, "TABLE", "dxbi_rental_events")
 
     class ActiveClient(FakeClient):
         commands: list[str] = []
@@ -237,3 +237,55 @@ def test_invalid_active_refresh_never_exchanges_canonical_data(tmp_path: Path) -
     with pytest.raises(RuntimeError, match="previous data retained"):
         loader.load_files([path], client=client, min_start_date=date(2025, 1, 1), batch_size=100)
     assert not any("EXCHANGE" in command for command in client.commands)
+
+
+def test_a_complete_rescrape_replaces_its_window_instead_of_merging(tmp_path: Path) -> None:
+    """Merging kept leases only an older run held: 3,943 August leases from a test run kept
+    Business Bay's August count 12% above DXBInteract's (2026-10-08). A complete re-scrape of a
+    window replaces what is stored for those lease start dates and keeps every other date."""
+    from types import SimpleNamespace
+
+    from holocron.sources.dxbi.rental_events import normalize_rental_rows
+
+    loader = _load_script("load_dxbi_rental_events.py")
+    setattr(loader, "TABLE", "dxbi_rental_events")
+    stale = dict(
+        normalize_rental_rows(
+            [(_payload("broad", "12345678901234567890"), "/old/a.jsonl", "b")]
+        ).events[0]
+    )
+    stale["contract_key"] = "only-in-an-old-run"
+    stale["contract_amount_aed"] += 1
+
+    class ActiveClient(FakeClient):
+        def __init__(self) -> None:
+            super().__init__()
+            self.commands: list[tuple[str, dict | None]] = []
+
+        def query(self, sql, parameters):
+            return SimpleNamespace(named_results=lambda: iter([stale]))
+
+        def command(self, sql, parameters=None):
+            self.commands.append((sql, parameters))
+
+    path = tmp_path / "date=2026-07-01" / "row.jsonl"
+    path.parent.mkdir()
+    path.write_text(json.dumps(_payload("broad", "12345678901234567890")) + "\n")
+    client = ActiveClient()
+
+    totals = loader.load_files(
+        [path],
+        client=client,
+        min_start_date=date(2025, 1, 1),
+        batch_size=100,
+        replace_window=(date(2026, 7, 1), date(2026, 7, 2)),
+    )
+
+    assert totals["loaded_contracts"] == 1  # the new lease only, not the old run's
+    keys = [row[loader.COLUMNS.index("contract_key")] for row in client.inserts[0][1]]
+    assert "only-in-an-old-run" not in keys
+    copy_back, parameters = client.commands[-3]
+    assert parameters is not None
+    # Other dates are copied back; the whole window, 2 July included, is not.
+    assert "NOT (lease_start BETWEEN {first:Date} AND {last:Date})" in copy_back
+    assert (parameters["first"], parameters["last"]) == (date(2026, 7, 1), date(2026, 7, 2))

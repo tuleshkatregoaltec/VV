@@ -1,4 +1,4 @@
-import { analytics, type TimeframeDays } from '$lib/api/analytics'
+import { analytics } from '$lib/api/analytics'
 
 export const analyticsKeys = {
 	all: ['analytics'] as const,
@@ -77,21 +77,4 @@ export const analyticsQueries = {
 		queryFn: () => analytics.projectPriceDistribution(params, regType),
 		staleTime: 5 * 60 * 1000
 	})
-}
-
-export interface SalesTransactionQueryParams {
-	property_usage?: string
-	timeframe_days?: TimeframeDays | number
-	project?: string
-	filter_type?: string
-	building?: string
-	property_type?: string
-	rooms?: string
-	property_sub_type?: string
-	registration_type?: string
-	area?: string
-	price?: string
-	pricePerSqM?: string
-	limit?: number
-	offset?: number
 }
