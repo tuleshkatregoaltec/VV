@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Load a DXBI location sweep: DXBI's locations and the sales each location's search returned.
+"""Load a DXBI location sweep: DXBI's locations and the records each location's search returned.
 
 The input is one completed run of ``scripts/dxbi_location_sweep.py`` (``_SUCCESS``,
-``locations.json`` and ``location=<id>.jsonl.gz``). Both tables are replaced whole and
-atomically, so the Transactions Location filter always reads a single sweep.
+``locations.json`` and ``location=<id>.jsonl.gz``). A sales sweep fills ``dxbi_location_members``,
+a rentals sweep ``dxbi_location_lease_members``; ``dxbi_locations`` is refreshed either way. Each
+table is replaced whole and atomically, so the Transactions Location filter reads one sweep.
 """
 
 from __future__ import annotations
@@ -19,7 +20,7 @@ from typing import Any
 
 import clickhouse_connect
 
-from holocron.sources.dxbi.rental_events import canonical_area_name
+from holocron.sources.dxbi.rental_events import canonical_area_name, normalize_rental_rows
 from holocron.sources.dxbi.sales_units import compact_payload, location_key, normalize_sales_row
 
 logger = logging.getLogger("dxbi_location_members_loader")
@@ -58,6 +59,24 @@ CREATE TABLE IF NOT EXISTS dxbi_location_members (
 ) ENGINE = ReplacingMergeTree(loaded_at)
 ORDER BY (location_id, sale_key)
 """
+LEASE_MEMBERS_TABLE = "dxbi_location_lease_members"
+CREATE_LEASE_MEMBERS_SQL = """
+CREATE TABLE IF NOT EXISTS dxbi_location_lease_members (
+    location_id      UInt32,
+    location_name    String,
+    contract_key     String,
+    lease_start      Date,
+    window_start     Date,
+    window_end       Date,
+    source_run_id    String DEFAULT '',
+    loaded_at        DateTime64(3, 'UTC') DEFAULT now64(3)
+) ENGINE = ReplacingMergeTree(loaded_at)
+ORDER BY (location_id, contract_key)
+"""
+LEASE_MEMBER_COLUMNS = [
+    "location_id", "location_name", "contract_key", "lease_start", "window_start",
+    "window_end", "source_run_id",
+]  # fmt: skip
 LOCATION_COLUMNS = [
     "location_id", "name", "display_name", "slug", "flag", "parent_id", "name_key", "lineage",
     "source_run_id",
@@ -131,6 +150,40 @@ def member_rows(
     return rows, skipped
 
 
+def lease_member_rows(
+    run_dir: Path, names: dict[int, str], run_id: str
+) -> tuple[list[list[object]], int]:
+    """Each swept lease, keyed as the lease loader keys it, with the location that returned it.
+
+    A location's rows are normalized together, so identical leases on one day take the same
+    occurrence numbers (and contract keys) as in the daily load.
+    """
+    rows: list[list[object]] = []
+    skipped = 0
+    for path in sorted(run_dir.glob("location=*.jsonl.gz")):
+        with gzip.open(path, "rt", encoding="utf-8") as handle:
+            records = [json.loads(line) for line in handle]
+        if not records:
+            continue
+        location_id = int(records[0]["source_location"]["id"])
+        window = records[0]["window"]
+        result = normalize_rental_rows([(record, str(path), "") for record in records])
+        skipped += len(result.quarantined)
+        rows.extend(
+            [
+                location_id,
+                names[location_id],
+                event["contract_key"],
+                event["lease_start"],
+                date.fromisoformat(window["start"]),
+                date.fromisoformat(window["end"]),
+                run_id,
+            ]
+            for event in result.events
+        )
+    return rows, skipped
+
+
 def replace_table(
     client: Any, table: str, create_sql: str, rows: list[list[object]], columns: list[str]
 ) -> None:
@@ -165,7 +218,20 @@ def main() -> None:
     names = {
         int(item["id"]): str(item["name"]) for item in items if item.get("flag") in LOCATION_FLAGS
     }
-    members, skipped = member_rows(run_dir, names, run_id)
+    first = next(run_dir.glob("location=*.jsonl.gz"), None)
+    report = "sales"
+    if first is not None:
+        with gzip.open(first, "rt", encoding="utf-8") as handle:
+            line = handle.readline()
+        report = json.loads(line).get("transaction_type", "sales") if line else "sales"
+    if report == "rentals":
+        members, skipped = lease_member_rows(run_dir, names, run_id)
+        table, create_sql, columns = (
+            LEASE_MEMBERS_TABLE, CREATE_LEASE_MEMBERS_SQL, LEASE_MEMBER_COLUMNS
+        )  # fmt: skip
+    else:
+        members, skipped = member_rows(run_dir, names, run_id)
+        table, create_sql, columns = MEMBERS_TABLE, CREATE_MEMBERS_SQL, MEMBER_COLUMNS
 
     client = clickhouse_connect.get_client(
         host=args.host,
@@ -175,9 +241,10 @@ def main() -> None:
         password=args.password,
     )
     replace_table(client, LOCATIONS_TABLE, CREATE_LOCATIONS_SQL, locations, LOCATION_COLUMNS)
-    replace_table(client, MEMBERS_TABLE, CREATE_MEMBERS_SQL, members, MEMBER_COLUMNS)
+    replace_table(client, table, create_sql, members, columns)
     logger.info(
-        "Location members loaded locations=%s members=%s skipped=%s",
+        "Location members loaded report=%s locations=%s members=%s skipped=%s",
+        report,
         len(locations),
         len(members),
         skipped,

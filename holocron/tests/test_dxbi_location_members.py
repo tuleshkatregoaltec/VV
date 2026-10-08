@@ -72,3 +72,48 @@ def test_swept_sales_are_recorded_under_the_location_that_returned_them(tmp_path
     assert (member["building_key"], member["area_key"]) == ("binghattiroyale", "albarshasouth4")
     assert member["transaction_date"] == date(2026, 6, 20)
     assert member["window_end"] == date(2026, 10, 7)
+
+
+def test_a_swept_lease_has_the_contract_key_the_lease_load_gives_it(tmp_path: Path) -> None:
+    """DXBI's rental area pages group leases their own way too; the sweep records them by the
+    lease's contract key, so the key must be the one the daily lease load stores."""
+    from holocron.sources.dxbi.rental_events import normalize_rental_rows
+
+    loader = _load_script("load_dxbi_location_members.py")
+    columns = [
+        {
+            "id": "PATH_NAME",
+            "text": "Binghatti Royale, Jumeirah Village Circle Apartment, No. 1203",
+        },
+        {"id": "PROP_SIZES", "text": "1 Bed 700 sqft"},
+        {"id": "TOTAL_PRICES", "text": "65,000 New"},
+        {"id": "START_DATE", "text": "20 Aug, 2026 - 19 Aug, 2027 12 Months"},
+    ]
+    daily = {
+        "source_account": "account-c",
+        "filter_profile": {"id": "broad"},
+        "source_location": {"id": "1", "text": "Dubai", "slug": "dubai"},
+        "configuration_hash": "95e10242d34cd34fd5d4",
+        "shard": {"date": "2026-08-20"},
+        "source_run_id": "2026-10-07-aug-oct",
+        "columns": columns,
+    }
+    stored = normalize_rental_rows([(daily, "/r/date=2026-08-20/a.jsonl.gz", "account-c")])
+    swept = {
+        "transaction_type": "rentals",
+        "source_location": {"id": "36510", "text": "Jumeirah Village Circle (JVC)"},
+        "window": {"start": "2025-10-01", "end": "2026-10-07"},
+        "columns": columns,
+    }
+    with gzip.open(tmp_path / "location=36510.jsonl.gz", "wt") as handle:
+        handle.write(json.dumps(swept) + "\n")
+
+    rows, skipped = loader.lease_member_rows(tmp_path, {36510: "Jumeirah Village Circle"}, "run")
+
+    assert skipped == 0
+    member = dict(zip(loader.LEASE_MEMBER_COLUMNS, rows[0], strict=True))
+    assert member["contract_key"] == stored.events[0]["contract_key"]
+    assert (member["location_name"], member["lease_start"]) == (
+        "Jumeirah Village Circle",
+        date(2026, 8, 20),
+    )

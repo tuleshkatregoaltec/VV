@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Record the sales DXBInteract's search returns for each of its areas and communities.
+"""Record the sales or leases DXBInteract's search returns for each of its areas and communities.
 
 DXBI's area pages group sales by its own locations: the DLD area, and the master community or
 sub-area inside it. A row prints the location DXBI knows its building by, which can differ from
@@ -66,7 +66,11 @@ def location_list(page: Any) -> list[dict[str, Any]]:
 
 
 def write_location(
-    path: Path, location: dict[str, Any], window: dict[str, str], rows: list[dict[str, Any]]
+    path: Path,
+    location: dict[str, Any],
+    window: dict[str, str],
+    rows: list[dict[str, Any]],
+    report: str = "sales",
 ) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.NamedTemporaryFile(dir=path.parent, delete=False) as raw_handle:
@@ -75,7 +79,7 @@ def write_location(
         with gzip.open(temporary, "wt", encoding="utf-8") as handle:
             for index, row in enumerate(rows, start=1):
                 record = {
-                    "transaction_type": "sales",
+                    "transaction_type": report,
                     "source_location": location,
                     "window": window,
                     "row_index_in_location": index,
@@ -169,7 +173,7 @@ def sweep_location(
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Record the sales DXBInteract returns for each of its areas."
+        description="Record the sales or leases DXBInteract returns for each of its areas."
     )
     parser.add_argument("--credentials", required=True)
     parser.add_argument("--storage-state", required=True)
@@ -180,9 +184,15 @@ def main() -> int:
     parser.add_argument("--template-date", default="2025-07-01")
     parser.add_argument("--delay-min", type=float, default=3.0)
     parser.add_argument("--delay-max", type=float, default=6.0)
+    parser.add_argument(
+        "--report",
+        choices=tuple(REPORTS),
+        default="sales",
+        help="Sales or rentals: DXBI's area pages count each with its own search.",
+    )
     args = parser.parse_args()
 
-    report = REPORTS["sales"]
+    report = REPORTS[args.report]
     window = {"start": args.start_date, "end": args.end_date}
     credentials = json.loads(Path(args.credentials).read_text())
     output_dir: Path = args.output_dir
@@ -241,7 +251,7 @@ def main() -> int:
                     relogin=relogin,
                     delay=(args.delay_min, args.delay_max),
                 )
-                write_location(path, location, window, rows)
+                write_location(path, location, window, rows, args.report)
                 summary["locations"][str(location["id"])] = {
                     "name": location["dv"],
                     "flag": location["flag"],

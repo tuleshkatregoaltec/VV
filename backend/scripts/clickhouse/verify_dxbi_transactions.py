@@ -9,8 +9,9 @@ ft, half-open bands, the date window), and compares the live API with it:
 - totals and the first, a middle and the last page of every period (7-365 days) and usage;
 - every field of every compared row;
 - one page per filter value (types, bedrooms, status / contract type, top locations, buildings),
-  a location holding every record DXBI's area page counts (dxbi_location_members, then the
-  record's building, then its printed area and the areas above it);
+  a location holding every record DXBI's area page counts (dxbi_location_members or
+  dxbi_location_lease_members, then the record's building, then its printed area and the areas
+  above it);
 - every size, price, price per sq ft and rent band, and that the bands' totals add up to the rows
   that have a value (no overlap, no gap);
 - the filter options.
@@ -95,6 +96,13 @@ class Verifier:
             return json.loads(response.read())
 
     # -- independent expectation -------------------------------------------------------------
+    def _table(self, table: str, columns: list[str]) -> pd.DataFrame:
+        """A table's columns, as a frame that keeps them even with no rows: a sweep table stays
+        empty until its first sweep is loaded (the leases' until the lease sweep runs), and an
+        empty result carries no column names."""
+        result = self.ch.query(f"SELECT {', '.join(columns)} FROM {table}")
+        return pd.DataFrame(result.result_rows, columns=columns)
+
     def load(self) -> None:
         names = self.ch.query_df(
             "SELECT area_name, count() AS n FROM (SELECT area_name FROM dxbi_sales_unit_events "
@@ -108,15 +116,17 @@ class Verifier:
             .set_index("k")
             .area_name.to_dict()
         )
-        members = self.ch.query_df(
-            "SELECT location_name, sale_key, building_key, area_key FROM dxbi_location_members"
+        members = self._table(
+            "dxbi_location_members", ["location_name", "sale_key", "building_key", "area_key"]
         )
         self.by_sale = members.groupby("sale_key").location_name.agg(set).to_dict()
         swept = members[members.building_key != ""]
         self.by_building = (
             swept.groupby(["building_key", "area_key"]).location_name.agg(set).to_dict()
         )
-        lineages = self.ch.query_df("SELECT name_key, lineage FROM dxbi_locations")
+        leases = self._table("dxbi_location_lease_members", ["location_name", "contract_key"])
+        self.by_lease = leases.groupby("contract_key").location_name.agg(set).to_dict()
+        lineages = self._table("dxbi_locations", ["name_key", "lineage"])
         self.by_printed: dict[str, set] = {}
         for key, lineage in zip(lineages.name_key, lineages.lineage):
             self.by_printed.setdefault(key, set()).update(lineage)
@@ -281,9 +291,10 @@ class Verifier:
         )
         rentals["location"] = rentals.area_name.map(self._location)
         rentals["locations"] = [
-            self._dxbi_locations(None, _search_key(building), _search_key(area), printed)
-            for building, area, printed in zip(
-                rentals.building_name, rentals.area_name, rentals.location
+            frozenset(self.by_lease.get(key) or ())
+            or self._dxbi_locations(None, _search_key(building), _search_key(area), printed)
+            for key, building, area, printed in zip(
+                rentals.contract_key, rentals.building_name, rentals.area_name, rentals.location
             )
         ]
         rentals["usage"] = rentals.property_type.map(_usage)

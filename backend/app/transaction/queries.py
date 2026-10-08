@@ -86,9 +86,10 @@ _LOCATION = r"""multiIf(
 # Those pages can count a record under a different place than the area printed on it: JVC's page
 # counts buildings printed "Al Barsha South 4", and Dubai Marina's leaves out 27 of 181 sales
 # printed "Dubai Marina" (August 2026). dxbi_location_members holds the sales each location's
-# search returned over the last sweep (holocron/scripts/dxbi_location_sweep.py). A record takes,
-# in order: the locations that returned it; else those that returned other sales in its building;
-# else the location named like its printed area, with the areas above it.
+# search returned over the last sweep (holocron/scripts/dxbi_location_sweep.py), and
+# dxbi_location_lease_members the leases. A record takes, in order: the locations that returned
+# it; else those that returned other sales in its building; else the location named like its
+# printed area, with the areas above it.
 _SEARCH_KEY = r"""replaceRegexpAll(replaceAll(replaceAll(replaceAll(lowerUTF8({value}),
     'jumeriah', 'jumeirah'), 'residences', 'residence'), 'apartments', 'apartment'),
     '[^a-z0-9]+', '')"""
@@ -215,7 +216,7 @@ def _rentals_source(date_clause: str) -> str:
             if(contract_amount_aed > 0, contract_amount_aed, NULL) AS contract_amount_aed,
             contract_term_months AS term_months,
             contract_state AS contract_type,
-            {_DXBI_LOCATIONS} AS dxbi_locations
+            if(notEmpty(lease_locations), lease_locations, {_DXBI_LOCATIONS}) AS dxbi_locations
         FROM (
             SELECT *, {same_lease} AS same_lease,
                    {building_key} AS lease_building_key, {area_key} AS lease_area_key
@@ -227,6 +228,12 @@ def _rentals_source(date_clause: str) -> str:
             ORDER BY same_lease, occurrence_index, contract_key
             LIMIT 1 BY same_lease
         ) AS lease
+        LEFT JOIN (
+            SELECT contract_key AS swept_contract_key,
+                   groupUniqArray(location_name) AS lease_locations
+            FROM dxbi_location_lease_members
+            GROUP BY contract_key
+        ) AS swept_lease ON swept_lease.swept_contract_key = lease.contract_key
         LEFT JOIN {_BUILDING_LOCATIONS} AS swept_building
             ON swept_building.swept_building_key = lease.lease_building_key
             AND swept_building.swept_area_key = lease.lease_area_key

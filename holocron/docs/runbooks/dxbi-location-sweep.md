@@ -44,8 +44,14 @@ python scripts/load_dxbi_location_members.py /data/dxbi-location-sweep/run=2026-
 ```
 
 A 12-month window covers the buildings of 96% of the following year's sales (6 months: 90%).
-Re-run it monthly so new buildings are placed. Each run is about 1,400 searches at the
-scraper's 3-6 second pace.
+Re-run it monthly so new buildings are placed. The 12-month sales sweep of 2026-10-08 made 3,218
+searches in 6 hours (6.7 s each at the scraper's 3-6 second pace).
+
+**Leases.** DXBI's rental area pages group leases with their own search too. Run the same sweep
+with `--report rentals` into its own run directory, then load it the same way: it fills
+`dxbi_location_lease_members` by the leases' `contract_key`, and the Rentals page uses it before
+the building and printed-area fallbacks. Leases are about 2.5 times the sales searches, roughly 15
+hours for 12 months.
 
 ## Checking it
 
