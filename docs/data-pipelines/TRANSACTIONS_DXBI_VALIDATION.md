@@ -235,3 +235,46 @@ id of their own (none in the sales row HTML read on 2026-10-07, none in the stor
 of 1.6M leases); the only id is the one the scraper searches with, which is Dubai for the full
 sweep. Grouping by DXBI's areas needs a search per area that records which area each building
 falls in.
+
+
+## Reconciled against dxbinteract.com after the re-scrape (2026-10-08)
+
+Local data after the re-scrape:
+- DXBI sales for July to 7 October 2026 were re-scraped and loaded with `--replace-window`. This
+  replaced July's and early August's CSV-export rows. Every day now equals DXBInteract's listing:
+  25,891 sales for August to October and 14,144 for July (the CSV had 11,941), with sales whose
+  unit DXBI hides included.
+- Leases for August to 7 October were re-scraped. Six days failed at first (DXBI's Cloudflare
+  answered 520/522 at about 01:00 UTC) and succeeded on a re-run.
+- The location sweep covered 360 locations from October 2025 to 7 October 2026: 311,531
+  memberships, every search split below DXBI's 300-row cap. The market releases were rebuilt:
+  sales `5cc985b0e04a`, rentals `e550228425eb`.
+  - The sales release accepted `days_lost` on Sundays 2 and 9 August. These had held CSV rows
+    dated a day off (67 and 108). They now hold what DXBI lists (15 and 6) and DLD records (5 and
+    0). The reason is recorded in the ledger.
+
+Checks: `verify_dxbi_transactions.py` 382 / 0 failed; `verify_analytics.py` 2,198 / 0 failed;
+`e2e/transactions.spec.ts` 11 / 11 passed.
+
+**Sales against DXBI's area cards: 14 areas × July, August and September 2026.** The areas are JVC,
+Dubai Marina, Business Bay, Downtown, Dubai South, Palm Jumeirah, Dubai Hills, Arjan, Al Furjan,
+Dubai Creek Harbour, JLT, Al Barsha South Fourth, JVT and Damac Lagoons.
+
+| | Result |
+|---|---|
+| Sales count | **42 of 42 equal** (for example JVC July 968 / 968, Dubai South July 2,371 / 2,371) |
+| Median price per sq ft | equal to DXBI's rounding to the nearest 10 in all 42 (for example 1,420 / 1,423) |
+| Median price | equal or within 1% in 33; up to 5% apart in 9 (Dubai Marina July 1,500,000 / 1,435,000). DXBI's card is not the plain median of its listed sales, nor any simple variant tested (upper median, quantiles, geometric mean, median price per sq ft × median size). The page shows the exact median of DXBI's own listed sales |
+
+**Leases against DXBI's rental cards (13 areas; Damac Lagoons' rental card did not parse).** Medians
+of annual rent mostly agree exactly. Counts of new and renewed leases are within ±5% in most
+area-months, but not equal. Two causes were measured:
+- The lease loader keeps older versions it merges with each new scrape, including 3,943 August
+  rows from a run named `august-2026-shadow-test`. With them, some areas run 10-20% above DXBI
+  (Business Bay August: 1,813 new against 1,618). Counting only the new scrape, the same areas run
+  2-5% below (1,543).
+- Leases take their DXBI location from the sales sweep (by building) or their printed area. The
+  sweep did not search leases.
+
+Open: making lease counts equal needs a decision on the merge (a re-scrape that replaces its
+window, as for sales) and a lease sweep.
