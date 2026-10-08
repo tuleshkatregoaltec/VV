@@ -14,8 +14,6 @@ import { type PanelState, panel } from '../../stores/panel.svelte'
 let { unread = 0 }: { unread?: number } = $props()
 const dark = $derived(colorTheme.resolved === 'dark')
 const path = $derived(page.url.pathname.replace(/\/$/, ''))
-/** Market mode has no ＋ New: its screens read the market, they create nothing in the CRM. */
-const isMarket = $derived(path === '/crm/market' || path.startsWith('/crm/market/'))
 
 /** ＋ New presets to the page: Owners → Owner, Assets → Listing, Deals → Deal, Calendar → Task, else Lead. */
 const preset = $derived.by((): { label: string; to: PanelState } => {
@@ -72,7 +70,6 @@ function onkeydown(e: KeyboardEvent) {
 		>
 			<Search size={17} />
 		</button>
-		{#if !isMarket}
 		<span class="newgrp">
 			<button type="button" class="btn newbtn" aria-label="New {preset.label}" onclick={() => panel.open(preset.to)}>
 				<Plus size={16} /><span class="full">New {preset.label}</span>
@@ -87,7 +84,6 @@ function onkeydown(e: KeyboardEvent) {
 				<ChevronDown size={15} />
 			</button>
 		</span>
-		{/if}
 		<button
 			type="button"
 			class="ico"

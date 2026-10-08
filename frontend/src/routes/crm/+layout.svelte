@@ -4,9 +4,7 @@ import type { Snippet } from 'svelte'
 import { afterNavigate } from '$app/navigation'
 import { page } from '$app/state'
 import '$lib/crm/crm.css'
-import '$lib/crm/market/market.css'
 import AppFrame from '$lib/components/layout/AppFrame.svelte'
-import AskChat from '$lib/crm/components/shell/AskChat.svelte'
 import Drawer from '$lib/crm/components/shell/Drawer.svelte'
 import Sidebar from '$lib/crm/components/shell/Sidebar.svelte'
 import Toast from '$lib/crm/components/shell/Toast.svelte'
@@ -25,8 +23,8 @@ afterNavigate(({ to }) => {
 	if (to?.url) panel.syncFromUrl(to.url)
 })
 
-/** Home, Inbox and Assistant fit one screen on a laptop (no page scroll, v2). */
-const fit = $derived(/^\/crm(\/inbox|\/assistant)?\/?$/.test(page.url.pathname))
+/** Home and Inbox fit one screen on a laptop (no page scroll, v2). */
+const fit = $derived(/^\/crm(\/inbox)?\/?$/.test(page.url.pathname))
 </script>
 
 <svelte:head>
@@ -44,7 +42,6 @@ const fit = $derived(/^\/crm(\/inbox|\/assistant)?\/?$/.test(page.url.pathname))
 			</div>
 		</div>
 		<Drawer />
-		<AskChat />
 		<Toast />
 	</div>
 </AppFrame>
