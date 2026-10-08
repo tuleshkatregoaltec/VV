@@ -1,9 +1,14 @@
 import gzip
 import importlib.util
 import json
+import os
 from datetime import date
 from pathlib import Path
 from types import ModuleType
+
+import pytest
+
+from tests.test_market_release import _settings, database  # noqa: F401
 
 
 def _load_script(name: str) -> ModuleType:
@@ -117,3 +122,83 @@ def test_a_swept_lease_has_the_contract_key_the_lease_load_gives_it(tmp_path: Pa
         "Jumeirah Village Circle",
         date(2026, 8, 20),
     )
+
+
+def _sweep_dir(tmp_path: Path, name: str, window: tuple[str, str], **summary) -> Path:
+    run = tmp_path / f"run={name}"
+    run.mkdir()
+    (run / "_SUCCESS").touch()
+    (run / "summary.json").write_text(
+        json.dumps({"window": {"start": window[0], "end": window[1]}, "incomplete": [], **summary})
+    )
+    (run / "locations.json").write_text(json.dumps({"items": TREE}))
+    return run
+
+
+def test_only_a_whole_sweep_may_replace_members(tmp_path: Path) -> None:
+    """A nightly run that stopped early, or lost a location, must not replace two weeks of
+    membership with part of it."""
+    import pytest
+
+    loader = _load_script("load_dxbi_location_members.py")
+    whole = _sweep_dir(tmp_path, "whole", ("2026-09-24", "2026-10-07"), report="rentals")
+    assert loader.read_sweep(whole).report == "rentals"
+    assert (loader.read_sweep(whole).first, loader.read_sweep(whole).last) == (
+        date(2026, 9, 24),
+        date(2026, 10, 7),
+    )
+
+    unfinished = _sweep_dir(tmp_path, "unfinished", ("2026-09-24", "2026-10-07"))
+    (unfinished / "_SUCCESS").unlink()
+    with pytest.raises(SystemExit, match="no _SUCCESS"):
+        loader.read_sweep(unfinished)
+
+    partial = _sweep_dir(tmp_path, "partial", ("2026-09-24", "2026-10-07"), incomplete=["36510"])
+    with pytest.raises(SystemExit, match="incomplete"):
+        loader.read_sweep(partial)
+
+
+@pytest.mark.skipif(
+    os.environ.get("HOLOCRON_CLICKHOUSE_INTEGRATION") != "1",
+    reason="set HOLOCRON_CLICKHOUSE_INTEGRATION=1 with local ClickHouse",
+)
+def test_a_nightly_sweep_replaces_its_window_and_keeps_the_year(
+    tmp_path: Path,
+    database: str,  # noqa: F811
+) -> None:
+    """The first sweep covers a year; each night covers the last two weeks. A night replaces the
+    members dated in its window (DXBI may regroup a recent sale) and keeps every older date;
+    loading the same night twice changes nothing."""
+    import clickhouse_connect
+
+    loader = _load_script("load_dxbi_location_members.py")
+    settings = _settings(database)
+    client = clickhouse_connect.get_client(
+        host=settings.clickhouse_host,
+        port=settings.clickhouse_port,
+        username=settings.clickhouse_user,
+        password=settings.clickhouse_password,
+        database=database,
+    )
+
+    def member(key: str, day: date, location: str) -> list[object]:
+        return [36510, location, key, day, "b", "a", date(2025, 10, 1), date(2026, 10, 7), "r"]
+
+    client.command(loader.CREATE_MEMBERS_SQL)
+    client.insert(
+        loader.MEMBERS_TABLE,
+        [
+            member("old", date(2026, 3, 1), "Jumeirah Village Circle"),
+            member("recent", date(2026, 10, 1), "Jumeirah Village Circle"),
+            member("gone", date(2026, 10, 2), "Jumeirah Village Circle"),
+        ],
+        column_names=loader.MEMBER_COLUMNS,
+    )
+    night = loader.Sweep(tmp_path, "sales", date(2026, 9, 24), date(2026, 10, 7))
+    tonight = [member("recent", date(2026, 10, 1), "Al Barsha South Fourth")]
+
+    assert loader.replace_window(client, night, tonight) == 2
+    assert loader.replace_window(client, night, tonight) == 1  # the same night again
+    assert client.query(
+        f"SELECT sale_key, location_name FROM {loader.MEMBERS_TABLE} FINAL ORDER BY sale_key"
+    ).result_rows == [("old", "Jumeirah Village Circle"), ("recent", "Al Barsha South Fourth")]

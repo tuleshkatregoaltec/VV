@@ -144,3 +144,78 @@ def test_runs_already_in_the_ledger_are_not_reloaded(
     assert [(row[1], row[2], row[10]) for row in clickhouse.inserted] == [
         ("rentals", "run=2026-09-21", "success")
     ]
+
+
+def _reconciled(run_dir: Path, days: dict[str, str], *, status: str = "success") -> Path:
+    import json
+
+    (run_dir / "reconciliation.json").write_text(
+        json.dumps({"status": status, "terminal_partition_status": {"cfg": days}})
+    )
+    return run_dir
+
+
+def test_a_scrape_run_replaces_only_an_unbroken_window_it_finished(tmp_path: Path) -> None:
+    """Replacing a window deletes what was stored for it, so only a run that finished every day
+    of an unbroken range may; a partial or gapped run is merged as before."""
+    complete = {"2026-09-24": "complete", "2026-09-25": "complete", "2026-09-26": "complete"}
+
+    def window(name: str, days: dict[str, str], **kwargs) -> tuple[str, str] | None:
+        run_dir = _reconciled(_run(tmp_path, "rentals", name), days, **kwargs)
+        return evidence.scrape_window(evidence.EvidenceRun("rentals", name, run_dir))
+
+    assert window("run=whole", complete) == ("2026-09-24", "2026-09-26")
+    assert window("run=failed-day", {**complete, "2026-09-25": "failed"}) is None
+    assert window("run=gap", {"2026-09-24": "complete", "2026-09-26": "complete"}) is None
+    assert window("run=not-success", complete, status="failed") is None
+    no_file = _run(tmp_path, "rentals", "run=legacy")
+    assert evidence.scrape_window(evidence.EvidenceRun("rentals", "run=legacy", no_file)) is None
+
+
+def test_complete_scrape_runs_load_one_by_one_with_their_window(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Two runs given together must never replace the days between them: each complete run loads
+    on its own, oldest first; runs without a complete window merge together first."""
+    commands: list[list[str]] = []
+
+    def fake_run(command: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
+        commands.append(command)
+        output = "Sales load complete loaded=10 skipped=0 errors=0 without_unit=1 superseded=0"
+        return subprocess.CompletedProcess(command, 0, output, "")
+
+    monkeypatch.setattr(evidence.subprocess, "run", fake_run)
+    days = {"2026-10-01": "complete", "2026-10-02": "complete"}
+    later = {"2026-10-05": "complete", "2026-10-06": "complete"}
+    runs = [
+        evidence.EvidenceRun("sales", "run=a", _reconciled(_run(tmp_path, "sales", "run=a"), days)),
+        evidence.EvidenceRun("sales", "run=b", _run(tmp_path, "sales", "run=b")),
+        evidence.EvidenceRun(
+            "sales", "run=c", _reconciled(_run(tmp_path, "sales", "run=c"), later)
+        ),
+    ]
+
+    result = evidence.run_loader("sales", runs, env={})
+
+    assert [command[2:] for command in commands] == [
+        [str(runs[1].path)],
+        ["--replace-window", "2026-10-01", "2026-10-02", str(runs[0].path)],
+        ["--replace-window", "2026-10-05", "2026-10-06", str(runs[2].path)],
+    ]
+    assert result.rows_loaded == 30
+
+
+def test_location_sweeps_are_discovered_and_accounted(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    sales = _run(tmp_path, "sales-sweep", "run=2026-10-08-nightly")
+    _run(tmp_path, "rentals-sweep", "run=2026-10-08-nightly", complete=False)
+
+    found = evidence.discover_completed_runs(tmp_path)
+
+    assert [(run.report, run.name) for run in found] == [("sales-sweep", sales.name)]
+    result = evidence.parse_loader_output(
+        "sales-sweep", "INFO Location members loaded runs=1 members=420 replaced=400 skipped=2"
+    )
+    assert (result.rows_loaded, result.rows_skipped) == (420, 2)
+    assert result.details["replaced"] == 400

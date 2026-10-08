@@ -4,7 +4,12 @@
 The input is one completed run of ``scripts/dxbi_location_sweep.py`` (``_SUCCESS``,
 ``locations.json`` and ``location=<id>.jsonl.gz``). A sales sweep fills ``dxbi_location_members``,
 a rentals sweep ``dxbi_location_lease_members``; ``dxbi_locations`` is refreshed either way. Each
-table is replaced whole and atomically, so the Transactions Location filter reads one sweep.
+table is replaced whole and atomically.
+
+Each run replaces only the members dated inside its own window and keeps the rest, so a nightly
+sweep of the last two weeks adds to a year-long first run, and a re-run is harmless. Runs given
+together load oldest first. A run without ``_SUCCESS``, with an incomplete location or with no
+records is refused before anything changes.
 """
 
 from __future__ import annotations
@@ -16,7 +21,7 @@ import logging
 import os
 from datetime import date
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
 import clickhouse_connect
 
@@ -198,9 +203,103 @@ def replace_table(
     client.command(f"DROP TABLE {staging}")
 
 
+def replace_window(
+    client: Any,
+    sweep: Sweep,
+    rows: list[list[object]],
+) -> int:
+    """Replace the members dated inside the sweep's window, keep every other date; one swap.
+
+    A nightly sweep covers the last two weeks, a first run a year: either way earlier history
+    stays, and loading the same run twice gives the same table. Returns the rows replaced.
+    """
+    table, create_sql, columns, dated = _TARGETS[sweep.report]
+    staging = f"{table}_load"
+    window = {"first": sweep.first, "last": sweep.last}
+    inside = f"{dated} BETWEEN {{first:Date}} AND {{last:Date}}"
+    client.command(create_sql)
+    replaced = int(
+        client.query(
+            f"SELECT count() FROM {table} FINAL WHERE {inside}", parameters=window
+        ).result_rows[0][0]
+    )
+    client.command(f"DROP TABLE IF EXISTS {staging}")
+    client.command(create_sql.replace(f"EXISTS {table} ", f"EXISTS {staging} ", 1))
+    client.command(
+        f"INSERT INTO {staging} SELECT * FROM {table} FINAL WHERE NOT ({inside})",
+        parameters=window,
+    )
+    for offset in range(0, len(rows), 50_000):
+        client.insert(staging, rows[offset : offset + 50_000], column_names=columns)
+    client.command(f"EXCHANGE TABLES {table} AND {staging}")
+    client.command(f"DROP TABLE {staging}")
+    return replaced
+
+
+class Sweep(NamedTuple):
+    """One completed sweep run: what it searched and over which dates."""
+
+    path: Path
+    report: str
+    first: date
+    last: date
+
+
+def read_sweep(run_dir: Path) -> Sweep:
+    """A completed, whole sweep run, or SystemExit: an incomplete one must not replace anything."""
+    if not (run_dir / "_SUCCESS").is_file():
+        raise SystemExit(f"{run_dir} is not a completed sweep (no _SUCCESS)")
+    summary = json.loads((run_dir / "summary.json").read_text())
+    if summary.get("incomplete"):
+        raise SystemExit(f"{run_dir}: locations {summary['incomplete']} are incomplete")
+    window = summary["window"]
+    return Sweep(
+        path=run_dir,
+        report=str(summary.get("report") or _report_from_records(run_dir)),
+        first=date.fromisoformat(window["start"]),
+        last=date.fromisoformat(window["end"]),
+    )
+
+
+def _report_from_records(run_dir: Path) -> str:
+    # Runs written before summary.json named the report: the first record that exists says.
+    for path in sorted(run_dir.glob("location=*.jsonl.gz")):
+        with gzip.open(path, "rt", encoding="utf-8") as handle:
+            line = handle.readline()
+        if line:
+            return str(json.loads(line).get("transaction_type") or "sales")
+    raise SystemExit(f"{run_dir}: the sweep returned no records at all")
+
+
+def load_sweep(client: Any, sweep: Sweep) -> dict[str, int]:
+    run_id = sweep.path.name.removeprefix("run=")
+    items = json.loads((sweep.path / "locations.json").read_text())["items"]
+    names = {
+        int(item["id"]): str(item["name"]) for item in items if item.get("flag") in LOCATION_FLAGS
+    }
+    read = lease_member_rows if sweep.report == "rentals" else member_rows
+    members, skipped = read(sweep.path, names, run_id)
+    if not members:
+        # DXBI lists sales and leases every week; a whole sweep with none is a failed session.
+        raise SystemExit(f"{sweep.path}: no {sweep.report} in {sweep.first}..{sweep.last}")
+    replace_table(
+        client,
+        LOCATIONS_TABLE,
+        CREATE_LOCATIONS_SQL,
+        location_rows(items, run_id),
+        LOCATION_COLUMNS,
+    )
+    replaced = replace_window(client, sweep, members)
+    logger.info(
+        "sweep %s report=%s window=%s..%s members=%s replaced=%s skipped=%s",
+        run_id, sweep.report, sweep.first, sweep.last, len(members), replaced, skipped,
+    )  # fmt: skip
+    return {"members": len(members), "replaced": replaced, "skipped": skipped}
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("run_dir", type=Path)
+    parser.add_argument("run_dirs", nargs="+", type=Path)
     parser.add_argument("--host", default=os.getenv("CLICKHOUSE_HOST", "127.0.0.1"))
     parser.add_argument("--port", type=int, default=int(os.getenv("CLICKHOUSE_PORT", "8123")))
     parser.add_argument("--database", default=os.getenv("CLICKHOUSE_DATABASE", "vitevue"))
@@ -209,30 +308,8 @@ def main() -> None:
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 
-    run_dir: Path = args.run_dir
-    if not (run_dir / "_SUCCESS").is_file():
-        raise SystemExit(f"{run_dir} is not a completed sweep (no _SUCCESS)")
-    run_id = run_dir.name.removeprefix("run=")
-    items = json.loads((run_dir / "locations.json").read_text())["items"]
-    locations = location_rows(items, run_id)
-    names = {
-        int(item["id"]): str(item["name"]) for item in items if item.get("flag") in LOCATION_FLAGS
-    }
-    first = next(run_dir.glob("location=*.jsonl.gz"), None)
-    report = "sales"
-    if first is not None:
-        with gzip.open(first, "rt", encoding="utf-8") as handle:
-            line = handle.readline()
-        report = json.loads(line).get("transaction_type", "sales") if line else "sales"
-    if report == "rentals":
-        members, skipped = lease_member_rows(run_dir, names, run_id)
-        table, create_sql, columns = (
-            LEASE_MEMBERS_TABLE, CREATE_LEASE_MEMBERS_SQL, LEASE_MEMBER_COLUMNS
-        )  # fmt: skip
-    else:
-        members, skipped = member_rows(run_dir, names, run_id)
-        table, create_sql, columns = MEMBERS_TABLE, CREATE_MEMBERS_SQL, MEMBER_COLUMNS
-
+    # Read every run first: one bad run stops the batch before anything changes.
+    sweeps = [read_sweep(run_dir) for run_dir in sorted(args.run_dirs)]
     client = clickhouse_connect.get_client(
         host=args.host,
         port=args.port,
@@ -240,15 +317,20 @@ def main() -> None:
         username=args.username,
         password=args.password,
     )
-    replace_table(client, LOCATIONS_TABLE, CREATE_LOCATIONS_SQL, locations, LOCATION_COLUMNS)
-    replace_table(client, table, create_sql, members, columns)
+    totals = {"runs": 0, "members": 0, "replaced": 0, "skipped": 0}
+    for sweep in sweeps:  # oldest first: a later run's window wins where two overlap
+        for name, value in load_sweep(client, sweep).items():
+            totals[name] += value
+        totals["runs"] += 1
     logger.info(
-        "Location members loaded report=%s locations=%s members=%s skipped=%s",
-        report,
-        len(locations),
-        len(members),
-        skipped,
+        "Location members loaded %s", " ".join(f"{name}={value}" for name, value in totals.items())
     )
+
+
+_TARGETS = {
+    "sales": (MEMBERS_TABLE, CREATE_MEMBERS_SQL, MEMBER_COLUMNS, "transaction_date"),
+    "rentals": (LEASE_MEMBERS_TABLE, CREATE_LEASE_MEMBERS_SQL, LEASE_MEMBER_COLUMNS, "lease_start"),
+}
 
 
 if __name__ == "__main__":

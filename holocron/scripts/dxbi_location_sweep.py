@@ -269,7 +269,14 @@ def main() -> int:
             browser.close()
 
     incomplete = [key for key, value in summary["locations"].items() if not value["complete"]]
-    summary.update({"window": window, "finished_at": utc_now(), "incomplete": incomplete})
+    summary.update(
+        {
+            "report": args.report,
+            "window": window,
+            "finished_at": utc_now(),
+            "incomplete": incomplete,
+        }
+    )
     atomic_json(summary_path, summary)
     if not incomplete:
         (output_dir / "_SUCCESS").touch()
