@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import re
 from datetime import date, timedelta
 from typing import Any, Optional
 
@@ -715,6 +716,54 @@ def _resolve_project_scope(
     return "Dubai", "market"
 
 
+_BUCKET = re.compile(
+    r"^\s*(?:(?P<low>\d+(?:\.\d+)?)(?P<low_unit>[KM]?)\s*-\s*(?P<high>\d+(?:\.\d+)?)(?P<high_unit>[KM]?)"
+    r"|<\s*(?P<below>\d+(?:\.\d+)?)(?P<below_unit>[KM]?)"
+    r"|(?P<from>\d+(?:\.\d+)?)(?P<from_unit>[KM]?)\s*\+)\s*$",
+    re.IGNORECASE,
+)
+_SCALE = {"": 1, "K": 1_000, "M": 1_000_000}
+
+
+def _bucket_bounds(
+    name: str, label: Optional[str]
+) -> Optional[tuple[Optional[float], Optional[float]]]:
+    """A bucket label as half-open bounds: '1M-2M' is 1,000,000 up to (not including) 2,000,000,
+    '<500K' below 500,000 and '5M+' from 5,000,000. Areas are in sq ft ('1K-2K')."""
+    if not label:
+        return None
+    match = _BUCKET.match(label)
+    if not match:
+        from fastapi import HTTPException
+
+        raise HTTPException(
+            status_code=422,
+            detail=f"Invalid {name}: {label!r}. Use e.g. '1M-2M', '<500K' or '5M+'.",
+        )
+
+    def amount(group: str) -> Optional[float]:
+        value = match.group(group)
+        if value is None:
+            return None
+        return float(value) * _SCALE[(match.group(f"{group}_unit") or "").upper()]
+
+    if match.group("low") is not None:
+        return amount("low"), amount("high")
+    if match.group("below") is not None:
+        return None, amount("below")
+    return amount("from"), None
+
+
+def _bind_bounds(parameters: dict, name: str, bounds) -> None:
+    if bounds is None:
+        return
+    low, high = bounds
+    if low is not None:
+        parameters[f"{name}_min"] = low
+    if high is not None:
+        parameters[f"{name}_max"] = high
+
+
 async def get_sales_analytics(
     market_type: Optional[str] = None,
     property_usage: Optional[str] = "Residential",
@@ -789,10 +838,10 @@ async def get_sales_analytics(
             parameters["rooms"] = rooms
         if reg_type:
             parameters["reg_type"] = reg_type
-        if price_bucket:
-            parameters["price_bucket"] = price_bucket
-        if area_bucket:
-            parameters["area_bucket"] = area_bucket
+        price_range = _bucket_bounds("price_bucket", price_bucket)
+        area_range = _bucket_bounds("area_bucket", area_bucket)
+        _bind_bounds(parameters, "price", price_range)
+        _bind_bounds(parameters, "area_sqft", area_range)
 
         result = await queries.fetch_sales_summary(
             parameters,
@@ -804,10 +853,12 @@ async def get_sales_analytics(
             property_type=resolved_property_type,
             rooms=rooms,
             reg_type=reg_type,
-            price_bucket=price_bucket,
-            area_bucket=area_bucket,
+            price_range=price_range,
+            area_range=area_range,
         )
 
+    except HTTPException:
+        raise
     except Exception as e:
         # Log error and return empty response instead of crashing
         import logging
@@ -912,6 +963,10 @@ async def get_rental_analytics(
         parameters["master_project"] = master_project
     if property_type:
         parameters["property_type"] = property_type
+    rent_range = _bucket_bounds("rent_bucket", rent_bucket)
+    area_range = _bucket_bounds("area_bucket", area_bucket)
+    _bind_bounds(parameters, "rent", rent_range)
+    _bind_bounds(parameters, "area_sqft", area_range)
 
     result = await queries.fetch_rentals_summary(
         parameters,
@@ -920,6 +975,8 @@ async def get_rental_analytics(
         end_date=end_date.isoformat(),
         master_project=master_project,
         property_type=property_type,
+        rent_range=rent_range,
+        area_range=area_range,
     )
 
     # An aggregate over no leases is one row with a zero count and NaN averages (not JSON).

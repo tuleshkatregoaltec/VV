@@ -184,3 +184,59 @@ async def test_a_date_range_holds_its_whole_last_day(warehouse):
     )
 
     assert response.summary.transaction_count == 3
+
+
+async def test_bucket_filters_are_half_open_ranges(warehouse):
+    """price_bucket and area_bucket filtered on columns the served table does not have: ClickHouse
+    failed and the page got 0 sales. rent_bucket was ignored. Each is a half-open range on the
+    value, as the Transactions bands are, and a label that reads as none is an error."""
+    from datetime import date
+
+    import pytest
+    from fastapi import HTTPException
+
+    from app.analytics import service
+
+    await warehouse.command("""
+        CREATE TABLE ch_transactions (
+            trans_group_en String, property_usage_en String, property_type String,
+            actual_worth Float64, meter_sale_price Float64, size_sqm Float64, instance_date Date,
+            master_project_en String DEFAULT '', location_name String DEFAULT '',
+            rooms_en String DEFAULT '', reg_type_en String DEFAULT ''
+        ) ENGINE = MergeTree ORDER BY instance_date
+    """)
+    await warehouse.command("""
+        CREATE TABLE ch_rent_contracts (
+            property_usage_en String, property_type String, annual_amount Float64,
+            size_sqm Float64, contract_start_date Date, master_project_en String DEFAULT '',
+            location_name String DEFAULT ''
+        ) ENGINE = MergeTree ORDER BY contract_start_date
+    """)
+    day = date.today()
+    await warehouse.insert(
+        "ch_transactions",
+        [["Sales", "Residential", "Apartment", price, 10_000, sqm, day]
+         for price, sqm in ((999_999, 90), (1_000_000, 93), (1_999_999, 186), (2_000_000, 200))],
+        column_names=["trans_group_en", "property_usage_en", "property_type", "actual_worth",
+                      "meter_sale_price", "size_sqm", "instance_date"],
+    )  # fmt: skip
+    await warehouse.insert(
+        "ch_rent_contracts",
+        [["Residential", "Apartment", rent, 100, day] for rent in (49_999, 50_000, 100_000)],
+        column_names=["property_usage_en", "property_type", "annual_amount", "size_sqm",
+                      "contract_start_date"],
+    )  # fmt: skip
+
+    async def sold(**buckets) -> int:
+        response = await service.get_sales_analytics(timeframe_days=30, **buckets)
+        return response.summary.transaction_count
+
+    assert await sold(price_bucket="1M-2M") == 2
+    assert await sold(price_bucket="<1M") == 1
+    assert await sold(price_bucket="2M+") == 1
+    assert await sold(area_bucket="1K-2K") == 1  # 93 m² is 1,001 sq ft; 186 m² is 2,002
+    rented = await service.get_rental_analytics(timeframe_days=30, rent_bucket="50K-100K")
+    assert rented.summary.contract_count == 1
+    with pytest.raises(HTTPException) as refused:
+        await sold(price_bucket="cheap")
+    assert refused.value.status_code == 422

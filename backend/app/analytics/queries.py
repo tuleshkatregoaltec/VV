@@ -6,6 +6,9 @@ from app.market.scope import MARKET_FILTERS as MARKET_FILTERS
 from app.market.scope import ProjectFilterType, ProjectScopeType
 from app.market.scope import project_filter_clause as _project_filter
 
+# Half-open bounds of a range filter: (low or None, high or None).
+Bounds = tuple[Optional[float], Optional[float]]
+
 
 def search_projects() -> str:
     return """
@@ -826,8 +829,8 @@ async def fetch_sales_summary(
     rooms: Optional[str] = None,
     area_name: Optional[str] = None,
     reg_type: Optional[str] = None,
-    price_bucket: Optional[str] = None,
-    area_bucket: Optional[str] = None,
+    price_range: Optional[Bounds] = None,
+    area_range: Optional[Bounds] = None,
     market: Optional[dict[str, str]] = None,
 ):
     return await query(
@@ -841,8 +844,8 @@ async def fetch_sales_summary(
             rooms,
             area_name,
             reg_type,
-            price_bucket,
-            area_bucket,
+            price_range,
+            area_range,
             market,
         ),
         parameters,
@@ -857,10 +860,19 @@ async def fetch_rentals_summary(
     master_project: Optional[str] = None,
     property_type: Optional[str] = None,
     area_name: Optional[str] = None,
+    rent_range: Optional[Bounds] = None,
+    area_range: Optional[Bounds] = None,
 ):
     return await query(
         rentals_summary(
-            property_usage, start_date, end_date, master_project, property_type, area_name
+            property_usage,
+            start_date,
+            end_date,
+            master_project,
+            property_type,
+            area_name,
+            rent_range,
+            area_range,
         ),
         parameters,
     )
@@ -892,6 +904,19 @@ async def fetch_price_trends(
     )
 
 
+def _range_clauses(expression: str, name: str, bounds: Optional[Bounds]) -> list[str]:
+    """``expression`` in the half-open [low, high); bounds bind as ``{name}_min``/``_max``."""
+    if bounds is None:
+        return []
+    low, high = bounds
+    clauses = []
+    if low is not None:
+        clauses.append(f"{expression} >= {{{name}_min:Float64}}")
+    if high is not None:
+        clauses.append(f"{expression} < {{{name}_max:Float64}}")
+    return clauses
+
+
 def _market_clauses(market: Optional[dict[str, str]]) -> list[str]:
     """Sales by default; a market type's own group and predicate otherwise (trusted)."""
     if market is None:
@@ -909,8 +934,8 @@ def sales_summary(
     rooms: Optional[str] = None,
     area_name: Optional[str] = None,
     reg_type: Optional[str] = None,
-    price_bucket: Optional[str] = None,
-    area_bucket: Optional[str] = None,
+    price_range: Optional[Bounds] = None,
+    area_range: Optional[Bounds] = None,
     market: Optional[dict[str, str]] = None,
 ) -> str:
     """
@@ -940,10 +965,8 @@ def sales_summary(
         where_clauses.append("location_name = {area_name:String}")
     if reg_type is not None:
         where_clauses.append("reg_type_en = {reg_type:String}")
-    if price_bucket is not None:
-        where_clauses.append("price_bucket = {price_bucket:String}")
-    if area_bucket is not None:
-        where_clauses.append("area_bucket = {area_bucket:String}")
+    where_clauses += _range_clauses("actual_worth", "price", price_range)
+    where_clauses += _range_clauses("size_sqm * 10.7639", "area_sqft", area_range)
 
     where_clause = " AND ".join(where_clauses)
 
@@ -1029,6 +1052,8 @@ def rentals_summary(
     master_project: Optional[str] = None,
     property_type: Optional[str] = None,
     area_name: Optional[str] = None,
+    rent_range: Optional[Bounds] = None,
+    area_range: Optional[Bounds] = None,
 ) -> str:
     """
     Get rental analytics summary for a date range.
@@ -1047,6 +1072,8 @@ def rentals_summary(
         where_clauses.append("property_type = {property_type:String}")
     if area_name is not None:
         where_clauses.append("location_name = {area_name:String}")
+    where_clauses += _range_clauses("annual_amount", "rent", rent_range)
+    where_clauses += _range_clauses("size_sqm * 10.7639", "area_sqft", area_range)
 
     where_clause = " AND ".join(where_clauses)
 
