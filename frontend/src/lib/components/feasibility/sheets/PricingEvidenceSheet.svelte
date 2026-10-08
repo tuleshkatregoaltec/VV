@@ -1,5 +1,6 @@
 <script lang="ts">
 import { workbookStore } from '$lib/feasibility/workbook/store.svelte'
+import { perSqft, toSqft } from '$lib/utils/units'
 
 const isBtr = $derived(workbookStore.assumptions?.developmentModel === 'build_to_rent_residential')
 const study = $derived(
@@ -30,14 +31,12 @@ const btsComparableRows = $derived(
 function fmt(n: number, digits = 0): string {
 	return n.toLocaleString('en-AE', { minimumFractionDigits: digits, maximumFractionDigits: digits })
 }
+// Research and the workbook are in m²; every figure on this sheet is per square foot.
 function rateToSqft(aedPerSqm: number) {
-	return aedPerSqm * 0.092903
+	return perSqft(aedPerSqm)
 }
 function annualRateToMonthlySqft(aedPerSqmYear: number) {
-	return (aedPerSqmYear * 0.092903) / 12
-}
-function toSqft(sqm: number) {
-	return sqm / 0.092903
+	return perSqft(aedPerSqmYear) / 12
 }
 
 const confidenceBadge: Record<string, string> = {
@@ -97,13 +96,13 @@ const TD_LEFT = 'px-2 py-[3px] text-left text-slate-800 border-b border-[#EBEBEB
 				<tr>
 					<td class="{TD_LEFT} font-semibold text-slate-500 text-[10px] uppercase tracking-wide border-r border-[#E8E8E8]">Total Rental Units</td>
 					<td class="{TD_LEFT} border-r border-[#E8E8E8]">{fmt(outputs?.btr?.program.totalUnits ?? 0, 0)}</td>
-					<td class="{TD_LEFT} font-semibold text-slate-500 text-[10px] uppercase tracking-wide border-r border-[#E8E8E8]">Leasable Area (sqm)</td>
-					<td class={TD_LEFT}>{fmt(outputs?.btr?.program.totalAreaSqm ?? 0)}</td>
+					<td class="{TD_LEFT} font-semibold text-slate-500 text-[10px] uppercase tracking-wide border-r border-[#E8E8E8]">Leasable Area (sq ft)</td>
+					<td class={TD_LEFT}>{fmt(toSqft(outputs?.btr?.program.totalAreaSqm ?? 0))}</td>
 				</tr>
 				<tr>
-					<td class="{TD_LEFT} font-semibold text-slate-500 text-[10px] uppercase tracking-wide border-r border-[#E8E8E8]">Avg Rent (AED/sqft/mo)</td>
+					<td class="{TD_LEFT} font-semibold text-slate-500 text-[10px] uppercase tracking-wide border-r border-[#E8E8E8]">Avg Rent (AED/sq ft/mo)</td>
 					<td class="{TD_LEFT} border-r border-[#E8E8E8] font-medium text-[#1565C0]">
-						{outputs?.btr ? fmt(outputs.btr.program.weightedAvgRentPsqmMonth * 0.092903, 2) : '—'}
+						{outputs?.btr ? fmt(perSqft(outputs.btr.program.weightedAvgRentPsqmMonth), 2) : '—'}
 					</td>
 					<td class="{TD_LEFT} font-semibold text-slate-500 text-[10px] uppercase tracking-wide border-r border-[#E8E8E8]">Gross Potential Rent (AED/yr)</td>
 					<td class="{TD_LEFT} font-medium">{fmt(outputs?.btr?.program.grossPotentialRentAed ?? 0)}</td>
@@ -123,8 +122,8 @@ const TD_LEFT = 'px-2 py-[3px] text-left text-slate-800 border-b border-[#EBEBEB
 					<th class="{TH_LEFT} border-r border-[#D9D9D9]">Unit Type</th>
 					<th class="{TH_LEFT} border-r border-[#D9D9D9]">Size Band</th>
 					<th class="{TH} border-r border-[#D9D9D9]">Contracts (12m)</th>
-					<th class="{TH} border-r border-[#D9D9D9]">Median AED/sqm/yr</th>
-					<th class="{TH} border-r border-[#D9D9D9]">Median AED/sqft/mo</th>
+					<th class="{TH} border-r border-[#D9D9D9]">Median AED/sq ft/yr</th>
+					<th class="{TH} border-r border-[#D9D9D9]">Median AED/sq ft/mo</th>
 					<th class="{TH} border-r border-[#D9D9D9]">Median Annual AED</th>
 					<th class={TH}>Modeled Monthly (AED)</th>
 				</tr>
@@ -144,7 +143,7 @@ const TD_LEFT = 'px-2 py-[3px] text-left text-slate-800 border-b border-[#EBEBEB
 						<td class="{TD_LEFT} font-medium border-r border-[#E8E8E8] uppercase">{band.unit_type_proxy}</td>
 						<td class="{TD_LEFT} border-r border-[#E8E8E8] text-slate-500">{band.size_band_label}</td>
 						<td class="{TD} border-r border-[#E8E8E8]">{fmt(band.contract_count, 0)}</td>
-						<td class="{TD} border-r border-[#E8E8E8] font-medium">{fmt(band.median_rent_psm_annual)}</td>
+						<td class="{TD} border-r border-[#E8E8E8] font-medium">{fmt(rateToSqft(band.median_rent_psm_annual), 2)}</td>
 						<td class="{TD} border-r border-[#E8E8E8]">{fmt(annualRateToMonthlySqft(band.median_rent_psm_annual), 2)}</td>
 						<td class="{TD} border-r border-[#E8E8E8]">{fmt(band.median_annual_rent)}</td>
 						<td class="{TD} {btrRow ? 'text-[#1565C0] font-medium' : 'text-slate-400'}">
@@ -175,11 +174,11 @@ const TD_LEFT = 'px-2 py-[3px] text-left text-slate-800 border-b border-[#EBEBEB
 				<tr class="hover:bg-slate-50/60">
 					<td class="{TD_LEFT} font-medium border-r border-[#E8E8E8]">Rental contracts (12m)</td>
 					<td class="{TD}">{fmt(study.rental_market_summary.rental_contract_count_12m, 0)}</td>
-					<td class="{TD_LEFT} font-medium border-r border-[#E8E8E8]">Avg rent (AED/sqm/yr)</td>
-					<td class="{TD}">{study.rental_market_summary.avg_rent_price_sqm_12m ? fmt(study.rental_market_summary.avg_rent_price_sqm_12m) : '—'}</td>
+					<td class="{TD_LEFT} font-medium border-r border-[#E8E8E8]">Avg rent (AED/sq ft/yr)</td>
+					<td class="{TD}">{study.rental_market_summary.avg_rent_price_sqm_12m ? fmt(rateToSqft(study.rental_market_summary.avg_rent_price_sqm_12m), 2) : '—'}</td>
 				</tr>
 				<tr class="hover:bg-slate-50/60">
-					<td class="{TD_LEFT} font-medium border-r border-[#E8E8E8]">Avg rent (AED/sqft/mo)</td>
+					<td class="{TD_LEFT} font-medium border-r border-[#E8E8E8]">Avg rent (AED/sq ft/mo)</td>
 					<td class="{TD}">{study.rental_market_summary.avg_rent_price_sqm_12m ? fmt(annualRateToMonthlySqft(study.rental_market_summary.avg_rent_price_sqm_12m), 2) : '—'}</td>
 					<td class="{TD_LEFT} font-medium border-r border-[#E8E8E8]">Median annual rent</td>
 					<td class="{TD}">{study.rental_market_summary.median_annual_rent ? fmt(study.rental_market_summary.median_annual_rent) : '—'}</td>
@@ -206,8 +205,8 @@ const TD_LEFT = 'px-2 py-[3px] text-left text-slate-800 border-b border-[#EBEBEB
 					<th class="{TH_LEFT} border-r border-[#D9D9D9]">Project</th>
 					<th class="{TH_LEFT} border-r border-[#D9D9D9]">Area</th>
 					<th class="{TH} border-r border-[#D9D9D9]">Similarity</th>
-					<th class="{TH} border-r border-[#D9D9D9]">Rent AED/sqm/yr</th>
-					<th class="{TH} border-r border-[#D9D9D9]">Rent AED/sqft/mo</th>
+					<th class="{TH} border-r border-[#D9D9D9]">Rent AED/sq ft/yr</th>
+					<th class="{TH} border-r border-[#D9D9D9]">Rent AED/sq ft/mo</th>
 					<th class="{TH} border-r border-[#D9D9D9]">Median Annual Rent</th>
 					<th class={TH}>Yield</th>
 				</tr>
@@ -218,7 +217,7 @@ const TD_LEFT = 'px-2 py-[3px] text-left text-slate-800 border-b border-[#EBEBEB
 						<td class="{TD_LEFT} font-medium border-r border-[#E8E8E8]">{comp.project_name}</td>
 						<td class="{TD_LEFT} border-r border-[#E8E8E8]">{comp.area_name}</td>
 						<td class="{TD} border-r border-[#E8E8E8]">{fmt(comp.score, 1)}</td>
-						<td class="{TD} border-r border-[#E8E8E8]">{comp.avg_rent_price_sqm_12m ? fmt(comp.avg_rent_price_sqm_12m) : '—'}</td>
+						<td class="{TD} border-r border-[#E8E8E8]">{comp.avg_rent_price_sqm_12m ? fmt(rateToSqft(comp.avg_rent_price_sqm_12m), 2) : '—'}</td>
 						<td class="{TD} border-r border-[#E8E8E8]">{comp.avg_rent_price_sqm_12m ? fmt(annualRateToMonthlySqft(comp.avg_rent_price_sqm_12m), 2) : '—'}</td>
 						<td class="{TD} border-r border-[#E8E8E8]">{comp.median_annual_rent ? fmt(comp.median_annual_rent) : '—'}</td>
 						<td class={TD}>{comp.gross_yield_pct ? fmt(comp.gross_yield_pct, 2) + '%' : '—'}</td>
@@ -239,10 +238,10 @@ const TD_LEFT = 'px-2 py-[3px] text-left text-slate-800 border-b border-[#EBEBEB
 				<tr>
 					<th class="{TH_LEFT} border-r border-[#D9D9D9]">Date</th>
 					<th class="{TH_LEFT} border-r border-[#D9D9D9]">Project</th>
-					<th class="{TH} border-r border-[#D9D9D9]">Plot Area (sqm)</th>
+					<th class="{TH} border-r border-[#D9D9D9]">Plot Area (sq ft)</th>
 					<th class="{TH} border-r border-[#D9D9D9]">Price AED</th>
-					<th class="{TH} border-r border-[#D9D9D9]">AED/plot sqm</th>
-					<th class="{TH} border-r border-[#D9D9D9]">AED/GFA sqm</th>
+					<th class="{TH} border-r border-[#D9D9D9]">AED/plot sq ft</th>
+					<th class="{TH} border-r border-[#D9D9D9]">AED/GFA sq ft</th>
 					<th class={TH}>Usage</th>
 				</tr>
 			</thead>
@@ -251,11 +250,11 @@ const TD_LEFT = 'px-2 py-[3px] text-left text-slate-800 border-b border-[#EBEBEB
 					<tr class="hover:bg-slate-50/60">
 						<td class="{TD_LEFT} border-r border-[#E8E8E8]">{row.instance_date?.slice(0, 10) ?? '—'}</td>
 						<td class="{TD_LEFT} border-r border-[#E8E8E8]">{row.project_name || row.procedure_name || '—'}</td>
-						<td class="{TD} border-r border-[#E8E8E8]">{fmt(row.plot_area_sqm)}</td>
+						<td class="{TD} border-r border-[#E8E8E8]">{fmt(toSqft(row.plot_area_sqm))}</td>
 						<td class="{TD} border-r border-[#E8E8E8]">{fmt(row.price_aed)}</td>
-						<td class="{TD} border-r border-[#E8E8E8]">{fmt(row.price_sqm)}</td>
+						<td class="{TD} border-r border-[#E8E8E8]">{fmt(rateToSqft(row.price_sqm))}</td>
 						<td class="{TD} border-r border-[#E8E8E8] {row.price_per_gfa_sqm ? 'text-[#1565C0] font-medium' : 'text-slate-400'}">
-							{row.price_per_gfa_sqm ? fmt(row.price_per_gfa_sqm) : '—'}
+							{row.price_per_gfa_sqm ? fmt(rateToSqft(row.price_per_gfa_sqm)) : '—'}
 						</td>
 						<td class={TD}>{row.property_usage || '—'}</td>
 					</tr>
@@ -282,10 +281,10 @@ const TD_LEFT = 'px-2 py-[3px] text-left text-slate-800 border-b border-[#EBEBEB
 					<td class={TD_LEFT}>{study.usage.replace('_', ' ')}</td>
 				</tr>
 				<tr>
-					<td class="{TD_LEFT} font-semibold text-slate-500 text-[10px] uppercase tracking-wide border-r border-[#E8E8E8]">Plot Area (sqm)</td>
-					<td class="{TD_LEFT} border-r border-[#E8E8E8]">{outputs ? fmt(outputs.area.plotAreaSqm) : fmt(assumptions?.plotAreaSqm ?? 0)}</td>
-					<td class="{TD_LEFT} font-semibold text-slate-500 text-[10px] uppercase tracking-wide border-r border-[#E8E8E8]">Max GFA (sqm)</td>
-					<td class={TD_LEFT}>{outputs ? fmt(outputs.area.maxGfaSqm) : '—'}</td>
+					<td class="{TD_LEFT} font-semibold text-slate-500 text-[10px] uppercase tracking-wide border-r border-[#E8E8E8]">Plot Area (sq ft)</td>
+					<td class="{TD_LEFT} border-r border-[#E8E8E8]">{outputs ? fmt(toSqft(outputs.area.plotAreaSqm)) : fmt(toSqft(assumptions?.plotAreaSqm ?? 0))}</td>
+					<td class="{TD_LEFT} font-semibold text-slate-500 text-[10px] uppercase tracking-wide border-r border-[#E8E8E8]">Max GFA (sq ft)</td>
+					<td class={TD_LEFT}>{outputs ? fmt(toSqft(outputs.area.maxGfaSqm)) : '—'}</td>
 				</tr>
 				<tr>
 					<td class="{TD_LEFT} font-semibold text-slate-500 text-[10px] uppercase tracking-wide border-r border-[#E8E8E8]">Total Units</td>
@@ -294,7 +293,7 @@ const TD_LEFT = 'px-2 py-[3px] text-left text-slate-800 border-b border-[#EBEBEB
 					<td class={TD_LEFT}>{fmt(outputs?.program.totalParkingSpaces ?? 0, 0)}</td>
 				</tr>
 				<tr>
-					<td class="{TD_LEFT} font-semibold text-slate-500 text-[10px] uppercase tracking-wide border-r border-[#E8E8E8]">Wtd. Avg Price (AED/sqft)</td>
+					<td class="{TD_LEFT} font-semibold text-slate-500 text-[10px] uppercase tracking-wide border-r border-[#E8E8E8]">Wtd. Avg Price (AED/sq ft)</td>
 					<td class="{TD_LEFT} border-r border-[#E8E8E8] font-medium text-[#1565C0]">
 						{outputs ? fmt(rateToSqft(outputs.program.weightedAvgSalesRatePsqm)) : '—'}
 					</td>
@@ -318,8 +317,8 @@ const TD_LEFT = 'px-2 py-[3px] text-left text-slate-800 border-b border-[#EBEBEB
 					<th class="{TH_LEFT} border-r border-[#D9D9D9]">Unit Type</th>
 					<th class="{TH} border-r border-[#D9D9D9]">Units</th>
 					<th class="{TH} border-r border-[#D9D9D9]">Share %</th>
-					<th class="{TH} border-r border-[#D9D9D9]">Avg Size (sqft)</th>
-					<th class="{TH} border-r border-[#D9D9D9]">AED/sqft</th>
+					<th class="{TH} border-r border-[#D9D9D9]">Avg Size (sq ft)</th>
+					<th class="{TH} border-r border-[#D9D9D9]">AED/sq ft</th>
 					<th class={TH}>Gross Revenue</th>
 				</tr>
 			</thead>
@@ -342,17 +341,16 @@ const TD_LEFT = 'px-2 py-[3px] text-left text-slate-800 border-b border-[#EBEBEB
 		{#if (study.off_plan_unit_benchmarks?.length ?? 0) > 0}
 		<table class="w-full border-collapse" style="border-spacing:0">
 			<tbody>
-				<tr><td colspan="7" class={HEADER}>1. &nbsp; OFF-PLAN PRICING BENCHMARKS</td></tr>
+				<tr><td colspan="6" class={HEADER}>1. &nbsp; OFF-PLAN PRICING BENCHMARKS</td></tr>
 			</tbody>
 		</table>
 		<table class="w-full border-collapse border-b border-[#D9D9D9]" style="border-spacing:0">
 			<colgroup>
-				<col style="width:14%">
-				<col style="width:13%">
-				<col style="width:10%">
-				<col style="width:10%">
+				<col style="width:16%">
+				<col style="width:15%">
 				<col style="width:12%">
 				<col style="width:12%">
+				<col style="width:16%">
 				<col style="width:29%">
 			</colgroup>
 			<thead>
@@ -361,8 +359,7 @@ const TD_LEFT = 'px-2 py-[3px] text-left text-slate-800 border-b border-[#EBEBEB
 					<th class="{TH} border-r border-[#D9D9D9]">Horizon</th>
 					<th class="{TH} border-r border-[#D9D9D9]">Avg Months</th>
 					<th class="{TH} border-r border-[#D9D9D9]">Txn Count</th>
-					<th class="{TH} border-r border-[#D9D9D9]">Median AED/sqm</th>
-					<th class="{TH} border-r border-[#D9D9D9]">Median AED/sqft</th>
+					<th class="{TH} border-r border-[#D9D9D9]">Median AED/sq ft</th>
 					<th class={TH}>Confidence</th>
 				</tr>
 			</thead>
@@ -373,7 +370,6 @@ const TD_LEFT = 'px-2 py-[3px] text-left text-slate-800 border-b border-[#EBEBEB
 						<td class="{TD} border-r border-[#E8E8E8]">{b.selected_horizon_bucket}</td>
 						<td class="{TD} border-r border-[#E8E8E8]">{fmt(b.avg_months_to_completion, 0)}</td>
 						<td class="{TD} border-r border-[#E8E8E8]">{fmt(b.transaction_count)}</td>
-						<td class="{TD} border-r border-[#E8E8E8] font-semibold">{fmt(b.selected_price_sqm)}</td>
 						<td class="{TD} border-r border-[#E8E8E8] font-semibold text-[#1565C0]">{fmt(rateToSqft(b.selected_price_sqm))}</td>
 						<td class="px-2 py-[3px] border-b border-[#EBEBEB]">
 							<span class="px-1.5 py-0.5 rounded text-[9px] font-semibold uppercase tracking-wide {confidenceBadge[b.confidence_label] ?? ''}">
@@ -390,24 +386,22 @@ const TD_LEFT = 'px-2 py-[3px] text-left text-slate-800 border-b border-[#EBEBEB
 		{#if (study.market_pricing?.length ?? 0) > 0}
 		<table class="w-full border-collapse mt-0" style="border-spacing:0">
 			<tbody>
-				<tr><td colspan="5" class={HEADER}>2. &nbsp; MARKET PRICING</td></tr>
+				<tr><td colspan="4" class={HEADER}>2. &nbsp; MARKET PRICING</td></tr>
 			</tbody>
 		</table>
 		<table class="w-full border-collapse border-b border-[#D9D9D9]" style="border-spacing:0">
 			<colgroup>
-				<col style="width:20%">
-				<col style="width:20%">
-				<col style="width:20%">
-				<col style="width:20%">
-				<col style="width:20%">
+				<col style="width:25%">
+				<col style="width:25%">
+				<col style="width:25%">
+				<col style="width:25%">
 			</colgroup>
 			<thead>
 				<tr>
 					<th class="{TH_LEFT} border-r border-[#D9D9D9]">Unit Type</th>
 					<th class="{TH} border-r border-[#D9D9D9]">Transactions</th>
-					<th class="{TH} border-r border-[#D9D9D9]">Median AED/sqm</th>
-					<th class="{TH} border-r border-[#D9D9D9]">Median AED/sqft</th>
-					<th class={TH}>Avg Area (sqft)</th>
+					<th class="{TH} border-r border-[#D9D9D9]">Median AED/sq ft</th>
+					<th class={TH}>Avg Area (sq ft)</th>
 				</tr>
 			</thead>
 			<tbody>
@@ -415,7 +409,6 @@ const TD_LEFT = 'px-2 py-[3px] text-left text-slate-800 border-b border-[#EBEBEB
 					<tr class="hover:bg-slate-50/60">
 						<td class="{TD_LEFT} font-medium border-r border-[#E8E8E8]">{row.unit_type}</td>
 						<td class="{TD} border-r border-[#E8E8E8]">{fmt(row.transaction_count)}</td>
-						<td class="{TD} border-r border-[#E8E8E8]">{fmt(row.median_price_sqm)}</td>
 						<td class="{TD} border-r border-[#E8E8E8] font-semibold text-[#1565C0]">{fmt(rateToSqft(row.median_price_sqm))}</td>
 						<td class={TD}>{row.avg_area_sqm ? fmt(toSqft(row.avg_area_sqm)) : '—'}</td>
 					</tr>
@@ -448,7 +441,7 @@ const TD_LEFT = 'px-2 py-[3px] text-left text-slate-800 border-b border-[#EBEBEB
 					<th class="{TH_LEFT} border-r border-[#D9D9D9]">Area</th>
 					<th class="{TH} border-r border-[#D9D9D9]">Buildings</th>
 					<th class="{TH} border-r border-[#D9D9D9]">Units</th>
-					<th class="{TH} border-r border-[#D9D9D9]">AED/sqft</th>
+					<th class="{TH} border-r border-[#D9D9D9]">AED/sq ft</th>
 					<th class="{TH_LEFT} border-r border-[#D9D9D9]">Dom. Type</th>
 					<th class="{TH_LEFT} border-r border-[#D9D9D9]">Rationale</th>
 					<th class={TH}>Remove</th>
@@ -538,10 +531,10 @@ const TD_LEFT = 'px-2 py-[3px] text-left text-slate-800 border-b border-[#EBEBEB
 					<th class="{TH_LEFT} border-r border-[#D9D9D9]">Date</th>
 					<th class="{TH_LEFT} border-r border-[#D9D9D9]">Area</th>
 					<th class="{TH_LEFT} border-r border-[#D9D9D9]">Usage</th>
-					<th class="{TH} border-r border-[#D9D9D9]">Plot Area (sqm)</th>
+					<th class="{TH} border-r border-[#D9D9D9]">Plot Area (sq ft)</th>
 					<th class="{TH} border-r border-[#D9D9D9]">Price (AED)</th>
-					<th class="{TH} border-r border-[#D9D9D9]">AED/plot sqm</th>
-					<th class="{TH} border-r border-[#D9D9D9]">AED/GFA sqm</th>
+					<th class="{TH} border-r border-[#D9D9D9]">AED/plot sq ft</th>
+					<th class="{TH} border-r border-[#D9D9D9]">AED/GFA sq ft</th>
 					<th class={TH_LEFT}>Landmark</th>
 				</tr>
 			</thead>
@@ -551,11 +544,11 @@ const TD_LEFT = 'px-2 py-[3px] text-left text-slate-800 border-b border-[#EBEBEB
 						<td class="{TD_LEFT} text-slate-500 border-r border-[#E8E8E8]">{lse.instance_date?.slice(0, 10) ?? '—'}</td>
 						<td class="{TD_LEFT} font-medium border-r border-[#E8E8E8]">{lse.area_name}</td>
 						<td class="{TD_LEFT} text-slate-500 border-r border-[#E8E8E8] text-[10px]">{lse.property_usage}</td>
-						<td class="{TD} border-r border-[#E8E8E8]">{fmt(lse.plot_area_sqm)}</td>
+						<td class="{TD} border-r border-[#E8E8E8]">{fmt(toSqft(lse.plot_area_sqm))}</td>
 						<td class="{TD} border-r border-[#E8E8E8]">{fmt(lse.price_aed)}</td>
-						<td class="{TD} border-r border-[#E8E8E8] font-semibold text-[#1565C0]">{fmt(lse.price_sqm)}</td>
+						<td class="{TD} border-r border-[#E8E8E8] font-semibold text-[#1565C0]">{fmt(rateToSqft(lse.price_sqm))}</td>
 						<td class="{TD} border-r border-[#E8E8E8] {lse.price_per_gfa_sqm ? 'font-medium text-slate-700' : 'text-slate-400'}">
-							{lse.price_per_gfa_sqm ? fmt(lse.price_per_gfa_sqm) : '—'}
+							{lse.price_per_gfa_sqm ? fmt(rateToSqft(lse.price_per_gfa_sqm)) : '—'}
 						</td>
 						<td class="{TD_LEFT} text-slate-400 text-[10px]">{lse.nearest_landmark ?? '—'}</td>
 					</tr>

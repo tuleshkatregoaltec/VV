@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest'
 
 import {
 	formatAed,
-	formatSqm,
 	PROPERTY_USAGE,
 	RENTAL_COLUMNS,
 	SALES_COLUMNS
@@ -31,9 +30,9 @@ describe('DXBI transaction page filters', () => {
 				selectedPropertyType: 'Apartment',
 				selectedBedrooms: '2 Beds',
 				selectedStatus: 'Ready',
-				sizeRange: '100-200',
+				sizeRange: '1,000-2,000',
 				priceRange: '1M-2M',
-				pricePerSqMRange: '10,000-20,000'
+				pricePerSqFtRange: '1,000-2,000'
 			}
 		})
 
@@ -47,12 +46,12 @@ describe('DXBI transaction page filters', () => {
 			property_type: 'Apartment',
 			bedrooms: '2 Beds',
 			status: 'Ready',
-			size_min: 100,
-			size_max: 200,
+			size_min: 1_000,
+			size_max: 2_000,
 			price_min: 1_000_000,
 			price_max: 2_000_000,
-			price_per_sqm_min: 10_000,
-			price_per_sqm_max: 20_000
+			price_per_sqft_min: 1_000,
+			price_per_sqft_max: 2_000
 		})
 		expect(withSelectedIds(filters, 'transaction_ids', new Set(['tx-1', 'tx-2']))).toMatchObject({
 			transaction_ids: 'tx-1,tx-2'
@@ -75,28 +74,28 @@ describe('DXBI transaction page filters', () => {
 			timeframe: 'Last Week',
 			localFilters: {
 				...DEFAULT_SALES_LOCAL_FILTERS,
-				sizeRange: '500+',
+				sizeRange: '5,000+',
 				priceRange: '5M+',
-				pricePerSqMRange: '30,000+'
+				pricePerSqFtRange: '3,000+'
 			}
 		})
 		expect(top).toEqual({
 			property_usage: 'Commercial',
 			timeframe_days: 7,
-			size_min: 500,
+			size_min: 5_000,
 			price_min: 5_000_000,
-			price_per_sqm_min: 30_000
+			price_per_sqft_min: 3_000
 		})
 
 		const bottom = buildSalesFilterParams({
 			propertyUsage: PROPERTY_USAGE.RESIDENTIAL,
 			timeframe: 'Last Week',
-			localFilters: { ...DEFAULT_SALES_LOCAL_FILTERS, sizeRange: '<50', priceRange: '<500k' }
+			localFilters: { ...DEFAULT_SALES_LOCAL_FILTERS, sizeRange: '<500', priceRange: '<500k' }
 		})
 		expect(bottom).toEqual({
 			property_usage: 'Residential',
 			timeframe_days: 7,
-			size_max: 50,
+			size_max: 500,
 			price_max: 500_000
 		})
 	})
@@ -112,7 +111,7 @@ describe('DXBI transaction page filters', () => {
 				selectedPropertyType: 'Apartment',
 				selectedBedrooms: '1 Bed',
 				selectedContractType: 'Renewed',
-				sizeRange: '50-100',
+				sizeRange: '500-1,000',
 				rentRange: '50k-100k'
 			}
 		})
@@ -127,8 +126,8 @@ describe('DXBI transaction page filters', () => {
 			property_type: 'Apartment',
 			bedrooms: '1 Bed',
 			contract_type: 'Renewed',
-			size_min: 50,
-			size_max: 100,
+			size_min: 500,
+			size_max: 1_000,
 			rent_min: 50_000,
 			rent_max: 100_000
 		})
@@ -157,9 +156,9 @@ describe('DXBI transaction rows', () => {
 			property_type: 'Apartment',
 			bedrooms: '1 Bed',
 			status: 'Ready',
-			size_sqm: 74.23,
+			size_sqft: 799,
 			price_aed: 1_750_000,
-			price_per_sqm_aed: 23_575
+			price_per_sqft_aed: 2_190
 		})
 
 		expect(row).toEqual({
@@ -171,9 +170,9 @@ describe('DXBI transaction rows', () => {
 			project: '-',
 			propertyType: 'Apartment',
 			bedrooms: '1 Bed',
-			size: 74.23,
+			size: 799,
 			price: 1_750_000,
-			pricePerSqM: 23_575,
+			pricePerSqFt: 2_190,
 			status: 'Ready'
 		})
 		expect(SALES_COLUMNS.map((column) => column.id)).toContain('unit')
@@ -190,7 +189,7 @@ describe('DXBI transaction rows', () => {
 			location_name: 'Al Mamzer',
 			property_type: 'Commercial',
 			bedrooms: null,
-			size_sqm: 387.78,
+			size_sqft: 4_174,
 			annual_rent_aed: 220_000,
 			contract_amount_aed: 440_000,
 			term_months: 24,
@@ -209,11 +208,14 @@ describe('DXBI transaction rows', () => {
 		expect(RENTAL_COLUMNS.map((column) => column.id)).toContain('unit')
 	})
 
-	it('formats amounts and sizes identically in every browser locale', () => {
+	it('formats amounts identically in every browser locale and shows sizes in sq ft', () => {
 		expect(formatAed(1_179_900)).toBe('1,179,900')
 		expect(formatAed(null)).toBe('-')
-		expect(formatSqm(76.4)).toBe('76.40')
-		expect(formatSqm(1_234.5)).toBe('1,234.50')
-		expect(formatSqm(undefined)).toBe('-')
+		const size = SALES_COLUMNS.find((column) => column.id === 'size')
+		expect(size?.label).toBe('Size (sq ft)')
+		expect(size?.format?.(822.6)).toBe('823')
+		expect(SALES_COLUMNS.find((column) => column.id === 'pricePerSqFt')?.label).toBe(
+			'Price/sq ft (AED)'
+		)
 	})
 })

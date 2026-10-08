@@ -1,4 +1,4 @@
-"""The Transactions pages read DXBI records only, once each, in the page's units."""
+"""The Transactions pages read DXBI records only, once each, in DXBI's square feet."""
 
 import csv
 import io
@@ -159,7 +159,7 @@ async def test_each_dxbi_sale_appears_once_with_its_unit_in_square_metres(dxbi):
     assert ids == ["block-1", "block-2", "from-scrape", "moved", "plain"]
     assert page.total == 5
     plain = next(row for row in page.transactions if row.transaction_id == "plain")
-    # 800 sq ft is 74.32 m²; AED 1,600,000 over it is AED 21,528 per m² (price / size).
+    # DXBI's own size; AED 1,600,000 over 800 sq ft is AED 2,000 per sq ft (price / size).
     assert plain.model_dump() == {
         "transaction_id": "plain",
         "transaction_date": TODAY - timedelta(days=1),
@@ -170,9 +170,9 @@ async def test_each_dxbi_sale_appears_once_with_its_unit_in_square_metres(dxbi):
         "property_type": "Apartment",
         "bedrooms": "1 Bed",
         "status": "Ready",
-        "size_sqm": 74.32,
+        "size_sqft": 800.0,
         "price_aed": 1_600_000,
-        "price_per_sqm_aed": 21_528,
+        "price_per_sqft_aed": 2_000,
     }
     moved = next(row for row in page.transactions if row.transaction_id == "moved")
     assert moved.building_name == "Tower B"
@@ -193,8 +193,8 @@ async def test_sales_filters_bands_usage_and_locations(dxbi):
             sale("plot", property_type="Plot", bedrooms="", unit_number="P1"),
             # A 2026 plot row the loader misreads: its "area" is the plot number.
             sale("misread", property_type="", bedrooms="", area_name="No. 630", unit_number="630"),
-            # 1076.39 sq ft is exactly 100.00 m²; AED 1,000,000 is the top of one band only.
-            sale("edge", size_sqft=1076.39, sale_amount_aed=1_000_000, unit_number="E1"),
+            # 1,000 sq ft and AED 1,000,000 are each the top of one band only.
+            sale("edge", size_sqft=1000.0, sale_amount_aed=1_000_000, unit_number="E1"),
             sale("no-size", size_sqft=0.0, unit_number="N1"),
             sale("arabia-1", area_name="City Of Arabia", unit_number="A1"),
             sale("arabia-2", area_name="City Of Arabia", unit_number="A2"),
@@ -218,12 +218,13 @@ async def test_sales_filters_bands_usage_and_locations(dxbi):
     # "All" is every DXBI record: plots and untyped rows included.
     assert {"plot", "misread"} <= set(await ids())
 
-    assert "edge" in await ids(size_min=100, size_max=200)
-    assert "edge" not in await ids(size_min=50, size_max=100)
+    assert "edge" in await ids(size_min=1000, size_max=2000)
+    assert "edge" not in await ids(size_min=500, size_max=1000)
+    assert "edge" in await ids(price_per_sqft_min=1000, price_per_sqft_max=2000)
     assert "edge" in await ids(price_min=1_000_000, price_max=2_000_000)
     assert "edge" not in await ids(price_min=500_000, price_max=1_000_000)
     # A sale with no size is in no size band, not in the smallest one.
-    assert "no-size" not in await ids(size_max=50)
+    assert "no-size" not in await ids(size_max=500)
 
     assert await ids(location="City Of Arabia") == ["arabia-1", "arabia-2", "arabia-3"]
     assert await ids(location="Jumeirah Village Circle") == ["jvc", "jvc-dubai"]
@@ -275,7 +276,7 @@ async def test_numbered_units_hold_one_copy_of_a_lease_and_unnumbered_rows_all_c
         "starts-today",
     ]
     first = next(row for row in page.contracts if row.contract_id == "lease-1")
-    # 1,326 sq ft is 123.19 m²; AED 320,000 over 24 months is AED 160,000 a year.
+    # AED 320,000 over 24 months is AED 160,000 a year; DXBI's size stays in sq ft.
     assert first.model_dump() == {
         "contract_id": "lease-1",
         "lease_start": TODAY - timedelta(days=2),
@@ -286,7 +287,7 @@ async def test_numbered_units_hold_one_copy_of_a_lease_and_unnumbered_rows_all_c
         "location_name": "Dubai Marina",
         "property_type": "Apartment",
         "bedrooms": "2 Beds",
-        "size_sqm": 123.19,
+        "size_sqft": 1326.0,
         "annual_rent_aed": 160_000,
         "contract_amount_aed": 320_000,
         "term_months": 24.0,
@@ -317,7 +318,7 @@ async def test_exports_hold_the_page_rows_and_neutralise_formulas(dxbi):
     rows = list(csv.DictReader(io.StringIO(filtered.getvalue().decode("utf-8-sig"))))
     assert sorted(r["Transaction ID"] for r in rows) == ["formula", "kept"]
     kept = next(r for r in rows if r["Transaction ID"] == "kept")
-    assert (kept["Unit"], kept["Size (sq.m)"], kept["Price/sq.m (AED)"]) == ("1", "74.32", "21528")
+    assert (kept["Unit"], kept["Size (sq ft)"], kept["Price/sq ft (AED)"]) == ("1", "800.0", "2000")
     formula = next(r for r in rows if r["Transaction ID"] == "formula")
     assert formula["Building"] == "'=HYPERLINK()"
 

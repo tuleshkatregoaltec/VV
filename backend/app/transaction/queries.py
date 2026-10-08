@@ -16,8 +16,6 @@ from typing import Optional
 from app.clickhouse.client import query
 from app.transaction.models import RentalFilters, SalesFilters
 
-SQFT_PER_SQM = 10.7639
-
 # DXBI names a property type but no usage; the page's Residential / Commercial switch groups the
 # types. Plots and rows DXBI gives no type appear under "All" only.
 RESIDENTIAL_TYPES = ("Apartment", "Villa", "Townhouse", "Hotel Apartment")
@@ -84,7 +82,7 @@ _LOCATION = r"""multiIf(
 
 
 def _sales_source(date_clause: str) -> str:
-    """One row per DXBI sale, values in the page's units (sizes in m², prices in AED).
+    """One row per DXBI sale, in DXBI's own units: sizes in sq ft, prices in AED.
 
     De-duplication: the source table keeps a second version of a sale whose address was
     re-normalised (latest load wins). DXBI itself lists some sales twice in one scrape with
@@ -111,10 +109,9 @@ def _sales_source(date_clause: str) -> str:
             {_BEDROOMS} AS bedrooms,
             multiIf(market_status = 'Offplan', 'Off-Plan', market_status = 'Ready', 'Ready', '')
                 AS status,
-            if(size_sqft > 0, round(size_sqft / {SQFT_PER_SQM}, 2), NULL) AS size_sqm,
+            if(size_sqft > 0, size_sqft, NULL) AS size_sqft,
             sale_amount_aed AS price_aed,
-            if(size_sqft > 0, toInt64(round(sale_amount_aed * {SQFT_PER_SQM} / size_sqft)), NULL)
-                AS price_per_sqm
+            if(size_sqft > 0, toInt64(round(sale_amount_aed / size_sqft)), NULL) AS price_per_sqft
         FROM (
             SELECT *, {same_sale} AS same_sale
             FROM (
@@ -132,7 +129,7 @@ def _sales_source(date_clause: str) -> str:
 
 
 def _rentals_source(date_clause: str) -> str:
-    """One row per DXBI lease of one unit, values in the page's units.
+    """One row per DXBI lease of one unit, in DXBI's own units: sizes in sq ft, amounts in AED.
 
     DXBI lists a multi-unit lease once per unit. Its report can also repeat one row (identical
     unit, dates, amount and state, same raw fingerprint) when paging shifts during a scrape: a
@@ -157,7 +154,7 @@ def _rentals_source(date_clause: str) -> str:
             property_type,
             {_USAGE} AS property_usage,
             {_BEDROOMS} AS bedrooms,
-            if(size_sqft > 0, round(size_sqft / {SQFT_PER_SQM}, 2), NULL) AS size_sqm,
+            if(size_sqft > 0, size_sqft, NULL) AS size_sqft,
             if(annual_rent_aed > 0, annual_rent_aed, NULL) AS annual_rent_aed,
             if(contract_amount_aed > 0, contract_amount_aed, NULL) AS contract_amount_aed,
             contract_term_months AS term_months,
@@ -204,15 +201,15 @@ def _sales_where(filters: SalesFilters, params: dict) -> str:
     _equals(clauses, params, "status", "status", filters.status)
     _equals(clauses, params, "location_name", "location", filters.location)
     _equals(clauses, params, "building_name", "building", filters.building)
-    _band(clauses, params, "size_sqm", "size", filters.size_min, filters.size_max)
+    _band(clauses, params, "size_sqft", "size", filters.size_min, filters.size_max)
     _band(clauses, params, "price_aed", "price", filters.price_min, filters.price_max)
     _band(
         clauses,
         params,
-        "price_per_sqm",
-        "price_per_sqm",
-        filters.price_per_sqm_min,
-        filters.price_per_sqm_max,
+        "price_per_sqft",
+        "price_per_sqft",
+        filters.price_per_sqft_min,
+        filters.price_per_sqft_max,
     )
     return " AND ".join(clauses) or "1 = 1"
 
@@ -225,16 +222,16 @@ def _rentals_where(filters: RentalFilters, params: dict) -> str:
     _equals(clauses, params, "contract_type", "contract_type", filters.contract_type)
     _equals(clauses, params, "location_name", "location", filters.location)
     _equals(clauses, params, "building_name", "building", filters.building)
-    _band(clauses, params, "size_sqm", "size", filters.size_min, filters.size_max)
+    _band(clauses, params, "size_sqft", "size", filters.size_min, filters.size_max)
     _band(clauses, params, "annual_rent_aed", "rent", filters.rent_min, filters.rent_max)
     return " AND ".join(clauses) or "1 = 1"
 
 
 _SALE_COLUMNS = """transaction_id, transaction_date, unit_number, building_name, project_name,
-            location_name, property_type, property_usage, bedrooms, status, size_sqm,
-            price_aed, price_per_sqm"""
+            location_name, property_type, property_usage, bedrooms, status, size_sqft,
+            price_aed, price_per_sqft"""
 _RENTAL_COLUMNS = """contract_id, lease_start, lease_end, unit_number, building_name,
-            project_name, location_name, property_type, property_usage, bedrooms, size_sqm,
+            project_name, location_name, property_type, property_usage, bedrooms, size_sqft,
             annual_rent_aed, contract_amount_aed, term_months, contract_type"""
 
 

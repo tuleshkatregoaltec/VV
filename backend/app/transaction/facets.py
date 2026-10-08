@@ -10,13 +10,13 @@ def _bedrooms_sort_key(label: str) -> tuple:
     return (0, 0) if label == "Studio" else (1, int(match.group(1))) if match else (2, 0)
 
 
-def _options(values: object) -> list[str]:
+def _options(values: list | None) -> list[str]:
     """Alphabetical regardless of case; names differing only in case keep a fixed order."""
     cleaned = {str(value).strip() for value in values or [] if str(value).strip()}
     return sorted(cleaned, key=lambda value: (value.casefold(), value))
 
 
-def _bedrooms(values: object) -> list[str]:
+def _bedrooms(values: list | None) -> list[str]:
     return sorted(_options(values), key=_bedrooms_sort_key)
 
 

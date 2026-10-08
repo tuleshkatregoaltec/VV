@@ -153,8 +153,8 @@ def request(**fields) -> MarketMetricsRequest:
 
 
 ALL_SALE_METRICS = [
-    "count", "total_aed", "mean_aed", "median_aed", "mean_aed_per_sqm", "median_aed_per_sqm",
-    "weighted_aed_per_sqm", "mean_aed_per_sqft",
+    "count", "total_aed", "mean_aed", "median_aed", "mean_aed_per_sqft", "median_aed_per_sqft",
+    "weighted_aed_per_sqft",
 ]  # fmt: skip
 
 
@@ -170,11 +170,12 @@ async def test_last_month_average_sale_price_in_jvc(served):
     assert values["total_aed"] == 6_000_000
     assert values["mean_aed"] == 2_000_000
     assert values["median_aed"] == 1_000_000
-    # Per-sqm rates 20,000 / 10,000 / 40,000; weighted = 6,000,000 / 250 sqm.
-    assert values["mean_aed_per_sqm"] == pytest.approx(70_000 / 3, abs=0.01)
-    assert values["median_aed_per_sqm"] == 20_000
-    assert values["weighted_aed_per_sqm"] == 24_000
+    # Sizes are stored in m²; every rate is per sq ft. Per-m² rates 20,000 / 10,000 / 40,000
+    # are 1,858.03 / 929.02 / 3,716.07 per sq ft; weighted = 6,000,000 / (250 m² x 10.7639).
     assert values["mean_aed_per_sqft"] == pytest.approx(70_000 / 3 / SQFT, abs=0.01)
+    assert values["median_aed_per_sqft"] == pytest.approx(20_000 / SQFT, abs=0.01)
+    assert values["weighted_aed_per_sqft"] == pytest.approx(6_000_000 / (250 * SQFT), abs=0.01)
+    assert "mean_aed_per_sqm" not in values
     assert values["rated_count"] == 3
     assert {(m.area, m.master_project) for m in result.matched_locations} == {
         ("Al Barsha South Fourth", "Jumeirah Village Circle"),

@@ -19,8 +19,8 @@ class AreaListItem(BaseModel):
     total_sales_volume_12m: float
     median_sale_price: Optional[float]
     median_annual_rent: Optional[float]
-    avg_sale_price_sqm_12m: Optional[float]
-    avg_rent_price_sqm_12m: Optional[float]
+    avg_sale_price_sqft_12m: Optional[float]
+    avg_rent_price_sqft_12m: Optional[float]
     gross_yield_pct: Optional[float]
     top_developers: List[str] = Field(default_factory=list)
 
@@ -73,8 +73,8 @@ class AreaDetailResponse(BaseModel):
     total_sales_volume_12m: float
     median_sale_price: Optional[float]
     median_annual_rent: Optional[float]
-    avg_sale_price_sqm_12m: Optional[float]
-    avg_rent_price_sqm_12m: Optional[float]
+    avg_sale_price_sqft_12m: Optional[float]
+    avg_rent_price_sqft_12m: Optional[float]
     gross_yield_pct: Optional[float]
     top_developers: List[str] = Field(default_factory=list)
     top_master_projects: List[str] = Field(default_factory=list)

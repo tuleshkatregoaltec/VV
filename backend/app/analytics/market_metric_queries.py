@@ -83,7 +83,8 @@ def _from(dataset: str) -> str:
 
 
 def _rate(ds: Dataset) -> str:
-    return f"{ds.value} / {ds.area_sqm}"
+    """AED per square foot of one record (sizes are stored in m²)."""
+    return f"{ds.value} / ({ds.area_sqm} * {SQM_TO_SQFT})"
 
 
 def metric_expressions(ds: Dataset) -> dict[str, str]:
@@ -98,14 +99,12 @@ def metric_expressions(ds: Dataset) -> dict[str, str]:
         "p25_aed": f"quantileExactInclusive(0.25)({ds.value})",
         "p75_aed": f"quantileExactInclusive(0.75)({ds.value})",
         "rated_count": f"toFloat64(countIf({rated}))",
-        "mean_aed_per_sqm": f"avgIf({_rate(ds)}, {rated})",
-        "median_aed_per_sqm": f"quantileExactInclusiveIf(0.5)({_rate(ds)}, {rated})",
-        "weighted_aed_per_sqm": f"sumIf({ds.value}, {rated}) / sumIf({ds.area_sqm}, {rated})",
+        "mean_aed_per_sqft": f"avgIf({_rate(ds)}, {rated})",
+        "median_aed_per_sqft": f"quantileExactInclusiveIf(0.5)({_rate(ds)}, {rated})",
+        "weighted_aed_per_sqft": (
+            f"sumIf({ds.value}, {rated}) / sumIf({ds.area_sqm} * {SQM_TO_SQFT}, {rated})"
+        ),
     }
-    for name in ("mean", "median", "weighted"):
-        expressions[f"{name}_aed_per_sqft"] = (
-            f"({expressions[f'{name}_aed_per_sqm']}) / {SQM_TO_SQFT}"
-        )
     if ds is RENTALS:
         expressions["total_contract_aed"] = "sum(toFloat64(contract_amount))"
         expressions["median_contract_aed"] = (

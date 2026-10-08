@@ -27,12 +27,12 @@ async def test_sales_options_come_from_dxbi_in_one_scan_under_every_filter():
                 location="Downtown Dubai",
                 building="Tower A",
                 timeframe_days=30,
-                size_min=100,
-                size_max=200,
+                size_min=1000,
+                size_max=2000,
                 price_min=1_000_000,
                 price_max=2_000_000,
-                price_per_sqm_min=20_000,
-                price_per_sqm_max=30_000,
+                price_per_sqft_min=2_000,
+                price_per_sqft_max=3_000,
             )
         )
 
@@ -50,8 +50,8 @@ async def test_sales_options_come_from_dxbi_in_one_scan_under_every_filter():
     assert "ch_transactions" not in sql
     # The date window applies before de-duplication; bands are [min, max).
     assert "transaction_date > today() - {timeframe_days:Int32}" in sql
-    assert "size_sqm >= {size_min:Float64}" in sql and "size_sqm < {size_max:Float64}" in sql
-    assert "price_per_sqm < {price_per_sqm_max:Float64}" in sql
+    assert "size_sqft >= {size_min:Float64}" in sql and "size_sqft < {size_max:Float64}" in sql
+    assert "price_per_sqft < {price_per_sqft_max:Float64}" in sql
     assert params == {
         "timeframe_days": 30,
         "property_usage": "Residential",
@@ -60,12 +60,12 @@ async def test_sales_options_come_from_dxbi_in_one_scan_under_every_filter():
         "status": "Ready",
         "location": "Downtown Dubai",
         "building": "Tower A",
-        "size_min": 100,
-        "size_max": 200,
+        "size_min": 1000,
+        "size_max": 2000,
         "price_min": 1_000_000,
         "price_max": 2_000_000,
-        "price_per_sqm_min": 20_000,
-        "price_per_sqm_max": 30_000,
+        "price_per_sqft_min": 2_000,
+        "price_per_sqft_max": 3_000,
     }
 
 
@@ -89,8 +89,8 @@ async def test_rental_options_come_from_dxbi_in_one_scan_under_every_filter():
                 contract_type="Renewed",
                 location="Dubai Marina",
                 timeframe_days=180,
-                size_min=50,
-                size_max=100,
+                size_min=500,
+                size_max=1000,
                 rent_min=50_000,
                 rent_max=100_000,
             )
@@ -112,8 +112,8 @@ async def test_rental_options_come_from_dxbi_in_one_scan_under_every_filter():
         "property_usage": "Residential",
         "contract_type": "Renewed",
         "location": "Dubai Marina",
-        "size_min": 50,
-        "size_max": 100,
+        "size_min": 500,
+        "size_max": 1000,
         "rent_min": 50_000,
         "rent_max": 100_000,
     }

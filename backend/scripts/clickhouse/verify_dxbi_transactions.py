@@ -3,13 +3,13 @@
 The Transactions pages show DXBI records only (app.transaction.queries). This script recomputes
 the last 365 days in pandas straight from dxbi_sales_unit_events and dxbi_rental_events, with the
 page's rules re-implemented here rather than imported (one row per sale or lease, the location
-spelling, Residential / Commercial grouping, bedroom labels, sizes in m², price per m², half-open
+spelling, Residential / Commercial grouping, bedroom labels, sizes in sq ft, price per sq ft, half-open
 bands, the date window), and compares the live API with it:
 
 - totals and the first, a middle and the last page of every period (7-365 days) and usage;
 - every field of every compared row;
 - one page per filter value (types, bedrooms, status / contract type, top locations, buildings);
-- every size, price, price per m² and rent band, and that the bands' totals add up to the rows
+- every size, price, price per sq ft and rent band, and that the bands' totals add up to the rows
   that have a value (no overlap, no gap);
 - the filter options.
 
@@ -33,7 +33,6 @@ import pandas as pd
 
 from app.config import settings
 
-SQFT_PER_SQM = 10.7639
 RESIDENTIAL = {"Apartment", "Villa", "Townhouse", "Hotel Apartment"}
 COMMERCIAL = {
     "Office",
@@ -48,7 +47,7 @@ COMMERCIAL = {
     "Building",
     "Commercial",
 }
-SIZE_BANDS = [(None, 50), (50, 100), (100, 200), (200, 500), (500, None)]
+SIZE_BANDS = [(None, 500), (500, 1_000), (1_000, 2_000), (2_000, 5_000), (5_000, None)]
 PRICE_BANDS = [
     (None, 500_000),
     (500_000, 1_000_000),
@@ -56,7 +55,7 @@ PRICE_BANDS = [
     (2_000_000, 5_000_000),
     (5_000_000, None),
 ]
-PRICE_SQM_BANDS = [(None, 10_000), (10_000, 20_000), (20_000, 30_000), (30_000, None)]
+PRICE_SQFT_BANDS = [(None, 1_000), (1_000, 2_000), (2_000, 3_000), (3_000, None)]
 RENT_BANDS = [(None, 50_000), (50_000, 100_000), (100_000, 200_000), (200_000, None)]
 
 
@@ -179,9 +178,9 @@ class Verifier:
         sales["status"] = sales.market_status.map({"Offplan": "Off-Plan", "Ready": "Ready"}).fillna(
             ""
         )
-        sales["size_sqm"] = [round(s / SQFT_PER_SQM, 2) if s > 0 else None for s in sales.size_sqft]
-        sales["ppsqm"] = [
-            int(round(p * SQFT_PER_SQM / s)) if s > 0 else None
+        sales["size"] = [s if s > 0 else None for s in sales.size_sqft]
+        sales["ppsqft"] = [
+            int(round(p / s)) if s > 0 else None
             for p, s in zip(sales.sale_amount_aed, sales.size_sqft)
         ]
         sales["d"] = pd.to_datetime(sales.transaction_date).dt.date
@@ -228,9 +227,7 @@ class Verifier:
         rentals["location"] = rentals.area_name.map(self._location)
         rentals["usage"] = rentals.property_type.map(_usage)
         rentals["beds"] = rentals.bedrooms.map(_bedrooms)
-        rentals["size_sqm"] = [
-            round(s / SQFT_PER_SQM, 2) if s > 0 else None for s in rentals.size_sqft
-        ]
+        rentals["size"] = [s if s > 0 else None for s in rentals.size_sqft]
         rentals["d"] = pd.to_datetime(rentals.lease_start).dt.date
         return rentals
 
@@ -253,9 +250,9 @@ class Verifier:
             if f.get(name):
                 frame = frame[frame[column] == f[name]]
         bands = (
-            [("size_sqm", "size"), ("sale_amount_aed", "price"), ("ppsqm", "price_per_sqm")]
+            [("size", "size"), ("sale_amount_aed", "price"), ("ppsqft", "price_per_sqft")]
             if sales
-            else [("size_sqm", "size"), ("annual_rent_aed", "rent")]
+            else [("size", "size"), ("annual_rent_aed", "rent")]
         )
         for column, name in bands:
             low, high = f.get(f"{name}_min"), f.get(f"{name}_max")
@@ -352,10 +349,10 @@ class Verifier:
                 self.compare_page(kind, 365, 0, {"building": value})
 
         for kind, name, bands, column in (
-            ("sales", "size", SIZE_BANDS, "size_sqm"),
+            ("sales", "size", SIZE_BANDS, "size"),
             ("sales", "price", PRICE_BANDS, "sale_amount_aed"),
-            ("sales", "price_per_sqm", PRICE_SQM_BANDS, "ppsqm"),
-            ("rentals", "size", SIZE_BANDS, "size_sqm"),
+            ("sales", "price_per_sqft", PRICE_SQFT_BANDS, "ppsqft"),
+            ("rentals", "size", SIZE_BANDS, "size"),
             ("rentals", "rent", RENT_BANDS, "annual_rent_aed"),
         ):
             total = 0
@@ -426,9 +423,9 @@ def _sale_fields(r) -> dict:
         "property_type": _missing(r.property_type),
         "bedrooms": _missing(r.beds),
         "status": _missing(r.status),
-        "size_sqm": _missing(r.size_sqm),
+        "size_sqft": _missing(r.size),
         "price_aed": int(r.sale_amount_aed),
-        "price_per_sqm_aed": None if _missing(r.ppsqm) is None else int(r.ppsqm),
+        "price_per_sqft_aed": None if _missing(r.ppsqft) is None else int(r.ppsqft),
     }
 
 
@@ -443,7 +440,7 @@ def _rental_fields(r) -> dict:
         "location_name": _missing(r.location),
         "property_type": _missing(r.property_type),
         "bedrooms": _missing(r.beds),
-        "size_sqm": _missing(r.size_sqm),
+        "size_sqft": _missing(r.size),
         "annual_rent_aed": int(r.annual_rent_aed) or None,
         "contract_amount_aed": int(r.contract_amount_aed) or None,
         "term_months": float(r.contract_term_months) or None,

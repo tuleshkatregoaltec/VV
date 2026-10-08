@@ -16,7 +16,8 @@ export type {
 	TransactionResponse
 }
 
-// Filters of the DXBI Transactions pages. Range bounds are half-open: min inclusive, max exclusive.
+// Filters of the DXBI Transactions pages. Sizes in sq ft; range bounds are half-open (min
+// inclusive, max exclusive).
 interface BaseTransactionFilters {
 	property_usage?: string
 	property_type?: string
@@ -34,8 +35,8 @@ export interface SalesTransactionFilters extends BaseTransactionFilters {
 	status?: string
 	price_min?: number
 	price_max?: number
-	price_per_sqm_min?: number
-	price_per_sqm_max?: number
+	price_per_sqft_min?: number
+	price_per_sqft_max?: number
 	transaction_ids?: string
 }
 

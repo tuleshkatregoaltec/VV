@@ -10,6 +10,7 @@ import { type FeasibilitySheetTab, workbookStore } from '$lib/feasibility/workbo
 import { formatNumber, titleCase, unitConfigMatchesKey } from '$lib/feasibility/workbook/utils'
 import { feasibilityStudy } from '$lib/stores/feasibilityStudy.svelte'
 import { feasibilityWorkspace, type PendingProposal } from '$lib/stores/feasibilityWorkspace.svelte'
+import { perSqft, toSqft } from '$lib/utils/units'
 
 marked.use({
 	renderer: {
@@ -187,7 +188,8 @@ function formatProposalValue(key: string, value: unknown): string {
 			return `${formatNumber(value, value % 1 === 0 ? 0 : 1)}%`
 		}
 		if (key.endsWith('Aed')) return `AED ${formatNumber(value)}`
-		if (key.includes('Psqm')) return `AED ${formatNumber(value)} / sqm`
+		if (key.includes('Psqm')) return `AED ${formatNumber(perSqft(value))} / sq ft`
+		if (key.includes('Sqm')) return `${formatNumber(toSqft(value))} sq ft`
 		if (key.includes('Months')) return `${formatNumber(value)} mo`
 		if (key.includes('Years')) return `${formatNumber(value)} yr`
 		return formatNumber(value, value % 1 === 0 ? 0 : 2)
@@ -198,8 +200,9 @@ function formatProposalValue(key: string, value: unknown): string {
 	return String(value)
 }
 
+// Proposals reach the workbook in m²; they are shown in square feet like every other figure.
 function formatUnitPrice(pricePsqm: number): string {
-	return `AED ${formatNumber(pricePsqm)} / sqm`
+	return `AED ${formatNumber(perSqft(pricePsqm))} / sq ft`
 }
 
 function proposalSummary(proposal: PendingProposal | null): string {
@@ -224,8 +227,7 @@ function proposalLines(proposal: PendingProposal | null): ProposalLine[] {
 				return {
 					title: unit?.label ?? titleCase(key),
 					from: unit ? formatUnitPrice(unit.sellingRatePsqm) : undefined,
-					to: formatUnitPrice(next),
-					detail: `Approx. AED ${formatNumber(next * 0.092903)} / sq ft`
+					to: formatUnitPrice(next)
 				}
 			})
 	}
@@ -240,7 +242,9 @@ function proposalLines(proposal: PendingProposal | null): ProposalLine[] {
 			const unit = findUnitConfig(key)
 			const details = [
 				typeof row.count === 'number' ? `${formatNumber(row.count)} units` : null,
-				typeof row.avgSizeSqm === 'number' ? `${formatNumber(row.avgSizeSqm)} sqm avg` : null,
+				typeof row.avgSizeSqm === 'number'
+					? `${formatNumber(toSqft(row.avgSizeSqm))} sq ft avg`
+					: null,
 				typeof row.price_sqm === 'number' ? formatUnitPrice(row.price_sqm) : null,
 				typeof row.parkingRatio === 'number' ? `${formatNumber(row.parkingRatio, 1)} parking` : null
 			].filter(Boolean)

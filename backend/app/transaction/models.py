@@ -24,8 +24,8 @@ class SalesFilters(BaseModel):
     size_max: Optional[float] = None
     price_min: Optional[float] = None
     price_max: Optional[float] = None
-    price_per_sqm_min: Optional[float] = None
-    price_per_sqm_max: Optional[float] = None
+    price_per_sqft_min: Optional[float] = None
+    price_per_sqft_max: Optional[float] = None
 
 
 class RentalFilters(BaseModel):
@@ -53,7 +53,7 @@ class RentalFilters(BaseModel):
 
 
 class TransactionResponse(BaseModel):
-    """One DXBI sale (dxbi_sales_unit_events): sizes in m², prices in AED."""
+    """One DXBI sale (dxbi_sales_unit_events): sizes in sq ft, prices in AED."""
 
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
@@ -66,9 +66,9 @@ class TransactionResponse(BaseModel):
     property_type: Optional[str] = None
     bedrooms: Optional[str] = None
     status: Optional[str] = None
-    size_sqm: Optional[float] = None
+    size_sqft: Optional[float] = None
     price_aed: Optional[int] = None
-    price_per_sqm_aed: Optional[int] = None
+    price_per_sqft_aed: Optional[int] = None
 
 
 class TransactionListResponse(BaseModel):
@@ -79,7 +79,7 @@ class TransactionListResponse(BaseModel):
 
 
 class RentalContractResponse(BaseModel):
-    """One DXBI lease of one unit (dxbi_rental_events): sizes in m², amounts in AED."""
+    """One DXBI lease of one unit (dxbi_rental_events): sizes in sq ft, amounts in AED."""
 
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
@@ -92,7 +92,7 @@ class RentalContractResponse(BaseModel):
     location_name: Optional[str] = None
     property_type: Optional[str] = None
     bedrooms: Optional[str] = None
-    size_sqm: Optional[float] = None
+    size_sqft: Optional[float] = None
     annual_rent_aed: Optional[int] = None
     contract_amount_aed: Optional[int] = None
     term_months: Optional[float] = None

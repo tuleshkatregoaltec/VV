@@ -8,6 +8,7 @@ from app.area.models import (
     AreaListResponse,
     AreaProjectSnapshot,
 )
+from app.market.units import per_sqft
 
 
 async def list_areas(
@@ -38,8 +39,8 @@ async def list_areas(
                 total_sales_volume_12m=float(row.get("total_sales_volume_12m") or 0),
                 median_sale_price=row.get("median_sale_price"),
                 median_annual_rent=row.get("median_annual_rent"),
-                avg_sale_price_sqm_12m=row.get("avg_sale_price_sqm_12m"),
-                avg_rent_price_sqm_12m=row.get("avg_rent_price_sqm_12m"),
+                avg_sale_price_sqft_12m=per_sqft(row.get("avg_sale_price_sqm_12m")),
+                avg_rent_price_sqft_12m=per_sqft(row.get("avg_rent_price_sqm_12m")),
                 gross_yield_pct=row.get("gross_yield_pct"),
                 top_developers=list(row.get("top_developers") or []),
             )
@@ -78,8 +79,8 @@ async def get_area_detail(area_name: str) -> AreaDetailResponse:
         total_sales_volume_12m=float(detail.get("total_sales_volume_12m") or 0),
         median_sale_price=detail.get("median_sale_price"),
         median_annual_rent=detail.get("median_annual_rent"),
-        avg_sale_price_sqm_12m=detail.get("avg_sale_price_sqm_12m"),
-        avg_rent_price_sqm_12m=detail.get("avg_rent_price_sqm_12m"),
+        avg_sale_price_sqft_12m=per_sqft(detail.get("avg_sale_price_sqm_12m")),
+        avg_rent_price_sqft_12m=per_sqft(detail.get("avg_rent_price_sqm_12m")),
         gross_yield_pct=detail.get("gross_yield_pct"),
         top_developers=list(detail.get("top_developers") or []),
         top_master_projects=list(detail.get("top_master_projects") or []),

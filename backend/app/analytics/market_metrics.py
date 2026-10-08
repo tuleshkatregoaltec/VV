@@ -53,7 +53,7 @@ ELIGIBILITY = {
 }
 
 _VALUE = {"sales": "sale price", "rentals": "annual rent (DLD annualised amount)"}
-_AREA = {"sales": "procedure area", "rentals": "contract area"}
+_AREA = {"sales": "size in sq ft", "rentals": "size in sq ft"}
 
 
 def _definitions(dataset: str, names: list[str]) -> list[MarketMetricDefinition]:
@@ -70,12 +70,12 @@ def _definitions(dataset: str, names: list[str]) -> list[MarketMetricDefinition]
         "p25_aed": ("AED", f"25th percentile {value}, linear interpolation."),
         "p75_aed": ("AED", f"75th percentile {value}, linear interpolation."),
         "rated_count": ("records", f"Records with {area} > 0, the per-area denominator."),
-        "mean_aed_per_sqm": ("AED/sqm", f"Mean of each record's {rate}."),
-        "median_aed_per_sqm": ("AED/sqm", f"Median of each record's {rate}."),
-        "weighted_aed_per_sqm": ("AED/sqm", f"Area-weighted: sum of {value} ÷ sum of {area}."),
-        "mean_aed_per_sqft": ("AED/sqft", "mean_aed_per_sqm ÷ 10.7639 (1 sqm = 10.7639 sqft)."),
-        "median_aed_per_sqft": ("AED/sqft", "median_aed_per_sqm ÷ 10.7639."),
-        "weighted_aed_per_sqft": ("AED/sqft", "weighted_aed_per_sqm ÷ 10.7639."),
+        "mean_aed_per_sqft": ("AED/sq ft", f"Mean of each record's {rate}."),
+        "median_aed_per_sqft": ("AED/sq ft", f"Median of each record's {rate}."),
+        "weighted_aed_per_sqft": (
+            "AED/sq ft",
+            f"Area-weighted: sum of {value} ÷ sum of {area}.",
+        ),
         "total_contract_aed": ("AED", "Sum of whole-term contract amounts (not annualised)."),
         "median_contract_aed": ("AED", "Median whole-term contract amount (not annualised)."),
     }

@@ -1,6 +1,6 @@
 # Transactions pages: DXBI-only data, validated
 
-Date: 2026-10-06. Measured on the local warehouse copy (handoff snapshot): DXBI sales run to
+Date: 2026-10-06 (units: square feet throughout, see the section at the end). Measured on the local warehouse copy (handoff snapshot): DXBI sales run to
 2026-09-19 and DXBI leases start up to 2026-09-20, so "Last Week" shows no sales locally. Re-run
 `backend/scripts/clickhouse/verify_dxbi_transactions.py` on staging and production after deployment.
 
@@ -23,9 +23,9 @@ counts (see "Transactions versus Analytics").
 | Both | Project (hidden by default) | `project_name` | as recorded (DXBI fills it on ~11% of rows) |
 | Both | Property Type | `property_type` | DXBI's words |
 | Both | Bedrooms | `bedrooms` | `Studio`, `1 Bed`, `2 Beds`, … (DXBI writes `2 Bed` and `2 Beds` for the same count) |
-| Both | Size (sq.m) | `size_sqft` | sq ft ÷ 10.7639, rounded to 0.01 m²; no size is shown as `-` |
+| Both | Size (sq ft) | `size_sqft` | DXBI's own square feet, shown in whole sq ft; no size is shown as `-` |
 | Sales | Price (AED) | `sale_amount_aed` | as recorded |
-| Sales | Price/sq.m (AED) | — | price ÷ size (exact size), rounded to whole AED |
+| Sales | Price/sq ft (AED) | — | price ÷ size in sq ft, rounded to whole AED (matches DXBI's own price per sq ft on 98% of sales) |
 | Sales | Status | `market_status` | `Off-Plan` / `Ready` |
 | Rentals | Start / End Date | `lease_start`, `lease_end` | the page is dated by lease start |
 | Rentals | Unit | `unit_number` | new column |
@@ -47,9 +47,9 @@ gives no type appear under the new **All** option only.
 **Periods.** "Last N days" is the last N calendar days, today included; leases that start in the
 future are not shown until they start.
 
-**Bands.** Size, price, price per m² and rent bands are half-open: `100-200` is 100 up to (not
-including) 200 and `500+` is 500 and above. Before, a 100 m² unit counted in both `50-100` and
-`100-200`. The bands' totals now add up exactly to the rows that have a value.
+**Bands.** Size (sq ft), price, price per sq ft and rent bands are half-open: `1,000-2,000` is
+1,000 up to (not including) 2,000 and `5,000+` is 5,000 and above. Before, a unit on a boundary
+counted in two bands. The bands' totals now add up exactly to the rows that have a value.
 
 **Filter options.** Building lists every building in the filtered rows (it stopped at the first
 1,000 alphabetically, so most buildings could not be chosen).
@@ -72,16 +72,17 @@ unit, so such sales are never merged.
 
 1. **Independent recomputation** (`verify_dxbi_transactions.py`): the last 365 days are rebuilt
    in pandas from the raw DXBI tables with every rule re-implemented (no backend SQL reused) and
-   compared with the live API: totals and the first, a middle and the last page for 7, 30, 90,
+   compared with the live API (sizes in sq ft, prices per sq ft): totals and the first, a middle
+   and the last page for 7, 30, 90,
    180 and 365 days × Residential / Commercial / All; every field of every compared row; one page
    per property type, bedroom count, status and contract type, the 8 largest locations and 4
-   largest buildings; every band of size, price, price per m² and rent, and that each band
+   largest buildings; every band of size, price, price per sq ft and rent, and that each band
    family adds up to the rows with a value; the filter options. **358 checks, 0 failures**
    (522 in the exploratory run, which also counted passes per page).
 2. **The pages in a browser** (headless Chromium against the running app): the displayed count
    equals the API total, and every cell of every row equals the API value in the page's format,
    for the default views, filters chosen through the controls (type, size band, location +
-   bedrooms + price-per-m² band, rent band + contract type), page 2, Commercial (no bedrooms column
+   bedrooms + price-per-area band, rent band + contract type), page 2, Commercial (no bedrooms column
    or filter), All over the last year, plots, the optional Project / Contract Amount / Term
    columns, the details popup, and the CSV export (same rows, same order, 50,000-row cap).
    **53 checks, 0 failures**, no page errors. Every shown annual rent equals contract amount × 12 ÷
@@ -117,6 +118,16 @@ number. DXBI holds about half of the most recent month's leases.
 | Same place spelled two ways | 5 names (`City of Arabia`, `Dubai islands`, `Dubai Land`, `Al Yufrah1`, `Jumeirah Village Circle Dubai`) | merged as above |
 | Misspellings DXBI uses beside the right name | e.g. `Jumeirah Villlage Circle` (4 sales), `Al Barshaa South 2`, `Al Thanayah 4`, `Nad Al Shiba 1` / `Nad Al Sheba 1`; DXBI also uses both `Marsa Dubai` and `Dubai Marina` | not merged (would be a guess); they show as separate locations |
 | Building names differing only in capitals | 3 (`Serenz by Danube - Tower B` / `TOWER B`, two `Raw District 2` names) | not merged |
-| Implausible sizes | sales under 10 m²: 289 apartments; leases under 10 m²: 8,253 apartments, 1,652 villas; leases over 5,000 m²: 1,044 villas | shown as DXBI records them; their price per m² is therefore extreme. Recommendation: treat sizes under 10 m² as missing on the page |
-| DXBI's own price per sq ft uses built-up area for some villas | 3,235 villas | the page divides by DXBI's size, so for these villas its price per m² differs from DXBI's listing |
+| Implausible sizes | sales under 108 sq ft (10 m²): 289 apartments; leases under 108 sq ft: 8,253 apartments, 1,652 villas; leases over 53,800 sq ft (5,000 m²): 1,044 villas | shown as DXBI records them; their price per sq ft is therefore extreme. Recommendation: treat sizes under 108 sq ft as missing on the page |
+| DXBI's own price per sq ft uses built-up area for some villas | 3,235 villas | the page divides by DXBI's size, so for these villas its price per sq ft differs from DXBI's listing |
 | Missing values | sales: project 89%, unit 2%; leases: building 66%, project 88%, bedrooms 34%, unit 7% | shown as `-` |
+
+## Units: square feet everywhere (2026-10-06)
+
+Every area the product shows is in square feet and every price or rent per area in AED per sq ft
+(one factor, 10.7639 sq ft per m², `backend/app/market/units.py` and `frontend/src/lib/utils/units.ts`).
+The Transactions pages use DXBI's own sq ft without conversion. The warehouse keeps its stored
+units and the feasibility workbook keeps its model in m²; both convert where the product reads or
+shows them. After the change the verifier above passed again (358 checks, 0 failures), and a browser
+sweep of every page (Dashboard, Transactions, Analytics, Radar, Projects, Upcoming, Developers,
+Listings, CRM, Profile, and every Feasibility sheet on a fixture study) found no square-metre text.

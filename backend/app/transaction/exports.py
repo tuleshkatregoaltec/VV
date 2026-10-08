@@ -136,9 +136,9 @@ SALES_EXPORT_HEADERS = [
     "Property Type",
     "Bedrooms",
     "Status",
-    "Size (sq.m)",
+    "Size (sq ft)",
     "Price (AED)",
-    "Price/sq.m (AED)",
+    "Price/sq ft (AED)",
 ]
 
 RENTAL_EXPORT_HEADERS = [
@@ -151,7 +151,7 @@ RENTAL_EXPORT_HEADERS = [
     "Location",
     "Property Type",
     "Bedrooms",
-    "Size (sq.m)",
+    "Size (sq ft)",
     "Annual Rent (AED)",
     "Contract Amount (AED)",
     "Term (months)",
@@ -177,9 +177,9 @@ async def export_sales_transactions(
             row["property_type"],
             row["bedrooms"],
             row["status"],
-            row["size_sqm"],
+            row["size_sqft"],
             row["price_aed"],
-            row["price_per_sqm"],
+            row["price_per_sqft"],
         ]
         for row in results
     ]
@@ -212,7 +212,7 @@ async def export_rental_contracts(
             row["location_name"],
             row["property_type"],
             row["bedrooms"],
-            row["size_sqm"],
+            row["size_sqft"],
             row["annual_rent_aed"],
             row["contract_amount_aed"],
             row["term_months"],

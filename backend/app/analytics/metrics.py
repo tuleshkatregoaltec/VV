@@ -167,15 +167,15 @@ def build_configuration_rows(
                 sales_last_12m=sales_last_12m,
                 avg_sale_price=float(sale_row.get("avg_sale_price", 0) or 0),
                 median_sale_price=median_sale_price,
-                avg_sale_price_sqm=float(sale_row.get("avg_sale_price_sqm", 0) or 0),
-                avg_unit_size_sqm=float(unit_row.get("avg_unit_size_sqm", 0) or 0),
+                avg_sale_price_sqft=float(sale_row.get("avg_sale_price_sqft", 0) or 0),
+                avg_unit_size_sqft=float(unit_row.get("avg_unit_size_sqft", 0) or 0),
                 rental_count=int(rent_row.get("rental_count", 0) or 0),
                 median_annual_rent=median_annual_rent,
-                median_rent_sqm=float(rent_row.get("median_rent_sqm", 0) or 0),
+                median_rent_sqft=float(rent_row.get("median_rent_sqft", 0) or 0),
                 gross_yield_pct=gross_yield_pct,
                 price_change_yoy_pct=_pct_change(
-                    sale_row.get("avg_price_sqm_last_12m"),
-                    sale_row.get("avg_price_sqm_prev_12m"),
+                    sale_row.get("avg_price_sqft_last_12m"),
+                    sale_row.get("avg_price_sqft_prev_12m"),
                 )
                 if sales_last_12m >= _CONFIG_PRICE_MIN_SAMPLE_SIZE
                 and sales_prev_12m >= _CONFIG_PRICE_MIN_SAMPLE_SIZE
@@ -291,13 +291,10 @@ def _chart_min_records(args: dict[str, Any], *, group_by: str, metric: str) -> i
         in {
             "avg_price",
             "median_price",
-            "avg_price_sqm",
-            "median_price_sqm",
             "avg_price_sqft",
             "median_price_sqft",
             "avg_rent",
             "median_rent",
-            "median_rent_sqm",
             "median_rent_sqft",
         }
         else 1
@@ -317,14 +314,11 @@ def metric_label(metric: str) -> str:
         "total_sales_volume_12m": "12m sales value",
         "avg_price": "Average price",
         "median_price": "Median price",
-        "avg_price_sqm": "Average price / sqm",
-        "median_price_sqm": "Median price / sqm",
-        "avg_price_sqft": "Average price / sqft",
-        "median_price_sqft": "Median price / sqft",
+        "avg_price_sqft": "Average price / sq ft",
+        "median_price_sqft": "Median price / sq ft",
         "avg_rent": "Average rent",
         "median_rent": "Median rent",
-        "median_rent_sqm": "Median rent / sqm",
-        "median_rent_sqft": "Median rent / sqft",
+        "median_rent_sqft": "Median rent / sq ft",
         "pipeline_units": "Pipeline units",
         "units_delivering_next_12_months": "Units delivering next 12m",
         "sales_transaction_count_12m": "12m sales transactions",

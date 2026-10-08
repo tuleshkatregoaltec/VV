@@ -122,14 +122,14 @@ async def _get_market_summary(project_name: str) -> ProjectAnalyticsResponse:
             transaction_count=sales_count,
             total_volume=float(row.get("sales_volume") or 0),
             avg_price=float(row.get("avg_sale_price") or 0),
-            avg_price_sqm=float(row.get("avg_sale_price_sqm") or 0),
+            avg_price_sqft=float(row.get("avg_sale_price_sqft") or 0),
             median_price=median_sale_price,
         ),
         rentals=ProjectRentalSummary(
             contract_count=rental_count,
             total_annual_value=float(row.get("rental_value") or 0),
             median_annual_rent=median_annual_rent,
-            median_rent_sqm=float(row.get("median_rent_sqm") or 0),
+            median_rent_sqft=float(row.get("median_rent_sqft") or 0),
         ),
         overall_gross_yield_pct=yield_pct,
         by_rooms=[],
@@ -287,7 +287,7 @@ async def get_project_summary(
         transaction_count=int(s.get("transaction_count", 0)),
         total_volume=float(s.get("total_volume", 0) or 0),
         avg_price=float(s.get("avg_price", 0) or 0),
-        avg_price_sqm=float(s.get("avg_price_sqm", 0) or 0),
+        avg_price_sqft=float(s.get("avg_price_sqft", 0) or 0),
         median_price=float(s.get("median_price", 0) or 0),
     )
 
@@ -297,7 +297,7 @@ async def get_project_summary(
         contract_count=int(r.get("contract_count", 0)),
         total_annual_value=float(r.get("total_annual_value", 0) or 0),
         median_annual_rent=float(r.get("median_annual_rent", 0) or 0),
-        median_rent_sqm=float(r.get("median_rent_sqm", 0) or 0),
+        median_rent_sqft=float(r.get("median_rent_sqft", 0) or 0),
     )
 
     # --- Overall gross yield ---
@@ -334,10 +334,10 @@ async def get_project_summary(
                 rooms=rooms,
                 sale_count=int(s_row.get("sale_count", 0)),
                 avg_sale_price=avg_sale,
-                avg_sale_price_sqm=float(s_row.get("avg_sale_price_sqm", 0) or 0),
+                avg_sale_price_sqft=float(s_row.get("avg_sale_price_sqft", 0) or 0),
                 rental_count=int(r_row.get("rental_count", 0)),
                 median_annual_rent=median_rent,
-                median_rent_sqm=float(r_row.get("median_rent_sqm", 0) or 0),
+                median_rent_sqft=float(r_row.get("median_rent_sqft", 0) or 0),
                 gross_yield_pct=yield_pct,
             )
         )
@@ -378,7 +378,7 @@ async def get_project_summary(
             rooms=room,
             count=int(row["unit_count"]),
             pct_of_total=round(int(row["unit_count"]) / total_units * 100, 1),
-            avg_unit_size_sqm=float(row.get("avg_unit_size_sqm", 0) or 0),
+            avg_unit_size_sqft=float(row.get("avg_unit_size_sqft", 0) or 0),
         )
         for row in units_rows
         if (room := _normalize_label(row.get("rooms_en"))) is not None
@@ -435,7 +435,7 @@ async def get_project_trends(
             date=row["period"],
             transaction_count=int(row["transaction_count"]),
             avg_price=float(row["avg_price"] or 0),
-            avg_price_sqm=float(row["avg_price_sqm"] or 0),
+            avg_price_sqft=float(row["avg_price_sqft"] or 0),
         )
         for row in rows
     ]
@@ -471,7 +471,7 @@ async def get_project_forecast(
         ProjectForecastPoint(
             date=row["period"],
             avg_price=float(row["avg_price"] or 0),
-            avg_price_sqm=float(row["avg_price_sqm"] or 0),
+            avg_price_sqft=float(row["avg_price_sqft"] or 0),
             series="historical",
         )
         for row in trend_rows
@@ -486,7 +486,7 @@ async def get_project_forecast(
             ProjectForecastPoint(
                 date=row["period"],
                 avg_price=float(row["avg_price"] or 0),
-                avg_price_sqm=float(row["avg_price_sqm"] or 0),
+                avg_price_sqft=float(row["avg_price_sqft"] or 0),
                 series="historical",
             )
             for row in offplan_rows
@@ -502,15 +502,15 @@ async def get_project_forecast(
 
     monthly_growth_rates: list[float] = []
     for prev, curr in zip(historical, historical[1:]):
-        prev_price = float(prev.avg_price_sqm or 0)
-        curr_price = float(curr.avg_price_sqm or 0)
+        prev_price = float(prev.avg_price_sqft or 0)
+        curr_price = float(curr.avg_price_sqft or 0)
         if prev_price > 0 and curr_price > 0:
             monthly_growth_rates.append((curr_price / prev_price) - 1)
 
     delivery_curve_rates: list[float] = []
     for prev, curr in zip(offplan_rows, offplan_rows[1:]):
-        prev_price = float(prev.get("avg_price_sqm") or 0)
-        curr_price = float(curr.get("avg_price_sqm") or 0)
+        prev_price = float(prev.get("avg_price_sqft") or 0)
+        curr_price = float(curr.get("avg_price_sqft") or 0)
         prev_months = float(prev.get("avg_months_to_delivery") or 0)
         curr_months = float(curr.get("avg_months_to_delivery") or 0)
         delivery_step = prev_months - curr_months
@@ -545,16 +545,16 @@ async def get_project_forecast(
 
     next_date = _add_months(last_point.date, 1)
     next_price = last_point.avg_price
-    next_price_sqm = last_point.avg_price_sqm
+    next_price_sqft = last_point.avg_price_sqft
 
     for _ in range(horizon_months):
         next_price *= 1 + monthly_growth
-        next_price_sqm *= 1 + monthly_growth
+        next_price_sqft *= 1 + monthly_growth
         forecast_points.append(
             ProjectForecastPoint(
                 date=next_date,
                 avg_price=round(next_price, 2),
-                avg_price_sqm=round(next_price_sqm, 2),
+                avg_price_sqft=round(next_price_sqft, 2),
                 series="forecast",
             )
         )
@@ -565,7 +565,7 @@ async def get_project_forecast(
         delivery_date=delivery_date,
         methodology=(
             "Forecast extends the recorded residential project trend, then blends recent "
-            "price/sqm movement with the off-plan delivery curve where delivery-dated launches exist."
+            "price per sq ft movement with the off-plan delivery curve where delivery-dated launches exist."
         ),
     )
 
@@ -677,8 +677,8 @@ async def get_project_price_distribution(
             p50_price=float(row["p50_price"] or 0),
             p75_price=float(row["p75_price"] or 0),
             p95_price=float(row["p95_price"] or 0),
-            mean_price_sqm=float(row["mean_price_sqm"] or 0),
-            std_price_sqm=float(row["std_price_sqm"] or 0),
+            mean_price_sqft=float(row["mean_price_sqft"] or 0),
+            std_price_sqft=float(row["std_price_sqft"] or 0),
         )
         if row["rooms_en"] == "__all__":
             all_bucket = bucket
@@ -1037,7 +1037,7 @@ async def get_market_trend(
             date=row["period"],
             transaction_count=int(row["transaction_count"]),
             avg_price=float(row["avg_price"]),
-            avg_price_sqm=float(row["avg_price_sqm"]),
+            avg_price_sqft=float(row["avg_price_sqft"]),
         )
         for row in trend_result
     ]
@@ -1048,20 +1048,20 @@ async def get_market_trend(
         return round((current - previous) / previous * 100, 1)
 
     avg_price_change_pct = None
-    avg_price_sqm_change_pct = None
+    avg_price_sqft_change_pct = None
     if current_result and prev_result:
         curr = current_result[0]
         prev = prev_result[0]
         avg_price_change_pct = pct_change(float(curr["avg_price"]), float(prev["avg_price"]))
-        avg_price_sqm_change_pct = pct_change(
-            float(curr["median_price_per_sqm"]), float(prev["median_price_per_sqm"])
+        avg_price_sqft_change_pct = pct_change(
+            float(curr["median_price_per_sqft"]), float(prev["median_price_per_sqft"])
         )
 
     return MarketTrendResponse(
         data=data,
         total_transactions=sum(p.transaction_count for p in data),
         avg_price_change_pct=avg_price_change_pct,
-        avg_price_sqm_change_pct=avg_price_sqm_change_pct,
+        avg_price_sqft_change_pct=avg_price_sqft_change_pct,
     )
 
 

@@ -1,3 +1,5 @@
+import { formatSqft } from '$lib/utils/units'
+
 // Property usage. DXBI records carry a property type but no usage: the backend groups the types
 // (apartments, villas, townhouses, hotel apartments are Residential; offices, shops, warehouses
 // and other business premises are Commercial). Plots and untyped records appear under All only.
@@ -24,21 +26,13 @@ export type ColumnDefinition = {
 	defaultVisible?: boolean // If false, column is hidden by default but can be toggled on
 }
 
-// Numbers are formatted the same way in every browser: the values come rounded from the API
-// (sizes to 0.01 m², amounts and AED/m² to whole dirhams), so the page shows them exactly.
+// Numbers are formatted the same way in every browser. Sizes are DXBI's square feet shown in
+// whole sq ft; amounts and AED per sq ft are whole dirhams.
 const aedFormat = new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 })
-const sqmFormat = new Intl.NumberFormat('en-US', {
-	minimumFractionDigits: 2,
-	maximumFractionDigits: 2
-})
 const monthsFormat = new Intl.NumberFormat('en-US', { maximumFractionDigits: 1 })
 
 export function formatAed(value: number | null | undefined): string {
 	return value == null ? '-' : aedFormat.format(value)
-}
-
-export function formatSqm(value: number | null | undefined): string {
-	return value == null ? '-' : sqmFormat.format(value)
 }
 
 export function formatCount(value: number): string {
@@ -58,11 +52,11 @@ export const SALES_COLUMNS: ColumnDefinition[] = [
 	{ id: 'project', label: 'Project', align: 'left', defaultVisible: false },
 	{ id: 'propertyType', label: 'Property Type', align: 'left', defaultVisible: true },
 	{ id: 'bedrooms', label: 'Bedrooms', align: 'left', badge: true, defaultVisible: true },
-	{ id: 'size', label: 'Size (sq.m)', align: 'right', format: formatSqm, defaultVisible: true },
+	{ id: 'size', label: 'Size (sq ft)', align: 'right', format: formatSqft, defaultVisible: true },
 	{ id: 'price', label: 'Price (AED)', align: 'right', format: formatAed, defaultVisible: true },
 	{
-		id: 'pricePerSqM',
-		label: 'Price/sq.m (AED)',
+		id: 'pricePerSqFt',
+		label: 'Price/sq ft (AED)',
 		align: 'right',
 		highlighted: true,
 		format: formatAed,
@@ -81,7 +75,7 @@ export const RENTAL_COLUMNS: ColumnDefinition[] = [
 	{ id: 'project', label: 'Project', align: 'left', defaultVisible: false },
 	{ id: 'propertyType', label: 'Property Type', align: 'left', defaultVisible: true },
 	{ id: 'bedrooms', label: 'Bedrooms', align: 'left', badge: true, defaultVisible: true },
-	{ id: 'size', label: 'Size (sq.m)', align: 'right', format: formatSqm, defaultVisible: true },
+	{ id: 'size', label: 'Size (sq ft)', align: 'right', format: formatSqft, defaultVisible: true },
 	{
 		id: 'annualRent',
 		label: 'Annual Rent (AED)',

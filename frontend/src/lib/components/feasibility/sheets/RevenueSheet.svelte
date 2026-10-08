@@ -1,5 +1,6 @@
 <script lang="ts">
 import { workbookStore } from '$lib/feasibility/workbook/store.svelte'
+import { perSqft } from '$lib/utils/units'
 
 function fmt(value: number, digits = 0) {
 	return value.toLocaleString('en-AE', {
@@ -65,7 +66,7 @@ No sales and collections data available.
 </div>
 <div class="px-2 py-1.5 flex-1">
 <div class="text-[9px] uppercase tracking-wider text-slate-500 font-semibold">Avg Rate</div>
-<div class="text-[11px] font-bold text-slate-900 tabular-nums">AED {fmt(outputs.program.weightedAvgSalesRatePsqm)} /sqm</div>
+<div class="text-[11px] font-bold text-slate-900 tabular-nums">AED {fmt(perSqft(outputs.program.weightedAvgSalesRatePsqm))} /sq ft</div>
 </div>
 </div>
 
@@ -126,7 +127,7 @@ No sales and collections data available.
 <th class="px-1 py-[4px] text-center text-[9px] font-semibold text-slate-500 uppercase tracking-wider">#</th>
 <th class="px-2 py-[4px] text-left text-[9px] font-semibold text-slate-600 uppercase tracking-wider">Unit Type</th>
 <th class="px-2 py-[4px] text-right text-[9px] font-semibold text-slate-600 uppercase tracking-wider">Units</th>
-<th class="px-2 py-[4px] text-right text-[9px] font-semibold text-slate-600 uppercase tracking-wider">Rate (AED/sqm)</th>
+<th class="px-2 py-[4px] text-right text-[9px] font-semibold text-slate-600 uppercase tracking-wider">Rate (AED/sq ft)</th>
 <th class="px-2 py-[4px] text-right text-[9px] font-semibold text-slate-600 uppercase tracking-wider">Revenue (AED)</th>
 </tr>
 {#each outputs.program.rows as row, idx (row.id)}
@@ -134,14 +135,14 @@ No sales and collections data available.
 <td class="px-1 py-[3px] text-center text-[9px] text-slate-400">{idx + 1}</td>
 <td class="px-2 py-[3px] text-left text-[10px] text-slate-800">{row.label}</td>
 <td class="px-2 py-[3px] text-right tabular-nums text-slate-900 text-[10px]">{fmt(row.units)}</td>
-<td class="px-2 py-[3px] text-right tabular-nums text-slate-900 text-[10px]">{fmt(row.sellingRatePsqm)}</td>
+<td class="px-2 py-[3px] text-right tabular-nums text-slate-900 text-[10px]">{fmt(perSqft(row.sellingRatePsqm))}</td>
 <td class="px-2 py-[3px] text-right tabular-nums text-slate-900 text-[10px]">{fmtMoney(row.revenueAed)}</td>
 </tr>
 {/each}
 <tr class="border-t-2 border-[#1F3864] border-b border-[#D9D9D9] font-bold bg-[#EEF2F7]">
 <td colspan="2" class="px-2 py-[3px] text-left text-[10px] text-slate-900 font-bold">Total</td>
 <td class="px-2 py-[3px] text-right tabular-nums text-slate-900 text-[10px] font-bold">{fmt(outputs.program.totalUnits)}</td>
-<td class="px-2 py-[3px] text-right tabular-nums text-slate-900 text-[10px] font-bold">{fmt(outputs.program.weightedAvgSalesRatePsqm)}</td>
+<td class="px-2 py-[3px] text-right tabular-nums text-slate-900 text-[10px] font-bold">{fmt(perSqft(outputs.program.weightedAvgSalesRatePsqm))}</td>
 <td class="px-2 py-[3px] text-right tabular-nums text-slate-900 text-[10px] font-bold">{fmtMoney(outputs.program.grossRevenueAed)}</td>
 </tr>
 
@@ -159,7 +160,7 @@ No sales and collections data available.
 <th class="px-2 py-[4px] text-left text-[9px] font-semibold text-slate-600 uppercase tracking-wider">Unit Type</th>
 <th class="px-2 py-[4px] text-right text-[9px] font-semibold text-slate-600 uppercase tracking-wider">Horizon</th>
 <th class="px-2 py-[4px] text-right text-[9px] font-semibold text-slate-600 uppercase tracking-wider">Avg Months</th>
-<th class="px-2 py-[4px] text-right text-[9px] font-semibold text-slate-600 uppercase tracking-wider">Rate (AED/sqm)</th>
+<th class="px-2 py-[4px] text-right text-[9px] font-semibold text-slate-600 uppercase tracking-wider">Rate (AED/sq ft)</th>
 <th class="px-2 py-[4px] text-right text-[9px] font-semibold text-slate-600 uppercase tracking-wider">Transactions</th>
 </tr>
 {#each offPlanPricing as row (`${row.unit_type}-${row.horizon_bucket}`)}
@@ -167,7 +168,7 @@ No sales and collections data available.
 <td class="px-2 py-[3px] text-left text-[10px] text-slate-800">{row.unit_type}</td>
 <td class="px-2 py-[3px] text-right tabular-nums text-slate-500 text-[10px]">{row.horizon_bucket}</td>
 <td class="px-2 py-[3px] text-right tabular-nums text-slate-900 text-[10px]">{fmt(row.avg_months_to_completion, 1)}</td>
-<td class="px-2 py-[3px] text-right tabular-nums text-slate-900 text-[10px]">{fmt(row.median_price_sqm)}</td>
+<td class="px-2 py-[3px] text-right tabular-nums text-slate-900 text-[10px]">{fmt(perSqft(row.median_price_sqm))}</td>
 <td class="px-2 py-[3px] text-right tabular-nums text-slate-500 text-[10px]">{fmt(row.transaction_count)}</td>
 </tr>
 {/each}
@@ -190,7 +191,7 @@ No sales and collections data available.
 {#each offPlanBenchmarks as row (`${row.unit_type}-${row.selected_horizon_bucket}`)}
 <tr class="border-b border-[#D9D9D9] hover:bg-slate-50/60">
 <td class="px-2 py-[3px] text-left text-[10px] text-slate-800">{row.unit_type}</td>
-<td class="px-2 py-[3px] text-right tabular-nums text-slate-900 text-[10px]">AED {fmt(row.selected_price_sqm)}/sqm</td>
+<td class="px-2 py-[3px] text-right tabular-nums text-slate-900 text-[10px]">AED {fmt(perSqft(row.selected_price_sqm))}/sq ft</td>
 <td class="px-2 py-[3px] text-right tabular-nums text-slate-500 text-[10px]">{fmt(row.transaction_count)}</td>
 </tr>
 {/each}

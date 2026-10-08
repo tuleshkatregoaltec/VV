@@ -13,8 +13,8 @@ def _radar_stats() -> dict:
         "rental_contract_count_12m": 0,
         "total_sales_volume_12m": 0,
         "dda_plot_count": 0,
-        "dda_total_plot_area_sqm": 0,
-        "dda_total_gfa_sqm": 0,
+        "dda_total_plot_area_sqft": 0,
+        "dda_total_gfa_sqft": 0,
     }
 
 

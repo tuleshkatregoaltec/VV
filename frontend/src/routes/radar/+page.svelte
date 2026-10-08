@@ -33,7 +33,6 @@ import PageContainer from '$lib/components/layout/PageContainer.svelte'
 import ProjectMap from '$lib/components/map/RadarLabMap.svelte'
 import BuildingDetails from '$lib/components/projects/BuildingDetails.svelte'
 import { projectQueries } from '$lib/queries/projects'
-import { SQM_TO_SQFT } from '$lib/utils/units'
 
 type PanelView = 'overview' | 'project' | 'area' | 'building'
 type ZoneHeatmapLayer = 'transaction_activity' | 'avg_price_sqft' | 'rental_yield'
@@ -96,7 +95,7 @@ let renderedDDAMode = $state<DdaLayerMode>('outlines')
 
 const heatmapLayerOptions: Array<{ value: ZoneHeatmapLayer; label: string; caption: string }> = [
 	{ value: 'transaction_activity', label: 'Activity', caption: 'DLD sales and Ejari leases' },
-	{ value: 'avg_price_sqft', label: 'Price / sqft', caption: 'Sales rate' },
+	{ value: 'avg_price_sqft', label: 'Price / sq ft', caption: 'Sales rate' },
 	{ value: 'rental_yield', label: 'Yield', caption: 'Gross rent yield' }
 ]
 const activityPeriodOptions: Array<{ value: RadarPeriodDays; label: string }> = [
@@ -506,7 +505,7 @@ function heatmapLayerLabel(layer: ZoneHeatmapLayer) {
 }
 
 function areaMetricValue(area: ProjectRadarArea, layer: ZoneHeatmapLayer): number {
-	if (layer === 'avg_price_sqft') return (area.avg_sale_price_sqm ?? 0) / SQM_TO_SQFT
+	if (layer === 'avg_price_sqft') return area.avg_sale_price_sqft ?? 0
 	if (layer === 'rental_yield') return area.gross_yield_pct ?? 0
 	return (area.sales_transaction_count ?? 0) + (area.rental_contract_count ?? 0)
 }
@@ -1160,7 +1159,7 @@ $effect(() => {
 											<div>
 												<p class="text-slate-500">GFA</p>
 												<p class="font-semibold text-slate-950">
-													{formatCompact(selectedArea.dda_total_gfa_sqm)} sqm
+													{formatCompact(selectedArea.dda_total_gfa_sqft)} sq ft
 												</p>
 											</div>
 										</div>
@@ -1217,9 +1216,9 @@ $effect(() => {
 										</p>
 									</div>
 									<div>
-										<p class="font-mono text-[10px] uppercase tracking-[0.08em] text-fg-4">Price / sqft</p>
+										<p class="font-mono text-[10px] uppercase tracking-[0.08em] text-fg-4">Price / sq ft</p>
 										<p class="mt-1 text-base font-semibold tabular-nums text-fg-1">
-											{formatPriceSqft((selectedArea.avg_sale_price_sqm ?? 0) / SQM_TO_SQFT)}
+											{formatPriceSqft(selectedArea.avg_sale_price_sqft ?? 0)}
 										</p>
 									</div>
 									<div>

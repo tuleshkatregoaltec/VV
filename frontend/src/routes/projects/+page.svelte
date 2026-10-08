@@ -930,7 +930,7 @@ $effect(() => {
 											<div>
 												<p class="text-slate-500">GFA</p>
 												<p class="font-semibold text-slate-950">
-													{formatCompact(selectedArea.dda_total_gfa_sqm)} sqm
+													{formatCompact(selectedArea.dda_total_gfa_sqft)} sq ft
 												</p>
 											</div>
 										</div>
@@ -988,7 +988,7 @@ $effect(() => {
 										<div class="rounded-md bg-slate-50 px-3 py-2">
 											<p class="text-[11px] text-slate-500">DDA GFA</p>
 											<p class="text-sm font-semibold text-slate-950">
-												{formatCompact(selectedArea.dda_total_gfa_sqm)} sqm
+												{formatCompact(selectedArea.dda_total_gfa_sqft)} sq ft
 											</p>
 										</div>
 									</div>

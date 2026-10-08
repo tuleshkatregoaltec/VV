@@ -3593,10 +3593,10 @@
 									"type": "null"
 								}
 							],
-							"description": "Minimum size (sq.m), inclusive",
+							"description": "Minimum size (sq ft), inclusive",
 							"title": "Size Min"
 						},
-						"description": "Minimum size (sq.m), inclusive"
+						"description": "Minimum size (sq ft), inclusive"
 					},
 					{
 						"name": "size_max",
@@ -3611,10 +3611,10 @@
 									"type": "null"
 								}
 							],
-							"description": "Maximum size (sq.m), exclusive",
+							"description": "Maximum size (sq ft), exclusive",
 							"title": "Size Max"
 						},
-						"description": "Maximum size (sq.m), exclusive"
+						"description": "Maximum size (sq ft), exclusive"
 					},
 					{
 						"name": "price_min",
@@ -3653,7 +3653,7 @@
 						"description": "Maximum price (AED), exclusive"
 					},
 					{
-						"name": "price_per_sqm_min",
+						"name": "price_per_sqft_min",
 						"in": "query",
 						"required": false,
 						"schema": {
@@ -3665,13 +3665,13 @@
 									"type": "null"
 								}
 							],
-							"description": "Minimum price per sq.m (AED), inclusive",
-							"title": "Price Per Sqm Min"
+							"description": "Minimum price per sq ft (AED), inclusive",
+							"title": "Price Per Sqft Min"
 						},
-						"description": "Minimum price per sq.m (AED), inclusive"
+						"description": "Minimum price per sq ft (AED), inclusive"
 					},
 					{
-						"name": "price_per_sqm_max",
+						"name": "price_per_sqft_max",
 						"in": "query",
 						"required": false,
 						"schema": {
@@ -3683,10 +3683,10 @@
 									"type": "null"
 								}
 							],
-							"description": "Maximum price per sq.m (AED), exclusive",
-							"title": "Price Per Sqm Max"
+							"description": "Maximum price per sq ft (AED), exclusive",
+							"title": "Price Per Sqft Max"
 						},
-						"description": "Maximum price per sq.m (AED), exclusive"
+						"description": "Maximum price per sq ft (AED), exclusive"
 					}
 				],
 				"responses": {
@@ -3860,10 +3860,10 @@
 									"type": "null"
 								}
 							],
-							"description": "Minimum size (sq.m), inclusive",
+							"description": "Minimum size (sq ft), inclusive",
 							"title": "Size Min"
 						},
-						"description": "Minimum size (sq.m), inclusive"
+						"description": "Minimum size (sq ft), inclusive"
 					},
 					{
 						"name": "size_max",
@@ -3878,10 +3878,10 @@
 									"type": "null"
 								}
 							],
-							"description": "Maximum size (sq.m), exclusive",
+							"description": "Maximum size (sq ft), exclusive",
 							"title": "Size Max"
 						},
-						"description": "Maximum size (sq.m), exclusive"
+						"description": "Maximum size (sq ft), exclusive"
 					},
 					{
 						"name": "rent_min",
@@ -6470,10 +6470,10 @@
 									"type": "null"
 								}
 							],
-							"description": "Minimum size (sq.m), inclusive",
+							"description": "Minimum size (sq ft), inclusive",
 							"title": "Size Min"
 						},
-						"description": "Minimum size (sq.m), inclusive"
+						"description": "Minimum size (sq ft), inclusive"
 					},
 					{
 						"name": "size_max",
@@ -6488,10 +6488,10 @@
 									"type": "null"
 								}
 							],
-							"description": "Maximum size (sq.m), exclusive",
+							"description": "Maximum size (sq ft), exclusive",
 							"title": "Size Max"
 						},
-						"description": "Maximum size (sq.m), exclusive"
+						"description": "Maximum size (sq ft), exclusive"
 					},
 					{
 						"name": "price_min",
@@ -6530,7 +6530,7 @@
 						"description": "Maximum price (AED), exclusive"
 					},
 					{
-						"name": "price_per_sqm_min",
+						"name": "price_per_sqft_min",
 						"in": "query",
 						"required": false,
 						"schema": {
@@ -6542,13 +6542,13 @@
 									"type": "null"
 								}
 							],
-							"description": "Minimum price per sq.m (AED), inclusive",
-							"title": "Price Per Sqm Min"
+							"description": "Minimum price per sq ft (AED), inclusive",
+							"title": "Price Per Sqft Min"
 						},
-						"description": "Minimum price per sq.m (AED), inclusive"
+						"description": "Minimum price per sq ft (AED), inclusive"
 					},
 					{
-						"name": "price_per_sqm_max",
+						"name": "price_per_sqft_max",
 						"in": "query",
 						"required": false,
 						"schema": {
@@ -6560,10 +6560,10 @@
 									"type": "null"
 								}
 							],
-							"description": "Maximum price per sq.m (AED), exclusive",
-							"title": "Price Per Sqm Max"
+							"description": "Maximum price per sq ft (AED), exclusive",
+							"title": "Price Per Sqft Max"
 						},
-						"description": "Maximum price per sq.m (AED), exclusive"
+						"description": "Maximum price per sq ft (AED), exclusive"
 					}
 				],
 				"responses": {
@@ -6764,10 +6764,10 @@
 									"type": "null"
 								}
 							],
-							"description": "Minimum size (sq.m), inclusive",
+							"description": "Minimum size (sq ft), inclusive",
 							"title": "Size Min"
 						},
-						"description": "Minimum size (sq.m), inclusive"
+						"description": "Minimum size (sq ft), inclusive"
 					},
 					{
 						"name": "size_max",
@@ -6782,10 +6782,10 @@
 									"type": "null"
 								}
 							],
-							"description": "Maximum size (sq.m), exclusive",
+							"description": "Maximum size (sq ft), exclusive",
 							"title": "Size Max"
 						},
-						"description": "Maximum size (sq.m), exclusive"
+						"description": "Maximum size (sq ft), exclusive"
 					},
 					{
 						"name": "rent_min",
@@ -7026,10 +7026,10 @@
 									"type": "null"
 								}
 							],
-							"description": "Minimum size (sq.m), inclusive",
+							"description": "Minimum size (sq ft), inclusive",
 							"title": "Size Min"
 						},
-						"description": "Minimum size (sq.m), inclusive"
+						"description": "Minimum size (sq ft), inclusive"
 					},
 					{
 						"name": "size_max",
@@ -7044,10 +7044,10 @@
 									"type": "null"
 								}
 							],
-							"description": "Maximum size (sq.m), exclusive",
+							"description": "Maximum size (sq ft), exclusive",
 							"title": "Size Max"
 						},
-						"description": "Maximum size (sq.m), exclusive"
+						"description": "Maximum size (sq ft), exclusive"
 					},
 					{
 						"name": "price_min",
@@ -7086,7 +7086,7 @@
 						"description": "Maximum price (AED), exclusive"
 					},
 					{
-						"name": "price_per_sqm_min",
+						"name": "price_per_sqft_min",
 						"in": "query",
 						"required": false,
 						"schema": {
@@ -7098,13 +7098,13 @@
 									"type": "null"
 								}
 							],
-							"description": "Minimum price per sq.m (AED), inclusive",
-							"title": "Price Per Sqm Min"
+							"description": "Minimum price per sq ft (AED), inclusive",
+							"title": "Price Per Sqft Min"
 						},
-						"description": "Minimum price per sq.m (AED), inclusive"
+						"description": "Minimum price per sq ft (AED), inclusive"
 					},
 					{
-						"name": "price_per_sqm_max",
+						"name": "price_per_sqft_max",
 						"in": "query",
 						"required": false,
 						"schema": {
@@ -7116,10 +7116,10 @@
 									"type": "null"
 								}
 							],
-							"description": "Maximum price per sq.m (AED), exclusive",
-							"title": "Price Per Sqm Max"
+							"description": "Maximum price per sq ft (AED), exclusive",
+							"title": "Price Per Sqft Max"
 						},
-						"description": "Maximum price per sq.m (AED), exclusive"
+						"description": "Maximum price per sq ft (AED), exclusive"
 					}
 				],
 				"responses": {
@@ -7317,10 +7317,10 @@
 									"type": "null"
 								}
 							],
-							"description": "Minimum size (sq.m), inclusive",
+							"description": "Minimum size (sq ft), inclusive",
 							"title": "Size Min"
 						},
-						"description": "Minimum size (sq.m), inclusive"
+						"description": "Minimum size (sq ft), inclusive"
 					},
 					{
 						"name": "size_max",
@@ -7335,10 +7335,10 @@
 									"type": "null"
 								}
 							],
-							"description": "Maximum size (sq.m), exclusive",
+							"description": "Maximum size (sq ft), exclusive",
 							"title": "Size Max"
 						},
-						"description": "Maximum size (sq.m), exclusive"
+						"description": "Maximum size (sq ft), exclusive"
 					},
 					{
 						"name": "rent_min",
@@ -9066,9 +9066,9 @@
 						"type": "number",
 						"title": "Pct Of Total"
 					},
-					"avg_unit_size_sqm": {
+					"avg_unit_size_sqft": {
 						"type": "number",
-						"title": "Avg Unit Size Sqm",
+						"title": "Avg Unit Size Sqft",
 						"default": 0.0
 					}
 				},
@@ -9173,7 +9173,7 @@
 						],
 						"title": "Median Annual Rent"
 					},
-					"avg_sale_price_sqm_12m": {
+					"avg_sale_price_sqft_12m": {
 						"anyOf": [
 							{
 								"type": "number"
@@ -9182,9 +9182,9 @@
 								"type": "null"
 							}
 						],
-						"title": "Avg Sale Price Sqm 12M"
+						"title": "Avg Sale Price Sqft 12M"
 					},
-					"avg_rent_price_sqm_12m": {
+					"avg_rent_price_sqft_12m": {
 						"anyOf": [
 							{
 								"type": "number"
@@ -9193,7 +9193,7 @@
 								"type": "null"
 							}
 						],
-						"title": "Avg Rent Price Sqm 12M"
+						"title": "Avg Rent Price Sqft 12M"
 					},
 					"gross_yield_pct": {
 						"anyOf": [
@@ -9252,8 +9252,8 @@
 					"total_sales_volume_12m",
 					"median_sale_price",
 					"median_annual_rent",
-					"avg_sale_price_sqm_12m",
-					"avg_rent_price_sqm_12m",
+					"avg_sale_price_sqft_12m",
+					"avg_rent_price_sqft_12m",
 					"gross_yield_pct"
 				],
 				"title": "AreaDetailResponse"
@@ -9395,7 +9395,7 @@
 						],
 						"title": "Median Annual Rent"
 					},
-					"avg_sale_price_sqm_12m": {
+					"avg_sale_price_sqft_12m": {
 						"anyOf": [
 							{
 								"type": "number"
@@ -9404,9 +9404,9 @@
 								"type": "null"
 							}
 						],
-						"title": "Avg Sale Price Sqm 12M"
+						"title": "Avg Sale Price Sqft 12M"
 					},
-					"avg_rent_price_sqm_12m": {
+					"avg_rent_price_sqft_12m": {
 						"anyOf": [
 							{
 								"type": "number"
@@ -9415,7 +9415,7 @@
 								"type": "null"
 							}
 						],
-						"title": "Avg Rent Price Sqm 12M"
+						"title": "Avg Rent Price Sqft 12M"
 					},
 					"gross_yield_pct": {
 						"anyOf": [
@@ -9453,8 +9453,8 @@
 					"total_sales_volume_12m",
 					"median_sale_price",
 					"median_annual_rent",
-					"avg_sale_price_sqm_12m",
-					"avg_rent_price_sqm_12m",
+					"avg_sale_price_sqft_12m",
+					"avg_rent_price_sqft_12m",
 					"gross_yield_pct"
 				],
 				"title": "AreaListItem"
@@ -9927,7 +9927,7 @@
 						"type": "number",
 						"title": "Percentage"
 					},
-					"avg_area_sqm": {
+					"avg_area_sqft": {
 						"anyOf": [
 							{
 								"type": "number"
@@ -9936,11 +9936,11 @@
 								"type": "null"
 							}
 						],
-						"title": "Avg Area Sqm"
+						"title": "Avg Area Sqft"
 					}
 				},
 				"type": "object",
-				"required": ["rooms_en", "count", "percentage", "avg_area_sqm"],
+				"required": ["rooms_en", "count", "percentage", "avg_area_sqft"],
 				"title": "BuildingUnitType",
 				"description": "Bedroom/type breakdown for a specific building"
 			},
@@ -19065,9 +19065,6 @@
 								"median_aed",
 								"p25_aed",
 								"p75_aed",
-								"mean_aed_per_sqm",
-								"median_aed_per_sqm",
-								"weighted_aed_per_sqm",
 								"mean_aed_per_sqft",
 								"median_aed_per_sqft",
 								"weighted_aed_per_sqft",
@@ -19288,9 +19285,6 @@
 							"median_aed",
 							"p25_aed",
 							"p75_aed",
-							"mean_aed_per_sqm",
-							"median_aed_per_sqm",
-							"weighted_aed_per_sqm",
 							"mean_aed_per_sqft",
 							"median_aed_per_sqft",
 							"weighted_aed_per_sqft",
@@ -19651,13 +19645,13 @@
 						"type": "number",
 						"title": "Avg Price"
 					},
-					"avg_price_sqm": {
+					"avg_price_sqft": {
 						"type": "number",
-						"title": "Avg Price Sqm"
+						"title": "Avg Price Sqft"
 					}
 				},
 				"type": "object",
-				"required": ["date", "transaction_count", "avg_price", "avg_price_sqm"],
+				"required": ["date", "transaction_count", "avg_price", "avg_price_sqft"],
 				"title": "MarketTrendPoint",
 				"description": "Single data point for the market trend chart"
 			},
@@ -19685,7 +19679,7 @@
 						],
 						"title": "Avg Price Change Pct"
 					},
-					"avg_price_sqm_change_pct": {
+					"avg_price_sqft_change_pct": {
 						"anyOf": [
 							{
 								"type": "number"
@@ -19694,7 +19688,7 @@
 								"type": "null"
 							}
 						],
-						"title": "Avg Price Sqm Change Pct"
+						"title": "Avg Price Sqft Change Pct"
 					}
 				},
 				"type": "object",
@@ -21287,13 +21281,13 @@
 						"title": "P95 Price",
 						"default": 0.0
 					},
-					"mean_price_sqm": {
+					"mean_price_sqft": {
 						"type": "number",
-						"title": "Mean Price Sqm"
+						"title": "Mean Price Sqft"
 					},
-					"std_price_sqm": {
+					"std_price_sqft": {
 						"type": "number",
-						"title": "Std Price Sqm"
+						"title": "Std Price Sqft"
 					}
 				},
 				"type": "object",
@@ -21302,8 +21296,8 @@
 					"sale_count",
 					"mean_price",
 					"std_price",
-					"mean_price_sqm",
-					"std_price_sqm"
+					"mean_price_sqft",
+					"std_price_sqft"
 				],
 				"title": "PriceDistributionBucket",
 				"description": "Mean + population std dev for a single bedroom type."
@@ -21417,13 +21411,13 @@
 						"type": "number",
 						"title": "Median Sale Price"
 					},
-					"avg_sale_price_sqm": {
+					"avg_sale_price_sqft": {
 						"type": "number",
-						"title": "Avg Sale Price Sqm"
+						"title": "Avg Sale Price Sqft"
 					},
-					"avg_unit_size_sqm": {
+					"avg_unit_size_sqft": {
 						"type": "number",
-						"title": "Avg Unit Size Sqm"
+						"title": "Avg Unit Size Sqft"
 					},
 					"rental_count": {
 						"type": "integer",
@@ -21433,9 +21427,9 @@
 						"type": "number",
 						"title": "Median Annual Rent"
 					},
-					"median_rent_sqm": {
+					"median_rent_sqft": {
 						"type": "number",
-						"title": "Median Rent Sqm"
+						"title": "Median Rent Sqft"
 					},
 					"gross_yield_pct": {
 						"anyOf": [
@@ -21503,11 +21497,11 @@
 					"sales_last_12m",
 					"avg_sale_price",
 					"median_sale_price",
-					"avg_sale_price_sqm",
-					"avg_unit_size_sqm",
+					"avg_sale_price_sqft",
+					"avg_unit_size_sqft",
 					"rental_count",
 					"median_annual_rent",
-					"median_rent_sqm",
+					"median_rent_sqft",
 					"price_p25",
 					"price_p50",
 					"price_p75"
@@ -21788,9 +21782,9 @@
 						"type": "number",
 						"title": "Avg Price"
 					},
-					"avg_price_sqm": {
+					"avg_price_sqft": {
 						"type": "number",
-						"title": "Avg Price Sqm"
+						"title": "Avg Price Sqft"
 					},
 					"series": {
 						"type": "string",
@@ -21799,7 +21793,7 @@
 					}
 				},
 				"type": "object",
-				"required": ["date", "avg_price", "avg_price_sqm", "series"],
+				"required": ["date", "avg_price", "avg_price_sqft", "series"],
 				"title": "ProjectForecastPoint"
 			},
 			"ProjectForecastResponse": {
@@ -22121,7 +22115,7 @@
 						],
 						"title": "Median Annual Rent"
 					},
-					"avg_sale_price_sqm_12m": {
+					"avg_sale_price_sqft_12m": {
 						"anyOf": [
 							{
 								"type": "number"
@@ -22130,9 +22124,9 @@
 								"type": "null"
 							}
 						],
-						"title": "Avg Sale Price Sqm 12M"
+						"title": "Avg Sale Price Sqft 12M"
 					},
-					"avg_rent_price_sqm_12m": {
+					"avg_rent_price_sqft_12m": {
 						"anyOf": [
 							{
 								"type": "number"
@@ -22141,7 +22135,7 @@
 								"type": "null"
 							}
 						],
-						"title": "Avg Rent Price Sqm 12M"
+						"title": "Avg Rent Price Sqft 12M"
 					},
 					"gross_yield_pct": {
 						"anyOf": [
@@ -22172,13 +22166,13 @@
 						"type": "integer",
 						"title": "Dda Plot Count"
 					},
-					"dda_total_plot_area_sqm": {
+					"dda_total_plot_area_sqft": {
 						"type": "number",
-						"title": "Dda Total Plot Area Sqm"
+						"title": "Dda Total Plot Area Sqft"
 					},
-					"dda_total_gfa_sqm": {
+					"dda_total_gfa_sqft": {
 						"type": "number",
-						"title": "Dda Total Gfa Sqm"
+						"title": "Dda Total Gfa Sqft"
 					},
 					"dda_dominant_land_uses": {
 						"items": {
@@ -22202,7 +22196,7 @@
 						"title": "Total Sales Volume",
 						"default": 0.0
 					},
-					"avg_sale_price_sqm": {
+					"avg_sale_price_sqft": {
 						"anyOf": [
 							{
 								"type": "number"
@@ -22211,9 +22205,9 @@
 								"type": "null"
 							}
 						],
-						"title": "Avg Sale Price Sqm"
+						"title": "Avg Sale Price Sqft"
 					},
-					"avg_rent_price_sqm": {
+					"avg_rent_price_sqft": {
 						"anyOf": [
 							{
 								"type": "number"
@@ -22222,7 +22216,7 @@
 								"type": "null"
 							}
 						],
-						"title": "Avg Rent Price Sqm"
+						"title": "Avg Rent Price Sqft"
 					}
 				},
 				"type": "object",
@@ -22245,14 +22239,14 @@
 					"total_sales_volume_12m",
 					"median_sale_price",
 					"median_annual_rent",
-					"avg_sale_price_sqm_12m",
-					"avg_rent_price_sqm_12m",
+					"avg_sale_price_sqft_12m",
+					"avg_rent_price_sqft_12m",
 					"gross_yield_pct",
 					"top_developers",
 					"top_master_projects",
 					"dda_plot_count",
-					"dda_total_plot_area_sqm",
-					"dda_total_gfa_sqm",
+					"dda_total_plot_area_sqft",
+					"dda_total_gfa_sqft",
 					"dda_dominant_land_uses"
 				],
 				"title": "ProjectRadarArea",
@@ -22482,7 +22476,7 @@
 						],
 						"title": "Gross Yield Pct"
 					},
-					"avg_sale_price_sqm_12m": {
+					"avg_sale_price_sqft_12m": {
 						"anyOf": [
 							{
 								"type": "number"
@@ -22491,9 +22485,9 @@
 								"type": "null"
 							}
 						],
-						"title": "Avg Sale Price Sqm 12M"
+						"title": "Avg Sale Price Sqft 12M"
 					},
-					"avg_rent_price_sqm_12m": {
+					"avg_rent_price_sqft_12m": {
 						"anyOf": [
 							{
 								"type": "number"
@@ -22502,7 +22496,7 @@
 								"type": "null"
 							}
 						],
-						"title": "Avg Rent Price Sqm 12M"
+						"title": "Avg Rent Price Sqft 12M"
 					},
 					"sales_transaction_count": {
 						"type": "integer",
@@ -22519,7 +22513,7 @@
 						"title": "Total Sales Volume",
 						"default": 0.0
 					},
-					"avg_sale_price_sqm": {
+					"avg_sale_price_sqft": {
 						"anyOf": [
 							{
 								"type": "number"
@@ -22528,9 +22522,9 @@
 								"type": "null"
 							}
 						],
-						"title": "Avg Sale Price Sqm"
+						"title": "Avg Sale Price Sqft"
 					},
-					"avg_rent_price_sqm": {
+					"avg_rent_price_sqft": {
 						"anyOf": [
 							{
 								"type": "number"
@@ -22539,7 +22533,7 @@
 								"type": "null"
 							}
 						],
-						"title": "Avg Rent Price Sqm"
+						"title": "Avg Rent Price Sqft"
 					}
 				},
 				"type": "object",
@@ -22565,8 +22559,8 @@
 					"median_sale_price",
 					"median_annual_rent",
 					"gross_yield_pct",
-					"avg_sale_price_sqm_12m",
-					"avg_rent_price_sqm_12m"
+					"avg_sale_price_sqft_12m",
+					"avg_rent_price_sqft_12m"
 				],
 				"title": "ProjectRadarProject",
 				"description": "Mapped project pin with market and delivery signals."
@@ -22645,13 +22639,13 @@
 						"type": "integer",
 						"title": "Dda Plot Count"
 					},
-					"dda_total_plot_area_sqm": {
+					"dda_total_plot_area_sqft": {
 						"type": "number",
-						"title": "Dda Total Plot Area Sqm"
+						"title": "Dda Total Plot Area Sqft"
 					},
-					"dda_total_gfa_sqm": {
+					"dda_total_gfa_sqft": {
 						"type": "number",
-						"title": "Dda Total Gfa Sqm"
+						"title": "Dda Total Gfa Sqft"
 					},
 					"activity_period_days": {
 						"type": "integer",
@@ -22730,8 +22724,8 @@
 					"rental_contract_count_12m",
 					"total_sales_volume_12m",
 					"dda_plot_count",
-					"dda_total_plot_area_sqm",
-					"dda_total_gfa_sqm"
+					"dda_total_plot_area_sqft",
+					"dda_total_gfa_sqft"
 				],
 				"title": "ProjectRadarStats",
 				"description": "Top-level metrics for the projects radar map."
@@ -22750,9 +22744,9 @@
 						"type": "number",
 						"title": "Median Annual Rent"
 					},
-					"median_rent_sqm": {
+					"median_rent_sqft": {
 						"type": "number",
-						"title": "Median Rent Sqm"
+						"title": "Median Rent Sqft"
 					}
 				},
 				"type": "object",
@@ -22760,7 +22754,7 @@
 					"contract_count",
 					"total_annual_value",
 					"median_annual_rent",
-					"median_rent_sqm"
+					"median_rent_sqft"
 				],
 				"title": "ProjectRentalSummary"
 			},
@@ -22778,9 +22772,9 @@
 						"type": "number",
 						"title": "Avg Price"
 					},
-					"avg_price_sqm": {
+					"avg_price_sqft": {
 						"type": "number",
-						"title": "Avg Price Sqm"
+						"title": "Avg Price Sqft"
 					},
 					"median_price": {
 						"type": "number",
@@ -22792,7 +22786,7 @@
 					"transaction_count",
 					"total_volume",
 					"avg_price",
-					"avg_price_sqm",
+					"avg_price_sqft",
 					"median_price"
 				],
 				"title": "ProjectSalesSummary"
@@ -22899,13 +22893,13 @@
 						"type": "number",
 						"title": "Avg Price"
 					},
-					"avg_price_sqm": {
+					"avg_price_sqft": {
 						"type": "number",
-						"title": "Avg Price Sqm"
+						"title": "Avg Price Sqft"
 					}
 				},
 				"type": "object",
-				"required": ["date", "transaction_count", "avg_price", "avg_price_sqm"],
+				"required": ["date", "transaction_count", "avg_price", "avg_price_sqft"],
 				"title": "ProjectTrendPoint"
 			},
 			"ProjectTrendsResponse": {
@@ -22936,7 +22930,7 @@
 						"type": "number",
 						"title": "Percentage"
 					},
-					"avg_area_sqm": {
+					"avg_area_sqft": {
 						"anyOf": [
 							{
 								"type": "number"
@@ -22945,11 +22939,11 @@
 								"type": "null"
 							}
 						],
-						"title": "Avg Area Sqm"
+						"title": "Avg Area Sqft"
 					}
 				},
 				"type": "object",
-				"required": ["property_sub_type", "count", "percentage", "avg_area_sqm"],
+				"required": ["property_sub_type", "count", "percentage", "avg_area_sqft"],
 				"title": "ProjectUnitComposition",
 				"description": "Unit type breakdown"
 			},
@@ -23394,7 +23388,7 @@
 						],
 						"title": "Bedrooms"
 					},
-					"size_sqm": {
+					"size_sqft": {
 						"anyOf": [
 							{
 								"type": "number"
@@ -23403,7 +23397,7 @@
 								"type": "null"
 							}
 						],
-						"title": "Size Sqm"
+						"title": "Size Sqft"
 					},
 					"annual_rent_aed": {
 						"anyOf": [
@@ -23453,7 +23447,7 @@
 				"type": "object",
 				"required": ["contract_id"],
 				"title": "RentalContractResponse",
-				"description": "One DXBI lease of one unit (dxbi_rental_events): sizes in m\u00b2, amounts in AED."
+				"description": "One DXBI lease of one unit (dxbi_rental_events): sizes in sq ft, amounts in AED."
 			},
 			"RentalDimensionBreakdown": {
 				"properties": {
@@ -23660,9 +23654,9 @@
 						"type": "number",
 						"title": "Avg Sale Price"
 					},
-					"avg_sale_price_sqm": {
+					"avg_sale_price_sqft": {
 						"type": "number",
-						"title": "Avg Sale Price Sqm"
+						"title": "Avg Sale Price Sqft"
 					},
 					"rental_count": {
 						"type": "integer",
@@ -23672,9 +23666,9 @@
 						"type": "number",
 						"title": "Median Annual Rent"
 					},
-					"median_rent_sqm": {
+					"median_rent_sqft": {
 						"type": "number",
-						"title": "Median Rent Sqm"
+						"title": "Median Rent Sqft"
 					},
 					"gross_yield_pct": {
 						"anyOf": [
@@ -23693,10 +23687,10 @@
 					"rooms",
 					"sale_count",
 					"avg_sale_price",
-					"avg_sale_price_sqm",
+					"avg_sale_price_sqft",
 					"rental_count",
 					"median_annual_rent",
-					"median_rent_sqm"
+					"median_rent_sqft"
 				],
 				"title": "RoomAnalytics",
 				"description": "Combined sales + rental + yield metrics per bedroom count"
@@ -25088,7 +25082,7 @@
 						],
 						"title": "Status"
 					},
-					"size_sqm": {
+					"size_sqft": {
 						"anyOf": [
 							{
 								"type": "number"
@@ -25097,7 +25091,7 @@
 								"type": "null"
 							}
 						],
-						"title": "Size Sqm"
+						"title": "Size Sqft"
 					},
 					"price_aed": {
 						"anyOf": [
@@ -25110,7 +25104,7 @@
 						],
 						"title": "Price Aed"
 					},
-					"price_per_sqm_aed": {
+					"price_per_sqft_aed": {
 						"anyOf": [
 							{
 								"type": "integer"
@@ -25119,13 +25113,13 @@
 								"type": "null"
 							}
 						],
-						"title": "Price Per Sqm Aed"
+						"title": "Price Per Sqft Aed"
 					}
 				},
 				"type": "object",
 				"required": ["transaction_id"],
 				"title": "TransactionResponse",
-				"description": "One DXBI sale (dxbi_sales_unit_events): sizes in m\u00b2, prices in AED."
+				"description": "One DXBI sale (dxbi_sales_unit_events): sizes in sq ft, prices in AED."
 			},
 			"TrendPoint": {
 				"properties": {

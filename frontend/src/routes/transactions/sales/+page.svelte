@@ -20,7 +20,7 @@ import {
 	buildSalesFilterParams,
 	DEFAULT_SALES_LOCAL_FILTERS,
 	SALES_PRICE_OPTIONS,
-	SALES_PRICE_SQM_OPTIONS,
+	SALES_PRICE_SQFT_OPTIONS,
 	type SaleRow,
 	type SalesLocalFilters,
 	SIZE_OPTIONS,
@@ -109,13 +109,13 @@ let filterDefinitions = $derived<FilterDefinition[]>([
 		type: 'standard',
 		options: ['All', ...(options?.statuses ?? [])]
 	},
-	{ id: 'sizeRange', label: 'Size (sq.m)', type: 'standard', options: SIZE_OPTIONS },
+	{ id: 'sizeRange', label: 'Size (sq ft)', type: 'standard', options: SIZE_OPTIONS },
 	{ id: 'priceRange', label: 'Price (AED)', type: 'standard', options: SALES_PRICE_OPTIONS },
 	{
-		id: 'pricePerSqMRange',
-		label: 'Price/sq.m (AED)',
+		id: 'pricePerSqFtRange',
+		label: 'Price/sq ft (AED)',
 		type: 'standard',
-		options: SALES_PRICE_SQM_OPTIONS
+		options: SALES_PRICE_SQFT_OPTIONS
 	}
 ])
 
@@ -150,7 +150,7 @@ function buildActiveFilterChips(): FilterChip[] {
 	addSelectedChip(chips, 'Status', localFilters.selectedStatus)
 	addSelectedChip(chips, 'Size', localFilters.sizeRange)
 	addSelectedChip(chips, 'Price', localFilters.priceRange)
-	addSelectedChip(chips, 'Price/sq.m', localFilters.pricePerSqMRange)
+	addSelectedChip(chips, 'Price/sq ft', localFilters.pricePerSqFtRange)
 
 	return chips
 }

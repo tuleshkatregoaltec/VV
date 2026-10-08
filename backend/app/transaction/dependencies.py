@@ -19,15 +19,15 @@ def sales_filters(
     timeframe_days: Optional[int] = Query(
         default=None, ge=1, description="Last N calendar days, today included"
     ),
-    size_min: Optional[float] = Query(default=None, description="Minimum size (sq.m), inclusive"),
-    size_max: Optional[float] = Query(default=None, description="Maximum size (sq.m), exclusive"),
+    size_min: Optional[float] = Query(default=None, description="Minimum size (sq ft), inclusive"),
+    size_max: Optional[float] = Query(default=None, description="Maximum size (sq ft), exclusive"),
     price_min: Optional[float] = Query(default=None, description="Minimum price (AED), inclusive"),
     price_max: Optional[float] = Query(default=None, description="Maximum price (AED), exclusive"),
-    price_per_sqm_min: Optional[float] = Query(
-        default=None, description="Minimum price per sq.m (AED), inclusive"
+    price_per_sqft_min: Optional[float] = Query(
+        default=None, description="Minimum price per sq ft (AED), inclusive"
     ),
-    price_per_sqm_max: Optional[float] = Query(
-        default=None, description="Maximum price per sq.m (AED), exclusive"
+    price_per_sqft_max: Optional[float] = Query(
+        default=None, description="Maximum price per sq ft (AED), exclusive"
     ),
 ) -> SalesFilters:
     return SalesFilters(
@@ -42,8 +42,8 @@ def sales_filters(
         size_max=size_max,
         price_min=price_min,
         price_max=price_max,
-        price_per_sqm_min=price_per_sqm_min,
-        price_per_sqm_max=price_per_sqm_max,
+        price_per_sqft_min=price_per_sqft_min,
+        price_per_sqft_max=price_per_sqft_max,
     )
 
 
@@ -61,8 +61,8 @@ def rental_filters(
         ge=1,
         description="Leases starting in the last N calendar days, today included",
     ),
-    size_min: Optional[float] = Query(default=None, description="Minimum size (sq.m), inclusive"),
-    size_max: Optional[float] = Query(default=None, description="Maximum size (sq.m), exclusive"),
+    size_min: Optional[float] = Query(default=None, description="Minimum size (sq ft), inclusive"),
+    size_max: Optional[float] = Query(default=None, description="Maximum size (sq ft), exclusive"),
     rent_min: Optional[float] = Query(
         default=None, description="Minimum annual rent (AED), inclusive"
     ),
