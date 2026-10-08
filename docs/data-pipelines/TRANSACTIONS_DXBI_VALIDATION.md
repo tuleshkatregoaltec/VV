@@ -19,7 +19,7 @@ counts (see "Transactions versus Analytics").
 | Sales | Date | `transaction_date` | DXBI's sale date |
 | Sales | Unit | `unit_number` | as DXBI records it (new column) |
 | Both | Building | `building_name` | as recorded |
-| Both | Location | `area_name` | DXBI's commonest spelling of the same letters and digits; `X Dubai` becomes `X` when DXBI also names `X`; a unit marker (`No. 630`) is not a location |
+| Both | Location | `area_name` | DXBI's commonest spelling of the same letters and digits; `X Dubai` becomes `X` when DXBI also names `X`; a unit marker (`No. 630`) is not a location. The Location *filter* groups by DXBI's own areas (below) |
 | Both | Project (hidden by default) | `project_name` | as recorded (DXBI fills it on ~11% of rows) |
 | Both | Property Type | `property_type` | DXBI's words |
 | Both | Bedrooms | `bedrooms` | `Studio`, `1 Bed`, `2 Beds`, … (DXBI writes `2 Bed` and `2 Beds` for the same count) |
@@ -53,6 +53,23 @@ counted in two bands. The bands' totals now add up exactly to the rows that have
 
 **Filter options.** Building lists every building in the filtered rows (it stopped at the first
 1,000 alphabetically, so most buildings could not be chosen).
+
+**Location: DXBI's own grouping (decision 2026-10-07).** The Location filter offers DXBI's areas,
+sub-areas and master communities, and holds every record DXBI's area page for it counts. Those
+pages can count a record under a different place than the area printed on its row. In August
+2026, JVC's page counted buildings printed only "Al Barsha South 4", and Dubai Marina's page
+counted 154 sales while 181 rows print "Dubai Marina". A JVC sale is also on the page of JVC's DLD
+area, Al Barsha South Fourth. The Location column still shows the area DXBI prints on the row.
+
+DXBI's rows carry no location id, so the grouping is learned by running DXBI's own search for each
+location (`holocron/scripts/dxbi_location_sweep.py`, runbook
+`holocron/docs/runbooks/dxbi-location-sweep.md`) into `dxbi_location_members`. A record takes, in
+order:
+1. the locations whose search returned it;
+2. otherwise, the locations that returned other sales in its building (leases use this);
+3. otherwise, the location named like its printed area, plus the areas above it.
+
+For August 2026 the sweep returned exactly DXBI's card counts: JVC 761, Dubai Marina 154.
 
 ## One row per sale or lease
 
