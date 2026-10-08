@@ -6189,7 +6189,7 @@ export type MarketTrendPoint = {
     /**
      * Avg Price Sqft
      */
-    avg_price_sqft: number;
+    avg_price_sqft?: number | null;
 };
 
 /**

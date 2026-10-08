@@ -17,11 +17,16 @@ let selectedMetric = $state<Metric>('price_sqft')
 
 const trendQuery = createQuery(() => analyticsQueries.marketTrend(RANGE_TO_DAYS[selectedRange]))
 
-const chartData = $derived(trendQuery.data?.data ?? [])
+type TrendPoint = NonNullable<typeof trendQuery.data>['data'][number]
 
-const values = $derived(
-	chartData.map((d) => (selectedMetric === 'price_sqft' ? d.avg_price_sqft : d.avg_price))
-)
+function metricOf(point: TrendPoint): number | null {
+	return (selectedMetric === 'price_sqft' ? point.avg_price_sqft : point.avg_price) ?? null
+}
+
+// A period with no sale of a known size has no price per sq ft: it is not plotted.
+const chartData = $derived((trendQuery.data?.data ?? []).filter((d) => metricOf(d) !== null))
+
+const values = $derived(chartData.map((d) => metricOf(d) as number))
 const minValue = $derived(Math.min(...values))
 const maxValue = $derived(Math.max(...values))
 const valueRange = $derived(maxValue - minValue || 1)
@@ -58,7 +63,7 @@ function generatePath(data: typeof chartData): string {
 	if (data.length < 2) return ''
 	const points = data.map((point, i) => {
 		const x = padding.left + (i / (data.length - 1)) * innerWidth
-		const value = selectedMetric === 'price_sqft' ? point.avg_price_sqft : point.avg_price
+		const value = metricOf(point) as number
 		const normalizedValue = (value - minValue) / valueRange
 		const y = padding.top + (1 - normalizedValue) * innerHeight
 		return { x, y }

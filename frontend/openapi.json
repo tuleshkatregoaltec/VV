@@ -19655,12 +19655,19 @@
 						"title": "Avg Price"
 					},
 					"avg_price_sqft": {
-						"type": "number",
+						"anyOf": [
+							{
+								"type": "number"
+							},
+							{
+								"type": "null"
+							}
+						],
 						"title": "Avg Price Sqft"
 					}
 				},
 				"type": "object",
-				"required": ["date", "transaction_count", "avg_price", "avg_price_sqft"],
+				"required": ["date", "transaction_count", "avg_price"],
 				"title": "MarketTrendPoint",
 				"description": "Single data point for the market trend chart"
 			},

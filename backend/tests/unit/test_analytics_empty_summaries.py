@@ -36,3 +36,32 @@ async def test_rentals_summary_of_no_leases_is_empty(monkeypatch):
     assert response.summary.contract_count == 0
     assert response.trends == []
     json.dumps(response.model_dump(mode="json"), allow_nan=False)
+
+
+async def test_market_trend_change_of_a_period_without_sizes_is_empty(monkeypatch):
+    """30 days of whole-building sales: none has a size, so the period has no median price per
+    sq ft (NULL), and an empty previous period has no average (NaN). The change is unknown, not a
+    500."""
+
+    async def trend(*args, **kwargs):
+        return [{"period": date(2026, 9, 20), "transaction_count": 1, "avg_price": 5e7,
+                 "avg_price_sqft": None}]  # fmt: skip
+
+    summaries = iter(
+        [
+            [{"transaction_count": 1, "avg_price": 5e7, "median_price_per_sqft": None}],
+            [{"transaction_count": 0, "avg_price": NAN, "median_price_per_sqft": None}],
+        ]
+    )
+
+    async def summary(*args, **kwargs):
+        return next(summaries)
+
+    monkeypatch.setattr(queries, "fetch_price_trends", trend)
+    monkeypatch.setattr(queries, "fetch_sales_summary", summary)
+
+    response = await service.get_market_trend(days=30, market_type="bulk_building")
+
+    assert response.total_transactions == 1
+    assert (response.avg_price_change_pct, response.avg_price_sqft_change_pct) == (None, None)
+    json.dumps(response.model_dump(mode="json"), allow_nan=False)

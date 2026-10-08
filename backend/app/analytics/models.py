@@ -95,7 +95,8 @@ class MarketTrendPoint(BaseModel):
     date: date
     transaction_count: int
     avg_price: float
-    avg_price_sqft: float
+    # None when no sale in the period has a size (whole buildings, for example).
+    avg_price_sqft: Optional[float] = None
 
 
 class MarketTrendResponse(BaseModel):

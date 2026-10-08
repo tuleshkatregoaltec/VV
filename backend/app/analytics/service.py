@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import math
 import re
 from datetime import date, timedelta
 from typing import Any, Optional
@@ -1102,18 +1103,25 @@ async def get_market_trend(
         logging.getLogger(__name__).error(f"Error executing market trend query: {e}")
         return MarketTrendResponse(data=[], total_transactions=0)
 
+    def figure(value: Any) -> Optional[float]:
+        # A period with no sales (or none with a size) has no average or median: NULL or NaN.
+        if value is None:
+            return None
+        number = float(value)
+        return None if math.isnan(number) else number
+
     data = [
         MarketTrendPoint(
             date=row["period"],
             transaction_count=int(row["transaction_count"]),
             avg_price=float(row["avg_price"]),
-            avg_price_sqft=float(row["avg_price_sqft"]),
+            avg_price_sqft=figure(row["avg_price_sqft"]),
         )
         for row in trend_result
     ]
 
-    def pct_change(current: float, previous: float) -> Optional[float]:
-        if not previous:
+    def pct_change(current: Optional[float], previous: Optional[float]) -> Optional[float]:
+        if current is None or not previous:
             return None
         return round((current - previous) / previous * 100, 1)
 
@@ -1122,9 +1130,9 @@ async def get_market_trend(
     if current_result and prev_result:
         curr = current_result[0]
         prev = prev_result[0]
-        avg_price_change_pct = pct_change(float(curr["avg_price"]), float(prev["avg_price"]))
+        avg_price_change_pct = pct_change(figure(curr["avg_price"]), figure(prev["avg_price"]))
         avg_price_sqft_change_pct = pct_change(
-            float(curr["median_price_per_sqft"]), float(prev["median_price_per_sqft"])
+            figure(curr["median_price_per_sqft"]), figure(prev["median_price_per_sqft"])
         )
 
     return MarketTrendResponse(
