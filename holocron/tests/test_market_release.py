@@ -362,6 +362,25 @@ def test_crash_after_events_exchange_keeps_and_recovers_the_replaced_release(war
 
 
 @live
+def test_rollback_refuses_a_release_built_before_the_uniform_columns(warehouse) -> None:
+    """The first uniform publish keeps the pre-uniform release as __previous; its property_type
+    and location_name hold only their ALTER defaults. Served again, every type and location would
+    be blank, and the pages would look empty rather than broken."""
+    _dld_sales(warehouse, [(f"T{i}", "Sales", 1_000_000 + i) for i in range(50)])
+    release.materialize_market_sale_events(clickhouse=warehouse)
+    _dld_sales(warehouse, [("T50", "Sales", 2_000_000)])
+    r2 = str(release.materialize_market_sale_events(clickhouse=warehouse)["release_id"])
+    warehouse.command(
+        "ALTER TABLE market_sale_events__previous UPDATE property_type = '', location_name = '' "
+        "WHERE 1 SETTINGS mutations_sync = 2"
+    )
+
+    with pytest.raises(RuntimeError, match="before the uniform columns"):
+        release.rollback(warehouse, "market_sale_events")
+    assert _tables(warehouse)["market_sale_events"] == r2 and _served(warehouse) == 51
+
+
+@live
 def test_crash_between_ledger_and_events_exchange_serves_one_consistent_release(
     warehouse,
 ) -> None:

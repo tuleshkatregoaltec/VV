@@ -561,7 +561,9 @@ def require_published_market_layer(client) -> None:
 
     The views read Holocron's canonical release. On a warehouse where the market rebuild has
     never published (fresh install, schedule never run), creating them would silently empty
-    every sales and rentals endpoint, so nothing is changed and the operator is told why.
+    every sales and rentals endpoint, so nothing is changed and the operator is told why. The
+    same holds for a release built before the uniform transforms (one table refreshed, the other
+    still on its old release): its property types and locations are all blank.
     """
     problems = []
     for view, table in MARKET_BACKED_VIEWS.items():
@@ -578,12 +580,18 @@ def require_published_market_layer(client) -> None:
             "WHERE dataset = {table:String} AND state = 'published'",
             parameters={"table": table},
         ).result_rows[0][0]
-        served = client.query(f"SELECT count() FROM `{table}` WHERE is_served = 1").result_rows[0][
-            0
-        ]
+        served, uniform = client.query(
+            f"SELECT count(), countIf(property_type != '' OR location_name != '') "
+            f"FROM `{table}` WHERE is_served = 1"
+        ).result_rows[0]
         if not published or not served:
             problems.append(
                 f"{view}: {table} has {published} published release(s) and {served} served rows"
+            )
+        elif not uniform:
+            # Built before the uniform transforms: the columns the app reads are all blank.
+            problems.append(
+                f"{view}: {table}'s release names no property type or location on any row"
             )
     if problems:
         raise MarketLayerNotPublished(

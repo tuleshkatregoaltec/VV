@@ -10,7 +10,6 @@ from app.analytics.metrics import (
     _add_months,
     _coalesce_delivery_date,
     _normalize_label,
-    _positive_float,
     _quarter_start,
     _room_sort_key,
     _trend_interval_for_days,
@@ -94,43 +93,57 @@ async def get_sub_project_list(
 
 
 async def _get_market_summary(project_name: str) -> ProjectAnalyticsResponse:
-    """Return a quick citywide summary from the local materialized fact table.
+    """The whole Dubai market's summary, by the same definitions as a project's.
 
-    The detailed analytics queries intentionally retain their raw, unit-level
-    paths for a selected project.  Running all of those citywide at once is
-    prohibitively expensive on a local ClickHouse instance, so the landing
-    scope uses the already materialized 12-month project aggregates instead.
+    The headline figures come from the served rows (``ch_transactions`` / ``ch_rent_contracts``)
+    with the project summary's own queries over the whole market, so Dubai and any project
+    compare like for like. They used to come from ``ch_project_fact``. There the median price and
+    rent were medians of about 3,000 projects' medians, mostly 0, so the page showed 0. The
+    breakdowns (rooms, configurations, unit mix) stay empty: they are too expensive citywide.
     """
-    rows = await queries.fetch_get_market_summary_rows({})
-    row = rows[0] if rows else {}
-    sales_count = int(row.get("sales_count") or 0)
-    rental_count = int(row.get("rental_count") or 0)
-    median_sale_price = float(row.get("median_sale_price") or 0)
-    median_annual_rent = float(row.get("median_annual_rent") or 0)
-    yield_pct = _positive_float(row.get("gross_yield_pct"))
-    if yield_pct is not None:
-        yield_pct = round(yield_pct, 2)
+    existing = {"reg_type_en": "Existing Properties"}
+    sales_rows, existing_rows, rent_rows, fact_rows = await asyncio.gather(
+        queries.fetch_project_sales_summary({}, "market"),
+        queries.fetch_project_sales_summary(existing, "market", reg_type="Existing Properties"),
+        queries.fetch_project_rentals_summary({}, "market"),
+        queries.fetch_get_market_summary_rows({}),
+    )
+    s = sales_rows[0] if sales_rows else {}
+    r = rent_rows[0] if rent_rows else {}
+    sales = ProjectSalesSummary(
+        transaction_count=int(s.get("transaction_count") or 0),
+        total_volume=float(s.get("total_volume") or 0),
+        avg_price=float(s.get("avg_price") or 0),
+        avg_price_sqft=float(s.get("avg_price_sqft") or 0),
+        median_price=float(s.get("median_price") or 0),
+    )
+    rentals = ProjectRentalSummary(
+        contract_count=int(r.get("contract_count") or 0),
+        total_annual_value=float(r.get("total_annual_value") or 0),
+        median_annual_rent=float(r.get("median_annual_rent") or 0),
+        median_rent_sqft=float(r.get("median_rent_sqft") or 0),
+    )
+    # As for a project: rent over the median price of existing homes (off-plan launch prices
+    # are discounted).
+    existing_median_price = float(
+        (existing_rows[0] if existing_rows else {}).get("median_price") or 0
+    )
+    yield_pct = (
+        round(rentals.median_annual_rent / existing_median_price * 100, 2)
+        if existing_median_price > 0 and rentals.median_annual_rent > 0
+        else None
+    )
+    unit_count = int((fact_rows[0] if fact_rows else {}).get("unit_count") or 0)
 
     return ProjectAnalyticsResponse(
         project=ProjectMeta(
             project_name=project_name,
             area_name="Dubai",
             developer_name="All developers",
-            no_of_units=int(row.get("unit_count") or 0) or None,
+            no_of_units=unit_count or None,
         ),
-        sales=ProjectSalesSummary(
-            transaction_count=sales_count,
-            total_volume=float(row.get("sales_volume") or 0),
-            avg_price=float(row.get("avg_sale_price") or 0),
-            avg_price_sqft=float(row.get("avg_sale_price_sqft") or 0),
-            median_price=median_sale_price,
-        ),
-        rentals=ProjectRentalSummary(
-            contract_count=rental_count,
-            total_annual_value=float(row.get("rental_value") or 0),
-            median_annual_rent=median_annual_rent,
-            median_rent_sqft=float(row.get("median_rent_sqft") or 0),
-        ),
+        sales=sales,
+        rentals=rentals,
         overall_gross_yield_pct=yield_pct,
         by_rooms=[],
         by_property_type=[],

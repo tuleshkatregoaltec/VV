@@ -8,11 +8,11 @@ async def fetch_dld_price_index(parameters):
             toStartOfQuarter(instance_date) AS quarter,
             if(
                 {is_commercial:UInt8} = 1,
-                property_sub_type_en,
-                if(property_type_en = 'Villa', 'Villa', 'Apartment')
+                property_type,
+                if(property_type IN ('Villa', 'Townhouse'), 'Villa', 'Apartment')
             ) AS segment,
             uniqExact(transaction_id) AS transactions,
-            median(trans_value / (procedure_area * 10.7639)) AS median_psf
+            median(trans_value / (size_sqm * 10.7639)) AS median_psf
         FROM ch_transactions
         WHERE
             trans_group_en = 'Sales'
@@ -23,24 +23,20 @@ async def fetch_dld_price_index(parameters):
                 'Sell - Pre registration',
                 'Sale On Payment Plan'
             )
+            -- The uniform type and size (DLD records most villas as 'Building' or 'Land', and a
+            -- land-registered villa's area is its plot's).
             AND (
-                (
-                    {is_commercial:UInt8} = 1
-                    AND property_usage_en = 'Commercial'
-                    AND property_type_en = 'Unit'
-                    AND property_sub_type_en IN ('Office', 'Shop')
-                )
+                ({is_commercial:UInt8} = 1 AND property_type IN ('Office', 'Shop'))
                 OR (
                     {is_commercial:UInt8} = 0
-                    AND property_usage_en = 'Residential'
-                    AND property_type_en IN ('Unit', 'Villa')
+                    AND property_type IN ('Apartment', 'Hotel Apartment', 'Villa', 'Townhouse')
                 )
             )
             AND instance_date >= {index_start:Date}
             AND instance_date < {current_quarter:Date}
-            AND procedure_area > 0
+            AND size_sqm > 0
             AND trans_value > 0
-            AND trans_value / (procedure_area * 10.7639) BETWEEN 200 AND 12000
+            AND trans_value / (size_sqm * 10.7639) BETWEEN 200 AND 12000
         GROUP BY quarter, segment
         ORDER BY quarter, segment
     """,

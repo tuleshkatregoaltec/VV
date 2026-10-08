@@ -723,27 +723,9 @@ async def fetch_search_sub_projects(parameters: dict, filter_type: ProjectFilter
 
 
 async def fetch_get_market_summary_rows(parameters: dict):
+    """The registered unit count of every project; the market's figures use the served rows."""
     return await query(
-        """
-        SELECT
-            sum(pf.sales_transaction_count_12m) AS sales_count,
-            sum(pf.total_sales_volume_12m) AS sales_volume,
-            if(
-                sum(pf.sales_transaction_count_12m) > 0,
-                sum(pf.median_sale_price * pf.sales_transaction_count_12m)
-                    / sum(pf.sales_transaction_count_12m),
-                0
-            ) AS avg_sale_price,
-            avgOrNull(pf.avg_sale_price_sqm_12m) / 10.7639 AS avg_sale_price_sqft,
-            medianExact(pf.median_sale_price) AS median_sale_price,
-            sum(pf.rental_contract_count_12m) AS rental_count,
-            sum(pf.median_annual_rent * pf.rental_contract_count_12m) AS rental_value,
-            medianExact(pf.median_annual_rent) AS median_annual_rent,
-            avgOrNull(pf.avg_rent_price_sqm_12m) / 10.7639 AS median_rent_sqft,
-            medianExact(pf.gross_yield_pct) AS gross_yield_pct,
-            sum(pf.no_of_units) AS unit_count
-        FROM ch_project_fact AS pf
-        """,
+        "SELECT sum(pf.no_of_units) AS unit_count FROM ch_project_fact AS pf",
         parameters,
     )
 

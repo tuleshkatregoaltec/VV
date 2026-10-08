@@ -324,7 +324,9 @@ MarketMetricGroup = Literal[
     "registration",
     "contract_version",
 ]
-MarketPropertyType = Literal["apartment", "hotel_apartment", "villa", "office", "shop", "land"]
+MarketPropertyType = Literal[
+    "apartment", "hotel_apartment", "villa", "townhouse", "office", "shop", "land"
+]
 MarketBedrooms = Literal["studio", "1", "2", "3", "4", "5", "6", "7"]
 
 
@@ -369,7 +371,9 @@ class MarketMetricsRequest(BaseModel):
     )
     building: Optional[str] = Field(default=None, max_length=160)
     project: Optional[str] = Field(default=None, max_length=160)
-    property_type: Optional[MarketPropertyType] = None
+    property_type: Optional[MarketPropertyType] = Field(
+        default=None, description="villa includes townhouses; townhouse is townhouses only"
+    )
     usage: Optional[Literal["residential", "commercial"]] = None
     bedrooms: Optional[list[MarketBedrooms]] = Field(default=None, max_length=8)
     registration: Optional[Literal["off_plan", "ready"]] = Field(

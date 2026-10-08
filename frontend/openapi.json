@@ -19121,13 +19121,22 @@
 						"anyOf": [
 							{
 								"type": "string",
-								"enum": ["apartment", "hotel_apartment", "villa", "office", "shop", "land"]
+								"enum": [
+									"apartment",
+									"hotel_apartment",
+									"villa",
+									"townhouse",
+									"office",
+									"shop",
+									"land"
+								]
 							},
 							{
 								"type": "null"
 							}
 						],
-						"title": "Property Type"
+						"title": "Property Type",
+						"description": "villa includes townhouses; townhouse is townhouses only"
 					},
 					"usage": {
 						"anyOf": [

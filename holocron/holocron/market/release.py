@@ -351,6 +351,11 @@ def rollback(clickhouse: ClickHouseClient, served: str, *, owner: str | None = N
         target = tables.get(f"{served}__previous")
         if target is None or any(tables.get(f"{t}__previous") != target for t in group):
             raise RuntimeError(f"{served}: no complete previous release to roll back to")
+        if _built_before_uniform_columns(clickhouse, f"{served}__previous"):
+            raise RuntimeError(
+                f"{served}: the previous release {target} was built before the uniform columns; "
+                "serving it again would blank every property type and location"
+            )
         current = tables.get(served, "")
         for table in group:
             # A table retained from before release ids existed lacks the column readers select.
@@ -369,6 +374,23 @@ def rollback(clickhouse: ClickHouseClient, served: str, *, owner: str | None = N
         if target in ledger:
             _record(clickhouse, ledger[target], state="published", detail="restored by rollback")
         return target
+
+
+def _built_before_uniform_columns(clickhouse: ClickHouseClient, table: str) -> bool:
+    """True when ``table`` serves rows but none names a property type or a location.
+
+    A release built before the uniform transforms carries those columns only as their ALTER
+    defaults, and the app reads them: served again, every type and location would be blank.
+    """
+    for column in ("property_type", "location_name"):
+        clickhouse.command(
+            f"ALTER TABLE `{table}` ADD COLUMN IF NOT EXISTS {column} String DEFAULT ''"
+        )
+    served, uniform = clickhouse.query(
+        f"SELECT count(), countIf(property_type != '' OR location_name != '') "
+        f"FROM `{table}` WHERE is_served = 1"
+    ).result_rows[0]
+    return bool(served) and not uniform
 
 
 # --- validation -----------------------------------------------------------------------------

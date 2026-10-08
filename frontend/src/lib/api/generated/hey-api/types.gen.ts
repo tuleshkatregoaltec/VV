@@ -5929,8 +5929,10 @@ export type MarketMetricsRequest = {
     project?: string | null;
     /**
      * Property Type
+     *
+     * villa includes townhouses; townhouse is townhouses only
      */
-    property_type?: 'apartment' | 'hotel_apartment' | 'villa' | 'office' | 'shop' | 'land' | null;
+    property_type?: 'apartment' | 'hotel_apartment' | 'villa' | 'townhouse' | 'office' | 'shop' | 'land' | null;
     /**
      * Usage
      */
