@@ -77,7 +77,10 @@ is UTC+4 all year (no daylight saving).
 
 - **One session per account.** A sweep takes its report's scrape lock
   (`/run/lock/vitevue-dxbi-<report>.lock`), so it waits while that account's scrape runs, and a
-  late scrape delays its sweep rather than overlapping it.
+  late scrape delays its sweep rather than overlapping it. It waits at most 55 minutes
+  (`DXBI_SWEEP_LOCK_WAIT_SECONDS`): when the Sunday weekly or the monthly lease scrape holds the
+  account (up to 12 and 24 hours), the sweep skips that night without a failure marker, and the
+  next night's 14-day window covers the missed days.
 - **Loading.** The evidence load takes each finished run (`_SUCCESS`) once (ledger
   `dxbi_evidence_load_ledger`) and archives its raw files to object storage first.
   - A scrape run that completed every day of an unbroken window loads alone with

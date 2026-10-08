@@ -21,6 +21,11 @@ config_dir="${DXBI_CONFIG_DIR:-/root/.config/vitevue/dxbi}"
 browser="${DXBI_BROWSER:-/root/.cache/ms-playwright/chromium-1217/chrome-linux64/chrome}"
 window_days="${DXBI_SWEEP_WINDOW_DAYS:-14}"
 timeout_duration="${DXBI_SWEEP_TIMEOUT:-3h}"
+# How long to wait for the account's scrape. The daily scrape ends within its 3-hour timeout,
+# but the Sunday weekly and the monthly lease scrapes hold the account for up to 12 and 24
+# hours: the sweep then skips the night (the next night's 14-day window covers it) instead of
+# waiting until systemd kills it. Wait plus sweep stays inside the unit's 4-hour limit.
+lock_wait_seconds="${DXBI_SWEEP_LOCK_WAIT_SECONDS:-3300}"
 # Dubai's calendar date, although the server clock is UTC: at 03:30 Dubai it is still the
 # previous day in UTC, and the window must end on Dubai's today.
 run_date="$(TZ=Asia/Dubai date +%F)"
@@ -44,8 +49,12 @@ record_failure() {
 }
 trap record_failure EXIT
 exec 9>"$lock_file"
-echo "Waiting for the shared ${report} scrape lock."
-flock 9
+echo "Waiting up to ${lock_wait_seconds}s for the shared ${report} scrape lock."
+if ! flock -w "$lock_wait_seconds" 9; then
+  echo "The ${report} account is still scraping; skipping tonight's sweep."
+  rmdir "$output_dir" 2>/dev/null || true
+  exit 0
+fi
 
 /usr/bin/timeout --signal=TERM --kill-after=30s "$timeout_duration" \
   "${repo_dir}/holocron/.venv/bin/python" \
