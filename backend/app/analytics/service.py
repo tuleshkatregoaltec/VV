@@ -240,7 +240,9 @@ async def get_project_summary(
             )
 
     # --- Sales summary ---
-    s = sales_sum_rows[0] if sales_sum_rows else {}
+    # An aggregate over no sales is one row with a zero count and NaN averages (not JSON): a
+    # project with no sales yet (off-plan launches in Compare) has no figures.
+    s = sales_sum_rows[0] if sales_sum_rows and sales_sum_rows[0].get("transaction_count") else {}
     sales = ProjectSalesSummary(
         transaction_count=int(s.get("transaction_count", 0)),
         total_volume=float(s.get("total_volume", 0) or 0),
@@ -250,7 +252,7 @@ async def get_project_summary(
     )
 
     # --- Rental summary ---
-    r = rent_sum_rows[0] if rent_sum_rows else {}
+    r = rent_sum_rows[0] if rent_sum_rows and rent_sum_rows[0].get("contract_count") else {}
     rentals = ProjectRentalSummary(
         contract_count=int(r.get("contract_count", 0)),
         total_annual_value=float(r.get("total_annual_value", 0) or 0),
@@ -623,6 +625,9 @@ async def get_project_price_distribution(
     by_rooms: list[PriceDistributionBucket] = []
 
     for row in rows:
+        # The all-rooms row is one row even over no sales, with NaN statistics: no distribution.
+        if not int(row["sale_count"]):
+            continue
         bucket = PriceDistributionBucket(
             rooms=row["rooms_en"],
             sale_count=int(row["sale_count"]),
