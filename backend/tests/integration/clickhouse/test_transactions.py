@@ -123,6 +123,7 @@ async def dxbi(warehouse, install_serving):
             "dxbi_rental_events",
             "dxbi_locations",
             "dxbi_location_members",
+            "dxbi_location_lease_members",
         ),
         views=(),
     )
@@ -371,6 +372,36 @@ async def test_a_location_holds_what_dxbi_area_page_counts(dxbi, warehouse):
         RentalFilters(timeframe_days=7, location="Jumeirah Village Circle"), 100, 0
     )
     assert [row.contract_id for row in leases.contracts] == ["royale-lease"]
+
+
+async def test_a_swept_lease_takes_the_locations_dxbi_rental_pages_count_it_in(dxbi, warehouse):
+    """DXBI's rental area pages group leases with their own search, as the sales pages do; a
+    lease the lease sweep returned takes those locations over its building's and printed area's."""
+    await warehouse.insert(
+        "dxbi_locations",
+        [
+            [31385, "Marsa Dubai", "marsadubai", ["Marsa Dubai"]],
+            [31987, "Dubai Marina", "dubaimarina", ["Dubai Marina", "Marsa Dubai"]],
+        ],
+        column_names=["location_id", "name", "name_key", "lineage"],
+    )
+    await warehouse.insert(
+        "dxbi_location_lease_members",
+        [[31385, "Marsa Dubai", "swept", TODAY, TODAY, TODAY]],
+        column_names=["location_id", "location_name", "contract_key", "lease_start",
+                      "window_start", "window_end"],
+    )  # fmt: skip
+    # Both print "Dubai Marina"; DXBI's Dubai Marina rental page does not count the swept one.
+    await dxbi(leases=[lease("swept"), lease("printed", unit_number="1102")])
+
+    async def ids(location: str) -> list[str]:
+        page = await service.fetch_rental_contracts(
+            RentalFilters(timeframe_days=7, location=location), 100, 0
+        )
+        return sorted(row.contract_id for row in page.contracts)
+
+    assert await ids("Dubai Marina") == ["printed"]
+    assert await ids("Marsa Dubai") == ["printed", "swept"]
 
 
 async def test_numbered_units_hold_one_copy_of_a_lease_and_unnumbered_rows_all_count(dxbi):

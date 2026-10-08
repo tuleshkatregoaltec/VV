@@ -326,6 +326,20 @@ CREATE TABLE IF NOT EXISTS dxbi_location_members (
 ) ENGINE = ReplacingMergeTree(loaded_at)
 ORDER BY (location_id, sale_key);
 
+-- The leases DXBI's search returns for each location over a window (scripts/dxbi_location_sweep.py
+-- --report rentals), by the lease's contract_key in dxbi_rental_events.
+CREATE TABLE IF NOT EXISTS dxbi_location_lease_members (
+    location_id      UInt32,
+    location_name    String,
+    contract_key     String,
+    lease_start      Date,
+    window_start     Date,
+    window_end       Date,
+    source_run_id    String DEFAULT '',
+    loaded_at        DateTime64(3, 'UTC') DEFAULT now64(3)
+) ENGINE = ReplacingMergeTree(loaded_at)
+ORDER BY (location_id, contract_key);
+
 CREATE TABLE IF NOT EXISTS dxbi_rental_sale_matches (
     unit_candidate_key             String,
     unit_number                    String DEFAULT '',

@@ -276,5 +276,12 @@ area-months, but not equal. Two causes were measured:
 - Leases take their DXBI location from the sales sweep (by building) or their printed area. The
   sweep did not search leases.
 
-Open: making lease counts equal needs a decision on the merge (a re-scrape that replaces its
-window, as for sales) and a lease sweep.
+**Lease fix (decided 2026-10-08).**
+- A complete lease re-scrape now replaces its window (`load_dxbi_rental_events.py
+  --replace-window`). Applied locally to 1 August-7 October: the window holds exactly the 154,667
+  leases DXBI listed, and every area is now slightly *below* DXBI's cards. August and September
+  across the 13 areas: 37,191 against 38,234 (-2.7%), from -1.2% (Arjan) to -10% (Al Furjan).
+- Leases also get their own sweep (`dxbi_location_sweep.py --report rentals` into
+  `dxbi_location_lease_members`), which the Rentals page uses before the building and printed
+  area. It has not been run yet. It should close most of the remaining gap, which comes from
+  leases placed by building or printed area rather than by DXBI's own rental search.

@@ -43,16 +43,20 @@ units with spaces whole, and deletes older copies of a re-loaded sale.
   window, then load it with `--replace-window FIRST LAST`. DXBI's latest listing then replaces
   those dates outright: CSV-export rows, and sales DXBI moved to another day.
 
-## 4. DXBI leases
+## 4. DXBI leases (approval for the replace)
 
-Scrape the window with `dxbi_rental_backfill.py --report rentals` and load the day directories
-with `holocron/scripts/load_dxbi_rental_events.py`. Re-run the scrape for any day that ends
-`failed`: DXBI's Cloudflare returns 520/522 at times, and a re-run retries only those days.
+Scrape the window with `dxbi_rental_backfill.py --report rentals`. Re-run the scrape for any day
+that ends `failed`: DXBI's Cloudflare returns 520/522 at times, and a re-run retries only those
+days. Once every day is complete, load the day directories with
+`holocron/scripts/load_dxbi_rental_events.py --replace-window FIRST LAST`. DXBI's listing then
+replaces what is stored for those lease start dates. A plain load merges, and keeps leases only
+older runs held: locally, 3,943 August leases from a test run put some areas 10-20% above DXBI.
 
-## 5. Location sweep
+## 5. Location sweeps
 
-Follow `holocron/docs/runbooks/dxbi-location-sweep.md`: sweep the last 12 months, then
-`load_dxbi_location_members.py <run dir>`. Re-run it monthly.
+Follow `holocron/docs/runbooks/dxbi-location-sweep.md`: sweep sales and leases (`--report
+rentals`) over the last 12 months, then `load_dxbi_location_members.py <run dir>` for each.
+Re-run monthly.
 
 ## 6. Market releases
 

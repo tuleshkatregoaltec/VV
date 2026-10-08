@@ -9,8 +9,9 @@ ft, half-open bands, the date window), and compares the live API with it:
 - totals and the first, a middle and the last page of every period (7-365 days) and usage;
 - every field of every compared row;
 - one page per filter value (types, bedrooms, status / contract type, top locations, buildings),
-  a location holding every record DXBI's area page counts (dxbi_location_members, then the
-  record's building, then its printed area and the areas above it);
+  a location holding every record DXBI's area page counts (dxbi_location_members or
+  dxbi_location_lease_members, then the record's building, then its printed area and the areas
+  above it);
 - every size, price, price per sq ft and rent band, and that the bands' totals add up to the rows
   that have a value (no overlap, no gap);
 - the filter options.
@@ -116,6 +117,10 @@ class Verifier:
         self.by_building = (
             swept.groupby(["building_key", "area_key"]).location_name.agg(set).to_dict()
         )
+        leases = self.ch.query_df(
+            "SELECT location_name, contract_key FROM dxbi_location_lease_members"
+        )
+        self.by_lease = leases.groupby("contract_key").location_name.agg(set).to_dict()
         lineages = self.ch.query_df("SELECT name_key, lineage FROM dxbi_locations")
         self.by_printed: dict[str, set] = {}
         for key, lineage in zip(lineages.name_key, lineages.lineage):
@@ -281,9 +286,10 @@ class Verifier:
         )
         rentals["location"] = rentals.area_name.map(self._location)
         rentals["locations"] = [
-            self._dxbi_locations(None, _search_key(building), _search_key(area), printed)
-            for building, area, printed in zip(
-                rentals.building_name, rentals.area_name, rentals.location
+            frozenset(self.by_lease.get(key) or ())
+            or self._dxbi_locations(None, _search_key(building), _search_key(area), printed)
+            for key, building, area, printed in zip(
+                rentals.contract_key, rentals.building_name, rentals.area_name, rentals.location
             )
         ]
         rentals["usage"] = rentals.property_type.map(_usage)
