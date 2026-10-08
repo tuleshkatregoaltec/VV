@@ -89,3 +89,59 @@ async def test_sales_summary_applies_residential_and_project_scope_in_clickhouse
     assert rows[0]["avg_price"] == 2000000
     market = await query(project_sales_summary("market"))
     assert market[0]["transaction_count"] == 3
+
+
+async def test_market_types_select_on_the_uniform_type_and_their_own_group(warehouse):
+    """market_type used DLD's labels ('Unit', 'Land') on the served uniform type, which has
+    neither, so residential units, commercial units and land returned 0 sales; mortgages and
+    gifts returned ordinary sales. DLD registers most villas as 'Building' or against their land,
+    and its commercial-usage villas and plots are not commercial units."""
+    from datetime import date
+
+    from app.analytics import service
+
+    await warehouse.command("""
+        CREATE TABLE ch_transactions (
+            trans_group_en String, property_usage_en String, property_type String,
+            property_type_en String, actual_worth Float64, meter_sale_price Float64,
+            size_sqm Float64, instance_date Date, master_project_en String DEFAULT '',
+            location_name String DEFAULT '', rooms_en String DEFAULT '',
+            reg_type_en String DEFAULT '', price_bucket String DEFAULT '',
+            area_bucket String DEFAULT ''
+        ) ENGINE = MergeTree ORDER BY instance_date
+    """)
+    day = date.today()
+    rows = [
+        # group, usage, uniform type, DLD type
+        ("Sales", "Residential", "Apartment", "Unit"),
+        ("Sales", "Residential", "Hotel Apartment", "Unit"),
+        ("Sales", "Residential", "Villa", "Building"),
+        ("Sales", "Residential", "Townhouse", "Land"),
+        ("Sales", "Commercial", "Office", "Unit"),
+        ("Sales", "Hospitality", "Apartment", "Unit"),
+        ("Sales", "Commercial", "Villa", "Land"),
+        ("Sales", "Commercial", "Plot", "Land"),
+        ("Sales", "Residential", "Building", "Building"),
+        ("Mortgages", "Residential", "Apartment", "Unit"),
+        ("Gifts", "Residential", "Villa", "Villa"),
+    ]
+    await warehouse.insert(
+        "ch_transactions",
+        [[*row, 1_000_000, 10_000, 100, day] for row in rows],
+        column_names=["trans_group_en", "property_usage_en", "property_type", "property_type_en",
+                      "actual_worth", "meter_sale_price", "size_sqm", "instance_date"],
+    )  # fmt: skip
+
+    async def sold(market_type: str) -> int:
+        response = await service.get_sales_analytics(market_type=market_type, timeframe_days=30)
+        return response.summary.transaction_count
+
+    assert await sold("residential_units") == 2
+    assert await sold("villas") == 3
+    assert await sold("commercial_units") == 2
+    assert await sold("land") == 1
+    assert await sold("bulk_building") == 1
+    assert await sold("mortgages") == 1
+    assert await sold("gifts") == 1
+    trend = await service.get_market_trend(days=30, market_type="villas")
+    assert trend.total_transactions == 3

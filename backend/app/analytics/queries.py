@@ -828,7 +828,7 @@ async def fetch_sales_summary(
     reg_type: Optional[str] = None,
     price_bucket: Optional[str] = None,
     area_bucket: Optional[str] = None,
-    property_usage_in: Optional[list] = None,
+    market: Optional[dict[str, str]] = None,
 ):
     return await query(
         sales_summary(
@@ -843,7 +843,7 @@ async def fetch_sales_summary(
             reg_type,
             price_bucket,
             area_bucket,
-            property_usage_in,
+            market,
         ),
         parameters,
     )
@@ -875,7 +875,7 @@ async def fetch_price_trends(
     master_project: Optional[str] = None,
     property_type: Optional[str] = None,
     area_name: Optional[str] = None,
-    property_usage_in: Optional[list] = None,
+    market: Optional[dict[str, str]] = None,
 ):
     return await query(
         price_trends(
@@ -886,10 +886,17 @@ async def fetch_price_trends(
             master_project,
             property_type,
             area_name,
-            property_usage_in,
+            market,
         ),
         parameters,
     )
+
+
+def _market_clauses(market: Optional[dict[str, str]]) -> list[str]:
+    """Sales by default; a market type's own group and predicate otherwise (trusted)."""
+    if market is None:
+        return ["trans_group_en = 'Sales'"]
+    return [f"trans_group_en = '{market['trans_group_en']}'", f"({market['where']})"]
 
 
 def sales_summary(
@@ -904,7 +911,7 @@ def sales_summary(
     reg_type: Optional[str] = None,
     price_bucket: Optional[str] = None,
     area_bucket: Optional[str] = None,
-    property_usage_in: Optional[list] = None,
+    market: Optional[dict[str, str]] = None,
 ) -> str:
     """
     Get sales analytics summary for a date range.
@@ -912,19 +919,14 @@ def sales_summary(
     Returns: transaction_count, median_price, avg_price, total_volume,
              median_price_per_sqft, median_area_sqft
 
-    All filtering uses parameter binding - no SQL injection risk.
-    property_usage_in values must come from MARKET_FILTERS (trusted, not user input).
+    All filtering uses parameter binding - no SQL injection risk. ``market`` is a
+    MARKET_FILTERS entry (trusted, not user input): its group and predicate.
     """
-    # Build WHERE clause with parameter placeholders
-    where_clauses = [
-        "trans_group_en = 'Sales'",
+    where_clauses = _market_clauses(market) + [
         "instance_date BETWEEN {start_date:Date} AND {end_date:Date}",
     ]
     if property_usage is not None:
         where_clauses.append("property_usage_en = {property_usage:String}")
-    elif property_usage_in is not None:
-        vals = "', '".join(property_usage_in)
-        where_clauses.append(f"property_usage_en IN ('{vals}')")
 
     if master_project is not None:
         where_clauses.append("master_project_en = {master_project:String}")
@@ -970,7 +972,7 @@ def price_trends(
     master_project: Optional[str] = None,
     property_type: Optional[str] = None,
     area_name: Optional[str] = None,
-    property_usage_in: Optional[list] = None,
+    market: Optional[dict[str, str]] = None,
 ) -> str:
     """
     Get price trends over time (grouped by day, week, or month).
@@ -979,7 +981,7 @@ def price_trends(
         interval: 'day', 'week', or 'month'
 
     Returns: period, transaction_count, avg_price, avg_price_sqft
-    property_usage_in values must come from MARKET_FILTERS (trusted, not user input).
+    ``market`` is a MARKET_FILTERS entry (trusted, not user input).
     """
     # SAFE: interval is controlled by application, not user input
     if interval not in ("day", "week", "month"):
@@ -992,15 +994,11 @@ def price_trends(
     else:
         time_group = "toStartOfMonth(instance_date)"
 
-    where_clauses = [
-        "trans_group_en = 'Sales'",
+    where_clauses = _market_clauses(market) + [
         "instance_date BETWEEN {start_date:Date} AND {end_date:Date}",
     ]
     if property_usage is not None:
         where_clauses.append("property_usage_en = {property_usage:String}")
-    elif property_usage_in is not None:
-        vals = "', '".join(property_usage_in)
-        where_clauses.append(f"property_usage_en IN ('{vals}')")
 
     if master_project is not None:
         where_clauses.append("master_project_en = {master_project:String}")

@@ -742,10 +742,10 @@ async def get_sales_analytics(
     """
     from fastapi import HTTPException
 
-    # Resolve market_type into property_usage / property_type / property_usage_in
+    # A market type replaces property_usage / property_type with its own group and predicate.
     resolved_property_usage = property_usage
     resolved_property_type = property_type
-    resolved_property_usage_in = None
+    market = None
 
     if market_type is not None:
         if market_type not in MARKET_FILTERS:
@@ -753,10 +753,9 @@ async def get_sales_analytics(
                 status_code=422,
                 detail=f"Invalid market_type. Valid values: {list(MARKET_FILTERS)}",
             )
-        mf = MARKET_FILTERS[market_type]
-        resolved_property_usage = mf.get("property_usage_en")
-        resolved_property_usage_in = mf.get("property_usage_en__in")
-        resolved_property_type = mf.get("property_type_en", property_type)
+        market = MARKET_FILTERS[market_type]
+        resolved_property_usage = None
+        resolved_property_type = None
 
     # Calculate date range
     if timeframe_days:
@@ -798,7 +797,7 @@ async def get_sales_analytics(
         result = await queries.fetch_sales_summary(
             parameters,
             property_usage=resolved_property_usage,
-            property_usage_in=resolved_property_usage_in,
+            market=market,
             start_date=start_date.isoformat(),
             end_date=end_date.isoformat(),
             master_project=master_project,
@@ -977,10 +976,10 @@ async def get_market_trend(
     """
     from fastapi import HTTPException
 
-    # Resolve market_type
+    # A market type replaces property_usage with its own group and predicate.
     resolved_property_usage = property_usage
-    resolved_property_usage_in = None
     resolved_property_type = None
+    market = None
 
     if market_type is not None:
         if market_type not in MARKET_FILTERS:
@@ -988,10 +987,8 @@ async def get_market_trend(
                 status_code=422,
                 detail=f"Invalid market_type. Valid values: {list(MARKET_FILTERS)}",
             )
-        mf = MARKET_FILTERS[market_type]
-        resolved_property_usage = mf.get("property_usage_en")
-        resolved_property_usage_in = mf.get("property_usage_en__in")
-        resolved_property_type = mf.get("property_type_en")
+        market = MARKET_FILTERS[market_type]
+        resolved_property_usage = None
 
     end_date = date.today()
     start_date = end_date - timedelta(days=days)
@@ -1018,7 +1015,7 @@ async def get_market_trend(
             queries.fetch_price_trends(
                 _trend_params(start_date.isoformat(), end_date.isoformat()),
                 property_usage=resolved_property_usage,
-                property_usage_in=resolved_property_usage_in,
+                market=market,
                 property_type=resolved_property_type,
                 start_date=start_date.isoformat(),
                 end_date=end_date.isoformat(),
@@ -1027,7 +1024,7 @@ async def get_market_trend(
             queries.fetch_sales_summary(
                 _trend_params(start_date.isoformat(), end_date.isoformat()),
                 property_usage=resolved_property_usage,
-                property_usage_in=resolved_property_usage_in,
+                market=market,
                 property_type=resolved_property_type,
                 start_date=start_date.isoformat(),
                 end_date=end_date.isoformat(),
@@ -1035,7 +1032,7 @@ async def get_market_trend(
             queries.fetch_sales_summary(
                 _trend_params(prev_start.isoformat(), prev_end.isoformat()),
                 property_usage=resolved_property_usage,
-                property_usage_in=resolved_property_usage_in,
+                market=market,
                 property_type=resolved_property_type,
                 start_date=prev_start.isoformat(),
                 end_date=prev_end.isoformat(),
