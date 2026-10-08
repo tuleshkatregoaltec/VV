@@ -76,6 +76,18 @@ def test_sizes_no_home_can_have_are_not_served() -> None:
         assert "/ nullIf(_size_sqm, 0)" in sql
 
 
+def test_a_dxbi_lease_takes_the_registry_area_its_own_text_names() -> None:
+    # DXBI writes "District 7, Jumeirah Park, Al Thanyah Fifth": the community it shows is not a
+    # DLD area, the registry area at the end is. 83.7% of DXBI-only leases flagged as outside
+    # DLD's areas name a DLD area there; it must win over the learned community mapping.
+    assert transforms._RENTAL_DLD_AREA.startswith("multiIf(rp.dld_area != '', rp.dld_area,")
+    place = transforms._registry_place("x")
+    assert place == "trimBoth(arrayElement(splitByChar(',', x.location_name), -1))"
+    # Pairing and the DXBI-only rows resolve areas the same way.
+    assert "AS rp ON" in transforms._RENTAL_MATCH_INPUTS
+    assert "AS rp ON" in transforms._RENTAL_EVENTS_DXBI_SQL
+
+
 class _Result:
     def __init__(self, value: Any) -> None:
         self.result_rows = [(value,)]

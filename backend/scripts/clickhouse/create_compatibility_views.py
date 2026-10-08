@@ -337,7 +337,7 @@ VIEW_DDL: Sequence[tuple[str, str]] = (
                     lowerUTF8(project_name_en) AS project_key,
                     count() AS sales_transaction_count_12m,
                     sum(actual_worth) AS total_sales_volume_12m,
-                    quantile(0.5)(actual_worth) AS median_sale_price,
+                    quantileExact(0.5)(actual_worth) AS median_sale_price,
                     avg(meter_sale_price) AS avg_sale_price_sqm_12m
                 FROM ch_transactions, anchor
                 WHERE trans_group_en = 'Sales'
@@ -350,7 +350,7 @@ VIEW_DDL: Sequence[tuple[str, str]] = (
                 SELECT
                     lowerUTF8(project_name_en) AS project_key,
                     count() AS rental_contract_count_12m,
-                    quantile(0.5)(annual_amount) AS median_annual_rent,
+                    quantileExact(0.5)(annual_amount) AS median_annual_rent,
                     avg(rent_per_sqm) AS avg_rent_price_sqm_12m
                 FROM ch_rent_contracts, anchor
                 WHERE annual_amount > 0
@@ -456,7 +456,7 @@ VIEW_DDL: Sequence[tuple[str, str]] = (
                     any(district_id) AS area_id,
                     count() AS sales_transaction_count_12m,
                     sum(actual_worth) AS total_sales_volume_12m,
-                    quantile(0.5)(actual_worth) AS median_sale_price,
+                    quantileExact(0.5)(actual_worth) AS median_sale_price,
                     avg(meter_sale_price) AS avg_sale_price_sqm_12m
                 FROM ch_transactions, anchor
                 WHERE trans_group_en = 'Sales'
@@ -470,7 +470,7 @@ VIEW_DDL: Sequence[tuple[str, str]] = (
                     lowerUTF8(district_name) AS area_key,
                     any(district_name) AS area_label,
                     count() AS rental_contract_count_12m,
-                    quantile(0.5)(annual_amount) AS median_annual_rent,
+                    quantileExact(0.5)(annual_amount) AS median_annual_rent,
                     avg(rent_per_sqm) AS avg_rent_price_sqm_12m
                 FROM ch_rent_contracts, anchor
                 WHERE annual_amount > 0

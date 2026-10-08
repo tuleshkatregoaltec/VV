@@ -3,8 +3,8 @@
 The Transactions pages show DXBI records only (app.transaction.queries). This script recomputes
 the last 365 days in pandas straight from dxbi_sales_unit_events and dxbi_rental_events, with the
 page's rules re-implemented here rather than imported (one row per sale or lease, the location
-spelling, Residential / Commercial grouping, bedroom labels, sizes in sq ft (a size no home of its type
-can have is missing), price per sq ft, half-open bands, the date window), and compares the live API with it:
+spelling, Residential / Commercial grouping, bedroom labels, DXBI's own sizes in sq ft and price per sq
+ft, half-open bands, the date window), and compares the live API with it:
 
 - totals and the first, a middle and the last page of every period (7-365 days) and usage;
 - every field of every compared row;
@@ -57,8 +57,6 @@ PRICE_BANDS = [
 ]
 PRICE_SQFT_BANDS = [(None, 1_000), (1_000, 2_000), (2_000, 3_000), (3_000, None)]
 RENT_BANDS = [(None, 50_000), (50_000, 100_000), (100_000, 200_000), (200_000, None)]
-# The smallest size a home of each type can have (sq ft); a smaller one is shown as missing.
-MIN_HOME_SQFT = {"Apartment": 108, "Hotel Apartment": 108, "Villa": 500, "Townhouse": 500}
 
 
 class Verifier:
@@ -125,7 +123,7 @@ class Verifier:
         sales = self.ch.query_df(
             "SELECT sale_key, transaction_date, unit_number, building_name, building_key, "
             "project_name, area_name, property_type, market_status, bedrooms, size_sqft, size_key, "
-            "sale_amount_aed, detail_url, loaded_at FROM dxbi_sales_unit_events "
+            "sale_amount_aed, price_per_sqft_aed, detail_url, loaded_at FROM dxbi_sales_unit_events "
             f"WHERE transaction_date BETWEEN '{start}' AND '{self.today}'"
         )
         raw = len(sales)
@@ -180,10 +178,15 @@ class Verifier:
         sales["status"] = sales.market_status.map({"Offplan": "Off-Plan", "Ready": "Ready"}).fillna(
             ""
         )
-        sales["size"] = [_size(s, t) for s, t in zip(sales.size_sqft, sales.property_type)]
+        sales["size"] = [s if s > 0 else None for s in sales.size_sqft]
+        # DXBI's own price per sq ft when it has one (villas: price / built-up area), else price / size.
         sales["ppsqft"] = [
-            None if _missing(s) is None else int(round(p / s))
-            for p, s in zip(sales.sale_amount_aed, sales["size"])
+            int(round(f))
+            if _missing(f) is not None and f > 0
+            else int(round(p / s))
+            if s > 0
+            else None
+            for p, s, f in zip(sales.sale_amount_aed, sales.size_sqft, sales.price_per_sqft_aed)
         ]
         sales["d"] = pd.to_datetime(sales.transaction_date).dt.date
         return sales
@@ -201,6 +204,25 @@ class Verifier:
             ["lease_start", "contract_key"]
         )
         current = len(rentals)
+        # A lease listed without its unit whose terms equal a numbered lease's is that lease.
+        terms = [
+            "area_name",
+            "property_type",
+            "bedrooms",
+            "size_sqft",
+            "lease_start",
+            "lease_end",
+            "contract_amount_aed",
+            "contract_state",
+        ]
+        numbered_terms = set(
+            rentals[rentals.unit_number != ""][terms].astype(str).agg("|".join, axis=1)
+        )
+        copy = (rentals.unit_number == "") & rentals[terms].astype(str).agg("|".join, axis=1).isin(
+            numbered_terms
+        )
+        rentals = rentals[~copy]
+        copies = int(copy.sum())
         # A numbered unit holds one copy of a lease; unnumbered identical rows all count.
         numbered = rentals.unit_number != ""
         identity = [
@@ -223,13 +245,13 @@ class Verifier:
         ).drop_duplicates("same")
         print(
             f"rentals: {raw} raw rows starting in 365 days -> {len(rentals)} leases "
-            f"({raw - current} superseded, {current - len(rentals)} repeated numbered-unit rows "
-            "removed)"
+            f"({raw - current} superseded, {copies} unit-less copies of numbered leases and "
+            f"{current - copies - len(rentals)} repeated numbered-unit rows removed)"
         )
         rentals["location"] = rentals.area_name.map(self._location)
         rentals["usage"] = rentals.property_type.map(_usage)
         rentals["beds"] = rentals.bedrooms.map(_bedrooms)
-        rentals["size"] = [_size(s, t) for s, t in zip(rentals.size_sqft, rentals.property_type)]
+        rentals["size"] = [s if s > 0 else None for s in rentals.size_sqft]
         rentals["d"] = pd.to_datetime(rentals.lease_start).dt.date
         return rentals
 
@@ -404,10 +426,6 @@ def _bedrooms(value: str) -> str:
     if not match:
         return ""
     return f"{match.group(1)} Bed" + ("" if match.group(1) == "1" else "s")
-
-
-def _size(size_sqft: float, property_type: str) -> float | None:
-    return size_sqft if size_sqft > 0 and size_sqft >= MIN_HOME_SQFT.get(property_type, 0) else None
 
 
 def _missing(value):

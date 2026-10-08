@@ -40,15 +40,16 @@ SMALL_SAMPLE = 10
 
 ELIGIBILITY = {
     "sales": (
-        "Served canonical sales (one row per DLD transaction after corrections and "
-        "de-duplication, plus DXBI sales DLD does not hold): transaction group 'Sales' with a "
-        "price above zero. Mortgages, gifts, probable duplicates and superseded versions are "
-        "excluded. Date: DLD registration date (instance_date), Dubai calendar."
+        "Served canonical sales, one row per sale after corrections and de-duplication: DXBI's "
+        "record where DXBI lists the sale, DLD's for the sales only DLD holds. Transaction group "
+        "'Sales' with a price above zero; mortgages, gifts, probable duplicates and superseded "
+        "versions are excluded. Date: transaction date (DXBI's where DXBI lists the sale, "
+        "otherwise DLD's), Dubai calendar."
     ),
     "rentals": (
-        "Served canonical Ejari contracts (de-duplicated DLD rows plus DXBI contracts DLD does "
-        "not hold) with an annual amount above zero and an end date after the start date. "
-        "Date: contract registration date, Dubai calendar."
+        "Served canonical leases, one row per lease of one unit: DXBI's record where DXBI lists "
+        "the lease, de-duplicated Ejari contracts for the leases only DLD holds. Annual amount "
+        "above zero and an end date after the start date. Date: lease start date, Dubai calendar."
     ),
 }
 

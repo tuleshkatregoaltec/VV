@@ -884,14 +884,30 @@ _RENTAL_AREA_CTES = f"""
     )"""
 
 
+def _registry_place(alias: str) -> str:
+    """The last place in DXBI's lease location text.
+
+    DXBI ends a lease's location with the DLD area it took from the registry ("District 7,
+    Jumeirah Park, Al Thanyah Fifth") while its area name is the community ("Jumeirah Park"),
+    which DLD names differently ("Al Quoz Industrial 4" is DLD's "Al Goze Industrial Fourth").
+    """
+    return f"trimBoth(arrayElement(splitByChar(',', {alias}.location_name), -1))"
+
+
 def _rental_area_joins(alias: str) -> str:
     return (
+        f"LEFT JOIN dld_area_names AS rp ON rp.name_key = {_area_name_key(_registry_place(alias))}\n"
         f"LEFT JOIN sales_area_map AS sm ON sm.dxbi_area = {alias}.area_name\n"
         f"LEFT JOIN dld_area_names AS n ON n.name_key = {_area_name_key(f'{alias}.area_name')}"
     )
 
 
-_RENTAL_DLD_AREA = "multiIf(sm.dld_area != '', sm.dld_area, n.dld_area != '', n.dld_area, '')"
+# A DXBI lease's DLD area: the registry area its own text names, else the DLD area its
+# community's matched sales carry, else its area name when DLD uses the same one.
+_RENTAL_DLD_AREA = (
+    "multiIf(rp.dld_area != '', rp.dld_area, sm.dld_area != '', sm.dld_area,"
+    " n.dld_area != '', n.dld_area, '')"
+)
 
 _RENTAL_MATCH_INPUTS = f"""{_RENTAL_AREA_CTES},
     dld AS (

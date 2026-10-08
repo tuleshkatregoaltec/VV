@@ -8,8 +8,8 @@ GET_SIMILAR_PROJECTS_REF_SQL = """
         master_project_en,
         area_name_en,
         property_type_en,
-        round(median(actual_worth), 0) as median_price,
-        round(median(size_sqm) * 10.7639, 0) as median_area,
+        round(medianExact(actual_worth), 0) as median_price,
+        round(medianExact(size_sqm) * 10.7639, 0) as median_area,
         count(*) as transaction_count
     FROM ch_transactions
     WHERE
@@ -26,10 +26,10 @@ GET_SIMILAR_PROJECTS_SIMILAR_SQL = """
             master_project_en,
             area_name_en,
             property_type_en,
-            round(median(actual_worth), 0) as median_price,
-            round(median(size_sqm) * 10.7639, 0) as median_area,
+            round(medianExact(actual_worth), 0) as median_price,
+            round(medianExact(size_sqm) * 10.7639, 0) as median_area,
             count(*) as transaction_count,
-            abs(median(actual_worth) - {ref_price:Float64}) as price_diff
+            abs(medianExact(actual_worth) - {ref_price:Float64}) as price_diff
         FROM ch_transactions
         WHERE
             master_project_en != {ref_project:String}

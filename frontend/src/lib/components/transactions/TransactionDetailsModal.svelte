@@ -12,6 +12,11 @@ let {
 	onClose: () => void
 } = $props()
 
+// A missing value is a plain '-', without a unit after it.
+function withUnit(formatted: string, unit: string): string {
+	return formatted === '-' ? '-' : `${formatted} ${unit}`
+}
+
 // DXBI records the unit of every sale, so the unit is shown as recorded, not inferred.
 const fields = $derived(
 	transaction
@@ -25,9 +30,12 @@ const fields = $derived(
 				{ label: 'Property Type', value: transaction.propertyType },
 				{ label: 'Bedrooms', value: transaction.bedrooms },
 				{ label: 'Status', value: transaction.status },
-				{ label: 'Size', value: `${formatSqft(transaction.size)} sq ft` },
-				{ label: 'Price', value: `${formatAed(transaction.price)} AED` },
-				{ label: 'Price/sq ft', value: `${formatAed(transaction.pricePerSqFt)} AED/sq ft` }
+				{ label: 'Size', value: withUnit(formatSqft(transaction.size), 'sq ft') },
+				{ label: 'Price', value: withUnit(formatAed(transaction.price), 'AED') },
+				{
+					label: 'Price/sq ft',
+					value: withUnit(formatAed(transaction.pricePerSqFt), 'AED/sq ft')
+				}
 			]
 		: []
 )
@@ -46,8 +54,8 @@ const fields = $derived(
 				{/each}
 			</div>
 			<p class="mt-3 text-xs text-fg-4">
-				Source: DXBInteract (DXBI) sold-transaction record. Price/sq ft is the price divided by
-				the size.
+				Source: DXBInteract (DXBI) sold-transaction record. Size and price/sq ft are DXBI's own
+				figures.
 			</p>
 		</div>
 	{/if}

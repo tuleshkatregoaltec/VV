@@ -44,7 +44,8 @@ UNIFORM_PROPERTY_TYPES = {
 SALES = Dataset(
     table="ch_transactions",
     release_table="market_sale_events",
-    # DLD instance_date is the registration date as recorded (Dubai local time).
+    # Transaction date (decision 2026-10-07): DXBI's date where DXBI lists the sale, otherwise
+    # DLD's registration date as recorded (Dubai local time).
     event_date="toDate(instance_date)",
     value="toFloat64(actual_worth)",
     area_sqm="size_sqm",
@@ -58,7 +59,7 @@ SALES = Dataset(
 RENTALS = Dataset(
     table="ch_rent_contracts",
     release_table="market_rental_events",
-    # Rentals are dated by contract start on every page (uniform layer); DXBI has no
+    # A lease counts in the month it starts (decision 2026-10-07), on every page; DXBI has no
     # registration date. Leases starting after the requested period are not in it.
     event_date="toDate(contract_start_date)",
     # DLD annual_amount is the annualised rent; contract_amount is the whole-term value.
