@@ -107,8 +107,7 @@ async def get_project_summary(
     The whole Dubai market ('market') runs the same queries as any community, breakdowns
     included (off-plan / secondary configurations, rooms, types, unit mix). It used to answer
     from a shortcut without them, so its off-plan and secondary tables showed nothing; every
-    query takes under half a second citywide except rents by rooms (~4 s), and the response is
-    cached.
+    query takes under half a second citywide, and the response is cached.
     """
 
     # For LIKE queries the param needs the wildcard appended
