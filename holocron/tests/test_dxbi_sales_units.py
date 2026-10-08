@@ -116,3 +116,48 @@ def test_financing_and_resale_signals_are_normalized_without_guessing() -> None:
     assert event["seller_transaction_count"] == 4
     assert event["market_status"] == "Ready"
     assert event["built_up_area_sqft"] == 1_400
+
+
+def test_plot_rows_without_market_status_keep_their_area_and_type() -> None:
+    """DXBI lists plots as '<area> Plot' with no Offplan/Ready status. Read as other rows, the
+    plot number became the area ('No. 630') and the type was lost (256 sales in 2026)."""
+
+    def plot(location_text: str) -> dict:
+        event = normalize_sales_row(
+            {
+                "unit_number": location_text.rsplit("No. ", 1)[-1],
+                "location_text": location_text,
+                "amount_text": "AED 4,000,000 (-) AED 400 /sqft",
+                "specs_text": "10,000 sqft",
+                "date_text": "15, Sep 2026 Individual (1 Time)",
+                "detail_url": "https://dxbinteract.com/sold/t-plot",
+            }
+        )
+        assert event is not None
+        return event
+
+    lone = plot("Buyer's agent Al Jafliya Plot, Floor u-hidden, No. 630")
+    assert (lone["property_type"], lone["market_status"]) == ("Plot", "")
+    assert (lone["building_name"], lone["area_name"], lone["unit_number"]) == (
+        "Al Jafliya",
+        "Al Jafliya",
+        "630",
+    )
+
+    cluster = plot("Nice 1, Damac Lagoons Plot, Floor u-hidden, No. DL-M235")
+    assert (cluster["building_name"], cluster["area_name"]) == ("Nice 1", "Damac Lagoons")
+
+    nested = plot(
+        "Bora Bora (All Phases), Damac Islands, Al Yelayiss 1 Plot, Floor u-hidden, No. DI-BB0744"
+    )
+    assert (nested["building_name"], nested["project_name"], nested["area_name"]) == (
+        "Bora Bora (All Phases)",
+        "Damac Islands",
+        "Al Yelayiss 1",
+    )
+    assert nested["property_type"] == "Plot"
+
+    # Rows with a status keep their existing reading.
+    apartment = plot("Binghatti Hillcrest, Arjan Offplan Apartment, Floor 3, No. 301")
+    assert (apartment["property_type"], apartment["market_status"]) == ("Apartment", "Offplan")
+    assert (apartment["building_name"], apartment["area_name"]) == ("Binghatti Hillcrest", "Arjan")

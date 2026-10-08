@@ -6,6 +6,7 @@ import StandardDropdown from '$lib/components/dropdowns/StandardDropdown.svelte'
 import { propertyType, timeframe } from '$lib/components/filters/globalFilters.svelte'
 import AppFrame from '$lib/components/layout/AppFrame.svelte'
 import PageContainer from '$lib/components/layout/PageContainer.svelte'
+import { PROPERTY_USAGE_OPTIONS } from '$lib/constants/transactions'
 
 let { children }: { children: Snippet } = $props()
 
@@ -45,7 +46,7 @@ let activeTab = $derived(page.url.pathname.includes('/rentals') ? 'rentals' : 's
 					</nav>
 
 					<div class="ui-segmented" role="group" aria-label="Property usage">
-						{#each ['Residential', 'Commercial'] as option}
+						{#each PROPERTY_USAGE_OPTIONS as option}
 							<button
 								type="button"
 								onclick={() => (propertyType.current = option)}

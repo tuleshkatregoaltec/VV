@@ -286,7 +286,7 @@ const marketTrendLastPoint = $derived(
 		: null
 )
 const latestSalesDate = $derived(
-	latestSalesTransactionQuery.data?.transactions[0]?.instance_date ??
+	latestSalesTransactionQuery.data?.transactions[0]?.transaction_date ??
 		marketTrendLastPoint?.date ??
 		null
 )
