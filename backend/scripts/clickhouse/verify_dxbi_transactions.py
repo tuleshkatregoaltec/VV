@@ -96,6 +96,13 @@ class Verifier:
             return json.loads(response.read())
 
     # -- independent expectation -------------------------------------------------------------
+    def _table(self, table: str, columns: list[str]) -> pd.DataFrame:
+        """A table's columns, as a frame that keeps them even with no rows: a sweep table stays
+        empty until its first sweep is loaded (the leases' until the lease sweep runs), and an
+        empty result carries no column names."""
+        result = self.ch.query(f"SELECT {', '.join(columns)} FROM {table}")
+        return pd.DataFrame(result.result_rows, columns=columns)
+
     def load(self) -> None:
         names = self.ch.query_df(
             "SELECT area_name, count() AS n FROM (SELECT area_name FROM dxbi_sales_unit_events "
@@ -109,19 +116,17 @@ class Verifier:
             .set_index("k")
             .area_name.to_dict()
         )
-        members = self.ch.query_df(
-            "SELECT location_name, sale_key, building_key, area_key FROM dxbi_location_members"
+        members = self._table(
+            "dxbi_location_members", ["location_name", "sale_key", "building_key", "area_key"]
         )
         self.by_sale = members.groupby("sale_key").location_name.agg(set).to_dict()
         swept = members[members.building_key != ""]
         self.by_building = (
             swept.groupby(["building_key", "area_key"]).location_name.agg(set).to_dict()
         )
-        leases = self.ch.query_df(
-            "SELECT location_name, contract_key FROM dxbi_location_lease_members"
-        )
+        leases = self._table("dxbi_location_lease_members", ["location_name", "contract_key"])
         self.by_lease = leases.groupby("contract_key").location_name.agg(set).to_dict()
-        lineages = self.ch.query_df("SELECT name_key, lineage FROM dxbi_locations")
+        lineages = self._table("dxbi_locations", ["name_key", "lineage"])
         self.by_printed: dict[str, set] = {}
         for key, lineage in zip(lineages.name_key, lineages.lineage):
             self.by_printed.setdefault(key, set()).update(lineage)
