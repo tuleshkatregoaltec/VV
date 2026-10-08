@@ -93,9 +93,14 @@ _DLD_RENT_TYPE = _uniform_type(
 
 
 def _prefer(primary: str, fallback: str) -> str:
-    """primary unless it names no specific type, then fallback (if that one does)."""
+    """primary unless it names no specific type, then fallback (if that one does).
+
+    A hotel apartment stays one: DXBI calls most of them "Apartment" where DLD's sub-type names
+    them (3,379 of DLD's 3,617 hotel-apartment sales in 2025), and they trade at other prices.
+    """
     return (
-        f"if({primary} NOT IN {_GENERIC_TYPES} OR {fallback} IN {_GENERIC_TYPES}, "
+        f"multiIf({primary} = 'Apartment' AND {fallback} = 'Hotel Apartment', {fallback}, "
+        f"{primary} NOT IN {_GENERIC_TYPES} OR {fallback} IN {_GENERIC_TYPES}, "
         f"{primary}, {fallback})"
     )
 

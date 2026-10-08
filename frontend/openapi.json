@@ -19121,13 +19121,22 @@
 						"anyOf": [
 							{
 								"type": "string",
-								"enum": ["apartment", "hotel_apartment", "villa", "office", "shop", "land"]
+								"enum": [
+									"apartment",
+									"hotel_apartment",
+									"villa",
+									"townhouse",
+									"office",
+									"shop",
+									"land"
+								]
 							},
 							{
 								"type": "null"
 							}
 						],
-						"title": "Property Type"
+						"title": "Property Type",
+						"description": "villa includes townhouses; townhouse is townhouses only"
 					},
 					"usage": {
 						"anyOf": [
@@ -19646,12 +19655,19 @@
 						"title": "Avg Price"
 					},
 					"avg_price_sqft": {
-						"type": "number",
+						"anyOf": [
+							{
+								"type": "number"
+							},
+							{
+								"type": "null"
+							}
+						],
 						"title": "Avg Price Sqft"
 					}
 				},
 				"type": "object",
-				"required": ["date", "transaction_count", "avg_price", "avg_price_sqft"],
+				"required": ["date", "transaction_count", "avg_price"],
 				"title": "MarketTrendPoint",
 				"description": "Single data point for the market trend chart"
 			},

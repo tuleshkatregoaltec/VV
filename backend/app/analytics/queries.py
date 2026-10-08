@@ -6,6 +6,9 @@ from app.market.scope import MARKET_FILTERS as MARKET_FILTERS
 from app.market.scope import ProjectFilterType, ProjectScopeType
 from app.market.scope import project_filter_clause as _project_filter
 
+# Half-open bounds of a range filter: (low or None, high or None).
+Bounds = tuple[Optional[float], Optional[float]]
+
 
 def search_projects() -> str:
     return """
@@ -607,7 +610,7 @@ def project_price_trends(
           AND trans_group_en = 'Sales'
           AND property_type NOT IN ('Plot', 'Building', '')
           AND property_usage_en = 'Residential'
-          AND instance_date BETWEEN {{start_date:Date}} AND {{end_date:Date}}
+          AND toDate(instance_date) BETWEEN {{start_date:Date}} AND {{end_date:Date}}
           AND actual_worth > 0
         GROUP BY period
         ORDER BY period ASC
@@ -650,7 +653,7 @@ def project_offplan_price_curve(
           AND t.property_type NOT IN ('Plot', 'Building', '')
           AND t.property_usage_en = 'Residential'
           AND t.reg_type_en = 'Off-Plan Properties'
-          AND t.instance_date BETWEEN {{start_date:Date}} AND {{end_date:Date}}
+          AND toDate(t.instance_date) BETWEEN {{start_date:Date}} AND {{end_date:Date}}
           AND t.actual_worth > 0
           AND coalesce(p.completion_date, p.project_end_date) IS NOT NULL
           AND dateDiff('month', t.instance_date, coalesce(p.completion_date, p.project_end_date)) >= 0
@@ -723,27 +726,9 @@ async def fetch_search_sub_projects(parameters: dict, filter_type: ProjectFilter
 
 
 async def fetch_get_market_summary_rows(parameters: dict):
+    """The registered unit count of every project; the market's figures use the served rows."""
     return await query(
-        """
-        SELECT
-            sum(pf.sales_transaction_count_12m) AS sales_count,
-            sum(pf.total_sales_volume_12m) AS sales_volume,
-            if(
-                sum(pf.sales_transaction_count_12m) > 0,
-                sum(pf.median_sale_price * pf.sales_transaction_count_12m)
-                    / sum(pf.sales_transaction_count_12m),
-                0
-            ) AS avg_sale_price,
-            avgOrNull(pf.avg_sale_price_sqm_12m) / 10.7639 AS avg_sale_price_sqft,
-            medianExact(pf.median_sale_price) AS median_sale_price,
-            sum(pf.rental_contract_count_12m) AS rental_count,
-            sum(pf.median_annual_rent * pf.rental_contract_count_12m) AS rental_value,
-            medianExact(pf.median_annual_rent) AS median_annual_rent,
-            avgOrNull(pf.avg_rent_price_sqm_12m) / 10.7639 AS median_rent_sqft,
-            medianExact(pf.gross_yield_pct) AS gross_yield_pct,
-            sum(pf.no_of_units) AS unit_count
-        FROM ch_project_fact AS pf
-        """,
+        "SELECT sum(pf.no_of_units) AS unit_count FROM ch_project_fact AS pf",
         parameters,
     )
 
@@ -844,9 +829,9 @@ async def fetch_sales_summary(
     rooms: Optional[str] = None,
     area_name: Optional[str] = None,
     reg_type: Optional[str] = None,
-    price_bucket: Optional[str] = None,
-    area_bucket: Optional[str] = None,
-    property_usage_in: Optional[list] = None,
+    price_range: Optional[Bounds] = None,
+    area_range: Optional[Bounds] = None,
+    market: Optional[dict[str, str]] = None,
 ):
     return await query(
         sales_summary(
@@ -859,9 +844,9 @@ async def fetch_sales_summary(
             rooms,
             area_name,
             reg_type,
-            price_bucket,
-            area_bucket,
-            property_usage_in,
+            price_range,
+            area_range,
+            market,
         ),
         parameters,
     )
@@ -875,10 +860,19 @@ async def fetch_rentals_summary(
     master_project: Optional[str] = None,
     property_type: Optional[str] = None,
     area_name: Optional[str] = None,
+    rent_range: Optional[Bounds] = None,
+    area_range: Optional[Bounds] = None,
 ):
     return await query(
         rentals_summary(
-            property_usage, start_date, end_date, master_project, property_type, area_name
+            property_usage,
+            start_date,
+            end_date,
+            master_project,
+            property_type,
+            area_name,
+            rent_range,
+            area_range,
         ),
         parameters,
     )
@@ -893,7 +887,7 @@ async def fetch_price_trends(
     master_project: Optional[str] = None,
     property_type: Optional[str] = None,
     area_name: Optional[str] = None,
-    property_usage_in: Optional[list] = None,
+    market: Optional[dict[str, str]] = None,
 ):
     return await query(
         price_trends(
@@ -904,10 +898,30 @@ async def fetch_price_trends(
             master_project,
             property_type,
             area_name,
-            property_usage_in,
+            market,
         ),
         parameters,
     )
+
+
+def _range_clauses(expression: str, name: str, bounds: Optional[Bounds]) -> list[str]:
+    """``expression`` in the half-open [low, high); bounds bind as ``{name}_min``/``_max``."""
+    if bounds is None:
+        return []
+    low, high = bounds
+    clauses = []
+    if low is not None:
+        clauses.append(f"{expression} >= {{{name}_min:Float64}}")
+    if high is not None:
+        clauses.append(f"{expression} < {{{name}_max:Float64}}")
+    return clauses
+
+
+def _market_clauses(market: Optional[dict[str, str]]) -> list[str]:
+    """Sales by default; a market type's own group and predicate otherwise (trusted)."""
+    if market is None:
+        return ["trans_group_en = 'Sales'"]
+    return [f"trans_group_en = '{market['trans_group_en']}'", f"({market['where']})"]
 
 
 def sales_summary(
@@ -920,9 +934,9 @@ def sales_summary(
     rooms: Optional[str] = None,
     area_name: Optional[str] = None,
     reg_type: Optional[str] = None,
-    price_bucket: Optional[str] = None,
-    area_bucket: Optional[str] = None,
-    property_usage_in: Optional[list] = None,
+    price_range: Optional[Bounds] = None,
+    area_range: Optional[Bounds] = None,
+    market: Optional[dict[str, str]] = None,
 ) -> str:
     """
     Get sales analytics summary for a date range.
@@ -930,19 +944,14 @@ def sales_summary(
     Returns: transaction_count, median_price, avg_price, total_volume,
              median_price_per_sqft, median_area_sqft
 
-    All filtering uses parameter binding - no SQL injection risk.
-    property_usage_in values must come from MARKET_FILTERS (trusted, not user input).
+    All filtering uses parameter binding - no SQL injection risk. ``market`` is a
+    MARKET_FILTERS entry (trusted, not user input): its group and predicate.
     """
-    # Build WHERE clause with parameter placeholders
-    where_clauses = [
-        "trans_group_en = 'Sales'",
-        "instance_date BETWEEN {start_date:Date} AND {end_date:Date}",
+    where_clauses = _market_clauses(market) + [
+        "toDate(instance_date) BETWEEN {start_date:Date} AND {end_date:Date}",
     ]
     if property_usage is not None:
         where_clauses.append("property_usage_en = {property_usage:String}")
-    elif property_usage_in is not None:
-        vals = "', '".join(property_usage_in)
-        where_clauses.append(f"property_usage_en IN ('{vals}')")
 
     if master_project is not None:
         where_clauses.append("master_project_en = {master_project:String}")
@@ -956,10 +965,8 @@ def sales_summary(
         where_clauses.append("location_name = {area_name:String}")
     if reg_type is not None:
         where_clauses.append("reg_type_en = {reg_type:String}")
-    if price_bucket is not None:
-        where_clauses.append("price_bucket = {price_bucket:String}")
-    if area_bucket is not None:
-        where_clauses.append("area_bucket = {area_bucket:String}")
+    where_clauses += _range_clauses("actual_worth", "price", price_range)
+    where_clauses += _range_clauses("size_sqm * 10.7639", "area_sqft", area_range)
 
     where_clause = " AND ".join(where_clauses)
 
@@ -988,7 +995,7 @@ def price_trends(
     master_project: Optional[str] = None,
     property_type: Optional[str] = None,
     area_name: Optional[str] = None,
-    property_usage_in: Optional[list] = None,
+    market: Optional[dict[str, str]] = None,
 ) -> str:
     """
     Get price trends over time (grouped by day, week, or month).
@@ -997,7 +1004,7 @@ def price_trends(
         interval: 'day', 'week', or 'month'
 
     Returns: period, transaction_count, avg_price, avg_price_sqft
-    property_usage_in values must come from MARKET_FILTERS (trusted, not user input).
+    ``market`` is a MARKET_FILTERS entry (trusted, not user input).
     """
     # SAFE: interval is controlled by application, not user input
     if interval not in ("day", "week", "month"):
@@ -1010,15 +1017,11 @@ def price_trends(
     else:
         time_group = "toStartOfMonth(instance_date)"
 
-    where_clauses = [
-        "trans_group_en = 'Sales'",
-        "instance_date BETWEEN {start_date:Date} AND {end_date:Date}",
+    where_clauses = _market_clauses(market) + [
+        "toDate(instance_date) BETWEEN {start_date:Date} AND {end_date:Date}",
     ]
     if property_usage is not None:
         where_clauses.append("property_usage_en = {property_usage:String}")
-    elif property_usage_in is not None:
-        vals = "', '".join(property_usage_in)
-        where_clauses.append(f"property_usage_en IN ('{vals}')")
 
     if master_project is not None:
         where_clauses.append("master_project_en = {master_project:String}")
@@ -1049,6 +1052,8 @@ def rentals_summary(
     master_project: Optional[str] = None,
     property_type: Optional[str] = None,
     area_name: Optional[str] = None,
+    rent_range: Optional[Bounds] = None,
+    area_range: Optional[Bounds] = None,
 ) -> str:
     """
     Get rental analytics summary for a date range.
@@ -1058,7 +1063,7 @@ def rentals_summary(
     """
     where_clauses = [
         "property_usage_en = {property_usage:String}",
-        "contract_start_date BETWEEN {start_date:Date} AND {end_date:Date}",
+        "toDate(contract_start_date) BETWEEN {start_date:Date} AND {end_date:Date}",
     ]
 
     if master_project is not None:
@@ -1067,6 +1072,8 @@ def rentals_summary(
         where_clauses.append("property_type = {property_type:String}")
     if area_name is not None:
         where_clauses.append("location_name = {area_name:String}")
+    where_clauses += _range_clauses("annual_amount", "rent", rent_range)
+    where_clauses += _range_clauses("size_sqm * 10.7639", "area_sqft", area_range)
 
     where_clause = " AND ".join(where_clauses)
 

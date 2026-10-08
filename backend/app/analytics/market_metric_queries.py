@@ -35,7 +35,9 @@ class Dataset:
 UNIFORM_PROPERTY_TYPES = {
     "apartment": "property_type = 'Apartment'",
     "hotel_apartment": "property_type = 'Hotel Apartment'",
-    "villa": "property_type = 'Villa'",
+    # DLD has no townhouse type: its villas, which this used to read, include them.
+    "villa": "property_type IN ('Villa', 'Townhouse')",
+    "townhouse": "property_type = 'Townhouse'",
     "office": "property_type = 'Office'",
     "shop": "property_type = 'Shop'",
     "land": "property_type = 'Plot'",

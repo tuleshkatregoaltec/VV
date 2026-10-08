@@ -243,6 +243,7 @@
                 "apartment",
                 "hotel_apartment",
                 "villa",
+                "townhouse",
                 "office",
                 "shop",
                 "land"
@@ -253,7 +254,8 @@
               "type": "null"
             }
           ],
-          "default": null
+          "default": null,
+          "description": "villa includes townhouses; townhouse is townhouses only"
         },
         "usage": {
           "anyOf": [

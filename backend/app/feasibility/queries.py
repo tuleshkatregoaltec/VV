@@ -201,7 +201,7 @@ async def fetch_comparable_projects(parameters):
             sum(toFloat64(t.procedure_area)) AS total_land_area_sqm
         FROM ch_transactions t
         INNER JOIN ch_projects p ON p.project_number = t.project_number
-        WHERE t.property_type_en = 'Land'
+        WHERE t.property_type = 'Plot'
           AND t.trans_group_en = 'Sales'
           AND t.procedure_area > 0
           AND t.project_number != ''

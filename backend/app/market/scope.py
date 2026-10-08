@@ -3,33 +3,27 @@ from typing import Literal
 ProjectFilterType = Literal["project", "master", "virtual_master"]
 ProjectScopeType = Literal["project", "master", "virtual_master", "market"]
 
-# Server-side market type filters — frontend passes market_type, never raw predicates.
-# See analytics_architecture.md for taxonomy rationale.
-MARKET_FILTERS: dict[str, dict] = {
+# Server-side market types: the frontend passes market_type, never raw predicates. Each is a
+# transaction group and a trusted predicate on the served rows' uniform columns (property_type in
+# DXBI's words). DLD's own labels no longer fit: it registers most villas as 'Building' or
+# against their land ('Land'), and the served type has no 'Unit'.
+MARKET_FILTERS: dict[str, dict[str, str]] = {
     "residential_units": {
-        "property_type_en": "Unit",
-        "property_usage_en": "Residential",
         "trans_group_en": "Sales",
+        "where": "property_usage_en = 'Residential'"
+        " AND property_type IN ('Apartment', 'Hotel Apartment')",
     },
-    "villas": {
-        "property_type_en": "Villa",
-        "trans_group_en": "Sales",
-    },
+    "villas": {"trans_group_en": "Sales", "where": "property_type IN ('Villa', 'Townhouse')"},
     "commercial_units": {
-        "property_type_en": "Unit",
-        "property_usage_en__in": ["Commercial", "Hospitality"],
         "trans_group_en": "Sales",
+        # Units only: DLD's commercial-usage villas, plots and whole buildings are not units.
+        "where": "property_usage_en IN ('Commercial', 'Hospitality')"
+        " AND property_type NOT IN ('Villa', 'Townhouse', 'Plot', 'Building', '')",
     },
-    "bulk_building": {
-        "property_type_en": "Building",
-        "trans_group_en": "Sales",
-    },
-    "land": {
-        "property_type_en": "Land",
-        "trans_group_en": "Sales",
-    },
-    "mortgages": {"trans_group_en": "Mortgages"},
-    "gifts": {"trans_group_en": "Gifts"},
+    "bulk_building": {"trans_group_en": "Sales", "where": "property_type = 'Building'"},
+    "land": {"trans_group_en": "Sales", "where": "property_type = 'Plot'"},
+    "mortgages": {"trans_group_en": "Mortgages", "where": "1 = 1"},
+    "gifts": {"trans_group_en": "Gifts", "where": "1 = 1"},
 }
 
 

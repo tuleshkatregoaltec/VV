@@ -128,7 +128,8 @@ async def fetch_plot_details(parameters):
 async def fetch_land_sale_evidence(*, area_name, days, limit, plot_area_sqm, usage):
     base_where = [
         "trans_group_en = 'Sales'",
-        "property_type_en = 'Land'",
+        # DLD registers off-plan villas against their land ('Land'); the uniform type keeps plots.
+        "property_type = 'Plot'",
         "actual_worth > 0",
         "procedure_area > 0",
         "lower(area_name_en) = lower({area_name:String})",
@@ -210,7 +211,7 @@ async def _dda_land_transaction_rows(communities: set[str]) -> list[dict[str, An
             toFloat64(actual_worth) AS price_aed
         FROM ch_transactions
         WHERE trans_group_en = 'Sales'
-          AND property_type_en = 'Land'
+          AND property_type = 'Plot'
           AND actual_worth > {min_transaction_aed:Float64}
           AND procedure_area > 0
           AND instance_date >= today() - {lookback_days:Int32}

@@ -65,7 +65,8 @@ async def test_land_evidence_preserves_usage_fallback_units_and_far_calculation(
     await warehouse.command("""CREATE TABLE ch_transactions (
         transaction_id String, instance_date Date, area_name_en String, project_name_en String,
         procedure_name_en String, property_usage_en String, procedure_area Float64,
-        actual_worth Float64, nearest_landmark_en String, trans_group_en String, property_type_en String
+        actual_worth Float64, nearest_landmark_en String, trans_group_en String,
+        property_type_en String, property_type String
     ) ENGINE = MergeTree ORDER BY transaction_id""")
     await warehouse.insert(
         "ch_transactions",
@@ -82,7 +83,24 @@ async def test_land_evidence_preserves_usage_fallback_units_and_far_calculation(
                 "",
                 "Sales",
                 "Land",
-            ]
+                "Plot",
+            ],
+            [
+                # DLD registers an off-plan villa against its land; the uniform type is Villa,
+                # and a villa's price is no evidence of what the land is worth.
+                "villa-on-land",
+                date.today(),
+                "Test Area",
+                "Comparable",
+                "Sell",
+                "Commercial",
+                1000,
+                9000000,
+                "",
+                "Sales",
+                "Land",
+                "Villa",
+            ],
         ],
     )
     rows = await evidence.get_land_sale_evidence(
