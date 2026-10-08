@@ -357,13 +357,13 @@ function availabilityLabel(listing: ListingCardResponse | ListingDetailResponse)
 						<button
 							type="button"
 							aria-pressed={mode === 'rent'}
-							class="rounded-md px-3 py-1.5 text-xs font-semibold transition-colors {mode === 'rent' ? 'bg-fg-1 text-bg shadow-sm' : 'text-fg-3 hover:bg-panel hover:text-fg-1'}"
+							class="rounded-md px-3 py-1.5 text-xs font-semibold transition-colors {mode === 'rent' ? 'bg-fg-1 text-app shadow-sm' : 'text-fg-3 hover:bg-panel hover:text-fg-1'}"
 							onclick={() => setMode('rent')}>For rent</button
 						>
 						<button
 							type="button"
 							aria-pressed={mode === 'sale'}
-							class="rounded-md px-3 py-1.5 text-xs font-semibold transition-colors {mode === 'sale' ? 'bg-fg-1 text-bg shadow-sm' : 'text-fg-3 hover:bg-panel hover:text-fg-1'}"
+							class="rounded-md px-3 py-1.5 text-xs font-semibold transition-colors {mode === 'sale' ? 'bg-fg-1 text-app shadow-sm' : 'text-fg-3 hover:bg-panel hover:text-fg-1'}"
 							onclick={() => setMode('sale')}>For sale</button
 						>
 					</nav>

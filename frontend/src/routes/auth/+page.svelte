@@ -363,7 +363,9 @@ async function handleResendForgotPasswordOTP() {
 	sideTitle="One place for transactions, feasibility work, and commercial decisions."
 	sideCopy="Vitevue keeps market signals, project analysis, and commercial context in one workspace so teams can move with more confidence and less friction."
 	cardViewportFill={false}
-	panelClass="lg:h-[calc(100vh-2rem)] lg:max-h-[49rem]"
+	panelClass="lg:min-h-[min(calc(100vh-2rem),49rem)]"
+	sectionWidthClass="lg:max-w-xl xl:max-w-2xl lg:h-auto"
+	cardClass="lg:self-stretch"
 	headerClass="min-h-[7.25rem] sm:min-h-[6.5rem]"
 >
 	<svelte:fragment slot="side">
@@ -415,14 +417,14 @@ async function handleResendForgotPasswordOTP() {
 
 	<div class="flex flex-col gap-4">
 		{#if currentView === 'login' || currentView === 'signup'}
-			<div class="grid grid-cols-2 rounded-lg border border-border bg-white p-1">
+			<div class="grid grid-cols-2 rounded-lg border border-border bg-card p-1">
 				<button
 					type="button"
 					onclick={() => setView('login')}
 					class="rounded-md border px-4 py-2.5 text-sm font-medium transition {currentView ===
 					'login'
 						? 'border-navy bg-navy text-on-navy shadow-xs'
-						: 'border-transparent text-fg-3 hover:border-strong hover:bg-slate-50 hover:text-fg-1'}"
+						: 'border-transparent text-fg-3 hover:border-strong hover:bg-app hover:text-fg-1'}"
 				>
 					Sign in
 				</button>
@@ -432,7 +434,7 @@ async function handleResendForgotPasswordOTP() {
 					class="rounded-md border px-4 py-2.5 text-sm font-medium transition {currentView ===
 					'signup'
 						? 'border-navy bg-navy text-on-navy shadow-xs'
-						: 'border-transparent text-fg-3 hover:border-strong hover:bg-slate-50 hover:text-fg-1'}"
+						: 'border-transparent text-fg-3 hover:border-strong hover:bg-app hover:text-fg-1'}"
 				>
 					Create account
 				</button>
@@ -510,7 +512,7 @@ async function handleResendForgotPasswordOTP() {
 				<button
 					type="button"
 					onclick={() => setView('email-auth')}
-					class="w-full rounded-md border border-border bg-white px-4 py-3 text-sm font-medium text-fg-2 transition hover:border-[var(--color-navy-600)] hover:bg-slate-50 hover:text-navy"
+					class="w-full rounded-md border border-border bg-card px-4 py-3 text-sm font-medium text-fg-2 transition hover:border-strong hover:bg-app hover:text-fg-1"
 				>
 					Sign in with email code instead
 				</button>
@@ -602,7 +604,7 @@ async function handleResendForgotPasswordOTP() {
 				<label
 					class="flex items-start gap-3 rounded-md border px-3 py-2.5 text-xs leading-5 text-fg-3 transition-colors {fieldErrors.terms
 						? 'border-[var(--color-error)] bg-error-bg'
-						: 'border-border bg-white'}"
+						: 'border-border bg-card'}"
 				>
 					<input
 						type="checkbox"
@@ -669,7 +671,7 @@ async function handleResendForgotPasswordOTP() {
 				</button>
 
 				<div
-					class="rounded-md border border-border bg-slate-50 px-4 py-3 text-sm text-fg-3"
+					class="rounded-md border border-border bg-app px-4 py-3 text-sm text-fg-3"
 				>
 					{#if resendCountdown > 0}
 						Resend code in {resendCountdown}s

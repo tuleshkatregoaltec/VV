@@ -260,3 +260,27 @@ function formatNumber(num: number): string {
 		Based on {formatNumber(trendQuery.data?.total_transactions ?? 0)} transactions
 	</p>
 </div>
+
+<style>
+	/* Chart/trend tokens are missing from app.css; scoped here so only this chart is affected. */
+	svg {
+		--color-chart-line: var(--color-navy-900);
+		--color-chart-grid: #e2e8f0;
+		--color-chart-axis: #cbd5e1;
+		--color-chart-muted: #94a3b8;
+	}
+
+	:global(:root[data-theme='dark']) svg {
+		--color-chart-line: #d9e1ea;
+		--color-chart-grid: rgba(148, 163, 184, 0.17);
+		--color-chart-axis: rgba(148, 163, 184, 0.32);
+	}
+
+	.text-trend-up {
+		color: var(--color-success);
+	}
+
+	.text-trend-down {
+		color: var(--color-error);
+	}
+</style>

@@ -39,9 +39,9 @@ let {
 		{disabled}
 		{required}
 		{autocomplete}
-		class="w-full rounded-md border bg-white px-3.5 py-3 text-sm text-fg-1 placeholder-fg-5 transition-all
+		class="w-full rounded-md border bg-card px-3.5 py-3 text-sm text-fg-1 placeholder-fg-5 transition-all
                focus:outline-none focus:border-navy focus:ring-2 focus:ring-focus
-               disabled:cursor-not-allowed disabled:bg-slate-100
+               disabled:cursor-not-allowed disabled:bg-panel
                {error
 			? 'border-[var(--color-error)] bg-error-bg'
 			: 'border-border'}"

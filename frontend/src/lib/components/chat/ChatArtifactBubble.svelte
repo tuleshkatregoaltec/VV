@@ -83,7 +83,7 @@ function resultSummary(): string {
 </script>
 
 <section
-	class="overflow-hidden rounded-lg border border-border bg-white shadow-sm"
+	class="overflow-hidden rounded-lg border border-border bg-card shadow-sm"
 	in:fly={{ y: 8, duration: 180, easing: cubicOut }}
 	out:fade={{ duration: 100 }}
 >
