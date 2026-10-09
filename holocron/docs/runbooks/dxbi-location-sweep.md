@@ -71,6 +71,7 @@ is UTC+4 all year (no daylight saving).
 | 03:30 | 23:30 (day before) | `dxbi-sales-sweep`: sales sweep of the last 14 days | a | ~45-60 min |
 | 04:30 | 00:30 | `dxbi-rentals-daily`: lease scrape of the last 14 days | b | ~1-3 h |
 | 06:30 | 02:30 | `dxbi-rentals-sweep`: lease sweep of the last 14 days | b | ~1 h |
+| 06:30 | 02:30 | `dxbi-sales-morning`: sales re-scrape of the last 3 days, back-filling units | a | ~5-10 min |
 | Sun 06:00 | Sun 02:00 | `dxbi-rentals-weekly`: leases 15-180 days back | b | up to 12 h |
 | 10:00 | 06:00 | Dagster `dxbi_evidence_load`: archives and loads every finished run | - | minutes |
 | 10:30 | 06:30 | Dagster `market_events_refresh`: rebuilds the Analytics releases | - | ~5 min |
@@ -81,6 +82,12 @@ is UTC+4 all year (no daylight saving).
   (`DXBI_SWEEP_LOCK_WAIT_SECONDS`): when the Sunday weekly or the monthly lease scrape holds the
   account (up to 12 and 24 hours), the sweep skips that night without a failure marker, and the
   next night's 14-day window covers the missed days.
+- **Units DXBI adds a day later.** DXBI lists a day's sales before their units (the location
+  ends in an empty "No." and there is no sale page) and fills them in about a day later. The
+  morning run (`dxbi-report-daily sales morning`) re-reads the last 3 days
+  (`DXBI_SALES_MORNING_DAYS`), so the 10:00 load replaces those days with the units DXBI has
+  added since the night. Its run is named `run=<date>-morning`, which sorts after
+  `run=<date>-daily`, so it loads last.
 - **Loading.** The evidence load takes each finished run (`_SUCCESS`) once (ledger
   `dxbi_evidence_load_ledger`) and archives its raw files to object storage first.
   - A scrape run that completed every day of an unbroken window loads alone with
@@ -95,9 +102,11 @@ is UTC+4 all year (no daylight saving).
 
 ```bash
 install -m 0755 holocron/deploy/systemd/dxbi-location-sweep.sh /usr/local/sbin/dxbi-location-sweep
+install -m 0755 holocron/deploy/systemd/dxbi-report-daily.sh /usr/local/sbin/dxbi-report-daily
 install -m 0644 holocron/deploy/systemd/dxbi-{sales,rentals}-sweep.{service,timer} /etc/systemd/system/
+install -m 0644 holocron/deploy/systemd/dxbi-sales-morning.{service,timer} /etc/systemd/system/
 systemctl daemon-reload
-systemctl enable --now dxbi-sales-sweep.timer dxbi-rentals-sweep.timer
+systemctl enable --now dxbi-sales-sweep.timer dxbi-rentals-sweep.timer dxbi-sales-morning.timer
 systemctl list-timers 'dxbi-*'   # next runs, shown in UTC
 ```
 
