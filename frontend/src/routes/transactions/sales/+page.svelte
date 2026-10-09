@@ -1,6 +1,6 @@
 <script lang="ts">
 import { createQuery } from '@tanstack/svelte-query'
-import { RotateCcw } from 'lucide-svelte'
+import { ChevronDown, RotateCcw, SlidersHorizontal } from 'lucide-svelte'
 import { type TransactionExportFormat, transactions } from '$lib/api/transactions'
 import FilterPanel from '$lib/components/filters/FilterPanel.svelte'
 import { propertyType, timeframe } from '$lib/components/filters/globalFilters.svelte'
@@ -88,6 +88,12 @@ let filterDefinitions = $derived<FilterDefinition[]>([
 		options: ['All', ...(options?.buildings ?? [])]
 	},
 	{
+		id: 'selectedProject',
+		label: 'Project',
+		type: 'searchable',
+		options: ['All', ...(options?.projects ?? [])]
+	},
+	{
 		id: 'selectedPropertyType',
 		label: 'Property Type',
 		type: 'standard',
@@ -145,6 +151,7 @@ function buildActiveFilterChips(): FilterChip[] {
 
 	addSelectedChip(chips, 'Location', localFilters.selectedLocation)
 	addSelectedChip(chips, 'Building', localFilters.selectedBuilding)
+	addSelectedChip(chips, 'Project', localFilters.selectedProject)
 	addSelectedChip(chips, 'Property type', localFilters.selectedPropertyType)
 	if (!isCommercial) addSelectedChip(chips, 'Bedrooms', localFilters.selectedBedrooms)
 	addSelectedChip(chips, 'Status', localFilters.selectedStatus)
@@ -156,6 +163,8 @@ function buildActiveFilterChips(): FilterChip[] {
 }
 
 let activeFilterChips = $derived(buildActiveFilterChips())
+// The Dataset and Period chips are always there; the rest are the filters set on this page.
+let activeLocalFilters = $derived(activeFilterChips.length - 2)
 
 function handleRowClick(row: SaleRow) {
 	selectedTransaction = row
@@ -230,7 +239,7 @@ async function handleExport(format: TransactionExportFormat) {
 				Market controls
 			</p>
 			<p class="mt-1 text-sm text-fg-3">
-				DXBI sales records. Filter by location, building, unit type, size and price.
+				DXBI sales records. Filter by location, building, project, unit type, size and price.
 			</p>
 		</div>
 		<button
@@ -253,9 +262,18 @@ async function handleExport(format: TransactionExportFormat) {
 			idPrefix="sales-filters-desktop"
 		/>
 	</div>
-	<details class="ui-panel overflow-hidden lg:hidden">
-		<summary class="cursor-pointer px-3 py-2.5 text-sm font-semibold text-fg-1">
-			Local filters
+	<details class="group ui-panel overflow-hidden lg:hidden">
+		<summary
+			class="ui-button h-10 w-full list-none justify-between rounded-none border-0 px-3 text-sm [&::-webkit-details-marker]:hidden"
+		>
+			<span class="inline-flex items-center gap-2">
+				<SlidersHorizontal size={15} strokeWidth={1.8} />
+				Filters
+				{#if activeLocalFilters > 0}
+					<span class="ui-selection-badge px-1.5 text-[11px] leading-5">{activeLocalFilters}</span>
+				{/if}
+			</span>
+			<ChevronDown size={16} strokeWidth={1.8} class="transition-transform group-open:rotate-180" />
 		</summary>
 		<div class="border-t border-border bg-card p-3">
 			<FilterPanel

@@ -71,7 +71,7 @@ function handleKeydown(e: KeyboardEvent) {
 		</div>
 		<input
 			type="text"
-			class="w-full rounded-md border border-border bg-white py-2 pl-9 pr-8 text-sm text-fg-1 placeholder-fg-5 transition-all focus:border-navy focus:outline-none focus:ring-2 focus:ring-focus"
+			class="ui-field w-full py-2 pl-9 pr-8 text-sm"
 			{placeholder}
 			bind:value={inputValue}
 			oninput={() => (isOpen = true)}
@@ -93,7 +93,7 @@ function handleKeydown(e: KeyboardEvent) {
 	</div>
 
 	{#if isOpen}
-		<div class="absolute z-50 mt-2 max-h-72 w-full overflow-y-auto rounded-lg border border-border bg-white p-1.5 shadow-lg">
+		<div class="ui-menu absolute z-50 mt-2 max-h-72 w-full overflow-y-auto p-1.5">
 			{#if projectsQuery.isLoading}
 				<div class="px-3 py-2 text-sm text-fg-5">Loading...</div>
 			{:else if projectsQuery.isError}
@@ -107,7 +107,7 @@ function handleKeydown(e: KeyboardEvent) {
 						class="w-full rounded-md px-3 py-2 text-left text-sm transition-colors {project.name ===
 						value?.name
 							? 'bg-info-bg font-medium text-info'
-							: 'text-fg-2 hover:bg-slate-50 hover:text-fg-1'}"
+							: 'text-fg-2 hover:bg-panel hover:text-fg-1'}"
 						onmousedown={() => select(project)}
 					>
 						{project.name}

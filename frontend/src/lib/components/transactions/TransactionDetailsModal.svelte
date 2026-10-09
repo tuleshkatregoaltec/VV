@@ -45,7 +45,7 @@ const fields = $derived(
 	{#if transaction}
 		<div class="mb-2">
 			<h3 class="mb-3 text-lg font-semibold text-fg-1">Transaction Information</h3>
-			<div class="grid grid-cols-2 gap-4 rounded-lg border border-border bg-slate-50 p-4 md:grid-cols-3">
+			<div class="grid grid-cols-2 gap-4 rounded-lg border border-border bg-panel p-4 md:grid-cols-3">
 				{#each fields as field (field.label)}
 					<div>
 						<span class="text-sm text-fg-4">{field.label}</span>

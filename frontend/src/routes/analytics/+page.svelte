@@ -108,27 +108,16 @@ function selectDubaiMarket() {
 		{#if comparing}
 			{#if projectA && projectB}
 				<AnalyticsCompareView {projectA} {projectB} {allProjects} />
-			{:else}
-				<div class="grid grid-cols-1 gap-6 xl:grid-cols-2">
-					{#if projectA}
-						<div class="ui-surface p-5">
-							<p class="text-xs font-semibold uppercase tracking-[0.18em] text-fg-4">Project A</p>
-							<p class="mt-2 text-lg font-semibold text-fg-1">{projectA.name}</p>
-							<p class="mt-1 text-sm text-fg-3">Select Project B to start comparison.</p>
-						</div>
-					{:else}
-						{@render EmptyState('Project A')}
-					{/if}
-					{#if projectB}
-						<div class="ui-surface p-5">
-							<p class="text-xs font-semibold uppercase tracking-[0.18em] text-fg-4">Project B</p>
-							<p class="mt-2 text-lg font-semibold text-fg-1">{projectB.name}</p>
-							<p class="mt-1 text-sm text-fg-3">Select Project A to start comparison.</p>
-						</div>
-					{:else}
-						{@render EmptyState('Project B')}
-					{/if}
+			{:else if projectA || projectB}
+				<!-- One side chosen: its figures show at once; only the empty side asks for a pick. -->
+				{@const chosen = (projectA ?? projectB)!}
+				<div class="rounded-lg border border-dashed border-strong bg-card px-5 py-4 text-sm text-fg-3">
+					<span class="font-semibold text-fg-1">{chosen.name}</span> is Project {projectA ? 'A' : 'B'}.
+					Search for Project {projectA ? 'B' : 'A'} above to compare the two side by side.
 				</div>
+				<ProjectPanel selection={chosen} />
+			{:else}
+				{@render EmptyState('Compare')}
 			{/if}
 		{:else if projectA}
 			<ProjectPanel selection={projectA} />
