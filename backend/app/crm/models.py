@@ -370,3 +370,98 @@ class CrmPropertyReportResponse(BaseModel):
     agent_signals: list[str] = Field(default_factory=list)
     methodology: list[str] = Field(default_factory=list)
     generated_at: datetime
+
+
+RENEWAL_FORWARD_DAYS_DEFAULT = 60
+RENEWAL_LOOKBACK_DAYS_DEFAULT = 30
+# The lease-expiry dataset only covers 90 days ahead (see opportunity_queries._LEAD_CTE).
+RENEWAL_FORWARD_DAYS_MAX = 90
+RENEWAL_LOOKBACK_DAYS_MAX = 365
+
+
+class CrmAgentAreaPreference(SQLModel, table=True):
+    """One agent's renewal-lead areas and lease-expiry windows within an organization."""
+
+    __tablename__ = "crm_agent_area_preferences"
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id",
+            "organization_id",
+            name="uq_crm_agent_area_preference_owner",
+        ),
+    )
+
+    id: int | None = SQLField(default=None, primary_key=True)
+    user_id: str = SQLField(index=True)
+    organization_id: str = SQLField(index=True)
+    areas: list[str] = SQLField(
+        default_factory=list,
+        sa_column=Column(JSON, nullable=False),
+    )
+    forward_days: int = SQLField(default=RENEWAL_FORWARD_DAYS_DEFAULT)
+    lookback_days: int = SQLField(default=RENEWAL_LOOKBACK_DAYS_DEFAULT)
+    created_at: datetime = SQLField(sa_column=Column(DateTime(timezone=True), nullable=False))
+    updated_at: datetime = SQLField(sa_column=Column(DateTime(timezone=True), nullable=False))
+
+
+class CrmAreaPreferencesUpdate(BaseModel):
+    areas: list[str] = Field(max_length=50)
+    forward_days: int = Field(
+        default=RENEWAL_FORWARD_DAYS_DEFAULT, ge=1, le=RENEWAL_FORWARD_DAYS_MAX
+    )
+    lookback_days: int = Field(
+        default=RENEWAL_LOOKBACK_DAYS_DEFAULT, ge=0, le=RENEWAL_LOOKBACK_DAYS_MAX
+    )
+
+
+class CrmAreaPreferencesResponse(CrmAreaPreferencesUpdate):
+    updated_at: datetime | None = None
+
+
+class CrmRenewalArea(BaseModel):
+    area: str
+    upcoming_90_days: int
+
+
+class CrmRenewalOwner(BaseModel):
+    """Owner contact for a renewal lead, only when entered by the agent or import-matched."""
+
+    name: str | None = None
+    phone: str | None = None
+    email: str | None = None
+    # workspace: saved on the agent's lead workspace (typed in, or copied there by an owner import).
+    # owner_import: a verified or probable current-owner claim on this unit from an owner import.
+    source: Literal["workspace", "owner_import"]
+
+
+class CrmRenewalLead(BaseModel):
+    lead: CrmLead
+    owner: CrmRenewalOwner | None = None
+    # The agency's stored lead for this unit, once an agent has opened it in Leads.
+    lead_record_id: int | None = None
+
+
+class CrmRenewalLeadsResponse(BaseModel):
+    items: list[CrmRenewalLead]
+    total: int
+    limit: int
+    offset: int
+    # Leases whose expiry crossed into the forward window today.
+    entered_today: int
+    preferences: CrmAreaPreferencesResponse
+    as_of: date
+
+
+class CrmRenewalsResponse(BaseModel):
+    """Assets › Renewals: one page of the lease-expiry dataset and the options for its filters."""
+
+    leads: list[CrmLead]
+    total: int
+    limit: int
+    offset: int
+    property_types: list[str] = Field(default_factory=list)
+    # Listed once an area is picked.
+    projects: list[str] = Field(default_factory=list)
+    # Listed once a project is picked.
+    buildings: list[str] = Field(default_factory=list)
+    as_of: date

@@ -2,7 +2,7 @@ from datetime import date, datetime
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field
-from sqlalchemy import DateTime, ForeignKey, Text, UniqueConstraint
+from sqlalchemy import DateTime, ForeignKey, Index, Text, UniqueConstraint, text
 from sqlmodel import JSON, Column, SQLModel
 from sqlmodel import Field as SQLField
 
@@ -25,6 +25,9 @@ InboundStatus = Literal[
     "disqualified",
 ]
 InboundMatchState = Literal["suggested", "saved", "dismissed", "contacted", "stale"]
+
+# Leads Vitevue supplies from the lease data; source_lead_id holds the unit's candidate key.
+VITEVUE_LEASE_SOURCE = "Vitevue lease lead"
 
 
 class CrmInboundImport(SQLModel, table=True):
@@ -69,6 +72,16 @@ class CrmInboundContact(SQLModel, table=True):
 
 class CrmInboundEnquiry(SQLModel, table=True):
     __tablename__ = "crm_inbound_enquiries"
+    # One shared Vitevue lease lead per unit per agency, even when two agents open it at once.
+    __table_args__ = (
+        Index(
+            "uq_crm_inbound_vitevue_lease_unit",
+            "organization_id",
+            "source_lead_id",
+            unique=True,
+            postgresql_where=text(f"source = '{VITEVUE_LEASE_SOURCE}'"),
+        ),
+    )
 
     id: int | None = SQLField(default=None, primary_key=True)
     organization_id: str = SQLField(index=True)
@@ -311,6 +324,10 @@ class InboundEnquiryUpdate(BaseModel):
     consent_status: Literal["unknown", "provided", "withdrawn"] | None = None
     do_not_contact: bool | None = None
     preferred_channel: str | None = Field(default=None, max_length=40)
+    # The contact's own details, e.g. the owner an agent finds for a Vitevue lease lead.
+    full_name: str | None = Field(default=None, max_length=240)
+    phone: str | None = Field(default=None, max_length=80)
+    email: str | None = Field(default=None, max_length=320)
 
 
 class InboundNoteCreate(BaseModel):

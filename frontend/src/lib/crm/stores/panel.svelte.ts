@@ -27,7 +27,7 @@ export type PanelState =
 	| { kind: 'owner'; id: string }
 	| { kind: 'market'; id: string }
 	| { kind: 'client'; client: string }
-	| { kind: 'renewal'; id: number }
+	| { kind: 'renewal'; id: string }
 	| { kind: 'event'; id: number }
 	| { kind: 'day'; date: string }
 	| { kind: 'search' }

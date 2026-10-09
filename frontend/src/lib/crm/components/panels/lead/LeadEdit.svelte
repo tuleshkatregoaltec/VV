@@ -24,6 +24,8 @@ const initial = untrack(() => ({
 		expected_rent_aed: Number(lead.fields.expected_rent_aed) || null
 	} as Record<string, number | null>,
 	phone: lead.phone,
+	name: lead.lease && lead.name === lead.lease.unit ? '' : lead.name,
+	email: lead.email,
 	next: lead.next_action,
 	language: lead.language
 }))
@@ -32,11 +34,17 @@ let type = $state<LeadType>(initial.type)
 let draft = $state<Record<string, string>>(initial.draft)
 let money = $state<Record<string, number | null>>(initial.money)
 let phone = $state(initial.phone)
+let name = $state(initial.name)
+let email = $state(initial.email)
 let next = $state(initial.next)
 let language = $state(initial.language)
 let saving = $state(false)
 
 const fields = $derived(LEAD_TYPES[type].fields)
+/** A Vitevue lease lead stays "seller or landlord" until the agent picks one. */
+const types = $derived(
+	lead.lead_type === 'owner' ? (['owner', ...LEAD_TYPE_ORDER] as LeadType[]) : LEAD_TYPE_ORDER
+)
 
 async function save(e: SubmitEvent) {
 	e.preventDefault()
@@ -52,6 +60,8 @@ async function save(e: SubmitEvent) {
 	}
 	const typeChanged = type !== lead.lead_type
 	const phoneChanged = phone.trim() !== lead.phone
+	const nameChanged = name.trim() !== initial.name
+	const emailChanged = email.trim() !== lead.email
 	const r = await write({
 		call: () =>
 			crm.leads.patch(lead.id, {
@@ -59,7 +69,9 @@ async function save(e: SubmitEvent) {
 				fields: out,
 				next_action: next,
 				language,
-				...(phoneChanged ? { phone: phone.trim() } : {})
+				...(phoneChanged ? { phone: phone.trim() } : {}),
+				...(nameChanged ? { name: name.trim() } : {}),
+				...(emailChanged ? { email: email.trim() } : {})
 			}),
 		success: (res) => (res.undo_token ? 'Changes saved' : null),
 		event: typeChanged ? 'lead_type_changed' : undefined
@@ -73,7 +85,7 @@ async function save(e: SubmitEvent) {
 	<div class="fld">
 		<label for="edit-type">Lead type</label>
 		<select id="edit-type" bind:value={type}>
-			{#each LEAD_TYPE_ORDER as t (t)}
+			{#each types as t (t)}
 				<option value={t}>{LEAD_TYPES[t].label}</option>
 			{/each}
 		</select>
@@ -94,15 +106,25 @@ async function save(e: SubmitEvent) {
 		</div>
 	{/each}
 	<div class="fld">
-		<label for="edit-phone">Phone</label>
-		<input
-			id="edit-phone"
-			inputmode="tel"
-			autocomplete="off"
-			placeholder="050 123 4567"
-			required
-			bind:value={phone}
-		/>
+		<label for="edit-name">{lead.lease ? 'Owner name' : 'Name'}</label>
+		<input id="edit-name" autocomplete="off" required={!lead.lease} bind:value={name} />
+	</div>
+	<div class="frow">
+		<div class="fld">
+			<label for="edit-phone">Phone</label>
+			<input
+				id="edit-phone"
+				inputmode="tel"
+				autocomplete="off"
+				placeholder="050 123 4567"
+				required={!lead.lease}
+				bind:value={phone}
+			/>
+		</div>
+		<div class="fld">
+			<label for="edit-email">Email</label>
+			<input id="edit-email" type="email" autocomplete="off" bind:value={email} />
+		</div>
 	</div>
 	<div class="frow">
 		<div class="fld">

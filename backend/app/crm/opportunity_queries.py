@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
-from app.clickhouse.client import query
+from app.clickhouse.client import ClientDisconnected, query, run_cancellable
 
 
 async def fetch_sales_inventory(parameters):
@@ -360,9 +360,13 @@ def _where_clause(
     search: str | None,
     asset_class: str | None = None,
     property_type: str | None = None,
+    unlet_only: bool = False,
 ) -> tuple[str, dict[str, Any]]:
     conditions = ["1 = 1"]
     params: dict[str, Any] = {}
+    if unlet_only:
+        # Vacant: the exact unit's lease ended, no later lease is registered and it was not sold.
+        conditions.append("lease_evidence_state = 'unlet_signal'")
     if status:
         conditions.append("lead_status = {status:String}")
         params["status"] = status
@@ -630,6 +634,192 @@ async def fetch_dashboard(
         query(metadata_sql, metadata_params),
     )
     return lead_rows, summary_rows, breakdown_rows, asset_rows, metadata_rows
+
+
+_CANDIDATE_SOURCE = "FROM dxbi_rental_unit_candidates AS c FINAL"
+assert _LEAD_CTE.count(_CANDIDATE_SOURCE) == 1
+# The lead query for chosen areas only. Leases are narrowed to those areas before the joins and
+# the per-unit ranking, so one area costs a fraction of all of Dubai. The registry area may be
+# renamed by the geography crosswalk, so registry names that display as a chosen area are kept
+# too; the exact display-area filter still runs on the result.
+_AREA_LEAD_CTE = _LEAD_CTE.replace(
+    _CANDIDATE_SOURCE,
+    """FROM (
+        SELECT *, event_key
+        FROM dxbi_rental_unit_candidates FINAL
+        WHERE
+            has({areas:Array(String)}, area_name)
+            OR area_name IN (
+                SELECT registry_area_name
+                FROM geo_crm_rental_hierarchy
+                WHERE has({areas:Array(String)}, display_area_name)
+            )
+    ) AS c""",
+)
+
+
+async def run_until_disconnected(is_disconnected, work):
+    """Run `work` with time-limited queries; None (queries stopped) if the caller went away."""
+    try:
+        return await run_cancellable(is_disconnected, work)
+    except ClientDisconnected:
+        return None
+
+
+async def fetch_renewal_leads(anchor, areas, forward_days, lookback_days, limit, offset, kind=None):
+    """Return one agent's lease-expiry leads: their areas, inside the forward/look-back windows.
+
+    Only leases tied to a known unit number become leads. `kind` narrows them to vacant units
+    (lease ended, no later lease registered) or to leases still running.
+    """
+    kind_condition = {
+        None: "",
+        "vacant": "AND lease_evidence_state = 'unlet_signal'",
+        "upcoming": "AND lease_end >= {as_of:Date}",
+    }[kind]
+    params = {
+        "as_of": anchor.isoformat(),
+        "expired_days": lookback_days,
+        "forward_days": forward_days,
+        "areas": list(areas),
+        "limit": limit,
+        "offset": offset,
+    }
+    # One query: window totals are computed over every match before LIMIT applies.
+    rows = await query(
+        _AREA_LEAD_CTE
+        + """
+        SELECT
+            *,
+            count() OVER () AS _window_total,
+            countIf(lease_end = addDays({as_of:Date}, {forward_days:Int32})) OVER ()
+                AS _window_entered_today
+        FROM leads
+        WHERE
+            has({areas:Array(String)}, area_name)
+            AND lease_end <= addDays({as_of:Date}, {forward_days:Int32})
+            AND ifNull(unit_number, '') != ''
+            """
+        + kind_condition
+        + """
+        ORDER BY lease_end ASC, raw_score DESC, event_key
+        LIMIT {limit:Int32} OFFSET {offset:Int32}
+        """,
+        params,
+    )
+    # A page past the end has no rows to carry the totals; it reports zero.
+    counts = {
+        "total": rows[0]["_window_total"] if rows else 0,
+        "entered_today": rows[0]["_window_entered_today"] if rows else 0,
+    }
+    return rows, [counts]
+
+
+async def fetch_renewals(
+    anchor,
+    *,
+    status,
+    unlet_only,
+    expired_days,
+    area,
+    property_type,
+    project,
+    building,
+    limit,
+    offset,
+):
+    """Assets › Renewals: one page of leases with its total, plus the options for its filters.
+
+    Two queries instead of the dashboard's five. With an area picked, leases are narrowed to it
+    before the per-unit work (the same narrowing as the agent's renewal leads).
+    """
+    cte = _AREA_LEAD_CTE if area else _LEAD_CTE
+    where, filter_params = _where_clause(
+        status=status,
+        priority=None,
+        area=area,
+        project=project,
+        building=building,
+        search=None,
+        property_type=property_type,
+        unlet_only=unlet_only,
+    )
+    # The options list what the other filters allow, so picking one never empties its own list.
+    facet_where, facet_params = _where_clause(
+        status=status,
+        priority=None,
+        area=area,
+        project=None,
+        building=None,
+        search=None,
+        unlet_only=unlet_only,
+    )
+    base = {
+        "as_of": anchor.isoformat(),
+        "expired_days": expired_days,
+        "areas": [area] if area else [],
+    }
+    rows_sql = (
+        cte
+        + f"""
+        SELECT *, count() OVER () AS _window_total
+        FROM leads
+        WHERE {where}
+        ORDER BY raw_score DESC, lease_end ASC, annual_rent_aed DESC
+        LIMIT {{limit:Int32}} OFFSET {{offset:Int32}}
+        """
+    )
+    facets_sql = (
+        cte
+        + f"""
+        SELECT
+            arraySort(groupUniqArray(property_subtype)) AS property_types,
+            arraySort(
+                groupUniqArrayIf(project_name, project_name != '' AND {{filter_area:String}} != '')
+            ) AS projects,
+            arraySort(
+                groupUniqArrayIf(
+                    building_name,
+                    building_name != ''
+                    AND {{filter_project:String}} != ''
+                    AND project_name = {{filter_project:String}}
+                )
+            ) AS buildings
+        FROM leads
+        WHERE {facet_where}
+        """
+    )
+    rows, facets = await asyncio.gather(
+        query(rows_sql, {**base, **filter_params, "limit": limit, "offset": offset}),
+        query(
+            facets_sql,
+            {
+                **base,
+                **facet_params,
+                "filter_area": area or "",
+                "filter_project": project or "",
+            },
+        ),
+    )
+    total = rows[0]["_window_total"] if rows else 0
+    return rows, total, (facets[0] if facets else {})
+
+
+async def fetch_renewal_areas(anchor):
+    """Areas in the lease-expiry dataset, with their leases ending in the next 90 days."""
+    return await query(
+        _LEAD_CTE
+        + """
+        SELECT
+            area_name AS area,
+            countIf(lease_end >= {as_of:Date}) AS upcoming_90_days
+        FROM leads
+        WHERE area_name != ''
+        GROUP BY area_name
+        ORDER BY area_name
+        """,
+        {"as_of": anchor.isoformat(), "expired_days": 365},
+    )
 
 
 async def fetch_lead(parameters):

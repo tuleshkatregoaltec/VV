@@ -3,9 +3,12 @@
  * comes from the Vitevue backend (./backend): leads, owners, imports, portal listings, the
  * agent's name, and what is built from them (Search, Matches, Home's new leads, the counts).
  *
- * Areas with no backend endpoint yet (deals, calendar, inbox, the agency's listings, portfolio,
- * renewals, notifications, settings) read as empty, and their writes fail with a 501 so no
- * screen reports a change that was not stored.
+ * Lease renewals come from the lease-expiry dataset (/api/v1/crm/renewals). Leads and its feed
+ * strip also hold the Vitevue lease leads for the agent's areas (/renewal-leads).
+ *
+ * Areas with no backend endpoint yet (deals, calendar, the inbox's handout, the agency's
+ * listings, portfolio, notifications, settings) read as empty, and their writes fail with a 501
+ * so no screen reports a change that was not stored.
  */
 import { addDays } from '../format'
 import * as backend from './backend'
@@ -25,6 +28,7 @@ import type {
 	DocumentUploadResult,
 	EventCreate,
 	FeedArea,
+	FeedPreferences,
 	FeedSummary,
 	FormPreview,
 	HandoutMode,
@@ -65,7 +69,9 @@ import type {
 	OwnerRow,
 	PortfolioResponse,
 	PursueResult,
-	Renewal,
+	RenewalDetail,
+	RenewalListParams,
+	RenewalListResponse,
 	SearchResults,
 	Written
 } from './types'
@@ -143,6 +149,8 @@ export const crm = {
 		list: (p: LeadListParams): Promise<LeadListResponse> => backend.listLeads(p),
 		get: (id: number): Promise<LeadDetail> => backend.getLead(id),
 		create: (body: LeadCreate) => backend.createLead(body),
+		/** Open a Vitevue lease as the agency's shared lead for its unit (created the first time). */
+		openVitevue: (leaseId: string) => backend.openVitevueLead(leaseId),
 		patch: (id: number, body: LeadPatch) => backend.patchLead(id, body),
 		/** Move to a stage with what that stage needs (status + a note or contact activity). */
 		moveStage: (id: number, body: LeadStageMove) => backend.moveLeadStage(id, body),
@@ -172,28 +180,18 @@ export const crm = {
 			notOnBackend<Written<ListingCreateResult>>('A listing from a lead')
 	},
 
-	/** The lease-expiry feed for the agent's areas has no backend yet. */
+	/** Backend: /api/v1/crm/area-preferences, /renewal-areas and /renewal-leads (My areas). */
 	feed: {
-		summary: async (): Promise<FeedSummary> => ({
-			areas: [],
-			window_total: 0,
-			on_file: 0,
-			entered_today: 0
-		}),
-		areas: async (): Promise<FeedArea[]> => [],
-		setAreas: (_areas: string[]) => notOnBackend<Written<FeedSummary>>('Your areas')
+		summary: (): Promise<FeedSummary> => backend.feedSummary(),
+		areas: (): Promise<FeedArea[]> => backend.feedAreas(),
+		preferences: (): Promise<FeedPreferences> => backend.getFeedPreferences(),
+		setPreferences: (p: FeedPreferences): Promise<Written<FeedPreferences>> =>
+			backend.setFeedPreferences(p)
 	},
 
 	inbox: {
-		list: async (_filter: InboxFilter): Promise<InboxResponse> => ({
-			items: [],
-			counts: { all: 0, mine: 0, waiting: 0, dismissed: 0 },
-			today: 0,
-			waiting: 0,
-			handout: 'manager',
-			handout_label: 'Not set',
-			sources: []
-		}),
+		/** Backend: /api/v1/crm/inbound/enquiries. Read only until the handout system exists. */
+		list: (filter: InboxFilter): Promise<InboxResponse> => backend.listInbox(filter),
 		ask: (_id: string) => notOnBackend<Written<InboxItem>>('Asking for an enquiry'),
 		withdraw: (_id: string) => notOnBackend<Written<InboxItem>>('Withdrawing a request'),
 		release: (_id: string) => notOnBackend<Written<InboxItem>>('Releasing an enquiry'),
@@ -287,10 +285,15 @@ export const crm = {
 		checkIn: (_client: string) => notOnBackend<{ sent: boolean }>('Client check-ins')
 	},
 
+	/** Backend: /api/v1/crm/dashboard (every lease), /leads/{id} (history), /workspaces/{id} (owner). */
 	renewals: {
-		list: async (): Promise<Renewal[]> => [],
-		start: (_id: number) => notOnBackend<Written<Renewal>>('Renewals'),
-		send: (_id: number) => notOnBackend<{ sent: boolean }>('Renewals')
+		list: (p: RenewalListParams, signal?: AbortSignal): Promise<RenewalListResponse> =>
+			backend.listRenewals(p, signal),
+		get: (id: string): Promise<RenewalDetail> => backend.getRenewal(id),
+		saveOwner: (id: string, owner: { name: string; phone: string; email: string }) =>
+			backend.saveRenewalOwner(id, owner),
+		/** Starting a renewal opens a rent deal; deals are not stored yet. */
+		start: (_id: string) => notOnBackend<Written<RenewalDetail>>('Starting a renewal')
 	},
 
 	/** Backend: /api/v1/listings (Property Finder listings with a comparable-sales estimate). */

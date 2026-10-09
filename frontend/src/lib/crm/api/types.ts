@@ -4,10 +4,11 @@
  * so no business rule lives in Svelte. Money is whole AED; dates are YYYY-MM-DD (Dubai).
  */
 
-export type LeadType = 'buyer' | 'seller' | 'tenant' | 'landlord'
+/** `owner`: a Vitevue lease lead not yet classified as seller or landlord. */
+export type LeadType = 'buyer' | 'seller' | 'tenant' | 'landlord' | 'owner'
 export type DealType = 'sale' | 'rent'
 /** `file`: an owner on the agency's own owner file ("Your owner file", 7 Oct; was `vitevue`). */
-export type Source = 'inbound' | 'file' | 'own_contact' | 'agent_to_agent'
+export type Source = 'inbound' | 'file' | 'own_contact' | 'agent_to_agent' | 'vitevue'
 /**
  * Stages depend on the lead type (6 Oct): buyers and tenants go through Viewing, sellers and
  * landlords through Listed (proposal). New → Contacted → Qualified → Viewing | Listed → Offer → Won / Lost.
@@ -127,6 +128,28 @@ export interface LeadRow {
 	source_short: string
 	/** Buyer/tenant from a portal: the listing they enquired on. */
 	listing: RecordRef | null
+	/** Vitevue lease lead: the unit's lease behind it. */
+	lease: VitevueLease | null
+}
+
+/**
+ * The lease behind a Vitevue lease lead. A lead nobody has opened yet has id 0 and is created
+ * (one per unit, shared by the agency) when an agent first opens it.
+ */
+export interface VitevueLease {
+	/** Lease id: opens the lease with its property history. */
+	id: string
+	unit: string
+	area: string
+	property: string
+	lease_start: string
+	lease_end: string
+	/** Negative once the lease has ended. */
+	days_left: number
+	vacant: boolean
+	rent_aed: number
+	last_purchase: { date: string; price_aed: number | null } | null
+	end_chip: Chip
 }
 
 export interface OwnerMatchRecord {
@@ -157,6 +180,8 @@ export interface PursuedMatch {
 }
 
 export interface LeadDetail extends LeadRow {
+	/** The contact's email ('' when unknown). */
+	email: string
 	/** "On your agency's file": what the phone matches on the agency's owner file. */
 	owner_match: { summary: string; records: OwnerMatchRecord[] }
 	/** Matches the agent pursued for this lead (Pursue in Matches). */
@@ -187,6 +212,8 @@ export interface LeadListParams {
 	beds?: string
 	ptype?: PropertyKind | ''
 	budget?: BudgetBand | ''
+	/** Leads page: add Vitevue lease leads from My areas (not Home, counts or Matches). */
+	vitevue?: boolean
 }
 
 export interface LeadListResponse {
@@ -196,6 +223,8 @@ export interface LeadListResponse {
 	counts: { all: number; lost: number } & Record<LeadType, number>
 	new_count: number
 	areas: string[]
+	/** The Vitevue lease leads could not load; the agency's own leads are still listed. */
+	vitevue_unavailable?: boolean
 }
 
 export interface LeadEvent {
@@ -224,6 +253,9 @@ export interface LeadPatch {
 	language?: string
 	/** Normalised to +971; a changed number re-runs the owner match. */
 	phone?: string
+	/** The contact's name and email, e.g. the owner found for a Vitevue lease lead. */
+	name?: string
+	email?: string
 	/** Buyers only: matched to Launch desk projects (Matches › Off-plan buyers). */
 	off_plan?: boolean
 }
@@ -613,20 +645,86 @@ export interface PortfolioResponse {
 	}
 }
 
+/**
+ * One lease from the lease-expiry dataset (/api/v1/crm/dashboard), keyed by its lease id.
+ * Owner contact is only what the agent typed in or an owner import matched; otherwise null.
+ */
 export interface Renewal {
-	id: number
-	party: string
+	id: string
+	/** "Tower · unit 1204" (unit only when the lease is tied to one exact unit). */
 	unit: string
+	area: string
+	/** "Apartment · 1 Bed · 850 sqft" */
+	property: string
 	rent_aed: number
-	building_median_aed: number
+	lease_start: string
 	lease_end: string
+	/** Days to lease end; negative once it has ended. */
 	days_left: number
-	gap_pct: number
-	gap_chip: Chip
 	end_chip: Chip
-	started: boolean
-	deal_id: string | null
-	draft: string
+	owner: RenewalOwner | null
+}
+
+export interface RenewalOwner {
+	name: string | null
+	phone: string | null
+	email: string | null
+	/** "Typed in" or "Owner import · {list}" */
+	source: string
+}
+
+/**
+ * Assets › Renewals filter: every lease, or one lease-end window. `vacant` (the default) is a
+ * unit whose lease ended in the last 60 days with no later lease registered.
+ */
+export type RenewalWindow =
+	| ''
+	| 'vacant'
+	| 'expired'
+	| 'expiring_30'
+	| 'expiring_60'
+	| 'expiring_90'
+
+export interface RenewalListParams {
+	area: string
+	window: RenewalWindow
+	property_type: string
+	/** Picked after an area. */
+	project: string
+	/** Picked after a project. */
+	building: string
+	limit: number
+}
+
+export interface RenewalListResponse {
+	items: Renewal[]
+	total: number
+	/** Options for the filters, from the leases in the current filter (areas come from My areas' list). */
+	property_types: string[]
+	projects: string[]
+	buildings: string[]
+}
+
+/** A dated entry in the property history: a registered lease or a sale. */
+export interface RenewalHistoryEvent {
+	id: string
+	kind: 'lease' | 'sale'
+	date: string
+	end_date: string | null
+	title: string
+	detail: string
+	amount_aed: number | null
+	source: string
+}
+
+export interface RenewalDetail extends Renewal {
+	reason: string
+	action: string
+	last_purchase: { date: string; price_aed: number | null } | null
+	gross_yield_pct: number | null
+	history: RenewalHistoryEvent[]
+	/** How the history was matched to the unit. */
+	match_explanation: string
 }
 
 export interface MarketListing {
@@ -873,11 +971,14 @@ export interface HomeResponse {
  */
 export interface FeedSummary {
 	areas: string[]
-	/** Units in the areas with a lease ending in the next 90 days (DLD/Ejari). */
+	/** Lease-end window: leases ending in the next `forward_days` or ended in the last `lookback_days`. */
+	forward_days: number
+	lookback_days: number
+	/** Units in the areas inside the window (DLD/Ejari). */
 	window_total: number
-	/** Of those, owners on the agency's own file. */
+	/** Of the loaded units, those with a known owner (typed in or matched by an owner import). */
 	on_file: number
-	/** Owner-file owners that entered the inbox today (30, 60, 90 days to lease end). */
+	/** Units whose lease end entered the forward window today. */
 	entered_today: number
 }
 
@@ -885,6 +986,12 @@ export interface FeedArea {
 	area: string
 	/** Units with a lease ending in the next 90 days (DLD/Ejari), for My areas. */
 	owners_in_90_day_window: number
+}
+
+export interface FeedPreferences {
+	areas: string[]
+	forward_days: number
+	lookback_days: number
 }
 
 /* ── inbox and the handout setting (6 Oct, 04:25–06:10) ── */

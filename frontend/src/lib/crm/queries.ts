@@ -8,7 +8,8 @@ import type {
 	ListingScope,
 	ListingStatus,
 	MatchOptions,
-	OwnerListParams
+	OwnerListParams,
+	RenewalListParams
 } from './api/types'
 
 /** Every CRM Beta key starts with 'crm', so a write can refresh the whole CRM at once. */
@@ -28,6 +29,7 @@ export const crmKeys = {
 	leadConversation: (id: number) => [...crmKeys.all, 'lead', id, 'conversation'] as const,
 	feedSummary: () => [...crmKeys.all, 'feed', 'summary'] as const,
 	feedAreas: () => [...crmKeys.all, 'feed', 'areas'] as const,
+	feedPreferences: () => [...crmKeys.all, 'feed', 'preferences'] as const,
 	dealStages: () => [...crmKeys.all, 'deal-stages'] as const,
 	deals: (tab: DealTab, type: DealType | '' = '') => [...crmKeys.all, 'deals', tab, type] as const,
 	deal: (id: string) => [...crmKeys.all, 'deal', id] as const,
@@ -36,7 +38,8 @@ export const crmKeys = {
 		[...crmKeys.all, 'listings', scope, status ?? 'all'] as const,
 	listing: (id: string) => [...crmKeys.all, 'listing', id] as const,
 	portfolio: () => [...crmKeys.all, 'portfolio'] as const,
-	renewals: () => [...crmKeys.all, 'renewals'] as const,
+	renewals: (p: RenewalListParams) => [...crmKeys.all, 'renewals', p] as const,
+	renewal: (id: string) => [...crmKeys.all, 'renewal', id] as const,
 	market: () => [...crmKeys.all, 'market'] as const,
 	marketListing: (id: string) => [...crmKeys.all, 'market', id] as const,
 	owners: (p: OwnerListParams) => [...crmKeys.all, 'owners', p] as const,
@@ -88,6 +91,7 @@ export const crmQueries = {
 	}),
 	feedSummary: () => ({ queryKey: crmKeys.feedSummary(), queryFn: crm.feed.summary }),
 	feedAreas: () => ({ queryKey: crmKeys.feedAreas(), queryFn: crm.feed.areas }),
+	feedPreferences: () => ({ queryKey: crmKeys.feedPreferences(), queryFn: crm.feed.preferences }),
 	dealStages: () => ({
 		queryKey: crmKeys.dealStages(),
 		queryFn: crm.deals.stages,
@@ -110,7 +114,13 @@ export const crmQueries = {
 	}),
 	listing: (id: string) => ({ queryKey: crmKeys.listing(id), queryFn: () => crm.listings.get(id) }),
 	portfolio: () => ({ queryKey: crmKeys.portfolio(), queryFn: crm.portfolio.get }),
-	renewals: () => ({ queryKey: crmKeys.renewals(), queryFn: crm.renewals.list }),
+	renewals: (p: RenewalListParams) => ({
+		queryKey: crmKeys.renewals(p),
+		// Passing the signal lets a filter change abandon the previous request.
+		queryFn: ({ signal }: { signal: AbortSignal }) => crm.renewals.list(p, signal),
+		placeholderData: keepPreviousData
+	}),
+	renewal: (id: string) => ({ queryKey: crmKeys.renewal(id), queryFn: () => crm.renewals.get(id) }),
 	market: () => ({ queryKey: crmKeys.market(), queryFn: crm.market.list }),
 	marketListing: (id: string) => ({
 		queryKey: crmKeys.marketListing(id),

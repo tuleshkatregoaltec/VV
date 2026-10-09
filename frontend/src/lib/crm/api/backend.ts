@@ -11,11 +11,20 @@ import { me as authMe } from '$lib/api/auth'
 import { ApiError, client } from '$lib/api/client'
 import type {
 	AuthMeResponse,
+	CrmAreaPreferencesResponse,
 	CrmContactImportResponse,
+	CrmLead,
+	CrmLeadDetailResponse,
+	CrmLeadImportedContact,
 	CrmOwnerProfile,
 	CrmOwnerProperty,
 	CrmOwnerRegistryResponse,
 	CrmOwnerWorkspaceSummary,
+	CrmRenewalArea,
+	CrmRenewalLeadsResponse,
+	CrmRenewalOwner,
+	CrmRenewalsResponse,
+	CrmWorkspaceResponse,
 	InboundEnquiryListResponse,
 	InboundEnquiryResponse,
 	InboundEnquiryUpdate,
@@ -26,11 +35,17 @@ import type {
 } from '$lib/api/generated/hey-api/types.gen'
 import { type ListingCardResponse, listings as portal } from '$lib/api/listings'
 import { groupOf, LEAD_TYPES, SOURCE_OPTIONS } from '../config'
-import { aed, short } from '../format'
+import { aed, fmt, fullDate, plural, short } from '../format'
 import type {
 	Chip,
+	FeedArea,
+	FeedPreferences,
+	FeedSummary,
 	ImportPreview,
 	ImportRequest,
+	InboxFilter,
+	InboxItem,
+	InboxResponse,
 	LeadCreate,
 	LeadDetail,
 	LeadEvent,
@@ -57,8 +72,14 @@ import type {
 	OwnerRow,
 	OwnerTab,
 	OwnerUnit,
+	Renewal,
+	RenewalDetail,
+	RenewalListParams,
+	RenewalListResponse,
+	RenewalOwner,
 	SearchResults,
 	Source,
+	VitevueLease,
 	Written
 } from './types'
 
@@ -67,6 +88,8 @@ const CRM = '/api/v1/crm'
 const LIST_LIMIT = 500
 /** Off-plan buyers are marked with this enquiry tag. */
 const OFF_PLAN_TAG = 'off-plan'
+/** Source of the leads Vitevue supplies from lease data (backend VITEVUE_LEASE_SOURCE). */
+const VITEVUE_SOURCE = 'Vitevue lease lead'
 
 type Intent = InboundEnquiryResponse['intent']
 type Status = InboundEnquiryResponse['status']
@@ -135,16 +158,22 @@ const LEAD_TYPE: Record<Exclude<Intent, 'unknown'>, LeadType> = {
 	sell: 'seller',
 	let: 'landlord'
 }
-const INTENT: Record<LeadType, Exclude<Intent, 'unknown'>> = {
+const INTENT: Record<LeadType, Intent> = {
 	buyer: 'buy',
 	tenant: 'rent',
 	seller: 'sell',
-	landlord: 'let'
+	landlord: 'let',
+	owner: 'unknown'
 }
 
-/** Unqualified contacts (intent unknown) belong to the Inbox, not the Leads list. */
+const isVitevue = (e: InboundEnquiryResponse) => e.source === VITEVUE_SOURCE
+
+/**
+ * Unqualified contacts (intent unknown) belong to the Inbox, not the Leads list. A Vitevue lease
+ * lead is the exception: it stays in Leads as "seller or landlord" until the agent picks one.
+ */
 const typeOf = (e: InboundEnquiryResponse): LeadType =>
-	e.intent === 'unknown' ? 'buyer' : LEAD_TYPE[e.intent]
+	e.intent === 'unknown' ? (isVitevue(e) ? 'owner' : 'buyer') : LEAD_TYPE[e.intent]
 
 function stageOf(status: Status, type: LeadType): LeadStage {
 	switch (status) {
@@ -246,7 +275,10 @@ function criteriaWith(current: Criteria, fields: LeadFields): Criteria {
 }
 
 const sourceOf = (label: string): Source =>
-	SOURCE_OPTIONS.find((o) => o.label.toLowerCase() === label.toLowerCase())?.source ?? 'inbound'
+	label === VITEVUE_SOURCE
+		? 'vitevue'
+		: (SOURCE_OPTIONS.find((o) => o.label.toLowerCase() === label.toLowerCase())?.source ??
+			'inbound')
 
 function summaryOf(type: LeadType, f: LeadFields): { line: string; sub: string } {
 	const money = (v: unknown) => (num(v) ? `AED ${short(Number(v))}` : null)
@@ -282,9 +314,11 @@ function leadRow(e: InboundEnquiryResponse, u: AuthMeResponse): LeadRow {
 	const type = typeOf(e)
 	const fields = fieldsOf(e.criteria)
 	const locations = e.criteria.locations
+	const lease = isVitevue(e) ? leaseOfEnquiry(e) : null
 	return {
 		id: e.id,
-		name: e.contact.full_name,
+		// An owner nobody has identified yet has no name: show the unit, never an invented name.
+		name: e.contact.full_name || lease?.unit || 'Owner not identified',
 		phone: e.contact.phone ?? e.contact.whatsapp ?? '',
 		lead_type: type,
 		deal_type: LEAD_TYPES[type].deal,
@@ -298,7 +332,7 @@ function leadRow(e: InboundEnquiryResponse, u: AuthMeResponse): LeadRow {
 				? fullName(u)
 				: 'Another agent'
 			: null,
-		score: e.priority?.score ?? 0,
+		score: lease ? vitevueScore(lease.days_left, lease.vacant) : (e.priority?.score ?? 0),
 		area: (Array.isArray(locations) ? text(locations[0]) : null) ?? text(e.criteria.building) ?? '',
 		language: e.contact.preferred_language ?? '',
 		next_action: nextActionOf(e),
@@ -306,10 +340,11 @@ function leadRow(e: InboundEnquiryResponse, u: AuthMeResponse): LeadRow {
 		gated: false,
 		owner_id: null,
 		fields,
-		summary: summaryOf(type, fields),
+		summary: lease && type === 'owner' ? vitevueSummary(lease) : summaryOf(type, fields),
 		known: knownOf(e),
 		source_short: e.source,
-		listing: null
+		listing: null,
+		lease
 	}
 }
 
@@ -317,6 +352,7 @@ function leadDetail(e: InboundEnquiryResponse, u: AuthMeResponse): LeadDetail {
 	const row = leadRow(e, u)
 	return {
 		...row,
+		email: e.contact.email ?? '',
 		owner_match: {
 			summary: row.known,
 			records: (e.contact.registry_profiles ?? []).map((p) => ({
@@ -363,25 +399,57 @@ const BUDGET_BANDS: Record<string, (deal: 'sale' | 'rent', v: number) => boolean
 const isVilla = (propertyType: unknown) => /villa|townhouse/i.test(String(propertyType ?? ''))
 
 export async function listLeads(p: LeadListParams): Promise<LeadListResponse> {
-	const [res, u] = await Promise.all([
+	const [res, u, leaseResult] = await Promise.all([
 		client.get<InboundEnquiryListResponse>(
 			client.withQuery(`${CRM}/inbound/enquiries`, { search: p.q || undefined, limit: LIST_LIMIT })
 		),
-		whoAmI()
+		whoAmI(),
+		// The agency's own leads still show when the lease data cannot load; the page says so.
+		p.vitevue ? renewalLeads().catch(() => 'failed' as const) : null
 	])
-	const all = res.enquiries
-		.filter((e) => e.intent !== 'unknown')
-		.map((e) => ({ e, row: leadRow(e, u) }))
+	const leases = leaseResult === 'failed' ? null : leaseResult
+	const stored = res.enquiries
+		.filter((e) => e.intent !== 'unknown' || (p.vitevue && isVitevue(e)))
+		.map((e) => ({ e: e as InboundEnquiryResponse | null, row: leadRow(e, u) }))
+	// Opened units carry today's lease state; the rest are shown until an agent opens them.
+	const live = new Map((leases?.items ?? []).map((i) => [i.lead_record_id, i.lead]))
+	for (const item of stored) {
+		const l = item.row.lease && live.get(item.row.id)
+		if (l) {
+			const lease = leaseOfLead(l)
+			item.row = { ...item.row, lease, score: vitevueScore(lease.days_left, lease.vacant) }
+		}
+	}
+	const needle = (p.q ?? '').trim().toLowerCase()
+	const unopened = (leases?.items ?? [])
+		.filter((i) => !i.lead_record_id)
+		.map((i) => ({ e: null, row: unopenedVitevueLead(i) }))
+		.filter(
+			({ row }) =>
+				!needle || `${row.name} ${row.summary.line} ${row.area}`.toLowerCase().includes(needle)
+		)
+	// Vitevue lease leads follow the agency's own leads, ranked among themselves.
+	const all = [
+		...stored.filter(({ row }) => !row.lease),
+		...[...stored.filter(({ row }) => row.lease), ...unopened].sort(
+			(a, b) => b.row.score - a.row.score
+		)
+	]
 
 	const matching = all.filter(({ e, row }) => {
 		if (p.source && row.source !== p.source) return false
 		if (p.stage && row.stage !== p.stage) return false
 		if (p.area && row.area !== p.area) return false
 		if (p.beds) {
+			if (!e) return false
 			const beds = num(e.criteria.bedrooms_min)
 			if (beds === null || (p.beds === '4' ? beds < 4 : beds !== Number(p.beds))) return false
 		}
-		if (p.ptype && (p.ptype === 'villa') !== isVilla(e.criteria.property_type)) return false
+		if (
+			p.ptype &&
+			(p.ptype === 'villa') !== isVilla(e ? e.criteria.property_type : row.lease?.property)
+		)
+			return false
 		if (p.budget) {
 			const v = num(
 				row.fields.budget_aed ?? row.fields.target_price_aed ?? row.fields.expected_rent_aed
@@ -406,7 +474,8 @@ export async function listLeads(p: LeadListParams): Promise<LeadListResponse> {
 		total: items.length,
 		counts,
 		new_count: open.filter(({ row }) => row.stage === 'new').length,
-		areas: [...new Set(all.map(({ row }) => row.area).filter(Boolean))].sort()
+		areas: [...new Set(all.map(({ row }) => row.area).filter(Boolean))].sort(),
+		vitevue_unavailable: leaseResult === 'failed'
 	}
 }
 
@@ -434,13 +503,17 @@ export async function createLead(body: LeadCreate): Promise<Written<LeadDetail>>
 
 export async function patchLead(id: number, body: LeadPatch): Promise<Written<LeadDetail>> {
 	const [current, u] = await Promise.all([getEnquiry(id), whoAmI()])
-	if (body.phone !== undefined && body.phone !== (current.contact.phone ?? '')) {
-		throw notSaved('A changed phone number')
-	}
 	if (body.language !== undefined && body.language !== (current.contact.preferred_language ?? '')) {
 		throw notSaved('A changed language')
 	}
 	const update: InboundEnquiryUpdate = {}
+	// The backend normalises the phone (+971) and the email.
+	if (body.name !== undefined && body.name.trim() !== current.contact.full_name)
+		update.full_name = body.name.trim()
+	if (body.phone !== undefined && body.phone.trim() !== (current.contact.phone ?? ''))
+		update.phone = body.phone.trim() || null
+	if (body.email !== undefined && body.email.trim() !== (current.contact.email ?? ''))
+		update.email = body.email.trim() || null
 	if (body.lead_type) update.intent = INTENT[body.lead_type]
 	if (body.stage) update.status = statusOf(body.stage)
 	if (body.fields) update.criteria = criteriaWith(current.criteria, body.fields)
@@ -994,6 +1067,418 @@ export async function getMarket(id: string): Promise<MarketListingDetail> {
 	if (!m)
 		throw new ApiError('This listing has no comparable sales to compare against.', 404, 'not_found')
 	return { ...m, matched: [] }
+}
+
+/* ── lease renewals (Assets › Renewals and the Leads inbox) ── */
+
+/** Owner-import claims that tie a contact to the unit as its owner today. */
+const CURRENT_OWNER = new Set(['verified_current_owner', 'probable_current_owner'])
+
+function renewalUnit(l: CrmLead): string {
+	const place = l.building_name || l.project_name || l.area_name || 'Unit'
+	return l.unit_number ? `${place} · unit ${l.unit_number}` : place
+}
+
+function renewalProperty(l: CrmLead): string {
+	return [
+		l.property_subtype || l.property_type,
+		l.bedrooms && l.bedrooms !== 'Not stated' ? l.bedrooms : null,
+		l.size_sqft ? `${fmt(l.size_sqft)} sqft` : null
+	]
+		.filter(Boolean)
+		.join(' · ')
+}
+
+function leaseEndChip(days: number): Chip {
+	if (days < 0) return { tone: 'red', label: `Ended ${plural(-days, 'day')} ago` }
+	if (days === 0) return { tone: 'red', label: 'Ends today' }
+	return { tone: days <= 30 ? 'amber' : 'blue', label: `Ends in ${plural(days, 'day')}` }
+}
+
+function renewalOwner(o: CrmRenewalOwner | null | undefined): RenewalOwner | null {
+	if (!o) return null
+	return {
+		name: o.name ?? null,
+		phone: o.phone ?? null,
+		email: o.email ?? null,
+		source: o.source === 'workspace' ? 'Saved on this lead' : 'Owner import'
+	}
+}
+
+function renewal(l: CrmLead, owner: RenewalOwner | null): Renewal {
+	return {
+		id: l.lead_id,
+		unit: renewalUnit(l),
+		area: l.area_name,
+		property: renewalProperty(l),
+		rent_aed: l.annual_rent_aed,
+		lease_start: l.lease_start,
+		lease_end: l.lease_end,
+		days_left: l.days_to_expiry,
+		end_chip: leaseEndChip(l.days_to_expiry),
+		owner
+	}
+}
+
+/**
+ * Every lease in the dataset, whatever any agent's areas: /api/v1/crm/renewals. `signal` drops
+ * the request when a filter changes, and the backend then stops its query.
+ */
+export async function listRenewals(
+	p: RenewalListParams,
+	signal?: AbortSignal
+): Promise<RenewalListResponse> {
+	const res = await client.get<CrmRenewalsResponse>(
+		client.withQuery(`${CRM}/renewals`, {
+			window: p.window || undefined,
+			area: p.area || undefined,
+			property_type: p.property_type || undefined,
+			project: p.project || undefined,
+			building: p.building || undefined,
+			limit: p.limit
+		}),
+		{ signal }
+	)
+	return {
+		items: res.leads.map((l) => renewal(l, null)),
+		total: res.total,
+		property_types: res.property_types ?? [],
+		projects: res.projects ?? [],
+		buildings: res.buildings ?? []
+	}
+}
+
+/**
+ * One lease with its property history (/leads/{id}) and owner. The owner is the one saved on
+ * the agent's lead workspace, else a current-owner match from an owner import, else nobody.
+ */
+export async function getRenewal(id: string): Promise<RenewalDetail> {
+	const key = encodeURIComponent(id)
+	const [detail, workspace, contacts] = await Promise.all([
+		client.get<CrmLeadDetailResponse>(`${CRM}/leads/${key}`),
+		client.get<CrmWorkspaceResponse>(`${CRM}/workspaces/${key}`),
+		client.get<CrmLeadImportedContact[]>(`${CRM}/leads/${key}/contacts`)
+	])
+	const typed = workspace.owner_name || workspace.owner_phone || workspace.owner_email
+	const matched = contacts.find((c) => CURRENT_OWNER.has(c.ownership_status))
+	const owner: RenewalOwner | null = typed
+		? {
+				name: workspace.owner_name ?? null,
+				phone: workspace.owner_phone ?? null,
+				email: workspace.owner_email ?? null,
+				source: 'Saved on this lead'
+			}
+		: matched
+			? {
+					name: matched.contact_name || null,
+					phone: matched.phone_primary || matched.phone_alternate || null,
+					email: matched.email_primary ?? null,
+					source: `Owner import · ${matched.list_name}`
+				}
+			: null
+	const l = detail.lead
+	return {
+		...renewal(l, owner),
+		reason: l.lead_reason,
+		action: l.recommended_action,
+		last_purchase: l.last_purchase_date
+			? { date: l.last_purchase_date, price_aed: l.latest_purchase_price_aed ?? null }
+			: null,
+		gross_yield_pct: l.gross_yield_pct ?? null,
+		history: detail.timeline.map((e) => ({
+			id: e.event_id,
+			kind: e.event_type,
+			date: e.event_date,
+			end_date: e.end_date ?? null,
+			title: e.title,
+			detail: e.description,
+			amount_aed: e.amount_aed ?? null,
+			source: e.source
+		})),
+		match_explanation: detail.match_explanation
+	}
+}
+
+/** Type in the owner of a lease's unit; an empty field clears it. */
+export async function saveRenewalOwner(
+	id: string,
+	owner: { name: string; phone: string; email: string }
+): Promise<Written<RenewalDetail>> {
+	await client.patch(`${CRM}/workspaces/${encodeURIComponent(id)}`, {
+		owner_name: owner.name.trim() || null,
+		owner_phone: owner.phone.trim() || null,
+		owner_email: owner.email.trim() || null
+	})
+	return done(await getRenewal(id))
+}
+
+/* My areas: the agent's areas and lease-end windows that fill the Leads inbox. */
+
+const preferences = (p: CrmAreaPreferencesResponse): FeedPreferences => ({
+	areas: p.areas,
+	forward_days: p.forward_days ?? 60,
+	lookback_days: p.lookback_days ?? 30
+})
+
+export async function getFeedPreferences(): Promise<FeedPreferences> {
+	return preferences(await client.get<CrmAreaPreferencesResponse>(`${CRM}/area-preferences`))
+}
+
+export async function setFeedPreferences(p: FeedPreferences): Promise<Written<FeedPreferences>> {
+	return done(
+		preferences(await client.put<CrmAreaPreferencesResponse>(`${CRM}/area-preferences`, p))
+	)
+}
+
+export async function feedAreas(): Promise<FeedArea[]> {
+	const rows = await client.get<CrmRenewalArea[]>(`${CRM}/renewal-areas`)
+	return rows.map((r) => ({ area: r.area, owners_in_90_day_window: r.upcoming_90_days }))
+}
+
+/** Largest page /renewal-leads serves. */
+const RENEWAL_LEADS_LIMIT = 500
+
+/**
+ * Lease leads in My areas. Screens that load at the same moment (the Leads list and its feed
+ * strip, or a save refreshing every CRM query) share one request.
+ */
+let renewalLeadsInFlight: Promise<CrmRenewalLeadsResponse> | null = null
+const renewalLeads = () =>
+	(renewalLeadsInFlight ??= client
+		.get<CrmRenewalLeadsResponse>(
+			client.withQuery(`${CRM}/renewal-leads`, { limit: RENEWAL_LEADS_LIMIT })
+		)
+		.finally(() => {
+			renewalLeadsInFlight = null
+		}))
+
+export async function feedSummary(): Promise<FeedSummary> {
+	const res = await renewalLeads()
+	return {
+		areas: res.preferences.areas,
+		forward_days: res.preferences.forward_days ?? 60,
+		lookback_days: res.preferences.lookback_days ?? 30,
+		window_total: res.total,
+		on_file: res.items.filter((i) => i.owner).length,
+		entered_today: res.entered_today
+	}
+}
+
+/* Vitevue lease leads in Leads: one shared lead per unit, created when an agent first opens it. */
+
+/**
+ * Rank: vacant units first (most recently vacated on top), then ended leases not confirmed
+ * vacant, then leases still running, the sooner they end the higher.
+ */
+function vitevueScore(daysLeft: number, vacant: boolean): number {
+	const ended = Math.min(-daysLeft, 60)
+	if (daysLeft < 0) return (vacant ? 100 : 80) - Math.floor(ended / 6)
+	return Math.max(10, 69 - Math.floor(daysLeft * 0.6))
+}
+
+function leaseOfLead(l: CrmLead): VitevueLease {
+	return {
+		id: l.lead_id,
+		unit: renewalUnit(l),
+		area: l.area_name,
+		property: renewalProperty(l),
+		lease_start: l.lease_start,
+		lease_end: l.lease_end,
+		days_left: l.days_to_expiry,
+		vacant: l.lease_evidence_state === 'unlet_signal',
+		rent_aed: l.annual_rent_aed,
+		last_purchase: l.last_purchase_date
+			? {
+					date: l.last_purchase_date,
+					price_aed: l.latest_purchase_price_aed ?? l.matched_sale_price_aed ?? null
+				}
+			: null,
+		end_chip: leaseEndChip(l.days_to_expiry)
+	}
+}
+
+/** The lease saved on a stored Vitevue lead when it was opened. */
+function leaseOfEnquiry(e: InboundEnquiryResponse): VitevueLease | null {
+	const v = e.observed_data?.vitevue_lease as Record<string, unknown> | undefined
+	if (!v || typeof v.lease_id !== 'string' || typeof v.lease_end !== 'string') return null
+	const c = e.criteria
+	const days = daysFromToday(v.lease_end)
+	return {
+		id: v.lease_id,
+		unit: [text(c.building), text(c.unit_number) && `unit ${text(c.unit_number)}`]
+			.filter(Boolean)
+			.join(' · '),
+		area: (Array.isArray(c.locations) ? text(c.locations[0]) : null) ?? '',
+		property: [
+			text(c.property_type),
+			text(c.bedrooms),
+			num(c.size_sqft) && `${fmt(Number(c.size_sqft))} sqft`
+		]
+			.filter(Boolean)
+			.join(' · '),
+		lease_start: String(v.lease_start ?? ''),
+		lease_end: v.lease_end,
+		days_left: days,
+		vacant: Boolean(v.vacant) && days < 0,
+		rent_aed: num(v.annual_rent_aed) ?? 0,
+		last_purchase: v.last_purchase_date
+			? { date: String(v.last_purchase_date), price_aed: num(v.last_purchase_price_aed) }
+			: null,
+		end_chip: leaseEndChip(days)
+	}
+}
+
+const vitevueSummary = (lease: VitevueLease) => ({
+	line: lease.unit,
+	sub: [lease.end_chip.label, lease.rent_aed ? `${aed(lease.rent_aed)} a year` : null]
+		.filter(Boolean)
+		.join(' · ')
+})
+
+/** A unit nobody has opened yet: shown in Leads, stored when an agent opens it (id 0). */
+function unopenedVitevueLead(item: CrmRenewalLeadsResponse['items'][number]): LeadRow {
+	const lease = leaseOfLead(item.lead)
+	const owner = renewalOwner(item.owner)
+	return {
+		id: 0,
+		name: owner?.name || lease.unit,
+		phone: owner?.phone ?? '',
+		lead_type: 'owner',
+		deal_type: 'sale',
+		source: 'vitevue',
+		source_detail: VITEVUE_SOURCE,
+		received_label: lease.end_chip.label,
+		stage: 'new',
+		agent: null,
+		score: vitevueScore(lease.days_left, lease.vacant),
+		area: lease.area,
+		language: '',
+		next_action: '',
+		off_plan: false,
+		gated: false,
+		owner_id: null,
+		fields: { unit: lease.unit },
+		summary: vitevueSummary(lease),
+		known: owner
+			? `${owner.name ?? 'Owner'} · ${owner.source.toLowerCase()}`
+			: 'Owner not identified yet',
+		source_short: VITEVUE_SOURCE,
+		listing: null,
+		lease
+	}
+}
+
+/** Open a Vitevue lease as the agency's shared lead for its unit (created the first time). */
+export async function openVitevueLead(leaseId: string): Promise<Written<LeadDetail>> {
+	const [e, u] = await Promise.all([
+		client.post<InboundEnquiryResponse>(`${CRM}/renewal-leads/${encodeURIComponent(leaseId)}/lead`),
+		whoAmI()
+	])
+	return done(leadDetail(e, u))
+}
+
+/* ── inbox (/api/v1/crm/inbound/enquiries) ── */
+
+const LINE: Record<Source, InboxItem['line']> = {
+	inbound: 'in',
+	file: 'vv',
+	vitevue: 'vv',
+	own_contact: 'own',
+	agent_to_agent: 'a2a'
+}
+const BAND: Record<string, string> = {
+	high: 'High',
+	medium: 'Medium',
+	standard: 'Standard'
+}
+
+function inboxItem(e: InboundEnquiryResponse, u: AuthMeResponse): InboxItem {
+	const type = typeOf(e)
+	const typed = e.intent !== 'unknown'
+	const summary = summaryOf(type, fieldsOf(e.criteria))
+	const name = e.contact.full_name || 'Unnamed contact'
+	const dismissed = e.status === 'disqualified'
+	const mine = e.assigned_user_id === u.id
+	const agent = e.assigned_user_id ? (mine ? fullName(u) : 'Another agent') : 'Unassigned'
+	return {
+		id: String(e.id),
+		name,
+		source: e.campaign ? `${e.source} · ${e.campaign}` : e.source,
+		line: LINE[sourceOf(e.source)],
+		at_label: stamp(e.enquiry_date),
+		ago: received(e.enquiry_date),
+		text: e.raw_notes || (typed ? summary.line : 'Not yet qualified'),
+		owner_check: knownOf(e),
+		priority: `${BAND[e.priority?.band ?? 'standard']} · ${e.priority?.score ?? 0}`,
+		state: dismissed ? 'dismissed' : e.assigned_user_id ? 'assigned' : 'waiting',
+		status_chip: dismissed
+			? { tone: 'neutral', label: 'Not a real enquiry' }
+			: e.sla_state === 'overdue'
+				? { tone: 'red', label: 'First reply overdue' }
+				: e.assigned_user_id
+					? { tone: mine ? 'green' : 'blue', label: mine ? 'Yours' : 'Assigned' }
+					: { tone: 'amber', label: 'Waiting for a manager' },
+		agent,
+		// Agent suggestions and the handout system are not on the backend yet.
+		suggested: '—',
+		reason: (e.priority?.reasons ?? []).join(' · '),
+		requests: [],
+		want_line: typed
+			? [LEAD_TYPES[type].label, summary.line, summary.sub].filter(Boolean).join(' · ')
+			: 'Not yet qualified as a buyer, seller, tenant or landlord',
+		// Only a typed enquiry opens as a lead; an unqualified contact has no lead type yet.
+		lead_id: typed ? e.id : null,
+		conversation: e.raw_notes
+			? [{ from: 'client', who: name, at: stamp(e.enquiry_date), text: e.raw_notes }]
+			: [],
+		can: { ask: false, withdraw: false, release: false, dismiss: false, restore: false },
+		my_request: null
+	}
+}
+
+/**
+ * Inbox: typed enquiries still waiting for a first response (the backend's inbox rule) and
+ * contacts not yet qualified; Not real lists disqualified ones. Vitevue lease leads live in Leads.
+ * Read only: asking for, releasing and dismissing enquiries need the handout system.
+ */
+export async function listInbox(filter: InboxFilter): Promise<InboxResponse> {
+	const get = (q: Record<string, string>) =>
+		client.get<InboundEnquiryListResponse>(
+			client.withQuery(`${CRM}/inbound/enquiries`, { ...q, limit: LIST_LIMIT })
+		)
+	const [inbox, unqualified, disqualified, u] = await Promise.all([
+		get({ workspace: 'inbox' }),
+		get({ workspace: 'unqualified' }),
+		get({ status: 'disqualified' }),
+		whoAmI()
+	])
+	const seen = new Set<number>()
+	const open = [...inbox.enquiries, ...unqualified.enquiries]
+		.filter((e) => !isVitevue(e) && e.status !== 'disqualified')
+		.filter((e) => !seen.has(e.id) && Boolean(seen.add(e.id)))
+		.sort((a, b) => b.enquiry_date.localeCompare(a.enquiry_date))
+		.map((e) => inboxItem(e, u))
+	const dismissed = disqualified.enquiries.filter((e) => !isVitevue(e)).map((e) => inboxItem(e, u))
+	const lists: Record<InboxFilter, InboxItem[]> = {
+		all: open,
+		mine: open.filter((x) => x.agent === fullName(u)),
+		waiting: open.filter((x) => x.state === 'waiting'),
+		dismissed
+	}
+	return {
+		items: lists[filter],
+		counts: {
+			all: lists.all.length,
+			mine: lists.mine.length,
+			waiting: lists.waiting.length,
+			dismissed: lists.dismissed.length
+		},
+		today: open.filter((x) => x.ago === 'today').length,
+		waiting: lists.waiting.length,
+		handout: 'manager',
+		handout_label: 'Not set',
+		sources: []
+	}
 }
 
 /* ── built from leads and owners ── */

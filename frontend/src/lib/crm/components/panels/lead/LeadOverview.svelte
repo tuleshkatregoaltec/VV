@@ -2,13 +2,14 @@
 import ChevronRight from 'lucide-svelte/icons/chevron-right'
 import { goto } from '$app/navigation'
 import { crm } from '../../../api'
-import type { LeadDetail, LeadStage } from '../../../api/types'
+import type { LeadDetail, LeadStage, LeadType } from '../../../api/types'
 import { GATE_LINE, LEAD_TYPES, OFF_PLAN_FIELDS, stageOf, stagesFor } from '../../../config'
-import { aed, priceShort } from '../../../format'
+import { aed, fullDate, priceShort } from '../../../format'
 import { openDeal, openListing, openOwner, panel } from '../../../stores/panel.svelte'
 import { ui } from '../../../stores/ui.svelte'
 import { write } from '../../../write'
 import Chain, { type ChainPart } from '../../ui/Chain.svelte'
+import Chip from '../../ui/Chip.svelte'
 import Kv from '../../ui/Kv.svelte'
 
 let { lead }: { lead: LeadDetail } = $props()
@@ -39,6 +40,15 @@ function value(key: (typeof type.fields)[number]) {
 	const v = lead.fields[key.key]
 	if (v === undefined || v === null || v === '' || v === 0) return 'Not stated'
 	return key.money ? aed(Number(v)) : String(v)
+}
+
+/** A Vitevue lease lead starts undecided; the agent classifies it as a seller or a landlord. */
+function classify(to: LeadType) {
+	write({
+		call: () => crm.leads.patch(lead.id, { lead_type: to }),
+		success: `${lead.name} → ${LEAD_TYPES[to].label}`,
+		event: 'lead_type_changed'
+	})
 }
 
 /** A stage opens its short form; back to New needs nothing. */
@@ -122,6 +132,52 @@ const chain = $derived.by((): ChainPart[] => {
 		{/each}
 	</div>
 </section>
+
+{#if lead.lease}
+	{@const l = lead.lease}
+	<section class="sec">
+		<h3>
+			Vitevue lease lead
+			<button type="button" class="btn ghost sm" onclick={() => panel.open({ kind: 'renewal', id: l.id })}>
+				Property history
+			</button>
+		</h3>
+		{#if lead.lead_type === 'owner'}
+			<div class="form-actions">
+				<span class="small muted">Sale or letting?</span>
+				<button type="button" class="btn sm" onclick={() => classify('seller')}>Seller</button>
+				<button type="button" class="btn sm" onclick={() => classify('landlord')}>Landlord</button>
+			</div>
+		{/if}
+		<div class="kv">
+			<Kv k="Unit" v={l.unit} o={[l.area, l.property].filter(Boolean).join(' · ')} />
+			<Kv k="Last tenancy">
+				{l.lease_start ? `${fullDate(l.lease_start)} – ${fullDate(l.lease_end)}` : fullDate(l.lease_end)}
+				<Chip chip={l.end_chip} />
+			</Kv>
+			<Kv k="Last rent a year" v={l.rent_aed ? aed(l.rent_aed) : ''} />
+			<Kv
+				k="Last purchase"
+				v={l.last_purchase?.price_aed ? aed(l.last_purchase.price_aed) : l.last_purchase ? 'Price not recorded' : 'None on record'}
+				o={l.last_purchase ? fullDate(l.last_purchase.date) : ''}
+			/>
+		</div>
+	</section>
+
+	<section class="sec">
+		<h3>
+			Owner
+			<button type="button" class="btn ghost sm" onclick={() => panel.setTab('edit')}>
+				{lead.name === l.unit && !lead.phone && !lead.email ? 'Add owner' : 'Edit'}
+			</button>
+		</h3>
+		<div class="kv">
+			<Kv k="Name" v={lead.name === l.unit ? '' : lead.name} o={lead.name === l.unit ? 'Not identified yet' : ''} />
+			<Kv k="Phone" v={lead.phone} />
+			<Kv k="Email" v={lead.email} />
+		</div>
+	</section>
+{/if}
 
 <section class="sec">
 	<h3>

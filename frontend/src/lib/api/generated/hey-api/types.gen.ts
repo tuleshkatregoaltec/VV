@@ -946,6 +946,46 @@ export type CreateUserResponse = {
 };
 
 /**
+ * CrmAreaPreferencesResponse
+ */
+export type CrmAreaPreferencesResponse = {
+    /**
+     * Areas
+     */
+    areas: Array<string>;
+    /**
+     * Forward Days
+     */
+    forward_days?: number;
+    /**
+     * Lookback Days
+     */
+    lookback_days?: number;
+    /**
+     * Updated At
+     */
+    updated_at?: string | null;
+};
+
+/**
+ * CrmAreaPreferencesUpdate
+ */
+export type CrmAreaPreferencesUpdate = {
+    /**
+     * Areas
+     */
+    areas: Array<string>;
+    /**
+     * Forward Days
+     */
+    forward_days?: number;
+    /**
+     * Lookback Days
+     */
+    lookback_days?: number;
+};
+
+/**
  * CrmAssetBreakdownItem
  */
 export type CrmAssetBreakdownItem = {
@@ -2207,6 +2247,127 @@ export type CrmPropertyReportResponse = {
      * Generated At
      */
     generated_at: string;
+};
+
+/**
+ * CrmRenewalArea
+ */
+export type CrmRenewalArea = {
+    /**
+     * Area
+     */
+    area: string;
+    /**
+     * Upcoming 90 Days
+     */
+    upcoming_90_days: number;
+};
+
+/**
+ * CrmRenewalLead
+ */
+export type CrmRenewalLead = {
+    lead: CrmLead;
+    owner?: CrmRenewalOwner | null;
+    /**
+     * Lead Record Id
+     */
+    lead_record_id?: number | null;
+};
+
+/**
+ * CrmRenewalLeadsResponse
+ */
+export type CrmRenewalLeadsResponse = {
+    /**
+     * Items
+     */
+    items: Array<CrmRenewalLead>;
+    /**
+     * Total
+     */
+    total: number;
+    /**
+     * Limit
+     */
+    limit: number;
+    /**
+     * Offset
+     */
+    offset: number;
+    /**
+     * Entered Today
+     */
+    entered_today: number;
+    preferences: CrmAreaPreferencesResponse;
+    /**
+     * As Of
+     */
+    as_of: string;
+};
+
+/**
+ * CrmRenewalOwner
+ *
+ * Owner contact for a renewal lead, only when entered by the agent or import-matched.
+ */
+export type CrmRenewalOwner = {
+    /**
+     * Name
+     */
+    name?: string | null;
+    /**
+     * Phone
+     */
+    phone?: string | null;
+    /**
+     * Email
+     */
+    email?: string | null;
+    /**
+     * Source
+     */
+    source: 'workspace' | 'owner_import';
+};
+
+/**
+ * CrmRenewalsResponse
+ *
+ * Assets › Renewals: one page of the lease-expiry dataset and the options for its filters.
+ */
+export type CrmRenewalsResponse = {
+    /**
+     * Leads
+     */
+    leads: Array<CrmLead>;
+    /**
+     * Total
+     */
+    total: number;
+    /**
+     * Limit
+     */
+    limit: number;
+    /**
+     * Offset
+     */
+    offset: number;
+    /**
+     * Property Types
+     */
+    property_types?: Array<string>;
+    /**
+     * Projects
+     */
+    projects?: Array<string>;
+    /**
+     * Buildings
+     */
+    buildings?: Array<string>;
+    /**
+     * As Of
+     */
+    as_of: string;
 };
 
 /**
@@ -4517,6 +4678,18 @@ export type InboundEnquiryUpdate = {
      * Preferred Channel
      */
     preferred_channel?: string | null;
+    /**
+     * Full Name
+     */
+    full_name?: string | null;
+    /**
+     * Phone
+     */
+    phone?: string | null;
+    /**
+     * Email
+     */
+    email?: string | null;
 };
 
 /**
@@ -11554,6 +11727,209 @@ export type CrmCrmDashboardResponses = {
 };
 
 export type CrmCrmDashboardResponse = CrmCrmDashboardResponses[keyof CrmCrmDashboardResponses];
+
+export type CrmCrmAreaPreferencesData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/crm/area-preferences';
+};
+
+export type CrmCrmAreaPreferencesResponses = {
+    /**
+     * Successful Response
+     */
+    200: CrmAreaPreferencesResponse;
+};
+
+export type CrmCrmAreaPreferencesResponse = CrmCrmAreaPreferencesResponses[keyof CrmCrmAreaPreferencesResponses];
+
+export type CrmCrmUpdateAreaPreferencesData = {
+    body: CrmAreaPreferencesUpdate;
+    path?: never;
+    query?: never;
+    url: '/api/v1/crm/area-preferences';
+};
+
+export type CrmCrmUpdateAreaPreferencesErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmUpdateAreaPreferencesError = CrmCrmUpdateAreaPreferencesErrors[keyof CrmCrmUpdateAreaPreferencesErrors];
+
+export type CrmCrmUpdateAreaPreferencesResponses = {
+    /**
+     * Successful Response
+     */
+    200: CrmAreaPreferencesResponse;
+};
+
+export type CrmCrmUpdateAreaPreferencesResponse = CrmCrmUpdateAreaPreferencesResponses[keyof CrmCrmUpdateAreaPreferencesResponses];
+
+export type CrmCrmRenewalsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Window
+         */
+        window?: string | null;
+        /**
+         * Area
+         */
+        area?: string | null;
+        /**
+         * Property Type
+         */
+        property_type?: string | null;
+        /**
+         * Project
+         */
+        project?: string | null;
+        /**
+         * Building
+         */
+        building?: string | null;
+        /**
+         * Limit
+         */
+        limit?: number;
+        /**
+         * Offset
+         */
+        offset?: number;
+        /**
+         * As Of
+         */
+        as_of?: string | null;
+    };
+    url: '/api/v1/crm/renewals';
+};
+
+export type CrmCrmRenewalsErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmRenewalsError = CrmCrmRenewalsErrors[keyof CrmCrmRenewalsErrors];
+
+export type CrmCrmRenewalsResponses = {
+    /**
+     * Successful Response
+     */
+    200: CrmRenewalsResponse;
+};
+
+export type CrmCrmRenewalsResponse = CrmCrmRenewalsResponses[keyof CrmCrmRenewalsResponses];
+
+export type CrmCrmRenewalAreasData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * As Of
+         */
+        as_of?: string | null;
+    };
+    url: '/api/v1/crm/renewal-areas';
+};
+
+export type CrmCrmRenewalAreasErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmRenewalAreasError = CrmCrmRenewalAreasErrors[keyof CrmCrmRenewalAreasErrors];
+
+export type CrmCrmRenewalAreasResponses = {
+    /**
+     * Response Crm-Crm Renewal Areas
+     *
+     * Successful Response
+     */
+    200: Array<CrmRenewalArea>;
+};
+
+export type CrmCrmRenewalAreasResponse = CrmCrmRenewalAreasResponses[keyof CrmCrmRenewalAreasResponses];
+
+export type CrmCrmRenewalLeadsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Kind
+         */
+        kind?: string | null;
+        /**
+         * Limit
+         */
+        limit?: number;
+        /**
+         * Offset
+         */
+        offset?: number;
+        /**
+         * As Of
+         */
+        as_of?: string | null;
+    };
+    url: '/api/v1/crm/renewal-leads';
+};
+
+export type CrmCrmRenewalLeadsErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmRenewalLeadsError = CrmCrmRenewalLeadsErrors[keyof CrmCrmRenewalLeadsErrors];
+
+export type CrmCrmRenewalLeadsResponses = {
+    /**
+     * Successful Response
+     */
+    200: CrmRenewalLeadsResponse;
+};
+
+export type CrmCrmRenewalLeadsResponse = CrmCrmRenewalLeadsResponses[keyof CrmCrmRenewalLeadsResponses];
+
+export type CrmCrmOpenRenewalLeadData = {
+    body?: never;
+    path: {
+        /**
+         * Lease Id
+         */
+        lease_id: string;
+    };
+    query?: never;
+    url: '/api/v1/crm/renewal-leads/{lease_id}/lead';
+};
+
+export type CrmCrmOpenRenewalLeadErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmOpenRenewalLeadError = CrmCrmOpenRenewalLeadErrors[keyof CrmCrmOpenRenewalLeadErrors];
+
+export type CrmCrmOpenRenewalLeadResponses = {
+    /**
+     * Successful Response
+     */
+    200: InboundEnquiryResponse;
+};
+
+export type CrmCrmOpenRenewalLeadResponse = CrmCrmOpenRenewalLeadResponses[keyof CrmCrmOpenRenewalLeadResponses];
 
 export type CrmCrmLeadDetailData = {
     body?: never;

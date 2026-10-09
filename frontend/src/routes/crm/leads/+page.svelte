@@ -1,6 +1,7 @@
 <script lang="ts">
 import { createQuery } from '@tanstack/svelte-query'
 import Search from 'lucide-svelte/icons/search'
+import { crm } from '$lib/crm/api'
 import type { LeadListParams, LeadRow, LeadStage, LeadType, Source } from '$lib/crm/api/types'
 import Chip from '$lib/crm/components/ui/Chip.svelte'
 import Empty from '$lib/crm/components/ui/Empty.svelte'
@@ -30,7 +31,7 @@ import { fmt } from '$lib/crm/format'
 import { crmQueries } from '$lib/crm/queries'
 import { openLead, panel } from '$lib/crm/stores/panel.svelte'
 import { clearLeadFilters, type LeadTab, ui } from '$lib/crm/stores/ui.svelte'
-import { errorText } from '$lib/crm/write'
+import { errorText, write } from '$lib/crm/write'
 
 const me = createQuery(() => crmQueries.me())
 const feed = createQuery(() => crmQueries.feedSummary())
@@ -58,7 +59,9 @@ const params = $derived<LeadListParams>({
 	beds: ui.beds,
 	ptype: ui.ptype,
 	budget: ui.budget,
-	q
+	q,
+	// Vitevue lease leads from My areas join the agency's own leads here.
+	vitevue: true
 })
 const leads = createQuery(() => crmQueries.leads(params))
 const counts = $derived(leads.data?.counts)
@@ -97,6 +100,20 @@ function selectTab(t: LeadTab) {
 	if (type && ui.stage && !stagesFor(type).some((s) => s.id === ui.stage)) ui.stage = ''
 }
 
+/** A Vitevue lease nobody has opened yet (id 0) becomes the agency's shared lead on open. */
+async function open(l: LeadRow) {
+	if (l.id) return openLead(l.id)
+	if (!l.lease) return
+	const leaseId = l.lease.id
+	const r = await write({
+		call: () => crm.leads.openVitevue(leaseId),
+		success: `${l.lease.unit} is now a lead`
+	})
+	if (r) openLead(r.data.id)
+}
+
+const rowKey = (l: LeadRow) => (l.id ? String(l.id) : `lease:${l.lease?.id}`)
+
 const typeLine = (l: LeadRow) =>
 	[
 		`${LEAD_TYPES[l.lead_type].label}${l.off_plan ? ' · off-plan' : ''}`,
@@ -130,14 +147,21 @@ const typeLine = (l: LeadRow) =>
 </PageHeader>
 
 <div class="card feedstrip">
-	<span class="srcdot" style:--c="var(--l-vv)">Lease ends in 90 days</span>
-	{#if feed.data}
+	<span class="srcdot" style:--c="var(--l-vv)">
+		{feed.data
+			? `Lease ends · next ${feed.data.forward_days} days, last ${feed.data.lookback_days} days`
+			: 'Lease ends'}
+	</span>
+	{#if feed.data && !feed.data.areas.length}
+		<span class="sep">·</span>
+		<span class="muted">Pick your areas to get renewal leads in the Inbox</span>
+	{:else if feed.data}
 		<span class="sep">·</span>
 		<b>{feed.data.areas.join(', ')}</b>
 		<span class="sep">·</span>
 		<span><b class="num">{fmt(feed.data.window_total)}</b> units</span>
 		<span class="sep">·</span>
-		<span><b class="num">{fmt(feed.data.on_file)}</b> on your agency's file</span>
+		<span><b class="num">{fmt(feed.data.on_file)}</b> with a known owner</span>
 		<span class="sep">·</span>
 		<span><b class="num">{fmt(feed.data.entered_today)}</b> entered the inbox today</span>
 	{:else if feed.isError}
@@ -241,6 +265,9 @@ const typeLine = (l: LeadRow) =>
 	</div>
 {/if}
 
+{#if leads.data?.vitevue_unavailable}
+	<ErrorLine bar message="Vitevue lease leads could not load. Your agency's own leads are listed." onretry={() => leads.refetch()} />
+{/if}
 {#if leads.isError && leads.data}
 	<ErrorLine bar message={errorText(leads.error)} onretry={() => leads.refetch()} />
 {/if}
@@ -255,12 +282,12 @@ const typeLine = (l: LeadRow) =>
 					{@const cards = grows.filter((l) => l.stage === s.id)}
 					<section class="col" aria-label="{s.label}, {cards.length} leads">
 						<div class="colh"><span>{s.label}</span><span>{cards.length}</span></div>
-						{#each cards as l (l.id)}
+						{#each cards as l (rowKey(l))}
 							<button
 								type="button"
 								class="bcard cl"
 								style:--c={SOURCES[l.source].color}
-								onclick={() => openLead(l.id)}
+								onclick={() => open(l)}
 							>
 								<span class="t">{l.name}</span>
 								<span class="d">{LEAD_TYPES[l.lead_type].label} · {SOURCES[l.source].label}</span>
@@ -298,10 +325,10 @@ const typeLine = (l: LeadRow) =>
 						</tr>
 					</thead>
 					<tbody>
-						{#each rows as l (l.id)}
+						{#each rows as l (rowKey(l))}
 							<tr class="row">
 								<td class="cl" style:--c={SOURCES[l.source].color}>
-									<button type="button" class="rowlink" onclick={() => openLead(l.id)}>{l.name}</button>
+									<button type="button" class="rowlink" onclick={() => open(l)}>{l.name}</button>
 									<div class="sub">{SOURCES[l.source].label} · {typeLine(l)}</div>
 								</td>
 								<td data-label="Details">

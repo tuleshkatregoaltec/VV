@@ -79,6 +79,17 @@ export const LEAD_TYPES: Record<
 			{ key: 'available', label: 'Available' },
 			{ key: 'furnishing', label: 'Furnishing' }
 		]
+	},
+	/** A Vitevue lease lead before the agent classifies it as a seller or a landlord. */
+	owner: {
+		label: 'Seller or landlord',
+		plural: 'Undecided',
+		deal: 'sale',
+		tone: 'outline',
+		fields: [
+			{ key: 'unit', label: 'Unit' },
+			{ key: 'timeline', label: 'Timeline' }
+		]
 	}
 }
 
@@ -86,7 +97,8 @@ export const SOURCES: Record<Source, { label: string; color: string }> = {
 	inbound: { label: 'Inbound', color: 'var(--l-in)' },
 	file: { label: 'Your owner file', color: 'var(--l-vv)' },
 	own_contact: { label: 'Own contact', color: 'var(--l-own)' },
-	agent_to_agent: { label: 'Agent to agent', color: 'var(--l-a2a)' }
+	agent_to_agent: { label: 'Agent to agent', color: 'var(--l-a2a)' },
+	vitevue: { label: 'Vitevue lease lead', color: 'var(--l-vv)' }
 }
 
 /** Where a hand-entered lead came from; each maps to one source bucket. */
@@ -125,10 +137,10 @@ export const LEAD_GROUPS: Record<
 	{ label: string; types: LeadType[]; proposal: boolean }
 > = {
 	bt: { label: 'Buyers and tenants', types: ['buyer', 'tenant'], proposal: false },
-	sl: { label: 'Sellers and landlords', types: ['seller', 'landlord'], proposal: true }
+	sl: { label: 'Sellers and landlords', types: ['seller', 'landlord', 'owner'], proposal: true }
 }
 export const groupOf = (t: LeadType): LeadGroup =>
-	t === 'seller' || t === 'landlord' ? 'sl' : 'bt'
+	t === 'seller' || t === 'landlord' || t === 'owner' ? 'sl' : 'bt'
 export const stagesFor = (t: LeadType) =>
 	STAGES.filter((s) => s.id !== (groupOf(t) === 'sl' ? 'viewing' : 'listed'))
 

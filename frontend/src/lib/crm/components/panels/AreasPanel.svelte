@@ -9,12 +9,20 @@ import { write } from '../../write'
 import Panel from '../ui/Panel.svelte'
 import QueryView from '../ui/QueryView.svelte'
 
-/** My areas: the Leads feed strip counts lease ends in these; owner-file leads come from them. */
+/**
+ * My areas: leases in these areas that end within the next `forward` days, or ended within the
+ * last `lookback` days, arrive in the Inbox as Vitevue renewal leads. The lease data reaches
+ * 90 days ahead, so the forward window stops there.
+ */
 const areas = createQuery(() => crmQueries.feedAreas())
-const summary = createQuery(() => crmQueries.feedSummary())
+const saved = createQuery(() => crmQueries.feedPreferences())
 
 let picked = $state<Set<string> | null>(null)
-const selected = $derived(picked ?? new Set(summary.data?.areas ?? []))
+const selected = $derived(picked ?? new Set(saved.data?.areas ?? []))
+let forward = $state<number | null>(null)
+let lookback = $state<number | null>(null)
+const forwardDays = $derived(forward ?? saved.data?.forward_days ?? 60)
+const lookbackDays = $derived(lookback ?? saved.data?.lookback_days ?? 30)
 
 function toggle(area: string, on: boolean) {
 	const next = new Set(selected)
@@ -29,15 +37,46 @@ async function save() {
 		toast.show('Pick at least one area', { tone: 'error' })
 		return
 	}
+	if (!(forwardDays >= 1 && forwardDays <= 90) || !(lookbackDays >= 0 && lookbackDays <= 365)) {
+		toast.show('Days ahead: 1 to 90. Days back: 0 to 365.', { tone: 'error' })
+		return
+	}
 	const r = await write({
-		call: () => crm.feed.setAreas(list),
+		call: () =>
+			crm.feed.setPreferences({
+				areas: list,
+				forward_days: forwardDays,
+				lookback_days: lookbackDays
+			}),
 		success: `Areas saved · ${list.length}`
 	})
 	if (r) panel.close()
 }
 </script>
 
-<Panel kicker="Lease ends in 90 days" title="My areas" sub="{selected.size} chosen">
+<Panel kicker="Renewal leads" title="My areas" sub="{selected.size} chosen">
+	<div class="fld">
+		<label for="areas-forward">Lease ends in the next (days)</label>
+		<input
+			id="areas-forward"
+			type="number"
+			min="1"
+			max="90"
+			value={forwardDays}
+			oninput={(e) => (forward = e.currentTarget.valueAsNumber)}
+		/>
+	</div>
+	<div class="fld">
+		<label for="areas-lookback">Or ended in the last (days)</label>
+		<input
+			id="areas-lookback"
+			type="number"
+			min="0"
+			max="365"
+			value={lookbackDays}
+			oninput={(e) => (lookback = e.currentTarget.valueAsNumber)}
+		/>
+	</div>
 	<QueryView query={areas} rows={6}>
 		{#snippet children(list)}
 			<fieldset class="docs">
