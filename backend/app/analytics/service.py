@@ -337,7 +337,7 @@ async def get_project_summary(
             rooms=room,
             count=int(row["unit_count"]),
             pct_of_total=round(int(row["unit_count"]) / total_units * 100, 1),
-            avg_unit_size_sqft=float(row.get("avg_unit_size_sqft", 0) or 0),
+            avg_unit_size_sqft=float(row.get("median_unit_size_sqft", 0) or 0),
         )
         for row in units_rows
         if (room := _normalize_label(row.get("rooms_en"))) is not None
@@ -635,9 +635,11 @@ async def get_project_price_distribution(
             log_mean_price=float(row["log_mean_price"] or 0),
             log_std_price=float(row["log_std_price"] or 0),
             p05_price=float(row["p05_price"] or 0),
+            p16_price=float(row["p16_price"] or 0),
             p25_price=float(row["p25_price"] or 0),
             p50_price=float(row["p50_price"] or 0),
             p75_price=float(row["p75_price"] or 0),
+            p84_price=float(row["p84_price"] or 0),
             p95_price=float(row["p95_price"] or 0),
             mean_price_sqft=float(row["mean_price_sqft"] or 0),
             std_price_sqft=float(row["std_price_sqft"] or 0),

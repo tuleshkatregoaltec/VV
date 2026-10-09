@@ -135,6 +135,8 @@ export type AnalyticsUnitComposition = {
     pct_of_total: number;
     /**
      * Avg Unit Size Sqft
+     *
+     * Median registered unit size (sq ft)
      */
     avg_unit_size_sqft?: number;
 };
@@ -7256,6 +7258,10 @@ export type PriceDistributionBucket = {
      */
     p05_price?: number;
     /**
+     * P16 Price
+     */
+    p16_price?: number;
+    /**
      * P25 Price
      */
     p25_price?: number;
@@ -7267,6 +7273,10 @@ export type PriceDistributionBucket = {
      * P75 Price
      */
     p75_price?: number;
+    /**
+     * P84 Price
+     */
+    p84_price?: number;
     /**
      * P95 Price
      */
@@ -7354,6 +7364,8 @@ export type ProjectConfigurationRow = {
     avg_sale_price_sqft: number;
     /**
      * Avg Unit Size Sqft
+     *
+     * Median registered unit size (sq ft); the name predates the median
      */
     avg_unit_size_sqft: number;
     /**
@@ -7382,6 +7394,8 @@ export type ProjectConfigurationRow = {
     sales_momentum_pct?: number | null;
     /**
      * Absorption Rate Pct
+     *
+     * Sales in the last 12 months per registered unit; none when the registry holds under 100 units of the type or fewer units than were sold
      */
     absorption_rate_pct?: number | null;
     /**

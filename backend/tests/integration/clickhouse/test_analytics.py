@@ -242,11 +242,11 @@ async def test_bucket_filters_are_half_open_ranges(warehouse):
     assert refused.value.status_code == 422
 
 
-async def test_leases_count_under_their_own_bedrooms_before_any_size_guess(warehouse):
-    """Every lease used to be placed by size inside one bedroom type's range of registered unit
-    sizes, and dropped when its size fit two ranges. Citywide the ranges overlap, so the Dubai
-    view showed 0 studio, 1-bed and 4-bed leases. A lease that states its bedrooms (DXBI) counts
-    under them; only a lease without them is placed by size, and only when one range holds it."""
+async def test_leases_count_only_under_the_bedrooms_they_record(warehouse):
+    """A lease that states its bedrooms (DXBI) counts under them, whatever its size. A lease
+    without them is not placed by size: the largest type's size range took every oversized
+    lease (DLD villa leases record the plot), so 7-9-bed rents read AED 5 per sq ft and a 0.6%
+    yield (2026-10-08), and labour-camp rooms landed in the studio range."""
     from app.analytics.queries import project_rentals_by_rooms
 
     await warehouse.command("""
@@ -276,9 +276,8 @@ async def test_leases_count_under_their_own_bedrooms_before_any_size_guess(wareh
             # States its bedrooms: counts under them, whatever its size.
             ["c1", 1, "Tower", "Master", "Residential", 50_000, 55, "Studio"],
             ["c2", 1, "Tower", "Master", "Residential", 70_000, 56, "1 B/R"],
-            # No bedrooms, size only in the one-bed range: placed by size.
+            # No bedrooms: counts under no bedroom type, even with a size only one-beds have.
             ["c3", 1, "Tower", "Master", "Residential", 80_000, 75, ""],
-            # No bedrooms, size in both ranges: cannot be placed.
             ["c4", 1, "Tower", "Master", "Residential", 60_000, 60, ""],
         ],
         column_names=["contract_id", "line_number", "project_name_en", "master_project_en",
@@ -287,4 +286,49 @@ async def test_leases_count_under_their_own_bedrooms_before_any_size_guess(wareh
 
     rows = await query(project_rentals_by_rooms("market"))
 
-    assert {row["rooms_en"]: row["rental_count"] for row in rows} == {"Studio": 1, "1 B/R": 2}
+    assert {row["rooms_en"]: row["rental_count"] for row in rows} == {"Studio": 1, "1 B/R": 1}
+
+
+async def test_unit_size_is_the_median_and_the_middle_68_percent_is_measured(warehouse):
+    """DLD registers some units under the wrong type: 1,127 "studios" above 5,000 sq ft made the
+    average studio 31,816 sq ft (median 412). And mean ± one deviation of skewed prices went
+    below zero ("68% of sales between — and AED 5.75M"): the range is the 16th to 84th
+    percentile of the sales themselves."""
+    from app.analytics.queries import project_price_distribution, project_units_composition
+
+    await warehouse.command("""
+        CREATE TABLE ch_units (
+            project_name_en String, master_project_en String, rooms_en String,
+            actual_area Float64
+        ) ENGINE = MergeTree ORDER BY rooms_en
+    """)
+    # Nine studios of 38-40 m² and one "studio" of 600 m².
+    await warehouse.insert(
+        "ch_units",
+        [["Tower", "Master", "Studio", area] for area in (38, 38, 39, 39, 39, 40, 40, 40, 40, 600)],
+        column_names=["project_name_en", "master_project_en", "rooms_en", "actual_area"],
+    )
+    units = await query(project_units_composition("market"))
+    assert units[0]["median_unit_size_sqft"] == round(40 * 10.7639, 2)  # one of the sizes
+
+    await warehouse.command("""
+        CREATE TABLE ch_transactions (
+            project_name_en String, master_project_en String, trans_group_en String,
+            property_type String, property_usage_en String, rooms_en String,
+            actual_worth Float64, meter_sale_price Float64, reg_type_en String
+        ) ENGINE = MergeTree ORDER BY project_name_en
+    """)
+    # 99 sales from AED 1M to 1.98M and one at AED 100M: the mean minus a deviation is negative.
+    prices = [1_000_000 + 10_000 * i for i in range(99)] + [100_000_000]
+    await warehouse.insert(
+        "ch_transactions",
+        [["Tower", "Master", "Sales", "Apartment", "Residential", "1 B/R", price, 20_000,
+          "Existing Properties"] for price in prices],
+        column_names=["project_name_en", "master_project_en", "trans_group_en", "property_type",
+                      "property_usage_en", "rooms_en", "actual_worth", "meter_sale_price",
+                      "reg_type_en"],
+    )  # fmt: skip
+    rows = {row["rooms_en"]: row for row in await query(project_price_distribution("market"))}
+    every = rows["__all__"]
+    assert every["mean_price"] - every["std_price"] < 0
+    assert 1_100_000 <= every["p16_price"] < every["p84_price"] <= 1_900_000

@@ -14,6 +14,11 @@ _CONFIG_PRICE_MIN_SAMPLE_SIZE = 3
 _CONFIG_MOMENTUM_MIN_SAMPLE_SIZE = 20
 
 
+# Sales per registered unit needs a registry that holds the type: DLD registers few large units
+# by bedrooms (villas mostly as land), so 7-bed sales/stock read 337% on 16 units (2026-10-08).
+_ABSORPTION_MIN_STOCK = 100
+
+
 _BEDROOM_RE = re.compile(r"^\d+\s+B/R$", re.IGNORECASE)
 
 
@@ -155,7 +160,8 @@ def build_configuration_rows(
             gross_yield_pct = round(median_annual_rent / median_sale_price * 100, 2)
 
         absorption_rate_pct: Optional[float] = None
-        if stock_units > 0:
+        # More sales than registered units means the registry misses the type, not absorption.
+        if stock_units >= _ABSORPTION_MIN_STOCK and sales_last_12m <= stock_units:
             absorption_rate_pct = round(sales_last_12m / stock_units * 100, 1)
 
         rows.append(
@@ -168,7 +174,7 @@ def build_configuration_rows(
                 avg_sale_price=float(sale_row.get("avg_sale_price", 0) or 0),
                 median_sale_price=median_sale_price,
                 avg_sale_price_sqft=float(sale_row.get("avg_sale_price_sqft", 0) or 0),
-                avg_unit_size_sqft=float(unit_row.get("avg_unit_size_sqft", 0) or 0),
+                avg_unit_size_sqft=float(unit_row.get("median_unit_size_sqft", 0) or 0),
                 rental_count=int(rent_row.get("rental_count", 0) or 0),
                 median_annual_rent=median_annual_rent,
                 median_rent_sqft=float(rent_row.get("median_rent_sqft", 0) or 0),
