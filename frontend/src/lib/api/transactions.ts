@@ -24,6 +24,7 @@ interface BaseTransactionFilters {
 	bedrooms?: string
 	location?: string
 	building?: string
+	project?: string
 	timeframe_days?: number
 	size_min?: number
 	size_max?: number

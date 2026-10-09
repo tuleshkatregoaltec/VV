@@ -3971,6 +3971,10 @@ export type FilterOptionsResponse = {
      */
     buildings?: Array<string>;
     /**
+     * Projects
+     */
+    projects?: Array<string>;
+    /**
      * Property Types
      */
     property_types?: Array<string>;
@@ -11876,6 +11880,12 @@ export type FiltersGetSalesFilterOptionsData = {
          */
         building?: string | null;
         /**
+         * Project
+         *
+         * DXBI project name
+         */
+        project?: string | null;
+        /**
          * Timeframe Days
          *
          * Last N calendar days, today included
@@ -11979,6 +11989,12 @@ export type FiltersGetRentalFilterOptionsData = {
          * DXBI building name
          */
         building?: string | null;
+        /**
+         * Project
+         *
+         * DXBI project name
+         */
+        project?: string | null;
         /**
          * Timeframe Days
          *
@@ -13388,6 +13404,12 @@ export type TransactionsGetSalesTransactionsData = {
          */
         building?: string | null;
         /**
+         * Project
+         *
+         * DXBI project name
+         */
+        project?: string | null;
+        /**
          * Timeframe Days
          *
          * Last N calendar days, today included
@@ -13504,6 +13526,12 @@ export type TransactionsGetRentalContractsData = {
          */
         building?: string | null;
         /**
+         * Project
+         *
+         * DXBI project name
+         */
+        project?: string | null;
+        /**
          * Timeframe Days
          *
          * Leases starting in the last N calendar days, today included
@@ -13607,6 +13635,12 @@ export type TransactionsExportSalesTransactionsEndpointData = {
          * DXBI building name
          */
         building?: string | null;
+        /**
+         * Project
+         *
+         * DXBI project name
+         */
+        project?: string | null;
         /**
          * Timeframe Days
          *
@@ -13721,6 +13755,12 @@ export type TransactionsExportRentalContractsEndpointData = {
          * DXBI building name
          */
         building?: string | null;
+        /**
+         * Project
+         *
+         * DXBI project name
+         */
+        project?: string | null;
         /**
          * Timeframe Days
          *

@@ -17,10 +17,10 @@ counts (see "Transactions versus Analytics").
 | Page | Column | DXBI source | Rule |
 |---|---|---|---|
 | Sales | Date | `transaction_date` | DXBI's sale date |
-| Sales | Unit | `unit_number` | as DXBI records it (new column) |
-| Both | Building | `building_name` | as recorded |
+| Sales | Unit | `unit_number` | as DXBI records it (below); none shows as `-` |
+| Both | Building | `dxbi_places.building_label`, else `building_name` | the building in DXBI's location list for the record's path; none when the path is a project or an area |
 | Both | Location | `area_name` | DXBI's commonest spelling of the same letters and digits; `X Dubai` becomes `X` when DXBI also names `X`; a unit marker (`No. 630`) is not a location. The Location *filter* groups by DXBI's own areas (below) |
-| Both | Project (hidden by default) | `project_name` | as recorded (DXBI fills it on ~11% of rows) |
+| Both | Project | `dxbi_places.project_label`, else `project_name` | the project in DXBI's location list for the record's path (90% of sales over 90 days; ~10% when parsed from the text); shown by default, with a Project filter |
 | Both | Property Type | `property_type` | DXBI's words |
 | Both | Bedrooms | `bedrooms` | `Studio`, `1 Bed`, `2 Beds`, … (DXBI writes `2 Bed` and `2 Beds` for the same count) |
 | Both | Size (sq ft) | `size_sqft` | DXBI's own square feet, shown in whole sq ft; no size is shown as `-` |
@@ -28,7 +28,7 @@ counts (see "Transactions versus Analytics").
 | Sales | Price/sq ft (AED) | `price_per_sqft_aed` | DXBI's own price per sq ft, as DXBInteract shows it (for some villas DXBI divides by the built-up area, not the size it shows); price ÷ size only when DXBI gives none |
 | Sales | Status | `market_status` | `Off-Plan` / `Ready` |
 | Rentals | Start / End Date | `lease_start`, `lease_end` | the page is dated by lease start |
-| Rentals | Unit | `unit_number` | new column |
+| Rentals | Unit | `unit_number` | as DXBI records it; none shows as `-` |
 | Rentals | Annual Rent (AED) | `annual_rent_aed` | contract amount × 12 ÷ term in months (checked on every row) |
 | Rentals | Contract Amount (AED), Term (months) (hidden by default) | `contract_amount_aed`, `contract_term_months` | as recorded |
 | Rentals | Contract Type | `contract_state` | `New` / `Renewed` |
@@ -38,6 +38,20 @@ Nearest Mall (sales); Sub Type, Tenant Type, # Properties, Freehold, Landmark, N
 Nearest Mall (rentals). The DLD project selector is replaced by DXBI Location and Building filters.
 The details popup no longer offers "Find Matching Unit": it called an endpoint that does not exist,
 and DXBI records the unit.
+
+**Units (decision 2026-10-09).** Every record DXBI lists is shown, so rows and totals match
+DXBI. DXBI lists a day's sales before their units (the location ends in an empty "No." and there
+is no sale page) and fills them in about a day later; `dxbi-sales-morning` re-scrapes the last 3
+days at 06:30 Dubai and the 10:00 load replaces them, so the units appear that morning. Some
+units DXBI never shows (24 Silicon Star 2 sales, about 1% of leases); those rows show `-`, as on
+DXBI.
+
+**Building and Project (2026-10-09).** DXBI prints a record's location as one place's path in its
+location list (`dxbi_places`, loaded with each location sweep), and only the list says whether
+the first part is a building, a project or an area: 46% of sales showed a project as their
+building. A sale finds its place by its stored building and area keys, a lease by its whole
+path; 99.9% of sales and 95% of leases over 90 days do. A single-name place DXBI lists as an area
+is the record's area. A record whose path is not in the list keeps the parsed names.
 
 **Residential / Commercial / All.** DXBI gives a property type but no usage. Residential is
 Apartment, Villa, Townhouse and Hotel Apartment; Commercial is Office, Shop, Show Rooms, Warehouse,

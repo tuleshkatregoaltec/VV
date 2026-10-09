@@ -27,6 +27,7 @@ describe('DXBI transaction page filters', () => {
 			localFilters: {
 				selectedLocation: 'Jumeirah Village Circle',
 				selectedBuilding: 'Binghatti Heights',
+				selectedProject: 'Binghatti Heights',
 				selectedPropertyType: 'Apartment',
 				selectedBedrooms: '2 Beds',
 				selectedStatus: 'Ready',
@@ -43,6 +44,7 @@ describe('DXBI transaction page filters', () => {
 			offset: 30,
 			location: 'Jumeirah Village Circle',
 			building: 'Binghatti Heights',
+			project: 'Binghatti Heights',
 			property_type: 'Apartment',
 			bedrooms: '2 Beds',
 			status: 'Ready',
@@ -108,6 +110,7 @@ describe('DXBI transaction page filters', () => {
 			localFilters: {
 				selectedLocation: 'Dubai Marina',
 				selectedBuilding: 'Marina Gate 1',
+				selectedProject: 'Marina Gate',
 				selectedPropertyType: 'Apartment',
 				selectedBedrooms: '1 Bed',
 				selectedContractType: 'Renewed',
@@ -123,6 +126,7 @@ describe('DXBI transaction page filters', () => {
 			offset: 60,
 			location: 'Dubai Marina',
 			building: 'Marina Gate 1',
+			project: 'Marina Gate',
 			property_type: 'Apartment',
 			bedrooms: '1 Bed',
 			contract_type: 'Renewed',
@@ -206,6 +210,16 @@ describe('DXBI transaction rows', () => {
 			contractType: 'Renewed'
 		})
 		expect(RENTAL_COLUMNS.map((column) => column.id)).toContain('unit')
+	})
+
+	it('shows DXBI project beside the building on both pages', () => {
+		// About half of DXBI's sales are of a whole project with no building named (2026-10-08):
+		// with Project hidden, those rows showed no place name beside their location.
+		for (const columns of [SALES_COLUMNS, RENTAL_COLUMNS]) {
+			const ids = columns.map((column) => column.id)
+			expect(ids.indexOf('project')).toBe(ids.indexOf('building') + 1)
+			expect(columns.find((column) => column.id === 'project')?.defaultVisible).not.toBe(false)
+		}
 	})
 
 	it('formats amounts identically in every browser locale and shows sizes in sq ft', () => {

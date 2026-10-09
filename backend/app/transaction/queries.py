@@ -5,6 +5,10 @@ every value comes from Holocron's DXBI tables, ``dxbi_sales_unit_events`` and
 ``dxbi_rental_events``. No DLD row and no DLD-filled value reaches them; the Analytics pages keep
 the combined market layer (``ch_transactions`` / ``ch_rent_contracts``).
 
+Every record DXBI lists is shown, with its unit as DXBI shows it, so rows and totals match DXBI
+(decision 2026-10-09). DXBI lists a day's sales before their units and fills them in about a day
+later; the morning re-scrape of the last three days (``dxbi-sales-morning``) reads them.
+
 Each request reads one de-duplicated, normalised DXBI source with its date window applied before
 de-duplication (``_sales_source`` / ``_rentals_source``), and one WHERE clause built from the
 filters (``_sales_where`` / ``_rentals_where``), so the list, its total, the filter options and
@@ -106,6 +110,28 @@ _PRINTED_LOCATIONS = """(
         FROM dxbi_locations
         GROUP BY name_key
     )"""
+# Building and Project as DXBI's location list gives them (dxbi_places, loaded with each sweep):
+# DXBI prints a record's location as one place's path, and the first part is a building (B), a
+# project (P) or an area. A sale keys its path by its first and last parts, a lease by the whole
+# path. A record whose path is not in the list keeps the parsed names. A single-name place DXBI
+# lists as an area or community is the record's area, not its building.
+_SALE_PLACES = """(
+        SELECT building_key AS place_building_key, area_key AS place_area_key, flag AS place_flag,
+               building_label AS place_building, project_label AS place_project,
+               area_label AS place_area
+        FROM dxbi_places
+        ORDER BY building_key, area_key, match_rank, location_id
+        LIMIT 1 BY building_key, area_key
+    )"""
+_LEASE_PLACES = """(
+        SELECT path_key AS place_path_key, flag AS place_flag,
+               building_label AS place_building, project_label AS place_project
+        FROM dxbi_places
+        ORDER BY path_key, match_rank, location_id
+        LIMIT 1 BY path_key
+    )"""
+_PLACE_LABELS = """if(place_flag != '', place_building, building_name) AS building_name,
+                if(place_flag != '', place_project, project_name) AS project_name"""
 _DXBI_LOCATIONS = """multiIf(
             notEmpty(building_locations), building_locations,
             notEmpty(printed_locations), printed_locations,
@@ -151,17 +177,26 @@ def _sales_source(date_clause: str) -> str:
                 AS price_per_sqft,
             if(notEmpty(sale_locations), sale_locations, {_DXBI_LOCATIONS}) AS dxbi_locations
         FROM (
-            SELECT *, {same_sale} AS same_sale
-            FROM (
-                SELECT * FROM dxbi_sales_unit_events FINAL
-                WHERE {date_clause}
-                ORDER BY sale_key, loaded_at DESC, area_name = '', bedrooms = '',
-                         market_status = '', length(building_name), building_key, bedrooms,
-                         size_key
-                LIMIT 1 BY sale_key
+            SELECT * REPLACE (
+                {_PLACE_LABELS},
+                if(area_name = '', place_area, area_name) AS area_name
             )
-            ORDER BY same_sale, detail_url = '', loaded_at DESC, sale_key
-            LIMIT 1 BY same_sale
+            FROM (
+                SELECT *, {same_sale} AS same_sale
+                FROM (
+                    SELECT * FROM dxbi_sales_unit_events FINAL
+                    WHERE {date_clause}
+                    ORDER BY sale_key, loaded_at DESC, area_name = '', bedrooms = '',
+                             market_status = '', length(building_name), building_key, bedrooms,
+                             size_key
+                    LIMIT 1 BY sale_key
+                )
+                ORDER BY same_sale, detail_url = '', loaded_at DESC, sale_key
+                LIMIT 1 BY same_sale
+            ) AS deduped
+            LEFT JOIN {_SALE_PLACES} AS place
+                ON place.place_building_key = deduped.building_key
+                AND place.place_area_key = deduped.area_key
         ) AS sale
         LEFT JOIN (
             SELECT sale_key AS swept_sale_key, groupUniqArray(location_name) AS sale_locations
@@ -198,6 +233,7 @@ def _rentals_source(date_clause: str) -> str:
     # A lease's building and area keyed as the sales loader keys them (sales_units.location_key).
     building_key = _SEARCH_KEY.format(value="building_name")
     area_key = _SEARCH_KEY.format(value="area_name")
+    path_key = _SEARCH_KEY.format(value="location_name")
     return rf"""
         WITH {_LOCATION_SPELLING}
         SELECT
@@ -218,15 +254,20 @@ def _rentals_source(date_clause: str) -> str:
             contract_state AS contract_type,
             if(notEmpty(lease_locations), lease_locations, {_DXBI_LOCATIONS}) AS dxbi_locations
         FROM (
-            SELECT *, {same_lease} AS same_lease,
-                   {building_key} AS lease_building_key, {area_key} AS lease_area_key
-            FROM dxbi_rental_events FINAL
-            WHERE {date_clause}
-              AND (unit_number != '' OR {lease_terms} NOT IN (
-                  SELECT {lease_terms} FROM dxbi_rental_events FINAL
-                  WHERE {date_clause} AND unit_number != ''))
-            ORDER BY same_lease, occurrence_index, contract_key
-            LIMIT 1 BY same_lease
+            SELECT * REPLACE ({_PLACE_LABELS})
+            FROM (
+                SELECT *, {same_lease} AS same_lease,
+                       {building_key} AS lease_building_key, {area_key} AS lease_area_key,
+                       {path_key} AS lease_path_key
+                FROM dxbi_rental_events FINAL
+                WHERE {date_clause}
+                  AND (unit_number != '' OR {lease_terms} NOT IN (
+                      SELECT {lease_terms} FROM dxbi_rental_events FINAL
+                      WHERE {date_clause} AND unit_number != ''))
+                ORDER BY same_lease, occurrence_index, contract_key
+                LIMIT 1 BY same_lease
+            ) AS deduped
+            LEFT JOIN {_LEASE_PLACES} AS place ON place.place_path_key = deduped.lease_path_key
         ) AS lease
         LEFT JOIN (
             SELECT contract_key AS swept_contract_key,
@@ -280,6 +321,7 @@ def _sales_where(filters: SalesFilters, params: dict) -> str:
     _equals(clauses, params, "status", "status", filters.status)
     _location(clauses, params, filters.location)
     _equals(clauses, params, "building_name", "building", filters.building)
+    _equals(clauses, params, "project_name", "project", filters.project)
     _band(clauses, params, "size_sqft", "size", filters.size_min, filters.size_max)
     _band(clauses, params, "price_aed", "price", filters.price_min, filters.price_max)
     _band(
@@ -301,6 +343,7 @@ def _rentals_where(filters: RentalFilters, params: dict) -> str:
     _equals(clauses, params, "contract_type", "contract_type", filters.contract_type)
     _location(clauses, params, filters.location)
     _equals(clauses, params, "building_name", "building", filters.building)
+    _equals(clauses, params, "project_name", "project", filters.project)
     _band(clauses, params, "size_sqft", "size", filters.size_min, filters.size_max)
     _band(clauses, params, "annual_rent_aed", "rent", filters.rent_min, filters.rent_max)
     return " AND ".join(clauses) or "1 = 1"
@@ -419,7 +462,8 @@ async def fetch_sales_facets(filters: SalesFilters) -> dict:
             groupUniqArrayIf(bedrooms, bedrooms != '') AS bedroom_options,
             groupUniqArrayIf(status, status != '') AS status_options,
             groupUniqArrayArray(dxbi_locations) AS location_options,
-            groupUniqArrayIf(building_name, building_name != '') AS building_options
+            groupUniqArrayIf(building_name, building_name != '') AS building_options,
+            groupUniqArrayIf(project_name, project_name != '') AS project_options
         FROM ({source})
         WHERE {_sales_where(filters, params)}
         """,
@@ -439,7 +483,8 @@ async def fetch_rental_facets(filters: RentalFilters) -> dict:
             groupUniqArrayIf(bedrooms, bedrooms != '') AS bedroom_options,
             groupUniqArrayIf(contract_type, contract_type != '') AS contract_type_options,
             groupUniqArrayArray(dxbi_locations) AS location_options,
-            groupUniqArrayIf(building_name, building_name != '') AS building_options
+            groupUniqArrayIf(building_name, building_name != '') AS building_options,
+            groupUniqArrayIf(project_name, project_name != '') AS project_options
         FROM ({source})
         WHERE {_rentals_where(filters, params)}
         """,

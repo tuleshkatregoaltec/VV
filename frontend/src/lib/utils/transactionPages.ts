@@ -54,6 +54,7 @@ export const RENT_OPTIONS = ['All', ...Object.keys(RENT_BANDS)]
 export interface SalesLocalFilters {
 	selectedLocation: string
 	selectedBuilding: string
+	selectedProject: string
 	selectedPropertyType: string
 	selectedBedrooms: string
 	selectedStatus: string
@@ -65,6 +66,7 @@ export interface SalesLocalFilters {
 export interface RentalsLocalFilters {
 	selectedLocation: string
 	selectedBuilding: string
+	selectedProject: string
 	selectedPropertyType: string
 	selectedBedrooms: string
 	selectedContractType: string
@@ -75,6 +77,7 @@ export interface RentalsLocalFilters {
 export const DEFAULT_SALES_LOCAL_FILTERS: SalesLocalFilters = {
 	selectedLocation: 'All',
 	selectedBuilding: 'All',
+	selectedProject: 'All',
 	selectedPropertyType: 'All',
 	selectedBedrooms: 'All',
 	selectedStatus: 'All',
@@ -86,6 +89,7 @@ export const DEFAULT_SALES_LOCAL_FILTERS: SalesLocalFilters = {
 export const DEFAULT_RENTALS_LOCAL_FILTERS: RentalsLocalFilters = {
 	selectedLocation: 'All',
 	selectedBuilding: 'All',
+	selectedProject: 'All',
 	selectedPropertyType: 'All',
 	selectedBedrooms: 'All',
 	selectedContractType: 'All',
@@ -142,6 +146,7 @@ export function buildSalesFilterParams(
 	const filters: SalesFacetFilters = baseFilters(context)
 	if (isSelected(local.selectedLocation)) filters.location = local.selectedLocation
 	if (isSelected(local.selectedBuilding)) filters.building = local.selectedBuilding
+	if (isSelected(local.selectedProject)) filters.project = local.selectedProject
 	if (isSelected(local.selectedPropertyType)) filters.property_type = local.selectedPropertyType
 	if (isSelected(local.selectedBedrooms)) filters.bedrooms = local.selectedBedrooms
 	if (isSelected(local.selectedStatus)) filters.status = local.selectedStatus
@@ -170,6 +175,7 @@ export function buildRentalsFilterParams(
 	const filters: RentalFacetFilters = baseFilters(context)
 	if (isSelected(local.selectedLocation)) filters.location = local.selectedLocation
 	if (isSelected(local.selectedBuilding)) filters.building = local.selectedBuilding
+	if (isSelected(local.selectedProject)) filters.project = local.selectedProject
 	if (isSelected(local.selectedPropertyType)) filters.property_type = local.selectedPropertyType
 	if (isSelected(local.selectedBedrooms)) filters.bedrooms = local.selectedBedrooms
 	if (isSelected(local.selectedContractType)) filters.contract_type = local.selectedContractType

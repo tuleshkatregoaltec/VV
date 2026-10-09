@@ -13,9 +13,9 @@ from holocron.sources.dxbi.evidence import load_evidence, loader_environment
     description=(
         "DXBI rental and sales evidence (dxbi_rental_events, dxbi_rental_unit_candidates, "
         "dxbi_sales_unit_events, dxbi_rental_sale_matches) and location sweeps "
-        "(dxbi_locations, dxbi_location_members, dxbi_location_lease_members): completed runs from "
-        "DXBI_EVIDENCE_DIR, archived to object storage, loaded, and accounted in "
-        "dxbi_evidence_load_ledger."
+        "(dxbi_locations, dxbi_places, dxbi_location_members, dxbi_location_lease_members): "
+        "completed runs from DXBI_EVIDENCE_DIR, archived to object storage, loaded, and "
+        "accounted in dxbi_evidence_load_ledger."
     ),
 )
 def dxbi_evidence_bronze(

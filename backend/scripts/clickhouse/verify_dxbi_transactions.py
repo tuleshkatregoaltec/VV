@@ -6,9 +6,13 @@ page's rules re-implemented here rather than imported (one row per sale or lease
 spelling, Residential / Commercial grouping, bedroom labels, DXBI's own sizes in sq ft and price per sq
 ft, half-open bands, the date window), and compares the live API with it:
 
+- building and project as DXBI's location list gives them (dxbi_places: a sale by its stored
+  building and area keys, a lease by its whole path), the parsed names otherwise, and a
+  single-name area as the record's area;
 - totals and the first, a middle and the last page of every period (7-365 days) and usage;
 - every field of every compared row;
-- one page per filter value (types, bedrooms, status / contract type, top locations, buildings),
+- one page per filter value (types, bedrooms, status / contract type, top locations, buildings,
+  projects),
   a location holding every record DXBI's area page counts (dxbi_location_members or
   dxbi_location_lease_members, then the record's building, then its printed area and the areas
   above it);
@@ -130,6 +134,24 @@ class Verifier:
         self.by_printed: dict[str, set] = {}
         for key, lineage in zip(lineages.name_key, lineages.lineage):
             self.by_printed.setdefault(key, set()).update(lineage)
+        places = self._table(
+            "dxbi_places",
+            ["building_key", "area_key", "path_key", "match_rank", "location_id",
+             "building_label", "project_label", "area_label"],
+        ).sort_values(["match_rank", "location_id"], kind="mergesort")  # fmt: skip
+        labels = ["building_label", "project_label", "area_label"]
+        self.sale_place = {
+            (row.building_key, row.area_key): row._asdict()
+            for row in places.drop_duplicates(["building_key", "area_key"])[
+                ["building_key", "area_key", *labels]
+            ].itertuples(index=False)
+        }
+        self.lease_place = {
+            row.path_key: row._asdict()
+            for row in places.drop_duplicates("path_key")[["path_key", *labels]].itertuples(
+                index=False
+            )
+        }
         start = self.today - timedelta(days=364)
         self.sales = self._sales(start)
         self.rentals = self._rentals(start)
@@ -209,11 +231,17 @@ class Verifier:
             f"({versions} older or duplicate versions, {before - len(sales)} same-unit same-day "
             "copies removed)"
         )
+        # DXBI's place for the stored keys; a single-name area is the sale's area.
+        place = [self.sale_place.get(key) for key in zip(sales.building_key, sales.area_key)]
+        sales["area_name"] = [
+            area or (p["area_label"] if p else "") for area, p in zip(sales.area_name, place)
+        ]
         sales["location"] = sales.area_name.map(self._location)
         sales["locations"] = [
             self._dxbi_locations(*values)
             for values in zip(sales.sale_key, sales.building_key, sales.area_key, sales.location)
         ]
+        _apply_place_labels(sales, place)
         sales["usage"] = sales.property_type.map(_usage)
         sales["beds"] = sales.bedrooms.map(_bedrooms)
         sales["status"] = sales.market_status.map({"Offplan": "Off-Plan", "Ready": "Ready"}).fillna(
@@ -297,6 +325,9 @@ class Verifier:
                 rentals.contract_key, rentals.building_name, rentals.area_name, rentals.location
             )
         ]
+        _apply_place_labels(
+            rentals, [self.lease_place.get(_search_key(path)) for path in rentals.location_name]
+        )
         rentals["usage"] = rentals.property_type.map(_usage)
         rentals["beds"] = rentals.bedrooms.map(_bedrooms)
         rentals["size"] = [s if s > 0 else None for s in rentals.size_sqft]
@@ -315,6 +346,7 @@ class Verifier:
             ("property_type", "property_type"),
             ("beds", "bedrooms"),
             ("building_name", "building"),
+            ("project_name", "project"),
             ("status", "status") if sales else ("contract_state", "contract_type"),
         ]
         for column, name in equal:
@@ -371,6 +403,7 @@ class Verifier:
         want = {
             "locations": alphabetical(set().union(*expected.locations)),
             "buildings": alphabetical(v.strip() for v in expected.building_name),
+            "projects": alphabetical(v.strip() for v in expected.project_name),
             "property_types": alphabetical(expected.property_type),
             "bedrooms": sorted(
                 {v for v in expected.beds if v},
@@ -420,6 +453,9 @@ class Verifier:
             buildings = frame[frame.building_name != ""].building_name.value_counts().index[:4]
             for value in buildings:
                 self.compare_page(kind, 365, 0, {"building": value})
+            projects = frame[frame.project_name != ""].project_name.value_counts().index[:4]
+            for value in projects:
+                self.compare_page(kind, 365, 0, {"project": value})
 
         for kind, name, bands, column in (
             ("sales", "size", SIZE_BANDS, "size"),
@@ -454,6 +490,16 @@ class Verifier:
 
         print(f"\n{self.checks} checks, {len(self.failures)} failures")
         return 1 if self.failures else 0
+
+
+def _apply_place_labels(frame: pd.DataFrame, places: list) -> None:
+    """Building and project from the record's DXBI place; the parsed names without one."""
+    frame["building_name"] = [
+        p["building_label"] if p else name for name, p in zip(frame.building_name, places)
+    ]
+    frame["project_name"] = [
+        p["project_label"] if p else name for name, p in zip(frame.project_name, places)
+    ]
 
 
 def _alphabetical(values) -> list[str]:

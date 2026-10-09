@@ -3,8 +3,9 @@
 
 The input is one completed run of ``scripts/dxbi_location_sweep.py`` (``_SUCCESS``,
 ``locations.json`` and ``location=<id>.jsonl.gz``). A sales sweep fills ``dxbi_location_members``,
-a rentals sweep ``dxbi_location_lease_members``; ``dxbi_locations`` is refreshed either way. Each
-table is replaced whole and atomically.
+a rentals sweep ``dxbi_location_lease_members``; ``dxbi_locations`` (the Location choices) and
+``dxbi_places`` (every place in DXBI's list, for building and project labels) are refreshed
+either way. Each table is replaced whole and atomically.
 
 Each run replaces only the members dated inside its own window and keeps the rest, so a nightly
 sweep of the last two weeks adds to a year-long first run, and a re-run is harmless. Runs given
@@ -25,6 +26,7 @@ from typing import Any, NamedTuple
 
 import clickhouse_connect
 
+from holocron.sources.dxbi.places import PLACE_COLUMNS, place_rows
 from holocron.sources.dxbi.rental_events import canonical_area_name, normalize_rental_rows
 from holocron.sources.dxbi.sales_units import compact_payload, location_key, normalize_sales_row
 
@@ -63,6 +65,24 @@ CREATE TABLE IF NOT EXISTS dxbi_location_members (
     loaded_at        DateTime64(3, 'UTC') DEFAULT now64(3)
 ) ENGINE = ReplacingMergeTree(loaded_at)
 ORDER BY (location_id, sale_key)
+"""
+PLACES_TABLE = "dxbi_places"
+CREATE_PLACES_SQL = """
+CREATE TABLE IF NOT EXISTS dxbi_places (
+    location_id    UInt32,
+    flag           LowCardinality(String),
+    path           String,
+    path_key       String,
+    building_key   String,
+    area_key       String,
+    match_rank     UInt8,
+    building_label String DEFAULT '',
+    project_label  String DEFAULT '',
+    area_label     String DEFAULT '',
+    source_run_id  String DEFAULT '',
+    loaded_at      DateTime64(3, 'UTC') DEFAULT now64(3)
+) ENGINE = MergeTree
+ORDER BY (building_key, area_key, location_id)
 """
 LEASE_MEMBERS_TABLE = "dxbi_location_lease_members"
 CREATE_LEASE_MEMBERS_SQL = """
@@ -289,6 +309,7 @@ def load_sweep(client: Any, sweep: Sweep) -> dict[str, int]:
         location_rows(items, run_id),
         LOCATION_COLUMNS,
     )
+    replace_table(client, PLACES_TABLE, CREATE_PLACES_SQL, place_rows(items, run_id), PLACE_COLUMNS)
     replaced = replace_window(client, sweep, members)
     logger.info(
         "sweep %s report=%s window=%s..%s members=%s replaced=%s skipped=%s",
