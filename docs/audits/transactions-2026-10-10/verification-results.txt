@@ -1,0 +1,256 @@
+DXBI Transactions audit evidence — 10 October 2026
+Commit aed5309
+
+Frontend unit suite: 59 passed, 11 files.
+Initial focused backend suite: 10 passed.
+Live operation/schema parity: 6 operations and 5 schemas matched exactly.
+
+
+clickhouse-tests.log
+set -a && source .env.dev && set +a && cd backend && uv run pytest tests/integration/clickhouse "$@"
+============================= test session starts ==============================
+platform linux -- Python 3.13.15, pytest-9.0.1, pluggy-1.6.0
+rootdir: /home/maan3/vv/VV-git/backend
+configfile: pyproject.toml
+plugins: asyncio-1.3.0, langsmith-0.14.1, anyio-4.11.0, cov-7.0.0, logfire-4.19.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=function, asyncio_default_test_loop_scope=function
+collected 49 items / 34 deselected / 15 selected
+
+tests/integration/clickhouse/test_analytics.py ..                        [ 13%]
+tests/integration/clickhouse/test_crm_inventory.py .                     [ 20%]
+tests/integration/clickhouse/test_market_metrics.py ..                   [ 33%]
+tests/integration/clickhouse/test_transactions.py ........FF             [100%]
+
+=================================== FAILURES ===================================
+__________ test_same_named_towers_in_different_areas_keep_both_sales ___________
+tests/integration/clickhouse/test_transactions.py:577: in test_same_named_towers_in_different_areas_keep_both_sales
+    assert {row.transaction_id for row in page.transactions} == {"area-a", "area-b"}
+E   AssertionError: assert {'area-a'} == {'area-a', 'area-b'}
+E     
+E     Extra items in the right set:
+E     'area-b'
+E     Use -v to get more diff
+_________ test_missing_unit_in_other_building_is_not_a_duplicate_lease _________
+tests/integration/clickhouse/test_transactions.py:590: in test_missing_unit_in_other_building_is_not_a_duplicate_lease
+    assert {row.contract_id for row in page.contracts} == {"tower-a", "tower-b"}
+E   AssertionError: assert {'tower-a'} == {'tower-a', 'tower-b'}
+E     
+E     Extra items in the right set:
+E     'tower-b'
+E     Use -v to get more diff
+=========================== short test summary info ============================
+FAILED tests/integration/clickhouse/test_transactions.py::test_same_named_towers_in_different_areas_keep_both_sales
+FAILED tests/integration/clickhouse/test_transactions.py::test_missing_unit_in_other_building_is_not_a_duplicate_lease
+================= 2 failed, 13 passed, 34 deselected in 4.35s ==================
+error: recipe `test-backend-clickhouse` failed on line 128 with exit code 1
+
+
+export-tests.log
+set -a && source .env.dev && set +a && cd backend && scripts/lifecycle/tests-start.sh "$@"
+============================= test session starts ==============================
+platform linux -- Python 3.13.15, pytest-9.0.1, pluggy-1.6.0
+cachedir: /tmp/vitevue-pytest-cache
+rootdir: /home/maan3/vv/VV-git/backend
+configfile: pyproject.toml
+plugins: asyncio-1.3.0, langsmith-0.14.1, anyio-4.11.0, cov-7.0.0, logfire-4.19.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=function, asyncio_default_test_loop_scope=function
+collected 5 items
+
+tests/unit/test_transaction_exports.py ....F                             [100%]
+
+=================================== FAILURES ===================================
+_________ test_selected_export_metadata_does_not_claim_ignored_filters _________
+tests/unit/test_transaction_exports.py:160: in test_selected_export_metadata_does_not_claim_ignored_filters
+    assert "location=Elsewhere" not in metadata
+E   AssertionError: assert 'location=Elsewhere' not in 'contract_id...frame_days=7'
+E     
+E     'location=Elsewhere' is contained here:
+E       contract_ids=R-1, location=Elsewhere, timeframe_days=7
+E     ?                   ++++++++++++++++++
+=========================== short test summary info ============================
+FAILED tests/unit/test_transaction_exports.py::test_selected_export_metadata_does_not_claim_ignored_filters
+========================= 1 failed, 4 passed in 0.76s ==========================
+error: recipe `test-backend` failed on line 73 with exit code 1
+
+
+http-guards.log
+anonymous transactions/sales 401
+anonymous transactions/rentals 401
+anonymous transactions/sales/export 401
+anonymous transactions/rentals/export 401
+anonymous filters/sales 401
+anonymous filters/rentals 401
+invalid transactions/sales?limit=0 422
+invalid transactions/rentals?offset=-1 422
+invalid transactions/sales?timeframe_days=0 422
+invalid transactions/rentals/export?format=pdf 422
+
+
+reconciliation.log
+sales: 172940 raw rows in 365 days -> 172940 sales (0 older or duplicate versions, 0 same-unit same-day copies removed)
+rentals: 891043 raw rows starting in 365 days -> 868403 leases (0 superseded, 13133 unit-less copies of numbered leases and 9507 repeated numbered-unit rows removed)
+
+405 checks, 0 failures
+
+
+export-parity.log
+sales csv 2 selected rows and every field match the API
+sales workbook filters claimed: transaction_ids=00743d3af28498f078142605,009fb248292ae99ec4da7fbe, location=Audit deliberately unmatched location, timeframe_days=1
+sales xlsx 2 selected rows and every field match the API
+rentals csv 2 selected rows and every field match the API
+rentals workbook filters claimed: contract_ids=001372ae7262f95e6eb2169c,002bc4ddc02fa266792caf2e, location=Audit deliberately unmatched location, timeframe_days=1
+rentals xlsx 2 selected rows and every field match the API
+104 exported field comparisons passed
+
+
+e2e-results.json
+{
+  "startTime": "2026-10-10T12:42:55.148Z",
+  "duration": 216608.99699999997,
+  "expected": 11,
+  "skipped": 0,
+  "unexpected": 0,
+  "flaky": 0
+}
+a sale opens its details with the values the API returned: expected
+every usage and period shows the rows and total the API returns: expected
+each filter value sends its query and shows the API rows: expected
+pagination walks the pages as the API pages them: expected
+column settings show and hide a column: expected
+exports carry the filtered rows, or only the selected ones: expected
+every usage and period shows the rows and total the API returns: expected
+each filter value sends its query and shows the API rows: expected
+pagination walks the pages as the API pages them: expected
+column settings show and hide a column: expected
+exports carry the filtered rows, or only the selected ones: expected
+
+targeted-results.json
+{
+  "startTime": "2026-10-10T12:46:07.891Z",
+  "duration": 54418.353,
+  "expected": 6,
+  "skipped": 0,
+  "unexpected": 5,
+  "flaky": 0
+}
+sales: all displayed fields equal API values: expected
+sales: pending page must not allow selection of the previous page: unexpected
+Error: expect(locator).toBeDisabled() failed
+
+Locator:  locator('tbody input[aria-label="Select row"]').first()
+Expected: disabled
+Received: enabled
+Timeout:  1000ms
+
+Call log:
+  - Expect "toBeDisabled" with timeout 1000ms
+  - waiting for locator('tbody input[aria-label="Select row"]').first()
+    5 × locator resolved to <input type="checkbox" class="ui-checkbox" aria-label="Select row"/>
+      - unexpected value "enabled"
+
+
+  49 |         const previousRow = page.locator('tbody input[aria-label="Select row"]').first();
+  50 |         // Financial evidence must not be selectable under the wrong page/filter label.
+> 51 |         try { await expect(previousRow).toBeDisabled({timeout:1000}); }
+     |                                         ^
+  52 |         finally { release(); }
+  53 |     });
+  54 |
+    at /home/maan3/vv/VV-git/e2e/transactions-audit.spec.ts:51:41
+sales: filter-option failure must be visible to users: unexpected
+Error: expect(locator).toBeVisible() failed
+
+Locator: getByText(/error loading filters|failed to load filters|Audit injected facet failure/i)
+Expected: visible
+Timeout: 1000ms
+Error: element(s) not found
+
+Call log:
+  - Expect "toBeVisible" with timeout 1000ms
+  - waiting for getByText(/error loading filters|failed to load filters|Audit injected facet failure/i)
+
+
+  60 |         await page.waitForTimeout(300);
+  61 |         await page.screenshot({path:path.join(evidence,`${kind}-facet-error.png`),fullPage:false});
+> 62 |         await expect(page.getByText(/error loading filters|failed to load filters|Audit injected facet failure/i)).toBeVisible({timeout:1000});
+     |                                                                                                                    ^
+  63 |     });
+  64 | }
+  65 |
+    at /home/maan3/vv/VV-git/e2e/transactions-audit.spec.ts:62:116
+rentals: all displayed fields equal API values: expected
+rentals: pending page must not allow selection of the previous page: unexpected
+Error: expect(locator).toBeDisabled() failed
+
+Locator:  locator('tbody input[aria-label="Select row"]').first()
+Expected: disabled
+Received: enabled
+Timeout:  1000ms
+
+Call log:
+  - Expect "toBeDisabled" with timeout 1000ms
+  - waiting for locator('tbody input[aria-label="Select row"]').first()
+    5 × locator resolved to <input type="checkbox" class="ui-checkbox" aria-label="Select row"/>
+      - unexpected value "enabled"
+
+
+  49 |         const previousRow = page.locator('tbody input[aria-label="Select row"]').first();
+  50 |         // Financial evidence must not be selectable under the wrong page/filter label.
+> 51 |         try { await expect(previousRow).toBeDisabled({timeout:1000}); }
+     |                                         ^
+  52 |         finally { release(); }
+  53 |     });
+  54 |
+    at /home/maan3/vv/VV-git/e2e/transactions-audit.spec.ts:51:41
+rentals: filter-option failure must be visible to users: unexpected
+Error: expect(locator).toBeVisible() failed
+
+Locator: getByText(/error loading filters|failed to load filters|Audit injected facet failure/i)
+Expected: visible
+Timeout: 1000ms
+Error: element(s) not found
+
+Call log:
+  - Expect "toBeVisible" with timeout 1000ms
+  - waiting for getByText(/error loading filters|failed to load filters|Audit injected facet failure/i)
+
+
+  60 |         await page.waitForTimeout(300);
+  61 |         await page.screenshot({path:path.join(evidence,`${kind}-facet-error.png`),fullPage:false});
+> 62 |         await expect(page.getByText(/error loading filters|failed to load filters|Audit injected facet failure/i)).toBeVisible({timeout:1000});
+     |                                                                                                                    ^
+  63 |     });
+  64 | }
+  65 |
+    at /home/maan3/vv/VV-git/e2e/transactions-audit.spec.ts:62:116
+sale detail dialog must receive focus and contain keyboard navigation: unexpected
+Error: expect(received).toBe(expected) // Object.is equality
+
+Expected: true
+Received: false
+
+  70 |     await expect(dialog).toBeVisible();
+  71 |     await page.screenshot({path:path.join(evidence,'sale-details.png'),fullPage:false});
+> 72 |     expect.soft(await dialog.evaluate(el=>el.contains(document.activeElement))).toBe(true);
+     |                                                                                 ^
+  73 |     await page.getByRole('button',{name:'Close modal'}).focus();
+  74 |     await page.keyboard.press('Tab');
+  75 |     expect.soft(await dialog.evaluate(el=>el.contains(document.activeElement))).toBe(true);
+    at /home/maan3/vv/VV-git/e2e/transactions-audit.spec.ts:72:81
+Error: expect(received).toBe(expected) // Object.is equality
+
+Expected: true
+Received: false
+
+  73 |     await page.getByRole('button',{name:'Close modal'}).focus();
+  74 |     await page.keyboard.press('Tab');
+> 75 |     expect.soft(await dialog.evaluate(el=>el.contains(document.activeElement))).toBe(true);
+     |                                                                                 ^
+  76 | });
+  77 |
+  78 | test('mobile rental rent dropdown can select its last option', async ({page}) => {
+    at /home/maan3/vv/VV-git/e2e/transactions-audit.spec.ts:75:81
+mobile rental rent dropdown can select its last option: expected
+sales: selection, column controls and navigation remain usable: expected
+rentals: selection, column controls and navigation remain usable: expected
+mobile sales cards show API values and open and close details in dark mode: expected

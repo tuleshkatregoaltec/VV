@@ -1,0 +1,39 @@
+Transactions and Analytics resolution verification — 2026-10-10 UTC
+Base: aed5309 (fix/analytics-numbers / PR #41)
+
+just test-backend: 353 passed, 0 failed, 0 skipped
+just test-backend-clickhouse: 53 passed, 0 failed, 0 skipped (isolated databases)
+just test-frontend: 59 passed, 0 failed, 0 skipped
+just lint-backend: passed (Ruff lint and format check)
+just generate-client: passed, including frontend lint (230 files)
+just lint-frontend: passed
+just check-frontend: 0 errors, 0 warnings
+just build-frontend: passed; existing unused-import/chunk-size/adapter-auto notices remain
+
+Browser: 40 unique cases passed, 0 unresolved failures or skipped cases.
+- Existing Transactions suite: 11 passed in the combined run.
+- Transactions audit suite: all 11 passed, including the final audit run.
+- Final Analytics suite: 18 passed, 0 failed (2.1 minutes).
+One Chromium worker, no retries, existing authorized session, local running stack.
+Cases include desktop/mobile, light/dark, API/display values, facets, all bands,
+pagination, columns, row selection, export, detail dismissal, canonical project
+and master selection, comparison, drill-down, chart controls, keyboard navigation,
+and injected failures with successful retry.
+
+Initial combined-run issues were resolved rather than skipped:
+- Two harness timing failures: await results/error state instead of short/fixed delays.
+- A master-comparison locator matched two headings: constrain it to the level-2 heading.
+- Expanded search-failure testing exposed a real retry/focus edge case: keep focus in
+  the input before refetch. Final Analytics run verifies recovery.
+
+Independent source/API reconciliation (SELECT-only warehouse and authenticated GETs):
+sales: 172940 raw rows in 365 days -> 172940 sales (0 older or duplicate versions, 0 same-unit same-day copies removed)
+rentals: 891043 raw rows starting in 365 days -> 879831 leases (0 superseded, 1705 unit-less copies of numbered leases and 9507 repeated numbered-unit rows removed)
+
+405 checks, 0 failures
+
+Analytics independent source/API checks:
+{"project": "23 MARINA", "sales": 893, "volume": 2848576487, "units": 294, "source_api_and_drilldown_equal": true}
+{"project": "MARINA PINNACLE", "sales": 2262, "volume": 2591689921, "units": 772, "source_api_and_drilldown_equal": true}
+{"project": "Binghatti Skyrise", "sales": 2907, "volume": 4561381930, "units": 3358, "source_api_and_drilldown_equal": true}
+{"supply_reference_date": "2026-10-10", "completed": 426065, "overdue": 47215, "undated": 62742, "current_quarter_pipeline": 41027, "next_quarter_carried": 467092, "source_api_equal": true}
