@@ -122,6 +122,7 @@ async def dxbi(warehouse, install_serving):
             "dxbi_sales_unit_events",
             "dxbi_rental_events",
             "dxbi_locations",
+            "dxbi_places",
             "dxbi_location_members",
             "dxbi_location_lease_members",
         ),
@@ -160,6 +161,9 @@ async def test_each_dxbi_sale_appears_once_with_its_unit_in_square_feet(dxbi):
             # 'D' is a block letter, not a unit: two DXBI records stay two sales.
             sale("block-1", building_key="sakura", unit_number="D"),
             sale("block-2", building_key="sakura", unit_number="D"),
+            # DXBI lists a day's sales before their units (no unit, no sale page): shown as DXBI
+            # lists it, and the morning re-scrape reads the unit.
+            sale("provisional", unit_number="", detail_url="", building_key="towerd"),
             # Outside the last 30 days, today included: 30 days ago and in the future.
             sale("old", transaction_date=TODAY - timedelta(days=30)),
             sale("future", transaction_date=TODAY + timedelta(days=3)),
@@ -169,8 +173,10 @@ async def test_each_dxbi_sale_appears_once_with_its_unit_in_square_feet(dxbi):
     page = await service.fetch_sales_transactions(SalesFilters(timeframe_days=30), 30, 0)
 
     ids = sorted(row.transaction_id for row in page.transactions)
-    assert ids == ["block-1", "block-2", "from-scrape", "moved", "plain"]
-    assert page.total == 5
+    assert ids == ["block-1", "block-2", "from-scrape", "moved", "plain", "provisional"]
+    assert page.total == 6
+    provisional = next(row for row in page.transactions if row.transaction_id == "provisional")
+    assert provisional.unit_number is None
     plain = next(row for row in page.transactions if row.transaction_id == "plain")
     # DXBI's own size; AED 1,600,000 over 800 sq ft is AED 2,000 per sq ft (price / size).
     assert plain.model_dump() == {
@@ -192,7 +198,7 @@ async def test_each_dxbi_sale_appears_once_with_its_unit_in_square_feet(dxbi):
 
     second_page = await service.fetch_sales_transactions(SalesFilters(timeframe_days=30), 2, 2)
     first_two = await service.fetch_sales_transactions(SalesFilters(timeframe_days=30), 2, 0)
-    assert second_page.total == 5
+    assert second_page.total == 6
     assert not {r.transaction_id for r in second_page.transactions} & {
         r.transaction_id for r in first_two.transactions
     }
@@ -291,6 +297,69 @@ async def test_sales_filters_bands_usage_and_locations(dxbi):
     )
     row = next(r for r in misread.transactions if r.transaction_id == "misread")
     assert (row.location_name, row.property_type, row.unit_number) == (None, None, "630")
+
+
+async def test_building_and_project_are_what_dxbi_location_list_says(dxbi, warehouse):
+    """DXBI prints a record's location as one place's path; its first part is a building, a
+    project or an area, and only DXBI's location list says which (2026-10-08: 46% of sales
+    showed a project as their building, 90% had no project). A path the list does not hold keeps
+    the parsed names."""
+    place = ["building_key", "area_key", "path_key", "flag", "building_label", "project_label",
+             "area_label"]  # fmt: skip
+    await warehouse.insert(
+        "dxbi_places",
+        [
+            ["mog197", "discoverygardens", "mog197mogulclusterdiscoverygardens", "B",
+             "Mog 197", "Mogul Cluster", "Discovery Gardens"],
+            ["damacriverlink", "dubaiinvestmentpark2", "damacriverlinkdubaiinvestmentparksecond",
+             "P", "", "Damac Riverlink", "Dubai Investment Park 2"],
+            ["horalanz", "", "horalanz", "A", "", "", "Hor Al Anz"],
+        ],
+        column_names=place,
+    )  # fmt: skip
+    riverlink = {"building_name": "Damac Riverlink", "building_key": "damacriverlink",
+                 "area_name": "Dubai Investment Park 2", "area_key": "dubaiinvestmentpark2"}  # fmt: skip
+    await dxbi(
+        sales=[
+            sale("in-building", building_name="Mog 197", building_key="mog197",
+                 area_name="Discovery Gardens", area_key="discoverygardens"),
+            sale("whole-project", **riverlink),
+            # A single name DXBI lists as an area is the sale's area, not its building.
+            sale("area-only", building_name="Hor Al Anz", building_key="horalanz", area_name=""),
+            sale("unlisted", project_name="Parsed Project"),
+        ],
+        leases=[
+            lease("lease-in-project", location_name="Damac Riverlink, Dubai Investment Park Second",
+                  building_name="Damac Riverlink", area_name="Dubai Investment Park 2"),
+        ],
+    )  # fmt: skip
+
+    page = await service.fetch_sales_transactions(SalesFilters(timeframe_days=7), 30, 0)
+    labels = {
+        row.transaction_id: (row.building_name, row.project_name, row.location_name)
+        for row in page.transactions
+    }
+    assert labels == {
+        "in-building": ("Mog 197", "Mogul Cluster", "Discovery Gardens"),
+        "whole-project": (None, "Damac Riverlink", "Dubai Investment Park 2"),
+        "area-only": (None, None, "Hor Al Anz"),
+        "unlisted": ("Tower A", "Parsed Project", "Downtown Dubai"),
+    }
+
+    by_project = await service.fetch_sales_transactions(
+        SalesFilters(timeframe_days=7, project="Damac Riverlink"), 30, 0
+    )
+    assert [row.transaction_id for row in by_project.transactions] == ["whole-project"]
+    options = await facets.get_sales_filter_options(SalesFilters(timeframe_days=7))
+    assert options.projects == ["Damac Riverlink", "Mogul Cluster", "Parsed Project"]
+    assert options.buildings == ["Mog 197", "Tower A"]
+
+    leases = await service.fetch_rental_contracts(
+        RentalFilters(timeframe_days=7, project="Damac Riverlink"), 30, 0
+    )
+    assert [(r.contract_id, r.building_name) for r in leases.contracts] == [
+        ("lease-in-project", None)
+    ]
 
 
 async def test_a_location_holds_what_dxbi_area_page_counts(dxbi, warehouse):

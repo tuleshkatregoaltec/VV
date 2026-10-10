@@ -33,6 +33,7 @@ const FILTERS: Record<Kind, Filter[]> = {
     sales: [
         { id: 'selectedLocation', param: 'location' },
         { id: 'selectedBuilding', param: 'building' },
+        { id: 'selectedProject', param: 'project' },
         { id: 'selectedPropertyType', param: 'property_type' },
         { id: 'selectedBedrooms', param: 'bedrooms' },
         { id: 'selectedStatus', param: 'status' },
@@ -43,6 +44,7 @@ const FILTERS: Record<Kind, Filter[]> = {
     rentals: [
         { id: 'selectedLocation', param: 'location' },
         { id: 'selectedBuilding', param: 'building' },
+        { id: 'selectedProject', param: 'project' },
         { id: 'selectedPropertyType', param: 'property_type' },
         { id: 'selectedBedrooms', param: 'bedrooms' },
         { id: 'selectedContractType', param: 'contract_type' },
@@ -194,6 +196,9 @@ for (const kind of ['sales', 'rentals'] as const) {
                     if (filter.param === 'building') {
                         for (const row of shown.rows) expect(String(row.building_name).trim()).toBe(value);
                     }
+                    if (filter.param === 'project') {
+                        for (const row of shown.rows) expect(String(row.project_name).trim()).toBe(value);
+                    }
                     // The options narrow to the current filters: reset before the next value.
                     await page.getByRole('button', { name: 'Reset filters' }).first().click();
                     await expectScreenShows(page, kind, unfiltered);
@@ -222,13 +227,14 @@ for (const kind of ['sales', 'rentals'] as const) {
         test('column settings show and hide a column', async ({ page }) => {
             const listing = await openPage(page, kind, 'Residential', 'Last Month');
             await listing(usageQuery('Residential', 30));
+            // Project is shown by default beside Building (DXBI's location list names it).
             const header = page.locator('thead').getByText('Project', { exact: true });
-            await expect(header).toHaveCount(0);
+            await expect(header).toBeVisible();
             await page.locator('#column-visibility-button').click();
             await page.locator('#column-visibility-menu').getByText('Project', { exact: true }).click();
-            await expect(header).toBeVisible();
-            await page.locator('#column-visibility-menu').getByText('Project', { exact: true }).click();
             await expect(header).toHaveCount(0);
+            await page.locator('#column-visibility-menu').getByText('Project', { exact: true }).click();
+            await expect(header).toBeVisible();
         });
 
         test('exports carry the filtered rows, or only the selected ones', async ({ page }) => {

@@ -3562,6 +3562,24 @@
 						"description": "DXBI building name"
 					},
 					{
+						"name": "project",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "string"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "DXBI project name",
+							"title": "Project"
+						},
+						"description": "DXBI project name"
+					},
+					{
 						"name": "timeframe_days",
 						"in": "query",
 						"required": false,
@@ -3827,6 +3845,24 @@
 							"title": "Building"
 						},
 						"description": "DXBI building name"
+					},
+					{
+						"name": "project",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "string"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "DXBI project name",
+							"title": "Project"
+						},
+						"description": "DXBI project name"
 					},
 					{
 						"name": "timeframe_days",
@@ -6439,6 +6475,24 @@
 						"description": "DXBI building name"
 					},
 					{
+						"name": "project",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "string"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "DXBI project name",
+							"title": "Project"
+						},
+						"description": "DXBI project name"
+					},
+					{
 						"name": "timeframe_days",
 						"in": "query",
 						"required": false,
@@ -6733,6 +6787,24 @@
 						"description": "DXBI building name"
 					},
 					{
+						"name": "project",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "string"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "DXBI project name",
+							"title": "Project"
+						},
+						"description": "DXBI project name"
+					},
+					{
 						"name": "timeframe_days",
 						"in": "query",
 						"required": false,
@@ -6993,6 +7065,24 @@
 							"title": "Building"
 						},
 						"description": "DXBI building name"
+					},
+					{
+						"name": "project",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "string"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "DXBI project name",
+							"title": "Project"
+						},
+						"description": "DXBI project name"
 					},
 					{
 						"name": "timeframe_days",
@@ -7284,6 +7374,24 @@
 							"title": "Building"
 						},
 						"description": "DXBI building name"
+					},
+					{
+						"name": "project",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "string"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "DXBI project name",
+							"title": "Project"
+						},
+						"description": "DXBI project name"
 					},
 					{
 						"name": "timeframe_days",
@@ -15440,6 +15548,14 @@
 						},
 						"type": "array",
 						"title": "Buildings",
+						"default": []
+					},
+					"projects": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"title": "Projects",
 						"default": []
 					},
 					"property_types": {

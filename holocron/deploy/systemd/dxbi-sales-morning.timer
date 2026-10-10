@@ -1,0 +1,14 @@
+[Unit]
+Description=Re-scrape the last 3 days of DXBI sales every morning (Dubai time)
+
+[Timer]
+# 06:30 Dubai (GST, UTC+4, no daylight saving) = 02:30 UTC. DXBI lists a day's sales before their
+# units and fills them in about a day later; this run reads them after the 02:30 sales scrape and
+# the 03:30 sweep on the same account, and before Holocron loads DXBI evidence at 10:00 Dubai.
+OnCalendar=*-*-* 06:30:00 Asia/Dubai
+Persistent=true
+RandomizedDelaySec=5min
+Unit=dxbi-sales-morning.service
+
+[Install]
+WantedBy=timers.target

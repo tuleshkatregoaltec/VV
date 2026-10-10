@@ -433,21 +433,6 @@ let pipelineChart: Chart | null = null
 let marketSplitChart: Chart | null = null
 let themeVersion = $state(0)
 
-// Dark-mode chart colours (chart tokens are missing from app.css); used only by this panel.
-const DARK_CHART_COLORS = {
-	line: '#d9e1ea',
-	fill: 'rgba(217, 225, 234, 0.12)',
-	grid: 'rgba(148, 163, 184, 0.17)',
-	axis: 'rgba(148, 163, 184, 0.32)'
-}
-
-function getPanelChartTheme() {
-	const theme = getChartTheme()
-	return document.documentElement.dataset.theme === 'dark'
-		? { ...theme, ...DARK_CHART_COLORS }
-		: theme
-}
-
 // ─── Trend chart ─────────────────────────────────────────────────────────
 function buildTrendChart() {
 	const recordedSeries = getRecordedTrendSeries()
@@ -456,7 +441,7 @@ function buildTrendChart() {
 	trendChart?.destroy()
 	const ctx = trendCanvas.getContext('2d')
 	if (!ctx) return
-	const theme = getPanelChartTheme()
+	const theme = getChartTheme()
 
 	const gradient = ctx.createLinearGradient(0, 0, 0, 280)
 	gradient.addColorStop(0, theme.fill)
@@ -591,7 +576,7 @@ function buildBellChart() {
 	bellChart?.destroy()
 	const ctx = bellCanvas.getContext('2d')
 	if (!ctx) return
-	const theme = getPanelChartTheme()
+	const theme = getChartTheme()
 
 	const mu = bucket.log_mean_price
 	const sigma = bucket.log_std_price
@@ -734,7 +719,7 @@ function buildPipelineChart() {
 	pipelineChart?.destroy()
 	const ctx = pipelineCanvas.getContext('2d')
 	if (!ctx) return
-	const theme = getPanelChartTheme()
+	const theme = getChartTheme()
 
 	const currentQuarterMs = getCurrentQuarterStartMs()
 	const firstProjectedIdx = pipelineData.findIndex(
@@ -816,12 +801,14 @@ function buildPipelineChart() {
 					border: { display: false },
 					ticks: { color: theme.muted, maxTicksLimit: 12 }
 				},
+				// Each axis is titled in its series' colour: stock (line) left, supply (bars) right.
 				stock: {
 					type: 'linear',
 					position: 'left',
 					beginAtZero: true,
 					grid: { color: theme.grid },
 					border: { display: false },
+					title: { display: true, text: 'Total stock (units)', color: theme.line },
 					ticks: { color: theme.muted, callback: (v) => fmtCompact(Number(v)) }
 				},
 				deliveries: {
@@ -830,6 +817,7 @@ function buildPipelineChart() {
 					beginAtZero: true,
 					grid: { drawOnChartArea: false },
 					border: { display: false },
+					title: { display: true, text: 'Upcoming supply (units)', color: theme.warning },
 					ticks: { color: theme.muted, callback: (v) => fmtCompact(Number(v)) }
 				}
 			}
@@ -1184,7 +1172,8 @@ onMount(() => {
 		</section>
 
 		<section class="grid gap-5 xl:grid-cols-[minmax(0,1.1fr)_360px]">
-			<section class="rounded-lg border border-border bg-card p-5">
+			<!-- The chart grows with the Market Split card beside it instead of leaving a gap. -->
+			<section class="flex flex-col rounded-lg border border-border bg-card p-5">
 				<div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
 					<div>
 						<p class="text-[11px] font-semibold uppercase tracking-[0.22em] text-fg-4">
@@ -1213,7 +1202,7 @@ onMount(() => {
 						</button>
 					</div>
 				</div>
-				<div class="mt-4 h-[280px]">
+				<div class="relative mt-4 h-[280px] xl:h-auto xl:min-h-[280px] xl:flex-1">
 					{#if trendsQuery.isLoading || (!isAggregateSelection() && forecastQuery.isLoading)}
 						<div class="h-full animate-pulse rounded-lg bg-panel"></div>
 					{:else if hasTrendChartData()}
@@ -1319,7 +1308,7 @@ onMount(() => {
 					<div class="inline-flex rounded-lg border border-border bg-panel p-0.5">
 						<button
 							type="button"
-							class="rounded-lg px-3.5 py-1.5 text-sm font-medium transition-colors {configSegment === 'all' ? 'bg-navy text-on-navy shadow-sm' : 'text-fg-3 hover:text-fg-2'}"
+							class="rounded-lg px-3.5 py-1.5 text-sm font-medium transition-colors {configSegment === 'all' ? 'bg-card text-fg-1 shadow-sm' : 'text-fg-3 hover:text-fg-2'}"
 							onclick={() => (configSegment = 'all')}
 						>
 							All
@@ -1342,42 +1331,30 @@ onMount(() => {
 				{/if}
 			</div>
 
-			<div class="mt-3 flex flex-wrap items-center gap-2 text-xs text-fg-4">
-				<span class="inline-flex items-center rounded-sm border border-border bg-panel px-2.5 py-1 font-medium text-fg-3">
-					Listing metrics pending
-				</span>
-				<span class="inline-flex items-center rounded-sm border border-dashed border-border px-2.5 py-1">
-					Days on market
-				</span>
-				<span class="inline-flex items-center rounded-sm border border-dashed border-border px-2.5 py-1">
-					Sale / list ratio
-				</span>
-			</div>
-
 			{#if configMode === 'sales'}
-				<div class="mt-4 overflow-x-auto">
-					<table class="min-w-full border-separate border-spacing-0 text-sm">
+				<div class="ui-scroll-shadow mt-4 overflow-x-auto">
+					<table class="min-w-[640px] w-full border-separate border-spacing-0 text-sm sm:min-w-full">
 						<thead>
 							<tr class="text-left">
-								<th class="border-b border-border pb-2.5 pr-6 text-[11px] font-semibold uppercase tracking-[0.14em] text-fg-4">Config</th>
+								<th class="sticky left-0 z-10 border-b border-border bg-card pb-2.5 pr-6 text-[11px] font-semibold uppercase tracking-[0.14em] text-fg-4">Config</th>
 								<th class="border-b border-border pb-2.5 pr-6 text-right text-[11px] font-semibold uppercase tracking-[0.14em] text-fg-4">Sales</th>
 								<th class="border-b border-border pb-2.5 pr-6 text-right text-[11px] font-semibold uppercase tracking-[0.14em] text-fg-4">Avg Price</th>
-								<th class="border-b border-border pb-2.5 pr-6 text-right text-[11px] font-semibold uppercase tracking-[0.14em] text-fg-5">Size sq ft</th>
+								<th class="border-b border-border pb-2.5 pr-6 text-right text-[11px] font-semibold uppercase tracking-[0.14em] text-fg-4">Size sq ft</th>
 								<th class="border-b border-border pb-2.5 pr-6 text-right text-[11px] font-semibold uppercase tracking-[0.14em] text-fg-4">
-									Momentum<br /><span class="font-normal normal-case tracking-normal text-fg-5">90d shift</span>
+									Momentum<br /><span class="font-normal normal-case tracking-normal text-fg-4">90d shift</span>
 								</th>
 								<th class="border-b border-border pb-2.5 pr-6 text-right text-[11px] font-semibold uppercase tracking-[0.14em] text-fg-4">
-									Price Δ YoY<br /><span class="font-normal normal-case tracking-normal text-fg-5">% change</span>
+									Price Δ YoY<br /><span class="font-normal normal-case tracking-normal text-fg-4">% change</span>
 								</th>
-								<th class="border-b border-border pb-2.5 text-right text-[11px] font-semibold uppercase tracking-[0.14em] text-primary">
-									Sales / Stock<br /><span class="font-normal normal-case tracking-normal text-info">% / year</span>
+								<th class="border-b border-border pb-2.5 text-right text-[11px] font-semibold uppercase tracking-[0.14em] text-fg-4">
+									Sales / Stock<br /><span class="font-normal normal-case tracking-normal text-fg-4">% / year</span>
 								</th>
 							</tr>
 						</thead>
 						<tbody>
 							{#each configRows as row (row.market_segment + row.rooms)}
 								<tr class="group">
-									<td class="border-b border-border py-3 pr-6 font-medium text-fg-1 group-hover:bg-panel">
+									<td class="sticky left-0 z-10 border-b border-border bg-card py-3 pr-6 font-medium text-fg-1 group-hover:bg-panel">
 										{row.rooms}
 									</td>
 									<td class="border-b border-border py-3 pr-6 text-right text-fg-2 group-hover:bg-panel">
@@ -1389,12 +1366,12 @@ onMount(() => {
 											<br /><span class="text-[11px] text-fg-4">{fmtPsf(row.avg_sale_price_sqft)}</span>
 										{/if}
 									</td>
-									<td class="border-b border-border py-3 pr-6 text-right text-fg-5 group-hover:bg-panel">
+									<td class="border-b border-border py-3 pr-6 text-right text-fg-2 group-hover:bg-panel">
 										{row.avg_unit_size_sqft > 0 ? fmtNumber(row.avg_unit_size_sqft, 0) : '—'}
 									</td>
 									<td class="border-b border-border py-3 pr-6 text-right group-hover:bg-panel">
 										{#if row.sales_momentum_pct == null || !Number.isFinite(row.sales_momentum_pct)}
-											<span class="text-fg-5">—</span>
+											<span class="text-fg-4">—</span>
 										{:else if Math.abs(row.sales_momentum_pct) < 0.5}
 											<span class="inline-flex items-center gap-0.5 rounded-full bg-panel px-2 py-0.5 text-xs font-medium text-fg-4">
 												— {fmtSignedPct(row.sales_momentum_pct)}
@@ -1416,7 +1393,7 @@ onMount(() => {
 												{fmtPct(Math.abs(row.price_change_yoy_pct))}
 											</span>
 										{:else}
-											<span class="text-fg-5">—</span>
+											<span class="text-fg-4">—</span>
 										{/if}
 									</td>
 									<td class="border-b border-border py-3 text-right font-medium group-hover:bg-panel">
@@ -1438,21 +1415,21 @@ onMount(() => {
 				</div>
 			{:else}
 				<!-- Rental view -->
-				<div class="mt-4 overflow-x-auto">
-					<table class="min-w-full border-separate border-spacing-0 text-sm">
+				<div class="ui-scroll-shadow mt-4 overflow-x-auto">
+					<table class="min-w-[480px] w-full border-separate border-spacing-0 text-sm sm:min-w-full">
 						<thead>
 							<tr class="text-left">
-								<th class="border-b border-border pb-2.5 pr-6 text-[11px] font-semibold uppercase tracking-[0.14em] text-fg-4">Config</th>
+								<th class="sticky left-0 z-10 border-b border-border bg-card pb-2.5 pr-6 text-[11px] font-semibold uppercase tracking-[0.14em] text-fg-4">Config</th>
 								<th class="border-b border-border pb-2.5 pr-6 text-right text-[11px] font-semibold uppercase tracking-[0.14em] text-fg-4">Contracts</th>
 								<th class="border-b border-border pb-2.5 pr-6 text-right text-[11px] font-semibold uppercase tracking-[0.14em] text-fg-4">Median Rent</th>
 								<th class="border-b border-border pb-2.5 pr-6 text-right text-[11px] font-semibold uppercase tracking-[0.14em] text-fg-4">Rent / sq ft</th>
-								<th class="border-b border-border pb-2.5 text-right text-[11px] font-semibold uppercase tracking-[0.14em] text-primary">Gross Yield</th>
+								<th class="border-b border-border pb-2.5 text-right text-[11px] font-semibold uppercase tracking-[0.14em] text-fg-4">Gross Yield</th>
 							</tr>
 						</thead>
 						<tbody>
 							{#each rentalConfigRows as row (row.rooms)}
 								<tr class="group">
-									<td class="border-b border-border py-3 pr-6 font-medium text-fg-1 group-hover:bg-panel">{row.rooms}</td>
+									<td class="sticky left-0 z-10 border-b border-border bg-card py-3 pr-6 font-medium text-fg-1 group-hover:bg-panel">{row.rooms}</td>
 									<td class="border-b border-border py-3 pr-6 text-right text-fg-3 group-hover:bg-panel">{fmtNumber(row.rental_count)}</td>
 									<td class="border-b border-border py-3 pr-6 text-right font-medium text-fg-1 group-hover:bg-panel">{fmtCurrency(row.median_annual_rent)}</td>
 									<td class="border-b border-border py-3 pr-6 text-right text-fg-3 group-hover:bg-panel">
@@ -1498,11 +1475,12 @@ onMount(() => {
 
 			<!-- Room tabs -->
 			{#if distroRoomList.length > 0}
-				<div class="mt-3 flex flex-wrap gap-1.5">
+				<div class="ui-segmented mt-3">
 					<button
 						type="button"
 						onclick={() => (distroRooms = 'All')}
-						class="rounded-md px-3 py-1 text-xs font-medium transition-colors {distroRooms === 'All' ? 'bg-primary-light text-on-navy' : 'border border-border bg-card text-fg-2 hover:border-strong'}"
+						class="ui-segmented-item px-3 py-1 text-xs"
+						data-active={distroRooms === 'All'}
 					>
 						All
 					</button>
@@ -1510,7 +1488,8 @@ onMount(() => {
 						<button
 							type="button"
 							onclick={() => (distroRooms = room)}
-							class="rounded-md px-3 py-1 text-xs font-medium transition-colors {distroRooms === room ? 'bg-primary-light text-on-navy' : 'border border-border bg-card text-fg-2 hover:border-strong'}"
+							class="ui-segmented-item px-3 py-1 text-xs"
+							data-active={distroRooms === room}
 						>
 							{room}
 						</button>
@@ -1525,7 +1504,7 @@ onMount(() => {
 						<p class="flex items-center gap-1 text-[11px] font-medium uppercase tracking-[0.14em] text-fg-4">
 							<span class="font-serif text-base text-fg-3">μ</span> Mean Price
 						</p>
-						<p class="mt-1 text-lg font-semibold text-primary">{fmtCurrency(distroBucket.mean_price)}</p>
+						<p class="mt-1 text-lg font-semibold text-accent-text">{fmtCurrency(distroBucket.mean_price)}</p>
 					</div>
 					<div>
 						<p class="flex items-center gap-1 text-[11px] font-medium uppercase tracking-[0.14em] text-fg-4">
@@ -1573,12 +1552,14 @@ onMount(() => {
 
 			<!-- Bedroom filter tabs -->
 			{#if pipelineRoomList.length > 0}
-				<div class="mt-3 flex flex-wrap items-center gap-1.5">
-					<span class="mr-1 text-xs font-medium text-fg-4">Bedrooms</span>
+				<div class="mt-3 flex flex-wrap items-center gap-2">
+					<span class="text-xs font-medium text-fg-4">Bedrooms</span>
+					<div class="ui-segmented">
 					<button
 						type="button"
 						onclick={() => (pipelineRooms = null)}
-						class="rounded-md px-3 py-1 text-xs font-medium transition-colors {pipelineRooms === null ? 'bg-primary-light text-on-navy' : 'border border-border bg-card text-fg-2 hover:border-strong'}"
+						class="ui-segmented-item px-3 py-1 text-xs"
+						data-active={pipelineRooms === null}
 					>
 						All
 					</button>
@@ -1586,11 +1567,13 @@ onMount(() => {
 						<button
 							type="button"
 							onclick={() => (pipelineRooms = room)}
-							class="rounded-md px-3 py-1 text-xs font-medium transition-colors {pipelineRooms === room ? 'bg-primary-light text-on-navy' : 'border border-border bg-card text-fg-2 hover:border-strong'}"
+							class="ui-segmented-item px-3 py-1 text-xs"
+							data-active={pipelineRooms === room}
 						>
 							{room}
 						</button>
 					{/each}
+					</div>
 				</div>
 			{/if}
 

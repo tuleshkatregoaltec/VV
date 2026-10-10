@@ -18,6 +18,7 @@ def sales_filters(
         default=None, description="DXBI area or community: every record its DXBI area page counts"
     ),
     building: Optional[str] = Query(default=None, description="DXBI building name"),
+    project: Optional[str] = Query(default=None, description="DXBI project name"),
     timeframe_days: Optional[int] = Query(
         default=None, ge=1, description="Last N calendar days, today included"
     ),
@@ -39,6 +40,7 @@ def sales_filters(
         status=status,
         location=location,
         building=building,
+        project=project,
         timeframe_days=timeframe_days,
         size_min=size_min,
         size_max=size_max,
@@ -60,6 +62,7 @@ def rental_filters(
         default=None, description="DXBI area or community: every record its DXBI area page counts"
     ),
     building: Optional[str] = Query(default=None, description="DXBI building name"),
+    project: Optional[str] = Query(default=None, description="DXBI project name"),
     timeframe_days: Optional[int] = Query(
         default=None,
         ge=1,
@@ -81,6 +84,7 @@ def rental_filters(
         contract_type=contract_type,
         location=location,
         building=building,
+        project=project,
         timeframe_days=timeframe_days,
         size_min=size_min,
         size_max=size_max,

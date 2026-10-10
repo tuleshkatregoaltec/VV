@@ -23,6 +23,7 @@ export type ColumnDefinition = {
 	format?: (value: any, row?: any) => string
 	badge?: boolean
 	highlighted?: boolean
+	wrap?: boolean // Long names wrap to a second line instead of widening the table
 	defaultVisible?: boolean // If false, column is hidden by default but can be toggled on
 }
 
@@ -47,9 +48,9 @@ function formatMonths(value: number | null | undefined): string {
 export const SALES_COLUMNS: ColumnDefinition[] = [
 	{ id: 'date', label: 'Date', align: 'left', defaultVisible: true },
 	{ id: 'unit', label: 'Unit', align: 'left', defaultVisible: true },
-	{ id: 'building', label: 'Building', align: 'left', defaultVisible: true },
-	{ id: 'location', label: 'Location', align: 'left', defaultVisible: true },
-	{ id: 'project', label: 'Project', align: 'left', defaultVisible: false },
+	{ id: 'building', label: 'Building', align: 'left', wrap: true, defaultVisible: true },
+	{ id: 'project', label: 'Project', align: 'left', wrap: true, defaultVisible: true },
+	{ id: 'location', label: 'Location', align: 'left', wrap: true, defaultVisible: true },
 	{ id: 'propertyType', label: 'Property Type', align: 'left', defaultVisible: true },
 	{ id: 'bedrooms', label: 'Bedrooms', align: 'left', badge: true, defaultVisible: true },
 	{ id: 'size', label: 'Size (sq ft)', align: 'right', format: formatSqft, defaultVisible: true },
@@ -70,9 +71,9 @@ export const RENTAL_COLUMNS: ColumnDefinition[] = [
 	{ id: 'startDate', label: 'Start Date', align: 'left', defaultVisible: true },
 	{ id: 'endDate', label: 'End Date', align: 'left', defaultVisible: true },
 	{ id: 'unit', label: 'Unit', align: 'left', defaultVisible: true },
-	{ id: 'building', label: 'Building', align: 'left', defaultVisible: true },
-	{ id: 'location', label: 'Location', align: 'left', defaultVisible: true },
-	{ id: 'project', label: 'Project', align: 'left', defaultVisible: false },
+	{ id: 'building', label: 'Building', align: 'left', wrap: true, defaultVisible: true },
+	{ id: 'project', label: 'Project', align: 'left', wrap: true, defaultVisible: true },
+	{ id: 'location', label: 'Location', align: 'left', wrap: true, defaultVisible: true },
 	{ id: 'propertyType', label: 'Property Type', align: 'left', defaultVisible: true },
 	{ id: 'bedrooms', label: 'Bedrooms', align: 'left', badge: true, defaultVisible: true },
 	{ id: 'size', label: 'Size (sq ft)', align: 'right', format: formatSqft, defaultVisible: true },

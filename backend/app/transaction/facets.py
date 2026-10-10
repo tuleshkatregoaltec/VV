@@ -26,6 +26,7 @@ async def get_sales_filter_options(filters: SalesFilters) -> FilterOptionsRespon
     return FilterOptionsResponse(
         locations=_options(facets.get("location_options")),
         buildings=_options(facets.get("building_options")),
+        projects=_options(facets.get("project_options")),
         property_types=_options(facets.get("property_type_options")),
         bedrooms=_bedrooms(facets.get("bedroom_options")),
         statuses=_options(facets.get("status_options")),
@@ -38,6 +39,7 @@ async def get_rental_filter_options(filters: RentalFilters) -> FilterOptionsResp
     return FilterOptionsResponse(
         locations=_options(facets.get("location_options")),
         buildings=_options(facets.get("building_options")),
+        projects=_options(facets.get("project_options")),
         property_types=_options(facets.get("property_type_options")),
         bedrooms=_bedrooms(facets.get("bedroom_options")),
         contract_types=_options(facets.get("contract_type_options")),

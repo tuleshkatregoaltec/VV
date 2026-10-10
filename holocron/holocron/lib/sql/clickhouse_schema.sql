@@ -310,6 +310,25 @@ CREATE TABLE IF NOT EXISTS dxbi_locations (
 ) ENGINE = ReplacingMergeTree(loaded_at)
 ORDER BY location_id;
 
+-- Every place in DXBI's location list with the keys a stored sale or lease of that path carries,
+-- and the building, project and area DXBI gives it (holocron.sources.dxbi.places): the
+-- Transactions pages' Building and Project labels.
+CREATE TABLE IF NOT EXISTS dxbi_places (
+    location_id    UInt32,
+    flag           LowCardinality(String),
+    path           String,
+    path_key       String,
+    building_key   String,
+    area_key       String,
+    match_rank     UInt8,
+    building_label String DEFAULT '',
+    project_label  String DEFAULT '',
+    area_label     String DEFAULT '',
+    source_run_id  String DEFAULT '',
+    loaded_at      DateTime64(3, 'UTC') DEFAULT now64(3)
+) ENGINE = MergeTree
+ORDER BY (building_key, area_key, location_id);
+
 -- The sales DXBI's search returns for each location over a window (scripts/dxbi_location_sweep.py):
 -- how DXBI's area pages group sales, which can differ from the area printed on a row.
 CREATE TABLE IF NOT EXISTS dxbi_location_members (
