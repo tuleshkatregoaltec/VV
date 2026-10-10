@@ -21,7 +21,7 @@ Execution is sequential. Each implementation step is checked before the next beg
 - [x] A7 Expose/retry Analytics panel and comparison/forecast errors.
 - [x] A8 Support keyboard selection in project and sub-project search.
 - [x] Combined backend, ClickHouse, frontend, browser, contract and build checks.
-- [ ] Updated evidence, review, commits, push and PR.
+- [x] Updated evidence, review, commits, push and PR.
 
 Historical audit reports remain baseline evidence. Final verification and any limitations will be recorded separately here.
 
@@ -52,3 +52,5 @@ A7: six live fault/recovery regressions passed: trends, distribution, supply, fo
 A8: four browser keyboard regressions passed, including master drill-down, Tab/Enter, arrows/Escape and modal containment.
 
 Final verification: 353 backend, 53 ClickHouse, 59 frontend and 40 unique browser cases passed; 405 independent Transactions source/API checks passed. Canonical Analytics sales/stock and pipeline totals reconcile. Svelte check has zero errors/warnings; lint, regenerated contracts and production build pass. Expanded recovery coverage found a search-retry focus edge case; retaining input focus fixed it and the final 18-case Analytics run passed. Existing build notices and verification limits are recorded in REPORT.md.
+
+Completed: [PR #42](https://github.com/Kian-Sham/VV/pull/42), stacked on PR #41. Backend fixes, frontend fixes/tests and audit evidence are committed separately. The unrelated pipeline-document edit remains local and excluded.

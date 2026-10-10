@@ -1,5 +1,7 @@
 # Transactions and Analytics audit resolution — 10 October 2026
 
+Implementation: [PR #42](https://github.com/Kian-Sham/VV/pull/42), stacked on [PR #41](https://github.com/Kian-Sham/VV/pull/41).
+
 This follow-up resolves the 14 confirmed findings from the [Transactions audit](../transactions-2026-10-10/REPORT.md) and [Analytics audit](../analytics-2026-10-10/REPORT.md). Those reports and their screenshots describe the original defects at `aed5309`; they are historical evidence, not the final state. Implementation proceeded in the order recorded in [PLAN.md](PLAN.md), with focused checks before each next fix.
 
 ## Architecture and coverage
