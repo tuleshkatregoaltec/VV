@@ -26,7 +26,7 @@ __________ test_same_named_towers_in_different_areas_keep_both_sales ___________
 tests/integration/clickhouse/test_transactions.py:577: in test_same_named_towers_in_different_areas_keep_both_sales
     assert {row.transaction_id for row in page.transactions} == {"area-a", "area-b"}
 E   AssertionError: assert {'area-a'} == {'area-a', 'area-b'}
-E     
+E
 E     Extra items in the right set:
 E     'area-b'
 E     Use -v to get more diff
@@ -34,7 +34,7 @@ _________ test_missing_unit_in_other_building_is_not_a_duplicate_lease _________
 tests/integration/clickhouse/test_transactions.py:590: in test_missing_unit_in_other_building_is_not_a_duplicate_lease
     assert {row.contract_id for row in page.contracts} == {"tower-a", "tower-b"}
 E   AssertionError: assert {'tower-a'} == {'tower-a', 'tower-b'}
-E     
+E
 E     Extra items in the right set:
 E     'tower-b'
 E     Use -v to get more diff
@@ -63,7 +63,7 @@ _________ test_selected_export_metadata_does_not_claim_ignored_filters _________
 tests/unit/test_transaction_exports.py:160: in test_selected_export_metadata_does_not_claim_ignored_filters
     assert "location=Elsewhere" not in metadata
 E   AssertionError: assert 'location=Elsewhere' not in 'contract_id...frame_days=7'
-E     
+E
 E     'location=Elsewhere' is contained here:
 E       contract_ids=R-1, location=Elsewhere, timeframe_days=7
 E     ?                   ++++++++++++++++++
