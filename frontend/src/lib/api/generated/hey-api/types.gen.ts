@@ -7632,6 +7632,22 @@ export type ProjectPipelinePoint = {
  */
 export type ProjectPipelineResponse = {
     /**
+     * Reference Date
+     */
+    reference_date?: string | null;
+    /**
+     * Overdue Units
+     *
+     * Uncompleted units with an elapsed planned end date
+     */
+    overdue_units?: number;
+    /**
+     * Undated Units
+     *
+     * Uncompleted units without a delivery date
+     */
+    undated_units?: number;
+    /**
      * Area Name
      */
     area_name?: string | null;

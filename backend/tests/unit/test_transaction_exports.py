@@ -143,3 +143,35 @@ async def test_rental_export_selected_ids_override_filters(monkeypatch):
     assert [cell.value for cell in sheet[6]] == transaction_service.RENTAL_EXPORT_HEADERS
     assert sheet["A7"].value == "R-1"
     assert sheet["D7"].value == "G29"
+
+
+async def test_selected_export_metadata_does_not_claim_ignored_filters(monkeypatch):
+    # A downloaded workbook must accurately explain its contents to another analyst.
+    # Selected IDs override the screen filters, so those filters were not applied.
+    async def fake_query(sql, params):
+        return [RENTAL_ROW]
+
+    monkeypatch.setattr(queries, "query", fake_query)
+    stream = await transaction_service.export_rental_contracts(
+        RentalFilters(location="Elsewhere", timeframe_days=7), contract_ids="R-1"
+    )
+    metadata = load_workbook(stream)["Metadata"]["B7"].value
+    assert "contract_ids=R-1" in metadata
+    assert "location=Elsewhere" not in metadata
+    assert "timeframe_days=7" not in metadata
+
+
+async def test_selected_sale_export_metadata_omits_unapplied_filters(monkeypatch):
+    async def fake_query(sql, params):
+        return [SALES_ROW]
+
+    monkeypatch.setattr(queries, "query", fake_query)
+    stream = await transaction_service.export_sales_transactions(
+        SalesFilters(location="Elsewhere", timeframe_days=7), transaction_ids=" T-1, "
+    )
+    assert load_workbook(stream)["Metadata"]["B7"].value == "transaction_ids=T-1"
+
+    stream = await transaction_service.export_sales_transactions(
+        SalesFilters(location="Dubai Marina"), transaction_ids=" , "
+    )
+    assert "location=Dubai Marina" in load_workbook(stream)["Metadata"]["B7"].value

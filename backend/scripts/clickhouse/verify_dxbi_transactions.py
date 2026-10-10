@@ -208,10 +208,17 @@ class Verifier:
         ).drop_duplicates("sale_key")
         versions = raw - len(sales)
         # One real (numbered) unit sold on one day at one price is one sale; the scrape wins.
-        numbered = sales.unit_number.str.contains(r"[0-9]")
+        area_identity = sales.area_key.where(sales.area_key != "", sales.area_name.map(_search_key))
+        numbered = (
+            sales.unit_number.str.contains(r"[0-9]")
+            & (sales.building_key != "")
+            & (area_identity != "")
+        )
         sales["same"] = sales.sale_key
         sales.loc[numbered, "same"] = (
-            sales.building_key
+            area_identity
+            + "|"
+            + sales.building_key
             + "|"
             + sales.unit_number
             + "|"
@@ -273,8 +280,10 @@ class Verifier:
             ["lease_start", "contract_key"]
         )
         current = len(rentals)
-        # A lease listed without its unit whose terms equal a numbered lease's is that lease.
+        # Only the same explicit building path and terms can identify a unit-less copy.
         terms = [
+            "location_name",
+            "building_name",
             "area_name",
             "property_type",
             "bedrooms",
@@ -287,8 +296,11 @@ class Verifier:
         numbered_terms = set(
             rentals[rentals.unit_number != ""][terms].astype(str).agg("|".join, axis=1)
         )
-        copy = (rentals.unit_number == "") & rentals[terms].astype(str).agg("|".join, axis=1).isin(
-            numbered_terms
+        copy = (
+            (rentals.unit_number == "")
+            & (rentals.building_name != "")
+            & (rentals.area_name != "")
+            & rentals[terms].astype(str).agg("|".join, axis=1).isin(numbered_terms)
         )
         rentals = rentals[~copy]
         copies = int(copy.sum())

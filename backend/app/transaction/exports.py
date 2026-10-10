@@ -188,7 +188,11 @@ async def export_sales_transactions(
     return _workbook(
         title="Sales Transactions",
         source="DXBInteract (DXBI) sold transactions",
-        filters={"transaction_ids": transaction_ids, **filters.model_dump()},
+        filters=(
+            {"transaction_ids": ",".join(queries._ids(transaction_ids))}
+            if queries._ids(transaction_ids)
+            else filters.model_dump()
+        ),
         headers=SALES_EXPORT_HEADERS,
         rows=rows,
     )
@@ -225,7 +229,11 @@ async def export_rental_contracts(
     return _workbook(
         title="Rental Contracts",
         source="DXBInteract (DXBI) rental contracts",
-        filters={"contract_ids": contract_ids, **filters.model_dump()},
+        filters=(
+            {"contract_ids": ",".join(queries._ids(contract_ids))}
+            if queries._ids(contract_ids)
+            else filters.model_dump()
+        ),
         headers=RENTAL_EXPORT_HEADERS,
         rows=rows,
     )

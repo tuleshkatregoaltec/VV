@@ -562,3 +562,59 @@ async def test_exports_hold_the_page_rows_and_neutralise_formulas(dxbi):
     assert [(r["Unit"], r["Annual Rent (AED)"], r["Contract Amount (AED)"]) for r in rows] == [
         ("1101", "160000", "320000")
     ]
+
+
+async def test_same_named_towers_in_different_areas_keep_both_sales(dxbi):
+    # Unit numbers and tower names are only unique within a location. Two source detail
+    # URLs establish distinct sales even when their date, price and unit happen to match.
+    await dxbi(
+        sales=[
+            sale(
+                "area-a",
+                building_name="Tower 1",
+                building_key="tower1",
+                area_name="Dubai Marina",
+                area_key="dubaimarina",
+            ),
+            sale(
+                "area-b",
+                building_name="Tower 1",
+                building_key="tower1",
+                area_name="Business Bay",
+                area_key="businessbay",
+            ),
+        ]
+    )
+    page = await service.fetch_sales_transactions(SalesFilters(timeframe_days=30), 30, 0)
+    assert {row.transaction_id for row in page.transactions} == {"area-a", "area-b"}
+    assert page.total == 2
+
+
+async def test_missing_unit_in_other_building_is_not_a_duplicate_lease(dxbi):
+    # Equal commercial terms do not identify a property: another tower's lease with an
+    # unknown unit must remain visible, rather than being mistaken for a numbered unit.
+    await dxbi(
+        leases=[
+            lease("tower-a", building_name="Tower A", location_name="Tower A, Dubai Marina"),
+            lease(
+                "tower-b",
+                unit_number="",
+                building_name="Tower B",
+                location_name="Tower B, Dubai Marina",
+            ),
+        ]
+    )
+    page = await service.fetch_rental_contracts(RentalFilters(timeframe_days=30), 30, 0)
+    assert {row.contract_id for row in page.contracts} == {"tower-a", "tower-b"}
+    assert page.total == 2
+
+
+async def test_unknown_building_does_not_prove_a_unitless_lease_is_a_copy(dxbi):
+    await dxbi(
+        leases=[
+            lease("numbered", building_name="", location_name="Dubai Marina"),
+            lease("unknown", unit_number="", building_name="", location_name="Dubai Marina"),
+        ]
+    )
+    page = await service.fetch_rental_contracts(RentalFilters(timeframe_days=30), 30, 0)
+    assert {row.contract_id for row in page.contracts} == {"numbered", "unknown"}

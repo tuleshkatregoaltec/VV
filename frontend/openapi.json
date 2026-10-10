@@ -22099,6 +22099,30 @@
 			},
 			"ProjectPipelineResponse": {
 				"properties": {
+					"reference_date": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "date"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Reference Date"
+					},
+					"overdue_units": {
+						"type": "integer",
+						"title": "Overdue Units",
+						"description": "Uncompleted units with an elapsed planned end date",
+						"default": 0
+					},
+					"undated_units": {
+						"type": "integer",
+						"title": "Undated Units",
+						"description": "Uncompleted units without a delivery date",
+						"default": 0
+					},
 					"area_name": {
 						"anyOf": [
 							{

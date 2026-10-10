@@ -11,47 +11,36 @@ Bounds = tuple[Optional[float], Optional[float]]
 
 
 def search_projects() -> str:
+    # Search the same names used by Analytics predicates, not the map/display catalogue.
+    # Include projects without sales so rental-only and registered launches remain reachable.
     return """
-        WITH virtual_masters AS (
-            SELECT DISTINCT substring(project_name_en, 1, position(project_name_en, ' - ') - 1) AS prefix
-            FROM ch_transactions
+        WITH scopes AS (
+            SELECT DISTINCT project_name_en, master_project_en FROM ch_transactions
+            UNION DISTINCT
+            SELECT DISTINCT project_name_en, master_project_en FROM ch_rent_contracts
+            UNION DISTINCT
+            SELECT DISTINCT project_name_en, master_project_en FROM ch_projects
+            UNION DISTINCT
+            SELECT DISTINCT project_name_en, master_project_en FROM ch_units
+        ), virtual_masters AS (
+            SELECT DISTINCT substring(project_name_en, 1, position(project_name_en, ' - ') - 1) AS name
+            FROM scopes
             WHERE position(project_name_en, ' - ') > 0
               AND (master_project_en = '' OR master_project_en IS NULL)
-              AND project_name_en <> ''
         )
-        SELECT name, filter_type
+        SELECT DISTINCT name, filter_type
         FROM (
-            SELECT DISTINCT master_project_en AS name, 'master' AS filter_type
-            FROM ch_transactions
-            WHERE master_project_en <> ''
-              AND lower(master_project_en) LIKE {search_pattern:String}
-
+            SELECT master_project_en AS name, 'master' AS filter_type FROM scopes
+            WHERE master_project_en != ''
             UNION ALL
-
-            SELECT prefix AS name, 'virtual_master' AS filter_type
-            FROM virtual_masters
-            WHERE lower(prefix) LIKE {search_pattern:String}
-
+            SELECT name, 'virtual_master' AS filter_type FROM virtual_masters
+            WHERE name NOT IN (SELECT master_project_en FROM scopes)
             UNION ALL
-
-            SELECT DISTINCT project_name_en AS name, 'project' AS filter_type
-            FROM ch_transactions
-            WHERE (master_project_en = '' OR master_project_en IS NULL)
-              AND project_name_en <> ''
-              AND lower(project_name_en) LIKE {search_pattern:String}
-              AND project_name_en NOT IN (SELECT prefix FROM virtual_masters)
-              AND (
-                  position(project_name_en, ' - ') = 0
-                  OR substring(project_name_en, 1, position(project_name_en, ' - ') - 1)
-                     NOT IN (SELECT prefix FROM virtual_masters)
-              )
-              AND NOT (
-                  position(project_name_en, ' - ') > 0
-                  AND lower(substring(project_name_en, 1, position(project_name_en, ' - ') - 1))
-                      IN (SELECT lower(master_project_en) FROM ch_transactions WHERE master_project_en <> '')
-              )
+            SELECT project_name_en AS name, 'project' AS filter_type FROM scopes
+            WHERE project_name_en != ''
         )
-        ORDER BY name
+        WHERE lowerUTF8(name) LIKE {search_pattern:String}
+        ORDER BY name, filter_type
         LIMIT {limit:Int32}
     """
 
@@ -251,16 +240,7 @@ def project_rentals_by_rooms(filter_type: ProjectScopeType = "project") -> str:
 
 
 def project_units_composition(filter_type: ProjectScopeType = "project") -> str:
-    if filter_type == "market":
-        where = "1 = 1"
-    elif filter_type == "virtual_master":
-        where = "project_name_en LIKE {project_name:String}"
-    elif filter_type == "master":
-        where = """(master_project_en = {project_name:String}
-            OR (lower(project_name_en) LIKE concat(lower({project_name:String}), ' - %')
-                AND (master_project_en = '' OR master_project_en IS NULL)))"""
-    else:
-        where = "master_project_en = {project_name:String}"
+    where = _project_filter(filter_type)
     return f"""
         SELECT
             rooms_en,
@@ -658,8 +638,8 @@ def area_supply_projects(filter_by_area: bool = True) -> str:
             p.area_name_en,
             p.project_status,
             p.project_start_date,
-            p.project_end_date,
-            p.completion_date,
+            toDate(p.project_end_date) AS project_end_date,
+            toDate(p.completion_date) AS completion_date,
             p.percent_completed,
             p.no_of_units
         FROM ch_projects p
