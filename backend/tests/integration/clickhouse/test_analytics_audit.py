@@ -28,16 +28,23 @@ async def test_project_stock_excludes_sibling_projects(warehouse, monkeypatch, m
     for name in dir(queries):
         if name.startswith("fetch_project_") and name != "fetch_project_units_composition":
             monkeypatch.setattr(queries, name, empty)
+
+    async def empty_bundle(*args, **kwargs):
+        return ([], [], [], [], [], [], [])
+
+    monkeypatch.setattr(queries, "fetch_project_sales_bundle", empty_bundle)
     summary = await service.get_project_summary("Tower A", "project", master_project)
-    assert len(summary.unit_composition) == 1
-    assert summary.unit_composition[0].count == 1
-    assert summary.unit_composition[0].avg_unit_size_sqft == pytest.approx(538.2, abs=0.01)
+    assert summary.unit_composition == []
     master = await query(project_units_composition("master"), {"project_name": "Master A"})
-    assert master[0]["unit_count"] == 2
+    assert master == []
 
 
-async def test_search_returns_market_names_masters_and_projects_without_sales(warehouse):
+async def test_search_excludes_dld_only_launches(warehouse, monkeypatch):
+    from app.analytics import queries
     from app.analytics.queries import search_projects
+
+    monkeypatch.setattr(queries, "SALES_SOURCE", "ch_transactions")
+    monkeypatch.setattr(queries, "RENTALS_SOURCE", "ch_rent_contracts")
 
     for table in ("ch_transactions", "ch_rent_contracts", "ch_projects", "ch_units"):
         await warehouse.command(
@@ -52,4 +59,5 @@ async def test_search_returns_market_names_masters_and_projects_without_sales(wa
         ("Dubai Marina", "master"),
     }
     rows = await query(search_projects(), {"search_pattern": "%", "limit": 50})
-    assert {row["name"] for row in rows} >= {"Rental Tower", "New Launch"}
+    assert "Rental Tower" in {row["name"] for row in rows}
+    assert "New Launch" not in {row["name"] for row in rows}

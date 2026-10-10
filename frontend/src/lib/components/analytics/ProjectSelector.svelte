@@ -26,6 +26,12 @@ let isOpen = $state(false)
 let container: HTMLDivElement
 let input: HTMLInputElement
 const searchTerm = $derived(inputValue.trim())
+let debouncedSearch = $state('')
+$effect(() => {
+	const term = searchTerm
+	const timer = setTimeout(() => (debouncedSearch = term), 250)
+	return () => clearTimeout(timer)
+})
 
 function clickOutside(node: HTMLElement, callback: () => void) {
 	function handle(e: MouseEvent) {
@@ -40,7 +46,7 @@ function clickOutside(node: HTMLElement, callback: () => void) {
 }
 
 const projectsQuery = createQuery(() => ({
-	...analyticsQueries.projectSearch(searchTerm, 50),
+	...analyticsQueries.projectSearch(debouncedSearch, 50),
 	enabled: browser && isOpen
 }))
 
@@ -80,7 +86,8 @@ function handleKeydown(e: KeyboardEvent) {
 	}
 	if (e.key === 'Enter' && e.target === input) {
 		e.preventDefault()
-		if (filtered.length > 0) select(filtered[0])
+		if (searchTerm === debouncedSearch && !projectsQuery.isFetching && filtered.length > 0)
+			select(filtered[0])
 	}
 }
 </script>
@@ -127,7 +134,7 @@ function handleKeydown(e: KeyboardEvent) {
 
 	{#if isOpen}
 		<div id={listId} role="listbox" aria-label={`${label} results`} tabindex="-1" class="ui-menu absolute z-50 mt-2 max-h-72 w-full overflow-y-auto p-1.5">
-			{#if projectsQuery.isLoading}
+			{#if projectsQuery.isLoading || searchTerm !== debouncedSearch}
 				<div class="px-3 py-2 text-sm text-fg-5">Loading...</div>
 			{:else if projectsQuery.isError}
 				<AnalyticsError message="Failed to load projects." retry={() => { input.focus(); return projectsQuery.refetch() }} fetching={projectsQuery.isFetching} />

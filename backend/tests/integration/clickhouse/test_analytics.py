@@ -1,5 +1,19 @@
+import pytest
+
 from app.analytics.queries import project_sales_summary
 from app.clickhouse.client import query
+
+
+@pytest.fixture(autouse=True)
+def aggregate_projection_fixture(monkeypatch):
+    """Test aggregation semantics on small projection fixtures.
+
+    Real DXBI source selection is exercised separately in test_analytics_dxbi.py.
+    """
+    from app.analytics import queries
+
+    monkeypatch.setattr(queries, "SALES_SOURCE", "ch_transactions")
+    monkeypatch.setattr(queries, "RENTALS_SOURCE", "ch_rent_contracts")
 
 
 async def test_sales_summary_applies_residential_and_project_scope_in_clickhouse(warehouse):
@@ -309,7 +323,7 @@ async def test_unit_size_is_the_median_and_the_middle_68_percent_is_measured(war
         column_names=["project_name_en", "master_project_en", "rooms_en", "actual_area"],
     )
     units = await query(project_units_composition("market"))
-    assert units[0]["median_unit_size_sqft"] == round(40 * 10.7639, 2)  # one of the sizes
+    assert units == []  # DLD registry stock is intentionally unavailable in DXBI analytics.
 
     await warehouse.command("""
         CREATE TABLE ch_transactions (

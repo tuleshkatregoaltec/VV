@@ -12,6 +12,7 @@ from app.transaction.models import RentalFilters, SalesFilters
 TODAY = date.today()
 SALE_COLUMNS = (
     "sale_key",
+    "dld_transaction_number",
     "transaction_date",
     "unit_number",
     "building_name",
@@ -62,6 +63,7 @@ LOADED = datetime(2026, 1, 1, tzinfo=UTC)
 def sale(key: str, **values) -> list:
     row = {
         "sale_key": key,
+        "dld_transaction_number": "",
         "transaction_date": TODAY - timedelta(days=1),
         "unit_number": "101",
         "building_name": "Tower A",
@@ -297,6 +299,78 @@ async def test_sales_filters_bands_usage_and_locations(dxbi):
     )
     row = next(r for r in misread.transactions if r.transaction_id == "misread")
     assert (row.location_name, row.property_type, row.unit_number) == (None, None, "630")
+
+
+async def test_sales_facets_offer_alternatives_without_losing_other_constraints(dxbi):
+    """An agent can replace any one selection without first clearing the whole search."""
+    changes = [
+        {},
+        {"property_type": "Villa"},
+        {"bedrooms": "2 Beds"},
+        {"market_status": "Offplan"},
+        {"area_name": "Dubai Marina"},
+        {"building_name": "Tower B", "building_key": "towerb"},
+        {"project_name": "Development B"},
+        {"property_type": "Townhouse", "sale_amount_aed": 5_000_000},
+        {"property_type": "Townhouse", "transaction_date": TODAY - timedelta(days=90)},
+    ]
+    await dxbi(
+        sales=[
+            sale(f"facet-{i}", **{"unit_number": str(i), "project_name": "Development A", **change})
+            for i, change in enumerate(changes)
+        ]
+    )
+    selected = SalesFilters(
+        timeframe_days=30,
+        property_usage="Residential",
+        property_type="Apartment",
+        bedrooms="1 Bed",
+        status="Ready",
+        location="Downtown Dubai",
+        building="Tower A",
+        project="Development A",
+        price_max=2_000_000,
+    )
+    result = await service.fetch_sales_transactions(selected, 100, 0)
+    assert result.total == 1
+    assert [row.transaction_id for row in result.transactions] == ["facet-0"]
+    options = await facets.get_sales_filter_options(selected)
+    assert options.property_types == ["Apartment", "Villa"]
+    assert options.bedrooms == ["1 Bed", "2 Beds"]
+    assert options.statuses == ["Off-Plan", "Ready"]
+    assert options.locations == ["Downtown Dubai", "Dubai Marina"]
+    assert options.buildings == ["Tower A", "Tower B"]
+    assert options.projects == ["Development A", "Development B"]
+
+    # Even an obsolete selection must permit recovery; don't claim it is an available option.
+    missing = selected.model_copy(update={"bedrooms": "99 Beds"})
+    assert (await service.fetch_sales_transactions(missing, 100, 0)).total == 0
+    assert (await facets.get_sales_filter_options(missing)).bedrooms == ["1 Bed", "2 Beds"]
+
+
+async def test_rental_facets_allow_replacing_contract_and_bedroom_selections(dxbi):
+    await dxbi(
+        leases=[
+            lease("base", unit_number="1", contract_state="New"),
+            lease("renew", unit_number="2", contract_state="Renewed"),
+            lease("beds", unit_number="3", bedrooms="3 Beds", contract_state="New"),
+            lease("expensive", unit_number="4", bedrooms="4 Beds", annual_rent_aed=900_000),
+        ]
+    )
+    selected = RentalFilters(
+        timeframe_days=30,
+        property_usage="Residential",
+        location="Dubai Marina",
+        property_type="Apartment",
+        bedrooms="2 Beds",
+        contract_type="New",
+        rent_max=200_000,
+    )
+    result = await service.fetch_rental_contracts(selected, 100, 0)
+    assert result.total == 1
+    options = await facets.get_rental_filter_options(selected)
+    assert options.contract_types == ["New", "Renewed"]
+    assert options.bedrooms == ["2 Beds", "3 Beds"]
 
 
 async def test_building_and_project_are_what_dxbi_location_list_says(dxbi, warehouse):
@@ -618,3 +692,180 @@ async def test_unknown_building_does_not_prove_a_unitless_lease_is_a_copy(dxbi):
     )
     page = await service.fetch_rental_contracts(RentalFilters(timeframe_days=30), 30, 0)
     assert {row.contract_id for row in page.contracts} == {"numbered", "unknown"}
+
+
+async def test_project_context_resolves_repeated_towers_without_guessing(dxbi, warehouse):
+    from app.transaction.queries import _sales_source
+
+    await warehouse.insert(
+        "dxbi_places",
+        [
+            [
+                1,
+                "tower1",
+                "jvc",
+                "Tower 1, May Residence, JVC",
+                "B",
+                "Tower 1",
+                "May Residence",
+                "JVC",
+                "catalogue-1",
+            ],
+            [
+                2,
+                "tower1",
+                "jvc",
+                "Tower 1, Elitz, JVC",
+                "B",
+                "Tower 1",
+                "Elitz",
+                "JVC",
+                "catalogue-1",
+            ],
+        ],
+        column_names=[
+            "location_id",
+            "building_key",
+            "area_key",
+            "path",
+            "flag",
+            "building_label",
+            "project_label",
+            "area_label",
+            "source_run_id",
+        ],
+    )
+    common = dict(building_name="Tower 1", building_key="tower1", area_name="JVC", area_key="jvc")
+    await dxbi(
+        sales=[
+            sale("may", project_name="May Residence", **common),
+            sale("elitz", project_name="Elitz", **common),
+            sale("unknown", project_name="", **common),
+        ]
+    )
+    page = await service.fetch_sales_transactions(SalesFilters(), 10, 0)
+    assert page.total == 3  # Equal unit/date/price in different projects cannot prove duplication.
+    rows = {r.transaction_id: r for r in page.transactions}
+    assert rows["may"].project_name == "May Residence"
+    assert rows["elitz"].project_name == "Elitz"
+    assert rows["unknown"].project_name is None
+    assert rows["unknown"].building_name == "Tower 1"  # Agreed fields remain usable.
+    scoped = await service.fetch_sales_transactions(SalesFilters(project="Elitz"), 10, 0)
+    assert [r.transaction_id for r in scoped.transactions] == ["elitz"]
+    options = await facets.get_sales_filter_options(SalesFilters())
+    assert options.projects == ["Elitz", "May Residence"]
+    exported = await exports.export_sales_transactions(
+        SalesFilters(project="Elitz"), file_format="csv"
+    )
+    records = list(csv.DictReader(io.StringIO(exported.getvalue().decode("utf-8-sig"))))
+    assert [r["Transaction ID"] for r in records] == ["elitz"]
+    evidence = await warehouse.query(
+        f"SELECT location_resolution, location_candidate_count, location_evidence "
+        f"FROM ({_sales_source('1=1')}) WHERE transaction_id='unknown'"
+    )
+    assert evidence.result_rows[0][:2] == ("ambiguous", 2)
+    assert {e[1] for e in evidence.result_rows[0][2]} == {"catalogue-1"}
+    # A second read is idempotent, and the source has not acquired our derived values.
+    assert (await service.fetch_sales_transactions(SalesFilters(), 10, 0)) == page
+    original = await warehouse.query(
+        "SELECT project_name FROM dxbi_sales_unit_events WHERE sale_key='unknown'"
+    )
+    assert original.result_rows == [("",)]
+
+
+async def test_conflicting_catalogue_context_never_selects_lowest_id(dxbi, warehouse):
+    await warehouse.insert(
+        "dxbi_places",
+        [
+            [i, "towera", "area", "Tower A, Source Project, Area", "B", "Tower A", project, "Area"]
+            for i, project in [(1, "Wrong Project"), (2, "Other Project")]
+        ],
+        column_names=[
+            "location_id",
+            "building_key",
+            "area_key",
+            "path",
+            "flag",
+            "building_label",
+            "project_label",
+            "area_label",
+        ],
+    )
+    await dxbi(
+        sales=[sale("conflict", project_name="Source Project", area_name="Area", area_key="area")]
+    )
+    result = await service.fetch_sales_transactions(SalesFilters(), 10, 0)
+    assert result.transactions[0].project_name == "Source Project"
+
+
+async def test_distinct_provider_links_survive_identical_terms(dxbi):
+    await dxbi(sales=[sale("first", area_key="downtown"), sale("second", area_key="downtown")])
+    page = await service.fetch_sales_transactions(SalesFilters(), 10, 0)
+    assert page.total == 2
+    assert {row.transaction_id for row in page.transactions} == {"first", "second"}
+    assert sum(row.price_aed for row in page.transactions) == 3_200_000
+
+
+@pytest.mark.parametrize(
+    "conflict",
+    [
+        {"size_sqft": 900},
+        {"project_name": "Different project"},
+        {"dld_transaction_number": "11-2-2026"},
+    ],
+)
+async def test_csv_pair_with_conflicting_evidence_stays_unresolved(dxbi, conflict):
+    await dxbi(
+        sales=[
+            sale("scraped", area_key="downtown", dld_transaction_number="11-1-2026"),
+            sale("csv", area_key="downtown", detail_url="", **conflict),
+        ]
+    )
+    assert (await service.fetch_sales_transactions(SalesFilters(), 10, 0)).total == 2
+
+
+async def test_unidentified_equal_term_sales_are_not_forced_into_one(dxbi):
+    await dxbi(
+        sales=[
+            sale("csv-a", area_key="downtown", detail_url=""),
+            sale("csv-b", area_key="downtown", detail_url=""),
+        ]
+    )
+    assert (await service.fetch_sales_transactions(SalesFilters(), 10, 0)).total == 2
+
+
+async def test_area_only_address_uses_exact_existing_location_catalogue(dxbi, warehouse):
+    await warehouse.insert(
+        "dxbi_locations",
+        [[42, "Um Suqaim First", "A", "catalogue-2"]],
+        column_names=["location_id", "name", "flag", "source_run_id"],
+    )
+    await dxbi(
+        sales=[
+            sale(
+                "plot",
+                building_name="Um Suqaim First",
+                building_key="umsuqaimfirst",
+                area_name="",
+                area_key="",
+                property_type="Plot",
+            ),
+            sale(
+                "elsewhere",
+                building_name="Um Suqaim First",
+                building_key="umsuqaimfirst",
+                area_name="Another Area",
+                area_key="anotherarea",
+            ),
+        ]
+    )
+    page = await service.fetch_sales_transactions(SalesFilters(), 10, 0)
+    rows = {row.transaction_id: row for row in page.transactions}
+    assert rows["plot"].location_name == "Um Suqaim First"
+    assert rows["plot"].building_name is None
+    assert rows["elsewhere"].location_name == "Another Area"
+    assert rows["elsewhere"].building_name == "Um Suqaim First"
+    matched = await service.fetch_sales_transactions(
+        SalesFilters(location="Um Suqaim First"), 10, 0
+    )
+    assert [r.transaction_id for r in matched.transactions] == ["plot"]

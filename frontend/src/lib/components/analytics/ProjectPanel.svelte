@@ -269,10 +269,7 @@ function statusBadgeClass(status: string): string {
 
 function fmtCurrency(n: number | null | undefined): string {
 	if (n == null || !Number.isFinite(n) || n <= 0) return '—'
-	if (n >= 1_000_000_000) return `AED ${(n / 1_000_000_000).toFixed(2)}B`
-	if (n >= 1_000_000) return `AED ${(n / 1_000_000).toFixed(2)}M`
-	if (n >= 1_000) return `AED ${(n / 1_000).toFixed(0)}K`
-	return `AED ${Math.round(n).toLocaleString()}`
+	return `AED ${n.toLocaleString('en-AE', { maximumFractionDigits: 2 })}`
 }
 
 function fmtCompact(n: number | null | undefined): string {
@@ -311,7 +308,7 @@ function fmtSignedPct(n: number | null | undefined, digits = 1): string {
 
 function fmtPsf(pricePerSqft: number | null | undefined): string {
 	if (!pricePerSqft || !Number.isFinite(pricePerSqft)) return ''
-	return `AED ${fmtNumber(pricePerSqft, 0)}/sq ft`
+	return `AED ${fmtNumber(pricePerSqft, 2)}/sq ft`
 }
 
 function pctTone(value: number | null | undefined) {
@@ -415,7 +412,11 @@ let themeVersion = $state(0)
 function buildTrendChart() {
 	const recordedSeries = getRecordedTrendSeries()
 	const forecastSeries = getFutureForecastSeries(recordedSeries)
-	if (!trendCanvas || recordedSeries.length === 0) return
+	if (!trendCanvas || recordedSeries.length === 0) {
+		trendChart?.destroy()
+		trendChart = null
+		return
+	}
 	trendChart?.destroy()
 	const ctx = trendCanvas.getContext('2d')
 	if (!ctx) return
@@ -693,7 +694,11 @@ function buildBellChart() {
 // ─── Pipeline chart ───────────────────────────────────────────────────────
 function buildPipelineChart() {
 	const pipelineData = getPipeline()?.data ?? []
-	if (!pipelineCanvas || pipelineData.length === 0) return
+	if (!pipelineCanvas || pipelineData.length === 0) {
+		pipelineChart?.destroy()
+		pipelineChart = null
+		return
+	}
 	pipelineChart?.destroy()
 	const ctx = pipelineCanvas.getContext('2d')
 	if (!ctx) return
@@ -869,6 +874,15 @@ function buildMarketSplitChart() {
 		}
 	})
 }
+
+$effect(() => {
+	if (
+		distroQuery.data &&
+		distroRooms !== 'All' &&
+		!distroQuery.data.by_rooms.some((row) => row.rooms === distroRooms)
+	)
+		distroRooms = 'All'
+})
 
 // ─── Effects ──────────────────────────────────────────────────────────────
 $effect(() => {
@@ -1061,86 +1075,31 @@ onMount(() => {
 				</div>
 			</div>
 
-			<!-- Metadata strip -->
-			<div class="mt-4 flex flex-wrap gap-4 border-t border-border pt-4">
-				<div class="min-w-[150px] max-w-[260px]">
-					<p class="text-[11px] uppercase tracking-[0.16em] text-fg-4">{getDeveloperLabel(summary, isMasterScope, isMarketScope)}</p>
-					<p class="mt-1 truncate text-sm font-medium text-fg-1" title={getDeveloperDisplay(summary, isMasterScope, isMarketScope)}>
-						{getDeveloperDisplay(summary, isMasterScope, isMarketScope)}
-					</p>
-				</div>
-				<div class="min-w-[100px]">
-					<p class="text-[11px] uppercase tracking-[0.16em] text-fg-4">Units</p>
-					<p class="mt-1 text-sm font-medium text-fg-1">
-						{fmtNumber(summary.project?.no_of_units)}
-					</p>
-				</div>
-				<div class="min-w-[160px]">
-					<p class="text-[11px] uppercase tracking-[0.16em] text-fg-4">Handover</p>
-					{#if isMarketScope}
-						<p class="mt-1 text-sm font-medium text-fg-1">All completions</p>
-					{:else if isMasterScope}
-						<p class="mt-1 text-sm font-medium text-fg-1">Multiple phases</p>
-					{:else if summary.project?.completion_date}
-						<p class="mt-1 text-sm font-medium text-fg-1">
-							{new Date(summary.project.completion_date).toLocaleDateString('en-GB', {
-								month: 'short',
-								year: 'numeric'
-							})}
-						</p>
-					{:else}
-						<p class="mt-1 text-sm font-medium text-fg-1">—</p>
-					{/if}
-					{#if summary.project?.percent_completed != null}
-						<div class="mt-1.5 h-1.5 w-full max-w-[140px] rounded-full bg-panel">
-							<div
-								class="h-1.5 rounded-full bg-primary-light"
-								style="width: {Math.min(100, summary.project.percent_completed)}%"
-							></div>
-						</div>
-						<p class="mt-1 text-[11px] text-fg-4">
-							{fmtPct(summary.project.percent_completed, 0)}
-							{isMasterScope ? 'aggregate completion' : 'complete'}
-						</p>
-					{/if}
-				</div>
-				{#if isMasterScope && subProjects.length > 0}
-					<div class="min-w-[120px]">
-						<p class="text-[11px] uppercase tracking-[0.16em] text-fg-4">Developments</p>
-						<p class="mt-1 text-sm font-medium text-fg-1">
-							{fmtNumber(subProjects.length)}
-						</p>
-					</div>
-				{:else if summary.project?.no_of_buildings}
-					<div class="min-w-[100px]">
-						<p class="text-[11px] uppercase tracking-[0.16em] text-fg-4">Buildings</p>
-						<p class="mt-1 text-sm font-medium text-fg-1">
-							{fmtNumber(summary.project.no_of_buildings)}
-						</p>
-					</div>
-				{/if}
-			</div>
+            <p class="mt-4 border-t border-border pt-3 text-xs text-fg-4">
+                DXBI transactions · Residential properties · All recorded dates.
+                Registered unit stock and delivery forecasts are unavailable from this source.
+            </p>
 		</section>
 
 		<!-- ── KPI cards ──────────────────────────────────────────────── -->
 		<section class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
 			<div class="rounded-lg border border-border bg-card px-5 py-4">
 				<p class="text-[11px] uppercase tracking-[0.18em] text-fg-4">Total Sales</p>
-				<p class="mt-2.5 text-3xl font-semibold text-fg-1">
+				<p class="mt-2.5 break-words text-3xl font-semibold text-fg-1">
 					{fmtNumber(summary.sales.transaction_count)}
 				</p>
 				<p class="mt-1.5 text-sm text-fg-4">transactions</p>
 			</div>
 			<div class="rounded-lg border border-border bg-card px-5 py-4">
 				<p class="text-[11px] uppercase tracking-[0.18em] text-fg-4">Avg Sale Price</p>
-				<p class="mt-2.5 text-3xl font-semibold text-fg-1">
+				<p class="mt-2.5 break-words text-3xl font-semibold text-fg-1">
 					{fmtCurrency(summary.sales.avg_price)}
 				</p>
-				<p class="mt-1.5 text-sm text-fg-4">{fmtCurrency(summary.sales.avg_price_sqft)}/sq ft</p>
+				<p class="mt-1.5 text-sm text-fg-4">{fmtPsf(summary.sales.avg_price_sqft)}</p>
 			</div>
 			<div class="rounded-lg border border-border bg-card px-5 py-4">
 				<p class="text-[11px] uppercase tracking-[0.18em] text-fg-4">Median Annual Rent</p>
-				<p class="mt-2.5 text-3xl font-semibold text-fg-1">
+				<p class="mt-2.5 break-words text-3xl font-semibold text-fg-1">
 					{fmtCurrency(summary.rentals.median_annual_rent)}
 				</p>
 				<p class="mt-1.5 text-sm text-fg-4">
@@ -1149,7 +1108,7 @@ onMount(() => {
 			</div>
 			<div class="rounded-lg border border-border bg-card px-5 py-4">
 				<p class="text-[11px] uppercase tracking-[0.18em] text-info">Gross Yield</p>
-				<p class="mt-2.5 text-3xl font-semibold text-info">
+				<p class="mt-2.5 break-words text-3xl font-semibold text-info">
 					{fmtPct(summary.overall_gross_yield_pct)}
 				</p>
 				<p class="mt-1.5 text-sm text-info">median rent ÷ median sale</p>
@@ -1329,7 +1288,7 @@ onMount(() => {
 								<th class="sticky left-0 z-10 border-b border-border bg-card pb-2.5 pr-6 text-[11px] font-semibold uppercase tracking-[0.14em] text-fg-4">Config</th>
 								<th class="border-b border-border pb-2.5 pr-6 text-right text-[11px] font-semibold uppercase tracking-[0.14em] text-fg-4">Sales</th>
 								<th class="border-b border-border pb-2.5 pr-6 text-right text-[11px] font-semibold uppercase tracking-[0.14em] text-fg-4">Avg Price</th>
-								<th class="border-b border-border pb-2.5 pr-6 text-right text-[11px] font-semibold uppercase tracking-[0.14em] text-fg-4">Size sq ft</th>
+								<th class="border-b border-border pb-2.5 pr-6 text-right text-[11px] font-semibold uppercase tracking-[0.14em] text-fg-4">Median sale size sq ft</th>
 								<th class="border-b border-border pb-2.5 pr-6 text-right text-[11px] font-semibold uppercase tracking-[0.14em] text-fg-4">
 									Momentum<br /><span class="font-normal normal-case tracking-normal text-fg-4">90d shift</span>
 								</th>
@@ -1546,7 +1505,7 @@ onMount(() => {
 
 			{#if pipeline}
 				<p class="mt-2 text-xs text-fg-3">
-					Completed stock uses recorded completion dates. Scheduled deliveries are planned.
+					DLD source. Completed stock uses recorded completion dates. Scheduled deliveries are planned.
 					{#if pipeline.reference_date}As of {pipeline.reference_date}.{/if}
 				</p>
 				{#if pipeline.overdue_units || pipeline.undated_units}

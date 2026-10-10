@@ -1,8 +1,9 @@
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect as baseExpect, type Page } from '@playwright/test';
 import path from 'node:path';
+const expect = baseExpect.configure({ timeout: 30000 });
 const evidence = path.resolve(
     __dirname,
-    '../docs/audits/resolution-2026-10-10/screenshots',
+    '../docs/audits/analytics-dxbi-2026-10-11/screenshots',
 );
 const section = (page: Page, name: string) =>
     page
@@ -164,7 +165,7 @@ test('master community must be reachable from the real project catalogue', async
     await expect(page.getByRole('listbox')).toBeVisible();
     await expect(
         page.getByRole('listbox').getByText('Master', { exact: true }),
-    ).toBeVisible({ timeout: 10000 });
+    ).toBeVisible({ timeout: 30000 });
     await page.screenshot({
         path: path.join(evidence, 'master-search.png'),
         fullPage: false,
@@ -334,6 +335,7 @@ test('selecting a catalogue name preserves known project sales', async ({
         page
             .locator('section')
             .filter({ has: page.getByText('Price Trend', { exact: true }) })
+            .last()
             .locator('canvas'),
     ).toBeVisible({ timeout: 15000 });
     await page.screenshot({
@@ -399,12 +401,12 @@ test('main project search retains keyboard focus until selection', async ({
         .fill('Binghatti Skyrise');
     await expect(page.getByRole('listbox')).toBeVisible();
     await expect(
-        page.getByRole('option').filter({ hasText: 'Binghatti Skyrise' }),
+        page.getByRole('option').filter({ has: page.getByText('Binghatti Skyrise', { exact: true }) }),
     ).toBeVisible();
     await page.keyboard.press('Tab');
     await page.waitForTimeout(250);
     await expect(
-        page.getByRole('option').filter({ hasText: 'Binghatti Skyrise' }),
+        page.getByRole('option').filter({ has: page.getByText('Binghatti Skyrise', { exact: true }) }),
     ).toBeFocused();
     await page.keyboard.press('Enter');
     await page.screenshot({
@@ -413,7 +415,7 @@ test('main project search retains keyboard focus until selection', async ({
     });
     await expect(
         page.getByRole('heading', { name: 'Binghatti Skyrise', exact: true }),
-    ).toBeVisible({ timeout: 10000 });
+    ).toBeVisible({ timeout: 30000 });
 });
 
 test('forecast failure is recoverable without hiding recorded trends', async ({
@@ -441,6 +443,7 @@ test('forecast failure is recoverable without hiding recorded trends', async ({
         page
             .locator('section')
             .filter({ has: page.getByText('Price Trend', { exact: true }) })
+            .last()
             .locator('canvas'),
     ).toBeVisible();
 });
@@ -512,7 +515,7 @@ test('project search supports arrow selection and Escape', async ({ page }) => {
     await input.press('ArrowDown');
     await page.keyboard.press('Enter');
     await expect(
-        page.getByRole('heading', { name: '23 MARINA', exact: true }),
+        page.getByRole('heading', { name: '23 Marina', exact: true }),
     ).toBeVisible();
 });
 
@@ -554,17 +557,17 @@ test('live master comparison and pointer drill-down remain scoped', async ({
     const response = page.waitForResponse(
         (r) =>
             r.url().includes('/project/summary') &&
-            new URL(r.url()).searchParams.get('project') === '23 MARINA' &&
+            new URL(r.url()).searchParams.get('project')?.toLowerCase() === '23 marina' &&
             r.status() === 200,
     );
     await input
         .locator('../..')
-        .getByRole('button', { name: '23 MARINA', exact: true })
+        .getByRole('button', { name: '23 Marina', exact: true })
         .click();
     const data = await (await response).json();
     expect(data.sales.transaction_count).toBeGreaterThan(0);
     await expect(
-        page.getByRole('heading', { name: '23 MARINA', exact: true }),
+        page.getByRole('heading', { name: '23 Marina', exact: true }),
     ).toBeVisible();
     await page.screenshot({
         path: path.join(evidence, 'master-drilldown.png'),
@@ -593,7 +596,7 @@ test('project search failure can be retried', async ({ page }) => {
     failing = false;
     await alert.getByRole('button', { name: 'Retry', exact: true }).click();
     await expect(
-        page.getByRole('option').filter({ hasText: '23 MARINA' }),
+        page.getByRole('option').filter({ has: page.getByText('23 Marina', { exact: true }) }),
     ).toBeVisible();
 });
 

@@ -178,6 +178,7 @@ async def get_market_trend(
 
 
 @router.get("/projects", response_model=ProjectSearchResponse)
+@cached_endpoint(prefix="analytics:dxbi:search:v1", expire=300)
 async def search_projects_endpoint(
     context: AuthContext = Depends(require_active_subscription),
     search: str = Query(default="", description="Master project name search term"),
@@ -188,6 +189,7 @@ async def search_projects_endpoint(
 
 
 @router.get("/project/sub-projects", response_model=SubProjectsResponse)
+@cached_endpoint(prefix="analytics:dxbi:subprojects:v1", expire=300)
 async def get_sub_projects_endpoint(
     context: AuthContext = Depends(require_active_subscription),
     master_project: str = Query(description="Master project name"),
@@ -200,7 +202,7 @@ async def get_sub_projects_endpoint(
 
 
 @router.get("/project/summary", response_model=ProjectAnalyticsResponse)
-@cached_endpoint(prefix="analytics:project_summary:v4", expire=900)
+@cached_endpoint(prefix="analytics:dxbi:project_summary:v2", expire=900)
 async def get_project_summary_endpoint(
     context: AuthContext = Depends(require_active_subscription),
     master_project: Optional[str] = Query(default=None, description="Master project name"),
@@ -225,6 +227,7 @@ async def get_project_summary_endpoint(
 
 
 @router.get("/project/trends", response_model=ProjectTrendsResponse)
+@cached_endpoint(prefix="analytics:dxbi:trends:v1", expire=300)
 async def get_project_trends_endpoint(
     context: AuthContext = Depends(require_active_subscription),
     master_project: Optional[str] = Query(default=None, description="Master project name"),
@@ -280,6 +283,7 @@ async def get_project_pipeline_endpoint(
     "/project/price-distribution",
     response_model=ProjectPriceDistributionResponse,
 )
+@cached_endpoint(prefix="analytics:dxbi:distribution:v1", expire=300)
 async def get_project_price_distribution_endpoint(
     context: AuthContext = Depends(require_active_subscription),
     master_project: Optional[str] = Query(default=None, description="Master project name"),
