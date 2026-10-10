@@ -1514,10 +1514,12 @@ onMount(() => {
 					</div>
 					<div>
 						<p class="text-[11px] font-medium uppercase tracking-[0.14em] text-fg-4">68% of Sales Between</p>
+						<!-- The 16th to 84th percentile of the sales themselves: mean ± one deviation went
+						     below zero for skewed prices ("— – AED 5.75M"). -->
 						<p class="mt-1 text-sm font-semibold text-fg-1">
-							{fmtCurrency(Math.max(0, distroBucket.mean_price - distroBucket.std_price))}
+							{fmtCurrency(distroBucket.p16_price)}
 							<span class="font-normal text-fg-4">–</span>
-							{fmtCurrency(distroBucket.mean_price + distroBucket.std_price)}
+							{fmtCurrency(distroBucket.p84_price)}
 						</p>
 					</div>
 				</div>

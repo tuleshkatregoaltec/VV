@@ -226,71 +226,25 @@ def project_rentals_summary(filter_type: ProjectScopeType = "project") -> str:
 
 
 def project_rentals_by_rooms(filter_type: ProjectScopeType = "project") -> str:
-    if filter_type == "market":
-        unit_filter = "1 = 1"
-    elif filter_type == "virtual_master":
-        unit_filter = "project_name_en LIKE {project_name:String}"
-    elif filter_type == "master":
-        unit_filter = """(master_project_en = {project_name:String}
-            OR (lower(project_name_en) LIKE concat(lower({project_name:String}), ' - %')
-                AND (master_project_en = '' OR master_project_en IS NULL)))"""
-    else:
-        unit_filter = "project_name_en = {project_name:String}"
-
     rent_filter = _project_filter(filter_type)
 
-    # A lease counts under its own bedrooms (DXBI gives them on most leases since 2025). Only a
-    # lease without them is placed by size: inside exactly one bedroom type's interquartile size
-    # range among the scope's registered units. Placing every lease by size dropped those whose
-    # size fits two types' ranges, which citywide is nearly all of them (Dubai showed 0 studio,
-    # 1-bed and 4-bed leases).
+    # A lease counts under the bedrooms it records (DXBI gives them on most leases since 2025)
+    # and nowhere else. Placing a lease without them by its size put the largest bedroom type's
+    # range around every oversized lease: 7-9-bed rents at AED 5 per sq ft and a 0.6% yield
+    # (2026-10-08), because DLD's villa leases record the plot, not the home, and 633,000
+    # labour-camp rooms fell in the studio range. No minimum sample or per-type range fixed it
+    # (2026-10-09: 6-bed villas still at AED 22 per sq ft), so sizes do not place leases.
     return f"""
         SELECT
             rooms_en,
             count() AS rental_count,
             round(medianExact(annual_amount), 2) AS median_annual_rent,
             round(medianExact(annual_amount / nullIf(actual_area * 10.7639, 0)), 2) AS median_rent_sqft
-        FROM (
-            SELECT rooms_en, annual_amount, actual_area
-            FROM ch_rent_contracts
-            WHERE {rent_filter}
-              AND property_usage_en = 'Residential'
-              AND annual_amount > 0
-              AND rooms_en != ''
-            UNION ALL
-            SELECT fits[1].1 AS rooms_en, annual_amount, actual_area
-            FROM (
-                -- (bedroom type, lower and upper quartile size) of the scope's registered units,
-                -- held as one array: matching each lease against it avoids joining millions of
-                -- leases to every type (Dubai: 5 s -> 0.4 s, same figures).
-                WITH (
-                    SELECT groupArray((rooms_en, lo, hi)) FROM (
-                        SELECT
-                            rooms_en,
-                            quantileExact(0.25)(actual_area) AS lo,
-                            quantileExact(0.75)(actual_area) AS hi,
-                            count() AS n
-                        FROM ch_units
-                        WHERE {unit_filter}
-                          AND (rooms_en LIKE '% B/R' OR rooms_en = 'Studio')
-                          AND actual_area > 0
-                        GROUP BY rooms_en
-                        HAVING n >= 3
-                    )
-                ) AS ranges
-                SELECT
-                    annual_amount,
-                    actual_area,
-                    arrayFilter(r -> actual_area BETWEEN r.2 AND r.3, ranges) AS fits
-                FROM ch_rent_contracts
-                WHERE {rent_filter}
-                  AND property_usage_en = 'Residential'
-                  AND annual_amount > 0
-                  AND actual_area > 0
-                  AND rooms_en = ''
-            )
-            WHERE length(fits) = 1
-        )
+        FROM ch_rent_contracts
+        WHERE {rent_filter}
+          AND property_usage_en = 'Residential'
+          AND annual_amount > 0
+          AND rooms_en != ''
         GROUP BY rooms_en
         ORDER BY rental_count DESC
     """
@@ -311,7 +265,9 @@ def project_units_composition(filter_type: ProjectScopeType = "project") -> str:
         SELECT
             rooms_en,
             count() as unit_count,
-            round(avgIf(actual_area, actual_area > 0) * 10.7639, 2) as avg_unit_size_sqft
+            -- The median: DLD's registry holds some units under the wrong type (1,127 "studios"
+            -- above 5,000 sq ft), which put the average studio at 31,816 sq ft (median 412).
+            round(medianExactIf(actual_area, actual_area > 0) * 10.7639, 2) as median_unit_size_sqft
         FROM ch_units
         WHERE {where}
           AND rooms_en != ''
@@ -566,9 +522,11 @@ def project_price_distribution(
             round(avg(log(actual_worth)), 6) as log_mean_price,
             round(stddevPop(log(actual_worth)), 6) as log_std_price,
             round(quantileExact(0.05)(actual_worth), 2) as p05_price,
+            round(quantileExact(0.16)(actual_worth), 2) as p16_price,
             round(quantileExact(0.25)(actual_worth), 2) as p25_price,
             round(quantileExact(0.50)(actual_worth), 2) as p50_price,
             round(quantileExact(0.75)(actual_worth), 2) as p75_price,
+            round(quantileExact(0.84)(actual_worth), 2) as p84_price,
             round(quantileExact(0.95)(actual_worth), 2) as p95_price,
             round(avg(meter_sale_price) / 10.7639, 2) as mean_price_sqft,
             round(stddevPop(meter_sale_price) / 10.7639, 2) as std_price_sqft
@@ -590,9 +548,11 @@ def project_price_distribution(
             round(avg(log(actual_worth)), 6) as log_mean_price,
             round(stddevPop(log(actual_worth)), 6) as log_std_price,
             round(quantileExact(0.05)(actual_worth), 2) as p05_price,
+            round(quantileExact(0.16)(actual_worth), 2) as p16_price,
             round(quantileExact(0.25)(actual_worth), 2) as p25_price,
             round(quantileExact(0.50)(actual_worth), 2) as p50_price,
             round(quantileExact(0.75)(actual_worth), 2) as p75_price,
+            round(quantileExact(0.84)(actual_worth), 2) as p84_price,
             round(quantileExact(0.95)(actual_worth), 2) as p95_price,
             round(avg(meter_sale_price) / 10.7639, 2) as mean_price_sqft,
             round(stddevPop(meter_sale_price) / 10.7639, 2) as std_price_sqft

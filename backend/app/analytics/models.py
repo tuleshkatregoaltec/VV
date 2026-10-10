@@ -164,14 +164,20 @@ class ProjectConfigurationRow(BaseModel):
     avg_sale_price: float
     median_sale_price: float
     avg_sale_price_sqft: float
-    avg_unit_size_sqft: float
+    avg_unit_size_sqft: float = Field(
+        description="Median registered unit size (sq ft); the name predates the median"
+    )
     rental_count: int
     median_annual_rent: float
     median_rent_sqft: float
     gross_yield_pct: Optional[float] = None
     price_change_yoy_pct: Optional[float] = None
     sales_momentum_pct: Optional[float] = None
-    absorption_rate_pct: Optional[float] = None
+    absorption_rate_pct: Optional[float] = Field(
+        default=None,
+        description="Sales in the last 12 months per registered unit; none when the registry "
+        "holds under 100 units of the type or fewer units than were sold",
+    )
     price_p25: float
     price_p50: float
     price_p75: float
@@ -195,7 +201,9 @@ class AnalyticsUnitComposition(BaseModel):
     rooms: str
     count: int
     pct_of_total: float
-    avg_unit_size_sqft: float = 0.0
+    avg_unit_size_sqft: float = Field(
+        default=0.0, description="Median registered unit size (sq ft)"
+    )
 
 
 class ProjectAnalyticsResponse(BaseModel):
@@ -260,9 +268,11 @@ class PriceDistributionBucket(BaseModel):
     log_mean_price: float = 0.0
     log_std_price: float = 0.0
     p05_price: float = 0.0
+    p16_price: float = 0.0  # with p84, the middle 68% of sales ("68% of sales between")
     p25_price: float = 0.0
     p50_price: float = 0.0
     p75_price: float = 0.0
+    p84_price: float = 0.0
     p95_price: float = 0.0
     mean_price_sqft: float
     std_price_sqft: float

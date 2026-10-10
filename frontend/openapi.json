@@ -9177,6 +9177,7 @@
 					"avg_unit_size_sqft": {
 						"type": "number",
 						"title": "Avg Unit Size Sqft",
+						"description": "Median registered unit size (sq ft)",
 						"default": 0.0
 					}
 				},
@@ -21393,6 +21394,11 @@
 						"title": "P05 Price",
 						"default": 0.0
 					},
+					"p16_price": {
+						"type": "number",
+						"title": "P16 Price",
+						"default": 0.0
+					},
 					"p25_price": {
 						"type": "number",
 						"title": "P25 Price",
@@ -21406,6 +21412,11 @@
 					"p75_price": {
 						"type": "number",
 						"title": "P75 Price",
+						"default": 0.0
+					},
+					"p84_price": {
+						"type": "number",
+						"title": "P84 Price",
 						"default": 0.0
 					},
 					"p95_price": {
@@ -21549,7 +21560,8 @@
 					},
 					"avg_unit_size_sqft": {
 						"type": "number",
-						"title": "Avg Unit Size Sqft"
+						"title": "Avg Unit Size Sqft",
+						"description": "Median registered unit size (sq ft); the name predates the median"
 					},
 					"rental_count": {
 						"type": "integer",
@@ -21605,7 +21617,8 @@
 								"type": "null"
 							}
 						],
-						"title": "Absorption Rate Pct"
+						"title": "Absorption Rate Pct",
+						"description": "Sales in the last 12 months per registered unit; none when the registry holds under 100 units of the type or fewer units than were sold"
 					},
 					"price_p25": {
 						"type": "number",
