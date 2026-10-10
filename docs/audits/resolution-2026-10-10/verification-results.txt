@@ -37,3 +37,18 @@ Analytics independent source/API checks:
 {"project": "MARINA PINNACLE", "sales": 2262, "volume": 2591689921, "units": 772, "source_api_and_drilldown_equal": true}
 {"project": "Binghatti Skyrise", "sales": 2907, "volume": 4561381930, "units": 3358, "source_api_and_drilldown_equal": true}
 {"supply_reference_date": "2026-10-10", "completed": 426065, "overdue": 47215, "undated": 62742, "current_quarter_pipeline": 41027, "next_quarter_carried": 467092, "source_api_equal": true}
+
+Additional stack merge review — 2026-10-10 UTC
+Reviewed application head: 1c35ba40debd56420a35541199ec69868485ddeb
+just holocron check: format, lint and types passed; 544 tests passed, 24 skipped
+  (the offline default disables local ClickHouse integration).
+HOLOCRON_CLICKHOUSE_INTEGRATION=1 just holocron test:
+  568 passed, 0 failed, 0 skipped in 94.08 seconds, isolated local databases.
+  The 24 tests skipped in the offline run passed in this integration-enabled run.
+  One existing collection warning: TestStopped is an exception class with a constructor
+  in handoff/bayut_standalone/run_bayut_request_test.py, not a collected test class.
+bash -n holocron/deploy/systemd/dxbi-report-daily.sh: passed
+git diff origin/VV...HEAD --check: passed
+Original PR heads #40, #41 and #42: backend-offline, frontend-check,
+  holocron-check all SUCCESS; exact heads are recorded in MERGE_REVIEW.md.
+Private execution logs: .evaluation/resolution-2026-10-10/merge-holocron-{check,integration}.log

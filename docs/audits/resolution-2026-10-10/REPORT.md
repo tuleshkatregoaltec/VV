@@ -65,7 +65,7 @@ Some canonical projects lack a project-metadata record in the local source: a ca
 
 The build succeeds with existing dependency/PasswordInput unused-import warnings, large-chunk notices and adapter-auto's notice that no deployment platform is detected locally. This PR does not alter the deployment adapter.
 
-The PR is stacked on `fix/analytics-numbers` (PR #41); review/merge its prerequisite before integrating this follow-up into the main development branch. No merge or deployment is included. The unrelated existing edit to `docs/data-pipelines/UNIFORM_LAYER_CHANGES.md` is excluded.
+The implementation PR was opened on `fix/analytics-numbers` (PR #41), itself dependent on PR #40. The subsequent user-authorized review and landing procedure for all three into `VV` is documented in [MERGE_REVIEW.md](MERGE_REVIEW.md), including warehouse and ingestion prerequisites before deployment. Production deployment is separate. The unrelated existing edit to `docs/data-pipelines/UNIFORM_LAYER_CHANGES.md` is excluded.
 
 
 ## Reproduction
