@@ -13,7 +13,7 @@ router = APIRouter(prefix="/api/v1/filters", tags=["filters"])
 
 
 @router.get("/sales", response_model=FilterOptionsResponse)
-@cached_endpoint(prefix="filters:dxbi-sales", expire=3600)
+@cached_endpoint(prefix="filters:dxbi-sales:v2", expire=3600)
 async def get_sales_filter_options(
     context: AuthContext = Depends(require_active_subscription),
     filters: SalesFilters = Depends(sales_filters),
@@ -23,7 +23,7 @@ async def get_sales_filter_options(
 
 
 @router.get("/rentals", response_model=FilterOptionsResponse)
-@cached_endpoint(prefix="filters:dxbi-rentals", expire=3600)
+@cached_endpoint(prefix="filters:dxbi-rentals:v2", expire=3600)
 async def get_rental_filter_options(
     context: AuthContext = Depends(require_active_subscription),
     filters: RentalFilters = Depends(rental_filters),

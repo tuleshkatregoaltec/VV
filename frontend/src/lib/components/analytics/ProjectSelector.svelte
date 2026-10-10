@@ -3,19 +3,28 @@ import { createQuery } from '@tanstack/svelte-query'
 import { browser } from '$app/environment'
 import type { ProjectSearchItem } from '$lib/api/analytics'
 import { analyticsQueries } from '$lib/queries/analytics'
+import AnalyticsError from './AnalyticsError.svelte'
 
 let {
 	value = $bindable<ProjectSearchItem | null>(null),
-	placeholder = 'Search project...',
+	placeholder = 'Search projects or master communities...',
+	label = 'Project scope',
 	onSelect
 }: {
 	value?: ProjectSearchItem | null
+	label?: string
 	placeholder?: string
 	onSelect?: (project: ProjectSearchItem | null) => void
 } = $props()
 
-let inputValue = $state(value?.name ?? '')
+const listId = $props.id()
+let inputValue = $state('')
+$effect(() => {
+	inputValue = value?.filter_type === 'market' ? '' : (value?.name ?? '')
+})
 let isOpen = $state(false)
+let container: HTMLDivElement
+let input: HTMLInputElement
 const searchTerm = $derived(inputValue.trim())
 
 function clickOutside(node: HTMLElement, callback: () => void) {
@@ -40,6 +49,7 @@ const filtered = $derived(projectsQuery.data?.projects ?? [])
 function select(project: ProjectSearchItem) {
 	value = project
 	inputValue = project.name
+	input.focus()
 	isOpen = false
 	onSelect?.(project)
 }
@@ -53,16 +63,31 @@ function clear() {
 
 function handleKeydown(e: KeyboardEvent) {
 	if (e.key === 'Escape') {
+		input.focus()
 		isOpen = false
 	}
-	if (e.key === 'Enter') {
+	if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+		e.preventDefault()
+		const options = Array.from(container.querySelectorAll<HTMLButtonElement>('[role="option"]'))
+		const current = options.indexOf(document.activeElement as HTMLButtonElement)
+		const next =
+			e.key === 'ArrowDown'
+				? (current + 1) % options.length
+				: current <= 0
+					? options.length - 1
+					: current - 1
+		options[next]?.focus()
+	}
+	if (e.key === 'Enter' && e.target === input) {
 		e.preventDefault()
 		if (filtered.length > 0) select(filtered[0])
 	}
 }
 </script>
 
-<div class="relative" use:clickOutside={() => (isOpen = false)}>
+<div class="relative" bind:this={container} role="group" aria-label={label}
+	onfocusout={(event) => { if (!container.contains(event.relatedTarget as Node)) isOpen = false }}
+	use:clickOutside={() => (isOpen = false)}>
 	<div class="relative">
 		<div class="pointer-events-none absolute inset-y-0 left-3 flex items-center">
 			<svg class="h-4 w-4 text-fg-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -73,16 +98,24 @@ function handleKeydown(e: KeyboardEvent) {
 			type="text"
 			class="ui-field w-full py-2 pl-9 pr-8 text-sm"
 			{placeholder}
+			aria-label={label}
+			bind:this={input}
+			role="combobox"
+			aria-autocomplete="list"
+			aria-controls={isOpen ? listId : undefined}
+			onkeydown={handleKeydown}
+			aria-expanded={isOpen}
+			aria-haspopup="listbox"
 			bind:value={inputValue}
 			oninput={() => (isOpen = true)}
 			onfocus={() => (isOpen = true)}
-			onkeydown={handleKeydown}
 		/>
-		{#if value}
+		{#if value && value.filter_type !== 'market'}
 			<button
 				type="button"
 				class="absolute inset-y-0 right-2 flex items-center px-1 text-fg-5 hover:text-fg-2"
 				onclick={clear}
+				onkeydown={handleKeydown}
 				aria-label="Clear selection"
 			>
 				<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -93,11 +126,11 @@ function handleKeydown(e: KeyboardEvent) {
 	</div>
 
 	{#if isOpen}
-		<div class="ui-menu absolute z-50 mt-2 max-h-72 w-full overflow-y-auto p-1.5">
+		<div id={listId} role="listbox" aria-label={`${label} results`} tabindex="-1" class="ui-menu absolute z-50 mt-2 max-h-72 w-full overflow-y-auto p-1.5">
 			{#if projectsQuery.isLoading}
 				<div class="px-3 py-2 text-sm text-fg-5">Loading...</div>
 			{:else if projectsQuery.isError}
-				<div class="px-3 py-2 text-sm text-error">Failed to load projects</div>
+				<AnalyticsError message="Failed to load projects." retry={() => { input.focus(); return projectsQuery.refetch() }} fetching={projectsQuery.isFetching} />
 			{:else if filtered.length === 0}
 				<div class="px-3 py-2 text-sm text-fg-5">No projects found</div>
 			{:else}
@@ -108,9 +141,13 @@ function handleKeydown(e: KeyboardEvent) {
 						value?.name
 							? 'bg-info-bg font-medium text-info'
 							: 'text-fg-2 hover:bg-panel hover:text-fg-1'}"
-						onmousedown={() => select(project)}
+						onclick={() => select(project)}
+						onkeydown={handleKeydown}
+						role="option"
+						aria-selected={value?.name === project.name && value?.filter_type === project.filter_type}
 					>
-						{project.name}
+						<span>{project.name}</span>
+						<span class="ml-2 text-xs text-fg-4">{project.filter_type === 'project' ? 'Project' : 'Master'}</span>
 					</button>
 				{/each}
 			{/if}

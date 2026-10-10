@@ -152,8 +152,10 @@ def _sales_source(date_clause: str) -> str:
     2026-10-07). For some villas DXBI divides the price by the built-up area rather than the size
     it shows; only a sale without DXBI's figure gets price / size.
     """
+    area_identity = f"if(area_key != '', area_key, {_SEARCH_KEY.format(value='area_name')})"
     same_sale = (
-        "if(match(unit_number, '[0-9]'), concat(building_key, '|', unit_number, '|', "
+        f"if(match(unit_number, '[0-9]') AND building_key != '' AND {area_identity} != '', "
+        f"concat({area_identity}, '|', building_key, '|', unit_number, '|', "
         "toString(transaction_date), '|', toString(sale_amount_aed)), sale_key)"
     )
     return rf"""
@@ -217,12 +219,13 @@ def _rentals_source(date_clause: str) -> str:
     unit, dates, amount and state, same raw fingerprint) when paging shifts during a scrape: a
     numbered unit cannot hold two identical leases, so those collapse to one. DXBI also lists
     some leases both with their unit number and without it (two report views): a lease without
-    a unit whose area, type, bedrooms, size, dates, amount and state equal a numbered lease's is
+    a unit whose building path, area and commercial terms equal a numbered lease's is
     that lease (2026-10-07: 90 of Business Bay's 2,121 leases in June 2026). Other identical
     rows without a unit number cannot be told apart and are all kept.
     """
     lease_terms = (
-        "cityHash64(area_name, property_type, bedrooms, size_sqft, lease_start, lease_end, "
+        "cityHash64(location_name, building_name, area_name, property_type, bedrooms, "
+        "size_sqft, lease_start, lease_end, "
         "contract_amount_aed, contract_state)"
     )
     same_lease = (
@@ -261,7 +264,8 @@ def _rentals_source(date_clause: str) -> str:
                        {path_key} AS lease_path_key
                 FROM dxbi_rental_events FINAL
                 WHERE {date_clause}
-                  AND (unit_number != '' OR {lease_terms} NOT IN (
+                  AND (unit_number != '' OR building_name = '' OR area_name = ''
+                       OR {lease_terms} NOT IN (
                       SELECT {lease_terms} FROM dxbi_rental_events FINAL
                       WHERE {date_clause} AND unit_number != ''))
                 ORDER BY same_lease, occurrence_index, contract_key

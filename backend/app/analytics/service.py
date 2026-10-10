@@ -10,7 +10,6 @@ from typing import Any, Optional
 from app.analytics import queries
 from app.analytics.metrics import (
     _add_months,
-    _coalesce_delivery_date,
     _normalize_label,
     _quarter_start,
     _room_sort_key,
@@ -48,6 +47,7 @@ from app.analytics.models import (
 )
 from app.analytics.queries import MARKET_FILTERS, ProjectFilterType, ProjectScopeType
 from app.core.observability import operation
+from app.market.periods import business_today
 
 # Room sort order: Studio first, then numeric bedrooms, then anything else
 
@@ -114,17 +114,6 @@ async def get_project_summary(
     like_name = project_name + " - %" if filter_type == "virtual_master" else project_name
     params = {} if filter_type == "market" else {"project_name": like_name}
 
-    # Unit composition: master/project use master_project_en equality;
-    # virtual_master uses project_name_en LIKE (ch_units also lacks master_project_en for orphans)
-    if filter_type == "market":
-        units_params = {}
-    elif filter_type == "virtual_master":
-        units_params = {"project_name": like_name}
-    elif filter_type == "master":
-        units_params = {"project_name": project_name}
-    else:
-        units_params = {"project_name": master_project or project_name}
-
     if filter_type == "market":
         meta_task = asyncio.sleep(0, result=[])
     else:
@@ -144,7 +133,6 @@ async def get_project_summary(
     existing_params = {**params, "reg_type_en": "Existing Properties"}
     offplan_params = {**params, "reg_type_en": "Off-Plan Properties"}
 
-    # project_rentals_by_rooms uses {project_name} for both rent and units filters
     rent_rooms_params = params
 
     (
@@ -182,7 +170,7 @@ async def get_project_summary(
         queries.fetch_project_sales_by_reg_type(params, filter_type),
         queries.fetch_project_rentals_summary(params, filter_type),
         queries.fetch_project_rentals_by_rooms(rent_rooms_params, filter_type),
-        queries.fetch_project_units_composition(units_params, filter_type),
+        queries.fetch_project_units_composition(params, filter_type),
         meta_task,
         developer_task,
     )
@@ -550,25 +538,34 @@ async def get_project_pipeline(
     if not rows:
         return ProjectPipelineResponse(area_name=area_name, developer_name=developer_name, data=[])
 
-    today = await _latest_sales_anchor_date()
+    today = business_today()
     start_quarter = _quarter_start(date(today.year - 1, 1, 1))
     periods = [_add_months(start_quarter, quarter_index * 3) for quarter_index in range(16)]
 
     completed_by_quarter: dict[date, int] = {}
     pipeline_by_quarter: dict[date, int] = {}
+    overdue_units = 0
+    undated_units = 0
 
     for row in rows:
         units = int(row.get("no_of_units") or 0)
         if units <= 0:
             continue
 
-        completion_dt = _coalesce_delivery_date(row)
-        if completion_dt:
-            quarter = _quarter_start(completion_dt)
-            if completion_dt <= today:
-                completed_by_quarter[quarter] = completed_by_quarter.get(quarter, 0) + units
+        actual_completion = row.get("completion_date")
+        planned_delivery = row.get("project_end_date")
+        if actual_completion and actual_completion <= today:
+            quarter = _quarter_start(actual_completion)
+            completed_by_quarter[quarter] = completed_by_quarter.get(quarter, 0) + units
+        elif actual_completion or planned_delivery:
+            delivery = actual_completion or planned_delivery
+            if delivery < today:
+                overdue_units += units
             else:
+                quarter = _quarter_start(delivery)
                 pipeline_by_quarter[quarter] = pipeline_by_quarter.get(quarter, 0) + units
+        else:
+            undated_units += units
 
     cumulative_existing = sum(units for q, units in completed_by_quarter.items() if q < periods[0])
     cumulative_future = 0
@@ -579,6 +576,8 @@ async def get_project_pipeline(
         new_pipeline_units = pipeline_by_quarter.get(period, 0)
         if period <= today_quarter:
             cumulative_existing += completed_by_quarter.get(period, 0)
+            # Deliveries due later this quarter must remain in subsequent projected stock.
+            cumulative_future += new_pipeline_units
             data.append(
                 ProjectPipelinePoint(
                     period=period,
@@ -601,6 +600,9 @@ async def get_project_pipeline(
         )
 
     return ProjectPipelineResponse(
+        reference_date=today,
+        overdue_units=overdue_units,
+        undated_units=undated_units,
         area_name=area_name,
         developer_name=developer_name,
         data=data,

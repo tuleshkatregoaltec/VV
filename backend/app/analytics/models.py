@@ -253,6 +253,11 @@ class ProjectPipelinePoint(BaseModel):
 
 
 class ProjectPipelineResponse(BaseModel):
+    reference_date: Optional[date] = None
+    overdue_units: int = Field(
+        default=0, description="Uncompleted units with an elapsed planned end date"
+    )
+    undated_units: int = Field(default=0, description="Uncompleted units without a delivery date")
     area_name: Optional[str] = None
     developer_name: Optional[str] = None
     data: list[ProjectPipelinePoint]

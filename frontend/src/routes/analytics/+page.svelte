@@ -1,13 +1,10 @@
 <script lang="ts">
-import { createQuery } from '@tanstack/svelte-query'
 import { Building2, GitCompare } from 'lucide-svelte'
 import type { ProjectSearchItem } from '$lib/api/analytics'
-import type { SearchSelection } from '$lib/api/projects'
 import AnalyticsCompareView from '$lib/components/analytics/AnalyticsCompareView.svelte'
 import ProjectPanel from '$lib/components/analytics/ProjectPanel.svelte'
+import ProjectSelector from '$lib/components/analytics/ProjectSelector.svelte'
 import PageContainer from '$lib/components/layout/PageContainer.svelte'
-import ProjectSearchInput from '$lib/components/projects/ProjectSearchInput.svelte'
-import { projectQueries } from '$lib/queries/projects'
 
 const DUBAI_MARKET_SELECTION: ProjectSearchItem = { name: 'Dubai', filter_type: 'market' }
 
@@ -16,30 +13,9 @@ let projectB = $state<ProjectSearchItem | null>(null)
 let comparing = $state(false)
 let isDubaiMarketSelected = $derived(projectA?.filter_type === 'market')
 
-const allProjectsQuery = createQuery(() => projectQueries.list())
-const allProjects = $derived(allProjectsQuery.data ?? [])
-
 function toggleCompare() {
 	comparing = !comparing
 	if (!comparing) projectB = null
-}
-
-function toAnalyticsSelection(sel: SearchSelection): ProjectSearchItem | null {
-	if (sel.type === 'master') {
-		return { name: sel.masterName, filter_type: 'master' }
-	}
-
-	const project = allProjects.find((item) => item.project_id === sel.projectId)
-	if (!project) return null
-	return { name: project.project_name, filter_type: 'project' }
-}
-
-function handleSearchSelectA(sel: SearchSelection) {
-	projectA = toAnalyticsSelection(sel)
-}
-
-function handleSearchSelectB(sel: SearchSelection) {
-	projectB = toAnalyticsSelection(sel)
 }
 
 function selectDubaiMarket() {
@@ -94,9 +70,9 @@ function selectDubaiMarket() {
 			<div class="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
 				<div class="flex-1">
 					<div class="grid gap-3 {comparing ? 'xl:grid-cols-2' : ''}">
-						<ProjectSearchInput allProjects={allProjects} onSelect={handleSearchSelectA} />
+						<ProjectSelector bind:value={projectA} label="Project A" />
 						{#if comparing}
-							<ProjectSearchInput allProjects={allProjects} onSelect={handleSearchSelectB} />
+							<ProjectSelector bind:value={projectB} label="Project B" />
 						{/if}
 					</div>
 				</div>
@@ -107,7 +83,7 @@ function selectDubaiMarket() {
 
 		{#if comparing}
 			{#if projectA && projectB}
-				<AnalyticsCompareView {projectA} {projectB} {allProjects} />
+				<AnalyticsCompareView {projectA} {projectB} />
 			{:else if projectA || projectB}
 				<!-- One side chosen: its figures show at once; only the empty side asks for a pick. -->
 				{@const chosen = (projectA ?? projectB)!}
