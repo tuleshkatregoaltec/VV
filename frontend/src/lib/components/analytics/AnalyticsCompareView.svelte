@@ -8,20 +8,18 @@ import type {
 	ProjectSearchItem,
 	ProjectTrendPoint
 } from '$lib/api/analytics'
-import type { ProjectSearchResult } from '$lib/api/projects'
 import { analyticsQueries } from '$lib/queries/analytics'
 import { getChartTheme } from '$lib/utils/chartTheme'
+import AnalyticsError from './AnalyticsError.svelte'
 
 Chart.register(...registerables)
 
 let {
 	projectA,
-	projectB,
-	allProjects = []
+	projectB
 }: {
 	projectA: ProjectSearchItem
 	projectB: ProjectSearchItem
-	allProjects?: ProjectSearchResult[]
 } = $props()
 
 type TrendMode = 'avg_price' | 'avg_price_sqft'
@@ -142,20 +140,12 @@ function getDisplayName(selection: ProjectSearchItem, summary: ProjectAnalyticsR
 function getKnownArea(selection: ProjectSearchItem, summary: ProjectAnalyticsResponse): string {
 	const fromProject = summary.project?.area_name
 	if (fromProject) return fromProject
-	const fromSearch = allProjects.find((project) =>
-		isMasterSelection(selection)
-			? project.master_project_en === selection.name
-			: project.project_name === selection.name
-	)
-	return fromSearch?.area_name ?? 'Area unavailable'
+	return 'Area unavailable'
 }
 
 function getDevelopmentCount(selection: ProjectSearchItem, subProjectCount: number): number | null {
 	if (!isMasterSelection(selection)) return null
-	const fromSearch = allProjects.filter(
-		(project) => project.master_project_en === selection.name
-	).length
-	return fromSearch || subProjectCount || null
+	return subProjectCount || null
 }
 
 function getHandoverLabel(
@@ -536,9 +526,7 @@ onMount(() => {
 		<div class="h-[360px] animate-pulse rounded-lg border border-border bg-card"></div>
 	</div>
 {:else if error}
-	<div class="rounded-lg border border-error bg-error-bg px-8 py-16 text-center text-sm text-error">
-		Failed to load comparison analytics.
-	</div>
+	<AnalyticsError message="Failed to load comparison analytics." retry={() => Promise.all([summaryQueryA.refetch(), summaryQueryB.refetch()])} fetching={summaryQueryA.isFetching || summaryQueryB.isFetching} />
 {:else if summaryA && summaryB}
 	{@const subCountA = subProjectsQueryA.data?.sub_projects.length ?? 0}
 	{@const subCountB = subProjectsQueryB.data?.sub_projects.length ?? 0}
@@ -549,6 +537,9 @@ onMount(() => {
 	{@const topRowsB = getTopConfigRows(summaryB)}
 
 	<div class="space-y-5">
+		{#if subProjectsQueryA.isError || subProjectsQueryB.isError}
+			<AnalyticsError message="Failed to load development counts for the comparison." retry={() => Promise.all([subProjectsQueryA.refetch(), subProjectsQueryB.refetch()])} fetching={subProjectsQueryA.isFetching || subProjectsQueryB.isFetching} />
+		{/if}
 		<section class="grid gap-5 xl:grid-cols-2">
 			{@render SummaryCard(
 				'Project A',
@@ -594,7 +585,9 @@ onMount(() => {
 				</div>
 			</div>
 			<div class="mt-4 h-[340px]">
-				{#if trendsQueryA.isLoading || trendsQueryB.isLoading}
+				{#if trendsQueryA.isError || trendsQueryB.isError}
+					<AnalyticsError message="Failed to load comparison trends." retry={() => Promise.all([trendsQueryA.refetch(), trendsQueryB.refetch()])} fetching={trendsQueryA.isFetching || trendsQueryB.isFetching} />
+				{:else if trendsQueryA.isLoading || trendsQueryB.isLoading}
 					<div class="h-full animate-pulse rounded-lg bg-panel"></div>
 				{:else if (trendsQueryA.data?.data.length ?? 0) > 0 || (trendsQueryB.data?.data.length ?? 0) > 0}
 					<canvas bind:this={trendCanvas}></canvas>

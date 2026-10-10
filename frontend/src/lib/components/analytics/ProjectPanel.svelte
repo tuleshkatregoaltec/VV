@@ -14,6 +14,7 @@ import type {
 } from '$lib/api/analytics'
 import { analyticsQueries } from '$lib/queries/analytics'
 import { getChartTheme } from '$lib/utils/chartTheme'
+import AnalyticsError from './AnalyticsError.svelte'
 
 Chart.register(...registerables)
 
@@ -29,7 +30,6 @@ let configMode = $state<AnalysisMode>('sales')
 let configSegment = $state<ConfigSegment>('all')
 let distroRooms = $state<string>('All')
 let distroOffplan = $state(false)
-let pipelineRooms = $state<string | null>(null)
 let subDropdownOpen = $state(false)
 let subSearch = $state('')
 
@@ -41,7 +41,6 @@ $effect(() => {
 	configSegment = 'all'
 	distroRooms = 'All'
 	distroOffplan = false
-	pipelineRooms = null
 	subDropdownOpen = false
 	subSearch = ''
 })
@@ -119,15 +118,6 @@ function getConfigurationRentalRows(summary: ProjectAnalyticsResponse | null) {
 	)
 }
 
-function getAvailableRooms(): string[] {
-	const summary = getSummary()
-	if (!summary) return []
-	return summary.unit_composition
-		.filter((c) => c.count > 0)
-		.map((c) => c.rooms)
-		.filter((room) => room === 'Studio' || /^[1-5] B\/R$/.test(room))
-}
-
 function getDistroRooms(): string[] {
 	return distroQuery.data?.by_rooms.map((b) => b.rooms) ?? []
 }
@@ -137,21 +127,6 @@ function getDistroBucket(): PriceDistributionBucket | null {
 	if (!distro) return null
 	if (distroRooms === 'All') return distro.all ?? null
 	return distro.by_rooms.find((b) => b.rooms === distroRooms) ?? null
-}
-
-function getFilteredPipelineData(): ProjectPipelinePoint[] {
-	const data = getPipeline()?.data ?? []
-	if (!pipelineRooms) return data
-	const summary = getSummary()
-	const comp = summary?.unit_composition.find((c) => c.rooms === pipelineRooms)
-	if (!comp) return []
-	const ratio = comp.pct_of_total / 100
-	return data.map((p) => ({
-		...p,
-		existing_stock_units: Math.round(p.existing_stock_units * ratio),
-		carried_stock_units: Math.round(p.carried_stock_units * ratio),
-		new_pipeline_units: Math.round(p.new_pipeline_units * ratio)
-	}))
 }
 
 function getMarketSplit(summary: ProjectAnalyticsResponse | null) {
@@ -198,8 +173,11 @@ function closeSubDropdown() {
 }
 
 function handleSubKeydown(e: KeyboardEvent) {
-	if (e.key === 'Escape') closeSubDropdown()
-	if (e.key === 'Enter') {
+	if (e.key === 'Escape') {
+		;(e.currentTarget as HTMLElement).closest('[role="group"]')?.querySelector('button')?.focus()
+		closeSubDropdown()
+	}
+	if (e.key === 'Enter' && e.target instanceof HTMLInputElement) {
 		e.preventDefault()
 		const filteredSubProjects = getFilteredSubProjects()
 		if (filteredSubProjects.length > 0) {
@@ -714,7 +692,7 @@ function buildBellChart() {
 
 // ─── Pipeline chart ───────────────────────────────────────────────────────
 function buildPipelineChart() {
-	const pipelineData = getFilteredPipelineData()
+	const pipelineData = getPipeline()?.data ?? []
 	if (!pipelineCanvas || pipelineData.length === 0) return
 	pipelineChart?.destroy()
 	const ctx = pipelineCanvas.getContext('2d')
@@ -908,7 +886,6 @@ $effect(() => {
 })
 
 $effect(() => {
-	const _r = pipelineRooms
 	themeVersion
 	getPipeline()
 	getSummary()
@@ -937,7 +914,9 @@ onMount(() => {
 })
 </script>
 
-{#if summaryQuery.isLoading}
+{#if summaryQuery.isError}
+	<AnalyticsError message="Failed to load analytics for this project." retry={() => summaryQuery.refetch()} fetching={summaryQuery.isFetching} />
+{:else if summaryQuery.isLoading}
 	<div class="grid gap-6">
 		<div class="h-36 animate-pulse rounded-lg border border-border bg-card"></div>
 		<div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -958,12 +937,14 @@ onMount(() => {
 	{@const rentalConfigRows = getConfigurationRentalRows(summary)}
 	{@const distroBucket = getDistroBucket()}
 	{@const distroRoomList = getDistroRooms()}
-	{@const pipelineRoomList = getAvailableRooms()}
 	{@const marketSplit = getMarketSplit(summary)}
 	{@const isMarketScope = isMarketSelection()}
 	{@const isMasterScope = selection.filter_type !== 'project' && selection.filter_type !== 'market' && !subProject}
 	<div class="space-y-5">
 
+		{#if subProjectsQuery.isError}
+			<AnalyticsError message="Failed to load developments." retry={() => subProjectsQuery.refetch()} fetching={subProjectsQuery.isFetching} />
+		{/if}
 		<!-- ── Project header ────────────────────────────────────────── -->
 		<section class="rounded-lg border border-border bg-card p-5">
 			<div class="flex flex-wrap items-start justify-between gap-4">
@@ -1011,9 +992,11 @@ onMount(() => {
 					{/if}
 
 					{#if subProjects.length > 1}
-						<div class="relative" use:clickOutside={closeSubDropdown}>
+						<div class="relative" role="group" aria-label="Development selection" use:clickOutside={closeSubDropdown}
+							onfocusout={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node)) closeSubDropdown() }}>
 							<button
 								type="button"
+								onkeydown={handleSubKeydown}
 								onclick={() => {
 									subDropdownOpen = !subDropdownOpen;
 									subSearch = '';
@@ -1045,8 +1028,9 @@ onMount(() => {
 									<div class="max-h-64 overflow-y-auto p-2">
 										<button
 											type="button"
+											onkeydown={handleSubKeydown}
 											class="w-full rounded-md px-3 py-2 text-left text-sm transition-colors {subProject === null ? 'bg-info-bg text-info' : 'text-fg-2 hover:bg-panel'}"
-											onmousedown={() => {
+											onclick={() => {
 												subProject = null;
 												closeSubDropdown();
 											}}
@@ -1056,8 +1040,9 @@ onMount(() => {
 										{#each filteredSubProjects as sp (sp.name)}
 											<button
 												type="button"
+												onkeydown={handleSubKeydown}
 												class="mt-0.5 w-full rounded-md px-3 py-2 text-left text-sm transition-colors {subProject === sp.name ? 'bg-info-bg text-info' : 'text-fg-2 hover:bg-panel'}"
-												onmousedown={() => {
+												onclick={() => {
 													subProject = sp.name;
 													closeSubDropdown();
 												}}
@@ -1202,8 +1187,13 @@ onMount(() => {
 						</button>
 					</div>
 				</div>
+				{#if forecastQuery.isError && !isAggregateSelection()}
+					<AnalyticsError message="Failed to load forecast." retry={() => forecastQuery.refetch()} fetching={forecastQuery.isFetching} />
+				{/if}
 				<div class="relative mt-4 h-[280px] xl:h-auto xl:min-h-[280px] xl:flex-1">
-					{#if trendsQuery.isLoading || (!isAggregateSelection() && forecastQuery.isLoading)}
+					{#if trendsQuery.isError}
+						<AnalyticsError message="Failed to load price trends." retry={() => trendsQuery.refetch()} fetching={trendsQuery.isFetching} />
+					{:else if trendsQuery.isLoading || (!isAggregateSelection() && forecastQuery.isLoading)}
 						<div class="h-full animate-pulse rounded-lg bg-panel"></div>
 					{:else if hasTrendChartData()}
 						<canvas bind:this={trendCanvas}></canvas>
@@ -1527,7 +1517,9 @@ onMount(() => {
 
 			<!-- Bell curve -->
 			<div class="mt-4 h-[220px]">
-				{#if distroQuery.isLoading}
+				{#if distroQuery.isError}
+					<AnalyticsError message="Failed to load price distribution." retry={() => distroQuery.refetch()} fetching={distroQuery.isFetching} />
+				{:else if distroQuery.isLoading}
 					<div class="h-full animate-pulse rounded-lg bg-panel"></div>
 				{:else if distroBucket && distroBucket.std_price > 0}
 					<canvas bind:this={bellCanvas}></canvas>
@@ -1552,35 +1544,25 @@ onMount(() => {
 				</h3>
 			</div>
 
-			<!-- Bedroom filter tabs -->
-			{#if pipelineRoomList.length > 0}
-				<div class="mt-3 flex flex-wrap items-center gap-2">
-					<span class="text-xs font-medium text-fg-4">Bedrooms</span>
-					<div class="ui-segmented">
-					<button
-						type="button"
-						onclick={() => (pipelineRooms = null)}
-						class="ui-segmented-item px-3 py-1 text-xs"
-						data-active={pipelineRooms === null}
-					>
-						All
-					</button>
-					{#each pipelineRoomList as room (room)}
-						<button
-							type="button"
-							onclick={() => (pipelineRooms = room)}
-							class="ui-segmented-item px-3 py-1 text-xs"
-							data-active={pipelineRooms === room}
-						>
-							{room}
-						</button>
-					{/each}
-					</div>
-				</div>
+			{#if pipeline}
+				<p class="mt-2 text-xs text-fg-3">
+					Completed stock uses recorded completion dates. Scheduled deliveries are planned.
+					{#if pipeline.reference_date}As of {pipeline.reference_date}.{/if}
+				</p>
+				{#if pipeline.overdue_units || pipeline.undated_units}
+					<p class="mt-1 text-xs text-fg-3">
+						Excluded from the dated stock projection: {fmtNumber(pipeline.overdue_units)} overdue units
+						and {fmtNumber(pipeline.undated_units)} units without a delivery date.
+					</p>
+				{/if}
 			{/if}
 
+			<p class="mt-2 text-xs text-fg-3">Supply is shown for all bedroom types in this area.</p>
+
 			<div class="mt-4 h-[340px]">
-				{#if pipelineQuery.isLoading}
+				{#if pipelineQuery.isError}
+					<AnalyticsError message="Failed to load supply pipeline." retry={() => pipelineQuery.refetch()} fetching={pipelineQuery.isFetching} />
+				{:else if pipelineQuery.isLoading}
 					<div class="h-full animate-pulse rounded-lg bg-panel"></div>
 				{:else if pipeline && pipeline.data.length > 0}
 					<canvas bind:this={pipelineCanvas}></canvas>
@@ -1592,9 +1574,5 @@ onMount(() => {
 			</div>
 		</section>
 
-	</div>
-{:else if summaryQuery.isError}
-	<div class="rounded-lg border border-error bg-error-bg px-8 py-16 text-center text-sm text-error">
-		Failed to load analytics for this project.
 	</div>
 {/if}

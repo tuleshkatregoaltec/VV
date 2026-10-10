@@ -232,6 +232,15 @@ async function handleExport(format: TransactionExportFormat) {
 	</div>
 {/if}
 
+{#if facetOptionsQuery.isError}
+	<div role="alert" class="mb-4 rounded-lg border border-error bg-error-bg p-4 text-sm text-error">
+		<p>Error loading filters. {facetOptionsQuery.data ? 'Showing previously loaded options.' : 'Filter options are unavailable.'}</p>
+		<button type="button" class="ui-button mt-2" disabled={facetOptionsQuery.isFetching} onclick={() => facetOptionsQuery.refetch()}>Retry filters</button>
+	</div>
+{:else if facetOptionsQuery.isPending}
+	<p role="status" class="mb-3 text-sm text-fg-3">Loading filter options…</p>
+{/if}
+
 <div class="ui-surface relative z-20 p-4 sm:p-5">
 	<div class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
 		<div>
@@ -303,7 +312,7 @@ async function handleExport(format: TransactionExportFormat) {
 		</div>
 	</div>
 	<div class="shrink-0 text-sm font-medium text-fg-2">
-		{formatCount(totalRecords)} matching transactions
+		{#if transactionsQuery.isPlaceholderData}Updating matching transactions…{:else}{formatCount(totalRecords)} matching transactions{/if}
 	</div>
 </div>
 
@@ -328,7 +337,7 @@ async function handleExport(format: TransactionExportFormat) {
 	{columns}
 	data={displayData}
 	onrowclick={handleRowClick}
-	loading={transactionsQuery.isPending && displayData.length === 0}
+	loading={transactionsQuery.isPending || transactionsQuery.isPlaceholderData}
 	selectable={true}
 	bind:selectedIds={selectedTransactionIds}
 	{getRowId}
