@@ -91,3 +91,47 @@ async def test_rental_only_scope_is_searchable_and_empty_sales_are_json_safe(dxb
     assert summary.rentals.contract_count == 1
     assert summary.overall_gross_yield_pct is None
     json.dumps(summary.model_dump(mode="json"), allow_nan=False)
+
+
+async def test_configuration_periods_share_today_and_keep_old_sparse_bedrooms(dxbi):  # noqa: F811
+    """An old off-plan launch is not current activity; sparse homes must not disappear."""
+    from datetime import date, timedelta
+
+    await dxbi(
+        sales=[
+            sale(
+                "ready",
+                project_name="Mixed Tower",
+                transaction_date=date.today() - timedelta(days=10),
+            ),
+            sale(
+                "old-offplan",
+                project_name="Mixed Tower",
+                bedrooms="4 Beds",
+                transaction_date=date.today() - timedelta(days=800),
+                market_status="Offplan",
+            ),
+            sale(
+                "future",
+                project_name="Mixed Tower",
+                bedrooms="5 Beds",
+                transaction_date=date.today() + timedelta(days=30),
+                market_status="Offplan",
+            ),
+        ]
+    )
+    summary = await service.get_project_summary("Mixed Tower")
+    rows = {(row.market_segment, row.rooms): row for row in summary.configuration_analysis}
+    assert rows["all", "1 B/R"].sales_last_12m == 1
+    for segment in ("all", "off_plan"):
+        assert rows[segment, "4 B/R"].sale_count == 1
+        assert rows[segment, "4 B/R"].sales_last_12m == 0
+        assert rows[segment, "5 B/R"].sales_last_12m == 0
+        assert rows[segment, "4 B/R"].price_change_yoy_pct is None
+        assert rows[segment, "4 B/R"].sales_momentum_pct is None
+    narrow = await queries.fetch_project_configuration_sales(
+        {"project_name": "Mixed Tower", "reg_type_en": "Off-Plan Properties"},
+        "project",
+        "Off-Plan Properties",
+    )
+    assert all(row["sales_last_12m"] == 0 for row in narrow)

@@ -39,3 +39,11 @@ Exact isolated-branch results (no skipped tests):
 Initial alternate-port browser setup attempts failed because a dependency symlink was outside Vite's allow-list and the local API URL still pointed to the original port. Installing locked dependencies inside the worktree and using its same-origin proxy corrected test setup; no product-auth changes were made. Tests then passed on the isolated branch at ports 5174/8001. Local development app processes were separately restarted at 5173/8000 and the Analytics page returned HTTP 200.
 
 The earlier development-checkout counts in REPORT.md include tests for excluded work. These exact branch results supersede those counts for the PR. Production deployment/load tests and a full cross-product browser suite were not run. No external reviewer approval is claimed.
+
+## 12 October correction validation
+
+District One exposed a semantic gap beyond API/display agreement: row counts covered a different period from row prices, low-sample rooms vanished, and historical off-plan windows appeared current. These are now corrected, with specific regression coverage and a [verified table screenshot](screenshots/district-one-corrected.png). [Detailed findings and remaining source repair](PROJECT-FINDINGS-2026-10-12.md).
+
+Latest local results: 354 full fast-backend tests; 66 ClickHouse integration tests; 59 frontend unit tests; 21 Chromium checks (setup plus 20 interaction tests). All passed, none skipped. Ruff and Biome pass; Svelte reports zero errors/warnings; regenerated client and production build succeed. Existing adapter/dependency build notices remain. Original backend CI failure is addressed by the public source operation, contract refresh and static-inventory correction; the new CI run is checked separately after push.
+
+The malformed Binghatti record is not silently repaired: no raw evidence was found and the provider detail URL returned 403. Its Studio row is now visible, but its entity grouping remains unresolved. No source records or production data were changed.

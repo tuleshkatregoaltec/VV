@@ -5,7 +5,7 @@ its building when no project is supplied; community uses DXBI's displayed locati
 Transaction observations are never a registered property-stock denominator.
 """
 
-from app.transaction.queries import _rentals_source, _sales_source
+from app.transaction.service import normalized_rentals_source_sql, normalized_sales_source_sql
 
 _ROOMS = "if(match(bedrooms, '^[0-9]+ Beds?$'), concat(extract(bedrooms, '^([0-9]+)'), ' B/R'), bedrooms)"
 _SCOPE = "if(project_name != '', project_name, building_name)"
@@ -21,7 +21,7 @@ SALES_SOURCE = f"""(
                    status = 'Ready', 'Existing Properties', '') AS reg_type_en,
            {_SCOPE} AS project_name_en, location_name AS master_project_en,
            location_name, location_name AS area_name_en
-    FROM ({_sales_source("1=1")})
+    FROM ({normalized_sales_source_sql()})
 )"""
 
 RENTALS_SOURCE = f"""(
@@ -32,5 +32,5 @@ RENTALS_SOURCE = f"""(
            property_usage AS property_usage_en, {_ROOMS} AS rooms_en,
            {_SCOPE} AS project_name_en, location_name AS master_project_en,
            location_name, location_name AS area_name_en
-    FROM ({_rentals_source("1=1")})
+    FROM ({normalized_rentals_source_sql()})
 )"""

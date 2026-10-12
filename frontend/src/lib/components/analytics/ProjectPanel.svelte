@@ -247,7 +247,6 @@ function isResidentialConfigRoom(room: string | null | undefined): boolean {
 function isReliableConfigRow(row: ProjectConfigurationRow): boolean {
 	return (
 		isResidentialConfigRoom(row.rooms) &&
-		row.sales_last_12m >= 3 &&
 		(row.stock_units > 0 || row.sale_count > 0 || row.sales_last_12m > 0 || row.rental_count > 0)
 	)
 }
@@ -1111,7 +1110,7 @@ onMount(() => {
 				<p class="mt-2.5 break-words text-3xl font-semibold text-info">
 					{fmtPct(summary.overall_gross_yield_pct)}
 				</p>
-				<p class="mt-1.5 text-sm text-info">median rent ÷ median sale</p>
+				<p class="mt-1.5 text-sm text-info">median rent ÷ secondary median sale</p>
 			</div>
 		</section>
 
@@ -1281,6 +1280,8 @@ onMount(() => {
 			</div>
 
 			{#if configMode === 'sales'}
+                <p class="mt-4 text-xs text-fg-4">Sales, prices and sizes cover all recorded dates. Recent periods end today (UTC) for every segment. Low-sample configurations remain visible.</p>
+                <p class="mt-1 text-xs text-fg-4">Momentum compares consecutive 90-day counts using their average as the denominator (minimum 20 sales in each). Price change compares consecutive 12-month periods (minimum 3 sales in each). Sales / Stock is unavailable without registered unit counts.</p>
 				<div class="ui-scroll-shadow mt-4 overflow-x-auto">
 					<table class="min-w-[640px] w-full border-separate border-spacing-0 text-sm sm:min-w-full">
 						<thead>
@@ -1307,7 +1308,7 @@ onMount(() => {
 										{row.rooms}
 									</td>
 									<td class="border-b border-border py-3 pr-6 text-right text-fg-2 group-hover:bg-panel">
-										{fmtNumber(row.sales_last_12m)}
+										{fmtNumber(row.sale_count)}
 									</td>
 									<td class="border-b border-border py-3 pr-6 text-right group-hover:bg-panel">
 										<span class="font-medium text-fg-1">{fmtCurrency(row.avg_sale_price)}</span>

@@ -64,3 +64,31 @@ test('comparison numbers and plotted values match both DXBI API selections', asy
     await expect(page.getByRole('combobox', { name: 'Project B', exact: true })).toHaveCount(0);
     expect(errors).toEqual([]);
 });
+
+
+test('District One keeps sparse bedrooms and uses all-history counts in every tab', async ({ page }) => {
+    test.setTimeout(180000);
+    await page.goto('/analytics');
+    await expect(page.getByRole('heading', { name: 'Configuration Analysis', exact: true })).toBeVisible();
+    const input = page.getByRole('combobox').first();
+    await input.fill('(D1) District One Residences');
+    const response = page.waitForResponse(r => r.ok() && r.url().includes('/analytics/project/summary?project='));
+    await page.getByRole('option', { name: '(D1) District One Residences Project', exact: true }).click();
+    const summary = await (await response).json();
+    const panel = page.locator('section').filter({ has: page.getByRole('heading', { name: 'Configuration Analysis', exact: true }) }).last();
+    await expect(panel.getByText(/Sales, prices and sizes cover all recorded dates/)).toBeVisible();
+    for (const [label, segment] of [['All', 'all'], ['Off-Plan', 'off_plan'], ['Secondary', 'secondary']]) {
+        await panel.getByRole('button', { name: label, exact: true }).click();
+        const expected = summary.configuration_analysis.filter((r: any) => r.market_segment === segment);
+        await expect(panel.locator('tbody tr')).toHaveCount(expected.length);
+        for (const config of expected) {
+            const row = panel.locator('tbody tr').filter({ has: page.getByRole('cell', { name: config.rooms, exact: true }) });
+            await expect(row.locator('td').nth(1)).toHaveText(config.sale_count.toLocaleString('en-AE'));
+        }
+    }
+    await panel.getByRole('button', { name: 'All', exact: true }).click();
+    await expect(panel.getByRole('cell', { name: '4 B/R', exact: true })).toBeVisible();
+    await expect(panel.getByRole('cell', { name: '5 B/R', exact: true })).toBeVisible();
+    expect(summary.configuration_analysis.filter((r: any) => r.market_segment === 'off_plan').every((r: any) => r.sales_last_12m === 0)).toBe(true);
+    await panel.screenshot({ path: path.resolve('../docs/audits/analytics-dxbi-2026-10-11/screenshots/district-one-corrected.png') });
+});

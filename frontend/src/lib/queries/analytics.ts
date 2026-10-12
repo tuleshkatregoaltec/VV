@@ -1,7 +1,7 @@
 import { analytics } from '$lib/api/analytics'
 
 export const analyticsKeys = {
-	all: ['analytics', 'dxbi-v1'] as const,
+	all: ['analytics', 'dxbi-v2'] as const,
 	marketTrend: (days: number, propertyUsage?: string) =>
 		[...analyticsKeys.all, 'marketTrend', { days, propertyUsage }] as const,
 	projectSearch: (search: string, limit: number) =>

@@ -184,7 +184,7 @@ function getKpis(summary: ProjectAnalyticsResponse) {
 		{
 			label: 'Gross yield',
 			value: fmtPct(summary.overall_gross_yield_pct),
-			detail: 'rent / sale'
+			detail: 'median rent / secondary median sale'
 		},
 		{
 			label: 'Off-plan share',
@@ -198,7 +198,7 @@ function getTopConfigRows(summary: ProjectAnalyticsResponse): ProjectConfigurati
 	return summary.configuration_analysis
 		.filter((row) => row.market_segment === 'all')
 		.slice()
-		.sort((left, right) => right.sales_last_12m - left.sales_last_12m)
+		.sort((left, right) => right.sale_count - left.sale_count)
 		.slice(0, 5)
 }
 
@@ -734,7 +734,7 @@ onMount(() => {
 					<div class="flex items-start justify-between gap-3">
 						<p class="min-w-0 font-semibold text-fg-1">{row.rooms}</p>
 						<p class="shrink-0 text-sm font-semibold text-fg-2">
-							{fmtNumber(row.sales_last_12m)} sales
+							{fmtNumber(row.sale_count)} sales · all dates
 						</p>
 					</div>
 					<div class="mt-2 grid grid-cols-2 gap-2 text-xs sm:grid-cols-3">

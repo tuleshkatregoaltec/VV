@@ -152,8 +152,6 @@ def build_configuration_rows(
 
         if stock_units <= 0 and sale_count <= 0 and int(rent_row.get("rental_count", 0) or 0) <= 0:
             continue
-        if sales_last_12m < _CONFIG_PRICE_MIN_SAMPLE_SIZE:
-            continue
 
         gross_yield_pct: Optional[float] = None
         if segment != "off_plan" and median_sale_price > 0 and median_annual_rent > 0:

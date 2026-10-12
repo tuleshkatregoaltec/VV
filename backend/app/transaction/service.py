@@ -14,6 +14,16 @@ from app.transaction.models import (
 logger = logging.getLogger(__name__)
 
 
+def normalized_sales_source_sql() -> str:
+    """Public DXBI sales projection for domain consumers sharing transaction identities."""
+    return queries._sales_source("1=1")
+
+
+def normalized_rentals_source_sql() -> str:
+    """Public DXBI rental projection for domain consumers sharing transaction identities."""
+    return queries._rentals_source("1=1")
+
+
 def _text(value: object) -> Optional[str]:
     """DXBI leaves unknown text fields empty; the API reports them as missing."""
     return str(value) if value not in (None, "") else None

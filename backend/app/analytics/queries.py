@@ -155,19 +155,18 @@ def project_configuration_sales(
               {reg_filter}
         ),
         anchor AS (
-            SELECT max(instance_date) AS latest_sale_date
-            FROM scoped_sales
+            SELECT addDays(toDate(now('UTC')), 1) AS latest_sale_date
         )
         SELECT
             rooms_en,
             count() AS sale_count,
             medianExactIf(size_sqm * 10.7639, size_sqm > 0) AS median_sale_size_sqft,
-            countIf(instance_date >= addYears(latest_sale_date, -1)) AS sales_last_12m,
+            countIf(instance_date >= addYears(latest_sale_date, -1) AND instance_date < latest_sale_date) AS sales_last_12m,
             countIf(
                 instance_date >= addYears(latest_sale_date, -2)
                 AND instance_date < addYears(latest_sale_date, -1)
             ) AS sales_prev_12m,
-            countIf(instance_date >= addDays(latest_sale_date, -90)) AS sales_last_90d,
+            countIf(instance_date >= addDays(latest_sale_date, -90) AND instance_date < latest_sale_date) AS sales_last_90d,
             countIf(
                 instance_date >= addDays(latest_sale_date, -180)
                 AND instance_date < addDays(latest_sale_date, -90)
@@ -178,7 +177,7 @@ def project_configuration_sales(
             round(quantileExact(0.25)(actual_worth), 2) AS price_p25,
             round(medianExact(actual_worth), 2) AS price_p50,
             round(quantileExact(0.75)(actual_worth), 2) AS price_p75,
-            round(avgIf(meter_sale_price / 10.7639, instance_date >= addYears(latest_sale_date, -1)), 2) AS avg_price_sqft_last_12m,
+            round(avgIf(meter_sale_price / 10.7639, instance_date >= addYears(latest_sale_date, -1) AND instance_date < latest_sale_date), 2) AS avg_price_sqft_last_12m,
             round(
                 avgIf(
                     meter_sale_price / 10.7639,
@@ -656,23 +655,22 @@ async def fetch_project_sales_bundle(parameters: dict, filter_type: ProjectScope
                round(medianExact(actual_worth), 2) AS median_sale_price,
                round(avg(meter_sale_price) / 10.7639, 2) AS avg_sale_price_sqft,
                round(medianExactIf(size_sqm * 10.7639, size_sqm > 0), 2) AS median_sale_size_sqft,
-               countIf(instance_date >= addYears(latest_sale_date, -1)) AS sales_last_12m,
+               countIf(instance_date >= addYears(latest_sale_date, -1) AND instance_date < latest_sale_date) AS sales_last_12m,
                countIf(instance_date >= addYears(latest_sale_date, -2)
                     AND instance_date < addYears(latest_sale_date, -1)) AS sales_prev_12m,
-               countIf(instance_date >= addDays(latest_sale_date, -90)) AS sales_last_90d,
+               countIf(instance_date >= addDays(latest_sale_date, -90) AND instance_date < latest_sale_date) AS sales_last_90d,
                countIf(instance_date >= addDays(latest_sale_date, -180)
                     AND instance_date < addDays(latest_sale_date, -90)) AS sales_prev_90d,
                round(quantileExact(0.25)(actual_worth), 2) AS price_p25,
                round(medianExact(actual_worth), 2) AS price_p50,
                round(quantileExact(0.75)(actual_worth), 2) AS price_p75,
                round(avgIf(meter_sale_price / 10.7639,
-                    instance_date >= addYears(latest_sale_date, -1)), 2) AS avg_price_sqft_last_12m,
+                    instance_date >= addYears(latest_sale_date, -1) AND instance_date < latest_sale_date), 2) AS avg_price_sqft_last_12m,
                round(avgIf(meter_sale_price / 10.7639,
                     instance_date >= addYears(latest_sale_date, -2)
                     AND instance_date < addYears(latest_sale_date, -1)), 2) AS avg_price_sqft_prev_12m
         FROM (
-            SELECT *, maxIf(instance_date, rooms_en != '') OVER (PARTITION BY segment)
-                      AS latest_sale_date
+            SELECT *, addDays(toDate(now('UTC')), 1) AS latest_sale_date
             FROM (
                 SELECT *, arrayJoin(['all', multiIf(reg_type_en = 'Existing Properties',
                         'secondary', reg_type_en = 'Off-Plan Properties', 'off_plan', 'unknown')])

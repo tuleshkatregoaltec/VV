@@ -66,7 +66,6 @@ test('market metrics, segment tables, distributions and supply controls', async 
         const rows = data.configuration_analysis.filter(
             (r: any) =>
                 r.market_segment === segment &&
-                r.sales_last_12m >= 3 &&
                 /^(Studio|\d+ B\/R|.*Penthouse.*)$/i.test(r.rooms),
         );
         expect(await config.locator('tbody tr').count()).toBe(rows.length);
@@ -80,7 +79,7 @@ test('market metrics, segment tables, distributions and supply controls', async 
                             exact: true,
                         }),
                     }),
-            ).toContainText(row.sales_last_12m.toLocaleString('en-US'));
+            ).toContainText(row.sale_count.toLocaleString('en-US'));
     }
     await config.getByRole('button', { name: 'Rental', exact: true }).click();
     for (const row of data.by_rooms.filter(

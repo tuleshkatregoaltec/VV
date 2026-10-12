@@ -41,7 +41,7 @@ describe('shared query builders', () => {
 		expect(projectSearchQuery.queryKey).toEqual(analyticsKeys.projectSearch('', 500))
 		// New DXBI ingestions must become searchable without reloading the app.
 		expect(projectSearchQuery.staleTime).toBe(5 * 60 * 1000)
-		expect(projectSearchQuery.queryKey).toContain('dxbi-v1')
+		expect(projectSearchQuery.queryKey).toContain('dxbi-v2')
 		await projectSearchQuery.queryFn()
 		expect(projectSearchSpy).toHaveBeenCalledWith('', 500)
 

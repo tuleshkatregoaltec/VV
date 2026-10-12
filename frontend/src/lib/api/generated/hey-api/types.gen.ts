@@ -7365,7 +7365,7 @@ export type ProjectConfigurationRow = {
     /**
      * Avg Unit Size Sqft
      *
-     * Median registered unit size (sq ft); the name predates the median
+     * Median observed DXBI sale size (sq ft), across all recorded dates
      */
     avg_unit_size_sqft: number;
     /**
