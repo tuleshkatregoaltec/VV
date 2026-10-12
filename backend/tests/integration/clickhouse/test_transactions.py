@@ -869,3 +869,65 @@ async def test_area_only_address_uses_exact_existing_location_catalogue(dxbi, wa
         SalesFilters(location="Um Suqaim First"), 10, 0
     )
     assert [r.transaction_id for r in matched.transactions] == ["plot"]
+
+
+async def test_location_keywords_match_across_fields_without_merging_numbers(dxbi, warehouse):
+    """One location search must reconcile lists, counts, facets and filtered exports."""
+    await warehouse.insert(
+        "dxbi_sales_unit_events",
+        [
+            sale(
+                "numbered-02",
+                building_name="02 Residence",
+                project_name="Ned Al Ghurair",
+                area_name="Jumeirah Village Triangle",
+                building_key="02residence",
+            ),
+            sale(
+                "numbered-03",
+                building_name="03 Residence",
+                project_name="Ned Al Ghurair",
+                area_name="Jumeirah Village Triangle",
+                building_key="03residence",
+            ),
+        ],
+        column_names=SALE_COLUMNS,
+    )
+    from app.transaction import queries
+
+    filters = SalesFilters(location_search="02 RESIDENCE triangle")
+    rows, total = await queries.fetch_sales_rows(filters, 10, 0)
+    assert total == 1
+    assert [r["transaction_id"] for r in rows] == ["numbered-02"]
+    exported = await queries.export_sales_rows(filters, None, 100)
+    assert [r["transaction_id"] for r in exported] == ["numbered-02"]
+    assert set((await queries.fetch_sales_facets(filters))["building_options"]) == {
+        "02 Residence",
+        "03 Residence",
+    }
+    assert (await queries.fetch_sales_rows(SalesFilters(location_search="02%' OR 1=1"), 10, 0))[
+        1
+    ] == 0
+
+
+async def test_rental_location_keywords_reconcile_export_and_count(dxbi):
+    from app.transaction import queries
+
+    await dxbi(
+        leases=[
+            lease(
+                "location-rent",
+                building_name="09 Life Residences",
+                location_name="09 Life Residences, Wadi Al Safa 5",
+                area_name="Wadi Al Safa 5",
+            )
+        ]
+    )
+    filters = RentalFilters(location_search="09 life safA")
+    rows, total = await queries.fetch_rental_rows(filters, 10, 0)
+    assert total == 1
+    assert rows[0]["contract_id"] == "location-rent"
+    assert len(await queries.export_rental_rows(filters, None, 100)) == total
+    assert (await queries.fetch_rental_rows(RentalFilters(location_search="08 life"), 10, 0))[
+        1
+    ] == 0

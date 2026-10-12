@@ -178,11 +178,13 @@ async def get_market_trend(
 
 
 @router.get("/projects", response_model=ProjectSearchResponse)
-@cached_endpoint(prefix="analytics:dxbi:search:v1", expire=300)
+@cached_endpoint(prefix="analytics:dxbi:search:v2", expire=300)
 async def search_projects_endpoint(
     context: AuthContext = Depends(require_active_subscription),
-    search: str = Query(default="", description="Master project name search term"),
-    limit: int = Query(default=50, description="Max results to return"),
+    search: str = Query(
+        default="", max_length=200, description="Building, project or area keywords"
+    ),
+    limit: int = Query(default=50, ge=1, le=100, description="Max results to return"),
 ):
     """Search master project names for the selector dropdown."""
     return await get_project_search(search=search, limit=limit)

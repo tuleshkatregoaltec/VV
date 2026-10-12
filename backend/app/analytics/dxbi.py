@@ -19,6 +19,7 @@ SALES_SOURCE = f"""(
            property_usage AS property_usage_en, {_ROOMS} AS rooms_en,
            multiIf(status = 'Off-Plan', 'Off-Plan Properties',
                    status = 'Ready', 'Existing Properties', '') AS reg_type_en,
+           if(project_name != '', 'Project', 'Building') AS scope_kind,
            {_SCOPE} AS project_name_en, location_name AS master_project_en,
            location_name, location_name AS area_name_en
     FROM ({normalized_sales_source_sql()})
@@ -30,6 +31,7 @@ RENTALS_SOURCE = f"""(
            size_sqft / 10.7639 AS actual_area, size_sqft / 10.7639 AS size_sqm,
            property_type, property_type AS property_type_en,
            property_usage AS property_usage_en, {_ROOMS} AS rooms_en,
+           if(project_name != '', 'Project', 'Building') AS scope_kind,
            {_SCOPE} AS project_name_en, location_name AS master_project_en,
            location_name, location_name AS area_name_en
     FROM ({normalized_rentals_source_sql()})

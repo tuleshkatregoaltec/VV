@@ -52,6 +52,7 @@ export const SALES_PRICE_SQFT_OPTIONS = ['All', ...Object.keys(SALES_PRICE_SQFT_
 export const RENT_OPTIONS = ['All', ...Object.keys(RENT_BANDS)]
 
 export interface SalesLocalFilters {
+	locationSearch: string
 	selectedLocation: string
 	selectedBuilding: string
 	selectedProject: string
@@ -64,6 +65,7 @@ export interface SalesLocalFilters {
 }
 
 export interface RentalsLocalFilters {
+	locationSearch: string
 	selectedLocation: string
 	selectedBuilding: string
 	selectedProject: string
@@ -75,6 +77,7 @@ export interface RentalsLocalFilters {
 }
 
 export const DEFAULT_SALES_LOCAL_FILTERS: SalesLocalFilters = {
+	locationSearch: '',
 	selectedLocation: 'All',
 	selectedBuilding: 'All',
 	selectedProject: 'All',
@@ -87,6 +90,7 @@ export const DEFAULT_SALES_LOCAL_FILTERS: SalesLocalFilters = {
 }
 
 export const DEFAULT_RENTALS_LOCAL_FILTERS: RentalsLocalFilters = {
+	locationSearch: '',
 	selectedLocation: 'All',
 	selectedBuilding: 'All',
 	selectedProject: 'All',
@@ -144,6 +148,7 @@ export function buildSalesFilterParams(
 ): SalesFacetFilters {
 	const local = context.localFilters
 	const filters: SalesFacetFilters = baseFilters(context)
+	if (local.locationSearch.trim()) filters.location_search = local.locationSearch.trim()
 	if (isSelected(local.selectedLocation)) filters.location = local.selectedLocation
 	if (isSelected(local.selectedBuilding)) filters.building = local.selectedBuilding
 	if (isSelected(local.selectedProject)) filters.project = local.selectedProject
@@ -173,6 +178,7 @@ export function buildRentalsFilterParams(
 ): RentalFacetFilters {
 	const local = context.localFilters
 	const filters: RentalFacetFilters = baseFilters(context)
+	if (local.locationSearch.trim()) filters.location_search = local.locationSearch.trim()
 	if (isSelected(local.selectedLocation)) filters.location = local.selectedLocation
 	if (isSelected(local.selectedBuilding)) filters.building = local.selectedBuilding
 	if (isSelected(local.selectedProject)) filters.project = local.selectedProject
@@ -201,6 +207,21 @@ export function withSelectedIds<T extends SalesTransactionFilters | RentalTransa
 		...filters,
 		[key]: Array.from(selectedIds).join(',')
 	} as T
+}
+
+export function formatLocation(...parts: (string | null | undefined)[]): string {
+	const seen = new Set<string>()
+	return (
+		parts
+			.filter((part): part is string => {
+				const key = part?.trim().normalize('NFKC').toLowerCase()
+				if (!key || key === '-' || seen.has(key)) return false
+				seen.add(key)
+				return true
+			})
+			.map((part) => part.trim())
+			.join(' · ') || 'Location unavailable'
+	)
 }
 
 // Table rows. Missing DXBI text values show as '-', missing numbers as null (formatted '-').
@@ -242,7 +263,7 @@ export function toSaleRow(sale: TransactionResponseOutput): SaleRow {
 		date: sale.transaction_date ?? '-',
 		unit: sale.unit_number ?? '-',
 		building: sale.building_name ?? '-',
-		location: sale.location_name ?? '-',
+		location: formatLocation(sale.building_name, sale.project_name, sale.location_name),
 		project: sale.project_name ?? '-',
 		propertyType: sale.property_type ?? '-',
 		bedrooms: sale.bedrooms ?? '-',
@@ -260,7 +281,7 @@ export function toRentalRow(lease: RentalContractResponseOutput): RentalRow {
 		endDate: lease.lease_end ?? '-',
 		unit: lease.unit_number ?? '-',
 		building: lease.building_name ?? '-',
-		location: lease.location_name ?? '-',
+		location: formatLocation(lease.building_name, lease.project_name, lease.location_name),
 		project: lease.project_name ?? '-',
 		propertyType: lease.property_type ?? '-',
 		bedrooms: lease.bedrooms ?? '-',

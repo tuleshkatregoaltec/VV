@@ -33,7 +33,7 @@ async def test_summary_search_and_charts_are_dxbi_only(dxbi, warehouse):  # noqa
             )
         ],
     )
-    await warehouse.command("""CREATE TABLE market_dxbi_sale_enrichment (
+    await warehouse.command("""CREATE TABLE IF NOT EXISTS market_dxbi_sale_enrichment (
         sale_key String, dxbi_loaded_at DateTime64(3, 'UTC'),
         requested_transaction_number String, match_status String,
         dld_transaction_number String, dld_line_id String, project_name String
@@ -135,3 +135,26 @@ async def test_configuration_periods_share_today_and_keep_old_sparse_bedrooms(dx
         "Off-Plan Properties",
     )
     assert all(row["sales_last_12m"] == 0 for row in narrow)
+
+
+async def test_search_labels_building_fallback_and_preserves_numbered_scopes(dxbi):  # noqa: F811
+    await dxbi(
+        sales=[
+            sale(
+                "scope08",
+                building_name="08 Life Residences",
+                building_key="08life",
+                project_name="",
+                area_name="Warsan Fourth",
+            ),
+            sale(
+                "scope09",
+                building_name="09 Life Residences",
+                building_key="09life",
+                project_name="",
+                area_name="Wadi Al Safa 5",
+            ),
+        ]
+    )
+    result = await service.get_project_search("08 LIFE warsan")
+    assert [(r.name, r.scope_kind) for r in result.projects] == [("08 Life Residences", "Building")]

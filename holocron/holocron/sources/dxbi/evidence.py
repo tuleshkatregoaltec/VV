@@ -128,10 +128,14 @@ def parse_loader_output(report: str, output: str) -> LoaderResult:
     """
     if report.endswith("-sweep"):
         match = re.search(r"Location members loaded ((?:\w+=\d+\s*)+)", output)
+        if not match:
+            raise RuntimeError(f"{report} loader accounting summary is missing")
         totals = {
             name: int(value)
             for name, value in re.findall(r"(\w+)=(\d+)", match.group(1) if match else "")
         }
+        if not {"members", "skipped"} <= totals.keys():
+            raise RuntimeError(f"{report} loader accounting is incomplete")
         return LoaderResult(
             rows_loaded=totals.get("members", 0),
             rows_skipped=totals.get("skipped", 0),
@@ -140,7 +144,19 @@ def parse_loader_output(report: str, output: str) -> LoaderResult:
         )
     if report == "rentals":
         match = re.search(r"Complete (\{.*\})", output)
-        totals = json.loads(match.group(1)) if match else {}
+        if not match:
+            raise RuntimeError("rentals loader accounting summary is missing")
+        totals = json.loads(match.group(1))
+        if (
+            not {
+                "loaded_contracts",
+                "out_of_scope_rows",
+                "profile_overlap_rows",
+                "quarantined_rows",
+            }
+            <= totals.keys()
+        ):
+            raise RuntimeError("rentals loader accounting is incomplete")
         return LoaderResult(
             rows_loaded=int(totals.get("loaded_contracts", 0)),
             rows_skipped=int(totals.get("out_of_scope_rows", 0))
@@ -149,10 +165,14 @@ def parse_loader_output(report: str, output: str) -> LoaderResult:
             details=totals,
         )
     match = re.search(r"Sales load complete ((?:\w+=\d+\s*)+)", output)
+    if not match:
+        raise RuntimeError(f"{report} loader accounting summary is missing")
     totals = {
         name: int(value)
         for name, value in re.findall(r"(\w+)=(\d+)", match.group(1) if match else "")
     }
+    if not {"loaded", "skipped", "errors"} <= totals.keys():
+        raise RuntimeError(f"{report} loader accounting is incomplete")
     return LoaderResult(
         rows_loaded=totals.get("loaded", 0),
         rows_skipped=totals.get("skipped", 0),
@@ -175,6 +195,16 @@ def scrape_window(run: EvidenceRun) -> tuple[str, str] | None:
     reconciliation = json.loads(path.read_text())
     statuses = list((reconciliation.get("terminal_partition_status") or {}).values())
     if reconciliation.get("status") != "success" or not statuses:
+        return None
+    if any(not isinstance(item, dict) or not item for item in statuses):
+        return None
+    partitions = sum(len(item) for item in statuses)
+    if (
+        reconciliation.get("expected_partitions") != partitions
+        or reconciliation.get("completed_partitions") != partitions
+        or reconciliation.get("failed_partitions") != 0
+        or reconciliation.get("missing_partitions") != 0
+    ):
         return None
     days = set(statuses[0])
     if any(set(days_status) != days for days_status in statuses) or any(
