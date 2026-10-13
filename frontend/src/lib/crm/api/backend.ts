@@ -35,7 +35,7 @@ import type {
 	InboundMatchResponse
 } from '$lib/api/generated/hey-api/types.gen'
 import { type ListingCardResponse, listings as portal } from '$lib/api/listings'
-import { groupOf, LEAD_TYPES, SOURCE_OPTIONS } from '../config'
+import { groupOf, LEAD_TYPES, ownerPropertyKind, SOURCE_OPTIONS } from '../config'
 import { aed, fmt, fullDate, plural, short } from '../format'
 import { importCounts, isFlagged, mappingChecks } from '../ownerImportReport'
 import type {
@@ -921,11 +921,10 @@ export async function listOwners(p: OwnerListParams): Promise<OwnerListResponse>
 			if (!props.some((x) => (bedsOf(x) ?? -1) === want || (want === 4 && (bedsOf(x) ?? 0) >= 4)))
 				return false
 		}
+		// DLD's type when known (opened owners), else the file's; generic "Unit" is "unspecified".
 		if (
 			p.ptype &&
-			!props.some(
-				(x) => (p.ptype === 'villa') === isVilla(x.registry_property_type || x.property_type)
-			)
+			!props.some((x) => ownerPropertyKind(x.registry_property_type || x.property_type) === p.ptype)
 		)
 			return false
 		if (p.units) {

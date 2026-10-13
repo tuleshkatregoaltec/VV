@@ -11,19 +11,13 @@ import InfoTip from '$lib/crm/components/ui/InfoTip.svelte'
 import PageHeader from '$lib/crm/components/ui/PageHeader.svelte'
 import QueryView from '$lib/crm/components/ui/QueryView.svelte'
 import { fmt } from '$lib/crm/format'
-import {
-	type ClaimStatus,
-	FAILED_STATUSES,
-	failureReasons,
-	STATUS_INFO
-} from '$lib/crm/ownerImportReport'
+import { type ClaimStatus, STATUS_HELP, STATUS_INFO } from '$lib/crm/ownerImportReport'
 import { crmQueries } from '$lib/crm/queries'
 import { write } from '$lib/crm/write'
 
 /**
- * One owner file's report: the row funnel (rows → dropped → merged → kept → matched / failed),
- * a tile per DLD status, each sheet's column mapping with what it means for its rows, and the
- * kept rows themselves — opening on the failed ones so the manager sees what to fix first.
+ * One owner file's report: the row funnel (rows → dropped → merged → kept → matched), a tile per
+ * DLD status, and the kept rows themselves, opening on all statuses.
  */
 const imports = createQuery(() => crmQueries.ownerImportDetails())
 const id = $derived(Number(page.params.id))
@@ -34,16 +28,10 @@ const STATUS = {
 	processing: { label: 'Processing', tone: 'amber' },
 	failed: { label: 'Failed', tone: 'red' }
 } as const
-const SOURCE = {
-	heuristic: 'Built-in column names',
-	llm: 'AI header helper',
-	heuristic_fallback: 'Built-in names (AI failed)'
-}
-const FAMILY: Record<string, string> = {
-	transaction_party: 'Transaction sheet',
-	contact_list: 'Contact list'
-}
-const statuses = Object.keys(STATUS_INFO) as ClaimStatus[]
+// Every DLD status gets a tile except "Unit found, not verified".
+const statuses = (Object.keys(STATUS_INFO) as ClaimStatus[]).filter(
+	(s) => s !== 'unit_linked_unverified'
+)
 
 let editing = $state(false)
 let draft = $state('')
@@ -53,20 +41,17 @@ let confirming = $state(false)
 // The rows open on the first failed status that has rows; after that the tiles and the select drive
 // it. A processing import has no counts yet, so the choice waits until it has finished. Moving to
 // another import also closes any open rename or delete prompt.
+// The owner rows open on "All statuses"; the tiles and the select narrow them. Moving to another
+// import resets the filter and closes any open rename or delete prompt.
 let status = $state<ClaimStatus | null>(null)
-let chosenFor = $state<number | null>(null)
 let shownFor = $state<number | null>(null)
 $effect.pre(() => {
-	if (!imp) return
-	if (shownFor !== imp.id) {
-		shownFor = imp.id
-		editing = false
-		confirming = false
-		draft = ''
-	}
-	if (chosenFor === imp.id || imp.status === 'processing') return
-	chosenFor = imp.id
-	status = FAILED_STATUSES.find((s) => imp.counts.byStatus[s] > 0) ?? null
+	if (!imp || shownFor === imp.id) return
+	shownFor = imp.id
+	status = null
+	editing = false
+	confirming = false
+	draft = ''
 })
 
 async function rename(i: OwnerImportDetail) {
@@ -168,7 +153,6 @@ const share = (n: number, of: number) => (of ? `${Math.round((n / of) * 100)}%` 
 				<h3>What happened to the rows</h3>
 				<div class="bar" aria-hidden="true">
 					<span class="seg matched" style:width={pct(c.matched, c.rows)}></span>
-					<span class="seg failed" style:width={pct(c.failed, c.rows)}></span>
 					<span class="seg merged" style:width={pct(c.merged, c.rows)}></span>
 					<span class="seg dropped" style:width={pct(c.dropped, c.rows)}></span>
 				</div>
@@ -189,27 +173,6 @@ const share = (n: number, of: number) => (of ? `${Math.round((n / of) * 100)}%` 
 						<span class="lbl"><i class="dot matched"></i>Matched to DLD</span><span class="v">{fmt(c.matched)}</span>
 						<span class="n">{c.matchRate === null ? '—' : `${Math.round(c.matchRate * 100)}%`} of kept</span>
 					</div>
-					<div class="kpi red">
-						<span class="lbl">
-							<i class="dot failed"></i>Failed to match
-							{#if c.failed}
-								<InfoTip label="Why {fmt(c.failed)} rows failed to match" align="left">
-									<b>Why {fmt(c.failed)} rows failed to match DLD</b>
-									<ul class="why">
-										{#each failureReasons(c) as r (r.status)}
-											<li>
-												<b>{r.label} · {fmt(r.count)}</b>
-												<span>{r.meaning}.</span>
-												<span class="fix">Fix: {r.fix}</span>
-											</li>
-										{/each}
-									</ul>
-								</InfoTip>
-							{/if}
-						</span>
-						<span class="v">{fmt(c.failed)}</span>
-						<span class="n">{share(c.failed, c.kept)} of kept</span>
-					</div>
 				</div>
 			</section>
 
@@ -218,57 +181,32 @@ const share = (n: number, of: number) => (of ? `${Math.round((n / of) * 100)}%` 
 				<h3>By DLD status</h3>
 				<div class="grid-4 kpis">
 					{#each statuses as s (s)}
-						<button
-							type="button"
-							class={['kpi', status === s && 'on']}
-							aria-pressed={status === s}
-							disabled={imp.listId === null}
-							onclick={() => (status = status === s ? null : s)}
-						>
-							<span class="lbl"><Chip tone={STATUS_INFO[s].tone}>{STATUS_INFO[s].label}</Chip></span>
-							<span class="v sm">{fmt(c.byStatus[s])} <small>{share(c.byStatus[s], c.kept)}</small></span>
-							<span class="n">{STATUS_INFO[s].meaning}</span>
-						</button>
+						<!-- The tile filters the owner rows; the ⓘ beside it explains the status. -->
+						<div class="stile">
+							<button
+								type="button"
+								class={['kpi', status === s && 'on']}
+								aria-pressed={status === s}
+								disabled={imp.listId === null}
+								onclick={() => (status = status === s ? null : s)}
+							>
+								<span class="lbl"><Chip tone={STATUS_INFO[s].tone}>{STATUS_INFO[s].label}</Chip></span>
+								<span class="v sm">{fmt(c.byStatus[s])} <small>{share(c.byStatus[s], c.kept)}</small></span>
+								<span class="n">{STATUS_INFO[s].meaning}</span>
+							</button>
+							<span class="stip">
+								<InfoTip label="What “{STATUS_INFO[s].label}” means">
+									<b>{STATUS_INFO[s].label}</b>
+									<span>{STATUS_HELP[s].how}</span>
+									<span class="todo">{STATUS_HELP[s].todo}</span>
+								</InfoTip>
+							</span>
+						</div>
 					{/each}
 				</div>
 			</section>
 
-			<!-- 4. Sheets and mapping -->
-			<section class="sec">
-				<h3>Sheets and column mapping</h3>
-				{#each imp.sheets as s, i (i)}
-					<div class="card sheet">
-						<div class="sh">
-							<b>{s.name}</b>
-							<span class="small muted">
-								{fmt(s.rows)} rows · {FAMILY[s.family] ?? s.family} · {SOURCE[s.source] ?? s.source}
-								{s.source === 'llm' ? ` · ${Math.round(s.confidence * 100)}% sure` : ''}
-							</span>
-						</div>
-						{#each s.checks as k (k.code)}
-							<div class={['check', k.level]} role={k.level === 'error' ? 'alert' : undefined}>
-								{k.level === 'error' ? '⚠' : 'ⓘ'}
-								{k.text}
-							</div>
-						{/each}
-						<dl class="fields">
-							{#each s.fields as f (f.field)}
-								<dt>{f.field}</dt>
-								<dd>{f.column}</dd>
-							{/each}
-						</dl>
-						{#if s.warnings.length}
-							<ul class="small muted warns">
-								{#each s.warnings as w, j (j)}<li>{w}</li>{/each}
-							</ul>
-						{/if}
-					</div>
-				{:else}
-					<p class="small muted">No sheet details were stored for this import.</p>
-				{/each}
-			</section>
-
-			<!-- 5. Owner rows -->
+			<!-- 4. Owner rows -->
 			<section class="sec">
 				<h3>Owner rows</h3>
 				{#if imp.listId === null}
@@ -333,10 +271,6 @@ const share = (n: number, of: number) => (of ? `${Math.round((n / of) * 100)}%` 
 	.dot.matched {
 		background: var(--green);
 	}
-	.seg.failed,
-	.dot.failed {
-		background: var(--red);
-	}
 	.seg.merged,
 	.dot.merged {
 		background: var(--text2);
@@ -361,61 +295,19 @@ const share = (n: number, of: number) => (of ? `${Math.round((n / of) * 100)}%` 
 		font-weight: 400;
 		color: var(--text2);
 	}
-	.sheet {
-		padding: 0.9rem 1rem;
-		margin-bottom: 0.75rem;
+	.stile {
+		position: relative;
 		display: grid;
-		gap: 0.5rem;
 	}
-	.sh {
-		display: flex;
-		align-items: baseline;
-		flex-wrap: wrap;
-		gap: 0.6rem;
+	.stile > .kpi {
+		width: 100%;
 	}
-	.check {
-		font-size: 13px;
-		padding: 0.4rem 0.6rem;
-		border-radius: 8px;
+	.stip {
+		position: absolute;
+		top: 10px;
+		right: 10px;
 	}
-	.check.error {
-		background: var(--red-bg);
-		color: var(--red);
-	}
-	.check.warning {
-		background: var(--amber-bg);
-		color: var(--amber);
-	}
-	.fields {
-		display: grid;
-		grid-template-columns: max-content 1fr;
-		gap: 0.2rem 1rem;
-		margin: 0;
-		font-size: 13px;
-	}
-	.fields dt {
-		color: var(--text2);
-		font-family: var(--mono, ui-monospace, monospace);
-		font-size: 12px;
-	}
-	.fields dd {
-		margin: 0;
-	}
-	.warns {
-		margin: 0;
-		padding-left: 1.1rem;
-	}
-	.why {
-		margin: 0;
-		padding-left: 1.1rem;
-		display: grid;
-		gap: 0.55rem;
-	}
-	.why li {
-		display: grid;
-		gap: 0.1rem;
-	}
-	.why .fix {
+	.todo {
 		color: var(--text2);
 		font-size: 12px;
 	}

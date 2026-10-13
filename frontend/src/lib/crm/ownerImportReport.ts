@@ -74,6 +74,45 @@ export const STATUS_INFO: Record<ClaimStatus, { label: string; meaning: string; 
 	}
 }
 
+/**
+ * How the backend decides each status (backend/app/crm/ownership.py) and what to do about it, for
+ * the ⓘ on the import report's status tiles. Sales are DLD sales of the matched unit.
+ */
+export const STATUS_HELP: Record<ClaimStatus, { how: string; todo: string }> = {
+	verified_current_owner: {
+		how: 'DLD has a sale of this unit within ±2 days of the file’s date, the price is within 2%, and there is no later sale. Confidence 98%.',
+		todo: 'Ready to use: the strongest evidence of current ownership.'
+	},
+	probable_current_owner: {
+		how: 'A DLD sale fits the file’s date (±2 days) but the file has no price to compare (86%), or the file’s date is newer than the latest DLD sale (72%).',
+		todo: 'Likely the owner; check before relying on it.'
+	},
+	unit_linked_unverified: {
+		how: 'A unit or lease was linked, but there is no sale or date to prove ownership.',
+		todo: 'Check ownership another way.'
+	},
+	former_owner: {
+		how: 'The file lists this person as the Seller (100%), or DLD shows a later sale of the unit more than 2 days after the file’s date (99%).',
+		todo: 'Not the current owner: a past relationship, not a lead.'
+	},
+	conflicting_claim: {
+		how: 'A DLD sale is within ±2 days but the price differs by more than 2% (45%), or the date does not fit the unit’s sales history (40%).',
+		todo: 'Review the row: the file and DLD disagree.'
+	},
+	insufficient_property_data: {
+		how: 'No unit could be worked out: the row has no unit, and no single DLD sale matches its date and price in its location. Confidence 0%.',
+		todo: 'Add a unit or plot number DLD knows to the file and upload it again.'
+	},
+	registry_not_observed: {
+		how: 'The row has a unit, but DLD’s sales data has never recorded it (often off-plan, very new, or a mistyped unit). Confidence 10%.',
+		todo: 'Check the unit number; DLD may not list it yet.'
+	},
+	unmatched: {
+		how: 'The unit number exists in several DLD buildings and the file’s building / project did not clearly pick one (needs a score of 55 and a 12-point lead). Confidence 20%.',
+		todo: 'Write the building name the way DLD does, then upload again.'
+	}
+}
+
 const SUMMARY_KEY: Record<ClaimStatus, keyof CrmContactImportSummary> = {
 	verified_current_owner: 'verified_current_owners',
 	probable_current_owner: 'probable_current_owners',

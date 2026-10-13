@@ -201,6 +201,15 @@ export interface LeadDetail extends LeadRow {
 
 export type BudgetBand = 's1' | 's2' | 's3' | 'r1' | 'r2'
 export type PropertyKind = 'apartment' | 'villa'
+/** Owners type filter: the kinds of property in owner files and DLD; "unspecified" = "Unit" / "Residential". */
+export type OwnerPropertyKind =
+	| 'apartment'
+	| 'villa'
+	| 'land'
+	| 'hotel'
+	| 'commercial'
+	| 'building'
+	| 'unspecified'
 
 export interface LeadListParams {
 	lead_type?: LeadType | ''
@@ -758,7 +767,7 @@ export interface OwnerListParams {
 	source?: OwnerSource | ''
 	area?: string
 	beds?: string
-	ptype?: PropertyKind | ''
+	ptype?: OwnerPropertyKind | ''
 	/** 1, 2 or 3 (= 3 or more) */
 	units?: string
 	/** Where the page starts in the whole owner file; 0 when left out. */

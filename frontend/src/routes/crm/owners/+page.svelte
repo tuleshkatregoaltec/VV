@@ -12,7 +12,7 @@ import PageHeader from '$lib/crm/components/ui/PageHeader.svelte'
 import QueryView from '$lib/crm/components/ui/QueryView.svelte'
 import Skeleton from '$lib/crm/components/ui/Skeleton.svelte'
 import Tabs from '$lib/crm/components/ui/Tabs.svelte'
-import { BEDS_OPTIONS, OWNER_SOURCES, PTYPE_OPTIONS, stageOf } from '$lib/crm/config'
+import { OWNER_PTYPE_OPTIONS, OWNER_SOURCES, stageOf } from '$lib/crm/config'
 import { fmt } from '$lib/crm/format'
 import { crmQueries } from '$lib/crm/queries'
 import { openOwner, panel } from '$lib/crm/stores/panel.svelte'
@@ -32,7 +32,7 @@ $effect(() => {
 const PAGE_SIZES = [50, 100, 200, 500]
 let offset = $state(0)
 $effect.pre(() => {
-	void [ui.ownerTab, q, ui.ownerSource, ui.ownerArea, ui.ownerBeds, ui.ownerPtype, ui.ownerPageSize]
+	void [ui.ownerTab, q, ui.ownerSource, ui.ownerArea, ui.ownerPtype, ui.ownerPageSize]
 	offset = 0
 })
 
@@ -41,7 +41,6 @@ const params = $derived<OwnerListParams>({
 	q,
 	source: ui.ownerSource,
 	area: ui.ownerArea,
-	beds: ui.ownerBeds,
 	ptype: ui.ownerPtype,
 	offset,
 	limit: ui.ownerPageSize
@@ -63,21 +62,19 @@ function goPage(next: number) {
 	offset = next
 	document.querySelector('.owners-table')?.scrollIntoView({ block: 'start' })
 }
-const filtered = $derived(
-	Boolean(ui.ownerQ || ui.ownerSource || ui.ownerArea || ui.ownerBeds || ui.ownerPtype)
-)
+const filtered = $derived(Boolean(ui.ownerQ || ui.ownerSource || ui.ownerArea || ui.ownerPtype))
 const waiting = $derived(imports.data?.filter((r) => r.status === 'Waiting').length ?? 0)
 
-/** v2 tabs (6 Oct, 11:20): All · My contacts · 3+ units · Next event ≤ 90 days · Just sold · Update due. */
+/** v2 tabs (6 Oct, 11:20): All · 3+ units · Next event ≤ 90 days · Just sold · Update due (My contacts removed). */
 const tabs = $derived(
 	(
 		[
 			['all', 'All'],
-			['mine', 'My contacts'],
 			['multi', '3+ units'],
 			['event', 'Next event ≤ 90 days'],
-			['sold', 'Just sold'],
-			['update', 'Update due']
+			// "Former owners" (was "Just sold"): every owner the file or DLD shows as a seller, of any date.
+			// "Update due" is hidden until market updates exist.
+			['sold', 'Former owners']
 		] as [OwnerTab, string][]
 	).map(([id, label]) => ({
 		id,
@@ -117,25 +114,19 @@ const facts = $derived(
 		<span class="sr-only">Search owners</span>
 		<input placeholder="Owner, unit, building" autocomplete="off" bind:value={ui.ownerQ} />
 	</label>
+	<!-- Every owner comes from an imported file today; "Own contact" and "DLD/Ejari event" have no data yet. -->
 	<FilterMenu
 		label="Source"
 		allLabel="All sources"
 		value={ui.ownerSource}
-		options={OWNER_SOURCES.map((s) => ({ id: s.id as OwnerSource, label: s.label }))}
+		options={OWNER_SOURCES.filter((s) => s.id === 'agency_import').map((s) => ({ id: s.id as OwnerSource, label: s.label }))}
 		onselect={(v) => (ui.ownerSource = v)}
-	/>
-	<FilterMenu
-		label="Bedrooms"
-		allLabel="Any bedrooms"
-		value={ui.ownerBeds}
-		options={BEDS_OPTIONS}
-		onselect={(v) => (ui.ownerBeds = v)}
 	/>
 	<FilterMenu
 		label="Type"
 		allLabel="Any type"
 		value={ui.ownerPtype}
-		options={PTYPE_OPTIONS.map((x) => ({ id: x.id as PropertyKind, label: x.label }))}
+		options={OWNER_PTYPE_OPTIONS}
 		onselect={(v) => (ui.ownerPtype = v)}
 	/>
 	<FilterMenu
@@ -233,7 +224,7 @@ const facts = $derived(
 		{#if o.page.total > o.page.limit}
 			<div class="pager">
 				<span class="small muted">
-					{pageText} · the source, bedrooms, type and area filters cover this page
+					{pageText} · the source, type and area filters cover this page
 				</span>
 				<button
 					type="button"

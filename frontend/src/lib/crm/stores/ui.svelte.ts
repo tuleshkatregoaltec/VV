@@ -9,6 +9,7 @@ import type {
 	LeadStage,
 	LeadType,
 	ListingStatus,
+	OwnerPropertyKind,
 	OwnerSource,
 	OwnerTab,
 	PropertyKind,
@@ -57,7 +58,7 @@ export const ui = $state({
 	ownerMore: false,
 	ownerArea: '',
 	ownerBeds: '',
-	ownerPtype: '' as PropertyKind | '',
+	ownerPtype: '' as OwnerPropertyKind | '',
 	ownerUnits: '',
 	/** Owners per page on the Owners table: 50, 100, 200 or 500. */
 	ownerPageSize: 50,

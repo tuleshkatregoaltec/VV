@@ -19,7 +19,7 @@ async function submit(e: SubmitEvent) {
 	})
 	saving = false
 	if (r) {
-		ui.ownerTab = 'mine'
+		ui.ownerTab = 'all'
 		ui.ownerSource = ''
 		await goto(`/crm/owners?owner=${r.data.id}`)
 	}

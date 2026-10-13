@@ -11,6 +11,7 @@ import type {
 	LeadStage,
 	LeadType,
 	Origin,
+	OwnerPropertyKind,
 	OwnerSource,
 	PropertyKind,
 	Source,
@@ -183,6 +184,36 @@ export const PTYPE_OPTIONS: { id: PropertyKind; label: string }[] = [
 	{ id: 'apartment', label: 'Apartment' },
 	{ id: 'villa', label: 'Villa / townhouse' }
 ]
+/**
+ * Owners type filter: the main kinds in the owner files and DLD, plus "Not specified". Hotel and
+ * commercial properties are recognised but have no option of their own (they show under Any type).
+ */
+export const OWNER_PTYPE_OPTIONS: { id: OwnerPropertyKind; label: string }[] = [
+	{ id: 'apartment', label: 'Apartment' },
+	{ id: 'villa', label: 'Villa / townhouse' },
+	{ id: 'land', label: 'Land / plot' },
+	{ id: 'building', label: 'Whole building' },
+	{ id: 'unspecified', label: 'Not specified (“Unit”)' }
+]
+
+/**
+ * The kind of property from a file's or DLD's type. Generic types ("Unit", "Residential", empty)
+ * are "unspecified" rather than guessed as apartments.
+ */
+export function ownerPropertyKind(type: unknown): OwnerPropertyKind {
+	const t = String(type ?? '')
+		.trim()
+		.toLowerCase()
+	if (/villa|townhouse/.test(t)) return 'villa'
+	if (/hotel/.test(t)) return 'hotel'
+	if (/\bland\b|plot/.test(t)) return 'land'
+	if (/flat|apartment/.test(t)) return 'apartment'
+	if (/commercial|shop|office|show ?room|workshop|warehouse|clinic|retail|gym/.test(t))
+		return 'commercial'
+	if (/building/.test(t)) return 'building'
+	return 'unspecified'
+}
+
 export const BUDGET_OPTIONS: { id: BudgetBand; label: string }[] = [
 	{ id: 's1', label: 'Sale under 1m' },
 	{ id: 's2', label: 'Sale 1–3m' },

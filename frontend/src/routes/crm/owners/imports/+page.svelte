@@ -13,7 +13,7 @@ import { crmQueries } from '$lib/crm/queries'
 import { panel } from '$lib/crm/stores/panel.svelte'
 
 /**
- * Owner imports: what each uploaded owner file gave — rows kept, matched to DLD, failed, dropped —
+ * Owner imports: what each uploaded owner file gave — rows kept, matched to DLD, dropped —
  * so a manager can see which files need fixing. ⚠ marks a failed import or a sheet whose mapping
  * means its rows were dropped or can't be tied to a property. Totals count completed imports.
  */
@@ -27,14 +27,13 @@ const STATUS = {
 
 function totals(list: OwnerImportDetail[]) {
 	const done = list.filter((i) => i.status === 'completed')
-	const sum = (k: 'rows' | 'kept' | 'matched' | 'failed' | 'dropped' | 'readyToContact') =>
+	const sum = (k: 'rows' | 'kept' | 'matched' | 'dropped' | 'readyToContact') =>
 		done.reduce((t, i) => t + i.counts[k], 0)
 	return [
 		{ label: 'Imports', v: list.length },
 		{ label: 'Rows in files', v: sum('rows') },
 		{ label: 'Owners kept', v: sum('kept') },
 		{ label: 'Matched to DLD', v: sum('matched'), tone: 'green' },
-		{ label: 'Failed to match', v: sum('failed'), tone: 'red' },
 		{ label: 'Dropped', v: sum('dropped') },
 		{ label: 'Ready to contact', v: sum('readyToContact') }
 	]
@@ -52,7 +51,7 @@ const problems = (i: OwnerImportDetail) => [
 
 <svelte:head><title>Owner imports · CRM Beta</title></svelte:head>
 
-<PageHeader title="Owner imports" facts="Each owner file, checked against DLD · rows kept, matched, failed and dropped">
+<PageHeader title="Owner imports" facts="Each owner file, checked against DLD · rows kept, matched and dropped">
 	{#snippet right()}
 		<a class="btn ghost" href="/crm/owners"><ArrowLeft size={15} /><span>Owners</span></a>
 		<button type="button" class="btn ghost" onclick={() => panel.open({ kind: 'new-import', ownersOnly: true })}>
@@ -90,7 +89,6 @@ const problems = (i: OwnerImportDetail) => [
 								<th class="r">Rows</th>
 								<th class="r">Kept</th>
 								<th class="r">Matched</th>
-								<th class="r">Failed</th>
 								<th class="r">Dropped</th>
 								<th class="r">Match rate</th>
 								<th>Status</th>
@@ -110,7 +108,6 @@ const problems = (i: OwnerImportDetail) => [
 									<td data-label="Rows" class="r">{fmt(i.counts.rows)}</td>
 									<td data-label="Kept" class="r">{fmt(i.counts.kept)}</td>
 									<td data-label="Matched" class="r">{fmt(i.counts.matched)}</td>
-									<td data-label="Failed" class="r">{fmt(i.counts.failed)}</td>
 									<td data-label="Dropped" class="r">{fmt(i.counts.dropped)}</td>
 									<td data-label="Match rate" class="r">{rate(i.counts.matchRate)}</td>
 									<td data-label="Status"><Chip tone={STATUS[i.status].tone}>{STATUS[i.status].label}</Chip></td>
@@ -123,7 +120,6 @@ const problems = (i: OwnerImportDetail) => [
 														<li>{#if p.sheet}<span class="sheet">{p.sheet}:</span>{/if} {p.text}</li>
 													{/each}
 												</ul>
-												<span class="hint">Open the import for the full report.</span>
 											</InfoTip>
 										{/if}
 									</td>
