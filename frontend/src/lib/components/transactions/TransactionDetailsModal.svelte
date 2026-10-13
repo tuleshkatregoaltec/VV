@@ -24,9 +24,15 @@ const fields = $derived(
 				{ label: 'Transaction ID', value: transaction.transaction_id },
 				{ label: 'Date', value: transaction.date },
 				{ label: 'Unit', value: transaction.unit },
-				{ label: 'Building', value: transaction.building },
-				{ label: 'Location', value: transaction.location },
+				// DXBI lists a standalone tower as a project: it is its own building.
+				{
+					label: 'Building',
+					value: transaction.building !== '-' ? transaction.building : transaction.project
+				},
+				{ label: 'Community', value: transaction.community },
 				{ label: 'Project', value: transaction.project },
+				{ label: 'Master Project', value: transaction.masterProject },
+				{ label: 'DLD Area', value: transaction.dldArea },
 				{ label: 'Property Type', value: transaction.propertyType },
 				{ label: 'Bedrooms', value: transaction.bedrooms },
 				{ label: 'Status', value: transaction.status },
@@ -53,9 +59,24 @@ const fields = $derived(
 					</div>
 				{/each}
 			</div>
+			<div class="mt-4 rounded-lg border border-border bg-panel p-4">
+				<span class="text-sm text-fg-4">Location</span>
+				<p class="font-medium text-fg-1">{transaction.location}</p>
+				{#if transaction.mapUrl}
+					<a
+						href={transaction.mapUrl}
+						target="_blank"
+						rel="noopener noreferrer"
+						class="mt-1 inline-block text-sm text-info underline underline-offset-2"
+					>
+						Open in Google Maps
+					</a>
+				{/if}
+			</div>
 			<p class="mt-3 text-xs text-fg-4">
 				Source: DXBInteract (DXBI) sold-transaction record. Size and price/sq ft are DXBI's own
-				figures.
+				figures. Master project, DLD area and any value DXBI left empty come from the matching
+				Dubai Land Department record.
 			</p>
 		</div>
 	{/if}

@@ -209,16 +209,26 @@ def _location_title(cell_html: str) -> str:
     return " ".join(unescape(title.group("title")).split()) if title else ""
 
 
+_LOCATION_KEY_REPLACEMENTS = {
+    "jumeriah": "jumeirah",
+    "residences": "residence",
+    "apartments": "apartment",
+}
+
+
 def location_key(value: str) -> str:
     normalized = value.lower()
-    replacements = {
-        "jumeriah": "jumeirah",
-        "residences": "residence",
-        "apartments": "apartment",
-    }
-    for source, target in replacements.items():
+    for source, target in _LOCATION_KEY_REPLACEMENTS.items():
         normalized = normalized.replace(source, target)
     return re.sub(r"[^a-z0-9]+", "", normalized)
+
+
+def location_key_sql(expr: str) -> str:
+    """``location_key`` as a ClickHouse expression."""
+    normalized = f"lowerUTF8({expr})"
+    for source, target in _LOCATION_KEY_REPLACEMENTS.items():
+        normalized = f"replaceAll({normalized}, '{source}', '{target}')"
+    return f"replaceRegexpAll({normalized}, '[^a-z0-9]+', '')"
 
 
 def _bedroom_label(value: str) -> str:

@@ -227,13 +227,13 @@ for (const kind of ['sales', 'rentals'] as const) {
         test('column settings show and hide a column', async ({ page }) => {
             const listing = await openPage(page, kind, 'Residential', 'Last Month');
             await listing(usageQuery('Residential', 30));
-            // Project is shown by default beside Building (DXBI's location list names it).
-            const header = page.locator('thead').getByText('Project', { exact: true });
+            // Bedrooms is shown by default, both for sales and for leases.
+            const header = page.locator('thead').getByText('Bedrooms', { exact: true });
             await expect(header).toBeVisible();
             await page.locator('#column-visibility-button').click();
-            await page.locator('#column-visibility-menu').getByText('Project', { exact: true }).click();
+            await page.locator('#column-visibility-menu').getByText('Bedrooms', { exact: true }).click();
             await expect(header).toHaveCount(0);
-            await page.locator('#column-visibility-menu').getByText('Project', { exact: true }).click();
+            await page.locator('#column-visibility-menu').getByText('Bedrooms', { exact: true }).click();
             await expect(header).toBeVisible();
         });
 

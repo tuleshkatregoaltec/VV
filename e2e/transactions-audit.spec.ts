@@ -39,10 +39,7 @@ for (const kind of ['sales', 'rentals'] as const) {
             kind === 'sales'
                 ? [
                       'transaction_date',
-                      'unit_number',
-                      'building_name',
-                      'project_name',
-                      'location_name',
+                      'location',
                       'property_type',
                       'bedrooms',
                       'size_sqft',
@@ -53,10 +50,7 @@ for (const kind of ['sales', 'rentals'] as const) {
                 : [
                       'lease_start',
                       'lease_end',
-                      'unit_number',
-                      'building_name',
-                      'project_name',
-                      'location_name',
+                      'location',
                       'property_type',
                       'bedrooms',
                       'size_sqft',
@@ -72,8 +66,17 @@ for (const kind of ['sales', 'rentals'] as const) {
                 .nth(i)
                 .locator('td')
                 .allInnerTexts();
+            // One Location column joins unit, building, project, master and area (DXBI's
+            // community when the profile has none); bedrooms of a non-home are not applicable.
+            const homes = ['Apartment', 'Villa', 'Townhouse', 'Hotel Apartment', 'Penthouse', 'Duplex'];
             const expected = fields.map((key) =>
-                rows[i][key] == null
+                key === 'location'
+                    ? rows[i].location || rows[i].location_name || '-'
+                    : key === 'bedrooms' && rows[i].bedrooms == null
+                      ? rows[i].property_type && !homes.includes(rows[i].property_type)
+                          ? 'N/A'
+                          : '-'
+                      : rows[i][key] == null
                     ? '-'
                     : typeof rows[i][key] === 'number'
                       ? new Intl.NumberFormat('en-US', {

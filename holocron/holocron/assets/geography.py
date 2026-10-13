@@ -29,6 +29,7 @@ from holocron.domain.offplan_projects import (
 )
 from holocron.platform.clickhouse import ClickHouseClient
 from holocron.platform.clickhouse_schema import ensure_schema
+from holocron.sources.dxbi.agent_names import UNSERVED_NAMES_SQL
 from holocron.platform.resources import ClickHouseResource
 
 _GEOGRAPHY_GROUP = "geography"
@@ -915,8 +916,23 @@ def _load_overrides(
     }
 
 
+def _repaired_building_names(clickhouse: ClickHouseClient) -> set[str]:
+    exists = clickhouse.query(
+        "SELECT count() FROM system.tables WHERE database = currentDatabase() "
+        "AND name = 'dxbi_building_name_repairs'"
+    ).result_rows[0][0]
+    if not exists:
+        return set()
+    return {str(row[0]) for row in clickhouse.query(UNSERVED_NAMES_SQL).result_rows}
+
+
 def materialize_geo_tower_aliases(*, clickhouse: ClickHouseClient) -> int:
-    """Preserve approved aliases and learn only from already approved exact links."""
+    """Preserve approved aliases and learn only from already approved exact links.
+
+    A DXBI building name an agent's name was glued to (holocron.sources.dxbi.agent_names) is
+    never an alias, even one approved before the repair: a person's name must not be served.
+    """
+    repaired = _repaired_building_names(clickhouse)
     preserved_rows = clickhouse.query(
         """
         SELECT
@@ -956,9 +972,11 @@ def materialize_geo_tower_aliases(*, clickhouse: ClickHouseClient) -> int:
         GROUP BY canonical_location_id, raw_building_name, source_system
         """
     ).result_rows
-    rows = [tuple(row) for row in preserved_rows]
+    rows = [tuple(row) for row in preserved_rows if row[1] not in repaired]
     preserved_keys = {(row[0], row[2], row[3]) for row in rows}
     for canonical_location_id, alias_name, source_system, evidence_json in generated:
+        if alias_name in repaired:
+            continue
         normalized_alias = normalize_location_name(alias_name)
         key = (canonical_location_id, normalized_alias, source_system)
         if not normalized_alias or key in preserved_keys:

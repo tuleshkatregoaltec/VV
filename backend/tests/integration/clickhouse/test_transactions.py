@@ -125,11 +125,13 @@ async def dxbi(warehouse, install_serving):
             "dxbi_places",
             "dxbi_location_members",
             "dxbi_location_lease_members",
+            "dxbi_sale_profile",
+            "dxbi_rental_profile",
         ),
         views=(),
     )
 
-    async def insert(*, sales=(), leases=()):
+    async def insert(*, sales=(), leases=(), sale_profiles=(), lease_profiles=()):
         if sales:
             await warehouse.insert(
                 "dxbi_sales_unit_events", list(sales), column_names=list(SALE_COLUMNS)
@@ -138,6 +140,13 @@ async def dxbi(warehouse, install_serving):
             await warehouse.insert(
                 "dxbi_rental_events", list(leases), column_names=list(RENTAL_COLUMNS)
             )
+        for table, rows in (
+            ("dxbi_sale_profile", sale_profiles),
+            ("dxbi_rental_profile", lease_profiles),
+        ):
+            # Each profile row names only the columns it sets; the rest take their defaults.
+            for row in rows:
+                await warehouse.insert(table, [list(row.values())], column_names=list(row))
 
     return insert
 
@@ -185,6 +194,10 @@ async def test_each_dxbi_sale_appears_once_with_its_unit_in_square_feet(dxbi):
         "unit_number": "1904",
         "building_name": "Tower A",
         "project_name": None,
+        "master_project": None,
+        "dld_area": None,
+        "location": None,
+        "map_url": None,
         "location_name": "Downtown Dubai",
         "property_type": "Apartment",
         "bedrooms": "1 Bed",
@@ -511,6 +524,10 @@ async def test_numbered_units_hold_one_copy_of_a_lease_and_unnumbered_rows_all_c
         "unit_number": "1101",
         "building_name": "Iris Blue",
         "project_name": None,
+        "master_project": None,
+        "dld_area": None,
+        "location": None,
+        "map_url": None,
         "location_name": "Dubai Marina",
         "property_type": "Apartment",
         "bedrooms": "2 Beds",
@@ -562,6 +579,67 @@ async def test_exports_hold_the_page_rows_and_neutralise_formulas(dxbi):
     assert [(r["Unit"], r["Annual Rent (AED)"], r["Contract Amount (AED)"]) for r in rows] == [
         ("1101", "160000", "320000")
     ]
+
+
+async def test_the_dld_profile_fills_what_dxbi_left_empty_and_never_overrides_it(dxbi):
+    # The profile carries DLD's official area and master project and fills an empty project,
+    # bedroom count or status; DXBI's own values stay. A copy of DXBI's raw path in the profile
+    # (source 'dxbi') must not undo the location list's labelling.
+    await dxbi(
+        sales=[
+            sale("blank", project_name="", bedrooms="", market_status="", unit_number="1"),
+            sale("own", project_name="Burj Views", unit_number="2"),
+            sale("raw", project_name="", unit_number="3"),
+        ],
+        leases=[lease("lease-1")],
+        sale_profiles=[
+            {
+                "sale_key": "blank",
+                "project_name": "Burj Royale",
+                "project_source": "dld_pair",
+                "master_project": "Burj Khalifa",
+                "area_name": "Burj Khalifa",
+                "bedrooms": "2 Bed",
+                "completion_status": "Off-Plan",
+            },
+            {
+                "sale_key": "own",
+                "project_name": "Other",
+                "project_source": "dld_pair",
+                "master_project": "Burj Khalifa",
+                "area_name": "Burj Khalifa",
+                "bedrooms": "3 Bed",
+                "completion_status": "Off-Plan",
+            },
+            {"sale_key": "raw", "project_name": "Tower A", "project_source": "dxbi"},
+        ],
+        lease_profiles=[
+            {
+                "contract_key": "lease-1",
+                "building_name": "Sale Tower",
+                "building_source": "dxbi_sale",
+                "master_project": "Dubai Marina",
+                "area_name": "Marsa Dubai",
+            }
+        ],
+    )
+
+    page = await service.fetch_sales_transactions(SalesFilters(timeframe_days=7), 10, 0)
+    rows = {row.transaction_id: row for row in page.transactions}
+    blank = rows["blank"]
+    assert (blank.project_name, blank.bedrooms, blank.status) == (
+        "Burj Royale",
+        "2 Beds",
+        "Off-Plan",
+    )
+    assert (blank.master_project, blank.dld_area) == ("Burj Khalifa", "Burj Khalifa")
+    own = rows["own"]
+    assert (own.project_name, own.bedrooms, own.status) == ("Burj Views", "1 Bed", "Ready")
+    assert rows["raw"].project_name is None
+
+    leases = await service.fetch_rental_contracts(RentalFilters(timeframe_days=7), 10, 0)
+    lease_row = leases.contracts[0]
+    assert (lease_row.master_project, lease_row.dld_area) == ("Dubai Marina", "Marsa Dubai")
 
 
 async def test_same_named_towers_in_different_areas_keep_both_sales(dxbi):

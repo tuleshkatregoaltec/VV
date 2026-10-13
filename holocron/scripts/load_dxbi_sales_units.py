@@ -13,6 +13,7 @@ from pathlib import Path
 
 import clickhouse_connect
 
+from holocron.sources.dxbi.agent_names import repair_agent_names
 from holocron.sources.dxbi.sales_units import compact_payload, normalize_sales_row
 
 logger = logging.getLogger("dxbi_sales_unit_loader")
@@ -528,6 +529,8 @@ def main() -> None:
                 )
             client.command(f"OPTIMIZE TABLE {SALES_TABLE} FINAL")
             totals["superseded"] = remove_superseded_sales(client)
+            # An agent's name glued to a building must never reach a table, page or export.
+            totals.update(repair_agent_names(client))
         logger.info(
             "Sales load complete %s", " ".join(f"{name}={value}" for name, value in totals.items())
         )

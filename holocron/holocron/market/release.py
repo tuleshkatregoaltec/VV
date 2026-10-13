@@ -641,7 +641,7 @@ def materialize_market_sale_events(
     return publish_validated(
         clickhouse=clickhouse,
         builds={
-            "market_sale_matches": (transforms._SALE_MATCHES_SQL,),
+            "market_sale_matches": transforms.SALE_MATCH_STATEMENTS,
             # Rentals read the served crosswalk, so both datasets place rows the same way.
             "market_geo_crosswalk": transforms._GEO_CROSSWALK_STATEMENTS,
             "market_sale_events": (

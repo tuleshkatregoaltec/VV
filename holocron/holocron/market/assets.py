@@ -8,6 +8,7 @@ from dagster import (
 )
 
 from holocron.market.checks import CHECKS, MarketCheck, outcome
+from holocron.market.dxbi_profile import build_profiles
 from holocron.market.release import (
     materialize_market_rental_events,
     materialize_market_sale_events,
@@ -53,6 +54,21 @@ def market_rental_events_asset(context, clickhouse: ClickHouseResource) -> Mater
     return MaterializeResult(
         metadata={"stage": "market", "table": "market_rental_events", **counts}
     )
+
+
+@asset(
+    name="dxbi_profiles",
+    group_name=_MARKET_GROUP,
+    deps=["market_sale_events", "market_rental_events"],
+    description=(
+        "One profile per DXBI sale and lease: Area, Master Project, Project, Building and Unit, "
+        "type, bedrooms and completion status, each value with its source (DXBI or DLD)."
+    ),
+)
+def dxbi_profiles_asset(context, clickhouse: ClickHouseResource) -> MaterializeResult:
+    rows = build_profiles(clickhouse.client())
+    context.log.info("dxbi profiles built: %s", rows)
+    return MaterializeResult(metadata={"stage": "market", **rows})
 
 
 def _asset_check(check: MarketCheck) -> AssetChecksDefinition:

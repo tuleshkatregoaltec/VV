@@ -209,8 +209,13 @@ export interface SaleRow {
 	date: string
 	unit: string
 	building: string
+	// Unit, building, project, master project and area in one line, and its Google Maps link.
 	location: string
+	mapUrl: string | null
+	community: string
 	project: string
+	masterProject: string
+	dldArea: string
 	propertyType: string
 	bedrooms: string
 	size: number | null
@@ -225,8 +230,13 @@ export interface RentalRow {
 	endDate: string
 	unit: string
 	building: string
+	// Unit, building, project, master project and area in one line, and its Google Maps link.
 	location: string
+	mapUrl: string | null
+	community: string
 	project: string
+	masterProject: string
+	dldArea: string
 	propertyType: string
 	bedrooms: string
 	size: number | null
@@ -236,16 +246,43 @@ export interface RentalRow {
 	contractType: string
 }
 
+// Bedrooms describe homes: an office or shop has none to show, a home without one is unrecorded.
+const HOME_TYPES = new Set([
+	'Apartment',
+	'Villa',
+	'Townhouse',
+	'Hotel Apartment',
+	'Penthouse',
+	'Duplex'
+])
+
+function bedroomsMissing(propertyType: string | null | undefined): string {
+	return propertyType && !HOME_TYPES.has(propertyType) ? 'N/A' : '-'
+}
+
+// DLD writes many names in capitals ("DAMAC HILLS"); show them as words.
+function displayName(value: string | null | undefined): string {
+	if (!value) return '-'
+	if (value !== value.toUpperCase() || !/[A-Z]{3}/.test(value)) return value
+	return value
+		.toLowerCase()
+		.replace(/(^|[\s(/-])([a-z])/g, (_, lead, letter) => lead + letter.toUpperCase())
+}
+
 export function toSaleRow(sale: TransactionResponseOutput): SaleRow {
 	return {
 		transaction_id: sale.transaction_id,
 		date: sale.transaction_date ?? '-',
 		unit: sale.unit_number ?? '-',
 		building: sale.building_name ?? '-',
-		location: sale.location_name ?? '-',
+		location: sale.location || sale.location_name || '-',
+		mapUrl: sale.map_url || null,
+		community: sale.location_name ?? '-',
 		project: sale.project_name ?? '-',
+		masterProject: displayName(sale.master_project),
+		dldArea: displayName(sale.dld_area),
 		propertyType: sale.property_type ?? '-',
-		bedrooms: sale.bedrooms ?? '-',
+		bedrooms: sale.bedrooms ?? bedroomsMissing(sale.property_type),
 		size: sale.size_sqft ?? null,
 		price: sale.price_aed ?? null,
 		pricePerSqFt: sale.price_per_sqft_aed ?? null,
@@ -260,10 +297,14 @@ export function toRentalRow(lease: RentalContractResponseOutput): RentalRow {
 		endDate: lease.lease_end ?? '-',
 		unit: lease.unit_number ?? '-',
 		building: lease.building_name ?? '-',
-		location: lease.location_name ?? '-',
+		location: lease.location || lease.location_name || '-',
+		mapUrl: lease.map_url || null,
+		community: lease.location_name ?? '-',
 		project: lease.project_name ?? '-',
+		masterProject: displayName(lease.master_project),
+		dldArea: displayName(lease.dld_area),
 		propertyType: lease.property_type ?? '-',
-		bedrooms: lease.bedrooms ?? '-',
+		bedrooms: lease.bedrooms ?? bedroomsMissing(lease.property_type),
 		size: lease.size_sqft ?? null,
 		annualRent: lease.annual_rent_aed ?? null,
 		contractAmount: lease.contract_amount_aed ?? null,

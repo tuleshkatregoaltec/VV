@@ -2223,3 +2223,88 @@ WHERE b.snapshot_id = (
       WHERE snapshot_id = (
           SELECT snapshot_id FROM published ORDER BY collected_at DESC, snapshot_id DESC LIMIT 1)
   );
+
+-- One complete profile per DXBI sale / lease (holocron.market.dxbi_profile): the location chain
+-- Area -> Master Project -> Project -> Building -> Unit, type, bedrooms and completion status,
+-- each with its source (dxbi | dld_pair | dld_evidence | building | own_building | place_name |
+-- project | web_verified | dxbi_community | pf_community | area_is_master | area | area_map |
+-- dxbi_sale | dld_unit | dld_unit_ref | not_applicable | none).
+CREATE TABLE IF NOT EXISTS dxbi_sale_profile (
+    sale_key String,
+    transaction_date Date,
+    area_name String,
+    area_source LowCardinality(String),
+    master_project String,
+    master_project_source LowCardinality(String),
+    project_name String,
+    project_source LowCardinality(String),
+    building_name String,
+    building_source LowCardinality(String),
+    unit_number String,
+    unit_source LowCardinality(String),
+    property_type LowCardinality(String),
+    bedrooms LowCardinality(String),
+    bedrooms_source LowCardinality(String),
+    completion_status LowCardinality(String),
+    completion_source LowCardinality(String),
+    dld_link LowCardinality(String),
+    dld_transaction_key String,
+    size_sqft Float64,
+    size_source LowCardinality(String),
+    location String,
+    latitude Nullable(Float64),
+    longitude Nullable(Float64),
+    map_url String,
+    built_at DateTime64(3, 'UTC')
+)
+ENGINE = MergeTree()
+ORDER BY sale_key;
+
+CREATE TABLE IF NOT EXISTS dxbi_rental_profile (
+    contract_key String,
+    lease_start Date,
+    area_name String,
+    area_source LowCardinality(String),
+    master_project String,
+    master_project_source LowCardinality(String),
+    project_name String,
+    project_source LowCardinality(String),
+    building_name String,
+    building_source LowCardinality(String),
+    dld_building_ref String,
+    floor String,
+    unit_number String,
+    unit_source LowCardinality(String),
+    property_type LowCardinality(String),
+    bedrooms LowCardinality(String),
+    bedrooms_source LowCardinality(String),
+    completion_status LowCardinality(String),
+    completion_source LowCardinality(String),
+    dld_link LowCardinality(String),
+    size_sqft Float64,
+    size_source LowCardinality(String),
+    location String,
+    latitude Nullable(Float64),
+    longitude Nullable(Float64),
+    map_url String,
+    built_at DateTime64(3, 'UTC')
+)
+ENGINE = MergeTree()
+ORDER BY contract_key;
+
+-- Profile tables built before the size, location and map columns.
+ALTER TABLE dxbi_sale_profile ADD COLUMN IF NOT EXISTS dld_transaction_key String DEFAULT '';
+ALTER TABLE dxbi_rental_profile ADD COLUMN IF NOT EXISTS dld_building_ref String DEFAULT '';
+ALTER TABLE dxbi_rental_profile ADD COLUMN IF NOT EXISTS floor String DEFAULT '';
+ALTER TABLE dxbi_sale_profile ADD COLUMN IF NOT EXISTS size_sqft Float64 DEFAULT 0;
+ALTER TABLE dxbi_sale_profile ADD COLUMN IF NOT EXISTS size_source LowCardinality(String) DEFAULT '';
+ALTER TABLE dxbi_sale_profile ADD COLUMN IF NOT EXISTS location String DEFAULT '';
+ALTER TABLE dxbi_sale_profile ADD COLUMN IF NOT EXISTS latitude Nullable(Float64);
+ALTER TABLE dxbi_sale_profile ADD COLUMN IF NOT EXISTS longitude Nullable(Float64);
+ALTER TABLE dxbi_sale_profile ADD COLUMN IF NOT EXISTS map_url String DEFAULT '';
+ALTER TABLE dxbi_rental_profile ADD COLUMN IF NOT EXISTS size_sqft Float64 DEFAULT 0;
+ALTER TABLE dxbi_rental_profile ADD COLUMN IF NOT EXISTS size_source LowCardinality(String) DEFAULT '';
+ALTER TABLE dxbi_rental_profile ADD COLUMN IF NOT EXISTS location String DEFAULT '';
+ALTER TABLE dxbi_rental_profile ADD COLUMN IF NOT EXISTS latitude Nullable(Float64);
+ALTER TABLE dxbi_rental_profile ADD COLUMN IF NOT EXISTS longitude Nullable(Float64);
+ALTER TABLE dxbi_rental_profile ADD COLUMN IF NOT EXISTS map_url String DEFAULT '';

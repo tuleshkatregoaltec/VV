@@ -215,6 +215,31 @@ function getDeveloperNames(summary: ProjectAnalyticsResponse): string[] {
 	return uniqueNormalized([...(project?.developer_names ?? []), project?.developer_name])
 }
 
+// Where a header value DLD's projects register lacks was filled from: "Developer, Handover:
+// DXBInteract building list".
+const FIELD_LABELS: Record<string, string> = {
+	developer_name: 'Developer',
+	completion_date: 'Handover',
+	percent_completed: 'Completion',
+	no_of_units: 'Units',
+	no_of_buildings: 'Buildings',
+	area_name: 'Area'
+}
+const SOURCE_LABELS: Record<string, string> = {
+	dld_units: "DLD's units register",
+	dxbi_buildings: "DXBInteract's building list"
+}
+
+function fieldSourceNote(sources: Record<string, string> | undefined): string {
+	const bySource = new Map<string, string[]>()
+	for (const [field, source] of Object.entries(sources ?? {})) {
+		bySource.set(source, [...(bySource.get(source) ?? []), FIELD_LABELS[field] ?? field])
+	}
+	return [...bySource]
+		.map(([source, fields]) => `${fields.join(', ')}: ${SOURCE_LABELS[source] ?? source}`)
+		.join(' · ')
+}
+
 function getDeveloperLabel(
 	summary: ProjectAnalyticsResponse,
 	isMasterScope: boolean,
@@ -1120,6 +1145,11 @@ onMount(() => {
 					</div>
 				{/if}
 			</div>
+			{#if fieldSourceNote(summary.project?.field_sources)}
+				<p class="mt-2 text-[11px] text-fg-4" data-testid="analytics-field-sources">
+					Not in DLD's projects register: {fieldSourceNote(summary.project?.field_sources)}
+				</p>
+			{/if}
 		</section>
 
 		<!-- ── KPI cards ──────────────────────────────────────────────── -->

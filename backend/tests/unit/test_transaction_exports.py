@@ -12,6 +12,10 @@ SALES_ROW = {
     "unit_number": "1904",
     "building_name": "Marina Tower A",
     "project_name": "Marina Tower",
+    "master_project": "Dubai Marina",
+    "dld_area": "Marsa Dubai",
+    "location": "Unit 1904, Marina Tower A, Marina Tower, Dubai Marina, Marsa Dubai, Dubai",
+    "map_url": "https://www.google.com/maps/search/?api=1&query=25.08%2C55.14",
     "location_name": "Dubai Marina",
     "property_type": "Apartment",
     "property_usage": "Residential",
@@ -29,6 +33,10 @@ RENTAL_ROW = {
     "unit_number": "G29",
     "building_name": "Marina Tower A",
     "project_name": "Marina Tower",
+    "master_project": "Dubai Marina",
+    "dld_area": "Marsa Dubai",
+    "location": "Unit 1904, Marina Tower A, Marina Tower, Dubai Marina, Marsa Dubai, Dubai",
+    "map_url": "https://www.google.com/maps/search/?api=1&query=25.08%2C55.14",
     "location_name": "Dubai Marina",
     "property_type": "Apartment",
     "property_usage": "Residential",
@@ -72,7 +80,7 @@ async def test_sales_excel_export_names_dxbi_and_caps_rows(monkeypatch):
     assert "location=Dubai Marina" in metadata["B7"].value
     sheet = workbook["Sales Transactions"]
     assert [cell.value for cell in sheet[6]] == transaction_service.SALES_EXPORT_HEADERS
-    assert (sheet["A7"].value, sheet["C7"].value, sheet["L7"].value) == ("T-1", "1904", 1_500)
+    assert (sheet["A7"].value, sheet["C7"].value, sheet["P7"].value) == ("T-1", "1904", 1_500)
 
 
 async def test_sales_csv_export_is_the_raw_rows_without_workbook_metadata(monkeypatch):
@@ -116,8 +124,8 @@ async def test_exports_escape_spreadsheet_formula_strings(monkeypatch):
     assert worksheet["C7"].value == "'@malicious"
     assert worksheet["D7"].value == "'+SUM(1,1)"
     assert worksheet["E7"].value.startswith("'=HYPERLINK")
-    assert worksheet["F7"].value == "'-2+3"
-    assert worksheet["G7"].value == "'\t=cmd"
+    assert worksheet["J7"].value == "'-2+3"
+    assert worksheet["K7"].value == "'\t=cmd"
 
 
 async def test_rental_export_selected_ids_override_filters(monkeypatch):

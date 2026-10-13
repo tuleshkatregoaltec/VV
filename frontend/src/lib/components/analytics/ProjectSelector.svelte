@@ -146,8 +146,14 @@ function handleKeydown(e: KeyboardEvent) {
 						role="option"
 						aria-selected={value?.name === project.name && value?.filter_type === project.filter_type}
 					>
-						<span>{project.name}</span>
-						<span class="ml-2 text-xs text-fg-4">{project.filter_type === 'project' ? 'Project' : 'Master'}</span>
+						{#if project.building}
+							<!-- A building match opens the project its sales are registered in. -->
+							<span>{project.building}</span>
+							<span class="ml-2 text-xs text-fg-4">Building · in {project.name}</span>
+						{:else}
+							<span>{project.name}</span>
+							<span class="ml-2 text-xs text-fg-4">{project.filter_type === 'project' ? 'Project' : 'Master'}</span>
+						{/if}
 					</button>
 				{/each}
 			{/if}

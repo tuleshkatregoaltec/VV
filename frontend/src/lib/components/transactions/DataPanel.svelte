@@ -36,6 +36,7 @@ let {
 		badge?: boolean
 		highlighted?: boolean
 		wrap?: boolean
+		href?: (row: any) => string | null
 		defaultVisible?: boolean
 	}>
 	data?: Array<Record<string, any>>
@@ -310,7 +311,9 @@ function getRenderKey(row: any, index: number): string {
 										'left'} text-[13px] tabular-nums {column.highlighted
 										? 'font-semibold text-info'
 										: 'text-fg-1'} {column.wrap
-										? 'min-w-[7.5rem] max-w-[15rem]'
+										? column.href
+											? 'min-w-[14rem] max-w-[26rem]'
+											: 'min-w-[7.5rem] max-w-[15rem]'
 										: 'whitespace-nowrap'}"
 								>
 									{#if column.badge && row[column.id] !== '-'}
@@ -319,6 +322,18 @@ function getRenderKey(row: any, index: number): string {
 										>
 											{column.format ? column.format(row[column.id], row) : row[column.id]}
 										</span>
+									{:else if column.href?.(row)}
+										<!-- The row opens its details on click; the link opens the map instead. -->
+										<a
+											href={column.href(row)}
+											target="_blank"
+											rel="noopener noreferrer"
+											class="text-info underline decoration-dotted underline-offset-2 hover:decoration-solid"
+											title="Open in Google Maps"
+											onclick={(event) => event.stopPropagation()}
+										>
+											{column.format ? column.format(row[column.id], row) : row[column.id]}
+										</a>
 									{:else}
 										{column.format ? column.format(row[column.id], row) : row[column.id]}
 									{/if}

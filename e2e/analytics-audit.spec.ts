@@ -330,11 +330,13 @@ test('selecting a catalogue name preserves known project sales', async ({
     await expect(
         page.getByRole('heading', { name: /^23 marina$/i }),
     ).toBeVisible();
+    // The section also holds the Market Split donut; the trend chart is its first canvas.
     await expect(
         page
             .locator('section')
             .filter({ has: page.getByText('Price Trend', { exact: true }) })
-            .locator('canvas'),
+            .locator('canvas')
+            .first(),
     ).toBeVisible({ timeout: 15000 });
     await page.screenshot({
         path: path.join(evidence, 'canonical-project.png'),
@@ -398,14 +400,15 @@ test('main project search retains keyboard focus until selection', async ({
         .getByPlaceholder('Search projects or master communities...')
         .fill('Binghatti Skyrise');
     await expect(page.getByRole('listbox')).toBeVisible();
-    await expect(
-        page.getByRole('option').filter({ hasText: 'Binghatti Skyrise' }),
-    ).toBeVisible();
+    // The project is listed first; its buildings ("Binghatti Skyrise Tower A") follow it.
+    const project = page
+        .getByRole('option')
+        .filter({ hasText: 'Binghatti Skyrise' })
+        .first();
+    await expect(project).toBeVisible();
     await page.keyboard.press('Tab');
     await page.waitForTimeout(250);
-    await expect(
-        page.getByRole('option').filter({ hasText: 'Binghatti Skyrise' }),
-    ).toBeFocused();
+    await expect(project).toBeFocused();
     await page.keyboard.press('Enter');
     await page.screenshot({
         path: path.join(evidence, 'search-keyboard.png'),

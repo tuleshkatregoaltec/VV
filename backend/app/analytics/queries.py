@@ -681,6 +681,26 @@ async def fetch_search_projects(parameters: dict):
     return await query(search_projects(), parameters)
 
 
+# Each building with the project its sales are registered in (the most common one); the search
+# reads it from memory, so a keystroke does not scan the sales.
+BUILDING_PROJECTS = """
+    SELECT building, argMax(project_name_en, n) AS project
+    FROM (
+        SELECT building_name_en AS building, project_name_en, count() AS n
+        FROM ch_transactions
+        WHERE building_name_en != '' AND project_name_en != ''
+          AND lowerUTF8(building_name_en) != lowerUTF8(project_name_en)
+        GROUP BY building, project_name_en
+    )
+    GROUP BY building
+    ORDER BY building
+"""
+
+
+async def fetch_building_projects():
+    return await query(BUILDING_PROJECTS, {})
+
+
 async def fetch_search_sub_projects(parameters: dict, filter_type: ProjectFilterType = "master"):
     return await query(search_sub_projects(filter_type), parameters)
 
@@ -692,6 +712,68 @@ async def fetch_project_meta(parameters: dict, filter_type):
         "project": project_meta_by_name,
     }[filter_type]
     return await query(meta_fn(), parameters)
+
+
+# DXBI's building list (the heatmap's building cards: developer, completion, unit count) for a
+# project DLD's projects register does not hold (older ones such as LAKE SHORE TOWER). A project
+# is the buildings DXBI lists under its name, the one building of that name, or the DXBI buildings
+# whose paired sales sit in it (>= 90% of >= 3: DLD's "SKY COURTS" is DXBI's Sky Courts Tower A-F).
+# A project card (display_as 'P') carries the project's totals and lists its building cards
+# (building_csv): it counts only when none of its buildings' cards is counted already.
+_NAME_KEY = "lowerUTF8(replaceRegexpAll({value}, '[^A-Za-z0-9]', ''))"
+_PAIRED_BUILDINGS = f"""(
+        SELECT building_key FROM (
+            SELECT {_NAME_KEY.format(value="building_name")} AS building_key,
+                   countIf(project_name = {{project_name:String}}) AS inside, count() AS sales
+            FROM dxbi_sale_profile
+            WHERE project_source = 'dld_pair' AND building_name != ''
+              AND {_NAME_KEY.format(value="building_name")} IN (
+                  SELECT {_NAME_KEY.format(value="building_name")} FROM dxbi_sale_profile
+                  WHERE project_name = {{project_name:String}} AND project_source = 'dld_pair')
+            GROUP BY building_key
+        )
+        WHERE inside >= 0.9 * sales AND sales >= 3
+    )"""
+PROJECT_META_FROM_DXBI = f"""
+    SELECT
+        topK(1)(area)[1] AS area_name_en,
+        topKIf(1)(dev, dev != '')[1] AS developer_name_en,
+        maxOrNull(completion) AS completion_date,
+        minOrNull(percent) AS percent_completed,
+        groupArrayIf(card_id, card != 'P') AS building_ids,
+        arrayFilter((u, kids) -> NOT hasAny(kids, building_ids),
+                    groupArrayIf(units, card = 'P'), groupArrayIf(kids, card = 'P')) AS project_units,
+        sumIf(units, card != 'P') + arraySum(project_units) AS no_of_units,
+        nullIf(length(building_ids) + arraySum(arrayMap(
+            (u, kids) -> if(hasAny(kids, building_ids), 0, length(kids)),
+            groupArrayIf(units, card = 'P'), groupArrayIf(kids, card = 'P'))), 0)
+            AS no_of_buildings
+    FROM (
+        SELECT JSONExtractString(payload_json, 'Building', 'project') AS project,
+               JSONExtractString(payload_json, 'Building', 'location') AS location,
+               JSONExtractString(payload_json, 'Building', 'area_name') AS area,
+               trimBoth(JSONExtractString(payload_json, 'Building', 'dev')) AS dev,
+               toDate(parseDateTimeBestEffortOrNull(
+                   JSONExtractString(payload_json, 'Building', 'completion_date'))) AS completion,
+               JSONExtract(payload_json, 'Building', 'completion_percent', 'Nullable(Float64)')
+                   AS percent,
+               JSONExtractUInt(payload_json, 'Building', 'unit_count') AS units,
+               JSONExtractString(payload_json, 'Building', 'display_as') AS card,
+               toUInt64OrZero(location_id) AS card_id,
+               JSONExtract(payload_json, 'Building', 'building_csv', 'Array(UInt64)') AS kids
+        FROM dxbi_heatmap_buildings_bronze
+        WHERE status = 200
+        LIMIT 1 BY location_id
+    )
+    WHERE {_NAME_KEY.format(value="project")} = {_NAME_KEY.format(value="{project_name:String}")}
+       OR {_NAME_KEY.format(value="location")} = {_NAME_KEY.format(value="{project_name:String}")}
+       OR {_NAME_KEY.format(value="location")} IN {_PAIRED_BUILDINGS}
+    HAVING count() > 0
+"""
+
+
+async def fetch_project_meta_from_dxbi(parameters: dict):
+    return await query(PROJECT_META_FROM_DXBI, parameters)
 
 
 async def fetch_project_developers_by_scope(

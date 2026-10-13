@@ -7564,7 +7564,11 @@ export type ProjectForecastResponse = {
 /**
  * ProjectMeta
  *
- * Metadata from ch_projects + ch_developers
+ * Metadata from ch_projects + ch_developers, filled where they are silent.
+ *
+ * ``field_sources`` names where a filled field came from: "dld_units" (DLD's units register
+ * count) or "dxbi_buildings" (DXBInteract's building list). A field not in it is DLD's projects
+ * register.
  */
 export type ProjectMeta = {
     /**
@@ -7603,6 +7607,12 @@ export type ProjectMeta = {
      * No Of Buildings
      */
     no_of_buildings?: number | null;
+    /**
+     * Field Sources
+     */
+    field_sources?: {
+        [key: string]: string;
+    };
 };
 
 /**
@@ -8160,6 +8170,10 @@ export type ProjectSearchItem = {
      * Filter Type
      */
     filter_type: string;
+    /**
+     * Building
+     */
+    building?: string;
 };
 
 /**
@@ -8526,6 +8540,30 @@ export type RentalContractResponse = {
      * Project Name
      */
     project_name?: string | null;
+    /**
+     * Master Project
+     *
+     * DLD master project (filled from the matched DLD record)
+     */
+    master_project?: string | null;
+    /**
+     * Dld Area
+     *
+     * DLD's official area name
+     */
+    dld_area?: string | null;
+    /**
+     * Location
+     *
+     * Unit, building, project, master project and area in one line
+     */
+    location?: string | null;
+    /**
+     * Map Url
+     *
+     * Google Maps link to the location
+     */
+    map_url?: string | null;
     /**
      * Location Name
      */
@@ -9462,6 +9500,30 @@ export type TransactionResponse = {
      * Project Name
      */
     project_name?: string | null;
+    /**
+     * Master Project
+     *
+     * DLD master project (filled from the matched DLD record)
+     */
+    master_project?: string | null;
+    /**
+     * Dld Area
+     *
+     * DLD's official area name
+     */
+    dld_area?: string | null;
+    /**
+     * Location
+     *
+     * Unit, building, project, master project and area in one line
+     */
+    location?: string | null;
+    /**
+     * Map Url
+     *
+     * Google Maps link to the location
+     */
+    map_url?: string | null;
     /**
      * Location Name
      */

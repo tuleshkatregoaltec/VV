@@ -114,7 +114,12 @@ class MarketTrendResponse(BaseModel):
 
 
 class ProjectMeta(BaseModel):
-    """Metadata from ch_projects + ch_developers"""
+    """Metadata from ch_projects + ch_developers, filled where they are silent.
+
+    ``field_sources`` names where a filled field came from: "dld_units" (DLD's units register
+    count) or "dxbi_buildings" (DXBInteract's building list). A field not in it is DLD's projects
+    register.
+    """
 
     project_name: str
     area_name: Optional[str] = None
@@ -125,6 +130,7 @@ class ProjectMeta(BaseModel):
     percent_completed: Optional[float] = None
     no_of_units: Optional[int] = None
     no_of_buildings: Optional[int] = None
+    field_sources: dict[str, str] = Field(default_factory=dict)
 
 
 class ProjectSalesSummary(BaseModel):
@@ -293,6 +299,7 @@ class ProjectPriceDistributionResponse(BaseModel):
 class ProjectSearchItem(BaseModel):
     name: str
     filter_type: str  # "master" | "virtual_master" | "project"
+    building: str = ""  # Set when the search matched this building of the project
 
 
 class ProjectSearchResponse(BaseModel):
