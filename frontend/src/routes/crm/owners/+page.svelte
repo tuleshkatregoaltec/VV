@@ -84,20 +84,12 @@ const tabs = $derived(
 	}))
 )
 
-const facts = $derived(
-	o
-		? `Agency file · ${o.on_file} owners · checked against DLD and Ejari · kept in your workspace`
-		: ''
-)
+const facts = $derived(o ? `Agency file · ${o.on_file} owners` : '')
 </script>
 
 <svelte:head><title>Owners · CRM Beta</title></svelte:head>
 
 <PageHeader title="Owners" {facts}>
-	{#snippet note()}
-		<!-- 6 Oct, 38:17–40:07: owner files stay in the agency's workspace — being built, not a promise. -->
-		<span class="chip outline" title="Design principle being built (Maan), not a promise.">In build</span>
-	{/snippet}
 	{#snippet right()}
 		<a class="btn ghost" href="/crm/owners/imports"><ChartBar size={15} /><span>Imports</span></a>
 		<button type="button" class="btn ghost" onclick={() => panel.open({ kind: 'new-import', ownersOnly: true })}>
