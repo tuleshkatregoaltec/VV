@@ -595,6 +595,8 @@ async def get_owner_registry(
     max_value_aed: int | None,
     limit: int,
     offset: int,
+    min_properties: int | None = None,
+    next_event_days: int | None = None,
 ) -> CrmOwnerRegistryResponse:
     summary = await _owner_registry_summary_sql(
         db,
@@ -616,6 +618,8 @@ async def get_owner_registry(
         max_value_aed=max_value_aed,
         limit=limit,
         offset=offset,
+        min_properties=min_properties,
+        next_event_days=next_event_days,
     )
     property_rows = await _owner_properties_sql(
         db,

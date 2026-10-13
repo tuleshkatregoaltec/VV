@@ -8,6 +8,8 @@ import type {
 	ListingScope,
 	ListingStatus,
 	MatchOptions,
+	OwnerImportDetail,
+	OwnerImportRowsParams,
 	OwnerListParams,
 	RenewalListParams
 } from './api/types'
@@ -46,6 +48,10 @@ export const crmKeys = {
 	owner: (id: string) => [...crmKeys.all, 'owner', id] as const,
 	ownerReport: (id: string) => [...crmKeys.all, 'owner', id, 'report'] as const,
 	imports: () => [...crmKeys.all, 'imports'] as const,
+	ownerImports: () => [...crmKeys.all, 'imports', 'owners'] as const,
+	ownerImportDetails: () => [...crmKeys.all, 'imports', 'owners', 'details'] as const,
+	ownerImportRows: (listId: number, p: OwnerImportRowsParams) =>
+		[...crmKeys.all, 'imports', 'owners', 'rows', listId, p] as const,
 	events: (from: string, to: string) => [...crmKeys.all, 'events', from, to] as const,
 	event: (id: number) => [...crmKeys.all, 'event', id] as const,
 	calendarSide: () => [...crmKeys.all, 'calendar-side'] as const,
@@ -137,6 +143,19 @@ export const crmQueries = {
 		queryFn: () => crm.owners.report(id)
 	}),
 	imports: () => ({ queryKey: crmKeys.imports(), queryFn: crm.imports.list }),
+	ownerImports: () => ({ queryKey: crmKeys.ownerImports(), queryFn: crm.imports.ownerHistory }),
+	/** Re-checks every 5 s while an import is still processing, so its counts appear by themselves. */
+	ownerImportDetails: () => ({
+		queryKey: crmKeys.ownerImportDetails(),
+		queryFn: crm.imports.ownerDetails,
+		refetchInterval: (q: { state: { data?: OwnerImportDetail[] } }) =>
+			q.state.data?.some((i) => i.status === 'processing') ? 5000 : false
+	}),
+	ownerImportRows: (listId: number, p: OwnerImportRowsParams) => ({
+		queryKey: crmKeys.ownerImportRows(listId, p),
+		queryFn: () => crm.imports.ownerRows(listId, p),
+		placeholderData: keepPreviousData
+	}),
 	events: (from: string, to: string) => ({
 		queryKey: crmKeys.events(from, to),
 		queryFn: () => crm.events.list(from, to),

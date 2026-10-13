@@ -13,6 +13,7 @@ import type {
 	AuthMeResponse,
 	CrmAreaPreferencesResponse,
 	CrmContactImportResponse,
+	CrmContactListDetail,
 	CrmLead,
 	CrmLeadDetailResponse,
 	CrmLeadImportedContact,
@@ -36,6 +37,7 @@ import type {
 import { type ListingCardResponse, listings as portal } from '$lib/api/listings'
 import { groupOf, LEAD_TYPES, SOURCE_OPTIONS } from '../config'
 import { aed, fmt, fullDate, plural, short } from '../format'
+import { importCounts, isFlagged, mappingChecks } from '../ownerImportReport'
 import type {
 	Chip,
 	FeedArea,
@@ -67,6 +69,14 @@ import type {
 	MatchTier,
 	Me,
 	OwnerDetail,
+	OwnerFilePreview,
+	OwnerImport,
+	OwnerImportDetail,
+	OwnerImportResult,
+	OwnerImportRow,
+	OwnerImportRows,
+	OwnerImportRowsParams,
+	OwnerImportSource,
 	OwnerListParams,
 	OwnerListResponse,
 	OwnerRow,
@@ -800,6 +810,8 @@ function ownerUnit(p: CrmOwnerProperty): OwnerUnit {
 		size_sqft: p.registry_size_sqft ?? null,
 		bought_aed: sale,
 		bought_year: saleDate ? Number(saleDate.slice(0, 4)) : null,
+		owned_from: (p.imported_transaction_date ?? p.registry_sale_date ?? null)?.slice(0, 10) ?? null,
+		owned_to: p.later_sale_date?.slice(0, 10) ?? null,
 		status:
 			p.lease_end && p.annual_rent_aed
 				? `Let at ${aed(p.annual_rent_aed)} a year until ${dayMonth(p.lease_end)}`
@@ -811,25 +823,94 @@ function ownerUnit(p: CrmOwnerProperty): OwnerUnit {
 		rent_history: [],
 		transactions: [...new Map(transactions.map((t) => [`${t.when}${t.what}`, t])).values()].map(
 			(t) => ({ ...t, when: t.when.slice(0, 10) })
-		)
+		),
+		source: unitSource(p)
 	}
+}
+
+/** "Sheet1:12" → "Sheet1 row 12". */
+const sourceRow = (r: string) => {
+	const i = r.lastIndexOf(':')
+	return i > 0 ? `${r.slice(0, i)} row ${r.slice(i + 1)}` : r
+}
+
+/** "Business Bay 2024 SVR · Sheet1 row 12": the import(s), then the sheet and row(s) in the file. */
+function unitSource(p: CrmOwnerProperty): string {
+	return [(p.source_lists ?? []).join(', '), (p.source_rows ?? []).map(sourceRow).join(', ')]
+		.filter(Boolean)
+		.join(' · ')
+}
+
+/** The imports an owner's units came from, matched to the import history by name, oldest first. */
+function ownerImportSources(
+	properties: CrmOwnerProperty[],
+	imports: CrmContactImportResponse[]
+): OwnerImportSource[] {
+	const units = new Map<string, number>()
+	for (const p of properties)
+		for (const name of p.source_lists ?? []) units.set(name, (units.get(name) ?? 0) + 1)
+	return [...units]
+		.map(([name, count]) => {
+			const imp = imports.find((i) => i.name === name)
+			return {
+				importId: imp?.id ?? null,
+				name,
+				file: imp?.original_filename ?? null,
+				date: imp?.created_at.slice(0, 10) ?? null,
+				units: count
+			}
+		})
+		.sort((a, b) => (a.date ?? '9999').localeCompare(b.date ?? '9999'))
 }
 
 const ownerWorkspaces = () => client.get<CrmOwnerWorkspaceSummary[]>(`${CRM}/owner-workspaces`)
 
+/** Tabs whose count covers only the page of 500 in view (none since the backend filters them). */
+const PAGE_ONLY_TABS: OwnerTab[] = []
+
+/** The tabs the backend filters for the whole file, and the query for each. */
+const SERVER_TABS = {
+	all: { scope: 'all' },
+	sold: { scope: 'prior_owners' },
+	multi: { scope: 'all', min_properties: 3 },
+	event: { scope: 'all', next_event_days: 90 }
+} as const
+type ServerTab = keyof typeof SERVER_TABS
+const isServerTab = (t: OwnerTab): t is ServerTab => t in SERVER_TABS
+
+/**
+ * One page (500) of the owner file. All, Just sold (every former owner), 3+ units and Next event
+ * (lease ends within 90 days) come from the backend for the whole file, so their counts and rows
+ * are complete. My contacts counts the whole workspace list; its rows, Update due and the source,
+ * area, bedrooms and type filters work on the page in view.
+ */
 export async function listOwners(p: OwnerListParams): Promise<OwnerListResponse> {
-	const [res, ws] = await Promise.all([
+	const registry = (tab: ServerTab, limit: number, offset: number) =>
 		client.get<CrmOwnerRegistryResponse>(
 			client.withQuery(`${CRM}/owner-registry`, {
-				scope: 'all',
+				...SERVER_TABS[tab],
 				search: p.q || undefined,
-				limit: LIST_LIMIT
+				limit,
+				offset
 			})
-		),
-		ownerWorkspaces()
+		)
+	const current: ServerTab = isServerTab(p.tab) ? p.tab : 'all'
+	const others = (Object.keys(SERVER_TABS) as ServerTab[]).filter((t) => t !== current)
+	// The page in view, plus each other server tab's total (one row each) for its count.
+	const limit = p.limit ?? LIST_LIMIT
+	const [res, ws, ...otherTotals] = await Promise.all([
+		registry(current, limit, p.offset ?? 0),
+		ownerWorkspaces(),
+		...others.map((t) => registry(t, 1, 0))
 	])
+	const totals = Object.fromEntries([
+		[current, res.total],
+		...others.map((t, i) => [t, otherTotals[i].total])
+	]) as Record<ServerTab, number>
 	const byKey = new Map(ws.map((w) => [w.owner_key, w]))
 	const all = res.owners.map((o) => ({ o, row: ownerRow(o, byKey.get(o.owner_key)) }))
+	// Source, area, bedrooms, type and units are filtered here, on this page only.
+	const pageOnlyFilter = Boolean(p.source || p.area || p.beds || p.ptype || p.units)
 
 	const matching = all.filter(({ o, row }) => {
 		const props = o.properties ?? []
@@ -870,7 +951,14 @@ export async function listOwners(p: OwnerListParams): Promise<OwnerListResponse>
 	const counts = Object.fromEntries(
 		(Object.keys(TABS) as OwnerTab[]).map((t) => [t, matching.filter(TABS[t]).length])
 	) as Record<OwnerTab, number>
-	const items = matching.filter(TABS[p.tab]).map(({ row }) => row)
+	// With no page-only filter, the server tabs cover the whole file (or the whole search result),
+	// and My contacts is the whole workspace list when nothing narrows it.
+	if (!pageOnlyFilter) {
+		Object.assign(counts, totals)
+		if (!p.q) counts.mine = ws.length
+	}
+	// A server tab's rows already come filtered from the backend.
+	const items = (isServerTab(p.tab) ? matching : matching.filter(TABS[p.tab])).map(({ row }) => row)
 
 	return {
 		items,
@@ -878,7 +966,9 @@ export async function listOwners(p: OwnerListParams): Promise<OwnerListResponse>
 		total: items.length,
 		unit_total: items.reduce((n, r) => n + r.units.length, 0),
 		with_event_90: matching.filter(({ o }) => inEvent(o)).length,
-		on_file: res.total,
+		on_file: totals.all,
+		page: { offset: p.offset ?? 0, limit, total: res.total, loaded: res.owners.length },
+		pageOnlyTabs: PAGE_ONLY_TABS,
 		areas: [
 			...new Set(
 				all.flatMap(({ o }) => (o.properties ?? []).map((x) => x.area_name)).filter(Boolean)
@@ -888,14 +978,16 @@ export async function listOwners(p: OwnerListParams): Promise<OwnerListResponse>
 }
 
 export async function getOwner(id: string): Promise<OwnerDetail> {
-	const [o, ws] = await Promise.all([
+	const [o, ws, imports] = await Promise.all([
 		client.get<CrmOwnerProfile>(`${CRM}/owners/${encodeURIComponent(id)}`),
-		ownerWorkspaces()
+		ownerWorkspaces(),
+		client.get<CrmContactImportResponse[]>(`${CRM}/contact-imports`)
 	])
 	const w = ws.find((x) => x.owner_key === id)
 	return {
 		...ownerRow(o, w),
 		unit_rows: (o.properties ?? []).map(ownerUnit),
+		imported_from: ownerImportSources(o.properties ?? [], imports),
 		matched: [],
 		// The workspace keeps the latest note only.
 		notes: w?.last_note
@@ -957,21 +1049,8 @@ export async function listImports(): Promise<ImportRequest[]> {
 		.map(({ created: _c, ...r }) => r)
 }
 
-/**
- * Leads files are read by the backend. Owner files have no preview endpoint, so only the row
- * count is shown; the backend maps their columns when the file is imported.
- */
-export async function previewImport(file: File, kind: 'Owners' | 'Leads'): Promise<ImportPreview> {
-	if (kind === 'Owners') {
-		const lines = (await file.text()).split(/\r?\n/).filter((l) => l.trim())
-		return {
-			file: file.name,
-			rows: Math.max(0, lines.length - 1),
-			columns: { name: null, phone: null, budget: null, area: null },
-			sample: [],
-			problem: null
-		}
-	}
+/** Leads files are read by the backend, which picks the columns. */
+export async function previewImport(file: File): Promise<ImportPreview> {
 	const fd = new FormData()
 	fd.append('file', file)
 	const res = await client.post<InboundImportPreviewResponse>(`${CRM}/inbound/imports/preview`, fd)
@@ -997,21 +1076,255 @@ export async function previewImport(file: File, kind: 'Owners' | 'Leads'): Promi
 }
 
 /** The import endpoints take no areas; the Areas box is not sent. */
-export async function createImport(
-	file: File,
-	kind: 'Owners' | 'Leads'
-): Promise<Written<ImportRequest>> {
+export async function createImport(file: File): Promise<Written<ImportRequest>> {
 	const fd = new FormData()
 	fd.append('file', file)
 	fd.append('name', file.name)
-	if (kind === 'Leads') {
-		const r = await client.post<InboundImportResponse>(`${CRM}/inbound/imports`, fd)
-		const { created: _c, ...row } = importRow('Leads', r)
-		return done(row)
-	}
-	const r = await client.post<CrmContactImportResponse>(`${CRM}/contact-imports`, fd)
-	const { created: _c, ...row } = importRow('Owners', r)
+	const r = await client.post<InboundImportResponse>(`${CRM}/inbound/imports`, fd)
+	const { created: _c, ...row } = importRow('Leads', r)
 	return done(row)
+}
+
+/* ── owner files (/contact-imports) ── */
+
+/** The same limits the backend applies to an owners file. */
+export const OWNER_FILE_TYPES = ['.csv', '.xlsx']
+const OWNER_FILE_MAX_BYTES = 50 * 1024 * 1024
+const HEADER_SCAN_ROWS = 15
+const MAX_COLUMNS = 100
+const PLACEHOLDER_HEADER = /^column\s*\d+$/i
+
+function ownerFileProblem(file: File): string | null {
+	const name = file.name.toLowerCase()
+	if (!OWNER_FILE_TYPES.some((t) => name.endsWith(t))) return 'Choose a CSV or XLSX file.'
+	if (!file.size) return 'This file is empty.'
+	if (file.size > OWNER_FILE_MAX_BYTES) return 'This file is over 50 MB.'
+	return null
+}
+
+/** The row in the first 15 with the most filled cells is the header row. */
+function headerRow(rows: string[][]): number {
+	let best = 0
+	let bestCount = -1
+	rows.slice(0, HEADER_SCAN_ROWS).forEach((row, i) => {
+		const filled = row
+			.slice(0, MAX_COLUMNS)
+			.filter((c) => c.trim() && !PLACEHOLDER_HEADER.test(c.trim())).length
+		if (filled > bestCount) {
+			best = i
+			bestCount = filled
+		}
+	})
+	return best
+}
+
+/**
+ * Read an owners file in the browser so the agent can check it before upload: the header row,
+ * the number of data rows and the first five. Nothing is sent; the backend maps the columns.
+ */
+export async function previewOwnerFile(file: File): Promise<OwnerFilePreview> {
+	const base = { file: file.name, size: file.size, sheets: 0, rows: 0, headers: [], sample: [] }
+	const problem = ownerFileProblem(file)
+	if (problem) return { ...base, problem }
+	let workbook: import('xlsx').WorkBook
+	const XLSX = await import('xlsx')
+	try {
+		workbook = XLSX.read(await file.arrayBuffer(), { type: 'array', dense: true, raw: true })
+	} catch {
+		return {
+			...base,
+			problem: 'This file could not be read. Save it again as CSV or XLSX without a password.'
+		}
+	}
+	let rows = 0
+	let sheets = 0
+	let headers: string[] = []
+	let sample: string[][] = []
+	for (const sheetName of workbook.SheetNames) {
+		const grid = XLSX.utils
+			.sheet_to_json<unknown[]>(workbook.Sheets[sheetName], {
+				header: 1,
+				blankrows: false,
+				defval: '',
+				raw: false
+			})
+			.map((r) => r.map((c) => String(c ?? '').trim()))
+		if (!grid.length) continue
+		const h = headerRow(grid)
+		const data = grid.slice(h + 1).filter((r) => r.some((c) => c))
+		if (!data.length) continue
+		sheets += 1
+		rows += data.length
+		if (!headers.length) {
+			const cols = grid[h]
+				.slice(0, MAX_COLUMNS)
+				.map((c, i) => ({ c, i }))
+				.filter(({ c }) => c && !PLACEHOLDER_HEADER.test(c))
+			headers = cols.map(({ c }) => c)
+			sample = data.slice(0, 5).map((r) => cols.map(({ i }) => r[i] ?? ''))
+		}
+	}
+	return {
+		...base,
+		sheets,
+		rows,
+		headers,
+		sample,
+		problem: rows ? null : 'No rows found in this file.'
+	}
+}
+
+function ownerImportResult(
+	r: CrmContactImportResponse,
+	alreadyImported: boolean
+): OwnerImportResult {
+	const s = r.summary
+	return {
+		id: r.id,
+		name: r.name,
+		status: r.status,
+		alreadyImported,
+		createdAt: r.created_at,
+		summary: {
+			totalRows: s.total_rows ?? 0,
+			candidateRows: s.candidate_rows ?? 0,
+			duplicatesCollapsed: s.duplicate_rows_collapsed ?? 0,
+			validContacts: s.valid_contacts ?? 0,
+			verified: s.verified_current_owners ?? 0,
+			probable: s.probable_current_owners ?? 0,
+			unitLinked: s.unit_linked_unverified ?? 0,
+			former: s.former_owners ?? 0,
+			conflicting: s.conflicting_claims ?? 0,
+			notMatched:
+				(s.unmatched ?? 0) + (s.registry_not_observed ?? 0) + (s.insufficient_property_data ?? 0),
+			rentalOpportunities: s.rental_opportunities ?? 0,
+			contactReady: s.contact_ready ?? 0
+		}
+	}
+}
+
+/**
+ * Upload an owners file. The backend reads, matches and saves it before it answers. When the
+ * same file was uploaded before, it returns that import instead; the list taken first tells
+ * the two apart. A failed import reads as one generic line; the server keeps the details.
+ */
+export async function importOwnerFile(
+	file: File,
+	name: string
+): Promise<Written<OwnerImportResult>> {
+	const problem = ownerFileProblem(file)
+	if (problem) throw new ApiError(problem, 400)
+	const before = await client.get<CrmContactImportResponse[]>(`${CRM}/contact-imports`)
+	const known = new Set(before.map((r) => r.id))
+	const fd = new FormData()
+	fd.append('file', file)
+	fd.append('name', name.trim() || file.name.replace(/\.[^.]+$/, '') || file.name)
+	let r: CrmContactImportResponse
+	try {
+		r = await client.post<CrmContactImportResponse>(`${CRM}/contact-imports`, fd)
+	} catch (e) {
+		if (e instanceof ApiError && e.status === 422)
+			throw new ApiError('This file could not be imported. Check the columns and try again.', 422)
+		throw e
+	}
+	return done(ownerImportResult(r, known.has(r.id)))
+}
+
+/** The organization's owner files, newest first. */
+export async function listOwnerImports(): Promise<OwnerImport[]> {
+	const rows = await client.get<CrmContactImportResponse[]>(`${CRM}/contact-imports`)
+	return [...rows]
+		.sort((a, b) => b.created_at.localeCompare(a.created_at))
+		.map((r) => ({
+			id: r.id,
+			name: r.name || r.original_filename,
+			file: r.original_filename,
+			status: r.status,
+			claims: r.summary.candidate_rows ?? 0,
+			rentalLeads: r.summary.rental_opportunities ?? 0,
+			at: stamp(r.created_at)
+		}))
+}
+
+/** Owner files with counts, sheet mappings and checks, newest first (dashboard and report). */
+export async function listOwnerImportDetails(): Promise<OwnerImportDetail[]> {
+	const rows = await client.get<CrmContactImportResponse[]>(`${CRM}/contact-imports`)
+	return [...rows]
+		.sort((a, b) => b.created_at.localeCompare(a.created_at))
+		.map((r) => {
+			const mappings = r.mappings ?? []
+			return {
+				id: r.id,
+				name: r.name || r.original_filename,
+				file: r.original_filename,
+				status: r.status,
+				at: stamp(r.created_at),
+				createdAt: r.created_at,
+				listId: r.list_id ?? null,
+				counts: importCounts(r.summary),
+				sheets: mappings.map((m) => ({
+					name: m.sheet_name,
+					rows: m.meaningful_rows,
+					family: m.sheet_family,
+					source: m.mapping_source,
+					confidence: m.confidence,
+					fields: Object.entries(m.field_map ?? {}).map(([field, column]) => ({ field, column })),
+					warnings: m.warnings ?? [],
+					checks: mappingChecks(m)
+				})),
+				flagged: isFlagged(r.status, mappings)
+			}
+		})
+}
+
+const OWNER_ROWS_LIMIT = 100
+
+/** One page (100) of an owner file's kept rows, filtered by status and search. */
+export async function listOwnerImportRows(
+	listId: number,
+	p: OwnerImportRowsParams
+): Promise<OwnerImportRows> {
+	const res = await client.get<CrmContactListDetail>(
+		client.withQuery(`${CRM}/contact-lists/${listId}`, {
+			status: p.status ?? undefined,
+			search: p.search.trim() || undefined,
+			limit: OWNER_ROWS_LIMIT,
+			offset: p.offset
+		})
+	)
+	return {
+		rows: res.contacts.map(
+			(c): OwnerImportRow => ({
+				id: c.id,
+				name: c.contact_name,
+				phone: c.phone_primary || c.phone_alternate || c.email_primary || '',
+				building: c.building_name || c.project_name,
+				unit: c.unit_number,
+				date: c.transaction_date ?? null,
+				price: c.transaction_price_aed ?? null,
+				status: c.ownership_status,
+				confidence: c.confidence_score,
+				reason: c.match_reason,
+				sheet: c.source_sheet,
+				rowNumber: c.source_row_number
+			})
+		),
+		total: res.total,
+		offset: res.offset,
+		limit: res.limit
+	}
+}
+
+/** Rename an owner file; the backend renames its saved list too. */
+export async function renameOwnerImport(id: number, name: string): Promise<Written<null>> {
+	await client.patch<CrmContactImportResponse>(`${CRM}/contact-imports/${id}`, { name })
+	return done(null)
+}
+
+/** Delete one owner file, its saved list and its claims; owner notes and pipelines stay. */
+export async function deleteOwnerImport(id: number): Promise<Written<null>> {
+	await client.delete<void>(`${CRM}/contact-imports/${id}`)
+	return done(null)
 }
 
 /* ── portal listings (Assets › Market) ── */

@@ -61,6 +61,12 @@ import type {
 	NavCounts,
 	Notification,
 	OwnerDetail,
+	OwnerFilePreview,
+	OwnerImport,
+	OwnerImportDetail,
+	OwnerImportResult,
+	OwnerImportRows,
+	OwnerImportRowsParams,
 	OwnerLeadCreate,
 	OwnerListParams,
 	OwnerListResponse,
@@ -325,12 +331,27 @@ export const crm = {
 	/** Backend: /api/v1/crm/inbound/imports (leads) and /contact-imports (owners). */
 	imports: {
 		list: (): Promise<ImportRequest[]> => backend.listImports(),
-		/** The backend reads a leads file and picks the columns; an owners file shows its row count. */
-		preview: (file: File, kind: 'Owners' | 'Leads'): Promise<ImportPreview> =>
-			backend.previewImport(file, kind),
+		/** The backend reads a leads file and picks the columns. */
+		preview: (file: File): Promise<ImportPreview> => backend.previewImport(file),
 		/** The import endpoints take no areas, so `areas` is not sent. */
-		create: (file: File, kind: 'Owners' | 'Leads', _areas: string) =>
-			backend.createImport(file, kind)
+		create: (file: File, _areas: string) => backend.createImport(file),
+		/** An owners file is read in the browser first; nothing is sent until it is imported. */
+		previewOwners: (file: File): Promise<OwnerFilePreview> => backend.previewOwnerFile(file),
+		/** Upload, match against DLD and save an owners file (/contact-imports). */
+		importOwners: (file: File, name: string): Promise<Written<OwnerImportResult>> =>
+			backend.importOwnerFile(file, name),
+		/** Owner files uploaded by the organization, newest first. */
+		ownerHistory: (): Promise<OwnerImport[]> => backend.listOwnerImports(),
+		/** Owner files with counts, sheet mappings and checks (dashboard and report). */
+		ownerDetails: (): Promise<OwnerImportDetail[]> => backend.listOwnerImportDetails(),
+		/** One page of an owner file's kept rows. */
+		ownerRows: (listId: number, p: OwnerImportRowsParams): Promise<OwnerImportRows> =>
+			backend.listOwnerImportRows(listId, p),
+		/** Rename an owner file and its saved list. */
+		renameOwners: (id: number, name: string): Promise<Written<null>> =>
+			backend.renameOwnerImport(id, name),
+		/** Delete an owner file with its saved list and claims. No undo. */
+		removeOwners: (id: number): Promise<Written<null>> => backend.deleteOwnerImport(id)
 	},
 
 	events: {

@@ -461,12 +461,18 @@ async def crm_owner_registry(
     max_rent_aed: int | None = Query(default=None, ge=0, le=10_000_000_000),
     min_value_aed: int | None = Query(default=None, ge=0, le=100_000_000_000),
     max_value_aed: int | None = Query(default=None, ge=0, le=100_000_000_000),
+    min_properties: int | None = Query(default=None, ge=1, le=10_000),
+    next_event_days: int | None = Query(default=None, ge=0, le=3_650),
     limit: int = Query(default=100, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
     context: AuthContext = Depends(require_active_subscription),
     db: AsyncSession = Depends(get_db_session),
 ):
-    """Return deduplicated owner profiles grouped into actionable CRM folders."""
+    """Return deduplicated owner profiles grouped into actionable CRM folders.
+
+    `min_properties` keeps owners with at least that many units; `next_event_days` keeps owners
+    whose next lease ends between today and that many days from now.
+    """
     _, organization_id = _auth_ids(context)
     return await get_owner_registry(
         db,
@@ -483,6 +489,8 @@ async def crm_owner_registry(
         max_value_aed=max_value_aed,
         limit=limit,
         offset=offset,
+        min_properties=min_properties,
+        next_event_days=next_event_days,
     )
 
 

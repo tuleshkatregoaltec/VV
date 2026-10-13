@@ -15,8 +15,12 @@ let { unread = 0 }: { unread?: number } = $props()
 const dark = $derived(colorTheme.resolved === 'dark')
 const path = $derived(page.url.pathname.replace(/\/$/, ''))
 
-/** ＋ New presets to the page: Owners → Owner, Assets → Listing, Deals → Deal, Calendar → Task, else Lead. */
-const preset = $derived.by((): { label: string; to: PanelState } => {
+/**
+ * ＋ New presets to the page: Owners → Owner, Assets → Listing, Deals → Deal, Calendar → Task, else
+ * Lead. The owner import pages have no ＋ New (their Upload button is the way in).
+ */
+const preset = $derived.by((): { label: string; to: PanelState } | null => {
+	if (path.includes('/owners/imports')) return null
 	if (path.endsWith('/owners')) return { label: 'owner', to: { kind: 'new-owner' } }
 	if (path.endsWith('/assets')) return { label: 'listing', to: { kind: 'new-listing' } }
 	if (path.endsWith('/deals')) return { label: 'deal', to: { kind: 'new-deal' } }
@@ -70,9 +74,11 @@ function onkeydown(e: KeyboardEvent) {
 		>
 			<Search size={17} />
 		</button>
+		{#if preset}
+		{@const p = preset}
 		<span class="newgrp">
-			<button type="button" class="btn newbtn" aria-label="New {preset.label}" onclick={() => panel.open(preset.to)}>
-				<Plus size={16} /><span class="full">New {preset.label}</span>
+			<button type="button" class="btn newbtn" aria-label="New {p.label}" onclick={() => panel.open(p.to)}>
+				<Plus size={16} /><span class="full">New {p.label}</span>
 			</button>
 			<button
 				type="button"
@@ -84,6 +90,7 @@ function onkeydown(e: KeyboardEvent) {
 				<ChevronDown size={15} />
 			</button>
 		</span>
+		{/if}
 		<button
 			type="button"
 			class="ico"

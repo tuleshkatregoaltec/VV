@@ -1,5 +1,6 @@
 <script lang="ts">
 import { createQuery } from '@tanstack/svelte-query'
+import { goto } from '$app/navigation'
 import { crm } from '../../api'
 import type { OwnerUnit } from '../../api/types'
 import { GATE_LINE, ORIGIN_TONE, stageOf } from '../../config'
@@ -69,6 +70,37 @@ const maxRent = (u: OwnerUnit) => Math.max(1, ...u.rent_history.map((h) => h.aed
 			<Kv k="Last contact" v={o.last_contact} />
 			<Kv k="Relationship" v={o.mine ? 'Mine' : 'Company'} />
 			<Kv k="Source" v={o.source_label} o={o.on_file ? "on your agency's file" : 'your own contact'} wide />
+			<!-- Which uploaded file(s) this owner came from; each opens that import's report. -->
+			<Kv k="Imported from" wide>
+				{#if o.imported_from.length}
+					<ul class="srcs">
+						{#each o.imported_from as f (f.name)}
+							<li>
+								{#if f.importId !== null}
+									{@const importId = f.importId}
+									<button
+										type="button"
+										class="srclink"
+										onclick={async () => {
+											panel.closeAll()
+											await goto(`/crm/owners/imports/${importId}`)
+										}}>{f.name}</button
+									>
+								{:else}
+									<span>{f.name}</span>
+								{/if}
+								<span class="srcmeta">
+									{[f.file, f.date && fullDate(f.date), `${fmt(f.units)} unit${f.units === 1 ? '' : 's'}`]
+										.filter(Boolean)
+										.join(' · ')}
+								</span>
+							</li>
+						{/each}
+					</ul>
+				{:else}
+					—
+				{/if}
+			</Kv>
 		</div>
 
 		{#if !o.prior_deal}
@@ -169,6 +201,13 @@ const maxRent = (u: OwnerUnit) => Math.max(1, ...u.rent_history.map((h) => h.aed
 								<span>
 									<span class="no">#{u.number}</span> · {u.building}{beds(u) ? ` · ${beds(u)}` : ''}
 									<span class="small muted">· {u.area}</span>
+									{#if u.owned_from || u.owned_to}
+										<span class="small muted">
+											· {[u.owned_from && fullDate(u.owned_from), u.owned_to && `sold ${fullDate(u.owned_to)}`]
+												.filter(Boolean)
+												.join(' – ')}
+										</span>
+									{/if}
 								</span>
 								<Chip chip={u.status_chip} />
 								<span class="muted" aria-hidden="true">{isOpen ? '−' : '＋'}</span>
@@ -177,6 +216,7 @@ const maxRent = (u: OwnerUnit) => Math.max(1, ...u.rent_history.map((h) => h.aed
 								<div class="ub" id="unit-{u.key}">
 									<div class="kv">
 										<Kv k="Type" v="{u.type}{u.size_sqft ? ` · ${fmt(u.size_sqft)} sqft` : ''}" />
+										<Kv k="Imported from" v={u.source || '—'} o="file · sheet and row" wide />
 										<Kv k="Last sale" v={u.bought_aed ? `${aed(u.bought_aed)} · ${u.bought_year}` : '—'} o="DLD" />
 										<Kv
 											k="Rent now"
@@ -293,3 +333,30 @@ const maxRent = (u: OwnerUnit) => Math.max(1, ...u.rent_history.map((h) => h.aed
 {:else}
 	<PanelLoading query={owner} kicker="Owner" />
 {/if}
+
+<style>
+	.srcs {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+		display: grid;
+		gap: 0.35rem;
+	}
+	.srcs li {
+		display: grid;
+	}
+	.srclink {
+		justify-self: start;
+		padding: 0;
+		border: 0;
+		background: none;
+		color: var(--accent);
+		font: inherit;
+		cursor: pointer;
+		text-align: left;
+	}
+	.srcmeta {
+		font-size: 12px;
+		color: var(--text2);
+	}
+</style>

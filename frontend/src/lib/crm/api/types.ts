@@ -3,6 +3,7 @@
  * anything computed (chips, summaries, commission amounts, counts) is produced by the backend
  * so no business rule lives in Svelte. Money is whole AED; dates are YYYY-MM-DD (Dubai).
  */
+import type { ClaimStatus, ImportCounts, SheetCheck } from '../ownerImportReport'
 
 /** `owner`: a Vitevue lease lead not yet classified as seller or landlord. */
 export type LeadType = 'buyer' | 'seller' | 'tenant' | 'landlord' | 'owner'
@@ -760,6 +761,10 @@ export interface OwnerListParams {
 	ptype?: PropertyKind | ''
 	/** 1, 2 or 3 (= 3 or more) */
 	units?: string
+	/** Where the page starts in the whole owner file; 0 when left out. */
+	offset?: number
+	/** Owners per page (50, 100, 200 or 500); 500 when left out. */
+	limit?: number
 }
 
 export interface OwnerRow {
@@ -803,12 +808,18 @@ export interface OwnerUnit {
 	size_sqft: number | null
 	bought_aed: number | null
 	bought_year: number | null
+	/** Date of this owner's own deal on the unit (agency file, else the matched DLD sale). */
+	owned_from: string | null
+	/** Date the unit was sold on to someone else, if it was. */
+	owned_to: string | null
 	status: string
 	status_chip: Chip
 	rent: { aed: number; from: string; to: string } | null
 	market: { sale: [number, number]; rent: [number, number] } | null
 	rent_history: { year: number; aed: number }[]
 	transactions: { when: string; what: string; aed: number | null }[]
+	/** Where this unit came from: "Business Bay 2024 SVR · Sheet1 row 12". Empty when unknown. */
+	source: string
 }
 
 /** One line of the owner's record of relationship. Leads and call logs do not count as a transaction. */
@@ -823,8 +834,21 @@ export interface RelationRow {
 	added: boolean
 }
 
+/** One uploaded file this owner came from, with how many of their units it gave. */
+export interface OwnerImportSource {
+	/** Null when the import is no longer in the import history. */
+	importId: number | null
+	name: string
+	file: string | null
+	/** Upload date, YYYY-MM-DD. */
+	date: string | null
+	units: number
+}
+
 export interface OwnerDetail extends OwnerRow {
 	unit_rows: OwnerUnit[]
+	/** The uploaded files this owner came from, oldest first. */
+	imported_from: OwnerImportSource[]
 	matched: LeadRow[]
 	notes: OwnerNote[]
 	/** Deals, listings and past transactions with this owner on the agency's file. */
@@ -855,6 +879,13 @@ export interface OwnerListResponse {
 	/** Owners on the agency's own file. */
 	on_file: number
 	areas: string[]
+	/**
+	 * This page within the whole file (search included). The tab counts and the source, area,
+	 * bedrooms and type filters only see the owners on this page.
+	 */
+	page: { offset: number; limit: number; total: number; loaded: number }
+	/** Tabs whose counts cover only this page (the backend can't filter them yet). */
+	pageOnlyTabs: OwnerTab[]
 }
 
 export interface OwnerLeadCreate {
@@ -890,6 +921,113 @@ export interface ImportPreview {
 	columns: Record<'name' | 'phone' | 'budget' | 'area', string | null>
 	sample: { name: string; phone: string; budget: string; area: string }[]
 	problem: string | null
+}
+
+/**
+ * An owners file read in the browser before upload: the header row it found, the data rows
+ * and a few sample rows. The backend maps the columns itself when the file is imported.
+ */
+export interface OwnerFilePreview {
+	file: string
+	size: number
+	sheets: number
+	rows: number
+	headers: string[]
+	sample: string[][]
+	problem: string | null
+}
+
+/** One uploaded owners file in the import history (/contact-imports). */
+export interface OwnerImport {
+	id: number
+	name: string
+	file: string
+	status: 'processing' | 'completed' | 'failed'
+	/** Owner–property claims kept after duplicates were merged. */
+	claims: number
+	rentalLeads: number
+	at: string
+}
+
+/** One sheet of an owner file: how its columns were mapped and what that means for its rows. */
+export interface ImportSheet {
+	name: string
+	rows: number
+	/** 'transaction_party' (a DLD export with dates) or 'contact_list'. */
+	family: string
+	source: 'heuristic' | 'llm' | 'heuristic_fallback'
+	confidence: number
+	fields: { field: string; column: string }[]
+	warnings: string[]
+	checks: SheetCheck[]
+}
+
+/** An owner file with its counts and sheets, for the import dashboard and report. */
+export interface OwnerImportDetail {
+	id: number
+	name: string
+	file: string
+	status: 'processing' | 'completed' | 'failed'
+	at: string
+	createdAt: string
+	/** The saved list holding its owner rows; null when none was saved. */
+	listId: number | null
+	counts: ImportCounts
+	sheets: ImportSheet[]
+	flagged: boolean
+}
+
+export interface OwnerImportRowsParams {
+	status: ClaimStatus | null
+	search: string
+	offset: number
+}
+
+/** One kept row of an owner file (a claim), as checked against DLD. */
+export interface OwnerImportRow {
+	id: number
+	name: string
+	phone: string
+	building: string
+	unit: string
+	date: string | null
+	price: number | null
+	status: ClaimStatus
+	confidence: number
+	reason: string
+	sheet: string
+	rowNumber: number
+}
+
+export interface OwnerImportRows {
+	rows: OwnerImportRow[]
+	total: number
+	offset: number
+	limit: number
+}
+
+/** What the backend did with an owners file: its counts, or the earlier import of the same file. */
+export interface OwnerImportResult {
+	id: number
+	name: string
+	status: 'processing' | 'completed' | 'failed'
+	/** The same file was uploaded before; the backend returned that import. */
+	alreadyImported: boolean
+	createdAt: string
+	summary: {
+		totalRows: number
+		candidateRows: number
+		duplicatesCollapsed: number
+		validContacts: number
+		verified: number
+		probable: number
+		unitLinked: number
+		former: number
+		conflicting: number
+		notMatched: number
+		rentalOpportunities: number
+		contactReady: number
+	}
 }
 
 /* ── calendar ── */

@@ -3,6 +3,8 @@ export interface TabItem<V> {
 	id: V
 	label: string
 	count?: number | null
+	/** A short note after the count, e.g. "this page" when it doesn't cover everything. */
+	hint?: string
 }
 </script>
 
@@ -46,6 +48,14 @@ export interface TabItem<V> {
 		>
 			{item.label}
 			{#if item.count !== undefined && item.count !== null}<span class="ct">{item.count}</span>{/if}
+			{#if item.hint}<span class="ct hint">{item.hint}</span>{/if}
 		</button>
 	{/each}
 </div>
+
+<style>
+	.hint {
+		font-size: 11px;
+		font-style: italic;
+	}
+</style>

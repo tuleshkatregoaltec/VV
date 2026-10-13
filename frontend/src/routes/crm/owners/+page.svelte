@@ -1,6 +1,8 @@
 <script lang="ts">
 import { createQuery } from '@tanstack/svelte-query'
+import ChartBar from 'lucide-svelte/icons/chart-no-axes-column'
 import Search from 'lucide-svelte/icons/search'
+import Upload from 'lucide-svelte/icons/upload'
 import type { OwnerListParams, OwnerSource, OwnerTab, PropertyKind } from '$lib/crm/api/types'
 import Chip from '$lib/crm/components/ui/Chip.svelte'
 import Empty from '$lib/crm/components/ui/Empty.svelte'
@@ -25,17 +27,42 @@ $effect(() => {
 	return () => clearTimeout(t)
 })
 
+// The whole owner file, 50–500 owners a page. A new tab, search, filter or page size goes back to
+// the first page.
+const PAGE_SIZES = [50, 100, 200, 500]
+let offset = $state(0)
+$effect.pre(() => {
+	void [ui.ownerTab, q, ui.ownerSource, ui.ownerArea, ui.ownerBeds, ui.ownerPtype, ui.ownerPageSize]
+	offset = 0
+})
+
 const params = $derived<OwnerListParams>({
 	tab: ui.ownerTab,
 	q,
 	source: ui.ownerSource,
 	area: ui.ownerArea,
 	beds: ui.ownerBeds,
-	ptype: ui.ownerPtype
+	ptype: ui.ownerPtype,
+	offset,
+	limit: ui.ownerPageSize
 })
 const owners = createQuery(() => crmQueries.owners(params))
 const imports = createQuery(() => crmQueries.imports())
 const o = $derived(owners.data)
+const loading = $derived(owners.isPlaceholderData)
+/** "Showing 501–1,000 of 73,224" for the page in view. */
+const pageText = $derived(
+	o
+		? o.page.total
+			? `Showing ${fmt(o.page.offset + 1)}–${fmt(o.page.offset + o.page.loaded)} of ${fmt(o.page.total)} owners`
+			: 'No owners'
+		: ''
+)
+
+function goPage(next: number) {
+	offset = next
+	document.querySelector('.owners-table')?.scrollIntoView({ block: 'start' })
+}
 const filtered = $derived(
 	Boolean(ui.ownerQ || ui.ownerSource || ui.ownerArea || ui.ownerBeds || ui.ownerPtype)
 )
@@ -52,7 +79,12 @@ const tabs = $derived(
 			['sold', 'Just sold'],
 			['update', 'Update due']
 		] as [OwnerTab, string][]
-	).map(([id, label]) => ({ id, label, count: o?.counts[id] }))
+	).map(([id, label]) => ({
+		id,
+		label,
+		count: o?.counts[id],
+		hint: o && o.page.total > o.page.limit && o.pageOnlyTabs.includes(id) ? 'this page' : undefined
+	}))
 )
 
 const facts = $derived(
@@ -68,6 +100,12 @@ const facts = $derived(
 	{#snippet note()}
 		<!-- 6 Oct, 38:17–40:07: owner files stay in the agency's workspace — being built, not a promise. -->
 		<span class="chip outline" title="Design principle being built (Maan), not a promise.">In build</span>
+	{/snippet}
+	{#snippet right()}
+		<a class="btn ghost" href="/crm/owners/imports"><ChartBar size={15} /><span>Imports</span></a>
+		<button type="button" class="btn ghost" onclick={() => panel.open({ kind: 'new-import', ownersOnly: true })}>
+			<Upload size={15} /><span>Upload</span>
+		</button>
 	{/snippet}
 </PageHeader>
 
@@ -110,14 +148,20 @@ const facts = $derived(
 	{#if filtered}
 		<button type="button" class="btn plain sm" onclick={clearOwnerFilters}>Clear</button>
 	{/if}
-	<span class="count" aria-live="polite">{o ? `${o.items.length} owner${o.items.length === 1 ? '' : 's'}` : ''}</span>
+	<span class="count" aria-live="polite">{loading ? 'Loading…' : pageText}</span>
+	<label class="psize">
+		<span>Rows per page</span>
+		<select bind:value={ui.ownerPageSize}>
+			{#each PAGE_SIZES as n (n)}<option value={n}>{n}</option>{/each}
+		</select>
+	</label>
 </div>
 
 {#if owners.isError && o}
 	<ErrorLine bar message={errorText(owners.error)} onretry={() => owners.refetch()} />
 {/if}
 
-<div class="card">
+<div class={['card owners-table', loading && 'stale']} aria-busy={loading}>
 	{#if o}
 		<div class="tblwrap">
 			<table class="tbl">
@@ -186,6 +230,29 @@ const facts = $derived(
 				</tbody>
 			</table>
 		</div>
+		{#if o.page.total > o.page.limit}
+			<div class="pager">
+				<span class="small muted">
+					{pageText} · the source, bedrooms, type and area filters cover this page
+				</span>
+				<button
+					type="button"
+					class="btn ghost sm"
+					disabled={loading || offset === 0}
+					onclick={() => goPage(Math.max(0, offset - o.page.limit))}
+				>
+					Previous
+				</button>
+				<button
+					type="button"
+					class="btn ghost sm"
+					disabled={loading || offset + o.page.limit >= o.page.total}
+					onclick={() => goPage(offset + o.page.limit)}
+				>
+					Next
+				</button>
+			</div>
+		{/if}
 	{:else if owners.isError}
 		<ErrorLine message={errorText(owners.error)} onretry={() => owners.refetch()} />
 	{:else}
@@ -199,7 +266,7 @@ const facts = $derived(
 			Owner file and import requests
 			<span class="facts">Vitevue does not provide or sell owner data · {waiting} waiting for the admin</span>
 		</h2>
-		<button type="button" class="btn ghost sm" onclick={() => panel.open({ kind: 'new-import' })}>
+		<button type="button" class="btn ghost sm" onclick={() => panel.open({ kind: 'new-import', ownersOnly: true })}>
 			Import a file
 		</button>
 	</div>
@@ -228,3 +295,40 @@ const facts = $derived(
 		{/snippet}
 	</QueryView>
 </section>
+
+<style>
+	.owners-table {
+		scroll-margin-top: 5rem;
+	}
+	.stale {
+		opacity: 0.55;
+		transition: opacity 0.15s;
+	}
+	.pager {
+		display: flex;
+		align-items: center;
+		justify-content: flex-end;
+		flex-wrap: wrap;
+		gap: 0.5rem;
+		padding: 0.75rem 1rem;
+		border-top: 1px solid var(--sep);
+	}
+	.psize {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.4rem;
+		font-size: 12.5px;
+		color: var(--text2);
+	}
+	.psize select {
+		height: 30px;
+		border: 1px solid var(--line-2);
+		border-radius: 8px;
+		background: var(--card);
+		color: var(--text);
+		padding: 0 0.4rem;
+	}
+	.pager .small {
+		margin-right: auto;
+	}
+</style>

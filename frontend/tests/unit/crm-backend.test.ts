@@ -181,17 +181,19 @@ describe('CRM owners from /api/v1/crm/owner-registry', () => {
 		} as CrmOwnerProfile
 	}
 
-	it('counts the tabs the agent filters by: 3+ units and a lease ending within 90 days', async () => {
-		serve({
-			'/api/v1/crm/owner-registry': {
-				scope: 'all',
-				owners: [owner('a', 3, 30), owner('b', 1, 200), owner('c', 1, null)],
-				total: 3,
-				limit: 500,
-				offset: 0,
-				summary: {}
-			},
-			'/api/v1/crm/owner-workspaces': []
+	it('counts the tabs the agent filters by (3+ units, a lease ending within 90 days) on the backend, for the whole file', async () => {
+		const page = {
+			owners: [owner('a', 3, 30), owner('b', 1, 200), owner('c', 1, null)],
+			limit: 500,
+			offset: 0,
+			summary: {}
+		}
+		vi.spyOn(client, 'get').mockImplementation(async (url: string) => {
+			if (url.startsWith('/api/v1/crm/owner-workspaces')) return [] as never
+			if (!url.startsWith('/api/v1/crm/owner-registry')) throw new Error(`unexpected GET ${url}`)
+			// The backend applies the tab filters: one owner has 3+ units, one a lease within 90 days.
+			const total = url.includes('min_properties=3') || url.includes('next_event_days=90') ? 1 : 3
+			return { ...page, total } as never
 		})
 		const res = await backend.listOwners({ tab: 'all' })
 		expect(res.counts).toMatchObject({ all: 3, multi: 1, event: 1, mine: 0 })
@@ -205,7 +207,8 @@ describe('CRM owners from /api/v1/crm/owner-registry', () => {
 	it('keeps the DLD 02-2026 gate on: no owner has a prior deal on record yet', async () => {
 		serve({
 			'/api/v1/crm/owners/a': owner('a', 1, 30),
-			'/api/v1/crm/owner-workspaces': []
+			'/api/v1/crm/owner-workspaces': [],
+			'/api/v1/crm/contact-imports': []
 		})
 		const o = await backend.getOwner('a')
 		expect(o.prior_deal).toBe(false)

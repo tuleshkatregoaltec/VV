@@ -59,6 +59,8 @@ export const ui = $state({
 	ownerBeds: '',
 	ownerPtype: '' as PropertyKind | '',
 	ownerUnits: '',
+	/** Owners per page on the Owners table: 50, 100, 200 or 500. */
+	ownerPageSize: 50,
 	/** YYYY-MM-DD; empty = today */
 	weekDay: '',
 	/** YYYY-MM; empty = this month */
