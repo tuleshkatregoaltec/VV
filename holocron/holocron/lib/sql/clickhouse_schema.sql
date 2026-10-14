@@ -265,6 +265,7 @@ FROM (
 
 CREATE TABLE IF NOT EXISTS dxbi_sales_unit_events (
     sale_key           String,
+    dld_transaction_number String DEFAULT '',
     transaction_date   Date,
     unit_number        String,
     building_name      String DEFAULT '',
@@ -2223,6 +2224,9 @@ WHERE b.snapshot_id = (
       WHERE snapshot_id = (
           SELECT snapshot_id FROM published ORDER BY collected_at DESC, snapshot_id DESC LIMIT 1)
   );
+
+-- Preserve verified registration identifiers when available; do not merge distinct identities.
+ALTER TABLE dxbi_sales_unit_events ADD COLUMN IF NOT EXISTS dld_transaction_number String DEFAULT '';
 
 -- One complete profile per DXBI sale / lease (holocron.market.dxbi_profile): the location chain
 -- Area -> Master Project -> Project -> Building -> Unit, type, bedrooms and completion status,

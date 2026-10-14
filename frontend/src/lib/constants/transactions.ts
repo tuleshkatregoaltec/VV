@@ -127,5 +127,5 @@ export const TIMEFRAME_MAPPING: Record<string, number> = {
 }
 
 // Pagination
-export const DEFAULT_ITEMS_PER_PAGE = 30
+export const DEFAULT_ITEMS_PER_PAGE = 10
 export const MAX_VISIBLE_PAGES = 7

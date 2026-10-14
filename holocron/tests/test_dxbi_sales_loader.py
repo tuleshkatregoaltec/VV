@@ -162,3 +162,26 @@ def test_a_complete_rescrape_replaces_its_window(database: str) -> None:  # noqa
     assert client.query(
         f"SELECT sale_key FROM {loader.SALES_TABLE} FINAL ORDER BY sale_key"
     ).result_rows == [("kept",), ("t-abc",)]
+
+
+@pytest.mark.parametrize("bad_row", [{}, {"date_text": "21, Jun 2026 Developer"}])
+def test_replacement_preflight_refuses_lossy_or_wrong_date_evidence(
+    tmp_path: Path, bad_row: dict
+) -> None:
+    loader = _load_script("load_dxbi_sales_units.py")
+    row = _sale((0, 5000000), building="Tower One")
+    bad = {**row, **bad_row} if bad_row else {}
+    path = tmp_path / "sales.jsonl"
+    path.write_text(json.dumps(row) + "\n" + json.dumps(bad) + "\n")
+    with pytest.raises(ValueError, match="Replacement input rejected"):
+        loader.validate_replacement_files([path], first=date(2026, 6, 20), last=date(2026, 6, 20))
+
+
+def test_replacement_preflight_counts_valid_evidence_without_writes(tmp_path: Path) -> None:
+    loader = _load_script("load_dxbi_sales_units.py")
+    path = tmp_path / "sales.jsonl"
+    path.write_text(json.dumps(_sale((0, 5000000), building="Tower One")) + "\n")
+    assert (
+        loader.validate_replacement_files([path], first=date(2026, 6, 20), last=date(2026, 6, 20))
+        == 1
+    )

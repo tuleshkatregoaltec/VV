@@ -25,6 +25,7 @@ describe('DXBI transaction page filters', () => {
 			timeframe: 'Last Month',
 			currentPage: 2,
 			localFilters: {
+				locationSearch: '',
 				selectedLocation: 'Jumeirah Village Circle',
 				selectedBuilding: 'Binghatti Heights',
 				selectedProject: 'Binghatti Heights',
@@ -40,8 +41,8 @@ describe('DXBI transaction page filters', () => {
 		expect(filters).toEqual({
 			property_usage: 'Residential',
 			timeframe_days: 30,
-			limit: 30,
-			offset: 30,
+			limit: 10,
+			offset: 10,
 			location: 'Jumeirah Village Circle',
 			building: 'Binghatti Heights',
 			project: 'Binghatti Heights',
@@ -108,6 +109,7 @@ describe('DXBI transaction page filters', () => {
 			timeframe: 'Last 6 Months',
 			currentPage: 3,
 			localFilters: {
+				locationSearch: '',
 				selectedLocation: 'Dubai Marina',
 				selectedBuilding: 'Marina Gate 1',
 				selectedProject: 'Marina Gate',
@@ -122,8 +124,8 @@ describe('DXBI transaction page filters', () => {
 		expect(filters).toEqual({
 			property_usage: 'Residential',
 			timeframe_days: 180,
-			limit: 30,
-			offset: 60,
+			limit: 10,
+			offset: 20,
 			location: 'Dubai Marina',
 			building: 'Marina Gate 1',
 			project: 'Marina Gate',
@@ -170,7 +172,8 @@ describe('DXBI transaction rows', () => {
 			date: '2026-09-15',
 			unit: '1904',
 			building: '29 Boulevard Tower 2',
-			location: 'Downtown Dubai',
+			// No profile yet: DXBI's own building and community.
+			location: '29 Boulevard Tower 2 · Downtown Dubai',
 			mapUrl: null,
 			community: 'Downtown Dubai',
 			project: '-',
@@ -256,6 +259,22 @@ describe('DXBI transaction rows', () => {
 		}
 	})
 
+	it('keeps project-only names in the unified location column on both pages', () => {
+		expect(
+			toSaleRow({
+				transaction_id: 'project-only',
+				project_name: '02 Residence',
+				location_name: 'JVT'
+			}).location
+		).toBe('02 Residence · JVT')
+		for (const columns of [SALES_COLUMNS, RENTAL_COLUMNS]) {
+			expect(columns.find((column) => column.id === 'location')?.defaultVisible).toBe(true)
+			expect(columns.some((column) => column.id === 'project' || column.id === 'building')).toBe(
+				false
+			)
+		}
+	})
+
 	it('formats amounts identically in every browser locale and shows sizes in sq ft', () => {
 		expect(formatAed(1_179_900)).toBe('1,179,900')
 		expect(formatAed(null)).toBe('-')
@@ -266,4 +285,31 @@ describe('DXBI transaction rows', () => {
 			'Price/sq ft (AED)'
 		)
 	})
+})
+
+it('combines location fields without deleting the original property identity', () => {
+	const row = toSaleRow({
+		transaction_id: 'one',
+		building_name: '02 Residence',
+		project_name: '02 Residence',
+		location_name: 'JVT'
+	})
+	expect(row.location).toBe('02 Residence · JVT')
+	expect(row.building).toBe('02 Residence')
+	expect(
+		SALES_COLUMNS.filter((column) => ['building', 'project', 'location'].includes(column.id)).map(
+			(column) => column.label
+		)
+	).toEqual(['Location'])
+})
+
+it('sends free-text location keywords to both lists and exports through shared filters', () => {
+	const params = buildSalesFilterParams({
+		propertyUsage: 'All',
+		timeframe: 'Last Month',
+		localFilters: { ...DEFAULT_SALES_LOCAL_FILTERS, locationSearch: '  skyrise business bay  ' }
+	})
+	expect(params.location_search).toBe('skyrise business bay')
+	expect(params.location).toBeUndefined()
+	expect(params.building).toBeUndefined()
 })

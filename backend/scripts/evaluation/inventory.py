@@ -64,6 +64,11 @@ def build_inventory(app: Path = APP) -> dict:
             return ".".join([base, *tail]) if base else None
 
         def strings(node, seen=frozenset()):
+            if isinstance(node, ast.FormattedValue):
+                # Unknown interpolation must separate SQL tokens, never turn FROM {source}
+                # WHERE into a fabricated table named WHERE.
+                value = strings(node.value, seen)
+                return value or "{" + ast.unparse(node.value) + "}"
             if isinstance(node, ast.Name) and node.id in assignments and node.id not in seen:
                 return strings(assignments[node.id], seen | {node.id})
             if isinstance(node, ast.Constant) and isinstance(node.value, str):

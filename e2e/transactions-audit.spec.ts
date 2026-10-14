@@ -3,7 +3,7 @@ import path from 'node:path';
 
 // Run with the local audit config and an authenticated test session. Responses are real except
 // in explicitly injected latency/failure cases. No database changes are made by these tests.
-const evidence = path.resolve(
+const evidence = process.env.TRANSACTION_AUDIT_SCREENSHOTS ?? path.resolve(
     __dirname,
     '../docs/audits/resolution-2026-10-10/screenshots',
 );
@@ -71,7 +71,10 @@ for (const kind of ['sales', 'rentals'] as const) {
             const homes = ['Apartment', 'Villa', 'Townhouse', 'Hotel Apartment', 'Penthouse', 'Duplex'];
             const expected = fields.map((key) =>
                 key === 'location'
-                    ? rows[i].location || rows[i].location_name || '-'
+                    ? rows[i].location ||
+                      [rows[i].building_name, rows[i].project_name, rows[i].location_name]
+                          .filter((value, index, all) => value?.trim() && all.findIndex(v => v?.trim().toLowerCase() === value.trim().toLowerCase()) === index)
+                          .map(value => value.trim()).join(' · ') || 'Location unavailable'
                     : key === 'bedrooms' && rows[i].bedrooms == null
                       ? rows[i].property_type && !homes.includes(rows[i].property_type)
                           ? 'N/A'
@@ -102,7 +105,7 @@ for (const kind of ['sales', 'rentals'] as const) {
         await page.route(`**/api/v1/transactions/${kind}?**`, async (route) => {
             if (
                 new URL(route.request().url()).searchParams.get('offset') ===
-                '30'
+                '10'
             )
                 await barrier;
             await route.continue();
@@ -112,7 +115,7 @@ for (const kind of ['sales', 'rentals'] as const) {
             .click();
         await expect(
             page.getByRole('navigation', { name: 'Pagination' }),
-        ).toContainText('31');
+        ).toContainText('11');
         await page.screenshot({
             path: path.join(evidence, `${kind}-pending-page.png`),
             fullPage: true,
@@ -145,9 +148,7 @@ for (const kind of ['sales', 'rentals'] as const) {
         );
         await open(page, kind);
         await page.waitForTimeout(8500); // Query's default retries use 1+2+4 second backoff.
-        await page
-            .locator(`#${kind}-filters-desktop-selectedLocation-input-button`)
-            .click();
+        await expect(page.locator(`#${kind}-filters-selectedPropertyType-input-button`)).toBeDisabled();
         await page.waitForTimeout(300);
         await page.screenshot({
             path: path.join(evidence, `${kind}-facet-error.png`),
@@ -219,10 +220,10 @@ test('mobile rental rent dropdown can select its last option', async ({
     ).toBeVisible({ timeout: 120000 });
     await page.locator('details > summary').click();
     await page
-        .locator('#rentals-filters-mobile-rentRange-input-button')
+        .locator('#rentals-filters-rentRange-input-button')
         .click();
     const option = page
-        .locator('#rentals-filters-mobile-rentRange-input-menu')
+        .locator('#rentals-filters-rentRange-input-menu')
         .getByRole('button', { name: '200k+', exact: true });
     await page.screenshot({
         path: path.join(evidence, 'rentals-mobile-dropdown.png'),
@@ -230,7 +231,7 @@ test('mobile rental rent dropdown can select its last option', async ({
     });
     await option.click({ timeout: 3000 });
     await expect(
-        page.locator('#rentals-filters-mobile-rentRange-input-button'),
+        page.locator('#rentals-filters-rentRange-input-button'),
     ).toHaveText('200k+');
 });
 
@@ -241,16 +242,16 @@ for (const kind of ['sales', 'rentals'] as const) {
         await open(page, kind);
         await page
             .getByRole('checkbox', {
-                name: 'Select all 30 rows on this page',
+                name: 'Select all 10 rows on this page',
                 exact: true,
             })
             .check();
         await expect(
-            page.getByText('30 selected', { exact: true }),
+            page.getByText('10 selected', { exact: true }),
         ).toBeVisible();
         await page
             .getByRole('checkbox', {
-                name: 'Deselect all 30 rows on this page',
+                name: 'Deselect all 10 rows on this page',
                 exact: true,
             })
             .uncheck();

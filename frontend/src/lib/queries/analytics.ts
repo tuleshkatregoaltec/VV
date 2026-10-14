@@ -1,7 +1,7 @@
 import { analytics } from '$lib/api/analytics'
 
 export const analyticsKeys = {
-	all: ['analytics'] as const,
+	all: ['analytics', 'dxbi-v2'] as const,
 	marketTrend: (days: number, propertyUsage?: string) =>
 		[...analyticsKeys.all, 'marketTrend', { days, propertyUsage }] as const,
 	projectSearch: (search: string, limit: number) =>
@@ -35,13 +35,13 @@ export const analyticsQueries = {
 	projectSearch: (search = '', limit = 50) => ({
 		queryKey: analyticsKeys.projectSearch(search, limit),
 		queryFn: () => analytics.projectSearch(search, limit),
-		staleTime: search === '' ? Infinity : 5 * 60 * 1000
+		staleTime: 5 * 60 * 1000
 	}),
 	subProjects: (masterProject: string | null, filterType: string | null) => ({
 		queryKey: analyticsKeys.subProjects(masterProject ?? '', filterType ?? ''),
 		queryFn: () => analytics.subProjects(masterProject ?? '', filterType ?? 'master'),
 		enabled: Boolean(masterProject && filterType && !['project', 'market'].includes(filterType)),
-		staleTime: Infinity
+		staleTime: 5 * 60 * 1000
 	}),
 	projectSummary: (params: { masterProject?: string; project?: string; filterType?: string }) => ({
 		queryKey: analyticsKeys.projectSummary(params),

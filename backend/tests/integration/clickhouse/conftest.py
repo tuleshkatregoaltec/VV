@@ -60,3 +60,22 @@ def install_serving(warehouse):
             await warehouse.command(ddl[view])
 
     return install
+
+
+@pytest.fixture
+def analytics_projection_tables(monkeypatch):
+    """Small projection tables for aggregation tests; DXBI isolation has separate tests."""
+    from app.analytics import dxbi, queries
+
+    monkeypatch.setattr(queries, "SALES_SOURCE", "ch_transactions")
+    monkeypatch.setattr(queries, "RENTALS_SOURCE", "ch_rent_contracts")
+    for name in (
+        "GET_MARKET_PULSE_SQL",
+        "RANK_AREAS_VOLUME_SQL",
+        "RANK_AREAS_PRICE_SQL",
+        "RANK_AREAS_GROWTH_SQL",
+    ):
+        if hasattr(queries, name):
+            monkeypatch.setattr(
+                queries, name, getattr(queries, name).replace(dxbi.SALES_SOURCE, "ch_transactions")
+            )

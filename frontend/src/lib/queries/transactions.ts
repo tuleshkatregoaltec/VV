@@ -10,7 +10,7 @@ import type {
 import { transactions } from '$lib/api/transactions'
 
 export const transactionKeys = {
-	all: ['transactions'] as const,
+	all: ['transactions', 'location-v1'] as const,
 	sales: (params: SalesTransactionFilters) => [...transactionKeys.all, 'sales', params] as const,
 	rentals: (params: RentalTransactionFilters) =>
 		[...transactionKeys.all, 'rentals', params] as const,

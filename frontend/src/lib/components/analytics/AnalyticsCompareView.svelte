@@ -69,10 +69,7 @@ function isMasterSelection(selection: ProjectSearchItem): boolean {
 
 function fmtCurrency(n: number | null | undefined): string {
 	if (n == null || !Number.isFinite(n) || n <= 0) return '-'
-	if (n >= 1_000_000_000) return `AED ${(n / 1_000_000_000).toFixed(2)}B`
-	if (n >= 1_000_000) return `AED ${(n / 1_000_000).toFixed(2)}M`
-	if (n >= 1_000) return `AED ${(n / 1_000).toFixed(0)}K`
-	return `AED ${Math.round(n).toLocaleString('en-AE')}`
+	return `AED ${n.toLocaleString('en-AE', { maximumFractionDigits: 2 })}`
 }
 
 function fmtCompact(n: number | null | undefined): string {
@@ -148,26 +145,6 @@ function getDevelopmentCount(selection: ProjectSearchItem, subProjectCount: numb
 	return subProjectCount || null
 }
 
-function getHandoverLabel(
-	selection: ProjectSearchItem,
-	summary: ProjectAnalyticsResponse,
-	developmentCount: number | null
-): string {
-	if (isMarketSelection(selection)) return 'All completions'
-	if (isMasterSelection(selection)) {
-		return developmentCount && developmentCount > 1 ? 'Multiple phases' : 'Aggregate timeline'
-	}
-	if (summary.project?.completion_date) {
-		return new Date(summary.project.completion_date).toLocaleDateString('en-GB', {
-			month: 'short',
-			year: 'numeric'
-		})
-	}
-	if (summary.project?.percent_completed != null)
-		return `${fmtPct(summary.project.percent_completed, 0)} complete`
-	return 'Not available'
-}
-
 function getOffPlanShare(summary: ProjectAnalyticsResponse): number | null {
 	const offPlan = summary.by_reg_type.find((row) => row.reg_type === 'Off-Plan Properties')
 	if (offPlan?.pct_of_total != null) return offPlan.pct_of_total
@@ -207,7 +184,7 @@ function getKpis(summary: ProjectAnalyticsResponse) {
 		{
 			label: 'Gross yield',
 			value: fmtPct(summary.overall_gross_yield_pct),
-			detail: 'rent / sale'
+			detail: 'median rent / secondary median sale'
 		},
 		{
 			label: 'Off-plan share',
@@ -221,7 +198,7 @@ function getTopConfigRows(summary: ProjectAnalyticsResponse): ProjectConfigurati
 	return summary.configuration_analysis
 		.filter((row) => row.market_segment === 'all')
 		.slice()
-		.sort((left, right) => right.sales_last_12m - left.sales_last_12m)
+		.sort((left, right) => right.sale_count - left.sale_count)
 		.slice(0, 5)
 }
 
@@ -341,9 +318,9 @@ function buildTrendChart() {
 					backgroundColor: theme.line,
 					borderWidth: 2.5,
 					tension: 0.32,
-					pointRadius: 0,
+					pointRadius: 2,
 					pointHoverRadius: 4,
-					spanGaps: true
+					spanGaps: false
 				},
 				{
 					label: getShortName(projectB, summaryB),
@@ -352,9 +329,9 @@ function buildTrendChart() {
 					backgroundColor: theme.lineAlt,
 					borderWidth: 2.5,
 					tension: 0.32,
-					pointRadius: 0,
+					pointRadius: 2,
 					pointHoverRadius: 4,
-					spanGaps: true
+					spanGaps: false
 				}
 			]
 		},
@@ -564,6 +541,7 @@ onMount(() => {
 						Shared price trend
 					</p>
 					<h2 class="mt-1 text-lg font-semibold text-fg-1">One market signal, two selections</h2>
+                    <p class="mt-1 text-xs text-fg-4">DXBI monthly observations · 365-day lookback</p>
 				</div>
 				<div class="ui-segmented self-start md:self-auto">
 					<button
@@ -715,46 +693,12 @@ onMount(() => {
 			</span>
 		</div>
 
-		<div class="mt-4 grid gap-3 border-t border-border pt-4 sm:grid-cols-2 lg:grid-cols-4">
-			<div>
-				<p class="text-[11px] uppercase tracking-[0.14em] text-fg-4">
-					{isMasterSelection(selection) ? 'Developments' : 'Units'}
-				</p>
-				<p class="mt-1 text-sm font-semibold text-fg-1">
-					{#if isMasterSelection(selection)}
-						{subProjectsLoading && developmentCount == null
-							? 'Loading'
-							: developmentCount != null
-								? `${fmtNumber(developmentCount)} developments`
-								: 'Aggregate'}
-					{:else}
-						{fmtNumber(summary.project?.no_of_units)}
-					{/if}
-				</p>
-			</div>
-			<div>
-				<p class="text-[11px] uppercase tracking-[0.14em] text-fg-4">Handover</p>
-				<p class="mt-1 text-sm font-semibold text-fg-1">
-					{getHandoverLabel(selection, summary, developmentCount)}
-				</p>
-			</div>
-			<div>
-				<p class="text-[11px] uppercase tracking-[0.14em] text-fg-4">
-					{isMasterSelection(selection) ? 'Sales records' : 'Developer'}
-				</p>
-				<p class="mt-1 truncate text-sm font-semibold text-fg-1">
-					{isMasterSelection(selection)
-						? fmtNumber(summary.sales.transaction_count)
-						: summary.project?.developer_name ?? '-'}
-				</p>
-			</div>
-			<div>
-				<p class="text-[11px] uppercase tracking-[0.14em] text-fg-4">Units</p>
-				<p class="mt-1 text-sm font-semibold text-fg-1">
-					{fmtNumber(summary.project?.no_of_units)}
-				</p>
-			</div>
-		</div>
+		<p class="mt-4 border-t border-border pt-3 text-xs text-fg-4">
+            DXBI transactions · Residential properties · All recorded dates
+            {#if isMasterSelection(selection) && developmentCount != null}
+                · {fmtNumber(developmentCount)} project/building scopes
+            {/if}
+        </p>
 
 		<div class="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3">
 			{#each getKpis(summary) as item (item.label)}
@@ -790,7 +734,7 @@ onMount(() => {
 					<div class="flex items-start justify-between gap-3">
 						<p class="min-w-0 font-semibold text-fg-1">{row.rooms}</p>
 						<p class="shrink-0 text-sm font-semibold text-fg-2">
-							{fmtNumber(row.sales_last_12m)} sales
+							{fmtNumber(row.sale_count)} sales · all dates
 						</p>
 					</div>
 					<div class="mt-2 grid grid-cols-2 gap-2 text-xs sm:grid-cols-3">

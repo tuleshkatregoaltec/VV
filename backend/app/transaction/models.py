@@ -18,6 +18,9 @@ class SalesFilters(BaseModel):
     location: Optional[str] = Field(
         default=None, description="DXBI area or community: every record its DXBI area page counts"
     )
+    location_search: Optional[str] = Field(
+        default=None, max_length=200, description="Keywords across DXBI building, project and area"
+    )
     building: Optional[str] = Field(default=None, description="DXBI building name")
     project: Optional[str] = Field(default=None, description="DXBI project name")
     timeframe_days: Optional[int] = Field(
@@ -44,6 +47,9 @@ class RentalFilters(BaseModel):
     contract_type: Optional[str] = Field(default=None, description="New or Renewed")
     location: Optional[str] = Field(
         default=None, description="DXBI area or community: every record its DXBI area page counts"
+    )
+    location_search: Optional[str] = Field(
+        default=None, max_length=200, description="Keywords across DXBI building, project and area"
     )
     building: Optional[str] = Field(default=None, description="DXBI building name")
     project: Optional[str] = Field(default=None, description="DXBI project name")

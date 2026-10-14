@@ -6,7 +6,7 @@ import hashlib
 import json
 import re
 from datetime import date, datetime
-from html import unescape
+from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any
 
@@ -26,8 +26,6 @@ _PLOT_SUFFIX = re.compile(
 # The location as DXBI shows it: <span class="bold-title" title="Burj Vista Tower 1, Downtown
 # Dubai">. The cell's text also holds what DXBI hides on screen, such as the buyer's agent's name
 # right before the building ("Hajar Binghatti Royale").
-_LOCATION_TAG = re.compile(r'<span\b(?=[^>]*\bclass="[^"]*\bbold-title\b)[^>]*>', re.IGNORECASE)
-_TITLE_ATTRIBUTE = re.compile(r'\btitle="(?P<title>[^"]*)"', re.IGNORECASE)
 _BEDROOMS = re.compile(r"(?P<count>\d+)\s*Beds?\b", re.IGNORECASE)
 _SIZE = re.compile(r"(?P<size>[\d,]+(?:\.\d+)?)\s*sqft", re.IGNORECASE)
 _PRICE = re.compile(r"AED\s*(?P<price>[\d,]+)", re.IGNORECASE)
@@ -121,6 +119,9 @@ def normalize_sales_row(payload: dict[str, Any], *, source_file: str = "") -> di
     )
     return {
         "sale_key": sale_key,
+        # Preserve the explicit registration number verbatim. A /sold/t-* token and the
+        # hashed sale_key identify DXBI records, not DLD registrations.
+        "dld_transaction_number": str(payload.get("dld_transaction_number") or "").strip(),
         "transaction_date": transaction_date,
         "unit_number": unit_number,
         "building_name": building_name,
@@ -177,12 +178,20 @@ def compact_payload(line: str) -> dict[str, Any]:
         if isinstance(column, dict)
     }
     title = _location_title(str(columns.get("PATH_NAME", {}).get("html") or ""))
+    registration = str(
+        record.get("dld_transaction_number")
+        or columns.get("TRANSACTION_NUMBER", {}).get("text")
+        or ""
+    ).strip()
+    if registration:
+        record["dld_transaction_number"] = registration
     if "unit_number" in record:
         return {**record, "location_title": title} if title else record
 
     location_text = str(columns.get("PATH_NAME", {}).get("text") or "")
     units = [match.group("unit").strip() for match in _UNIT_NUMBER.finditer(location_text)]
-    units = [unit for unit in units if unit.lower() != "u-hidden"]
+    # A hidden final unit must not fall back to an earlier building number.
+    unit = units[-1] if units and units[-1].lower() != "u-hidden" else ""
     detail_url = ""
     for column in columns.values():
         for link in column.get("links") or []:
@@ -193,20 +202,38 @@ def compact_payload(line: str) -> dict[str, Any]:
         if detail_url:
             break
     return {
-        "unit_number": units[-1] if units else "",
+        "unit_number": unit,
         "location_text": location_text,
         "amount_text": str(columns.get("TOTAL_PRICE", {}).get("text") or ""),
         "specs_text": str(columns.get("BEDROOM", {}).get("text") or ""),
         "date_text": str(columns.get("SOLD_BY", {}).get("text") or ""),
         "detail_url": detail_url,
+        **({"dld_transaction_number": registration} if registration else {}),
         **({"location_title": title} if title else {}),
     }
 
 
+class _LocationTitleParser(HTMLParser):
+    """Read only the provider's property title, never adjacent agent text."""
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.titles: list[str] = []
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        values = dict(attrs)
+        if tag == "span" and "bold-title" in (values.get("class") or "").split():
+            title = " ".join((values.get("title") or "").split())
+            if title:
+                self.titles.append(title)
+
+
 def _location_title(cell_html: str) -> str:
-    tag = _LOCATION_TAG.search(cell_html)
-    title = _TITLE_ATTRIBUTE.search(tag.group(0)) if tag else None
-    return " ".join(unescape(title.group("title")).split()) if title else ""
+    parser = _LocationTitleParser()
+    parser.feed(cell_html)
+    titles = set(parser.titles)
+    # Conflicting titles are not evidence for choosing an arbitrary property.
+    return next(iter(titles)) if len(titles) == 1 else ""
 
 
 _LOCATION_KEY_REPLACEMENTS = {

@@ -4,8 +4,7 @@ import asyncio
 import logging
 import math
 import re
-import time
-from datetime import date, datetime, timedelta
+from datetime import date, timedelta
 from typing import Any, Optional
 
 from app.analytics import queries
@@ -26,7 +25,6 @@ from app.analytics.models import (
     MarketTrendResponse,
     PriceDistributionBucket,
     ProjectAnalyticsResponse,
-    ProjectForecastPoint,
     ProjectForecastResponse,
     ProjectMeta,
     ProjectPipelinePoint,
@@ -72,83 +70,22 @@ async def _latest_sales_anchor_date() -> date:
     return date.today()
 
 
-def _as_date(value: object) -> Optional[date]:
-    """DLD's projects register keeps completion as a date-time (2026-02-11 12:09:58)."""
-    if isinstance(value, datetime):
-        return value.date()
-    return value or None  # type: ignore[return-value]
-
-
-async def _fill_project_meta(
-    registered: Optional[ProjectMeta], project_name: str, register_units: int
-) -> Optional[ProjectMeta]:
-    """Fill what DLD's projects register does not hold, naming each field's source.
-
-    Units: DLD's units register count, then DXBInteract's building list; developer, handover,
-    completion, buildings and area: the building list (older projects such as LAKE SHORE TOWER
-    are not in the register).
-    """
-    project = registered or ProjectMeta(project_name=project_name)
-    sources = project.field_sources
-    if project.no_of_units is None and register_units > 0:
-        project.no_of_units, sources["no_of_units"] = register_units, "dld_units"
-    rows = await queries.fetch_project_meta_from_dxbi({"project_name": project_name})
-    row = rows[0] if rows else {}
-    found = {
-        "developer_name": _normalize_label(row.get("developer_name_en")),
-        "completion_date": _as_date(row.get("completion_date")),
-        "percent_completed": float(row["percent_completed"])
-        if row.get("percent_completed") is not None
-        else None,
-        "no_of_units": int(row["no_of_units"]) if row.get("no_of_units") else None,
-        "no_of_buildings": int(row["no_of_buildings"]) if row.get("no_of_buildings") else None,
-        "area_name": row.get("area_name_en") or None,
-    }
-    for name, value in found.items():
-        if getattr(project, name) is None and value is not None:
-            setattr(project, name, value)
-            sources[name] = "dxbi_buildings"
-    return project if registered is not None or sources else None
-
-
-_BUILDING_PROJECTS_TTL = 600.0
-_building_projects: tuple[float, list[tuple[str, str]]] = (0.0, [])
-_building_projects_lock = asyncio.Lock()
-
-
-async def _building_project_list() -> list[tuple[str, str]]:
-    """(building, project) pairs, re-read every ten minutes (sales are released daily)."""
-    global _building_projects
-    async with _building_projects_lock:
-        loaded_at, pairs = _building_projects
-        if time.monotonic() - loaded_at > _BUILDING_PROJECTS_TTL:
-            rows = await queries.fetch_building_projects()
-            pairs = [(r["building"], r["project"]) for r in rows]
-            _building_projects = (time.monotonic(), pairs)
-        return pairs
-
-
 async def get_project_search(search: str, limit: int = 50) -> ProjectSearchResponse:
-    """Return matching projects for the dropdown selector, then buildings that match.
-
-    A building opens the project its sales are registered in. Buildings keep up to half of the
-    list, so a search that matches many project names still shows its buildings.
-    """
-    term = search.strip().lower()
-    pattern = f"%{term}%" if term else "%"
-    rows = await queries.fetch_search_projects({"search_pattern": pattern, "limit": limit})
-    buildings = (
-        [
-            ProjectSearchItem(name=project, filter_type="project", building=building)
-            for building, project in await _building_project_list()
-            if term in building.lower()
-        ][:limit]
-        if term
-        else []
+    """Return matching projects for the dropdown selector."""
+    pattern = f"%{search.lower()}%" if search.strip() else "%"
+    rows = await queries.fetch_search_projects(
+        {"search_pattern": pattern, "search": search, "limit": limit}
     )
-    projects = [ProjectSearchItem(name=r["name"], filter_type=r["filter_type"]) for r in rows]
-    shown = max(limit - len(buildings), limit - limit // 2)
-    return ProjectSearchResponse(projects=(projects[:shown] + buildings)[:limit])
+    return ProjectSearchResponse(
+        projects=[
+            ProjectSearchItem(
+                name=r["name"],
+                filter_type=r["filter_type"],
+                scope_kind=r.get("scope_kind", "Location"),
+            )
+            for r in rows
+        ]
+    )
 
 
 async def get_sub_project_list(
@@ -201,10 +138,27 @@ async def get_project_summary(
     else:
         developer_task = asyncio.sleep(0, result=[])
 
-    existing_params = {**params, "reg_type_en": "Existing Properties"}
-    offplan_params = {**params, "reg_type_en": "Off-Plan Properties"}
-
     rent_rooms_params = params
+
+    (
+        sales_bundle,
+        sales_type_rows,
+        sales_reg_rows,
+        rent_sum_rows,
+        rent_rooms_rows,
+        units_rows,
+        meta_rows,
+        developer_rows,
+    ) = await asyncio.gather(
+        queries.fetch_project_sales_bundle(params, filter_type),
+        queries.fetch_project_sales_by_property_type(params, filter_type),
+        queries.fetch_project_sales_by_reg_type(params, filter_type),
+        queries.fetch_project_rentals_summary(params, filter_type),
+        queries.fetch_project_rentals_by_rooms(rent_rooms_params, filter_type),
+        queries.fetch_project_units_composition(params, filter_type),
+        meta_task,
+        developer_task,
+    )
 
     (
         sales_sum_rows,
@@ -214,37 +168,7 @@ async def get_project_summary(
         config_all_rows,
         config_offplan_rows,
         config_secondary_rows,
-        sales_type_rows,
-        sales_reg_rows,
-        rent_sum_rows,
-        rent_rooms_rows,
-        units_rows,
-        meta_rows,
-        developer_rows,
-    ) = await asyncio.gather(
-        queries.fetch_project_sales_summary(params, filter_type),
-        queries.fetch_project_sales_summary(
-            existing_params, filter_type, reg_type="Existing Properties"
-        ),
-        queries.fetch_project_sales_by_rooms(params, filter_type),
-        queries.fetch_project_sales_by_rooms(
-            existing_params, filter_type, reg_type="Existing Properties"
-        ),
-        queries.fetch_project_configuration_sales(params, filter_type),
-        queries.fetch_project_configuration_sales(
-            offplan_params, filter_type, reg_type="Off-Plan Properties"
-        ),
-        queries.fetch_project_configuration_sales(
-            existing_params, filter_type, reg_type="Existing Properties"
-        ),
-        queries.fetch_project_sales_by_property_type(params, filter_type),
-        queries.fetch_project_sales_by_reg_type(params, filter_type),
-        queries.fetch_project_rentals_summary(params, filter_type),
-        queries.fetch_project_rentals_by_rooms(rent_rooms_params, filter_type),
-        queries.fetch_project_units_composition(params, filter_type),
-        meta_task,
-        developer_task,
-    )
+    ) = sales_bundle
 
     # --- Project metadata ---
     project: Optional[ProjectMeta] = None
@@ -272,7 +196,7 @@ async def get_project_summary(
                 developer_name=developer_names[0] if developer_names else top_developer,
                 developer_names=developer_names,
                 project_status=m.get("project_status") or None,
-                completion_date=_as_date(m.get("completion_date")),
+                completion_date=m.get("completion_date") or None,
                 percent_completed=float(m["percent_completed"])
                 if m.get("percent_completed") is not None
                 else None,
@@ -287,7 +211,7 @@ async def get_project_summary(
                 area_name=m.get("area_name_en") or None,
                 developer_name=_normalize_label(m.get("developer_name_en")),
                 project_status=m.get("project_status") or None,
-                completion_date=_as_date(m.get("completion_date")),
+                completion_date=m.get("completion_date") or None,
                 percent_completed=float(m["percent_completed"])
                 if m.get("percent_completed") is not None
                 else None,
@@ -389,8 +313,6 @@ async def get_project_summary(
     unit_count_total = sum(int(row["unit_count"]) for row in units_rows)
     if filter_type == "market" and project is not None:
         project.no_of_units = unit_count_total if unit_count_total > 0 else None
-    if filter_type == "project":
-        project = await _fill_project_meta(project, project_name, unit_count_total)
 
     total_units = unit_count_total or 1
     unit_composition = [
@@ -465,128 +387,9 @@ async def get_project_trends(
 async def get_project_forecast(
     project_name: str, days: int, filter_type: ProjectScopeType = "project"
 ) -> ProjectForecastResponse:
-    """Build a project-level forward price path from historical trend and off-plan curve data."""
-    if filter_type == "market":
-        return ProjectForecastResponse(
-            data=[],
-            methodology="Citywide Dubai forecasts are not generated from project delivery curves.",
-        )
-
-    end_dt = date.today()
-    start_dt = end_dt - timedelta(days=days)
-    interval = _trend_interval_for_days(days)
-
-    like_name = project_name + " - %" if filter_type == "virtual_master" else project_name
-    params = {
-        "project_name": like_name,
-        "start_date": start_dt.isoformat(),
-        "end_date": end_dt.isoformat(),
-    }
-    trend_rows, offplan_rows = await asyncio.gather(
-        queries.fetch_project_price_trends(params, interval, filter_type),
-        queries.fetch_project_offplan_price_curve(params, interval, filter_type),
-    )
-
-    historical = [
-        ProjectForecastPoint(
-            date=row["period"],
-            avg_price=float(row["avg_price"] or 0),
-            avg_price_sqft=float(row["avg_price_sqft"] or 0),
-            series="historical",
-        )
-        for row in trend_rows
-        if float(row.get("avg_price") or 0) > 0
-    ]
-
-    summary = await get_project_summary(project_name=project_name, filter_type=filter_type)
-    delivery_date = summary.project.completion_date if summary.project else None
-
-    if not historical:
-        historical = [
-            ProjectForecastPoint(
-                date=row["period"],
-                avg_price=float(row["avg_price"] or 0),
-                avg_price_sqft=float(row["avg_price_sqft"] or 0),
-                series="historical",
-            )
-            for row in offplan_rows
-            if float(row.get("avg_price") or 0) > 0
-        ]
-
-    if not historical:
-        return ProjectForecastResponse(
-            data=[],
-            delivery_date=delivery_date,
-            methodology="No residential sales history was available to construct a project-level forecast.",
-        )
-
-    monthly_growth_rates: list[float] = []
-    for prev, curr in zip(historical, historical[1:]):
-        prev_price = float(prev.avg_price_sqft or 0)
-        curr_price = float(curr.avg_price_sqft or 0)
-        if prev_price > 0 and curr_price > 0:
-            monthly_growth_rates.append((curr_price / prev_price) - 1)
-
-    delivery_curve_rates: list[float] = []
-    for prev, curr in zip(offplan_rows, offplan_rows[1:]):
-        prev_price = float(prev.get("avg_price_sqft") or 0)
-        curr_price = float(curr.get("avg_price_sqft") or 0)
-        prev_months = float(prev.get("avg_months_to_delivery") or 0)
-        curr_months = float(curr.get("avg_months_to_delivery") or 0)
-        delivery_step = prev_months - curr_months
-        if prev_price > 0 and curr_price > 0 and delivery_step > 0:
-            delivery_curve_rates.append(((curr_price / prev_price) - 1) / delivery_step)
-
-    recent_growth = (
-        sum(monthly_growth_rates[-3:]) / len(monthly_growth_rates[-3:])
-        if monthly_growth_rates[-3:]
-        else 0.0
-    )
-    delivery_curve = (
-        sum(delivery_curve_rates[-4:]) / len(delivery_curve_rates[-4:])
-        if delivery_curve_rates[-4:]
-        else 0.0
-    )
-    monthly_growth = max(-0.01, min(0.018, recent_growth * 0.7 + delivery_curve * 0.3))
-
-    last_point = historical[-1]
-    forecast_points: list[ProjectForecastPoint] = []
-    if delivery_date and delivery_date > last_point.date:
-        horizon_months = max(
-            1,
-            min(
-                12,
-                (delivery_date.year - last_point.date.year) * 12
-                + (delivery_date.month - last_point.date.month),
-            ),
-        )
-    else:
-        horizon_months = 6
-
-    next_date = _add_months(last_point.date, 1)
-    next_price = last_point.avg_price
-    next_price_sqft = last_point.avg_price_sqft
-
-    for _ in range(horizon_months):
-        next_price *= 1 + monthly_growth
-        next_price_sqft *= 1 + monthly_growth
-        forecast_points.append(
-            ProjectForecastPoint(
-                date=next_date,
-                avg_price=round(next_price, 2),
-                avg_price_sqft=round(next_price_sqft, 2),
-                series="forecast",
-            )
-        )
-        next_date = _add_months(next_date, 1)
-
+    # DXBI has no verified delivery schedule in the loaded source; no DLD price curve.
     return ProjectForecastResponse(
-        data=[*historical, *forecast_points],
-        delivery_date=delivery_date,
-        methodology=(
-            "Forecast extends the recorded residential project trend, then blends recent "
-            "price per sq ft movement with the off-plan delivery curve where delivery-dated launches exist."
-        ),
+        data=[], methodology="Delivery-based forecasts are unavailable from DXBI transaction data."
     )
 
 
@@ -599,10 +402,14 @@ async def get_project_pipeline(
         developer_name = None
         rows = await queries.fetch_area_supply_projects({}, filter_by_area=False)
     else:
-        summary = await get_project_summary(project_name=project_name, filter_type=filter_type)
-        area_name = summary.project.area_name if summary.project else None
-        developer_name = summary.project.developer_name if summary.project else None
+        like_name = project_name + " - %" if filter_type == "virtual_master" else project_name
+        meta = await queries.fetch_pipeline_meta({"project_name": like_name}, filter_type)
+        area_name = meta[0].get("area_name_en") if meta else None
+        developer_name = meta[0].get("developer_name_en") if meta else None
 
+        if not area_name:
+            dxbi_meta = await queries.fetch_project_meta({"project_name": like_name}, filter_type)
+            area_name = dxbi_meta[0].get("area_name_en") if dxbi_meta else None
         if not area_name:
             return ProjectPipelineResponse(area_name=None, developer_name=developer_name, data=[])
 

@@ -54,7 +54,7 @@ function selectDubaiMarket() {
 						Project scope
 					</p>
 					<p class="mt-1 text-sm text-fg-3">
-						Dubai is loaded by default. Search a project or master community to narrow the view.
+						DXBI sales and rentals. Search a project, building or community. Upcoming supply uses DLD.
 					</p>
 				</div>
 				<button

@@ -1,7 +1,7 @@
 from app.analytics.metrics import _sampled_count_pct_change, build_configuration_rows
 
 
-def test_configuration_prices_require_three_recent_sales_and_yield_uses_median():
+def test_low_sample_counts_remain_visible_and_yield_uses_median():
     stock = {"Studio": {"unit_count": 10}, "1 B/R": {"unit_count": 200}}
     rent = {"1 B/R": {"median_annual_rent": 60000, "rental_count": 4}}
     sales = [
@@ -15,10 +15,14 @@ def test_configuration_prices_require_three_recent_sales_and_yield_uses_median()
         },
     ]
     rows = build_configuration_rows("all", sales, stock, rent)
-    assert len(rows) == 1
-    assert rows[0].rooms == "1 B/R"
-    assert rows[0].gross_yield_pct == 6.0
-    assert rows[0].absorption_rate_pct == 1.5
+    assert len(rows) == 2
+    assert rows[0].rooms == "Studio"
+    assert rows[0].sale_count == 2
+    assert rows[0].price_change_yoy_pct is None
+    assert rows[0].sales_momentum_pct is None
+    assert rows[1].rooms == "1 B/R"
+    assert rows[1].gross_yield_pct == 6.0
+    assert rows[1].absorption_rate_pct == 1.5
     off_plan = build_configuration_rows("off_plan", sales, stock, rent)[0]
     assert off_plan.gross_yield_pct is None
     assert off_plan.rental_count == 0
