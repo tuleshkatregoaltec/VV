@@ -60,7 +60,7 @@ def search_projects(keyword_clause: str | None = None) -> str:
                     SELECT arrayJoin([
                         (project_name_en, 'project', scope_kind,
                          concat(project_name_en, ' ', area_name_en)),
-                        (master_project_en, 'master', 'Area', master_project_en)
+                        (master_project_en, 'master', 'Master', master_project_en)
                     ]) AS scope
                     FROM {records}
                 )
@@ -74,20 +74,25 @@ def search_projects(keyword_clause: str | None = None) -> str:
         SELECT * FROM (
             SELECT name, 'project' AS filter_type, 'Building' AS scope_kind, building
             FROM (
-                -- The project most of the building's records are in.
+                -- The project most of the building's records are in (over all of them: a
+                -- stray pairing must not outvote the building's own project).
                 SELECT building_name AS building, argMax(project_name_en, n) AS name,
-                       any(search_location) AS search_location
+                       any(search_location) AS search_location, max(n) AS in_project,
+                       sum(n) AS records
                 FROM (
                     SELECT building_name, project_name_en, count() AS n,
                            any(concat(building_name, ' ', area_name_en)) AS search_location
                     FROM {records}
                     WHERE building_name != '' AND project_name_en != ''
-                      AND lowerUTF8(building_name) != lowerUTF8(project_name_en)
                     GROUP BY building_name, project_name_en
                 )
                 GROUP BY building
             )
-            WHERE {search_clause.replace("lowerUTF8(name)", "lowerUTF8(building)")}
+            -- A building that is its project's namesake is listed as the project already; one
+            -- or two records (a stray pairing) are no evidence of the building's project.
+            WHERE lowerUTF8(building) != lowerUTF8(name)
+              AND in_project >= 3 AND in_project * 2 >= records
+              AND {search_clause.replace("lowerUTF8(name)", "lowerUTF8(building)")}
             ORDER BY {order.replace("lowerUTF8(name)", "lowerUTF8(building)")}, building
             LIMIT {{limit:Int32}}
         )

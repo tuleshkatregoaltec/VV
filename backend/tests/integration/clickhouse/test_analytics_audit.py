@@ -68,7 +68,7 @@ async def test_search_excludes_dld_only_launches(warehouse, monkeypatch):
     rows = await query(search_projects(), {"search_pattern": "%marina%", "limit": 50})
     assert {tuple(row.values()) for row in rows} == {
         ("23 MARINA", "project", "Project", ""),
-        ("Dubai Marina", "master", "Area", ""),
+        ("Dubai Marina", "master", "Master", ""),
     }
     rows = await query(search_projects(), {"search_pattern": "%", "limit": 50})
     assert "Rental Tower" in {row["name"] for row in rows}

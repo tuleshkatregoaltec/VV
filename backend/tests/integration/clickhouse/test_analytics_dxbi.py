@@ -204,7 +204,17 @@ async def test_search_keeps_buildings_beside_many_project_names(dxbi):  # noqa: 
                 sale(f"p{i}", project_name=f"Lake Project {i:02}", building_name="")
                 for i in range(60)
             ),
-            sale("b", building_name="Lake Shore Tower", project_name="JLT Cluster X"),
+            *(
+                sale(
+                    f"b{i}",
+                    building_name="Lake Shore Tower",
+                    project_name="JLT Cluster X",
+                    unit_number=f"20{i}",
+                )
+                for i in range(3)
+            ),
+            # One record is no evidence of a building's project (a stray pairing).
+            sale("stray", building_name="Lakeside Stray", project_name="Other Project"),
         ]
     )
     found = (await service.get_project_search("lake", limit=50)).projects
