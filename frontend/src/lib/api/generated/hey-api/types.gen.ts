@@ -1237,6 +1237,10 @@ export type CrmContactImportSummary = {
      */
     duplicate_rows_collapsed?: number;
     /**
+     * Dropped No Unit
+     */
+    dropped_no_unit?: number;
+    /**
      * Valid Contacts
      */
     valid_contacts?: number;

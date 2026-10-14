@@ -468,11 +468,13 @@ def _summary(
     candidates: list[ParsedContact],
     total_rows: int,
     duplicate_rows_collapsed: int = 0,
+    dropped_no_unit: int = 0,
 ) -> CrmContactImportSummary:
     return CrmContactImportSummary(
         total_rows=total_rows,
         candidate_rows=len(candidates),
         duplicate_rows_collapsed=duplicate_rows_collapsed,
+        dropped_no_unit=dropped_no_unit,
         valid_contacts=sum(candidate.has_valid_contact for candidate in candidates),
         verified_current_owners=sum(
             candidate.ownership_status == "verified_current_owner" for candidate in candidates

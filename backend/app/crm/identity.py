@@ -204,6 +204,19 @@ def _dedupe_candidates(candidates: list[ParsedContact]) -> tuple[list[ParsedCont
     return unique, collapsed
 
 
+def _drop_candidates_without_unit(
+    candidates: list[ParsedContact],
+) -> tuple[list[ParsedContact], int]:
+    """Drop rows whose unit is still unknown after registry matching.
+
+    Run this after matching: an exact sale signature can recover the unit even when
+    the uploaded cell was empty. A row that still has no unit cannot identify a
+    property, and a later import of the same owner would never replace it.
+    """
+    kept = [candidate for candidate in candidates if candidate.unit_number]
+    return kept, len(candidates) - len(kept)
+
+
 def _text(value: Any) -> str:
     if value is None:
         return ""

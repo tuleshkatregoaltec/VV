@@ -11,7 +11,11 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.crm import import_repository
 from app.crm.ai import _llm_mapping
-from app.crm.identity import _candidate_owner_key, _dedupe_candidates
+from app.crm.identity import (
+    _candidate_owner_key,
+    _dedupe_candidates,
+    _drop_candidates_without_unit,
+)
 from app.crm.import_models import (
     CrmContactImport,
     CrmContactImportResponse,
@@ -97,6 +101,7 @@ async def process_contact_import(
         rentals = await _rental_evidence(candidates)
         for candidate in candidates:
             _apply_evidence(candidate, sales=sales, rentals=rentals)
+        candidates, dropped_no_unit = _drop_candidates_without_unit(candidates)
         candidates, duplicate_rows_collapsed = _dedupe_candidates(candidates)
 
         contact_list = CrmContactList(
@@ -166,7 +171,7 @@ async def process_contact_import(
             organization_id=organization_id,
             list_name=record.name,
         )
-        summary = _summary(candidates, total_rows, duplicate_rows_collapsed)
+        summary = _summary(candidates, total_rows, duplicate_rows_collapsed, dropped_no_unit)
         record.status = "completed"
         record.mapping = {"sheets": [_mapping_response(profile) for profile in profiles]}
         record.summary = summary.model_dump()

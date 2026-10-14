@@ -171,6 +171,7 @@ class CrmContactImportSummary(BaseModel):
     total_rows: int = 0
     candidate_rows: int = 0
     duplicate_rows_collapsed: int = 0
+    dropped_no_unit: int = 0
     valid_contacts: int = 0
     verified_current_owners: int = 0
     probable_current_owners: int = 0

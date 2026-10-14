@@ -10954,6 +10954,11 @@
 						"title": "Duplicate Rows Collapsed",
 						"default": 0
 					},
+					"dropped_no_unit": {
+						"type": "integer",
+						"title": "Dropped No Unit",
+						"default": 0
+					},
 					"valid_contacts": {
 						"type": "integer",
 						"title": "Valid Contacts",

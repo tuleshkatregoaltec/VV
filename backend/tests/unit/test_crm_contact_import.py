@@ -9,13 +9,14 @@ from app.crm.identity import (
     ParsedContact,
     _building_match_strength,
     _dedupe_candidates,
+    _drop_candidates_without_unit,
     _location_similarity,
     _normalize_phone,
     _normalize_unit,
     _recover_embedded_property_identity,
 )
 from app.crm.import_models import CrmOwnerProfile, CrmOwnerProperty
-from app.crm.import_parsing import _heuristic_mapping, _unique_headers
+from app.crm.import_parsing import _heuristic_mapping, _summary, _unique_headers
 from app.crm.imports import delete_contact_import
 from app.crm.owner_repository import _owner_filter_sql, _owner_scope_clause
 from app.crm.ownership import (
@@ -585,6 +586,34 @@ def test_same_contact_across_two_properties_remains_two_property_claims():
 
     assert collapsed == 0
     assert len(unique) == 2
+
+
+def test_rows_without_a_unit_after_matching_are_dropped_and_counted():
+    # A row with no unit cannot identify a property; keeping it only adds an empty
+    # owner entry that a later import of the same owner never replaces.
+    with_unit = _contact(unit_number="602", row_fingerprint="with-unit")
+    no_unit = _contact(unit_number="", row_fingerprint="no-unit")
+    no_building = _contact(
+        building_name="", project_name="", unit_number="1001", row_fingerprint="no-building"
+    )
+
+    kept, dropped = _drop_candidates_without_unit([with_unit, no_unit, no_building])
+
+    assert dropped == 1
+    assert kept == [with_unit, no_building]
+    assert _summary(kept, total_rows=3, dropped_no_unit=dropped).dropped_no_unit == 1
+
+
+def test_unit_recovered_by_registry_match_is_kept():
+    # Matching runs before the drop, so a unit filled in from an exact sale signature
+    # keeps the row even when the uploaded unit cell was empty.
+    recovered = _contact(unit_number="")
+    recovered.unit_number = "1204"
+
+    kept, dropped = _drop_candidates_without_unit([recovered])
+
+    assert dropped == 0
+    assert kept == [recovered]
 
 
 def test_prior_owners_are_separated_from_current_owner_registry():
