@@ -215,8 +215,7 @@ function getDeveloperNames(summary: ProjectAnalyticsResponse): string[] {
 	return uniqueNormalized([...(project?.developer_names ?? []), project?.developer_name])
 }
 
-// Where a header value DLD's projects register lacks was filled from: "Developer, Handover:
-// DXBInteract building list".
+// Where a header value came from: "Developer, Handover: DXBInteract's building list".
 const FIELD_LABELS: Record<string, string> = {
 	developer_name: 'Developer',
 	completion_date: 'Handover',
@@ -226,7 +225,6 @@ const FIELD_LABELS: Record<string, string> = {
 	area_name: 'Area'
 }
 const SOURCE_LABELS: Record<string, string> = {
-	dld_units: "DLD's units register",
 	dxbi_buildings: "DXBInteract's building list"
 }
 

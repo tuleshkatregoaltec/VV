@@ -114,12 +114,8 @@ class MarketTrendResponse(BaseModel):
 
 
 class ProjectMeta(BaseModel):
-    """Metadata from ch_projects + ch_developers, filled where they are silent.
-
-    ``field_sources`` names where a filled field came from: "dld_units" (DLD's units register
-    count) or "dxbi_buildings" (DXBInteract's building list). A field not in it is DLD's projects
-    register.
-    """
+    """A scope's metadata. ``field_sources`` names each filled field's source: "dxbi_buildings"
+    (DXBInteract's building list: developer, handover, completion, units, buildings, area)."""
 
     project_name: str
     area_name: Optional[str] = None
