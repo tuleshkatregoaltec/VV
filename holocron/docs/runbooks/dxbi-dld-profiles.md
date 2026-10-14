@@ -65,9 +65,10 @@ The July 2026 scrapes (`dxbi_sales_dynamic_2026-07-08..10`) were parsed from tha
 loader reads DXBI's location title since commit d406840, and loads of the current scraper have
 none; the July raw text cannot be re-parsed.
 
-**The fix is to re-scrape those sales** (dates 2016 to June 2026; every one keeps its DXBI detail
-URL) with the current scraper, then delete `holocron/sources/dxbi/agent_names.py` and its call in
-`load_dxbi_sales_units.py`. Until then `repair_agent_names` runs after every sales load: it
+**The fix is to re-load or re-scrape those sales** from DXBI's own data
+(`dxbi-july-sales-rescrape.md`: first check whether the raw files keep DXBI's title, then
+re-load them, or re-scrape the dates that do not), then delete
+`holocron/sources/dxbi/agent_names.py` and its call in `load_dxbi_sales_units.py`. Until then `repair_agent_names` runs after every sales load: it
 removes a leading prefix only on evidence (the rest is a building DXBI lists at least three times
 as often in the area, and the prefix reads as a person), records each repair with the sales it
 changed in `dxbi_building_name_repairs`, and rewrites them. A review that finds a raw name is a

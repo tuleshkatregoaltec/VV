@@ -132,3 +132,38 @@ def test_a_reviewed_real_building_gets_its_raw_name_back(warehouse) -> None:  # 
     assert agent_names.repair_agent_names(warehouse)["rows_restored"] == 0
     unserved = {row[0] for row in warehouse.query(agent_names.UNSERVED_NAMES_SQL).result_rows}
     assert "Jamal Tower" not in unserved
+
+
+def test_the_title_check_tells_a_reload_from_a_rescrape(tmp_path) -> None:
+    import importlib.util
+    import json
+    from pathlib import Path
+
+    script = Path(__file__).parents[1] / "scripts" / "check_dxbi_sales_titles.py"
+    spec = importlib.util.spec_from_file_location("check_dxbi_sales_titles", script)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    text = "Buyer's agent Sheetal Lakeshore Tower 1, Al Thanyah Fifth Ready Apartment, Floor 3, No. 301"
+
+    def row(html: str, key: str) -> str:
+        return json.dumps(
+            {
+                "transaction_type": "sales", "unit_number": "301", "location_text": text,
+                "amount_text": "AED 1,050,000 AED 1,500 /sqft", "specs_text": "700 sqft 1 Bed",
+                "date_text": "20, Jun 2024 Individual", "detail_url": f"https://x/sold/t-{key}",
+                "columns": [{"id": "PATH_NAME", "text": text, "html": html}],
+            }
+        )  # fmt: skip
+
+    titled = tmp_path / "titled.jsonl"
+    titled.write_text(
+        row('<span class="bold-title" title="Lakeshore Tower 1, Al Thanyah Fifth">x</span>', "a")
+    )
+    untitled = tmp_path / "untitled.jsonl"
+    untitled.write_text(row("", "b"))
+    # A title fixes the building; a row without one must be re-scraped.
+    assert module.check(titled) == {
+        "rows": 1, "sales": 1, "with_title": 1, "building_changes": 1, "unreadable": 0
+    }  # fmt: skip
+    assert module.check(untitled)["with_title"] == 0
