@@ -340,3 +340,29 @@ async def test_an_office_tower_shows_its_commercial_records_not_zeros(dxbi):  # 
     assert sum(point.transaction_count for point in trends.data) == 3
     distribution = await service.get_project_price_distribution("Office Tower")
     assert distribution.all.sale_count == 3
+
+
+async def test_commercial_leases_line_up_with_sales_by_their_dld_type(dxbi):  # noqa: F811
+    """DXBI lists every office lease as "Commercial"; the profile takes Office from the matched
+    DLD contract, so the tower's offices show sales, leases and a yield in one row."""
+    await dxbi(
+        sales=[sale("o1", building_name="Office Tower", property_type="Office", bedrooms="")],
+        leases=[
+            lease("l1", building_name="Office Tower", property_type="Commercial", bedrooms=""),
+            lease(
+                "l2",
+                building_name="Office Tower",
+                property_type="Commercial",
+                bedrooms="",
+                unit_number="1102",
+            ),
+        ],  # fmt: skip
+        lease_profiles=[
+            {"contract_key": "l1", "property_type": "Office", "property_type_source": "dld_pair"},
+        ],
+    )
+    summary = await service.get_project_summary("Office Tower", "project")
+    rows = {row.rooms: row for row in summary.by_rooms}
+    assert (rows["Office"].sale_count, rows["Office"].rental_count) == (1, 1)
+    # A lease no source types stays apart, and says so.
+    assert rows["Commercial (type not recorded)"].rental_count == 1

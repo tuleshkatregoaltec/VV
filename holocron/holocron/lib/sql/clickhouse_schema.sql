@@ -2280,6 +2280,7 @@ CREATE TABLE IF NOT EXISTS dxbi_rental_profile (
     unit_number String,
     unit_source LowCardinality(String),
     property_type LowCardinality(String),
+    property_type_source LowCardinality(String),
     bedrooms LowCardinality(String),
     bedrooms_source LowCardinality(String),
     completion_status LowCardinality(String),
@@ -2300,6 +2301,7 @@ ORDER BY contract_key;
 ALTER TABLE dxbi_sale_profile ADD COLUMN IF NOT EXISTS dld_transaction_key String DEFAULT '';
 ALTER TABLE dxbi_rental_profile ADD COLUMN IF NOT EXISTS dld_building_ref String DEFAULT '';
 ALTER TABLE dxbi_rental_profile ADD COLUMN IF NOT EXISTS floor String DEFAULT '';
+ALTER TABLE dxbi_rental_profile ADD COLUMN IF NOT EXISTS property_type_source LowCardinality(String) DEFAULT '';
 ALTER TABLE dxbi_sale_profile ADD COLUMN IF NOT EXISTS size_sqft Float64 DEFAULT 0;
 ALTER TABLE dxbi_sale_profile ADD COLUMN IF NOT EXISTS size_source LowCardinality(String) DEFAULT '';
 ALTER TABLE dxbi_sale_profile ADD COLUMN IF NOT EXISTS location String DEFAULT '';

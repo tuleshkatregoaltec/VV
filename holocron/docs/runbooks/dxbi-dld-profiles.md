@@ -32,6 +32,12 @@ Circle (JVC)", "Mirdif": villas and plots listed under their community) is `plac
 fill stays in the profile and is not copied into the market tables, so Analytics lists no
 project no source names.
 
+A lease DXBI lists only as "Commercial" takes its matched DLD contract's type in DXBI's words
+(Office, Shop, Warehouse, Show Rooms, Workshop, Clinic, Hotel, Gymnasium;
+`DLD_COMMERCIAL_TYPES`), with `property_type_source = dld_pair`: locally 315,805 of 441,215
+commercial leases. Any other DLD type, or one that contradicts DXBI (a "Flat"), leaves it
+"Commercial"; Analytics shows those as "Commercial (type not recorded)".
+
 ## Location, map link and the master-project dictionary
 
 `location` joins Unit, Building, Project, Master Project and Area (each once, DLD capitals in

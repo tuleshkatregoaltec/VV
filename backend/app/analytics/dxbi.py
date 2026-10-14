@@ -21,10 +21,12 @@ from app.transaction.service import LOCATION_SQL as _LOCATION
 from app.transaction.service import USAGE_SQL as _USAGE
 
 # DXBI's bedrooms label ('1 Bed', '2 Beds', 'Studio') as the Analytics room label ('1 B/R'). An
-# office or shop has no bedrooms: its type (Office, Shop, Warehouse) is its configuration, so the
-# bedroom-keyed tables group commercial records by type.
+# office or shop has no bedrooms: its type (Office, Shop, Warehouse; a lease's from its matched
+# DLD contract) is its configuration, so the bedroom-keyed tables group commercial records by type.
 _ROOMS = (
-    f"if({_USAGE} = 'Commercial', property_type, "
+    f"if({_USAGE} = 'Commercial', "
+    # A lease neither DXBI nor its DLD contract types more finely than "Commercial".
+    "if(property_type = 'Commercial', 'Commercial (type not recorded)', property_type), "
     "if(match(bedroom_label, '^[0-9]+ Beds?$'), "
     "concat(extract(bedroom_label, '^([0-9]+)'), ' B/R'), bedroom_label))"
 )

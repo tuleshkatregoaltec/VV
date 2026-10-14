@@ -131,7 +131,9 @@ _LISTED_FILLS = {
     "dxbi_leases_listed": """
         INSERT INTO dxbi_leases_listed
         SELECT x.contract_key, x.lease_start, x.lease_end, x.unit_number, x.building_name,
-               x.project_name, x.area_name, x.property_type, x.bedrooms, x.size_sqft,
+               x.project_name, x.area_name,
+               if(p.property_type_source = 'dld_pair', p.property_type, x.property_type),
+               x.bedrooms, x.size_sqft,
                x.annual_rent_aed, x.contract_amount_aed, x.contract_term_months,
                x.contract_state, p.area_name, p.master_project, p.project_name,
                p.project_source, p.bedrooms, p.size_sqft, now64(3)

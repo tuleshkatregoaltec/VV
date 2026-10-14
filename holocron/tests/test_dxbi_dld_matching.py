@@ -246,3 +246,20 @@ def test_listed_records_count_each_sale_and_lease_once(warehouse) -> None:  # no
     assert listed == [("link-a", ""), ("link-b", ""), ("scraped", "DUBAI MARINA")]
     leased = warehouse.query("SELECT contract_key FROM dxbi_leases_listed ORDER BY 1").result_rows
     assert [row[0] for row in leased] == ["numbered", "unitless-other"]
+
+
+def test_a_commercial_lease_takes_its_dld_contracts_type_in_dxbis_words() -> None:
+    # DXBI lists every office or shop lease as "Commercial"; its matched DLD contract says which,
+    # so a tower's leases and sales line up as Office and Shop. A DLD "Flat" on a DXBI commercial
+    # lease contradicts it and changes nothing.
+    assert dxbi_profile.DLD_COMMERCIAL_TYPES["Office"] == ("office",)
+    assert all("flat" not in names for names in dxbi_profile.DLD_COMMERCIAL_TYPES.values())
+    sql = dxbi_profile.RENTAL_PROFILE_SQL
+    assert "p.property_type = 'Commercial' AND p.ref_type != '', p.ref_type" in sql
+    assert "'dld_pair'" in sql and "property_type_source" in dxbi_profile.RENTAL_PROFILE_COLUMNS
+    # Every name maps to a type the Commercial view counts.
+    from holocron.market.dxbi_profile import DLD_COMMERCIAL_TYPES
+
+    commercial = {"Office", "Shop", "Show Rooms", "Warehouse", "Workshop", "Clinic", "Gymnasium",
+                  "Hotel", "Sized Partition", "Building", "Commercial"}  # fmt: skip
+    assert set(DLD_COMMERCIAL_TYPES) <= commercial

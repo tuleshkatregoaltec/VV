@@ -86,6 +86,7 @@ RENTAL_PROFILE_COLUMNS = (
     "unit_number",
     "unit_source",
     "property_type",
+    "property_type_source",
     "bedrooms",
     "bedrooms_source",
     "completion_status",
@@ -317,12 +318,41 @@ LEFT JOIN type_beds AS tb ON tb.building_key = r.building_key AND tb.size_key = 
 """
 
 
+# A lease DXBI lists only as "Commercial" takes the type its matched DLD contract records, in
+# DXBI's own words (the names DXBI's sales use), so a tower's leases and sales line up as Office,
+# Shop or Warehouse. Only exact equivalents map; any other DLD type, or one that contradicts DXBI
+# (a "Flat"), leaves the lease "Commercial".
+DLD_COMMERCIAL_TYPES = {
+    "Office": ("office",),
+    "Shop": ("shop", "shop with a mezzanine", "kiosk"),
+    "Show Rooms": ("showroom", "showroom with mezzanine"),
+    "Warehouse": ("warehouse", "warehouse complex", "complex warehouse", "store", "storage"),
+    "Workshop": ("workshop",),
+    "Clinic": ("clinic",),
+    "Hotel": ("hotel",),
+    "Gymnasium": ("gym", "health club"),
+}
+
+
+def _dld_commercial_type(alias: str) -> str:
+    label = (
+        f"lowerUTF8(trimBoth(if({alias}.prop_sub_type_en != '', {alias}.prop_sub_type_en, "
+        f"{alias}.prop_type_en)))"
+    )
+    branches = ", ".join(
+        f"{label} IN ({', '.join(repr(name) for name in names)}), '{dxbi}'"
+        for dxbi, names in DLD_COMMERCIAL_TYPES.items()
+    )
+    return f"multiIf({branches}, '')"
+
+
 _RENTAL_RESOLVED = f"""
 WITH
     {t._RENTAL_AREA_CTES},
     {_PROJECT_MASTER},
     dld_rows AS (
-        SELECT dld_rent_key, area_en, project_en, master_project_en, rooms, actual_area
+        SELECT dld_rent_key, area_en, project_en, master_project_en, rooms, actual_area,
+               prop_type_en, prop_sub_type_en
         FROM ({t._DLD_RENTS_MATCH_BASE})
         WHERE dld_rent_key IN (
             SELECT dld_rent_key FROM market_rental_matches WHERE dld_rent_key != 0)
@@ -352,6 +382,7 @@ WITH
                multiIf(d.area_en != '', trimBoth(d.area_en), l.mapped_area != '', l.mapped_area,
                        l.registry_text != '', l.registry_text, l.dxbi_area) AS dld_area,
                d.actual_area * {t.SQFT_PER_SQM} AS ref_size,
+               {_dld_commercial_type("d")} AS ref_type,
                upperUTF8(trimBoth(l.unit_number)) AS unit_key,
                toUInt32(round(l.size_sqft)) AS size_key
         FROM lease AS l
@@ -447,7 +478,7 @@ WITH
         GROUP BY building_key
     ),
     resolved AS (
-        SELECT b.contract_key AS contract_key, b.lease_start AS lease_start, b.building_name AS building_name, b.dxbi_project AS dxbi_project, b.dxbi_area AS dxbi_area, b.unit_number AS unit_number, b.property_type AS property_type, b.dxbi_bedrooms AS dxbi_bedrooms, b.size_sqft AS size_sqft, b.mapped_area AS mapped_area, b.mapped_area_source AS mapped_area_source, b.ref_kind AS ref_kind, b.ref_area AS ref_area, b.ref_project AS ref_project, b.ref_master AS ref_master, b.ref_bedrooms AS ref_bedrooms, b.dld_area AS dld_area, b.unit_key AS unit_key, b.size_key AS size_key, b.ref_size AS ref_size,
+        SELECT b.contract_key AS contract_key, b.lease_start AS lease_start, b.building_name AS building_name, b.dxbi_project AS dxbi_project, b.dxbi_area AS dxbi_area, b.unit_number AS unit_number, b.property_type AS property_type, b.dxbi_bedrooms AS dxbi_bedrooms, b.size_sqft AS size_sqft, b.mapped_area AS mapped_area, b.mapped_area_source AS mapped_area_source, b.ref_kind AS ref_kind, b.ref_area AS ref_area, b.ref_project AS ref_project, b.ref_master AS ref_master, b.ref_bedrooms AS ref_bedrooms, b.dld_area AS dld_area, b.unit_key AS unit_key, b.size_key AS size_key, b.ref_size AS ref_size, b.ref_type AS ref_type,
                su.s_building AS sale_building, su.s_project AS sale_project,
                su.s_master AS sale_master, su.s_bedrooms AS sale_bedrooms,
                multiIf(du.u_land != '' AND du.u_project != '', du.u_project,
@@ -518,7 +549,10 @@ SELECT
     p.floor AS floor,
     p.unit_number,
     if(p.unit_key NOT IN ('', '0'), 'dxbi', 'none') AS unit_source,
-    p.property_type,
+    if(p.property_type = 'Commercial' AND p.ref_type != '', p.ref_type, p.property_type)
+        AS property_type,
+    multiIf(p.property_type = 'Commercial' AND p.ref_type != '', 'dld_pair',
+            p.property_type != '', 'dxbi', 'none') AS property_type_source,
     multiIf(p.property_type NOT IN {RESIDENTIAL_TYPES}, '',
             p.dxbi_bedrooms != '', p.dxbi_bedrooms, p.sale_bedrooms != '', p.sale_bedrooms,
             p.unit_bedrooms != '', p.unit_bedrooms, p.ref_bedrooms != '', p.ref_bedrooms,
@@ -708,7 +742,12 @@ def _finished(*, table: str, columns: tuple[str, ...], resolved: str, key: str, 
     )
     no_projects = "(af.units > 0 AND af.project_units < 0.05 * af.units)"
     no_masters = "(af.units > 0 AND af.master_units < 0.05 * af.units)"
-    lease_only = ", s.dld_building_ref AS dld_building_ref, s.floor AS floor" if lease else ""
+    lease_only = (
+        ", s.dld_building_ref AS dld_building_ref, s.floor AS floor"
+        ", s.property_type_source AS property_type_source"
+        if lease
+        else ""
+    )
     lease_dld = "" if lease else ", s.dld_transaction_key AS dld_transaction_key"
     date = "lease_start" if lease else "transaction_date"
     return f"""
@@ -966,7 +1005,8 @@ LEASES_LISTED_SQL = f"""
 INSERT INTO `dxbi_leases_listed` ({", ".join(LEASES_LISTED_COLUMNS)})
 SELECT x.contract_key, x.lease_start, x.lease_end, x.unit_number, x.building_name,
        x.project_name, x.area_name,
-       x.property_type, x.bedrooms, x.size_sqft, x.annual_rent_aed, x.contract_amount_aed,
+       -- DXBI's "Commercial" is refined from the matched DLD contract (Office, Shop).
+       if(p.property_type_source = 'dld_pair', p.property_type, x.property_type), x.bedrooms, x.size_sqft, x.annual_rent_aed, x.contract_amount_aed,
        x.contract_term_months, x.contract_state,
        p.area_name, p.master_project, p.project_name, p.project_source, p.bedrooms, p.size_sqft,
        now64(3)
