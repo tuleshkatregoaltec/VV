@@ -2,7 +2,12 @@
 import { createQuery } from '@tanstack/svelte-query'
 import Search from 'lucide-svelte/icons/search'
 import { aed, fmt, fullDate } from '../../format'
-import { type ClaimStatus, clampOffset, STATUS_INFO } from '../../ownerImportReport'
+import {
+	type ClaimStatus,
+	clampOffset,
+	insufficientReason,
+	STATUS_INFO
+} from '../../ownerImportReport'
 import { crmQueries } from '../../queries'
 import Chip from '../ui/Chip.svelte'
 import QueryView from '../ui/QueryView.svelte'
@@ -98,7 +103,10 @@ const statuses = Object.keys(STATUS_INFO) as ClaimStatus[]
 									<Chip tone={STATUS_INFO[r.status].tone}>{STATUS_INFO[r.status].label}</Chip>
 									<div class="sub">{r.confidence}% confidence</div>
 								</td>
-								<td data-label="Why" class="why">{r.reason || '—'}</td>
+								<!-- "Insufficient property data" says what the file was missing; other rows show the backend's reason. -->
+								<td data-label="Why" class="why">
+									{r.status === 'insufficient_property_data' ? insufficientReason(r) : r.reason || '—'}
+								</td>
 								<td data-label="Source" class="sub nowrap">{r.sheet} · row {r.rowNumber}</td>
 							</tr>
 						{:else}

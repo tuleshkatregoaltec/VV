@@ -259,3 +259,37 @@ export function failureReasons(c: ImportCounts): FailureReason[] {
 		}))
 		.sort((a, b) => b.count - a.count)
 }
+
+const MISSING = new Set(['', '-', 'n/a', 'na', 'none', 'null', 'unknown'])
+const present = (v: string | null | undefined) =>
+	!MISSING.has(
+		String(v ?? '')
+			.trim()
+			.toLowerCase()
+	)
+
+/**
+ * Why a row is "Insufficient property data", from the row itself: which of unit and building /
+ * project the file was missing, and whether it had a sale date and price to look the property up
+ * by. (The backend gives one generic sentence for all of these.)
+ */
+export function insufficientReason(row: {
+	building: string
+	unit: string
+	date: string | null
+	price: number | null
+}): string {
+	const unit = present(row.unit)
+	const building = present(row.building)
+	const missing =
+		!unit && !building
+			? 'No unit number and no building or project in the file'
+			: !unit
+				? 'No unit number in the file'
+				: !building
+					? 'No building or project in the file'
+					: 'The unit could not be tied to a property'
+	return row.date && row.price
+		? `${missing}. Its sale date and price did not match one DLD sale in this location.`
+		: `${missing}, and no sale date and price to look the property up in DLD.`
+}
