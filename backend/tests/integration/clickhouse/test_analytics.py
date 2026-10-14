@@ -97,11 +97,13 @@ async def test_sales_summary_applies_residential_and_project_scope_in_clickhouse
         "('Tower A', 'Master A', 'Sales', 'Land', 'Residential', 2000000, 20000, "
         "'Existing Properties', 'Plot')"
     )
-    rows = await query(project_sales_summary("project"), {"project_name": "Tower A"})
+    rows = await query(
+        project_sales_summary("project"), {"project_name": "Tower A", "usage": "Residential"}
+    )
     assert rows[0]["transaction_count"] == 2
     assert rows[0]["total_volume"] == 4000000
     assert rows[0]["avg_price"] == 2000000
-    market = await query(project_sales_summary("market"))
+    market = await query(project_sales_summary("market"), {"usage": "Residential"})
     assert market[0]["transaction_count"] == 3
 
 
@@ -303,7 +305,7 @@ async def test_leases_count_only_under_the_bedrooms_they_record(warehouse):
                       "property_usage_en", "annual_amount", "actual_area", "rooms_en"],
     )  # fmt: skip
 
-    rows = await query(project_rentals_by_rooms("market"))
+    rows = await query(project_rentals_by_rooms("market"), {"usage": "Residential"})
 
     assert {row["rooms_en"]: row["rental_count"] for row in rows} == {"Studio": 1, "1 B/R": 1}
 
@@ -347,7 +349,10 @@ async def test_unit_size_is_the_median_and_the_middle_68_percent_is_measured(war
                       "property_usage_en", "rooms_en", "actual_worth", "meter_sale_price",
                       "reg_type_en"],
     )  # fmt: skip
-    rows = {row["rooms_en"]: row for row in await query(project_price_distribution("market"))}
+    rows = {
+        row["rooms_en"]: row
+        for row in await query(project_price_distribution("market"), {"usage": "Residential"})
+    }
     every = rows["__all__"]
     assert every["mean_price"] - every["std_price"] < 0
     assert 1_100_000 <= every["p16_price"] < every["p84_price"] <= 1_900_000

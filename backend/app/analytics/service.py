@@ -43,6 +43,7 @@ from app.analytics.models import (
     RoomAnalytics,
     SubProjectItem,
     SubProjectsResponse,
+    UsageCount,
 )
 from app.analytics.queries import MARKET_FILTERS, ProjectFilterType, ProjectScopeType
 from app.core.observability import operation
@@ -178,10 +179,35 @@ async def get_sub_project_list(
     )
 
 
+USAGES = ("Residential", "Commercial")
+
+
+async def _resolve_usage(
+    scope: dict, filter_type: ProjectScopeType, requested: str
+) -> tuple[str, dict[str, UsageCount]]:
+    """The usage to show and the scope's records per usage.
+
+    'auto' shows Residential where the scope has residential records, else Commercial where it
+    has commercial ones (an office tower shows its offices, not zeros). Every project endpoint
+    resolves the same way, so parallel requests of one page agree.
+    """
+    rows = await queries.fetch_project_usage_counts(scope, filter_type)
+    counts = {usage: UsageCount() for usage in USAGES}
+    for row in rows:
+        counts[row["usage"]] = UsageCount(sales=int(row["sales"]), leases=int(row["leases"]))
+    if requested in USAGES:
+        return requested, counts
+    residential, commercial = counts["Residential"], counts["Commercial"]
+    if residential.sales + residential.leases == 0 and commercial.sales + commercial.leases > 0:
+        return "Commercial", counts
+    return "Residential", counts
+
+
 async def get_project_summary(
     project_name: str,
     filter_type: ProjectScopeType = "project",
     master_project: Optional[str] = None,
+    usage: str = "auto",
 ) -> ProjectAnalyticsResponse:
     """
     Run ClickHouse queries in parallel and merge into a single response.
@@ -197,6 +223,8 @@ async def get_project_summary(
     # For LIKE queries the param needs the wildcard appended
     like_name = project_name + " - %" if filter_type == "virtual_master" else project_name
     params = {} if filter_type == "market" else {"project_name": like_name}
+    usage, usage_counts = await _resolve_usage(params, filter_type, usage)
+    params = {**params, "usage": usage}
 
     if filter_type == "market":
         meta_task = asyncio.sleep(0, result=[])
@@ -412,14 +440,18 @@ async def get_project_summary(
     }
 
     configuration_analysis = [
-        *build_configuration_rows("all", config_all_rows, unit_rows_by_room, rent_by_room),
-        *build_configuration_rows("off_plan", config_offplan_rows, unit_rows_by_room, rent_by_room),
+        *build_configuration_rows("all", config_all_rows, unit_rows_by_room, rent_by_room, usage),
         *build_configuration_rows(
-            "secondary", config_secondary_rows, unit_rows_by_room, rent_by_room
+            "off_plan", config_offplan_rows, unit_rows_by_room, rent_by_room, usage
+        ),
+        *build_configuration_rows(
+            "secondary", config_secondary_rows, unit_rows_by_room, rent_by_room, usage
         ),
     ]
 
     return ProjectAnalyticsResponse(
+        usage=usage,
+        usage_counts=usage_counts,
         project=project,
         sales=sales,
         rentals=rentals,
@@ -433,7 +465,7 @@ async def get_project_summary(
 
 
 async def get_project_trends(
-    project_name: str, days: int, filter_type: ProjectScopeType = "project"
+    project_name: str, days: int, filter_type: ProjectScopeType = "project", usage: str = "auto"
 ) -> ProjectTrendsResponse:
     """Price trend time series for a project over the given number of days."""
     end_dt = date.today()
@@ -447,6 +479,8 @@ async def get_project_trends(
     }
     if filter_type != "market":
         params["project_name"] = like_name
+    scope = {"project_name": like_name} if filter_type != "market" else {}
+    params["usage"] = (await _resolve_usage(scope, filter_type, usage))[0]
 
     rows = await queries.fetch_project_price_trends(params, interval, filter_type)
 
@@ -571,10 +605,12 @@ async def get_project_price_distribution(
     project_name: str,
     filter_type: ProjectScopeType = "project",
     reg_type: Optional[str] = None,
+    usage: str = "auto",
 ) -> ProjectPriceDistributionResponse:
     """Price distribution statistics per bedroom type for bell-curve style visualisation."""
     like_name = project_name + " - %" if filter_type == "virtual_master" else project_name
     params: dict = {} if filter_type == "market" else {"project_name": like_name}
+    params["usage"] = (await _resolve_usage(dict(params), filter_type, usage))[0]
     if reg_type:
         params["reg_type_en"] = reg_type
 

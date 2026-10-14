@@ -123,7 +123,10 @@ def build_configuration_rows(
     sales_rows: list[dict],
     unit_rows_by_room: dict,
     rent_by_room: dict,
+    usage: str = "Residential",
 ) -> list[ProjectConfigurationRow]:
+    """One row per configuration: a bedroom count, or for commercial records the property type
+    (Office, Shop), which the Analytics source puts in rooms_en."""
     sales_lookup = {
         room: row
         for row in sales_rows
@@ -132,7 +135,12 @@ def build_configuration_rows(
     room_keys = {
         room
         for room in set(unit_rows_by_room) | set(sales_lookup)
-        if _is_residential_config_room(room)
+        if (
+            _is_residential_config_room(room)
+            if usage != "Commercial"
+            else (label := _normalize_label(room)) is not None
+            and label.upper() not in {"NA", "N/A", "NONE", "NULL"}
+        )
     }
     rows: list[ProjectConfigurationRow] = []
 

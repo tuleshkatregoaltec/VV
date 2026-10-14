@@ -136,7 +136,7 @@ def project_sales_summary(
         WHERE {_project_filter(filter_type)}
           AND trans_group_en = 'Sales'
           AND property_type NOT IN ('Plot', 'Building', '')
-          AND property_usage_en = 'Residential'
+          AND property_usage_en = {{usage:String}}
           AND actual_worth > 0
           {reg_filter}
     """
@@ -157,7 +157,7 @@ def project_sales_by_rooms(
         WHERE {_project_filter(filter_type)}
           AND trans_group_en = 'Sales'
           AND property_type NOT IN ('Plot', 'Building', '')
-          AND property_usage_en = 'Residential'
+          AND property_usage_en = {{usage:String}}
           AND rooms_en != ''
           AND actual_worth > 0
           {reg_filter}
@@ -182,7 +182,7 @@ def project_configuration_sales(
             WHERE {_project_filter(filter_type)}
               AND trans_group_en = 'Sales'
               AND property_type NOT IN ('Plot', 'Building', '')
-              AND property_usage_en = 'Residential'
+              AND property_usage_en = {{usage:String}}
               AND rooms_en != ''
               AND actual_worth > 0
               {reg_filter}
@@ -236,6 +236,7 @@ def project_sales_by_property_type(filter_type: ProjectScopeType = "project") ->
         WHERE {_project_filter(filter_type)}
           AND trans_group_en = 'Sales'
           AND property_type != ''
+          AND property_usage_en = {{usage:String}}
           AND actual_worth > 0
         GROUP BY property_type_en
         ORDER BY count DESC
@@ -252,7 +253,7 @@ def project_sales_by_reg_type(filter_type: ProjectScopeType = "project") -> str:
         WHERE {_project_filter(filter_type)}
           AND trans_group_en = 'Sales'
           AND property_type NOT IN ('Plot', 'Building', '')
-          AND property_usage_en = 'Residential'
+          AND property_usage_en = {{usage:String}}
           AND reg_type_en IS NOT NULL
         GROUP BY reg_type_en
         ORDER BY count DESC
@@ -268,7 +269,7 @@ def project_rentals_summary(filter_type: ProjectScopeType = "project") -> str:
             round(coalesce(medianExact(annual_amount / nullIf(actual_area * 10.7639, 0)), 0), 2) as median_rent_sqft
         FROM {RENTALS_SOURCE}
         WHERE {_project_filter(filter_type)}
-          AND property_usage_en = 'Residential'
+          AND property_usage_en = {{usage:String}}
           AND annual_amount > 0
     """
 
@@ -290,7 +291,7 @@ def project_rentals_by_rooms(filter_type: ProjectScopeType = "project") -> str:
             round(medianExact(annual_amount / nullIf(actual_area * 10.7639, 0)), 2) AS median_rent_sqft
         FROM {RENTALS_SOURCE}
         WHERE {rent_filter}
-          AND property_usage_en = 'Residential'
+          AND property_usage_en = {{usage:String}}
           AND annual_amount > 0
           AND rooms_en != ''
         GROUP BY rooms_en
@@ -529,7 +530,7 @@ def project_price_distribution(
         WHERE {project_filter}
           AND trans_group_en = 'Sales'
           AND property_type NOT IN ('Plot', 'Building', '')
-          AND property_usage_en = 'Residential'
+          AND property_usage_en = {{usage:String}}
           AND rooms_en != ''
           AND actual_worth > 0
           {reg_filter}
@@ -555,7 +556,7 @@ def project_price_distribution(
         WHERE {project_filter}
           AND trans_group_en = 'Sales'
           AND property_type NOT IN ('Plot', 'Building', '')
-          AND property_usage_en = 'Residential'
+          AND property_usage_en = {{usage:String}}
           AND actual_worth > 0
           {reg_filter}
     """
@@ -584,7 +585,7 @@ def project_price_trends(
         WHERE {_project_filter(filter_type)}
           AND trans_group_en = 'Sales'
           AND property_type NOT IN ('Plot', 'Building', '')
-          AND property_usage_en = 'Residential'
+          AND property_usage_en = {{usage:String}}
           AND toDate(instance_date) BETWEEN {{start_date:Date}} AND {{end_date:Date}}
           AND actual_worth > 0
         GROUP BY period
@@ -743,6 +744,29 @@ async def fetch_project_developers_by_scope(parameters: dict, filter_type="maste
     return []
 
 
+def project_usage_counts(filter_type: ProjectScopeType = "project") -> str:
+    """The scope's sales and leases per usage, whatever usage the page shows."""
+    return f"""
+        SELECT property_usage_en AS usage, countIf(is_sale) AS sales, countIf(NOT is_sale) AS leases
+        FROM (
+            SELECT property_usage_en, 1 AS is_sale, project_name_en, master_project_en
+            FROM {SALES_SOURCE}
+            WHERE trans_group_en = 'Sales' AND property_type NOT IN ('Plot', 'Building', '')
+              AND actual_worth > 0
+            UNION ALL
+            SELECT property_usage_en, 0, project_name_en, master_project_en
+            FROM {RENTALS_SOURCE}
+            WHERE annual_amount > 0
+        )
+        WHERE {_project_filter(filter_type)} AND property_usage_en IN ('Residential', 'Commercial')
+        GROUP BY usage
+    """
+
+
+async def fetch_project_usage_counts(parameters: dict, filter_type: ProjectScopeType):
+    return await query(project_usage_counts(filter_type), parameters)
+
+
 async def fetch_project_sales_bundle(parameters: dict, filter_type: ProjectScopeType):
     """Summary, bedrooms and configuration segments from one normalized-source scan."""
     rows = await query(
@@ -776,7 +800,7 @@ async def fetch_project_sales_bundle(parameters: dict, filter_type: ProjectScope
                 FROM {SALES_SOURCE}
                 WHERE {_project_filter(filter_type)} AND trans_group_en = 'Sales'
                     AND property_type NOT IN ('Plot', 'Building', '')
-                    AND property_usage_en = 'Residential' AND actual_worth > 0
+                    AND property_usage_en = {{usage:String}} AND actual_worth > 0
             )
         )
         GROUP BY GROUPING SETS ((segment), (segment, rooms_en))

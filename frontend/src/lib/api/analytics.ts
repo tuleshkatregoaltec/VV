@@ -67,6 +67,17 @@ export type RentalAnalyticsParams = NonNullable<AnalyticsGetRentalAnalyticsData[
 	timeframe_days?: TimeframeDays | null
 }
 
+// Which records a project view covers: Residential or Commercial, or auto (Commercial for a scope
+// with no residential records).
+export type AnalyticsUsage = 'auto' | 'Residential' | 'Commercial'
+
+export type ProjectParams = {
+	masterProject?: string
+	project?: string
+	filterType?: string
+	usage?: AnalyticsUsage
+}
+
 export const analytics = {
 	sales: (params: AnalyticsParams = {}) =>
 		client.get<SalesAnalyticsResponse>(client.withQuery('/api/v1/analytics/sales', params)),
@@ -90,32 +101,28 @@ export const analytics = {
 			})
 		),
 
-	projectSummary: (params: { masterProject?: string; project?: string; filterType?: string }) =>
+	projectSummary: (params: ProjectParams) =>
 		client.get<ProjectAnalyticsResponse>(
 			client.withQuery('/api/v1/analytics/project/summary', {
 				project: params.project,
 				master_project: params.masterProject,
-				filter_type: params.filterType
+				filter_type: params.filterType,
+				usage: params.usage
 			})
 		),
 
-	projectTrends: (
-		params: { masterProject?: string; project?: string; filterType?: string },
-		days = 365
-	) =>
+	projectTrends: (params: ProjectParams, days = 365) =>
 		client.get<ProjectTrendsResponse>(
 			client.withQuery('/api/v1/analytics/project/trends', {
 				days,
 				project: params.project,
 				master_project: params.masterProject,
-				filter_type: params.filterType
+				filter_type: params.filterType,
+				usage: params.usage
 			})
 		),
 
-	projectForecast: (
-		params: { masterProject?: string; project?: string; filterType?: string },
-		days = 365
-	) =>
+	projectForecast: (params: ProjectParams, days = 365) =>
 		client.get<ProjectForecastResponse>(
 			client.withQuery('/api/v1/analytics/project/forecast', {
 				days,
@@ -125,7 +132,7 @@ export const analytics = {
 			})
 		),
 
-	projectPipeline: (params: { masterProject?: string; project?: string; filterType?: string }) =>
+	projectPipeline: (params: ProjectParams) =>
 		client.get<ProjectPipelineResponse>(
 			client.withQuery('/api/v1/analytics/project/pipeline', {
 				project: params.project,
@@ -134,15 +141,13 @@ export const analytics = {
 			})
 		),
 
-	projectPriceDistribution: (
-		params: { masterProject?: string; project?: string; filterType?: string },
-		regType?: string
-	) =>
+	projectPriceDistribution: (params: ProjectParams, regType?: string) =>
 		client.get<ProjectPriceDistributionResponse>(
 			client.withQuery('/api/v1/analytics/project/price-distribution', {
 				project: params.project,
 				master_project: params.masterProject,
 				filter_type: params.filterType,
+				usage: params.usage,
 				reg_type: regType
 			})
 		)

@@ -677,6 +677,13 @@ onMount(() => {
 					{getDisplayName(selection, summary)}
 				</h2>
 				<p class="mt-1 text-sm text-fg-3">{getKnownArea(selection, summary)}</p>
+				<!-- Each side shows its own usage: an office tower compares as Commercial. -->
+				<span
+					class="mt-2 inline-flex rounded-sm bg-panel px-2 py-0.5 text-[11px] font-semibold text-fg-3 ring-1 ring-border"
+					data-testid="compare-usage"
+				>
+					{summary.usage === 'Commercial' ? 'Commercial' : 'Residential'} records
+				</span>
 			</div>
 			<span
 				class="inline-flex w-fit items-center rounded-sm px-2.5 py-1 text-xs font-semibold {isMarketSelection(

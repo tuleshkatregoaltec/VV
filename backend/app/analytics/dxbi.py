@@ -20,10 +20,13 @@ from app.transaction.service import LOCATION_SPELLING_SQL as _LOCATION_SPELLING
 from app.transaction.service import LOCATION_SQL as _LOCATION
 from app.transaction.service import USAGE_SQL as _USAGE
 
-# DXBI's bedrooms label ('1 Bed', '2 Beds', 'Studio') as the Analytics room label ('1 B/R').
+# DXBI's bedrooms label ('1 Bed', '2 Beds', 'Studio') as the Analytics room label ('1 B/R'). An
+# office or shop has no bedrooms: its type (Office, Shop, Warehouse) is its configuration, so the
+# bedroom-keyed tables group commercial records by type.
 _ROOMS = (
+    f"if({_USAGE} = 'Commercial', property_type, "
     "if(match(bedroom_label, '^[0-9]+ Beds?$'), "
-    "concat(extract(bedroom_label, '^([0-9]+)'), ' B/R'), bedroom_label)"
+    "concat(extract(bedroom_label, '^([0-9]+)'), ' B/R'), bedroom_label))"
 )
 _BEDROOM_LABEL = (
     f"if(bedrooms != '', {_BEDROOMS}, {_BEDROOMS.replace('bedrooms', 'profile_bedrooms')})"

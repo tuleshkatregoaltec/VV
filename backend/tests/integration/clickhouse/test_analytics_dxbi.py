@@ -76,7 +76,10 @@ async def test_summary_search_and_charts_are_dxbi_only(dxbi, warehouse):  # noqa
     assert distro.all.mean_price == pytest.approx(summary.sales.avg_price)
     forecast = await service.get_project_forecast("DXBI Tower", 365)
     assert forecast.data == [] and forecast.delivery_date is None
-    rows = await query(queries.project_sales_summary("project"), {"project_name": "DLD Label"})
+    rows = await query(
+        queries.project_sales_summary("project"),
+        {"project_name": "DLD Label", "usage": "Residential"},
+    )
     assert rows[0]["transaction_count"] == 0
 
 
@@ -130,7 +133,11 @@ async def test_configuration_periods_share_today_and_keep_old_sparse_bedrooms(dx
         assert rows[segment, "4 B/R"].price_change_yoy_pct is None
         assert rows[segment, "4 B/R"].sales_momentum_pct is None
     narrow = await queries.fetch_project_configuration_sales(
-        {"project_name": "Mixed Tower", "reg_type_en": "Off-Plan Properties"},
+        {
+            "project_name": "Mixed Tower",
+            "reg_type_en": "Off-Plan Properties",
+            "usage": "Residential",
+        },
         "project",
         "Off-Plan Properties",
     )
@@ -277,3 +284,59 @@ async def test_an_abbreviation_finds_the_master_it_stands_for(dxbi):  # noqa: F8
     assert ("Jumeirah Village Circle", "master") in {(p.name, p.filter_type) for p in found}
     # A word that starts its place's name is not expanded: "downtown" still finds Downtown Views.
     assert service._expand_abbreviations("downtown views") == "downtown views"
+
+
+async def test_an_office_tower_shows_its_commercial_records_not_zeros(dxbi):  # noqa: F811
+    """014 TOWER (offices and shops) showed 0 under the residential-only view: 'auto' shows the
+    usage the scope has, reports both usages' counts, and groups offices by type."""
+    await dxbi(
+        sales=[
+            sale("o1", building_name="Office Tower", property_type="Office", bedrooms=""),
+            sale(
+                "o2",
+                building_name="Office Tower",
+                property_type="Office",
+                bedrooms="",
+                unit_number="102",
+            ),
+            sale(
+                "s1",
+                building_name="Office Tower",
+                property_type="Shop",
+                bedrooms="",
+                unit_number="G01",
+            ),
+            sale("h1", building_name="Mixed Tower", unit_number="201"),
+            sale(
+                "h2",
+                building_name="Mixed Tower",
+                property_type="Office",
+                bedrooms="",
+                unit_number="202",
+            ),
+        ],  # fmt: skip
+        leases=[lease("l1", building_name="Office Tower", property_type="Office", bedrooms="")],
+    )
+    auto = await service.get_project_summary("Office Tower", "project")
+    assert auto.usage == "Commercial"
+    assert auto.usage_counts["Commercial"].sales == 3
+    assert auto.usage_counts["Commercial"].leases == 1
+    assert auto.usage_counts["Residential"].sales == 0
+    assert auto.sales.transaction_count == 3
+    assert {row.rooms for row in auto.by_rooms} >= {"Office", "Shop"}
+    # Configuration Analysis groups offices and shops by type (bedrooms do not apply).
+    assert {row.rooms for row in auto.configuration_analysis} == {"Office", "Shop"}
+    # A mixed tower shows its homes; its office is one click away, and counted.
+    mixed = await service.get_project_summary("Mixed Tower", "project")
+    assert (mixed.usage, mixed.sales.transaction_count) == ("Residential", 1)
+    assert mixed.usage_counts["Commercial"].sales == 1
+    office = await service.get_project_summary("Mixed Tower", "project", usage="Commercial")
+    assert (office.usage, office.sales.transaction_count) == ("Commercial", 1)
+    # A usage asked for explicitly is shown even when empty (no silent switch).
+    empty = await service.get_project_summary("Office Tower", "project", usage="Residential")
+    assert (empty.usage, empty.sales.transaction_count) == ("Residential", 0)
+    # The charts follow the same resolution.
+    trends = await service.get_project_trends("Office Tower", 365)
+    assert sum(point.transaction_count for point in trends.data) == 3
+    distribution = await service.get_project_price_distribution("Office Tower")
+    assert distribution.all.sale_count == 3

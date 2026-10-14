@@ -721,6 +721,19 @@
 							"title": "Filter Type"
 						},
 						"description": "Filter type: master, virtual_master, or project"
+					},
+					{
+						"name": "usage",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"enum": ["auto", "Residential", "Commercial"],
+							"type": "string",
+							"description": "Residential or Commercial records; auto shows Commercial for a scope with no residential records",
+							"default": "auto",
+							"title": "Usage"
+						},
+						"description": "Residential or Commercial records; auto shows Commercial for a scope with no residential records"
 					}
 				],
 				"responses": {
@@ -814,6 +827,19 @@
 							"title": "Days"
 						},
 						"description": "Number of days to look back"
+					},
+					{
+						"name": "usage",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"enum": ["auto", "Residential", "Commercial"],
+							"type": "string",
+							"description": "Residential or Commercial records; auto shows Commercial for a scope with no residential records",
+							"default": "auto",
+							"title": "Usage"
+						},
+						"description": "Residential or Commercial records; auto shows Commercial for a scope with no residential records"
 					}
 				],
 				"responses": {
@@ -1084,6 +1110,19 @@
 							"title": "Reg Type"
 						},
 						"description": "Optional registration type filter (e.g. 'Off-Plan Properties')"
+					},
+					{
+						"name": "usage",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"enum": ["auto", "Residential", "Commercial"],
+							"type": "string",
+							"description": "Residential or Commercial records; auto shows Commercial for a scope with no residential records",
+							"default": "auto",
+							"title": "Usage"
+						},
+						"description": "Residential or Commercial records; auto shows Commercial for a scope with no residential records"
 					}
 				],
 				"responses": {
@@ -21564,6 +21603,20 @@
 			},
 			"ProjectAnalyticsResponse": {
 				"properties": {
+					"usage": {
+						"type": "string",
+						"title": "Usage",
+						"description": "Usage the figures cover: Residential or Commercial (resolved from 'auto')",
+						"default": "Residential"
+					},
+					"usage_counts": {
+						"additionalProperties": {
+							"$ref": "#/components/schemas/UsageCount"
+						},
+						"type": "object",
+						"title": "Usage Counts",
+						"description": "The scope's sales and leases per usage"
+					},
 					"project": {
 						"anyOf": [
 							{
@@ -25817,6 +25870,23 @@
 				"type": "object",
 				"required": ["status", "s3"],
 				"title": "UploadHealthResponse"
+			},
+			"UsageCount": {
+				"properties": {
+					"sales": {
+						"type": "integer",
+						"title": "Sales",
+						"default": 0
+					},
+					"leases": {
+						"type": "integer",
+						"title": "Leases",
+						"default": 0
+					}
+				},
+				"type": "object",
+				"title": "UsageCount",
+				"description": "A scope's records of one usage."
 			},
 			"UserDetailResponse": {
 				"properties": {

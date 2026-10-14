@@ -94,3 +94,31 @@ test('District One keeps sparse bedrooms and uses all-history counts in every ta
     await expect(panel.getByRole('cell', { name: '5 B/R', exact: true })).toBeVisible();
     await panel.screenshot({ path: path.resolve('../docs/audits/analytics-dxbi-2026-10-11/screenshots/district-one-corrected.png') });
 });
+
+test('an office tower shows its commercial records, with the usage and its counts named', async ({ page }) => {
+    test.setTimeout(120000);
+    await page.goto('/analytics');
+    await expect(page.getByRole('heading', { name: 'Configuration Analysis', exact: true })).toBeVisible();
+    const summary = page.waitForResponse(r => r.ok() && r.url().includes('/analytics/project/summary?project=014'));
+    await page.getByRole('combobox').first().fill('014 TOWER');
+    await page.getByRole('option', { name: '014 TOWER Project', exact: true }).click();
+    const data = await (await summary).json();
+    expect(data.usage).toBe('Commercial');
+    const usage = page.getByTestId('analytics-usage');
+    await expect(usage.getByRole('button', { name: /^Commercial/ })).toHaveAttribute('aria-pressed', 'true');
+    await expect(usage.getByRole('button', { name: /^Residential/ })).toBeDisabled();
+    await expect(page.getByTestId('analytics-usage-note')).toHaveText(/no residential sales or leases/);
+    const sales = data.usage_counts.Commercial.sales.toLocaleString('en-AE');
+    await expect(page.locator('section').filter({ hasText: 'Total Sales' }).first()).toContainText(sales);
+    const config = page.locator('section').filter({ has: page.getByRole('heading', { name: 'Configuration Analysis', exact: true }) }).last();
+    await expect(config.getByRole('cell', { name: 'Office', exact: true })).toBeVisible();
+
+    // A mixed project opens on its homes; Commercial switches every figure to its offices.
+    await page.getByRole('combobox').first().fill('LAKE SHORE TOWER');
+    await page.getByRole('option', { name: 'LAKE SHORE TOWER Project', exact: true }).click();
+    await expect(usage.getByRole('button', { name: /^Residential/ })).toHaveAttribute('aria-pressed', 'true');
+    const switched = page.waitForResponse(r => r.ok() && r.url().includes('/analytics/project/summary?') && r.url().includes('usage=Commercial'));
+    await usage.getByRole('button', { name: /^Commercial/ }).click();
+    expect((await (await switched).json()).usage).toBe('Commercial');
+    await expect(page.getByTestId('analytics-usage-note')).toHaveText(/residential records are under Residential/);
+});

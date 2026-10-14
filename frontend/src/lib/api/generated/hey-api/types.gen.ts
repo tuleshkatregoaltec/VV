@@ -7297,6 +7297,20 @@ export type PriceDistributionBucket = {
  * Full analytics response for a single project
  */
 export type ProjectAnalyticsResponse = {
+    /**
+     * Usage
+     *
+     * Usage the figures cover: Residential or Commercial (resolved from 'auto')
+     */
+    usage?: string;
+    /**
+     * Usage Counts
+     *
+     * The scope's sales and leases per usage
+     */
+    usage_counts?: {
+        [key: string]: UsageCount;
+    };
     project?: ProjectMeta | null;
     sales: ProjectSalesSummary;
     rentals: ProjectRentalSummary;
@@ -9766,6 +9780,22 @@ export type UploadHealthResponse = {
 };
 
 /**
+ * UsageCount
+ *
+ * A scope's records of one usage.
+ */
+export type UsageCount = {
+    /**
+     * Sales
+     */
+    sales?: number;
+    /**
+     * Leases
+     */
+    leases?: number;
+};
+
+/**
  * UserDetailResponse
  */
 export type UserDetailResponse = {
@@ -10334,6 +10364,12 @@ export type AnalyticsGetProjectSummaryEndpointData = {
          * Filter type: master, virtual_master, or project
          */
         filter_type?: 'project' | 'master' | 'virtual_master';
+        /**
+         * Usage
+         *
+         * Residential or Commercial records; auto shows Commercial for a scope with no residential records
+         */
+        usage?: 'auto' | 'Residential' | 'Commercial';
     };
     url: '/api/v1/analytics/project/summary';
 };
@@ -10384,6 +10420,12 @@ export type AnalyticsGetProjectTrendsEndpointData = {
          * Number of days to look back
          */
         days?: number;
+        /**
+         * Usage
+         *
+         * Residential or Commercial records; auto shows Commercial for a scope with no residential records
+         */
+        usage?: 'auto' | 'Residential' | 'Commercial';
     };
     url: '/api/v1/analytics/project/trends';
 };
@@ -10528,6 +10570,12 @@ export type AnalyticsGetProjectPriceDistributionEndpointData = {
          * Optional registration type filter (e.g. 'Off-Plan Properties')
          */
         reg_type?: string | null;
+        /**
+         * Usage
+         *
+         * Residential or Commercial records; auto shows Commercial for a scope with no residential records
+         */
+        usage?: 'auto' | 'Residential' | 'Commercial';
     };
     url: '/api/v1/analytics/project/price-distribution';
 };

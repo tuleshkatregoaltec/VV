@@ -208,9 +208,23 @@ class AnalyticsUnitComposition(BaseModel):
     )
 
 
+class UsageCount(BaseModel):
+    """A scope's records of one usage."""
+
+    sales: int = 0
+    leases: int = 0
+
+
 class ProjectAnalyticsResponse(BaseModel):
     """Full analytics response for a single project"""
 
+    usage: str = Field(
+        default="Residential",
+        description="Usage the figures cover: Residential or Commercial (resolved from 'auto')",
+    )
+    usage_counts: dict[str, UsageCount] = Field(
+        default_factory=dict, description="The scope's sales and leases per usage"
+    )
     project: Optional[ProjectMeta] = None
     sales: ProjectSalesSummary
     rentals: ProjectRentalSummary

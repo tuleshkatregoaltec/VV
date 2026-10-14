@@ -3,6 +3,7 @@ import { createQuery } from '@tanstack/svelte-query'
 import { Chart, registerables } from 'chart.js'
 import { onMount } from 'svelte'
 import type {
+	AnalyticsUsage,
 	PriceDistributionBucket,
 	ProjectAnalyticsResponse,
 	ProjectConfigurationRow,
@@ -15,6 +16,7 @@ import type {
 import { analyticsQueries } from '$lib/queries/analytics'
 import { getChartTheme } from '$lib/utils/chartTheme'
 import AnalyticsError from './AnalyticsError.svelte'
+import UsageToggle from './UsageToggle.svelte'
 
 Chart.register(...registerables)
 
@@ -32,10 +34,14 @@ let distroRooms = $state<string>('All')
 let distroOffplan = $state(false)
 let subDropdownOpen = $state(false)
 let subSearch = $state('')
+// Residential or Commercial records; a new selection starts automatic (Commercial for a scope
+// with no residential records), a click pins the choice.
+let usage = $state<AnalyticsUsage>('auto')
 
 $effect(() => {
 	selection
 	subProject = null
+	usage = 'auto'
 	mode = 'sales'
 	configMode = 'sales'
 	configSegment = 'all'
@@ -47,12 +53,12 @@ $effect(() => {
 
 const queryParams = $derived.by(() =>
 	selection.filter_type === 'market'
-		? {}
+		? { usage }
 		: subProject
-			? { project: subProject, masterProject: selection.name }
+			? { project: subProject, masterProject: selection.name, usage }
 			: selection.filter_type === 'project'
-				? { project: selection.name }
-				: { masterProject: selection.name, filterType: selection.filter_type }
+				? { project: selection.name, usage }
+				: { masterProject: selection.name, filterType: selection.filter_type, usage }
 )
 
 const subProjectsQuery = createQuery(() =>
@@ -107,14 +113,15 @@ function getConfigurationRows(summary: ProjectAnalyticsResponse | null): Project
 	return (
 		summary?.configuration_analysis
 			.filter((row) => row.market_segment === configSegment)
-			.filter((row) => isReliableConfigRow(row)) ?? []
+			.filter((row) => isReliableConfigRow(row, summary.usage)) ?? []
 	)
 }
 
 function getConfigurationRentalRows(summary: ProjectAnalyticsResponse | null) {
 	return (
-		summary?.by_rooms.filter((row) => isResidentialConfigRoom(row.rooms) && row.rental_count > 0) ??
-		[]
+		summary?.by_rooms.filter(
+			(row) => isConfigRoom(row.rooms, summary.usage) && row.rental_count > 0
+		) ?? []
 	)
 }
 
@@ -259,17 +266,20 @@ function getDeveloperDisplay(
 	return names[0] ?? '—'
 }
 
-function isResidentialConfigRoom(room: string | null | undefined): boolean {
+// A residential configuration is a bedroom count; a commercial one is the property type (Office,
+// Shop): the backend groups commercial records by type.
+function isConfigRoom(room: string | null | undefined, usage = 'Residential'): boolean {
 	const label = normalizeText(room)
 	if (!label) return false
 	const upper = label.toUpperCase()
 	if (['NA', 'N/A', 'NONE', 'NULL'].includes(upper)) return false
+	if (usage === 'Commercial') return true
 	return upper === 'STUDIO' || /^\d+\s+B\/R$/i.test(label) || upper.includes('PENTHOUSE')
 }
 
-function isReliableConfigRow(row: ProjectConfigurationRow): boolean {
+function isReliableConfigRow(row: ProjectConfigurationRow, usage = 'Residential'): boolean {
 	return (
-		isResidentialConfigRoom(row.rooms) &&
+		isConfigRoom(row.rooms, usage) &&
 		(row.stock_units > 0 || row.sale_count > 0 || row.sales_last_12m > 0 || row.rental_count > 0)
 	)
 }
@@ -998,7 +1008,9 @@ onMount(() => {
 							: summary.project?.project_name ?? selection.name}
 					</h2>
 					{#if isMarketScope}
-						<p class="mt-1 text-sm text-fg-3">Citywide residential market aggregate</p>
+						<p class="mt-1 text-sm text-fg-3">
+							Citywide {summary.usage === 'Commercial' ? 'commercial' : 'residential'} market aggregate
+						</p>
 					{:else if isMasterScope}
 						<p class="mt-1 text-sm text-fg-3">
 							Master community aggregate{subProjects.length > 0
@@ -1008,6 +1020,13 @@ onMount(() => {
 					{:else if summary.project?.developer_name}
 						<p class="mt-1 text-sm text-fg-3">{summary.project.developer_name}</p>
 					{/if}
+					<UsageToggle
+						counts={summary.usage_counts}
+						resolved={summary.usage === 'Commercial' ? 'Commercial' : 'Residential'}
+						value={usage}
+						scope={isMarketScope ? 'Dubai' : isMasterScope ? 'this community' : 'this project'}
+						onchange={(choice) => (usage = choice)}
+					/>
 				</div>
 
 				<div class="flex items-center gap-3">
@@ -1168,7 +1187,7 @@ onMount(() => {
 			{/if}
 			{/if}
             <p class="mt-4 border-t border-border pt-3 text-xs text-fg-4">
-                DXBI transactions · Residential properties · All recorded dates.
+                DXBI transactions · {summary.usage === 'Commercial' ? 'Commercial' : 'Residential'} properties · All recorded dates.
                 {#if !hasProjectDetails}Registered unit stock and delivery forecasts are unavailable from this source.{/if}
             </p>
 		</section>
@@ -1379,7 +1398,7 @@ onMount(() => {
 					<table class="min-w-[640px] w-full border-separate border-spacing-0 text-sm sm:min-w-full">
 						<thead>
 							<tr class="text-left">
-								<th class="sticky left-0 z-10 border-b border-border bg-card pb-2.5 pr-6 text-[11px] font-semibold uppercase tracking-[0.14em] text-fg-4">Config</th>
+								<th class="sticky left-0 z-10 border-b border-border bg-card pb-2.5 pr-6 text-[11px] font-semibold uppercase tracking-[0.14em] text-fg-4">{summary.usage === 'Commercial' ? 'Type' : 'Config'}</th>
 								<th class="border-b border-border pb-2.5 pr-6 text-right text-[11px] font-semibold uppercase tracking-[0.14em] text-fg-4">Sales</th>
 								<th class="border-b border-border pb-2.5 pr-6 text-right text-[11px] font-semibold uppercase tracking-[0.14em] text-fg-4">Avg Price</th>
 								<th class="border-b border-border pb-2.5 pr-6 text-right text-[11px] font-semibold uppercase tracking-[0.14em] text-fg-4">Median sale size sq ft</th>
@@ -1462,7 +1481,7 @@ onMount(() => {
 					<table class="min-w-[480px] w-full border-separate border-spacing-0 text-sm sm:min-w-full">
 						<thead>
 							<tr class="text-left">
-								<th class="sticky left-0 z-10 border-b border-border bg-card pb-2.5 pr-6 text-[11px] font-semibold uppercase tracking-[0.14em] text-fg-4">Config</th>
+								<th class="sticky left-0 z-10 border-b border-border bg-card pb-2.5 pr-6 text-[11px] font-semibold uppercase tracking-[0.14em] text-fg-4">{summary.usage === 'Commercial' ? 'Type' : 'Config'}</th>
 								<th class="border-b border-border pb-2.5 pr-6 text-right text-[11px] font-semibold uppercase tracking-[0.14em] text-fg-4">Contracts</th>
 								<th class="border-b border-border pb-2.5 pr-6 text-right text-[11px] font-semibold uppercase tracking-[0.14em] text-fg-4">Median Rent</th>
 								<th class="border-b border-border pb-2.5 pr-6 text-right text-[11px] font-semibold uppercase tracking-[0.14em] text-fg-4">Rent / sq ft</th>

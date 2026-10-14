@@ -1,7 +1,7 @@
 """Analytics API endpoints with flexible filtering from daily aggregates."""
 
 from datetime import date
-from typing import Optional
+from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
@@ -204,13 +204,18 @@ async def get_sub_projects_endpoint(
 
 
 @router.get("/project/summary", response_model=ProjectAnalyticsResponse)
-@cached_endpoint(prefix="analytics:dxbi:project_summary:v4", expire=900)
+@cached_endpoint(prefix="analytics:dxbi:project_summary:v5", expire=900)
 async def get_project_summary_endpoint(
     context: AuthContext = Depends(require_active_subscription),
     master_project: Optional[str] = Query(default=None, description="Master project name"),
     project: Optional[str] = Query(default=None, description="Sub-project name (project_name_en)"),
     filter_type: ProjectFilterType = Query(
         default="project", description="Filter type: master, virtual_master, or project"
+    ),
+    usage: Literal["auto", "Residential", "Commercial"] = Query(
+        default="auto",
+        description="Residential or Commercial records; auto shows Commercial for a scope "
+        "with no residential records",
     ),
 ):
     """
@@ -225,11 +230,12 @@ async def get_project_summary_endpoint(
         project_name=project_name,
         filter_type=resolved_filter_type,
         master_project=master_project,
+        usage=usage,
     )
 
 
 @router.get("/project/trends", response_model=ProjectTrendsResponse)
-@cached_endpoint(prefix="analytics:dxbi:trends:v2", expire=300)
+@cached_endpoint(prefix="analytics:dxbi:trends:v3", expire=300)
 async def get_project_trends_endpoint(
     context: AuthContext = Depends(require_active_subscription),
     master_project: Optional[str] = Query(default=None, description="Master project name"),
@@ -238,13 +244,18 @@ async def get_project_trends_endpoint(
         default="project", description="Filter type: master, virtual_master, or project"
     ),
     days: int = Query(default=365, description="Number of days to look back"),
+    usage: Literal["auto", "Residential", "Commercial"] = Query(
+        default="auto",
+        description="Residential or Commercial records; auto shows Commercial for a scope "
+        "with no residential records",
+    ),
 ):
     """Sales price trend time series for a project, master, or virtual master."""
     project_name, resolved_filter_type = _resolve_project_scope(
         master_project=master_project, project=project, filter_type=filter_type
     )
     return await get_project_trends(
-        project_name=project_name, days=days, filter_type=resolved_filter_type
+        project_name=project_name, days=days, filter_type=resolved_filter_type, usage=usage
     )
 
 
@@ -285,7 +296,7 @@ async def get_project_pipeline_endpoint(
     "/project/price-distribution",
     response_model=ProjectPriceDistributionResponse,
 )
-@cached_endpoint(prefix="analytics:dxbi:distribution:v2", expire=300)
+@cached_endpoint(prefix="analytics:dxbi:distribution:v3", expire=300)
 async def get_project_price_distribution_endpoint(
     context: AuthContext = Depends(require_active_subscription),
     master_project: Optional[str] = Query(default=None, description="Master project name"),
@@ -297,6 +308,11 @@ async def get_project_price_distribution_endpoint(
         default=None,
         description="Optional registration type filter (e.g. 'Off-Plan Properties')",
     ),
+    usage: Literal["auto", "Residential", "Commercial"] = Query(
+        default="auto",
+        description="Residential or Commercial records; auto shows Commercial for a scope "
+        "with no residential records",
+    ),
 ):
     project_name, resolved_filter_type = _resolve_project_scope(
         master_project=master_project, project=project, filter_type=filter_type
@@ -305,6 +321,7 @@ async def get_project_price_distribution_endpoint(
         project_name=project_name,
         filter_type=resolved_filter_type,
         reg_type=reg_type,
+        usage=usage,
     )
 
 
