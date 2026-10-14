@@ -158,3 +158,92 @@ async def test_search_labels_building_fallback_and_preserves_numbered_scopes(dxb
     )
     result = await service.get_project_search("08 LIFE warsan")
     assert [(r.name, r.scope_kind) for r in result.projects] == [("08 Life Residences", "Building")]
+
+
+async def test_scopes_group_by_the_profiles_dld_master_and_project(dxbi):  # noqa: F811
+    """DXBI prints a community ('Dubai Marina'); its profile names DLD's master and project.
+    A DXBI 'building' that is a place's name is no project; an unprofiled sale keeps DXBI's."""
+    await dxbi(
+        sales=[
+            sale("paired", building_name="Marina Gate 1", area_name="Dubai Marina"),
+            sale("villa", building_name="Mirdif", area_name="Mirdif", unit_number="7"),
+            sale("new", building_name="Brand New Tower", project_name="New Launch"),
+        ],
+        sale_profiles=[
+            {
+                "sale_key": "paired",
+                "master_project": "DUBAI MARINA",
+                "area_name": "MARSA DUBAI",
+                "project_name": "MARINA GATE",
+                "project_source": "dld_pair",
+            },
+            {
+                "sale_key": "villa",
+                "master_project": "",
+                "area_name": "MIRDIF",
+                "project_name": "Mirdif",
+                "project_source": "place_name",
+            },
+        ],  # fmt: skip
+    )
+    project = await service.get_project_summary("MARINA GATE", "project")
+    assert project.sales.transaction_count == 1
+    master = await service.get_project_summary("DUBAI MARINA", "master")
+    assert master.sales.transaction_count == 1
+    # The place-name villa counts under its area's community, never as a project.
+    assert (await service.get_project_summary("Mirdif", "project")).sales.transaction_count == 0
+    assert (await service.get_project_summary("Mirdif", "master")).sales.transaction_count == 1
+    # Loaded since the last profile build: DXBI's own project until the next build.
+    assert (await service.get_project_summary("New Launch", "project")).sales.transaction_count == 1
+
+
+async def test_search_keeps_buildings_beside_many_project_names(dxbi):  # noqa: F811
+    await dxbi(
+        sales=[
+            *(
+                sale(f"p{i}", project_name=f"Lake Project {i:02}", building_name="")
+                for i in range(60)
+            ),
+            sale("b", building_name="Lake Shore Tower", project_name="JLT Cluster X"),
+        ]
+    )
+    found = (await service.get_project_search("lake", limit=50)).projects
+    assert len(found) == 50
+    # The building keeps its place and opens its project.
+    assert [(p.name, p.building) for p in found if p.building] == [
+        ("JLT Cluster X", "Lake Shore Tower")
+    ]
+    # An empty search lists scopes only.
+    assert not any(p.building for p in (await service.get_project_search("")).projects)
+
+
+async def test_a_project_header_names_its_sources(dxbi, warehouse):  # noqa: F811
+    """DXBI transactions hold no developer, handover or unit count: DXBInteract's building list
+    does. Its project card repeats the totals of the building cards it lists."""
+    await dxbi(
+        sales=[sale("s", building_name="Lakeshore Tower 1", project_name="Lake Shore Tower")]
+    )
+
+    def card(location_id, name, units, kind="B", kids=()):
+        building = {
+            "location": name, "project": "Lake Shore Tower", "area_name": "Al Thanyah Fifth",
+            "dev": "Al Bodor", "completion_date": "2012-01-21T20:00:00Z",
+            "completion_percent": 100, "unit_count": units, "display_as": kind,
+            "building_csv": list(kids),
+        }  # fmt: skip
+        return [location_id, 200, json.dumps({"Building": building})]
+
+    await warehouse.insert(
+        "dxbi_heatmap_buildings_bronze",
+        [card("1", "Lake Shore Tower", 477, "P", kids=[2]), card("2", "Lakeshore Tower 1", 477)],
+        column_names=["location_id", "status", "payload_json"],
+    )
+    meta = (await service.get_project_summary("Lake Shore Tower", "project")).project
+    assert (meta.developer_name, str(meta.completion_date), meta.no_of_units) == (
+        "Al Bodor",
+        "2012-01-21",
+        477,
+    )
+    assert meta.no_of_buildings == 1
+    assert set(meta.field_sources) >= {"developer_name", "completion_date", "no_of_units"}
+    assert set(meta.field_sources.values()) == {"dxbi_buildings"}

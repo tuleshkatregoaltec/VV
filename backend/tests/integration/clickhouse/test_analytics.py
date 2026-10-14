@@ -155,8 +155,13 @@ async def test_market_types_select_on_the_uniform_type_and_their_own_group(wareh
     assert await sold("commercial_units") == 2
     assert await sold("land") == 1
     assert await sold("bulk_building") == 1
-    assert await sold("mortgages") == 1
-    assert await sold("gifts") == 1
+    # The Analytics records are DXBI sales: mortgages and gifts are refused, not counted as 0.
+    from fastapi import HTTPException
+
+    for registration in ("mortgages", "gifts"):
+        with pytest.raises(HTTPException) as refused:
+            await sold(registration)
+        assert refused.value.status_code == 422
     trend = await service.get_market_trend(days=30, market_type="villas")
     assert trend.total_transactions == 3
 

@@ -5,6 +5,7 @@ import re
 from holocron.market import dxbi_profile, transforms
 from holocron.platform.bronze import coerce_money
 from holocron.platform.census import SCHEMA_SQL, parse_expected_schema
+from tests.test_market_release import database, live, warehouse  # noqa: F401  (fixtures)
 from holocron.sources.dld_open_data_orchestration import (
     DLD_OPEN_DATA_TRANSACTIONS_RESWEEP_DEFAULTS,
 )
@@ -165,3 +166,81 @@ def test_weekly_resweep_rereads_ninety_days_without_the_checkpoint() -> None:
     # from the daily checkpoint, or it would read nothing older.
     assert DLD_OPEN_DATA_TRANSACTIONS_RESWEEP_DEFAULTS["lookback_days"] >= 60
     assert DLD_OPEN_DATA_TRANSACTIONS_RESWEEP_DEFAULTS["checkpointed_incremental"] is False
+
+
+def test_listed_tables_name_their_columns_as_the_schema_does() -> None:
+    schema = parse_expected_schema(SCHEMA_SQL.read_text(encoding="utf-8"))
+    assert list(dxbi_profile.SALES_LISTED_COLUMNS) == schema["dxbi_sales_listed"]
+    assert list(dxbi_profile.LEASES_LISTED_COLUMNS) == schema["dxbi_leases_listed"]
+
+
+@live
+def test_listed_records_count_each_sale_and_lease_once(warehouse) -> None:  # noqa: F811
+    # The Analytics pages read these tables; they must hold exactly the records the
+    # Transactions pages list (backend/app/transaction/queries.py), or the two pages disagree.
+    from datetime import UTC, date, datetime
+
+    loaded = datetime(2026, 7, 1, tzinfo=UTC)
+    sale = {
+        "transaction_date": date(2026, 6, 1), "unit_number": "1203", "building_name": "Tower A",
+        "building_key": "towera", "area_name": "Dubai Marina", "area_key": "dubaimarina",
+        "size_sqft": 800.0, "sale_amount_aed": 1_000_000, "property_type": "Apartment",
+        "bedrooms": "1 Bed", "market_status": "Ready", "loaded_at": loaded,
+    }  # fmt: skip
+    sales = [
+        {**sale, "sale_key": "scraped", "detail_url": "https://dxbinteract.com/sold/t-1"},
+        # A CSV-export copy of the same sale: same unit, date, price and facts, no link.
+        {**sale, "sale_key": "csv-copy", "detail_url": ""},
+        # Two DXBI links with the same terms are two sales (another unit's pair).
+        {**sale, "sale_key": "link-a", "unit_number": "1204", "detail_url": "https://x/sold/t-a"},
+        {**sale, "sale_key": "link-b", "unit_number": "1204", "detail_url": "https://x/sold/t-b"},
+    ]
+    columns = list(sales[0])
+    warehouse.insert_rows(
+        table="dxbi_sales_unit_events",
+        rows=[[row.get(c, "") for c in columns] for row in sales],
+        column_names=columns,
+    )
+    warehouse.insert_rows(
+        table="dxbi_sale_profile",
+        rows=[["scraped", "DUBAI MARINA", "MARSA DUBAI", "TOWER A", "dld_pair"]],
+        column_names=["sale_key", "master_project", "area_name", "project_name", "project_source"],
+    )
+    lease = {
+        "location_name": "Tower B, Business Bay", "building_name": "Tower B",
+        "area_name": "Business Bay", "property_type": "Apartment", "bedrooms": "1 Bed",
+        "size_sqft": 700.0, "contract_amount_aed": 90_000, "annual_rent_aed": 90_000,
+        "lease_start": date(2026, 6, 1), "lease_end": date(2027, 5, 31), "contract_state": "New",
+    }  # fmt: skip
+    leases = [
+        {**lease, "contract_key": "numbered", "unit_number": "501"},
+        # The report repeated the same numbered row while paging.
+        {**lease, "contract_key": "repeat", "unit_number": "501", "occurrence_index": 2},
+        # The same lease in the view without units.
+        {**lease, "contract_key": "unitless-copy", "unit_number": ""},
+        # A lease without its unit and with other terms stays.
+        {
+            **lease,
+            "contract_key": "unitless-other",
+            "unit_number": "",
+            "contract_amount_aed": 95_000,
+        },
+    ]
+    columns = sorted({c for row in leases for c in row})
+    warehouse.insert_rows(
+        table="dxbi_rental_events",
+        rows=[
+            [row.get(c, 1 if c == "occurrence_index" else "") for c in columns] for row in leases
+        ],
+        column_names=columns,
+    )
+    dxbi_profile.create_tables(warehouse)
+    for table in dxbi_profile.LISTED_TABLES:
+        dxbi_profile.build_profile(warehouse, table)
+
+    listed = warehouse.query(
+        "SELECT sale_key, profile_master FROM dxbi_sales_listed ORDER BY sale_key"
+    ).result_rows
+    assert listed == [("link-a", ""), ("link-b", ""), ("scraped", "DUBAI MARINA")]
+    leased = warehouse.query("SELECT contract_key FROM dxbi_leases_listed ORDER BY 1").result_rows
+    assert [row[0] for row in leased] == ["numbered", "unitless-other"]

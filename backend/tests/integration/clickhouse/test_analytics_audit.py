@@ -48,7 +48,7 @@ async def test_search_excludes_dld_only_launches(warehouse, monkeypatch):
 
     for table in ("ch_transactions", "ch_rent_contracts", "ch_projects", "ch_units"):
         await warehouse.command(
-            f"CREATE TABLE {table} (project_name_en String, master_project_en String, area_name_en String DEFAULT '', scope_kind String DEFAULT 'Project') ENGINE = Memory"
+            f"CREATE TABLE {table} (project_name_en String, master_project_en String, area_name_en String DEFAULT '', scope_kind String DEFAULT 'Project', building_name String DEFAULT '') ENGINE = Memory"
         )
     await warehouse.insert(
         "ch_transactions",
@@ -67,8 +67,8 @@ async def test_search_excludes_dld_only_launches(warehouse, monkeypatch):
     )
     rows = await query(search_projects(), {"search_pattern": "%marina%", "limit": 50})
     assert {tuple(row.values()) for row in rows} == {
-        ("23 MARINA", "project", "Project"),
-        ("Dubai Marina", "master", "Area"),
+        ("23 MARINA", "project", "Project", ""),
+        ("Dubai Marina", "master", "Area", ""),
     }
     rows = await query(search_projects(), {"search_pattern": "%", "limit": 50})
     assert "Rental Tower" in {row["name"] for row in rows}

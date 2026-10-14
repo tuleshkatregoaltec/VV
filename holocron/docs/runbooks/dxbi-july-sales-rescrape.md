@@ -15,8 +15,9 @@ the agent-name stop-gap (`holocron/sources/dxbi/agent_names.py`) can be deleted.
   the location cell since commit d406840 (2026-10-07), which is what DXBI shows. Loads since then
   are clean: 0 of 40,893 sales from 2026-07-01 on start with a known agent name.
 - 14,056 sales of the batch are repaired by the stop-gap today; 14,054 of them are dated 2021 or
-  later. The stop-gap catches only names its rules recognise, so some contaminated names may
-  remain.
+  later. The stop-gap catches only names its rules recognise, and some remain: for example, 31
+  sales still carry a brokerage's name ("Luiza TOP PRIORITY Real Estate LLC Al Habtoor Tower"),
+  all of them from the batch (2026-10-14).
 
 | Sale year | Sales in the batch | Repaired by the stop-gap |
 |---|---|---|

@@ -85,10 +85,10 @@
 									"type": "null"
 								}
 							],
-							"description": "Market type (overrides property_usage/property_type). One of: residential_units, villas, commercial_units, bulk_building, land, mortgages, gifts",
+							"description": "Market type (overrides property_usage/property_type). One of: residential_units, villas, commercial_units, bulk_building, land",
 							"title": "Market Type"
 						},
-						"description": "Market type (overrides property_usage/property_type). One of: residential_units, villas, commercial_units, bulk_building, land, mortgages, gifts"
+						"description": "Market type (overrides property_usage/property_type). One of: residential_units, villas, commercial_units, bulk_building, land"
 					},
 					{
 						"name": "property_usage",
@@ -502,10 +502,10 @@
 									"type": "null"
 								}
 							],
-							"description": "Market type (overrides property_usage). One of: residential_units, villas, commercial_units, bulk_building, land, mortgages, gifts",
+							"description": "Market type (overrides property_usage). One of: residential_units, villas, commercial_units, bulk_building, land",
 							"title": "Market Type"
 						},
-						"description": "Market type (overrides property_usage). One of: residential_units, villas, commercial_units, bulk_building, land, mortgages, gifts"
+						"description": "Market type (overrides property_usage). One of: residential_units, villas, commercial_units, bulk_building, land"
 					},
 					{
 						"name": "property_usage",

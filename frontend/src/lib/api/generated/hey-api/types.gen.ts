@@ -10036,7 +10036,7 @@ export type AnalyticsGetSalesAnalyticsData = {
         /**
          * Market Type
          *
-         * Market type (overrides property_usage/property_type). One of: residential_units, villas, commercial_units, bulk_building, land, mortgages, gifts
+         * Market type (overrides property_usage/property_type). One of: residential_units, villas, commercial_units, bulk_building, land
          */
         market_type?: string | null;
         /**
@@ -10208,7 +10208,7 @@ export type AnalyticsGetMarketTrendData = {
         /**
          * Market Type
          *
-         * Market type (overrides property_usage). One of: residential_units, villas, commercial_units, bulk_building, land, mortgages, gifts
+         * Market type (overrides property_usage). One of: residential_units, villas, commercial_units, bulk_building, land
          */
         market_type?: string | null;
         /**

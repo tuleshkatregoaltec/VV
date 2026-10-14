@@ -1,10 +1,8 @@
-import asyncio
 from typing import Optional
-from weakref import WeakKeyDictionary
 
 from app.analytics.dxbi import RENTALS_SOURCE, SALES_SOURCE
 from app.analytics.models import TrendInterval
-from app.clickhouse.client import query as warehouse_query
+from app.clickhouse.client import query
 from app.market.location_search import location_keyword_clause
 from app.market.scope import MARKET_FILTERS as MARKET_FILTERS
 from app.market.scope import ProjectFilterType, ProjectScopeType, project_filter_clause
@@ -29,53 +27,70 @@ def _project_filter(filter_type: ProjectScopeType) -> str:
     )
 
 
-# Compare can request two summaries plus charts concurrently. Bound the heavy
-# normalized-source scans per worker instead of multiplying warehouse memory use.
-_query_slots: WeakKeyDictionary = WeakKeyDictionary()
-
-
-async def query(sql: str, parameters: dict | None = None):
-    loop = asyncio.get_running_loop()
-    slots = _query_slots.setdefault(loop, asyncio.Semaphore(2))
-    async with slots:
-        return await warehouse_query(
-            sql + " SETTINGS max_threads=2, max_execution_time=60", parameters
-        )
-
-
 # Half-open bounds of a range filter: (low or None, high or None).
 Bounds = tuple[Optional[float], Optional[float]]
 
 
 def search_projects(keyword_clause: str | None = None) -> str:
+    """Projects and master projects whose names (with their area) match, then buildings.
+
+    A building opens the project its records are in, so it is listed with that project's name
+    (``building`` set). Each kind returns up to the limit; the service keeps room for buildings.
+    """
     search_clause = keyword_clause or "lowerUTF8(name) LIKE {search_pattern:String}"
-    return f"""
-        SELECT name, filter_type,
-               if(uniqExact(kind) = 1, any(kind), 'Location') AS scope_kind
-        FROM (
-            SELECT scope.1 AS name, scope.2 AS filter_type, scope.3 AS kind,
-                   scope.4 AS search_location
-            FROM (
-                SELECT arrayJoin([
-                    (project_name_en, 'project', scope_kind,
-                     concat(project_name_en, ' ', area_name_en)),
-                    (master_project_en, 'master', 'Area', master_project_en)
-                ]) AS scope
-                FROM (
-                    SELECT project_name_en, master_project_en, area_name_en, scope_kind
+    records = f"""(
+                    SELECT project_name_en, master_project_en, area_name_en, scope_kind,
+                           building_name
                     FROM {SALES_SOURCE}
                     UNION ALL
-                    SELECT project_name_en, master_project_en, area_name_en, scope_kind
+                    SELECT project_name_en, master_project_en, area_name_en, scope_kind,
+                           building_name
                     FROM {RENTALS_SOURCE}
+                )"""
+    order = """lowerUTF8(name) = replaceAll({search_pattern:String}, '%', '') DESC,
+                 startsWith(lowerUTF8(name), replaceAll({search_pattern:String}, '%', '')) DESC"""
+    return f"""
+        SELECT * FROM (
+            SELECT name, filter_type,
+                   if(uniqExact(kind) = 1, any(kind), 'Location') AS scope_kind, '' AS building
+            FROM (
+                SELECT scope.1 AS name, scope.2 AS filter_type, scope.3 AS kind,
+                       scope.4 AS search_location
+                FROM (
+                    SELECT arrayJoin([
+                        (project_name_en, 'project', scope_kind,
+                         concat(project_name_en, ' ', area_name_en)),
+                        (master_project_en, 'master', 'Area', master_project_en)
+                    ]) AS scope
+                    FROM {records}
                 )
             )
+            WHERE name != '' AND {search_clause}
+            GROUP BY name, filter_type
+            ORDER BY {order}, name, filter_type
+            LIMIT {{limit:Int32}}
         )
-        WHERE name != '' AND {search_clause}
-        GROUP BY name, filter_type
-        ORDER BY lowerUTF8(name) = replaceAll({{search_pattern:String}}, '%', '') DESC,
-                 startsWith(lowerUTF8(name), replaceAll({{search_pattern:String}}, '%', '')) DESC,
-                 name, filter_type
-        LIMIT {{limit:Int32}}
+        UNION ALL
+        SELECT * FROM (
+            SELECT name, 'project' AS filter_type, 'Building' AS scope_kind, building
+            FROM (
+                -- The project most of the building's records are in.
+                SELECT building_name AS building, argMax(project_name_en, n) AS name,
+                       any(search_location) AS search_location
+                FROM (
+                    SELECT building_name, project_name_en, count() AS n,
+                           any(concat(building_name, ' ', area_name_en)) AS search_location
+                    FROM {records}
+                    WHERE building_name != '' AND project_name_en != ''
+                      AND lowerUTF8(building_name) != lowerUTF8(project_name_en)
+                    GROUP BY building_name, project_name_en
+                )
+                GROUP BY building
+            )
+            WHERE {search_clause.replace("lowerUTF8(name)", "lowerUTF8(building)")}
+            ORDER BY {order.replace("lowerUTF8(name)", "lowerUTF8(building)")}, building
+            LIMIT {{limit:Int32}}
+        )
     """
 
 
@@ -168,7 +183,7 @@ def project_configuration_sales(
               {reg_filter}
         ),
         anchor AS (
-            SELECT addDays(toDate(now('UTC')), 1) AS latest_sale_date
+            SELECT addDays(toDate(now('Asia/Dubai')), 1) AS latest_sale_date
         )
         SELECT
             rooms_en,
@@ -647,6 +662,68 @@ async def fetch_project_meta(parameters: dict, filter_type):
     return await query(project_meta(filter_type), parameters)
 
 
+# DXBI's building list (the heatmap's building cards: developer, completion, unit count) for a
+# project DLD's projects register does not hold (older ones such as LAKE SHORE TOWER). A project
+# is the buildings DXBI lists under its name, the one building of that name, or the DXBI buildings
+# whose paired sales sit in it (>= 90% of >= 3: DLD's "SKY COURTS" is DXBI's Sky Courts Tower A-F).
+# A project card (display_as 'P') carries the project's totals and lists its building cards
+# (building_csv): it counts only when none of its buildings' cards is counted already.
+_NAME_KEY = "lowerUTF8(replaceRegexpAll({value}, '[^A-Za-z0-9]', ''))"
+_PAIRED_BUILDINGS = f"""(
+        SELECT building_key FROM (
+            SELECT {_NAME_KEY.format(value="building_name")} AS building_key,
+                   countIf(project_name = {{project_name:String}}) AS inside, count() AS sales
+            FROM dxbi_sale_profile
+            WHERE project_source = 'dld_pair' AND building_name != ''
+              AND {_NAME_KEY.format(value="building_name")} IN (
+                  SELECT {_NAME_KEY.format(value="building_name")} FROM dxbi_sale_profile
+                  WHERE project_name = {{project_name:String}} AND project_source = 'dld_pair')
+            GROUP BY building_key
+        )
+        WHERE inside >= 0.9 * sales AND sales >= 3
+    )"""
+PROJECT_META_FROM_DXBI = f"""
+    SELECT
+        topK(1)(area)[1] AS area_name_en,
+        topKIf(1)(dev, dev != '')[1] AS developer_name_en,
+        maxOrNull(completion) AS completion_date,
+        minOrNull(percent) AS percent_completed,
+        groupArrayIf(card_id, card != 'P') AS building_ids,
+        arrayFilter((u, kids) -> NOT hasAny(kids, building_ids),
+                    groupArrayIf(units, card = 'P'), groupArrayIf(kids, card = 'P')) AS project_units,
+        sumIf(units, card != 'P') + arraySum(project_units) AS no_of_units,
+        nullIf(length(building_ids) + arraySum(arrayMap(
+            (u, kids) -> if(hasAny(kids, building_ids), 0, length(kids)),
+            groupArrayIf(units, card = 'P'), groupArrayIf(kids, card = 'P'))), 0)
+            AS no_of_buildings
+    FROM (
+        SELECT JSONExtractString(payload_json, 'Building', 'project') AS project,
+               JSONExtractString(payload_json, 'Building', 'location') AS location,
+               JSONExtractString(payload_json, 'Building', 'area_name') AS area,
+               trimBoth(JSONExtractString(payload_json, 'Building', 'dev')) AS dev,
+               toDate(parseDateTimeBestEffortOrNull(
+                   JSONExtractString(payload_json, 'Building', 'completion_date'))) AS completion,
+               JSONExtract(payload_json, 'Building', 'completion_percent', 'Nullable(Float64)')
+                   AS percent,
+               JSONExtractUInt(payload_json, 'Building', 'unit_count') AS units,
+               JSONExtractString(payload_json, 'Building', 'display_as') AS card,
+               toUInt64OrZero(location_id) AS card_id,
+               JSONExtract(payload_json, 'Building', 'building_csv', 'Array(UInt64)') AS kids
+        FROM dxbi_heatmap_buildings_bronze
+        WHERE status = 200
+        LIMIT 1 BY location_id
+    )
+    WHERE {_NAME_KEY.format(value="project")} = {_NAME_KEY.format(value="{project_name:String}")}
+       OR {_NAME_KEY.format(value="location")} = {_NAME_KEY.format(value="{project_name:String}")}
+       OR {_NAME_KEY.format(value="location")} IN {_PAIRED_BUILDINGS}
+    HAVING count() > 0
+"""
+
+
+async def fetch_project_meta_from_dxbi(parameters: dict):
+    return await query(PROJECT_META_FROM_DXBI, parameters)
+
+
 async def fetch_pipeline_meta(parameters: dict, filter_type):
     meta_fn = {
         "master": pipeline_project_meta_by_master,
@@ -686,7 +763,7 @@ async def fetch_project_sales_bundle(parameters: dict, filter_type: ProjectScope
                     instance_date >= addYears(latest_sale_date, -2)
                     AND instance_date < addYears(latest_sale_date, -1)), 2) AS avg_price_sqft_prev_12m
         FROM (
-            SELECT *, addDays(toDate(now('UTC')), 1) AS latest_sale_date
+            SELECT *, addDays(toDate(now('Asia/Dubai')), 1) AS latest_sale_date
             FROM (
                 SELECT *, arrayJoin(['all', multiIf(reg_type_en = 'Existing Properties',
                         'secondary', reg_type_en = 'Off-Plan Properties', 'off_plan', 'unknown')])
@@ -975,9 +1052,13 @@ def price_trends(
     property_type: Optional[str] = None,
     area_name: Optional[str] = None,
     market: Optional[dict[str, str]] = None,
+    source: Optional[str] = None,
 ) -> str:
     """
     Get price trends over time (grouped by day, week, or month).
+
+    ``source`` is the Analytics DXBI records by default; chat charts pass the combined market
+    layer (``ch_transactions``) their other queries read.
 
     Args:
         interval: 'day', 'week', or 'month'
@@ -985,6 +1066,7 @@ def price_trends(
     Returns: period, transaction_count, avg_price, avg_price_sqft
     ``market`` is a MARKET_FILTERS entry (trusted, not user input).
     """
+    source = source or SALES_SOURCE
     # SAFE: interval is controlled by application, not user input
     if interval not in ("day", "week", "month"):
         raise ValueError("interval must be 'day', 'week', or 'month'")
@@ -1017,7 +1099,7 @@ def price_trends(
             count() as transaction_count,
             round(avg(actual_worth), 2) as avg_price,
             round(avg(meter_sale_price) / 10.7639, 2) as avg_price_sqft
-        FROM {SALES_SOURCE}
+        FROM {source}
         WHERE {where_clause}
         GROUP BY period
         ORDER BY period ASC
@@ -1073,7 +1155,7 @@ def rentals_summary(
     """
 
 
-GET_MARKET_PULSE_SQL = f"""
+GET_MARKET_PULSE_SQL = """
     SELECT
         count(*) as transaction_count,
         round(medianExact(actual_worth), 0) as median_price,
@@ -1082,11 +1164,11 @@ GET_MARKET_PULSE_SQL = f"""
         round(medianExact(actual_worth / size_sqm) / 10.7639, 0) as median_price_per_sqft,
         min(instance_date) as period_start,
         max(instance_date) as period_end
-    FROM {SALES_SOURCE}
+    FROM ch_transactions
     WHERE
-        location_name = {{area:String}}
+        location_name = {area:String}
         AND trans_group_en = 'Sales'
-        AND instance_date >= today() - {{period_days:Int32}}
+        AND instance_date >= today() - {period_days:Int32}
         AND actual_worth > 0
         AND size_sqm > 0
     """
@@ -1096,52 +1178,53 @@ async def fetch_market_pulse(parameters: dict):
     return await query(GET_MARKET_PULSE_SQL, parameters)
 
 
-# Ranked by location in the uniform vocabulary (DXBI community names; the names market
-# pulse and the Transactions page filter on).
-RANK_AREAS_VOLUME_SQL = f"""
+# Chat's market tools (market pulse, area rankings) read the combined market layer, as the rest
+# of chat does; the Analytics page reads the DXBI records. Ranked by location in the uniform
+# vocabulary (DXBI community names; the names market pulse and the Transactions page filter on).
+RANK_AREAS_VOLUME_SQL = """
         SELECT
             location_name as area,
             count(*) as transaction_count,
             round(medianExact(actual_worth), 0) as median_price
-        FROM {SALES_SOURCE}
+        FROM ch_transactions
         WHERE
-            instance_date >= today() - {{period_days:Int32}}
+            instance_date >= today() - {period_days:Int32}
             AND trans_group_en = 'Sales'
             AND actual_worth > 0
             AND location_name != ''
         GROUP BY location_name
         ORDER BY transaction_count DESC
-        LIMIT {{limit:Int32}}
+        LIMIT {limit:Int32}
         """
 
 
-RANK_AREAS_PRICE_SQL = f"""
+RANK_AREAS_PRICE_SQL = """
         SELECT
             location_name as area,
             round(medianExact(actual_worth), 0) as median_price,
             count(*) as transaction_count
-        FROM {SALES_SOURCE}
+        FROM ch_transactions
         WHERE
-            instance_date >= today() - {{period_days:Int32}}
+            instance_date >= today() - {period_days:Int32}
             AND trans_group_en = 'Sales'
             AND actual_worth > 0
             AND location_name != ''
         GROUP BY location_name
         HAVING transaction_count >= 10
         ORDER BY median_price DESC
-        LIMIT {{limit:Int32}}
+        LIMIT {limit:Int32}
         """
 
 
-RANK_AREAS_GROWTH_SQL = f"""
+RANK_AREAS_GROWTH_SQL = """
         WITH
             current_period AS (
                 SELECT
                     location_name as area,
                     medianExact(actual_worth) as current_median
-                FROM {SALES_SOURCE}
+                FROM ch_transactions
                 WHERE
-                    instance_date >= today() - {{period_days:Int32}}
+                    instance_date >= today() - {period_days:Int32}
                     AND trans_group_en = 'Sales'
                     AND actual_worth > 0
                     AND location_name != ''
@@ -1152,10 +1235,10 @@ RANK_AREAS_GROWTH_SQL = f"""
                 SELECT
                     location_name as area,
                     medianExact(actual_worth) as previous_median
-                FROM {SALES_SOURCE}
+                FROM ch_transactions
                 WHERE
-                    instance_date >= today() - {{period_days:Int32}} * 2
-                    AND instance_date < today() - {{period_days:Int32}}
+                    instance_date >= today() - {period_days:Int32} * 2
+                    AND instance_date < today() - {period_days:Int32}
                     AND trans_group_en = 'Sales'
                     AND actual_worth > 0
                     AND location_name != ''
@@ -1170,7 +1253,7 @@ RANK_AREAS_GROWTH_SQL = f"""
         FROM current_period c
         INNER JOIN previous_period p ON c.area = p.area
         ORDER BY growth_percentage DESC
-        LIMIT {{limit:Int32}}
+        LIMIT {limit:Int32}
         """
 
 

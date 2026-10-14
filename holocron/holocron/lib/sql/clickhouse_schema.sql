@@ -2312,3 +2312,58 @@ ALTER TABLE dxbi_rental_profile ADD COLUMN IF NOT EXISTS location String DEFAULT
 ALTER TABLE dxbi_rental_profile ADD COLUMN IF NOT EXISTS latitude Nullable(Float64);
 ALTER TABLE dxbi_rental_profile ADD COLUMN IF NOT EXISTS longitude Nullable(Float64);
 ALTER TABLE dxbi_rental_profile ADD COLUMN IF NOT EXISTS map_url String DEFAULT '';
+
+-- Every DXBI sale and lease the Transactions pages list, once each (the identity rules of
+-- backend/app/transaction/queries.py), with DXBI's own values and its profile's DLD-sourced
+-- area, master project and project (holocron.market.dxbi_profile). The Analytics pages read
+-- these: built after each profile build, not re-derived per request.
+CREATE TABLE IF NOT EXISTS dxbi_sales_listed (
+    sale_key String,
+    transaction_date Date,
+    unit_number String,
+    building_name String,
+    project_name String,
+    area_name String,
+    property_type LowCardinality(String),
+    bedrooms LowCardinality(String),
+    market_status LowCardinality(String),
+    size_sqft Float64,
+    sale_amount_aed UInt64,
+    price_per_sqft_aed Nullable(Float64),
+    profile_area String,
+    profile_master String,
+    profile_project String,
+    profile_project_source LowCardinality(String),
+    profile_bedrooms LowCardinality(String),
+    profile_status LowCardinality(String),
+    profile_size Float64,
+    built_at DateTime64(3, 'UTC')
+)
+ENGINE = MergeTree()
+ORDER BY (profile_master, profile_project, transaction_date);
+
+CREATE TABLE IF NOT EXISTS dxbi_leases_listed (
+    contract_key String,
+    lease_start Date,
+    lease_end Date,
+    unit_number String,
+    building_name String,
+    project_name String,
+    area_name String,
+    property_type LowCardinality(String),
+    bedrooms LowCardinality(String),
+    size_sqft Float64,
+    annual_rent_aed UInt64,
+    contract_amount_aed UInt64,
+    contract_term_months Float32,
+    contract_state LowCardinality(String),
+    profile_area String,
+    profile_master String,
+    profile_project String,
+    profile_project_source LowCardinality(String),
+    profile_bedrooms LowCardinality(String),
+    profile_size Float64,
+    built_at DateTime64(3, 'UTC')
+)
+ENGINE = MergeTree()
+ORDER BY (profile_master, profile_project, lease_start);

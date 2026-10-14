@@ -57,6 +57,21 @@ and DLD-only rows take the master the profiles found for their project.
 - DLD stopped filling master project in 2026 open data; it is filled from the project's other
   registrations where they exist.
 
+## Listed records for the Analytics pages
+
+`dxbi_sales_listed` and `dxbi_leases_listed` hold every record the Transactions pages list, once
+each, with DXBI's own values and the profile's area, master project and project. They use the
+identity rules of `backend/app/transaction/queries.py` (`_sales_source` / `_rentals_source`)
+over all dates. If you change those rules, change `SALES_LISTED_SQL` / `LEASES_LISTED_SQL` with
+them. Built by `dxbi_profiles` after the profiles, and after every DXBI evidence load
+(`build_listed`, about 8 s locally), so a new record reaches Analytics the same day, under
+DXBI's own project until the next profile build. The Analytics backend reads only these
+(`backend/app/analytics/dxbi.py`): a summary takes 0.2-0.4 s instead of the 11-15 s it took when
+each query re-derived the Transactions normalisation.
+
+Check after a build (both must hold): the counts equal the Transactions sources, 993,778 sales
+and 1,662,876 leases locally on 2026-10-14, with identical keys.
+
 ## Agents' names in DXBI building names (stop-gap)
 
 DXBI's row text holds the buyer's or seller's agent, hidden on screen, right before the building.

@@ -44,8 +44,11 @@ function change(id: string, value: string) {
 }
 let draft = $state('')
 let searchTimer: ReturnType<typeof setTimeout> | undefined
+// The input follows the committed search only when that value changes (a reset, a link), not
+// whenever another filter changes, which would wipe text typed during the debounce.
+const committedSearch = $derived((filters as Record<string, string>).locationSearch ?? '')
 $effect(() => {
-	draft = (filters as Record<string, string>).locationSearch ?? ''
+	draft = committedSearch
 })
 onDestroy(() => clearTimeout(searchTimer))
 function updateSearch(value: string) {

@@ -62,7 +62,8 @@ def market_rental_events_asset(context, clickhouse: ClickHouseResource) -> Mater
     deps=["market_sale_events", "market_rental_events"],
     description=(
         "One profile per DXBI sale and lease: Area, Master Project, Project, Building and Unit, "
-        "type, bedrooms and completion status, each value with its source (DXBI or DLD)."
+        "type, bedrooms and completion status, each value with its source (DXBI or DLD); then "
+        "the listed records the Analytics pages read (dxbi_sales_listed, dxbi_leases_listed)."
     ),
 )
 def dxbi_profiles_asset(context, clickhouse: ClickHouseResource) -> MaterializeResult:

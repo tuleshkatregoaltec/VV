@@ -27,8 +27,12 @@ let container: HTMLDivElement
 let input: HTMLInputElement
 const searchTerm = $derived(inputValue.trim())
 let debouncedSearch = $state('')
+// Enter pressed before the debounced search settled selects the first result once it arrives;
+// typing on cancels it.
+let pendingEnter = $state(false)
 $effect(() => {
 	const term = searchTerm
+	pendingEnter = false
 	const timer = setTimeout(() => (debouncedSearch = term), 250)
 	return () => clearTimeout(timer)
 })
@@ -51,6 +55,12 @@ const projectsQuery = createQuery(() => ({
 }))
 
 const filtered = $derived(projectsQuery.data?.projects ?? [])
+$effect(() => {
+	if (pendingEnter && searchTerm === debouncedSearch && !projectsQuery.isFetching) {
+		pendingEnter = false
+		if (filtered.length > 0) select(filtered[0])
+	}
+})
 
 function select(project: ProjectSearchItem) {
 	value = project
@@ -86,8 +96,7 @@ function handleKeydown(e: KeyboardEvent) {
 	}
 	if (e.key === 'Enter' && e.target === input) {
 		e.preventDefault()
-		if (searchTerm === debouncedSearch && !projectsQuery.isFetching && filtered.length > 0)
-			select(filtered[0])
+		if (searchTerm.trim()) pendingEnter = true
 	}
 }
 </script>

@@ -4,7 +4,7 @@ import asyncio
 import logging
 import math
 import re
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from typing import Any, Optional
 
 from app.analytics import queries
@@ -70,22 +70,64 @@ async def _latest_sales_anchor_date() -> date:
     return date.today()
 
 
+def _as_date(value: object) -> Optional[date]:
+    """A completion recorded as a date-time is its date."""
+    if isinstance(value, datetime):
+        return value.date()
+    return value or None  # type: ignore[return-value]
+
+
+async def _fill_project_meta(
+    registered: Optional[ProjectMeta], project_name: str
+) -> Optional[ProjectMeta]:
+    """A project's developer, handover, completion, units and buildings from DXBInteract's
+    building list, each named as its source (the DXBI transactions hold none of them).
+    """
+    project = registered or ProjectMeta(project_name=project_name)
+    sources = project.field_sources
+    rows = await queries.fetch_project_meta_from_dxbi({"project_name": project_name})
+    row = rows[0] if rows else {}
+    found = {
+        "developer_name": _normalize_label(row.get("developer_name_en")),
+        "completion_date": _as_date(row.get("completion_date")),
+        "percent_completed": float(row["percent_completed"])
+        if row.get("percent_completed") is not None
+        else None,
+        "no_of_units": int(row["no_of_units"]) if row.get("no_of_units") else None,
+        "no_of_buildings": int(row["no_of_buildings"]) if row.get("no_of_buildings") else None,
+        "area_name": row.get("area_name_en") or None,
+    }
+    for name, value in found.items():
+        if getattr(project, name) is None and value is not None:
+            setattr(project, name, value)
+            sources[name] = "dxbi_buildings"
+    return project if registered is not None or sources else None
+
+
 async def get_project_search(search: str, limit: int = 50) -> ProjectSearchResponse:
-    """Return matching projects for the dropdown selector."""
+    """Matching projects and master projects for the selector, then matching buildings.
+
+    A building opens the project its records are in. Buildings keep up to half of the list, so
+    a search that matches many project names still shows its buildings.
+    """
     pattern = f"%{search.lower()}%" if search.strip() else "%"
     rows = await queries.fetch_search_projects(
         {"search_pattern": pattern, "search": search, "limit": limit}
     )
-    return ProjectSearchResponse(
-        projects=[
-            ProjectSearchItem(
-                name=r["name"],
-                filter_type=r["filter_type"],
-                scope_kind=r.get("scope_kind", "Location"),
-            )
-            for r in rows
-        ]
-    )
+    items = [
+        ProjectSearchItem(
+            name=r["name"],
+            filter_type=r["filter_type"],
+            scope_kind=r.get("scope_kind") or "Location",
+            building=r.get("building") or "",
+        )
+        for r in rows
+    ]
+    # An empty search lists scopes only.
+    buildings = [item for item in items if item.building] if search.strip() else []
+    scopes = [item for item in items if not item.building]
+    shown = max(limit - len(buildings), limit - limit // 2)
+    return ProjectSearchResponse(projects=(scopes[:shown] + buildings)[:limit])
 
 
 async def get_sub_project_list(
@@ -146,7 +188,6 @@ async def get_project_summary(
         sales_reg_rows,
         rent_sum_rows,
         rent_rooms_rows,
-        units_rows,
         meta_rows,
         developer_rows,
     ) = await asyncio.gather(
@@ -155,7 +196,6 @@ async def get_project_summary(
         queries.fetch_project_sales_by_reg_type(params, filter_type),
         queries.fetch_project_rentals_summary(params, filter_type),
         queries.fetch_project_rentals_by_rooms(rent_rooms_params, filter_type),
-        queries.fetch_project_units_composition(params, filter_type),
         meta_task,
         developer_task,
     )
@@ -196,7 +236,7 @@ async def get_project_summary(
                 developer_name=developer_names[0] if developer_names else top_developer,
                 developer_names=developer_names,
                 project_status=m.get("project_status") or None,
-                completion_date=m.get("completion_date") or None,
+                completion_date=_as_date(m.get("completion_date")),
                 percent_completed=float(m["percent_completed"])
                 if m.get("percent_completed") is not None
                 else None,
@@ -211,7 +251,7 @@ async def get_project_summary(
                 area_name=m.get("area_name_en") or None,
                 developer_name=_normalize_label(m.get("developer_name_en")),
                 project_status=m.get("project_status") or None,
-                completion_date=m.get("completion_date") or None,
+                completion_date=_as_date(m.get("completion_date")),
                 percent_completed=float(m["percent_completed"])
                 if m.get("percent_completed") is not None
                 else None,
@@ -310,7 +350,11 @@ async def get_project_summary(
     ]
 
     # --- Unit composition ---
-    unit_count_total = sum(int(row["unit_count"]) for row in units_rows)
+    # DXBI transactions are not a register of units: no unit composition.
+    units_rows: list[dict] = []
+    unit_count_total = 0
+    if filter_type == "project":
+        project = await _fill_project_meta(project, project_name)
     if filter_type == "market" and project is not None:
         project.no_of_units = unit_count_total if unit_count_total > 0 else None
 

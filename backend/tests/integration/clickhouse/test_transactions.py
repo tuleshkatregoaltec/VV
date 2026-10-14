@@ -117,6 +117,29 @@ def lease(key: str, **values) -> list:
     return [row[column] for column in RENTAL_COLUMNS]
 
 
+_LISTED_FILLS = {
+    "dxbi_sales_listed": """
+        INSERT INTO dxbi_sales_listed
+        SELECT x.sale_key, x.transaction_date, x.unit_number, x.building_name, x.project_name,
+               x.area_name, x.property_type, x.bedrooms, x.market_status, x.size_sqft,
+               x.sale_amount_aed, if(x.price_per_sqft_aed > 0, x.price_per_sqft_aed, NULL),
+               p.area_name, p.master_project, p.project_name, p.project_source, p.bedrooms,
+               p.completion_status, p.size_sqft, now64(3)
+        FROM (SELECT * FROM dxbi_sales_unit_events FINAL ORDER BY sale_key, loaded_at DESC
+              LIMIT 1 BY sale_key) AS x
+        LEFT JOIN dxbi_sale_profile AS p ON p.sale_key = x.sale_key""",
+    "dxbi_leases_listed": """
+        INSERT INTO dxbi_leases_listed
+        SELECT x.contract_key, x.lease_start, x.lease_end, x.unit_number, x.building_name,
+               x.project_name, x.area_name, x.property_type, x.bedrooms, x.size_sqft,
+               x.annual_rent_aed, x.contract_amount_aed, x.contract_term_months,
+               x.contract_state, p.area_name, p.master_project, p.project_name,
+               p.project_source, p.bedrooms, p.size_sqft, now64(3)
+        FROM dxbi_rental_events AS x FINAL
+        LEFT JOIN dxbi_rental_profile AS p ON p.contract_key = x.contract_key""",
+}
+
+
 @pytest.fixture
 async def dxbi(warehouse, install_serving):
     await install_serving(
@@ -129,6 +152,9 @@ async def dxbi(warehouse, install_serving):
             "dxbi_location_lease_members",
             "dxbi_sale_profile",
             "dxbi_rental_profile",
+            "dxbi_sales_listed",
+            "dxbi_leases_listed",
+            "dxbi_heatmap_buildings_bronze",
         ),
         views=(),
     )
@@ -149,6 +175,11 @@ async def dxbi(warehouse, install_serving):
             # Each profile row names only the columns it sets; the rest take their defaults.
             for row in rows:
                 await warehouse.insert(table, [list(row.values())], column_names=list(row))
+        # Holocron's listed records (holocron.market.dxbi_profile), each sale and lease once
+        # with its profile; the identity rules are Holocron's and tested there.
+        for table, statement in _LISTED_FILLS.items():
+            await warehouse.command(f"TRUNCATE TABLE {table}")
+            await warehouse.command(statement)
 
     return insert
 

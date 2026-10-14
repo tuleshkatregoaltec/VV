@@ -22,8 +22,7 @@ MARKET_FILTERS: dict[str, dict[str, str]] = {
     },
     "bulk_building": {"trans_group_en": "Sales", "where": "property_type = 'Building'"},
     "land": {"trans_group_en": "Sales", "where": "property_type = 'Plot'"},
-    "mortgages": {"trans_group_en": "Mortgages", "where": "1 = 1"},
-    "gifts": {"trans_group_en": "Gifts", "where": "1 = 1"},
+    # Mortgages and gifts are DLD registrations; the Analytics DXBI records are sales only.
 }
 
 

@@ -299,8 +299,7 @@ export function toSaleRow(sale: TransactionResponseOutput): SaleRow {
 		// The profile's line (unit, building, project, master, area); without a profile yet,
 		// DXBI's own building, project and community.
 		location:
-			sale.location ||
-			formatLocation(sale.building_name, sale.project_name, sale.location_name),
+			sale.location || formatLocation(sale.building_name, sale.project_name, sale.location_name),
 		mapUrl: sale.map_url || null,
 		community: sale.location_name ?? '-',
 		project: sale.project_name ?? '-',

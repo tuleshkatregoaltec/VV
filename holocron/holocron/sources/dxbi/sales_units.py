@@ -117,11 +117,15 @@ def normalize_sales_row(payload: dict[str, Any], *, source_file: str = "") -> di
             )
         )
     )
+    # A placeholder DXBI prints in the cell ('-', 'N/A') is no registration number.
+    registration = str(payload.get("dld_transaction_number") or "").strip()
+    if not re.search(r"\d", registration):
+        registration = ""
     return {
         "sale_key": sale_key,
         # Preserve the explicit registration number verbatim. A /sold/t-* token and the
         # hashed sale_key identify DXBI records, not DLD registrations.
-        "dld_transaction_number": str(payload.get("dld_transaction_number") or "").strip(),
+        "dld_transaction_number": registration,
         "transaction_date": transaction_date,
         "unit_number": unit_number,
         "building_name": building_name,

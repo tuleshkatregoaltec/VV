@@ -37,6 +37,7 @@ from typing import Any
 
 from holocron.market import transforms as t
 from holocron.platform.clickhouse_schema import schema_sql_path
+from holocron.sources.dxbi.sales_units import location_key_sql
 
 PROFILE_TABLES = ("dxbi_sale_profile", "dxbi_rental_profile")
 
@@ -887,9 +888,102 @@ RENTAL_PROFILE_SQL = _finished(
     lease=True,
 )
 
+# The records the Transactions pages list, once each, for the Analytics pages. The identity rules
+# are those of backend/app/transaction/queries.py (``_sales_source`` / ``_rentals_source``) over
+# all dates; keep the two in step. A sale: its latest load (the most complete listing among
+# conflicting ones); a CSV-export copy of a scraped sale (same area, building, numbered unit,
+# date and price, one DXBI link, the same facts) counts once. A lease: identical rows of one
+# numbered unit count once, and a lease listed without its unit that equals a numbered lease's
+# building path, area and terms is that lease.
+LISTED_TABLES = ("dxbi_sales_listed", "dxbi_leases_listed")
+SALES_LISTED_COLUMNS = (
+    "sale_key", "transaction_date", "unit_number", "building_name", "project_name", "area_name",
+    "property_type",
+    "bedrooms", "market_status", "size_sqft", "sale_amount_aed", "price_per_sqft_aed",
+    "profile_area", "profile_master", "profile_project", "profile_project_source",
+    "profile_bedrooms", "profile_status", "profile_size", "built_at",
+)  # fmt: skip
+LEASES_LISTED_COLUMNS = (
+    "contract_key", "lease_start", "lease_end", "unit_number", "building_name", "project_name",
+    "area_name",
+    "property_type", "bedrooms", "size_sqft", "annual_rent_aed", "contract_amount_aed",
+    "contract_term_months", "contract_state", "profile_area", "profile_master",
+    "profile_project", "profile_project_source", "profile_bedrooms", "profile_size", "built_at",
+)  # fmt: skip
+_SALE_TERMS = (
+    "if(match(unit_number, '[0-9]') AND building_key != '' AND {area} != '', "
+    "concat({area}, '|', building_key, '|', unit_number, '|', toString(transaction_date), '|', "
+    "toString(sale_amount_aed)), sale_key)"
+).format(area=f"if(area_key != '', area_key, {location_key_sql('area_name')})")
+SALES_LISTED_SQL = f"""
+INSERT INTO `dxbi_sales_listed` ({", ".join(SALES_LISTED_COLUMNS)})
+SELECT x.sale_key, x.transaction_date, x.unit_number, x.building_name, x.project_name,
+       x.area_name,
+       x.property_type, x.bedrooms, x.market_status, x.size_sqft, x.sale_amount_aed,
+       if(x.price_per_sqft_aed > 0, x.price_per_sqft_aed, NULL),
+       p.area_name, p.master_project, p.project_name, p.project_source, p.bedrooms,
+       p.completion_status, p.size_sqft, now64(3)
+FROM (
+    SELECT * FROM (
+        SELECT *, if(
+            uniqExactIf(detail_url, detail_url != '') OVER terms != 1
+            OR uniqExactIf(dld_transaction_number, dld_transaction_number != '') OVER terms > 1
+            OR uniqExact(tuple(project_name, property_type, size_sqft, bedrooms, market_status))
+                OVER terms > 1,
+            sale_key, sale_terms) AS same_sale
+        FROM (
+            SELECT *, {_SALE_TERMS} AS sale_terms
+            FROM (
+                SELECT * FROM dxbi_sales_unit_events FINAL
+                ORDER BY sale_key, loaded_at DESC, area_name = '', bedrooms = '',
+                         market_status = '', length(building_name), building_key, bedrooms,
+                         size_key
+                LIMIT 1 BY sale_key
+            )
+        )
+        WINDOW terms AS (PARTITION BY sale_terms)
+    )
+    ORDER BY same_sale, detail_url = '', loaded_at DESC, sale_key
+    LIMIT 1 BY same_sale
+) AS x
+LEFT JOIN dxbi_sale_profile AS p ON p.sale_key = x.sale_key
+{t._HEAVY_QUERY_SETTINGS}
+"""
+_LEASE_TERMS = (
+    "cityHash64(location_name, building_name, area_name, property_type, bedrooms, size_sqft, "
+    "lease_start, lease_end, contract_amount_aed, contract_state)"
+)
+_SAME_LEASE = (
+    "if(unit_number != '', cityHash64(unit_number, location_name, property_type, bedrooms, "
+    "size_sqft, lease_start, lease_end, contract_amount_aed, contract_state), "
+    "cityHash64(contract_key))"
+)
+LEASES_LISTED_SQL = f"""
+INSERT INTO `dxbi_leases_listed` ({", ".join(LEASES_LISTED_COLUMNS)})
+SELECT x.contract_key, x.lease_start, x.lease_end, x.unit_number, x.building_name,
+       x.project_name, x.area_name,
+       x.property_type, x.bedrooms, x.size_sqft, x.annual_rent_aed, x.contract_amount_aed,
+       x.contract_term_months, x.contract_state,
+       p.area_name, p.master_project, p.project_name, p.project_source, p.bedrooms, p.size_sqft,
+       now64(3)
+FROM (
+    SELECT *, {_SAME_LEASE} AS same_lease
+    FROM dxbi_rental_events FINAL
+    WHERE unit_number != '' OR building_name = '' OR area_name = ''
+       OR {_LEASE_TERMS} NOT IN (
+           SELECT {_LEASE_TERMS} FROM dxbi_rental_events FINAL WHERE unit_number != '')
+    ORDER BY same_lease, occurrence_index, contract_key
+    LIMIT 1 BY same_lease
+) AS x
+LEFT JOIN dxbi_rental_profile AS p ON p.contract_key = x.contract_key
+{t._HEAVY_QUERY_SETTINGS}
+"""
+
 PROFILE_STATEMENTS = {
     "dxbi_sale_profile": SALE_PROFILE_SQL,
     "dxbi_rental_profile": RENTAL_PROFILE_SQL,
+    "dxbi_sales_listed": SALES_LISTED_SQL,
+    "dxbi_leases_listed": LEASES_LISTED_SQL,
 }
 
 
@@ -902,8 +996,8 @@ def _create_statement(table: str) -> str:
 
 
 def create_tables(clickhouse: Any) -> None:
-    """Create only the profile tables (the full schema run also replaces views)."""
-    for table in PROFILE_TABLES:
+    """Create only the profile and listed tables (the full schema run also replaces views)."""
+    for table in (*PROFILE_TABLES, *LISTED_TABLES):
         clickhouse.command(_create_statement(table))
 
 
@@ -924,6 +1018,14 @@ def build_profile(clickhouse: Any, table: str) -> int:
 
 
 def build_profiles(clickhouse: Any) -> dict[str, int]:
-    """Both profiles, sales first (the lease profile reads the sale profile)."""
+    """Both profiles, sales first (the lease profile reads the sale profile), then the listed
+    records that read them."""
     create_tables(clickhouse)
-    return {table: build_profile(clickhouse, table) for table in PROFILE_TABLES}
+    return {table: build_profile(clickhouse, table) for table in (*PROFILE_TABLES, *LISTED_TABLES)}
+
+
+def build_listed(clickhouse: Any) -> dict[str, int]:
+    """The listed records alone, with the profiles as built last: after a DXBI load, so the
+    Analytics pages see new records before the next profile build names their DLD project."""
+    create_tables(clickhouse)
+    return {table: build_profile(clickhouse, table) for table in LISTED_TABLES}
