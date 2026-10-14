@@ -17,9 +17,10 @@ const path = $derived(page.url.pathname.replace(/\/$/, ''))
 
 /**
  * ＋ New presets to the page: Owners → Owner, Assets → Listing, Deals → Deal, Calendar → Task, else
- * Lead. The owner import pages have no ＋ New (their Upload button is the way in).
+ * Lead. Home and the owner import pages have no ＋ New (an import's Upload button is the way in).
  */
 const preset = $derived.by((): { label: string; to: PanelState } | null => {
+	if (path === '/crm') return null
 	if (path.includes('/owners/imports')) return null
 	if (path.endsWith('/owners')) return { label: 'owner', to: { kind: 'new-owner' } }
 	if (path.endsWith('/assets')) return { label: 'listing', to: { kind: 'new-listing' } }

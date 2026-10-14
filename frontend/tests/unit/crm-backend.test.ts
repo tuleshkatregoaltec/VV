@@ -151,6 +151,119 @@ describe('CRM leads from /api/v1/crm/inbound', () => {
 	})
 })
 
+describe('New Lead form saves every field of every lead type (POST /api/v1/crm/inbound/enquiries)', () => {
+	// What the agent typed must reach the backend under the keys it stores and matches on, and
+	// come back unchanged when the lead is opened; a lost field is a lost part of the brief.
+	const cases = [
+		{
+			type: 'buyer',
+			intent: 'buy',
+			fields: {
+				wants: '2 bed apartment',
+				budget_aed: 1_500_000,
+				finance: 'Mortgage',
+				purpose: 'Invest',
+				timeline: '3 months'
+			},
+			criteria: {
+				wants: '2 bed apartment',
+				budget_max_aed: 1_500_000,
+				financing: 'Mortgage',
+				purpose: 'Invest',
+				timeline: '3 months'
+			}
+		},
+		{
+			type: 'seller',
+			intent: 'sell',
+			fields: {
+				building: 'Bloom Towers A',
+				unit_number: '1204',
+				target_price_aed: 2_100_000,
+				occupancy: 'Vacant',
+				mortgage: 'None',
+				timeline: 'This month'
+			},
+			criteria: {
+				building: 'Bloom Towers A',
+				unit_number: '1204',
+				expected_price_aed: 2_100_000,
+				occupancy: 'Vacant',
+				mortgage: 'None',
+				timeline: 'This month'
+			}
+		},
+		{
+			type: 'tenant',
+			intent: 'rent',
+			fields: { wants: 'Studio', budget_aed: 65_000, cheques: '4', move_in: 'December' },
+			criteria: { wants: 'Studio', budget_max_aed: 65_000, cheques: '4', move_in: 'December' }
+		},
+		{
+			type: 'landlord',
+			intent: 'let',
+			fields: {
+				building: 'Marina Heights',
+				unit_number: '3301',
+				expected_rent_aed: 120_000,
+				available: 'January',
+				furnishing: 'Furnished'
+			},
+			criteria: {
+				building: 'Marina Heights',
+				unit_number: '3301',
+				expected_rent_aed: 120_000,
+				available: 'January',
+				furnishing: 'Furnished'
+			}
+		}
+	] as const
+
+	for (const c of cases) {
+		it(`${c.type}: sends every field and reads it back`, async () => {
+			serve({})
+			const post = vi
+				.spyOn(client, 'post')
+				.mockImplementation(async (_url: string, body: unknown) => {
+					// The backend stores criteria as given (a JSON column), so echo it back.
+					const b = body as {
+						intent: string
+						full_name: string
+						criteria: Record<string, unknown>
+					}
+					return enquiry({
+						intent: b.intent as InboundEnquiryResponse['intent'],
+						criteria: b.criteria,
+						contact: { ...enquiry().contact, full_name: b.full_name }
+					})
+				})
+
+			const res = await backend.createLead({
+				name: 'Test Lead',
+				phone: '050 123 4567',
+				source: 'inbound',
+				source_detail: 'Property Finder',
+				lead_type: c.type,
+				area: 'JVC, Dubai Marina',
+				fields: { ...c.fields }
+			})
+
+			expect(post).toHaveBeenCalledWith('/api/v1/crm/inbound/enquiries', {
+				intent: c.intent,
+				record_kind: 'opportunity',
+				full_name: 'Test Lead',
+				phone: '050 123 4567',
+				source: 'Property Finder',
+				criteria: { ...c.criteria, locations: ['JVC', 'Dubai Marina'] }
+			})
+			expect(res.data.name).toBe('Test Lead')
+			expect(res.data.fields).toMatchObject({ ...c.fields, areas: 'JVC, Dubai Marina' })
+			// The Leads table headline shows the first area; the full list stays in the brief.
+			expect(res.data.area).toBe('JVC')
+		})
+	}
+})
+
 describe('CRM owners from /api/v1/crm/owner-registry', () => {
 	const owner = (key: string, units: number, leaseInDays: number | null): CrmOwnerProfile => {
 		const end =

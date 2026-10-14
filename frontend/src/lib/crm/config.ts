@@ -23,22 +23,33 @@ export interface FieldDef {
 	label: string
 	money?: boolean
 	options?: string[]
+	/** Needed by the New Lead form: without it the backend can never match the lead. */
+	required?: boolean
 }
 
 export const LEAD_TYPE_ORDER: LeadType[] = ['buyer', 'seller', 'tenant', 'landlord']
 
 export const LEAD_TYPES: Record<
 	LeadType,
-	{ label: string; plural: string; deal: DealType; tone: Tone; fields: FieldDef[] }
+	{
+		label: string
+		plural: string
+		deal: DealType
+		tone: Tone
+		fields: FieldDef[]
+		/** Buyers and tenants are matched by area, so the New Lead form asks for one. */
+		areaRequired?: boolean
+	}
 > = {
 	buyer: {
 		label: 'Buyer',
 		plural: 'Buyers',
 		deal: 'sale',
 		tone: 'blue',
+		areaRequired: true,
 		fields: [
 			{ key: 'wants', label: 'Wants' },
-			{ key: 'budget_aed', label: 'Budget', money: true },
+			{ key: 'budget_aed', label: 'Budget', money: true, required: true },
 			{ key: 'finance', label: 'Finance' },
 			{ key: 'purpose', label: 'Buying to', options: ['Live in', 'Invest'] },
 			{ key: 'timeline', label: 'Timeline' }
@@ -50,7 +61,8 @@ export const LEAD_TYPES: Record<
 		deal: 'sale',
 		tone: 'amber',
 		fields: [
-			{ key: 'unit', label: 'Unit' },
+			{ key: 'building', label: 'Building', required: true },
+			{ key: 'unit_number', label: 'Unit number', required: true },
 			{ key: 'target_price_aed', label: 'Target price', money: true },
 			{ key: 'occupancy', label: 'Occupancy' },
 			{ key: 'mortgage', label: 'Mortgage' },
@@ -62,9 +74,10 @@ export const LEAD_TYPES: Record<
 		plural: 'Tenants',
 		deal: 'rent',
 		tone: 'green',
+		areaRequired: true,
 		fields: [
 			{ key: 'wants', label: 'Wants' },
-			{ key: 'budget_aed', label: 'Budget a year', money: true },
+			{ key: 'budget_aed', label: 'Budget a year', money: true, required: true },
 			{ key: 'cheques', label: 'Cheques' },
 			{ key: 'move_in', label: 'Move-in' }
 		]
@@ -75,7 +88,8 @@ export const LEAD_TYPES: Record<
 		deal: 'rent',
 		tone: 'neutral',
 		fields: [
-			{ key: 'unit', label: 'Unit' },
+			{ key: 'building', label: 'Building', required: true },
+			{ key: 'unit_number', label: 'Unit number', required: true },
 			{ key: 'expected_rent_aed', label: 'Expected rent a year', money: true },
 			{ key: 'available', label: 'Available' },
 			{ key: 'furnishing', label: 'Furnishing' }

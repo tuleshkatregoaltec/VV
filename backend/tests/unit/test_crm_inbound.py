@@ -1,9 +1,12 @@
 from datetime import date, datetime, timedelta, timezone
 
+import pytest
+from pydantic import ValidationError
+
 from app.crm.import_models import CrmPropertyContactClaim
 from app.crm.inbound import _ownership_enrichment
 from app.crm.inbound_imports import _best_header, _file_rows, _preview_file
-from app.crm.inbound_models import CrmInboundEnquiry
+from app.crm.inbound_models import CrmInboundEnquiry, InboundEnquiryCreate
 from app.crm.inbound_policy import (
     _belongs_in_inbox,
     _deterministic_criteria,
@@ -353,3 +356,63 @@ def test_name_only_match_is_never_presented_as_high_priority():
 
     assert priority.band == "medium"
     assert "verify identity" in " ".join(priority.reasons).lower()
+
+
+def test_new_lead_requires_only_a_name():
+    # The New Lead form asks for name and phone, but the API itself only insists on a name;
+    # everything else in the brief is optional so an agent can save a lead mid-call.
+    with pytest.raises(ValidationError):
+        InboundEnquiryCreate(intent="buy", record_kind="opportunity")
+    with pytest.raises(ValidationError):
+        InboundEnquiryCreate(full_name="", intent="buy", record_kind="opportunity")
+
+    lead = InboundEnquiryCreate(full_name="Test Lead", intent="buy", record_kind="opportunity")
+
+    assert lead.phone is None
+    assert lead.criteria == {}
+    assert lead.source == "Manual"
+
+
+def test_new_lead_criteria_keep_every_lead_type_field():
+    # Seller, tenant and landlord fields have no dedicated columns; they must survive in the
+    # free-form criteria rather than be silently discarded by validation.
+    criteria = {
+        "unit": "Marina Heights #3301",
+        "expected_rent_aed": 120000,
+        "available": "January",
+        "furnishing": "Furnished",
+        "cheques": "4",
+        "move_in": "December",
+        "occupancy": "Vacant",
+        "mortgage": "None",
+        "locations": ["JVC"],
+    }
+
+    lead = InboundEnquiryCreate(
+        full_name="Test Lead", intent="let", record_kind="opportunity", criteria=criteria
+    )
+
+    assert lead.criteria == criteria
+
+
+@pytest.mark.parametrize(
+    ("intent", "criteria"),
+    [
+        ("buy", {"locations": ["JVC"], "budget_max_aed": 1500000}),
+        ("rent", {"locations": ["JVC"], "budget_max_aed": 65000}),
+        ("sell", {"building": "Bloom Towers A", "unit_number": "1204"}),
+        ("let", {"building": "Marina Heights", "unit_number": "3301"}),
+    ],
+)
+def test_new_lead_form_required_fields_are_enough_to_qualify(intent, criteria):
+    # The New Lead form's required fields are exactly what matching needs, so a qualified lead
+    # created from it can be matched; a free-text seller "unit" never could be.
+    enquiry = _inbound_enquiry(intent)
+    enquiry.criteria = criteria
+    enquiry.status = "qualified"
+
+    assert _qualification_complete(enquiry)
+
+    if intent in {"sell", "let"}:
+        enquiry.criteria = {"unit": f"{criteria['building']} #{criteria['unit_number']}"}
+        assert not _qualification_complete(enquiry)

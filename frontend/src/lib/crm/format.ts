@@ -77,3 +77,18 @@ export function monthGrid(ym: string): string[] {
 
 /** Pick "1 lead" / "2 leads". */
 export const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`
+
+/**
+ * Why a typed phone number cannot be saved, or '' when it can. The backend keeps only numbers of
+ * 7 or more digits and silently stores anything else as no phone, so the form must refuse it.
+ */
+export function phoneProblem(raw: string): string {
+	const value = raw.trim()
+	if (!value) return 'Enter a phone number.'
+	if (/[/,;|\n]/.test(value)) return 'Enter one phone number only.'
+	if (/[^\d\s+().-]/.test(value)) return 'Use only digits, spaces and + ( ) - in a phone number.'
+	const digits = value.replace(/\D/g, '').length
+	if (digits < 7) return 'This phone number is too short.'
+	if (digits > 15) return 'This phone number is too long.'
+	return ''
+}

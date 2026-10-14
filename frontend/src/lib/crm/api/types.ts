@@ -81,6 +81,9 @@ export type LeadFieldKey =
 	| 'purpose'
 	| 'timeline'
 	| 'unit'
+	/** A seller's or landlord's property, in the two keys the backend matches on. */
+	| 'building'
+	| 'unit_number'
 	| 'target_price_aed'
 	| 'occupancy'
 	| 'mortgage'
