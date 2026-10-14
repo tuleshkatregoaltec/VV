@@ -141,6 +141,7 @@ def test_the_title_check_tells_a_reload_from_a_rescrape(tmp_path) -> None:
 
     script = Path(__file__).parents[1] / "scripts" / "check_dxbi_sales_titles.py"
     spec = importlib.util.spec_from_file_location("check_dxbi_sales_titles", script)
+    assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
 

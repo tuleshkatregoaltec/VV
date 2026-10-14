@@ -15,7 +15,10 @@ defines none, DXBI's community. Transaction observations are never a registered 
 denominator.
 """
 
-from app.transaction.queries import _BEDROOMS, _LOCATION, _LOCATION_SPELLING, _USAGE
+from app.transaction.service import BEDROOMS_SQL as _BEDROOMS
+from app.transaction.service import LOCATION_SPELLING_SQL as _LOCATION_SPELLING
+from app.transaction.service import LOCATION_SQL as _LOCATION
+from app.transaction.service import USAGE_SQL as _USAGE
 
 # DXBI's bedrooms label ('1 Bed', '2 Beds', 'Studio') as the Analytics room label ('1 B/R').
 _ROOMS = (

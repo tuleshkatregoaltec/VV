@@ -26,9 +26,9 @@ def test_actual_chat_registration_links_to_public_capabilities_and_warehouse():
     } <= reachable
     assert "app.listings.service.list_listings_from_clickhouse" not in reachable
     pulse = inventory["functions"]["app.analytics.queries.fetch_market_pulse"]
-    # The imported DXBI projection is constructed dynamically. Static discovery cannot
-    # resolve it; real warehouse tests verify its source boundary.
-    assert pulse["sql_source_candidates"] == []
+    # Chat's market pulse reads the combined market layer, as the rest of chat does; the
+    # Analytics page reads the DXBI records.
+    assert pulse["sql_source_candidates"] == ["ch_transactions"]
 
 
 def test_declared_legacy_hbu_tools_are_not_assigned_to_selected_production_agents():

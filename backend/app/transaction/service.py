@@ -14,6 +14,15 @@ from app.transaction.models import (
 logger = logging.getLogger(__name__)
 
 
+# How the Transactions pages show DXBI's labels, for domains that show the same records
+# (Analytics): usage from the property type, one bedrooms label per count, and DXBI's commonest
+# spelling of a place (LOCATION_SQL needs the LOCATION_SPELLING_SQL WITH clause).
+USAGE_SQL = queries._USAGE
+BEDROOMS_SQL = queries._BEDROOMS
+LOCATION_SPELLING_SQL = queries._LOCATION_SPELLING
+LOCATION_SQL = queries._LOCATION
+
+
 def normalized_sales_source_sql() -> str:
     """Public DXBI sales projection for domain consumers sharing transaction identities."""
     return queries._sales_source("1=1")

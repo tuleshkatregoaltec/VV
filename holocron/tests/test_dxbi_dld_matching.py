@@ -164,7 +164,7 @@ def test_dld_room_text_reads_as_dxbi_bedrooms() -> None:
 def test_weekly_resweep_rereads_ninety_days_without_the_checkpoint() -> None:
     # Weekend registrations arrive after the daily 7-day overlap; the resweep must not resume
     # from the daily checkpoint, or it would read nothing older.
-    assert DLD_OPEN_DATA_TRANSACTIONS_RESWEEP_DEFAULTS["lookback_days"] >= 60
+    assert int(DLD_OPEN_DATA_TRANSACTIONS_RESWEEP_DEFAULTS["lookback_days"]) >= 60
     assert DLD_OPEN_DATA_TRANSACTIONS_RESWEEP_DEFAULTS["checkpointed_incremental"] is False
 
 

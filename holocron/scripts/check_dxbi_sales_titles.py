@@ -56,7 +56,7 @@ def check(path: Path) -> dict[str, int]:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
+    parser = argparse.ArgumentParser(description=(__doc__ or "").split("\n\n")[0])
     parser.add_argument("files", nargs="+", type=Path)
     args = parser.parse_args()
     total = dict.fromkeys(("rows", "sales", "with_title", "building_changes", "unreadable"), 0)
