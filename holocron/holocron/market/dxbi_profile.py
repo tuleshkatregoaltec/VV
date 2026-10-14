@@ -671,7 +671,8 @@ def _finished(*, table: str, columns: tuple[str, ...], resolved: str, key: str, 
       standalone tower, "BAYZ 101 BY DANUBE", as a project; source ``own_building``); a villa or
       plot sold directly in a community is in that community. A "building" that is the name of a
       place DLD or DXBI knows as an area or master project ("Jumeirah Village Circle (JVC)",
-      "Mirdif") is not a project (source ``place_name``).
+      "Mirdif") is not a project (source ``place_name``), nor is a DXBI or DXBI-sale project of
+      such a name (a lease copies "Jumeirah Village Circle (JVC)" from its unit's sale).
     * Building (leases): DLD's plot / building number where no source names the building.
     * Master project and project are not applicable in an area DLD defines none in.
     """
@@ -800,7 +801,10 @@ WITH
                {building} AS building_name, {building_source} AS building_source,
                multiIf(s.project_name != '', s.project_name,
                        s.building_name != '', s.building_name, '') AS project_name,
-               multiIf(s.project_name != '', s.project_source,
+               multiIf(s.project_name != '' AND s.project_source IN ('dxbi', 'dxbi_sale')
+                         AND {_place_key("s.project_name")} IN (SELECT place_key FROM place_keys),
+                       'place_name',
+                       s.project_name != '', s.project_source,
                        {_place_key("s.building_name")} IN (SELECT place_key FROM place_keys),
                        'place_name',
                        s.building_name != '', 'own_building',

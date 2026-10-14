@@ -96,6 +96,8 @@ def test_a_place_name_in_the_building_slot_adds_no_market_project() -> None:
     # the market tables made Analytics list a project no source names. A standalone tower
     # ("HDS Tower") is its own project, as DLD registers them.
     assert "'place_name'" in dxbi_profile.SALE_PROFILE_SQL
+    # A lease copies its project from its unit's DXBI sale: a place's name stays no project.
+    assert "s.project_source IN ('dxbi', 'dxbi_sale')" in dxbi_profile.RENTAL_PROFILE_SQL
     assert "place_name" not in transforms._PROFILE_PROJECT_SOURCES
     assert "'own_building'" in transforms._PROFILE_PROJECT_SOURCES
     for fill in (transforms._SALE_PROFILE_FILL, transforms._RENTAL_PROFILE_FILL):

@@ -257,3 +257,23 @@ async def test_a_project_header_names_its_sources(dxbi, warehouse):  # noqa: F81
     assert meta.no_of_buildings == 1
     assert set(meta.field_sources) >= {"developer_name", "completion_date", "no_of_units"}
     assert set(meta.field_sources.values()) == {"dxbi_buildings"}
+
+
+async def test_an_abbreviation_finds_the_master_it_stands_for(dxbi):  # noqa: F811
+    """DXBI and DLD write "Jumeirah Village Circle"; people type "JVC"."""
+    await dxbi(
+        sales=[sale("jvc", building_name="Bloom Towers", area_name="Jumeirah Village Circle")],
+        sale_profiles=[
+            {
+                "sale_key": "jvc",
+                "master_project": "Jumeirah Village Circle",
+                "area_name": "AL BARSHA SOUTH FOURTH",
+                "project_name": "BLOOM TOWERS",
+                "project_source": "dld_pair",
+            },
+        ],  # fmt: skip
+    )
+    found = (await service.get_project_search("JVC")).projects
+    assert ("Jumeirah Village Circle", "master") in {(p.name, p.filter_type) for p in found}
+    # A word that starts its place's name is not expanded: "downtown" still finds Downtown Views.
+    assert service._expand_abbreviations("downtown views") == "downtown views"

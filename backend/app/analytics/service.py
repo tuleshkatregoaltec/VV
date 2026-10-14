@@ -47,6 +47,7 @@ from app.analytics.models import (
 from app.analytics.queries import MARKET_FILTERS, ProjectFilterType, ProjectScopeType
 from app.core.observability import operation
 from app.market.periods import business_today
+from app.market.reference import AREA_ALIASES
 
 # Room sort order: Studio first, then numeric bedrooms, then anything else
 
@@ -104,16 +105,49 @@ async def _fill_project_meta(
     return project if registered is not None or sources else None
 
 
+# Short forms people type for places whose names do not start with them.
+_ABBREVIATIONS = {
+    short: name
+    for short, name in AREA_ALIASES.items()
+    if " " not in short and not name.lower().startswith(short)
+}
+
+
+def _expand_abbreviations(search: str) -> str:
+    return " ".join(_ABBREVIATIONS.get(word.lower(), word) for word in search.split())
+
+
 async def get_project_search(search: str, limit: int = 50) -> ProjectSearchResponse:
     """Matching projects and master projects for the selector, then matching buildings.
 
     A building opens the project its records are in. Buildings keep up to half of the list, so
     a search that matches many project names still shows its buildings.
     """
-    pattern = f"%{search.lower()}%" if search.strip() else "%"
-    rows = await queries.fetch_search_projects(
-        {"search_pattern": pattern, "search": search, "limit": limit}
+    terms = [search]
+    expanded = _expand_abbreviations(search)
+    if expanded.lower() != search.strip().lower():
+        # "JVC" is DLD's Jumeirah Village Circle; DLD also writes some masters with the short
+        # form ("Jumeriah Beach Residence - JBR"), so both spellings are searched.
+        terms = [expanded, search]
+    results = await asyncio.gather(
+        *(
+            queries.fetch_search_projects(
+                {
+                    "search_pattern": f"%{term.lower()}%" if term.strip() else "%",
+                    "search": term,
+                    "limit": limit,
+                }
+            )
+            for term in terms
+        )
     )
+    seen: set[tuple[str, str, str]] = set()
+    rows = []
+    for row in (row for result in results for row in result):
+        key = (row["name"], row["filter_type"], row.get("building") or "")
+        if key not in seen:
+            seen.add(key)
+            rows.append(row)
     items = [
         ProjectSearchItem(
             name=r["name"],
