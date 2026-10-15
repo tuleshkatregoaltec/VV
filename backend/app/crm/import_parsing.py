@@ -491,6 +491,9 @@ def _candidate_from_row(
         procedure_type=procedure[:160],
         row_fingerprint=hashlib.sha256(fingerprint_source.encode()).hexdigest(),
     )
+    source_unit = re.sub(r"\s+", "", _text(_field_value(row, profile, "unit_number"))).upper()
+    if source_unit and source_unit.lower() != unit.lower():
+        candidate.evidence["source_unit_number"] = source_unit[:100]
     _recover_embedded_property_identity(candidate)
     return candidate
 

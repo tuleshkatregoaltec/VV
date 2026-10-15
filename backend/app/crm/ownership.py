@@ -20,6 +20,7 @@ from app.crm.import_models import (
     CrmContactImportSummary,
 )
 from app.crm.owners import _invalidate_owner_summary_cache
+from app.crm.registry_fallback import _apply_registry_unit_fallbacks
 
 logger = logging.getLogger(__name__)
 
@@ -763,6 +764,7 @@ async def rematch_property_contact_claims(
     resolution_counts = await _recover_property_identity_from_transaction(candidates)
     near_resolution_counts = await _recover_property_identity_from_near_transaction(candidates)
     sales = await _sales_evidence(candidates)
+    await _apply_registry_unit_fallbacks(candidates, sales)
     rentals = await _rental_evidence(candidates)
     now = datetime.now(timezone.utc)
     status_counts: dict[str, int] = {}

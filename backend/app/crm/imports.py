@@ -40,6 +40,7 @@ from app.crm.ownership import (
     _rental_evidence,
     _sales_evidence,
 )
+from app.crm.registry_fallback import _apply_registry_unit_fallbacks
 from app.crm.workspaces import _enrich_workspaces
 
 logger = logging.getLogger(__name__)
@@ -104,6 +105,7 @@ async def process_contact_import(
         await _recover_property_identity_from_transaction(candidates)
         await _recover_property_identity_from_near_transaction(candidates)
         sales = await _sales_evidence(candidates)
+        await _apply_registry_unit_fallbacks(candidates, sales)
         rentals = await _rental_evidence(candidates)
         for candidate in candidates:
             _apply_evidence(candidate, sales=sales, rentals=rentals)
