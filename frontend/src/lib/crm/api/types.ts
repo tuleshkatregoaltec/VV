@@ -3,7 +3,7 @@
  * anything computed (chips, summaries, commission amounts, counts) is produced by the backend
  * so no business rule lives in Svelte. Money is whole AED; dates are YYYY-MM-DD (Dubai).
  */
-import type { ClaimStatus, ImportCounts, SheetCheck } from '../ownerImportReport'
+import type { ClaimStatus, DropReason, ImportCounts, SheetCheck } from '../ownerImportReport'
 
 /** `owner`: a Vitevue lease lead not yet classified as seller or landlord. */
 export type LeadType = 'buyer' | 'seller' | 'tenant' | 'landlord' | 'owner'
@@ -1035,6 +1035,36 @@ export interface OwnerImportRow {
 	reason: string
 	sheet: string
 	rowNumber: number
+}
+
+export interface OwnerDroppedRowsParams {
+	reason: DropReason | null
+	search: string
+	offset: number
+}
+
+/** A row an owner file did not keep: the file's own values and why it was dropped. */
+export interface OwnerDroppedRow {
+	sheet: string
+	rowNumber: number
+	reason: DropReason
+	name: string
+	building: string
+	unit: string
+	date: string
+	price: string
+	role: string
+	procedure: string
+}
+
+export interface OwnerDroppedRows {
+	/** False for imports made before the dropped-rows log existed. */
+	available: boolean
+	rows: OwnerDroppedRow[]
+	byReason: Partial<Record<DropReason, number>>
+	total: number
+	offset: number
+	limit: number
 }
 
 export interface OwnerImportRows {

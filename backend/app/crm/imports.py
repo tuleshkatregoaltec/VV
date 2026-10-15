@@ -5,6 +5,7 @@ import hashlib
 import logging
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
 from fastapi import HTTPException, UploadFile
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -16,11 +17,21 @@ from app.crm.identity import (
     _dedupe_candidates,
     _drop_candidates_without_unit,
 )
+from app.crm.import_drop_log import (
+    count_by_reason,
+    delete_drop_log,
+    load_drop_log,
+    log_drop_summary,
+    no_unit_rows,
+    page_drop_log,
+    save_drop_log,
+)
 from app.crm.import_models import (
     CrmContactImport,
     CrmContactImportResponse,
     CrmContactImportSummary,
     CrmContactList,
+    CrmDroppedRowsResponse,
     CrmPropertyContactClaim,
     CrmSheetMapping,
 )
@@ -96,7 +107,8 @@ async def process_contact_import(
         profiles = await asyncio.to_thread(inspector, data, filename)
         profiles = [await _llm_mapping(profile) for profile in profiles]
         parser = _parse_xlsx if suffix == ".xlsx" else _parse_csv
-        candidates, total_rows = await asyncio.to_thread(parser, data, filename, profiles)
+        dropped: list[dict[str, Any]] = []
+        candidates, total_rows = await asyncio.to_thread(parser, data, filename, profiles, dropped)
         if not total_rows:
             # Nothing to import: remove the record so no empty import or list is left behind.
             await import_repository.delete_record(db, record)
@@ -109,6 +121,7 @@ async def process_contact_import(
         rentals = await _rental_evidence(candidates)
         for candidate in candidates:
             _apply_evidence(candidate, sales=sales, rentals=rentals)
+        dropped.extend(no_unit_rows(candidates))
         candidates, dropped_no_unit = _drop_candidates_without_unit(candidates)
         candidates, duplicate_rows_collapsed = _dedupe_candidates(candidates)
 
@@ -180,6 +193,15 @@ async def process_contact_import(
             list_name=record.name,
         )
         summary = _summary(candidates, total_rows, duplicate_rows_collapsed, dropped_no_unit)
+        summary.dropped_by_reason = count_by_reason(dropped)
+        log_drop_summary(
+            record.id,
+            total_rows=total_rows,
+            kept=len(candidates),
+            merged=duplicate_rows_collapsed,
+            rows=dropped,
+        )
+        summary.dropped_log = await save_drop_log(organization_id, record.id, dropped)
         record.status = "completed"
         record.mapping = {"sheets": [_mapping_response(profile) for profile in profiles]}
         record.summary = summary.model_dump()
@@ -193,6 +215,7 @@ async def process_contact_import(
     except Exception as exc:
         logger.exception("CRM contact import failed", extra={"import_id": record.id})
         await db.rollback()
+        await delete_drop_log(organization_id, record.id)
         record.status = "failed"
         record.error_message = str(exc)[:2_000]
         record.completed_at = datetime.now(timezone.utc)
@@ -276,3 +299,31 @@ async def delete_contact_import(
     await import_repository.delete_record(db, record)
     await db.commit()
     _invalidate_owner_summary_cache(organization_id)
+    await delete_drop_log(organization_id, import_id)
+
+
+async def list_dropped_rows(
+    db: AsyncSession,
+    *,
+    import_id: int,
+    organization_id: str,
+    reason: str | None,
+    search: str | None,
+    limit: int,
+    offset: int,
+) -> CrmDroppedRowsResponse:
+    """One page of the rows an import did not keep, read from its dropped-rows log."""
+    record = await import_repository.get_import_for_org(db, import_id, organization_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="Owner-data import not found")
+    rows = await load_drop_log(organization_id, import_id)
+    page = page_drop_log(rows, reason=reason, search=search, limit=limit, offset=offset)
+    # The search text is not logged: it may be an owner's name.
+    logger.info(
+        "CRM dropped rows viewed · import #%s · reason=%s · search=%s · %s",
+        import_id,
+        reason or "all",
+        "yes" if search and search.strip() else "no",
+        f"{len(page.rows)} of {page.total} shown" if page.available else "no log for this import",
+    )
+    return page

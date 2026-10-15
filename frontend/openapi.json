@@ -2309,6 +2309,104 @@
 				}
 			}
 		},
+		"/api/v1/crm/contact-imports/{import_id}/dropped-rows": {
+			"get": {
+				"tags": ["crm", "crm"],
+				"summary": "Crm Contact Import Dropped Rows",
+				"description": "Rows of one import that were not kept, with the file's values and the reason.\n\nRead from the dropped-rows log saved at upload; `available` is false for imports made\nbefore the log existed.",
+				"operationId": "crm-crm_contact_import_dropped_rows",
+				"parameters": [
+					{
+						"name": "import_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "integer",
+							"title": "Import Id"
+						}
+					},
+					{
+						"name": "reason",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "string",
+									"pattern": "^(no_name|not_buyer_seller|not_a_sale|no_unit)$"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"title": "Reason"
+						}
+					},
+					{
+						"name": "search",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "string",
+									"maxLength": 160
+								},
+								{
+									"type": "null"
+								}
+							],
+							"title": "Search"
+						}
+					},
+					{
+						"name": "limit",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer",
+							"maximum": 500,
+							"minimum": 1,
+							"default": 100,
+							"title": "Limit"
+						}
+					},
+					{
+						"name": "offset",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer",
+							"minimum": 0,
+							"default": 0,
+							"title": "Offset"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/CrmDroppedRowsResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
 		"/api/v1/crm/contact-lists": {
 			"get": {
 				"tags": ["crm", "crm"],
@@ -11049,6 +11147,18 @@
 						"type": "integer",
 						"title": "Contact Ready",
 						"default": 0
+					},
+					"dropped_by_reason": {
+						"additionalProperties": {
+							"type": "integer"
+						},
+						"type": "object",
+						"title": "Dropped By Reason"
+					},
+					"dropped_log": {
+						"type": "boolean",
+						"title": "Dropped Log",
+						"default": false
 					}
 				},
 				"type": "object",
@@ -11288,6 +11398,99 @@
 					"as_of"
 				],
 				"title": "CrmDashboardResponse"
+			},
+			"CrmDroppedRow": {
+				"properties": {
+					"sheet": {
+						"type": "string",
+						"title": "Sheet"
+					},
+					"row": {
+						"type": "integer",
+						"title": "Row"
+					},
+					"reason": {
+						"type": "string",
+						"enum": ["no_name", "not_buyer_seller", "not_a_sale", "no_unit"],
+						"title": "Reason"
+					},
+					"name": {
+						"type": "string",
+						"title": "Name",
+						"default": ""
+					},
+					"building": {
+						"type": "string",
+						"title": "Building",
+						"default": ""
+					},
+					"unit": {
+						"type": "string",
+						"title": "Unit",
+						"default": ""
+					},
+					"date": {
+						"type": "string",
+						"title": "Date",
+						"default": ""
+					},
+					"price": {
+						"type": "string",
+						"title": "Price",
+						"default": ""
+					},
+					"role": {
+						"type": "string",
+						"title": "Role",
+						"default": ""
+					},
+					"procedure": {
+						"type": "string",
+						"title": "Procedure",
+						"default": ""
+					}
+				},
+				"type": "object",
+				"required": ["sheet", "row", "reason"],
+				"title": "CrmDroppedRow",
+				"description": "A row the import did not keep, with the file's own values and why it was dropped."
+			},
+			"CrmDroppedRowsResponse": {
+				"properties": {
+					"available": {
+						"type": "boolean",
+						"title": "Available"
+					},
+					"total": {
+						"type": "integer",
+						"title": "Total"
+					},
+					"offset": {
+						"type": "integer",
+						"title": "Offset"
+					},
+					"limit": {
+						"type": "integer",
+						"title": "Limit"
+					},
+					"by_reason": {
+						"additionalProperties": {
+							"type": "integer"
+						},
+						"type": "object",
+						"title": "By Reason"
+					},
+					"rows": {
+						"items": {
+							"$ref": "#/components/schemas/CrmDroppedRow"
+						},
+						"type": "array",
+						"title": "Rows"
+					}
+				},
+				"type": "object",
+				"required": ["available", "total", "offset", "limit", "by_reason", "rows"],
+				"title": "CrmDroppedRowsResponse"
 			},
 			"CrmFilters": {
 				"properties": {

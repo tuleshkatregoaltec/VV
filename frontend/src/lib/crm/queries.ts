@@ -8,6 +8,7 @@ import type {
 	ListingScope,
 	ListingStatus,
 	MatchOptions,
+	OwnerDroppedRowsParams,
 	OwnerImportDetail,
 	OwnerImportRowsParams,
 	OwnerListParams,
@@ -52,6 +53,8 @@ export const crmKeys = {
 	ownerImportDetails: () => [...crmKeys.all, 'imports', 'owners', 'details'] as const,
 	ownerImportRows: (listId: number, p: OwnerImportRowsParams) =>
 		[...crmKeys.all, 'imports', 'owners', 'rows', listId, p] as const,
+	ownerImportDropped: (importId: number, p: OwnerDroppedRowsParams) =>
+		[...crmKeys.all, 'imports', 'owners', 'dropped', importId, p] as const,
 	events: (from: string, to: string) => [...crmKeys.all, 'events', from, to] as const,
 	event: (id: number) => [...crmKeys.all, 'event', id] as const,
 	calendarSide: () => [...crmKeys.all, 'calendar-side'] as const,
@@ -154,6 +157,11 @@ export const crmQueries = {
 	ownerImportRows: (listId: number, p: OwnerImportRowsParams) => ({
 		queryKey: crmKeys.ownerImportRows(listId, p),
 		queryFn: () => crm.imports.ownerRows(listId, p),
+		placeholderData: keepPreviousData
+	}),
+	ownerImportDropped: (importId: number, p: OwnerDroppedRowsParams) => ({
+		queryKey: crmKeys.ownerImportDropped(importId, p),
+		queryFn: () => crm.imports.ownerDropped(importId, p),
 		placeholderData: keepPreviousData
 	}),
 	events: (from: string, to: string) => ({

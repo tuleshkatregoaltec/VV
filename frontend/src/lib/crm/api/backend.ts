@@ -14,6 +14,7 @@ import type {
 	CrmAreaPreferencesResponse,
 	CrmContactImportResponse,
 	CrmContactListDetail,
+	CrmDroppedRowsResponse,
 	CrmLead,
 	CrmLeadDetailResponse,
 	CrmLeadImportedContact,
@@ -69,6 +70,8 @@ import type {
 	MatchTier,
 	Me,
 	OwnerDetail,
+	OwnerDroppedRows,
+	OwnerDroppedRowsParams,
 	OwnerFilePreview,
 	OwnerImport,
 	OwnerImportDetail,
@@ -1342,6 +1345,43 @@ export async function listOwnerImportRows(
 				rowNumber: c.source_row_number
 			})
 		),
+		total: res.total,
+		offset: res.offset,
+		limit: res.limit
+	}
+}
+
+/**
+ * One page (100) of the rows an owner file did not keep, read from the dropped-rows log saved at
+ * upload, filtered by reason and searched by name, building or unit.
+ */
+export async function listOwnerImportDropped(
+	importId: number,
+	p: OwnerDroppedRowsParams
+): Promise<OwnerDroppedRows> {
+	const res = await client.get<CrmDroppedRowsResponse>(
+		client.withQuery(`${CRM}/contact-imports/${importId}/dropped-rows`, {
+			reason: p.reason ?? undefined,
+			search: p.search.trim() || undefined,
+			limit: OWNER_ROWS_LIMIT,
+			offset: p.offset
+		})
+	)
+	return {
+		available: res.available,
+		rows: res.rows.map((r) => ({
+			sheet: r.sheet,
+			rowNumber: r.row,
+			reason: r.reason,
+			name: r.name ?? '',
+			building: r.building ?? '',
+			unit: r.unit ?? '',
+			date: r.date ?? '',
+			price: r.price ?? '',
+			role: r.role ?? '',
+			procedure: r.procedure ?? ''
+		})),
+		byReason: res.by_reason,
 		total: res.total,
 		offset: res.offset,
 		limit: res.limit

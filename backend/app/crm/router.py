@@ -20,6 +20,7 @@ from app.crm.import_models import (
     CrmContactImportResponse,
     CrmContactListDetail,
     CrmContactListSummary,
+    CrmDroppedRowsResponse,
     CrmLeadImportedContact,
     CrmOwnerBulkUpdate,
     CrmOwnerProfile,
@@ -29,6 +30,7 @@ from app.crm.import_models import (
 from app.crm.imports import (
     delete_contact_import,
     list_contact_imports,
+    list_dropped_rows,
     process_contact_import,
     rename_contact_import,
 )
@@ -385,6 +387,39 @@ async def crm_delete_contact_import(
         organization_id=organization_id,
     )
     return Response(status_code=204)
+
+
+@router.get(
+    "/contact-imports/{import_id}/dropped-rows",
+    response_model=CrmDroppedRowsResponse,
+)
+async def crm_contact_import_dropped_rows(
+    import_id: int,
+    reason: str | None = Query(
+        default=None,
+        pattern="^(no_name|not_buyer_seller|not_a_sale|no_unit)$",
+    ),
+    search: str | None = Query(default=None, max_length=160),
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+    context: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """Rows of one import that were not kept, with the file's values and the reason.
+
+    Read from the dropped-rows log saved at upload; `available` is false for imports made
+    before the log existed.
+    """
+    _, organization_id = _auth_ids(context)
+    return await list_dropped_rows(
+        db,
+        import_id=import_id,
+        organization_id=organization_id,
+        reason=reason,
+        search=search,
+        limit=limit,
+        offset=offset,
+    )
 
 
 @router.get(

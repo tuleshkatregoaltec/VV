@@ -1284,6 +1284,16 @@ export type CrmContactImportSummary = {
      * Contact Ready
      */
     contact_ready?: number;
+    /**
+     * Dropped By Reason
+     */
+    dropped_by_reason?: {
+        [key: string]: number;
+    };
+    /**
+     * Dropped Log
+     */
+    dropped_log?: boolean;
 };
 
 /**
@@ -1436,6 +1446,86 @@ export type CrmDashboardResponse = {
      * As Of
      */
     as_of: string;
+};
+
+/**
+ * CrmDroppedRow
+ *
+ * A row the import did not keep, with the file's own values and why it was dropped.
+ */
+export type CrmDroppedRow = {
+    /**
+     * Sheet
+     */
+    sheet: string;
+    /**
+     * Row
+     */
+    row: number;
+    /**
+     * Reason
+     */
+    reason: 'no_name' | 'not_buyer_seller' | 'not_a_sale' | 'no_unit';
+    /**
+     * Name
+     */
+    name?: string;
+    /**
+     * Building
+     */
+    building?: string;
+    /**
+     * Unit
+     */
+    unit?: string;
+    /**
+     * Date
+     */
+    date?: string;
+    /**
+     * Price
+     */
+    price?: string;
+    /**
+     * Role
+     */
+    role?: string;
+    /**
+     * Procedure
+     */
+    procedure?: string;
+};
+
+/**
+ * CrmDroppedRowsResponse
+ */
+export type CrmDroppedRowsResponse = {
+    /**
+     * Available
+     */
+    available: boolean;
+    /**
+     * Total
+     */
+    total: number;
+    /**
+     * Offset
+     */
+    offset: number;
+    /**
+     * Limit
+     */
+    limit: number;
+    /**
+     * By Reason
+     */
+    by_reason: {
+        [key: string]: number;
+    };
+    /**
+     * Rows
+     */
+    rows: Array<CrmDroppedRow>;
 };
 
 /**
@@ -11455,6 +11545,53 @@ export type CrmCrmRenameContactImportResponses = {
 };
 
 export type CrmCrmRenameContactImportResponse = CrmCrmRenameContactImportResponses[keyof CrmCrmRenameContactImportResponses];
+
+export type CrmCrmContactImportDroppedRowsData = {
+    body?: never;
+    path: {
+        /**
+         * Import Id
+         */
+        import_id: number;
+    };
+    query?: {
+        /**
+         * Reason
+         */
+        reason?: string | null;
+        /**
+         * Search
+         */
+        search?: string | null;
+        /**
+         * Limit
+         */
+        limit?: number;
+        /**
+         * Offset
+         */
+        offset?: number;
+    };
+    url: '/api/v1/crm/contact-imports/{import_id}/dropped-rows';
+};
+
+export type CrmCrmContactImportDroppedRowsErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmContactImportDroppedRowsError = CrmCrmContactImportDroppedRowsErrors[keyof CrmCrmContactImportDroppedRowsErrors];
+
+export type CrmCrmContactImportDroppedRowsResponses = {
+    /**
+     * Successful Response
+     */
+    200: CrmDroppedRowsResponse;
+};
+
+export type CrmCrmContactImportDroppedRowsResponse = CrmCrmContactImportDroppedRowsResponses[keyof CrmCrmContactImportDroppedRowsResponses];
 
 export type CrmCrmContactListsData = {
     body?: never;

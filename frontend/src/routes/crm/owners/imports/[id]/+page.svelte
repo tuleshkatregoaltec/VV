@@ -5,13 +5,20 @@ import { goto } from '$app/navigation'
 import { page } from '$app/state'
 import { crm } from '$lib/crm/api'
 import type { OwnerImportDetail } from '$lib/crm/api/types'
+import DroppedRows from '$lib/crm/components/imports/DroppedRows.svelte'
 import ImportRows from '$lib/crm/components/imports/ImportRows.svelte'
 import Chip from '$lib/crm/components/ui/Chip.svelte'
 import InfoTip from '$lib/crm/components/ui/InfoTip.svelte'
 import PageHeader from '$lib/crm/components/ui/PageHeader.svelte'
 import QueryView from '$lib/crm/components/ui/QueryView.svelte'
 import { fmt } from '$lib/crm/format'
-import { type ClaimStatus, STATUS_HELP, STATUS_INFO } from '$lib/crm/ownerImportReport'
+import {
+	type ClaimStatus,
+	DROP_REASON_INFO,
+	type DropReason,
+	STATUS_HELP,
+	STATUS_INFO
+} from '$lib/crm/ownerImportReport'
 import { crmQueries } from '$lib/crm/queries'
 import { write } from '$lib/crm/write'
 
@@ -44,11 +51,14 @@ let confirming = $state(false)
 // The owner rows open on "All statuses"; the tiles and the select narrow them. Moving to another
 // import resets the filter and closes any open rename or delete prompt.
 let status = $state<ClaimStatus | null>(null)
+// The Dropped card opens the rows the import did not keep, with the reason for each.
+let showDropped = $state(false)
 let shownFor = $state<number | null>(null)
 $effect.pre(() => {
 	if (!imp || shownFor === imp.id) return
 	shownFor = imp.id
 	status = null
+	showDropped = false
 	editing = false
 	confirming = false
 	draft = ''
@@ -80,6 +90,14 @@ async function remove(i: OwnerImportDetail) {
 	busy = false
 	if (r) await goto('/crm/owners/imports')
 }
+
+// "120 No name · 410 Not Buyer/Seller …", largest first; empty for imports made before the log.
+const droppedBreakdown = (byReason: Partial<Record<DropReason, number>>) =>
+	(Object.entries(byReason) as [DropReason, number][])
+		.filter(([, n]) => n > 0)
+		.sort((a, b) => b[1] - a[1])
+		.map(([r, n]) => `${fmt(n)} ${DROP_REASON_INFO[r]?.label ?? r}`)
+		.join(' · ')
 
 const pct = (n: number, of: number) => (of ? `${(n / of) * 100}%` : '0%')
 const share = (n: number, of: number) => (of ? `${Math.round((n / of) * 100)}%` : '—')
@@ -158,10 +176,18 @@ const share = (n: number, of: number) => (of ? `${Math.round((n / of) * 100)}%` 
 				</div>
 				<div class="grid-4 kpis">
 					<div class="kpi"><span class="lbl">Rows in file</span><span class="v">{fmt(c.rows)}</span></div>
-					<div class="kpi">
+					<button
+						type="button"
+						class={['kpi', showDropped && 'on']}
+						aria-pressed={showDropped}
+						aria-controls="dropped-rows"
+						disabled={!c.dropped}
+						onclick={() => (showDropped = !showDropped)}
+					>
 						<span class="lbl"><i class="dot dropped"></i>Dropped</span><span class="v">{fmt(c.dropped)}</span>
-						<span class="n">No name, not Buyer/Seller, or mortgage/gift</span>
-					</div>
+						<span class="n">{droppedBreakdown(c.droppedByReason) || 'No name, not Buyer/Seller, or mortgage/gift'}</span>
+						{#if c.dropped}<span class="n link">{showDropped ? 'Hide rows' : 'Show rows'}</span>{/if}
+					</button>
 					<div class="kpi">
 						<span class="lbl"><i class="dot merged"></i>Duplicates merged</span><span class="v">{fmt(c.merged)}</span>
 					</div>
@@ -175,6 +201,13 @@ const share = (n: number, of: number) => (of ? `${Math.round((n / of) * 100)}%` 
 					</div>
 				</div>
 			</section>
+
+			{#if showDropped}
+				<section class="sec" id="dropped-rows">
+					<h3>Dropped rows</h3>
+					<DroppedRows importId={imp.id} />
+				</section>
+			{/if}
 
 			<!-- 3. Status breakdown -->
 			<section class="sec">
@@ -289,6 +322,9 @@ const share = (n: number, of: number) => (of ? `${Math.round((n / of) * 100)}%` 
 	.kpi.on {
 		border-color: var(--accent);
 		box-shadow: 0 0 0 1px var(--accent);
+	}
+	.kpi .link {
+		color: var(--accent);
 	}
 	.kpi small {
 		font-size: 12.5px;

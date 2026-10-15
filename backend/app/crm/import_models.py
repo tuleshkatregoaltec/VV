@@ -183,6 +183,37 @@ class CrmContactImportSummary(BaseModel):
     unmatched: int = 0
     rental_opportunities: int = 0
     contact_ready: int = 0
+    # Rows not kept, per reason (see CrmDroppedRowReason); dropped_log says whether the
+    # dropped-rows log was saved, so imports from before it existed can say so.
+    dropped_by_reason: dict[str, int] = Field(default_factory=dict)
+    dropped_log: bool = False
+
+
+CrmDroppedRowReason = Literal["no_name", "not_buyer_seller", "not_a_sale", "no_unit"]
+
+
+class CrmDroppedRow(BaseModel):
+    """A row the import did not keep, with the file's own values and why it was dropped."""
+
+    sheet: str
+    row: int
+    reason: CrmDroppedRowReason
+    name: str = ""
+    building: str = ""
+    unit: str = ""
+    date: str = ""
+    price: str = ""
+    role: str = ""
+    procedure: str = ""
+
+
+class CrmDroppedRowsResponse(BaseModel):
+    available: bool
+    total: int
+    offset: int
+    limit: int
+    by_reason: dict[str, int]
+    rows: list[CrmDroppedRow]
 
 
 class CrmSheetMapping(BaseModel):

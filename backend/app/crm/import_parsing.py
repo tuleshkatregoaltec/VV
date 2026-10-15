@@ -430,20 +430,59 @@ def _field_value(
     return row[header.index]
 
 
+def _dropped_row(
+    row: tuple[Any, ...] | list[Any],
+    *,
+    profile: SheetProfile,
+    row_number: int,
+    reason: str,
+) -> dict[str, Any]:
+    """The file's own values for a row the import does not keep, for the dropped-rows log."""
+
+    def value(canonical: str) -> str:
+        cell = _field_value(row, profile, canonical)
+        if isinstance(cell, datetime):
+            return cell.date().isoformat()
+        if isinstance(cell, date):
+            return cell.isoformat()
+        return _text(cell)[:200]
+
+    return {
+        "sheet": profile.name,
+        "row": row_number,
+        "reason": reason,
+        "name": value("contact_name"),
+        "building": value("building_name") or value("project_name"),
+        "unit": value("unit_number"),
+        "date": value("transaction_date"),
+        "price": value("transaction_price_aed"),
+        "role": value("party_role"),
+        "procedure": value("procedure_type"),
+    }
+
+
 def _candidate_from_row(
     row: tuple[Any, ...] | list[Any],
     *,
     profile: SheetProfile,
     filename: str,
     row_number: int,
+    dropped: list[dict[str, Any]] | None = None,
 ) -> ParsedContact | None:
     name = _text(_field_value(row, profile, "contact_name"))
     unit = _normalize_unit(_field_value(row, profile, "unit_number"))
     if not name:
+        if dropped is not None:
+            dropped.append(
+                _dropped_row(row, profile=profile, row_number=row_number, reason="no_name")
+            )
         return None
     role = _normalized_role(_field_value(row, profile, "party_role"))
     procedure = _text(_field_value(row, profile, "procedure_type"))
     if not _is_transfer_candidate(role, procedure, profile.sheet_family):
+        if dropped is not None:
+            reason = "not_buyer_seller" if role not in {"Buyer", "Seller"} else "not_a_sale"
+            dropped.append(_dropped_row(row, profile=profile, row_number=row_number, reason=reason))
         return None
 
     inferred_project = _inferred_project(filename, profile.name)
@@ -502,6 +541,7 @@ def _parse_xlsx(
     data: bytes,
     filename: str,
     profiles: list[SheetProfile],
+    dropped: list[dict[str, Any]] | None = None,
 ) -> tuple[list[ParsedContact], int]:
     workbook = openpyxl.load_workbook(io.BytesIO(data), read_only=True, data_only=True)
     candidates: list[ParsedContact] = []
@@ -545,6 +585,7 @@ def _parse_xlsx(
                     profile=profile,
                     filename=filename,
                     row_number=row_number,
+                    dropped=dropped,
                 )
                 if candidate:
                     candidates.append(candidate)
@@ -557,6 +598,7 @@ def _parse_csv(
     data: bytes,
     filename: str,
     profiles: list[SheetProfile],
+    dropped: list[dict[str, Any]] | None = None,
 ) -> tuple[list[ParsedContact], int]:
     rows = _csv_rows(data)
     profile = profiles[0]
@@ -582,6 +624,7 @@ def _parse_csv(
             profile=profile,
             filename=filename,
             row_number=row_number,
+            dropped=dropped,
         )
         if candidate:
             candidates.append(candidate)

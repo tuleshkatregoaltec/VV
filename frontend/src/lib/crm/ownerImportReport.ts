@@ -113,7 +113,14 @@ export const STATUS_HELP: Record<ClaimStatus, { how: string; todo: string }> = {
 	}
 }
 
-const SUMMARY_KEY: Record<ClaimStatus, keyof CrmContactImportSummary> = {
+/** The summary's count fields (it also holds a per-reason map and a flag). */
+type SummaryCount = {
+	[K in keyof CrmContactImportSummary]-?: CrmContactImportSummary[K] extends number | undefined
+		? K
+		: never
+}[keyof CrmContactImportSummary]
+
+const SUMMARY_KEY: Record<ClaimStatus, SummaryCount> = {
 	verified_current_owner: 'verified_current_owners',
 	probable_current_owner: 'probable_current_owners',
 	unit_linked_unverified: 'unit_linked_unverified',
@@ -136,10 +143,14 @@ export interface ImportCounts {
 	/** matched ÷ kept; null when nothing was kept. */
 	matchRate: number | null
 	byStatus: Record<ClaimStatus, number>
+	/** Dropped rows per reason; empty for imports made before the dropped-rows log. */
+	droppedByReason: Partial<Record<DropReason, number>>
+	/** Whether the dropped rows can be listed (the log was saved at upload). */
+	droppedLog: boolean
 }
 
 export function importCounts(summary: CrmContactImportSummary): ImportCounts {
-	const n = (key: keyof CrmContactImportSummary) => summary[key] ?? 0
+	const n = (key: SummaryCount) => summary[key] ?? 0
 	const byStatus = Object.fromEntries(
 		(Object.keys(SUMMARY_KEY) as ClaimStatus[]).map((s) => [s, n(SUMMARY_KEY[s])])
 	) as Record<ClaimStatus, number>
@@ -158,6 +169,8 @@ export function importCounts(summary: CrmContactImportSummary): ImportCounts {
 		readyToContact: n('contact_ready'),
 		rentalLeads: n('rental_opportunities'),
 		matchRate: kept ? matched / kept : null,
+		droppedByReason: summary.dropped_by_reason ?? {},
+		droppedLog: summary.dropped_log ?? false,
 		byStatus
 	}
 }
@@ -292,4 +305,107 @@ export function insufficientReason(row: {
 	return row.date && row.price
 		? `${missing}. Its sale date and price did not match one DLD sale in this location.`
 		: `${missing}, and no sale date and price to look the property up in DLD.`
+}
+
+export type DropReason = 'no_name' | 'not_buyer_seller' | 'not_a_sale' | 'no_unit'
+
+/** Where in the import a row was dropped: while reading the file, or after checking DLD. */
+export type DropStage = 'before_match' | 'after_match'
+
+export const DROP_STAGE_LABEL: Record<DropStage, string> = {
+	before_match: 'Before DLD matching',
+	after_match: 'After DLD matching'
+}
+
+/** Why an import did not keep a row, in the order the import checks them. */
+export const DROP_REASON_INFO: Record<
+	DropReason,
+	{ label: string; meaning: string; stage: DropStage }
+> = {
+	no_name: {
+		label: 'No name',
+		meaning: 'The name cell is empty, so there is no owner to keep',
+		stage: 'before_match'
+	},
+	not_buyer_seller: {
+		label: 'Not Buyer/Seller',
+		meaning: 'A transaction row for another party (bank, mortgagee, developer…)',
+		stage: 'before_match'
+	},
+	not_a_sale: {
+		label: 'Not a sale',
+		meaning: 'A Buyer/Seller row for a mortgage, gift, grant or other non-sale procedure',
+		stage: 'before_match'
+	},
+	no_unit: {
+		label: 'No unit',
+		meaning: 'No unit in the file, and none could be recovered from DLD',
+		stage: 'after_match'
+	}
+}
+
+/** The values a dropped-row explanation needs (a row of the dropped-rows log). */
+export interface DroppedRowFacts {
+	reason: DropReason
+	role: string
+	procedure: string
+	date: string
+	price: string
+}
+
+export interface DropDetail {
+	stage: DropStage
+	/** What happened to this row, with the file's own values. */
+	what: string
+	/** The rule the import applies. */
+	rule: string
+	/** What would have kept the row. */
+	fix: string
+}
+
+/**
+ * The full reason one row was dropped, in the words of the import's rules
+ * (backend import_parsing._candidate_from_row / _is_transfer_candidate and
+ * identity._drop_candidates_without_unit).
+ */
+export function dropDetail(r: DroppedRowFacts): DropDetail {
+	const stage = DROP_REASON_INFO[r.reason].stage
+	switch (r.reason) {
+		case 'no_name':
+			return {
+				stage,
+				what: 'The name cell of this row is empty.',
+				rule: 'Every kept row needs an owner name; a row without one has no one to contact.',
+				fix: 'Fill in the owner name in the file and upload it again.'
+			}
+		case 'not_buyer_seller':
+			return {
+				stage,
+				what: r.role
+					? `The role is “${r.role}”, which is not Buyer or Seller.`
+					: 'The role is empty: this sheet has no Buyer/Seller column mapped, or the cell is blank.',
+				rule: 'On a transaction sheet only the Buyer or Seller of a sale is an owner; banks, mortgagees and other parties are not kept.',
+				fix: r.role
+					? 'Nothing to fix if this party is not an owner.'
+					: 'If the sheet is a list of owners, map its role column (or import it as a contact list) and upload again.'
+			}
+		case 'not_a_sale':
+			return {
+				stage,
+				what: `The procedure is “${r.procedure}”, which is not a sale.`,
+				rule: 'A Buyer/Seller row is kept only when its procedure is empty or contains “sale”, “sell” or “delayed sell”. Mortgages, gifts and grants do not change who bought the property, and their amount is not a sale price, so they cannot be checked against DLD sales.',
+				fix: 'Nothing to fix: the owner is usually kept from the row of the actual sale.'
+			}
+		case 'no_unit':
+			return {
+				stage,
+				what: `The file has no unit for this row, and DLD matching could not find one${
+					r.date || r.price
+						? ` from its date and price (${[r.date, r.price].filter(Boolean).join(', ')})`
+						: ''
+				}.`,
+				rule: 'A row needs a unit to identify a property; it is dropped only after DLD matching has tried to recover the unit.',
+				fix: 'Add the unit number in the file and upload it again.'
+			}
+	}
 }

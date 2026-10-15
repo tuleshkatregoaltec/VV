@@ -61,6 +61,8 @@ import type {
 	NavCounts,
 	Notification,
 	OwnerDetail,
+	OwnerDroppedRows,
+	OwnerDroppedRowsParams,
 	OwnerFilePreview,
 	OwnerImport,
 	OwnerImportDetail,
@@ -347,6 +349,9 @@ export const crm = {
 		/** One page of an owner file's kept rows. */
 		ownerRows: (listId: number, p: OwnerImportRowsParams): Promise<OwnerImportRows> =>
 			backend.listOwnerImportRows(listId, p),
+		/** One page of the rows an owner file did not keep, with the reason. */
+		ownerDropped: (importId: number, p: OwnerDroppedRowsParams): Promise<OwnerDroppedRows> =>
+			backend.listOwnerImportDropped(importId, p),
 		/** Rename an owner file and its saved list. */
 		renameOwners: (id: number, name: string): Promise<Written<null>> =>
 			backend.renameOwnerImport(id, name),
