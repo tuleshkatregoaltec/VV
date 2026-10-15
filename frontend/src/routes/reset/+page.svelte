@@ -111,11 +111,11 @@ async function handleResetPassword() {
 	<svelte:fragment slot="side">
 		<div class="space-y-4 rounded-lg border border-[rgba(246,241,231,0.14)] bg-[color:rgba(246,241,231,0.05)] p-5">
 			<div class="rounded-lg border border-[rgba(246,241,231,0.14)] bg-[color:rgba(246,241,231,0.05)] p-4">
-				<p class="text-xs font-semibold uppercase tracking-[0.22em] text-slate-400">
+				<p class="text-xs font-semibold uppercase tracking-[0.22em] text-on-navy-muted">
 					Recovery flow
 				</p>
 				<p class="mt-3 text-2xl font-semibold text-white">Secure reset</p>
-				<p class="mt-2 text-sm leading-6 text-slate-300">
+				<p class="mt-2 text-sm leading-6 text-on-navy-muted">
 					Once the password changes, you return to the same guarded application flow as any other
 					authenticated session.
 				</p>
@@ -130,13 +130,13 @@ async function handleResetPassword() {
 		</div>
 	{:else if !hasValidSession && error}
 		<div class="space-y-5">
-			<div class="rounded-lg border border-[rgba(163,36,36,0.2)] bg-error-bg p-6">
+			<div class="rounded-lg border border-error-border bg-error-bg p-6">
 				<p class="text-sm font-semibold text-error">Reset link is no longer valid</p>
 				<p class="mt-2 text-sm leading-6 text-error">{error}</p>
 			</div>
 			<a
 				href={resolve('/auth')}
-				class="inline-flex rounded-md bg-navy px-5 py-3 text-sm font-semibold text-bone transition hover:bg-primary-light"
+				class="inline-flex rounded-md bg-action px-5 py-3 text-sm font-semibold text-on-action transition hover:bg-action-hover"
 			>
 				Return to sign in
 			</a>
@@ -177,7 +177,7 @@ async function handleResetPassword() {
 			<button
 				type="submit"
 				disabled={loading}
-				class="w-full rounded-md bg-navy px-4 py-3.5 text-sm font-semibold text-bone transition hover:bg-primary-light disabled:cursor-not-allowed disabled:opacity-50"
+				class="w-full rounded-md bg-action px-4 py-3.5 text-sm font-semibold text-on-action transition hover:bg-action-hover disabled:cursor-not-allowed disabled:opacity-50"
 			>
 				{loading ? 'Updating password...' : 'Update password'}
 			</button>
