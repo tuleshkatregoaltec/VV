@@ -24,7 +24,7 @@ export type PanelState =
 	| { kind: 'lead'; id: number; tab?: LeadPanelTab }
 	| { kind: 'deal'; id: string; tab?: DealPanelTab }
 	| { kind: 'listing'; id: string }
-	| { kind: 'owner'; id: string }
+	| { kind: 'owner'; id: string; unit?: string }
 	| { kind: 'market'; id: string }
 	| { kind: 'client'; client: string }
 	| { kind: 'renewal'; id: string }
@@ -193,7 +193,8 @@ export const panel = new PanelStore()
 export const openLead = (id: number, tab?: LeadPanelTab) => panel.open({ kind: 'lead', id, tab })
 export const openDeal = (id: string, tab?: DealPanelTab) => panel.open({ kind: 'deal', id, tab })
 export const openListing = (id: string) => panel.open({ kind: 'listing', id })
-export const openOwner = (id: string) => panel.open({ kind: 'owner', id })
+/** `unit` (a unit number) opens that unit's row, e.g. the row clicked on an import report. */
+export const openOwner = (id: string, unit?: string) => panel.open({ kind: 'owner', id, unit })
 export const closeRecord = (kind: RecordKind, id: string | number) => panel.drop(kind, id)
 
 export function openRef(ref: { kind: string; id: string | number }) {

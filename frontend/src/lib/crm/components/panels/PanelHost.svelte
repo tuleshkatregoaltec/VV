@@ -67,7 +67,7 @@ const key = $derived.by(() => {
 	{:else if p.kind === 'listing'}
 		<ListingPanel id={p.id} />
 	{:else if p.kind === 'owner'}
-		<OwnerPanel id={p.id} />
+		<OwnerPanel id={p.id} unit={p.unit} />
 	{:else if p.kind === 'market'}
 		<MarketPanel id={p.id} />
 	{:else if p.kind === 'client'}

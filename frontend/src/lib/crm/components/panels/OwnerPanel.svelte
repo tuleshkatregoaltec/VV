@@ -5,6 +5,7 @@ import { crm } from '../../api'
 import type { OwnerUnit } from '../../api/types'
 import { GATE_LINE, ORIGIN_TONE, stageOf } from '../../config'
 import { aed, fmt, fullDate, short } from '../../format'
+import { matchLines } from '../../ownerMatch'
 import { crmQueries } from '../../queries'
 import { openLead, openRef, panel } from '../../stores/panel.svelte'
 import { write } from '../../write'
@@ -22,11 +23,22 @@ import PanelLoading from '../ui/PanelLoading.svelte'
  * DLD Circular 02-2026: without a prior deal on record there is no call, Create lead or market
  * update — only "Add a prior deal record before contacting" and Add record.
  */
-let { id }: { id: string } = $props()
+let { id, unit }: { id: string; unit?: string } = $props()
 const owner = createQuery(() => crmQueries.owner(id))
 
 let note = $state('')
 let open = $state<Record<string, boolean>>({})
+
+// Opened from an import report row: open that unit once the owner has loaded.
+let shownUnit = $state('')
+$effect(() => {
+	const units = owner.data?.unit_rows
+	const want = (unit ?? '').trim().toUpperCase()
+	if (!units || !want || shownUnit === `${id}|${want}`) return
+	shownUnit = `${id}|${want}`
+	const hits = units.filter((u) => u.number.trim().toUpperCase() === want)
+	if (hits.length) open = { ...open, ...Object.fromEntries(hits.map((u) => [u.key, true])) }
+})
 
 function logCall(e: SubmitEvent) {
 	e.preventDefault()
@@ -44,6 +56,8 @@ function logCall(e: SubmitEvent) {
 function marketUpdate(name: string) {
 	write({ call: () => crm.owners.sendMarketUpdate(id), success: `Market update for ${name} sent` })
 }
+
+const MARK = { match: '✓', differs: '✗', info: '•', none: '–' } as const
 
 const beds = (u: OwnerUnit) =>
 	u.bedrooms === null ? '' : u.bedrooms ? `${u.bedrooms}BR` : 'Studio'
@@ -231,6 +245,77 @@ const maxRent = (u: OwnerUnit) => Math.max(1, ...u.rent_history.map((h) => h.aed
 											o="Vitevue estimate"
 										/>
 									</div>
+									{#if u.check}
+										{@const c = u.check}
+										<!-- What the owner file said, what DLD has, and how the import matched them. -->
+										<div class="check">
+											<div class="cbox">
+												<div class="lbl">Imported owner record</div>
+												<div class="kv">
+													<Kv k="Transaction date" v={c.imported.date ? fullDate(c.imported.date) : '—'} />
+													<Kv k="Sale price" v={c.imported.aed ? aed(c.imported.aed) : '—'} />
+													<Kv k="Property type" v={c.imported.type || 'Not supplied'} />
+													<Kv k="Unit" v={c.imported.unit || 'Not supplied'} />
+													<Kv k="Role" v={c.imported.role || 'Not supplied'} />
+												</div>
+											</div>
+											<div class="cbox dld">
+												<div class="lbl">DLD record{c.dld.market ? ` · ${c.dld.market}` : ''}</div>
+												<div class="kv">
+													<Kv
+														k="Unit"
+														v={c.dld.unit
+															? [c.dld.unit, c.dld.building].filter(Boolean).join(' · ')
+															: '—'}
+														o={c.dld.area || undefined}
+														wide
+													/>
+													<Kv k="Latest recorded sale" v={c.dld.date ? fullDate(c.dld.date) : '—'} />
+													<Kv k="Recorded price" v={c.dld.aed ? aed(c.dld.aed) : '—'} />
+													<Kv
+														k="Type / bedrooms"
+														v={[c.dld.type, c.dld.bedrooms].filter(Boolean).join(' · ') || '—'}
+													/>
+													<Kv k="Recorded size" v={c.dld.size_sqft ? `${fmt(c.dld.size_sqft)} sqft` : '—'} />
+													<Kv k="Built-up area" v={c.dld.built_up_sqft ? `${fmt(c.dld.built_up_sqft)} sqft` : '—'} />
+													<Kv k="Price / sqft" v={c.dld.aed_per_sqft ? `${aed(c.dld.aed_per_sqft)} / sqft` : '—'} />
+												</div>
+											</div>
+										</div>
+										<div class="result">
+											<Chip chip={c.result.chip} />
+											<span class="small muted">{c.result.confidence}% confidence</span>
+											{#if c.lease}
+												<span class="small muted">
+													· Lease ends {fullDate(c.lease.end)}{c.lease.aed ? ` · ${aed(c.lease.aed)} a year` : ''}
+												</span>
+											{/if}
+										</div>
+										{#if c.result.reason}<div class="small">{c.result.reason}</div>{/if}
+										<div>
+											<div class="lbl">Matching</div>
+											<div class="tblwrap boxed">
+												<table class="tbl mtbl">
+													<thead>
+														<tr><th>Checked</th><th>File</th><th>DLD</th><th>Result</th></tr>
+													</thead>
+													<tbody>
+														{#each matchLines(c) as m (m.label)}
+															<tr>
+																<td>{m.label}</td>
+																<td data-label="File">{m.file}</td>
+																<td data-label="DLD">{m.dld}</td>
+																<td data-label="Result" class={m.result}>
+																	<span aria-hidden="true">{MARK[m.result]}</span>
+																	{m.note}
+																</td>
+															</tr>
+														{/each}
+													</tbody>
+												</table>
+											</div>
+										</div>
+									{/if}
 									{#if u.rent_history.length}
 										<div>
 											<div class="lbl">Rent by year</div>
@@ -335,6 +420,39 @@ const maxRent = (u: OwnerUnit) => Math.max(1, ...u.rent_history.map((h) => h.aed
 {/if}
 
 <style>
+	.check {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+		gap: 0.6rem;
+	}
+	.cbox {
+		border: 1px solid var(--line);
+		border-radius: 8px;
+		padding: 0.6rem 0.7rem;
+		background: var(--card-2);
+	}
+	.cbox.dld {
+		border-color: var(--blue);
+		background: var(--blue-bg);
+	}
+	.mtbl td {
+		font-size: 12.5px;
+	}
+	.mtbl .match {
+		color: var(--green);
+	}
+	.mtbl .differs {
+		color: var(--red);
+	}
+	.mtbl .none {
+		color: var(--text2);
+	}
+	.result {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.4rem;
+	}
 	.srcs {
 		list-style: none;
 		margin: 0;

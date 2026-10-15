@@ -4,6 +4,7 @@ import csv
 import hashlib
 import io
 import re
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from pathlib import Path
@@ -99,6 +100,7 @@ class SheetProfile:
     mapping_source: str = "heuristic"
     confidence: float = 0.82
     warnings: list[str] = field(default_factory=list)
+    date_order: str = "dmy"
 
 
 def _header_token(value: str) -> str:
@@ -264,27 +266,121 @@ def _inspect_csv(data: bytes, filename: str) -> list[SheetProfile]:
     ]
 
 
-def _parse_date(value: Any) -> date | None:
+_DATE_TIME_SUFFIX = re.compile(
+    r"[T\s]+\d{1,2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:\s*[ap]\.?m\.?)?$", re.IGNORECASE
+)
+_NUMERIC_DATE = re.compile(r"^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$")
+_DATE_FORMATS = (
+    "%Y-%m-%d",
+    "%Y/%m/%d",
+    "%d %b %Y",
+    "%d-%b-%Y",
+    "%d %B %Y",
+    "%d-%B-%Y",
+    "%b %d %Y",
+    "%B %d %Y",
+)
+_EMPTY_DATES = {"", "-", "n/a", "na", "none", "null", "unknown", "nan"}
+
+
+def _date_text(value: Any) -> str:
+    """Date text without a time part, with "Sept" as "Sep" and no commas."""
+    text = _DATE_TIME_SUFFIX.sub("", _text(value)).strip()
+    text = re.sub(r"\bsept\b", "Sep", text, flags=re.IGNORECASE)
+    return " ".join(text.replace(",", " ").split())
+
+
+def _numeric_date(text: str) -> tuple[int, int, int] | None:
+    match = _NUMERIC_DATE.match(text)
+    return (int(match[1]), int(match[2]), int(match[3])) if match else None
+
+
+def _date_order(values: Iterable[Any]) -> str:
+    """Day/month order of a date column: "dmy" (UAE, the default), "mdy" when a text date is
+    clearly month first (09/25/2024), or "mixed" when the column has clear dates both ways."""
+    day_first = month_first = False
+    for value in values:
+        if value is None or isinstance(value, date):
+            continue
+        parts = _numeric_date(_date_text(value))
+        if not parts:
+            continue
+        first, second, _ = parts
+        day_first = day_first or (first > 12 >= second)
+        month_first = month_first or (second > 12 >= first)
+        if day_first and month_first:
+            return "mixed"
+    return "mdy" if month_first else "dmy"
+
+
+def _parse_date(value: Any, order: str = "dmy") -> date | None:
+    """Read a sale date. NN/NN/YYYY follows its own clue when one number is over 12; otherwise
+    the column's order, and a "mixed" column leaves it empty rather than guess."""
     if isinstance(value, datetime):
         return value.date()
     if isinstance(value, date):
         return value
-    text = _text(value)
+    text = _date_text(value)
     if not text:
         return None
-    for fmt in (
-        "%Y-%m-%d",
-        "%d/%m/%Y",
-        "%d-%m-%Y",
-        "%d %b %Y",
-        "%d-%b-%Y",
-        "%Y/%m/%d",
-    ):
+    parts = _numeric_date(text)
+    if parts:
+        first, second, year = parts
+        if first > 12 or (order == "dmy" and second <= 12):
+            day, month = first, second
+        elif second > 12 or order == "mdy" or first == second:
+            day, month = second, first
+        else:
+            return None
+        try:
+            return date(year, month, day)
+        except ValueError:
+            return None
+    for fmt in _DATE_FORMATS:
         try:
             return datetime.strptime(text, fmt).date()
         except ValueError:
             continue
     return None
+
+
+def _date_column_index(profile: SheetProfile) -> int | None:
+    header_key = profile.field_map.get("transaction_date")
+    header = next((item for item in profile.headers if item.key == header_key), None)
+    return header.index if header_key and header else None
+
+
+def _read_dates_by_column_order(profile: SheetProfile, values: Iterable[Any]) -> None:
+    """Set the sheet's date order from its whole date column, and warn about dates read month
+    first, left empty as unclear, or not readable at all."""
+    header_key = profile.field_map.get("transaction_date")
+    if not header_key:
+        return
+    values = list(values)
+    profile.date_order = _date_order(values)
+    label = next((h.label for h in profile.headers if h.key == header_key), header_key)
+    unclear = unreadable = 0
+    for value in values:
+        if value is None or isinstance(value, date):
+            continue
+        if _text(value).lower() in _EMPTY_DATES or _parse_date(value, profile.date_order):
+            continue
+        parts = _numeric_date(_date_text(value))
+        if parts and parts[0] <= 12 and parts[1] <= 12:
+            unclear += 1
+        else:
+            unreadable += 1
+    if profile.date_order == "mdy":
+        profile.warnings.append(f"Dates in {label} were read month first (MM/DD/YYYY).")
+    if unclear:
+        profile.warnings.append(
+            f"Dates in {label} mix day-first and month-first: {unclear:,} unclear "
+            f"date{'s' if unclear != 1 else ''} left empty."
+        )
+    if unreadable:
+        profile.warnings.append(
+            f"{unreadable:,} date{'s' if unreadable != 1 else ''} in {label} could not be read."
+        )
 
 
 def _parse_amount(value: Any) -> int | None:
@@ -363,7 +459,9 @@ def _candidate_from_row(
     phone = _normalize_phone(_field_value(row, profile, "phone_primary"))
     alternate = _normalize_phone(_field_value(row, profile, "phone_alternate"))
     email = _normalize_email(_field_value(row, profile, "email_primary"))
-    transaction_date = _parse_date(_field_value(row, profile, "transaction_date"))
+    transaction_date = _parse_date(
+        _field_value(row, profile, "transaction_date"), profile.date_order
+    )
     transaction_price = _parse_amount(_field_value(row, profile, "transaction_price_aed"))
     fingerprint_source = "|".join(
         (
@@ -412,6 +510,20 @@ def _parse_xlsx(
             if not profile:
                 continue
             max_index = max((header.index for header in profile.headers), default=0)
+            date_index = _date_column_index(profile)
+            if date_index is not None:
+                _read_dates_by_column_order(
+                    profile,
+                    (
+                        row[0] if row else None
+                        for row in sheet.iter_rows(
+                            min_row=profile.header_row + 1,
+                            min_col=date_index + 1,
+                            max_col=date_index + 1,
+                            values_only=True,
+                        )
+                    ),
+                )
             for row_number, row in enumerate(
                 sheet.iter_rows(
                     min_row=profile.header_row + 1,
@@ -445,6 +557,15 @@ def _parse_csv(
 ) -> tuple[list[ParsedContact], int]:
     rows = _csv_rows(data)
     profile = profiles[0]
+    date_index = _date_column_index(profile)
+    if date_index is not None:
+        _read_dates_by_column_order(
+            profile,
+            (
+                row[date_index] if date_index < len(row) else None
+                for row in rows[profile.header_row :]
+            ),
+        )
     candidates: list[ParsedContact] = []
     total_rows = 0
     for row_number, row in enumerate(rows[profile.header_row :], start=profile.header_row + 1):

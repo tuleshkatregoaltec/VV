@@ -45,6 +45,7 @@ from app.crm.workspaces import _enrich_workspaces
 logger = logging.getLogger(__name__)
 
 _MAX_FILE_BYTES = 50 * 1024 * 1024
+_EMPTY_FILE = "File is empty, so nothing was imported."
 
 
 async def process_contact_import(
@@ -61,7 +62,7 @@ async def process_contact_import(
         raise HTTPException(status_code=400, detail="Upload an XLSX or CSV file")
     data = await upload.read(_MAX_FILE_BYTES + 1)
     if not data:
-        raise HTTPException(status_code=400, detail="The uploaded file is empty")
+        raise HTTPException(status_code=400, detail=_EMPTY_FILE)
     if len(data) > _MAX_FILE_BYTES:
         raise HTTPException(status_code=413, detail="The uploaded file exceeds 50 MB")
     sha256 = hashlib.sha256(data).hexdigest()
@@ -95,6 +96,11 @@ async def process_contact_import(
         profiles = [await _llm_mapping(profile) for profile in profiles]
         parser = _parse_xlsx if suffix == ".xlsx" else _parse_csv
         candidates, total_rows = await asyncio.to_thread(parser, data, filename, profiles)
+        if not total_rows:
+            # Nothing to import: remove the record so no empty import or list is left behind.
+            await import_repository.delete_record(db, record)
+            await db.commit()
+            raise HTTPException(status_code=400, detail=_EMPTY_FILE)
         await _recover_property_identity_from_transaction(candidates)
         await _recover_property_identity_from_near_transaction(candidates)
         sales = await _sales_evidence(candidates)

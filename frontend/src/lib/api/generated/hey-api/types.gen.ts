@@ -1952,6 +1952,10 @@ export type CrmOwnerProperty = {
      */
     imported_property_type?: string;
     /**
+     * Imported Party Role
+     */
+    imported_party_role?: string;
+    /**
      * Latest Sale Date
      */
     latest_sale_date?: string | null;
@@ -1991,6 +1995,18 @@ export type CrmOwnerProperty = {
      * Registry Market Status
      */
     registry_market_status?: string | null;
+    /**
+     * Registry Unit Number
+     */
+    registry_unit_number?: string | null;
+    /**
+     * Registry Building Name
+     */
+    registry_building_name?: string | null;
+    /**
+     * Registry Area Name
+     */
+    registry_area_name?: string | null;
     /**
      * Later Sale Date
      */
@@ -11549,6 +11565,14 @@ export type CrmCrmOwnerRegistryData = {
          * Max Value Aed
          */
         max_value_aed?: number | null;
+        /**
+         * Min Properties
+         */
+        min_properties?: number | null;
+        /**
+         * Next Event Days
+         */
+        next_event_days?: number | null;
         /**
          * Limit
          */

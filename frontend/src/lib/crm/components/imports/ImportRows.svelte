@@ -9,6 +9,7 @@ import {
 	STATUS_INFO
 } from '../../ownerImportReport'
 import { crmQueries } from '../../queries'
+import { openOwner } from '../../stores/panel.svelte'
 import Chip from '../ui/Chip.svelte'
 import QueryView from '../ui/QueryView.svelte'
 
@@ -17,6 +18,7 @@ import QueryView from '../ui/QueryView.svelte'
  * building or unit. Each row names its sheet and row number so it can be found in the file.
  * Changing the filter or the search goes back to the first page; while the new page loads the old
  * rows are dimmed and the pager waits. The search stops at 160 characters, the backend's limit.
+ * A row opens its owner, on the row's unit, with the file's record next to DLD's.
  */
 let { listId, status = $bindable(null) }: { listId: number; status?: ClaimStatus | null } = $props()
 
@@ -91,9 +93,11 @@ const statuses = Object.keys(STATUS_INFO) as ClaimStatus[]
 					</thead>
 					<tbody>
 						{#each page.rows as r (r.id)}
-							<tr>
+							<tr class="row">
 								<td>
-									<div class="nm">{r.name}</div>
+									<button type="button" class="rowlink nm" onclick={() => openOwner(r.ownerKey, r.unit)}>
+										{r.name}
+									</button>
 									<div class="sub mono">{r.phone || '—'}</div>
 								</td>
 								<td data-label="Building · unit">{r.building || '—'}{r.unit ? ` · ${r.unit}` : ''}</td>

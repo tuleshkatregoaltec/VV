@@ -298,6 +298,7 @@ class CrmOwnerProperty(BaseModel):
     imported_transaction_date: date | None = None
     imported_transaction_price_aed: int | None = None
     imported_property_type: str = ""
+    imported_party_role: str = ""
     latest_sale_date: date | None = None
     latest_sale_price_aed: int | None = SQLField(default=None, sa_type=BigInteger)
     registry_sale_date: date | None = None
@@ -308,6 +309,9 @@ class CrmOwnerProperty(BaseModel):
     registry_built_up_area_sqft: float | None = None
     registry_price_per_sqft_aed: float | None = None
     registry_market_status: str | None = None
+    registry_unit_number: str | None = None
+    registry_building_name: str | None = None
+    registry_area_name: str | None = None
     later_sale_date: date | None = None
     lease_end: date | None = None
     annual_rent_aed: int | None = SQLField(default=None, sa_type=BigInteger)

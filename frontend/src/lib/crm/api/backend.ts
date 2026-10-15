@@ -37,7 +37,7 @@ import type {
 import { type ListingCardResponse, listings as portal } from '$lib/api/listings'
 import { groupOf, LEAD_TYPES, ownerPropertyKind, SOURCE_OPTIONS } from '../config'
 import { aed, fmt, fullDate, plural, short } from '../format'
-import { importCounts, isFlagged, mappingChecks } from '../ownerImportReport'
+import { importCounts, isFlagged, mappingChecks, STATUS_INFO } from '../ownerImportReport'
 import type {
 	Chip,
 	FeedArea,
@@ -824,7 +824,40 @@ function ownerUnit(p: CrmOwnerProperty): OwnerUnit {
 		transactions: [...new Map(transactions.map((t) => [`${t.when}${t.what}`, t])).values()].map(
 			(t) => ({ ...t, when: t.when.slice(0, 10) })
 		),
-		source: unitSource(p)
+		source: unitSource(p),
+		check: {
+			imported: {
+				date: p.imported_transaction_date ?? null,
+				aed: p.imported_transaction_price_aed ?? null,
+				type: p.imported_property_type || p.property_type,
+				unit: p.unit_number,
+				role: p.imported_party_role ?? ''
+			},
+			dld: {
+				unit: p.registry_unit_number ?? '',
+				building: p.registry_building_name ?? '',
+				area: p.registry_area_name ?? '',
+				date: p.registry_sale_date ?? p.latest_sale_date ?? null,
+				aed: p.registry_sale_price_aed ?? p.latest_sale_price_aed ?? null,
+				type: p.registry_property_type ?? '',
+				bedrooms: p.registry_bedrooms ?? '',
+				size_sqft: p.registry_size_sqft ?? null,
+				built_up_sqft: p.registry_built_up_area_sqft ?? null,
+				aed_per_sqft: p.registry_price_per_sqft_aed ?? null,
+				market: p.registry_market_status ?? ''
+			},
+			// Same wording as the import report, so the panel and the report agree.
+			result: {
+				label: STATUS_INFO[p.ownership_status].label,
+				confidence: p.confidence_score,
+				reason: p.match_reason,
+				chip: {
+					tone: STATUS_INFO[p.ownership_status].tone,
+					label: STATUS_INFO[p.ownership_status].label
+				}
+			},
+			lease: p.lease_end ? { end: p.lease_end, aed: p.annual_rent_aed ?? null } : null
+		}
 	}
 }
 
@@ -1096,7 +1129,7 @@ const PLACEHOLDER_HEADER = /^column\s*\d+$/i
 function ownerFileProblem(file: File): string | null {
 	const name = file.name.toLowerCase()
 	if (!OWNER_FILE_TYPES.some((t) => name.endsWith(t))) return 'Choose a CSV or XLSX file.'
-	if (!file.size) return 'This file is empty.'
+	if (!file.size) return 'File is empty, so nothing will be imported.'
 	if (file.size > OWNER_FILE_MAX_BYTES) return 'This file is over 50 MB.'
 	return null
 }
@@ -1169,7 +1202,7 @@ export async function previewOwnerFile(file: File): Promise<OwnerFilePreview> {
 		rows,
 		headers,
 		sample,
-		problem: rows ? null : 'No rows found in this file.'
+		problem: rows ? null : 'File is empty, so nothing will be imported.'
 	}
 }
 
@@ -1295,6 +1328,7 @@ export async function listOwnerImportRows(
 		rows: res.contacts.map(
 			(c): OwnerImportRow => ({
 				id: c.id,
+				ownerKey: c.owner_key,
 				name: c.contact_name,
 				phone: c.phone_primary || c.phone_alternate || c.email_primary || '',
 				building: c.building_name || c.project_name,

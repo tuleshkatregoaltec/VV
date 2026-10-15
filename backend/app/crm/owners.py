@@ -301,6 +301,7 @@ def _property_from_rows(
         imported_transaction_date=best.transaction_date,
         imported_transaction_price_aed=best.transaction_price_aed,
         imported_property_type=best.property_type,
+        imported_party_role=best.party_role,
         latest_sale_date=best.latest_sale_date,
         latest_sale_price_aed=best.latest_sale_price_aed,
         registry_sale_date=best.latest_sale_date,
@@ -516,6 +517,7 @@ def _sql_owner_property(row: dict[str, Any]) -> CrmOwnerProperty:
             int(row["transaction_price_aed"]) if row["transaction_price_aed"] else None
         ),
         imported_property_type=str(row["property_type"] or ""),
+        imported_party_role=str(row.get("party_role") or ""),
         latest_sale_date=row["latest_sale_date"],
         latest_sale_price_aed=(
             int(row["latest_sale_price_aed"]) if row["latest_sale_price_aed"] else None
@@ -773,6 +775,11 @@ async def _enrich_owner_profile_registry(profile: CrmOwnerProfile) -> CrmOwnerPr
         owner_property.registry_market_status = (
             str(selected.get("market_status") or "").strip() or None
         )
+        owner_property.registry_unit_number = str(selected.get("unit_number") or "").strip() or None
+        owner_property.registry_building_name = (
+            str(selected.get("building_name") or selected.get("project_name") or "").strip() or None
+        )
+        owner_property.registry_area_name = str(selected.get("area_name") or "").strip() or None
     return profile
 
 

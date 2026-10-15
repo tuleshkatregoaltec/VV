@@ -832,6 +832,30 @@ export interface OwnerUnit {
 	transactions: { when: string; what: string; aed: number | null }[]
 	/** Where this unit came from: "Business Bay 2024 SVR · Sheet1 row 12". Empty when unknown. */
 	source: string
+	/** The owner file's record next to DLD's, and the match result. Owner-import units only. */
+	check?: OwnerUnitCheck
+}
+
+/** What the owner file said about a unit, what DLD has for it, and how they were matched. */
+export interface OwnerUnitCheck {
+	/** `role` is the file's Buyer/Seller column; empty when the file had none. */
+	imported: { date: string | null; aed: number | null; type: string; unit: string; role: string }
+	/** `unit`, `building` and `area` are DLD's own names for the sale's property. */
+	dld: {
+		unit: string
+		building: string
+		area: string
+		date: string | null
+		aed: number | null
+		type: string
+		bedrooms: string
+		size_sqft: number | null
+		built_up_sqft: number | null
+		aed_per_sqft: number | null
+		market: string
+	}
+	result: { label: string; confidence: number; reason: string; chip: Chip }
+	lease: { end: string; aed: number | null } | null
 }
 
 /** One line of the owner's record of relationship. Leads and call logs do not count as a transaction. */
@@ -998,6 +1022,8 @@ export interface OwnerImportRowsParams {
 /** One kept row of an owner file (a claim), as checked against DLD. */
 export interface OwnerImportRow {
 	id: number
+	/** Opens this owner in the Owner panel. */
+	ownerKey: string
 	name: string
 	phone: string
 	building: string

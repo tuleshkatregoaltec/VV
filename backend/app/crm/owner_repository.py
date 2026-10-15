@@ -31,6 +31,7 @@ WITH base AS (
         c.building_name,
         c.unit_number,
         c.property_type,
+        c.party_role,
         c.transaction_date,
         c.transaction_price_aed,
         c.ownership_status,

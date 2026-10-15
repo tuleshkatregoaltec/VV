@@ -2435,7 +2435,7 @@
 			"get": {
 				"tags": ["crm", "crm"],
 				"summary": "Crm Owner Registry",
-				"description": "Return deduplicated owner profiles grouped into actionable CRM folders.",
+				"description": "Return deduplicated owner profiles grouped into actionable CRM folders.\n\n`min_properties` keeps owners with at least that many units; `next_event_days` keeps owners\nwhose next lease ends between today and that many days from now.",
 				"operationId": "crm-crm_owner_registry",
 				"parameters": [
 					{
@@ -2597,6 +2597,42 @@
 								}
 							],
 							"title": "Max Value Aed"
+						}
+					},
+					{
+						"name": "min_properties",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "integer",
+									"maximum": 10000,
+									"minimum": 1
+								},
+								{
+									"type": "null"
+								}
+							],
+							"title": "Min Properties"
+						}
+					},
+					{
+						"name": "next_event_days",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "integer",
+									"maximum": 3650,
+									"minimum": 0
+								},
+								{
+									"type": "null"
+								}
+							],
+							"title": "Next Event Days"
 						}
 					},
 					{
@@ -12162,6 +12198,11 @@
 						"title": "Imported Property Type",
 						"default": ""
 					},
+					"imported_party_role": {
+						"type": "string",
+						"title": "Imported Party Role",
+						"default": ""
+					},
 					"latest_sale_date": {
 						"anyOf": [
 							{
@@ -12273,6 +12314,39 @@
 							}
 						],
 						"title": "Registry Market Status"
+					},
+					"registry_unit_number": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Registry Unit Number"
+					},
+					"registry_building_name": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Registry Building Name"
+					},
+					"registry_area_name": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Registry Area Name"
 					},
 					"later_sale_date": {
 						"anyOf": [
