@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Iterable
 
@@ -11,6 +12,9 @@ from app.crm.identity import (
     ParsedContact,
     _candidate_owner_key,
     _location_key,
+    _location_number_markers,
+    _location_similarity,
+    _location_tokens,
     _normalize_unit,
     _recover_embedded_property_identity,
     _transaction_location_score,
@@ -30,6 +34,10 @@ _SALES_EVIDENCE_UNIT_CHUNK = 20_000
 
 _TRANSACTION_SIGNATURE_CHUNK = 1_500
 
+_EXCEL_ERROR = re.compile(
+    r"#(REF!|N/A|VALUE!|NAME\?|DIV/0!|NULL!|NUM!|SPILL!|CALC!)", re.IGNORECASE
+)
+
 _STATUS_SUMMARY_FIELDS = {
     "verified_current_owner": "verified_current_owners",
     "probable_current_owner": "probable_current_owners",
@@ -45,6 +53,72 @@ _STATUS_SUMMARY_FIELDS = {
 def _chunks(values: list[str], size: int = _QUERY_CHUNK) -> Iterable[list[str]]:
     for start in range(0, len(values), size):
         yield values[start : start + size]
+
+
+def _unique_unit_on_signature(
+    candidate: ParsedContact,
+    properties: list[dict[str, Any]],
+) -> dict[str, Any] | None:
+    """Fallback for a date+price signature the location rules rejected or could not decide.
+
+    Only one of the sales on that exact date and price may carry the row's unit, and the row's
+    location has to fit that sale without contradicting it: at least one of its building,
+    project or area must match the sale (score >= 55, or one name's words contained in the
+    other's, e.g. "GR Panorama" and "Panorama"), and building numbers must not differ
+    ("Tower 1" never matches "Tower 2"). Excel error values such as #REF! are not locations.
+    A row with no location at all is decided by the unit.
+    """
+    unit = _normalize_unit(candidate.unit_number)
+    if not unit:
+        return None
+    matches = [row for row in properties if _normalize_unit(row.get("unit_number")) == unit]
+    if len(matches) != 1:
+        return None
+    sale = matches[0]
+    owner_locations = [
+        value
+        for value in (
+            _fallback_location(candidate.building_name),
+            _fallback_location(candidate.project_name),
+            _fallback_location(candidate.area_name),
+        )
+        if value
+    ]
+    if not owner_locations:
+        return sale
+    sale_building = str(sale.get("building_name") or "")
+    sale_locations = [
+        value
+        for value in (
+            sale_building,
+            str(sale.get("project_name") or ""),
+            str(sale.get("area_name") or ""),
+        )
+        if value
+    ]
+    owner_numbers = _location_number_markers(_fallback_location(candidate.building_name))
+    sale_numbers = _location_number_markers(sale_building)
+    if owner_numbers and sale_numbers and owner_numbers != sale_numbers:
+        return None
+    fits = any(
+        _location_fits(owner, observed) for owner in owner_locations for observed in sale_locations
+    )
+    return sale if fits else None
+
+
+def _fallback_location(value: str) -> str:
+    location = _usable_project_name(value)
+    return "" if _EXCEL_ERROR.fullmatch(location) else location
+
+
+def _location_fits(owner: str, observed: str) -> bool:
+    if _location_similarity(owner, observed) >= 55:
+        return True
+    owner_tokens = frozenset(_location_tokens(owner))
+    observed_tokens = frozenset(_location_tokens(observed))
+    return bool(owner_tokens and observed_tokens) and (
+        owner_tokens <= observed_tokens or observed_tokens <= owner_tokens
+    )
 
 
 async def _recover_property_identity_from_transaction(
@@ -65,6 +139,7 @@ async def _recover_property_identity_from_transaction(
     ]
     unique_resolutions = 0
     contextual_resolutions = 0
+    unit_resolutions = 0
     ambiguous = 0
     for start in range(0, len(eligible), _TRANSACTION_SIGNATURE_CHUNK):
         batch = eligible[start : start + _TRANSACTION_SIGNATURE_CHUNK]
@@ -123,11 +198,15 @@ async def _recover_property_identity_from_transaction(
                     or _usable_project_name(candidate.area_name)
                 )
                 if has_source_location and location_score < 55:
-                    selected = None
-                    ambiguous += 1
-                    continue
+                    selected = _unique_unit_on_signature(candidate, properties)
+                    if selected is None:
+                        ambiguous += 1
+                        continue
+                    method = "unique_transaction_unit_signature"
+                    unit_resolutions += 1
+                else:
+                    unique_resolutions += 1
                 score = location_score or 100
-                unique_resolutions += 1
             else:
                 scored = sorted(
                     ((_transaction_location_score(candidate, row), row) for row in properties),
@@ -137,11 +216,16 @@ async def _recover_property_identity_from_transaction(
                 score, selected = scored[0]
                 runner_up = scored[1][0]
                 if score < 55 or score - runner_up < 12:
-                    selected = None
-                    ambiguous += 1
-                    continue
-                method = "transaction_signature_with_location"
-                contextual_resolutions += 1
+                    selected = _unique_unit_on_signature(candidate, properties)
+                    if selected is None:
+                        ambiguous += 1
+                        continue
+                    score = _transaction_location_score(candidate, selected)
+                    method = "unique_transaction_unit_signature"
+                    unit_resolutions += 1
+                else:
+                    method = "transaction_signature_with_location"
+                    contextual_resolutions += 1
 
             if not selected:
                 continue
@@ -175,6 +259,7 @@ async def _recover_property_identity_from_transaction(
         "eligible": len(eligible),
         "unique": unique_resolutions,
         "contextual": contextual_resolutions,
+        "unit": unit_resolutions,
         "ambiguous": ambiguous,
     }
 
