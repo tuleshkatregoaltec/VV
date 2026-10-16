@@ -29,6 +29,12 @@ from app.crm.import_models import (
 _MAX_ROWS = 500_000
 
 _PLACEHOLDER_HEADER = re.compile(r"^column\s*\d+$", re.IGNORECASE)
+_BUILDING_NO_PROPERTY_IDENTIFIER = re.compile(
+    r"(?:^|[-\s])(?:v|villa|th)[-\s]*[a-z0-9.]+$", re.IGNORECASE
+)
+_BUILDING_NO_NUMERIC_IDENTIFIER = re.compile(
+    r"^(?:r\d*\s+)?(.+?)[-\s]+(?:v|villa|th)[-\s]*(\d+)$", re.IGNORECASE
+)
 
 _TRANSFER_WORDS = ("sale", "sell", "delayed sell")
 
@@ -471,6 +477,31 @@ def _candidate_from_row(
 ) -> ParsedContact | None:
     name = _text(_field_value(row, profile, "contact_name"))
     unit = _normalize_unit(_field_value(row, profile, "unit_number"))
+    unit_fallback_field = ""
+    unit_fallback_value = ""
+    if not unit:
+        property_number = next(
+            (
+                _text(row[header.index])
+                for header in profile.headers
+                if _header_token(header.key) == "propertynumber"
+                and header.index < len(row)
+                and _text(row[header.index])
+            ),
+            "",
+        )
+        if property_number and _normalize_unit(property_number) not in {"0", "1"}:
+            unit = _normalize_unit(property_number)
+            unit_fallback_field = "propertynumber"
+            unit_fallback_value = property_number
+    building_no = next(
+        (
+            _text(row[header.index])
+            for header in profile.headers
+            if _header_token(header.key) == "buildingno" and header.index < len(row)
+        ),
+        "",
+    )
     if not name:
         if dropped is not None:
             dropped.append(
@@ -488,10 +519,13 @@ def _candidate_from_row(
     inferred_project = _inferred_project(filename, profile.name)
     area = _text(_field_value(row, profile, "area_name"))
     master_project = _text(_field_value(row, profile, "master_project"))
+    area_source_field = ""
     project = _text(_field_value(row, profile, "project_name")) or inferred_project
     building = _text(_field_value(row, profile, "building_name")) or project
     if not area:
         area = "Tilal Al Ghaf" if inferred_project else master_project
+        if master_project and not inferred_project:
+            area_source_field = "master_project"
     if not project:
         project = master_project
 
@@ -530,10 +564,49 @@ def _candidate_from_row(
         procedure_type=procedure[:160],
         row_fingerprint=hashlib.sha256(fingerprint_source.encode()).hexdigest(),
     )
+    if area_source_field:
+        candidate.evidence["source_area_field"] = area_source_field
     source_unit = re.sub(r"\s+", "", _text(_field_value(row, profile, "unit_number"))).upper()
     if source_unit and source_unit.lower() != unit.lower():
         candidate.evidence["source_unit_number"] = source_unit[:100]
+    if unit_fallback_field:
+        compact_value = re.sub(r"\s+", "", unit_fallback_value).upper()
+        candidate.evidence["source_unit_number"] = compact_value[:100]
+        candidate.evidence["unit_number_fallback"] = {
+            "source_field": unit_fallback_field,
+            "source_value": unit_fallback_value[:100],
+        }
     _recover_embedded_property_identity(candidate)
+    address_recovery = candidate.evidence.get("address_recovery")
+    building_no_identifier = _BUILDING_NO_NUMERIC_IDENTIFIER.fullmatch(building_no)
+    if (
+        not unit
+        and isinstance(address_recovery, dict)
+        and address_recovery.get("method") == "embedded_numeric_identifier"
+        and building_no_identifier
+    ):
+        source_building = _text(_field_value(row, profile, "building_name"))
+        candidate.building_name = _text(building_no_identifier.group(1))
+        candidate.unit_number = _normalize_unit(building_no_identifier.group(2))
+        candidate.evidence["source_unit_number"] = _normalize_unit(building_no)[:100]
+        candidate.evidence["address_recovery"] = {
+            "source_building_name": source_building,
+            "source_building_no": building_no,
+            "resolved_building_name": candidate.building_name,
+            "resolved_unit_number": candidate.unit_number,
+            "method": "building_no_structured_numeric_identifier",
+        }
+    # Keep the full code when the registry-style numeric suffix rule does not apply.
+    if not candidate.unit_number and _BUILDING_NO_PROPERTY_IDENTIFIER.search(building_no):
+        candidate.unit_number = _normalize_unit(building_no)[:100]
+        candidate.evidence["source_unit_number"] = re.sub(r"\s+", "", building_no).upper()[:100]
+    if not candidate.unit_number and _normalize_unit(building_no) not in {"", "0", "1"}:
+        candidate.unit_number = _normalize_unit(building_no)[:100]
+        candidate.evidence["source_unit_number"] = re.sub(r"\s+", "", building_no).upper()[:100]
+        candidate.evidence["unit_number_fallback"] = {
+            "source_field": "buildingno",
+            "source_value": building_no[:100],
+        }
     return candidate
 
 

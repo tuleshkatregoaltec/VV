@@ -121,6 +121,33 @@ def _location_fits(owner: str, observed: str) -> bool:
     )
 
 
+def _unique_property_in_master_project_area(
+    candidate: ParsedContact,
+    properties: list[dict[str, Any]],
+) -> dict[str, Any] | None:
+    """Ignore a long registry number appended to a master-project area label."""
+    if candidate.evidence.get("source_area_field") != "master_project":
+        return None
+    source_area = _fallback_location(candidate.area_name)
+    if not re.search(r"\b\d{3,}$", source_area):
+        return None
+    source_tokens = {token for token in _location_tokens(source_area) if not token.isdigit()}
+    if len(source_tokens) < 2:
+        return None
+
+    matches = [
+        row
+        for row in properties
+        if {
+            token
+            for token in _location_tokens(str(row.get("area_name") or ""))
+            if not token.isdigit()
+        }
+        == source_tokens
+    ]
+    return matches[0] if len(matches) == 1 else None
+
+
 async def _recover_property_identity_from_transaction(
     candidates: list[ParsedContact],
 ) -> dict[str, int]:
@@ -140,6 +167,7 @@ async def _recover_property_identity_from_transaction(
     unique_resolutions = 0
     contextual_resolutions = 0
     unit_resolutions = 0
+    master_project_area_resolutions = 0
     ambiguous = 0
     for start in range(0, len(eligible), _TRANSACTION_SIGNATURE_CHUNK):
         batch = eligible[start : start + _TRANSACTION_SIGNATURE_CHUNK]
@@ -200,13 +228,22 @@ async def _recover_property_identity_from_transaction(
                 if has_source_location and location_score < 55:
                     selected = _unique_unit_on_signature(candidate, properties)
                     if selected is None:
-                        ambiguous += 1
-                        continue
-                    method = "unique_transaction_unit_signature"
-                    unit_resolutions += 1
+                        selected = _unique_property_in_master_project_area(candidate, properties)
+                        if selected is None:
+                            ambiguous += 1
+                            continue
+                        method = "transaction_signature_with_master_project_area"
+                        master_project_area_resolutions += 1
+                    else:
+                        method = "unique_transaction_unit_signature"
+                        unit_resolutions += 1
                 else:
                     unique_resolutions += 1
-                score = location_score or 100
+                score = (
+                    location_score
+                    if method == "transaction_signature_with_master_project_area"
+                    else location_score or 100
+                )
             else:
                 scored = sorted(
                     ((_transaction_location_score(candidate, row), row) for row in properties),
@@ -218,11 +255,16 @@ async def _recover_property_identity_from_transaction(
                 if score < 55 or score - runner_up < 12:
                     selected = _unique_unit_on_signature(candidate, properties)
                     if selected is None:
-                        ambiguous += 1
-                        continue
+                        selected = _unique_property_in_master_project_area(candidate, properties)
+                        if selected is None:
+                            ambiguous += 1
+                            continue
+                        method = "transaction_signature_with_master_project_area"
+                        master_project_area_resolutions += 1
+                    else:
+                        method = "unique_transaction_unit_signature"
+                        unit_resolutions += 1
                     score = _transaction_location_score(candidate, selected)
-                    method = "unique_transaction_unit_signature"
-                    unit_resolutions += 1
                 else:
                     method = "transaction_signature_with_location"
                     contextual_resolutions += 1
@@ -260,6 +302,7 @@ async def _recover_property_identity_from_transaction(
         "unique": unique_resolutions,
         "contextual": contextual_resolutions,
         "unit": unit_resolutions,
+        "master_project_area": master_project_area_resolutions,
         "ambiguous": ambiguous,
     }
 
