@@ -1233,6 +1233,10 @@ export type CrmContactImportSummary = {
      */
     candidate_rows?: number;
     /**
+     * Distinct Properties
+     */
+    distinct_properties?: number | null;
+    /**
      * Duplicate Rows Collapsed
      */
     duplicate_rows_collapsed?: number;
@@ -1494,6 +1498,48 @@ export type CrmDroppedRow = {
      * Procedure
      */
     procedure?: string;
+};
+
+/**
+ * CrmImportPropertyRecord
+ */
+export type CrmImportPropertyRecord = {
+    name: string;
+    role: string;
+    sale_date?: string | null;
+    price_aed?: number | null;
+    status: string;
+    sheet: string;
+    row: number;
+};
+
+/**
+ * CrmImportProperty
+ */
+export type CrmImportProperty = {
+    property_key: string;
+    area: string;
+    project: string;
+    building: string;
+    unit: string;
+    property_type: string;
+    rows: number;
+    buyers: number;
+    sellers: number;
+    current_owner?: string | null;
+    latest_date?: string | null;
+    latest_price_aed?: number | null;
+    records: Array<CrmImportPropertyRecord>;
+};
+
+/**
+ * CrmImportPropertiesResponse
+ */
+export type CrmImportPropertiesResponse = {
+    total: number;
+    offset: number;
+    limit: number;
+    rows: Array<CrmImportProperty>;
 };
 
 /**

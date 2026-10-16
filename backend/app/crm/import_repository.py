@@ -72,6 +72,39 @@ async def count_import_claim_metrics(db: AsyncSession, organization_id, record_i
     return candidate_rows, valid_contacts, rental_opportunities, contact_ready
 
 
+async def count_import_distinct_properties(db: AsyncSession, organization_id, record_id) -> int:
+    # Claims with no building + unit carry a "source:<fingerprint>" key; they are not properties.
+    result = await db.exec(
+        select(func.count(func.distinct(CrmPropertyContactClaim.property_key))).where(
+            CrmPropertyContactClaim.organization_id == organization_id,
+            CrmPropertyContactClaim.import_id == record_id,
+            CrmPropertyContactClaim.property_key.not_like("source:%"),
+        )
+    )
+    return int(result.one() or 0)
+
+
+async def list_import_property_claims(db: AsyncSession, organization_id, record_id, search):
+    """Kept rows of one import that name a property, optionally searched by building or unit."""
+    statement = select(CrmPropertyContactClaim).where(
+        CrmPropertyContactClaim.organization_id == organization_id,
+        CrmPropertyContactClaim.import_id == record_id,
+        CrmPropertyContactClaim.property_key.not_like("source:%"),
+    )
+    if search and search.strip():
+        term = f"%{search.strip()}%"
+        statement = statement.where(
+            or_(
+                CrmPropertyContactClaim.building_name.ilike(term),
+                CrmPropertyContactClaim.project_name.ilike(term),
+                CrmPropertyContactClaim.area_name.ilike(term),
+                CrmPropertyContactClaim.unit_number.ilike(term),
+                CrmPropertyContactClaim.contact_name.ilike(term),
+            )
+        )
+    return (await db.exec(statement)).all()
+
+
 def save(db: AsyncSession, record):
     db.add(record)
 

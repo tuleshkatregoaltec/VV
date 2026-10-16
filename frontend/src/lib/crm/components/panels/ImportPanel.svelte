@@ -193,6 +193,7 @@ async function send() {
 					<div class="kv">
 						<Kv k="Rows in the file" v={fmt(s.totalRows)} />
 						<Kv k="Owners kept" v={fmt(s.candidateRows)} o={s.duplicatesCollapsed ? `${fmt(s.duplicatesCollapsed)} duplicates merged` : ''} />
+						{#if s.distinctProperties !== null}<Kv k="Properties" v={fmt(s.distinctProperties)} o="Distinct units, villas or plots" />{/if}
 						<Kv k="With a phone or email" v={fmt(s.validContacts)} />
 						<Kv k="Ready to contact" v={fmt(s.contactReady)} />
 						<Kv k="Verified owners" v={fmt(s.verified)} o="Matches a DLD sale" />

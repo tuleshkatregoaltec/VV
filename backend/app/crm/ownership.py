@@ -922,10 +922,14 @@ async def _refresh_contact_import_match_summaries(
             rental_opportunities,
             contact_ready,
         ) = await import_repository.count_import_claim_metrics(db, organization_id, record_id)
+        distinct_properties = await import_repository.count_import_distinct_properties(
+            db, organization_id, record_id
+        )
         summary = dict(record.summary or {})
         summary.update(
             {
                 "candidate_rows": candidate_rows,
+                "distinct_properties": distinct_properties,
                 "valid_contacts": valid_contacts,
                 "rental_opportunities": rental_opportunities,
                 "contact_ready": contact_ready,

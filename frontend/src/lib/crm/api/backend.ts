@@ -15,6 +15,7 @@ import type {
 	CrmContactImportResponse,
 	CrmContactListDetail,
 	CrmDroppedRowsResponse,
+	CrmImportPropertiesResponse,
 	CrmLead,
 	CrmLeadDetailResponse,
 	CrmLeadImportedContact,
@@ -38,7 +39,13 @@ import type {
 import { type ListingCardResponse, listings as portal } from '$lib/api/listings'
 import { groupOf, LEAD_TYPES, ownerPropertyKind, SOURCE_OPTIONS } from '../config'
 import { aed, fmt, fullDate, plural, short } from '../format'
-import { importCounts, isFlagged, mappingChecks, STATUS_INFO } from '../ownerImportReport'
+import {
+	type ClaimStatus,
+	importCounts,
+	isFlagged,
+	mappingChecks,
+	STATUS_INFO
+} from '../ownerImportReport'
 import type {
 	Chip,
 	FeedArea,
@@ -82,6 +89,8 @@ import type {
 	OwnerImportSource,
 	OwnerListParams,
 	OwnerListResponse,
+	OwnerProperties,
+	OwnerPropertyParams,
 	OwnerRow,
 	OwnerTab,
 	OwnerUnit,
@@ -1223,6 +1232,7 @@ function ownerImportResult(
 		summary: {
 			totalRows: s.total_rows ?? 0,
 			candidateRows: s.candidate_rows ?? 0,
+			distinctProperties: s.distinct_properties ?? null,
 			duplicatesCollapsed: s.duplicate_rows_collapsed ?? 0,
 			validContacts: s.valid_contacts ?? 0,
 			verified: s.verified_current_owners ?? 0,
@@ -1382,6 +1392,51 @@ export async function listOwnerImportDropped(
 			procedure: r.procedure ?? ''
 		})),
 		byReason: res.by_reason,
+		total: res.total,
+		offset: res.offset,
+		limit: res.limit
+	}
+}
+
+/**
+ * One page (100) of an owner file's distinct properties (building + unit), each with its kept
+ * rows, searched by building, project, area, unit or owner name.
+ */
+export async function listOwnerImportProperties(
+	importId: number,
+	p: OwnerPropertyParams
+): Promise<OwnerProperties> {
+	const res = await client.get<CrmImportPropertiesResponse>(
+		client.withQuery(`${CRM}/contact-imports/${importId}/properties`, {
+			search: p.search.trim() || undefined,
+			limit: OWNER_ROWS_LIMIT,
+			offset: p.offset
+		})
+	)
+	return {
+		rows: res.rows.map((r) => ({
+			key: r.property_key,
+			area: r.area,
+			project: r.project,
+			building: r.building,
+			unit: r.unit,
+			type: r.property_type,
+			rows: r.rows,
+			buyers: r.buyers,
+			sellers: r.sellers,
+			currentOwner: r.current_owner ?? null,
+			latestDate: r.latest_date ?? null,
+			latestPrice: r.latest_price_aed ?? null,
+			records: r.records.map((x) => ({
+				name: x.name,
+				role: x.role,
+				date: x.sale_date ?? null,
+				price: x.price_aed ?? null,
+				status: x.status as ClaimStatus,
+				sheet: x.sheet,
+				rowNumber: x.row
+			}))
+		})),
 		total: res.total,
 		offset: res.offset,
 		limit: res.limit

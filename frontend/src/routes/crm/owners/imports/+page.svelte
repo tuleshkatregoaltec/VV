@@ -88,6 +88,7 @@ const problems = (i: OwnerImportDetail) => [
 								<th>Date</th>
 								<th class="r">Rows</th>
 								<th class="r">Kept</th>
+								<th class="r">Properties</th>
 								<th class="r">Matched</th>
 								<th class="r">Dropped</th>
 								<th class="r">Match rate</th>
@@ -107,6 +108,7 @@ const problems = (i: OwnerImportDetail) => [
 									<td data-label="Date" class="nowrap">{i.at}</td>
 									<td data-label="Rows" class="r">{fmt(i.counts.rows)}</td>
 									<td data-label="Kept" class="r">{fmt(i.counts.kept)}</td>
+									<td data-label="Properties" class="r">{i.counts.properties === null ? '—' : fmt(i.counts.properties)}</td>
 									<td data-label="Matched" class="r">{fmt(i.counts.matched)}</td>
 									<td data-label="Dropped" class="r">{fmt(i.counts.dropped)}</td>
 									<td data-label="Match rate" class="r">{rate(i.counts.matchRate)}</td>

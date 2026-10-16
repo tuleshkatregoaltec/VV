@@ -72,6 +72,8 @@ import type {
 	OwnerLeadCreate,
 	OwnerListParams,
 	OwnerListResponse,
+	OwnerProperties,
+	OwnerPropertyParams,
 	OwnerRecordCreate,
 	OwnerReport,
 	OwnerRow,
@@ -352,6 +354,9 @@ export const crm = {
 		/** One page of the rows an owner file did not keep, with the reason. */
 		ownerDropped: (importId: number, p: OwnerDroppedRowsParams): Promise<OwnerDroppedRows> =>
 			backend.listOwnerImportDropped(importId, p),
+		/** One page of an owner file's distinct properties, with their rows. */
+		ownerProperties: (importId: number, p: OwnerPropertyParams): Promise<OwnerProperties> =>
+			backend.listOwnerImportProperties(importId, p),
 		/** Rename an owner file and its saved list. */
 		renameOwners: (id: number, name: string): Promise<Written<null>> =>
 			backend.renameOwnerImport(id, name),

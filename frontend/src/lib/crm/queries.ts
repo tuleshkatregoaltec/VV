@@ -12,6 +12,7 @@ import type {
 	OwnerImportDetail,
 	OwnerImportRowsParams,
 	OwnerListParams,
+	OwnerPropertyParams,
 	RenewalListParams
 } from './api/types'
 
@@ -55,6 +56,8 @@ export const crmKeys = {
 		[...crmKeys.all, 'imports', 'owners', 'rows', listId, p] as const,
 	ownerImportDropped: (importId: number, p: OwnerDroppedRowsParams) =>
 		[...crmKeys.all, 'imports', 'owners', 'dropped', importId, p] as const,
+	ownerImportProperties: (importId: number, p: OwnerPropertyParams) =>
+		[...crmKeys.all, 'imports', 'owners', 'properties', importId, p] as const,
 	events: (from: string, to: string) => [...crmKeys.all, 'events', from, to] as const,
 	event: (id: number) => [...crmKeys.all, 'event', id] as const,
 	calendarSide: () => [...crmKeys.all, 'calendar-side'] as const,
@@ -162,6 +165,11 @@ export const crmQueries = {
 	ownerImportDropped: (importId: number, p: OwnerDroppedRowsParams) => ({
 		queryKey: crmKeys.ownerImportDropped(importId, p),
 		queryFn: () => crm.imports.ownerDropped(importId, p),
+		placeholderData: keepPreviousData
+	}),
+	ownerImportProperties: (importId: number, p: OwnerPropertyParams) => ({
+		queryKey: crmKeys.ownerImportProperties(importId, p),
+		queryFn: () => crm.imports.ownerProperties(importId, p),
 		placeholderData: keepPreviousData
 	}),
 	events: (from: string, to: string) => ({

@@ -1037,6 +1037,47 @@ export interface OwnerImportRow {
 	rowNumber: number
 }
 
+export interface OwnerPropertyParams {
+	search: string
+	offset: number
+}
+
+/** One kept row of a property: who, their role, the sale and its DLD status. */
+export interface OwnerPropertyRecord {
+	name: string
+	role: string
+	date: string | null
+	price: number | null
+	status: ClaimStatus
+	sheet: string
+	rowNumber: number
+}
+
+/** One distinct property (building + unit) of an owner file, with its kept rows. */
+export interface OwnerProperty {
+	key: string
+	area: string
+	project: string
+	building: string
+	unit: string
+	type: string
+	rows: number
+	buyers: number
+	sellers: number
+	/** Name on the strongest verified/probable owner row; null when there is none. */
+	currentOwner: string | null
+	latestDate: string | null
+	latestPrice: number | null
+	records: OwnerPropertyRecord[]
+}
+
+export interface OwnerProperties {
+	rows: OwnerProperty[]
+	total: number
+	offset: number
+	limit: number
+}
+
 export interface OwnerDroppedRowsParams {
 	reason: DropReason | null
 	search: string
@@ -1085,6 +1126,8 @@ export interface OwnerImportResult {
 	summary: {
 		totalRows: number
 		candidateRows: number
+		/** Distinct units, villas or plots; null for imports made before it was counted. */
+		distinctProperties: number | null
 		duplicatesCollapsed: number
 		validContacts: number
 		verified: number

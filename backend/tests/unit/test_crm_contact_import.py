@@ -604,6 +604,23 @@ def test_rows_without_a_unit_after_matching_are_dropped_and_counted():
     assert _summary(kept, total_rows=3, dropped_no_unit=dropped).dropped_no_unit == 1
 
 
+def test_summary_counts_each_property_once_across_buyer_and_seller_rows():
+    # Managers asked how many units/villas a file covers; one unit sold twice, with a buyer and
+    # a seller row per sale, is one property, and rows with no unit are not properties.
+    rows = [
+        _contact(contact_name="Buyer A", party_role="Buyer", row_fingerprint="a"),
+        _contact(contact_name="Seller B", party_role="Seller", row_fingerprint="b"),
+        _contact(contact_name="Buyer C", building_name="ASPECT TOWER", row_fingerprint="c"),
+        _contact(unit_number="603", row_fingerprint="d"),
+        _contact(unit_number="", row_fingerprint="e"),
+    ]
+
+    summary = _summary(rows, total_rows=5)
+
+    assert summary.candidate_rows == 5
+    assert summary.distinct_properties == 2
+
+
 def test_unit_recovered_by_registry_match_is_kept():
     # Matching runs before the drop, so a unit filled in from an exact sale signature
     # keeps the row even when the uploaded unit cell was empty.

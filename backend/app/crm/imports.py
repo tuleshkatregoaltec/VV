@@ -32,6 +32,9 @@ from app.crm.import_models import (
     CrmContactImportSummary,
     CrmContactList,
     CrmDroppedRowsResponse,
+    CrmImportPropertiesResponse,
+    CrmImportProperty,
+    CrmImportPropertyRecord,
     CrmPropertyContactClaim,
     CrmSheetMapping,
 )
@@ -327,3 +330,83 @@ async def list_dropped_rows(
         f"{len(page.rows)} of {page.total} shown" if page.available else "no log for this import",
     )
     return page
+
+
+_CURRENT_OWNER_STATUSES = ("verified_current_owner", "probable_current_owner")
+# A property lists at most this many of its rows; a unit resold many times stays readable.
+_PROPERTY_RECORDS_MAX = 50
+
+
+def _group_properties(claims: list[CrmPropertyContactClaim]) -> list[CrmImportProperty]:
+    """One entry per property key, sorted by building/project then unit, newest rows first."""
+    grouped: dict[str, list[CrmPropertyContactClaim]] = {}
+    for claim in claims:
+        grouped.setdefault(claim.property_key, []).append(claim)
+    properties: list[CrmImportProperty] = []
+    for key, group in grouped.items():
+        group.sort(
+            key=lambda c: (c.transaction_date is not None, c.transaction_date, c.source_row_number),
+            reverse=True,
+        )
+        first = group[0]
+        current = max(
+            (c for c in group if c.ownership_status in _CURRENT_OWNER_STATUSES),
+            key=lambda c: c.confidence_score,
+            default=None,
+        )
+        dated = next((c for c in group if c.transaction_date), None)
+        properties.append(
+            CrmImportProperty(
+                property_key=key,
+                area=first.area_name,
+                project=first.project_name,
+                building=first.building_name,
+                unit=first.unit_number,
+                property_type=first.property_type,
+                rows=len(group),
+                buyers=sum(c.party_role == "Buyer" for c in group),
+                sellers=sum(c.party_role == "Seller" for c in group),
+                current_owner=current.contact_name if current else None,
+                latest_date=dated.transaction_date if dated else None,
+                latest_price_aed=dated.transaction_price_aed if dated else None,
+                records=[
+                    CrmImportPropertyRecord(
+                        name=c.contact_name,
+                        role=c.party_role,
+                        sale_date=c.transaction_date,
+                        price_aed=c.transaction_price_aed,
+                        status=c.ownership_status,
+                        sheet=c.source_sheet,
+                        row=c.source_row_number,
+                    )
+                    for c in group[:_PROPERTY_RECORDS_MAX]
+                ],
+            )
+        )
+    properties.sort(key=lambda p: ((p.building or p.project).casefold(), p.unit.casefold()))
+    return properties
+
+
+async def list_import_properties(
+    db: AsyncSession,
+    *,
+    import_id: int,
+    organization_id: str,
+    search: str | None,
+    limit: int,
+    offset: int,
+) -> CrmImportPropertiesResponse:
+    """One page of an import's distinct properties, each with its kept rows."""
+    record = await import_repository.get_import_for_org(db, import_id, organization_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="Owner-data import not found")
+    claims = await import_repository.list_import_property_claims(
+        db, organization_id, import_id, search
+    )
+    properties = _group_properties(list(claims))
+    return CrmImportPropertiesResponse(
+        total=len(properties),
+        offset=offset,
+        limit=limit,
+        rows=properties[offset : offset + limit],
+    )

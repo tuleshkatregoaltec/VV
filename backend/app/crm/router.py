@@ -21,6 +21,7 @@ from app.crm.import_models import (
     CrmContactListDetail,
     CrmContactListSummary,
     CrmDroppedRowsResponse,
+    CrmImportPropertiesResponse,
     CrmLeadImportedContact,
     CrmOwnerBulkUpdate,
     CrmOwnerProfile,
@@ -31,6 +32,7 @@ from app.crm.imports import (
     delete_contact_import,
     list_contact_imports,
     list_dropped_rows,
+    list_import_properties,
     process_contact_import,
     rename_contact_import,
 )
@@ -416,6 +418,30 @@ async def crm_contact_import_dropped_rows(
         import_id=import_id,
         organization_id=organization_id,
         reason=reason,
+        search=search,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@router.get(
+    "/contact-imports/{import_id}/properties",
+    response_model=CrmImportPropertiesResponse,
+)
+async def crm_contact_import_properties(
+    import_id: int,
+    search: str | None = Query(default=None, max_length=160),
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+    context: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """Distinct properties (building + unit) of one import, each with its kept rows."""
+    _, organization_id = _auth_ids(context)
+    return await list_import_properties(
+        db,
+        import_id=import_id,
+        organization_id=organization_id,
         search=search,
         limit=limit,
         offset=offset,

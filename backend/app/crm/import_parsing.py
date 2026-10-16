@@ -640,6 +640,9 @@ def _summary(
     return CrmContactImportSummary(
         total_rows=total_rows,
         candidate_rows=len(candidates),
+        distinct_properties=len(
+            {candidate.property_key for candidate in candidates if candidate.property_key}
+        ),
         duplicate_rows_collapsed=duplicate_rows_collapsed,
         dropped_no_unit=dropped_no_unit,
         valid_contacts=sum(candidate.has_valid_contact for candidate in candidates),

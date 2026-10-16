@@ -134,6 +134,8 @@ const SUMMARY_KEY: Record<ClaimStatus, SummaryCount> = {
 export interface ImportCounts {
 	rows: number
 	kept: number
+	/** Distinct units, villas or plots among the kept rows; null for imports made before it. */
+	properties: number | null
 	merged: number
 	dropped: number
 	matched: number
@@ -162,6 +164,7 @@ export function importCounts(summary: CrmContactImportSummary): ImportCounts {
 	return {
 		rows,
 		kept,
+		properties: summary.distinct_properties ?? null,
 		merged,
 		dropped: Math.max(0, rows - kept - merged),
 		matched,

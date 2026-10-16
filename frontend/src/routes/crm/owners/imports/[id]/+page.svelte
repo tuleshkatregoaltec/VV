@@ -7,6 +7,7 @@ import { crm } from '$lib/crm/api'
 import type { OwnerImportDetail } from '$lib/crm/api/types'
 import DroppedRows from '$lib/crm/components/imports/DroppedRows.svelte'
 import ImportRows from '$lib/crm/components/imports/ImportRows.svelte'
+import PropertyRows from '$lib/crm/components/imports/PropertyRows.svelte'
 import Chip from '$lib/crm/components/ui/Chip.svelte'
 import InfoTip from '$lib/crm/components/ui/InfoTip.svelte'
 import PageHeader from '$lib/crm/components/ui/PageHeader.svelte'
@@ -53,12 +54,15 @@ let confirming = $state(false)
 let status = $state<ClaimStatus | null>(null)
 // The Dropped card opens the rows the import did not keep, with the reason for each.
 let showDropped = $state(false)
+// The Properties card opens the import's distinct units, each with its buyer/seller rows.
+let showProperties = $state(false)
 let shownFor = $state<number | null>(null)
 $effect.pre(() => {
 	if (!imp || shownFor === imp.id) return
 	shownFor = imp.id
 	status = null
 	showDropped = false
+	showProperties = false
 	editing = false
 	confirming = false
 	draft = ''
@@ -195,6 +199,18 @@ const share = (n: number, of: number) => (of ? `${Math.round((n / of) * 100)}%` 
 						<span class="lbl">Owners kept</span><span class="v">{fmt(c.kept)}</span>
 						<span class="n">{fmt(c.readyToContact)} ready to contact · {fmt(c.rentalLeads)} rental leads</span>
 					</div>
+					<button
+						type="button"
+						class={['kpi', showProperties && 'on']}
+						aria-pressed={showProperties}
+						aria-controls="property-rows"
+						disabled={!c.kept}
+						onclick={() => (showProperties = !showProperties)}
+					>
+						<span class="lbl">Properties</span><span class="v">{c.properties === null ? '—' : fmt(c.properties)}</span>
+						<span class="n">{c.properties === null ? 'Counted from the next rematch' : 'Distinct units, villas or plots'}</span>
+						{#if c.kept}<span class="n link">{showProperties ? 'Hide properties' : 'Show properties'}</span>{/if}
+					</button>
 					<div class="kpi green">
 						<span class="lbl"><i class="dot matched"></i>Matched to DLD</span><span class="v">{fmt(c.matched)}</span>
 						<span class="n">{c.matchRate === null ? '—' : `${Math.round(c.matchRate * 100)}%`} of kept</span>
@@ -206,6 +222,13 @@ const share = (n: number, of: number) => (of ? `${Math.round((n / of) * 100)}%` 
 				<section class="sec" id="dropped-rows">
 					<h3>Dropped rows</h3>
 					<DroppedRows importId={imp.id} />
+				</section>
+			{/if}
+
+			{#if showProperties}
+				<section class="sec" id="property-rows">
+					<h3>Properties</h3>
+					<PropertyRows importId={imp.id} />
 				</section>
 			{/if}
 

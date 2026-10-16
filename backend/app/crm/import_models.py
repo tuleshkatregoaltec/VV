@@ -170,6 +170,9 @@ class CrmPropertyContactClaim(SQLModel, table=True):
 class CrmContactImportSummary(BaseModel):
     total_rows: int = 0
     candidate_rows: int = 0
+    # Distinct properties (building + unit) among the kept rows: one unit sold several times,
+    # with a buyer and a seller row per sale, counts once. None for imports made before it.
+    distinct_properties: int | None = None
     duplicate_rows_collapsed: int = 0
     dropped_no_unit: int = 0
     valid_contacts: int = 0
@@ -214,6 +217,44 @@ class CrmDroppedRowsResponse(BaseModel):
     limit: int
     by_reason: dict[str, int]
     rows: list[CrmDroppedRow]
+
+
+class CrmImportPropertyRecord(BaseModel):
+    """One kept row of a property: who, their role, the sale and how it matched DLD."""
+
+    name: str
+    role: str
+    sale_date: date | None = None
+    price_aed: int | None = None
+    status: str
+    sheet: str
+    row: int
+
+
+class CrmImportProperty(BaseModel):
+    """One distinct property (building + unit) of an import, with its kept rows."""
+
+    property_key: str
+    area: str
+    project: str
+    building: str
+    unit: str
+    property_type: str
+    rows: int
+    buyers: int
+    sellers: int
+    # Name on the strongest verified/probable current-owner row; None when there is none.
+    current_owner: str | None = None
+    latest_date: date | None = None
+    latest_price_aed: int | None = None
+    records: list[CrmImportPropertyRecord]
+
+
+class CrmImportPropertiesResponse(BaseModel):
+    total: int
+    offset: int
+    limit: int
+    rows: list[CrmImportProperty]
 
 
 class CrmSheetMapping(BaseModel):
