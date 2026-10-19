@@ -89,7 +89,7 @@ function handleAvatarError() {
 
 	{#if isOpen}
 		<div
-			class="ui-menu absolute bottom-full left-0 z-50 mb-2 w-64 overflow-hidden"
+			class="ui-menu absolute bottom-full left-0 z-50 mb-2 w-52 overflow-hidden"
 			in:fly={{ y: 10, duration: 200, easing: quintOut }}
 			out:fade={{ duration: 150 }}
 		>

@@ -433,10 +433,10 @@ function stopStreaming() {
 }
 </script>
 
-<div class="flex h-full min-h-0 flex-col bg-white">
+<div class="flex h-full min-h-0 flex-col bg-card">
 	{#if showHeader}
 		<div
-			class="flex items-start justify-between gap-4 border-b border-border bg-white px-5 py-4"
+			class="flex items-start justify-between gap-4 border-b border-border bg-card px-5 py-4"
 		>
 			<div>
 				<div class="flex items-center gap-2">
@@ -459,12 +459,12 @@ function stopStreaming() {
 	{/if}
 
 	<!-- Messages -->
-	<div class="flex-1 space-y-3 overflow-y-auto bg-white p-5">
+	<div class="flex-1 space-y-3 overflow-y-auto bg-card p-5">
 		{#if loading}
 			<div class="flex h-full items-center justify-center">
 				<div class="text-center">
 					<div
-						class="mb-3 inline-block h-8 w-8 animate-spin rounded-full border-2 border-slate-200 border-t-navy"
+						class="mb-3 inline-block h-8 w-8 animate-spin rounded-full border-2 border-border border-t-fg-1"
 					></div>
 					<p class="text-sm font-medium text-fg-3">Loading messages...</p>
 				</div>
@@ -499,7 +499,7 @@ function stopStreaming() {
 				<div class="flex h-full items-center justify-center">
 					<div class="text-center">
 						<div
-							class="mb-3 inline-block h-8 w-8 animate-spin rounded-full border-2 border-slate-200 border-t-navy"
+							class="mb-3 inline-block h-8 w-8 animate-spin rounded-full border-2 border-border border-t-fg-1"
 						></div>
 						<p class="text-sm font-medium text-fg-3">Starting conversation...</p>
 					</div>
@@ -511,7 +511,7 @@ function stopStreaming() {
 				>
 					<div class="w-full max-w-2xl text-center">
 						<div
-							class="mx-auto mb-5 flex h-12 w-12 items-center justify-center rounded-lg border border-border bg-white"
+							class="mx-auto mb-5 flex h-12 w-12 items-center justify-center rounded-lg border border-border bg-card"
 							in:fly={{ y: -20, duration: 500, delay: 100, easing: cubicOut }}
 						>
 							<img src="/icon.svg" alt="" class="h-5 w-5" />
@@ -537,25 +537,25 @@ function stopStreaming() {
 									startConversationWithPrompt(
 										'What changed in Dubai Marina 2BR yields this quarter?'
 									)}
-								class="rounded-md border border-slate-200 bg-white px-3 py-2.5 text-left leading-5 text-slate-700 transition-colors hover:border-slate-300 hover:bg-slate-50"
+								class="rounded-md border border-border bg-card px-3 py-2.5 text-left leading-5 text-fg-2 transition-colors hover:border-strong hover:bg-panel"
 							>
-								<span class="mr-1 text-slate-400">→</span>
+								<span class="mr-1 text-fg-5">→</span>
 								Dubai Marina 2BR yields
 							</button>
 							<button
 								onclick={() =>
 									startConversationWithPrompt('Compare Dubai Marina pricing against JBR.')}
-								class="rounded-md border border-slate-200 bg-white px-3 py-2.5 text-left leading-5 text-slate-700 transition-colors hover:border-slate-300 hover:bg-slate-50"
+								class="rounded-md border border-border bg-card px-3 py-2.5 text-left leading-5 text-fg-2 transition-colors hover:border-strong hover:bg-panel"
 							>
-								<span class="mr-1 text-slate-400">→</span>
+								<span class="mr-1 text-fg-5">→</span>
 								Compare to JBR
 							</button>
 							<button
 								onclick={() =>
 									startConversationWithPrompt('Build a comp basket for Business Bay offices.')}
-								class="rounded-md border border-slate-200 bg-white px-3 py-2.5 text-left leading-5 text-slate-700 transition-colors hover:border-slate-300 hover:bg-slate-50"
+								class="rounded-md border border-border bg-card px-3 py-2.5 text-left leading-5 text-fg-2 transition-colors hover:border-strong hover:bg-panel"
 							>
-								<span class="mr-1 text-slate-400">→</span>
+								<span class="mr-1 text-fg-5">→</span>
 								Build a comp basket
 							</button>
 						</div>
@@ -569,7 +569,7 @@ function stopStreaming() {
 			>
 				<div class="max-w-md text-center">
 					<div
-						class="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-lg border border-border bg-white"
+						class="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-lg border border-border bg-card"
 						in:fly={{ y: -20, duration: 500, easing: cubicOut }}
 					>
 						<img src="/icon.svg" alt="" class="h-5 w-5" />
@@ -596,21 +596,21 @@ function stopStreaming() {
 							? 'bg-navy text-bone'
 							: msg.artifacts?.length
 								? 'bg-transparent text-fg-2'
-								: 'border border-slate-200 bg-slate-50 text-fg-2'}"
+								: 'border border-border bg-panel text-fg-2'}"
 					>
 						{#if isThinking && i === messages.length - 1 && msg.role === 'assistant' && !msg.content && !msg.toolCalls?.length && !msg.artifacts?.length}
-							<div class="flex items-center gap-2 text-slate-400">
+							<div class="flex items-center gap-2 text-fg-5">
 								<div class="flex gap-1 items-center">
 									<div
-										class="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce"
+										class="w-1.5 h-1.5 bg-fg-5 rounded-full animate-bounce"
 										style="animation-delay: 0ms"
 									></div>
 									<div
-										class="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce"
+										class="w-1.5 h-1.5 bg-fg-5 rounded-full animate-bounce"
 										style="animation-delay: 150ms"
 									></div>
 									<div
-										class="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce"
+										class="w-1.5 h-1.5 bg-fg-5 rounded-full animate-bounce"
 										style="animation-delay: 300ms"
 									></div>
 								</div>
@@ -624,7 +624,7 @@ function stopStreaming() {
 								</div>
 									{#if msg.toolCalls && msg.toolCalls.length > 0}
 										<div
-											class="{msg.content || msg.artifacts?.length ? 'mb-3 border-b border-slate-200 pb-3' : ''} space-y-2 text-xs text-slate-600"
+											class="{msg.content || msg.artifacts?.length ? 'mb-3 border-b border-border pb-3' : ''} space-y-2 text-xs text-fg-3"
 										>
 											{#each msg.toolCalls as toolCall (toolCall)}
 												<div class="flex items-center gap-2">
@@ -650,7 +650,7 @@ function stopStreaming() {
 									{/if}
 									{#if msg.content}
 										<div
-											class="leading-relaxed [&_p]:mb-2 [&_p:last-child]:mb-0 [&_strong]:font-semibold [&_em]:italic [&_a]:text-primary-light [&_a]:underline [&_a:hover]:text-fg-1 [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:mb-2 [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:mb-2 [&_li]:mb-0.5 [&_blockquote]:border-l-4 [&_blockquote]:border-slate-300 [&_blockquote]:pl-3 [&_blockquote]:italic [&_blockquote]:text-slate-600 [&_blockquote]:my-2 [&_code]:bg-slate-100 [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded [&_code]:text-sm [&_code]:font-mono [&_pre]:bg-slate-100 [&_pre]:p-3 [&_pre]:rounded-lg [&_pre]:overflow-x-auto [&_pre]:my-2 [&_pre_code]:bg-transparent [&_pre_code]:p-0"
+											class="leading-relaxed [&_p]:mb-2 [&_p:last-child]:mb-0 [&_strong]:font-semibold [&_em]:italic [&_a]:text-primary-light [&_a]:underline [&_a:hover]:text-fg-1 [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:mb-2 [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:mb-2 [&_li]:mb-0.5 [&_blockquote]:border-l-4 [&_blockquote]:border-strong [&_blockquote]:pl-3 [&_blockquote]:italic [&_blockquote]:text-fg-3 [&_blockquote]:my-2 [&_code]:bg-panel [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded [&_code]:text-sm [&_code]:font-mono [&_pre]:bg-panel [&_pre]:p-3 [&_pre]:rounded-lg [&_pre]:overflow-x-auto [&_pre]:my-2 [&_pre_code]:bg-transparent [&_pre_code]:p-0"
 								>
 									{@html renderMarkdown(msg.content)}
 								</div>
@@ -662,13 +662,13 @@ function stopStreaming() {
 								<div
 									class="mt-3 pt-3 border-t {msg.role === 'user'
 									? 'border-slate-700'
-									: 'border-slate-200'} text-xs space-y-2"
+									: 'border-border'} text-xs space-y-2"
 							>
 								{#each msg.toolCalls as toolCall (toolCall)}
 									<div
 										class="flex items-center gap-2 {msg.role === 'user'
 											? 'text-slate-300'
-											: 'text-slate-600'}"
+											: 'text-fg-3'}"
 									>
 										<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 											<path
@@ -691,7 +691,7 @@ function stopStreaming() {
 	</div>
 
 	<!-- Input Area -->
-	<div class="border-t border-slate-200 bg-white p-4">
+	<div class="border-t border-border bg-card p-4">
 		{#if displayError && messages.length > 0}
 			<div
 				class="mb-4 flex items-center gap-2 rounded-lg border border-[rgba(163,36,36,0.2)] bg-error-bg p-3 text-sm text-error"
@@ -722,7 +722,7 @@ function stopStreaming() {
 				placeholder={conversationId
 					? 'Ask anything about Dubai real estate...'
 					: 'Select or create a conversation first'}
-				class="min-h-11 w-full resize-none rounded-md border border-navy bg-white py-3 pl-4 pr-14 text-[13px] leading-5 text-fg-1 placeholder:text-fg-5 focus:outline-none focus:ring-2 focus:ring-navy/10"
+				class="min-h-11 w-full resize-none rounded-md border border-focus bg-card py-3 pl-4 pr-14 text-[13px] leading-5 text-fg-1 placeholder:text-fg-5 focus:outline-none focus:ring-2 focus:ring-navy/10"
 				rows="1"
 				readonly={!conversationId || streamController !== null}
 				style="max-height: 180px;"
@@ -749,7 +749,7 @@ function stopStreaming() {
 					class="absolute right-1.5 top-1.5 flex h-8 w-8 items-center justify-center rounded transition-colors {inputValue.trim() &&
 					conversationId
 						? 'bg-navy text-bone hover:bg-primary-light'
-						: 'cursor-not-allowed bg-slate-200 text-slate-400'}"
+						: 'cursor-not-allowed bg-panel text-fg-5'}"
 					aria-label="Send message"
 				>
 					<svg class="h-3.5 w-3.5" fill="currentColor" viewBox="0 0 24 24">
