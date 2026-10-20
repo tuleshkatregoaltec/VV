@@ -660,7 +660,6 @@ def _location(*parts: str) -> str:
     )
 
 
-_UNIT = "if(f.unit_number NOT IN ('', '0'), concat('Unit ', f.unit_number), '')"
 # DXBI sometimes cuts a building name inside a bracket ("Cinderella (Living Legends Phase 5"):
 # the location text drops the unclosed part.
 _PLACES = (
@@ -894,7 +893,8 @@ SELECT f.* REPLACE (
            if(dm.master_name != '', dm.master_name, {_display("f.master_project")})
                AS master_project
        ),
-       {_location(_UNIT, *_PLACES)} AS location,
+       -- The unit has its own column, so the location is the place alone.
+       {_location(*_PLACES)} AS location,
        multiIf(tp.lat != 0, tp.lat, dp.lat != 0, dp.lat, NULL) AS latitude,
        multiIf(tp.lat != 0, tp.lng, dp.lat != 0, dp.lng, NULL) AS longitude,
        -- A located building opens at its point; otherwise Maps searches the place's name.

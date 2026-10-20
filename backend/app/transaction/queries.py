@@ -197,21 +197,28 @@ _DXBI_LOCATIONS = """multiIf(
             notEmpty(printed_locations), printed_locations,
             location_name != '', [location_name], [])"""
 
+# The unit has its own column, so the location text is the place alone. Profiles built before
+# holocron stopped writing it still start with "Unit <number>, ".
+_PLACE_ONLY = (
+    "if(startsWith(location, concat('Unit ', unit_number, ', ')), "
+    "substring(location, length(concat('Unit ', unit_number, ', ')) + 1), location)"
+)
+
 # The DXBI record's profile (holocron.market.dxbi_profile, rebuilt after each market release):
 # DLD's official area and master project, and the DLD or same-unit value for a project,
 # building, bedroom count or completion status DXBI left empty. DXBI's own values always win, and
 # the profile's copies of DXBI's raw path parts are not used: the place labels above decide
 # those (a lease path whose first part is a project has no building).
-_SALE_PROFILE = """(
+_SALE_PROFILE = f"""(
         SELECT sale_key AS profile_sale_key,
                if(project_source != 'dxbi', project_name, '') AS profile_project,
                master_project AS profile_master, area_name AS profile_area,
                bedrooms AS profile_bedrooms, completion_status AS profile_status,
-               location AS profile_location, map_url AS profile_map_url,
+               {_PLACE_ONLY} AS profile_location, map_url AS profile_map_url,
                size_sqft AS profile_size
         FROM dxbi_sale_profile
     )"""
-_LEASE_PROFILE = """(
+_LEASE_PROFILE = f"""(
         SELECT contract_key AS profile_contract_key,
                -- DLD's plot reference stays in the location text: it is not a building name
                -- to filter by.
@@ -219,7 +226,7 @@ _LEASE_PROFILE = """(
                if(project_source != 'dxbi', project_name, '') AS profile_project,
                master_project AS profile_master,
                area_name AS profile_area, bedrooms AS profile_bedrooms,
-               location AS profile_location, map_url AS profile_map_url,
+               {_PLACE_ONLY} AS profile_location, map_url AS profile_map_url,
                size_sqft AS profile_size
         FROM dxbi_rental_profile
     )"""

@@ -243,14 +243,17 @@ describe('DXBI transaction rows', () => {
 		expect(RENTAL_COLUMNS.map((column) => column.id)).toContain('location')
 	})
 
-	it('shows one Location column holding the whole place, linked to Google Maps', () => {
-		// Unit, building, project, master project and area used to be separate columns, some of
-		// them often empty; the place is now one line that is always filled, with its map link.
+	it('shows the Location column linked to Google Maps, with the Unit just before it', () => {
+		// Building, project, master project and area used to be separate columns, some of them
+		// often empty; the place is now one line that is always filled, with its map link. The
+		// unit keeps its own column just before it.
 		for (const columns of [SALES_COLUMNS, RENTAL_COLUMNS]) {
 			const ids = columns.map((column) => column.id)
-			for (const old of ['unit', 'building', 'project', 'masterProject', 'dldArea']) {
+			for (const old of ['building', 'project', 'masterProject', 'dldArea']) {
 				expect(ids).not.toContain(old)
 			}
+			expect(ids.indexOf('unit')).toBe(ids.indexOf('location') - 1)
+			expect(columns.find((column) => column.id === 'unit')?.defaultVisible).toBe(true)
 			const location = columns.find((column) => column.id === 'location')
 			expect(location?.defaultVisible).toBe(true)
 			expect(

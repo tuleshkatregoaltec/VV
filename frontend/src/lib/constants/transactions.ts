@@ -52,7 +52,8 @@ function mapLink(row: { mapUrl?: string | null }): string | null {
 // DXBI sales (dxbi_sales_unit_events): one row per sale of one unit.
 export const SALES_COLUMNS: ColumnDefinition[] = [
 	{ id: 'date', label: 'Date', align: 'left', defaultVisible: true },
-	// Unit, building, project, master project and DLD area in one line, linked to Google Maps.
+	{ id: 'unit', label: 'Unit', align: 'left', defaultVisible: true },
+	// Building, project, master project and DLD area in one line, linked to Google Maps.
 	{
 		id: 'location',
 		label: 'Location',
@@ -80,7 +81,8 @@ export const SALES_COLUMNS: ColumnDefinition[] = [
 export const RENTAL_COLUMNS: ColumnDefinition[] = [
 	{ id: 'startDate', label: 'Start Date', align: 'left', defaultVisible: true },
 	{ id: 'endDate', label: 'End Date', align: 'left', defaultVisible: true },
-	// Unit, building, project, master project and DLD area in one line, linked to Google Maps.
+	{ id: 'unit', label: 'Unit', align: 'left', defaultVisible: true },
+	// Building, project, master project and DLD area in one line, linked to Google Maps.
 	{
 		id: 'location',
 		label: 'Location',

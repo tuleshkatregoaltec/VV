@@ -230,7 +230,7 @@ export interface SaleRow {
 	date: string
 	unit: string
 	building: string
-	// Unit, building, project, master project and area in one line, and its Google Maps link.
+	// Building, project, master project and area in one line, and its Google Maps link.
 	location: string
 	mapUrl: string | null
 	community: string
@@ -251,7 +251,7 @@ export interface RentalRow {
 	endDate: string
 	unit: string
 	building: string
-	// Unit, building, project, master project and area in one line, and its Google Maps link.
+	// Building, project, master project and area in one line, and its Google Maps link.
 	location: string
 	mapUrl: string | null
 	community: string
@@ -296,7 +296,7 @@ export function toSaleRow(sale: TransactionResponseOutput): SaleRow {
 		date: sale.transaction_date ?? '-',
 		unit: sale.unit_number ?? '-',
 		building: sale.building_name ?? '-',
-		// The profile's line (unit, building, project, master, area); without a profile yet,
+		// The profile's line (building, project, master, area); without a profile yet,
 		// DXBI's own building, project and community.
 		location:
 			sale.location || formatLocation(sale.building_name, sale.project_name, sale.location_name),
@@ -321,7 +321,7 @@ export function toRentalRow(lease: RentalContractResponseOutput): RentalRow {
 		endDate: lease.lease_end ?? '-',
 		unit: lease.unit_number ?? '-',
 		building: lease.building_name ?? '-',
-		// The profile's line (unit, building, project, master, area); without a profile yet,
+		// The profile's line (building, project, master, area); without a profile yet,
 		// DXBI's own building, project and community.
 		location:
 			lease.location ||
