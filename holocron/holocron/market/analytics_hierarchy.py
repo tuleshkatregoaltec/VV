@@ -141,12 +141,14 @@ _WORK_DDL = f"""CREATE TABLE {WORK_TABLE} (
 def unit_key(expr: str) -> str:
     """A unit number as DXBI and DLD both write it, for matching and counting: a share of a unit
     ("2510 (Q 3)", Ciel's quarter shares) is that unit; "FLAT 415", "Unit No. 415" and "415" are
-    one, as are "A-101", "A 101" and "A101", and "0103" and "103"."""
+    one, as are "A-101", "A 101" and "A101", and "0103" and "103". Damac's estate prefixes are
+    dropped: DXBI writes a Damac Hills 2 villa "DH2-XR1139B" on a sale and "XR1139B" on a lease
+    (2,194 such pairs in 25 buildings), a Damac Lagoons one "DL-K138" and "K138"."""
     upper = f"upperUTF8(trimBoth({expr}))"
     bare = f"replaceRegexpOne({upper}, '\\s*\\([^)]*\\)\\s*$', '')"
     unprefixed = (
         f"replaceRegexpOne({bare}, "
-        "'^(UNIT|FLAT|APT|APARTMENT|APPARTMENT)(\\s*NO)?\\s*[.:#-]?\\s*', '')"
+        "'^((UNIT|FLAT|APT|APARTMENT|APPARTMENT)(\\s*NO)?\\s*[.:#-]?|(DH2|DL)\\s*[- ])\\s*', '')"
     )
     return (
         f"replaceRegexpAll(replaceRegexpAll({unprefixed}, '[^A-Z0-9]', ''), "
@@ -354,8 +356,9 @@ _DLD_UNIT_PROJECTS = f"""(
             ON l.l_group = u.dld_group
     )"""
 
-# A project with no register units under its name: the register group in its DLD area that holds
-# its unit numbers at the same floor areas. A group another DXBI project holds by name, or that
+# A project with no register units under its name, or a DXBI building that no DLD project names
+# ("Geepas Tower"): the register group in its DLD area that holds its unit numbers at the same
+# floor areas. A group another DXBI project holds by name, or that
 # two projects claim, links none (a phase, a duplicate or a mis-filed project, not this one).
 PROJECT_DLD_KEYS_SQL = f"""
 INSERT INTO `analytics_project_dld_keys`
@@ -374,7 +377,7 @@ WITH
     candidates AS (
         SELECT project_key, lowerUTF8(area_name) AS area, {key("area_name")} AS area_key
         FROM analytics_projects
-        WHERE scope_kind = 'Project' AND area_name != ''
+        WHERE area_name != ''
           AND project_key NOT IN (SELECT name_key FROM register WHERE name_key != '')
     ),
     unit_sizes AS (
@@ -737,8 +740,10 @@ WITH {_CARDS},
     -- Units traded in the project's own buildings; a project without buildings (villas DXBI
     -- lists by project) counts its records' units. A record filed here from another project's
     -- building, from a place name, or (in a project with buildings) without a building is
-    -- often a pairing from elsewhere and is not counted. Buildings on one DLD building (two
-    -- spellings, or towers DLD registers as one) hold one set of unit numbers.
+    -- often a pairing from elsewhere and is not counted; nor is a record of its building whose
+    -- pairing named another project (the listed records file it here, but its unit number is
+    -- the least certain). Buildings on one DLD building (two spellings, or towers DLD registers
+    -- as one) hold one set of unit numbers.
     project_traded AS (
         SELECT project_key, if(in_buildings > 0, in_buildings, without_building) AS traded
         FROM (

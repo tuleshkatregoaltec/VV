@@ -637,24 +637,34 @@ def hierarchy_resolved(records: str) -> str:
     project or building for a record without a profile), ``raw_kind``, ``h_building``,
     ``h_community`` and ``h_master``. A spelling the last hierarchy build did not see keeps its
     own name (DLD's capitals in title case); its master is resolved by Analytics.
+
+    A record in a building that clearly belongs to one project (>= 80% of >= 10 of its records)
+    is filed under that project (decision 3, 2026-10-21): DXBI names the building, while the
+    project of a paired record came from a DLD sale of the same price and date, which sister
+    phases launched at one price list share. ``stray`` marks the records so re-filed.
     """
     building, community = name_key("s1.h_building"), name_key("s1.h_community")
+    by_building = (
+        "(s2.clear_building AND ab.ab_project != '' AND ab.ab_share >= 0.8"
+        " AND ab.ab_records >= 10 AND (s2.raw_scope = '' OR ab.ab_project != s2.scope_key_))"
+    )
     return f"""(
     SELECT s2.*,
-           if(s2.raw_scope = '', '', s2.scope_key_) AS scope_key,
-           if(s2.raw_scope = '', '',
-              if(s2.ap_name != '', s2.ap_name, {title_case(without_all("s2.raw_scope"))}))
+           multiIf({by_building}, ab.ab_project, s2.raw_scope = '', '', s2.scope_key_)
+               AS scope_key,
+           multiIf({by_building}, bp.bp_name, s2.raw_scope = '', '',
+                   s2.ap_name != '', s2.ap_name, {title_case(without_all("s2.raw_scope"))})
                AS scope_name,
-           if(s2.raw_scope = '', '', if(s2.ap_kind != '', s2.ap_kind, s2.raw_kind)) AS scope_kind,
-           multiIf(s2.ap_master != '', s2.ap_master, s2.mk_master != '', s2.mk_master,
+           multiIf({by_building}, bp.bp_kind, s2.raw_scope = '', '',
+                   s2.ap_kind != '', s2.ap_kind, s2.raw_kind) AS scope_kind,
+           multiIf({by_building} AND bp.bp_master != '', bp.bp_master,
+                   s2.ap_master != '', s2.ap_master, s2.mk_master != '', s2.mk_master,
                    s2.h_master != '', {title_case("s2.h_master")}, '') AS master_name,
            {name_key("master_name")} AS master_key,
            ab.ab_name AS building_display,
-           -- Filed under another project than its building's, where >= 80% of >= 10 of the
-           -- building's records agree (the review list, wrong_project_records.md).
-           toUInt8(s2.clear_building AND ab.ab_project != '' AND s2.raw_scope != ''
-                   AND ab.ab_project != s2.scope_key_ AND ab.ab_share >= 0.8
-                   AND ab.ab_records >= 10) AS stray
+           -- Re-filed from the project its pairing named to its building's (the review list,
+           -- wrong_project_records.md, is these records).
+           toUInt8({by_building} AND s2.raw_scope != '') AS stray
     FROM (
         SELECT s1.*, if(bc.bc_id != '', bc.bc_id, bs.bs_id) AS building_id,
                bc.bc_id != '' AS clear_building
@@ -689,6 +699,9 @@ def hierarchy_resolved(records: str) -> str:
     LEFT JOIN (SELECT building_id AS ab_id, building_name AS ab_name, project_key AS ab_project,
                       project_share AS ab_share, records AS ab_records
                FROM analytics_buildings) AS ab ON ab.ab_id = s2.building_id
+    LEFT JOIN (SELECT project_key AS bp_key, project_name AS bp_name, scope_kind AS bp_kind,
+                      master_name AS bp_master
+               FROM analytics_projects) AS bp ON bp.bp_key = ab.ab_project
 )"""
 
 

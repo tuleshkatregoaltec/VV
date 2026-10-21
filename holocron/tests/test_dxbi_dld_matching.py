@@ -263,3 +263,81 @@ def test_a_commercial_lease_takes_its_dld_contracts_type_in_dxbis_words() -> Non
     commercial = {"Office", "Shop", "Show Rooms", "Warehouse", "Workshop", "Clinic", "Gymnasium",
                   "Hotel", "Sized Partition", "Building", "Commercial"}  # fmt: skip
     assert set(DLD_COMMERCIAL_TYPES) <= commercial
+
+
+@live
+def test_sister_buildings_let_at_one_rent_keep_their_own_leases(warehouse) -> None:  # noqa: F811
+    # Damac Lagoons Nice 1 and Nice 2 let identical villas at one rent on one day. Paired by
+    # floor-area order alone, Nice 2's smaller lease took Nice 1's DLD contract and the other way
+    # round (34,568 leases sat in another project than their building's). A lease whose building's
+    # paired records agree on a project (>= 80% of >= 10) pairs first inside that project.
+    from datetime import UTC, date, datetime
+
+    area, loaded = "Al Hebiah Fifth", datetime(2026, 7, 1, tzinfo=UTC)
+    sales, profiles = [], []
+    for building, project in (
+        ("Nice 1", "DAMAC LAGOONS - NICE 1"),
+        ("Nice 2", "DAMAC LAGOONS - NICE 2"),
+    ):
+        for i in range(10):
+            key = f"{building}-{i}"
+            sales.append([key, date(2025, 3, 1), f"V{i}", building, building.lower(), area,
+                          area.lower(), 2000.0, 2_000_000, loaded])  # fmt: skip
+            profiles.append([key, project, "dld_pair"])
+    warehouse.insert_rows(
+        table="dxbi_sales_unit_events",
+        rows=sales,
+        column_names=[
+            "sale_key", "transaction_date", "unit_number", "building_name", "building_key",
+            "area_name", "area_key", "size_sqft", "sale_amount_aed", "loaded_at",
+        ],
+    )  # fmt: skip
+    warehouse.insert_rows(
+        table="dxbi_sale_profile",
+        rows=profiles,
+        column_names=["sale_key", "project_name", "project_source"],
+    )
+    start, end = date(2025, 6, 1), date(2026, 5, 31)
+    leases = [
+        [key, key, key, building, area, sqft, 150_000, 150_000, start, end, "a", "r", "p", "l",
+         b"0" * 20, b"0" * 64, start, loaded]
+        for key, building, sqft in (("lease-nice1", "Nice 1", 1500.0), ("lease-nice2", "Nice 2", 1400.0))
+    ]  # fmt: skip
+    warehouse.insert_rows(
+        table="dxbi_rental_events",
+        rows=leases,
+        column_names=[
+            "contract_key", "unit_candidate_key", "unit_cohort_key", "building_name", "area_name",
+            "size_sqft", "contract_amount_aed", "annual_rent_aed", "lease_start", "lease_end",
+            "source_account", "source_run_id", "filter_profile_id", "source_location_id",
+            "configuration_hash", "raw_row_fingerprint", "source_shard_date", "scraped_at",
+        ],
+    )  # fmt: skip
+    rents = [
+        [f"r{i}", "run", i, datetime(2025, 5, 20), datetime(2025, 6, 1), datetime(2026, 5, 31),
+         150_000, 150_000, sqm, area, project]
+        for i, (sqm, project) in enumerate(((130.0, "DAMAC LAGOONS - NICE 1"), (140.0, "DAMAC LAGOONS - NICE 2")))
+    ]  # fmt: skip
+    warehouse.insert_rows(
+        table="dld_od_rents_bronze",
+        rows=rents,
+        column_names=[
+            "row_key", "run_id", "row_index", "registration_date", "start_date", "end_date",
+            "contract_amount", "annual_amount", "actual_area", "area_en", "project_en",
+        ],
+    )  # fmt: skip
+
+    for statement in transforms._RENTAL_MATCH_STATEMENTS:
+        warehouse.command(statement)
+
+    pairs = dict(
+        warehouse.query(
+            "SELECT m.dxbi_contract_key, r.project_en FROM market_rental_matches AS m"
+            f" INNER JOIN (SELECT dld_rent_key, project_en FROM ({transforms.DLD_RENTS_BASE})) AS r"
+            " ON r.dld_rent_key = m.dld_rent_key"
+        ).result_rows
+    )
+    assert pairs == {
+        "lease-nice1": "DAMAC LAGOONS - NICE 1",
+        "lease-nice2": "DAMAC LAGOONS - NICE 2",
+    }

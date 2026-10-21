@@ -114,6 +114,42 @@ hierarchy build still resolves through the key tables (its spelling's key).
   refresh was tried on 21 Oct: the gateway's `units` command answers 200 with no rows (unfiltered,
   by area, either sort) while `lands` answers; the May snapshot stays.
 
+### 7. Trust DXBI's building (decision 3, 21 Oct 2026)
+
+The user chose: a record whose DXBI building clearly belongs to one project (>= 80% of >= 10 of
+its records) is filed under that project. Cause of most wrong-project records: DXBI names the
+building but not the project, DLD names the project but not the unit or building, so a record's
+project came from a DLD sale or lease of the same price and date. Sister phases launched at one
+price list (Damac Lagoons Nice 1 / Nice 2: 500 DLD sales at AED 1,706,000 for 1,550 sqft in 2022)
+then swap records.
+
+- **Pairing checks the building.** Sales: among equally good DLD candidates, one in the DXBI
+  building's project wins when the building's paired sales agree >= 80% (was 90%, so Nice 1 at
+  84% never used it). Leases: a first pass pairs a lease only with a DLD contract of its
+  building's project (same area, dates and rent), before the general pass.
+- **Listed records follow the building.** `scope_key` / `scope_name` / master are the building's
+  project; `stray = 1` marks a record re-filed because its pairing named another project.
+- **DXBI-only buildings** ("Geepas Tower", own-building scopes) are linked to the DLD building
+  holding their unit numbers at the same floor areas, as projects are (section 6).
+- **Unit key** drops Damac's estate prefixes ("DH2-XR1139B" = "XR1139B", "DL-K138" = "K138").
+
+| | Before | After |
+|---|---:|---:|
+| Records whose pairing named another project than their (clear) building's | 40,078 (5,510 sales, 34,568 leases), shown under the wrong project | 14,196 (4,107 sales, 10,089 leases), all filed under their building's project |
+| Records in another project than their building's, building clear | 40,078 | 0 |
+| Records in another project than their building's, building not clear (< 80%) | not counted | 16,656 (7,627 sales, 9,029 leases), unchanged |
+| Nice 1 / Nice 2 | 697 + 114 crossed / 511 + 112 crossed | 819 / 630, none crossed; 551 / 452 plots counted |
+| Projects with a register count | 3,445 | 3,543 |
+| Buildings with a register count | 4,075 | 4,183 |
+| DXBI sales / leases paired with DLD | 964,280 / 1,418,877 | 964,401 / 1,418,882 |
+
+Re-filed records: `~/vv/analytics-hierarchy-audit-2026-10-21/refiled_by_building.csv`. Worth a
+look: "Majan" (a community name used as a building) re-files 185 records to Posh Lifestyles;
+"Alwan Residence 1" re-files 139 to Axis Residences 6.
+
+The full `scripts/build_dxbi_profiles.py` run hit the 9 GB limit at `analytics_buildings` right
+after the profiles; `--only analytics_hierarchy` alone passes (about 8 minutes).
+
 ### 5. Not changed (waiting for review)
 
 - The wrong-project records (decision 3).

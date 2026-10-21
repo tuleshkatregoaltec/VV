@@ -142,8 +142,9 @@ def test_one_spelling_one_master_and_merged_buildings(warehouse) -> None:  # noq
     )
     assert listed["m0"] == ("Merano Tower", "Business Bay", "Merano", 0)
     assert listed["t0"][0:3] == ("Merano Tower", "Business Bay", "Merano")
-    # Filed under another project than its building's: kept there, marked for review.
-    assert listed["stray"][0] == "Sami Q Tower" and listed["stray"][3] == 1
+    # Its pairing named another project, but its building clearly is Merano Tower's (decision 3,
+    # 2026-10-21): filed under its building's project, marked as re-filed.
+    assert listed["stray"] == ("Merano Tower", "Business Bay", "Merano", 1)
 
 
 @live
@@ -151,8 +152,8 @@ def test_unit_keys_read_dxbi_and_dld_formats_alike(warehouse) -> None:  # noqa: 
     # DXBI writes "FLAT 415" and "0103" where DLD writes 415 and 103: one unit each, else a
     # tower's traded units outnumber its register and the page drops the register count.
     same = [["FLAT 415", "415", "Unit No. 415"], ["A-0101", "A 101", "a101"],
-            ["2510 (Q 3)", "2510"]]  # fmt: skip
-    different = ["101", "1001", "G101", "A101"]
+            ["2510 (Q 3)", "2510"], ["DH2-XR1139B", "XR1139B"], ["DL-K138", "K138"]]  # fmt: skip
+    different = ["101", "1001", "G101", "A101", "DLX5", "X5"]
     texts = [text for group in same for text in group] + different
     keys = warehouse.query(
         "SELECT " + ", ".join(hierarchy.unit_key(f"'{text}'") for text in texts)
@@ -175,7 +176,7 @@ def test_unit_counts_where_names_and_numbers_disagree(warehouse) -> None:  # noq
     loaded = datetime(2026, 7, 1, tzinfo=UTC)
     rows, profiles = [], []
 
-    def sale(key, building, project, unit, sqft, area, dld_area):
+    def sale(key, building, project, unit, sqft, area, dld_area, source="dld_pair"):
         rows.append({
             "sale_key": key, "transaction_date": date(2026, 6, 1), "unit_number": unit,
             "building_name": building, "building_key": building.lower().replace(" ", ""),
@@ -183,13 +184,17 @@ def test_unit_counts_where_names_and_numbers_disagree(warehouse) -> None:  # noq
             "size_sqft": sqft, "sale_amount_aed": 1_000_000, "property_type": "Apartment",
             "bedrooms": "1 Bed", "market_status": "Ready", "loaded_at": loaded,
         })  # fmt: skip
-        profiles.append([key, "", dld_area, project, "dld_pair", building, "dxbi", sqft])
+        profiles.append([key, "", dld_area, project, source, building, "dxbi", sqft])
 
     # Icon Tower 1: DLD files its units under no project, so no register name matches it. Its
     # unit numbers at their floor areas sit in one DLD building; a neighbour repeats the numbers
     # at other areas.
     for i in range(1, 7):
         sale(f"i{i}", "Icon Tower 1", "ICON TOWER 1", f"100{i}", 1076.4, "JLT", "Al Thanyah Fifth")
+    # Geepas Tower: a tower no DLD project names (its own scope); its units sit in one DLD building.
+    for i in range(1, 6):
+        sale(f"g{i}", "Geepas Tower", "Geepas Tower", f"30{i}", 861.1, "Al Barsha", "ABS3",
+             source="own_building")  # fmt: skip
     # Twin Heights: towers A and B both number 101-104; only the floor areas tell them apart.
     for i in range(1, 5):
         sale(f"a{i}", "Twin Heights A", "TWIN HEIGHTS", f"10{i}", 753.5, "Business Bay", "BB")
@@ -225,6 +230,8 @@ def test_unit_counts_where_names_and_numbers_disagree(warehouse) -> None:  # noq
         units.append(["snap", "2026-05-16", project, number, area_id, area, land, building,
                       len(units) + 1, "1 B/R", sqm])  # fmt: skip
 
+    for i in range(1, 7):
+        unit("", "ABS3", "157", "1", f"30{i}", 80.0, 409)
     for i in range(1, 9):
         unit("", "Al Thanyah Fifth", "992", "1", f"100{i}", 100.0, 350)
         unit("", "Al Thanyah Fifth", "993", "1", f"100{i}", 60.0, 350)
@@ -248,7 +255,7 @@ def test_unit_counts_where_names_and_numbers_disagree(warehouse) -> None:  # noq
     links = warehouse.query(
         "SELECT project_key, dld_group, matched FROM analytics_project_dld_keys"
     ).result_rows
-    assert links == [("icontower1", "b:350/992/1", 6)]
+    assert sorted(links) == [("geepastower", "b:409/157/1", 5), ("icontower1", "b:350/992/1", 6)]
     buildings = dict(
         warehouse.query("SELECT building_name, dld_building FROM analytics_buildings").result_rows
     )
@@ -268,6 +275,7 @@ def test_unit_counts_where_names_and_numbers_disagree(warehouse) -> None:  # noq
     )
     # The register's 8 units, not "at least 6 traded".
     assert stock["icontower1"] == (8, "buildings", 0, 6)
+    assert stock["geepastower"][0:3] == (6, "buildings", 0)
     assert stock["twinheights"] == (8, "buildings", 0, 8)
     # Seven spellings of five units and a parking bay are five units traded: the register counts.
     assert stock["formattower"] == (5, "buildings", 0, 5)

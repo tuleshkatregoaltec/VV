@@ -460,9 +460,10 @@ _SALE_MATCH_INPUTS = f"""
         FROM ({DLD_SALES_BASE})
         WHERE group_en = 'Sales' AND trans_value > 0
     ),
-    -- The DLD project nearly all of a DXBI building's paired sales sit in (previous profile
-    -- build, >= 90% of >= 10). Among equally good candidates the one in that project wins:
-    -- otherwise a sale could pair with a same-price, same-size sale in another building.
+    -- The DLD project most of a DXBI building's paired sales sit in (previous profile build,
+    -- >= 80% of >= 10, the Analytics rule for a building's project). Among equally good
+    -- candidates the one in that project wins: sister phases launched together at one price
+    -- list (Damac Lagoons Nice 1 / Nice 2) otherwise swap their sales.
     building_projects AS (
         SELECT building_key, argMax(project_key, n) AS project_key
         FROM (
@@ -475,7 +476,7 @@ _SALE_MATCH_INPUTS = f"""
             GROUP BY building_key, project_key
         )
         GROUP BY building_key
-        HAVING max(n) / sum(n) >= 0.9 AND sum(n) >= 10
+        HAVING max(n) / sum(n) >= 0.8 AND sum(n) >= 10
     ),
     dx AS (
         SELECT b.sale_key AS sale_key, b.transaction_date AS transaction_date,
@@ -1108,7 +1109,7 @@ _RENTAL_MATCH_INPUTS = f"""{_RENTAL_AREA_CTES},
                toUInt64(greatest(annual_amount, 0)) AS annual_amt,
                actual_area * {SQFT_PER_SQM} AS sqft,
                toInt64(round(actual_area)) AS sqm,
-               area_en AS loc
+               area_en AS loc, lowerUTF8(trimBoth(project_en)) AS proj
         FROM ({_DLD_RENTS_MATCH_BASE})
     ),
     dx AS (
@@ -1163,7 +1164,94 @@ INNER JOIN (
 """
 
 
+# The DLD project most of a DXBI building's paired sales and leases sit in (previous profile
+# build, >= 80% of >= 10, the Analytics rule for a building's project), per lease of that
+# building. Built once per rental release and dropped after.
+RENTAL_BUILDING_PROJECTS_TABLE = "market_rental_building_projects__work"
+_RENTAL_BUILDING_PROJECTS_SQL = (
+    f"DROP TABLE IF EXISTS {RENTAL_BUILDING_PROJECTS_TABLE}",
+    f"""CREATE TABLE {RENTAL_BUILDING_PROJECTS_TABLE} (contract_key String, project_key String)
+ENGINE = MergeTree ORDER BY contract_key""",
+    f"""
+INSERT INTO {RENTAL_BUILDING_PROJECTS_TABLE}
+WITH
+    leases AS (
+        SELECT contract_key, any(building_name) AS building_name, any(area_name) AS area_name
+        FROM dxbi_rental_events FINAL GROUP BY contract_key
+    ),
+    votes AS (
+        SELECT building_key, project_key, sum(n) AS n FROM (
+            SELECT concat(lowerUTF8(trimBoth(x.building_name)), '|',
+                          lowerUTF8(trimBoth(x.area_name))) AS building_key,
+                   lowerUTF8(trimBoth(p.project_name)) AS project_key, count() AS n
+            FROM dxbi_sale_profile AS p
+            INNER JOIN (SELECT sale_key, building_name, area_name FROM ({DXBI_SALES_BASE}))
+                AS x ON x.sale_key = p.sale_key
+            WHERE p.project_source = 'dld_pair' AND p.project_name != '' AND x.building_name != ''
+            GROUP BY building_key, project_key
+            UNION ALL
+            SELECT concat(lowerUTF8(trimBoth(x.building_name)), '|',
+                          lowerUTF8(trimBoth(x.area_name))),
+                   lowerUTF8(trimBoth(p.project_name)), count()
+            FROM dxbi_rental_profile AS p
+            INNER JOIN leases AS x ON x.contract_key = p.contract_key
+            WHERE p.project_source = 'dld_pair' AND p.project_name != '' AND x.building_name != ''
+            GROUP BY 1, 2
+        )
+        GROUP BY building_key, project_key
+    ),
+    building_projects AS (
+        SELECT building_key, argMax(project_key, n) AS project_key FROM votes
+        GROUP BY building_key HAVING max(n) / sum(n) >= 0.8 AND sum(n) >= 10
+    )
+SELECT l.contract_key, bp.project_key
+FROM leases AS l
+INNER JOIN building_projects AS bp
+    ON bp.building_key = concat(lowerUTF8(trimBoth(l.building_name)), '|',
+                                lowerUTF8(trimBoth(l.area_name)))
+WHERE l.building_name != ''
+{_HEAVY_QUERY_SETTINGS}
+""",
+)
+
+
+def _rental_building_pairing_sql(*, tier: int) -> str:
+    """Tier 0's keys plus the project: a lease whose building's project is known pairs first with
+    a DLD contract of that project. Sister buildings let at one rent on one day (Damac Lagoons
+    Nice 1 / Nice 2) otherwise swap their leases by floor-area order."""
+    return f"""
+INSERT INTO `market_rental_matches`
+    (dxbi_contract_key, dld_rent_key, match_tier, end_day_gap, size_gap, has_dld_candidate, built_at)
+WITH {_RENTAL_MATCH_INPUTS}
+SELECT a.contract_key, b.dld_rent_key, {tier}, toInt32(abs(dateDiff('day', b.e, a.lease_end))),
+       abs(a.size_sqft - b.sqft) / greatest(b.sqft, 1.0), 1, now64(3)
+FROM (
+    SELECT x.contract_key AS contract_key, x.lease_end AS lease_end, x.size_sqft AS size_sqft,
+           x.loc AS k0, x.lease_start AS k1, x.lease_end AS k2, x.contract_amount_aed AS k3,
+           bp.project_key AS k4,
+           row_number() OVER (PARTITION BY k0, k1, k2, k3, k4
+                              ORDER BY size_sqft, contract_key) AS rn
+    FROM dx AS x
+    INNER JOIN {RENTAL_BUILDING_PROJECTS_TABLE} AS bp ON bp.contract_key = x.contract_key
+    WHERE x.loc != '' AND x.contract_amount_aed > 0
+      AND x.contract_key NOT IN (SELECT dxbi_contract_key FROM `market_rental_matches`)
+) AS a
+INNER JOIN (
+    SELECT dld_rent_key, e, sqft, loc AS k0, s AS k1, e AS k2, contract_amt AS k3, proj AS k4,
+           row_number() OVER (PARTITION BY k0, k1, k2, k3, k4 ORDER BY sqft, dld_rent_key) AS rn
+    FROM dld
+    WHERE loc != '' AND contract_amt > 0 AND proj != ''
+      AND dld_rent_key NOT IN (SELECT dld_rent_key FROM `market_rental_matches`)
+) AS b ON a.k0 = b.k0 AND a.k1 = b.k1 AND a.k2 = b.k2 AND a.k3 = b.k3 AND a.k4 = b.k4
+      AND a.rn = b.rn
+{_HEAVY_QUERY_SETTINGS}
+"""
+
+
 _RENTAL_MATCH_STATEMENTS = (
+    *_RENTAL_BUILDING_PROJECTS_SQL,
+    # Tier 0 first within the lease's building's project, then without it.
+    _rental_building_pairing_sql(tier=0),
     # Tier 0: same lease period and contract amount (99% of pairs agree on the end date).
     _rental_rank_pairing_sql(
         tier=0,
@@ -1482,6 +1570,7 @@ _RENTAL_MATCH_STATEMENTS = (
         for _ in range(RENTAL_AREA_SET_ROUNDS)
         for tier, dx_keys, dld_keys, dx_filter, dld_filter in _RENTAL_AREA_SET_TIERS
     ),
+    f"DROP TABLE IF EXISTS {RENTAL_BUILDING_PROJECTS_TABLE}",
     f"DROP TABLE IF EXISTS {RENTAL_AREA_SETS_TABLE}",
     _RENTAL_MATCH_STATEMENTS[-1],
 )
