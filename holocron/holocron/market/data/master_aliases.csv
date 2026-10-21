@@ -1,0 +1,138 @@
+alias,master,reason,evidence
+Silicon Oasis,Dubai Silicon Oasis,spelling,DXBI location tree (dxbi_places / dxbi_locations)
+Jumeirah Lakes Towers,Jumeirah Lake Towers,spelling,DXBI location tree (dxbi_places / dxbi_locations)
+Jumeirah Lake,Jumeirah Lake Towers,spelling,DXBI location tree (dxbi_places / dxbi_locations)
+Greens,The Greens,spelling,DXBI location tree (dxbi_places / dxbi_locations)
+Madinat Jumeirah Living,Madinat Jumeirah Living (MJL),spelling,DXBI location tree (dxbi_places / dxbi_locations)
+Arabian Ranches II,Arabian Ranches 2,spelling,DXBI location tree (dxbi_places / dxbi_locations)
+Palm Jabal Ali,Palm Jebel Ali,spelling,DXBI location tree (dxbi_places / dxbi_locations): Palm Jebel Ali - Frond A..P
+Downtown Jebel Ali,Down Town Jabal Ali,spelling,DXBI location tree (dxbi_places / dxbi_locations)
+Emirate Living,Emirates Living,spelling,DXBI location tree (dxbi_places / dxbi_locations)
+Al Barsha South Two,Al Barsha South 2,spelling,DLD area Al Barshaa South Second
+Difc,Dubai International Financial Center,spelling,DXBI location tree (dxbi_places / dxbi_locations)
+Maritime City,Dubai Maritime City,spelling,DXBI location tree (dxbi_places / dxbi_locations)
+Falcon City Of Wonders,Falcon City,spelling,DXBI location tree (dxbi_places / dxbi_locations)
+Zaabeel,Zabeel,spelling,DLD master Zabeel
+Mohammed Bin Rashid AL Maktoum City -District -1 Community,Mohammed Bin Rashid City - District One,spelling,DLD masters for District One
+Mohammed Bin Rashid Al Maktoum City - District One,Mohammed Bin Rashid City - District One,spelling,DLD masters for District One
+Mohammed Bin Rashid Al Maktoum City -District One West - Phase 2,Mohammed Bin Rashid City - District One,spelling,DLD masters for District One
+Mohammed Bin Rashid AL Maktoum District 11,"District 11, Mohammed Bin Rashid City",spelling,DXBI location tree (dxbi_places / dxbi_locations)
+Jumeirah Bay Islands,Jumeira Bay,spelling,DLD master Jumeira Bay
+Um Suqaim 3,Umm Suqeim 3,spelling,DLD area Umm Suqeim Third
+Dubai South (Dubai World Central),Dubai South,spelling,DXBI location tree (dxbi_places / dxbi_locations): Dubai South
+Dubai Investment Park 2,Dubai Investment Park Second,spelling,DLD area Dubai Investment Park Second
+Jumeriah Beach Residence  - JBR,Jumeirah Beach Residence (JBR),spelling,DXBI location tree (dxbi_places / dxbi_locations): Jumeirah Beach Residence (Jbr)
+Jumeriah Beach Residence - JBR,Jumeirah Beach Residence (JBR),spelling,DXBI location tree (dxbi_places / dxbi_locations): Jumeirah Beach Residence (Jbr)
+Nad Al Shiba Villas,Nad Al Sheba Villas,spelling,DXBI location tree (dxbi_places / dxbi_locations)
+Meydan Racecourse Community,Meydan Racecourse,spelling,DXBI location tree (dxbi_places / dxbi_locations)
+International Media Production Zone,Dubai Production City (IMPZ),spelling,DXBI location tree (dxbi_places / dxbi_locations)
+Dubai Production City,Dubai Production City (IMPZ),spelling,DXBI location tree (dxbi_places / dxbi_locations)
+Palm Deira,Dubai Islands,renamed,DXBI location tree (dxbi_places / dxbi_locations): 102 Palm Deira projects sit under Dubai Islands
+Liwan1,Liwan,sub_community,DXBI location tree (dxbi_places / dxbi_locations): Liwan
+Liwan2,Liwan,sub_community,DXBI location tree (dxbi_places / dxbi_locations): Liwan
+DUBAI HILLS,Dubai Hills Estate,sub_community,DXBI community of its records: Dubai Hills Estate
+DUBAI HILLS - CLUB VILLAS,Dubai Hills Estate,sub_community,DXBI community of its records: Dubai Hills Estate
+DUBAI HILLS - EMERALD HILLS,Dubai Hills Estate,sub_community,DXBI community of its records: Dubai Hills Estate
+DUBAI HILLS - FAIRWAY VISTAS,Dubai Hills Estate,sub_community,DXBI community of its records: Dubai Hills Estate
+DUBAI HILLS - FAIRWAYS,Dubai Hills Estate,sub_community,DXBI community of its records: Dubai Hills Estate
+DUBAI HILLS - GOLF GROVE,Dubai Hills Estate,sub_community,DXBI community of its records: Dubai Hills Estate
+DUBAI HILLS - GOLF PLACE,Dubai Hills Estate,sub_community,DXBI community of its records: Dubai Hills Estate
+DUBAI HILLS - GOLF TERRACES,Dubai Hills Estate,sub_community,DXBI community of its records: Dubai Hills Estate
+DUBAI HILLS - HILLS GROVE,Dubai Hills Estate,sub_community,DXBI community of its records: Dubai Hills Estate
+DUBAI HILLS - HILLS VIEW,Dubai Hills Estate,sub_community,DXBI community of its records: Dubai Hills Estate
+DUBAI HILLS - LAMBOURGHINI,Dubai Hills Estate,sub_community,DXBI community of its records: Dubai Hills Estate
+DUBAI HILLS - MAPLE 1,Dubai Hills Estate,sub_community,DXBI community of its records: Dubai Hills Estate
+DUBAI HILLS - MAPLE 2,Dubai Hills Estate,sub_community,DXBI community of its records: Dubai Hills Estate
+DUBAI HILLS - MAPLE 3,Dubai Hills Estate,sub_community,DXBI community of its records: Dubai Hills Estate
+DUBAI HILLS - PALM HILLS,Dubai Hills Estate,sub_community,DXBI community of its records: Dubai Hills Estate
+DUBAI HILLS - PARKWAY VISTAS,Dubai Hills Estate,sub_community,DXBI community of its records: Dubai Hills Estate
+DUBAI HILLS - PARKWAYS,Dubai Hills Estate,sub_community,DXBI community of its records: Dubai Hills Estate
+DUBAI HILLS - SIDRA 1,Dubai Hills Estate,sub_community,DXBI community of its records: Dubai Hills Estate
+DUBAI HILLS - SIDRA 2,Dubai Hills Estate,sub_community,DXBI community of its records: Dubai Hills Estate
+DUBAI HILLS - SIDRA 3,Dubai Hills Estate,sub_community,DXBI community of its records: Dubai Hills Estate
+Hills Park,Dubai Hills Estate,sub_community,DXBI community of its records: Dubai Hills Estate
+Springs - 1,The Springs,sub_community,Emirates Living sub-community The Springs
+Springs - 2,The Springs,sub_community,Emirates Living sub-community The Springs
+Springs - 3,The Springs,sub_community,Emirates Living sub-community The Springs
+Springs - 4,The Springs,sub_community,Emirates Living sub-community The Springs
+Springs - 5,The Springs,sub_community,Emirates Living sub-community The Springs
+Springs - 6,The Springs,sub_community,Emirates Living sub-community The Springs
+Springs - 7,The Springs,sub_community,Emirates Living sub-community The Springs
+Meadows 1,The Meadows,sub_community,Emirates Living sub-community The Meadows
+Meadows 2,The Meadows,sub_community,Emirates Living sub-community The Meadows
+Meadows 3,The Meadows,sub_community,Emirates Living sub-community The Meadows
+Meadows 4,The Meadows,sub_community,Emirates Living sub-community The Meadows
+Meadows 5,The Meadows,sub_community,Emirates Living sub-community The Meadows
+Meadows 6,The Meadows,sub_community,Emirates Living sub-community The Meadows
+Meadows 7,The Meadows,sub_community,Emirates Living sub-community The Meadows
+Meadows 8,The Meadows,sub_community,Emirates Living sub-community The Meadows
+Meadows 9,The Meadows,sub_community,Emirates Living sub-community The Meadows
+Lakes - Deema 1,The Lakes,sub_community,DXBI location tree (dxbi_places / dxbi_locations): The Lakes
+Lakes - Deema 2,The Lakes,sub_community,DXBI location tree (dxbi_places / dxbi_locations): The Lakes
+Lakes - Deema 3,The Lakes,sub_community,DXBI location tree (dxbi_places / dxbi_locations): The Lakes
+Lakes - Deema 4,The Lakes,sub_community,DXBI location tree (dxbi_places / dxbi_locations): The Lakes
+Lakes - Forat,The Lakes,sub_community,DXBI location tree (dxbi_places / dxbi_locations): The Lakes
+Lakes - Ghadeer,The Lakes,sub_community,DXBI location tree (dxbi_places / dxbi_locations): The Lakes
+Lakes - Hattan I,The Lakes,sub_community,DXBI location tree (dxbi_places / dxbi_locations): The Lakes
+Lakes - Hattan II,The Lakes,sub_community,DXBI location tree (dxbi_places / dxbi_locations): The Lakes
+Lakes - Hattan III,The Lakes,sub_community,DXBI location tree (dxbi_places / dxbi_locations): The Lakes
+Lakes - Maeen,The Lakes,sub_community,DXBI location tree (dxbi_places / dxbi_locations): The Lakes
+Zulal 1,The Lakes,sub_community,DXBI location tree (dxbi_places / dxbi_locations): The Lakes
+Zulal 2,The Lakes,sub_community,DXBI location tree (dxbi_places / dxbi_locations): The Lakes
+Arabian Ranches - Polo Homes,Arabian Ranches 1,sub_community,DXBI community of its records: Arabian Ranches 1
+Palmera 1,Arabian Ranches 1,sub_community,DXBI community of its records: Arabian Ranches 1
+Palmera 3,Arabian Ranches 1,sub_community,DXBI community of its records: Arabian Ranches 1
+Palmera 4,Arabian Ranches 1,sub_community,DXBI community of its records: Arabian Ranches 1
+Alvorada 2,Arabian Ranches 1,sub_community,DXBI community of its records: Arabian Ranches 1
+Al Reem 2,Arabian Ranches 1,sub_community,DXBI community of its records: Arabian Ranches 1
+Al Reem 3,Arabian Ranches 1,sub_community,DXBI community of its records: Arabian Ranches 1
+Camelia,Arabian Ranches 2,sub_community,DXBI community of its records: Arabian Ranches 2
+Camelia 2,Arabian Ranches 2,sub_community,DXBI community of its records: Arabian Ranches 2
+Joy,Arabian Ranches 3,sub_community,DXBI community of its records: Arabian Ranches 3
+Ruba,Arabian Ranches 3,sub_community,DXBI community of its records: Arabian Ranches 3
+Sun,Arabian Ranches 3,sub_community,DXBI community of its records: Arabian Ranches 3
+Spring,Arabian Ranches 3,sub_community,DXBI community of its records: Arabian Ranches 3
+Bliss 1,Arabian Ranches 3,sub_community,DXBI community of its records: Arabian Ranches 3
+Amaranta (all phases),Dubai Land Residence Complex,project_as_master,"DLD master of the Villanova projects (La Rosa, Amaranta); DXBI tree: Villanova"
+Amaranta 1,Dubai Land Residence Complex,project_as_master,"DLD master of the Villanova projects (La Rosa, Amaranta); DXBI tree: Villanova"
+Amaranta 2,Dubai Land Residence Complex,project_as_master,"DLD master of the Villanova projects (La Rosa, Amaranta); DXBI tree: Villanova"
+Amaranta 3,Dubai Land Residence Complex,project_as_master,"DLD master of the Villanova projects (La Rosa, Amaranta); DXBI tree: Villanova"
+Amaranta A,Dubai Land Residence Complex,project_as_master,"DLD master of the Villanova projects (La Rosa, Amaranta); DXBI tree: Villanova"
+Amaranta B,Dubai Land Residence Complex,project_as_master,"DLD master of the Villanova projects (La Rosa, Amaranta); DXBI tree: Villanova"
+La Rosa (all phases),Dubai Land Residence Complex,project_as_master,"DLD master of the Villanova projects (La Rosa, Amaranta); DXBI tree: Villanova"
+La Rosa 1,Dubai Land Residence Complex,project_as_master,"DLD master of the Villanova projects (La Rosa, Amaranta); DXBI tree: Villanova"
+La Rosa 2,Dubai Land Residence Complex,project_as_master,"DLD master of the Villanova projects (La Rosa, Amaranta); DXBI tree: Villanova"
+La Rosa 3,Dubai Land Residence Complex,project_as_master,"DLD master of the Villanova projects (La Rosa, Amaranta); DXBI tree: Villanova"
+La Rosa 4,Dubai Land Residence Complex,project_as_master,"DLD master of the Villanova projects (La Rosa, Amaranta); DXBI tree: Villanova"
+La Rosa 5,Dubai Land Residence Complex,project_as_master,"DLD master of the Villanova projects (La Rosa, Amaranta); DXBI tree: Villanova"
+La Rosa 6,Dubai Land Residence Complex,project_as_master,"DLD master of the Villanova projects (La Rosa, Amaranta); DXBI tree: Villanova"
+La Violeta 1,Dubai Land Residence Complex,project_as_master,"DLD master of the Villanova projects (La Rosa, Amaranta); DXBI tree: Villanova"
+La Violeta 2,Dubai Land Residence Complex,project_as_master,"DLD master of the Villanova projects (La Rosa, Amaranta); DXBI tree: Villanova"
+Haven By Al Dar 1,Haven By Aldar,project_as_master,DXBI location tree (dxbi_places / dxbi_locations)
+Haven By Al Dar 2,Haven By Aldar,project_as_master,DXBI location tree (dxbi_places / dxbi_locations)
+Haven By Al Dar 3,Haven By Aldar,project_as_master,DXBI location tree (dxbi_places / dxbi_locations)
+Verdes By Haven,Haven By Aldar,project_as_master,DXBI location tree (dxbi_places / dxbi_locations)
+Reem Townhouses,Town Square,project_as_master,DXBI community of its records: Town Square
+Maha Townhouses,Town Square,project_as_master,DXBI community of its records: Town Square
+Naseem Townhouses,Town Square,project_as_master,DXBI community of its records: Town Square
+Safi Townhouses,Town Square,project_as_master,DXBI community of its records: Town Square
+Shams Townhouses,Town Square,project_as_master,DXBI community of its records: Town Square
+Town Square Hayat,Town Square,project_as_master,DXBI community of its records: Town Square
+Reem - Mira Community Phase 1,Reem,project_as_master,DLD master Reem
+Reem - Mira Community Phase 2,Reem,project_as_master,DLD master Reem
+Reem - Mira Community Phase 3,Reem,project_as_master,DLD master Reem
+Reem - Mira Community Phase 4,Reem,project_as_master,DLD master Reem
+Reem - Mira Community Phase 5,Reem,project_as_master,DLD master Reem
+China Cluster,International City Phase 1,project_as_master,International City's country clusters
+France Cluster,International City Phase 1,project_as_master,International City's country clusters
+Greece Cluster,International City Phase 1,project_as_master,International City's country clusters
+Morocco Cluster,International City Phase 1,project_as_master,International City's country clusters
+Persia Cluster,International City Phase 1,project_as_master,International City's country clusters
+Spain Cluster,International City Phase 1,project_as_master,International City's country clusters
+Malta 2,Damac Lagoons,project_as_master,DXBI community of its records: Damac Lagoons
+Jebel Ali Village Townhouses- Phase 1,Jabal Ali Village,project_as_master,DXBI location tree (dxbi_places / dxbi_locations)
+Remraam - Al Ramth,Remraam,project_as_master,DLD master Remraam
+Elysee Heights,Jumeirah Village Circle,project_as_master,DXBI location tree (dxbi_places / dxbi_locations)
+Maison Elysee II,Jumeirah Village Circle,project_as_master,DXBI location tree (dxbi_places / dxbi_locations)
+MAISON ELYSEE III BY PANTHEON,Jumeirah Village Triangle,project_as_master,DXBI location tree (dxbi_places / dxbi_locations)
+Al Habtoor Grand,Dubai Marina,project_as_master,DXBI location tree (dxbi_places / dxbi_locations)

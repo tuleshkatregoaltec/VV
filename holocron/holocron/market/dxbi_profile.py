@@ -603,6 +603,95 @@ _AREA_FACTS = """
         GROUP BY area_key
     )"""
 
+
+def name_key(expr: str) -> str:
+    """A name's key: letters and digits, lower case ("PARK VILLA\\'S 2" = "Park Villas 2")."""
+    return f"lowerUTF8(replaceRegexpAll({expr}, '[^A-Za-z0-9]', ''))"
+
+
+def without_all(expr: str) -> str:
+    """DXBI's project-level label "X (all buildings)" / "X (All Phases)" is X."""
+    return f"replaceRegexpOne({expr}, '(?i)\\s*\\(all (buildings|phases)\\)\\s*$', '')"
+
+
+def project_key(expr: str) -> str:
+    return name_key(without_all(expr))
+
+
+def title_case(expr: str) -> str:
+    """A name DLD wrote in capitals, word by word in title case; a word with a digit or without a
+    vowel is an abbreviation and stays ("DMCC-EZ1", "JBR"). A name in mixed case is DXBI's or
+    DLD's own spelling and stays."""
+    words = f"splitByChar(' ', {expr})"
+    titled = (
+        f"arrayStringConcat(arrayMap(w -> if(match(w, '[0-9]') OR NOT match(w, '[AEIOUaeiou]'), "
+        f"w, initcapUTF8(lowerUTF8(w))), {words}), ' ')"
+    )
+    return f"if({expr} = upperUTF8({expr}) AND match({expr}, '[A-Z]{{3}}'), {titled}, {expr})"
+
+
+def hierarchy_resolved(records: str) -> str:
+    """Each record with its place in the Analytics hierarchy (holocron.market.analytics_hierarchy).
+
+    ``records`` names, besides its own columns, ``raw_scope`` (the profile's project, or DXBI's
+    project or building for a record without a profile), ``raw_kind``, ``h_building``,
+    ``h_community`` and ``h_master``. A spelling the last hierarchy build did not see keeps its
+    own name (DLD's capitals in title case); its master is resolved by Analytics.
+    """
+    building, community = name_key("s1.h_building"), name_key("s1.h_community")
+    return f"""(
+    SELECT s2.*,
+           if(s2.raw_scope = '', '', s2.scope_key_) AS scope_key,
+           if(s2.raw_scope = '', '',
+              if(s2.ap_name != '', s2.ap_name, {title_case(without_all("s2.raw_scope"))}))
+               AS scope_name,
+           if(s2.raw_scope = '', '', if(s2.ap_kind != '', s2.ap_kind, s2.raw_kind)) AS scope_kind,
+           multiIf(s2.ap_master != '', s2.ap_master, s2.mk_master != '', s2.mk_master,
+                   s2.h_master != '', {title_case("s2.h_master")}, '') AS master_name,
+           {name_key("master_name")} AS master_key,
+           ab.ab_name AS building_display,
+           -- Filed under another project than its building's, where >= 80% of >= 10 of the
+           -- building's records agree (the review list, wrong_project_records.md).
+           toUInt8(s2.clear_building AND ab.ab_project != '' AND s2.raw_scope != ''
+                   AND ab.ab_project != s2.scope_key_ AND ab.ab_share >= 0.8
+                   AND ab.ab_records >= 10) AS stray
+    FROM (
+        SELECT s1.*, if(bc.bc_id != '', bc.bc_id, bs.bs_id) AS building_id,
+               bc.bc_id != '' AS clear_building
+        FROM (
+            SELECT s0.*, ap.ap_name AS ap_name, ap.ap_kind AS ap_kind,
+                   ap.ap_master AS ap_master, mk.mk_master AS mk_master
+            FROM (
+                SELECT s.*, if(pk.pk_project != '', pk.pk_project,
+                               {project_key("s.raw_scope")}) AS scope_key_
+                FROM {records} AS s
+                LEFT JOIN (SELECT raw_key AS pk_raw, project_key AS pk_project
+                           FROM analytics_project_keys) AS pk
+                    ON pk.pk_raw = {name_key("s.raw_scope")}
+            ) AS s0
+            LEFT JOIN (SELECT project_key AS ap_key, project_name AS ap_name,
+                              scope_kind AS ap_kind, master_name AS ap_master
+                       FROM analytics_projects) AS ap ON ap.ap_key = s0.scope_key_
+            LEFT JOIN (SELECT raw_key AS mk_raw, master_name AS mk_master
+                       FROM analytics_master_keys) AS mk
+                ON mk.mk_raw = {name_key("s0.h_master")}
+        ) AS s1
+        LEFT JOIN (SELECT name_key AS bc_name, community_key AS bc_community,
+                          building_id AS bc_id
+                   FROM analytics_building_keys WHERE project_key = '') AS bc
+            ON bc.bc_name = {building} AND bc.bc_community = {community}
+        LEFT JOIN (SELECT name_key AS bs_name, community_key AS bs_community,
+                          project_key AS bs_project, building_id AS bs_id
+                   FROM analytics_building_keys WHERE project_key != '') AS bs
+            ON bs.bs_name = {building} AND bs.bs_community = {community}
+           AND bs.bs_project = s1.scope_key_
+    ) AS s2
+    LEFT JOIN (SELECT building_id AS ab_id, building_name AS ab_name, project_key AS ab_project,
+                      project_share AS ab_share, records AS ab_records
+               FROM analytics_buildings) AS ab ON ab.ab_id = s2.building_id
+)"""
+
+
 # Coordinates: the PropertyFinder tower the building name is an alias of (one tower only), else
 # the building's coordinates in DXBI's own building list.
 _COORDINATES = """
@@ -939,20 +1028,33 @@ RENTAL_PROFILE_SQL = _finished(
 # numbered unit count once, and a lease listed without its unit that equals a numbered lease's
 # building path, area and terms is that lease.
 LISTED_TABLES = ("dxbi_sales_listed", "dxbi_leases_listed")
+# The record's place in the Analytics hierarchy (holocron.market.analytics_hierarchy).
+HIERARCHY_COLUMNS = (
+    "scope_key", "scope_name", "scope_kind", "master_key", "master_name", "building_id",
+    "building_display", "stray",
+)  # fmt: skip
 SALES_LISTED_COLUMNS = (
     "sale_key", "transaction_date", "unit_number", "building_name", "project_name", "area_name",
     "property_type",
     "bedrooms", "market_status", "size_sqft", "sale_amount_aed", "price_per_sqft_aed",
     "profile_area", "profile_master", "profile_project", "profile_project_source",
-    "profile_bedrooms", "profile_status", "profile_size", "built_at",
+    "profile_bedrooms", "profile_status", "profile_size", *HIERARCHY_COLUMNS, "built_at",
 )  # fmt: skip
 LEASES_LISTED_COLUMNS = (
     "contract_key", "lease_start", "lease_end", "unit_number", "building_name", "project_name",
     "area_name",
     "property_type", "bedrooms", "size_sqft", "annual_rent_aed", "contract_amount_aed",
     "contract_term_months", "contract_state", "profile_area", "profile_master",
-    "profile_project", "profile_project_source", "profile_bedrooms", "profile_size", "built_at",
+    "profile_project", "profile_project_source", "profile_bedrooms", "profile_size",
+    *HIERARCHY_COLUMNS, "built_at",
 )  # fmt: skip
+# A record's own project, as Analytics scoped it before the hierarchy: the profile's, except a
+# place name's; a record without a profile yet takes DXBI's project, else its building.
+_RAW_SCOPE = """multiIf(
+    {p}.project_source = '', if({x}.project_name != '', {x}.project_name, {x}.building_name),
+    {p}.project_source = 'place_name', '', {p}.project_name)"""
+_RAW_KIND = """if({p}.project_source = 'own_building'
+       OR ({p}.project_source = '' AND {x}.project_name = ''), 'Building', 'Project')"""
 _SALE_TERMS = (
     "if(match(unit_number, '[0-9]') AND building_key != '' AND {area} != '', "
     "concat({area}, '|', building_key, '|', unit_number, '|', toString(transaction_date), '|', "
@@ -960,12 +1062,24 @@ _SALE_TERMS = (
 ).format(area=f"if(area_key != '', area_key, {location_key_sql('area_name')})")
 SALES_LISTED_SQL = f"""
 INSERT INTO `dxbi_sales_listed` ({", ".join(SALES_LISTED_COLUMNS)})
-SELECT x.sale_key, x.transaction_date, x.unit_number, x.building_name, x.project_name,
-       x.area_name,
-       x.property_type, x.bedrooms, x.market_status, x.size_sqft, x.sale_amount_aed,
-       if(x.price_per_sqft_aed > 0, x.price_per_sqft_aed, NULL),
-       p.area_name, p.master_project, p.project_name, p.project_source, p.bedrooms,
-       p.completion_status, p.size_sqft, now64(3)
+SELECT {", ".join(SALES_LISTED_COLUMNS[:-1])}, now64(3)
+FROM {
+    hierarchy_resolved(f'''(
+SELECT x.sale_key AS sale_key, x.transaction_date AS transaction_date,
+       x.unit_number AS unit_number, x.building_name AS building_name,
+       x.project_name AS project_name, x.area_name AS area_name,
+       x.property_type AS property_type, x.bedrooms AS bedrooms,
+       x.market_status AS market_status, x.size_sqft AS size_sqft,
+       x.sale_amount_aed AS sale_amount_aed,
+       if(x.price_per_sqft_aed > 0, x.price_per_sqft_aed, NULL) AS price_per_sqft_aed,
+       p.area_name AS profile_area, p.master_project AS profile_master,
+       p.project_name AS profile_project, p.project_source AS profile_project_source,
+       p.bedrooms AS profile_bedrooms, p.completion_status AS profile_status,
+       p.size_sqft AS profile_size,
+       {_RAW_SCOPE.format(p="p", x="x")} AS raw_scope,
+       {_RAW_KIND.format(p="p", x="x")} AS raw_kind,
+       x.building_name AS h_building, x.area_name AS h_community,
+       p.master_project AS h_master
 FROM (
     SELECT * FROM (
         SELECT *, if(
@@ -990,6 +1104,8 @@ FROM (
     LIMIT 1 BY same_sale
 ) AS x
 LEFT JOIN dxbi_sale_profile AS p ON p.sale_key = x.sale_key
+)''')
+}
 {t._HEAVY_QUERY_SETTINGS}
 """
 _LEASE_TERMS = (
@@ -1003,13 +1119,27 @@ _SAME_LEASE = (
 )
 LEASES_LISTED_SQL = f"""
 INSERT INTO `dxbi_leases_listed` ({", ".join(LEASES_LISTED_COLUMNS)})
-SELECT x.contract_key, x.lease_start, x.lease_end, x.unit_number, x.building_name,
-       x.project_name, x.area_name,
+SELECT {", ".join(LEASES_LISTED_COLUMNS[:-1])}, now64(3)
+FROM {
+    hierarchy_resolved(f'''(
+SELECT x.contract_key AS contract_key, x.lease_start AS lease_start, x.lease_end AS lease_end,
+       x.unit_number AS unit_number, x.building_name AS building_name,
+       x.project_name AS project_name, x.area_name AS area_name,
        -- DXBI's "Commercial" is refined from the matched DLD contract (Office, Shop).
-       if(p.property_type_source = 'dld_pair', p.property_type, x.property_type), x.bedrooms, x.size_sqft, x.annual_rent_aed, x.contract_amount_aed,
-       x.contract_term_months, x.contract_state,
-       p.area_name, p.master_project, p.project_name, p.project_source, p.bedrooms, p.size_sqft,
-       now64(3)
+       if(p.property_type_source = 'dld_pair', p.property_type, x.property_type)
+           AS property_type,
+       x.bedrooms AS bedrooms, x.size_sqft AS size_sqft, x.annual_rent_aed AS annual_rent_aed,
+       x.contract_amount_aed AS contract_amount_aed,
+       x.contract_term_months AS contract_term_months, x.contract_state AS contract_state,
+       p.area_name AS profile_area, p.master_project AS profile_master,
+       p.project_name AS profile_project, p.project_source AS profile_project_source,
+       p.bedrooms AS profile_bedrooms, p.size_sqft AS profile_size,
+       {_RAW_SCOPE.format(p="p", x="x")} AS raw_scope,
+       {_RAW_KIND.format(p="p", x="x")} AS raw_kind,
+       -- A lease without its building takes the one its unit's DXBI sale names.
+       if(x.building_name != '', x.building_name,
+          if(p.building_source = 'dxbi_sale', p.building_name, '')) AS h_building,
+       x.area_name AS h_community, p.master_project AS h_master
 FROM (
     SELECT *, {_SAME_LEASE} AS same_lease
     FROM dxbi_rental_events FINAL
@@ -1020,6 +1150,8 @@ FROM (
     LIMIT 1 BY same_lease
 ) AS x
 LEFT JOIN dxbi_rental_profile AS p ON p.contract_key = x.contract_key
+)''')
+}
 {t._HEAVY_QUERY_SETTINGS}
 """
 
@@ -1045,15 +1177,16 @@ def create_tables(clickhouse: Any) -> None:
         clickhouse.command(_create_statement(table))
 
 
-def build_profile(clickhouse: Any, table: str) -> int:
-    """Fill a staging copy, then swap it in; an empty build leaves the served table unchanged."""
+def build_table(clickhouse: Any, table: str, statement: str, *, allow_empty: bool = False) -> int:
+    """Fill a staging copy, then swap it in; an empty build leaves the served table unchanged
+    unless an empty table is a valid result (``allow_empty``)."""
     staging = f"{table}__staging"
     clickhouse.command(f"DROP TABLE IF EXISTS {staging}")
     # From the schema, not AS the served table, so a new column reaches the served table.
     clickhouse.command(_create_statement(table).replace(table, staging, 1))
-    clickhouse.command(PROFILE_STATEMENTS[table].replace(f"`{table}`", staging))
+    clickhouse.command(statement.replace(f"`{table}`", staging))
     rows = int(clickhouse.query(f"SELECT count() FROM {staging}").result_rows[0][0])
-    if rows == 0:
+    if rows == 0 and not allow_empty:
         clickhouse.command(f"DROP TABLE {staging}")
         raise RuntimeError(f"{table}: the build produced no rows; the served table is unchanged")
     clickhouse.command(f"EXCHANGE TABLES {staging} AND {table}")
@@ -1061,15 +1194,27 @@ def build_profile(clickhouse: Any, table: str) -> int:
     return rows
 
 
+def build_profile(clickhouse: Any, table: str) -> int:
+    return build_table(clickhouse, table, PROFILE_STATEMENTS[table])
+
+
 def build_profiles(clickhouse: Any) -> dict[str, int]:
-    """Both profiles, sales first (the lease profile reads the sale profile), then the listed
-    records that read them."""
+    """Both profiles, sales first (the lease profile reads the sale profile), then the Analytics
+    hierarchy built from them, then the listed records that carry its keys."""
+    from holocron.market.analytics_hierarchy import build_hierarchy
+
     create_tables(clickhouse)
-    return {table: build_profile(clickhouse, table) for table in (*PROFILE_TABLES, *LISTED_TABLES)}
+    rows = {table: build_profile(clickhouse, table) for table in PROFILE_TABLES}
+    rows |= build_hierarchy(clickhouse)
+    return rows | {table: build_profile(clickhouse, table) for table in LISTED_TABLES}
 
 
 def build_listed(clickhouse: Any) -> dict[str, int]:
-    """The listed records alone, with the profiles as built last: after a DXBI load, so the
-    Analytics pages see new records before the next profile build names their DLD project."""
+    """The listed records alone, with the profiles and hierarchy as built last: after a DXBI
+    load, so the Analytics pages see new records before the next profile build names their DLD
+    project (a new spelling keeps its own name until then)."""
+    from holocron.market.analytics_hierarchy import create_tables as create_hierarchy_tables
+
     create_tables(clickhouse)
+    create_hierarchy_tables(clickhouse)
     return {table: build_profile(clickhouse, table) for table in LISTED_TABLES}

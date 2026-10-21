@@ -2315,6 +2315,93 @@ ALTER TABLE dxbi_rental_profile ADD COLUMN IF NOT EXISTS latitude Nullable(Float
 ALTER TABLE dxbi_rental_profile ADD COLUMN IF NOT EXISTS longitude Nullable(Float64);
 ALTER TABLE dxbi_rental_profile ADD COLUMN IF NOT EXISTS map_url String DEFAULT '';
 
+-- The Analytics master -> project -> building hierarchy (holocron.market.analytics_hierarchy),
+-- built from the DXBI profiles before the listed tables, which carry its keys.
+-- Every spelling of a project seen (letters and digits, lower case) -> its project.
+CREATE TABLE IF NOT EXISTS analytics_project_keys (
+    raw_key String,
+    project_key String,
+    built_at DateTime64(3, 'UTC')
+)
+ENGINE = MergeTree()
+ORDER BY raw_key;
+
+-- Every master spelling seen -> the canonical master.
+CREATE TABLE IF NOT EXISTS analytics_master_keys (
+    raw_key String,
+    master_key String,
+    master_name String,
+    built_at DateTime64(3, 'UTC')
+)
+ENGINE = MergeTree()
+ORDER BY raw_key;
+
+CREATE TABLE IF NOT EXISTS analytics_projects (
+    project_key String,
+    project_name String,
+    scope_kind LowCardinality(String),
+    master_key String,
+    master_name String,
+    master_source LowCardinality(String),
+    area_name String,
+    sales UInt32,
+    leases UInt32,
+    spellings Array(String),
+    built_at DateTime64(3, 'UTC')
+)
+ENGINE = MergeTree()
+ORDER BY project_key;
+
+-- A DXBI building name in its DXBI community (and, for a name several projects share, its
+-- project) -> the building it is.
+CREATE TABLE IF NOT EXISTS analytics_building_keys (
+    name_key String,
+    community_key String,
+    project_key String,
+    building_id String,
+    built_at DateTime64(3, 'UTC')
+)
+ENGINE = MergeTree()
+ORDER BY (name_key, community_key, project_key);
+
+CREATE TABLE IF NOT EXISTS analytics_buildings (
+    building_id String,
+    building_name String,
+    community String,
+    project_key String,
+    project_name String,
+    master_key String,
+    master_name String,
+    project_share Float64,
+    records UInt32,
+    sales UInt32,
+    leases UInt32,
+    dld_building String,
+    spellings Array(String),
+    built_at DateTime64(3, 'UTC')
+)
+ENGINE = MergeTree()
+ORDER BY building_id;
+
+-- Registered units per project and per building, each count naming its source; a count below
+-- the units that traded there is replaced by those (units_at_least = 1).
+CREATE TABLE IF NOT EXISTS analytics_unit_stock (
+    scope_level LowCardinality(String),
+    scope_id String,
+    units UInt32,
+    units_source LowCardinality(String),
+    units_at_least UInt8,
+    units_traded UInt32,
+    buildings UInt32,
+    mix_rooms Array(String),
+    mix_units Array(UInt32),
+    mix_median_sqft Array(Float64),
+    mix_source LowCardinality(String),
+    built_at DateTime64(3, 'UTC')
+)
+ENGINE = MergeTree()
+ORDER BY (scope_level, scope_id);
+
 -- Every DXBI sale and lease the Transactions pages list, once each (the identity rules of
 -- backend/app/transaction/queries.py), with DXBI's own values and its profile's DLD-sourced
 -- area, master project and project (holocron.market.dxbi_profile). The Analytics pages read
@@ -2339,10 +2426,18 @@ CREATE TABLE IF NOT EXISTS dxbi_sales_listed (
     profile_bedrooms LowCardinality(String),
     profile_status LowCardinality(String),
     profile_size Float64,
+    scope_key String DEFAULT '',
+    scope_name String DEFAULT '',
+    scope_kind LowCardinality(String) DEFAULT '',
+    master_key String DEFAULT '',
+    master_name String DEFAULT '',
+    building_id String DEFAULT '',
+    building_display String DEFAULT '',
+    stray UInt8 DEFAULT 0,
     built_at DateTime64(3, 'UTC')
 )
 ENGINE = MergeTree()
-ORDER BY (profile_master, profile_project, transaction_date);
+ORDER BY (master_key, scope_key, transaction_date);
 
 CREATE TABLE IF NOT EXISTS dxbi_leases_listed (
     contract_key String,
@@ -2365,7 +2460,34 @@ CREATE TABLE IF NOT EXISTS dxbi_leases_listed (
     profile_project_source LowCardinality(String),
     profile_bedrooms LowCardinality(String),
     profile_size Float64,
+    scope_key String DEFAULT '',
+    scope_name String DEFAULT '',
+    scope_kind LowCardinality(String) DEFAULT '',
+    master_key String DEFAULT '',
+    master_name String DEFAULT '',
+    building_id String DEFAULT '',
+    building_display String DEFAULT '',
+    stray UInt8 DEFAULT 0,
     built_at DateTime64(3, 'UTC')
 )
 ENGINE = MergeTree()
-ORDER BY (profile_master, profile_project, lease_start);
+ORDER BY (master_key, scope_key, lease_start);
+
+-- Listed tables built before the Analytics hierarchy (holocron.market.analytics_hierarchy).
+ALTER TABLE dxbi_sales_listed ADD COLUMN IF NOT EXISTS scope_key String DEFAULT '';
+ALTER TABLE dxbi_sales_listed ADD COLUMN IF NOT EXISTS scope_name String DEFAULT '';
+ALTER TABLE dxbi_sales_listed ADD COLUMN IF NOT EXISTS scope_kind LowCardinality(String) DEFAULT '';
+ALTER TABLE dxbi_sales_listed ADD COLUMN IF NOT EXISTS master_key String DEFAULT '';
+ALTER TABLE dxbi_sales_listed ADD COLUMN IF NOT EXISTS master_name String DEFAULT '';
+ALTER TABLE dxbi_sales_listed ADD COLUMN IF NOT EXISTS building_id String DEFAULT '';
+ALTER TABLE dxbi_sales_listed ADD COLUMN IF NOT EXISTS building_display String DEFAULT '';
+ALTER TABLE dxbi_sales_listed ADD COLUMN IF NOT EXISTS stray UInt8 DEFAULT 0;
+ALTER TABLE dxbi_leases_listed ADD COLUMN IF NOT EXISTS scope_key String DEFAULT '';
+ALTER TABLE dxbi_leases_listed ADD COLUMN IF NOT EXISTS scope_name String DEFAULT '';
+ALTER TABLE dxbi_leases_listed ADD COLUMN IF NOT EXISTS scope_kind LowCardinality(String) DEFAULT '';
+ALTER TABLE dxbi_leases_listed ADD COLUMN IF NOT EXISTS master_key String DEFAULT '';
+ALTER TABLE dxbi_leases_listed ADD COLUMN IF NOT EXISTS master_name String DEFAULT '';
+ALTER TABLE dxbi_leases_listed ADD COLUMN IF NOT EXISTS building_id String DEFAULT '';
+ALTER TABLE dxbi_leases_listed ADD COLUMN IF NOT EXISTS building_display String DEFAULT '';
+ALTER TABLE dxbi_leases_listed ADD COLUMN IF NOT EXISTS stray UInt8 DEFAULT 0;
+
