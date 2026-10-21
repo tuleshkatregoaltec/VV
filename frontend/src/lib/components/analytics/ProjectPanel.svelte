@@ -20,7 +20,10 @@ import UsageToggle from './UsageToggle.svelte'
 
 Chart.register(...registerables)
 
-let { selection }: { selection: ProjectSearchItem } = $props()
+let {
+	selection,
+	onSelect
+}: { selection: ProjectSearchItem; onSelect?: (next: ProjectSearchItem) => void } = $props()
 
 type AnalysisMode = 'sales' | 'rentals'
 type ConfigSegment = 'all' | 'off_plan' | 'secondary'
@@ -54,11 +57,13 @@ $effect(() => {
 const queryParams = $derived.by(() =>
 	selection.filter_type === 'market'
 		? { usage }
-		: subProject
-			? { project: subProject, masterProject: selection.name, usage }
-			: selection.filter_type === 'project'
-				? { project: selection.name, usage }
-				: { masterProject: selection.name, filterType: selection.filter_type, usage }
+		: selection.filter_type === 'building'
+			? { buildingId: selection.building_id ?? '', usage }
+			: subProject
+				? { project: subProject, masterProject: selection.name, usage }
+				: selection.filter_type === 'project'
+					? { project: selection.name, usage }
+					: { masterProject: selection.name, filterType: selection.filter_type, usage }
 )
 
 const subProjectsQuery = createQuery(() =>
@@ -232,7 +237,44 @@ const FIELD_LABELS: Record<string, string> = {
 	area_name: 'Area'
 }
 const SOURCE_LABELS: Record<string, string> = {
-	dxbi_buildings: "DXBInteract's building list"
+	dxbi_buildings: "DXBInteract's building list",
+	dld_units: "DLD's unit register",
+	buildings: 'its buildings added up',
+	dld_land_plots: "DLD's land register (villa plots)",
+	units_traded: 'units with a recorded sale or lease (no register count)',
+	projects_rollup: 'its projects added up',
+	dxbi_records: 'DXBI buildings with records'
+}
+
+// Registered units as shown: "at least" when only the units that traded are known.
+function unitsLabel(project: ProjectAnalyticsResponse['project']): string {
+	if (!project?.no_of_units) return '—'
+	return project.units_at_least
+		? `at least ${fmtNumber(project.no_of_units)}`
+		: fmtNumber(project.no_of_units)
+}
+
+// The way back up the hierarchy from a building or project.
+function selectUp(level: 'master' | 'project', name: string | null | undefined) {
+	if (!name || !onSelect) return
+	onSelect(
+		level === 'master'
+			? { name, filter_type: 'master', scope_kind: 'Master' }
+			: { name, filter_type: 'project', scope_kind: 'Project' }
+	)
+}
+
+function selectBuilding(building: { building_id: string; name: string }) {
+	const project = getSummary()?.project
+	onSelect?.({
+		name: building.name,
+		filter_type: 'building',
+		scope_kind: 'Building',
+		building: building.name,
+		building_id: building.building_id,
+		project: project?.project_name ?? '',
+		master: project?.master_name ?? ''
+	})
 }
 
 function fieldSourceNote(sources: Record<string, string> | undefined): string {
@@ -364,7 +406,7 @@ function fmtQuarterLabel(value: string | Date): string {
 }
 
 function isAggregateSelection(): boolean {
-	return selection.filter_type !== 'project' && !subProject
+	return selection.filter_type !== 'project' && selection.filter_type !== 'building' && !subProject
 }
 
 function isMarketSelection(): boolean {
@@ -989,7 +1031,8 @@ onMount(() => {
 	{@const hasProjectDetails =
 		!isMarketScope &&
 		Object.keys(summary.project?.field_sources ?? {}).some((field) => field !== 'area_name')}
-	{@const isMasterScope = selection.filter_type !== 'project' && selection.filter_type !== 'market' && !subProject}
+	{@const isBuildingScope = selection.filter_type === 'building'}
+	{@const isMasterScope = selection.filter_type !== 'project' && selection.filter_type !== 'market' && !isBuildingScope && !subProject}
 	<div class="space-y-5">
 
 		{#if subProjectsQuery.isError}
@@ -999,9 +1042,28 @@ onMount(() => {
 		<section class="rounded-lg border border-border bg-card p-5">
 			<div class="flex flex-wrap items-start justify-between gap-4">
 				<div class="min-w-0">
-					<p class="text-[11px] font-semibold uppercase tracking-[0.22em] text-fg-4">
-						{summary.project?.area_name ?? `${selection.scope_kind ?? 'Location'} analytics`}
-					</p>
+					{#if !isMasterScope && !isMarketScope && summary.project?.master_name}
+						<!-- Master › Project for a building: each level opens its own analytics. -->
+						<nav
+							aria-label="Location"
+							class="flex flex-wrap items-center gap-1 text-[11px] font-semibold uppercase tracking-[0.22em] text-fg-4"
+							data-testid="analytics-breadcrumb"
+						>
+							<button type="button" class="uppercase hover:text-info" onclick={() => selectUp('master', summary.project?.master_name)}>
+								{summary.project.master_name}
+							</button>
+							{#if isBuildingScope && summary.project?.parent_project}
+								<span aria-hidden="true">›</span>
+								<button type="button" class="uppercase hover:text-info" onclick={() => selectUp('project', summary.project?.parent_project)}>
+									{summary.project.parent_project}
+								</button>
+							{/if}
+						</nav>
+					{:else}
+						<p class="text-[11px] font-semibold uppercase tracking-[0.22em] text-fg-4">
+							{summary.project?.area_name ?? `${selection.scope_kind ?? 'Location'} analytics`}
+						</p>
+					{/if}
 					<h2 class="mt-1.5 truncate text-2xl font-semibold tracking-normal text-fg-1">
 						{subProject
 							? stripPrefix(subProject)
@@ -1017,6 +1079,10 @@ onMount(() => {
 								? ` - ${fmtNumber(subProjects.length)} developments`
 								: ''}
 						</p>
+					{:else if isBuildingScope}
+						<p class="mt-1 text-sm text-fg-3">
+							Building{summary.project?.developer_name ? ` · ${summary.project.developer_name}` : ''}
+						</p>
 					{:else if summary.project?.developer_name}
 						<p class="mt-1 text-sm text-fg-3">{summary.project.developer_name}</p>
 					{/if}
@@ -1024,7 +1090,7 @@ onMount(() => {
 						counts={summary.usage_counts}
 						resolved={summary.usage === 'Commercial' ? 'Commercial' : 'Residential'}
 						value={usage}
-						scope={isMarketScope ? 'Dubai' : isMasterScope ? 'this community' : 'this project'}
+						scope={isMarketScope ? 'Dubai' : isMasterScope ? 'this community' : isBuildingScope ? 'this building' : 'this project'}
 						onchange={(choice) => (usage = choice)}
 					/>
 				</div>
@@ -1041,6 +1107,12 @@ onMount(() => {
 							class="inline-flex items-center rounded-sm bg-info-bg px-2.5 py-1 text-xs font-semibold text-info ring-1 ring-border"
 						>
 							Master community
+						</span>
+					{:else if isBuildingScope}
+						<span
+							class="inline-flex items-center rounded-sm bg-info-bg px-2.5 py-1 text-xs font-semibold text-info ring-1 ring-border"
+						>
+							Building
 						</span>
 					{:else if summary.project?.project_status}
 						<span
@@ -1131,9 +1203,16 @@ onMount(() => {
 				</div>
 				<div class="min-w-[100px]">
 					<p class="text-[11px] uppercase tracking-[0.16em] text-fg-4">Units</p>
-					<p class="mt-1 text-sm font-medium text-fg-1">
-						{fmtNumber(summary.project?.no_of_units)}
+					<p class="mt-1 text-sm font-medium text-fg-1" data-testid="analytics-units">
+						{unitsLabel(summary.project)}
 					</p>
+					{#if isMasterScope && summary.project?.no_of_projects}
+						<p class="mt-1 text-[11px] text-fg-4">
+							{fmtNumber(summary.project.projects_with_units ?? 0)} of {fmtNumber(summary.project.no_of_projects)} projects counted
+						</p>
+					{:else if summary.project?.units_at_least}
+						<p class="mt-1 text-[11px] text-fg-4">No register count; units traded</p>
+					{/if}
 				</div>
 				<div class="min-w-[160px]">
 					<p class="text-[11px] uppercase tracking-[0.16em] text-fg-4">Handover</p>
@@ -1191,6 +1270,44 @@ onMount(() => {
                 {#if !hasProjectDetails}Registered unit stock and delivery forecasts are unavailable from this source.{/if}
             </p>
 		</section>
+
+		<!-- ── A project's buildings ─────────────────────────────────── -->
+		{#if !isBuildingScope && !isMasterScope && !isMarketScope && (summary.buildings?.length ?? 0) > 0}
+			<section class="rounded-lg border border-border bg-card p-5" data-testid="analytics-buildings">
+				<div class="flex items-baseline justify-between gap-3">
+					<h3 class="text-sm font-semibold text-fg-1">Buildings</h3>
+					<p class="text-xs text-fg-4">Select a building for its own analytics</p>
+				</div>
+				<div class="mt-3 overflow-x-auto">
+					<table class="w-full text-sm">
+						<thead>
+							<tr class="border-b border-border text-left text-[11px] uppercase tracking-[0.12em] text-fg-4">
+								<th class="py-2 pr-4 font-medium">Building</th>
+								<th class="py-2 pr-4 text-right font-medium">Units</th>
+								<th class="py-2 pr-4 text-right font-medium">Sales</th>
+								<th class="py-2 text-right font-medium">Leases</th>
+							</tr>
+						</thead>
+						<tbody>
+							{#each summary.buildings ?? [] as building (building.building_id)}
+								<tr class="border-b border-border last:border-0">
+									<td class="py-2 pr-4">
+										<button type="button" class="text-left font-medium text-fg-1 hover:text-info" onclick={() => selectBuilding(building)}>
+											{building.name}
+										</button>
+									</td>
+									<td class="py-2 pr-4 text-right tabular-nums text-fg-2" title={building.units_source ? (SOURCE_LABELS[building.units_source] ?? building.units_source) : ''}>
+										{building.units ? (building.units_at_least ? `≥ ${fmtNumber(building.units)}` : fmtNumber(building.units)) : '—'}
+									</td>
+									<td class="py-2 pr-4 text-right tabular-nums text-fg-2">{fmtNumber(building.sales)}</td>
+									<td class="py-2 text-right tabular-nums text-fg-2">{fmtNumber(building.leases)}</td>
+								</tr>
+							{/each}
+						</tbody>
+					</table>
+				</div>
+			</section>
+		{/if}
 
 		<!-- ── KPI cards ──────────────────────────────────────────────── -->
 		<section class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">

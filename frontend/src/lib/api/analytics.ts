@@ -75,6 +75,8 @@ export type ProjectParams = {
 	masterProject?: string
 	project?: string
 	filterType?: string
+	// A building scope: the id the search returned (overrides project and master).
+	buildingId?: string
 	usage?: AnalyticsUsage
 }
 
@@ -106,6 +108,7 @@ export const analytics = {
 			client.withQuery('/api/v1/analytics/project/summary', {
 				project: params.project,
 				master_project: params.masterProject,
+				building_id: params.buildingId,
 				filter_type: params.filterType,
 				usage: params.usage
 			})
@@ -117,6 +120,7 @@ export const analytics = {
 				days,
 				project: params.project,
 				master_project: params.masterProject,
+				building_id: params.buildingId,
 				filter_type: params.filterType,
 				usage: params.usage
 			})
@@ -128,6 +132,7 @@ export const analytics = {
 				days,
 				project: params.project,
 				master_project: params.masterProject,
+				building_id: params.buildingId,
 				filter_type: params.filterType
 			})
 		),
@@ -137,6 +142,7 @@ export const analytics = {
 			client.withQuery('/api/v1/analytics/project/pipeline', {
 				project: params.project,
 				master_project: params.masterProject,
+				building_id: params.buildingId,
 				filter_type: params.filterType
 			})
 		),
@@ -146,6 +152,7 @@ export const analytics = {
 			client.withQuery('/api/v1/analytics/project/price-distribution', {
 				project: params.project,
 				master_project: params.masterProject,
+				building_id: params.buildingId,
 				filter_type: params.filterType,
 				usage: params.usage,
 				reg_type: regType

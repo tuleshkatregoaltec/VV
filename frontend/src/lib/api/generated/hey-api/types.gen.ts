@@ -628,6 +628,42 @@ export type BuildingInfo = {
 };
 
 /**
+ * BuildingStock
+ *
+ * One building of a project, with its registered units.
+ */
+export type BuildingStock = {
+    /**
+     * Building Id
+     */
+    building_id: string;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Sales
+     */
+    sales?: number;
+    /**
+     * Leases
+     */
+    leases?: number;
+    /**
+     * Units
+     */
+    units?: number | null;
+    /**
+     * Units Source
+     */
+    units_source?: string | null;
+    /**
+     * Units At Least
+     */
+    units_at_least?: boolean;
+};
+
+/**
  * BuildingUnitType
  *
  * Bedroom/type breakdown for a specific building
@@ -7339,6 +7375,12 @@ export type ProjectAnalyticsResponse = {
      */
     configuration_analysis: Array<ProjectConfigurationRow>;
     /**
+     * Buildings
+     *
+     * A project's buildings with their units
+     */
+    buildings?: Array<BuildingStock>;
+    /**
      * Recent Periods End
      *
      * Last day of the recent 90-day and 12-month windows: the newest recorded sale
@@ -7579,13 +7621,64 @@ export type ProjectForecastResponse = {
  * ProjectMeta
  *
  * A scope's metadata. ``field_sources`` names each filled field's source: "dxbi_buildings"
- * (DXBInteract's building list: developer, handover, completion, units, buildings, area).
+ * (DXBInteract's building list), "dld_units" (DLD's unit register), "buildings" (its
+ * buildings' counts added up), "dld_land_plots" (DLD's land register, villa plots),
+ * "units_traded" (no register count: the distinct units traded, ``units_at_least``) or
+ * "projects_rollup" (a master: its projects' counts added up).
  */
 export type ProjectMeta = {
     /**
      * Project Name
      */
     project_name: string;
+    /**
+     * Scope Level
+     */
+    scope_level?: 'project' | 'building' | 'master' | 'market' | null;
+    /**
+     * Master Name
+     *
+     * The scope's master project
+     */
+    master_name?: string | null;
+    /**
+     * Parent Project
+     *
+     * A building's project
+     */
+    parent_project?: string | null;
+    /**
+     * Building Id
+     */
+    building_id?: string | null;
+    /**
+     * Units Source
+     */
+    units_source?: string | null;
+    /**
+     * Units At Least
+     *
+     * No register count covers the units that traded: no_of_units is those units (at least)
+     */
+    units_at_least?: boolean;
+    /**
+     * Units Traded
+     *
+     * Distinct units with a recorded sale or lease
+     */
+    units_traded?: number | null;
+    /**
+     * No Of Projects
+     *
+     * A master's projects
+     */
+    no_of_projects?: number | null;
+    /**
+     * Projects With Units
+     *
+     * A master's projects with a register unit count
+     */
+    projects_with_units?: number | null;
     /**
      * Area Name
      */
@@ -8189,6 +8282,18 @@ export type ProjectSearchItem = {
      * Building
      */
     building?: string;
+    /**
+     * Building Id
+     */
+    building_id?: string;
+    /**
+     * Project
+     */
+    project?: string;
+    /**
+     * Master
+     */
+    master?: string;
 };
 
 /**
@@ -10319,7 +10424,7 @@ export type AnalyticsGetSubProjectsEndpointData = {
          *
          * Filter type: master or virtual_master
          */
-        filter_type?: 'project' | 'master' | 'virtual_master';
+        filter_type?: 'project' | 'master' | 'virtual_master' | 'building';
     };
     url: '/api/v1/analytics/project/sub-projects';
 };
@@ -10359,11 +10464,17 @@ export type AnalyticsGetProjectSummaryEndpointData = {
          */
         project?: string | null;
         /**
+         * Building Id
+         *
+         * Building id (from the search): scopes to that building
+         */
+        building_id?: string | null;
+        /**
          * Filter Type
          *
          * Filter type: master, virtual_master, or project
          */
-        filter_type?: 'project' | 'master' | 'virtual_master';
+        filter_type?: 'project' | 'master' | 'virtual_master' | 'building';
         /**
          * Usage
          *
@@ -10409,11 +10520,17 @@ export type AnalyticsGetProjectTrendsEndpointData = {
          */
         project?: string | null;
         /**
+         * Building Id
+         *
+         * Building id (from the search): scopes to that building
+         */
+        building_id?: string | null;
+        /**
          * Filter Type
          *
          * Filter type: master, virtual_master, or project
          */
-        filter_type?: 'project' | 'master' | 'virtual_master';
+        filter_type?: 'project' | 'master' | 'virtual_master' | 'building';
         /**
          * Days
          *
@@ -10465,11 +10582,17 @@ export type AnalyticsGetProjectForecastEndpointData = {
          */
         project?: string | null;
         /**
+         * Building Id
+         *
+         * Building id (from the search): scopes to that building
+         */
+        building_id?: string | null;
+        /**
          * Filter Type
          *
          * Filter type: master, virtual_master, or project
          */
-        filter_type?: 'project' | 'master' | 'virtual_master';
+        filter_type?: 'project' | 'master' | 'virtual_master' | 'building';
         /**
          * Days
          *
@@ -10515,11 +10638,17 @@ export type AnalyticsGetProjectPipelineEndpointData = {
          */
         project?: string | null;
         /**
+         * Building Id
+         *
+         * Building id (from the search): scopes to that building
+         */
+        building_id?: string | null;
+        /**
          * Filter Type
          *
          * Filter type: master, virtual_master, or project
          */
-        filter_type?: 'project' | 'master' | 'virtual_master';
+        filter_type?: 'project' | 'master' | 'virtual_master' | 'building';
     };
     url: '/api/v1/analytics/project/pipeline';
 };
@@ -10559,11 +10688,17 @@ export type AnalyticsGetProjectPriceDistributionEndpointData = {
          */
         project?: string | null;
         /**
+         * Building Id
+         *
+         * Building id (from the search): scopes to that building
+         */
+        building_id?: string | null;
+        /**
          * Filter Type
          *
          * Filter type: master, virtual_master, or project
          */
-        filter_type?: 'project' | 'master' | 'virtual_master';
+        filter_type?: 'project' | 'master' | 'virtual_master' | 'building';
         /**
          * Reg Type
          *

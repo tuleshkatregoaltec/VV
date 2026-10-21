@@ -555,7 +555,7 @@
 			"get": {
 				"tags": ["analytics", "analytics"],
 				"summary": "Search Projects Endpoint",
-				"description": "Search master project names for the selector dropdown.",
+				"description": "Projects, masters and buildings for the selector (a building is its own scope).",
 				"operationId": "analytics-search_projects_endpoint",
 				"parameters": [
 					{
@@ -633,7 +633,7 @@
 						"in": "query",
 						"required": false,
 						"schema": {
-							"enum": ["project", "master", "virtual_master"],
+							"enum": ["project", "master", "virtual_master", "building"],
 							"type": "string",
 							"description": "Filter type: master or virtual_master",
 							"default": "master",
@@ -710,11 +710,29 @@
 						"description": "Sub-project name (project_name_en)"
 					},
 					{
+						"name": "building_id",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "string"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "Building id (from the search): scopes to that building",
+							"title": "Building Id"
+						},
+						"description": "Building id (from the search): scopes to that building"
+					},
+					{
 						"name": "filter_type",
 						"in": "query",
 						"required": false,
 						"schema": {
-							"enum": ["project", "master", "virtual_master"],
+							"enum": ["project", "master", "virtual_master", "building"],
 							"type": "string",
 							"description": "Filter type: master, virtual_master, or project",
 							"default": "project",
@@ -804,11 +822,29 @@
 						"description": "Sub-project name (project_name_en)"
 					},
 					{
+						"name": "building_id",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "string"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "Building id (from the search): scopes to that building",
+							"title": "Building Id"
+						},
+						"description": "Building id (from the search): scopes to that building"
+					},
+					{
 						"name": "filter_type",
 						"in": "query",
 						"required": false,
 						"schema": {
-							"enum": ["project", "master", "virtual_master"],
+							"enum": ["project", "master", "virtual_master", "building"],
 							"type": "string",
 							"description": "Filter type: master, virtual_master, or project",
 							"default": "project",
@@ -909,11 +945,29 @@
 						"description": "Sub-project name (project_name_en)"
 					},
 					{
+						"name": "building_id",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "string"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "Building id (from the search): scopes to that building",
+							"title": "Building Id"
+						},
+						"description": "Building id (from the search): scopes to that building"
+					},
+					{
 						"name": "filter_type",
 						"in": "query",
 						"required": false,
 						"schema": {
-							"enum": ["project", "master", "virtual_master"],
+							"enum": ["project", "master", "virtual_master", "building"],
 							"type": "string",
 							"description": "Filter type: master, virtual_master, or project",
 							"default": "project",
@@ -1001,11 +1055,29 @@
 						"description": "Sub-project name (project_name_en)"
 					},
 					{
+						"name": "building_id",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "string"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "Building id (from the search): scopes to that building",
+							"title": "Building Id"
+						},
+						"description": "Building id (from the search): scopes to that building"
+					},
+					{
 						"name": "filter_type",
 						"in": "query",
 						"required": false,
 						"schema": {
-							"enum": ["project", "master", "virtual_master"],
+							"enum": ["project", "master", "virtual_master", "building"],
 							"type": "string",
 							"description": "Filter type: master, virtual_master, or project",
 							"default": "project",
@@ -1081,11 +1153,29 @@
 						"description": "Sub-project name (project_name_en)"
 					},
 					{
+						"name": "building_id",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "string"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "Building id (from the search): scopes to that building",
+							"title": "Building Id"
+						},
+						"description": "Building id (from the search): scopes to that building"
+					},
+					{
 						"name": "filter_type",
 						"in": "query",
 						"required": false,
 						"schema": {
-							"enum": ["project", "master", "virtual_master"],
+							"enum": ["project", "master", "virtual_master", "building"],
 							"type": "string",
 							"description": "Filter type: master, virtual_master, or project",
 							"default": "project",
@@ -10177,6 +10267,59 @@
 				"required": ["property_id", "building_number", "building_name", "floors"],
 				"title": "BuildingInfo",
 				"description": "Building with property_id for drilldown"
+			},
+			"BuildingStock": {
+				"properties": {
+					"building_id": {
+						"type": "string",
+						"title": "Building Id"
+					},
+					"name": {
+						"type": "string",
+						"title": "Name"
+					},
+					"sales": {
+						"type": "integer",
+						"title": "Sales",
+						"default": 0
+					},
+					"leases": {
+						"type": "integer",
+						"title": "Leases",
+						"default": 0
+					},
+					"units": {
+						"anyOf": [
+							{
+								"type": "integer"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Units"
+					},
+					"units_source": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Units Source"
+					},
+					"units_at_least": {
+						"type": "boolean",
+						"title": "Units At Least",
+						"default": false
+					}
+				},
+				"type": "object",
+				"required": ["building_id", "name"],
+				"title": "BuildingStock",
+				"description": "One building of a project, with its registered units."
 			},
 			"BuildingUnitType": {
 				"properties": {
@@ -21679,6 +21822,14 @@
 						"type": "array",
 						"title": "Configuration Analysis"
 					},
+					"buildings": {
+						"items": {
+							"$ref": "#/components/schemas/BuildingStock"
+						},
+						"type": "array",
+						"title": "Buildings",
+						"description": "A project's buildings with their units"
+					},
 					"recent_periods_end": {
 						"anyOf": [
 							{
@@ -22153,6 +22304,106 @@
 						"type": "string",
 						"title": "Project Name"
 					},
+					"scope_level": {
+						"anyOf": [
+							{
+								"type": "string",
+								"enum": ["project", "building", "master", "market"]
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Scope Level"
+					},
+					"master_name": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Master Name",
+						"description": "The scope's master project"
+					},
+					"parent_project": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Parent Project",
+						"description": "A building's project"
+					},
+					"building_id": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Building Id"
+					},
+					"units_source": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Units Source"
+					},
+					"units_at_least": {
+						"type": "boolean",
+						"title": "Units At Least",
+						"description": "No register count covers the units that traded: no_of_units is those units (at least)",
+						"default": false
+					},
+					"units_traded": {
+						"anyOf": [
+							{
+								"type": "integer"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Units Traded",
+						"description": "Distinct units with a recorded sale or lease"
+					},
+					"no_of_projects": {
+						"anyOf": [
+							{
+								"type": "integer"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "No Of Projects",
+						"description": "A master's projects"
+					},
+					"projects_with_units": {
+						"anyOf": [
+							{
+								"type": "integer"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Projects With Units",
+						"description": "A master's projects with a register unit count"
+					},
 					"area_name": {
 						"anyOf": [
 							{
@@ -22249,7 +22500,7 @@
 				"type": "object",
 				"required": ["project_name"],
 				"title": "ProjectMeta",
-				"description": "A scope's metadata. ``field_sources`` names each filled field's source: \"dxbi_buildings\"\n(DXBInteract's building list: developer, handover, completion, units, buildings, area)."
+				"description": "A scope's metadata. ``field_sources`` names each filled field's source: \"dxbi_buildings\"\n(DXBInteract's building list), \"dld_units\" (DLD's unit register), \"buildings\" (its\nbuildings' counts added up), \"dld_land_plots\" (DLD's land register, villa plots),\n\"units_traded\" (no register count: the distinct units traded, ``units_at_least``) or\n\"projects_rollup\" (a master: its projects' counts added up)."
 			},
 			"ProjectPipelinePoint": {
 				"properties": {
@@ -23156,6 +23407,21 @@
 					"building": {
 						"type": "string",
 						"title": "Building",
+						"default": ""
+					},
+					"building_id": {
+						"type": "string",
+						"title": "Building Id",
+						"default": ""
+					},
+					"project": {
+						"type": "string",
+						"title": "Project",
+						"default": ""
+					},
+					"master": {
+						"type": "string",
+						"title": "Master",
 						"default": ""
 					}
 				},

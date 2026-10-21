@@ -54,6 +54,7 @@ const error = $derived(summaryQueryA.isError || summaryQueryB.isError)
 
 function toQueryParams(selection: ProjectSearchItem) {
 	if (selection.filter_type === 'market') return {}
+	if (selection.filter_type === 'building') return { buildingId: selection.building_id ?? '' }
 	return selection.filter_type === 'project'
 		? { project: selection.name }
 		: { masterProject: selection.name, filterType: selection.filter_type }
@@ -64,7 +65,7 @@ function isMarketSelection(selection: ProjectSearchItem): boolean {
 }
 
 function isMasterSelection(selection: ProjectSearchItem): boolean {
-	return selection.filter_type !== 'project' && selection.filter_type !== 'market'
+	return !['project', 'market', 'building'].includes(selection.filter_type)
 }
 
 function fmtCurrency(n: number | null | undefined): string {

@@ -62,6 +62,14 @@ $effect(() => {
 	}
 })
 
+function isSelected(project: ProjectSearchItem): boolean {
+	return (
+		value?.name === project.name &&
+		value?.filter_type === project.filter_type &&
+		(value?.building_id ?? '') === (project.building_id ?? '')
+	)
+}
+
 function select(project: ProjectSearchItem) {
 	value = project
 	inputValue = project.name
@@ -153,22 +161,25 @@ function handleKeydown(e: KeyboardEvent) {
 				{#each filtered as project}
 					<button
 						type="button"
-						class="w-full rounded-md px-3 py-2 text-left text-sm transition-colors {project.name ===
-						value?.name
+						class="w-full rounded-md px-3 py-2 text-left text-sm transition-colors {isSelected(project)
 							? 'bg-info-bg font-medium text-info'
 							: 'text-fg-2 hover:bg-panel hover:text-fg-1'}"
 						onclick={() => select(project)}
 						onkeydown={handleKeydown}
 						role="option"
-						aria-selected={value?.name === project.name && value?.filter_type === project.filter_type}
+						aria-selected={isSelected(project)}
 					>
-						{#if project.building}
-							<!-- A building match opens the project its sales are registered in. -->
-							<span>{project.building}</span>
-							<span class="ml-2 text-xs text-fg-4">Building · in {project.name}</span>
+						{#if project.filter_type === 'building'}
+							<!-- A building is its own scope; its project and master place it. -->
+							<span>{project.name}</span>
+							<span class="ml-2 text-xs text-fg-4">
+								Building · {[project.project, project.master].filter(Boolean).join(' · ')}
+							</span>
 						{:else}
 							<span>{project.name}</span>
-							<span class="ml-2 text-xs text-fg-4">{project.scope_kind ?? 'Location'}</span>
+							<span class="ml-2 text-xs text-fg-4">
+								{project.scope_kind ?? 'Location'}{project.filter_type === 'project' && project.master ? ` · ${project.master}` : ''}
+							</span>
 						{/if}
 					</button>
 				{/each}

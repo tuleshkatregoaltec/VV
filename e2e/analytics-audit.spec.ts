@@ -317,8 +317,11 @@ test('sub-project buttons support keyboard activation from the live master catal
         0,
         { timeout: 1000 },
     );
+    // The development picker shows the choice (a Buildings table may name the same project).
     await expect(
-        page.getByRole('button', { name: label, exact: true }),
+        page
+            .getByRole('group', { name: 'Development selection' })
+            .getByRole('button', { name: label, exact: true }),
     ).toBeVisible();
 });
 
@@ -503,19 +506,19 @@ test('project search supports arrow selection and Escape', async ({ page }) => {
     const input = page.getByPlaceholder(
         'Search building, project or area...',
     );
-    await input.fill('23 MARINA');
+    await input.fill('23 Marina');
     await expect(page.getByRole('option').first()).toBeVisible();
     await input.press('ArrowDown');
     await expect(page.getByRole('option').first()).toBeFocused();
     await page.keyboard.press('Escape');
     await expect(page.getByRole('listbox')).toHaveCount(0);
     await expect(input).toBeFocused();
-    await input.fill('23 MARINA');
+    await input.fill('23 Marina');
     await expect(page.getByRole('option').first()).toBeVisible();
     await input.press('ArrowDown');
     await page.keyboard.press('Enter');
     await expect(
-        page.getByRole('heading', { name: '23 MARINA', exact: true }),
+        page.getByRole('heading', { name: '23 Marina', exact: true }),
     ).toBeVisible();
 });
 
@@ -534,7 +537,7 @@ test('live master comparison and pointer drill-down remain scoped', async ({
         page.getByRole('button', { name: /All development \(/ }),
     ).toBeVisible();
     await page.getByRole('button', { name: 'Compare', exact: true }).click();
-    await select(page, '23 MARINA', 1);
+    await select(page, '23 Marina', 1);
     await expect(
         page.getByRole('heading', {
             name: 'Delta is Project B minus Project A',
@@ -553,7 +556,7 @@ test('live master comparison and pointer drill-down remain scoped', async ({
         .click();
     await page.getByRole('button', { name: /All development \(/ }).click();
     const input = page.getByPlaceholder('Filter sub-projects...');
-    await input.fill('23 MARINA');
+    await input.fill('23 Marina');
     const response = page.waitForResponse(
         (r) =>
             r.url().includes('/project/summary') &&
@@ -562,12 +565,12 @@ test('live master comparison and pointer drill-down remain scoped', async ({
     );
     await input
         .locator('../..')
-        .getByRole('button', { name: '23 MARINA', exact: true })
+        .getByRole('button', { name: '23 Marina', exact: true })
         .click();
     const data = await (await response).json();
     expect(data.sales.transaction_count).toBeGreaterThan(0);
     await expect(
-        page.getByRole('heading', { name: '23 MARINA', exact: true }),
+        page.getByRole('heading', { name: '23 Marina', exact: true }),
     ).toBeVisible();
     await page.screenshot({
         path: path.join(evidence, 'master-drilldown.png'),
@@ -588,7 +591,7 @@ test('project search failure can be retried', async ({ page }) => {
     );
     await page
         .getByPlaceholder('Search building, project or area...')
-        .fill('23 MARINA');
+        .fill('23 Marina');
     const alert = page
         .getByRole('alert')
         .filter({ hasText: 'Failed to load projects.' });
@@ -596,7 +599,7 @@ test('project search failure can be retried', async ({ page }) => {
     failing = false;
     await alert.getByRole('button', { name: 'Retry', exact: true }).click();
     await expect(
-        page.getByRole('option').filter({ has: page.getByText('23 MARINA', { exact: true }) }),
+        page.getByRole('option').filter({ has: page.getByText('23 Marina', { exact: true }) }),
     ).toBeVisible();
 });
 
