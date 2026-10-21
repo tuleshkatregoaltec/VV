@@ -16,14 +16,19 @@ carry its keys (decisions 2026-10-21, docs/data-pipelines/ANALYTICS_HIERARCHY_PL
   one project is that project's building; a name several projects share without a majority
   ("Tower 2") is one building per project that holds a fifth of its records. Place names,
   DXBI project labels and DLD plot references are not
-  buildings. Two names of one project matching the same DLD building by unit numbers, one name
-  extending the other ("Merano" / "Merano Tower"), are one building.
+  buildings. One name in one project is one building whatever DXBI community its records carry,
+  unless they sit on different DLD buildings. Two names of one project matching the same DLD
+  building by unit numbers, one name extending the other ("Merano" / "Merano Tower"), are one
+  building.
 * Records keep their own project (the user reviews the ones filed elsewhere than their building's
   project first); ``stray`` marks them on the listed tables.
 * Units name their source: DXBI's building list, then DLD's unit register (a building matched by
-  unit numbers, or the project), then DLD's land register (villa plots). A count below the units
-  that traded there is not a count of the stock: those traded units are given instead, marked
-  ``units_at_least``.
+  unit numbers, at their floor areas where towers repeat the numbers, or the project), then DLD's
+  land register (villa plots). A project DLD holds under another name, or under no project, is
+  linked to it by its unit numbers and floor areas (``analytics_project_dld_keys``). A DLD
+  building two buildings match counts for neither. A count below the units that traded there is
+  not a count of the stock: those traded units are given instead, marked ``units_at_least``.
+  Unit numbers are compared and counted in one form (``unit_key``).
 """
 
 from __future__ import annotations
@@ -44,6 +49,7 @@ HIERARCHY_TABLES = (
     "analytics_master_keys",
     "analytics_project_keys",
     "analytics_projects",
+    "analytics_project_dld_keys",
     "analytics_building_keys",
     "analytics_buildings",
     "analytics_unit_stock",
@@ -58,6 +64,12 @@ SPLIT_SHARE = 0.2
 SPLIT_RECORDS = 5
 # A count below this share of the units that traded is not the building's or project's stock.
 UNITS_TRADED_FLOOR = 0.9
+# A project DLD's unit register holds under another name: one DLD project (or building) holds
+# this share of the project's unit numbers, at least UNIT_MATCH_MIN, each with its floor area
+# within SIZE_TOLERANCE.
+UNIT_MATCH_SHARE = 0.8
+UNIT_MATCH_MIN = 5
+SIZE_TOLERANCE = 0.02
 
 
 key = profile.name_key
@@ -122,11 +134,35 @@ def _py_key(name: str) -> str:
 _WORK_DDL = f"""CREATE TABLE {WORK_TABLE} (
     record_key String, kind LowCardinality(String), raw_scope String,
     raw_kind LowCardinality(String), project_source LowCardinality(String), building String,
-    community String, master String, dld_area String, unit_key String
+    community String, master String, dld_area String, unit_key String, size_sqft Float64
 ) ENGINE = MergeTree ORDER BY record_key"""
 
-# A unit's key: a share of a unit ("2510 (Q 3)", Ciel's quarter shares) is that unit.
-_UNIT_KEY = "upperUTF8(trimBoth(replaceRegexpOne(x.unit_number, '\\s*\\([^)]*\\)\\s*$', '')))"
+
+def unit_key(expr: str) -> str:
+    """A unit number as DXBI and DLD both write it, for matching and counting: a share of a unit
+    ("2510 (Q 3)", Ciel's quarter shares) is that unit; "FLAT 415", "Unit No. 415" and "415" are
+    one, as are "A-101", "A 101" and "A101", and "0103" and "103"."""
+    upper = f"upperUTF8(trimBoth({expr}))"
+    bare = f"replaceRegexpOne({upper}, '\\s*\\([^)]*\\)\\s*$', '')"
+    unprefixed = (
+        f"replaceRegexpOne({bare}, "
+        "'^(UNIT|FLAT|APT|APARTMENT|APPARTMENT)(\\s*NO)?\\s*[.:#-]?\\s*', '')"
+    )
+    return (
+        f"replaceRegexpAll(replaceRegexpAll({unprefixed}, '[^A-Z0-9]', ''), "
+        "'(^|[^0-9])0+([0-9])', '\\\\1\\\\2')"
+    )
+
+
+def non_residential(key_expr: str) -> str:
+    """A unit key DXBI writes for a shop, office, parking bay or store room."""
+    return (
+        f"match({key_expr}, '(SHOP|RETAIL|SHOWROOM|OFFICE|PARKING|STORE|STORAGE|KIOSK|"
+        "RESTAURANT|SUPERMARKET|STALL|GYM|CLINIC|NURSERY|WAREHOUSE|CAFE|COMMERCIAL)')"
+    )
+
+
+_UNIT_KEY = unit_key("x.unit_number")
 _BUILDING_OK = (
     "p.building_name != '' AND p.building_source IN ('dxbi', 'dxbi_sale') "
     "AND NOT match(p.building_name, '(?i)\\(all (buildings|phases)\\)\\s*$')"
@@ -137,7 +173,7 @@ SELECT p.sale_key, 'sale',
        if(p.project_source = 'place_name', '', p.project_name),
        if(p.project_source = 'own_building', 'Building', 'Project'), p.project_source,
        if({_BUILDING_OK}, p.building_name, ''), x.area_name, p.master_project, p.area_name,
-       {_UNIT_KEY}
+       {_UNIT_KEY}, p.size_sqft
 FROM dxbi_sale_profile AS p
 INNER JOIN (
     SELECT sale_key, area_name, unit_number FROM ({t.DXBI_SALES_BASE})
@@ -147,7 +183,7 @@ SELECT p.contract_key, 'lease',
        if(p.project_source = 'place_name', '', p.project_name),
        if(p.project_source = 'own_building', 'Building', 'Project'), p.project_source,
        if({_BUILDING_OK}, p.building_name, ''), x.area_name, p.master_project, p.area_name,
-       {_UNIT_KEY}
+       {_UNIT_KEY}, p.size_sqft
 FROM dxbi_rental_profile AS p
 INNER JOIN (
     SELECT contract_key, any(area_name) AS area_name, any(unit_number) AS unit_number
@@ -293,6 +329,93 @@ LEFT JOIN dxbi_names AS dn ON dn.k = f.project_key
 {t._HEAVY_QUERY_SETTINGS}
 """
 
+# DLD's unit register, the newest complete snapshot: one holding at least 90% of the largest
+# snapshot's rows, so a partial scan never replaces a full one. A register group is a unit's DLD
+# project; a unit DLD files under no project (most older towers) is in its DLD building.
+_DLD_UNITS = """(SELECT * FROM dld_od_units_bronze
+     WHERE run_id = (
+         SELECT argMax(run_id, scraped) FROM (
+             SELECT run_id, max(scraped_at) AS scraped, count() AS n
+             FROM dld_od_units_bronze GROUP BY run_id)
+         WHERE n >= 0.9 * (SELECT max(c) FROM (
+             SELECT count() AS c FROM dld_od_units_bronze GROUP BY run_id))))"""
+_DLD_GROUP = (
+    "if(project_en != '', concat('p:', toString(project_id)), "
+    "concat('b:', toString(area_id), '/', land_number, '/', building_number))"
+)
+# Each register unit with the DXBI project it belongs to: its name's, else the project linked to
+# its group by unit numbers (analytics_project_dld_keys).
+_DLD_UNIT_PROJECTS = f"""(
+        SELECT u.*, if(l.project_key != '', l.project_key, u.name_project) AS project_key
+        FROM (SELECT *, {_project_alias(project_key("project_en"))} AS name_project,
+                     {_DLD_GROUP} AS dld_group
+              FROM {_DLD_UNITS}) AS u
+        LEFT JOIN (SELECT dld_group AS l_group, project_key FROM analytics_project_dld_keys) AS l
+            ON l.l_group = u.dld_group
+    )"""
+
+# A project with no register units under its name: the register group in its DLD area that holds
+# its unit numbers at the same floor areas. A group another DXBI project holds by name, or that
+# two projects claim, links none (a phase, a duplicate or a mis-filed project, not this one).
+PROJECT_DLD_KEYS_SQL = f"""
+INSERT INTO `analytics_project_dld_keys`
+    (project_key, dld_group, dld_name, matched, unit_numbers, built_at)
+WITH
+    register AS (
+        SELECT {_DLD_GROUP} AS dld_group, project_en,
+               {_project_alias(project_key("project_en"))} AS name_key,
+               {unit_key("unit_number")} AS unit_key, actual_area * {t.SQFT_PER_SQM} AS sqft,
+               lowerUTF8(area_en) AS area, {key("master_project_en")} AS master_key
+        FROM {_DLD_UNITS}
+        WHERE unit_number != ''
+    ),
+    -- DLD's 2026 open data renamed areas after their communities ("JUMEIRAH VILLAGE CIRCLE");
+    -- the register keeps the older area, whose units name that community as their master.
+    candidates AS (
+        SELECT project_key, lowerUTF8(area_name) AS area, {key("area_name")} AS area_key
+        FROM analytics_projects
+        WHERE scope_kind = 'Project' AND area_name != ''
+          AND project_key NOT IN (SELECT name_key FROM register WHERE name_key != '')
+    ),
+    unit_sizes AS (
+        SELECT {_project_alias(project_key("raw_scope"))} AS project_key, unit_key,
+               median(size_sqft) AS sqft
+        FROM {WORK_TABLE}
+        WHERE raw_scope != '' AND unit_key NOT IN ('', '0') AND size_sqft > 0
+        GROUP BY project_key, unit_key
+        HAVING project_key IN (SELECT project_key FROM candidates)
+    ),
+    votes AS (
+        SELECT s.project_key AS project_key, r.dld_group AS dld_group,
+               any(r.project_en) AS dld_name, uniqExact(s.unit_key) AS n
+        FROM unit_sizes AS s
+        INNER JOIN candidates AS c ON c.project_key = s.project_key
+        INNER JOIN register AS r ON r.unit_key = s.unit_key
+        WHERE abs(r.sqft - s.sqft) <= {SIZE_TOLERANCE} * r.sqft
+          AND (r.area = c.area OR r.master_key = c.area_key)
+        GROUP BY project_key, dld_group
+    ),
+    links AS (
+        SELECT v.project_key AS project_key, argMax((v.dld_group, v.dld_name), v.n) AS best,
+               max(v.n) AS matched, any(z.units) AS unit_numbers,
+               arrayReverseSort(groupArray(v.n)) AS ranked
+        FROM votes AS v
+        INNER JOIN (SELECT project_key, count() AS units FROM unit_sizes GROUP BY project_key)
+            AS z ON z.project_key = v.project_key
+        GROUP BY project_key
+        -- Twin towers hold the same numbers at the same areas: a tie links neither.
+        HAVING matched >= {UNIT_MATCH_SHARE} * unit_numbers AND matched >= {UNIT_MATCH_MIN}
+           AND (length(ranked) = 1 OR ranked[2] < matched)
+    )
+SELECT project_key, best.1, best.2, matched, unit_numbers, now64(3)
+FROM links
+WHERE best.1 IN (SELECT best.1 FROM links GROUP BY best.1 HAVING count() = 1)
+  AND best.1 NOT IN (
+      SELECT dld_group FROM register
+      WHERE name_key IN (SELECT project_key FROM analytics_projects))
+{t._HEAVY_QUERY_SETTINGS}
+"""
+
 # Buildings. A "building" a fifth of whose records are a place name's is a place, not a building.
 _BUILDING_LOOSE = (
     "replaceRegexpAll(replaceRegexpAll(lowerUTF8({e}), "
@@ -304,7 +427,7 @@ _BUILDING_RECORDS = f"""
     building_records AS (
         SELECT w.record_key AS record_key, w.kind AS kind, w.building AS building,
                {key("w.building")} AS name_key, {key("w.community")} AS community_key,
-               w.community AS community, w.unit_key AS unit_key,
+               w.community AS community, w.unit_key AS unit_key, w.size_sqft AS size_sqft,
                if(w.raw_scope != '', {_project_alias(project_key("w.raw_scope"))}, '')
                    AS project_key,
                w.project_source = 'place_name' AS place
@@ -342,8 +465,8 @@ _BUILDING_RECORDS = f"""
     ),
     record_ids AS (
         SELECT r.record_key AS record_key, r.kind AS kind, r.building AS building,
-               r.community AS community, r.unit_key AS unit_key, r.project_key AS project_key,
-               if(c.c_id != '', c.c_id, s.s_id) AS building_id,
+               r.community AS community, r.unit_key AS unit_key, r.size_sqft AS size_sqft,
+               r.project_key AS project_key, if(c.c_id != '', c.c_id, s.s_id) AS building_id,
                if(c.c_id != '', c.c_home, s.s_home) AS home_project
         FROM building_records AS r
         LEFT JOIN (SELECT name_key AS c_name, community_key AS c_community, building_id AS c_id,
@@ -357,56 +480,89 @@ _BUILDING_RECORDS = f"""
            AND s.s_project = r.project_key
         WHERE NOT r.place
     ),
-    -- DLD's unit register, the latest snapshot, keyed like the projects.
+    -- DLD's unit register, keyed by the DXBI project each unit belongs to.
     dld_units AS (
-        SELECT {_project_alias(project_key("project_en"))} AS project_key,
-               upperUTF8(trimBoth(unit_number)) AS unit_key,
-               concat(toString(area_id), '/', land_number, '/', building_number) AS dld_building
-        FROM dld_od_units_bronze
-        WHERE run_id = (SELECT argMax(run_id, scraped_at) FROM dld_od_units_bronze)
-          AND unit_number != '' AND project_en != ''
+        SELECT project_key, {unit_key("unit_number")} AS unit_key,
+               concat(toString(area_id), '/', land_number, '/', building_number) AS dld_building,
+               actual_area * {t.SQFT_PER_SQM} AS sqft
+        FROM {_DLD_UNIT_PROJECTS}
+        WHERE unit_number != '' AND project_key != ''
     ),
-    -- The DLD building a building's unit numbers sit in (>= 80% of >= 3 matches).
+    -- The DLD building a building's unit numbers sit in (>= 80% of >= 3 matches). Where the
+    -- towers of a project repeat their unit numbers ("101" in each), the numbers at the same
+    -- floor area decide.
     dld_votes AS (
-        SELECT building_id, argMax(dld_building, n) AS dld_building, max(n) AS top_n,
-               sum(n) AS matched
+        SELECT building_id,
+               max(n) >= 0.8 * sum(n) AND sum(n) >= 3 AS by_number,
+               if(by_number, argMax(dld_building, n), argMax(dld_building, n_sized))
+                   AS dld_building
         FROM (
             SELECT r.building_id AS building_id, d.dld_building AS dld_building,
-                   uniqExact(r.unit_key) AS n
-            FROM (SELECT DISTINCT building_id, home_project, unit_key FROM record_ids
-                  WHERE building_id != '' AND unit_key NOT IN ('', '0')) AS r
+                   uniqExact(r.unit_key) AS n,
+                   uniqExactIf(r.unit_key, abs(d.sqft - r.sqft) <= {SIZE_TOLERANCE} * d.sqft)
+                       AS n_sized
+            FROM (SELECT building_id, home_project, unit_key, median(size_sqft) AS sqft
+                  FROM record_ids
+                  WHERE building_id != '' AND unit_key NOT IN ('', '0')
+                  GROUP BY building_id, home_project, unit_key) AS r
             INNER JOIN dld_units AS d
                 ON d.project_key = r.home_project AND d.unit_key = r.unit_key
             GROUP BY building_id, dld_building
         )
         GROUP BY building_id
-        HAVING top_n >= 0.8 * matched AND matched >= 3
+        HAVING by_number OR (max(n_sized) >= 0.8 * sum(n_sized) AND sum(n_sized) >= 3)
     ),
     id_facts AS (
         SELECT building_id, any(home_project) AS home_project, count() AS records,
                any(building) AS some_name
         FROM record_ids WHERE building_id != '' GROUP BY building_id
     ),
+    -- One name in one project is one building, whichever DXBI community its records carry
+    -- ("Zaabeel 2" / "Zabeel 2", "Al Furjan" / "Jabal Ali 1"), unless they sit on different DLD
+    -- buildings (two "Indigo Tower"s): the one with more records keeps its id.
+    name_ids AS (
+        SELECT f.building_id AS building_id,
+               if(g.lead_id != '', g.lead_id, f.building_id) AS name_id
+        FROM id_facts AS f
+        LEFT JOIN (
+            SELECT f2.home_project AS home_project,
+                   splitByChar('|', f2.building_id)[1] AS name_key,
+                   argMax(f2.building_id, f2.records) AS lead_id
+            FROM id_facts AS f2
+            LEFT JOIN dld_votes AS d2 ON d2.building_id = f2.building_id
+            GROUP BY home_project, name_key
+            HAVING uniqExactIf(d2.dld_building, d2.dld_building != '') <= 1
+        ) AS g ON g.home_project = f.home_project
+              AND g.name_key = splitByChar('|', f.building_id)[1]
+    ),
+    name_facts AS (
+        SELECT n.name_id AS building_id, any(f.home_project) AS home_project,
+               sum(f.records) AS records, argMax(f.some_name, f.records) AS some_name,
+               max(dv.dld_building) AS dld_building
+        FROM name_ids AS n
+        INNER JOIN id_facts AS f ON f.building_id = n.building_id
+        LEFT JOIN dld_votes AS dv ON dv.building_id = n.building_id
+        GROUP BY n.name_id
+    ),
     -- Two spellings in one project on one DLD building, one extending the other, are one
     -- building: the one with more records keeps its id.
     merged AS (
-        SELECT f.building_id AS building_id,
-               if({_BUILDING_LOOSE.format(e="f.some_name")} != ''
+        SELECT n.building_id AS building_id,
+               if(g.lead_id != '' AND {_BUILDING_LOOSE.format(e="f.some_name")} != ''
                   AND (startsWith({_BUILDING_LOOSE.format(e="f.some_name")},
                                   {_BUILDING_LOOSE.format(e="g.lead_name")})
                        OR startsWith({_BUILDING_LOOSE.format(e="g.lead_name")},
                                      {_BUILDING_LOOSE.format(e="f.some_name")})),
                   g.lead_id, f.building_id) AS final_id
-        FROM id_facts AS f
-        LEFT JOIN dld_votes AS dv ON dv.building_id = f.building_id
+        FROM name_ids AS n
+        INNER JOIN name_facts AS f ON f.building_id = n.name_id
         LEFT JOIN (
-            SELECT f2.home_project AS home_project, d2.dld_building AS dld_building,
-                   argMax(f2.building_id, f2.records) AS lead_id,
-                   argMax(f2.some_name, f2.records) AS lead_name
-            FROM id_facts AS f2 INNER JOIN dld_votes AS d2 ON d2.building_id = f2.building_id
+            SELECT home_project, dld_building, argMax(building_id, records) AS lead_id,
+                   argMax(some_name, records) AS lead_name
+            FROM name_facts WHERE dld_building != ''
             GROUP BY home_project, dld_building
-        ) AS g ON g.home_project = f.home_project AND g.dld_building = dv.dld_building
-           AND dv.dld_building != ''
+        ) AS g ON g.home_project = f.home_project AND g.dld_building = f.dld_building
+           AND f.dld_building != ''
     )"""
 
 BUILDING_KEYS_SQL = f"""
@@ -423,7 +579,7 @@ LEFT JOIN merged AS m ON m.building_id = i.building_id
 BUILDINGS_SQL = f"""
 INSERT INTO `analytics_buildings`
     (building_id, building_name, community, project_key, project_name, master_key, master_name,
-     project_share, records, sales, leases, dld_building, spellings, built_at)
+     project_share, records, sales, leases, dld_building, dld_claims, spellings, built_at)
 WITH {_DXBI_NAMES}, {_BUILDING_RECORDS},
     final_records AS (
         SELECT r.kind AS kind, r.building AS building, r.community AS community,
@@ -447,15 +603,19 @@ WITH {_DXBI_NAMES}, {_BUILDING_RECORDS},
               FROM final_records)
         GROUP BY final_id
     ),
+    -- How many buildings (after merging spellings) matched each DLD building.
     dld AS (
-        SELECT m.final_id AS final_id, any(dv.dld_building) AS dld_building
-        FROM merged AS m INNER JOIN dld_votes AS dv ON dv.building_id = m.building_id
-        GROUP BY final_id
+        SELECT final_id, dld_building, count() OVER (PARTITION BY dld_building) AS claims
+        FROM (
+            SELECT m.final_id AS final_id, any(dv.dld_building) AS dld_building
+            FROM merged AS m INNER JOIN dld_votes AS dv ON dv.building_id = m.building_id
+            GROUP BY final_id
+        )
     )
 SELECT f.final_id,
        if(dn.name != '', dn.name, s.top_spelling),
        f.community, f.home_project, p.project_name, p.master_key, p.master_name,
-       f.share, f.records, f.sales, f.leases, d.dld_building, s.spellings, now64(3)
+       f.share, f.records, f.sales, f.leases, d.dld_building, d.claims, s.spellings, now64(3)
 FROM facts AS f
 LEFT JOIN spellings AS s ON s.final_id = f.final_id
 LEFT JOIN dxbi_names AS dn ON dn.k = {key("s.top_spelling")}
@@ -491,18 +651,27 @@ INSERT INTO `analytics_unit_stock`
      mix_rooms, mix_units, mix_median_sqft, mix_source, built_at)
 WITH {_CARDS},
     dld_units AS (
-        SELECT {_project_alias(project_key("project_en"))} AS project_key,
+        SELECT project_key,
                concat(toString(area_id), '/', land_number, '/', building_number) AS dld_building,
-               property_id, {_MIX_ROOMS} AS rooms, actual_area * {t.SQFT_PER_SQM} AS sqft
-        FROM dld_od_units_bronze
-        WHERE run_id = (SELECT argMax(run_id, scraped_at) FROM dld_od_units_bronze)
+               property_id, {_MIX_ROOMS} AS rooms, actual_area * {t.SQFT_PER_SQM} AS sqft,
+               {unit_key("unit_number")} AS unit_key
+        FROM {_DLD_UNIT_PROJECTS}
     ),
+    -- A unit traded: a unit number, and for a shop, office or parking code one the project's
+    -- register holds (DLD registers some shops as units, a parking bay never).
     record_buildings AS (
         SELECT w.kind AS kind, w.unit_key AS unit_key, w.building AS building_text,
                if(w.raw_scope != '', {_project_alias(project_key("w.raw_scope"))}, '')
                    AS project_key,
-               if(c.building_id != '', c.building_id, s.building_id) AS building_id
+               if(c.building_id != '', c.building_id, s.building_id) AS building_id,
+               w.unit_key NOT IN ('', '0')
+                   AND (NOT {non_residential("w.unit_key")} OR rc.rc_unit != '') AS countable
         FROM {WORK_TABLE} AS w
+        LEFT JOIN (SELECT DISTINCT project_key AS rc_project, unit_key AS rc_unit FROM dld_units
+                   WHERE project_key != '' AND {non_residential("unit_key")}) AS rc
+            ON rc.rc_project = if(w.raw_scope != '',
+                                  {_project_alias(project_key("w.raw_scope"))}, '')
+           AND rc.rc_unit = w.unit_key
         LEFT JOIN (SELECT * FROM analytics_building_keys WHERE project_key = '') AS c
             ON c.name_key = {key("w.building")} AND c.community_key = {key("w.community")}
            AND w.building != ''
@@ -513,7 +682,7 @@ WITH {_CARDS},
            AND w.building != ''
     ),
     building_traded AS (
-        SELECT building_id, uniqExactIf(unit_key, unit_key NOT IN ('', '0')) AS traded
+        SELECT building_id, uniqExactIf(unit_key, countable) AS traded
         FROM record_buildings WHERE building_id != '' GROUP BY building_id
     ),
     building_cards AS (
@@ -531,7 +700,7 @@ WITH {_CARDS},
         SELECT b.building_id AS building_id, uniqExact(u.property_id) AS units
         FROM analytics_buildings AS b
         INNER JOIN dld_units AS u ON u.dld_building = b.dld_building
-        WHERE b.dld_building != ''
+        WHERE b.dld_building != '' AND b.dld_claims = 1
         GROUP BY building_id
     ),
     building_mix AS (
@@ -542,7 +711,7 @@ WITH {_CARDS},
                    toUInt32(uniqExact(u.property_id)) AS n, round(median(u.sqft)) AS med
             FROM analytics_buildings AS b
             INNER JOIN dld_units AS u ON u.dld_building = b.dld_building
-            WHERE b.dld_building != ''
+            WHERE b.dld_building != '' AND b.dld_claims = 1
             GROUP BY building_id, rooms ORDER BY building_id, rooms
         )
         GROUP BY building_id
@@ -568,18 +737,20 @@ WITH {_CARDS},
     -- Units traded in the project's own buildings; a project without buildings (villas DXBI
     -- lists by project) counts its records' units. A record filed here from another project's
     -- building, from a place name, or (in a project with buildings) without a building is
-    -- often a pairing from elsewhere and is not counted.
+    -- often a pairing from elsewhere and is not counted. Buildings on one DLD building (two
+    -- spellings, or towers DLD registers as one) hold one set of unit numbers.
     project_traded AS (
         SELECT project_key, if(in_buildings > 0, in_buildings, without_building) AS traded
         FROM (
             SELECT r.project_key AS project_key,
-                   uniqExactIf((r.building_id, r.unit_key),
-                               b.b_project = r.project_key AND r.unit_key NOT IN ('', '0'))
+                   uniqExactIf((if(b.b_dld != '', b.b_dld, r.building_id), r.unit_key),
+                               b.b_project = r.project_key AND r.countable)
                        AS in_buildings,
                    uniqExactIf(r.unit_key, r.building_id = '' AND r.building_text = ''
-                                           AND r.unit_key NOT IN ('', '0')) AS without_building
+                                           AND r.countable) AS without_building
             FROM record_buildings AS r
-            LEFT JOIN (SELECT building_id AS b_id, project_key AS b_project
+            LEFT JOIN (SELECT building_id AS b_id, project_key AS b_project,
+                              dld_building AS b_dld
                        FROM analytics_buildings) AS b ON b.b_id = r.building_id
             WHERE r.project_key != ''
             GROUP BY project_key
@@ -614,15 +785,15 @@ WITH {_CARDS},
         )
         GROUP BY project_key
     ),
-    -- Villa plots: DLD's land register, residential plots, in whichever snapshot holds most.
+    -- Villa plots: DLD's land register, residential plots in any snapshot. The snapshots number
+    -- a plot alike but tag it differently (area 505 / 0, sub-number '0' / ''): a plot is its
+    -- area name, land number and sub-number.
     project_plots AS (
-        SELECT project_key, max(plots) AS units FROM (
-            SELECT run_id, {_project_alias(project_key("project_en"))} AS project_key,
-                   uniqExact(area_id, land_number, land_sub_number) AS plots
-            FROM dld_od_lands_bronze
-            WHERE project_en != '' AND prop_sub_type_en = 'Residential'
-            GROUP BY run_id, project_key
-        )
+        SELECT {_project_alias(project_key("project_en"))} AS project_key,
+               uniqExact(lowerUTF8(area_en), land_number,
+                         if(land_sub_number IN ('', '0'), '', land_sub_number)) AS units
+        FROM dld_od_lands_bronze
+        WHERE project_en != '' AND prop_sub_type_en = 'Residential'
         GROUP BY project_key
     ),
     project_stock AS (
@@ -669,6 +840,7 @@ STATEMENTS = {
     "analytics_master_keys": MASTER_KEYS_SQL,
     "analytics_project_keys": PROJECT_KEYS_SQL,
     "analytics_projects": PROJECTS_SQL,
+    "analytics_project_dld_keys": PROJECT_DLD_KEYS_SQL,
     "analytics_building_keys": BUILDING_KEYS_SQL,
     "analytics_buildings": BUILDINGS_SQL,
     "analytics_unit_stock": UNIT_STOCK_SQL,

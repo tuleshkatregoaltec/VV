@@ -2352,6 +2352,19 @@ CREATE TABLE IF NOT EXISTS analytics_projects (
 ENGINE = MergeTree()
 ORDER BY project_key;
 
+-- A project DLD's unit register holds under another name (or, for units DLD files under no
+-- project, as one DLD building), found by its records' unit numbers and floor areas.
+CREATE TABLE IF NOT EXISTS analytics_project_dld_keys (
+    project_key String,
+    dld_group String,
+    dld_name String,
+    matched UInt32,
+    unit_numbers UInt32,
+    built_at DateTime64(3, 'UTC')
+)
+ENGINE = MergeTree()
+ORDER BY project_key;
+
 -- A DXBI building name in its DXBI community (and, for a name several projects share, its
 -- project) -> the building it is.
 CREATE TABLE IF NOT EXISTS analytics_building_keys (
@@ -2377,6 +2390,9 @@ CREATE TABLE IF NOT EXISTS analytics_buildings (
     sales UInt32,
     leases UInt32,
     dld_building String,
+    -- Buildings matching that DLD building: more than one (Shoreline's towers all match the one
+    -- DLD files under the project, or two towers DLD registers as one) and its count is none's.
+    dld_claims UInt32 DEFAULT 0,
     spellings Array(String),
     built_at DateTime64(3, 'UTC')
 )

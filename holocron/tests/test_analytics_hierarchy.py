@@ -144,3 +144,140 @@ def test_one_spelling_one_master_and_merged_buildings(warehouse) -> None:  # noq
     assert listed["t0"][0:3] == ("Merano Tower", "Business Bay", "Merano")
     # Filed under another project than its building's: kept there, marked for review.
     assert listed["stray"][0] == "Sami Q Tower" and listed["stray"][3] == 1
+
+
+@live
+def test_unit_keys_read_dxbi_and_dld_formats_alike(warehouse) -> None:  # noqa: F811
+    # DXBI writes "FLAT 415" and "0103" where DLD writes 415 and 103: one unit each, else a
+    # tower's traded units outnumber its register and the page drops the register count.
+    same = [["FLAT 415", "415", "Unit No. 415"], ["A-0101", "A 101", "a101"],
+            ["2510 (Q 3)", "2510"]]  # fmt: skip
+    different = ["101", "1001", "G101", "A101"]
+    texts = [text for group in same for text in group] + different
+    keys = warehouse.query(
+        "SELECT " + ", ".join(hierarchy.unit_key(f"'{text}'") for text in texts)
+    ).result_rows[0]
+    by_text = dict(zip(texts, keys, strict=True))
+    for group in same:
+        assert len({by_text[text] for text in group}) == 1, group
+    assert len({by_text[text] for text in different}) == len(different)
+    shop, flat = warehouse.query(
+        "SELECT "
+        + ", ".join(
+            hierarchy.non_residential(hierarchy.unit_key(t)) for t in ("'SHOP 1'", "'FLAT 1'")
+        )
+    ).result_rows[0]
+    assert (shop, flat) == (1, 0)
+
+
+@live
+def test_unit_counts_where_names_and_numbers_disagree(warehouse) -> None:  # noqa: F811
+    loaded = datetime(2026, 7, 1, tzinfo=UTC)
+    rows, profiles = [], []
+
+    def sale(key, building, project, unit, sqft, area, dld_area):
+        rows.append({
+            "sale_key": key, "transaction_date": date(2026, 6, 1), "unit_number": unit,
+            "building_name": building, "building_key": building.lower().replace(" ", ""),
+            "project_name": "", "area_name": area, "area_key": area.lower().replace(" ", ""),
+            "size_sqft": sqft, "sale_amount_aed": 1_000_000, "property_type": "Apartment",
+            "bedrooms": "1 Bed", "market_status": "Ready", "loaded_at": loaded,
+        })  # fmt: skip
+        profiles.append([key, "", dld_area, project, "dld_pair", building, "dxbi", sqft])
+
+    # Icon Tower 1: DLD files its units under no project, so no register name matches it. Its
+    # unit numbers at their floor areas sit in one DLD building; a neighbour repeats the numbers
+    # at other areas.
+    for i in range(1, 7):
+        sale(f"i{i}", "Icon Tower 1", "ICON TOWER 1", f"100{i}", 1076.4, "JLT", "Al Thanyah Fifth")
+    # Twin Heights: towers A and B both number 101-104; only the floor areas tell them apart.
+    for i in range(1, 5):
+        sale(f"a{i}", "Twin Heights A", "TWIN HEIGHTS", f"10{i}", 753.5, "Business Bay", "BB")
+        sale(f"b{i}", "Twin Heights B", "TWIN HEIGHTS", f"10{i}", 1291.7, "Business Bay", "BB")
+    # Twin Heights A again under another DXBI community spelling: the same building.
+    sale("a5", "Twin Heights A", "TWIN HEIGHTS", "104", 753.5, "Business Bay District", "BB")
+    # Shore 1 and Shore 2: DLD files only Shore 1's units under the project, so both match it.
+    for i in range(1, 5):
+        sale(f"s{i}", "Shore 1", "SHORE", f"20{i}", 700.0, "Business Bay", "BB")
+        sale(f"t{i}", "Shore 2", "SHORE", f"20{i}", 700.0, "Business Bay", "BB")
+    # Format Tower: five registered units, written seven ways, and a parking bay.
+    for i, unit in enumerate(["101", "FLAT 101", "Unit No. 102", "0103", "103", "104", "105",
+                              "PARKING P1"]):  # fmt: skip
+        sale(f"f{i}", "Format Tower", "FORMAT TOWER", unit, 538.2, "Business Bay", "BB")
+    columns = list(rows[0])
+    warehouse.insert_rows(
+        table="dxbi_sales_unit_events",
+        rows=[[row[c] for c in columns] for row in rows],
+        column_names=columns,
+    )
+    warehouse.insert_rows(
+        table="dxbi_sale_profile",
+        rows=profiles,
+        column_names=[
+            "sale_key", "master_project", "area_name", "project_name", "project_source",
+            "building_name", "building_source", "size_sqft",
+        ],
+    )  # fmt: skip
+
+    units = []
+
+    def unit(project, area, land, building, number, sqm, area_id):
+        units.append(["snap", "2026-05-16", project, number, area_id, area, land, building,
+                      len(units) + 1, "1 B/R", sqm])  # fmt: skip
+
+    for i in range(1, 9):
+        unit("", "Al Thanyah Fifth", "992", "1", f"100{i}", 100.0, 350)
+        unit("", "Al Thanyah Fifth", "993", "1", f"100{i}", 60.0, 350)
+    for i in range(1, 5):
+        unit("TWIN HEIGHTS", "BB", "50", "1", f"10{i}", 70.0, 526)
+        unit("TWIN HEIGHTS", "BB", "50", "2", f"10{i}", 120.0, 526)
+    for i in range(1, 6):
+        unit("FORMAT TOWER", "BB", "60", "1", f"10{i}", 50.0, 526)
+        unit("SHORE", "BB", "70", "1", f"20{i}", 65.0, 526)
+    warehouse.insert_rows(
+        table="dld_od_units_bronze",
+        rows=units,
+        column_names=[
+            "run_id", "scraped_at", "project_en", "unit_number", "area_id", "area_en",
+            "land_number", "building_number", "property_id", "rooms_en", "actual_area",
+        ],
+    )  # fmt: skip
+
+    hierarchy.build_hierarchy(warehouse)
+
+    links = warehouse.query(
+        "SELECT project_key, dld_group, matched FROM analytics_project_dld_keys"
+    ).result_rows
+    assert links == [("icontower1", "b:350/992/1", 6)]
+    buildings = dict(
+        warehouse.query("SELECT building_name, dld_building FROM analytics_buildings").result_rows
+    )
+    twin_a = warehouse.query(
+        "SELECT count(), sum(records) FROM analytics_buildings WHERE building_name = 'Twin Heights A'"
+    ).result_rows[0]
+    assert twin_a == (1, 5)
+    # The numbers alone split 4/4 between the twins; the floor areas pick each one's building.
+    assert buildings["Twin Heights A"] == "526/50/1"
+    assert buildings["Twin Heights B"] == "526/50/2"
+    assert buildings["Icon Tower 1"] == "350/992/1"
+    stock = dict(
+        warehouse.query(
+            "SELECT scope_id, (units, units_source, units_at_least, units_traded)"
+            " FROM analytics_unit_stock WHERE scope_level = 'project'"
+        ).result_rows
+    )
+    # The register's 8 units, not "at least 6 traded".
+    assert stock["icontower1"] == (8, "buildings", 0, 6)
+    assert stock["twinheights"] == (8, "buildings", 0, 8)
+    # Seven spellings of five units and a parking bay are five units traded: the register counts.
+    assert stock["formattower"] == (5, "buildings", 0, 5)
+    building_stock = dict(
+        warehouse.query(
+            "SELECT b.building_name, (s.units, s.units_source) FROM analytics_buildings AS b"
+            " INNER JOIN analytics_unit_stock AS s"
+            " ON s.scope_level = 'building' AND s.scope_id = b.building_id"
+        ).result_rows
+    )
+    # One DLD building is one building: matched by two, its 5 units are neither's.
+    assert building_stock["Shore 1"] == (4, "units_traded")
+    assert building_stock["Shore 2"] == (4, "units_traded")

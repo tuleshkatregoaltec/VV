@@ -1,7 +1,9 @@
 # Analytics hierarchy: implementation plan
 
-Status: implemented on the local warehouse, 21 Oct 2026 (branch `feat/dxbi-dld-complete-match`, #46).
-The one open item is the review of the wrong-project records (decision 3).
+Status: implemented on the local warehouse, 21 Oct 2026 (branch `feat/dxbi-dld-complete-match`, #46),
+with the unit-count work below (section 6). Open items: the review of the wrong-project records
+(decision 3) and the unit counts DLD and the records disagree on
+(`~/vv/analytics-hierarchy-audit-2026-10-21/unit_count_gaps.md`).
 Findings this plan fixes: <https://claude.ai/artifact/LmJZ2HYpFQ29yL7nT2N8Qs> (audit) and
 `~/vv/analytics-hierarchy-audit-2026-10-21/wrong_project_records.md` (wrong-project records).
 
@@ -82,6 +84,36 @@ hierarchy build still resolves through the key tables (its spelling's key).
 - Project view: a Buildings table (units, sales, leases). Unit mix table from the stock table.
 - Compare accepts buildings.
 
+### 6. Unit counts where names and numbers disagree (21 Oct 2026, second pass)
+
+- **A project DLD holds under another name, or under no project.** 1.53M of DLD's 2.35M register
+  units carry no project name (most older towers). A project with no register units under its name
+  is linked to the register group holding its unit numbers at the same floor areas (within 2%), in
+  its DLD area (an area DLD renamed in 2026 matches its older areas through their master): the
+  group's DLD project, or for unnamed units its DLD building. The group must hold >= 80% of the
+  project's unit numbers, at least 5, more than any other group (twin towers tie and link
+  neither), and no other DXBI project may hold it by name or claim it. Stored in
+  `analytics_project_dld_keys`; the project's count, its buildings' DLD matching and the unit mix
+  read it.
+- **Towers that repeat unit numbers.** Where unit numbers alone spread over a project's DLD
+  buildings, the numbers at the same floor area (within 2%) pick the building (same 80% / >= 3 rule).
+- **One DLD building, one building.** A DLD building matched by two buildings that are not
+  spellings of one (Shoreline's towers all matched Al Das, the one DLD files under the project)
+  counts for neither (`analytics_buildings.dld_claims`). Before, each took its count.
+- **One name in one project is one building**, whatever DXBI community its records carry
+  ("Zaabeel 2" / "Zabeel 2", "Al Furjan" / "Jabal Ali 1"), unless they sit on different DLD
+  buildings. Before, 280 such pairs were two buildings each, and a project adding up DXBI
+  building cards counted them twice (Arabella 1,378 units, now 689).
+- **Units traded are counted once.** One unit key for matching and counting: "FLAT 415",
+  "Unit No. 415" and "415" are one; "A-0101" and "A101" are one. A shop, office or parking code
+  counts as traded only where the project's register holds it. Buildings on one DLD building hold
+  one set of unit numbers in the project's count.
+- **Land plots** are counted across both land-register snapshots by area name, land number and
+  sub-number (the snapshots tag one plot as area 505 / 0 and sub-number '0' / ''); Vardon is 692.
+- **DLD's unit register** is read from the newest complete snapshot (>= 90% of the largest). A
+  refresh was tried on 21 Oct: the gateway's `units` command answers 200 with no rows (unfiltered,
+  by area, either sort) while `lands` answers; the May snapshot stays.
+
 ### 5. Not changed (waiting for review)
 
 - The wrong-project records (decision 3).
@@ -103,11 +135,11 @@ hierarchy build still resolves through the key tables (its spelling's key).
 | Project names that differ only in case or punctuation | 174 groups | 0 |
 | Master names (spellings, sub-communities, projects as masters) | 469 | 177 |
 | Projects under more than one master | 1,307 | 0 |
-| Projects with a register unit count | 1,918 (41%) | 3,311 of 4,506 (73%); 1,074 more show "at least N units traded" |
-| Buildings with a unit count | 0 (no view) | 3,863 of 6,536 with a register count; 2,662 more "at least N traded" |
+| Projects with a register unit count | 1,918 (41%) | 3,311 of 4,506 (73%) on the first pass; **3,445 (76%)** after section 6; 942 more show "at least N units traded" |
+| Buildings with a unit count | 0 (no view) | 3,863 of 6,536 (59%) on the first pass; **4,075 of 6,223 (65%)** after section 6 (280 duplicate buildings merged); 2,124 more "at least N traded" |
 | Masters with a unit count | 0 | every master: its projects' register counts added up, with "N of M projects counted" |
 | Building selection | opened the project | its own scope on every endpoint (`filter_type=building`, `building_id`) |
-| Records filed under another project than their building's | 38,679 (audit) | 39,975 marked `stray = 1`, unchanged, listed for review |
+| Records filed under another project than their building's | 38,679 (audit) | 39,975 marked `stray = 1`, listed for review; 40,078 after the building merges (159 added, 56 cleared: `wrong_project_records_delta.csv`) |
 
 Notes:
 
@@ -118,6 +150,37 @@ Notes:
   records), and a unit share ("2510 (Q 3)", Ciel) is its unit: building-less leases that pairing
   attached to a project are often another building's units.
 
+Section 6, step by step (projects / buildings with a register count; gaps P1–P4, B1–B3 as in
+`unit_count_gaps.md`):
+
+| Step | Projects | Buildings | Gaps after |
+|---|---:|---:|---|
+| First pass | 3,311 | 3,863 of 6,536 | P1 237, P2 41, P3 196, P4 53; B1 781, B2 836, B3 36 |
+| Link projects by unit numbers (423 links) | 3,434 | 4,077 | P1 125; B2 595 |
+| Floor-area tie-break; twin-tower ties link nothing; shared DLD buildings count for neither | 3,426 | 4,165 of 6,507 | B1 610; 8 projects lose a doubled sum |
+| Unit key, non-residential codes, plots, same-name buildings merged | 3,445 | 4,075 of 6,223 | P1 127, P2 44, P3 174, P4 53; B1 591, B2 575, B3 26 |
+
+What is left, and why it is not counted (listed with evidence in `unit_count_gaps.md`):
+
+- P1 127: unit numbers split over several DLD buildings or projects (65), not in the register at
+  their floor areas (32), the DLD project another DXBI project holds by name (11, likely a phase
+  or a duplicate), fewer than 5 matches (9), twin buildings (7), claimed by two projects (3).
+- P2 44 and B3 26: the register holds fewer units than traded even with one unit key: upper
+  floors or towers missing from the register (Skyvue D76xx, New Dubai Gate 1 B-7xx), villa codes
+  under a commercial register entry (Jumeirah Park), DXBI numbering DLD does not use (101A/101B).
+- P3 174: off-plan villa phases whose sub-plots DLD has not registered, and apartment projects
+  whose land register entry is the one site plot.
+- P4 53: first record after the May 2026 unit snapshot; DLD's units endpoint returns no rows.
+- Not countable from current data: villa clusters without a plot list, DXBI-only buildings, fewer
+  than 3 unit numbers, no unit numbers.
+
 Checks run: holocron 611 passed (live ClickHouse) with `ty` and ruff; backend unit/contract 223
 and ClickHouse 78; frontend vitest 71 and svelte-check; Playwright Analytics specs 24 (new
 `e2e/analytics-hierarchy.spec.ts`, screenshots in `docs/audits/analytics-hierarchy-2026-10-21/`).
+
+Checks run after section 6: holocron 613 passed (live ClickHouse; new tests: a project DLD files
+under no name gets its register count, repeated unit numbers resolve by floor area, format
+variants and a parking code do not inflate traded units, one name across communities is one
+building, a DLD building two buildings match counts for neither), `ty` and ruff; backend
+ClickHouse 78 and unit/contract 223; frontend vitest 71 and svelte-check; Playwright Analytics
+specs 24.

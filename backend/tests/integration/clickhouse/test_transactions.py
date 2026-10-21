@@ -182,7 +182,7 @@ _HIERARCHY_FILLS = {
         INSERT INTO analytics_buildings
         SELECT building_id, any(building_display), any(area_name), argMax(scope_key, n),
                argMax(scope_name, n), argMax(master_key, n), argMax(master_name, n), 1,
-               sum(n), sum(sales), sum(n) - sum(sales), '', [], now64(3)
+               sum(n), sum(sales), sum(n) - sum(sales), '', 0, [], now64(3)
         FROM (SELECT building_id, building_display, area_name, scope_key, scope_name, master_key,
                      master_name, count() AS n, countIf(is_sale) AS sales
               FROM {_RECORDS} WHERE building_id != ''
