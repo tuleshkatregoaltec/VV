@@ -175,11 +175,6 @@ class ProjectConfigurationRow(BaseModel):
     gross_yield_pct: Optional[float] = None
     price_change_yoy_pct: Optional[float] = None
     sales_momentum_pct: Optional[float] = None
-    absorption_rate_pct: Optional[float] = Field(
-        default=None,
-        description="Sales in the last 12 months per registered unit; none when the registry "
-        "holds under 100 units of the type or fewer units than were sold",
-    )
     price_p25: float
     price_p50: float
     price_p75: float
@@ -234,6 +229,10 @@ class ProjectAnalyticsResponse(BaseModel):
     by_reg_type: list[RegTypeBreakdown]
     unit_composition: list[AnalyticsUnitComposition]
     configuration_analysis: list[ProjectConfigurationRow]
+    recent_periods_end: Optional[date] = Field(
+        default=None,
+        description="Last day of the recent 90-day and 12-month windows: the newest recorded sale",
+    )
 
 
 class ProjectTrendPoint(BaseModel):

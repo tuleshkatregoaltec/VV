@@ -7338,6 +7338,12 @@ export type ProjectAnalyticsResponse = {
      * Configuration Analysis
      */
     configuration_analysis: Array<ProjectConfigurationRow>;
+    /**
+     * Recent Periods End
+     *
+     * Last day of the recent 90-day and 12-month windows: the newest recorded sale
+     */
+    recent_periods_end?: string | null;
 };
 
 /**
@@ -7406,12 +7412,6 @@ export type ProjectConfigurationRow = {
      * Sales Momentum Pct
      */
     sales_momentum_pct?: number | null;
-    /**
-     * Absorption Rate Pct
-     *
-     * Sales in the last 12 months per registered unit; none when the registry holds under 100 units of the type or fewer units than were sold
-     */
-    absorption_rate_pct?: number | null;
     /**
      * Price P25
      */

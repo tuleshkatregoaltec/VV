@@ -1392,8 +1392,8 @@ onMount(() => {
 			</div>
 
 			{#if configMode === 'sales'}
-                <p class="mt-4 text-xs text-fg-4">Sales, prices and sizes cover all recorded dates. Recent periods end today (UTC) for every segment. Low-sample configurations remain visible.</p>
-                <p class="mt-1 text-xs text-fg-4">Momentum compares consecutive 90-day counts using their average as the denominator (minimum 20 sales in each). Price change compares consecutive 12-month periods (minimum 3 sales in each). Sales / Stock is unavailable without registered unit counts.</p>
+                <p class="mt-4 text-xs text-fg-4">Sales, prices and sizes cover all recorded dates. Recent periods end on the newest recorded sale{#if summary.recent_periods_end}, {new Date(summary.recent_periods_end).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' })},{/if} for every segment. Low-sample configurations remain visible.</p>
+                <p class="mt-1 text-xs text-fg-4">Momentum compares consecutive 90-day counts using their average as the denominator (minimum 20 sales in each). Price change compares consecutive 12-month periods (minimum 3 sales in each).</p>
 				<div class="ui-scroll-shadow mt-4 overflow-x-auto">
 					<table class="min-w-[640px] w-full border-separate border-spacing-0 text-sm sm:min-w-full">
 						<thead>
@@ -1405,11 +1405,8 @@ onMount(() => {
 								<th class="border-b border-border pb-2.5 pr-6 text-right text-[11px] font-semibold uppercase tracking-[0.14em] text-fg-4">
 									Momentum<br /><span class="font-normal normal-case tracking-normal text-fg-4">90d shift</span>
 								</th>
-								<th class="border-b border-border pb-2.5 pr-6 text-right text-[11px] font-semibold uppercase tracking-[0.14em] text-fg-4">
-									Price Δ YoY<br /><span class="font-normal normal-case tracking-normal text-fg-4">% change</span>
-								</th>
 								<th class="border-b border-border pb-2.5 text-right text-[11px] font-semibold uppercase tracking-[0.14em] text-fg-4">
-									Sales / Stock<br /><span class="font-normal normal-case tracking-normal text-fg-4">% / year</span>
+									Price Δ YoY<br /><span class="font-normal normal-case tracking-normal text-fg-4">% change</span>
 								</th>
 							</tr>
 						</thead>
@@ -1448,7 +1445,7 @@ onMount(() => {
 											</span>
 										{/if}
 									</td>
-									<td class="border-b border-border py-3 pr-6 text-right group-hover:bg-panel">
+									<td class="border-b border-border py-3 text-right group-hover:bg-panel">
 										{#if row.price_change_yoy_pct != null && Number.isFinite(row.price_change_yoy_pct)}
 											<span class="font-medium {deltaTone(row.price_change_yoy_pct)}">
 												{row.price_change_yoy_pct > 0 ? '▲' : row.price_change_yoy_pct < 0 ? '▼' : ''}
@@ -1458,16 +1455,11 @@ onMount(() => {
 											<span class="text-fg-4">—</span>
 										{/if}
 									</td>
-									<td class="border-b border-border py-3 text-right font-medium group-hover:bg-panel">
-										<span class="{pctTone(row.absorption_rate_pct)}">
-											{fmtPct(row.absorption_rate_pct)}
-										</span>
-									</td>
 								</tr>
 							{/each}
 							{#if configRows.length === 0}
 								<tr>
-									<td colspan="7" class="py-8 text-center text-sm text-fg-4">
+									<td colspan="6" class="py-8 text-center text-sm text-fg-4">
 										No data available for this segment.
 									</td>
 								</tr>

@@ -96,8 +96,12 @@ async def test_rental_only_scope_is_searchable_and_empty_sales_are_json_safe(dxb
     json.dumps(summary.model_dump(mode="json"), allow_nan=False)
 
 
-async def test_configuration_periods_share_today_and_keep_old_sparse_bedrooms(dxbi):  # noqa: F811
-    """An old off-plan launch is not current activity; sparse homes must not disappear."""
+async def test_configuration_periods_end_on_the_newest_sale_and_keep_old_sparse_bedrooms(
+    dxbi,  # noqa: F811
+):
+    """Recent periods end on the newest recorded sale, not today: days not loaded yet are no days
+    without sales. An old off-plan launch is not current activity; sparse homes must not
+    disappear; a future-dated record does not move the end."""
     from datetime import date, timedelta
 
     await dxbi(
@@ -106,6 +110,11 @@ async def test_configuration_periods_share_today_and_keep_old_sparse_bedrooms(dx
                 "ready",
                 project_name="Mixed Tower",
                 transaction_date=date.today() - timedelta(days=10),
+            ),
+            sale(
+                "year-old",
+                project_name="Mixed Tower",
+                transaction_date=date.today() - timedelta(days=370),
             ),
             sale(
                 "old-offplan",
@@ -125,7 +134,9 @@ async def test_configuration_periods_share_today_and_keep_old_sparse_bedrooms(dx
     )
     summary = await service.get_project_summary("Mixed Tower")
     rows = {(row.market_segment, row.rooms): row for row in summary.configuration_analysis}
-    assert rows["all", "1 B/R"].sales_last_12m == 1
+    assert summary.recent_periods_end == date.today() - timedelta(days=10)
+    # 370 days before today is within the 12 months that end 10 days ago.
+    assert rows["all", "1 B/R"].sales_last_12m == 2
     for segment in ("all", "off_plan"):
         assert rows[segment, "4 B/R"].sale_count == 1
         assert rows[segment, "4 B/R"].sales_last_12m == 0

@@ -461,6 +461,10 @@ async def get_project_summary(
         by_reg_type=by_reg_type,
         unit_composition=unit_composition,
         configuration_analysis=configuration_analysis,
+        recent_periods_end=next(
+            (row["recent_period_end"] for row in sales_sum_rows if row.get("recent_period_end")),
+            None,
+        ),
     )
 
 

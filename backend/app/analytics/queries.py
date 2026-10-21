@@ -27,6 +27,14 @@ def _project_filter(filter_type: ProjectScopeType) -> str:
     )
 
 
+# Recent windows (90 days, 12 months) end on the newest recorded sale, the same day for every
+# scope and segment. Ending them today counted days not loaded yet as days without sales: with
+# sales loaded to 9 Oct, studio momentum read -21.4% on 20 Oct, +0.6% over the loaded days.
+_RECENT_WINDOW_END = """addDays((
+    SELECT max(transaction_date) FROM dxbi_sales_listed
+    WHERE transaction_date <= toDate(now('Asia/Dubai')) AND sale_amount_aed > 0), 1)"""
+
+
 # Half-open bounds of a range filter: (low or None, high or None).
 Bounds = tuple[Optional[float], Optional[float]]
 
@@ -188,7 +196,7 @@ def project_configuration_sales(
               {reg_filter}
         ),
         anchor AS (
-            SELECT addDays(toDate(now('Asia/Dubai')), 1) AS latest_sale_date
+            SELECT {_RECENT_WINDOW_END} AS latest_sale_date
         )
         SELECT
             rooms_en,
@@ -790,9 +798,10 @@ async def fetch_project_sales_bundle(parameters: dict, filter_type: ProjectScope
                     instance_date >= addYears(latest_sale_date, -1) AND instance_date < latest_sale_date), 2) AS avg_price_sqft_last_12m,
                round(avgIf(meter_sale_price / 10.7639,
                     instance_date >= addYears(latest_sale_date, -2)
-                    AND instance_date < addYears(latest_sale_date, -1)), 2) AS avg_price_sqft_prev_12m
+                    AND instance_date < addYears(latest_sale_date, -1)), 2) AS avg_price_sqft_prev_12m,
+               addDays(max(latest_sale_date), -1) AS recent_period_end
         FROM (
-            SELECT *, addDays(toDate(now('Asia/Dubai')), 1) AS latest_sale_date
+            SELECT *, {_RECENT_WINDOW_END} AS latest_sale_date
             FROM (
                 SELECT *, arrayJoin(['all', multiIf(reg_type_en = 'Existing Properties',
                         'secondary', reg_type_en = 'Off-Plan Properties', 'off_plan', 'unknown')])

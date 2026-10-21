@@ -14,11 +14,6 @@ _CONFIG_PRICE_MIN_SAMPLE_SIZE = 3
 _CONFIG_MOMENTUM_MIN_SAMPLE_SIZE = 20
 
 
-# Sales per registered unit needs a registry that holds the type: DLD registers few large units
-# by bedrooms (villas mostly as land), so 7-bed sales/stock read 337% on 16 units (2026-10-08).
-_ABSORPTION_MIN_STOCK = 100
-
-
 _BEDROOM_RE = re.compile(r"^\d+\s+B/R$", re.IGNORECASE)
 
 
@@ -165,11 +160,6 @@ def build_configuration_rows(
         if segment != "off_plan" and median_sale_price > 0 and median_annual_rent > 0:
             gross_yield_pct = round(median_annual_rent / median_sale_price * 100, 2)
 
-        absorption_rate_pct: Optional[float] = None
-        # More sales than registered units means the registry misses the type, not absorption.
-        if stock_units >= _ABSORPTION_MIN_STOCK and sales_last_12m <= stock_units:
-            absorption_rate_pct = round(sales_last_12m / stock_units * 100, 1)
-
         rows.append(
             ProjectConfigurationRow(
                 market_segment=segment,
@@ -193,7 +183,6 @@ def build_configuration_rows(
                 and sales_prev_12m >= _CONFIG_PRICE_MIN_SAMPLE_SIZE
                 else None,
                 sales_momentum_pct=_sampled_count_pct_change(sales_last_90d, sales_prev_90d),
-                absorption_rate_pct=absorption_rate_pct,
                 price_p25=float(sale_row.get("price_p25", 0) or 0),
                 price_p50=float(sale_row.get("price_p50", 0) or 0),
                 price_p75=float(sale_row.get("price_p75", 0) or 0),
