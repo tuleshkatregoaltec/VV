@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 
-IMPORT_RESOLVER_VERSION = "owner-context-6"
+IMPORT_RESOLVER_VERSION = "owner-context-7"
 
 
 def event_family(procedure: str) -> str:
@@ -39,3 +39,18 @@ def has_sale_evidence(candidate) -> bool:
         if not candidate.procedure_type and candidate.party_role in {"Buyer", "Seller"}:
             family = "sale"
     return family == "sale" and candidate.party_role in {"Buyer", "Seller"}
+
+
+def is_owner_list_entry(candidate) -> bool:
+    """An owner-list row: no role or procedure, but a registration date.
+
+    It may count as an acquisition only once a DLD sale confirms that date.
+    """
+    family = candidate.evidence.get("event_family")
+    if family is None:
+        family = event_family(candidate.procedure_type)
+    return (
+        family == "contact_snapshot"
+        and not candidate.party_role
+        and candidate.transaction_date is not None
+    )

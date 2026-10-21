@@ -22,7 +22,7 @@ from app.crm.identity import (
     _usable_project_name,
 )
 from app.crm.import_context import in_file_context, prepare_file_context, recover_from_file_context
-from app.crm.import_events import has_sale_evidence
+from app.crm.import_events import has_sale_evidence, is_owner_list_entry
 from app.crm.import_models import (
     CrmContactImportSummary,
 )
@@ -755,7 +755,25 @@ def _apply_evidence(
         )
         return
 
-    if not has_sale_evidence(candidate):
+    owner_list_sale = (
+        next(
+            (
+                event
+                for event in sale_events
+                if abs((event["transaction_date"] - candidate.transaction_date).days) <= 2
+                and _price_matches(
+                    candidate.transaction_price_aed, int(event.get("sale_amount_aed") or 0)
+                )
+            ),
+            None,
+        )
+        if is_owner_list_entry(candidate)
+        else None
+    )
+    if owner_list_sale:
+        # The owner list gives no role; the matching DLD sale is the acquisition.
+        candidate.evidence["acquisition_inferred"] = True
+    elif not has_sale_evidence(candidate):
         candidate.ownership_status = "unit_linked_unverified" if latest or rental else "unmatched"
         candidate.confidence_score = 50 if latest or rental else 20
         candidate.match_reason = (

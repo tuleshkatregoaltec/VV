@@ -528,6 +528,95 @@ def test_contact_only_row_remains_unverified_even_with_exact_unit():
     assert "does not establish a sale acquisition" in contact.match_reason
 
 
+def _owner_list_contact(**overrides) -> ParsedContact:
+    contact = _contact(party_role="", procedure_type="", **overrides)
+    contact.evidence["event_family"] = "contact_snapshot"
+    return contact
+
+
+def test_owner_list_row_matching_latest_sale_is_verified():
+    # Owner-list sheets omit Buyer/Seller; a DLD sale on the same date and price
+    # proves the acquisition, so these owners must not stay unverified.
+    contact = _owner_list_contact()
+    sales = {
+        contact.property_key: [
+            {"transaction_date": date(2025, 1, 31), "sale_amount_aed": 2_250_000}
+        ]
+    }
+
+    _apply_evidence(contact, sales=sales, rentals={})
+
+    assert contact.ownership_status == "verified_current_owner"
+    assert contact.evidence["acquisition_inferred"] is True
+
+
+def test_owner_list_row_with_later_sale_is_former_owner():
+    # An owner-list entry whose acquisition is followed by a resale is not a lead.
+    contact = _owner_list_contact(
+        transaction_date=date(2018, 9, 4), transaction_price_aed=1_300_000
+    )
+    sales = {
+        contact.property_key: [
+            {"transaction_date": date(2018, 9, 4), "sale_amount_aed": 1_300_000},
+            {"transaction_date": date(2025, 1, 31), "sale_amount_aed": 2_250_000},
+        ]
+    }
+
+    _apply_evidence(contact, sales=sales, rentals={})
+
+    assert contact.ownership_status == "former_owner"
+    assert contact.later_sale_date == date(2025, 1, 31)
+
+
+def test_owner_list_row_without_price_matching_sale_date_is_probable():
+    # Date alone fits the sale but cannot prove the amount.
+    contact = _owner_list_contact(transaction_price_aed=None)
+    sales = {
+        contact.property_key: [
+            {"transaction_date": date(2025, 1, 31), "sale_amount_aed": 2_250_000}
+        ]
+    }
+
+    _apply_evidence(contact, sales=sales, rentals={})
+
+    assert contact.ownership_status == "probable_current_owner"
+
+
+@pytest.mark.parametrize(
+    ("row_date", "row_price"),
+    [(date(2023, 6, 1), 2_250_000), (date(2025, 1, 31), 1_000_000)],
+)
+def test_owner_list_row_without_matching_sale_stays_unverified(row_date, row_price):
+    # A registration date may be a title-deed date, not the sale date; without a
+    # matching DLD sale the row is not evidence of a conflict.
+    contact = _owner_list_contact(transaction_date=row_date, transaction_price_aed=row_price)
+    sales = {
+        contact.property_key: [
+            {"transaction_date": date(2025, 1, 31), "sale_amount_aed": 2_250_000}
+        ]
+    }
+
+    _apply_evidence(contact, sales=sales, rentals={})
+
+    assert contact.ownership_status == "unit_linked_unverified"
+    assert "acquisition_inferred" not in contact.evidence
+
+
+def test_mortgage_row_is_not_treated_as_owner_list_acquisition():
+    # Financing events do not transfer ownership.
+    contact = _contact(procedure_type="Mortgage Registration")
+    contact.evidence["event_family"] = "financing"
+    sales = {
+        contact.property_key: [
+            {"transaction_date": date(2025, 1, 31), "sale_amount_aed": 2_250_000}
+        ]
+    }
+
+    _apply_evidence(contact, sales=sales, rentals={})
+
+    assert contact.ownership_status == "unit_linked_unverified"
+
+
 def test_unresolvable_source_and_registry_gap_are_distinct_states():
     missing_identity = _contact(building_name="Sidra 2", unit_number="")
     _apply_evidence(missing_identity, sales={}, rentals={})

@@ -86,7 +86,9 @@ def test_dated_owner_snapshot_and_multiple_phones_survive_without_buyer_role():
         },
         rentals={},
     )
-    assert row.ownership_status == "unit_linked_unverified"
+    # The matching DLD sale confirms the owner-list acquisition.
+    assert row.ownership_status == "verified_current_owner"
+    assert row.evidence["acquisition_inferred"] is True
 
 
 def test_missing_unit_retains_land_evidence_without_zero_or_shared_owner_identity():
