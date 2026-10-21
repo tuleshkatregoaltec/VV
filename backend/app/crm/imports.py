@@ -52,6 +52,7 @@ from app.crm.ownership import (
     _recover_property_identity_from_near_transaction,
     _recover_property_identity_from_transaction,
     _rental_evidence,
+    _reuse_mortgage_property_from_sale_anchors,
     _sales_evidence,
 )
 from app.crm.registry_fallback import _apply_registry_unit_fallbacks
@@ -119,6 +120,7 @@ async def process_contact_import(
             raise HTTPException(status_code=400, detail=_EMPTY_FILE)
         await _recover_property_identity_from_transaction(candidates)
         await _recover_property_identity_from_near_transaction(candidates)
+        _reuse_mortgage_property_from_sale_anchors(candidates)
         sales = await _sales_evidence(candidates)
         await _apply_registry_unit_fallbacks(candidates, sales)
         rentals = await _rental_evidence(candidates)

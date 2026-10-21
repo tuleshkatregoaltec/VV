@@ -20,6 +20,7 @@ from app.crm.identity import (
     _normalize_unit,
     _recover_embedded_property_identity,
     _text,
+    _usable_project_name,
 )
 from app.crm.import_models import (
     CrmContactImportSummary,
@@ -36,7 +37,7 @@ _BUILDING_NO_NUMERIC_IDENTIFIER = re.compile(
     r"^(?:r\d*\s+)?(.+?)[-\s]+(?:v|villa|th)[-\s]*(\d+)$", re.IGNORECASE
 )
 
-_TRANSFER_WORDS = ("sale", "sell", "delayed sell")
+_TRANSFER_WORDS = ("sale", "sell", "delayed sell", "mortgage")
 
 _CANONICAL_FIELDS = {
     "area_name",
@@ -523,8 +524,8 @@ def _candidate_from_row(
     project = _text(_field_value(row, profile, "project_name")) or inferred_project
     building = _text(_field_value(row, profile, "building_name")) or project
     if not area:
-        area = "Tilal Al Ghaf" if inferred_project else master_project
-        if master_project and not inferred_project:
+        area = _usable_project_name(master_project)
+        if area:
             area_source_field = "master_project"
     if not project:
         project = master_project
@@ -570,8 +571,9 @@ def _candidate_from_row(
     if source_unit and source_unit.lower() != unit.lower():
         candidate.evidence["source_unit_number"] = source_unit[:100]
     if unit_fallback_field:
-        compact_value = re.sub(r"\s+", "", unit_fallback_value).upper()
-        candidate.evidence["source_unit_number"] = compact_value[:100]
+        candidate.evidence["source_unit_number"] = re.sub(
+            r"\s+", "", unit_fallback_value
+        ).upper()[:100]
         candidate.evidence["unit_number_fallback"] = {
             "source_field": unit_fallback_field,
             "source_value": unit_fallback_value[:100],
