@@ -62,6 +62,21 @@ WORK_TABLE = "analytics_place_records__work"
 BUILDING_PROJECT_SHARE = 0.5
 SPLIT_SHARE = 0.2
 SPLIT_RECORDS = 5
+# A name is one building per project too when its records split between sister projects of one
+# master community below this share ("Capria 5" is a building of Capria East and of Capria
+# West), or when the name is generic and a second project holds SPLIT_SHARE ("Tower A" of Club
+# Drive and of Address Residences, Dubai Hills).
+SISTER_SPLIT_SHARE = 0.6
+GENERIC_BUILDING = profile.GENERIC_BUILDING
+# The name that can name a project: DXBI's project for a generic name it qualifies ("Tower A" of
+# Club Drive), else the building's own.
+_NAMING_KEY = (
+    "if(position({n}.community_key, '/') > 0, splitByChar('/', {n}.community_key)[2], {n}.name_key)"
+)
+_ID_NAMING_KEY = (
+    "if(position(splitByChar('|', f.final_id)[2], '/') > 0,"
+    " splitByChar('/', splitByChar('|', f.final_id)[2])[2], splitByChar('|', f.final_id)[1])"
+)
 # A count below this share of the units that traded is not the building's or project's stock.
 UNITS_TRADED_FLOOR = 0.9
 # A project DLD's unit register holds under another name: one DLD project (or building) holds
@@ -71,6 +86,10 @@ UNIT_MATCH_SHARE = 0.8
 UNIT_MATCH_MIN = 5
 SIZE_TOLERANCE = 0.02
 
+
+# The building statements nest the same CTEs many times over (each CTE is inlined): ClickHouse's
+# default cap of 10,000 plan optimizations refuses analytics_buildings.
+_SETTINGS = f"{t._HEAVY_QUERY_SETTINGS},\n    query_plan_max_optimizations_to_apply = 100000"
 
 key = profile.name_key
 _without_all = profile.without_all
@@ -84,6 +103,19 @@ def _dxbi_label(expr: str) -> str:
         f"if(match({bare}, '\\([A-Za-z]{{2,5}}\\)$'), "
         f"concat(replaceRegexpOne({bare}, '\\([A-Za-z]{{2,5}}\\)$', ''), '(', "
         f"upperUTF8(extract({bare}, '\\(([A-Za-z]{{2,5}})\\)$')), ')'), {bare})"
+    )
+
+
+def named_like(name_key: str, project_key: str) -> str:
+    """A project named like the building (both as keys): the same name, the building's name
+    ending the project's ("Nice 1" / "Damac Lagoons - Nice 1"), or one is the other and "tower",
+    "residence" or "building" ("Merano" / "Merano Tower"). A generic name names no project."""
+    suffix = "(towers?|residences?|building)$"
+    return (
+        f"(NOT match({name_key}, '{GENERIC_BUILDING}') AND ({project_key} = {name_key}"
+        f" OR (length({name_key}) >= 5 AND endsWith({project_key}, {name_key}))"
+        f" OR match({project_key}, concat('^', {name_key}, '{suffix}'))"
+        f" OR match({name_key}, concat('^', {project_key}, '{suffix}'))))"
     )
 
 
@@ -134,7 +166,8 @@ def _py_key(name: str) -> str:
 _WORK_DDL = f"""CREATE TABLE {WORK_TABLE} (
     record_key String, kind LowCardinality(String), raw_scope String,
     raw_kind LowCardinality(String), project_source LowCardinality(String), building String,
-    community String, master String, dld_area String, unit_key String, size_sqft Float64
+    community String, master String, dld_area String, unit_key String, size_sqft Float64,
+    dxbi_project String
 ) ENGINE = MergeTree ORDER BY record_key"""
 
 
@@ -175,23 +208,24 @@ SELECT p.sale_key, 'sale',
        if(p.project_source = 'place_name', '', p.project_name),
        if(p.project_source = 'own_building', 'Building', 'Project'), p.project_source,
        if({_BUILDING_OK}, p.building_name, ''), x.area_name, p.master_project, p.area_name,
-       {_UNIT_KEY}, p.size_sqft
+       {_UNIT_KEY}, p.size_sqft, x.project_name
 FROM dxbi_sale_profile AS p
 INNER JOIN (
-    SELECT sale_key, area_name, unit_number FROM ({t.DXBI_SALES_BASE})
+    SELECT sale_key, area_name, unit_number, project_name FROM ({t.DXBI_SALES_BASE})
 ) AS x ON x.sale_key = p.sale_key
 UNION ALL
 SELECT p.contract_key, 'lease',
        if(p.project_source = 'place_name', '', p.project_name),
        if(p.project_source = 'own_building', 'Building', 'Project'), p.project_source,
        if({_BUILDING_OK}, p.building_name, ''), x.area_name, p.master_project, p.area_name,
-       {_UNIT_KEY}, p.size_sqft
+       {_UNIT_KEY}, p.size_sqft, x.project_name
 FROM dxbi_rental_profile AS p
 INNER JOIN (
-    SELECT contract_key, any(area_name) AS area_name, any(unit_number) AS unit_number
+    SELECT contract_key, any(area_name) AS area_name, any(unit_number) AS unit_number,
+           any(project_name) AS project_name
     FROM dxbi_rental_events FINAL GROUP BY contract_key
 ) AS x ON x.contract_key = p.contract_key
-{t._HEAVY_QUERY_SETTINGS}
+{_SETTINGS}
 """
 
 # Masters as DXBI's location tree spells them, by key (with and without a bracketed short form).
@@ -328,7 +362,7 @@ LEFT JOIN (
     LEFT JOIN dxbi_master_names AS mn ON mn.k = {key("co.community")}
 ) AS cm ON cm.project_key = f.project_key
 LEFT JOIN dxbi_names AS dn ON dn.k = f.project_key
-{t._HEAVY_QUERY_SETTINGS}
+{_SETTINGS}
 """
 
 # DLD's unit register, the newest complete snapshot: one holding at least 90% of the largest
@@ -416,7 +450,7 @@ WHERE best.1 IN (SELECT best.1 FROM links GROUP BY best.1 HAVING count() = 1)
   AND best.1 NOT IN (
       SELECT dld_group FROM register
       WHERE name_key IN (SELECT project_key FROM analytics_projects))
-{t._HEAVY_QUERY_SETTINGS}
+{_SETTINGS}
 """
 
 # Buildings. A "building" a fifth of whose records are a place name's is a place, not a building.
@@ -426,46 +460,101 @@ _BUILDING_LOOSE = (
     "'\\\\b(the|tower|towers|residence|residences|building|apartments?)\\\\b', ''), "
     "'[^a-z0-9]', '')"
 )
-_BUILDING_RECORDS = f"""
+# The building steps, each computed once into a work table the next ones read (inlined as CTEs,
+# each statement recomputed the whole chain several times and outgrew 9 GB).
+FIRST_IDS_TABLE = "analytics_first_ids__work"
+RECORD_IDS_TABLE = "analytics_record_ids__work"
+DLD_VOTES_TABLE = "analytics_dld_votes__work"
+MERGED_TABLE = "analytics_building_merge__work"
+_BUILDING_WORK_DDL = (
+    f"""CREATE TABLE {FIRST_IDS_TABLE} (name_key String, community_key String,
+    project_key String, building_id String, home_project String)
+ENGINE = MergeTree ORDER BY (name_key, community_key, project_key)""",
+    f"""CREATE TABLE {RECORD_IDS_TABLE} (record_key String, kind LowCardinality(String),
+    building String, community String, unit_key String, size_sqft Float64, project_key String,
+    building_id String, home_project String) ENGINE = MergeTree ORDER BY building_id""",
+    f"""CREATE TABLE {DLD_VOTES_TABLE} (building_id String, dld_building String)
+ENGINE = MergeTree ORDER BY building_id""",
+    f"""CREATE TABLE {MERGED_TABLE} (building_id String, final_id String)
+ENGINE = MergeTree ORDER BY building_id""",
+)
+_BUILDING_SOURCE = f"""
     building_records AS (
         SELECT w.record_key AS record_key, w.kind AS kind, w.building AS building,
-               {key("w.building")} AS name_key, {key("w.community")} AS community_key,
+               {key("w.building")} AS name_key,
+               {profile.building_community_key("w.building", "w.community", "w.dxbi_project")}
+                   AS community_key,
                w.community AS community, w.unit_key AS unit_key, w.size_sqft AS size_sqft,
                if(w.raw_scope != '', {_project_alias(project_key("w.raw_scope"))}, '')
                    AS project_key,
                w.project_source = 'place_name' AS place
         FROM {WORK_TABLE} AS w
         WHERE w.building != ''
-    ),
+    )"""
+_FIRST_IDS = f"""
     name_votes AS (
         SELECT name_key, community_key, project_key, count() AS n
         FROM building_records WHERE NOT place AND project_key != ''
         GROUP BY name_key, community_key, project_key
     ),
+    -- A building's project: one named like it (Spring Oasis, though It Plaza pairings
+    -- outnumber it; at least 5 records and a tenth of them), else the most common.
     names AS (
-        SELECT b.name_key AS name_key, b.community_key AS community_key,
-               argMax(v.project_key, v.n) AS top_project, max(v.n) AS top_n, sum(v.n) AS voted
-        FROM (SELECT name_key, community_key FROM building_records
-              GROUP BY name_key, community_key HAVING countIf(place) < 0.2 * count()) AS b
-        INNER JOIN name_votes AS v
-            ON v.name_key = b.name_key AND v.community_key = b.community_key
-        GROUP BY b.name_key, b.community_key
+        SELECT name_key, community_key,
+               if(named != '', named, top) AS top_project, top_n, voted, named,
+               if(length(ranked) > 1, ranked[2].2, '') AS second, ranked[2].1 AS second_n
+        FROM (
+            SELECT b.name_key AS name_key, b.community_key AS community_key,
+                   argMax(v.project_key, v.n) AS top, max(v.n) AS top_n, sum(v.n) AS voted,
+                   argMaxIf(v.project_key, v.n,
+                            {named_like(_NAMING_KEY.format(n="b"), "v.project_key")} AND v.n >= 5)
+                       AS named_any,
+                   maxIf(v.n, {named_like(_NAMING_KEY.format(n="b"), "v.project_key")})
+                       AS named_n,
+                   if(named_n >= 5 AND named_n >= 0.1 * voted, named_any, '') AS named,
+                   arrayReverseSort(x -> x.1, groupArray((v.n, v.project_key))) AS ranked
+            FROM (SELECT name_key, community_key FROM building_records
+                  GROUP BY name_key, community_key HAVING countIf(place) < 0.2 * count()) AS b
+            INNER JOIN name_votes AS v
+                ON v.name_key = b.name_key AND v.community_key = b.community_key
+            GROUP BY b.name_key, b.community_key
+        )
+    ),
+    -- One building per project: no project holds half the name's records, or the name splits
+    -- between sister projects or is generic (SISTER_SPLIT_SHARE).
+    name_shapes AS (
+        SELECT n.name_key AS name_key, n.community_key AS community_key,
+               n.top_project AS top_project, n.voted AS voted,
+               n.named = '' AND (
+                   n.top_n < {BUILDING_PROJECT_SHARE} * n.voted
+                   OR (match(n.name_key, '{GENERIC_BUILDING}')
+                       AND position(n.community_key, '/') = 0
+                       AND n.second_n >= {SPLIT_SHARE} * n.voted
+                       AND n.second_n >= {SPLIT_RECORDS})
+                   OR (n.top_n < {SISTER_SPLIT_SHARE} * n.voted AND tm.m_master != ''
+                       AND tm.m_master = sm.m_master)
+               ) AS split
+        FROM names AS n
+        LEFT JOIN (SELECT project_key AS m_key, master_key AS m_master FROM analytics_projects)
+            AS tm ON tm.m_key = n.top_project
+        LEFT JOIN (SELECT project_key AS m_key, master_key AS m_master FROM analytics_projects)
+            AS sm ON sm.m_key = n.second
     ),
     -- The building each (name, community[, project]) is before merging spellings.
     first_ids AS (
         SELECT n.name_key AS name_key, n.community_key AS community_key, '' AS project_key,
                concat(n.name_key, '|', n.community_key) AS building_id,
                n.top_project AS home_project
-        FROM names AS n WHERE n.top_n >= {BUILDING_PROJECT_SHARE} * n.voted
+        FROM name_shapes AS n WHERE NOT n.split
         UNION ALL
         SELECT n.name_key, n.community_key, v.project_key,
                concat(n.name_key, '|', n.community_key, '|', v.project_key), v.project_key
-        FROM names AS n
+        FROM name_shapes AS n
         INNER JOIN name_votes AS v
             ON v.name_key = n.name_key AND v.community_key = n.community_key
-        WHERE n.top_n < {BUILDING_PROJECT_SHARE} * n.voted
-          AND v.n >= {SPLIT_SHARE} * n.voted AND v.n >= {SPLIT_RECORDS}
-    ),
+        WHERE n.split AND v.n >= {SPLIT_SHARE} * n.voted AND v.n >= {SPLIT_RECORDS}
+    )"""
+_RECORD_IDS = """
     record_ids AS (
         SELECT r.record_key AS record_key, r.kind AS kind, r.building AS building,
                r.community AS community, r.unit_key AS unit_key, r.size_sqft AS size_sqft,
@@ -482,7 +571,8 @@ _BUILDING_RECORDS = f"""
             ON s.s_name = r.name_key AND s.s_community = r.community_key
            AND s.s_project = r.project_key
         WHERE NOT r.place
-    ),
+    )"""
+_DLD_VOTES = f"""
     -- DLD's unit register, keyed by the DXBI project each unit belongs to.
     dld_units AS (
         SELECT project_key, {unit_key("unit_number")} AS unit_key,
@@ -514,7 +604,8 @@ _BUILDING_RECORDS = f"""
         )
         GROUP BY building_id
         HAVING by_number OR (max(n_sized) >= 0.8 * sum(n_sized) AND sum(n_sized) >= 3)
-    ),
+    )"""
+_MERGED = f"""
     id_facts AS (
         SELECT building_id, any(home_project) AS home_project, count() AS records,
                any(building) AS some_name
@@ -567,23 +658,48 @@ _BUILDING_RECORDS = f"""
         ) AS g ON g.home_project = f.home_project AND g.dld_building = f.dld_building
            AND f.dld_building != ''
     )"""
+_RECORD_IDS_READ = f"record_ids AS (SELECT * FROM {RECORD_IDS_TABLE})"
+_BUILDING_WORK_SQL = (
+    f"""INSERT INTO {FIRST_IDS_TABLE}
+WITH {_BUILDING_SOURCE}, {_FIRST_IDS}
+SELECT name_key, community_key, project_key, building_id, home_project FROM first_ids
+{_SETTINGS}""",
+    f"""INSERT INTO {RECORD_IDS_TABLE}
+WITH {_BUILDING_SOURCE}, first_ids AS (SELECT * FROM {FIRST_IDS_TABLE}), {_RECORD_IDS}
+SELECT record_key, kind, building, community, unit_key, size_sqft, project_key, building_id,
+       home_project
+FROM record_ids
+{_SETTINGS}""",
+    f"""INSERT INTO {DLD_VOTES_TABLE}
+WITH {_RECORD_IDS_READ}, {_DLD_VOTES}
+SELECT building_id, dld_building FROM dld_votes
+{_SETTINGS}""",
+    f"""INSERT INTO {MERGED_TABLE}
+WITH {_RECORD_IDS_READ}, dld_votes AS (SELECT * FROM {DLD_VOTES_TABLE}), {_MERGED}
+SELECT building_id, final_id FROM merged
+{_SETTINGS}""",
+)
+_BUILDING_WORK_TABLES = (FIRST_IDS_TABLE, RECORD_IDS_TABLE, DLD_VOTES_TABLE, MERGED_TABLE)
+_BUILDING_READS = f"""{_RECORD_IDS_READ},
+    merged AS (SELECT * FROM {MERGED_TABLE}),
+    dld_votes AS (SELECT * FROM {DLD_VOTES_TABLE})"""
 
 BUILDING_KEYS_SQL = f"""
 INSERT INTO `analytics_building_keys`
     (name_key, community_key, project_key, building_id, built_at)
-WITH {_BUILDING_RECORDS}
 SELECT i.name_key, i.community_key, i.project_key,
        if(m.final_id != '', m.final_id, i.building_id), now64(3)
-FROM first_ids AS i
-LEFT JOIN merged AS m ON m.building_id = i.building_id
-{t._HEAVY_QUERY_SETTINGS}
+FROM {FIRST_IDS_TABLE} AS i
+LEFT JOIN {MERGED_TABLE} AS m ON m.building_id = i.building_id
+{_SETTINGS}
 """
 
 BUILDINGS_SQL = f"""
 INSERT INTO `analytics_buildings`
     (building_id, building_name, community, project_key, project_name, master_key, master_name,
-     project_share, records, sales, leases, dld_building, dld_claims, spellings, built_at)
-WITH {_DXBI_NAMES}, {_BUILDING_RECORDS},
+     project_share, records, sales, leases, dld_building, dld_claims, named_project, generic_name,
+     spellings, built_at)
+WITH {_DXBI_NAMES}, {_BUILDING_READS},
     final_records AS (
         SELECT r.kind AS kind, r.building AS building, r.community AS community,
                r.project_key AS project_key, r.home_project AS home_project,
@@ -618,13 +734,17 @@ WITH {_DXBI_NAMES}, {_BUILDING_RECORDS},
 SELECT f.final_id,
        if(dn.name != '', dn.name, s.top_spelling),
        f.community, f.home_project, p.project_name, p.master_key, p.master_name,
-       f.share, f.records, f.sales, f.leases, d.dld_building, d.claims, s.spellings, now64(3)
+       f.share, f.records, f.sales, f.leases, d.dld_building, d.claims,
+       {named_like(_ID_NAMING_KEY, "f.home_project")},
+       match(splitByChar('|', f.final_id)[1], '{GENERIC_BUILDING}')
+           AND position(splitByChar('|', f.final_id)[2], '/') = 0,
+       s.spellings, now64(3)
 FROM facts AS f
 LEFT JOIN spellings AS s ON s.final_id = f.final_id
 LEFT JOIN dxbi_names AS dn ON dn.k = {key("s.top_spelling")}
 LEFT JOIN analytics_projects AS p ON p.project_key = f.home_project
 LEFT JOIN dld AS d ON d.final_id = f.final_id
-{t._HEAVY_QUERY_SETTINGS}
+{_SETTINGS}
 """
 
 # DLD's rooms in the Analytics configuration words ("1 B/R", "Studio"); an office is "Office".
@@ -647,6 +767,8 @@ _CARDS = f"""
               LIMIT 1 BY location_id)
         WHERE units > 0
     )"""
+
+_W_COMMUNITY = profile.building_community_key("w.building", "w.community", "w.dxbi_project")
 
 UNIT_STOCK_SQL = f"""
 INSERT INTO `analytics_unit_stock`
@@ -676,10 +798,10 @@ WITH {_CARDS},
                                   {_project_alias(project_key("w.raw_scope"))}, '')
            AND rc.rc_unit = w.unit_key
         LEFT JOIN (SELECT * FROM analytics_building_keys WHERE project_key = '') AS c
-            ON c.name_key = {key("w.building")} AND c.community_key = {key("w.community")}
+            ON c.name_key = {key("w.building")} AND c.community_key = {_W_COMMUNITY}
            AND w.building != ''
         LEFT JOIN (SELECT * FROM analytics_building_keys WHERE project_key != '') AS s
-            ON s.name_key = {key("w.building")} AND s.community_key = {key("w.community")}
+            ON s.name_key = {key("w.building")} AND s.community_key = {_W_COMMUNITY}
            AND s.project_key = if(w.raw_scope != '',
                                   {_project_alias(project_key("w.raw_scope"))}, '')
            AND w.building != ''
@@ -838,7 +960,7 @@ FROM (
 ) AS s
 LEFT JOIN project_mix AS m ON m.project_key = s.project_key
 WHERE pick.2 > 0
-{t._HEAVY_QUERY_SETTINGS}
+{_SETTINGS}
 """
 
 STATEMENTS = {
@@ -860,13 +982,24 @@ def create_tables(clickhouse: Any) -> None:
 def build_hierarchy(clickhouse: Any) -> dict[str, int]:
     """Every hierarchy table in order (each reads the ones before it), from the profiles."""
     create_tables(clickhouse)
-    clickhouse.command(f"DROP TABLE IF EXISTS {WORK_TABLE}")
+    work = (WORK_TABLE, *_BUILDING_WORK_TABLES)
+    for table in work:
+        clickhouse.command(f"DROP TABLE IF EXISTS {table}")
     clickhouse.command(_WORK_DDL)
+    for ddl in _BUILDING_WORK_DDL:
+        clickhouse.command(ddl)
     try:
         clickhouse.command(_WORK_SQL)
-        return {
-            table: profile.build_table(clickhouse, table, STATEMENTS[table], allow_empty=True)
-            for table in HIERARCHY_TABLES
-        }
+        built = {}
+        for table in HIERARCHY_TABLES:
+            if table == "analytics_building_keys":
+                # The building steps read the projects and their DLD links built above.
+                for statement in _BUILDING_WORK_SQL:
+                    clickhouse.command(statement)
+            built[table] = profile.build_table(
+                clickhouse, table, STATEMENTS[table], allow_empty=True
+            )
+        return built
     finally:
-        clickhouse.command(f"DROP TABLE IF EXISTS {WORK_TABLE}")
+        for table in work:
+            clickhouse.command(f"DROP TABLE IF EXISTS {table}")

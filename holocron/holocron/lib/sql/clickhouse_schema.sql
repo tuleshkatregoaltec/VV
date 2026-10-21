@@ -2393,6 +2393,10 @@ CREATE TABLE IF NOT EXISTS analytics_buildings (
     -- Buildings matching that DLD building: more than one (Shoreline's towers all match the one
     -- DLD files under the project, or two towers DLD registers as one) and its count is none's.
     dld_claims UInt32 DEFAULT 0,
+    -- Its project is named like it (Spring Oasis): its records re-file there whatever the share.
+    named_project UInt8 DEFAULT 0,
+    -- A name that names no project ("Tower A"), shared by sister projects' towers.
+    generic_name UInt8 DEFAULT 0,
     spellings Array(String),
     built_at DateTime64(3, 'UTC')
 )

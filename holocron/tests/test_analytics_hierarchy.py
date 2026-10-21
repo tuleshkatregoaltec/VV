@@ -289,3 +289,92 @@ def test_unit_counts_where_names_and_numbers_disagree(warehouse) -> None:  # noq
     # One DLD building is one building: matched by two, its 5 units are neither's.
     assert building_stock["Shore 1"] == (4, "units_traded")
     assert building_stock["Shore 2"] == (4, "units_traded")
+
+
+@live
+def test_records_file_under_their_buildings_project(warehouse) -> None:  # noqa: F811
+    # DXBI names a record's building; its project came from a DLD sale of the same price and
+    # date, which sister phases and unrelated towers can share (decision 3, 2026-10-21).
+    loaded = datetime(2026, 7, 1, tzinfo=UTC)
+    rows, profiles = [], []
+
+    def records(building, community, project, master, count, dxbi_project=""):
+        for _ in range(count):
+            key = f"{building}-{len(rows)}"
+            rows.append({
+                "sale_key": key, "transaction_date": date(2026, 6, 1), "unit_number": str(len(rows)),
+                "building_name": building, "building_key": building.lower().replace(" ", ""),
+                "project_name": dxbi_project, "area_name": community,
+                "area_key": community.lower().replace(" ", ""), "size_sqft": 800.0,
+                "sale_amount_aed": 1_000_000, "property_type": "Apartment", "bedrooms": "1 Bed",
+                "market_status": "Ready", "loaded_at": loaded,
+            })  # fmt: skip
+            profiles.append([key, master, "DLD AREA", project, "dld_pair", building, "dxbi"])
+
+    # Spring Oasis: It Plaza pairings outnumber its own, but a project is named like it.
+    records("Spring Oasis", "Dubai Silicon Oasis", "SPRING OASIS", "SILICON OASIS", 5)
+    records("Spring Oasis", "Dubai Silicon Oasis", "IT PLAZA", "SILICON OASIS", 7)
+    records("It Plaza", "Dubai Silicon Oasis", "IT PLAZA", "SILICON OASIS", 3)
+    # Palm Court: 70% in Sister One; three sales paired to its sister phase.
+    records("Palm Court", "Lagoons", "SISTER ONE", "LAGOONS", 7)
+    records("Palm Court", "Lagoons", "SISTER TWO", "LAGOONS", 3)
+    records("Sister Two Villas", "Lagoons", "SISTER TWO", "LAGOONS", 3)
+    # Capria 5: Capria East and Capria West each have a building 5; a 55/45 split is two buildings.
+    records("Capria 5", "Ghaf Woods", "CAPRIA EAST", "GHAF WOODS", 6)
+    records("Capria 5", "Ghaf Woods", "CAPRIA WEST", "GHAF WOODS", 5)
+    # Tower A: a generic name two projects' towers share in one community; DXBI files each sale
+    # under its project, which tells the towers apart. Two Club Drive sales paired to the other.
+    records("Tower A", "Hills", "CLUB DRIVE", "HILLS ESTATE", 8, dxbi_project="Club Drive")
+    records("Tower A", "Hills", "ADDRESS HILLS", "HILLS ESTATE", 2, dxbi_project="Club Drive")
+    records("Tower A", "Hills", "ADDRESS HILLS", "HILLS ESTATE", 10, dxbi_project="Address Hills")
+    # G-24: one named building, not a generic one; three sales paired to a JVC neighbour.
+    records("G-24", "JVC", "G-24", "JVC", 8)
+    records("G-24", "JVC", "CONDOR CLASSIC", "JVC", 3)
+    # Harbour Point: 60% its own; four sales paired to a tower in another community.
+    records("Harbour Point", "Marina", "MARINA ONE", "MARINA", 6)
+    records("Harbour Point", "Marina", "MIRAGE 1", "STUDIO CITY", 4)
+    records("Mirage 1", "Studio City", "MIRAGE 1", "STUDIO CITY", 3)
+    columns = list(rows[0])
+    warehouse.insert_rows(
+        table="dxbi_sales_unit_events",
+        rows=[[row[c] for c in columns] for row in rows],
+        column_names=columns,
+    )
+    warehouse.insert_rows(
+        table="dxbi_sale_profile",
+        rows=profiles,
+        column_names=[
+            "sale_key", "master_project", "area_name", "project_name", "project_source",
+            "building_name", "building_source",
+        ],
+    )  # fmt: skip
+
+    hierarchy.build_hierarchy(warehouse)
+    dxbi_profile.create_tables(warehouse)
+    dxbi_profile.build_profile(warehouse, "dxbi_sales_listed")
+
+    filed = {
+        (building, project): (count, stray)
+        for building, project, count, stray in warehouse.query(
+            "SELECT building_name, scope_name, count(), max(stray) FROM dxbi_sales_listed"
+            " GROUP BY 1, 2"
+        ).result_rows
+    }
+    assert filed[("Spring Oasis", "Spring Oasis")] == (12, 1)
+    assert filed[("Palm Court", "Sister One")] == (10, 1)
+    assert filed[("Capria 5", "Capria East")] == (6, 0)
+    assert filed[("Capria 5", "Capria West")] == (5, 0)
+    capria = warehouse.query(
+        "SELECT project_name FROM analytics_buildings WHERE building_name = 'Capria 5'"
+        " ORDER BY project_name"
+    ).result_rows
+    assert capria == [("Capria East",), ("Capria West",)]
+    assert filed[("Tower A", "Club Drive")] == (10, 1)
+    assert filed[("Tower A", "Address Hills")] == (10, 0)
+    towers = warehouse.query(
+        "SELECT project_name, records FROM analytics_buildings WHERE building_name = 'Tower A'"
+        " ORDER BY project_name"
+    ).result_rows
+    assert towers == [("Address Hills", 10), ("Club Drive", 10)]
+    assert filed[("G-24", "G-24")] == (11, 1)
+    assert filed[("Harbour Point", "Marina One")] == (10, 1)

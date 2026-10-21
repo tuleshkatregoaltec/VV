@@ -618,6 +618,24 @@ def project_key(expr: str) -> str:
     return name_key(without_all(expr))
 
 
+# A building name that names no one building: it starts with a generic word ("Tower A",
+# "Building 2", "Block B1") or is a bare letter or number ("A", "12").
+GENERIC_BUILDING = (
+    "^((tower|towers|building|block|bldg|cluster|phase|villa|villas|townhouse|plot)"
+    "[a-z]?[0-9]{0,3}[a-z]?|[a-z][0-9]?|[0-9]{1,2})$"
+)
+
+
+def building_community_key(building: str, community: str, dxbi_project: str) -> str:
+    """Where a building name is one building: its DXBI community, and for a generic name the
+    project DXBI files it under ("Tower A" of Club Drive and of Address Residences, both in
+    Dubai Hills Estate)."""
+    return (
+        f"concat({name_key(community)}, if(match({name_key(building)}, '{GENERIC_BUILDING}')"
+        f" AND {dxbi_project} != '', concat('/', {project_key(dxbi_project)}), ''))"
+    )
+
+
 def title_case(expr: str) -> str:
     """A name DLD wrote in capitals, word by word in title case; a word with a digit or without a
     vowel is an abbreviation and stays ("DMCC-EZ1", "JBR"). A name in mixed case is DXBI's or
@@ -630,23 +648,39 @@ def title_case(expr: str) -> str:
     return f"if({expr} = upperUTF8({expr}) AND match({expr}, '[A-Z]{{3}}'), {titled}, {expr})"
 
 
+# A building's records file under its project (decision 3, 2026-10-21): all of them when the
+# project is named like the building or holds CLEAR_SHARE of its records; with SISTER_SHARE,
+# those in another project of the same master community (sister phases sold off one price
+# list), unless the name is generic ("Tower A" of Club Drive and of Address Residences); with
+# ELSEWHERE_SHARE, those in a project of another master community (a price-and-date pairing
+# across the city: Manchester Tower sales filed under Azizi Mirage 1 in Studio City).
+CLEAR_SHARE = 0.8
+SISTER_SHARE = 0.6
+ELSEWHERE_SHARE = 0.5
+
+
 def hierarchy_resolved(records: str) -> str:
     """Each record with its place in the Analytics hierarchy (holocron.market.analytics_hierarchy).
 
     ``records`` names, besides its own columns, ``raw_scope`` (the profile's project, or DXBI's
     project or building for a record without a profile), ``raw_kind``, ``h_building``,
-    ``h_community`` and ``h_master``. A spelling the last hierarchy build did not see keeps its
+    ``h_community``, ``h_dxbi_project`` and ``h_master``. A spelling the last hierarchy build did not see keeps its
     own name (DLD's capitals in title case); its master is resolved by Analytics.
 
-    A record in a building that clearly belongs to one project (>= 80% of >= 10 of its records)
-    is filed under that project (decision 3, 2026-10-21): DXBI names the building, while the
-    project of a paired record came from a DLD sale of the same price and date, which sister
-    phases launched at one price list share. ``stray`` marks the records so re-filed.
+    A record in a building of a known project is filed under that project (the rules above):
+    DXBI names the building, while the project of a paired record came from a DLD sale of the
+    same price and date, which sister phases launched at one price list share. ``stray`` marks
+    the records so re-filed.
     """
-    building, community = name_key("s1.h_building"), name_key("s1.h_community")
+    building = name_key("s1.h_building")
+    community = building_community_key("s1.h_building", "s1.h_community", "s1.h_dxbi_project")
+    same_master = f"{name_key('s2.ap_master')} = ab.ab_master"
     by_building = (
-        "(s2.clear_building AND ab.ab_project != '' AND ab.ab_share >= 0.8"
-        " AND ab.ab_records >= 10 AND (s2.raw_scope = '' OR ab.ab_project != s2.scope_key_))"
+        "(s2.clear_building AND ab.ab_project != '' AND ab.ab_records >= 10"
+        " AND (s2.raw_scope = '' OR ab.ab_project != s2.scope_key_)"
+        f" AND (ab.ab_named OR ab.ab_share >= {CLEAR_SHARE}"
+        f" OR (ab.ab_share >= {SISTER_SHARE} AND NOT ab.ab_generic AND {same_master})"
+        f" OR (ab.ab_share >= {ELSEWHERE_SHARE} AND NOT ({same_master}))))"
     )
     return f"""(
     SELECT s2.*,
@@ -697,7 +731,8 @@ def hierarchy_resolved(records: str) -> str:
            AND bs.bs_project = s1.scope_key_
     ) AS s2
     LEFT JOIN (SELECT building_id AS ab_id, building_name AS ab_name, project_key AS ab_project,
-                      project_share AS ab_share, records AS ab_records
+                      project_share AS ab_share, records AS ab_records, master_key AS ab_master,
+                      named_project AS ab_named, generic_name AS ab_generic
                FROM analytics_buildings) AS ab ON ab.ab_id = s2.building_id
     LEFT JOIN (SELECT project_key AS bp_key, project_name AS bp_name, scope_kind AS bp_kind,
                       master_name AS bp_master
@@ -1092,7 +1127,7 @@ SELECT x.sale_key AS sale_key, x.transaction_date AS transaction_date,
        {_RAW_SCOPE.format(p="p", x="x")} AS raw_scope,
        {_RAW_KIND.format(p="p", x="x")} AS raw_kind,
        x.building_name AS h_building, x.area_name AS h_community,
-       p.master_project AS h_master
+       x.project_name AS h_dxbi_project, p.master_project AS h_master
 FROM (
     SELECT * FROM (
         SELECT *, if(
@@ -1152,7 +1187,8 @@ SELECT x.contract_key AS contract_key, x.lease_start AS lease_start, x.lease_end
        -- A lease without its building takes the one its unit's DXBI sale names.
        if(x.building_name != '', x.building_name,
           if(p.building_source = 'dxbi_sale', p.building_name, '')) AS h_building,
-       x.area_name AS h_community, p.master_project AS h_master
+       x.area_name AS h_community, x.project_name AS h_dxbi_project,
+       p.master_project AS h_master
 FROM (
     SELECT *, {_SAME_LEASE} AS same_lease
     FROM dxbi_rental_events FINAL

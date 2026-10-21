@@ -143,12 +143,38 @@ then swap records.
 | Buildings with a register count | 4,075 | 4,183 |
 | DXBI sales / leases paired with DLD | 964,280 / 1,418,877 | 964,401 / 1,418,882 |
 
-Re-filed records: `~/vv/analytics-hierarchy-audit-2026-10-21/refiled_by_building.csv`. Worth a
-look: "Majan" (a community name used as a building) re-files 185 records to Posh Lifestyles;
-"Alwan Residence 1" re-files 139 to Axis Residences 6.
+Second pass, same day (user: "do all the fixes, check the web where they are the same or
+different"). The 16,656 records whose building was under 80% agreement were three cases:
 
-The full `scripts/build_dxbi_profiles.py` run hit the 9 GB limit at `analytics_buildings` right
-after the profiles; `--only analytics_hierarchy` alone passes (about 8 minutes).
+- **A project named like the building** is its project, whatever the share (Spring Oasis, 61%
+  It Plaza pairings; Dubai Jewel Tower vs Silver Park Residency in Warsan Fourth). Web: Spring
+  Oasis is a residential tower, IT Plaza an office building; Jewel Tower is in Internet City.
+- **Sister phases of one master community** re-file at >= 60% (Damac Hills 2 clusters,
+  International City clusters). Where a name splits below 60% between sisters it is one
+  building per project: DLD's register has Capria East buildings 1-9 (plot 527) and Capria
+  West buildings 1-12 (plot 528), so "Capria 5" is two buildings.
+- **A project in another master community** (a price-and-date pairing across the city:
+  Manchester Tower to Azizi Mirage 1) re-files at >= 50%.
+- **Generic names** ("Tower A", "Building 2") take DXBI's own project as part of the building:
+  DXBI files every "Tower A" sale under Club Drive, Address Residences, Golf Horizon, Damac
+  Towers by Paramount, etc. "G-24" is a named building, not a generic one.
+- **One development DLD registers as two projects** merge (`project_aliases.csv`, with the web
+  evidence): Palm Central Private Residences (Frond M + Frond N; Nakheel: one development
+  between the fronds), Bellagio by Sunrise (+ Bellavion by Sunrise; Sunrise Capital: two blocks,
+  255 units).
+
+| | After first pass | After second pass |
+|---|---:|---:|
+| Records re-filed to their building's project | 14,196 | 30,370 (8,254 sales, 22,116 leases) |
+| Records in another project than their building's | 16,656 | 40 (38 in buildings with < 10 records, 2 sister at 50-60%) |
+| Projects / buildings with a register count | 3,543 / 4,183 | 3,550 / 4,204 |
+
+The building steps are now computed once into work tables (`analytics_first_ids__work`,
+`analytics_record_ids__work`, `analytics_dld_votes__work`, `analytics_building_merge__work`);
+inlined as CTEs they recomputed the chain several times, outgrew 9 GB and took 8-12 minutes.
+The hierarchy build now takes 89 seconds.
+
+Re-filed records: `~/vv/analytics-hierarchy-audit-2026-10-21/refiled_by_building.csv`.
 
 ### 5. Not changed (waiting for review)
 
