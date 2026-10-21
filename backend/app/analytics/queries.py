@@ -5,26 +5,40 @@ from app.analytics.models import TrendInterval
 from app.clickhouse.client import query
 from app.market.location_search import location_keyword_clause
 from app.market.scope import MARKET_FILTERS as MARKET_FILTERS
-from app.market.scope import ProjectFilterType, ProjectScopeType, project_filter_clause
+from app.market.scope import ProjectFilterType, ProjectScopeType
+
+_KEY = "lowerUTF8(replaceRegexpAll({e}, '[^A-Za-z0-9]', ''))"
+_PARAM_KEY = _KEY.format(e="{project_name:String}")
+# A link may carry any spelling the hierarchy has seen ("MERANO TOWER", "Silicon Oasis"): it
+# resolves to the canonical project or master; an unseen spelling matches its own key.
+PROJECT_KEYS = f"""(
+    SELECT project_key FROM analytics_project_keys WHERE raw_key = {_PARAM_KEY}
+    UNION ALL
+    SELECT {_KEY.format(e="replaceRegexpOne({project_name:String}, '(?i)\\s*\\(all (buildings|phases)\\)\\s*$', '')")})"""
+MASTER_KEYS = f"""(
+    SELECT master_key FROM analytics_master_keys WHERE raw_key = {_PARAM_KEY}
+    UNION ALL SELECT {_PARAM_KEY})"""
+
+
+# The columns every scope filter reads.
+_SCOPE_COLUMNS = "project_name_en, master_project_en, master_key_en, scope_key, building_id"
+# The market endpoints' master filter (any spelling of the master), on the DXBI sources.
+MASTER_FILTER = "master_key_en IN " + MASTER_KEYS.replace(
+    "{project_name:String}", "{master_project:String}"
+)
 
 
 def _project_filter(filter_type: ProjectScopeType) -> str:
-    # DXBI names retain provider casing; typed/cached links must select the same scope.
-    return (
-        project_filter_clause(filter_type)
-        .replace(
-            "project_name_en = {project_name:String}",
-            "lowerUTF8(project_name_en) = lowerUTF8({project_name:String})",
-        )
-        .replace(
-            "master_project_en = {project_name:String}",
-            "lowerUTF8(master_project_en) = lowerUTF8({project_name:String})",
-        )
-        .replace(
-            "project_name_en LIKE {project_name:String}",
-            "lowerUTF8(project_name_en) LIKE lowerUTF8({project_name:String})",
-        )
-    )
+    """The scope's records: a project, a master, a building (its id) or the whole market."""
+    if filter_type == "market":
+        return "1 = 1"
+    if filter_type == "master":
+        return f"master_key_en IN {MASTER_KEYS}"
+    if filter_type == "virtual_master":
+        return "lowerUTF8(project_name_en) LIKE lowerUTF8({project_name:String})"
+    if filter_type == "building":
+        return "building_id = {project_name:String}"
+    return f"scope_key IN {PROJECT_KEYS}"
 
 
 # Recent windows (90 days, 12 months) end on the newest recorded sale, the same day for every
@@ -40,93 +54,155 @@ Bounds = tuple[Optional[float], Optional[float]]
 
 
 def search_projects(keyword_clause: str | None = None) -> str:
-    """Projects and master projects whose names (with their area) match, then buildings.
+    """Projects and masters whose names (with their area and master) match, then buildings.
 
-    A building opens the project its records are in, so it is listed with that project's name
-    (``building`` set). Each kind returns up to the limit; the service keeps room for buildings.
+    Read from Holocron's hierarchy tables (one row per project, master and building), so a
+    keystroke scans thousands of names, not millions of records. A building is its own scope
+    (``filter_type`` "building", ``building_id``) and names its project and master. A project's
+    only building with the project's own name is the project, not listed twice. Each kind returns
+    up to the limit; the service keeps room for buildings.
     """
-    search_clause = keyword_clause or "lowerUTF8(name) LIKE {search_pattern:String}"
-    records = f"""(
-                    SELECT project_name_en, master_project_en, area_name_en, scope_kind,
-                           building_name
-                    FROM {SALES_SOURCE}
-                    UNION ALL
-                    SELECT project_name_en, master_project_en, area_name_en, scope_kind,
-                           building_name
-                    FROM {RENTALS_SOURCE}
-                )"""
+    search_clause = keyword_clause or "lowerUTF8(search_location) LIKE {search_pattern:String}"
     order = """lowerUTF8(name) = replaceAll({search_pattern:String}, '%', '') DESC,
                  startsWith(lowerUTF8(name), replaceAll({search_pattern:String}, '%', '')) DESC"""
     return f"""
         SELECT * FROM (
-            SELECT name, filter_type,
-                   if(uniqExact(kind) = 1, any(kind), 'Location') AS scope_kind, '' AS building
+            SELECT name, filter_type, scope_kind, '' AS building, '' AS building_id,
+                   project, master
             FROM (
-                SELECT scope.1 AS name, scope.2 AS filter_type, scope.3 AS kind,
-                       scope.4 AS search_location
-                FROM (
-                    SELECT arrayJoin([
-                        (project_name_en, 'project', scope_kind,
-                         concat(project_name_en, ' ', area_name_en)),
-                        (master_project_en, 'master', 'Master', master_project_en)
-                    ]) AS scope
-                    FROM {records}
-                )
+                SELECT project_name AS name, 'project' AS filter_type, scope_kind,
+                       '' AS project, master_name AS master, sales + leases AS records,
+                       concat(project_name, ' ', area_name, ' ', master_name) AS search_location
+                FROM analytics_projects
+                UNION ALL
+                SELECT master_name, 'master', 'Master', '', '', sum(sales + leases), master_name
+                FROM analytics_projects WHERE master_name != '' GROUP BY master_name
             )
             WHERE name != '' AND {search_clause}
-            GROUP BY name, filter_type
-            ORDER BY {order}, name, filter_type
+            ORDER BY {order}, records DESC, name
             LIMIT {{limit:Int32}}
         )
         UNION ALL
         SELECT * FROM (
-            SELECT name, 'project' AS filter_type, 'Building' AS scope_kind, building
+            SELECT building_name AS name, 'building' AS filter_type, 'Building' AS scope_kind,
+                   building_name AS building, building_id, project_name AS project,
+                   master_name AS master
             FROM (
-                -- The project most of the building's records are in (over all of them: a
-                -- stray pairing must not outvote the building's own project).
-                SELECT building_name AS building, argMax(project_name_en, n) AS name,
-                       any(search_location) AS search_location, max(n) AS in_project,
-                       sum(n) AS records
-                FROM (
-                    SELECT building_name, project_name_en, count() AS n,
-                           any(concat(building_name, ' ', area_name_en)) AS search_location
-                    FROM {records}
-                    WHERE building_name != '' AND project_name_en != ''
-                    GROUP BY building_name, project_name_en
-                )
-                GROUP BY building
+                SELECT b.*, concat(b.building_name, ' ', b.project_name, ' ', b.community)
+                           AS search_location,
+                       count() OVER (PARTITION BY b.project_key) AS project_buildings
+                FROM analytics_buildings AS b
             )
-            -- A building that is its project's namesake is listed as the project already; one
-            -- or two records (a stray pairing) are no evidence of the building's project.
-            WHERE lowerUTF8(building) != lowerUTF8(name)
-              AND in_project >= 3 AND in_project * 2 >= records
-              AND {search_clause.replace("lowerUTF8(name)", "lowerUTF8(building)")}
-            ORDER BY {order.replace("lowerUTF8(name)", "lowerUTF8(building)")}, building
+            WHERE records >= 3 AND project_name != ''
+              AND NOT (project_buildings = 1
+                       AND {_KEY.format(e="building_name")} = {_KEY.format(e="project_name")})
+              AND {search_clause}
+            ORDER BY {order.replace("lowerUTF8(name)", "lowerUTF8(building_name)")},
+                     records DESC, building_name
             LIMIT {{limit:Int32}}
         )
     """
 
 
 def search_sub_projects(filter_type: ProjectFilterType = "master") -> str:
+    """A master's projects (or a virtual master's), most sales first, counted over the records
+    the summaries read (so a project's count here is its page's)."""
     if filter_type == "virtual_master":
-        where = "project_name_en LIKE {master_project:String}"
+        where = "lowerUTF8(scope_name) LIKE lowerUTF8({master_project:String})"
     else:
-        where = """(master_project_en = {master_project:String}
-            OR (lower(project_name_en) LIKE concat(lower({master_project:String}), ' - %')
-                AND (master_project_en = '' OR master_project_en IS NULL)))"""
-    return f"""
-        SELECT project_name_en, countIf(is_sale) AS transaction_count
-        FROM (
-            SELECT project_name_en, master_project_en, 1 AS is_sale FROM {SALES_SOURCE}
-            UNION ALL
-            SELECT project_name_en, master_project_en, 0 AS is_sale FROM {RENTALS_SOURCE}
+        where = "master_key IN " + MASTER_KEYS.replace(
+            "{project_name:String}", "{master_project:String}"
         )
-        WHERE {where}
-          AND project_name_en IS NOT NULL
-          AND project_name_en <> ''
-        GROUP BY project_name_en
-        ORDER BY transaction_count DESC
+    return f"""
+        SELECT any(scope_name) AS project_name_en, countIf(is_sale) AS transaction_count
+        FROM (
+            SELECT scope_key, scope_name, 1 AS is_sale FROM dxbi_sales_listed WHERE {where}
+            UNION ALL
+            SELECT scope_key, scope_name, 0 FROM dxbi_leases_listed WHERE {where}
+        )
+        WHERE scope_key != ''
+        GROUP BY scope_key
+        ORDER BY transaction_count DESC, count() DESC, project_name_en
     """
+
+
+# A scope's place in the hierarchy and its registered units (analytics_unit_stock): a project,
+# a building, or a master's rollup over its projects.
+_STOCK = """
+    s.units AS units, s.units_source AS units_source, s.units_at_least AS units_at_least,
+    s.units_traded AS units_traded, s.buildings AS stock_buildings,
+    s.mix_rooms AS mix_rooms, s.mix_units AS mix_units, s.mix_median_sqft AS mix_median_sqft"""
+PROJECT_HIERARCHY = f"""
+    SELECT p.project_key AS project_key, p.project_name AS name, p.scope_kind AS scope_kind,
+           p.master_name AS master_name, p.area_name AS area_name, '' AS project_name,
+           '' AS building_id, {_STOCK}
+    FROM analytics_projects AS p
+    LEFT JOIN analytics_unit_stock AS s
+        ON s.scope_level = 'project' AND s.scope_id = p.project_key
+    WHERE p.project_key IN {PROJECT_KEYS}
+    ORDER BY p.sales + p.leases DESC
+    LIMIT 1
+"""
+BUILDING_HIERARCHY = f"""
+    SELECT b.project_key AS project_key, b.building_name AS name, 'Building' AS scope_kind,
+           b.master_name AS master_name, b.community AS area_name,
+           b.project_name AS project_name, b.building_id AS building_id, {_STOCK}
+    FROM analytics_buildings AS b
+    LEFT JOIN analytics_unit_stock AS s
+        ON s.scope_level = 'building' AND s.scope_id = b.building_id
+    WHERE b.building_id = {{project_name:String}}
+"""
+# A master: its projects' registered units added up (a count that is only the units traded is
+# not registered stock and is left out), and how many of its projects have a register count.
+MASTER_ROLLUP = f"""
+    SELECT argMax(p.master_name, p.sales + p.leases) AS name, count() AS projects,
+           countIf(s.units > 0 AND NOT s.units_at_least) AS projects_with_units,
+           sumIf(s.units, NOT s.units_at_least) AS units, sum(s.buildings) AS buildings,
+           sum(s.units_traded) AS units_traded
+    FROM analytics_projects AS p
+    LEFT JOIN analytics_unit_stock AS s
+        ON s.scope_level = 'project' AND s.scope_id = p.project_key
+    WHERE p.master_key IN {MASTER_KEYS}
+"""
+# A project's buildings; sales and leases counted over the records a building's page reads.
+PROJECT_BUILDINGS = f"""
+    WITH buildings AS (
+        SELECT building_id FROM analytics_buildings
+        WHERE project_key IN {PROJECT_KEYS}
+    )
+    SELECT b.building_id AS building_id, b.building_name AS name, c.sales AS sales,
+           c.leases AS leases, s.units AS units, s.units_source AS units_source,
+           s.units_at_least AS units_at_least
+    FROM analytics_buildings AS b
+    INNER JOIN (
+        SELECT building_id, countIf(is_sale) AS sales, countIf(NOT is_sale) AS leases
+        FROM (
+            SELECT building_id, 1 AS is_sale FROM dxbi_sales_listed
+            WHERE building_id IN (SELECT building_id FROM buildings)
+            UNION ALL
+            SELECT building_id, 0 FROM dxbi_leases_listed
+            WHERE building_id IN (SELECT building_id FROM buildings)
+        )
+        GROUP BY building_id
+    ) AS c ON c.building_id = b.building_id
+    LEFT JOIN analytics_unit_stock AS s
+        ON s.scope_level = 'building' AND s.scope_id = b.building_id
+    ORDER BY c.sales + c.leases DESC, b.building_name
+"""
+
+
+async def fetch_scope_hierarchy(parameters: dict, filter_type: ProjectScopeType) -> list[dict]:
+    if filter_type == "building":
+        return await query(BUILDING_HIERARCHY, parameters)
+    if filter_type == "project":
+        return await query(PROJECT_HIERARCHY, parameters)
+    if filter_type == "master":
+        return await query(MASTER_ROLLUP, parameters)
+    return []
+
+
+async def fetch_project_buildings(parameters: dict) -> list[dict]:
+    return await query(PROJECT_BUILDINGS, parameters)
 
 
 def project_sales_summary(
@@ -505,9 +581,9 @@ def project_meta(filter_type: ProjectScopeType = "project") -> str:
                if(uniqExactIf(area_name_en, area_name_en != '') = 1,
                   anyIf(area_name_en, area_name_en != ''), '') AS area_name_en
         FROM (
-            SELECT project_name_en, master_project_en, area_name_en FROM {SALES_SOURCE}
+            SELECT {_SCOPE_COLUMNS}, area_name_en FROM {SALES_SOURCE}
             UNION ALL
-            SELECT project_name_en, master_project_en, area_name_en FROM {RENTALS_SOURCE}
+            SELECT {_SCOPE_COLUMNS}, area_name_en FROM {RENTALS_SOURCE}
         ) WHERE {_project_filter(filter_type)}
     """
 
@@ -757,12 +833,12 @@ def project_usage_counts(filter_type: ProjectScopeType = "project") -> str:
     return f"""
         SELECT property_usage_en AS usage, countIf(is_sale) AS sales, countIf(NOT is_sale) AS leases
         FROM (
-            SELECT property_usage_en, 1 AS is_sale, project_name_en, master_project_en
+            SELECT property_usage_en, 1 AS is_sale, {_SCOPE_COLUMNS}
             FROM {SALES_SOURCE}
             WHERE trans_group_en = 'Sales' AND property_type NOT IN ('Plot', 'Building', '')
               AND actual_worth > 0
             UNION ALL
-            SELECT property_usage_en, 0, project_name_en, master_project_en
+            SELECT property_usage_en, 0, {_SCOPE_COLUMNS}
             FROM {RENTALS_SOURCE}
             WHERE annual_amount > 0
         )
@@ -1048,7 +1124,7 @@ def sales_summary(
         where_clauses.append("property_usage_en = {property_usage:String}")
 
     if master_project is not None:
-        where_clauses.append("master_project_en = {master_project:String}")
+        where_clauses.append(MASTER_FILTER)
     if property_type is not None:
         where_clauses.append("property_type = {property_type:String}")
     if property_sub_type is not None:
@@ -1104,6 +1180,7 @@ def price_trends(
     Returns: period, transaction_count, avg_price, avg_price_sqft
     ``market`` is a MARKET_FILTERS entry (trusted, not user input).
     """
+    combined_layer = source is not None
     source = source or SALES_SOURCE
     # SAFE: interval is controlled by application, not user input
     if interval not in ("day", "week", "month"):
@@ -1123,7 +1200,10 @@ def price_trends(
         where_clauses.append("property_usage_en = {property_usage:String}")
 
     if master_project is not None:
-        where_clauses.append("master_project_en = {master_project:String}")
+        where_clauses.append(
+            # The combined layer (chat) has no master key: its master is matched by name.
+            "master_project_en = {master_project:String}" if combined_layer else MASTER_FILTER
+        )
     if property_type is not None:
         where_clauses.append("property_type = {property_type:String}")
     if area_name is not None:
@@ -1166,7 +1246,7 @@ def rentals_summary(
     ]
 
     if master_project is not None:
-        where_clauses.append("master_project_en = {master_project:String}")
+        where_clauses.append(MASTER_FILTER)
     if property_type is not None:
         where_clauses.append("property_type = {property_type:String}")
     if area_name is not None:

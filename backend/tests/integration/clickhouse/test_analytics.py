@@ -3,27 +3,30 @@ import pytest
 from app.analytics.queries import project_sales_summary
 from app.clickhouse.client import query
 
+# The scope keys the Analytics filters read, as ALIAS columns of a projection table with project
+# and master names: its own names are its keys.
+PROJECTION_SCOPE_COLUMNS = """,
+    scope_key String ALIAS lowerUTF8(replaceRegexpAll(project_name_en, '[^A-Za-z0-9]', '')),
+    master_key_en String ALIAS lowerUTF8(replaceRegexpAll(master_project_en, '[^A-Za-z0-9]', '')),
+    building_id String ALIAS ''"""
+
 
 @pytest.fixture(autouse=True)
-def aggregate_projection_fixture(monkeypatch):
+def aggregate_projection_fixture(analytics_projection_tables):
     """Test aggregation semantics on small projection fixtures.
 
     Real DXBI source selection is exercised separately in test_analytics_dxbi.py.
     """
-    from app.analytics import queries
-
-    monkeypatch.setattr(queries, "SALES_SOURCE", "ch_transactions")
-    monkeypatch.setattr(queries, "RENTALS_SOURCE", "ch_rent_contracts")
 
 
 async def test_sales_summary_applies_residential_and_project_scope_in_clickhouse(warehouse):
-    await warehouse.command("""
+    await warehouse.command(f"""
         CREATE TABLE ch_transactions (
             project_name_en String, master_project_en String,
             trans_group_en String, property_type_en String,
             property_usage_en String, actual_worth Decimal(18, 2),
             meter_sale_price Decimal(18, 2), reg_type_en String,
-            property_type String DEFAULT 'Apartment'
+            property_type String DEFAULT 'Apartment'{PROJECTION_SCOPE_COLUMNS}
         ) ENGINE = MergeTree ORDER BY project_name_en
     """)
     await warehouse.insert(

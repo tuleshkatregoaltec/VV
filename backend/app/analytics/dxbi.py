@@ -33,15 +33,12 @@ _ROOMS = (
 _BEDROOM_LABEL = (
     f"if(bedrooms != '', {_BEDROOMS}, {_BEDROOMS.replace('bedrooms', 'profile_bedrooms')})"
 )
-_SCOPE = """multiIf(
-    profile_project_source = '', if(project_name != '', project_name, building_name),
-    profile_project_source = 'place_name', '', profile_project)"""
-_SCOPE_KIND = """multiIf(
-    scope = '', '',
-    profile_project_source = 'own_building'
-        OR (profile_project_source = '' AND project_name = ''), 'Building',
-    'Project')"""
-_MASTER = f"if(profile_master != '', profile_master, {_LOCATION})"
+# The scope, its kind and its master come from Holocron's hierarchy (analytics_projects,
+# holocron.market.analytics_hierarchy): one spelling per project, one master per project, and a
+# building id per DXBI building. A record with no master in it takes its DXBI community.
+_NAME_KEY = "lowerUTF8(replaceRegexpAll({e}, '[^A-Za-z0-9]', ''))"
+_MASTER = f"if(master_name != '', master_name, {_LOCATION})"
+_MASTER_KEY = f"if(master_key != '', master_key, {_NAME_KEY.format(e=_LOCATION)})"
 # DLD's area; without a profile, DXBI's community.
 _AREA = f"if(profile_area != '', profile_area, {_LOCATION})"
 
@@ -61,8 +58,9 @@ SALES_SOURCE = f"""(
                    'Off-Plan Properties',
                    market_status = 'Ready' OR (market_status = '' AND profile_status = 'Ready'),
                    'Existing Properties', '') AS reg_type_en,
-           {_SCOPE} AS scope, {_SCOPE_KIND} AS scope_kind, building_name,
-           scope AS project_name_en, {_MASTER} AS master_project_en,
+           scope_name AS scope, scope_kind, scope_key, building_name, building_id,
+           if(building_display != '', building_display, building_name) AS building_label,
+           scope AS project_name_en, {_MASTER} AS master_project_en, {_MASTER_KEY} AS master_key_en,
            {_LOCATION} AS location_name, {_AREA} AS area_name_en
     FROM dxbi_sales_listed
 )"""
@@ -77,8 +75,9 @@ RENTALS_SOURCE = f"""(
            actual_area AS size_sqm,
            property_type, property_type AS property_type_en,
            {_USAGE} AS property_usage_en, {_BEDROOM_LABEL} AS bedroom_label, {_ROOMS} AS rooms_en,
-           {_SCOPE} AS scope, {_SCOPE_KIND} AS scope_kind, building_name,
-           scope AS project_name_en, {_MASTER} AS master_project_en,
+           scope_name AS scope, scope_kind, scope_key, building_name, building_id,
+           if(building_display != '', building_display, building_name) AS building_label,
+           scope AS project_name_en, {_MASTER} AS master_project_en, {_MASTER_KEY} AS master_key_en,
            {_LOCATION} AS location_name, {_AREA} AS area_name_en
     FROM dxbi_leases_listed
 )"""

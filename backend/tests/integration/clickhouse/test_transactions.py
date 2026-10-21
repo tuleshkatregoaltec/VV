@@ -117,18 +117,34 @@ def lease(key: str, **values) -> list:
     return [row[column] for column in RENTAL_COLUMNS]
 
 
+# The hierarchy columns as Holocron fills them: the record's own project, its master (DXBI's
+# community where DLD gives none), a building per DXBI building name in its community.
+_MASTER = "if(p.master_project != '', p.master_project, x.area_name)"
+_SCOPE = """multiIf(
+    p.project_source = '', if(x.project_name != '', x.project_name, x.building_name),
+    p.project_source = 'place_name', '', p.project_name)"""
+_KEY = "lowerUTF8(replaceRegexpAll({e}, '[^A-Za-z0-9]', ''))"
+_HIERARCHY = f"""
+    {_KEY.format(e=_SCOPE)}, {_SCOPE},
+    if({_SCOPE} = '', '', if(p.project_source = 'own_building'
+                             OR (p.project_source = '' AND x.project_name = ''),
+                             'Building', 'Project')),
+    {_KEY.format(e=_MASTER)}, {_MASTER},
+    if(x.building_name != '', concat({_KEY.format(e="x.building_name")}, '|',
+                                     {_KEY.format(e="x.area_name")}), ''),
+    x.building_name, 0"""
 _LISTED_FILLS = {
-    "dxbi_sales_listed": """
+    "dxbi_sales_listed": f"""
         INSERT INTO dxbi_sales_listed
         SELECT x.sale_key, x.transaction_date, x.unit_number, x.building_name, x.project_name,
                x.area_name, x.property_type, x.bedrooms, x.market_status, x.size_sqft,
                x.sale_amount_aed, if(x.price_per_sqft_aed > 0, x.price_per_sqft_aed, NULL),
                p.area_name, p.master_project, p.project_name, p.project_source, p.bedrooms,
-               p.completion_status, p.size_sqft, now64(3)
+               p.completion_status, p.size_sqft, {_HIERARCHY}, now64(3)
         FROM (SELECT * FROM dxbi_sales_unit_events FINAL ORDER BY sale_key, loaded_at DESC
               LIMIT 1 BY sale_key) AS x
         LEFT JOIN dxbi_sale_profile AS p ON p.sale_key = x.sale_key""",
-    "dxbi_leases_listed": """
+    "dxbi_leases_listed": f"""
         INSERT INTO dxbi_leases_listed
         SELECT x.contract_key, x.lease_start, x.lease_end, x.unit_number, x.building_name,
                x.project_name, x.area_name,
@@ -136,9 +152,42 @@ _LISTED_FILLS = {
                x.bedrooms, x.size_sqft,
                x.annual_rent_aed, x.contract_amount_aed, x.contract_term_months,
                x.contract_state, p.area_name, p.master_project, p.project_name,
-               p.project_source, p.bedrooms, p.size_sqft, now64(3)
+               p.project_source, p.bedrooms, p.size_sqft, {_HIERARCHY}, now64(3)
         FROM dxbi_rental_events AS x FINAL
         LEFT JOIN dxbi_rental_profile AS p ON p.contract_key = x.contract_key""",
+}
+
+
+_RECORDS = """(
+    SELECT scope_key, scope_name, scope_kind, master_key, master_name, profile_area,
+           building_id, building_display, area_name, 1 AS is_sale FROM dxbi_sales_listed
+    UNION ALL
+    SELECT scope_key, scope_name, scope_kind, master_key, master_name, profile_area,
+           building_id, building_display, area_name, 0 FROM dxbi_leases_listed
+)"""
+_HIERARCHY_FILLS = {
+    "analytics_projects": f"""
+        INSERT INTO analytics_projects
+        SELECT scope_key, any(scope_name), any(scope_kind), any(master_key), any(master_name),
+               'records', any(profile_area), countIf(is_sale), countIf(NOT is_sale), [], now64(3)
+        FROM {_RECORDS} WHERE scope_key != '' GROUP BY scope_key""",
+    "analytics_project_keys": f"""
+        INSERT INTO analytics_project_keys
+        SELECT DISTINCT scope_key, scope_key, now64(3) FROM {_RECORDS} WHERE scope_key != ''""",
+    "analytics_master_keys": f"""
+        INSERT INTO analytics_master_keys
+        SELECT DISTINCT master_key, master_key, master_name, now64(3) FROM {_RECORDS}
+        WHERE master_key != ''""",
+    "analytics_buildings": f"""
+        INSERT INTO analytics_buildings
+        SELECT building_id, any(building_display), any(area_name), argMax(scope_key, n),
+               argMax(scope_name, n), argMax(master_key, n), argMax(master_name, n), 1,
+               sum(n), sum(sales), sum(n) - sum(sales), '', [], now64(3)
+        FROM (SELECT building_id, building_display, area_name, scope_key, scope_name, master_key,
+                     master_name, count() AS n, countIf(is_sale) AS sales
+              FROM {_RECORDS} WHERE building_id != ''
+              GROUP BY ALL)
+        GROUP BY building_id""",
 }
 
 
@@ -157,6 +206,12 @@ async def dxbi(warehouse, install_serving):
             "dxbi_sales_listed",
             "dxbi_leases_listed",
             "dxbi_heatmap_buildings_bronze",
+            "analytics_project_keys",
+            "analytics_master_keys",
+            "analytics_projects",
+            "analytics_building_keys",
+            "analytics_buildings",
+            "analytics_unit_stock",
         ),
         views=(),
     )
@@ -180,6 +235,11 @@ async def dxbi(warehouse, install_serving):
         # Holocron's listed records (holocron.market.dxbi_profile), each sale and lease once
         # with its profile; the identity rules are Holocron's and tested there.
         for table, statement in _LISTED_FILLS.items():
+            await warehouse.command(f"TRUNCATE TABLE {table}")
+            await warehouse.command(statement)
+        # Holocron's hierarchy (holocron.market.analytics_hierarchy) over the same records:
+        # each spelling its own project, each building name in its community one building.
+        for table, statement in _HIERARCHY_FILLS.items():
             await warehouse.command(f"TRUNCATE TABLE {table}")
             await warehouse.command(statement)
 

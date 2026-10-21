@@ -14,13 +14,13 @@ from app.analytics.metrics import (
     _quarter_start,
     _room_sort_key,
     _trend_interval_for_days,
-    _unique_normalized_labels,
     build_configuration_rows,
 )
 from app.analytics.models import (
     AnalyticsResponse,
     AnalyticsSummary,
     AnalyticsUnitComposition,
+    BuildingStock,
     MarketTrendPoint,
     MarketTrendResponse,
     PriceDistributionBucket,
@@ -82,8 +82,9 @@ def _as_date(value: object) -> Optional[date]:
 async def _fill_project_meta(
     registered: Optional[ProjectMeta], project_name: str
 ) -> Optional[ProjectMeta]:
-    """A project's developer, handover, completion, units and buildings from DXBInteract's
-    building list, each named as its source (the DXBI transactions hold none of them).
+    """A project's or building's developer, handover and completion from DXBInteract's building
+    list, each named as its source (the DXBI transactions hold none of them). Units and buildings
+    come from Holocron's unit stock (``_apply_stock``).
     """
     project = registered or ProjectMeta(project_name=project_name)
     sources = project.field_sources
@@ -95,8 +96,6 @@ async def _fill_project_meta(
         "percent_completed": float(row["percent_completed"])
         if row.get("percent_completed") is not None
         else None,
-        "no_of_units": int(row["no_of_units"]) if row.get("no_of_units") else None,
-        "no_of_buildings": int(row["no_of_buildings"]) if row.get("no_of_buildings") else None,
         "area_name": row.get("area_name_en") or None,
     }
     for name, value in found.items():
@@ -104,6 +103,50 @@ async def _fill_project_meta(
             setattr(project, name, value)
             sources[name] = "dxbi_buildings"
     return project if registered is not None or sources else None
+
+
+def _apply_stock(project: ProjectMeta, row: dict) -> None:
+    """A project's or building's registered units and buildings from Holocron's unit stock."""
+    if row.get("units"):
+        project.no_of_units = int(row["units"])
+        project.units_source = row.get("units_source") or None
+        project.units_at_least = bool(row.get("units_at_least"))
+        project.field_sources["no_of_units"] = project.units_source or ""
+    if row.get("units_traded"):
+        project.units_traded = int(row["units_traded"])
+    if project.scope_level == "project" and row.get("stock_buildings"):
+        project.no_of_buildings = int(row["stock_buildings"])
+        project.field_sources["no_of_buildings"] = "dxbi_records"
+
+
+def _apply_master_rollup(project: ProjectMeta, row: dict) -> None:
+    """A master: its projects' registered units added up, and how many projects have them."""
+    if not row:
+        return
+    project.no_of_projects = int(row.get("projects") or 0) or None
+    project.projects_with_units = int(row.get("projects_with_units") or 0)
+    if row.get("units"):
+        project.no_of_units = int(row["units"])
+        project.units_source = "projects_rollup"
+        project.field_sources["no_of_units"] = "projects_rollup"
+    if row.get("buildings"):
+        project.no_of_buildings = int(row["buildings"])
+    if row.get("units_traded"):
+        project.units_traded = int(row["units_traded"])
+
+
+def _unit_mix_rows(row: dict) -> list[dict]:
+    """The stock's unit mix as unit-composition rows (rooms, units, median size)."""
+    return [
+        {"rooms_en": rooms, "unit_count": int(units), "median_unit_size_sqft": float(sqft or 0)}
+        for rooms, units, sqft in zip(
+            row.get("mix_rooms") or [],
+            row.get("mix_units") or [],
+            row.get("mix_median_sqft") or [],
+            strict=False,
+        )
+        if rooms != "Other"
+    ]
 
 
 # Short forms people type for places whose names do not start with them.
@@ -121,8 +164,9 @@ def _expand_abbreviations(search: str) -> str:
 async def get_project_search(search: str, limit: int = 50) -> ProjectSearchResponse:
     """Matching projects and master projects for the selector, then matching buildings.
 
-    A building opens the project its records are in. Buildings keep up to half of the list, so
-    a search that matches many project names still shows its buildings.
+    A building is its own scope (``filter_type`` "building") and names its project and master.
+    Buildings keep up to half of the list, so a search that matches many project names still
+    shows its buildings.
     """
     terms = [search]
     expanded = _expand_abbreviations(search)
@@ -145,7 +189,7 @@ async def get_project_search(search: str, limit: int = 50) -> ProjectSearchRespo
     seen: set[tuple[str, str, str]] = set()
     rows = []
     for row in (row for result in results for row in result):
-        key = (row["name"], row["filter_type"], row.get("building") or "")
+        key = (row["name"], row["filter_type"], row.get("building_id") or "")
         if key not in seen:
             seen.add(key)
             rows.append(row)
@@ -155,12 +199,15 @@ async def get_project_search(search: str, limit: int = 50) -> ProjectSearchRespo
             filter_type=r["filter_type"],
             scope_kind=r.get("scope_kind") or "Location",
             building=r.get("building") or "",
+            building_id=r.get("building_id") or "",
+            project=r.get("project") or "",
+            master=r.get("master") or "",
         )
         for r in rows
     ]
     # An empty search lists scopes only.
-    buildings = [item for item in items if item.building] if search.strip() else []
-    scopes = [item for item in items if not item.building]
+    buildings = [item for item in items if item.filter_type == "building"] if search.strip() else []
+    scopes = [item for item in items if item.filter_type != "building"]
     shown = max(limit - len(buildings), limit - limit // 2)
     return ProjectSearchResponse(projects=(scopes[:shown] + buildings)[:limit])
 
@@ -226,21 +273,14 @@ async def get_project_summary(
     usage, usage_counts = await _resolve_usage(params, filter_type, usage)
     params = {**params, "usage": usage}
 
-    if filter_type == "market":
-        meta_task = asyncio.sleep(0, result=[])
-    else:
-        # meta for master/virtual_master uses the like_name for virtual (LIKE) or plain name
-        meta_params = (
-            {"project_name": like_name}
-            if filter_type == "virtual_master"
-            else {"project_name": project_name}
-        )
-        meta_task = queries.fetch_project_meta(meta_params, filter_type)
-
-    if filter_type in ("master", "virtual_master"):
-        developer_task = queries.fetch_project_developers_by_scope(meta_params, filter_type)
-    else:
-        developer_task = asyncio.sleep(0, result=[])
+    # The scope's place in the hierarchy and its registered units (Holocron's unit stock).
+    scope_params = {} if filter_type == "market" else {"project_name": like_name}
+    meta_task = queries.fetch_scope_hierarchy(scope_params, filter_type)
+    buildings_task = (
+        queries.fetch_project_buildings(scope_params)
+        if filter_type == "project"
+        else asyncio.sleep(0, result=[])
+    )
 
     rent_rooms_params = params
 
@@ -251,7 +291,7 @@ async def get_project_summary(
         rent_sum_rows,
         rent_rooms_rows,
         meta_rows,
-        developer_rows,
+        building_rows,
     ) = await asyncio.gather(
         queries.fetch_project_sales_bundle(params, filter_type),
         queries.fetch_project_sales_by_property_type(params, filter_type),
@@ -259,7 +299,7 @@ async def get_project_summary(
         queries.fetch_project_rentals_summary(params, filter_type),
         queries.fetch_project_rentals_by_rooms(rent_rooms_params, filter_type),
         meta_task,
-        developer_task,
+        buildings_task,
     )
 
     (
@@ -272,56 +312,41 @@ async def get_project_summary(
         config_secondary_rows,
     ) = sales_bundle
 
-    # --- Project metadata ---
-    project: Optional[ProjectMeta] = None
+    # --- Scope metadata ---
+    m = meta_rows[0] if meta_rows else {}
+    project: Optional[ProjectMeta]
     if filter_type == "market":
         project = ProjectMeta(
             project_name=project_name,
+            scope_level="market",
             area_name="Dubai",
             developer_name="All developers",
         )
-    elif meta_rows:
-        m = meta_rows[0]
-        if filter_type in ("master", "virtual_master"):
-            raw_devs = m.get("developer_names") or []
-            developer_names = _unique_normalized_labels(
-                [row.get("developer_name_en") for row in developer_rows]
-            )
-            if not developer_names:
-                developer_names = _unique_normalized_labels(raw_devs) if raw_devs else []
-            top_developer = _normalize_label(m.get("developer_name_en"))
-            if not developer_names and top_developer:
-                developer_names = [top_developer, *developer_names]
-            project = ProjectMeta(
-                project_name=project_name,
-                area_name=m.get("area_name_en") or None,
-                developer_name=developer_names[0] if developer_names else top_developer,
-                developer_names=developer_names,
-                project_status=m.get("project_status") or None,
-                completion_date=_as_date(m.get("completion_date")),
-                percent_completed=float(m["percent_completed"])
-                if m.get("percent_completed") is not None
-                else None,
-                no_of_units=int(m["no_of_units"]) if m.get("no_of_units") is not None else None,
-                no_of_buildings=int(m["no_of_buildings"])
-                if m.get("no_of_buildings") is not None
-                else None,
-            )
-        else:
-            project = ProjectMeta(
-                project_name=m.get("project_name_en", project_name),
-                area_name=m.get("area_name_en") or None,
-                developer_name=_normalize_label(m.get("developer_name_en")),
-                project_status=m.get("project_status") or None,
-                completion_date=_as_date(m.get("completion_date")),
-                percent_completed=float(m["percent_completed"])
-                if m.get("percent_completed") is not None
-                else None,
-                no_of_units=int(m["no_of_units"]) if m.get("no_of_units") is not None else None,
-                no_of_buildings=int(m["no_of_buildings"])
-                if m.get("no_of_buildings") is not None
-                else None,
-            )
+    elif filter_type in ("master", "virtual_master"):
+        project = ProjectMeta(project_name=m.get("name") or project_name, scope_level="master")
+        _apply_master_rollup(project, m)
+    elif filter_type == "building" and m:
+        project = ProjectMeta(
+            project_name=m["name"],
+            scope_level="building",
+            building_id=m.get("building_id") or None,
+            parent_project=m.get("project_name") or None,
+            master_name=m.get("master_name") or None,
+            area_name=m.get("area_name") or None,
+        )
+        project = await _fill_project_meta(project, m["name"])
+        _apply_stock(project, m)
+    elif filter_type == "project":
+        project = ProjectMeta(
+            project_name=m.get("name") or project_name,
+            scope_level="project",
+            master_name=m.get("master_name") or None,
+            area_name=m.get("area_name") or None,
+        )
+        project = await _fill_project_meta(project, project_name)
+        _apply_stock(project, m)
+    else:
+        project = None
 
     # --- Sales summary ---
     # An aggregate over no sales is one row with a zero count and NaN averages (not JSON): a
@@ -411,16 +436,9 @@ async def get_project_summary(
         for row in sales_reg_rows
     ]
 
-    # --- Unit composition ---
-    # DXBI transactions are not a register of units: no unit composition.
-    units_rows: list[dict] = []
-    unit_count_total = 0
-    if filter_type == "project":
-        project = await _fill_project_meta(project, project_name)
-    if filter_type == "market" and project is not None:
-        project.no_of_units = unit_count_total if unit_count_total > 0 else None
-
-    total_units = unit_count_total or 1
+    # --- Unit composition: the registered units by bedrooms (DLD's unit register) ---
+    units_rows = _unit_mix_rows(m) if filter_type in ("project", "building") else []
+    total_units = sum(int(row["unit_count"]) for row in units_rows) or 1
     unit_composition = [
         AnalyticsUnitComposition(
             rooms=room,
@@ -461,6 +479,18 @@ async def get_project_summary(
         by_reg_type=by_reg_type,
         unit_composition=unit_composition,
         configuration_analysis=configuration_analysis,
+        buildings=[
+            BuildingStock(
+                building_id=row["building_id"],
+                name=row["name"],
+                sales=int(row.get("sales") or 0),
+                leases=int(row.get("leases") or 0),
+                units=int(row["units"]) if row.get("units") else None,
+                units_source=row.get("units_source") or None,
+                units_at_least=bool(row.get("units_at_least")),
+            )
+            for row in building_rows
+        ],
         recent_periods_end=next(
             (row["recent_period_end"] for row in sales_sum_rows if row.get("recent_period_end")),
             None,
@@ -513,6 +543,12 @@ async def get_project_pipeline(
     project_name: str, filter_type: ProjectScopeType = "project"
 ) -> ProjectPipelineResponse:
     """Area-level delivery pipeline grouped by quarter around the selected project."""
+    if filter_type == "building":
+        # A building's delivery pipeline is its project's area.
+        building = await queries.fetch_scope_hierarchy({"project_name": project_name}, "building")
+        if not building:
+            return ProjectPipelineResponse(area_name=None, developer_name=None, data=[])
+        project_name, filter_type = building[0]["project_name"], "project"
     if filter_type == "market":
         area_name = "Dubai"
         developer_name = None
@@ -658,7 +694,11 @@ def _resolve_project_scope(
     master_project: Optional[str],
     project: Optional[str],
     filter_type: ProjectFilterType,
+    building_id: Optional[str] = None,
 ) -> tuple[str, ProjectScopeType]:
+    """The scope a request names: a building (by id), a project, a master, else the market."""
+    if building_id:
+        return building_id, "building"
     if project:
         return project, "project"
     if master_project:

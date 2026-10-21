@@ -237,17 +237,21 @@ async def test_search_keeps_buildings_beside_many_project_names(dxbi):  # noqa: 
     )
     found = (await service.get_project_search("lake", limit=50)).projects
     assert len(found) == 50
-    # The building keeps its place and opens its project.
-    assert [(p.name, p.building) for p in found if p.building] == [
-        ("JLT Cluster X", "Lake Shore Tower")
+    # The building keeps its place; it is its own scope and names its project.
+    buildings = [p for p in found if p.filter_type == "building"]
+    assert [(p.name, p.project, p.scope_kind) for p in buildings] == [
+        ("Lake Shore Tower", "JLT Cluster X", "Building")
     ]
+    assert buildings[0].building_id == "lakeshoretower|downtowndubai"
     # An empty search lists scopes only.
-    assert not any(p.building for p in (await service.get_project_search("")).projects)
+    assert not any(
+        p.filter_type == "building" for p in (await service.get_project_search("")).projects
+    )
 
 
 async def test_a_project_header_names_its_sources(dxbi, warehouse):  # noqa: F811
     """DXBI transactions hold no developer, handover or unit count: DXBInteract's building list
-    does. Its project card repeats the totals of the building cards it lists."""
+    gives the developer and handover; Holocron's unit stock the units, naming its source."""
     await dxbi(
         sales=[sale("s", building_name="Lakeshore Tower 1", project_name="Lake Shore Tower")]
     )
@@ -266,15 +270,28 @@ async def test_a_project_header_names_its_sources(dxbi, warehouse):  # noqa: F81
         [card("1", "Lake Shore Tower", 477, "P", kids=[2]), card("2", "Lakeshore Tower 1", 477)],
         column_names=["location_id", "status", "payload_json"],
     )
-    meta = (await service.get_project_summary("Lake Shore Tower", "project")).project
+    # Holocron's unit stock counts the units (holocron.market.analytics_hierarchy).
+    await warehouse.command(
+        "INSERT INTO analytics_unit_stock (scope_level, scope_id, units, units_source,"
+        " units_at_least, units_traded, buildings, mix_rooms, mix_units, mix_median_sqft)"
+        " VALUES ('project', 'lakeshoretower', 477, 'dxbi_buildings', 0, 1, 1,"
+        " ['1 B/R', 'Studio'], [400, 77], [820, 450])"
+    )
+    summary = await service.get_project_summary("Lake Shore Tower", "project")
+    meta = summary.project
     assert (meta.developer_name, str(meta.completion_date), meta.no_of_units) == (
         "Al Bodor",
         "2012-01-21",
         477,
     )
-    assert meta.no_of_buildings == 1
-    assert set(meta.field_sources) >= {"developer_name", "completion_date", "no_of_units"}
-    assert set(meta.field_sources.values()) == {"dxbi_buildings"}
+    assert meta.no_of_buildings == 1 and meta.units_traded == 1 and not meta.units_at_least
+    assert meta.field_sources["developer_name"] == "dxbi_buildings"
+    assert meta.field_sources["completion_date"] == "dxbi_buildings"
+    assert meta.field_sources["no_of_units"] == "dxbi_buildings"
+    assert [(u.rooms, u.count) for u in summary.unit_composition] == [
+        ("Studio", 77),
+        ("1 B/R", 400),
+    ]
 
 
 async def test_an_abbreviation_finds_the_master_it_stands_for(dxbi):  # noqa: F811
@@ -377,3 +394,77 @@ async def test_commercial_leases_line_up_with_sales_by_their_dld_type(dxbi):  # 
     assert (rows["Office"].sale_count, rows["Office"].rental_count) == (1, 1)
     # A lease no source types stays apart, and says so.
     assert rows["Commercial (type not recorded)"].rental_count == 1
+
+
+async def test_a_building_is_its_own_scope_inside_its_project(dxbi, warehouse):  # noqa: F811
+    """Selecting a building scopes every figure to it; its project still covers all its
+    buildings, lists them with their units, and an old spelling of the project finds it."""
+    await dxbi(
+        sales=[
+            *(
+                sale(f"a{i}", building_name="Skyrise Tower A", project_name="Skyrise",
+                     unit_number=f"A{i}", sale_amount_aed=1_000_000)
+                for i in range(3)
+            ),
+            *(
+                sale(f"b{i}", building_name="Skyrise Tower B", project_name="Skyrise",
+                     unit_number=f"B{i}", sale_amount_aed=2_000_000)
+                for i in range(2)
+            ),
+        ]
+    )  # fmt: skip
+    await warehouse.command(
+        "INSERT INTO analytics_project_keys (raw_key, project_key) VALUES ('skyrisetowers', 'skyrise')"
+    )
+    await warehouse.command(
+        "INSERT INTO analytics_unit_stock (scope_level, scope_id, units, units_source,"
+        " units_at_least, units_traded, buildings, mix_rooms, mix_units, mix_median_sqft) VALUES"
+        " ('building', 'skyrisetowera|downtowndubai', 1078, 'dld_units', 0, 3, 1, ['Studio'],"
+        " [1078], [400]),"
+        " ('project', 'skyrise', 1080, 'buildings', 0, 5, 2, [], [], [])"
+    )
+    search = await service.get_project_search("skyrise tower a")
+    building = next(p for p in search.projects if p.filter_type == "building")
+    assert (building.name, building.project) == ("Skyrise Tower A", "Skyrise")
+
+    tower = await service.get_project_summary(building.building_id, "building")
+    assert tower.sales.transaction_count == 3
+    assert tower.sales.total_volume == 3_000_000
+    meta = tower.project
+    assert (meta.scope_level, meta.parent_project, meta.no_of_units, meta.units_source) == (
+        "building",
+        "Skyrise",
+        1078,
+        "dld_units",
+    )
+    trends = await service.get_project_trends(building.building_id, 365, "building")
+    assert sum(p.transaction_count for p in trends.data) == 3
+
+    # The project by an old spelling: both buildings, listed with their units.
+    project = await service.get_project_summary("Skyrise Towers", "project")
+    assert project.sales.transaction_count == 5
+    assert project.project.no_of_units == 1080 and project.project.no_of_buildings == 2
+    assert [(b.name, b.sales, b.units) for b in project.buildings] == [
+        ("Skyrise Tower A", 3, 1078),
+        ("Skyrise Tower B", 2, None),
+    ]
+
+
+async def test_a_master_adds_up_its_projects_registered_units(dxbi, warehouse):  # noqa: F811
+    """A master shows its projects' register counts added up and how many projects have one;
+    a project known only by its traded units adds nothing to the register total."""
+    await dxbi(
+        sales=[
+            sale("a", project_name="Tower One", building_name="Tower One"),
+            sale("b", project_name="Tower Two", building_name="Tower Two"),
+        ]
+    )
+    await warehouse.command(
+        "INSERT INTO analytics_unit_stock (scope_level, scope_id, units, units_source,"
+        " units_at_least, units_traded, buildings) VALUES"
+        " ('project', 'towerone', 300, 'dxbi_buildings', 0, 1, 1),"
+        " ('project', 'towertwo', 12, 'units_traded', 1, 12, 1)"
+    )
+    master = (await service.get_project_summary("Downtown Dubai", "master")).project
+    assert (master.no_of_units, master.no_of_projects, master.projects_with_units) == (300, 2, 1)
+    assert master.units_source == "projects_rollup"

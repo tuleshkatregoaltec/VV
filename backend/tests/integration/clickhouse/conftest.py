@@ -63,10 +63,12 @@ def install_serving(warehouse):
 
 
 @pytest.fixture
-def analytics_projection_tables(monkeypatch):
+async def analytics_projection_tables(monkeypatch, install_serving):
     """Small projection tables for aggregation tests; DXBI isolation has separate tests."""
     from app.analytics import dxbi, queries
 
+    # The filters resolve spellings through the hierarchy's key tables (empty here).
+    await install_serving(tables=("analytics_project_keys", "analytics_master_keys"), views=())
     monkeypatch.setattr(queries, "SALES_SOURCE", "ch_transactions")
     monkeypatch.setattr(queries, "RENTALS_SOURCE", "ch_rent_contracts")
     for name in (

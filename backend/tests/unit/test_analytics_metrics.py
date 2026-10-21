@@ -31,4 +31,3 @@ def test_momentum_requires_twenty_in_both_periods_and_uses_mean_denominator():
     assert _sampled_count_pct_change(40, 19) is None
     assert _sampled_count_pct_change(19, 40) is None
     assert _sampled_count_pct_change(40, 20) == 66.7
-
