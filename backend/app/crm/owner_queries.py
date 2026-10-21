@@ -3,6 +3,39 @@ from __future__ import annotations
 from app.clickhouse.client import query
 
 
+async def fetch_import_locations():
+    return await query(
+        """SELECT DISTINCT arrayJoin([area_name, project_name]) AS name,
+                           area_name, project_name
+           FROM dxbi_sales_unit_events WHERE area_name != '' OR project_name != ''"""
+    )
+
+
+async def fetch_import_context_sales(parameters):
+    return await query(
+        r"""SELECT transaction_date, sale_amount_aed, unit_number,
+                   replaceRegexpAll(lowerUTF8(unit_number), '\\s+', '') AS unit_key,
+                   building_name, building_key, project_name, area_name, area_key,
+                   property_type, market_status, sale_key
+            FROM dxbi_sales_unit_events FINAL
+            WHERE (area_name IN {locations:Array(String)}
+                   OR project_name IN {locations:Array(String)})
+              AND transaction_date BETWEEN {start_date:Date} AND {end_date:Date}
+            SETTINGS max_threads=2, max_memory_usage=2000000000""",
+        parameters,
+    )
+
+
+async def fetch_cadastral_lands(parameters: dict) -> list[dict]:
+    return await query(
+        """SELECT DISTINCT area_id, area_en, master_project_en, project_en,
+                  land_number, land_sub_number
+           FROM dld_od_lands_bronze
+           WHERE land_number IN {land_numbers:Array(String)}""",
+        parameters,
+    )
+
+
 async def fetch_transaction_signatures(parameters):
     return await query(
         """
@@ -62,6 +95,8 @@ async def fetch_unit_sales(parameters):
                 area_key,
                 transaction_date,
                 sale_amount_aed,
+                property_type,
+                market_status,
                 sale_key,
                 detail_url
             FROM dxbi_sales_unit_events FINAL

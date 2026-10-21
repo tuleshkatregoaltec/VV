@@ -82,6 +82,20 @@ describe('importCounts', () => {
 		expect(c.matchRate).toBeNull()
 	})
 
+	it('keeps source identifiers, derived groups and plot-only evidence separate', () => {
+		const c = importCounts({
+			distinct_properties: 7586,
+			source_property_counts: { distinct_identifiers: 3470, source_property_references: 5000 },
+			rows_with_sales_history: 100,
+			plot_only_rows: 200
+		})
+		expect(c.properties).toBe(7586)
+		expect(c.sourceProperties?.distinct_identifiers).toBe(3470)
+		expect(c.salesHistoryRows).toBe(100)
+		expect(c.plotOnlyRows).toBe(200)
+		expect(importCounts({}).sourceProperties).toBeNull()
+	})
+
 	it('shows no match rate when nothing was kept', () => {
 		expect(importCounts({ total_rows: 2203, candidate_rows: 0 }).matchRate).toBeNull()
 	})
@@ -98,12 +112,12 @@ describe('mappingChecks', () => {
 		expect(mappingChecks(JVT_OLD)).toEqual([])
 	})
 
-	it('catches a transaction sheet whose rows are all dropped for lack of a role column', () => {
+	it('warns that missing roles require review without dropping records', () => {
 		const checks = mappingChecks(JVT_APR)
 		expect(checks.map((c) => c.code)).toEqual(['no_role', 'no_price'])
-		expect(checks[0].level).toBe('error')
+		expect(checks[0].level).toBe('warning')
 		expect(checks[0].text).toBe(
-			'Transaction sheet with no Buyer/Seller column: all its rows are dropped.'
+			'No party-role column: source records are retained for ownership review.'
 		)
 	})
 
@@ -163,7 +177,7 @@ describe('mappingChecks', () => {
 
 describe('isFlagged', () => {
 	it('flags an import with any error-level sheet check', () => {
-		expect(isFlagged('completed', [JVT_OLD, JVT_APR])).toBe(true)
+		expect(isFlagged('completed', [JVT_OLD, WESTWOOD])).toBe(true)
 	})
 
 	it('does not flag a clean completed import', () => {
@@ -203,7 +217,7 @@ describe('failureReasons', () => {
 			['unmatched', 104],
 			['insufficient_property_data', 1]
 		])
-		expect(reasons[0].label).toBe('Location ambiguous')
+		expect(reasons[0].label).toBe('Needs review')
 		expect(reasons[0].fix).toBeTruthy()
 	})
 

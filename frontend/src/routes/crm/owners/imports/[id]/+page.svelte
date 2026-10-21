@@ -36,10 +36,7 @@ const STATUS = {
 	processing: { label: 'Processing', tone: 'amber' },
 	failed: { label: 'Failed', tone: 'red' }
 } as const
-// Every DLD status gets a tile except "Unit found, not verified".
-const statuses = (Object.keys(STATUS_INFO) as ClaimStatus[]).filter(
-	(s) => s !== 'unit_linked_unverified'
-)
+const statuses = Object.keys(STATUS_INFO) as ClaimStatus[]
 
 let editing = $state(false)
 let draft = $state('')
@@ -189,14 +186,14 @@ const share = (n: number, of: number) => (of ? `${Math.round((n / of) * 100)}%` 
 						onclick={() => (showDropped = !showDropped)}
 					>
 						<span class="lbl"><i class="dot dropped"></i>Dropped</span><span class="v">{fmt(c.dropped)}</span>
-						<span class="n">{droppedBreakdown(c.droppedByReason) || 'No name, not Buyer/Seller, or mortgage/gift'}</span>
+						<span class="n">{droppedBreakdown(c.droppedByReason) || 'No rejected source rows'}</span>
 						{#if c.dropped}<span class="n link">{showDropped ? 'Hide rows' : 'Show rows'}</span>{/if}
 					</button>
 					<div class="kpi">
 						<span class="lbl"><i class="dot merged"></i>Duplicates merged</span><span class="v">{fmt(c.merged)}</span>
 					</div>
 					<div class="kpi">
-						<span class="lbl">Owners kept</span><span class="v">{fmt(c.kept)}</span>
+						<span class="lbl">Source records kept</span><span class="v">{fmt(c.kept)}</span>
 						<span class="n">{fmt(c.readyToContact)} ready to contact · {fmt(c.rentalLeads)} rental leads</span>
 					</div>
 					<button
@@ -207,15 +204,49 @@ const share = (n: number, of: number) => (of ? `${Math.round((n / of) * 100)}%` 
 						disabled={!c.kept}
 						onclick={() => (showProperties = !showProperties)}
 					>
-						<span class="lbl">Properties</span><span class="v">{c.properties === null ? '—' : fmt(c.properties)}</span>
-						<span class="n">{c.properties === null ? 'Counted from the next rematch' : 'Distinct units, villas or plots'}</span>
+						<span class="lbl">Property groups after matching</span><span class="v">{c.properties === null ? '—' : fmt(c.properties)}</span>
+						<span class="n">{c.properties === null ? 'Counted from the next rematch' : 'Includes inferred identities and plot links'}</span>
 						{#if c.kept}<span class="n link">{showProperties ? 'Hide properties' : 'Show properties'}</span>{/if}
 					</button>
 					<div class="kpi green">
-						<span class="lbl"><i class="dot matched"></i>Matched to DLD</span><span class="v">{fmt(c.matched)}</span>
+						<span class="lbl"><i class="dot matched"></i>Property evidence found</span><span class="v">{fmt(c.matched)}</span>
 						<span class="n">{c.matchRate === null ? '—' : `${Math.round(c.matchRate * 100)}%`} of kept</span>
+						{#if c.salesHistoryRows !== null}
+							<span class="n">{fmt(c.salesHistoryRows)} with sales history · {fmt(c.plotOnlyRows ?? 0)} plot only</span>
+						{/if}
 					</div>
 				</div>
+				{#if c.sourceProperties}
+					{@const source = c.sourceProperties}
+					<h3>Identifiers in the original file</h3>
+					<div class="grid-4 kpis">
+						<div class="kpi">
+							<span class="lbl">Source property references</span><span class="v">{fmt(source.source_property_references ?? 0)}</span>
+							<span class="n">Unit, then property number, then building code; units scoped by location</span>
+						</div>
+						<div class="kpi">
+							<span class="lbl">Property-number fallback</span><span class="v">{fmt(source.distinct_property_numbers_without_unit ?? 0)}</span>
+							<span class="n">Distinct property_number values where unit is empty; included in source references</span>
+						</div>
+						<div class="kpi">
+							<span class="lbl">Distinct unit numbers</span><span class="v">{fmt(source.distinct_unit_numbers ?? 0)}</span>
+							<span class="n">{fmt(source.location_scoped_units ?? 0)} building/project + unit combinations</span>
+						</div>
+						<div class="kpi">
+							<span class="lbl">Building numbers when unit is empty</span><span class="v">{fmt(source.distinct_building_numbers_without_unit ?? 0)}</span>
+							<span class="n">Distinct source building-number values</span>
+						</div>
+						<div class="kpi">
+							<span class="lbl">Combined identifiers</span><span class="v">{fmt(source.distinct_identifiers ?? 0)}</span>
+							<span class="n">{fmt(source.identifiers_in_both_columns ?? 0)} values appear in both columns; counted once</span>
+						</div>
+						<div class="kpi">
+							<span class="lbl">Rows missing both identifiers</span><span class="v">{fmt(source.rows_without_identifiers ?? 0)}</span>
+							<span class="n">May still contain land numbers or transaction evidence</span>
+						</div>
+					</div>
+					<p>Counts cover all {fmt(source.total_rows ?? 0)} source rows, including rows without an owner name. Repeated apartment numbers across buildings and inconsistent address labels mean these are source references, not a verified physical-property total.</p>
+				{/if}
 			</section>
 
 			{#if showDropped}
@@ -227,14 +258,14 @@ const share = (n: number, of: number) => (of ? `${Math.round((n / of) * 100)}%` 
 
 			{#if showProperties}
 				<section class="sec" id="property-rows">
-					<h3>Properties</h3>
+					<h3>Properties and unresolved source records</h3>
 					<PropertyRows importId={imp.id} />
 				</section>
 			{/if}
 
 			<!-- 3. Status breakdown -->
 			<section class="sec">
-				<h3>By DLD status</h3>
+				<h3>Ownership assessment</h3>
 				<div class="grid-4 kpis">
 					{#each statuses as s (s)}
 						<!-- The tile filters the owner rows; the ⓘ beside it explains the status. -->

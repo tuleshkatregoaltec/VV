@@ -82,7 +82,7 @@ async def _llm_mapping(profile: SheetProfile) -> SheetProfile:
             if canonical in _CANONICAL_FIELDS and header in available:
                 profile.field_map.setdefault(canonical, header)
     family = proposal.get("sheet_family")
-    if family in {"transaction_party", "contact_list"}:
+    if family in {"transaction_party", "contact_list"} and profile.field_map.get("party_role"):
         profile.sheet_family = family
     confidence = proposal.get("confidence")
     if isinstance(confidence, int | float):

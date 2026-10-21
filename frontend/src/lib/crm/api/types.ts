@@ -1027,6 +1027,12 @@ export interface OwnerImportRow {
 	name: string
 	phone: string
 	building: string
+	area: string
+	project: string
+	propertyType: string
+	propertyDetails: Record<string, string>
+	latestSaleDate: string | null
+	latestSalePrice: number | null
 	unit: string
 	date: string | null
 	price: number | null
@@ -1045,6 +1051,10 @@ export interface OwnerPropertyParams {
 /** One kept row of a property: who, their role, the sale and its DLD status. */
 export interface OwnerPropertyRecord {
 	name: string
+	procedure: string
+	identifiers: Record<string, string>
+	propertyDetails: Record<string, string>
+	matchReason: string
 	role: string
 	date: string | null
 	price: number | null

@@ -57,9 +57,10 @@ async def _resolve_by_identified_sale(
     The date/price step stores the sale it matched, but the unit lookup afterwards searches
     on the shortened unit (237) and cannot find a registry unit stored as TAG-AL2-237.
     """
-    by_sale_key = {
-        key: candidate for candidate in candidates if (key := _identified_sale_key(candidate))
-    }
+    by_sale_key: dict[str, list[ParsedContact]] = {}
+    for candidate in candidates:
+        if key := _identified_sale_key(candidate):
+            by_sale_key.setdefault(key, []).append(candidate)
     if not by_sale_key:
         return {}
     sale_rows: dict[str, dict[str, Any]] = {}
@@ -74,13 +75,14 @@ async def _resolve_by_identified_sale(
             history.setdefault(_registry_identity(row), []).append(row)
 
     resolutions: dict[int, tuple[str, int, list[dict[str, Any]], int]] = {}
-    for sale_key, candidate in by_sale_key.items():
+    for sale_key, matched_candidates in by_sale_key.items():
         sale = sale_rows.get(sale_key)
         rows = history.get(_registry_identity(sale)) if sale else None
         if not rows:
             continue
-        score = int(candidate.evidence["property_identity_resolution"].get("score") or 100)
-        resolutions[id(candidate)] = ("identified_sale_registry_unit", score, rows, 1)
+        for candidate in matched_candidates:
+            score = int(candidate.evidence["property_identity_resolution"].get("score") or 100)
+            resolutions[id(candidate)] = ("identified_sale_registry_unit", score, rows, 1)
     return resolutions
 
 
@@ -206,7 +208,7 @@ async def _apply_registry_unit_fallbacks(
     pending = [
         candidate
         for candidate in candidates
-        if candidate.property_key and candidate.property_key not in sales
+        if candidate.unit_number and candidate.property_key and candidate.property_key not in sales
     ]
     if not pending:
         return {"pending": 0, "resolved": 0, "collisions": 0}

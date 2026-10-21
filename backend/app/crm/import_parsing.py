@@ -4,6 +4,7 @@ import csv
 import hashlib
 import io
 import re
+import xml.etree.ElementTree as ET
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import date, datetime
@@ -21,6 +22,8 @@ from app.crm.identity import (
     _recover_embedded_property_identity,
     _text,
 )
+from app.crm.import_events import IMPORT_RESOLVER_VERSION, event_family
+from app.crm.import_inventory import SourcePropertyInventory
 from app.crm.import_models import (
     CrmContactImportSummary,
     CrmSheetMapping,
@@ -30,13 +33,11 @@ _MAX_ROWS = 500_000
 
 _PLACEHOLDER_HEADER = re.compile(r"^column\s*\d+$", re.IGNORECASE)
 _BUILDING_NO_PROPERTY_IDENTIFIER = re.compile(
-    r"(?:^|[-\s])(?:v|villa|th)[-\s]*[a-z0-9.]+$", re.IGNORECASE
+    r"(?:^|[-\s])(?:villa|v|th)[-\s]*(?=[a-z0-9.]*\d)[a-z0-9.]+$", re.IGNORECASE
 )
 _BUILDING_NO_NUMERIC_IDENTIFIER = re.compile(
     r"^(?:r\d*\s+)?(.+?)[-\s]+(?:v|villa|th)[-\s]*(\d+)$", re.IGNORECASE
 )
-
-_TRANSFER_WORDS = ("sale", "sell", "delayed sell")
 
 _CANONICAL_FIELDS = {
     "area_name",
@@ -45,6 +46,7 @@ _CANONICAL_FIELDS = {
     "building_name",
     "unit_number",
     "property_type",
+    "completion_status",
     "size_sqft",
     "transaction_date",
     "transaction_price_aed",
@@ -54,13 +56,20 @@ _CANONICAL_FIELDS = {
     "phone_primary",
     "phone_alternate",
     "email_primary",
+    "building_number",
+    "land_number",
+    "land_sub_number",
+    "property_number",
+    "plot_number",
+    "municipality_number",
+    "municipality_sub_number",
 }
 
 _ALIASES = {
-    "area_name": {"areanameen", "area", "community"},
+    "area_name": {"areanameen", "area", "community", "masterlocation"},
     "master_project": {"masterproject", "masterdevelopment"},
     "project_name": {"project", "projectname", "development"},
-    "building_name": {"buildingnameen", "building", "tower", "buildingname"},
+    "building_name": {"buildingnameen", "building", "tower", "buildingname", "buildingname2"},
     "unit_number": {
         "unitnumber",
         "unit",
@@ -71,6 +80,13 @@ _ALIASES = {
         "plotregistrationno",
     },
     "property_type": {"propertytypeen", "propertytype", "type"},
+    "completion_status": {
+        "completionstatus",
+        "marketstatus",
+        "registrationtype",
+        "regtypeen",
+        "propertycompletionstatus",
+    },
     "size_sqft": {"size", "areasqft", "propertysize"},
     "transaction_date": {"regis", "date", "registrationdate", "transactiondate"},
     "transaction_price_aed": {
@@ -78,13 +94,21 @@ _ALIASES = {
         "price",
         "transactionvalue",
         "saleprice",
+        "transactionamount",
     },
     "party_role": {"procedurepartytypenameen", "partytype", "partyrole"},
     "procedure_type": {"procedurenameen", "procedurename"},
     "contact_name": {"nameen", "name", "ownername", "contactname"},
-    "phone_primary": {"phone", "mobile", "phonenumber", "mobilenumber"},
+    "phone_primary": {"phone", "mobile", "phonenumber", "mobilenumber", "mobile1", "phone1"},
     "phone_alternate": {"secondarymobile", "alternatemobile", "mobile2"},
     "email_primary": {"email", "emailaddress", "owneremail"},
+    "building_number": {"buildingno", "buildingnumber", "building1"},
+    "land_number": {"landnumber", "landno"},
+    "land_sub_number": {"landsubnumber", "landsubno"},
+    "property_number": {"propertynumber"},
+    "plot_number": {"plotpreregno", "plotpreregistrationno", "plotnumber"},
+    "municipality_number": {"dmno", "municipalityno"},
+    "municipality_sub_number": {"dmsubno", "municipalitysubno"},
 }
 
 
@@ -107,6 +131,8 @@ class SheetProfile:
     confidence: float = 0.82
     warnings: list[str] = field(default_factory=list)
     date_order: str = "dmy"
+    last_data_row: int | None = None
+    property_inventory: SourcePropertyInventory = field(default_factory=SourcePropertyInventory)
 
 
 def _header_token(value: str) -> str:
@@ -188,7 +214,9 @@ def _heuristic_mapping(
         mapping["party_role"] = header_tokens["procedure"]
         mapping.pop("procedure_type", None)
 
-    family = "transaction_party" if mapping.get("transaction_date") else "contact_list"
+    family = "transaction_party" if mapping.get("party_role") else "contact_list"
+    if mapping.get("transaction_date") and not mapping.get("party_role"):
+        warnings.append("Dated owner records have no party role; ownership requires review.")
     if "contact_name" not in mapping:
         warnings.append("No owner/contact name column was detected.")
     if "unit_number" not in mapping:
@@ -210,6 +238,29 @@ def _inferred_project(filename: str, sheet_name: str) -> str:
     return ""
 
 
+def _populated_xlsx_rows(workbook, sheet) -> list[int]:
+    """Ignore formatting-only rows without stopping at gaps in real data.
+
+    Scan XML once, then bound openpyxl's expensive cell/date decoding. Clear the
+    sheetData parent too, so a million empty row elements do not accumulate.
+    """
+    rows = []
+    ns = "{http://schemas.openxmlformats.org/spreadsheetml/2006/main}"
+    parent = None
+    with workbook._archive.open(sheet._worksheet_path) as stream:
+        for action, element in ET.iterparse(stream, events=("start", "end")):
+            if action == "start" and element.tag == ns + "sheetData":
+                parent = element
+            if action != "end" or element.tag != ns + "row":
+                continue
+            if any(node.text for node in element.iter() if node.tag in {ns + "v", ns + "t"}):
+                rows.append(int(element.attrib["r"]))
+            element.clear()
+            if parent is not None:
+                parent.clear()
+    return rows
+
+
 def _inspect_xlsx(data: bytes, filename: str) -> list[SheetProfile]:
     workbook = openpyxl.load_workbook(io.BytesIO(data), read_only=True, data_only=True)
     profiles: list[SheetProfile] = []
@@ -229,15 +280,17 @@ def _inspect_xlsx(data: bytes, filename: str) -> list[SheetProfile]:
                 filename=filename,
                 sheet_name=sheet.title,
             )
+            populated_rows = _populated_xlsx_rows(workbook, sheet)
             profiles.append(
                 SheetProfile(
                     name=sheet.title.strip() or "Sheet",
                     header_row=header_row,
                     headers=headers,
-                    meaningful_rows=max(0, sheet.max_row - header_row),
+                    meaningful_rows=sum(number > header_row for number in populated_rows),
                     field_map=mapping,
                     sheet_family=family,
                     warnings=warnings,
+                    last_data_row=max(populated_rows, default=header_row),
                 )
             )
     finally:
@@ -411,17 +464,6 @@ def _normalized_role(value: Any) -> str:
     return _text(value).title()
 
 
-def _is_transfer_candidate(role: str, procedure: str, family: str) -> bool:
-    if family == "contact_list":
-        return True
-    if role not in {"Buyer", "Seller"}:
-        return False
-    if not procedure:
-        return True
-    lowered = procedure.lower()
-    return any(word in lowered for word in _TRANSFER_WORDS)
-
-
 def _field_value(
     row: tuple[Any, ...] | list[Any],
     profile: SheetProfile,
@@ -467,6 +509,10 @@ def _dropped_row(
     }
 
 
+def _missing_owner_name(name: str) -> bool:
+    return name.strip().casefold() in {"", "-", "n/a", "na", "none", "null", "nan", "unknown"}
+
+
 def _candidate_from_row(
     row: tuple[Any, ...] | list[Any],
     *,
@@ -475,8 +521,13 @@ def _candidate_from_row(
     row_number: int,
     dropped: list[dict[str, Any]] | None = None,
 ) -> ParsedContact | None:
+    profile.property_inventory.add(
+        {key: _text(_field_value(row, profile, key)) for key in profile.field_map}
+    )
     name = _text(_field_value(row, profile, "contact_name"))
     unit = _normalize_unit(_field_value(row, profile, "unit_number"))
+    if unit == "0":
+        unit = ""
     unit_fallback_field = ""
     unit_fallback_value = ""
     if not unit:
@@ -494,15 +545,8 @@ def _candidate_from_row(
             unit = _normalize_unit(property_number)
             unit_fallback_field = "propertynumber"
             unit_fallback_value = property_number
-    building_no = next(
-        (
-            _text(row[header.index])
-            for header in profile.headers
-            if _header_token(header.key) == "buildingno" and header.index < len(row)
-        ),
-        "",
-    )
-    if not name:
+    building_no = _text(_field_value(row, profile, "building_number"))
+    if _missing_owner_name(name):
         if dropped is not None:
             dropped.append(
                 _dropped_row(row, profile=profile, row_number=row_number, reason="no_name")
@@ -510,12 +554,6 @@ def _candidate_from_row(
         return None
     role = _normalized_role(_field_value(row, profile, "party_role"))
     procedure = _text(_field_value(row, profile, "procedure_type"))
-    if not _is_transfer_candidate(role, procedure, profile.sheet_family):
-        if dropped is not None:
-            reason = "not_buyer_seller" if role not in {"Buyer", "Seller"} else "not_a_sale"
-            dropped.append(_dropped_row(row, profile=profile, row_number=row_number, reason=reason))
-        return None
-
     inferred_project = _inferred_project(filename, profile.name)
     area = _text(_field_value(row, profile, "area_name"))
     master_project = _text(_field_value(row, profile, "master_project"))
@@ -531,6 +569,36 @@ def _candidate_from_row(
 
     phone = _normalize_phone(_field_value(row, profile, "phone_primary"))
     alternate = _normalize_phone(_field_value(row, profile, "phone_alternate"))
+    channels = list(
+        dict.fromkeys(
+            value
+            for value in (
+                phone,
+                alternate,
+                *(
+                    _normalize_phone(row[h.index])
+                    for h in profile.headers
+                    if h.index < len(row)
+                    and _header_token(h.key)
+                    in {
+                        "mobile",
+                        "mobile1",
+                        "mobile2",
+                        "phone",
+                        "phone1",
+                        "phone2",
+                        "secondarymobile",
+                        "alternatemobile",
+                        "phonenumber",
+                        "mobilenumber",
+                    }
+                ),
+            )
+            if value
+        )
+    )
+    phone = channels[0] if channels else None
+    alternate = channels[1] if len(channels) > 1 else None
     email = _normalize_email(_field_value(row, profile, "email_primary"))
     transaction_date = _parse_date(
         _field_value(row, profile, "transaction_date"), profile.date_order
@@ -563,6 +631,30 @@ def _candidate_from_row(
         party_role=role[:80],
         procedure_type=procedure[:160],
         row_fingerprint=hashlib.sha256(fingerprint_source.encode()).hexdigest(),
+    )
+    candidate.evidence.update(
+        {
+            "resolver_version": IMPORT_RESOLVER_VERSION,
+            "source_filename": filename,
+            "event_family": event_family(procedure),
+            "source_fields": {
+                canonical: _text(_field_value(row, profile, canonical))
+                for canonical in profile.field_map
+            },
+            "contact_channels": channels,
+            "source_identifiers": {
+                key: _text(_field_value(row, profile, key))
+                for key in (
+                    "land_number",
+                    "land_sub_number",
+                    "building_number",
+                    "property_number",
+                    "plot_number",
+                    "municipality_number",
+                    "municipality_sub_number",
+                )
+            },
+        }
     )
     if area_source_field:
         candidate.evidence["source_area_field"] = area_source_field
@@ -600,7 +692,11 @@ def _candidate_from_row(
     if not candidate.unit_number and _BUILDING_NO_PROPERTY_IDENTIFIER.search(building_no):
         candidate.unit_number = _normalize_unit(building_no)[:100]
         candidate.evidence["source_unit_number"] = re.sub(r"\s+", "", building_no).upper()[:100]
-    if not candidate.unit_number and _normalize_unit(building_no) not in {"", "0", "1"}:
+    if (
+        not candidate.unit_number
+        and _normalize_unit(building_no) not in {"", "0", "1"}
+        and any(character.isdigit() for character in building_no)
+    ):
         candidate.unit_number = _normalize_unit(building_no)[:100]
         candidate.evidence["source_unit_number"] = re.sub(r"\s+", "", building_no).upper()[:100]
         candidate.evidence["unit_number_fallback"] = {
@@ -625,6 +721,7 @@ def _parse_xlsx(
             profile = profile_by_name.get(sheet.title.strip() or "Sheet")
             if not profile:
                 continue
+            profile.property_inventory = SourcePropertyInventory()
             max_index = max((header.index for header in profile.headers), default=0)
             date_index = _date_column_index(profile)
             if date_index is not None:
@@ -634,6 +731,7 @@ def _parse_xlsx(
                         row[0] if row else None
                         for row in sheet.iter_rows(
                             min_row=profile.header_row + 1,
+                            max_row=profile.last_data_row,
                             min_col=date_index + 1,
                             max_col=date_index + 1,
                             values_only=True,
@@ -643,6 +741,7 @@ def _parse_xlsx(
             for row_number, row in enumerate(
                 sheet.iter_rows(
                     min_row=profile.header_row + 1,
+                    max_row=profile.last_data_row,
                     max_col=max_index + 1,
                     values_only=True,
                 ),
@@ -675,6 +774,7 @@ def _parse_csv(
 ) -> tuple[list[ParsedContact], int]:
     rows = _csv_rows(data)
     profile = profiles[0]
+    profile.property_inventory = SourcePropertyInventory()
     date_index = _date_column_index(profile)
     if date_index is not None:
         _read_dates_by_column_order(
@@ -713,6 +813,10 @@ def _summary(
     return CrmContactImportSummary(
         total_rows=total_rows,
         candidate_rows=len(candidates),
+        rows_with_sales_history=sum(c.latest_sale_date is not None for c in candidates),
+        plot_only_rows=sum(
+            bool(c.evidence.get("cadastral_identity")) and not c.unit_number for c in candidates
+        ),
         distinct_properties=len(
             {candidate.property_key for candidate in candidates if candidate.property_key}
         ),

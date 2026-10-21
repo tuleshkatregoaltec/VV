@@ -20,6 +20,7 @@ from app.crm.identity import (
     _normalize_unit,
     _usable_project_name,
 )
+from app.crm.import_context import property_details
 from app.crm.import_models import (
     CrmContactClaimResponse,
     CrmContactList,
@@ -87,6 +88,7 @@ def _claim_response(
         building_name=claim.building_name,
         unit_number=claim.unit_number,
         property_type=claim.property_type,
+        property_details=property_details(claim.evidence or {}),
         transaction_date=claim.transaction_date,
         transaction_price_aed=claim.transaction_price_aed,
         ownership_status=claim.ownership_status,  # type: ignore[arg-type]

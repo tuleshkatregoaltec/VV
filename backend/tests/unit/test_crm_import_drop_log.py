@@ -37,21 +37,19 @@ def _parse(data: bytes, collect: bool):
 
 
 def test_parser_records_why_each_row_was_dropped():
-    """The Dropped card must say why: no name, not a buyer/seller, or not a sale."""
-    _, total, dropped = _parse(TRANSACTIONS, collect=True)
+    """Non-sale events and other parties survive; only nameless rows are rejected."""
+    candidates, total, dropped = _parse(TRANSACTIONS, collect=True)
 
     assert total == 4
     assert [(row["row"], row["reason"]) for row in dropped] == [
         (3, "no_name"),
-        (4, "not_buyer_seller"),
-        (5, "not_a_sale"),
     ]
-    mortgage = dropped[1]
-    assert mortgage["name"] == "Bank Example"
-    assert mortgage["building"] == "Panorama"
-    assert mortgage["unit"] == "T2-203"
-    assert mortgage["role"] == "Mortgagee"
-    assert mortgage["procedure"] == "Mortgage Registration"
+    mortgage = candidates[1]
+    assert mortgage.contact_name == "Bank Example"
+    assert mortgage.building_name == "Panorama"
+    assert mortgage.unit_number == "T2-203"
+    assert mortgage.party_role == "Mortgagee"
+    assert mortgage.procedure_type == "Mortgage Registration"
 
 
 def test_collecting_dropped_rows_does_not_change_the_kept_rows():
@@ -60,7 +58,7 @@ def test_collecting_dropped_rows_does_not_change_the_kept_rows():
     without_log, _, _ = _parse(TRANSACTIONS, collect=False)
 
     assert [c.row_fingerprint for c in with_log] == [c.row_fingerprint for c in without_log]
-    assert [c.contact_name for c in with_log] == ["Kept Owner"]
+    assert [c.contact_name for c in with_log] == ["Kept Owner", "Bank Example", "Gift Owner"]
 
 
 def _contact(**overrides) -> ParsedContact:

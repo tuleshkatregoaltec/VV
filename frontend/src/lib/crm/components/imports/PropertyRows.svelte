@@ -36,6 +36,8 @@ $effect.pre(() => {
 
 const list = createQuery(() => crmQueries.ownerImportProperties(importId, { search, offset }))
 const loading = $derived(list.isPlaceholderData)
+const usable = (value: string | undefined) =>
+	value && !['0', 'null', 'none', 'n/a', '-'].includes(value.trim().toLowerCase()) ? value : ''
 
 $effect(() => {
 	const d = list.data
@@ -49,7 +51,7 @@ $effect(() => {
 	<label class="search">
 		<Search size={15} />
 		<span class="sr-only">Search properties</span>
-		<input placeholder="Building, project, area, unit, owner" autocomplete="off" maxlength="160" bind:value={typed} />
+		<input placeholder="Building, project, area, unit, land number, owner" autocomplete="off" maxlength="160" bind:value={typed} />
 	</label>
 	{#if list.data}
 		<span class="count" aria-live="polite">
@@ -70,9 +72,10 @@ $effect(() => {
 					<thead>
 						<tr>
 							<th>Building · unit</th>
-							<th>Area</th>
+							<th>Community · project</th>
+							<th>Type · completion</th>
 							<th>Current owner</th>
-							<th>Latest sale</th>
+							<th>Latest source event</th>
 							<th class="r">Rows</th>
 						</tr>
 					</thead>
@@ -89,16 +92,26 @@ $effect(() => {
 									>
 										<ChevronDown size={14} class={open === p.key ? 'chev up' : 'chev'} />
 										<span>
-											<span class="nm">{p.building || p.project || '—'}{p.unit ? ` · ${p.unit}` : ''}</span>
-											{#if (p.building && p.project) || p.type}
-												<span class="sub">{[p.building ? p.project : '', p.type].filter(Boolean).join(' · ')}</span>
+											<span class="nm">{usable(p.building) || usable(p.project) || '—'}{p.unit ? ` · ${p.unit}` : ''}</span>
+											{#if !p.unit}<span class="sub">Land {p.records[0]?.identifiers.land_number || 'unknown'} · {p.key.startsWith('dld-land:') ? 'Plot identified; ownership unverified' : 'Property needs resolution'}</span>{/if}
+											{#if (usable(p.building) && usable(p.project)) || usable(p.type)}
+												<span class="sub">{[usable(p.building) ? usable(p.project) : '', usable(p.type)].filter(Boolean).join(' · ')}</span>
 											{/if}
 										</span>
 									</button>
 								</td>
-								<td data-label="Area">{p.area || '—'}</td>
+								<td data-label="Community · project">
+									{(p.records[0]?.propertyDetails.registry_property_type ? usable(p.area) : p.records[0]?.propertyDetails.file_location || usable(p.area)) || '—'}
+									<div class="sub">{usable(p.project) || '—'}</div>
+									{#if p.records[0]?.propertyDetails.file_location}<div class="sub">Source location context: {p.records[0].propertyDetails.file_location}</div>{/if}
+								</td>
+								<td data-label="Type · completion">
+									{p.records[0]?.propertyDetails.registry_property_type || p.type || '—'}
+									<div class="sub">Source: {p.type || '—'} · {p.records[0]?.propertyDetails.source_completion_status || 'Completion unspecified'}</div>
+									{#if p.records[0]?.propertyDetails.registry_completion_status}<div class="sub">Latest sale: {p.records[0].propertyDetails.registry_completion_status}</div>{/if}
+								</td>
 								<td data-label="Current owner">{p.currentOwner ?? '—'}</td>
-								<td data-label="Latest sale" class="nowrap">
+								<td data-label="Latest source event" class="nowrap">
 									{p.latestDate ? fullDate(p.latestDate) : '—'}
 									{#if p.latestPrice}<div class="sub">{aed(p.latestPrice)}</div>{/if}
 								</td>
@@ -109,14 +122,14 @@ $effect(() => {
 							</tr>
 							{#if open === p.key}
 								<tr class="detail" id="prop-{p.key}">
-									<td colspan="5">
+									<td colspan="6">
 										<table class="inner">
 											<thead>
 												<tr>
 													<th>Name</th>
-													<th>Role</th>
+													<th>Role · procedure</th>
 													<th>Date</th>
-													<th class="r">Price</th>
+													<th class="r">Source amount</th>
 													<th>Status</th>
 													<th>Source</th>
 												</tr>
@@ -125,11 +138,12 @@ $effect(() => {
 												{#each p.records as r (`${r.sheet}:${r.rowNumber}`)}
 													<tr>
 														<td>{r.name || '—'}</td>
-														<td data-label="Role">{r.role || '—'}</td>
+														<td data-label="Role · procedure">{r.role || 'Unspecified'}<div class="sub">{r.procedure || 'Owner snapshot'}</div></td>
 														<td data-label="Date" class="nowrap">{r.date ? fullDate(r.date) : '—'}</td>
-														<td data-label="Price" class="r nowrap">{r.price ? aed(r.price) : '—'}</td>
+														<td data-label="Source amount" class="r nowrap">{r.price ? aed(r.price) : '—'}</td>
 														<td data-label="Status">
 															<Chip tone={STATUS_INFO[r.status]?.tone ?? 'neutral'}>{STATUS_INFO[r.status]?.label ?? r.status}</Chip>
+															<div class="sub">{r.matchReason}</div>
 														</td>
 														<td data-label="Source" class="sub nowrap">{r.sheet} · row {r.rowNumber}</td>
 													</tr>
@@ -143,7 +157,7 @@ $effect(() => {
 								</tr>
 							{/if}
 						{:else}
-							<tr><td colspan="5" class="sub">No properties match.</td></tr>
+							<tr><td colspan="6" class="sub">No properties match.</td></tr>
 						{/each}
 					</tbody>
 				</table>
