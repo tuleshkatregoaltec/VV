@@ -10478,6 +10478,12 @@ export type AnalyticsGetProjectSummaryEndpointData = {
          */
         filter_type?: 'project' | 'master' | 'virtual_master' | 'building';
         /**
+         * Summary Days
+         *
+         * Window for headline sales, rental, yield and usage counts: last N calendar days including today in Dubai. Omit for all dates. Configuration history is unchanged.
+         */
+        summary_days?: number | null;
+        /**
          * Usage
          *
          * Residential or Commercial records; auto shows Commercial for a scope with no residential records

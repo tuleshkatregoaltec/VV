@@ -49,6 +49,14 @@ _RECENT_WINDOW_END = """addDays((
     WHERE transaction_date <= toDate(now('Asia/Dubai')) AND sale_amount_aed > 0), 1)"""
 
 
+def _summary_window(column: str, enabled: bool) -> str:
+    """Last N calendar days including today in Dubai; never include future records."""
+    if not enabled:
+        return "1"
+    today = "toDate(now('Asia/Dubai'))"
+    return f"{column} > {today} - {{summary_days:Int32}} AND {column} <= {today}"
+
+
 # Half-open bounds of a range filter: (low or None, high or None).
 Bounds = tuple[Optional[float], Optional[float]]
 
@@ -344,7 +352,9 @@ def project_sales_by_reg_type(filter_type: ProjectScopeType = "project") -> str:
     """
 
 
-def project_rentals_summary(filter_type: ProjectScopeType = "project") -> str:
+def project_rentals_summary(
+    filter_type: ProjectScopeType = "project", windowed: bool = False
+) -> str:
     return f"""
         SELECT
             count() as contract_count,
@@ -355,6 +365,7 @@ def project_rentals_summary(filter_type: ProjectScopeType = "project") -> str:
         WHERE {_project_filter(filter_type)}
           AND property_usage_en = {{usage:String}}
           AND annual_amount > 0
+          AND ({_summary_window("contract_start_date", windowed)})
     """
 
 
@@ -828,17 +839,20 @@ async def fetch_project_developers_by_scope(parameters: dict, filter_type="maste
     return []
 
 
-def project_usage_counts(filter_type: ProjectScopeType = "project") -> str:
+def project_usage_counts(filter_type: ProjectScopeType = "project", windowed: bool = False) -> str:
     """The scope's sales and leases per usage, whatever usage the page shows."""
     return f"""
-        SELECT property_usage_en AS usage, countIf(is_sale) AS sales, countIf(NOT is_sale) AS leases
+        SELECT property_usage_en AS usage,
+               countIf(is_sale AND ({_summary_window("record_date", windowed)})) AS sales,
+               countIf(NOT is_sale AND ({_summary_window("record_date", windowed)})) AS leases,
+               countIf(is_sale) AS all_sales, countIf(NOT is_sale) AS all_leases
         FROM (
-            SELECT property_usage_en, 1 AS is_sale, {_SCOPE_COLUMNS}
+            SELECT property_usage_en, 1 AS is_sale, instance_date AS record_date, {_SCOPE_COLUMNS}
             FROM {SALES_SOURCE}
             WHERE trans_group_en = 'Sales' AND property_type NOT IN ('Plot', 'Building', '')
               AND actual_worth > 0
             UNION ALL
-            SELECT property_usage_en, 0, {_SCOPE_COLUMNS}
+            SELECT property_usage_en, 0, contract_start_date AS record_date, {_SCOPE_COLUMNS}
             FROM {RENTALS_SOURCE}
             WHERE annual_amount > 0
         )
@@ -848,11 +862,20 @@ def project_usage_counts(filter_type: ProjectScopeType = "project") -> str:
 
 
 async def fetch_project_usage_counts(parameters: dict, filter_type: ProjectScopeType):
-    return await query(project_usage_counts(filter_type), parameters)
+    return await query(project_usage_counts(filter_type, "summary_days" in parameters), parameters)
 
 
 async def fetch_project_sales_bundle(parameters: dict, filter_type: ProjectScopeType):
-    """Summary, bedrooms and configuration segments from one normalized-source scan."""
+    """Window the headline metrics without truncating configuration comparison history."""
+    summary_columns = ""
+    if "summary_days" in parameters:
+        window = _summary_window("instance_date", True)
+        summary_columns = f""",
+               countIf({window}) AS window_count,
+               round(sumIf(actual_worth, {window}), 2) AS window_volume,
+               round(avgIf(actual_worth, {window}), 2) AS window_price,
+               round(medianExactIf(actual_worth, {window}), 2) AS window_median,
+               round(avgIf(meter_sale_price, {window}) / 10.7639, 2) AS window_price_sqft"""
     rows = await query(
         f"""
         SELECT segment, rooms_en, grouping(rooms_en) AS is_total,
@@ -876,6 +899,7 @@ async def fetch_project_sales_bundle(parameters: dict, filter_type: ProjectScope
                     instance_date >= addYears(latest_sale_date, -2)
                     AND instance_date < addYears(latest_sale_date, -1)), 2) AS avg_price_sqft_prev_12m,
                addDays(max(latest_sale_date), -1) AS recent_period_end
+               {summary_columns}
         FROM (
             SELECT *, {_RECENT_WINDOW_END} AS latest_sale_date
             FROM (
@@ -897,10 +921,11 @@ async def fetch_project_sales_bundle(parameters: dict, filter_type: ProjectScope
         return [
             dict(
                 row,
-                transaction_count=row["sale_count"],
-                avg_price=row["avg_sale_price"],
-                median_price=row["median_sale_price"],
-                avg_price_sqft=row["avg_sale_price_sqft"],
+                transaction_count=row.get("window_count", row["sale_count"]),
+                total_volume=row.get("window_volume", row["total_volume"]),
+                avg_price=row.get("window_price", row["avg_sale_price"]),
+                median_price=row.get("window_median", row["median_sale_price"]),
+                avg_price_sqft=row.get("window_price_sqft", row["avg_sale_price_sqft"]),
             )
             for row in rows
             if row["is_total"] and row["segment"] == segment
@@ -957,7 +982,9 @@ async def fetch_project_sales_by_reg_type(
 async def fetch_project_rentals_summary(
     parameters: dict, filter_type: ProjectScopeType = "project"
 ):
-    return await query(project_rentals_summary(filter_type), parameters)
+    return await query(
+        project_rentals_summary(filter_type, "summary_days" in parameters), parameters
+    )
 
 
 async def fetch_project_rentals_by_rooms(

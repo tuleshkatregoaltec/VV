@@ -244,8 +244,13 @@ async def _resolve_usage(
         counts[row["usage"]] = UsageCount(sales=int(row["sales"]), leases=int(row["leases"]))
     if requested in USAGES:
         return requested, counts
-    residential, commercial = counts["Residential"], counts["Commercial"]
-    if residential.sales + residential.leases == 0 and commercial.sales + commercial.leases > 0:
+    # Auto usage describes the scope, even when the selected window has no recent records.
+    totals = {
+        row["usage"]: int(row.get("all_sales", row["sales"]))
+        + int(row.get("all_leases", row["leases"]))
+        for row in rows
+    }
+    if totals.get("Residential", 0) == 0 and totals.get("Commercial", 0) > 0:
         return "Commercial", counts
     return "Residential", counts
 
@@ -255,6 +260,7 @@ async def get_project_summary(
     filter_type: ProjectScopeType = "project",
     master_project: Optional[str] = None,
     usage: str = "auto",
+    summary_days: Optional[int] = None,
 ) -> ProjectAnalyticsResponse:
     """
     Run ClickHouse queries in parallel and merge into a single response.
@@ -270,6 +276,8 @@ async def get_project_summary(
     # For LIKE queries the param needs the wildcard appended
     like_name = project_name + " - %" if filter_type == "virtual_master" else project_name
     params = {} if filter_type == "market" else {"project_name": like_name}
+    if summary_days is not None:
+        params["summary_days"] = summary_days
     usage, usage_counts = await _resolve_usage(params, filter_type, usage)
     params = {**params, "usage": usage}
 
@@ -374,7 +382,9 @@ async def get_project_summary(
     # and would produce artificially inflated yields (e.g. JVC showing ~25%).
     # Median/median: both sides use the same central tendency measure for a consistent yield.
     existing_median_price = float(
-        (sales_sum_existing_rows[0].get("median_price") or 0) if sales_sum_existing_rows else 0
+        (sales_sum_existing_rows[0].get("median_price") or 0)
+        if sales_sum_existing_rows and sales_sum_existing_rows[0].get("transaction_count")
+        else 0
     )
     overall_yield: Optional[float] = None
     if existing_median_price > 0 and rentals.median_annual_rent > 0:

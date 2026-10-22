@@ -91,3 +91,24 @@ async def test_market_metrics_reports_unresolvable_periods_as_422(client):
     )
     assert response.status_code == 422
     assert "months" in response.json()["detail"]
+
+
+async def test_summary_window_is_validated_forwarded_and_part_of_cache_key(client, monkeypatch):
+    get_mock = AsyncMock(return_value=None)
+    summary_mock = AsyncMock(return_value=_summary_response())
+    monkeypatch.setattr("app.core.decorators.cache.get", get_mock)
+    monkeypatch.setattr("app.core.decorators.cache.set", AsyncMock())
+    monkeypatch.setattr("app.analytics.router.get_project_summary", summary_mock)
+    for days in (365, 30, None):
+        params = {} if days is None else {"summary_days": days}
+        response = await client.get("/api/v1/analytics/project/summary", params=params)
+        assert response.status_code == 200
+        assert summary_mock.await_args.kwargs["summary_days"] == days
+    assert len({call.args[0] for call in get_mock.await_args_list}) == 3
+    summary_mock.reset_mock()
+    for invalid in (0, -1, 3651, "invalid"):
+        response = await client.get(
+            "/api/v1/analytics/project/summary", params={"summary_days": invalid}
+        )
+        assert response.status_code == 422
+    summary_mock.assert_not_awaited()
