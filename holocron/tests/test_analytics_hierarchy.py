@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import csv
+import json
+import logging
 from datetime import UTC, date, datetime
 
 from holocron.market import analytics_hierarchy as hierarchy
@@ -145,6 +147,85 @@ def test_one_spelling_one_master_and_merged_buildings(warehouse) -> None:  # noq
     # Its pairing named another project, but its building clearly is Merano Tower's (decision 3,
     # 2026-10-21): filed under its building's project, marked as re-filed.
     assert listed["stray"] == ("Merano Tower", "Business Bay", "Merano", 1)
+
+
+@live
+def test_phase_lease_alias_keeps_card_units_once(warehouse, caplog) -> None:  # noqa: F811
+    loaded = datetime(2026, 7, 1, tzinfo=UTC)
+    warehouse.insert_rows(
+        table="dxbi_sales_unit_events",
+        rows=[["joy-sale", date(2026, 6, 1), "101", "Arabian Ranches III - JOY",
+               "Wadi Al Safa 5", loaded]],
+        column_names=["sale_key", "transaction_date", "unit_number", "project_name",
+                      "area_name", "loaded_at"],
+    )  # fmt: skip
+    warehouse.insert_rows(
+        table="dxbi_sale_profile",
+        rows=[["joy-sale", "Arabian Ranches III - JOY", "dld_pair", "Arabian Ranches 3",
+               "Wadi Al Safa 5"]],
+        column_names=["sale_key", "project_name", "project_source", "master_project", "area_name"],
+    )  # fmt: skip
+    warehouse.insert_rows(
+        table="dxbi_rental_events",
+        rows=[["joy-lease", date(2026, 6, 1), date(2027, 5, 31), "101", "Joy",
+               "Arabian Ranches 3", loaded]],
+        column_names=["contract_key", "lease_start", "lease_end", "unit_number", "project_name",
+                      "area_name", "scraped_at"],
+    )  # fmt: skip
+    warehouse.insert_rows(
+        table="dxbi_rental_profile",
+        rows=[["joy-lease", "Joy", "dxbi", "Arabian Ranches 3", "Wadi Al Safa 5"]],
+        column_names=["contract_key", "project_name", "project_source", "master_project",
+                      "area_name"],
+    )  # fmt: skip
+    # DXBI's card uses the lease spelling. The merged project must retain this stock count,
+    # rather than fall back to the one unit seen trading or add both spellings to its master.
+    warehouse.insert_rows(
+        table="dxbi_heatmap_buildings_bronze",
+        rows=[["joy-card", "fixture", "joy", 200, json.dumps({"Building": {
+            "project": "Joy", "location": "Joy", "area_name": "Arabian Ranches 3",
+            "display_as": "P", "unit_count": 486,
+        }})]],
+        column_names=["response_key", "run_id", "location_id", "status", "payload_json"],
+    )  # fmt: skip
+
+    with caplog.at_level(logging.INFO, logger=hierarchy.__name__):
+        built = hierarchy.build_hierarchy(warehouse)
+    assert built["analytics_projects"] == 1
+    assert warehouse.query(
+        "SELECT project_key, master_name, sales, leases FROM analytics_projects"
+    ).result_rows == [("arabianranchesiiijoy", "Arabian Ranches 3", 1, 1)]
+    assert warehouse.query(
+        "SELECT raw_key, project_key FROM analytics_project_keys ORDER BY raw_key"
+    ).result_rows == [
+        ("arabianranchesiiijoy", "arabianranchesiiijoy"),
+        ("joy", "arabianranchesiiijoy"),
+    ]
+    assert warehouse.query(
+        "SELECT units, units_source, units_traded FROM analytics_unit_stock"
+        " WHERE scope_level = 'project'"
+    ).result_rows == [(486, "dxbi_buildings", 1)]
+    assert warehouse.query(
+        "SELECT p.master_name, sum(s.units) FROM analytics_projects p"
+        " INNER JOIN analytics_unit_stock s ON s.scope_id = p.project_key"
+        " WHERE s.scope_level = 'project' GROUP BY p.master_name"
+    ).result_rows == [("Arabian Ranches 3", 486)]
+    assert "Analytics short/phase-name pairs remaining: 0" in caplog.text
+
+
+@live
+def test_phase_name_guard_counts_only_pairs_in_the_same_area(warehouse) -> None:  # noqa: F811
+    hierarchy.create_tables(warehouse)
+    # A repeated phase name in another area is not evidence for a merge. Keep punctuation
+    # and spacing as DLD writes them, including its double space before the separator.
+    warehouse.insert_rows(
+        table="analytics_projects",
+        rows=[["phase", "New Phase", "Area A"],
+              ["same", "Community  - NEW-PHASE", "Area A"],
+              ["other", "Other Community - New Phase", "Area B"]],
+        column_names=["project_key", "project_name", "area_name"],
+    )  # fmt: skip
+    assert warehouse.query(hierarchy.PHASE_NAME_PAIRS_SQL).result_rows == [(1,)]
 
 
 @live

@@ -288,3 +288,120 @@ variants and a parking code do not inflate traded units, one name across communi
 building, a DLD building two buildings match counts for neither), `ty` and ruff; backend
 ClickHouse 78 and unit/contract 223; frontend vitest 71 and svelte-check; Playwright Analytics
 specs 24.
+
+
+## S1: DXBI lease phase spellings (22 Oct 2026)
+
+Merged all 46 reviewed short/phase-name pairs through evidence-backed project aliases.
+The review checked the global key map, both DXBI event tables (project and building labels,
+including the normalized "all buildings/phases" suffix), and profile areas/masters.
+Every raw short spelling is confined to its intended DXBI community or DLD area; no generic
+names, shared-name conflicts, or alias chains were found. No pairs were rejected. Sun/Ruba
+and Golf Horizon/Panorama have stray matched DLD area/master labels, but their raw DXBI
+locations consistently identify Arabian Ranches 3 or Damac Hills respectively. Those pairing
+labels are not evidence of another project sharing the short name.
+
+Project cards now resolve through the same curated aliases as records, so Joy's 486-unit
+DXBI card survives its merge. Source priority and the existing traded-unit plausibility floor
+are unchanged. The build logs the remaining same-area short/phase-name pair count, warning
+when nonzero without rejecting the build. Casa Viva's master is explicitly Serena, supported
+by [Dubai Properties' Casa Viva page](https://dp.ae/our-portfolio/all-projects/50/casa-viva-at-serena/).
+Golf Horizon resolves to Damac Hills and Deema 1 to The Lakes through the merged records.
+
+| Check | Before | After |
+|---|---:|---:|
+| Same-area short/phase-name pairs | 46 | 0 |
+| Projects | 4,488 | 4,442 |
+| Projects with a positive unit count | 4,395 | 4,353 |
+| Joy sales / leases (short + DLD name) | 0 + 750 / 318 + 542 | 750 / 860 |
+| Joy units | 486 + 519 | 486 (dxbi_buildings) |
+| Vardon sales / leases (short + DLD name) | 0 + 930 / 21 + 715 | 930 / 736 |
+| Vardon units | 692 + 692 | 692 (dxbi_buildings) |
+| Damac Hills 2 master units | 26,574 | 19,024 (−7,550) |
+| Arabian Ranches 3 master units | 6,379 | 4,583 (−1,796) |
+| Hierarchy sales / leases | 961,468 / 605,449 | 961,468 / 605,449 |
+
+All 46 merged projects retain positive unit counts. Exactly 42 counted short projects
+disappear; Caya, Elora, Trinity and Santorini 1 already had zero units. No surviving project
+loses unit coverage. All pair-level sales and lease totals are conserved: 1,485 leases and
+6 sales move from short names. The removed short projects held 9,814 units.
+
+Master reductions also include source changes on the retained projects. Damac Hills 2
+removes 7,607 short-name units and gains 57 from card priority (Aquilegia +60, Primrose +1,
+Zinnia −4), for a net reduction of 7,550. Arabian Ranches 3 removes 1,752 short-name units
+and adjusts retained counts by −44 (Joy −33, Sun +5, Ruba −16), reducing its total by 1,796.
+Raya's 240-unit card and Mulberry's 110-unit card remain below the existing plausibility
+floor, so their merged projects retain 317 observed units and 324 DLD land plots respectively.
+
+### Reviewed pairs and resulting stock
+
+Before values are short-name units + DLD-name units. Every row is merged; none is rejected.
+The DLD spellings, including lll, Sanctnary and double spaces, are preserved in the CSV.
+
+| Short name | Canonical project | Leases before → after | Units before → after | Final source |
+|---|---|---:|---:|---|
+| Joy | Arabian Ranches III - JOY | 318 + 542 → 860 | 486 + 519 → 486 | dxbi_buildings |
+| Sun | Arabian Ranches III - SUN | 309 + 551 → 860 | 439 + 434 → 439 | dxbi_buildings |
+| Ruba | Arabian Ranches lll - Ruba | 252 + 459 → 711 | 430 + 446 → 430 | dxbi_buildings |
+| Talia | The Valley - Talia | 126 + 297 → 423 | 75 + 443 → 443 | unit_numbers |
+| Spring | Arabian Ranches III - Spring | 111 + 168 → 279 | 154 + 154 → 154 | dxbi_buildings |
+| Casa Viva | Serena - Casa Viva | 74 + 440 → 514 | 17 + 448 → 448 | unit_numbers |
+| Orania | The Valley - Orania | 38 + 216 → 254 | 34 + 410 → 410 | unit_numbers |
+| Albizia | Damac Hills (2) - Albizia | 24 + 614 → 638 | 604 + 604 → 604 | dxbi_buildings |
+| Vardon | Damac Hills (2) - Vardon | 21 + 715 → 736 | 692 + 692 → 692 | dxbi_buildings |
+| Pacifica | Damac Hills (2) - Pacifica | 16 + 561 → 577 | 640 + 640 → 640 | dxbi_buildings |
+| Zinnia | Damac Hills (2) - Zinnia | 15 + 456 → 471 | 486 + 490 → 486 | dxbi_buildings |
+| Centaury | Damac Hills (2) - Centaury | 14 + 405 → 419 | 413 + 413 → 413 | dxbi_buildings |
+| Sanctnary | Damac Hills (2)  - Sanctnary | 14 + 320 → 334 | 388 + 388 → 388 | dxbi_buildings |
+| Primrose | Damac Hills (2) - Primrose | 14 + 321 → 335 | 354 + 353 → 354 | dxbi_buildings |
+| Amargo | Damac Hills (2) - Amargo | 13 + 437 → 450 | 398 + 398 → 398 | dxbi_buildings |
+| Avencia 2 | Damac Hills (2) - AVENCIA-2 | 11 + 421 → 432 | 10 + 408 → 408 | dxbi_buildings |
+| Janusia | Damac Hills (2) - Janusia | 11 + 457 → 468 | 478 + 478 → 478 | dxbi_buildings |
+| Claret | Damac Hills (2) - Claret | 10 + 264 → 274 | 315 + 315 → 315 | dxbi_buildings |
+| Sycamore | Damac Hills (2) - Sycamore | 10 + 177 → 187 | 184 + 184 → 184 | dxbi_buildings |
+| Aquilegia | Damac Hills (2) - Aquilegia | 9 + 437 → 446 | 424 + 364 → 424 | dxbi_buildings |
+| Juniper | Damac Hills (2) - Juniper | 8 + 264 → 272 | 314 + 314 → 314 | dxbi_buildings |
+| Basswood | Damac Hills (2) - Basswood | 7 + 464 → 471 | 419 + 419 → 419 | dxbi_buildings |
+| Odora | Damac Hills (2) - Odora | 7 + 230 → 237 | 254 + 254 → 254 | dxbi_buildings |
+| Aster | Damac Hills (2) - Aster | 7 + 337 → 344 | 378 + 378 → 378 | dxbi_buildings |
+| Mimosa | Damac Hills (2) - Mimosa | 6 + 375 → 381 | 338 + 338 → 338 | dxbi_buildings |
+| Golf Panorama | Damac Hills - Golf Panorama | 1 + 171 → 172 | 160 + 160 → 160 | dxbi_buildings |
+| Trixis | Damac Hills (2) - Trixis | 5 + 119 → 124 | 134 + 134 → 134 | dxbi_buildings |
+| Coursetia | Damac Hills (2) - Coursetia | 5 + 152 → 157 | 169 + 169 → 169 | dxbi_buildings |
+| Raya | Arabian Ranches lll - Raya | 4 + 112 → 116 | 240 + 317 → 317 | unit_numbers |
+| June 2 | Arabian Ranches lll - June 2 | 3 + 31 → 34 | 1 + 43 → 43 | unit_numbers |
+| Caya | Arabian Ranches lll - Caya | 2 + 122 → 124 | 0 + 247 → 247 | dld_land_plots |
+| Richmond | Damac Hills -  Richmond | 2 + 99 → 101 | 2 + 118 → 118 | dxbi_buildings |
+| Golf Horizon | Damac Hills - Golf Horizon | 1 + 185 → 186 | 159 + 160 → 159 | dxbi_buildings |
+| Bliss 2 | Arabian Ranches lll - Bliss 2 | 2 + 99 → 101 | 2 + 302 → 302 | unit_numbers |
+| Mulberry | Damac Hills (2) - Mulberry | 2 + 81 → 83 | 110 + 324 → 324 | dld_land_plots |
+| Amargo 2 | Damac Hills (2) - Amargo 2 | 2 + 111 → 113 | 105 + 105 → 105 | dxbi_buildings |
+| Brookfield-2 | Damac Hills - BROOKFIELD-2 | 2 + 53 → 55 | 2 + 75 → 75 | dxbi_buildings |
+| Elora | The Valley - Elora | 1 + 51 → 52 | 0 + 520 → 520 | unit_numbers |
+| Cavalli Estates | Damac Hills - Cavalli Estates | 1 + 0 → 1 | 1 + 41 → 41 | dld_land_plots |
+| Deema 1 | The Lakes - Deema 1 | 1 + 31 → 32 | 1 + 39 → 39 | unit_numbers |
+| The Flora | Damac Hills - The Flora | 1 + 42 → 43 | 1 + 67 → 67 | dxbi_buildings |
+| The Turf | Damac Hills - The Turf | 1 + 39 → 40 | 1 + 64 → 64 | dxbi_buildings |
+| Trinity | Damac Hills - Trinity | 1 + 75 → 76 | 0 + 116 → 116 | dxbi_buildings |
+| Costa Brava 2 | Damac Lagoons - Costa Brava (2) | 1 + 9 → 10 | 1 + 497 → 497 | dld_projects |
+| Whitefield | Damac Hills - Whitefield | 1 + 34 → 35 | 1 + 70 → 70 | dxbi_buildings |
+| Santorini 1 | Damac Lagoons - Santorini (1) | 1 + 223 → 224 | 0 + 459 → 459 | dld_land_plots |
+
+Outside these pairs, Al Helal Al Zahaby Building keeps 81 units but now attributes them to
+its aliased DXBI card instead of its building rollup. Red Diamond DMCC changes from the
+saved baseline's 51 building-register units to 25 observed units. An isolated rebuild of
+the unchanged ef16d72 hierarchy and CSVs against the same sources also produces 25 units
+and no DLD project link; this is pre-existing rebuild drift, not an S1 regression. Its
+source/link stability remains a separate data-quality issue. The diagnostic database was
+removed after comparison; shared source and scratch tables were untouched.
+
+Validation: the Joy regression first failed with an observed-unit fallback, then passed
+with the card alias lookup. All nine hierarchy tests pass, including same-area pair
+detection. The hierarchy/listed rebuild completed sequentially (96s + 5s + 5s).
+Holocron's full live-ClickHouse `just check` passed Ruff formatting/lint, ty, and 617 tests
+(no skips; one existing TestStopped collection warning). Backend unit/contracts passed
+223 tests and the separate ClickHouse suite passed 78, with no skips. The first backend
+run skipped three Bun parity tests; after enabling the installed Bun and generating this
+worktree's Svelte config from locked frontend dependencies, the complete run passed.
+Frontend browser tests were not run: this change touches hierarchy logic and curated
+data only, with no API, schema, routing, or UI changes.
