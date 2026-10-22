@@ -2403,8 +2403,9 @@ CREATE TABLE IF NOT EXISTS analytics_buildings (
 ENGINE = MergeTree()
 ORDER BY building_id;
 
--- Registered units per project and per building, each count naming its source; a count below
--- the units that traded there is replaced by those (units_at_least = 1).
+-- Registered units per project and per building, each count naming its source (DXBI's building
+-- list first, then DLD's registers); a count below the units that traded there is no count, and
+-- units stays 0 beside units_traded. units_at_least is kept for older rows and is 0.
 CREATE TABLE IF NOT EXISTS analytics_unit_stock (
     scope_level LowCardinality(String),
     scope_id String,

@@ -28,7 +28,8 @@ carry its keys (decisions 2026-10-21, docs/data-pipelines/ANALYTICS_HIERARCHY_PL
   plots). A project DLD holds under another name, or under no project, is
   linked to it by its unit numbers and floor areas (``analytics_project_dld_keys``). A DLD
   building two buildings match counts for neither. A count below the units that traded there is
-  not a count of the stock: those traded units are given instead, marked ``units_at_least``.
+  not a count of the stock, and no estimate replaces it (user, 2026-10-22): the scope has no
+  unit count, only its ``units_traded``.
   Unit numbers are compared and counted in one form (``unit_key``).
 """
 
@@ -861,7 +862,7 @@ WITH {_CARDS},
                        ('dxbi_buildings', card_units),
                        dld_units > 0 AND dld_units >= {UNITS_TRADED_FLOOR} * traded,
                        ('dld_units', dld_units),
-                       traded > 0, ('units_traded', traded), ('', 0)) AS pick
+                       ('', 0)) AS pick
         FROM buildings_stock
     ),
     -- Units traded in the project's own buildings; a project without buildings (villas DXBI
@@ -896,7 +897,7 @@ WITH {_CARDS},
     -- building records.
     project_buildings AS (
         SELECT project_key, count() AS buildings,
-               sumIf(pick.2, pick.1 != 'units_traded') AS units,
+               sum(pick.2) AS units,
                sumIf(records, pick.1 IN ('dxbi_buildings', 'dld_units')) / sum(records)
                    AS covered,
                countIf(pick.1 != 'dxbi_buildings') = 0 AS all_dxbi
@@ -961,14 +962,14 @@ WITH {_CARDS},
         LEFT JOIN project_plots AS pp ON pp.project_key = p.project_key
         LEFT JOIN project_register AS pr ON pr.project_key = p.project_key
     )
-SELECT 'building', c.building_id, c.pick.2, c.pick.1, c.pick.1 = 'units_traded', c.traded, 1,
+SELECT 'building', c.building_id, c.pick.2, c.pick.1, 0, c.traded, 1,
        m.mix_rooms, m.mix_units, m.mix_sqft,
        if(length(m.mix_rooms) > 0, 'dld_units', ''), now64(3)
 FROM building_choice AS c
 LEFT JOIN building_mix AS m ON m.building_id = c.building_id
-WHERE c.pick.2 > 0
+WHERE c.pick.2 > 0 OR c.traded > 0
 UNION ALL
-SELECT 'project', s.project_key, pick.2, pick.1, pick.1 = 'units_traded', s.traded, s.buildings,
+SELECT 'project', s.project_key, pick.2, pick.1, 0, s.traded, s.buildings,
        m.mix_rooms, m.mix_units, m.mix_sqft,
        if(length(m.mix_rooms) > 0, 'dld_units', ''), now64(3)
 FROM (
@@ -983,11 +984,11 @@ FROM (
                    ('dld_projects', register_units),
                    plots > 0 AND plots >= {UNITS_TRADED_FLOOR} * traded,
                    ('dld_land_plots', plots),
-                   traded > 0, ('units_traded', traded), ('', 0)) AS pick
+                   ('', 0)) AS pick
     FROM project_stock
 ) AS s
 LEFT JOIN project_mix AS m ON m.project_key = s.project_key
-WHERE pick.2 > 0
+WHERE pick.2 > 0 OR s.traded > 0
 {_SETTINGS}
 """
 

@@ -203,6 +203,12 @@ the DLD project a unit-number link found. It counts 188 projects that showed "at
 traded", 43 of them launched after the unit register's May snapshot. Projects with a register
 count: 3,550 -> 3,730 of 4,394.
 
+No "at least N units traded" (user, 22 Oct): a project or building shows DXBI's building-list
+count, else a DLD register count, else no unit count. Its units traded stay in the stock table
+(`units_traded`) as evidence but are not shown as units. 664 projects and 2,016 buildings show
+no unit count; DXBI's own count covers 1,580 projects and 1,567 buildings, DLD's registers the
+rest of the 3,730 / 4,199.
+
 The building steps are now computed once into work tables (`analytics_first_ids__work`,
 `analytics_record_ids__work`, `analytics_dld_votes__work`, `analytics_building_merge__work`);
 inlined as CTEs they recomputed the chain several times, outgrew 9 GB and took 8-12 minutes.
