@@ -36,11 +36,14 @@ carry its keys (decisions 2026-10-21, docs/data-pipelines/ANALYTICS_HIERARCHY_PL
 from __future__ import annotations
 
 import csv
+import logging
 from pathlib import Path
 from typing import Any
 
 from holocron.market import dxbi_profile as profile
 from holocron.market import transforms as t
+
+logger = logging.getLogger(__name__)
 
 DATA = Path(__file__).with_name("data")
 MASTER_ALIASES_CSV = DATA / "master_aliases.csv"
@@ -760,12 +763,12 @@ _MIX_ROOMS = f"""multiIf(
     concat(extract({profile._bedrooms_from_dld("rooms_en")}, '^([0-9]+)'), ' B/R'),
     rooms_en IN ('Office', 'Shop', 'Warehouse', 'Hotel', 'Show Rooms', 'Clinic', 'Gymnasium'),
     rooms_en, 'Other')"""
-# DXBI's building list: a building card (not a project card) by name and DXBI area.
+# DXBI's building list: building cards by name and area, project cards by canonical project key.
 _CARDS = f"""
     cards AS (
         SELECT {key("JSONExtractString(payload_json, 'Building', 'location')")} AS name_key,
                {key("JSONExtractString(payload_json, 'Building', 'area_name')")} AS area_key,
-               {project_key("JSONExtractString(payload_json, 'Building', 'project')")}
+               {_project_alias(project_key("JSONExtractString(payload_json, 'Building', 'project')"))}
                    AS card_project,
                JSONExtractString(payload_json, 'Building', 'display_as') AS display_as,
                JSONExtractUInt(payload_json, 'Building', 'unit_count') AS units
@@ -1045,6 +1048,18 @@ STATEMENTS = {
     "analytics_unit_stock": UNIT_STOCK_SQL,
 }
 
+# Short DXBI phase names still separate from DLD's "Community - Phase" in the same area.
+PHASE_NAME_PAIRS_SQL = f"""
+SELECT count()
+FROM (
+    SELECT {key("project_name")} AS name_key, area_name FROM analytics_projects
+) AS a
+INNER JOIN (
+    SELECT {key("splitByString(' - ', project_name)[-1]")} AS tail, area_name
+    FROM analytics_projects WHERE position(project_name, ' - ') > 0
+) AS b ON a.name_key = b.tail AND a.area_name = b.area_name
+"""
+
 
 def create_tables(clickhouse: Any) -> None:
     for table in HIERARCHY_TABLES:
@@ -1071,6 +1086,12 @@ def build_hierarchy(clickhouse: Any) -> dict[str, int]:
             built[table] = profile.build_table(
                 clickhouse, table, STATEMENTS[table], allow_empty=True
             )
+        remaining = clickhouse.query(PHASE_NAME_PAIRS_SQL).result_rows[0][0]
+        logger.log(
+            logging.WARNING if remaining else logging.INFO,
+            "Analytics short/phase-name pairs remaining: %s",
+            remaining,
+        )
         return built
     finally:
         for table in work:
