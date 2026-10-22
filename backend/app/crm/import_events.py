@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 
-IMPORT_RESOLVER_VERSION = "owner-context-7"
+IMPORT_RESOLVER_VERSION = "owner-context-8"
 
 
 def event_family(procedure: str) -> str:

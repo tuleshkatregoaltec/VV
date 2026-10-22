@@ -8,7 +8,7 @@ import openpyxl
 import pytest
 
 from app.crm import owner_queries
-from app.crm.cadastral import _select_plot
+from app.crm.cadastral import _select_plot, _villa_code_variants, villa_sales_for_plots
 from app.crm.identity import _candidate_owner_key, _claim_preference
 from app.crm.import_events import event_family
 from app.crm.import_models import CrmPropertyContactClaim
@@ -165,3 +165,50 @@ async def test_financing_amount_is_never_looked_up_as_sale_signature(monkeypatch
     await _recover_property_identity_from_transaction(rows)
     await _recover_property_identity_from_near_transaction(rows)
     query.assert_not_awaited()
+
+
+def test_villa_code_variants_cover_prefixed_and_bare_unit_numbers():
+    # DLD sales record the same villa as "DH2-XV728B" and as "XV728B".
+    assert _villa_code_variants("DH2-XV728B") == {"dh2-xv728b", "xv728b"}
+    assert _villa_code_variants(" xv 728b ") == {"xv728b"}
+    assert _villa_code_variants("0") == set()
+
+
+async def test_villa_sales_link_plot_to_its_own_community_only(monkeypatch):
+    # A plot's pre-registration code identifies its villa; the same code in another
+    # community (e.g. Damac Hills 1) is a different property and must be ignored.
+    row = parse("NameEn,Master Project,Project,LandNumber\nExample,DAMAC HILLS 2,0,2822\n")[0]
+    row.evidence["cadastral_identity"] = {
+        "property_key": "dld-land:505:2822:0",
+        "villa_code": "DH2-XV728B",
+        "master_project": "DAMAC HILLS 2",
+        "project": "DAMAC HILLS (2) - BASSWOOD",
+        "area_name": "Madinat Hind 4",
+    }
+
+    def sale(unit_key, area, on):
+        return {
+            "unit_key": unit_key,
+            "area_name": area,
+            "project_name": "",
+            "transaction_date": on,
+            "sale_amount_aed": 1_200_000,
+            "sale_key": f"{unit_key}-{on}",
+        }
+
+    fetch = AsyncMock(
+        return_value=[
+            sale("dh2-xv728b", "Damac Hills 2", date(2016, 11, 29)),
+            sale("xv728b", "Damac Hills 2", date(2024, 2, 13)),
+            sale("xv728b", "Damac Hills", date(2018, 6, 27)),
+        ]
+    )
+    monkeypatch.setattr(owner_queries, "fetch_unit_sales", fetch)
+
+    sales = await villa_sales_for_plots([row])
+
+    assert set(fetch.await_args.args[0]["unit_keys"]) == {"dh2-xv728b", "xv728b"}
+    assert [s["transaction_date"] for s in sales["dld-land:505:2822:0"]] == [
+        date(2016, 11, 29),
+        date(2024, 2, 13),
+    ]

@@ -8,7 +8,7 @@ from typing import Any, Iterable
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.crm import import_repository, owner_queries
-from app.crm.cadastral import resolve_cadastral_plots
+from app.crm.cadastral import resolve_cadastral_plots, villa_sales_for_plots
 from app.crm.identity import (
     ParsedContact,
     _candidate_owner_key,
@@ -702,6 +702,87 @@ def _price_matches(imported: int | None, observed: int) -> bool:
     return abs(imported - observed) / observed <= 0.02
 
 
+def _apply_plot_evidence(candidate: ParsedContact, villa_sales: list[dict[str, Any]]) -> None:
+    """Judge a villa/plot row against the DLD sales of the plot's villa code."""
+    candidate.ownership_status = "unit_linked_unverified"
+    candidate.confidence_score = 50
+    candidate.match_reason = (
+        "The land number and location match a DLD plot. The source record is retained, "
+        "but an individual villa/unit and current ownership have not been verified."
+    )
+    if villa_sales:
+        latest = villa_sales[-1]
+        candidate.latest_sale_date = latest["transaction_date"]
+        candidate.latest_sale_price_aed = int(latest.get("sale_amount_aed") or 0) or None
+        candidate.evidence["villa_sales"] = {
+            "villa_code": candidate.evidence["cadastral_identity"].get("villa_code", ""),
+            "matched_sales": len(villa_sales),
+            "sale_dates": [str(sale["transaction_date"]) for sale in villa_sales],
+        }
+
+    if has_sale_evidence(candidate) and candidate.party_role == "Seller":
+        candidate.ownership_status = "former_owner"
+        candidate.confidence_score = 100
+        candidate.match_reason = (
+            "The uploaded record identifies this contact as the seller, not the current buyer."
+        )
+        candidate.later_sale_date = candidate.transaction_date
+        return
+    if not villa_sales or not candidate.transaction_date:
+        return
+
+    later = [
+        sale
+        for sale in villa_sales
+        if sale["transaction_date"] > candidate.transaction_date + timedelta(days=2)
+    ]
+    if later:
+        candidate.ownership_status = "former_owner"
+        candidate.confidence_score = 99
+        candidate.later_sale_date = later[-1]["transaction_date"]
+        candidate.match_reason = (
+            f"The plot's villa was sold again on {later[-1]['transaction_date']:%d %b %Y}; "
+            "this contact is not presented as the current owner."
+        )
+        return
+
+    acquirer = (
+        has_sale_evidence(candidate) and candidate.party_role == "Buyer"
+    ) or is_owner_list_entry(candidate)
+    if not acquirer:
+        return
+    same_date = [
+        sale
+        for sale in villa_sales
+        if abs((sale["transaction_date"] - candidate.transaction_date).days) <= 2
+    ]
+    if same_date and not any(
+        _price_matches(candidate.transaction_price_aed, int(sale.get("sale_amount_aed") or 0))
+        for sale in same_date
+    ):
+        candidate.ownership_status = "conflicting_claim"
+        candidate.confidence_score = 45
+        candidate.match_reason = (
+            "The plot's villa sale on this date differs by more than 2% from the uploaded price."
+        )
+        return
+    if same_date and candidate.transaction_price_aed:
+        candidate.ownership_status = "verified_current_owner"
+        candidate.confidence_score = 98
+        candidate.match_reason = (
+            "The plot's villa sale matches the acquisition date and price, with no later "
+            "transfer observed."
+        )
+        return
+    candidate.ownership_status = "probable_current_owner"
+    candidate.confidence_score = 72
+    candidate.match_reason = (
+        "No sale of the plot's villa is recorded after this acquisition. The acquisition "
+        "itself (e.g. a completed delayed sale) is not in the sales registry; review before "
+        "relying on this owner."
+    )
+
+
 def _apply_evidence(
     candidate: ParsedContact,
     *,
@@ -710,12 +791,7 @@ def _apply_evidence(
 ) -> None:
     key = candidate.property_key
     if not candidate.unit_number and candidate.evidence.get("cadastral_identity"):
-        candidate.ownership_status = "unit_linked_unverified"
-        candidate.confidence_score = 50
-        candidate.match_reason = (
-            "The land number and location match a DLD plot. The source record is retained, "
-            "but an individual villa/unit and current ownership have not been verified."
-        )
+        _apply_plot_evidence(candidate, sales.get(key, []))
         return
     sale_events = sales.get(key, [])
     rental = rentals.get(key)
@@ -1007,6 +1083,7 @@ async def rematch_property_contact_claims(
     await _apply_registry_unit_fallbacks(candidates, sales)
     rentals = await _rental_evidence(candidates)
     await resolve_cadastral_plots(candidates)
+    sales.update(await villa_sales_for_plots(candidates))
     now = datetime.now(timezone.utc)
     status_counts: dict[str, int] = {}
     for claim, candidate in zip(claims, candidates, strict=True):

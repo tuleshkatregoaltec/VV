@@ -29,7 +29,7 @@ async def fetch_import_context_sales(parameters):
 async def fetch_cadastral_lands(parameters: dict) -> list[dict]:
     return await query(
         """SELECT DISTINCT area_id, area_en, master_project_en, project_en,
-                  land_number, land_sub_number
+                  land_number, land_sub_number, pre_registration_number
            FROM dld_od_lands_bronze
            WHERE land_number IN {land_numbers:Array(String)}""",
         parameters,

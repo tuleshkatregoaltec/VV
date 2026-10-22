@@ -617,6 +617,91 @@ def test_mortgage_row_is_not_treated_as_owner_list_acquisition():
     assert contact.ownership_status == "unit_linked_unverified"
 
 
+def _plot_contact(**overrides) -> ParsedContact:
+    values = {
+        "unit_number": "",
+        "building_name": "",
+        "project_name": "",
+        "transaction_date": date(2022, 12, 29),
+        "transaction_price_aed": 1_717_600,
+        "procedure_type": "Complete Delayed Sell",
+    }
+    contact = _contact(**{**values, **overrides})
+    contact.evidence["event_family"] = "sale"
+    contact.evidence["cadastral_identity"] = {
+        "property_key": "dld-land:505:2822:0",
+        "villa_code": "dh2-xv728b",
+    }
+    return contact
+
+
+def _villa_sale(on: date, amount: int) -> dict:
+    return {"transaction_date": on, "sale_amount_aed": amount, "sale_key": f"s-{on}"}
+
+
+def test_plot_seller_is_former_owner_without_registry_sales():
+    # The file itself records the disposal; villas without a unit must not hide it.
+    contact = _plot_contact(party_role="Seller")
+
+    _apply_evidence(contact, sales={}, rentals={})
+
+    assert contact.ownership_status == "former_owner"
+
+
+def test_plot_buyer_with_later_villa_sale_is_former_owner():
+    # A resale of the same villa after the buyer's acquisition ends their ownership.
+    contact = _plot_contact()
+    sales = {
+        contact.property_key: [
+            _villa_sale(date(2016, 11, 29), 1_200_000),
+            _villa_sale(date(2024, 2, 13), 1_200_000),
+        ]
+    }
+
+    _apply_evidence(contact, sales=sales, rentals={})
+
+    assert contact.ownership_status == "former_owner"
+    assert contact.later_sale_date == date(2024, 2, 13)
+
+
+def test_plot_buyer_without_later_villa_sale_is_probable_owner():
+    # The handover is not in DLD sales, but no resale is recorded since.
+    contact = _plot_contact()
+    sales = {contact.property_key: [_villa_sale(date(2016, 11, 29), 1_200_000)]}
+
+    _apply_evidence(contact, sales=sales, rentals={})
+
+    assert contact.ownership_status == "probable_current_owner"
+
+
+def test_plot_buyer_matching_latest_villa_sale_is_verified():
+    contact = _plot_contact(transaction_date=date(2024, 2, 13), transaction_price_aed=1_200_000)
+    sales = {contact.property_key: [_villa_sale(date(2024, 2, 14), 1_200_000)]}
+
+    _apply_evidence(contact, sales=sales, rentals={})
+
+    assert contact.ownership_status == "verified_current_owner"
+
+
+def test_plot_mortgage_without_later_sale_does_not_become_current_owner():
+    # A mortgage does not prove who acquired the villa.
+    contact = _plot_contact(procedure_type="Mortgage Registration")
+    contact.evidence["event_family"] = "financing"
+    sales = {contact.property_key: [_villa_sale(date(2016, 11, 29), 1_200_000)]}
+
+    _apply_evidence(contact, sales=sales, rentals={})
+
+    assert contact.ownership_status == "unit_linked_unverified"
+
+
+def test_plot_without_villa_sales_stays_unverified():
+    contact = _plot_contact()
+
+    _apply_evidence(contact, sales={}, rentals={})
+
+    assert contact.ownership_status == "unit_linked_unverified"
+
+
 def test_unresolvable_source_and_registry_gap_are_distinct_states():
     missing_identity = _contact(building_name="Sidra 2", unit_number="")
     _apply_evidence(missing_identity, sales={}, rentals={})

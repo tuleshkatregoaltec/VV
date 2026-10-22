@@ -12,7 +12,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.crm import import_repository
 from app.crm.ai import _llm_mapping
-from app.crm.cadastral import resolve_cadastral_plots
+from app.crm.cadastral import resolve_cadastral_plots, villa_sales_for_plots
 from app.crm.identity import (
     _candidate_owner_key,
 )
@@ -171,6 +171,7 @@ async def process_contact_import(
         await _apply_registry_unit_fallbacks(candidates, sales)
         rentals = await _rental_evidence(candidates)
         await resolve_cadastral_plots(candidates)
+        sales.update(await villa_sales_for_plots(candidates))
         for candidate in candidates:
             _apply_evidence(candidate, sales=sales, rentals=rentals)
         # Each source event is persisted independently. Repeated owner/property
