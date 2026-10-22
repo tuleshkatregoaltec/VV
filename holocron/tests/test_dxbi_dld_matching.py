@@ -301,7 +301,11 @@ def test_sister_buildings_let_at_one_rent_keep_their_own_leases(warehouse) -> No
     leases = [
         [key, key, key, building, area, sqft, 150_000, 150_000, start, end, "a", "r", "p", "l",
          b"0" * 20, b"0" * 64, start, loaded]
-        for key, building, sqft in (("lease-nice1", "Nice 1", 1500.0), ("lease-nice2", "Nice 2", 1400.0))
+        for key, building, sqft in (
+            ("lease-nice1", "Nice 1", 1400.0), ("lease-nice2", "Nice 2", 1390.0),
+            # A 787 sqft lease at the same rent and dates as a 312 sqft office elsewhere.
+            ("lease-oberoi", "Oberoi Centre", 787.0),
+        )
     ]  # fmt: skip
     warehouse.insert_rows(
         table="dxbi_rental_events",
@@ -316,7 +320,10 @@ def test_sister_buildings_let_at_one_rent_keep_their_own_leases(warehouse) -> No
     rents = [
         [f"r{i}", "run", i, datetime(2025, 5, 20), datetime(2025, 6, 1), datetime(2026, 5, 31),
          150_000, 150_000, sqm, area, project]
-        for i, (sqm, project) in enumerate(((130.0, "DAMAC LAGOONS - NICE 1"), (140.0, "DAMAC LAGOONS - NICE 2")))
+        for i, (sqm, project) in enumerate(
+            ((129.5, "DAMAC LAGOONS - NICE 1"), (130.0, "DAMAC LAGOONS - NICE 2"),
+             (29.0, "TAMANI ARTS OFFICES"))
+        )
     ]  # fmt: skip
     warehouse.insert_rows(
         table="dld_od_rents_bronze",
@@ -337,6 +344,10 @@ def test_sister_buildings_let_at_one_rent_keep_their_own_leases(warehouse) -> No
             " ON r.dld_rent_key = m.dld_rent_key"
         ).result_rows
     )
+    # Floor areas within 5% of each other: by floor-area order alone Nice 2's 1,390 sqft lease
+    # takes Nice 1's 1,394 sqft contract; the building's project keeps them apart. The 787 sqft
+    # lease pairs with no 312 sqft office (it took Nice 2's 1,399 sqft contract before the size
+    # rule, or the office).
     assert pairs == {
         "lease-nice1": "DAMAC LAGOONS - NICE 1",
         "lease-nice2": "DAMAC LAGOONS - NICE 2",

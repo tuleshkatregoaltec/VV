@@ -1102,6 +1102,16 @@ _RENTAL_DLD_AREA = (
     " n.dld_area != '', n.dld_area, '')"
 )
 
+# A lease and a DLD contract with the same area, dates and rent are one lease only when their floor
+# areas agree (within 5%, where both have one). Rents are round numbers many leases share: of the
+# pairs whose areas differed by more, 70-77% named another project than the lease's building
+# (measured 2026-10-22: Oberoi Centre's 787 sqft lease had taken a 312 sqft Tamani Arts office).
+RENTAL_SIZE_TOLERANCE = 0.05
+_RENTAL_SIZE_OK = (
+    "(a.size_sqft <= 0 OR b.sqft <= 0"
+    f" OR abs(a.size_sqft - b.sqft) <= {RENTAL_SIZE_TOLERANCE} * b.sqft)"
+)
+
 _RENTAL_MATCH_INPUTS = f"""{_RENTAL_AREA_CTES},
     dld AS (
         SELECT dld_rent_key, toDate(start_date) AS s, toDate(end_date) AS e,
@@ -1160,6 +1170,7 @@ INNER JOIN (
     WHERE {dld_filter}
       AND dld_rent_key NOT IN (SELECT dld_rent_key FROM `market_rental_matches`)
 ) AS b ON {join_on} AND a.rn = b.rn
+WHERE {_RENTAL_SIZE_OK}
 {_HEAVY_QUERY_SETTINGS}
 """
 
@@ -1244,6 +1255,7 @@ INNER JOIN (
       AND dld_rent_key NOT IN (SELECT dld_rent_key FROM `market_rental_matches`)
 ) AS b ON a.k0 = b.k0 AND a.k1 = b.k1 AND a.k2 = b.k2 AND a.k3 = b.k3 AND a.k4 = b.k4
       AND a.rn = b.rn
+WHERE {_RENTAL_SIZE_OK}
 {_HEAVY_QUERY_SETTINGS}
 """
 
@@ -1470,7 +1482,8 @@ WITH {_RENTAL_MATCH_INPUTS},
 SELECT a.contract_key, b.dld_rent_key, {tier}, toInt32(abs(dateDiff('day', b.e, a.lease_end))),
        abs(a.size_sqft - b.sqft) / greatest(b.sqft, 1.0), 1, now64(3)
 FROM a INNER JOIN b ON a.k0 = b.k0 AND a.k1 = b.k1 AND a.k2 = b.k2 AND a.k3 = b.k3
-WHERE b.loc = a.loc OR (a.dxbi_area, b.loc) IN (SELECT dxbi_area, dld_area FROM area_sets)
+WHERE (b.loc = a.loc OR (a.dxbi_area, b.loc) IN (SELECT dxbi_area, dld_area FROM area_sets))
+  AND {_RENTAL_SIZE_OK}
 {_HEAVY_QUERY_SETTINGS}
 """
 
@@ -1516,6 +1529,7 @@ WITH {_RENTAL_MATCH_INPUTS},
             WHERE {dld_filter}
               AND dld_rent_key NOT IN (SELECT dld_rent_key FROM `market_rental_matches`)
         ) AS b ON {join_on} AND a.kloc = b.kloc AND a.rn = b.rn
+        WHERE {_RENTAL_SIZE_OK}
     )
 SELECT contract_key, dld_rent_key, {tier}, end_day_gap, size_gap, 1, now64(3)
 FROM (
