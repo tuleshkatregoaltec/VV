@@ -175,7 +175,25 @@ Executive Towers Plaza Boutiques), and in a building of under 5 records one reco
 the building decides (Emaar Square 5, The Pulse Beachfront, Binghatti Galaxy). Three remain: two
 leases of Mog 193 unit 308 (Discovery Gardens, its building 51% Mogul Cluster; the two sources
 disagree) and one sale in a 2-record I Suites building. Executive Bay Podium's one Executive Bay B
-lease re-filed to Executive Bay A (2 of its 3 records); a shared podium may belong to both.
+lease re-filed to Executive Bay A (2 of its 3 records), but its own DLD lease (same dates and
+1,268 sqft) is Executive Bay B: a podium's name now counts as generic, so its records keep their
+pairing. Five remain in another project than their building's: the three above and two podium
+records, by design.
+
+Pairing and size (measured 22 Oct 2026 on the current pairs; a pair "agrees" when its project is
+its clear building's, "disagrees" when it was re-filed):
+
+| Size gap DXBI vs DLD | Sales: pairs / agree / disagree | Leases: pairs / agree / disagree |
+|---|---|---|
+| <= 5% | 821,200 / 797,196 / 4,560 (0.6% wrong) | 356,589 / 315,960 / 4,157 (1.3%) |
+| 5-20% | 3,210 / 2,400 / 737 (24%) | 3,202 / 593 / 1,368 (70%) |
+| 20-50% | 2,015 / 1,062 / 854 (45%) | 2,934 / 470 / 1,211 (72%) |
+| > 50% | 1,791 / 727 / 868 (54%) | 2,152 / 270 / 910 (77%) |
+| a side has no size | 12,426 / 12,221 / 132 | 412 / 45 / 154 |
+
+A size check (both sizes known) is worth it for leases at 5%: it would drop 8,288 pairs, about
+3,500 of them wrong and 1,300 right. For sales it is a coin flip beyond 20% (about half of those
+pairs agree with their building) and is not proposed. Not applied: waiting for the user.
 
 The building steps are now computed once into work tables (`analytics_first_ids__work`,
 `analytics_record_ids__work`, `analytics_dld_votes__work`, `analytics_building_merge__work`);

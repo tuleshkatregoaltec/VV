@@ -330,6 +330,9 @@ def test_records_file_under_their_buildings_project(warehouse) -> None:  # noqa:
     # A small building (7 records): two sales paired to a neighbour still re-file at 60%.
     records("Plaza Seven", "Business Bay", "BOUTIQUE SEVEN", "BUSINESS BAY", 5)
     records("Plaza Seven", "Business Bay", "TAMANI ARTS", "BUSINESS BAY", 2)
+    # A podium the towers above it share keeps each record's own pairing.
+    records("Bay Podium", "Business Bay", "BAY A", "BUSINESS BAY", 2)
+    records("Bay Podium", "Business Bay", "BAY B", "BUSINESS BAY", 1)
     # Two records: the one named like the building decides.
     records("Emaar Square 5", "Downtown", "EMAAR SQUARE 5", "DOWNTOWN", 1)
     records("Emaar Square 5", "Downtown", "HEART OF EUROPE 2", "WORLD ISLANDS", 1)
@@ -385,4 +388,5 @@ def test_records_file_under_their_buildings_project(warehouse) -> None:  # noqa:
     assert filed[("G-24", "G-24")] == (11, 1)
     assert filed[("Plaza Seven", "Boutique Seven")] == (7, 1)
     assert filed[("Emaar Square 5", "Emaar Square 5")] == (2, 1)
+    assert filed[("Bay Podium", "Bay B")] == (1, 0)
     assert filed[("Harbour Point", "Marina One")] == (10, 1)

@@ -619,10 +619,12 @@ def project_key(expr: str) -> str:
 
 
 # A building name that names no one building: it starts with a generic word ("Tower A",
-# "Building 2", "Block B1") or is a bare letter or number ("A", "12").
+# "Building 2", "Block B1"), is a bare letter or number ("A", "12"), or is a podium, which the
+# towers above it share (Executive Bay Podium's lease is DLD's Executive Bay B, though two of
+# its three records are Executive Bay A).
 GENERIC_BUILDING = (
     "^((tower|towers|building|block|bldg|cluster|phase|villa|villas|townhouse|plot)"
-    "[a-z]?[0-9]{0,3}[a-z]?|[a-z][0-9]?|[0-9]{1,2})$"
+    "[a-z]?[0-9]{0,3}[a-z]?|[a-z][0-9]?|[0-9]{1,2})$|podium"
 )
 
 
