@@ -657,6 +657,10 @@ def title_case(expr: str) -> str:
 CLEAR_SHARE = 0.8
 SISTER_SHARE = 0.6
 ELSEWHERE_SHARE = 0.5
+# Those rules need 10 records; a building with 3-9 (Oberoi Centre, an Urbana block) re-files at
+# SISTER_SHARE unless its name is generic: its odd records are pairings from elsewhere.
+BUILDING_RECORDS = 10
+SMALL_BUILDING_RECORDS = 3
 
 
 def hierarchy_resolved(records: str) -> str:
@@ -676,11 +680,14 @@ def hierarchy_resolved(records: str) -> str:
     community = building_community_key("s1.h_building", "s1.h_community", "s1.h_dxbi_project")
     same_master = f"{name_key('s2.ap_master')} = ab.ab_master"
     by_building = (
-        "(s2.clear_building AND ab.ab_project != '' AND ab.ab_records >= 10"
+        "(s2.clear_building AND ab.ab_project != ''"
         " AND (s2.raw_scope = '' OR ab.ab_project != s2.scope_key_)"
-        f" AND (ab.ab_named OR ab.ab_share >= {CLEAR_SHARE}"
+        f" AND (ab.ab_named"
+        f" OR (ab.ab_records >= {BUILDING_RECORDS} AND (ab.ab_share >= {CLEAR_SHARE}"
         f" OR (ab.ab_share >= {SISTER_SHARE} AND NOT ab.ab_generic AND {same_master})"
         f" OR (ab.ab_share >= {ELSEWHERE_SHARE} AND NOT ({same_master}))))"
+        f" OR (ab.ab_records >= {SMALL_BUILDING_RECORDS} AND ab.ab_share >= {SISTER_SHARE}"
+        " AND NOT ab.ab_generic)))"
     )
     return f"""(
     SELECT s2.*,

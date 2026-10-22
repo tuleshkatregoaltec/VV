@@ -165,9 +165,17 @@ different"). The 16,656 records whose building was under 80% agreement were thre
 
 | | After first pass | After second pass |
 |---|---:|---:|
-| Records re-filed to their building's project | 14,196 | 30,370 (8,254 sales, 22,116 leases) |
-| Records in another project than their building's | 16,656 | 40 (38 in buildings with < 10 records, 2 sister at 50-60%) |
-| Projects / buildings with a register count | 3,543 / 4,183 | 3,550 / 4,204 |
+| Records re-filed to their building's project | 14,196 | 30,413 |
+| Records in another project than their building's | 16,656 | 40, then 3 (see below) |
+| Projects / buildings with a register count | 3,543 / 4,183 | 3,550 / 4,203 |
+
+The 40 (listed in `remaining_40_records.csv`) were buildings of under 10 records: a small
+building (3-9) now re-files at 60% unless generic (Oberoi Centre, Urbana stacked-house blocks,
+Executive Towers Plaza Boutiques), and in a building of under 5 records one record named like
+the building decides (Emaar Square 5, The Pulse Beachfront, Binghatti Galaxy). Three remain: two
+leases of Mog 193 unit 308 (Discovery Gardens, its building 51% Mogul Cluster; the two sources
+disagree) and one sale in a 2-record I Suites building. Executive Bay Podium's one Executive Bay B
+lease re-filed to Executive Bay A (2 of its 3 records); a shared podium may belong to both.
 
 The building steps are now computed once into work tables (`analytics_first_ids__work`,
 `analytics_record_ids__work`, `analytics_dld_votes__work`, `analytics_building_merge__work`);

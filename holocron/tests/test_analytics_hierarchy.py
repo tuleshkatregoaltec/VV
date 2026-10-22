@@ -327,6 +327,12 @@ def test_records_file_under_their_buildings_project(warehouse) -> None:  # noqa:
     records("Tower A", "Hills", "CLUB DRIVE", "HILLS ESTATE", 8, dxbi_project="Club Drive")
     records("Tower A", "Hills", "ADDRESS HILLS", "HILLS ESTATE", 2, dxbi_project="Club Drive")
     records("Tower A", "Hills", "ADDRESS HILLS", "HILLS ESTATE", 10, dxbi_project="Address Hills")
+    # A small building (7 records): two sales paired to a neighbour still re-file at 60%.
+    records("Plaza Seven", "Business Bay", "BOUTIQUE SEVEN", "BUSINESS BAY", 5)
+    records("Plaza Seven", "Business Bay", "TAMANI ARTS", "BUSINESS BAY", 2)
+    # Two records: the one named like the building decides.
+    records("Emaar Square 5", "Downtown", "EMAAR SQUARE 5", "DOWNTOWN", 1)
+    records("Emaar Square 5", "Downtown", "HEART OF EUROPE 2", "WORLD ISLANDS", 1)
     # G-24: one named building, not a generic one; three sales paired to a JVC neighbour.
     records("G-24", "JVC", "G-24", "JVC", 8)
     records("G-24", "JVC", "CONDOR CLASSIC", "JVC", 3)
@@ -377,4 +383,6 @@ def test_records_file_under_their_buildings_project(warehouse) -> None:  # noqa:
     ).result_rows
     assert towers == [("Address Hills", 10), ("Club Drive", 10)]
     assert filed[("G-24", "G-24")] == (11, 1)
+    assert filed[("Plaza Seven", "Boutique Seven")] == (7, 1)
+    assert filed[("Emaar Square 5", "Emaar Square 5")] == (2, 1)
     assert filed[("Harbour Point", "Marina One")] == (10, 1)

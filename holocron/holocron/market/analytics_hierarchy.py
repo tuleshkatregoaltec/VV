@@ -498,7 +498,8 @@ _FIRST_IDS = f"""
         GROUP BY name_key, community_key, project_key
     ),
     -- A building's project: one named like it (Spring Oasis, though It Plaza pairings
-    -- outnumber it; at least 5 records and a tenth of them), else the most common.
+    -- outnumber it; at least 5 records and a tenth of them, any in a building of under 5),
+    -- else the most common.
     names AS (
         SELECT name_key, community_key,
                if(named != '', named, top) AS top_project, top_n, voted, named,
@@ -507,11 +508,14 @@ _FIRST_IDS = f"""
             SELECT b.name_key AS name_key, b.community_key AS community_key,
                    argMax(v.project_key, v.n) AS top, max(v.n) AS top_n, sum(v.n) AS voted,
                    argMaxIf(v.project_key, v.n,
-                            {named_like(_NAMING_KEY.format(n="b"), "v.project_key")} AND v.n >= 5)
+                            {named_like(_NAMING_KEY.format(n="b"), "v.project_key")})
                        AS named_any,
                    maxIf(v.n, {named_like(_NAMING_KEY.format(n="b"), "v.project_key")})
                        AS named_n,
-                   if(named_n >= 5 AND named_n >= 0.1 * voted, named_any, '') AS named,
+                   -- In a building of under 5 records one record's name decides
+                   -- (Emaar Square 5: 2 records, 1 paired to The Heart Of Europe 2).
+                   if((named_n >= 5 AND named_n >= 0.1 * voted) OR (voted < 5 AND named_n >= 1),
+                      named_any, '') AS named,
                    arrayReverseSort(x -> x.1, groupArray((v.n, v.project_key))) AS ranked
             FROM (SELECT name_key, community_key FROM building_records
                   GROUP BY name_key, community_key HAVING countIf(place) < 0.2 * count()) AS b
