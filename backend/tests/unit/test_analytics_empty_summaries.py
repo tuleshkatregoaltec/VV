@@ -88,8 +88,9 @@ async def test_project_without_sales_or_leases_has_no_figures(monkeypatch):
                       "std_price_sqft")  # fmt: skip
         return [{"rooms_en": "__all__", "sale_count": 0, **dict.fromkeys(statistics, NAN)}]
 
+    # Nor has the hierarchy a row for it (no records, no place in it yet).
     for name in dir(queries):
-        if name.startswith("fetch_project_") or name == "fetch_project_developers_by_scope":
+        if name.startswith(("fetch_project_", "fetch_scope_")):
             monkeypatch.setattr(queries, name, rows)
     monkeypatch.setattr(queries, "fetch_project_sales_summary", no_sales)
     monkeypatch.setattr(queries, "fetch_project_rentals_summary", no_leases)
