@@ -7622,7 +7622,8 @@ export type ProjectForecastResponse = {
  *
  * A scope's metadata. ``field_sources`` names each filled field's source: "dxbi_buildings"
  * (DXBInteract's building list), "dld_units" (DLD's unit register), "buildings" (its
- * buildings' counts added up), "dld_land_plots" (DLD's land register, villa plots),
+ * buildings' counts added up), "dld_projects" (DLD's project register), "dld_land_plots"
+ * (DLD's land register, villa plots),
  * "units_traded" (no register count: the distinct units traded, ``units_at_least``) or
  * "projects_rollup" (a master: its projects' counts added up).
  */

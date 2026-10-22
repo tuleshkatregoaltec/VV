@@ -205,6 +205,10 @@ def test_unit_counts_where_names_and_numbers_disagree(warehouse) -> None:  # noq
     for i in range(1, 5):
         sale(f"s{i}", "Shore 1", "SHORE", f"20{i}", 700.0, "Business Bay", "BB")
         sale(f"t{i}", "Shore 2", "SHORE", f"20{i}", 700.0, "Business Bay", "BB")
+    # Launch Tower: launched after the unit register's snapshot; DLD's project register declares
+    # its 40 units.
+    for i in range(1, 7):
+        sale(f"l{i}", "Launch Tower", "LAUNCH TOWER", f"50{i}", 700.0, "Business Bay", "BB")
     # Format Tower: five registered units, written seven ways, and a parking bay.
     for i, unit in enumerate(["101", "FLAT 101", "Unit No. 102", "0103", "103", "104", "105",
                               "PARKING P1"]):  # fmt: skip
@@ -250,6 +254,13 @@ def test_unit_counts_where_names_and_numbers_disagree(warehouse) -> None:  # noq
         ],
     )  # fmt: skip
 
+    warehouse.insert_rows(
+        table="dld_od_projects_bronze",
+        rows=[["p1", "2026-09-20", "2026-09-20", "LAUNCH TOWER", 77, 40, 0]],
+        column_names=["row_key", "run_id", "scraped_at", "project_en", "project_id", "cnt_unit",
+                      "cnt_villa"],
+    )  # fmt: skip
+
     hierarchy.build_hierarchy(warehouse)
 
     links = warehouse.query(
@@ -276,6 +287,8 @@ def test_unit_counts_where_names_and_numbers_disagree(warehouse) -> None:  # noq
     # The register's 8 units, not "at least 6 traded".
     assert stock["icontower1"] == (8, "buildings", 0, 6)
     assert stock["geepastower"][0:3] == (6, "buildings", 0)
+    # Not in the unit register: DLD's project register counts it, not "at least 6 traded".
+    assert stock["launchtower"] == (40, "dld_projects", 0, 6)
     assert stock["twinheights"] == (8, "buildings", 0, 8)
     # Seven spellings of five units and a parking bay are five units traded: the register counts.
     assert stock["formattower"] == (5, "buildings", 0, 5)

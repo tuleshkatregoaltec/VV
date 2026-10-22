@@ -193,7 +193,15 @@ its clear building's, "disagrees" when it was re-filed):
 
 A size check (both sizes known) is worth it for leases at 5%: it would drop 8,288 pairs, about
 3,500 of them wrong and 1,300 right. For sales it is a coin flip beyond 20% (about half of those
-pairs agree with their building) and is not proposed. Not applied: waiting for the user.
+pairs agree with their building) and is not proposed. Applied for leases on 22 Oct (user):
+leases paired 1,418,882 -> 1,411,948; leases re-filed because their pairing named another
+project 22,1xx -> 17,236.
+
+DLD's project register (`dld_od_projects_bronze`: `cnt_unit` + `cnt_villa`, newest snapshot,
+September 2026) is a unit source after the unit register and before land plots, by name or by
+the DLD project a unit-number link found. It counts 188 projects that showed "at least N
+traded", 43 of them launched after the unit register's May snapshot. Projects with a register
+count: 3,550 -> 3,730 of 4,394.
 
 The building steps are now computed once into work tables (`analytics_first_ids__work`,
 `analytics_record_ids__work`, `analytics_dld_votes__work`, `analytics_building_merge__work`);

@@ -24,7 +24,8 @@ carry its keys (decisions 2026-10-21, docs/data-pipelines/ANALYTICS_HIERARCHY_PL
   project first); ``stray`` marks them on the listed tables.
 * Units name their source: DXBI's building list, then DLD's unit register (a building matched by
   unit numbers, at their floor areas where towers repeat the numbers, or the project), then DLD's
-  land register (villa plots). A project DLD holds under another name, or under no project, is
+  project register (the units a registered project declares), then DLD's land register (villa
+  plots). A project DLD holds under another name, or under no project, is
   linked to it by its unit numbers and floor areas (``analytics_project_dld_keys``). A DLD
   building two buildings match counts for neither. A count below the units that traded there is
   not a count of the stock: those traded units are given instead, marked ``units_at_least``.
@@ -927,17 +928,38 @@ WITH {_CARDS},
         WHERE project_en != '' AND prop_sub_type_en = 'Residential'
         GROUP BY project_key
     ),
+    -- DLD's project register: the units and villas a registered project declares (its newest
+    -- snapshot), by name or by the DLD project its unit numbers linked it to. It covers
+    -- projects launched after the unit register's snapshot and off-plan villa phases.
+    project_register AS (
+        SELECT if(l.project_key != '', l.project_key, r.name_key) AS project_key,
+               max(r.units) AS units
+        FROM (
+            SELECT {_project_alias(project_key("project_en"))} AS name_key,
+                   concat('p:', toString(project_id)) AS dld_group,
+                   argMax(cnt_unit + cnt_villa, scraped_at) AS units
+            FROM dld_od_projects_bronze
+            WHERE project_en != ''
+            GROUP BY name_key, dld_group
+        ) AS r
+        LEFT JOIN (SELECT dld_group AS l_group, project_key FROM analytics_project_dld_keys)
+            AS l ON l.l_group = r.dld_group
+        WHERE r.units > 0
+        GROUP BY project_key
+    ),
     project_stock AS (
         SELECT p.project_key AS project_key, pt.traded AS traded, pc.units AS card_units,
                if(pb.covered >= 0.95, pb.units, 0) AS building_units,
                if(pb.all_dxbi, 'dxbi_buildings', 'buildings') AS building_source,
-               pb.buildings AS buildings, pd.units AS dld_units, pp.units AS plots
+               pb.buildings AS buildings, pd.units AS dld_units, pp.units AS plots,
+               pr.units AS register_units
         FROM analytics_projects AS p
         LEFT JOIN project_traded AS pt ON pt.project_key = p.project_key
         LEFT JOIN project_cards AS pc ON pc.project_key = p.project_key
         LEFT JOIN project_buildings AS pb ON pb.project_key = p.project_key
         LEFT JOIN project_dld AS pd ON pd.project_key = p.project_key
         LEFT JOIN project_plots AS pp ON pp.project_key = p.project_key
+        LEFT JOIN project_register AS pr ON pr.project_key = p.project_key
     )
 SELECT 'building', c.building_id, c.pick.2, c.pick.1, c.pick.1 = 'units_traded', c.traded, 1,
        m.mix_rooms, m.mix_units, m.mix_sqft,
@@ -957,6 +979,8 @@ FROM (
                    (building_source, building_units),
                    dld_units > 0 AND dld_units >= {UNITS_TRADED_FLOOR} * traded,
                    ('dld_units', dld_units),
+                   register_units > 0 AND register_units >= {UNITS_TRADED_FLOOR} * traded,
+                   ('dld_projects', register_units),
                    plots > 0 AND plots >= {UNITS_TRADED_FLOOR} * traded,
                    ('dld_land_plots', plots),
                    traded > 0, ('units_traded', traded), ('', 0)) AS pick

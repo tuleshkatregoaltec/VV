@@ -239,6 +239,7 @@ const FIELD_LABELS: Record<string, string> = {
 const SOURCE_LABELS: Record<string, string> = {
 	dxbi_buildings: "DXBInteract's building list",
 	dld_units: "DLD's unit register",
+	dld_projects: "DLD's project register",
 	buildings: 'its buildings added up',
 	dld_land_plots: "DLD's land register (villa plots)",
 	units_traded: 'units with a recorded sale or lease (no register count)',
