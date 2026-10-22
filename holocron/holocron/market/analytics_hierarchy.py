@@ -28,8 +28,8 @@ carry its keys (decisions 2026-10-21, docs/data-pipelines/ANALYTICS_HIERARCHY_PL
   plots). A project DLD holds under another name, or under no project, is
   linked to it by its unit numbers and floor areas (``analytics_project_dld_keys``). A DLD
   building two buildings match counts for neither. A count below the units that traded there is
-  not a count of the stock, and no estimate replaces it (user, 2026-10-22): the scope has no
-  unit count, only its ``units_traded``.
+  not a count of the stock. Where none is left the count is our own (user, 2026-10-22): every
+  distinct unit number the records and DLD's register name there (``unit_numbers``).
   Unit numbers are compared and counted in one form (``unit_key``).
 """
 
@@ -847,14 +847,31 @@ WITH {_CARDS},
         )
         GROUP BY building_id
     ),
+    -- Our own count where neither DXBI nor DLD gives one (user, 2026-10-22): every distinct unit
+    -- number the building's records name, with those DLD registers in the DLD building it
+    -- matched (Skyvue's register misses tower D's top floors; its sales name them).
+    building_own AS (
+        SELECT building_id, uniqExact(unit_key) AS units FROM (
+            SELECT building_id, unit_key FROM record_buildings
+            WHERE building_id != '' AND countable
+            UNION ALL
+            SELECT b.building_id, u.unit_key
+            FROM analytics_buildings AS b
+            INNER JOIN dld_units AS u ON u.dld_building = b.dld_building
+            WHERE b.dld_building != '' AND b.dld_claims = 1 AND u.unit_key NOT IN ('', '0')
+        )
+        GROUP BY building_id
+    ),
     buildings_stock AS (
         SELECT b.building_id AS building_id, b.project_key AS project_key,
                b.records AS records,
-               bc.units AS card_units, bd.units AS dld_units, bt.traded AS traded
+               bc.units AS card_units, bd.units AS dld_units, bt.traded AS traded,
+               bo.units AS own_units
         FROM analytics_buildings AS b
         LEFT JOIN building_cards AS bc ON bc.building_id = b.building_id
         LEFT JOIN building_dld AS bd ON bd.building_id = b.building_id
         LEFT JOIN building_traded AS bt ON bt.building_id = b.building_id
+        LEFT JOIN building_own AS bo ON bo.building_id = b.building_id
     ),
     building_choice AS (
         SELECT *,
@@ -862,6 +879,7 @@ WITH {_CARDS},
                        ('dxbi_buildings', card_units),
                        dld_units > 0 AND dld_units >= {UNITS_TRADED_FLOOR} * traded,
                        ('dld_units', dld_units),
+                       own_units > 0, ('unit_numbers', own_units),
                        ('', 0)) AS pick
         FROM buildings_stock
     ),
@@ -948,12 +966,35 @@ WITH {_CARDS},
         WHERE r.units > 0
         GROUP BY project_key
     ),
+    -- The project's own count: the distinct unit numbers of its buildings' records and of its
+    -- DLD register (by DLD building, as its traded units are), or, for a project without
+    -- buildings, of its records and register.
+    project_own AS (
+        SELECT project_key, uniqExact(ident, unit_key) AS units FROM (
+            SELECT b.b_project AS project_key, if(b.b_dld != '', b.b_dld, r.building_id) AS ident,
+                   r.unit_key AS unit_key
+            FROM record_buildings AS r
+            INNER JOIN (SELECT building_id AS b_id, project_key AS b_project,
+                               dld_building AS b_dld
+                        FROM analytics_buildings) AS b ON b.b_id = r.building_id
+            WHERE r.building_id != '' AND r.countable AND b.b_project != ''
+            UNION ALL
+            SELECT project_key, '', unit_key FROM record_buildings
+            WHERE project_key != '' AND building_id = '' AND building_text = '' AND countable
+              AND project_key NOT IN (SELECT project_key FROM analytics_buildings)
+            UNION ALL
+            SELECT project_key, if(project_key IN (SELECT project_key FROM analytics_buildings),
+                                   dld_building, ''), unit_key
+            FROM dld_units WHERE project_key != '' AND unit_key NOT IN ('', '0')
+        )
+        GROUP BY project_key
+    ),
     project_stock AS (
         SELECT p.project_key AS project_key, pt.traded AS traded, pc.units AS card_units,
                if(pb.covered >= 0.95, pb.units, 0) AS building_units,
                if(pb.all_dxbi, 'dxbi_buildings', 'buildings') AS building_source,
                pb.buildings AS buildings, pd.units AS dld_units, pp.units AS plots,
-               pr.units AS register_units
+               pr.units AS register_units, po.units AS own_units
         FROM analytics_projects AS p
         LEFT JOIN project_traded AS pt ON pt.project_key = p.project_key
         LEFT JOIN project_cards AS pc ON pc.project_key = p.project_key
@@ -961,6 +1002,7 @@ WITH {_CARDS},
         LEFT JOIN project_dld AS pd ON pd.project_key = p.project_key
         LEFT JOIN project_plots AS pp ON pp.project_key = p.project_key
         LEFT JOIN project_register AS pr ON pr.project_key = p.project_key
+        LEFT JOIN project_own AS po ON po.project_key = p.project_key
     )
 SELECT 'building', c.building_id, c.pick.2, c.pick.1, 0, c.traded, 1,
        m.mix_rooms, m.mix_units, m.mix_sqft,
@@ -984,6 +1026,7 @@ FROM (
                    ('dld_projects', register_units),
                    plots > 0 AND plots >= {UNITS_TRADED_FLOOR} * traded,
                    ('dld_land_plots', plots),
+                   own_units > 0, ('unit_numbers', own_units),
                    ('', 0)) AS pick
     FROM project_stock
 ) AS s

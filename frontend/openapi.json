@@ -22500,7 +22500,7 @@
 				"type": "object",
 				"required": ["project_name"],
 				"title": "ProjectMeta",
-				"description": "A scope's metadata. ``field_sources`` names each filled field's source: \"dxbi_buildings\"\n(DXBInteract's building list), \"dld_units\" (DLD's unit register), \"buildings\" (its\nbuildings' counts added up), \"dld_projects\" (DLD's project register), \"dld_land_plots\"\n(DLD's land register, villa plots),\n\"units_traded\" (no register count: the distinct units traded, ``units_at_least``) or\n\"projects_rollup\" (a master: its projects' counts added up)."
+				"description": "A scope's metadata. ``field_sources`` names each filled field's source: \"dxbi_buildings\"\n(DXBInteract's building list), \"dld_units\" (DLD's unit register), \"buildings\" (its\nbuildings' counts added up), \"dld_projects\" (DLD's project register), \"dld_land_plots\"\n(DLD's land register, villa plots),\n\"unit_numbers\" (our own count: the distinct unit numbers in the records and DLD's register),\n\"units_traded\" (no register count: the distinct units traded, ``units_at_least``) or\n\"projects_rollup\" (a master: its projects' counts added up)."
 			},
 			"ProjectPipelinePoint": {
 				"properties": {

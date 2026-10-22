@@ -243,6 +243,7 @@ const SOURCE_LABELS: Record<string, string> = {
 	buildings: 'its buildings added up',
 	dld_land_plots: "DLD's land register (villa plots)",
 	units_traded: 'units with a recorded sale or lease (no register count)',
+	unit_numbers: 'counted from the unit numbers in our records',
 	projects_rollup: 'its projects added up',
 	dxbi_records: 'DXBI buildings with records'
 }

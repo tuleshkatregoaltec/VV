@@ -292,8 +292,8 @@ def test_unit_counts_where_names_and_numbers_disagree(warehouse) -> None:  # noq
     assert stock["twinheights"] == (8, "buildings", 0, 8)
     # Seven spellings of five units and a parking bay are five units traded: the register counts.
     assert stock["formattower"] == (5, "buildings", 0, 5)
-    # One DLD building is one building: matched by two, its 5 units are neither's, and no
-    # estimate stands in (user, 2026-10-22): no unit count, only the 4 units traded.
+    # One DLD building is one building: matched by two, its 5 units are neither's; the count is
+    # our own (user, 2026-10-22): the 4 distinct unit numbers each building's records name.
     shore = dict(
         warehouse.query(
             "SELECT b.building_name, (s.units, s.units_source, s.units_at_least, s.units_traded)"
@@ -302,7 +302,7 @@ def test_unit_counts_where_names_and_numbers_disagree(warehouse) -> None:  # noq
             " WHERE b.building_name LIKE 'Shore %'"
         ).result_rows
     )
-    assert shore == {"Shore 1": (0, "", 0, 4), "Shore 2": (0, "", 0, 4)}
+    assert shore == {"Shore 1": (4, "unit_numbers", 0, 4), "Shore 2": (4, "unit_numbers", 0, 4)}
 
 
 @live

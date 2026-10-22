@@ -204,10 +204,12 @@ traded", 43 of them launched after the unit register's May snapshot. Projects wi
 count: 3,550 -> 3,730 of 4,394.
 
 No "at least N units traded" (user, 22 Oct): a project or building shows DXBI's building-list
-count, else a DLD register count, else no unit count. Its units traded stay in the stock table
-(`units_traded`) as evidence but are not shown as units. 664 projects and 2,016 buildings show
-no unit count; DXBI's own count covers 1,580 projects and 1,567 buildings, DLD's registers the
-rest of the 3,730 / 4,199.
+count, else a DLD register count, else our own count (`unit_numbers`): every distinct unit
+number its records and DLD's register name there (Skyvue: DLD's 1,850 and the tower D floors
+only its sales name, 2,281). Every project and building with a unit number has a count: 4,395
+projects (DXBI 1,580, DLD 2,151, ours 664) and 6,215 buildings (DXBI 1,567, DLD 2,633, ours
+2,015). Our own count misses units that never traded and DLD has not registered; on buildings
+with a DXBI or DLD count, traded units alone were a median 90% of it.
 
 The building steps are now computed once into work tables (`analytics_first_ids__work`,
 `analytics_record_ids__work`, `analytics_dld_votes__work`, `analytics_building_merge__work`);
