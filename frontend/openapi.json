@@ -2536,7 +2536,7 @@
 							"anyOf": [
 								{
 									"type": "string",
-									"pattern": "^(verified_current_owner|probable_current_owner|unit_linked_unverified|former_owner|conflicting_claim|insufficient_property_data|registry_not_observed|unmatched)$"
+									"pattern": "^(verified_current_owner|probable_current_owner|unit_linked_unverified|former_owner|conflicting_claim|insufficient_property_data|registry_not_observed|unmatched|mortgage)$"
 								},
 								{
 									"type": "null"
@@ -11042,6 +11042,17 @@
 						"type": "string",
 						"title": "Owner Key"
 					},
+					"report_status": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Report Status"
+					},
 					"duplicate_count": {
 						"type": "integer",
 						"title": "Duplicate Count",
@@ -11125,6 +11136,13 @@
 						},
 						"type": "array",
 						"title": "Mappings"
+					},
+					"mortgage_by_status": {
+						"additionalProperties": {
+							"type": "integer"
+						},
+						"type": "object",
+						"title": "Mortgage By Status"
 					},
 					"error_message": {
 						"anyOf": [

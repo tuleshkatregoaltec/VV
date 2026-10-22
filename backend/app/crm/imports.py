@@ -336,6 +336,13 @@ async def _import_response(
         status=record.status,  # type: ignore[arg-type]
         summary=CrmContactImportSummary.model_validate(record.summary or {}),
         mappings=[CrmSheetMapping.model_validate(item) for item in raw_sheets],
+        mortgage_by_status=dict(
+            await import_repository.count_mortgage_review_by_status(
+                db, record.organization_id, record.id
+            )
+        )
+        if record.status == "completed"
+        else {},
         error_message=record.error_message,
         created_at=record.created_at,
         completed_at=record.completed_at,
