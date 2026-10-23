@@ -61,15 +61,19 @@ async def count_import_claim_metrics(db: AsyncSession, organization_id, record_i
                     ),
                 )
             ),
+            func.count().filter(CrmPropertyContactClaim.latest_sale_date.is_not(None)),
+            func.count().filter(
+                and_(
+                    CrmPropertyContactClaim.property_key.like("dld-land:%"),
+                    CrmPropertyContactClaim.unit_number == "",
+                )
+            ),
         ).where(
             CrmPropertyContactClaim.organization_id == organization_id,
             CrmPropertyContactClaim.import_id == record_id,
         )
     )
-    candidate_rows, valid_contacts, rental_opportunities, contact_ready = (
-        int(value or 0) for value in metrics_result.one()
-    )
-    return candidate_rows, valid_contacts, rental_opportunities, contact_ready
+    return tuple(int(value or 0) for value in metrics_result.one())
 
 
 async def count_import_distinct_properties(db: AsyncSession, organization_id, record_id) -> int:
@@ -85,11 +89,10 @@ async def count_import_distinct_properties(db: AsyncSession, organization_id, re
 
 
 async def list_import_property_claims(db: AsyncSession, organization_id, record_id, search):
-    """Kept rows of one import that name a property, optionally searched by building or unit."""
+    """Include unresolved source records so retained evidence is accessible for review."""
     statement = select(CrmPropertyContactClaim).where(
         CrmPropertyContactClaim.organization_id == organization_id,
         CrmPropertyContactClaim.import_id == record_id,
-        CrmPropertyContactClaim.property_key.not_like("source:%"),
     )
     if search and search.strip():
         term = f"%{search.strip()}%"
@@ -100,6 +103,9 @@ async def list_import_property_claims(db: AsyncSession, organization_id, record_
                 CrmPropertyContactClaim.area_name.ilike(term),
                 CrmPropertyContactClaim.unit_number.ilike(term),
                 CrmPropertyContactClaim.contact_name.ilike(term),
+                CrmPropertyContactClaim.evidence["source_identifiers"]["land_number"]
+                .as_string()
+                .ilike(term),
             )
         )
     return (await db.exec(statement)).all()
@@ -147,6 +153,19 @@ async def get_import_for_org(db: AsyncSession, import_id, organization_id):
                 CrmContactImport.id == import_id,
                 CrmContactImport.organization_id == organization_id,
             )
+        )
+    ).first()
+
+
+async def lock_import_for_replay(db: AsyncSession, import_id: int, organization_id: str):
+    return (
+        await db.exec(
+            select(CrmContactImport)
+            .where(
+                CrmContactImport.id == import_id,
+                CrmContactImport.organization_id == organization_id,
+            )
+            .with_for_update(nowait=True)
         )
     ).first()
 

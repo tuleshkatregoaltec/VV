@@ -167,12 +167,32 @@ class CrmPropertyContactClaim(SQLModel, table=True):
     updated_at: datetime = SQLField(sa_column=Column(DateTime(timezone=True), nullable=False))
 
 
+class CrmSourcePropertyCounts(BaseModel):
+    """File inventory before owner filtering; identifiers are not verified properties."""
+
+    total_rows: int = 0
+    distinct_unit_numbers: int = 0
+    distinct_building_numbers_without_unit: int = 0
+    distinct_identifiers: int = 0
+    distinct_property_numbers_without_unit: int = 0
+    source_property_references: int = 0
+    identifiers_in_both_columns: int = 0
+    location_scoped_units: int = 0
+    unit_rows: int = 0
+    building_fallback_rows: int = 0
+    rows_without_identifiers: int = 0
+    unit_rows_without_location: int = 0
+
+
 class CrmContactImportSummary(BaseModel):
     total_rows: int = 0
     candidate_rows: int = 0
     # Distinct properties (building + unit) among the kept rows: one unit sold several times,
     # with a buyer and a seller row per sale, counts once. None for imports made before it.
     distinct_properties: int | None = None
+    source_property_counts: CrmSourcePropertyCounts | None = None
+    rows_with_sales_history: int | None = None
+    plot_only_rows: int | None = None
     duplicate_rows_collapsed: int = 0
     dropped_no_unit: int = 0
     valid_contacts: int = 0
@@ -220,7 +240,7 @@ class CrmDroppedRowsResponse(BaseModel):
 
 
 class CrmImportPropertyRecord(BaseModel):
-    """One kept row of a property: who, their role, the sale and how it matched DLD."""
+    """One retained source event; sale_date is the legacy API name for its date."""
 
     name: str
     role: str
@@ -229,6 +249,11 @@ class CrmImportPropertyRecord(BaseModel):
     status: str
     sheet: str
     row: int
+    procedure: str = ""
+    event_family: str = ""
+    identifiers: dict[str, str] = Field(default_factory=dict)
+    match_reason: str = ""
+    property_details: dict[str, str] = Field(default_factory=dict)
 
 
 class CrmImportProperty(BaseModel):
@@ -311,6 +336,7 @@ class CrmContactClaimResponse(BaseModel):
     building_name: str
     unit_number: str
     property_type: str
+    property_details: dict[str, str] = Field(default_factory=dict)
     transaction_date: date | None = None
     transaction_price_aed: int | None = SQLField(default=None, sa_type=BigInteger)
     ownership_status: CrmOwnershipStatus

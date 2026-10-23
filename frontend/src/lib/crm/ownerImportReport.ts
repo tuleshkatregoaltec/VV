@@ -39,17 +39,17 @@ export const STATUS_INFO: Record<ClaimStatus, { label: string; meaning: string; 
 	},
 	probable_current_owner: {
 		label: 'Probable owner',
-		meaning: 'Date fits the latest DLD sale; no price to compare',
+		meaning: 'Ownership fits available sales evidence but still needs review',
 		tone: 'green'
 	},
 	unit_linked_unverified: {
-		label: 'Unit found, not verified',
-		meaning: 'The unit is known but the file has no date to check',
+		label: 'Property found, owner unverified',
+		meaning: 'A unit or plot is identified; ownership still needs evidence',
 		tone: 'amber'
 	},
 	former_owner: {
 		label: 'Former owner',
-		meaning: 'Sold since the date in the file',
+		meaning: 'Listed as seller, or a later sale follows the matched acquisition',
 		tone: 'neutral'
 	},
 	conflicting_claim: {
@@ -58,18 +58,18 @@ export const STATUS_INFO: Record<ClaimStatus, { label: string; meaning: string; 
 		tone: 'red'
 	},
 	insufficient_property_data: {
-		label: 'Insufficient property data',
-		meaning: 'No building and unit could be worked out',
+		label: 'Property needs resolution',
+		meaning: 'No unique property match; the row explains the remaining gap',
 		tone: 'red'
 	},
 	registry_not_observed: {
-		label: 'Not in DLD registry',
-		meaning: 'The unit is not in the DLD sales data',
+		label: 'Not found in available sales',
+		meaning: 'The unit is absent from the sales data currently available to us',
 		tone: 'red'
 	},
 	unmatched: {
-		label: 'Location ambiguous',
-		meaning: 'The unit exists in several buildings; none stood out',
+		label: 'Needs review',
+		meaning: 'Property identity or the event’s ownership effect is unverified',
 		tone: 'amber'
 	}
 }
@@ -80,19 +80,19 @@ export const STATUS_INFO: Record<ClaimStatus, { label: string; meaning: string; 
  */
 export const STATUS_HELP: Record<ClaimStatus, { how: string; todo: string }> = {
 	verified_current_owner: {
-		how: 'DLD has a sale of this unit within ±2 days of the file’s date, the price is within 2%, and there is no later sale. Confidence 98%.',
-		todo: 'Ready to use: the strongest evidence of current ownership.'
+		how: 'The resolved property, source date and amount match an observed sale, with no subsequent sale in available history.',
+		todo: 'Strong sale-based evidence. The registry match does not independently verify the person’s identity or exclude unobserved transfers.'
 	},
 	probable_current_owner: {
-		how: 'A DLD sale fits the file’s date (±2 days) but the file has no price to compare (86%), or the file’s date is newer than the latest DLD sale (72%).',
+		how: 'A unique property and amount fit within a bounded date window, price evidence is missing, or the file is newer than available sales coverage. Date shifts remain provisional.',
 		todo: 'Likely the owner; check before relying on it.'
 	},
 	unit_linked_unverified: {
-		how: 'A unit or lease was linked, but there is no sale or date to prove ownership.',
+		how: 'A unit, lease or DLD plot was linked. A mortgage, gift or owner snapshot alone does not establish a verified sale acquisition.',
 		todo: 'Check ownership another way.'
 	},
 	former_owner: {
-		how: 'The file lists this person as the Seller (100%), or DLD shows a later sale of the unit more than 2 days after the file’s date (99%).',
+		how: 'An explicit sale lists this person as Seller, or the sales registry shows a later sale after their acquisition.',
 		todo: 'Not the current owner: a past relationship, not a lead.'
 	},
 	conflicting_claim: {
@@ -100,12 +100,12 @@ export const STATUS_HELP: Record<ClaimStatus, { how: string; todo: string }> = {
 		todo: 'Review the row: the file and DLD disagree.'
 	},
 	insufficient_property_data: {
-		how: 'No unit could be worked out: the row has no unit, and no single DLD sale matches its date and price in its location. Confidence 0%.',
-		todo: 'Add a unit or plot number DLD knows to the file and upload it again.'
+		how: 'The source identifiers and location/date/amount search did not identify one property. The row distinguishes missing evidence, no matching sale and multiple candidates.',
+		todo: 'Review the retained land, building and property identifiers; do not replace them with a guessed unit.'
 	},
 	registry_not_observed: {
-		how: 'The row has a unit, but DLD’s sales data has never recorded it (often off-plan, very new, or a mistyped unit). Confidence 10%.',
-		todo: 'Check the unit number; DLD may not list it yet.'
+		how: 'The row has a unit identifier, but it was not found in the sales dataset currently available to this CRM. This does not establish that DLD has no record.',
+		todo: 'Check the source identifier and dataset coverage.'
 	},
 	unmatched: {
 		how: 'The unit number exists in several DLD buildings and the file’s building / project did not clearly pick one (needs a score of 55 and a 12-point lead). Confidence 20%.',
@@ -136,6 +136,9 @@ export interface ImportCounts {
 	kept: number
 	/** Distinct units, villas or plots among the kept rows; null for imports made before it. */
 	properties: number | null
+	sourceProperties: CrmContactImportSummary['source_property_counts']
+	salesHistoryRows: number | null
+	plotOnlyRows: number | null
 	merged: number
 	dropped: number
 	matched: number
@@ -165,6 +168,9 @@ export function importCounts(summary: CrmContactImportSummary): ImportCounts {
 		rows,
 		kept,
 		properties: summary.distinct_properties ?? null,
+		sourceProperties: summary.source_property_counts ?? null,
+		salesHistoryRows: summary.rows_with_sales_history ?? null,
+		plotOnlyRows: summary.plot_only_rows ?? null,
 		merged,
 		dropped: Math.max(0, rows - kept - merged),
 		matched,
@@ -197,9 +203,9 @@ export function mappingChecks(sheet: SheetLike): SheetCheck[] {
 		checks.push({ level: 'error', code: 'no_name', text: 'No name column: every row is dropped.' })
 	if (sheet.sheet_family === 'transaction_party' && !has('party_role'))
 		checks.push({
-			level: 'error',
+			level: 'warning',
 			code: 'no_role',
-			text: 'Transaction sheet with no Buyer/Seller column: all its rows are dropped.'
+			text: 'No party-role column: source records are retained for ownership review.'
 		})
 	// Without date + price the backend has no sale to recover the property from, so it needs a
 	// location (building, project, master project or a name inferred from the file) and a unit.

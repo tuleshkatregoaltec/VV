@@ -428,8 +428,10 @@ def test_aura_plot_preregistration_column_is_used_as_the_villa_identifier():
 
 
 @pytest.mark.asyncio
-async def test_delete_import_removes_published_records_and_the_import():
+async def test_delete_import_removes_published_records_and_the_import(monkeypatch):
+    monkeypatch.setattr("app.crm.imports.delete_drop_log", AsyncMock())
     record = MagicMock()
+    record.mapping = {}
     lookup = MagicMock()
     lookup.first.return_value = record
     db = AsyncMock()
@@ -523,7 +525,7 @@ def test_contact_only_row_remains_unverified_even_with_exact_unit():
     _apply_evidence(contact, sales=sales, rentals={})
 
     assert contact.ownership_status == "unit_linked_unverified"
-    assert "does not provide an acquisition date" in contact.match_reason
+    assert "does not establish a sale acquisition" in contact.match_reason
 
 
 def test_unresolvable_source_and_registry_gap_are_distinct_states():

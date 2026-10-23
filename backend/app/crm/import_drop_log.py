@@ -35,9 +35,10 @@ def _storage() -> ObjectStorageClient:
     )
 
 
-def drop_log_key(organization_id: str, import_id: int) -> str:
+def drop_log_key(organization_id: str, import_id: int, revision: str | None = None) -> str:
     """Private, organization-scoped location of one import's dropped-rows log."""
-    return f"crm-imports/{organization_id}/{import_id}/dropped-rows.json.gz"
+    name = f"dropped-rows-{revision}" if revision else "dropped-rows"
+    return f"crm-imports/{organization_id}/{import_id}/{name}.json.gz"
 
 
 def no_unit_rows(candidates: list[ParsedContact]) -> list[dict[str, Any]]:
@@ -119,11 +120,13 @@ def log_drop_summary(
         )
 
 
-async def save_drop_log(organization_id: str, import_id: int, rows: list[dict[str, Any]]) -> bool:
+async def save_drop_log(
+    organization_id: str, import_id: int, rows: list[dict[str, Any]], *, revision: str | None = None
+) -> bool:
     """Store the log; a storage failure never fails the import, it only leaves no log."""
     payload = gzip.compress(json.dumps(rows, ensure_ascii=False).encode())
     try:
-        await _storage().upload(drop_log_key(organization_id, import_id), payload)
+        await _storage().upload(drop_log_key(organization_id, import_id, revision), payload)
     except Exception:
         # No row values here: the log holds contact data.
         logger.warning("CRM dropped-rows log could not be saved", extra={"import_id": import_id})
@@ -131,10 +134,12 @@ async def save_drop_log(organization_id: str, import_id: int, rows: list[dict[st
     return True
 
 
-async def load_drop_log(organization_id: str, import_id: int) -> list[dict[str, Any]] | None:
+async def load_drop_log(
+    organization_id: str, import_id: int, *, revision: str | None = None
+) -> list[dict[str, Any]] | None:
     """The stored rows, or None when this import has no log (imported before it existed)."""
     try:
-        payload = await _storage().download(drop_log_key(organization_id, import_id))
+        payload = await _storage().download(drop_log_key(organization_id, import_id, revision))
     except ClientError as exc:
         if exc.response.get("Error", {}).get("Code") in {"NoSuchKey", "404"}:
             return None
@@ -142,9 +147,11 @@ async def load_drop_log(organization_id: str, import_id: int) -> list[dict[str, 
     return json.loads(gzip.decompress(payload))
 
 
-async def delete_drop_log(organization_id: str, import_id: int) -> None:
+async def delete_drop_log(
+    organization_id: str, import_id: int, *, revision: str | None = None
+) -> None:
     try:
-        await _storage().delete_many([drop_log_key(organization_id, import_id)])
+        await _storage().delete_many([drop_log_key(organization_id, import_id, revision)])
     except Exception:
         logger.warning("CRM dropped-rows log could not be deleted", extra={"import_id": import_id})
 

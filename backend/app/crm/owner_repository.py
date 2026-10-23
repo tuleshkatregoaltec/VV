@@ -68,6 +68,8 @@ ranked AS (
     ORDER BY
         owner_key_sql,
         property_key_sql,
+        (status_rank >= 4) DESC,
+        CASE WHEN status_rank >= 4 THEN transaction_date END DESC NULLS LAST,
         status_rank DESC,
         confidence_score DESC,
         transaction_date DESC NULLS LAST
@@ -281,6 +283,8 @@ async def _owner_properties_sql(
             ORDER BY
                 owner_key_sql,
                 property_key_sql,
+                (status_rank >= 4) DESC,
+                CASE WHEN status_rank >= 4 THEN transaction_date END DESC NULLS LAST,
                 status_rank DESC,
                 confidence_score DESC,
                 transaction_date DESC NULLS LAST

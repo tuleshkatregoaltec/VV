@@ -29,13 +29,7 @@ let {
 let showPassword = $state(false)
 
 const strengthLevels = ['Very Weak', 'Weak', 'Fair', 'Good', 'Strong']
-const strengthColors = [
-	'bg-error',
-	'bg-warning',
-	'bg-fg-5',
-	'bg-info',
-	'bg-success'
-]
+const strengthColors = ['bg-error', 'bg-warning', 'bg-fg-5', 'bg-info', 'bg-success']
 
 function calculatePasswordStrength(password: string): number {
 	if (!password) return 0

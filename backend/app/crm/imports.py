@@ -12,20 +12,21 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.crm import import_repository
 from app.crm.ai import _llm_mapping
+from app.crm.cadastral import resolve_cadastral_plots
 from app.crm.identity import (
     _candidate_owner_key,
-    _dedupe_candidates,
-    _drop_candidates_without_unit,
 )
+from app.crm.import_context import prepare_file_context, property_details, recover_from_file_context
 from app.crm.import_drop_log import (
     count_by_reason,
     delete_drop_log,
     load_drop_log,
     log_drop_summary,
-    no_unit_rows,
     page_drop_log,
     save_drop_log,
 )
+from app.crm.import_events import IMPORT_RESOLVER_VERSION
+from app.crm.import_inventory import SourcePropertyInventory
 from app.crm.import_models import (
     CrmContactImport,
     CrmContactImportResponse,
@@ -42,6 +43,7 @@ from app.crm.import_parsing import (
     _inspect_csv,
     _inspect_xlsx,
     _mapping_response,
+    _missing_owner_name,
     _parse_csv,
     _parse_xlsx,
     _summary,
@@ -71,6 +73,7 @@ async def process_contact_import(
     name: str,
     user_id: str,
     organization_id: str,
+    reprocess_import_id: int | None = None,
 ) -> CrmContactImportResponse:
     filename = Path(upload.filename or "").name
     suffix = Path(filename).suffix.lower()
@@ -82,122 +85,184 @@ async def process_contact_import(
     if len(data) > _MAX_FILE_BYTES:
         raise HTTPException(status_code=413, detail="The uploaded file exceeds 50 MB")
     sha256 = hashlib.sha256(data).hexdigest()
-    existing_result = await import_repository.find_import_by_digest(db, organization_id, sha256)
-    existing = existing_result
-    if existing:
-        return await _import_response(db, existing)
-
     now = datetime.now(timezone.utc)
-    record = CrmContactImport(
-        organization_id=organization_id,
-        created_by_user_id=user_id,
-        name=name.strip()[:200] or Path(filename).stem[:200],
-        original_filename=filename,
-        sha256=sha256,
-        size_bytes=len(data),
-        status="processing",
-        mapping={},
-        summary={},
-        created_at=now,
-    )
-    import_repository.save(db, record)
-    await db.commit()
-    await db.refresh(record)
+    replay = reprocess_import_id is not None
+    existing_claims = {}
+    preserved_owner_keys = {}
+    previous_mapping = {}
+    previous_summary = {}
+    if replay:
+        record = await import_repository.lock_import_for_replay(
+            db, reprocess_import_id, organization_id
+        )
+        if not record or record.sha256 != sha256:
+            raise HTTPException(status_code=409, detail="Replay requires the original import file.")
+        if record.status == "processing":
+            raise HTTPException(status_code=409, detail="This import is already processing.")
+        if record.mapping.get("resolver_version") == IMPORT_RESOLVER_VERSION:
+            return await _import_response(db, record)
+        previous_mapping = dict(record.mapping)
+        previous_summary = dict(record.summary)
+        claims = await import_repository.list_rental_refresh_claims(db, record.id, organization_id)
+        existing_claims = {(c.source_sheet, c.source_row_number): c for c in claims}
+        # Previously collapsed rows may also own notes through their selected claim.
+        for claim in claims:
+            preserved_owner_keys[(claim.source_sheet, claim.source_row_number)] = claim.owner_key
+            for source in (claim.evidence or {}).get("source_rows", []):
+                sheet, _, number = source.rpartition(":")
+                if number.isdigit():
+                    preserved_owner_keys[(sheet, int(number))] = claim.owner_key
+    else:
+        existing = await import_repository.find_import_by_digest(db, organization_id, sha256)
+        if existing:
+            return await _import_response(db, existing)
+        record = CrmContactImport(
+            organization_id=organization_id,
+            created_by_user_id=user_id,
+            name=name.strip()[:200] or Path(filename).stem[:200],
+            original_filename=filename,
+            sha256=sha256,
+            size_bytes=len(data),
+            status="processing",
+            mapping={},
+            summary={},
+            created_at=now,
+        )
+        import_repository.save(db, record)
+        await db.commit()
+        await db.refresh(record)
     if record.id is None:
         raise HTTPException(status_code=500, detail="Import record could not be created")
 
     try:
         inspector = _inspect_xlsx if suffix == ".xlsx" else _inspect_csv
         profiles = await asyncio.to_thread(inspector, data, filename)
-        profiles = [await _llm_mapping(profile) for profile in profiles]
+        # Replay must be deterministic and must not send source data to a model.
+        if not replay:
+            profiles = [await _llm_mapping(profile) for profile in profiles]
         parser = _parse_xlsx if suffix == ".xlsx" else _parse_csv
         dropped: list[dict[str, Any]] = []
         candidates, total_rows = await asyncio.to_thread(parser, data, filename, profiles, dropped)
         if not total_rows:
+            if replay:
+                raise ValueError(
+                    "Replay parsed no source records; existing results were preserved."
+                )
             # Nothing to import: remove the record so no empty import or list is left behind.
             await import_repository.delete_record(db, record)
             await db.commit()
             raise HTTPException(status_code=400, detail=_EMPTY_FILE)
+        missing_sources = existing_claims.keys() - {
+            (candidate.source_sheet, candidate.source_row_number) for candidate in candidates
+        }
+        nameless_sources = {
+            (row["sheet"], row["row"]) for row in dropped if row["reason"] == "no_name"
+        }
+        if any(
+            source not in nameless_sources
+            or not _missing_owner_name(existing_claims[source].contact_name)
+            for source in missing_sources
+        ):
+            raise ValueError("Replay would lose named source records; results were preserved.")
+        await prepare_file_context(candidates)
         await _recover_property_identity_from_transaction(candidates)
         await _recover_property_identity_from_near_transaction(candidates)
+        await recover_from_file_context(candidates)
         _reuse_mortgage_property_from_sale_anchors(candidates)
         sales = await _sales_evidence(candidates)
         await _apply_registry_unit_fallbacks(candidates, sales)
         rentals = await _rental_evidence(candidates)
+        await resolve_cadastral_plots(candidates)
         for candidate in candidates:
             _apply_evidence(candidate, sales=sales, rentals=rentals)
-        dropped.extend(no_unit_rows(candidates))
-        candidates, dropped_no_unit = _drop_candidates_without_unit(candidates)
-        candidates, duplicate_rows_collapsed = _dedupe_candidates(candidates)
+        # Each source event is persisted independently. Repeated owner/property
+        # rows are history, not duplicates; unresolved identities remain reviewable.
+        dropped_no_unit = duplicate_rows_collapsed = 0
+        for source in missing_sources:
+            await import_repository.delete_record(db, existing_claims[source])
 
-        contact_list = CrmContactList(
-            organization_id=organization_id,
-            created_by_user_id=user_id,
-            source_import_id=record.id,
-            name=record.name,
-            description=f"Imported from {filename}",
-            created_at=now,
-            updated_at=now,
-        )
+        contact_list = await import_repository.find_import_list(db, record) if replay else None
+        if contact_list is None:
+            contact_list = CrmContactList(
+                organization_id=organization_id,
+                created_by_user_id=user_id,
+                source_import_id=record.id,
+                name=record.name,
+                description=f"Imported from {filename}",
+                created_at=now,
+                updated_at=now,
+            )
         import_repository.save(db, contact_list)
         await db.flush()
         if contact_list.id is None:
             raise RuntimeError("Contact list could not be created")
 
         for start in range(0, len(candidates), 1_000):
-            import_repository.save_all(
-                db,
-                [
-                    CrmPropertyContactClaim(
-                        organization_id=organization_id,
-                        import_id=record.id,
-                        list_id=contact_list.id,
-                        source_sheet=candidate.source_sheet,
-                        source_row_number=candidate.source_row_number,
-                        row_fingerprint=candidate.row_fingerprint,
-                        owner_key=_candidate_owner_key(candidate),
-                        property_key=candidate.property_key
-                        or f"source:{candidate.row_fingerprint}",
-                        contact_name=candidate.contact_name,
-                        phone_primary=candidate.phone_primary,
-                        phone_alternate=candidate.phone_alternate,
-                        email_primary=candidate.email_primary,
-                        area_name=candidate.area_name,
-                        project_name=candidate.project_name,
-                        building_name=candidate.building_name,
-                        unit_number=candidate.unit_number,
-                        property_type=candidate.property_type,
-                        transaction_date=candidate.transaction_date,
-                        transaction_price_aed=candidate.transaction_price_aed,
-                        party_role=candidate.party_role,
-                        procedure_type=candidate.procedure_type,
-                        ownership_status=candidate.ownership_status,
-                        confidence_score=candidate.confidence_score,
-                        match_reason=candidate.match_reason,
-                        lead_id=candidate.lead_id,
-                        unit_candidate_key=candidate.unit_candidate_key,
-                        latest_sale_date=candidate.latest_sale_date,
-                        latest_sale_price_aed=candidate.latest_sale_price_aed,
-                        later_sale_date=candidate.later_sale_date,
-                        lease_end=candidate.lease_end,
-                        annual_rent_aed=candidate.annual_rent_aed,
-                        evidence=candidate.evidence,
-                        created_at=now,
-                        updated_at=now,
-                    )
-                    for candidate in candidates[start : start + 1_000]
-                ],
-            )
+            batch = [
+                CrmPropertyContactClaim(
+                    organization_id=organization_id,
+                    import_id=record.id,
+                    list_id=contact_list.id,
+                    source_sheet=candidate.source_sheet,
+                    source_row_number=candidate.source_row_number,
+                    row_fingerprint=candidate.row_fingerprint,
+                    owner_key=_candidate_owner_key(candidate),
+                    property_key=candidate.property_key or f"source:{candidate.row_fingerprint}",
+                    contact_name=candidate.contact_name,
+                    phone_primary=candidate.phone_primary,
+                    phone_alternate=candidate.phone_alternate,
+                    email_primary=candidate.email_primary,
+                    area_name=candidate.area_name,
+                    project_name=candidate.project_name,
+                    building_name=candidate.building_name,
+                    unit_number=candidate.unit_number,
+                    property_type=candidate.property_type,
+                    transaction_date=candidate.transaction_date,
+                    transaction_price_aed=candidate.transaction_price_aed,
+                    party_role=candidate.party_role,
+                    procedure_type=candidate.procedure_type,
+                    ownership_status=candidate.ownership_status,
+                    confidence_score=candidate.confidence_score,
+                    match_reason=candidate.match_reason,
+                    lead_id=candidate.lead_id,
+                    unit_candidate_key=candidate.unit_candidate_key,
+                    latest_sale_date=candidate.latest_sale_date,
+                    latest_sale_price_aed=candidate.latest_sale_price_aed,
+                    later_sale_date=candidate.later_sale_date,
+                    lease_end=candidate.lease_end,
+                    annual_rent_aed=candidate.annual_rent_aed,
+                    evidence=candidate.evidence,
+                    created_at=now,
+                    updated_at=now,
+                )
+                for candidate in candidates[start : start + 1_000]
+            ]
+            for claim in batch:
+                source = (claim.source_sheet, claim.source_row_number)
+                old = existing_claims.get(source)
+                if source in preserved_owner_keys:
+                    claim.owner_key = preserved_owner_keys[source]
+                if old is not None:
+                    for field_name in CrmPropertyContactClaim.model_fields:
+                        if field_name not in {"id", "created_at"}:
+                            setattr(old, field_name, getattr(claim, field_name))
+                else:
+                    import_repository.save(db, claim)
             await db.flush()
 
-        await _enrich_workspaces(
-            db,
-            candidates=candidates,
-            user_id=user_id,
-            organization_id=organization_id,
-            list_name=record.name,
-        )
+        if not replay:
+            await _enrich_workspaces(
+                db,
+                candidates=candidates,
+                user_id=user_id,
+                organization_id=organization_id,
+                list_name=record.name,
+            )
         summary = _summary(candidates, total_rows, duplicate_rows_collapsed, dropped_no_unit)
+        inventory = SourcePropertyInventory()
+        for profile in profiles:
+            inventory.merge(profile.property_inventory)
+        summary.source_property_counts = inventory.summary()
         summary.dropped_by_reason = count_by_reason(dropped)
         log_drop_summary(
             record.id,
@@ -206,9 +271,33 @@ async def process_contact_import(
             merged=duplicate_rows_collapsed,
             rows=dropped,
         )
-        summary.dropped_log = await save_drop_log(organization_id, record.id, dropped)
+        # Publish a replay log under a new key. A failed database commit must not
+        # replace the log referenced by the previous saved result.
+        summary.dropped_log = (
+            True
+            if replay and not dropped
+            else await save_drop_log(
+                organization_id, record.id, dropped, revision=IMPORT_RESOLVER_VERSION
+            )
+            if replay
+            else await save_drop_log(organization_id, record.id, dropped)
+        )
+        if missing_sources and not summary.dropped_log:
+            raise ValueError("Nameless rows cannot be removed without a saved dropped-row log.")
         record.status = "completed"
-        record.mapping = {"sheets": [_mapping_response(profile) for profile in profiles]}
+        record.error_message = None
+        record.mapping = {
+            "sheets": [_mapping_response(profile) for profile in profiles],
+            "resolver_version": IMPORT_RESOLVER_VERSION,
+        }
+        if replay:
+            if dropped:
+                record.mapping["drop_log_revision"] = IMPORT_RESOLVER_VERSION
+            record.mapping["previous_result"] = {
+                "mapping": previous_mapping,
+                "summary": previous_summary,
+                "reprocessed_at": now.isoformat(),
+            }
         record.summary = summary.model_dump()
         record.completed_at = datetime.now(timezone.utc)
         import_repository.save(db, record)
@@ -220,6 +309,10 @@ async def process_contact_import(
     except Exception as exc:
         logger.exception("CRM contact import failed", extra={"import_id": record.id})
         await db.rollback()
+        if replay:
+            raise HTTPException(
+                status_code=422, detail="Replay failed; previous import results were preserved."
+            ) from exc
         await delete_drop_log(organization_id, record.id)
         record.status = "failed"
         record.error_message = str(exc)[:2_000]
@@ -304,7 +397,13 @@ async def delete_contact_import(
     await import_repository.delete_record(db, record)
     await db.commit()
     _invalidate_owner_summary_cache(organization_id)
-    await delete_drop_log(organization_id, import_id)
+    revisions = {None}
+    mapping = record.mapping or {}
+    while mapping:
+        revisions.add(mapping.get("drop_log_revision"))
+        mapping = mapping.get("previous_result", {}).get("mapping", {})
+    for revision in revisions:
+        await delete_drop_log(organization_id, import_id, revision=revision)
 
 
 async def list_dropped_rows(
@@ -321,7 +420,14 @@ async def list_dropped_rows(
     record = await import_repository.get_import_for_org(db, import_id, organization_id)
     if not record:
         raise HTTPException(status_code=404, detail="Owner-data import not found")
-    rows = await load_drop_log(organization_id, import_id)
+    rows = (
+        []
+        if record.mapping.get("resolver_version") == IMPORT_RESOLVER_VERSION
+        and not record.summary.get("dropped_by_reason")
+        else await load_drop_log(
+            organization_id, import_id, revision=record.mapping.get("drop_log_revision")
+        )
+    )
     page = page_drop_log(rows, reason=reason, search=search, limit=limit, offset=offset)
     # The search text is not logged: it may be an owner's name.
     logger.info(
@@ -380,6 +486,11 @@ def _group_properties(claims: list[CrmPropertyContactClaim]) -> list[CrmImportPr
                         status=c.ownership_status,
                         sheet=c.source_sheet,
                         row=c.source_row_number,
+                        procedure=c.procedure_type,
+                        event_family=(c.evidence or {}).get("event_family", ""),
+                        identifiers=(c.evidence or {}).get("source_identifiers", {}),
+                        match_reason=c.match_reason,
+                        property_details=property_details(c.evidence or {}),
                     )
                     for c in group[:_PROPERTY_RECORDS_MAX]
                 ],

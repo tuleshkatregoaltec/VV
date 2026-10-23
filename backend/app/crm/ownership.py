@@ -8,6 +8,7 @@ from typing import Any, Iterable
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.crm import import_repository, owner_queries
+from app.crm.cadastral import resolve_cadastral_plots
 from app.crm.identity import (
     ParsedContact,
     _candidate_owner_key,
@@ -20,6 +21,8 @@ from app.crm.identity import (
     _transaction_location_score,
     _usable_project_name,
 )
+from app.crm.import_context import in_file_context, prepare_file_context, recover_from_file_context
+from app.crm.import_events import has_sale_evidence
 from app.crm.import_models import (
     CrmContactImportSummary,
 )
@@ -77,10 +80,9 @@ def _reuse_mortgage_property_from_sale_anchors(candidates: list[ParsedContact]) 
     }
     for anchor in candidates:
         if (
-            _is_mortgage_procedure(anchor)
+            not has_sale_evidence(anchor)
             or not anchor.transaction_date
             or not anchor.transaction_price_aed
-            or not any(word in anchor.procedure_type.casefold() for word in ("sale", "sell"))
         ):
             continue
         resolution = anchor.evidence.get("property_identity_resolution") or {}
@@ -97,7 +99,9 @@ def _reuse_mortgage_property_from_sale_anchors(candidates: list[ParsedContact]) 
             str(resolved.get("building_name") or resolved.get("project_name") or "")
         )
         sale_key = str(resolved.get("sale_key") or "")
-        if not all((unit, area, project, resolved_unit, resolved_area, resolved_building, sale_key)):
+        if not all(
+            (unit, area, project, resolved_unit, resolved_area, resolved_building, sale_key)
+        ):
             continue
         if unit != resolved_unit:
             continue
@@ -270,9 +274,9 @@ async def _recover_property_identity_from_transaction(
     eligible = [
         candidate
         for candidate in candidates
-        if candidate.transaction_date
+        if has_sale_evidence(candidate)
+        and candidate.transaction_date
         and candidate.transaction_price_aed
-        and not _is_mortgage_procedure(candidate)
     ]
     unique_resolutions = 0
     contextual_resolutions = 0
@@ -320,7 +324,11 @@ async def _recover_property_identity_from_transaction(
                 candidate.transaction_date,
                 int(candidate.transaction_price_aed or 0),
             )
-            properties = list(by_signature.get(signature, {}).values())
+            properties = [
+                row
+                for row in by_signature.get(signature, {}).values()
+                if in_file_context(candidate, row)
+            ]
             if not properties:
                 continue
 
@@ -434,9 +442,9 @@ async def _recover_property_identity_from_near_transaction(
     eligible = [
         candidate
         for candidate in candidates
-        if candidate.transaction_date
+        if has_sale_evidence(candidate)
+        and candidate.transaction_date
         and candidate.transaction_price_aed
-        and not _is_mortgage_procedure(candidate)
         and "property_identity_resolution" not in candidate.evidence
     ]
     resolved = 0
@@ -465,6 +473,7 @@ async def _recover_property_identity_from_near_transaction(
                 row
                 for row in rows_by_price.get(int(candidate.transaction_price_aed or 0), [])
                 if abs((row["transaction_date"] - source_date).days) <= window_days
+                and in_file_context(candidate, row)
             ]
             properties: dict[tuple[str, str, str], dict[str, Any]] = {}
             for row in candidate_rows:
@@ -545,7 +554,11 @@ async def _sales_evidence(
 ) -> dict[str, list[dict[str, Any]]]:
     """Find DXBI sales history through a canonical project/building hierarchy."""
     unit_keys = sorted(
-        {candidate.unit_number.lower() for candidate in candidates if candidate.property_key}
+        {
+            candidate.unit_number.lower()
+            for candidate in candidates
+            if candidate.property_key and candidate.unit_number
+        }
     )
     evidence: dict[str, list[dict[str, Any]]] = {}
     sales_by_unit: dict[str, list[dict[str, Any]]] = {}
@@ -573,12 +586,12 @@ async def _sales_evidence(
         properties_by_unit[unit_key] = list(grouped.items())
 
     resolution_cache: dict[
-        tuple[str, str, str, str],
+        tuple,
         tuple[int, str, list[dict[str, Any]], int] | None,
     ] = {}
     for candidate in candidates:
         source_property_key = candidate.property_key
-        if not source_property_key:
+        if not source_property_key or not candidate.unit_number:
             continue
         rows_for_unit = sales_by_unit.get(candidate.unit_number.lower(), [])
         if not rows_for_unit:
@@ -593,6 +606,10 @@ async def _sales_evidence(
             _location_key(candidate.project_name),
             _location_key(candidate.building_name),
             candidate.unit_number.lower(),
+            tuple(candidate.evidence.get("file_context", {}).get("locations", [])),
+            candidate.evidence.get("property_identity_resolution", {})
+            .get("resolved", {})
+            .get("sale_key"),
         )
         if cache_key in resolution_cache:
             cached = resolution_cache[cache_key]
@@ -600,6 +617,11 @@ async def _sales_evidence(
                 continue
             best_score, method, selected_rows, registry_candidate_count = cached
         else:
+            identified_sale = (
+                candidate.evidence.get("property_identity_resolution", {})
+                .get("resolved", {})
+                .get("sale_key")
+            )
             ranked = sorted(
                 (
                     (
@@ -608,10 +630,19 @@ async def _sales_evidence(
                         property_rows,
                     )
                     for identity, property_rows in properties_by_unit[candidate.unit_number.lower()]
+                    if in_file_context(candidate, property_rows[0])
+                    and (
+                        not identified_sale
+                        or any(row.get("sale_key") == identified_sale for row in property_rows)
+                    )
                 ),
                 key=lambda item: item[0],
                 reverse=True,
             )
+            if not ranked:
+                candidate.evidence["sales_lookup"] = {"status": "location_not_observed"}
+                resolution_cache[cache_key] = None
+                continue
             best_score, _, selected_rows = ranked[0]
             runner_up = ranked[1][0] if len(ranked) > 1 else 0
             distinctive_unit = len(candidate.unit_number) >= 5 and any(
@@ -835,6 +866,14 @@ def _apply_evidence(
     rentals: dict[str, dict[str, Any]],
 ) -> None:
     key = candidate.property_key
+    if not candidate.unit_number and candidate.evidence.get("cadastral_identity"):
+        candidate.ownership_status = "unit_linked_unverified"
+        candidate.confidence_score = 50
+        candidate.match_reason = (
+            "The land number and location match a DLD plot. The source record is retained, "
+            "but an individual villa/unit and current ownership have not been verified."
+        )
+        return
     sale_events = sales.get(key, [])
     rental = rentals.get(key)
     if rental:
@@ -851,6 +890,8 @@ def _apply_evidence(
             {str(event.get("_match_method") or "exact_building_key") for event in sale_events}
         )
         candidate.evidence["sales_match"] = {
+            "property_type": str(latest.get("property_type") or ""),
+            "market_status": str(latest.get("market_status") or ""),
             "methods": methods,
             "matched_buildings": sorted(
                 {
@@ -862,34 +903,23 @@ def _apply_evidence(
             "matched_sales": len(sale_events),
         }
 
-    if _is_mortgage_procedure(candidate):
-        lookup_status = str((candidate.evidence.get("sales_lookup") or {}).get("status") or "")
-        if not key:
-            candidate.ownership_status = "insufficient_property_data"
-            candidate.confidence_score = 0
-            candidate.match_reason = (
-                "The mortgage record has no recoverable property identifier; it does not "
-                "establish a sale or current ownership."
-            )
-        elif lookup_status == "unit_not_observed":
-            candidate.ownership_status = "registry_not_observed"
-            candidate.confidence_score = 10
-            candidate.match_reason = (
-                "The mortgage row's unit was not observed in the sales registry; mortgage "
-                "date and amount are not treated as sale evidence."
-            )
-        elif latest or rental:
-            candidate.ownership_status = "unit_linked_unverified"
-            candidate.confidence_score = 60
-            candidate.match_reason = (
-                "The property was linked through registry or rental evidence, but a mortgage "
-                "record does not prove that this contact acquired or currently owns it."
-            )
-        else:
-            candidate.match_reason = (
-                "The mortgage row did not resolve to a unique registry property; its date "
-                "and amount are not treated as sale evidence."
-            )
+    if not key:
+        candidate.ownership_status = "insufficient_property_data"
+        candidate.confidence_score = 0
+        candidate.match_reason = candidate.evidence.get("context_lookup", {}).get("reason") or (
+            "Source record retained. The land/building/property identifiers require "
+            "resolution before this contact can be linked to a registry property."
+        )
+        return
+
+    if not has_sale_evidence(candidate):
+        candidate.ownership_status = "unit_linked_unverified" if latest or rental else "unmatched"
+        candidate.confidence_score = 50 if latest or rental else 20
+        candidate.match_reason = (
+            "Source event retained for review. This procedure or party role does not "
+            "establish a sale acquisition or disposal; its date and amount were not "
+            "used to infer current ownership from sales history."
+        )
         return
 
     if candidate.party_role == "Seller":
@@ -950,7 +980,16 @@ def _apply_evidence(
         )
         return
 
+    resolution = candidate.evidence.get("property_identity_resolution", {})
+    identified_key = resolution.get("resolved", {}).get("sale_key")
     matched_event = next(
+        (
+            event
+            for event in sale_events
+            if identified_key and event.get("sale_key") == identified_key
+        ),
+        None,
+    ) or next(
         (
             event
             for event in sale_events
@@ -958,7 +997,12 @@ def _apply_evidence(
         ),
         None,
     )
-    if latest["transaction_date"] > candidate.transaction_date + timedelta(days=2):
+    acquisition_date = (
+        matched_event["transaction_date"]
+        if matched_event
+        else candidate.transaction_date + timedelta(days=2)
+    )
+    if latest["transaction_date"] > acquisition_date:
         candidate.ownership_status = "former_owner"
         candidate.confidence_score = 99
         candidate.later_sale_date = latest["transaction_date"]
@@ -966,6 +1010,12 @@ def _apply_evidence(
             f"A later sale was recorded on {latest['transaction_date']:%d %b %Y}; "
             "this contact is not presented as the current owner."
         )
+        if resolution.get("method") == "file_context_transaction_signature":
+            candidate.match_reason += (
+                f" Property inferred from {', '.join(candidate.evidence.get('file_context', {}).get('locations', []))}, "
+                f"the source amount and acquisition dated {acquisition_date:%d %b %Y}."
+            )
+            candidate.confidence_score = 90 if not resolution.get("date_delta_days") else 80
         return
 
     if matched_event and not _price_matches(
@@ -981,6 +1031,16 @@ def _apply_evidence(
         return
 
     if matched_event and candidate.transaction_price_aed:
+        shifted_days = abs((matched_event["transaction_date"] - candidate.transaction_date).days)
+        if shifted_days:
+            candidate.ownership_status = "probable_current_owner"
+            candidate.confidence_score = 80
+            candidate.match_reason = (
+                f"One property matches the location, amount and supplied details. Its sale "
+                f"date ({matched_event['transaction_date']:%d %b %Y}) differs from the file "
+                f"by {shifted_days} days. No later sale is observed; review the date before relying on this owner."
+            )
+            return
         candidate.ownership_status = "verified_current_owner"
         candidate.confidence_score = 98
         candidate.match_reason = (
@@ -1078,12 +1138,15 @@ async def rematch_property_contact_claims(
         )
         _recover_embedded_property_identity(candidate)
         candidates.append(candidate)
+    await prepare_file_context(candidates)
     resolution_counts = await _recover_property_identity_from_transaction(candidates)
     near_resolution_counts = await _recover_property_identity_from_near_transaction(candidates)
+    await recover_from_file_context(candidates)
     _reuse_mortgage_property_from_sale_anchors(candidates)
     sales = await _sales_evidence(candidates)
     await _apply_registry_unit_fallbacks(candidates, sales)
     rentals = await _rental_evidence(candidates)
+    await resolve_cadastral_plots(candidates)
     now = datetime.now(timezone.utc)
     status_counts: dict[str, int] = {}
     for claim, candidate in zip(claims, candidates, strict=True):
@@ -1092,7 +1155,7 @@ async def rematch_property_contact_claims(
         claim.project_name = candidate.project_name
         claim.building_name = candidate.building_name
         claim.unit_number = candidate.unit_number
-        claim.property_key = candidate.property_key
+        claim.property_key = candidate.property_key or f"source:{candidate.row_fingerprint}"
         claim.owner_key = _candidate_owner_key(candidate)
         claim.ownership_status = candidate.ownership_status
         claim.confidence_score = candidate.confidence_score
@@ -1154,6 +1217,8 @@ async def _refresh_contact_import_match_summaries(
             valid_contacts,
             rental_opportunities,
             contact_ready,
+            rows_with_sales_history,
+            plot_only_rows,
         ) = await import_repository.count_import_claim_metrics(db, organization_id, record_id)
         distinct_properties = await import_repository.count_import_distinct_properties(
             db, organization_id, record_id
@@ -1163,6 +1228,8 @@ async def _refresh_contact_import_match_summaries(
             {
                 "candidate_rows": candidate_rows,
                 "distinct_properties": distinct_properties,
+                "rows_with_sales_history": rows_with_sales_history,
+                "plot_only_rows": plot_only_rows,
                 "valid_contacts": valid_contacts,
                 "rental_opportunities": rental_opportunities,
                 "contact_ready": contact_ready,

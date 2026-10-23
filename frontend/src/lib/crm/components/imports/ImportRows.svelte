@@ -2,12 +2,7 @@
 import { createQuery } from '@tanstack/svelte-query'
 import Search from 'lucide-svelte/icons/search'
 import { aed, fmt, fullDate } from '../../format'
-import {
-	type ClaimStatus,
-	clampOffset,
-	insufficientReason,
-	STATUS_INFO
-} from '../../ownerImportReport'
+import { type ClaimStatus, clampOffset, STATUS_INFO } from '../../ownerImportReport'
 import { crmQueries } from '../../queries'
 import { openOwner } from '../../stores/panel.svelte'
 import Chip from '../ui/Chip.svelte'
@@ -49,6 +44,8 @@ $effect(() => {
 	if (next !== offset) offset = next
 })
 const statuses = Object.keys(STATUS_INFO) as ClaimStatus[]
+const usable = (value: string | undefined) =>
+	value && !['0', 'null', 'none', 'n/a', '-'].includes(value.trim().toLowerCase()) ? value : ''
 </script>
 
 <div class="filters">
@@ -84,8 +81,11 @@ const statuses = Object.keys(STATUS_INFO) as ClaimStatus[]
 						<tr>
 							<th>Owner</th>
 							<th>Building · unit</th>
-							<th>Date</th>
-							<th class="r">Price</th>
+							<th>Community · project</th>
+							<th>Type · completion</th>
+							<th>Source date</th>
+							<th class="r">Source amount</th>
+							<th>Latest registered sale</th>
 							<th>Status</th>
 							<th>Why</th>
 							<th>Source</th>
@@ -100,21 +100,45 @@ const statuses = Object.keys(STATUS_INFO) as ClaimStatus[]
 									</button>
 									<div class="sub mono">{r.phone || '—'}</div>
 								</td>
-								<td data-label="Building · unit">{r.building || '—'}{r.unit ? ` · ${r.unit}` : ''}</td>
+								<td data-label="Building · unit">
+									{usable(r.building) || '—'}{r.unit ? ` · ${r.unit}` : ''}
+									{#if usable(r.propertyDetails.source_land_number)}<div class="sub">Source land: {r.propertyDetails.source_land_number}</div>{/if}
+								</td>
+								<td data-label="Community · project">
+									{(r.latestSaleDate ? usable(r.area) : r.propertyDetails.file_location || usable(r.area)) || '—'}
+									{#if r.propertyDetails.file_location}<div class="sub">Source location context: {r.propertyDetails.file_location}</div>{/if}
+									<div class="sub">{usable(r.project) || 'No project identified'}</div>
+								</td>
+								<td data-label="Type · completion">
+									{r.propertyDetails.registry_property_type || usable(r.propertyType) || '—'}
+									{#if r.propertyDetails.registry_property_type}<div class="sub">Registry type</div>{/if}
+									<div class="sub">File: {usable(r.propertyDetails.source_property_type) || '—'} · {usable(r.propertyDetails.source_completion_status) || 'Completion unspecified'}</div>
+									{#if r.propertyDetails.registry_completion_status}<div class="sub">Latest sale: {r.propertyDetails.registry_completion_status}</div>{/if}
+								</td>
 								<td data-label="Date" class="nowrap">{r.date ? fullDate(r.date) : '—'}</td>
 								<td data-label="Price" class="r nowrap">{r.price ? aed(r.price) : '—'}</td>
+								<td data-label="Latest registered sale" class="nowrap">
+									{r.latestSaleDate ? fullDate(r.latestSaleDate) : '—'}
+									{#if r.latestSalePrice}<div class="sub">{aed(r.latestSalePrice)}</div>{/if}
+								</td>
 								<td data-label="Status">
 									<Chip tone={STATUS_INFO[r.status].tone}>{STATUS_INFO[r.status].label}</Chip>
 									<div class="sub">{r.confidence}% confidence</div>
 								</td>
-								<!-- "Insufficient property data" says what the file was missing; other rows show the backend's reason. -->
 								<td data-label="Why" class="why">
-									{r.status === 'insufficient_property_data' ? insufficientReason(r) : r.reason || '—'}
+									{r.reason || '—'}
+									<details class="sub">
+										<summary>Source property details</summary>
+										{#each Object.entries(r.propertyDetails).filter(([key, value]) => key.startsWith('source_') && usable(value)) as [key, value] (key)}
+											<div>{key.replace('source_', '').replaceAll('_', ' ')}: {value}</div>
+										{/each}
+										{#if r.propertyDetails.matched_sale_date}<div>Matched acquisition: {fullDate(r.propertyDetails.matched_sale_date)}</div>{/if}
+									</details>
 								</td>
 								<td data-label="Source" class="sub nowrap">{r.sheet} · row {r.rowNumber}</td>
 							</tr>
 						{:else}
-							<tr><td colspan="7" class="sub">No rows match.</td></tr>
+							<tr><td colspan="10" class="sub">No rows match.</td></tr>
 						{/each}
 					</tbody>
 				</table>

@@ -1106,6 +1106,12 @@ export type CrmContactClaimResponse = {
      */
     property_type: string;
     /**
+     * Property Details
+     */
+    property_details?: {
+        [key: string]: string;
+    };
+    /**
      * Transaction Date
      */
     transaction_date?: string | null;
@@ -1236,6 +1242,15 @@ export type CrmContactImportSummary = {
      * Distinct Properties
      */
     distinct_properties?: number | null;
+    source_property_counts?: CrmSourcePropertyCounts | null;
+    /**
+     * Rows With Sales History
+     */
+    rows_with_sales_history?: number | null;
+    /**
+     * Plot Only Rows
+     */
+    plot_only_rows?: number | null;
     /**
      * Duplicate Rows Collapsed
      */
@@ -1501,48 +1516,6 @@ export type CrmDroppedRow = {
 };
 
 /**
- * CrmImportPropertyRecord
- */
-export type CrmImportPropertyRecord = {
-    name: string;
-    role: string;
-    sale_date?: string | null;
-    price_aed?: number | null;
-    status: string;
-    sheet: string;
-    row: number;
-};
-
-/**
- * CrmImportProperty
- */
-export type CrmImportProperty = {
-    property_key: string;
-    area: string;
-    project: string;
-    building: string;
-    unit: string;
-    property_type: string;
-    rows: number;
-    buyers: number;
-    sellers: number;
-    current_owner?: string | null;
-    latest_date?: string | null;
-    latest_price_aed?: number | null;
-    records: Array<CrmImportPropertyRecord>;
-};
-
-/**
- * CrmImportPropertiesResponse
- */
-export type CrmImportPropertiesResponse = {
-    total: number;
-    offset: number;
-    limit: number;
-    rows: Array<CrmImportProperty>;
-};
-
-/**
  * CrmDroppedRowsResponse
  */
 export type CrmDroppedRowsResponse = {
@@ -1594,6 +1567,148 @@ export type CrmFilters = {
      * Property Types
      */
     property_types?: Array<string>;
+};
+
+/**
+ * CrmImportPropertiesResponse
+ */
+export type CrmImportPropertiesResponse = {
+    /**
+     * Total
+     */
+    total: number;
+    /**
+     * Offset
+     */
+    offset: number;
+    /**
+     * Limit
+     */
+    limit: number;
+    /**
+     * Rows
+     */
+    rows: Array<CrmImportProperty>;
+};
+
+/**
+ * CrmImportProperty
+ *
+ * One distinct property (building + unit) of an import, with its kept rows.
+ */
+export type CrmImportProperty = {
+    /**
+     * Property Key
+     */
+    property_key: string;
+    /**
+     * Area
+     */
+    area: string;
+    /**
+     * Project
+     */
+    project: string;
+    /**
+     * Building
+     */
+    building: string;
+    /**
+     * Unit
+     */
+    unit: string;
+    /**
+     * Property Type
+     */
+    property_type: string;
+    /**
+     * Rows
+     */
+    rows: number;
+    /**
+     * Buyers
+     */
+    buyers: number;
+    /**
+     * Sellers
+     */
+    sellers: number;
+    /**
+     * Current Owner
+     */
+    current_owner?: string | null;
+    /**
+     * Latest Date
+     */
+    latest_date?: string | null;
+    /**
+     * Latest Price Aed
+     */
+    latest_price_aed?: number | null;
+    /**
+     * Records
+     */
+    records: Array<CrmImportPropertyRecord>;
+};
+
+/**
+ * CrmImportPropertyRecord
+ *
+ * One retained source event; sale_date is the legacy API name for its date.
+ */
+export type CrmImportPropertyRecord = {
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Role
+     */
+    role: string;
+    /**
+     * Sale Date
+     */
+    sale_date?: string | null;
+    /**
+     * Price Aed
+     */
+    price_aed?: number | null;
+    /**
+     * Status
+     */
+    status: string;
+    /**
+     * Sheet
+     */
+    sheet: string;
+    /**
+     * Row
+     */
+    row: number;
+    /**
+     * Procedure
+     */
+    procedure?: string;
+    /**
+     * Event Family
+     */
+    event_family?: string;
+    /**
+     * Identifiers
+     */
+    identifiers?: {
+        [key: string]: string;
+    };
+    /**
+     * Match Reason
+     */
+    match_reason?: string;
+    /**
+     * Property Details
+     */
+    property_details?: {
+        [key: string]: string;
+    };
 };
 
 /**
@@ -2749,6 +2864,62 @@ export type CrmSheetMapping = {
      * Warnings
      */
     warnings?: Array<string>;
+};
+
+/**
+ * CrmSourcePropertyCounts
+ *
+ * File inventory before owner filtering; identifiers are not verified properties.
+ */
+export type CrmSourcePropertyCounts = {
+    /**
+     * Total Rows
+     */
+    total_rows?: number;
+    /**
+     * Distinct Unit Numbers
+     */
+    distinct_unit_numbers?: number;
+    /**
+     * Distinct Building Numbers Without Unit
+     */
+    distinct_building_numbers_without_unit?: number;
+    /**
+     * Distinct Identifiers
+     */
+    distinct_identifiers?: number;
+    /**
+     * Distinct Property Numbers Without Unit
+     */
+    distinct_property_numbers_without_unit?: number;
+    /**
+     * Source Property References
+     */
+    source_property_references?: number;
+    /**
+     * Identifiers In Both Columns
+     */
+    identifiers_in_both_columns?: number;
+    /**
+     * Location Scoped Units
+     */
+    location_scoped_units?: number;
+    /**
+     * Unit Rows
+     */
+    unit_rows?: number;
+    /**
+     * Building Fallback Rows
+     */
+    building_fallback_rows?: number;
+    /**
+     * Rows Without Identifiers
+     */
+    rows_without_identifiers?: number;
+    /**
+     * Unit Rows Without Location
+     */
+    unit_rows_without_location?: number;
 };
 
 /**
@@ -11638,6 +11809,49 @@ export type CrmCrmContactImportDroppedRowsResponses = {
 };
 
 export type CrmCrmContactImportDroppedRowsResponse = CrmCrmContactImportDroppedRowsResponses[keyof CrmCrmContactImportDroppedRowsResponses];
+
+export type CrmCrmContactImportPropertiesData = {
+    body?: never;
+    path: {
+        /**
+         * Import Id
+         */
+        import_id: number;
+    };
+    query?: {
+        /**
+         * Search
+         */
+        search?: string | null;
+        /**
+         * Limit
+         */
+        limit?: number;
+        /**
+         * Offset
+         */
+        offset?: number;
+    };
+    url: '/api/v1/crm/contact-imports/{import_id}/properties';
+};
+
+export type CrmCrmContactImportPropertiesErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmContactImportPropertiesError = CrmCrmContactImportPropertiesErrors[keyof CrmCrmContactImportPropertiesErrors];
+
+export type CrmCrmContactImportPropertiesResponses = {
+    /**
+     * Successful Response
+     */
+    200: CrmImportPropertiesResponse;
+};
+
+export type CrmCrmContactImportPropertiesResponse = CrmCrmContactImportPropertiesResponses[keyof CrmCrmContactImportPropertiesResponses];
 
 export type CrmCrmContactListsData = {
     body?: never;
