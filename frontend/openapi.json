@@ -2461,6 +2461,185 @@
 				}
 			}
 		},
+		"/api/v1/crm/contact-imports/{import_id}/dropped-rows": {
+			"get": {
+				"tags": ["crm", "crm"],
+				"summary": "Crm Contact Import Dropped Rows",
+				"description": "Rows of one import that were not kept, with the file's values and the reason.\n\nRead from the dropped-rows log saved at upload; `available` is false for imports made\nbefore the log existed.",
+				"operationId": "crm-crm_contact_import_dropped_rows",
+				"parameters": [
+					{
+						"name": "import_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "integer",
+							"title": "Import Id"
+						}
+					},
+					{
+						"name": "reason",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "string",
+									"pattern": "^(no_name|not_buyer_seller|not_a_sale|no_unit)$"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"title": "Reason"
+						}
+					},
+					{
+						"name": "search",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "string",
+									"maxLength": 160
+								},
+								{
+									"type": "null"
+								}
+							],
+							"title": "Search"
+						}
+					},
+					{
+						"name": "limit",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer",
+							"maximum": 500,
+							"minimum": 1,
+							"default": 100,
+							"title": "Limit"
+						}
+					},
+					{
+						"name": "offset",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer",
+							"minimum": 0,
+							"default": 0,
+							"title": "Offset"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/CrmDroppedRowsResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/crm/contact-imports/{import_id}/properties": {
+			"get": {
+				"tags": ["crm", "crm"],
+				"summary": "Crm Contact Import Properties",
+				"description": "Distinct properties (building + unit) of one import, each with its kept rows.",
+				"operationId": "crm-crm_contact_import_properties",
+				"parameters": [
+					{
+						"name": "import_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "integer",
+							"title": "Import Id"
+						}
+					},
+					{
+						"name": "search",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "string",
+									"maxLength": 160
+								},
+								{
+									"type": "null"
+								}
+							],
+							"title": "Search"
+						}
+					},
+					{
+						"name": "limit",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer",
+							"maximum": 500,
+							"minimum": 1,
+							"default": 100,
+							"title": "Limit"
+						}
+					},
+					{
+						"name": "offset",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer",
+							"minimum": 0,
+							"default": 0,
+							"title": "Offset"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/CrmImportPropertiesResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
 		"/api/v1/crm/contact-lists": {
 			"get": {
 				"tags": ["crm", "crm"],
@@ -2587,7 +2766,7 @@
 			"get": {
 				"tags": ["crm", "crm"],
 				"summary": "Crm Owner Registry",
-				"description": "Return deduplicated owner profiles grouped into actionable CRM folders.",
+				"description": "Return deduplicated owner profiles grouped into actionable CRM folders.\n\n`min_properties` keeps owners with at least that many units; `next_event_days` keeps owners\nwhose next lease ends between today and that many days from now.",
 				"operationId": "crm-crm_owner_registry",
 				"parameters": [
 					{
@@ -2749,6 +2928,42 @@
 								}
 							],
 							"title": "Max Value Aed"
+						}
+					},
+					{
+						"name": "min_properties",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "integer",
+									"maximum": 10000,
+									"minimum": 1
+								},
+								{
+									"type": "null"
+								}
+							],
+							"title": "Min Properties"
+						}
+					},
+					{
+						"name": "next_event_days",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "integer",
+									"maximum": 3650,
+									"minimum": 0
+								},
+								{
+									"type": "null"
+								}
+							],
+							"title": "Next Event Days"
 						}
 					},
 					{
@@ -3122,6 +3337,404 @@
 							"application/json": {
 								"schema": {
 									"$ref": "#/components/schemas/CrmDashboardResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/crm/area-preferences": {
+			"get": {
+				"tags": ["crm", "crm"],
+				"summary": "Crm Area Preferences",
+				"description": "Return the current agent's renewal-lead areas and lease-expiry windows.",
+				"operationId": "crm-crm_area_preferences",
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/CrmAreaPreferencesResponse"
+								}
+							}
+						}
+					}
+				}
+			},
+			"put": {
+				"tags": ["crm", "crm"],
+				"summary": "Crm Update Area Preferences",
+				"description": "Replace the current agent's renewal-lead areas and lease-expiry windows.",
+				"operationId": "crm-crm_update_area_preferences",
+				"requestBody": {
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/CrmAreaPreferencesUpdate"
+							}
+						}
+					},
+					"required": true
+				},
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/CrmAreaPreferencesResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/crm/renewals": {
+			"get": {
+				"tags": ["crm", "crm"],
+				"summary": "Crm Renewals",
+				"description": "Assets \u203a Renewals: every lease in the dataset, narrowed by the tab's filters.",
+				"operationId": "crm-crm_renewals",
+				"parameters": [
+					{
+						"name": "window",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "string",
+									"pattern": "^(vacant|expired|expiring_30|expiring_60|expiring_90)$"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"title": "Window"
+						}
+					},
+					{
+						"name": "area",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "string",
+									"maxLength": 160
+								},
+								{
+									"type": "null"
+								}
+							],
+							"title": "Area"
+						}
+					},
+					{
+						"name": "property_type",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "string",
+									"maxLength": 80
+								},
+								{
+									"type": "null"
+								}
+							],
+							"title": "Property Type"
+						}
+					},
+					{
+						"name": "project",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "string",
+									"maxLength": 160
+								},
+								{
+									"type": "null"
+								}
+							],
+							"title": "Project"
+						}
+					},
+					{
+						"name": "building",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "string",
+									"maxLength": 200
+								},
+								{
+									"type": "null"
+								}
+							],
+							"title": "Building"
+						}
+					},
+					{
+						"name": "limit",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer",
+							"maximum": 200,
+							"minimum": 1,
+							"default": 50,
+							"title": "Limit"
+						}
+					},
+					{
+						"name": "offset",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer",
+							"minimum": 0,
+							"default": 0,
+							"title": "Offset"
+						}
+					},
+					{
+						"name": "as_of",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "string",
+									"format": "date"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"title": "As Of"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/CrmRenewalsResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/crm/renewal-areas": {
+			"get": {
+				"tags": ["crm", "crm"],
+				"summary": "Crm Renewal Areas",
+				"description": "List areas in the lease-expiry dataset with their leases ending in the next 90 days.",
+				"operationId": "crm-crm_renewal_areas",
+				"parameters": [
+					{
+						"name": "as_of",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "string",
+									"format": "date"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"title": "As Of"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "array",
+									"items": {
+										"$ref": "#/components/schemas/CrmRenewalArea"
+									},
+									"title": "Response Crm-Crm Renewal Areas"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/crm/renewal-leads": {
+			"get": {
+				"tags": ["crm", "crm"],
+				"summary": "Crm Renewal Leads",
+				"description": "Return lease-expiry leads in the current agent's areas and windows.\n\nkind=vacant: units whose lease ended with no later lease registered (Leads \u203a Vacant units).\nkind=upcoming: leases still running (the Inbox).",
+				"operationId": "crm-crm_renewal_leads",
+				"parameters": [
+					{
+						"name": "kind",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "string",
+									"pattern": "^(vacant|upcoming)$"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"title": "Kind"
+						}
+					},
+					{
+						"name": "limit",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer",
+							"maximum": 500,
+							"minimum": 1,
+							"default": 200,
+							"title": "Limit"
+						}
+					},
+					{
+						"name": "offset",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer",
+							"minimum": 0,
+							"default": 0,
+							"title": "Offset"
+						}
+					},
+					{
+						"name": "as_of",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "string",
+									"format": "date"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"title": "As Of"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/CrmRenewalLeadsResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/v1/crm/renewal-leads/{lease_id}/lead": {
+			"post": {
+				"tags": ["crm", "crm"],
+				"summary": "Crm Open Renewal Lead",
+				"description": "Open a Vitevue lease as the agency's shared lead for its unit (created on first open).",
+				"operationId": "crm-crm_open_renewal_lead",
+				"parameters": [
+					{
+						"name": "lease_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"title": "Lease Id"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/InboundEnquiryResponse"
 								}
 							}
 						}
@@ -10844,6 +11457,76 @@
 				"required": ["user_id", "email", "organization_id", "organization_name"],
 				"title": "CreateUserResponse"
 			},
+			"CrmAreaPreferencesResponse": {
+				"properties": {
+					"areas": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"maxItems": 50,
+						"title": "Areas"
+					},
+					"forward_days": {
+						"type": "integer",
+						"maximum": 90.0,
+						"minimum": 1.0,
+						"title": "Forward Days",
+						"default": 60
+					},
+					"lookback_days": {
+						"type": "integer",
+						"maximum": 365.0,
+						"minimum": 0.0,
+						"title": "Lookback Days",
+						"default": 30
+					},
+					"updated_at": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "date-time"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Updated At"
+					}
+				},
+				"type": "object",
+				"required": ["areas"],
+				"title": "CrmAreaPreferencesResponse"
+			},
+			"CrmAreaPreferencesUpdate": {
+				"properties": {
+					"areas": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"maxItems": 50,
+						"title": "Areas"
+					},
+					"forward_days": {
+						"type": "integer",
+						"maximum": 90.0,
+						"minimum": 1.0,
+						"title": "Forward Days",
+						"default": 60
+					},
+					"lookback_days": {
+						"type": "integer",
+						"maximum": 365.0,
+						"minimum": 0.0,
+						"title": "Lookback Days",
+						"default": 30
+					}
+				},
+				"type": "object",
+				"required": ["areas"],
+				"title": "CrmAreaPreferencesUpdate"
+			},
 			"CrmAssetBreakdownItem": {
 				"properties": {
 					"asset_class": {
@@ -11003,6 +11686,13 @@
 					"property_type": {
 						"type": "string",
 						"title": "Property Type"
+					},
+					"property_details": {
+						"additionalProperties": {
+							"type": "string"
+						},
+						"type": "object",
+						"title": "Property Details"
 					},
 					"transaction_date": {
 						"anyOf": [
@@ -11262,9 +11952,57 @@
 						"title": "Candidate Rows",
 						"default": 0
 					},
+					"distinct_properties": {
+						"anyOf": [
+							{
+								"type": "integer"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Distinct Properties"
+					},
+					"source_property_counts": {
+						"anyOf": [
+							{
+								"$ref": "#/components/schemas/CrmSourcePropertyCounts"
+							},
+							{
+								"type": "null"
+							}
+						]
+					},
+					"rows_with_sales_history": {
+						"anyOf": [
+							{
+								"type": "integer"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Rows With Sales History"
+					},
+					"plot_only_rows": {
+						"anyOf": [
+							{
+								"type": "integer"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Plot Only Rows"
+					},
 					"duplicate_rows_collapsed": {
 						"type": "integer",
 						"title": "Duplicate Rows Collapsed",
+						"default": 0
+					},
+					"dropped_no_unit": {
+						"type": "integer",
+						"title": "Dropped No Unit",
 						"default": 0
 					},
 					"valid_contacts": {
@@ -11321,6 +12059,18 @@
 						"type": "integer",
 						"title": "Contact Ready",
 						"default": 0
+					},
+					"dropped_by_reason": {
+						"additionalProperties": {
+							"type": "integer"
+						},
+						"type": "object",
+						"title": "Dropped By Reason"
+					},
+					"dropped_log": {
+						"type": "boolean",
+						"title": "Dropped Log",
+						"default": false
 					}
 				},
 				"type": "object",
@@ -11561,6 +12311,99 @@
 				],
 				"title": "CrmDashboardResponse"
 			},
+			"CrmDroppedRow": {
+				"properties": {
+					"sheet": {
+						"type": "string",
+						"title": "Sheet"
+					},
+					"row": {
+						"type": "integer",
+						"title": "Row"
+					},
+					"reason": {
+						"type": "string",
+						"enum": ["no_name", "not_buyer_seller", "not_a_sale", "no_unit"],
+						"title": "Reason"
+					},
+					"name": {
+						"type": "string",
+						"title": "Name",
+						"default": ""
+					},
+					"building": {
+						"type": "string",
+						"title": "Building",
+						"default": ""
+					},
+					"unit": {
+						"type": "string",
+						"title": "Unit",
+						"default": ""
+					},
+					"date": {
+						"type": "string",
+						"title": "Date",
+						"default": ""
+					},
+					"price": {
+						"type": "string",
+						"title": "Price",
+						"default": ""
+					},
+					"role": {
+						"type": "string",
+						"title": "Role",
+						"default": ""
+					},
+					"procedure": {
+						"type": "string",
+						"title": "Procedure",
+						"default": ""
+					}
+				},
+				"type": "object",
+				"required": ["sheet", "row", "reason"],
+				"title": "CrmDroppedRow",
+				"description": "A row the import did not keep, with the file's own values and why it was dropped."
+			},
+			"CrmDroppedRowsResponse": {
+				"properties": {
+					"available": {
+						"type": "boolean",
+						"title": "Available"
+					},
+					"total": {
+						"type": "integer",
+						"title": "Total"
+					},
+					"offset": {
+						"type": "integer",
+						"title": "Offset"
+					},
+					"limit": {
+						"type": "integer",
+						"title": "Limit"
+					},
+					"by_reason": {
+						"additionalProperties": {
+							"type": "integer"
+						},
+						"type": "object",
+						"title": "By Reason"
+					},
+					"rows": {
+						"items": {
+							"$ref": "#/components/schemas/CrmDroppedRow"
+						},
+						"type": "array",
+						"title": "Rows"
+					}
+				},
+				"type": "object",
+				"required": ["available", "total", "offset", "limit", "by_reason", "rows"],
+				"title": "CrmDroppedRowsResponse"
+			},
 			"CrmFilters": {
 				"properties": {
 					"areas": {
@@ -11594,6 +12437,208 @@
 				},
 				"type": "object",
 				"title": "CrmFilters"
+			},
+			"CrmImportPropertiesResponse": {
+				"properties": {
+					"total": {
+						"type": "integer",
+						"title": "Total"
+					},
+					"offset": {
+						"type": "integer",
+						"title": "Offset"
+					},
+					"limit": {
+						"type": "integer",
+						"title": "Limit"
+					},
+					"rows": {
+						"items": {
+							"$ref": "#/components/schemas/CrmImportProperty"
+						},
+						"type": "array",
+						"title": "Rows"
+					}
+				},
+				"type": "object",
+				"required": ["total", "offset", "limit", "rows"],
+				"title": "CrmImportPropertiesResponse"
+			},
+			"CrmImportProperty": {
+				"properties": {
+					"property_key": {
+						"type": "string",
+						"title": "Property Key"
+					},
+					"area": {
+						"type": "string",
+						"title": "Area"
+					},
+					"project": {
+						"type": "string",
+						"title": "Project"
+					},
+					"building": {
+						"type": "string",
+						"title": "Building"
+					},
+					"unit": {
+						"type": "string",
+						"title": "Unit"
+					},
+					"property_type": {
+						"type": "string",
+						"title": "Property Type"
+					},
+					"rows": {
+						"type": "integer",
+						"title": "Rows"
+					},
+					"buyers": {
+						"type": "integer",
+						"title": "Buyers"
+					},
+					"sellers": {
+						"type": "integer",
+						"title": "Sellers"
+					},
+					"current_owner": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Current Owner"
+					},
+					"latest_date": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "date"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Latest Date"
+					},
+					"latest_price_aed": {
+						"anyOf": [
+							{
+								"type": "integer"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Latest Price Aed"
+					},
+					"records": {
+						"items": {
+							"$ref": "#/components/schemas/CrmImportPropertyRecord"
+						},
+						"type": "array",
+						"title": "Records"
+					}
+				},
+				"type": "object",
+				"required": [
+					"property_key",
+					"area",
+					"project",
+					"building",
+					"unit",
+					"property_type",
+					"rows",
+					"buyers",
+					"sellers",
+					"records"
+				],
+				"title": "CrmImportProperty",
+				"description": "One distinct property (building + unit) of an import, with its kept rows."
+			},
+			"CrmImportPropertyRecord": {
+				"properties": {
+					"name": {
+						"type": "string",
+						"title": "Name"
+					},
+					"role": {
+						"type": "string",
+						"title": "Role"
+					},
+					"sale_date": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "date"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Sale Date"
+					},
+					"price_aed": {
+						"anyOf": [
+							{
+								"type": "integer"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Price Aed"
+					},
+					"status": {
+						"type": "string",
+						"title": "Status"
+					},
+					"sheet": {
+						"type": "string",
+						"title": "Sheet"
+					},
+					"row": {
+						"type": "integer",
+						"title": "Row"
+					},
+					"procedure": {
+						"type": "string",
+						"title": "Procedure",
+						"default": ""
+					},
+					"event_family": {
+						"type": "string",
+						"title": "Event Family",
+						"default": ""
+					},
+					"identifiers": {
+						"additionalProperties": {
+							"type": "string"
+						},
+						"type": "object",
+						"title": "Identifiers"
+					},
+					"match_reason": {
+						"type": "string",
+						"title": "Match Reason",
+						"default": ""
+					},
+					"property_details": {
+						"additionalProperties": {
+							"type": "string"
+						},
+						"type": "object",
+						"title": "Property Details"
+					}
+				},
+				"type": "object",
+				"required": ["name", "role", "status", "sheet", "row"],
+				"title": "CrmImportPropertyRecord",
+				"description": "One retained source event; sale_date is the legacy API name for its date."
 			},
 			"CrmLead": {
 				"properties": {
@@ -12470,6 +13515,11 @@
 						"title": "Imported Property Type",
 						"default": ""
 					},
+					"imported_party_role": {
+						"type": "string",
+						"title": "Imported Party Role",
+						"default": ""
+					},
 					"latest_sale_date": {
 						"anyOf": [
 							{
@@ -12581,6 +13631,39 @@
 							}
 						],
 						"title": "Registry Market Status"
+					},
+					"registry_unit_number": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Registry Unit Number"
+					},
+					"registry_building_name": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Registry Building Name"
+					},
+					"registry_area_name": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Registry Area Name"
 					},
 					"later_sale_date": {
 						"anyOf": [
@@ -13051,6 +14134,189 @@
 				],
 				"title": "CrmPropertyReportResponse"
 			},
+			"CrmRenewalArea": {
+				"properties": {
+					"area": {
+						"type": "string",
+						"title": "Area"
+					},
+					"upcoming_90_days": {
+						"type": "integer",
+						"title": "Upcoming 90 Days"
+					}
+				},
+				"type": "object",
+				"required": ["area", "upcoming_90_days"],
+				"title": "CrmRenewalArea"
+			},
+			"CrmRenewalLead": {
+				"properties": {
+					"lead": {
+						"$ref": "#/components/schemas/CrmLead"
+					},
+					"owner": {
+						"anyOf": [
+							{
+								"$ref": "#/components/schemas/CrmRenewalOwner"
+							},
+							{
+								"type": "null"
+							}
+						]
+					},
+					"lead_record_id": {
+						"anyOf": [
+							{
+								"type": "integer"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Lead Record Id"
+					}
+				},
+				"type": "object",
+				"required": ["lead"],
+				"title": "CrmRenewalLead"
+			},
+			"CrmRenewalLeadsResponse": {
+				"properties": {
+					"items": {
+						"items": {
+							"$ref": "#/components/schemas/CrmRenewalLead"
+						},
+						"type": "array",
+						"title": "Items"
+					},
+					"total": {
+						"type": "integer",
+						"title": "Total"
+					},
+					"limit": {
+						"type": "integer",
+						"title": "Limit"
+					},
+					"offset": {
+						"type": "integer",
+						"title": "Offset"
+					},
+					"entered_today": {
+						"type": "integer",
+						"title": "Entered Today"
+					},
+					"preferences": {
+						"$ref": "#/components/schemas/CrmAreaPreferencesResponse"
+					},
+					"as_of": {
+						"type": "string",
+						"format": "date",
+						"title": "As Of"
+					}
+				},
+				"type": "object",
+				"required": ["items", "total", "limit", "offset", "entered_today", "preferences", "as_of"],
+				"title": "CrmRenewalLeadsResponse"
+			},
+			"CrmRenewalOwner": {
+				"properties": {
+					"name": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Name"
+					},
+					"phone": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Phone"
+					},
+					"email": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Email"
+					},
+					"source": {
+						"type": "string",
+						"enum": ["workspace", "owner_import"],
+						"title": "Source"
+					}
+				},
+				"type": "object",
+				"required": ["source"],
+				"title": "CrmRenewalOwner",
+				"description": "Owner contact for a renewal lead, only when entered by the agent or import-matched."
+			},
+			"CrmRenewalsResponse": {
+				"properties": {
+					"leads": {
+						"items": {
+							"$ref": "#/components/schemas/CrmLead"
+						},
+						"type": "array",
+						"title": "Leads"
+					},
+					"total": {
+						"type": "integer",
+						"title": "Total"
+					},
+					"limit": {
+						"type": "integer",
+						"title": "Limit"
+					},
+					"offset": {
+						"type": "integer",
+						"title": "Offset"
+					},
+					"property_types": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"title": "Property Types"
+					},
+					"projects": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"title": "Projects"
+					},
+					"buildings": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"title": "Buildings"
+					},
+					"as_of": {
+						"type": "string",
+						"format": "date",
+						"title": "As Of"
+					}
+				},
+				"type": "object",
+				"required": ["leads", "total", "limit", "offset", "as_of"],
+				"title": "CrmRenewalsResponse",
+				"description": "Assets \u203a Renewals: one page of the lease-expiry dataset and the options for its filters."
+			},
 			"CrmRentalComparable": {
 				"properties": {
 					"lease_start": {
@@ -13433,6 +14699,73 @@
 					"confidence"
 				],
 				"title": "CrmSheetMapping"
+			},
+			"CrmSourcePropertyCounts": {
+				"properties": {
+					"total_rows": {
+						"type": "integer",
+						"title": "Total Rows",
+						"default": 0
+					},
+					"distinct_unit_numbers": {
+						"type": "integer",
+						"title": "Distinct Unit Numbers",
+						"default": 0
+					},
+					"distinct_building_numbers_without_unit": {
+						"type": "integer",
+						"title": "Distinct Building Numbers Without Unit",
+						"default": 0
+					},
+					"distinct_identifiers": {
+						"type": "integer",
+						"title": "Distinct Identifiers",
+						"default": 0
+					},
+					"distinct_property_numbers_without_unit": {
+						"type": "integer",
+						"title": "Distinct Property Numbers Without Unit",
+						"default": 0
+					},
+					"source_property_references": {
+						"type": "integer",
+						"title": "Source Property References",
+						"default": 0
+					},
+					"identifiers_in_both_columns": {
+						"type": "integer",
+						"title": "Identifiers In Both Columns",
+						"default": 0
+					},
+					"location_scoped_units": {
+						"type": "integer",
+						"title": "Location Scoped Units",
+						"default": 0
+					},
+					"unit_rows": {
+						"type": "integer",
+						"title": "Unit Rows",
+						"default": 0
+					},
+					"building_fallback_rows": {
+						"type": "integer",
+						"title": "Building Fallback Rows",
+						"default": 0
+					},
+					"rows_without_identifiers": {
+						"type": "integer",
+						"title": "Rows Without Identifiers",
+						"default": 0
+					},
+					"unit_rows_without_location": {
+						"type": "integer",
+						"title": "Unit Rows Without Location",
+						"default": 0
+					}
+				},
+				"type": "object",
+				"title": "CrmSourcePropertyCounts",
+				"description": "File inventory before owner filtering; identifiers are not verified properties."
 			},
 			"CrmSummary": {
 				"properties": {
@@ -16883,6 +18216,42 @@
 							}
 						],
 						"title": "Preferred Channel"
+					},
+					"full_name": {
+						"anyOf": [
+							{
+								"type": "string",
+								"maxLength": 240
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Full Name"
+					},
+					"phone": {
+						"anyOf": [
+							{
+								"type": "string",
+								"maxLength": 80
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Phone"
+					},
+					"email": {
+						"anyOf": [
+							{
+								"type": "string",
+								"maxLength": 320
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Email"
 					}
 				},
 				"type": "object",

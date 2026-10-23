@@ -5,12 +5,14 @@ from datetime import date, timedelta
 from typing import Any
 
 from fastapi import HTTPException
+from sqlalchemy.exc import IntegrityError
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.crm import inbound_repository, owner_queries
 from app.crm.identity import _normalize_email, _normalize_phone
 from app.crm.import_models import CrmPropertyContactClaim
 from app.crm.inbound_models import (
+    VITEVUE_LEASE_SOURCE,
     CrmInboundActivity,
     CrmInboundContact,
     CrmInboundEnquiry,
@@ -323,6 +325,92 @@ async def create_inbound_enquiry(
     await db.commit()
     await db.refresh(enquiry)
     return await _enquiry_response(db, enquiry, contact=contact, include_registry_profiles=True)
+
+
+async def open_vitevue_lease_enquiry(
+    db: AsyncSession,
+    *,
+    organization_id: str,
+    user_id: str,
+    unit_key: str,
+    owner_name: str,
+    owner_phone: str | None,
+    owner_email: str | None,
+    criteria: dict[str, Any],
+    lease: dict[str, Any],
+) -> InboundEnquiryResponse:
+    """The agency's one shared lead for a unit Vitevue supplied, created on first open.
+
+    It starts undecided (seller or landlord), assigned to nobody, with no reply deadline: it was
+    not an enquiry. The owner is blank unless an owner import already identified them.
+    """
+    existing = await inbound_repository.list_vitevue_lease_enquiries(
+        db, organization_id, [unit_key]
+    )
+    if existing:
+        return await _enquiry_response(
+            db, existing[0], include_registry_profiles=True, include_history=True
+        )
+    now = _utcnow()
+    contact = CrmInboundContact(
+        organization_id=organization_id,
+        full_name=owner_name,
+        phone=_normalize_phone(owner_phone),
+        email=_normalize_email(owner_email),
+        created_at=now,
+        updated_at=now,
+    )
+    inbound_repository.save(db, contact)
+    await db.flush()
+    enquiry = CrmInboundEnquiry(
+        organization_id=organization_id,
+        contact_id=contact.id or 0,
+        created_by_user_id=user_id,
+        assigned_user_id=None,
+        record_kind="unqualified_contact",
+        intent="unknown",
+        status="new",
+        source=VITEVUE_LEASE_SOURCE,
+        source_lead_id=unit_key,
+        enquiry_date=now,
+        criteria=criteria,
+        strict_fields=[],
+        observed_data={"vitevue_lease": lease},
+        confirmed_data={},
+        qualification={},
+        extraction_confidence=1,
+        created_at=now,
+        updated_at=now,
+    )
+    inbound_repository.save(db, enquiry)
+    await db.flush()
+    inbound_repository.save(
+        db,
+        CrmInboundActivity(
+            enquiry_id=enquiry.id or 0,
+            organization_id=organization_id,
+            user_id=user_id,
+            activity_type="created",
+            body="Opened from a Vitevue lease lead",
+            metadata_json={"source": VITEVUE_LEASE_SOURCE, "lease_id": lease.get("lease_id")},
+            created_at=now,
+        ),
+    )
+    try:
+        await db.commit()
+    except IntegrityError:
+        # Another agent opened the same unit a moment earlier: use that lead.
+        await db.rollback()
+        existing = await inbound_repository.list_vitevue_lease_enquiries(
+            db, organization_id, [unit_key]
+        )
+        return await _enquiry_response(
+            db, existing[0], include_registry_profiles=True, include_history=True
+        )
+    await db.refresh(enquiry)
+    return await _enquiry_response(
+        db, enquiry, contact=contact, include_registry_profiles=True, include_history=True
+    )
 
 
 async def _registry_profiles(
@@ -722,9 +810,23 @@ async def update_inbound_enquiry(
     changes = payload.model_dump(exclude_unset=True)
     contact_changes = {
         key: changes.pop(key)
-        for key in ("consent_status", "do_not_contact", "preferred_channel")
+        for key in (
+            "consent_status",
+            "do_not_contact",
+            "preferred_channel",
+            "full_name",
+            "phone",
+            "email",
+        )
         if key in changes
     }
+    details_changed = bool({"full_name", "phone", "email"} & contact_changes.keys())
+    if "full_name" in contact_changes:
+        contact_changes["full_name"] = (contact_changes["full_name"] or "").strip()
+    if "phone" in contact_changes:
+        contact_changes["phone"] = _normalize_phone(contact_changes["phone"])
+    if "email" in contact_changes:
+        contact_changes["email"] = _normalize_email(contact_changes["email"])
     previous_status = enquiry.status
     matching_changed = bool(
         {"intent", "record_kind", "criteria", "strict_fields", "confirmed_data"} & changes.keys()
@@ -764,7 +866,11 @@ async def update_inbound_enquiry(
                 organization_id=organization_id,
                 user_id=user_id,
                 activity_type="contactability_updated",
-                body="Contact permissions or preferred channel updated",
+                body=(
+                    "Contact details updated"
+                    if details_changed
+                    else "Contact permissions or preferred channel updated"
+                ),
                 metadata_json=contact_changes,
                 created_at=enquiry.updated_at,
             ),

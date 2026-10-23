@@ -984,6 +984,46 @@ export type CreateUserResponse = {
 };
 
 /**
+ * CrmAreaPreferencesResponse
+ */
+export type CrmAreaPreferencesResponse = {
+    /**
+     * Areas
+     */
+    areas: Array<string>;
+    /**
+     * Forward Days
+     */
+    forward_days?: number;
+    /**
+     * Lookback Days
+     */
+    lookback_days?: number;
+    /**
+     * Updated At
+     */
+    updated_at?: string | null;
+};
+
+/**
+ * CrmAreaPreferencesUpdate
+ */
+export type CrmAreaPreferencesUpdate = {
+    /**
+     * Areas
+     */
+    areas: Array<string>;
+    /**
+     * Forward Days
+     */
+    forward_days?: number;
+    /**
+     * Lookback Days
+     */
+    lookback_days?: number;
+};
+
+/**
  * CrmAssetBreakdownItem
  */
 export type CrmAssetBreakdownItem = {
@@ -1103,6 +1143,12 @@ export type CrmContactClaimResponse = {
      * Property Type
      */
     property_type: string;
+    /**
+     * Property Details
+     */
+    property_details?: {
+        [key: string]: string;
+    };
     /**
      * Transaction Date
      */
@@ -1231,9 +1277,26 @@ export type CrmContactImportSummary = {
      */
     candidate_rows?: number;
     /**
+     * Distinct Properties
+     */
+    distinct_properties?: number | null;
+    source_property_counts?: CrmSourcePropertyCounts | null;
+    /**
+     * Rows With Sales History
+     */
+    rows_with_sales_history?: number | null;
+    /**
+     * Plot Only Rows
+     */
+    plot_only_rows?: number | null;
+    /**
      * Duplicate Rows Collapsed
      */
     duplicate_rows_collapsed?: number;
+    /**
+     * Dropped No Unit
+     */
+    dropped_no_unit?: number;
     /**
      * Valid Contacts
      */
@@ -1278,6 +1341,16 @@ export type CrmContactImportSummary = {
      * Contact Ready
      */
     contact_ready?: number;
+    /**
+     * Dropped By Reason
+     */
+    dropped_by_reason?: {
+        [key: string]: number;
+    };
+    /**
+     * Dropped Log
+     */
+    dropped_log?: boolean;
 };
 
 /**
@@ -1433,6 +1506,86 @@ export type CrmDashboardResponse = {
 };
 
 /**
+ * CrmDroppedRow
+ *
+ * A row the import did not keep, with the file's own values and why it was dropped.
+ */
+export type CrmDroppedRow = {
+    /**
+     * Sheet
+     */
+    sheet: string;
+    /**
+     * Row
+     */
+    row: number;
+    /**
+     * Reason
+     */
+    reason: 'no_name' | 'not_buyer_seller' | 'not_a_sale' | 'no_unit';
+    /**
+     * Name
+     */
+    name?: string;
+    /**
+     * Building
+     */
+    building?: string;
+    /**
+     * Unit
+     */
+    unit?: string;
+    /**
+     * Date
+     */
+    date?: string;
+    /**
+     * Price
+     */
+    price?: string;
+    /**
+     * Role
+     */
+    role?: string;
+    /**
+     * Procedure
+     */
+    procedure?: string;
+};
+
+/**
+ * CrmDroppedRowsResponse
+ */
+export type CrmDroppedRowsResponse = {
+    /**
+     * Available
+     */
+    available: boolean;
+    /**
+     * Total
+     */
+    total: number;
+    /**
+     * Offset
+     */
+    offset: number;
+    /**
+     * Limit
+     */
+    limit: number;
+    /**
+     * By Reason
+     */
+    by_reason: {
+        [key: string]: number;
+    };
+    /**
+     * Rows
+     */
+    rows: Array<CrmDroppedRow>;
+};
+
+/**
  * CrmFilters
  */
 export type CrmFilters = {
@@ -1452,6 +1605,148 @@ export type CrmFilters = {
      * Property Types
      */
     property_types?: Array<string>;
+};
+
+/**
+ * CrmImportPropertiesResponse
+ */
+export type CrmImportPropertiesResponse = {
+    /**
+     * Total
+     */
+    total: number;
+    /**
+     * Offset
+     */
+    offset: number;
+    /**
+     * Limit
+     */
+    limit: number;
+    /**
+     * Rows
+     */
+    rows: Array<CrmImportProperty>;
+};
+
+/**
+ * CrmImportProperty
+ *
+ * One distinct property (building + unit) of an import, with its kept rows.
+ */
+export type CrmImportProperty = {
+    /**
+     * Property Key
+     */
+    property_key: string;
+    /**
+     * Area
+     */
+    area: string;
+    /**
+     * Project
+     */
+    project: string;
+    /**
+     * Building
+     */
+    building: string;
+    /**
+     * Unit
+     */
+    unit: string;
+    /**
+     * Property Type
+     */
+    property_type: string;
+    /**
+     * Rows
+     */
+    rows: number;
+    /**
+     * Buyers
+     */
+    buyers: number;
+    /**
+     * Sellers
+     */
+    sellers: number;
+    /**
+     * Current Owner
+     */
+    current_owner?: string | null;
+    /**
+     * Latest Date
+     */
+    latest_date?: string | null;
+    /**
+     * Latest Price Aed
+     */
+    latest_price_aed?: number | null;
+    /**
+     * Records
+     */
+    records: Array<CrmImportPropertyRecord>;
+};
+
+/**
+ * CrmImportPropertyRecord
+ *
+ * One retained source event; sale_date is the legacy API name for its date.
+ */
+export type CrmImportPropertyRecord = {
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Role
+     */
+    role: string;
+    /**
+     * Sale Date
+     */
+    sale_date?: string | null;
+    /**
+     * Price Aed
+     */
+    price_aed?: number | null;
+    /**
+     * Status
+     */
+    status: string;
+    /**
+     * Sheet
+     */
+    sheet: string;
+    /**
+     * Row
+     */
+    row: number;
+    /**
+     * Procedure
+     */
+    procedure?: string;
+    /**
+     * Event Family
+     */
+    event_family?: string;
+    /**
+     * Identifiers
+     */
+    identifiers?: {
+        [key: string]: string;
+    };
+    /**
+     * Match Reason
+     */
+    match_reason?: string;
+    /**
+     * Property Details
+     */
+    property_details?: {
+        [key: string]: string;
+    };
 };
 
 /**
@@ -1946,6 +2241,10 @@ export type CrmOwnerProperty = {
      */
     imported_property_type?: string;
     /**
+     * Imported Party Role
+     */
+    imported_party_role?: string;
+    /**
      * Latest Sale Date
      */
     latest_sale_date?: string | null;
@@ -1985,6 +2284,18 @@ export type CrmOwnerProperty = {
      * Registry Market Status
      */
     registry_market_status?: string | null;
+    /**
+     * Registry Unit Number
+     */
+    registry_unit_number?: string | null;
+    /**
+     * Registry Building Name
+     */
+    registry_building_name?: string | null;
+    /**
+     * Registry Area Name
+     */
+    registry_area_name?: string | null;
     /**
      * Later Sale Date
      */
@@ -2248,6 +2559,127 @@ export type CrmPropertyReportResponse = {
 };
 
 /**
+ * CrmRenewalArea
+ */
+export type CrmRenewalArea = {
+    /**
+     * Area
+     */
+    area: string;
+    /**
+     * Upcoming 90 Days
+     */
+    upcoming_90_days: number;
+};
+
+/**
+ * CrmRenewalLead
+ */
+export type CrmRenewalLead = {
+    lead: CrmLead;
+    owner?: CrmRenewalOwner | null;
+    /**
+     * Lead Record Id
+     */
+    lead_record_id?: number | null;
+};
+
+/**
+ * CrmRenewalLeadsResponse
+ */
+export type CrmRenewalLeadsResponse = {
+    /**
+     * Items
+     */
+    items: Array<CrmRenewalLead>;
+    /**
+     * Total
+     */
+    total: number;
+    /**
+     * Limit
+     */
+    limit: number;
+    /**
+     * Offset
+     */
+    offset: number;
+    /**
+     * Entered Today
+     */
+    entered_today: number;
+    preferences: CrmAreaPreferencesResponse;
+    /**
+     * As Of
+     */
+    as_of: string;
+};
+
+/**
+ * CrmRenewalOwner
+ *
+ * Owner contact for a renewal lead, only when entered by the agent or import-matched.
+ */
+export type CrmRenewalOwner = {
+    /**
+     * Name
+     */
+    name?: string | null;
+    /**
+     * Phone
+     */
+    phone?: string | null;
+    /**
+     * Email
+     */
+    email?: string | null;
+    /**
+     * Source
+     */
+    source: 'workspace' | 'owner_import';
+};
+
+/**
+ * CrmRenewalsResponse
+ *
+ * Assets › Renewals: one page of the lease-expiry dataset and the options for its filters.
+ */
+export type CrmRenewalsResponse = {
+    /**
+     * Leads
+     */
+    leads: Array<CrmLead>;
+    /**
+     * Total
+     */
+    total: number;
+    /**
+     * Limit
+     */
+    limit: number;
+    /**
+     * Offset
+     */
+    offset: number;
+    /**
+     * Property Types
+     */
+    property_types?: Array<string>;
+    /**
+     * Projects
+     */
+    projects?: Array<string>;
+    /**
+     * Buildings
+     */
+    buildings?: Array<string>;
+    /**
+     * As Of
+     */
+    as_of: string;
+};
+
+/**
  * CrmRentalComparable
  */
 export type CrmRentalComparable = {
@@ -2470,6 +2902,62 @@ export type CrmSheetMapping = {
      * Warnings
      */
     warnings?: Array<string>;
+};
+
+/**
+ * CrmSourcePropertyCounts
+ *
+ * File inventory before owner filtering; identifiers are not verified properties.
+ */
+export type CrmSourcePropertyCounts = {
+    /**
+     * Total Rows
+     */
+    total_rows?: number;
+    /**
+     * Distinct Unit Numbers
+     */
+    distinct_unit_numbers?: number;
+    /**
+     * Distinct Building Numbers Without Unit
+     */
+    distinct_building_numbers_without_unit?: number;
+    /**
+     * Distinct Identifiers
+     */
+    distinct_identifiers?: number;
+    /**
+     * Distinct Property Numbers Without Unit
+     */
+    distinct_property_numbers_without_unit?: number;
+    /**
+     * Source Property References
+     */
+    source_property_references?: number;
+    /**
+     * Identifiers In Both Columns
+     */
+    identifiers_in_both_columns?: number;
+    /**
+     * Location Scoped Units
+     */
+    location_scoped_units?: number;
+    /**
+     * Unit Rows
+     */
+    unit_rows?: number;
+    /**
+     * Building Fallback Rows
+     */
+    building_fallback_rows?: number;
+    /**
+     * Rows Without Identifiers
+     */
+    rows_without_identifiers?: number;
+    /**
+     * Unit Rows Without Location
+     */
+    unit_rows_without_location?: number;
 };
 
 /**
@@ -4547,6 +5035,18 @@ export type InboundEnquiryUpdate = {
      * Preferred Channel
      */
     preferred_channel?: string | null;
+    /**
+     * Full Name
+     */
+    full_name?: string | null;
+    /**
+     * Phone
+     */
+    phone?: string | null;
+    /**
+     * Email
+     */
+    email?: string | null;
 };
 
 /**
@@ -11513,6 +12013,96 @@ export type CrmCrmRenameContactImportResponses = {
 
 export type CrmCrmRenameContactImportResponse = CrmCrmRenameContactImportResponses[keyof CrmCrmRenameContactImportResponses];
 
+export type CrmCrmContactImportDroppedRowsData = {
+    body?: never;
+    path: {
+        /**
+         * Import Id
+         */
+        import_id: number;
+    };
+    query?: {
+        /**
+         * Reason
+         */
+        reason?: string | null;
+        /**
+         * Search
+         */
+        search?: string | null;
+        /**
+         * Limit
+         */
+        limit?: number;
+        /**
+         * Offset
+         */
+        offset?: number;
+    };
+    url: '/api/v1/crm/contact-imports/{import_id}/dropped-rows';
+};
+
+export type CrmCrmContactImportDroppedRowsErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmContactImportDroppedRowsError = CrmCrmContactImportDroppedRowsErrors[keyof CrmCrmContactImportDroppedRowsErrors];
+
+export type CrmCrmContactImportDroppedRowsResponses = {
+    /**
+     * Successful Response
+     */
+    200: CrmDroppedRowsResponse;
+};
+
+export type CrmCrmContactImportDroppedRowsResponse = CrmCrmContactImportDroppedRowsResponses[keyof CrmCrmContactImportDroppedRowsResponses];
+
+export type CrmCrmContactImportPropertiesData = {
+    body?: never;
+    path: {
+        /**
+         * Import Id
+         */
+        import_id: number;
+    };
+    query?: {
+        /**
+         * Search
+         */
+        search?: string | null;
+        /**
+         * Limit
+         */
+        limit?: number;
+        /**
+         * Offset
+         */
+        offset?: number;
+    };
+    url: '/api/v1/crm/contact-imports/{import_id}/properties';
+};
+
+export type CrmCrmContactImportPropertiesErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmContactImportPropertiesError = CrmCrmContactImportPropertiesErrors[keyof CrmCrmContactImportPropertiesErrors];
+
+export type CrmCrmContactImportPropertiesResponses = {
+    /**
+     * Successful Response
+     */
+    200: CrmImportPropertiesResponse;
+};
+
+export type CrmCrmContactImportPropertiesResponse = CrmCrmContactImportPropertiesResponses[keyof CrmCrmContactImportPropertiesResponses];
+
 export type CrmCrmContactListsData = {
     body?: never;
     path?: never;
@@ -11622,6 +12212,14 @@ export type CrmCrmOwnerRegistryData = {
          * Max Value Aed
          */
         max_value_aed?: number | null;
+        /**
+         * Min Properties
+         */
+        min_properties?: number | null;
+        /**
+         * Next Event Days
+         */
+        next_event_days?: number | null;
         /**
          * Limit
          */
@@ -11804,6 +12402,209 @@ export type CrmCrmDashboardResponses = {
 };
 
 export type CrmCrmDashboardResponse = CrmCrmDashboardResponses[keyof CrmCrmDashboardResponses];
+
+export type CrmCrmAreaPreferencesData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/crm/area-preferences';
+};
+
+export type CrmCrmAreaPreferencesResponses = {
+    /**
+     * Successful Response
+     */
+    200: CrmAreaPreferencesResponse;
+};
+
+export type CrmCrmAreaPreferencesResponse = CrmCrmAreaPreferencesResponses[keyof CrmCrmAreaPreferencesResponses];
+
+export type CrmCrmUpdateAreaPreferencesData = {
+    body: CrmAreaPreferencesUpdate;
+    path?: never;
+    query?: never;
+    url: '/api/v1/crm/area-preferences';
+};
+
+export type CrmCrmUpdateAreaPreferencesErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmUpdateAreaPreferencesError = CrmCrmUpdateAreaPreferencesErrors[keyof CrmCrmUpdateAreaPreferencesErrors];
+
+export type CrmCrmUpdateAreaPreferencesResponses = {
+    /**
+     * Successful Response
+     */
+    200: CrmAreaPreferencesResponse;
+};
+
+export type CrmCrmUpdateAreaPreferencesResponse = CrmCrmUpdateAreaPreferencesResponses[keyof CrmCrmUpdateAreaPreferencesResponses];
+
+export type CrmCrmRenewalsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Window
+         */
+        window?: string | null;
+        /**
+         * Area
+         */
+        area?: string | null;
+        /**
+         * Property Type
+         */
+        property_type?: string | null;
+        /**
+         * Project
+         */
+        project?: string | null;
+        /**
+         * Building
+         */
+        building?: string | null;
+        /**
+         * Limit
+         */
+        limit?: number;
+        /**
+         * Offset
+         */
+        offset?: number;
+        /**
+         * As Of
+         */
+        as_of?: string | null;
+    };
+    url: '/api/v1/crm/renewals';
+};
+
+export type CrmCrmRenewalsErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmRenewalsError = CrmCrmRenewalsErrors[keyof CrmCrmRenewalsErrors];
+
+export type CrmCrmRenewalsResponses = {
+    /**
+     * Successful Response
+     */
+    200: CrmRenewalsResponse;
+};
+
+export type CrmCrmRenewalsResponse = CrmCrmRenewalsResponses[keyof CrmCrmRenewalsResponses];
+
+export type CrmCrmRenewalAreasData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * As Of
+         */
+        as_of?: string | null;
+    };
+    url: '/api/v1/crm/renewal-areas';
+};
+
+export type CrmCrmRenewalAreasErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmRenewalAreasError = CrmCrmRenewalAreasErrors[keyof CrmCrmRenewalAreasErrors];
+
+export type CrmCrmRenewalAreasResponses = {
+    /**
+     * Response Crm-Crm Renewal Areas
+     *
+     * Successful Response
+     */
+    200: Array<CrmRenewalArea>;
+};
+
+export type CrmCrmRenewalAreasResponse = CrmCrmRenewalAreasResponses[keyof CrmCrmRenewalAreasResponses];
+
+export type CrmCrmRenewalLeadsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Kind
+         */
+        kind?: string | null;
+        /**
+         * Limit
+         */
+        limit?: number;
+        /**
+         * Offset
+         */
+        offset?: number;
+        /**
+         * As Of
+         */
+        as_of?: string | null;
+    };
+    url: '/api/v1/crm/renewal-leads';
+};
+
+export type CrmCrmRenewalLeadsErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmRenewalLeadsError = CrmCrmRenewalLeadsErrors[keyof CrmCrmRenewalLeadsErrors];
+
+export type CrmCrmRenewalLeadsResponses = {
+    /**
+     * Successful Response
+     */
+    200: CrmRenewalLeadsResponse;
+};
+
+export type CrmCrmRenewalLeadsResponse = CrmCrmRenewalLeadsResponses[keyof CrmCrmRenewalLeadsResponses];
+
+export type CrmCrmOpenRenewalLeadData = {
+    body?: never;
+    path: {
+        /**
+         * Lease Id
+         */
+        lease_id: string;
+    };
+    query?: never;
+    url: '/api/v1/crm/renewal-leads/{lease_id}/lead';
+};
+
+export type CrmCrmOpenRenewalLeadErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CrmCrmOpenRenewalLeadError = CrmCrmOpenRenewalLeadErrors[keyof CrmCrmOpenRenewalLeadErrors];
+
+export type CrmCrmOpenRenewalLeadResponses = {
+    /**
+     * Successful Response
+     */
+    200: InboundEnquiryResponse;
+};
+
+export type CrmCrmOpenRenewalLeadResponse = CrmCrmOpenRenewalLeadResponses[keyof CrmCrmOpenRenewalLeadResponses];
 
 export type CrmCrmLeadDetailData = {
     body?: never;

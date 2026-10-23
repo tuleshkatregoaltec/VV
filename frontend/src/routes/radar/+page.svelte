@@ -73,6 +73,8 @@ const RADAR_OVERVIEW_ZOOM = 11
 const RADAR_BUILDING_MIN_ZOOM = 12
 
 let isMinimized = $state(false)
+// Height of the floating top bar; map controls sit just below it.
+let topOverlayHeight = $state(0)
 let panelView = $state<PanelView>('overview')
 let mapComponent = $state<any>()
 let selectedProjectId = $state<number | null>(null)
@@ -683,7 +685,7 @@ $effect(() => {
 <AppFrame>
 	<PageContainer variant="fullBleed" class="h-full overflow-hidden">
 		<div class="relative h-full overflow-hidden bg-slate-950">
-			<div class="absolute inset-0">
+			<div class="radar-map-shell absolute inset-0" style:--radar-controls-top="{topOverlayHeight + 14}px">
 					<ProjectMap
 						bind:this={mapComponent}
 						projectPins={showProjectPins ? visibleMapProjects : []}
@@ -705,7 +707,10 @@ $effect(() => {
 				/>
 			</div>
 
-				<div class="pointer-events-none absolute inset-x-3 top-3 z-30 md:inset-x-4 md:top-4">
+				<div
+					class="pointer-events-none absolute inset-x-3 top-3 z-30 md:inset-x-4 md:top-4"
+					bind:clientHeight={topOverlayHeight}
+				>
 					<div class="pointer-events-none mx-auto flex max-w-[1480px] flex-col gap-2">
 						<div class="grid gap-2 xl:grid-cols-[minmax(230px,0.6fr)_minmax(680px,1.55fr)_minmax(300px,0.85fr)]">
 							<div class="radar-glass pointer-events-auto flex min-h-14 items-center justify-between gap-3 rounded-lg px-3 py-2">
@@ -938,7 +943,7 @@ $effect(() => {
 			{#if isMinimized}
 				<button
 					type="button"
-					class="radar-theme-surface absolute bottom-4 right-4 z-30 flex h-11 items-center gap-2 rounded-lg border border-slate-200 bg-white/95 px-3 text-sm font-semibold text-slate-900 shadow-xl backdrop-blur"
+					class="radar-theme-surface absolute bottom-12 right-4 z-30 flex h-11 items-center gap-2 rounded-lg border border-slate-200 bg-white/95 px-3 text-sm font-semibold text-slate-900 shadow-xl backdrop-blur"
 					aria-label="Open information panel"
 					onclick={() => (isMinimized = false)}
 				>
@@ -946,7 +951,7 @@ $effect(() => {
 					Info
 				</button>
 			{:else}
-				<aside class="radar-info-panel radar-theme-surface absolute inset-x-3 bottom-3 z-20 flex max-h-[52dvh] flex-col overflow-hidden rounded-lg border border-slate-200 bg-white/95 shadow-2xl backdrop-blur md:inset-x-auto md:bottom-4 md:right-4 md:top-[116px] md:max-h-none md:w-[min(390px,calc(100vw-2rem))]">
+				<aside class="radar-info-panel radar-theme-surface absolute inset-x-3 bottom-12 z-20 flex max-h-[52dvh] flex-col overflow-hidden rounded-lg border border-slate-200 bg-white/95 shadow-2xl backdrop-blur md:inset-x-auto md:bottom-12 md:right-4 md:top-[116px] md:max-h-none md:w-[min(390px,calc(100vw-2rem))]">
 					<header class="border-b border-slate-200 px-4 py-3">
 						<div class="flex items-start justify-between gap-3">
 							<div class="min-w-0">
@@ -1375,6 +1380,11 @@ $effect(() => {
 </AppFrame>
 
 <style>
+	/* Zoom/compass sit under the floating top bar, whose height changes with screen width. */
+	.radar-map-shell :global(.maplibregl-ctrl-top-left) {
+		top: var(--radar-controls-top, 0px);
+	}
+
 	.radar-glass {
 		border: 1px solid rgba(226, 232, 240, 0.86);
 		background: rgba(255, 255, 255, 0.9);

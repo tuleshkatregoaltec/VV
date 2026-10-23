@@ -29,13 +29,7 @@ let {
 let showPassword = $state(false)
 
 const strengthLevels = ['Very Weak', 'Weak', 'Fair', 'Good', 'Strong']
-const strengthColors = [
-	'bg-error',
-	'bg-warning',
-	'bg-[var(--color-slate-400)]',
-	'bg-info',
-	'bg-success'
-]
+const strengthColors = ['bg-error', 'bg-warning', 'bg-fg-5', 'bg-info', 'bg-success']
 
 function calculatePasswordStrength(password: string): number {
 	if (!password) return 0
@@ -69,10 +63,10 @@ let strength = $derived(showStrength ? calculatePasswordStrength(value) : 0)
 			{required}
 			{autocomplete}
 			class="w-full rounded-md border bg-card px-3.5 py-3 pr-12 text-sm text-fg-1 placeholder-fg-5 transition-all
-                   focus:outline-none focus:border-navy focus:ring-2 focus:ring-focus
+                   focus:outline-none focus:border-focus focus:ring-2 focus:ring-focus
                    disabled:cursor-not-allowed disabled:bg-panel
                    {error
-				? 'border-[var(--color-error)] bg-error-bg'
+				? 'border-error-border bg-error-bg'
 				: 'border-border'}"
 		/>
 		<button
@@ -128,7 +122,7 @@ let strength = $derived(showStrength ? calculatePasswordStrength(value) : 0)
 					<div
 						class="h-1 flex-1 rounded-sm transition-all {i < strength
 							? strengthColors[strength - 1]
-							: 'bg-[var(--color-slate-200)]'}"
+							: 'bg-strong'}"
 					></div>
 				{/each}
 			</div>

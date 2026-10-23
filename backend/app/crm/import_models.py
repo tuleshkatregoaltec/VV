@@ -167,10 +167,34 @@ class CrmPropertyContactClaim(SQLModel, table=True):
     updated_at: datetime = SQLField(sa_column=Column(DateTime(timezone=True), nullable=False))
 
 
+class CrmSourcePropertyCounts(BaseModel):
+    """File inventory before owner filtering; identifiers are not verified properties."""
+
+    total_rows: int = 0
+    distinct_unit_numbers: int = 0
+    distinct_building_numbers_without_unit: int = 0
+    distinct_identifiers: int = 0
+    distinct_property_numbers_without_unit: int = 0
+    source_property_references: int = 0
+    identifiers_in_both_columns: int = 0
+    location_scoped_units: int = 0
+    unit_rows: int = 0
+    building_fallback_rows: int = 0
+    rows_without_identifiers: int = 0
+    unit_rows_without_location: int = 0
+
+
 class CrmContactImportSummary(BaseModel):
     total_rows: int = 0
     candidate_rows: int = 0
+    # Distinct properties (building + unit) among the kept rows: one unit sold several times,
+    # with a buyer and a seller row per sale, counts once. None for imports made before it.
+    distinct_properties: int | None = None
+    source_property_counts: CrmSourcePropertyCounts | None = None
+    rows_with_sales_history: int | None = None
+    plot_only_rows: int | None = None
     duplicate_rows_collapsed: int = 0
+    dropped_no_unit: int = 0
     valid_contacts: int = 0
     verified_current_owners: int = 0
     probable_current_owners: int = 0
@@ -182,6 +206,80 @@ class CrmContactImportSummary(BaseModel):
     unmatched: int = 0
     rental_opportunities: int = 0
     contact_ready: int = 0
+    # Rows not kept, per reason (see CrmDroppedRowReason); dropped_log says whether the
+    # dropped-rows log was saved, so imports from before it existed can say so.
+    dropped_by_reason: dict[str, int] = Field(default_factory=dict)
+    dropped_log: bool = False
+
+
+CrmDroppedRowReason = Literal["no_name", "not_buyer_seller", "not_a_sale", "no_unit"]
+
+
+class CrmDroppedRow(BaseModel):
+    """A row the import did not keep, with the file's own values and why it was dropped."""
+
+    sheet: str
+    row: int
+    reason: CrmDroppedRowReason
+    name: str = ""
+    building: str = ""
+    unit: str = ""
+    date: str = ""
+    price: str = ""
+    role: str = ""
+    procedure: str = ""
+
+
+class CrmDroppedRowsResponse(BaseModel):
+    available: bool
+    total: int
+    offset: int
+    limit: int
+    by_reason: dict[str, int]
+    rows: list[CrmDroppedRow]
+
+
+class CrmImportPropertyRecord(BaseModel):
+    """One retained source event; sale_date is the legacy API name for its date."""
+
+    name: str
+    role: str
+    sale_date: date | None = None
+    price_aed: int | None = None
+    status: str
+    sheet: str
+    row: int
+    procedure: str = ""
+    event_family: str = ""
+    identifiers: dict[str, str] = Field(default_factory=dict)
+    match_reason: str = ""
+    property_details: dict[str, str] = Field(default_factory=dict)
+
+
+class CrmImportProperty(BaseModel):
+    """One distinct property (building + unit) of an import, with its kept rows."""
+
+    property_key: str
+    area: str
+    project: str
+    building: str
+    unit: str
+    property_type: str
+    rows: int
+    buyers: int
+    sellers: int
+    # Name on the strongest verified/probable current-owner row; None when there is none.
+    current_owner: str | None = None
+    latest_date: date | None = None
+    latest_price_aed: int | None = None
+    records: list[CrmImportPropertyRecord]
+
+
+class CrmImportPropertiesResponse(BaseModel):
+    total: int
+    offset: int
+    limit: int
+    rows: list[CrmImportProperty]
 
 
 class CrmSheetMapping(BaseModel):
@@ -238,6 +336,7 @@ class CrmContactClaimResponse(BaseModel):
     building_name: str
     unit_number: str
     property_type: str
+    property_details: dict[str, str] = Field(default_factory=dict)
     transaction_date: date | None = None
     transaction_price_aed: int | None = SQLField(default=None, sa_type=BigInteger)
     ownership_status: CrmOwnershipStatus
@@ -297,6 +396,7 @@ class CrmOwnerProperty(BaseModel):
     imported_transaction_date: date | None = None
     imported_transaction_price_aed: int | None = None
     imported_property_type: str = ""
+    imported_party_role: str = ""
     latest_sale_date: date | None = None
     latest_sale_price_aed: int | None = SQLField(default=None, sa_type=BigInteger)
     registry_sale_date: date | None = None
@@ -307,6 +407,9 @@ class CrmOwnerProperty(BaseModel):
     registry_built_up_area_sqft: float | None = None
     registry_price_per_sqft_aed: float | None = None
     registry_market_status: str | None = None
+    registry_unit_number: str | None = None
+    registry_building_name: str | None = None
+    registry_area_name: str | None = None
     later_sale_date: date | None = None
     lease_end: date | None = None
     annual_rent_aed: int | None = SQLField(default=None, sa_type=BigInteger)

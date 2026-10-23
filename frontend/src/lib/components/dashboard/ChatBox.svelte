@@ -537,7 +537,7 @@ function stopStreaming() {
 									startConversationWithPrompt(
 										'What changed in Dubai Marina 2BR yields this quarter?'
 									)}
-								class="rounded-md border border-border bg-card px-3 py-2.5 text-left leading-5 text-fg-2 transition-colors hover:border-strong hover:bg-app"
+								class="rounded-md border border-border bg-card px-3 py-2.5 text-left leading-5 text-fg-2 transition-colors hover:border-strong hover:bg-panel"
 							>
 								<span class="mr-1 text-fg-5">→</span>
 								Dubai Marina 2BR yields
@@ -545,7 +545,7 @@ function stopStreaming() {
 							<button
 								onclick={() =>
 									startConversationWithPrompt('Compare Dubai Marina pricing against JBR.')}
-								class="rounded-md border border-border bg-card px-3 py-2.5 text-left leading-5 text-fg-2 transition-colors hover:border-strong hover:bg-app"
+								class="rounded-md border border-border bg-card px-3 py-2.5 text-left leading-5 text-fg-2 transition-colors hover:border-strong hover:bg-panel"
 							>
 								<span class="mr-1 text-fg-5">→</span>
 								Compare to JBR
@@ -553,7 +553,7 @@ function stopStreaming() {
 							<button
 								onclick={() =>
 									startConversationWithPrompt('Build a comp basket for Business Bay offices.')}
-								class="rounded-md border border-border bg-card px-3 py-2.5 text-left leading-5 text-fg-2 transition-colors hover:border-strong hover:bg-app"
+								class="rounded-md border border-border bg-card px-3 py-2.5 text-left leading-5 text-fg-2 transition-colors hover:border-strong hover:bg-panel"
 							>
 								<span class="mr-1 text-fg-5">→</span>
 								Build a comp basket
@@ -596,7 +596,7 @@ function stopStreaming() {
 							? 'bg-navy text-bone'
 							: msg.artifacts?.length
 								? 'bg-transparent text-fg-2'
-								: 'border border-border bg-app text-fg-2'}"
+								: 'border border-border bg-panel text-fg-2'}"
 					>
 						{#if isThinking && i === messages.length - 1 && msg.role === 'assistant' && !msg.content && !msg.toolCalls?.length && !msg.artifacts?.length}
 							<div class="flex items-center gap-2 text-fg-5">
@@ -722,7 +722,7 @@ function stopStreaming() {
 				placeholder={conversationId
 					? 'Ask anything about Dubai real estate...'
 					: 'Select or create a conversation first'}
-				class="min-h-11 w-full resize-none rounded-md border border-fg-1 bg-elevated py-3 pl-4 pr-14 text-[13px] leading-5 text-fg-1 placeholder:text-fg-5 focus:outline-none focus:ring-2 focus:ring-fg-1/10"
+				class="min-h-11 w-full resize-none rounded-md border border-focus bg-card py-3 pl-4 pr-14 text-[13px] leading-5 text-fg-1 placeholder:text-fg-5 focus:outline-none focus:ring-2 focus:ring-navy/10"
 				rows="1"
 				readonly={!conversationId || streamController !== null}
 				style="max-height: 180px;"
@@ -749,7 +749,7 @@ function stopStreaming() {
 					class="absolute right-1.5 top-1.5 flex h-8 w-8 items-center justify-center rounded transition-colors {inputValue.trim() &&
 					conversationId
 						? 'bg-navy text-bone hover:bg-primary-light'
-						: 'cursor-not-allowed bg-border text-fg-5'}"
+						: 'cursor-not-allowed bg-panel text-fg-5'}"
 					aria-label="Send message"
 				>
 					<svg class="h-3.5 w-3.5" fill="currentColor" viewBox="0 0 24 24">

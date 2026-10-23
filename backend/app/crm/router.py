@@ -1,7 +1,17 @@
 import json
 from datetime import date
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Response, UploadFile
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    Query,
+    Request,
+    Response,
+    UploadFile,
+)
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.dependencies import AuthContext, require_active_subscription
@@ -10,6 +20,8 @@ from app.crm.import_models import (
     CrmContactImportResponse,
     CrmContactListDetail,
     CrmContactListSummary,
+    CrmDroppedRowsResponse,
+    CrmImportPropertiesResponse,
     CrmLeadImportedContact,
     CrmOwnerBulkUpdate,
     CrmOwnerProfile,
@@ -19,6 +31,8 @@ from app.crm.import_models import (
 from app.crm.imports import (
     delete_contact_import,
     list_contact_imports,
+    list_dropped_rows,
+    list_import_properties,
     process_contact_import,
     rename_contact_import,
 )
@@ -55,10 +69,15 @@ from app.crm.matching import (
     update_inbound_match_state,
 )
 from app.crm.models import (
+    CrmAreaPreferencesResponse,
+    CrmAreaPreferencesUpdate,
     CrmDashboardResponse,
     CrmLeadDetailResponse,
     CrmNoteCreate,
     CrmPropertyReportResponse,
+    CrmRenewalArea,
+    CrmRenewalLeadsResponse,
+    CrmRenewalsResponse,
     CrmSavedLeadResponse,
     CrmWorkspaceResponse,
     CrmWorkspaceSummary,
@@ -71,6 +90,15 @@ from app.crm.owners import (
     get_owner_registry,
     list_contact_lists,
     list_lead_imported_contacts,
+)
+from app.crm.renewal_leads import (
+    get_area_preferences,
+    list_renewal_areas,
+    list_renewal_leads,
+    list_renewals,
+    open_renewal_lead,
+    until_disconnected,
+    update_area_preferences,
 )
 from app.crm.reports import get_property_report
 from app.crm.workspaces import (
@@ -364,6 +392,63 @@ async def crm_delete_contact_import(
 
 
 @router.get(
+    "/contact-imports/{import_id}/dropped-rows",
+    response_model=CrmDroppedRowsResponse,
+)
+async def crm_contact_import_dropped_rows(
+    import_id: int,
+    reason: str | None = Query(
+        default=None,
+        pattern="^(no_name|not_buyer_seller|not_a_sale|no_unit)$",
+    ),
+    search: str | None = Query(default=None, max_length=160),
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+    context: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """Rows of one import that were not kept, with the file's values and the reason.
+
+    Read from the dropped-rows log saved at upload; `available` is false for imports made
+    before the log existed.
+    """
+    _, organization_id = _auth_ids(context)
+    return await list_dropped_rows(
+        db,
+        import_id=import_id,
+        organization_id=organization_id,
+        reason=reason,
+        search=search,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@router.get(
+    "/contact-imports/{import_id}/properties",
+    response_model=CrmImportPropertiesResponse,
+)
+async def crm_contact_import_properties(
+    import_id: int,
+    search: str | None = Query(default=None, max_length=160),
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+    context: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """Distinct properties (building + unit) of one import, each with its kept rows."""
+    _, organization_id = _auth_ids(context)
+    return await list_import_properties(
+        db,
+        import_id=import_id,
+        organization_id=organization_id,
+        search=search,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@router.get(
     "/contact-lists",
     response_model=list[CrmContactListSummary],
 )
@@ -437,12 +522,18 @@ async def crm_owner_registry(
     max_rent_aed: int | None = Query(default=None, ge=0, le=10_000_000_000),
     min_value_aed: int | None = Query(default=None, ge=0, le=100_000_000_000),
     max_value_aed: int | None = Query(default=None, ge=0, le=100_000_000_000),
+    min_properties: int | None = Query(default=None, ge=1, le=10_000),
+    next_event_days: int | None = Query(default=None, ge=0, le=3_650),
     limit: int = Query(default=100, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
     context: AuthContext = Depends(require_active_subscription),
     db: AsyncSession = Depends(get_db_session),
 ):
-    """Return deduplicated owner profiles grouped into actionable CRM folders."""
+    """Return deduplicated owner profiles grouped into actionable CRM folders.
+
+    `min_properties` keeps owners with at least that many units; `next_event_days` keeps owners
+    whose next lease ends between today and that many days from now.
+    """
     _, organization_id = _auth_ids(context)
     return await get_owner_registry(
         db,
@@ -459,6 +550,8 @@ async def crm_owner_registry(
         max_value_aed=max_value_aed,
         limit=limit,
         offset=offset,
+        min_properties=min_properties,
+        next_event_days=next_event_days,
     )
 
 
@@ -550,6 +643,123 @@ async def crm_dashboard(
         limit=limit,
         offset=offset,
         as_of=as_of,
+    )
+
+
+@router.get("/area-preferences", response_model=CrmAreaPreferencesResponse)
+async def crm_area_preferences(
+    context: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """Return the current agent's renewal-lead areas and lease-expiry windows."""
+    user_id, organization_id = _auth_ids(context)
+    return await get_area_preferences(db, user_id=user_id, organization_id=organization_id)
+
+
+@router.put("/area-preferences", response_model=CrmAreaPreferencesResponse)
+async def crm_update_area_preferences(
+    payload: CrmAreaPreferencesUpdate,
+    context: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """Replace the current agent's renewal-lead areas and lease-expiry windows."""
+    user_id, organization_id = _auth_ids(context)
+    return await update_area_preferences(
+        db,
+        payload=payload,
+        user_id=user_id,
+        organization_id=organization_id,
+    )
+
+
+async def _until_disconnect(request: Request, work):
+    """Answer `work`, or stop its lease queries if the agent abandons the request."""
+    result = await until_disconnected(request.is_disconnected, work)
+    # 499: the client closed the request; nobody reads this response.
+    return Response(status_code=499) if result is None else result
+
+
+@router.get("/renewals", response_model=CrmRenewalsResponse)
+async def crm_renewals(
+    request: Request,
+    window: str | None = Query(
+        default=None, pattern="^(vacant|expired|expiring_30|expiring_60|expiring_90)$"
+    ),
+    area: str | None = Query(default=None, max_length=160),
+    property_type: str | None = Query(default=None, max_length=80),
+    project: str | None = Query(default=None, max_length=160),
+    building: str | None = Query(default=None, max_length=200),
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+    as_of: date | None = Query(default=None),
+    context: AuthContext = Depends(require_active_subscription),
+):
+    """Assets › Renewals: every lease in the dataset, narrowed by the tab's filters."""
+    return await _until_disconnect(
+        request,
+        list_renewals(
+            window=window,
+            area=area,
+            property_type=property_type,
+            project=project,
+            building=building,
+            limit=limit,
+            offset=offset,
+            as_of=as_of,
+        ),
+    )
+
+
+@router.get("/renewal-areas", response_model=list[CrmRenewalArea])
+async def crm_renewal_areas(
+    request: Request,
+    as_of: date | None = Query(default=None),
+    context: AuthContext = Depends(require_active_subscription),
+):
+    """List areas in the lease-expiry dataset with their leases ending in the next 90 days."""
+    return await _until_disconnect(request, list_renewal_areas(as_of=as_of))
+
+
+@router.get("/renewal-leads", response_model=CrmRenewalLeadsResponse)
+async def crm_renewal_leads(
+    request: Request,
+    kind: str | None = Query(default=None, pattern="^(vacant|upcoming)$"),
+    limit: int = Query(default=200, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+    as_of: date | None = Query(default=None),
+    context: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """Return lease-expiry leads in the current agent's areas and windows.
+
+    kind=vacant: units whose lease ended with no later lease registered (Leads › Vacant units).
+    kind=upcoming: leases still running (the Inbox).
+    """
+    user_id, organization_id = _auth_ids(context)
+    return await _until_disconnect(
+        request,
+        list_renewal_leads(
+            db,
+            kind=kind,
+            user_id=user_id,
+            organization_id=organization_id,
+            limit=limit,
+            offset=offset,
+            as_of=as_of,
+        ),
+    )
+
+
+@router.post("/renewal-leads/{lease_id}/lead", response_model=InboundEnquiryResponse)
+async def crm_open_renewal_lead(
+    lease_id: str,
+    context: AuthContext = Depends(require_active_subscription),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """Open a Vitevue lease as the agency's shared lead for its unit (created on first open)."""
+    user_id, organization_id = _auth_ids(context)
+    return await open_renewal_lead(
+        db, lease_id=lease_id, user_id=user_id, organization_id=organization_id
     )
 
 

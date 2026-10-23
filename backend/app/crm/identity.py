@@ -21,7 +21,9 @@ _UNIT_PLACEHOLDERS = {"", "-", "n/a", "na", "none", "null", "unknown"}
 
 _NUMERIC_PROPERTY_IDENTIFIER = re.compile(r"^\d+(?:\.\d+)?$")
 
-_VILLA_PROPERTY_IDENTIFIER = re.compile(r"(?:^|[-\s])(?:v|villa)[-\s]*[a-z0-9.]+$", re.IGNORECASE)
+_VILLA_PROPERTY_IDENTIFIER = re.compile(
+    r"(?:^|[-\s])(?:villa|v)[-\s]*(?=[a-z0-9.]*\d)[a-z0-9.]+$", re.IGNORECASE
+)
 
 _LOCATION_ALIAS_GROUPS = (
     ("jumeirah gate tower 1", "the address jbr 1"),
@@ -99,6 +101,8 @@ class ParsedContact:
     @property
     def property_key(self) -> str:
         location = self.building_name or self.project_name
+        if not self.unit_number:
+            return str(self.evidence.get("cadastral_identity", {}).get("property_key") or "")
         if not location or not self.unit_number:
             return ""
         return f"{_location_key(location)}|{self.unit_number.lower()}"
@@ -142,7 +146,7 @@ def _candidate_owner_key(candidate: ParsedContact) -> str:
         phone_primary=candidate.phone_primary,
         phone_alternate=candidate.phone_alternate,
         email_primary=candidate.email_primary,
-        property_key=candidate.property_key,
+        property_key=candidate.property_key or f"source:{candidate.row_fingerprint}",
     )
 
 
@@ -202,6 +206,19 @@ def _dedupe_candidates(candidates: list[ParsedContact]) -> tuple[list[ParsedCont
         unique.append(best)
     unique.sort(key=lambda item: (item.source_sheet, item.source_row_number))
     return unique, collapsed
+
+
+def _drop_candidates_without_unit(
+    candidates: list[ParsedContact],
+) -> tuple[list[ParsedContact], int]:
+    """Drop rows whose unit is still unknown after registry matching.
+
+    Run this after matching: an exact sale signature can recover the unit even when
+    the uploaded cell was empty. A row that still has no unit cannot identify a
+    property, and a later import of the same owner would never replace it.
+    """
+    kept = [candidate for candidate in candidates if candidate.unit_number]
+    return kept, len(candidates) - len(kept)
 
 
 def _text(value: Any) -> str:
@@ -397,7 +414,9 @@ def _recover_embedded_property_identity(candidate: ParsedContact) -> None:
 
     source_identifier = _normalize_unit(source_building)
     is_villa_identifier = bool(_VILLA_PROPERTY_IDENTIFIER.search(source_building))
-    is_numeric_identifier = bool(_NUMERIC_PROPERTY_IDENTIFIER.fullmatch(source_building))
+    is_numeric_identifier = source_identifier != "0" and bool(
+        _NUMERIC_PROPERTY_IDENTIFIER.fullmatch(source_building)
+    )
     if not (is_villa_identifier or is_numeric_identifier):
         return
 
@@ -459,8 +478,15 @@ def _claim_owner_key(claim: CrmPropertyContactClaim) -> str:
     )
 
 
-def _claim_preference(claim: CrmPropertyContactClaim) -> tuple[int, int, int, int]:
+def _claim_preference(claim: CrmPropertyContactClaim) -> tuple[int, int, int, int, int, int]:
+    decisive = claim.ownership_status in {
+        "former_owner",
+        "verified_current_owner",
+        "probable_current_owner",
+    }
     return (
+        int(decisive),
+        claim.transaction_date.toordinal() if decisive and claim.transaction_date else 0,
         _OWNERSHIP_PRIORITY.get(claim.ownership_status, 0),
         claim.confidence_score,
         1 if claim.phone_primary or claim.phone_alternate or claim.email_primary else 0,

@@ -42,6 +42,7 @@ body {
 	--color-navy-900: #0b1b2b;
 	--color-navy-800: #122739;
 	--color-navy-700: #1c344a;
+	--color-navy-600: #2c4a66;
 	--color-navy-100: #d9e1ea;
 	--color-navy-50: #ecf0f5;
 	--color-bone-50: #f6f1e7;
@@ -89,6 +90,15 @@ body {
 	/* Accent text: the teal at a shade that reads on light cards (4.5:1). */
 	--color-accent-text: #1f6f8b;
 
+	/* Main call-to-action: navy in light mode, bone in dark mode so it stays visible on dark cards. */
+	--color-action: var(--color-navy-900);
+	--color-action-hover: var(--color-navy-800);
+	--color-fg-on-action: var(--color-fg-on-navy);
+
+	/* Auth / onboarding shell. */
+	--color-bg-marketing: #f4f6f9;
+	--color-border-warm: #e7e0d2;
+
 	--radius-sm: 4px;
 	--radius-md: 6px;
 	--radius-lg: 8px;
@@ -127,6 +137,11 @@ body {
 	--color-info-bg: rgba(217, 225, 234, 0.11);
 	--color-info-border: rgba(217, 225, 234, 0.22);
 	--color-overlay: rgba(0, 0, 0, 0.66);
+	--color-action: var(--color-bone-50);
+	--color-action-hover: var(--color-bone-200);
+	--color-fg-on-action: var(--color-navy-900);
+	--color-bg-marketing: var(--color-bg-app);
+	--color-border-warm: var(--color-border);
 	--color-chart-line: #d9e1ea;
 	--color-chart-line-alt: #5fb3cf;
 	--color-chart-line-tertiary: #d3a15f;
@@ -144,6 +159,14 @@ body {
 		border-radius: var(--radius-lg);
 		background: var(--color-bg-card);
 		box-shadow: var(--shadow-sm);
+		color: var(--color-fg-1);
+	}
+
+	.ui-menu {
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-lg);
+		background: var(--color-bg-card);
+		box-shadow: var(--shadow-lg);
 		color: var(--color-fg-1);
 	}
 
@@ -214,20 +237,6 @@ body {
 	.ui-button:disabled {
 		cursor: not-allowed;
 		opacity: 0.55;
-	}
-
-	/* Primary in dark mode: navy on the dark card is barely visible, so the primary action takes
-	   the light bone fill, as the active item in the navy page header does. */
-	:root[data-theme="dark"] .ui-button[data-variant="primary"] {
-		border-color: var(--color-bone-50);
-		background: var(--color-bone-50);
-		color: var(--color-navy-900);
-	}
-
-	:root[data-theme="dark"] .ui-button[data-variant="primary"]:hover {
-		border-color: var(--color-bone-100);
-		background: var(--color-bone-100);
-		color: var(--color-navy-900);
 	}
 
 	/* An input or a dropdown trigger: a bordered field on the card colour, in both themes. */
@@ -389,6 +398,20 @@ body {
 		box-shadow: var(--shadow-sm);
 	}
 
+	.ui-icon-button {
+		gap: 0;
+	}
+
+	.ui-table-row[data-selected="true"],
+	.ui-table-row[aria-selected="true"] {
+		background: var(--color-info-bg);
+	}
+
+	.ui-table-row[data-selected="true"]:hover,
+	.ui-table-row[aria-selected="true"]:hover {
+		background: var(--color-info-bg);
+	}
+
 	.ui-segmented {
 		display: inline-flex;
 		width: fit-content;
@@ -439,6 +462,15 @@ body {
 	:where(.ui-page-header, .bg-navy) .ui-segmented-item[data-active="true"] {
 		background: var(--color-bone-50);
 		color: var(--color-navy-900);
+	}
+
+	.ui-metric-card {
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-lg);
+		background: var(--color-bg-card);
+		box-shadow: var(--shadow-sm);
+		color: var(--color-fg-1);
+		padding: 18px 20px;
 	}
 }
 
@@ -493,6 +525,12 @@ body {
 	--color-info-bg: var(--color-info-bg);
 	--color-info-border: var(--color-info-border);
 	--color-overlay: var(--color-overlay);
+	--color-action: var(--color-action);
+	--color-action-hover: var(--color-action-hover);
+	--color-on-action: var(--color-fg-on-action);
+	--color-primary-hover: var(--color-navy-800);
+	--color-marketing: var(--color-bg-marketing);
+	--color-warm: var(--color-border-warm);
 	--color-accent-text: var(--color-accent-text);
 }
 
@@ -502,6 +540,16 @@ body {
 
 :root:not([data-theme="dark"]) .theme-app .brand-logo-dark {
 	display: none;
+}
+
+/* Keep browser autofill on theme instead of the default grey/yellow fill. */
+.theme-app input:-webkit-autofill,
+.theme-app input:-webkit-autofill:hover,
+.theme-app input:-webkit-autofill:focus {
+	-webkit-text-fill-color: var(--color-fg-1);
+	caret-color: var(--color-fg-1);
+	box-shadow: 0 0 0 1000px var(--color-bg-card) inset;
+	transition: background-color 9999s ease-out 0s;
 }
 
 @theme {

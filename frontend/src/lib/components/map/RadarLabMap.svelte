@@ -566,7 +566,8 @@ onMount(() => {
 	})
 
 	// Add navigation controls
-	map.addControl(new maplibregl.NavigationControl(), 'top-right')
+	// Top-left: the radar page's info panel occupies the right edge.
+	map.addControl(new maplibregl.NavigationControl(), 'top-left')
 
 	map.on('load', () => {
 		syncRadarLayers()

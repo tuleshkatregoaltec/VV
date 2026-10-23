@@ -20,7 +20,7 @@ from app.crm.inbound_models import (
     CrmInboundMatch,
     CrmInboundNote,
 )
-from app.crm.models import CrmLeadNote, CrmLeadWorkspace, CrmSavedLead
+from app.crm.models import CrmAgentAreaPreference, CrmLeadNote, CrmLeadWorkspace, CrmSavedLead
 from app.feasibility.models import FeasibilitySavedStudy
 from app.news.models import NewsArticle
 from app.organization.models import Organization, OrganizationInvitation, OrganizationMembership
@@ -43,6 +43,7 @@ __all__ = [
     "CrmSavedLead",
     "CrmLeadWorkspace",
     "CrmLeadNote",
+    "CrmAgentAreaPreference",
     "CrmContactImport",
     "CrmContactList",
     "CrmPropertyContactClaim",
