@@ -1,4 +1,4 @@
-import { analytics, type ProjectParams } from '$lib/api/analytics'
+import { analytics, type ProjectParams, type ProjectSummaryParams } from '$lib/api/analytics'
 
 export const analyticsKeys = {
 	all: ['analytics', 'dxbi-v2'] as const,
@@ -8,7 +8,7 @@ export const analyticsKeys = {
 		[...analyticsKeys.all, 'projectSearch', { search, limit }] as const,
 	subProjects: (masterProject: string, filterType: string) =>
 		[...analyticsKeys.all, 'subProjects', { masterProject, filterType }] as const,
-	projectSummary: (params: ProjectParams) =>
+	projectSummary: (params: ProjectSummaryParams) =>
 		[...analyticsKeys.all, 'projectSummary', params] as const,
 	projectTrends: (params: ProjectParams, days: number) =>
 		[...analyticsKeys.all, 'projectTrends', params, days] as const,
@@ -37,7 +37,7 @@ export const analyticsQueries = {
 		enabled: Boolean(masterProject && filterType && !['project', 'market'].includes(filterType)),
 		staleTime: 5 * 60 * 1000
 	}),
-	projectSummary: (params: ProjectParams) => ({
+	projectSummary: (params: ProjectSummaryParams) => ({
 		queryKey: analyticsKeys.projectSummary(params),
 		queryFn: () => analytics.projectSummary(params),
 		staleTime: 5 * 60 * 1000

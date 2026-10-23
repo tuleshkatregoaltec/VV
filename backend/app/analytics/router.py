@@ -204,7 +204,7 @@ async def get_sub_projects_endpoint(
 
 
 @router.get("/project/summary", response_model=ProjectAnalyticsResponse)
-@cached_endpoint(prefix="analytics:dxbi:project_summary:v7", expire=900)
+@cached_endpoint(prefix="analytics:dxbi:project_summary:v8", expire=900)
 async def get_project_summary_endpoint(
     context: AuthContext = Depends(require_active_subscription),
     master_project: Optional[str] = Query(default=None, description="Master project name"),
@@ -214,6 +214,13 @@ async def get_project_summary_endpoint(
     ),
     filter_type: ProjectFilterType = Query(
         default="project", description="Filter type: master, virtual_master, or project"
+    ),
+    summary_days: Optional[int] = Query(
+        default=None,
+        ge=1,
+        le=3650,
+        description="Window for headline sales, rental, yield and usage counts: last N calendar "
+        "days including today in Dubai. Omit for all dates. Configuration history is unchanged.",
     ),
     usage: Literal["auto", "Residential", "Commercial"] = Query(
         default="auto",
@@ -237,6 +244,7 @@ async def get_project_summary_endpoint(
         filter_type=resolved_filter_type,
         master_project=master_project,
         usage=usage,
+        summary_days=summary_days,
     )
 
 

@@ -741,6 +741,26 @@
 						"description": "Filter type: master, virtual_master, or project"
 					},
 					{
+						"name": "summary_days",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "integer",
+									"maximum": 3650,
+									"minimum": 1
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "Window for headline sales, rental, yield and usage counts: last N calendar days including today in Dubai. Omit for all dates. Configuration history is unchanged.",
+							"title": "Summary Days"
+						},
+						"description": "Window for headline sales, rental, yield and usage counts: last N calendar days including today in Dubai. Omit for all dates. Configuration history is unchanged."
+					},
+					{
 						"name": "usage",
 						"in": "query",
 						"required": false,

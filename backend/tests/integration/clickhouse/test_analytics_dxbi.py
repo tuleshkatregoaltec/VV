@@ -468,3 +468,108 @@ async def test_a_master_adds_up_its_projects_registered_units(dxbi, warehouse): 
     master = (await service.get_project_summary("Downtown Dubai", "master")).project
     assert (master.no_of_units, master.no_of_projects, master.projects_with_units) == (300, 2, 1)
     assert master.units_source == "projects_rollup"
+
+
+async def test_summary_window_bounds_counts_prices_rent_and_yield_without_truncating_history(dxbi):  # noqa: F811
+    """Headline metrics share a window; historical comparisons retain their older evidence."""
+    from datetime import datetime, timedelta
+    from zoneinfo import ZoneInfo
+
+    today = datetime.now(ZoneInfo("Asia/Dubai")).date()
+    await dxbi(
+        sales=[
+            sale(
+                key,
+                project_name="Window Tower",
+                unit_number=key,
+                transaction_date=today - timedelta(days=age),
+                sale_amount_aed=price,
+                market_status=status,
+            )
+            for key, age, price, status in [
+                ("today", 0, 1000000, "Ready"),
+                ("offplan", 0, 2000000, "Offplan"),
+                ("first-day", 364, 3000000, "Ready"),
+                ("before-window", 365, 9000000, "Ready"),
+                ("future", -1, 9000000, "Ready"),
+            ]
+        ]
+        + [sale("office", project_name="Window Tower", property_type="Office")],
+        leases=[
+            lease(
+                key,
+                building_name="Window Tower",
+                location_name="Window Tower, Downtown Dubai",
+                area_name="Downtown Dubai",
+                lease_start=today - timedelta(days=age),
+                annual_rent_aed=rent,
+            )
+            for key, age, rent in [
+                ("today", 0, 120000),
+                ("first-day", 364, 180000),
+                ("before-window", 365, 900000),
+                ("future", -1, 900000),
+            ]
+        ],
+    )
+    all_dates = await service.get_project_summary("Window Tower")
+    year = await service.get_project_summary("Window Tower", summary_days=365)
+    month = await service.get_project_summary("Window Tower", summary_days=30)
+    assert year.sales.transaction_count == 3
+    assert year.sales.total_volume == 6000000
+    assert year.sales.avg_price == 2000000
+    assert year.sales.median_price == 2000000
+    assert year.sales.avg_price_sqft == 2500
+    assert year.rentals.contract_count == 2
+    assert year.rentals.median_annual_rent == 180000
+    assert year.rentals.total_annual_value == 300000
+    # Secondary median is 3M. The off-plan price must not enter the yield denominator.
+    assert year.overall_gross_yield_pct == 6
+    assert month.sales.transaction_count == 2
+    assert month.sales.avg_price == 1500000
+    assert month.rentals.contract_count == 1
+    assert month.rentals.median_annual_rent == 120000
+    assert month.overall_gross_yield_pct == 12
+    for result in (year, month):
+        assert result.usage_counts["Residential"].sales == result.sales.transaction_count
+        assert result.usage_counts["Residential"].leases == result.rentals.contract_count
+        assert result.usage_counts["Commercial"].sales == 1
+        assert result.configuration_analysis == all_dates.configuration_analysis
+        assert result.by_rooms == all_dates.by_rooms
+        json.dumps(result.model_dump(mode="json"), allow_nan=False)
+    assert all_dates.sales.transaction_count == 5
+    assert all_dates.rentals.contract_count == 4
+    market = await service.get_project_summary("Dubai", "market", summary_days=365)
+    assert market.sales == year.sales
+    commercial = await service.get_project_summary(
+        "Window Tower", usage="Commercial", summary_days=365
+    )
+    assert commercial.sales.transaction_count == 1
+    assert commercial.rentals.contract_count == 0
+    assert commercial.overall_gross_yield_pct is None
+
+
+async def test_empty_summary_window_is_json_safe_and_does_not_change_scope_usage(dxbi):  # noqa: F811
+    from datetime import date, timedelta
+
+    await dxbi(
+        sales=[
+            sale(
+                "old-home",
+                project_name="Mixed Tower",
+                transaction_date=date.today() - timedelta(days=800),
+            ),
+            sale("office", project_name="Mixed Tower", property_type="Office"),
+        ]
+    )
+    summary = await service.get_project_summary("Mixed Tower", summary_days=365)
+    assert summary.usage == "Residential"
+    assert summary.sales.transaction_count == 0
+    assert summary.sales.avg_price == 0
+    assert summary.sales.median_price == 0
+    assert summary.rentals.contract_count == 0
+    assert summary.overall_gross_yield_pct is None
+    assert summary.usage_counts["Residential"].sales == 0
+    assert summary.usage_counts["Commercial"].sales == 1
+    assert summary.configuration_analysis[0].sale_count == 1
+    json.dumps(summary.model_dump(mode="json"), allow_nan=False)

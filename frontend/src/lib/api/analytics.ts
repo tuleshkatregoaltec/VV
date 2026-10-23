@@ -1,5 +1,6 @@
 import { client } from './client'
 import type {
+	AnalyticsGetProjectSummaryEndpointData,
 	AnalyticsGetRentalAnalyticsData,
 	AnalyticsGetSalesAnalyticsData,
 	AnalyticsResponse,
@@ -80,6 +81,9 @@ export type ProjectParams = {
 	usage?: AnalyticsUsage
 }
 
+export type ProjectSummaryParams = ProjectParams &
+	Pick<NonNullable<AnalyticsGetProjectSummaryEndpointData['query']>, 'summary_days'>
+
 export const analytics = {
 	sales: (params: AnalyticsParams = {}) =>
 		client.get<SalesAnalyticsResponse>(client.withQuery('/api/v1/analytics/sales', params)),
@@ -103,14 +107,15 @@ export const analytics = {
 			})
 		),
 
-	projectSummary: (params: ProjectParams) =>
+	projectSummary: (params: ProjectSummaryParams) =>
 		client.get<ProjectAnalyticsResponse>(
 			client.withQuery('/api/v1/analytics/project/summary', {
 				project: params.project,
 				master_project: params.masterProject,
 				building_id: params.buildingId,
 				filter_type: params.filterType,
-				usage: params.usage
+				usage: params.usage,
+				summary_days: params.summary_days
 			})
 		),
 

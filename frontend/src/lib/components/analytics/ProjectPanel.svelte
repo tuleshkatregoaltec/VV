@@ -13,6 +13,7 @@ import type {
 	ProjectTrendPoint,
 	SubProjectItem
 } from '$lib/api/analytics'
+import StandardDropdown from '$lib/components/dropdowns/StandardDropdown.svelte'
 import { analyticsQueries } from '$lib/queries/analytics'
 import { getChartTheme } from '$lib/utils/chartTheme'
 import AnalyticsError from './AnalyticsError.svelte'
@@ -40,6 +41,16 @@ let subSearch = $state('')
 // Residential or Commercial records; a new selection starts automatic (Commercial for a scope
 // with no residential records), a click pins the choice.
 let usage = $state<AnalyticsUsage>('auto')
+let summaryPeriod = $state('Last Year')
+const summaryPeriods: Record<string, number | undefined> = {
+	'Last Week': 7,
+	'Last Month': 30,
+	'Last 3 Months': 90,
+	'Last 6 Months': 180,
+	'Last Year': 365,
+	'All time': undefined
+}
+const summaryDays = $derived(summaryPeriods[summaryPeriod])
 
 $effect(() => {
 	selection
@@ -70,7 +81,9 @@ const subProjectsQuery = createQuery(() =>
 	analyticsQueries.subProjects(selection.name, selection.filter_type)
 )
 
-const summaryQuery = createQuery(() => analyticsQueries.projectSummary(queryParams))
+const summaryQuery = createQuery(() =>
+	analyticsQueries.projectSummary({ ...queryParams, summary_days: summaryDays })
+)
 
 const trendsQuery = createQuery(() => analyticsQueries.projectTrends(queryParams, 365))
 
@@ -1092,9 +1105,16 @@ onMount(() => {
 						counts={summary.usage_counts}
 						resolved={summary.usage === 'Commercial' ? 'Commercial' : 'Residential'}
 						value={usage}
-						scope={isMarketScope ? 'Dubai' : isMasterScope ? 'this community' : isBuildingScope ? 'this building' : 'this project'}
+						scope={`${isMarketScope ? 'Dubai' : isMasterScope ? 'this community' : isBuildingScope ? 'this building' : 'this project'}${summaryDays ? ' in the selected window' : ''}`}
 						onchange={(choice) => (usage = choice)}
-					/>
+					>
+						<div class="flex items-center gap-2">
+							<label for="analytics-summary-window-button" class="text-xs font-medium text-fg-3">Summary window</label>
+							<div class="w-40">
+								<StandardDropdown id="analytics-summary-window" ariaLabel="Summary window" options={Object.keys(summaryPeriods)} bind:value={summaryPeriod} />
+							</div>
+						</div>
+					</UsageToggle>
 				</div>
 
 				<div class="flex items-center gap-3">
@@ -1268,7 +1288,7 @@ onMount(() => {
 			{/if}
 			{/if}
             <p class="mt-4 border-t border-border pt-3 text-xs text-fg-4">
-                DXBI transactions · {summary.usage === 'Commercial' ? 'Commercial' : 'Residential'} properties · All recorded dates.
+                DXBI transactions · {summary.usage === 'Commercial' ? 'Commercial' : 'Residential'} properties. Summary cards and usage counts: {summaryDays ? `last ${summaryDays} days, including today (Dubai time)` : 'all recorded dates'}. Sales use sale dates; rentals use lease start dates.
                 {#if !hasProjectDetails}Registered unit stock and delivery forecasts are unavailable from this source.{/if}
             </p>
 		</section>
@@ -1312,7 +1332,7 @@ onMount(() => {
 		{/if}
 
 		<!-- ── KPI cards ──────────────────────────────────────────────── -->
-		<section class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+		<section aria-label="Summary metrics" class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
 			<div class="rounded-lg border border-border bg-card px-5 py-4">
 				<p class="text-[11px] uppercase tracking-[0.18em] text-fg-4">Total Sales</p>
 				<p class="mt-2.5 break-words text-3xl font-semibold text-fg-1">
@@ -1358,6 +1378,7 @@ onMount(() => {
 								? 'Recorded pricing with delivery-aware forecast'
 								: 'Recorded pricing trend'}
 						</h3>
+						<p class="mt-1 text-xs text-fg-4">365-day lookback</p>
 					</div>
 					<div class="inline-flex rounded-lg border border-border bg-panel p-0.5">
 						<button
@@ -1413,6 +1434,7 @@ onMount(() => {
 				<h3 class="mt-1 text-base font-semibold text-fg-1">
 					Off-plan vs secondary sales
 				</h3>
+				<p class="mt-1 text-xs text-fg-4">All recorded dates</p>
 				<div class="mt-4 rounded-lg border border-border bg-panel p-4">
 					<div class="flex items-end justify-between gap-4">
 						<div>
@@ -1645,6 +1667,8 @@ onMount(() => {
 					</button>
 				</div>
 			</div>
+
+			<p class="mt-2 text-xs text-fg-4">All recorded dates</p>
 
 			<!-- Room tabs -->
 			{#if distroRoomList.length > 0}
