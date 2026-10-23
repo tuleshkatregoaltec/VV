@@ -6,6 +6,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.crm.import_models import CrmPropertyContactClaim
 from app.crm.inbound_models import (
+    VITEVUE_LEASE_SOURCE,
     CrmInboundActivity,
     CrmInboundContact,
     CrmInboundEnquiry,
@@ -129,6 +130,18 @@ async def list_enquiries(db: AsyncSession, organization_id):
             select(CrmInboundEnquiry)
             .where(CrmInboundEnquiry.organization_id == organization_id)
             .order_by(CrmInboundEnquiry.enquiry_date.desc())
+        )
+    ).all()
+
+
+async def list_vitevue_lease_enquiries(db: AsyncSession, organization_id, unit_keys):
+    return (
+        await db.exec(
+            select(CrmInboundEnquiry).where(
+                CrmInboundEnquiry.organization_id == organization_id,
+                CrmInboundEnquiry.source == VITEVUE_LEASE_SOURCE,
+                CrmInboundEnquiry.source_lead_id.in_(list(unit_keys)),  # type: ignore[union-attr]
+            )
         )
     ).all()
 

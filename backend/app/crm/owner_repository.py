@@ -31,6 +31,7 @@ WITH base AS (
         c.building_name,
         c.unit_number,
         c.property_type,
+        c.party_role,
         c.transaction_date,
         c.transaction_price_aed,
         c.ownership_status,
@@ -67,6 +68,8 @@ ranked AS (
     ORDER BY
         owner_key_sql,
         property_key_sql,
+        (status_rank >= 4) DESC,
+        CASE WHEN status_rank >= 4 THEN transaction_date END DESC NULLS LAST,
         status_rank DESC,
         confidence_score DESC,
         transaction_date DESC NULLS LAST
@@ -166,6 +169,8 @@ async def _owner_page_keys_sql(
     max_value_aed: int | None,
     limit: int,
     offset: int,
+    min_properties: int | None = None,
+    next_event_days: int | None = None,
 ) -> tuple[list[str], int]:
     where_sql, parameters = _owner_filter_sql(
         scope=scope,
@@ -207,6 +212,12 @@ async def _owner_page_keys_sql(
             count(*) OVER () AS total_profiles
         FROM profile_rollup
         WHERE (NOT :portfolio_only OR property_count > 1)
+          AND (CAST(:min_properties AS integer) IS NULL
+               OR property_count >= CAST(:min_properties AS integer))
+          AND (CAST(:next_event_days AS integer) IS NULL
+               OR (next_lease_end >= CURRENT_DATE
+                   AND next_lease_end <= CURRENT_DATE
+                       + make_interval(days => CAST(:next_event_days AS integer))))
         ORDER BY
             contact_ready_count DESC,
             property_count DESC,
@@ -221,6 +232,8 @@ async def _owner_page_keys_sql(
             "organization_id": organization_id,
             "owner_list_id": list_id,
             "portfolio_only": portfolio_only,
+            "min_properties": min_properties,
+            "next_event_days": next_event_days,
             "owner_limit": limit,
             "owner_offset": offset,
         }
@@ -270,6 +283,8 @@ async def _owner_properties_sql(
             ORDER BY
                 owner_key_sql,
                 property_key_sql,
+                (status_rank >= 4) DESC,
+                CASE WHEN status_rank >= 4 THEN transaction_date END DESC NULLS LAST,
                 status_rank DESC,
                 confidence_score DESC,
                 transaction_date DESC NULLS LAST

@@ -186,19 +186,19 @@ async function handleOrganizationSubmit() {
 				<div class="grid gap-3">
 					<div class="rounded-md border border-[rgba(246,241,231,0.12)] bg-[color:rgba(246,241,231,0.04)] px-4 py-3">
 						<p class="text-sm font-semibold text-white">Market clarity</p>
-						<p class="mt-1 text-sm leading-6 text-slate-300">
+						<p class="mt-1 text-sm leading-6 text-on-navy-muted">
 							See transactions, pricing signals, and commercial context in one workspace.
 						</p>
 					</div>
 					<div class="rounded-md border border-[rgba(246,241,231,0.12)] bg-[color:rgba(246,241,231,0.04)] px-4 py-3">
 						<p class="text-sm font-semibold text-white">Feasibility workflow</p>
-						<p class="mt-1 text-sm leading-6 text-slate-300">
+						<p class="mt-1 text-sm leading-6 text-on-navy-muted">
 							Move from raw site inputs to structured analysis with less spreadsheet overhead.
 						</p>
 					</div>
 					<div class="rounded-md border border-[rgba(246,241,231,0.12)] bg-[color:rgba(246,241,231,0.04)] px-4 py-3">
 						<p class="text-sm font-semibold text-white">Team coordination</p>
-						<p class="mt-1 text-sm leading-6 text-slate-300">
+						<p class="mt-1 text-sm leading-6 text-on-navy-muted">
 							Keep ownership, access, and commercial decisions aligned from the start.
 						</p>
 					</div>
@@ -211,11 +211,11 @@ async function handleOrganizationSubmit() {
 					<p class="mt-3 text-[1.4rem] font-semibold leading-tight text-white">
 						{ownerName} will own billing, access, and the team from one place.
 					</p>
-					<p class="mt-3 text-sm leading-6 text-slate-300">
+					<p class="mt-3 text-sm leading-6 text-on-navy-muted">
 						Choose a plan, set your initial team size, and continue to Stripe. Everything can be
 						adjusted later.
 					</p>
-					<div class="mt-4 space-y-2 text-sm text-slate-200">
+					<div class="mt-4 space-y-2 text-sm text-on-navy">
 						<p>Market context, transactions, and analysis in one workspace.</p>
 						<p>Structured access and billing from day one.</p>
 					</div>
@@ -260,13 +260,13 @@ async function handleOrganizationSubmit() {
 			<button
 				type="submit"
 				disabled={loading}
-				class="w-full rounded-md bg-navy px-6 py-3.5 text-base font-semibold text-bone transition hover:bg-primary-light disabled:cursor-not-allowed disabled:opacity-50"
+				class="w-full rounded-md bg-action px-6 py-3.5 text-base font-semibold text-on-action transition hover:bg-action-hover disabled:cursor-not-allowed disabled:opacity-50"
 			>
 				{loading ? 'Saving profile...' : 'Continue'}
 			</button>
 
 			<div
-				class="rounded-lg border border-slate-200 bg-slate-50/80 px-4 py-3 text-sm text-slate-600"
+				class="rounded-lg border border-border bg-panel px-4 py-3 text-sm text-fg-3"
 			>
 				Next up: choose your plan, set your seat count, and continue to Stripe.
 			</div>
@@ -279,14 +279,14 @@ async function handleOrganizationSubmit() {
 			}}
 			class="space-y-2"
 		>
-			<div class="rounded-lg border border-slate-200 bg-white p-4">
+			<div class="rounded-lg border border-border bg-card p-4">
 				<div class="space-y-4">
 					<div class="flex items-center justify-between gap-4">
-						<p class="text-sm font-semibold text-slate-900">Workspace details</p>
+						<p class="text-sm font-semibold text-fg-1">Workspace details</p>
 						<button
 							type="button"
 							onclick={() => setVisibleStep('profile')}
-							class="inline-flex items-center gap-2 text-sm font-medium text-slate-500 transition hover:text-slate-900"
+							class="inline-flex items-center gap-2 text-sm font-medium text-fg-4 transition hover:text-fg-1"
 						>
 							<span aria-hidden="true">←</span>
 							Edit profile
@@ -294,7 +294,7 @@ async function handleOrganizationSubmit() {
 					</div>
 
 					<div>
-						<label for="orgName" class="block text-sm font-semibold text-slate-900">
+						<label for="orgName" class="block text-sm font-semibold text-fg-1">
 							Organization name
 						</label>
 						<input
@@ -302,7 +302,7 @@ async function handleOrganizationSubmit() {
 							type="text"
 							bind:value={organizationName}
 							placeholder="Your company name"
-							class="mt-2 w-full rounded-md border border-slate-300 bg-white px-4 py-3 text-slate-900 shadow-sm focus:border-navy focus:outline-none focus:ring-2 focus:ring-navy/10"
+							class="mt-2 w-full rounded-md border border-strong bg-card px-4 py-3 text-fg-1 shadow-sm focus:border-focus focus:outline-none focus:ring-2 focus:ring-focus"
 							required
 						/>
 					</div>
@@ -311,7 +311,7 @@ async function handleOrganizationSubmit() {
 						<div></div>
 
 						<div>
-							<label for="seatCount" class="block text-sm font-semibold text-slate-900">
+							<label for="seatCount" class="block text-sm font-semibold text-fg-1">
 								Team size
 							</label>
 						</div>
@@ -319,7 +319,7 @@ async function handleOrganizationSubmit() {
 
 					<div class="grid gap-4 lg:grid-cols-[minmax(0,1fr)_13rem] lg:items-start">
 						<div>
-							<p class="text-sm font-semibold text-slate-900">Choose your plan</p>
+							<p class="text-sm font-semibold text-fg-1">Choose your plan</p>
 							<div class="mt-2 grid gap-2 sm:grid-cols-2">
 								{#each Object.entries(plans) as [tier, plan] (tier)}
 									<button
@@ -327,8 +327,8 @@ async function handleOrganizationSubmit() {
 										onclick={() => (selectedTier = tier as PlanTier)}
 										class="rounded-md border px-4 py-2.5 text-left transition {selectedTier ===
 										tier
-											? 'border-navy bg-navy text-bone shadow-sm'
-											: 'border-slate-200 bg-slate-50 text-slate-800 hover:border-slate-300'}"
+											? 'border-action bg-action text-on-action shadow-sm'
+											: 'border-border bg-panel text-fg-1 hover:border-strong'}"
 									>
 										<div class="flex items-center justify-between gap-3">
 											<p class="text-sm font-semibold">{plan.name}</p>
@@ -343,7 +343,7 @@ async function handleOrganizationSubmit() {
 						</div>
 
 						<div>
-							<p class="text-sm text-slate-500">How many people need access right now.</p>
+							<p class="text-sm text-fg-4">How many people need access right now.</p>
 							<input
 								id="seatCount"
 								type="number"
@@ -353,29 +353,29 @@ async function handleOrganizationSubmit() {
 									updateSeatCount(
 										parseInt((event.currentTarget as HTMLInputElement).value || '1', 10)
 									)}
-								class="mt-2 w-full rounded-md border border-slate-300 bg-white px-4 py-3 text-lg font-semibold text-slate-900 shadow-sm focus:border-navy focus:outline-none focus:ring-2 focus:ring-navy/10"
+								class="mt-2 w-full rounded-md border border-strong bg-card px-4 py-3 text-lg font-semibold text-fg-1 shadow-sm focus:border-focus focus:outline-none focus:ring-2 focus:ring-focus"
 								aria-label="Seat count"
 							/>
-							<p class="mt-2 text-xs leading-5 text-slate-500">You can change seats later.</p>
+							<p class="mt-2 text-xs leading-5 text-fg-4">You can change seats later.</p>
 						</div>
 					</div>
 
 					<div
-						class="flex flex-col gap-3 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
+						class="flex flex-col gap-3 rounded-lg border border-border bg-panel px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
 					>
 						<div class="min-w-0">
-							<p class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+							<p class="text-xs font-semibold uppercase tracking-[0.18em] text-fg-4">
 								Monthly total
 							</p>
 							<div class="mt-1 flex flex-wrap items-baseline gap-x-3 gap-y-1">
 								<p class="text-[2rem] font-semibold tracking-tight text-fg-1">
 									{totalMonthly} AED
 								</p>
-								<p class="text-sm text-slate-500">
+								<p class="text-sm text-fg-4">
 									{activePlan.name} · {activePlan.price} AED per seat · {seats} seats
 								</p>
 							</div>
-							<p class="mt-1 text-xs leading-5 text-slate-500">
+							<p class="mt-1 text-xs leading-5 text-fg-4">
 								Billed monthly in Stripe. You will return to Vitevue to invite teammates after
 								checkout.
 							</p>
@@ -384,7 +384,7 @@ async function handleOrganizationSubmit() {
 						<button
 							type="submit"
 							disabled={loading}
-							class="shrink-0 rounded-md bg-navy px-6 py-3 text-base font-semibold text-bone transition hover:bg-primary-light disabled:cursor-not-allowed disabled:opacity-50"
+							class="shrink-0 rounded-md bg-action px-6 py-3 text-base font-semibold text-on-action transition hover:bg-action-hover disabled:cursor-not-allowed disabled:opacity-50"
 						>
 							{#if loading}
 								{loadingStep === 'organization'

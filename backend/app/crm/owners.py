@@ -20,6 +20,7 @@ from app.crm.identity import (
     _normalize_unit,
     _usable_project_name,
 )
+from app.crm.import_context import property_details
 from app.crm.import_models import (
     CrmContactClaimResponse,
     CrmContactList,
@@ -87,6 +88,7 @@ def _claim_response(
         building_name=claim.building_name,
         unit_number=claim.unit_number,
         property_type=claim.property_type,
+        property_details=property_details(claim.evidence or {}),
         transaction_date=claim.transaction_date,
         transaction_price_aed=claim.transaction_price_aed,
         ownership_status=claim.ownership_status,  # type: ignore[arg-type]
@@ -301,6 +303,7 @@ def _property_from_rows(
         imported_transaction_date=best.transaction_date,
         imported_transaction_price_aed=best.transaction_price_aed,
         imported_property_type=best.property_type,
+        imported_party_role=best.party_role,
         latest_sale_date=best.latest_sale_date,
         latest_sale_price_aed=best.latest_sale_price_aed,
         registry_sale_date=best.latest_sale_date,
@@ -516,6 +519,7 @@ def _sql_owner_property(row: dict[str, Any]) -> CrmOwnerProperty:
             int(row["transaction_price_aed"]) if row["transaction_price_aed"] else None
         ),
         imported_property_type=str(row["property_type"] or ""),
+        imported_party_role=str(row.get("party_role") or ""),
         latest_sale_date=row["latest_sale_date"],
         latest_sale_price_aed=(
             int(row["latest_sale_price_aed"]) if row["latest_sale_price_aed"] else None
@@ -595,6 +599,8 @@ async def get_owner_registry(
     max_value_aed: int | None,
     limit: int,
     offset: int,
+    min_properties: int | None = None,
+    next_event_days: int | None = None,
 ) -> CrmOwnerRegistryResponse:
     summary = await _owner_registry_summary_sql(
         db,
@@ -616,6 +622,8 @@ async def get_owner_registry(
         max_value_aed=max_value_aed,
         limit=limit,
         offset=offset,
+        min_properties=min_properties,
+        next_event_days=next_event_days,
     )
     property_rows = await _owner_properties_sql(
         db,
@@ -769,6 +777,11 @@ async def _enrich_owner_profile_registry(profile: CrmOwnerProfile) -> CrmOwnerPr
         owner_property.registry_market_status = (
             str(selected.get("market_status") or "").strip() or None
         )
+        owner_property.registry_unit_number = str(selected.get("unit_number") or "").strip() or None
+        owner_property.registry_building_name = (
+            str(selected.get("building_name") or selected.get("project_name") or "").strip() or None
+        )
+        owner_property.registry_area_name = str(selected.get("area_name") or "").strip() or None
     return profile
 
 

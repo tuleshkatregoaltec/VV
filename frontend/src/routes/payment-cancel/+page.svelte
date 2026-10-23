@@ -39,13 +39,13 @@ import AuthFlowShell from '$lib/components/auth/AuthFlowShell.svelte'
 		<div class="flex flex-col gap-3 sm:flex-row">
 			<a
 				href={resolve('/setup')}
-				class="flex-1 rounded-md bg-navy px-5 py-3 text-center text-sm font-semibold text-bone transition hover:bg-primary-light"
+				class="flex-1 rounded-md bg-action px-5 py-3 text-center text-sm font-semibold text-on-action transition hover:bg-action-hover"
 			>
 				Return to setup
 			</a>
 			<a
 				href="mailto:contact@vitevue.com"
-				class="rounded-md border border-slate-300 px-5 py-3 text-center text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+				class="rounded-md border border-strong px-5 py-3 text-center text-sm font-semibold text-fg-2 transition hover:bg-panel"
 			>
 				Contact support
 			</a>

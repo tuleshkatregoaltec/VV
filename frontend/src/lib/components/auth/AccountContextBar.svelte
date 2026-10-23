@@ -18,7 +18,7 @@ async function handleLogout() {
 		class:rounded-xl={compact}
 		class:px-3={compact}
 		class:py-2.5={compact}
-		class="flex items-center justify-between gap-3 rounded-md border border-border bg-slate-50 px-4 py-3"
+		class="flex items-center justify-between gap-3 rounded-md border border-border bg-panel px-4 py-3"
 	>
 		<div class="min-w-0">
 			<p class="font-mono text-[10px] font-medium uppercase tracking-[0.08em] text-fg-4">
@@ -33,7 +33,7 @@ async function handleLogout() {
 			class:text-xs={compact}
 			class:px-2.5={compact}
 			class:py-1={compact}
-			class="shrink-0 rounded-md border border-border bg-white px-3 py-1.5 text-sm font-medium text-fg-2 transition hover:border-[var(--color-navy-600)] hover:text-navy disabled:opacity-60"
+			class="shrink-0 rounded-md border border-border bg-card px-3 py-1.5 text-sm font-medium text-fg-2 transition hover:border-strong hover:text-fg-1 disabled:opacity-60"
 		>
 			{loading ? 'Signing out...' : 'Use a different account'}
 		</button>
