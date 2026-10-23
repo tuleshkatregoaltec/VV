@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from collections.abc import Callable, Mapping, Sequence
 from datetime import UTC, date, datetime
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any
@@ -191,6 +192,21 @@ def coerce_int(value: Any) -> int:
         return int(parsed)
     except ValueError:
         return int(float(parsed))
+
+
+def coerce_money(value: Any) -> int:
+    """A whole-dirham amount, rounded half up.
+
+    DLD sends some prices with fils (723,726.89). Truncating stored 723,726 while DXBI shows the
+    rounded 723,727, so the two sources disagreed by a dirham and the sale went unmatched.
+    """
+    parsed = string_value(value).replace(",", "")
+    if not parsed:
+        return 0
+    try:
+        return int(Decimal(parsed).quantize(Decimal(1), rounding=ROUND_HALF_UP))
+    except InvalidOperation:
+        return 0
 
 
 def coerce_nullable_int(value: Any) -> int | None:

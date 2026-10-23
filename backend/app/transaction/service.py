@@ -14,6 +14,15 @@ from app.transaction.models import (
 logger = logging.getLogger(__name__)
 
 
+# How the Transactions pages show DXBI's labels, for domains that show the same records
+# (Analytics): usage from the property type, one bedrooms label per count, and DXBI's commonest
+# spelling of a place (LOCATION_SQL needs the LOCATION_SPELLING_SQL WITH clause).
+USAGE_SQL = queries._USAGE
+BEDROOMS_SQL = queries._BEDROOMS
+LOCATION_SPELLING_SQL = queries._LOCATION_SPELLING
+LOCATION_SQL = queries._LOCATION
+
+
 def normalized_sales_source_sql() -> str:
     """Public DXBI sales projection for domain consumers sharing transaction identities."""
     return queries._sales_source("1=1")
@@ -40,6 +49,10 @@ def sale_response(row: dict) -> TransactionResponse:
         unit_number=_text(row["unit_number"]),
         building_name=_text(row["building_name"]),
         project_name=_text(row["project_name"]),
+        master_project=_text(row["master_project"]),
+        dld_area=_text(row["dld_area"]),
+        location=_text(row["location"]),
+        map_url=_text(row["map_url"]),
         location_name=_text(row["location_name"]),
         property_type=_text(row["property_type"]),
         bedrooms=_text(row["bedrooms"]),
@@ -58,6 +71,10 @@ def rental_response(row: dict) -> RentalContractResponse:
         unit_number=_text(row["unit_number"]),
         building_name=_text(row["building_name"]),
         project_name=_text(row["project_name"]),
+        master_project=_text(row["master_project"]),
+        dld_area=_text(row["dld_area"]),
+        location=_text(row["location"]),
+        map_url=_text(row["map_url"]),
         location_name=_text(row["location_name"]),
         property_type=_text(row["property_type"]),
         bedrooms=_text(row["bedrooms"]),

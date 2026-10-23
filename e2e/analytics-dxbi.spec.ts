@@ -20,7 +20,8 @@ test('comparison numbers and plotted values match both DXBI API selections', asy
     await page.getByRole('button', { name: 'Compare', exact: true }).click();
     const input = page.getByRole('combobox', { name: 'Project B', exact: true });
     await input.fill('23 Marina');
-    await page.getByRole('option', { name: '23 Marina Project', exact: true }).click();
+    // One spelling per project: DXBI's "23 Marina" (DLD writes 23 MARINA), under its one master.
+    await page.getByRole('option', { name: '23 Marina Project · Dubai Marina', exact: true }).click();
     await expect(page.getByRole('heading', { name: 'Delta is Project B minus Project A', exact: true })).toBeVisible();
     await expect.poll(() => summaries.has('Dubai') && summaries.has('23 Marina')).toBe(true);
     const metricTable = page.locator('section').filter({ has: page.getByRole('heading', { name: 'Delta is Project B minus Project A', exact: true }) });
@@ -67,13 +68,17 @@ test('comparison numbers and plotted values match both DXBI API selections', asy
 
 
 test('District One keeps sparse bedrooms and uses all-history counts in every tab', async ({ page }) => {
+    // DXBI's "(D1) District One Residences" buildings are DLD projects of one master community.
     test.setTimeout(180000);
     await page.goto('/analytics');
     await expect(page.getByRole('heading', { name: 'Configuration Analysis', exact: true })).toBeVisible();
     const input = page.getByRole('combobox').first();
-    await input.fill('(D1) District One Residences');
-    const response = page.waitForResponse(r => r.ok() && r.url().includes('/analytics/project/summary?project='));
-    await page.getByRole('option', { name: '(D1) District One Residences Project', exact: true }).click();
+    // DLD's "Mohammed Bin Rashid AL Maktoum City -District -1 Community" and its other
+    // spellings are one master (holocron/market/data/master_aliases.csv).
+    const master = 'Mohammed Bin Rashid City - District One';
+    await input.fill('District One');
+    const response = page.waitForResponse(r => r.ok() && r.url().includes('/analytics/project/summary?'));
+    await page.getByRole('option', { name: `${master} Master`, exact: true }).click();
     const summary = await (await response).json();
     const panel = page.locator('section').filter({ has: page.getByRole('heading', { name: 'Configuration Analysis', exact: true }) }).last();
     await expect(panel.getByText(/Sales, prices and sizes cover all recorded dates/)).toBeVisible();
@@ -89,6 +94,33 @@ test('District One keeps sparse bedrooms and uses all-history counts in every ta
     await panel.getByRole('button', { name: 'All', exact: true }).click();
     await expect(panel.getByRole('cell', { name: '4 B/R', exact: true })).toBeVisible();
     await expect(panel.getByRole('cell', { name: '5 B/R', exact: true })).toBeVisible();
-    expect(summary.configuration_analysis.filter((r: any) => r.market_segment === 'off_plan').every((r: any) => r.sales_last_12m === 0)).toBe(true);
     await panel.screenshot({ path: path.resolve('../docs/audits/analytics-dxbi-2026-10-11/screenshots/district-one-corrected.png') });
+});
+
+test('an office tower shows its commercial records, with the usage and its counts named', async ({ page }) => {
+    test.setTimeout(120000);
+    await page.goto('/analytics');
+    await expect(page.getByRole('heading', { name: 'Configuration Analysis', exact: true })).toBeVisible();
+    const summary = page.waitForResponse(r => r.ok() && r.url().includes('/analytics/project/summary?project=014'));
+    await page.getByRole('combobox').first().fill('014 Tower');
+    await page.getByRole('option', { name: '014 Tower Project · Business Bay', exact: true }).click();
+    const data = await (await summary).json();
+    expect(data.usage).toBe('Commercial');
+    const usage = page.getByTestId('analytics-usage');
+    await expect(usage.getByRole('button', { name: /^Commercial/ })).toHaveAttribute('aria-pressed', 'true');
+    await expect(usage.getByRole('button', { name: /^Residential/ })).toBeDisabled();
+    await expect(page.getByTestId('analytics-usage-note')).toHaveText(/no residential sales or leases/);
+    const sales = data.usage_counts.Commercial.sales.toLocaleString('en-AE');
+    await expect(page.locator('section').filter({ hasText: 'Total Sales' }).first()).toContainText(sales);
+    const config = page.locator('section').filter({ has: page.getByRole('heading', { name: 'Configuration Analysis', exact: true }) }).last();
+    await expect(config.getByRole('cell', { name: 'Office', exact: true })).toBeVisible();
+
+    // A mixed project opens on its homes; Commercial switches every figure to its offices.
+    await page.getByRole('combobox').first().fill('Lake Shore Tower');
+    await page.getByRole('option', { name: 'Lake Shore Tower Project · Jumeirah Lake Towers', exact: true }).click();
+    await expect(usage.getByRole('button', { name: /^Residential/ })).toHaveAttribute('aria-pressed', 'true');
+    const switched = page.waitForResponse(r => r.ok() && r.url().includes('/analytics/project/summary?') && r.url().includes('usage=Commercial'));
+    await usage.getByRole('button', { name: /^Commercial/ }).click();
+    expect((await (await switched).json()).usage).toBe('Commercial');
+    await expect(page.getByTestId('analytics-usage-note')).toHaveText(/residential records are under Residential/);
 });

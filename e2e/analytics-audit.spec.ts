@@ -27,7 +27,7 @@ async function open(page: Page) {
 }
 async function select(page: Page, name: string, index = 0) {
     await page
-        .getByPlaceholder('Search projects or master communities...')
+        .getByPlaceholder('Search building, project or area...')
         .nth(index)
         .fill(name);
     const response = page.waitForResponse(
@@ -159,7 +159,7 @@ test('master community must be reachable from the real project catalogue', async
 }) => {
     await open(page);
     await page
-        .getByPlaceholder('Search projects or master communities...')
+        .getByPlaceholder('Search building, project or area...')
         .fill('Dubai Marina');
     await expect(page.getByRole('listbox')).toBeVisible();
     await expect(
@@ -291,7 +291,7 @@ test('sub-project buttons support keyboard activation from the live master catal
 }) => {
     await open(page);
     await page
-        .getByPlaceholder('Search projects or master communities...')
+        .getByPlaceholder('Search building, project or area...')
         .fill('Dubai Marina');
     await page
         .getByRole('listbox')
@@ -317,8 +317,11 @@ test('sub-project buttons support keyboard activation from the live master catal
         0,
         { timeout: 1000 },
     );
+    // The development picker shows the choice (a Buildings table may name the same project).
     await expect(
-        page.getByRole('button', { name: label, exact: true }),
+        page
+            .getByRole('group', { name: 'Development selection' })
+            .getByRole('button', { name: label, exact: true }),
     ).toBeVisible();
 });
 
@@ -330,6 +333,7 @@ test('selecting a catalogue name preserves known project sales', async ({
     await expect(
         page.getByRole('heading', { name: /^23 marina$/i }),
     ).toBeVisible();
+    // The section also holds the Market Split donut; the trend chart is its first canvas.
     await expect(
         page
             .locator('section')
@@ -396,7 +400,7 @@ test('main project search retains keyboard focus until selection', async ({
 }) => {
     await open(page);
     await page
-        .getByPlaceholder('Search projects or master communities...')
+        .getByPlaceholder('Search building, project or area...')
         .fill('Binghatti Skyrise');
     await expect(page.getByRole('listbox')).toBeVisible();
     await expect(
@@ -468,7 +472,7 @@ for (const endpoint of ['summary', 'trends']) {
             .getByRole('button', { name: 'Compare', exact: true })
             .click();
         await page
-            .getByPlaceholder('Search projects or master communities...')
+            .getByPlaceholder('Search building, project or area...')
             .nth(1)
             .fill('Sobha Orbis');
         await page
@@ -500,16 +504,16 @@ for (const endpoint of ['summary', 'trends']) {
 test('project search supports arrow selection and Escape', async ({ page }) => {
     await open(page);
     const input = page.getByPlaceholder(
-        'Search projects or master communities...',
+        'Search building, project or area...',
     );
-    await input.fill('23 MARINA');
+    await input.fill('23 Marina');
     await expect(page.getByRole('option').first()).toBeVisible();
     await input.press('ArrowDown');
     await expect(page.getByRole('option').first()).toBeFocused();
     await page.keyboard.press('Escape');
     await expect(page.getByRole('listbox')).toHaveCount(0);
     await expect(input).toBeFocused();
-    await input.fill('23 MARINA');
+    await input.fill('23 Marina');
     await expect(page.getByRole('option').first()).toBeVisible();
     await input.press('ArrowDown');
     await page.keyboard.press('Enter');
@@ -523,7 +527,7 @@ test('live master comparison and pointer drill-down remain scoped', async ({
 }) => {
     await open(page);
     await page
-        .getByPlaceholder('Search projects or master communities...')
+        .getByPlaceholder('Search building, project or area...')
         .fill('Dubai Marina');
     await page
         .getByRole('option')
@@ -533,7 +537,7 @@ test('live master comparison and pointer drill-down remain scoped', async ({
         page.getByRole('button', { name: /All development \(/ }),
     ).toBeVisible();
     await page.getByRole('button', { name: 'Compare', exact: true }).click();
-    await select(page, '23 MARINA', 1);
+    await select(page, '23 Marina', 1);
     await expect(
         page.getByRole('heading', {
             name: 'Delta is Project B minus Project A',
@@ -552,7 +556,7 @@ test('live master comparison and pointer drill-down remain scoped', async ({
         .click();
     await page.getByRole('button', { name: /All development \(/ }).click();
     const input = page.getByPlaceholder('Filter sub-projects...');
-    await input.fill('23 MARINA');
+    await input.fill('23 Marina');
     const response = page.waitForResponse(
         (r) =>
             r.url().includes('/project/summary') &&
@@ -586,8 +590,8 @@ test('project search failure can be retried', async ({ page }) => {
             : route.continue(),
     );
     await page
-        .getByPlaceholder('Search projects or master communities...')
-        .fill('23 MARINA');
+        .getByPlaceholder('Search building, project or area...')
+        .fill('23 Marina');
     const alert = page
         .getByRole('alert')
         .filter({ hasText: 'Failed to load projects.' });
@@ -611,7 +615,7 @@ test('development list failure can be retried', async ({ page }) => {
             : route.continue(),
     );
     await page
-        .getByPlaceholder('Search projects or master communities...')
+        .getByPlaceholder('Search building, project or area...')
         .fill('Dubai Marina');
     await page
         .getByRole('option')

@@ -197,6 +197,41 @@ _DXBI_LOCATIONS = """multiIf(
             notEmpty(printed_locations), printed_locations,
             location_name != '', [location_name], [])"""
 
+# The unit has its own column, so the location text is the place alone. Profiles built before
+# holocron stopped writing it still start with "Unit <number>, ".
+_PLACE_ONLY = (
+    "if(startsWith(location, concat('Unit ', unit_number, ', ')), "
+    "substring(location, length(concat('Unit ', unit_number, ', ')) + 1), location)"
+)
+
+# The DXBI record's profile (holocron.market.dxbi_profile, rebuilt after each market release):
+# DLD's official area and master project, and the DLD or same-unit value for a project,
+# building, bedroom count or completion status DXBI left empty. DXBI's own values always win, and
+# the profile's copies of DXBI's raw path parts are not used: the place labels above decide
+# those (a lease path whose first part is a project has no building).
+_SALE_PROFILE = f"""(
+        SELECT sale_key AS profile_sale_key,
+               if(project_source != 'dxbi', project_name, '') AS profile_project,
+               master_project AS profile_master, area_name AS profile_area,
+               bedrooms AS profile_bedrooms, completion_status AS profile_status,
+               {_PLACE_ONLY} AS profile_location, map_url AS profile_map_url,
+               size_sqft AS profile_size
+        FROM dxbi_sale_profile
+    )"""
+_LEASE_PROFILE = f"""(
+        SELECT contract_key AS profile_contract_key,
+               -- DLD's plot reference stays in the location text: it is not a building name
+               -- to filter by.
+               if(building_source = 'dxbi_sale', building_name, '') AS profile_building,
+               if(project_source != 'dxbi', project_name, '') AS profile_project,
+               master_project AS profile_master,
+               area_name AS profile_area, bedrooms AS profile_bedrooms,
+               {_PLACE_ONLY} AS profile_location, map_url AS profile_map_url,
+               size_sqft AS profile_size
+        FROM dxbi_rental_profile
+    )"""
+_PROFILE_BEDROOMS = _BEDROOMS.replace("bedrooms", "profile_bedrooms")
+
 
 def _sales_source(date_clause: str) -> str:
     """One row per DXBI sale, in DXBI's own units: sizes in sq ft, prices in AED.
@@ -226,14 +261,18 @@ def _sales_source(date_clause: str) -> str:
             transaction_date,
             unit_number,
             building_name,
-            project_name,
+            if(project_name != '', project_name, profile_project) AS project_name,
+            profile_master AS master_project,
+            profile_area AS dld_area,
+            profile_location AS location,
+            profile_map_url AS map_url,
             {_LOCATION} AS location_name,
             property_type,
             {_USAGE} AS property_usage,
-            {_BEDROOMS} AS bedrooms,
-            multiIf(market_status = 'Offplan', 'Off-Plan', market_status = 'Ready', 'Ready', '')
-                AS status,
-            if(size_sqft > 0, size_sqft, NULL) AS size_sqft,
+            if(bedrooms != '', {_BEDROOMS}, {_PROFILE_BEDROOMS}) AS bedrooms,
+            multiIf(market_status = 'Offplan', 'Off-Plan', market_status = 'Ready', 'Ready',
+                    profile_status) AS status,
+            multiIf(size_sqft > 0, size_sqft, profile_size > 0, profile_size, NULL) AS size_sqft,
             sale_amount_aed AS price_aed,
             multiIf(price_per_sqft_aed > 0, toInt64(round(price_per_sqft_aed)),
                     size_sqft > 0, toInt64(round(sale_amount_aed / size_sqft)), NULL)
@@ -303,6 +342,7 @@ def _sales_source(date_clause: str) -> str:
             ON swept_building.swept_building_key = sale.building_key
             AND swept_building.swept_area_key = sale.area_key
         LEFT JOIN {_PRINTED_LOCATIONS} AS printed ON printed.printed_key = sale.area_key
+        LEFT JOIN {_SALE_PROFILE} AS profile ON profile.profile_sale_key = sale.sale_key
     """
 
 
@@ -338,13 +378,17 @@ def _rentals_source(date_clause: str) -> str:
             lease_start,
             lease_end,
             unit_number,
-            building_name,
-            project_name,
+            if(building_name != '', building_name, profile_building) AS building_name,
+            if(project_name != '', project_name, profile_project) AS project_name,
+            profile_master AS master_project,
+            profile_area AS dld_area,
+            profile_location AS location,
+            profile_map_url AS map_url,
             {_LOCATION} AS location_name,
             property_type,
             {_USAGE} AS property_usage,
-            {_BEDROOMS} AS bedrooms,
-            if(size_sqft > 0, size_sqft, NULL) AS size_sqft,
+            if(bedrooms != '', {_BEDROOMS}, {_PROFILE_BEDROOMS}) AS bedrooms,
+            multiIf(size_sqft > 0, size_sqft, profile_size > 0, profile_size, NULL) AS size_sqft,
             if(annual_rent_aed > 0, annual_rent_aed, NULL) AS annual_rent_aed,
             if(contract_amount_aed > 0, contract_amount_aed, NULL) AS contract_amount_aed,
             contract_term_months AS term_months,
@@ -377,6 +421,7 @@ def _rentals_source(date_clause: str) -> str:
             ON swept_building.swept_building_key = lease.lease_building_key
             AND swept_building.swept_area_key = lease.lease_area_key
         LEFT JOIN {_PRINTED_LOCATIONS} AS printed ON printed.printed_key = lease.lease_area_key
+        LEFT JOIN {_LEASE_PROFILE} AS profile ON profile.profile_contract_key = lease.contract_key
     """
 
 
@@ -464,10 +509,10 @@ def _rentals_where(filters: RentalFilters, params: dict) -> str:
 
 
 _SALE_COLUMNS = """transaction_id, transaction_date, unit_number, building_name, project_name,
-            location_name, property_type, property_usage, bedrooms, status, size_sqft,
+            master_project, dld_area, location, map_url, location_name, property_type, property_usage, bedrooms, status, size_sqft,
             price_aed, price_per_sqft"""
 _RENTAL_COLUMNS = """contract_id, lease_start, lease_end, unit_number, building_name,
-            project_name, location_name, property_type, property_usage, bedrooms, size_sqft,
+            project_name, master_project, dld_area, location, map_url, location_name, property_type, property_usage, bedrooms, size_sqft,
             annual_rent_aed, contract_amount_aed, term_months, contract_type"""
 
 

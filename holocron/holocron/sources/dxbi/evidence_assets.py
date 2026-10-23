@@ -2,6 +2,7 @@ from pathlib import Path
 
 from dagster import MaterializeResult, MetadataValue, asset
 
+from holocron.market.dxbi_profile import build_listed
 from holocron.platform.resources import ClickHouseResource, ObjectStorageResource
 from holocron.platform.settings import Settings
 from holocron.sources.dxbi.evidence import load_evidence, loader_environment
@@ -15,7 +16,8 @@ from holocron.sources.dxbi.evidence import load_evidence, loader_environment
         "dxbi_sales_unit_events, dxbi_rental_sale_matches) and location sweeps "
         "(dxbi_locations, dxbi_places, dxbi_location_members, dxbi_location_lease_members): "
         "completed runs from DXBI_EVIDENCE_DIR, archived to object storage, loaded, and "
-        "accounted in dxbi_evidence_load_ledger."
+        "accounted in dxbi_evidence_load_ledger; then the listed records the Analytics pages "
+        "read (dxbi_sales_listed, dxbi_leases_listed)."
     ),
 )
 def dxbi_evidence_bronze(
@@ -41,6 +43,9 @@ def dxbi_evidence_bronze(
         ),
     )
     context.log.info("dxbi evidence load: %s", summary)
+    if summary.get("sales") or summary.get("rentals"):
+        # The Analytics pages read the listed records; new sales and leases reach them now.
+        summary["listed"] = build_listed(clickhouse.client())
     return MaterializeResult(
         metadata={
             "stage": "bronze",

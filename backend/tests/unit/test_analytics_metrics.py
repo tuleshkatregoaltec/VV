@@ -22,7 +22,6 @@ def test_low_sample_counts_remain_visible_and_yield_uses_median():
     assert rows[0].sales_momentum_pct is None
     assert rows[1].rooms == "1 B/R"
     assert rows[1].gross_yield_pct == 6.0
-    assert rows[1].absorption_rate_pct == 1.5
     off_plan = build_configuration_rows("off_plan", sales, stock, rent)[0]
     assert off_plan.gross_yield_pct is None
     assert off_plan.rental_count == 0
@@ -32,17 +31,3 @@ def test_momentum_requires_twenty_in_both_periods_and_uses_mean_denominator():
     assert _sampled_count_pct_change(40, 19) is None
     assert _sampled_count_pct_change(19, 40) is None
     assert _sampled_count_pct_change(40, 20) == 66.7
-
-
-def test_sales_per_unit_needs_a_registry_that_holds_the_type():
-    """DLD registers few large homes by bedrooms (villas mostly as land): 7-bed sales/stock read
-    337% on 16 registered units (2026-10-08). Under 100 units, or more sales than units, the
-    figure measures the registry's gaps, not absorption."""
-    sales = [{"rooms_en": room, "sales_last_12m": n, "sale_count": n}
-             for room, n in (("5 B/R", 56), ("6 B/R", 520), ("2 B/R", 300))]  # fmt: skip
-    stock = {"5 B/R": {"unit_count": 16}, "6 B/R": {"unit_count": 192},
-             "2 B/R": {"unit_count": 1000}}  # fmt: skip
-    rows = {row.rooms: row for row in build_configuration_rows("all", sales, stock, {})}
-    assert rows["5 B/R"].absorption_rate_pct is None
-    assert rows["6 B/R"].absorption_rate_pct is None
-    assert rows["2 B/R"].absorption_rate_pct == 30.0

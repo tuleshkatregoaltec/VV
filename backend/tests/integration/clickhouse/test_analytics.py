@@ -3,27 +3,30 @@ import pytest
 from app.analytics.queries import project_sales_summary
 from app.clickhouse.client import query
 
+# The scope keys the Analytics filters read, as ALIAS columns of a projection table with project
+# and master names: its own names are its keys.
+PROJECTION_SCOPE_COLUMNS = """,
+    scope_key String ALIAS lowerUTF8(replaceRegexpAll(project_name_en, '[^A-Za-z0-9]', '')),
+    master_key_en String ALIAS lowerUTF8(replaceRegexpAll(master_project_en, '[^A-Za-z0-9]', '')),
+    building_id String ALIAS ''"""
+
 
 @pytest.fixture(autouse=True)
-def aggregate_projection_fixture(monkeypatch):
+def aggregate_projection_fixture(analytics_projection_tables):
     """Test aggregation semantics on small projection fixtures.
 
     Real DXBI source selection is exercised separately in test_analytics_dxbi.py.
     """
-    from app.analytics import queries
-
-    monkeypatch.setattr(queries, "SALES_SOURCE", "ch_transactions")
-    monkeypatch.setattr(queries, "RENTALS_SOURCE", "ch_rent_contracts")
 
 
 async def test_sales_summary_applies_residential_and_project_scope_in_clickhouse(warehouse):
-    await warehouse.command("""
+    await warehouse.command(f"""
         CREATE TABLE ch_transactions (
             project_name_en String, master_project_en String,
             trans_group_en String, property_type_en String,
             property_usage_en String, actual_worth Decimal(18, 2),
             meter_sale_price Decimal(18, 2), reg_type_en String,
-            property_type String DEFAULT 'Apartment'
+            property_type String DEFAULT 'Apartment'{PROJECTION_SCOPE_COLUMNS}
         ) ENGINE = MergeTree ORDER BY project_name_en
     """)
     await warehouse.insert(
@@ -97,11 +100,13 @@ async def test_sales_summary_applies_residential_and_project_scope_in_clickhouse
         "('Tower A', 'Master A', 'Sales', 'Land', 'Residential', 2000000, 20000, "
         "'Existing Properties', 'Plot')"
     )
-    rows = await query(project_sales_summary("project"), {"project_name": "Tower A"})
+    rows = await query(
+        project_sales_summary("project"), {"project_name": "Tower A", "usage": "Residential"}
+    )
     assert rows[0]["transaction_count"] == 2
     assert rows[0]["total_volume"] == 4000000
     assert rows[0]["avg_price"] == 2000000
-    market = await query(project_sales_summary("market"))
+    market = await query(project_sales_summary("market"), {"usage": "Residential"})
     assert market[0]["transaction_count"] == 3
 
 
@@ -155,8 +160,13 @@ async def test_market_types_select_on_the_uniform_type_and_their_own_group(wareh
     assert await sold("commercial_units") == 2
     assert await sold("land") == 1
     assert await sold("bulk_building") == 1
-    assert await sold("mortgages") == 1
-    assert await sold("gifts") == 1
+    # The Analytics records are DXBI sales: mortgages and gifts are refused, not counted as 0.
+    from fastapi import HTTPException
+
+    for registration in ("mortgages", "gifts"):
+        with pytest.raises(HTTPException) as refused:
+            await sold(registration)
+        assert refused.value.status_code == 422
     trend = await service.get_market_trend(days=30, market_type="villas")
     assert trend.total_transactions == 3
 
@@ -298,7 +308,7 @@ async def test_leases_count_only_under_the_bedrooms_they_record(warehouse):
                       "property_usage_en", "annual_amount", "actual_area", "rooms_en"],
     )  # fmt: skip
 
-    rows = await query(project_rentals_by_rooms("market"))
+    rows = await query(project_rentals_by_rooms("market"), {"usage": "Residential"})
 
     assert {row["rooms_en"]: row["rental_count"] for row in rows} == {"Studio": 1, "1 B/R": 1}
 
@@ -342,7 +352,10 @@ async def test_unit_size_is_the_median_and_the_middle_68_percent_is_measured(war
                       "property_usage_en", "rooms_en", "actual_worth", "meter_sale_price",
                       "reg_type_en"],
     )  # fmt: skip
-    rows = {row["rooms_en"]: row for row in await query(project_price_distribution("market"))}
+    rows = {
+        row["rooms_en"]: row
+        for row in await query(project_price_distribution("market"), {"usage": "Residential"})
+    }
     every = rows["__all__"]
     assert every["mean_price"] - every["std_price"] < 0
     assert 1_100_000 <= every["p16_price"] < every["p84_price"] <= 1_900_000

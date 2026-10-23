@@ -384,3 +384,17 @@ def test_hidden_final_unit_never_becomes_a_building_number() -> None:
         )
     )
     assert payload["unit_number"] == ""
+
+
+def test_a_placeholder_in_the_transaction_number_cell_is_no_registration() -> None:
+    # Two different sales whose cell shows '-' must not share a "registration" identity.
+    payload = {
+        "location_text": "Tower, Area Ready Apartment",
+        "amount_text": "AED 1,000,000",
+        "specs_text": "861 sqft",
+        "date_text": "10, Sep 2026",
+        "detail_url": "https://dxbinteract.com/sold/t-opaque",
+    }
+    for placeholder in ("-", "N/A", " "):
+        event = normalize_sales_row({**payload, "dld_transaction_number": placeholder})
+        assert event is not None and event["dld_transaction_number"] == ""

@@ -3,6 +3,7 @@ import { createQuery } from '@tanstack/svelte-query'
 import { Chart, registerables } from 'chart.js'
 import { onMount } from 'svelte'
 import type {
+	AnalyticsUsage,
 	PriceDistributionBucket,
 	ProjectAnalyticsResponse,
 	ProjectConfigurationRow,
@@ -12,13 +13,18 @@ import type {
 	ProjectTrendPoint,
 	SubProjectItem
 } from '$lib/api/analytics'
+import StandardDropdown from '$lib/components/dropdowns/StandardDropdown.svelte'
 import { analyticsQueries } from '$lib/queries/analytics'
 import { getChartTheme } from '$lib/utils/chartTheme'
 import AnalyticsError from './AnalyticsError.svelte'
+import UsageToggle from './UsageToggle.svelte'
 
 Chart.register(...registerables)
 
-let { selection }: { selection: ProjectSearchItem } = $props()
+let {
+	selection,
+	onSelect
+}: { selection: ProjectSearchItem; onSelect?: (next: ProjectSearchItem) => void } = $props()
 
 type AnalysisMode = 'sales' | 'rentals'
 type ConfigSegment = 'all' | 'off_plan' | 'secondary'
@@ -32,10 +38,24 @@ let distroRooms = $state<string>('All')
 let distroOffplan = $state(false)
 let subDropdownOpen = $state(false)
 let subSearch = $state('')
+// Residential or Commercial records; a new selection starts automatic (Commercial for a scope
+// with no residential records), a click pins the choice.
+let usage = $state<AnalyticsUsage>('auto')
+let summaryPeriod = $state('Last Year')
+const summaryPeriods: Record<string, number | undefined> = {
+	'Last Week': 7,
+	'Last Month': 30,
+	'Last 3 Months': 90,
+	'Last 6 Months': 180,
+	'Last Year': 365,
+	'All time': undefined
+}
+const summaryDays = $derived(summaryPeriods[summaryPeriod])
 
 $effect(() => {
 	selection
 	subProject = null
+	usage = 'auto'
 	mode = 'sales'
 	configMode = 'sales'
 	configSegment = 'all'
@@ -47,19 +67,23 @@ $effect(() => {
 
 const queryParams = $derived.by(() =>
 	selection.filter_type === 'market'
-		? {}
-		: subProject
-			? { project: subProject, masterProject: selection.name }
-			: selection.filter_type === 'project'
-				? { project: selection.name }
-				: { masterProject: selection.name, filterType: selection.filter_type }
+		? { usage }
+		: selection.filter_type === 'building'
+			? { buildingId: selection.building_id ?? '', usage }
+			: subProject
+				? { project: subProject, masterProject: selection.name, usage }
+				: selection.filter_type === 'project'
+					? { project: selection.name, usage }
+					: { masterProject: selection.name, filterType: selection.filter_type, usage }
 )
 
 const subProjectsQuery = createQuery(() =>
 	analyticsQueries.subProjects(selection.name, selection.filter_type)
 )
 
-const summaryQuery = createQuery(() => analyticsQueries.projectSummary(queryParams))
+const summaryQuery = createQuery(() =>
+	analyticsQueries.projectSummary({ ...queryParams, summary_days: summaryDays })
+)
 
 const trendsQuery = createQuery(() => analyticsQueries.projectTrends(queryParams, 365))
 
@@ -107,14 +131,15 @@ function getConfigurationRows(summary: ProjectAnalyticsResponse | null): Project
 	return (
 		summary?.configuration_analysis
 			.filter((row) => row.market_segment === configSegment)
-			.filter((row) => isReliableConfigRow(row)) ?? []
+			.filter((row) => isReliableConfigRow(row, summary.usage)) ?? []
 	)
 }
 
 function getConfigurationRentalRows(summary: ProjectAnalyticsResponse | null) {
 	return (
-		summary?.by_rooms.filter((row) => isResidentialConfigRoom(row.rooms) && row.rental_count > 0) ??
-		[]
+		summary?.by_rooms.filter(
+			(row) => isConfigRoom(row.rooms, summary.usage) && row.rental_count > 0
+		) ?? []
 	)
 }
 
@@ -215,6 +240,68 @@ function getDeveloperNames(summary: ProjectAnalyticsResponse): string[] {
 	return uniqueNormalized([...(project?.developer_names ?? []), project?.developer_name])
 }
 
+// Where a header value came from: "Developer, Handover: DXBInteract's building list".
+const FIELD_LABELS: Record<string, string> = {
+	developer_name: 'Developer',
+	completion_date: 'Handover',
+	percent_completed: 'Completion',
+	no_of_units: 'Units',
+	no_of_buildings: 'Buildings',
+	area_name: 'Area'
+}
+const SOURCE_LABELS: Record<string, string> = {
+	dxbi_buildings: "DXBInteract's building list",
+	dld_units: "DLD's unit register",
+	dld_projects: "DLD's project register",
+	buildings: 'its buildings added up',
+	dld_land_plots: "DLD's land register (villa plots)",
+	units_traded: 'units with a recorded sale or lease (no register count)',
+	unit_numbers: 'counted from the unit numbers in our records',
+	projects_rollup: 'its projects added up',
+	dxbi_records: 'DXBI buildings with records'
+}
+
+// Registered units as shown: "at least" when only the units that traded are known.
+function unitsLabel(project: ProjectAnalyticsResponse['project']): string {
+	if (!project?.no_of_units) return '—'
+	return project.units_at_least
+		? `at least ${fmtNumber(project.no_of_units)}`
+		: fmtNumber(project.no_of_units)
+}
+
+// The way back up the hierarchy from a building or project.
+function selectUp(level: 'master' | 'project', name: string | null | undefined) {
+	if (!name || !onSelect) return
+	onSelect(
+		level === 'master'
+			? { name, filter_type: 'master', scope_kind: 'Master' }
+			: { name, filter_type: 'project', scope_kind: 'Project' }
+	)
+}
+
+function selectBuilding(building: { building_id: string; name: string }) {
+	const project = getSummary()?.project
+	onSelect?.({
+		name: building.name,
+		filter_type: 'building',
+		scope_kind: 'Building',
+		building: building.name,
+		building_id: building.building_id,
+		project: project?.project_name ?? '',
+		master: project?.master_name ?? ''
+	})
+}
+
+function fieldSourceNote(sources: Record<string, string> | undefined): string {
+	const bySource = new Map<string, string[]>()
+	for (const [field, source] of Object.entries(sources ?? {})) {
+		bySource.set(source, [...(bySource.get(source) ?? []), FIELD_LABELS[field] ?? field])
+	}
+	return [...bySource]
+		.map(([source, fields]) => `${fields.join(', ')}: ${SOURCE_LABELS[source] ?? source}`)
+		.join(' · ')
+}
+
 function getDeveloperLabel(
 	summary: ProjectAnalyticsResponse,
 	isMasterScope: boolean,
@@ -236,17 +323,20 @@ function getDeveloperDisplay(
 	return names[0] ?? '—'
 }
 
-function isResidentialConfigRoom(room: string | null | undefined): boolean {
+// A residential configuration is a bedroom count; a commercial one is the property type (Office,
+// Shop): the backend groups commercial records by type.
+function isConfigRoom(room: string | null | undefined, usage = 'Residential'): boolean {
 	const label = normalizeText(room)
 	if (!label) return false
 	const upper = label.toUpperCase()
 	if (['NA', 'N/A', 'NONE', 'NULL'].includes(upper)) return false
+	if (usage === 'Commercial') return true
 	return upper === 'STUDIO' || /^\d+\s+B\/R$/i.test(label) || upper.includes('PENTHOUSE')
 }
 
-function isReliableConfigRow(row: ProjectConfigurationRow): boolean {
+function isReliableConfigRow(row: ProjectConfigurationRow, usage = 'Residential'): boolean {
 	return (
-		isResidentialConfigRoom(row.rooms) &&
+		isConfigRoom(row.rooms, usage) &&
 		(row.stock_units > 0 || row.sale_count > 0 || row.sales_last_12m > 0 || row.rental_count > 0)
 	)
 }
@@ -331,7 +421,7 @@ function fmtQuarterLabel(value: string | Date): string {
 }
 
 function isAggregateSelection(): boolean {
-	return selection.filter_type !== 'project' && !subProject
+	return selection.filter_type !== 'project' && selection.filter_type !== 'building' && !subProject
 }
 
 function isMarketSelection(): boolean {
@@ -952,7 +1042,12 @@ onMount(() => {
 	{@const distroRoomList = getDistroRooms()}
 	{@const marketSplit = getMarketSplit(summary)}
 	{@const isMarketScope = isMarketSelection()}
-	{@const isMasterScope = selection.filter_type !== 'project' && selection.filter_type !== 'market' && !subProject}
+	<!-- A project's developer, units or handover, from a named source (not its area alone). -->
+	{@const hasProjectDetails =
+		!isMarketScope &&
+		Object.keys(summary.project?.field_sources ?? {}).some((field) => field !== 'area_name')}
+	{@const isBuildingScope = selection.filter_type === 'building'}
+	{@const isMasterScope = selection.filter_type !== 'project' && selection.filter_type !== 'market' && !isBuildingScope && !subProject}
 	<div class="space-y-5">
 
 		{#if subProjectsQuery.isError}
@@ -962,25 +1057,64 @@ onMount(() => {
 		<section class="rounded-lg border border-border bg-card p-5">
 			<div class="flex flex-wrap items-start justify-between gap-4">
 				<div class="min-w-0">
-					<p class="text-[11px] font-semibold uppercase tracking-[0.22em] text-fg-4">
-						{summary.project?.area_name ?? `${selection.scope_kind ?? 'Location'} analytics`}
-					</p>
+					{#if !isMasterScope && !isMarketScope && summary.project?.master_name}
+						<!-- Master › Project for a building: each level opens its own analytics. -->
+						<nav
+							aria-label="Location"
+							class="flex flex-wrap items-center gap-1 text-[11px] font-semibold uppercase tracking-[0.22em] text-fg-4"
+							data-testid="analytics-breadcrumb"
+						>
+							<button type="button" class="uppercase hover:text-info" onclick={() => selectUp('master', summary.project?.master_name)}>
+								{summary.project.master_name}
+							</button>
+							{#if isBuildingScope && summary.project?.parent_project}
+								<span aria-hidden="true">›</span>
+								<button type="button" class="uppercase hover:text-info" onclick={() => selectUp('project', summary.project?.parent_project)}>
+									{summary.project.parent_project}
+								</button>
+							{/if}
+						</nav>
+					{:else}
+						<p class="text-[11px] font-semibold uppercase tracking-[0.22em] text-fg-4">
+							{summary.project?.area_name ?? `${selection.scope_kind ?? 'Location'} analytics`}
+						</p>
+					{/if}
 					<h2 class="mt-1.5 truncate text-2xl font-semibold tracking-normal text-fg-1">
 						{subProject
 							? stripPrefix(subProject)
 							: summary.project?.project_name ?? selection.name}
 					</h2>
 					{#if isMarketScope}
-						<p class="mt-1 text-sm text-fg-3">Citywide residential market aggregate</p>
+						<p class="mt-1 text-sm text-fg-3">
+							Citywide {summary.usage === 'Commercial' ? 'commercial' : 'residential'} market aggregate
+						</p>
 					{:else if isMasterScope}
 						<p class="mt-1 text-sm text-fg-3">
 							Master community aggregate{subProjects.length > 0
 								? ` - ${fmtNumber(subProjects.length)} developments`
 								: ''}
 						</p>
+					{:else if isBuildingScope}
+						<p class="mt-1 text-sm text-fg-3">
+							Building{summary.project?.developer_name ? ` · ${summary.project.developer_name}` : ''}
+						</p>
 					{:else if summary.project?.developer_name}
 						<p class="mt-1 text-sm text-fg-3">{summary.project.developer_name}</p>
 					{/if}
+					<UsageToggle
+						counts={summary.usage_counts}
+						resolved={summary.usage === 'Commercial' ? 'Commercial' : 'Residential'}
+						value={usage}
+						scope={`${isMarketScope ? 'Dubai' : isMasterScope ? 'this community' : isBuildingScope ? 'this building' : 'this project'}${summaryDays ? ' in the selected window' : ''}`}
+						onchange={(choice) => (usage = choice)}
+					>
+						<div class="flex items-center gap-2">
+							<label for="analytics-summary-window-button" class="text-xs font-medium text-fg-3">Summary window</label>
+							<div class="w-40">
+								<StandardDropdown id="analytics-summary-window" ariaLabel="Summary window" options={Object.keys(summaryPeriods)} bind:value={summaryPeriod} />
+							</div>
+						</div>
+					</UsageToggle>
 				</div>
 
 				<div class="flex items-center gap-3">
@@ -995,6 +1129,12 @@ onMount(() => {
 							class="inline-flex items-center rounded-sm bg-info-bg px-2.5 py-1 text-xs font-semibold text-info ring-1 ring-border"
 						>
 							Master community
+						</span>
+					{:else if isBuildingScope}
+						<span
+							class="inline-flex items-center rounded-sm bg-info-bg px-2.5 py-1 text-xs font-semibold text-info ring-1 ring-border"
+						>
+							Building
 						</span>
 					{:else if summary.project?.project_status}
 						<span
@@ -1074,14 +1214,125 @@ onMount(() => {
 				</div>
 			</div>
 
+			<!-- Metadata strip: a project's details where a source holds them (sources named below). -->
+			{#if hasProjectDetails}
+			<div class="mt-4 flex flex-wrap gap-4 border-t border-border pt-4">
+				<div class="min-w-[150px] max-w-[260px]">
+					<p class="text-[11px] uppercase tracking-[0.16em] text-fg-4">{getDeveloperLabel(summary, isMasterScope, isMarketScope)}</p>
+					<p class="mt-1 truncate text-sm font-medium text-fg-1" title={getDeveloperDisplay(summary, isMasterScope, isMarketScope)}>
+						{getDeveloperDisplay(summary, isMasterScope, isMarketScope)}
+					</p>
+				</div>
+				<div class="min-w-[100px]">
+					<p class="text-[11px] uppercase tracking-[0.16em] text-fg-4">Units</p>
+					<p class="mt-1 text-sm font-medium text-fg-1" data-testid="analytics-units">
+						{unitsLabel(summary.project)}
+					</p>
+					{#if isMasterScope && summary.project?.no_of_projects}
+						<p class="mt-1 text-[11px] text-fg-4">
+							{fmtNumber(summary.project.projects_with_units ?? 0)} of {fmtNumber(summary.project.no_of_projects)} projects counted
+						</p>
+					{:else if summary.project?.units_at_least}
+						<p class="mt-1 text-[11px] text-fg-4">No register count; units traded</p>
+					{/if}
+				</div>
+				<div class="min-w-[160px]">
+					<p class="text-[11px] uppercase tracking-[0.16em] text-fg-4">Handover</p>
+					{#if isMarketScope}
+						<p class="mt-1 text-sm font-medium text-fg-1">All completions</p>
+					{:else if isMasterScope}
+						<p class="mt-1 text-sm font-medium text-fg-1">Multiple phases</p>
+					{:else if summary.project?.completion_date}
+						<p class="mt-1 text-sm font-medium text-fg-1">
+							{new Date(summary.project.completion_date).toLocaleDateString('en-GB', {
+								month: 'short',
+								year: 'numeric'
+							})}
+						</p>
+					{:else}
+						<p class="mt-1 text-sm font-medium text-fg-1">—</p>
+					{/if}
+					{#if summary.project?.percent_completed != null}
+						<div class="mt-1.5 h-1.5 w-full max-w-[140px] rounded-full bg-panel">
+							<div
+								class="h-1.5 rounded-full bg-primary-light"
+								style="width: {Math.min(100, summary.project.percent_completed)}%"
+							></div>
+						</div>
+						<p class="mt-1 text-[11px] text-fg-4">
+							{fmtPct(summary.project.percent_completed, 0)}
+							{isMasterScope ? 'aggregate completion' : 'complete'}
+						</p>
+					{/if}
+				</div>
+				{#if isMasterScope && subProjects.length > 0}
+					<div class="min-w-[120px]">
+						<p class="text-[11px] uppercase tracking-[0.16em] text-fg-4">Developments</p>
+						<p class="mt-1 text-sm font-medium text-fg-1">
+							{fmtNumber(subProjects.length)}
+						</p>
+					</div>
+				{:else if summary.project?.no_of_buildings}
+					<div class="min-w-[100px]">
+						<p class="text-[11px] uppercase tracking-[0.16em] text-fg-4">Buildings</p>
+						<p class="mt-1 text-sm font-medium text-fg-1">
+							{fmtNumber(summary.project.no_of_buildings)}
+						</p>
+					</div>
+				{/if}
+			</div>
+			{#if fieldSourceNote(summary.project?.field_sources)}
+				<p class="mt-2 text-[11px] text-fg-4" data-testid="analytics-field-sources">
+					Sources: {fieldSourceNote(summary.project?.field_sources)}
+				</p>
+			{/if}
+			{/if}
             <p class="mt-4 border-t border-border pt-3 text-xs text-fg-4">
-                DXBI transactions · Residential properties · All recorded dates.
-                Registered unit stock and delivery forecasts are unavailable from this source.
+                DXBI transactions · {summary.usage === 'Commercial' ? 'Commercial' : 'Residential'} properties. Summary cards and usage counts: {summaryDays ? `last ${summaryDays} days, including today (Dubai time)` : 'all recorded dates'}. Sales use sale dates; rentals use lease start dates.
+                {#if !hasProjectDetails}Registered unit stock and delivery forecasts are unavailable from this source.{/if}
             </p>
 		</section>
 
+		<!-- ── A project's buildings ─────────────────────────────────── -->
+		{#if !isBuildingScope && !isMasterScope && !isMarketScope && (summary.buildings?.length ?? 0) > 0}
+			<section class="rounded-lg border border-border bg-card p-5" data-testid="analytics-buildings">
+				<div class="flex items-baseline justify-between gap-3">
+					<h3 class="text-sm font-semibold text-fg-1">Buildings</h3>
+					<p class="text-xs text-fg-4">Select a building for its own analytics</p>
+				</div>
+				<div class="mt-3 overflow-x-auto">
+					<table class="w-full text-sm">
+						<thead>
+							<tr class="border-b border-border text-left text-[11px] uppercase tracking-[0.12em] text-fg-4">
+								<th class="py-2 pr-4 font-medium">Building</th>
+								<th class="py-2 pr-4 text-right font-medium">Units</th>
+								<th class="py-2 pr-4 text-right font-medium">Sales</th>
+								<th class="py-2 text-right font-medium">Leases</th>
+							</tr>
+						</thead>
+						<tbody>
+							{#each summary.buildings ?? [] as building (building.building_id)}
+								<tr class="border-b border-border last:border-0">
+									<td class="py-2 pr-4">
+										<button type="button" class="text-left font-medium text-fg-1 hover:text-info" onclick={() => selectBuilding(building)}>
+											{building.name}
+										</button>
+									</td>
+									<td class="py-2 pr-4 text-right tabular-nums text-fg-2" title={building.units_source ? (SOURCE_LABELS[building.units_source] ?? building.units_source) : ''}>
+										{building.units ? (building.units_at_least ? `≥ ${fmtNumber(building.units)}` : fmtNumber(building.units)) : '—'}
+									</td>
+									<td class="py-2 pr-4 text-right tabular-nums text-fg-2">{fmtNumber(building.sales)}</td>
+									<td class="py-2 text-right tabular-nums text-fg-2">{fmtNumber(building.leases)}</td>
+								</tr>
+							{/each}
+						</tbody>
+					</table>
+				</div>
+			</section>
+		{/if}
+
 		<!-- ── KPI cards ──────────────────────────────────────────────── -->
-		<section class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+		<section aria-label="Summary metrics" class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
 			<div class="rounded-lg border border-border bg-card px-5 py-4">
 				<p class="text-[11px] uppercase tracking-[0.18em] text-fg-4">Total Sales</p>
 				<p class="mt-2.5 break-words text-3xl font-semibold text-fg-1">
@@ -1127,6 +1378,7 @@ onMount(() => {
 								? 'Recorded pricing with delivery-aware forecast'
 								: 'Recorded pricing trend'}
 						</h3>
+						<p class="mt-1 text-xs text-fg-4">365-day lookback</p>
 					</div>
 					<div class="inline-flex rounded-lg border border-border bg-panel p-0.5">
 						<button
@@ -1182,6 +1434,7 @@ onMount(() => {
 				<h3 class="mt-1 text-base font-semibold text-fg-1">
 					Off-plan vs secondary sales
 				</h3>
+				<p class="mt-1 text-xs text-fg-4">All recorded dates</p>
 				<div class="mt-4 rounded-lg border border-border bg-panel p-4">
 					<div class="flex items-end justify-between gap-4">
 						<div>
@@ -1280,24 +1533,21 @@ onMount(() => {
 			</div>
 
 			{#if configMode === 'sales'}
-                <p class="mt-4 text-xs text-fg-4">Sales, prices and sizes cover all recorded dates. Recent periods end today (UTC) for every segment. Low-sample configurations remain visible.</p>
-                <p class="mt-1 text-xs text-fg-4">Momentum compares consecutive 90-day counts using their average as the denominator (minimum 20 sales in each). Price change compares consecutive 12-month periods (minimum 3 sales in each). Sales / Stock is unavailable without registered unit counts.</p>
+                <p class="mt-4 text-xs text-fg-4">Sales, prices and sizes cover all recorded dates. Recent periods end on the newest recorded sale{#if summary.recent_periods_end}, {new Date(summary.recent_periods_end).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' })},{/if} for every segment. Low-sample configurations remain visible.</p>
+                <p class="mt-1 text-xs text-fg-4">Momentum compares consecutive 90-day counts using their average as the denominator (minimum 20 sales in each). Price change compares consecutive 12-month periods (minimum 3 sales in each).</p>
 				<div class="ui-scroll-shadow mt-4 overflow-x-auto">
 					<table class="min-w-[640px] w-full border-separate border-spacing-0 text-sm sm:min-w-full">
 						<thead>
 							<tr class="text-left">
-								<th class="sticky left-0 z-10 border-b border-border bg-card pb-2.5 pr-6 text-[11px] font-semibold uppercase tracking-[0.14em] text-fg-4">Config</th>
+								<th class="sticky left-0 z-10 border-b border-border bg-card pb-2.5 pr-6 text-[11px] font-semibold uppercase tracking-[0.14em] text-fg-4">{summary.usage === 'Commercial' ? 'Type' : 'Config'}</th>
 								<th class="border-b border-border pb-2.5 pr-6 text-right text-[11px] font-semibold uppercase tracking-[0.14em] text-fg-4">Sales</th>
 								<th class="border-b border-border pb-2.5 pr-6 text-right text-[11px] font-semibold uppercase tracking-[0.14em] text-fg-4">Avg Price</th>
 								<th class="border-b border-border pb-2.5 pr-6 text-right text-[11px] font-semibold uppercase tracking-[0.14em] text-fg-4">Median sale size sq ft</th>
 								<th class="border-b border-border pb-2.5 pr-6 text-right text-[11px] font-semibold uppercase tracking-[0.14em] text-fg-4">
 									Momentum<br /><span class="font-normal normal-case tracking-normal text-fg-4">90d shift</span>
 								</th>
-								<th class="border-b border-border pb-2.5 pr-6 text-right text-[11px] font-semibold uppercase tracking-[0.14em] text-fg-4">
-									Price Δ YoY<br /><span class="font-normal normal-case tracking-normal text-fg-4">% change</span>
-								</th>
 								<th class="border-b border-border pb-2.5 text-right text-[11px] font-semibold uppercase tracking-[0.14em] text-fg-4">
-									Sales / Stock<br /><span class="font-normal normal-case tracking-normal text-fg-4">% / year</span>
+									Price Δ YoY<br /><span class="font-normal normal-case tracking-normal text-fg-4">% change</span>
 								</th>
 							</tr>
 						</thead>
@@ -1336,7 +1586,7 @@ onMount(() => {
 											</span>
 										{/if}
 									</td>
-									<td class="border-b border-border py-3 pr-6 text-right group-hover:bg-panel">
+									<td class="border-b border-border py-3 text-right group-hover:bg-panel">
 										{#if row.price_change_yoy_pct != null && Number.isFinite(row.price_change_yoy_pct)}
 											<span class="font-medium {deltaTone(row.price_change_yoy_pct)}">
 												{row.price_change_yoy_pct > 0 ? '▲' : row.price_change_yoy_pct < 0 ? '▼' : ''}
@@ -1346,16 +1596,11 @@ onMount(() => {
 											<span class="text-fg-4">—</span>
 										{/if}
 									</td>
-									<td class="border-b border-border py-3 text-right font-medium group-hover:bg-panel">
-										<span class="{pctTone(row.absorption_rate_pct)}">
-											{fmtPct(row.absorption_rate_pct)}
-										</span>
-									</td>
 								</tr>
 							{/each}
 							{#if configRows.length === 0}
 								<tr>
-									<td colspan="7" class="py-8 text-center text-sm text-fg-4">
+									<td colspan="6" class="py-8 text-center text-sm text-fg-4">
 										No data available for this segment.
 									</td>
 								</tr>
@@ -1369,7 +1614,7 @@ onMount(() => {
 					<table class="min-w-[480px] w-full border-separate border-spacing-0 text-sm sm:min-w-full">
 						<thead>
 							<tr class="text-left">
-								<th class="sticky left-0 z-10 border-b border-border bg-card pb-2.5 pr-6 text-[11px] font-semibold uppercase tracking-[0.14em] text-fg-4">Config</th>
+								<th class="sticky left-0 z-10 border-b border-border bg-card pb-2.5 pr-6 text-[11px] font-semibold uppercase tracking-[0.14em] text-fg-4">{summary.usage === 'Commercial' ? 'Type' : 'Config'}</th>
 								<th class="border-b border-border pb-2.5 pr-6 text-right text-[11px] font-semibold uppercase tracking-[0.14em] text-fg-4">Contracts</th>
 								<th class="border-b border-border pb-2.5 pr-6 text-right text-[11px] font-semibold uppercase tracking-[0.14em] text-fg-4">Median Rent</th>
 								<th class="border-b border-border pb-2.5 pr-6 text-right text-[11px] font-semibold uppercase tracking-[0.14em] text-fg-4">Rent / sq ft</th>
@@ -1422,6 +1667,8 @@ onMount(() => {
 					</button>
 				</div>
 			</div>
+
+			<p class="mt-2 text-xs text-fg-4">All recorded dates</p>
 
 			<!-- Room tabs -->
 			{#if distroRoomList.length > 0}

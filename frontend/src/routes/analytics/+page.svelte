@@ -91,12 +91,12 @@ function selectDubaiMarket() {
 					<span class="font-semibold text-fg-1">{chosen.name}</span> is Project {projectA ? 'A' : 'B'}.
 					Search for Project {projectA ? 'B' : 'A'} above to compare the two side by side.
 				</div>
-				<ProjectPanel selection={chosen} />
+				<ProjectPanel selection={chosen} onSelect={(next) => (projectA ? (projectA = next) : (projectB = next))} />
 			{:else}
 				{@render EmptyState('Compare')}
 			{/if}
 		{:else if projectA}
-			<ProjectPanel selection={projectA} />
+			<ProjectPanel selection={projectA} onSelect={(next) => (projectA = next)} />
 		{:else}
 			{@render EmptyState('Analytics')}
 		{/if}

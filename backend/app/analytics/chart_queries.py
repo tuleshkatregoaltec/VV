@@ -374,6 +374,7 @@ async def fetch_market_trend_rows(args: dict[str, Any]):
     start_date = end_date - timedelta(days=days)
 
     sql = price_trends(
+        source="ch_transactions",
         property_usage=property_usage,
         property_type=property_type,
         area_name=area,

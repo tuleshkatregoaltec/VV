@@ -1,7 +1,7 @@
 from typing import Literal
 
-ProjectFilterType = Literal["project", "master", "virtual_master"]
-ProjectScopeType = Literal["project", "master", "virtual_master", "market"]
+ProjectFilterType = Literal["project", "master", "virtual_master", "building"]
+ProjectScopeType = Literal["project", "master", "virtual_master", "building", "market"]
 
 # Server-side market types: the frontend passes market_type, never raw predicates. Each is a
 # transaction group and a trusted predicate on the served rows' uniform columns (property_type in
@@ -22,8 +22,7 @@ MARKET_FILTERS: dict[str, dict[str, str]] = {
     },
     "bulk_building": {"trans_group_en": "Sales", "where": "property_type = 'Building'"},
     "land": {"trans_group_en": "Sales", "where": "property_type = 'Plot'"},
-    "mortgages": {"trans_group_en": "Mortgages", "where": "1 = 1"},
-    "gifts": {"trans_group_en": "Gifts", "where": "1 = 1"},
+    # Mortgages and gifts are DLD registrations; the Analytics DXBI records are sales only.
 }
 
 
@@ -41,6 +40,8 @@ def project_filter_clause(filter_type: ProjectScopeType) -> str:
                 AND (master_project_en = '' OR master_project_en IS NULL)))"""
     if filter_type == "virtual_master":
         return "project_name_en LIKE {project_name:String}"
+    if filter_type == "building":
+        return "building_id = {project_name:String}"
     return "project_name_en = {project_name:String}"
 
 

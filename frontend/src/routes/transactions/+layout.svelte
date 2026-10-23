@@ -1,16 +1,13 @@
 <script lang="ts">
-import { ChevronDown } from 'lucide-svelte'
 import type { Snippet } from 'svelte'
 import { page } from '$app/state'
-import StandardDropdown from '$lib/components/dropdowns/StandardDropdown.svelte'
-import { propertyType, timeframe } from '$lib/components/filters/globalFilters.svelte'
+import { propertyType } from '$lib/components/filters/globalFilters.svelte'
 import AppFrame from '$lib/components/layout/AppFrame.svelte'
 import PageContainer from '$lib/components/layout/PageContainer.svelte'
 import { PROPERTY_USAGE_OPTIONS } from '$lib/constants/transactions'
 
 let { children }: { children: Snippet } = $props()
 
-const timeframes = ['Last Week', 'Last Month', 'Last 3 Months', 'Last 6 Months', 'Last Year']
 let activeTab = $derived(page.url.pathname.includes('/rentals') ? 'rentals' : 'sales')
 </script>
 
@@ -57,25 +54,6 @@ let activeTab = $derived(page.url.pathname.includes('/rentals') ? 'rentals' : 's
 								{option}
 							</button>
 						{/each}
-					</div>
-
-					<div class="w-full min-w-0 sm:w-[190px]">
-						<StandardDropdown
-							id="transactions-timeframe"
-							ariaLabel="Timeframe"
-							options={timeframes}
-							bind:value={timeframe.current}
-							variant="inverse"
-						>
-							{#snippet button({ isOpen })}
-								<span>{timeframe.current}</span>
-								<ChevronDown
-									size={16}
-									strokeWidth={1.8}
-									class="text-on-navy-muted transition-transform {isOpen ? 'rotate-180' : ''}"
-								/>
-							{/snippet}
-						</StandardDropdown>
 					</div>
 				</div>
 			</div>

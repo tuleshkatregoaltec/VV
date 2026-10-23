@@ -117,11 +117,15 @@ def normalize_sales_row(payload: dict[str, Any], *, source_file: str = "") -> di
             )
         )
     )
+    # A placeholder DXBI prints in the cell ('-', 'N/A') is no registration number.
+    registration = str(payload.get("dld_transaction_number") or "").strip()
+    if not re.search(r"\d", registration):
+        registration = ""
     return {
         "sale_key": sale_key,
         # Preserve the explicit registration number verbatim. A /sold/t-* token and the
         # hashed sale_key identify DXBI records, not DLD registrations.
-        "dld_transaction_number": str(payload.get("dld_transaction_number") or "").strip(),
+        "dld_transaction_number": registration,
         "transaction_date": transaction_date,
         "unit_number": unit_number,
         "building_name": building_name,
@@ -236,16 +240,26 @@ def _location_title(cell_html: str) -> str:
     return next(iter(titles)) if len(titles) == 1 else ""
 
 
+_LOCATION_KEY_REPLACEMENTS = {
+    "jumeriah": "jumeirah",
+    "residences": "residence",
+    "apartments": "apartment",
+}
+
+
 def location_key(value: str) -> str:
     normalized = value.lower()
-    replacements = {
-        "jumeriah": "jumeirah",
-        "residences": "residence",
-        "apartments": "apartment",
-    }
-    for source, target in replacements.items():
+    for source, target in _LOCATION_KEY_REPLACEMENTS.items():
         normalized = normalized.replace(source, target)
     return re.sub(r"[^a-z0-9]+", "", normalized)
+
+
+def location_key_sql(expr: str) -> str:
+    """``location_key`` as a ClickHouse expression."""
+    normalized = f"lowerUTF8({expr})"
+    for source, target in _LOCATION_KEY_REPLACEMENTS.items():
+        normalized = f"replaceAll({normalized}, '{source}', '{target}')"
+    return f"replaceRegexpAll({normalized}, '[^a-z0-9]+', '')"
 
 
 def _bedroom_label(value: str) -> str:

@@ -172,8 +172,13 @@ describe('DXBI transaction rows', () => {
 			date: '2026-09-15',
 			unit: '1904',
 			building: '29 Boulevard Tower 2',
+			// No profile yet: DXBI's own building and community.
 			location: '29 Boulevard Tower 2 · Downtown Dubai',
+			mapUrl: null,
+			community: 'Downtown Dubai',
 			project: '-',
+			masterProject: '-',
+			dldArea: '-',
 			propertyType: 'Apartment',
 			bedrooms: '1 Bed',
 			size: 799,
@@ -181,7 +186,28 @@ describe('DXBI transaction rows', () => {
 			pricePerSqFt: 2_190,
 			status: 'Ready'
 		})
-		expect(SALES_COLUMNS.map((column) => column.id)).toContain('unit')
+		expect(SALES_COLUMNS.map((column) => column.id)).toContain('location')
+	})
+
+	it('shows the DLD master project and area matched to a DXBI sale', () => {
+		// DXBI names the building and community; the official chain comes from DLD's record.
+		const row = toSaleRow({
+			transaction_id: 'sale-2',
+			unit_number: '1205',
+			building_name: 'Binghatti Heights',
+			project_name: 'Binghatti Heights',
+			master_project: 'Jumeirah Village',
+			dld_area: 'Al Barsha South Fourth',
+			location_name: 'Jumeirah Village Circle'
+		})
+		expect(row.masterProject).toBe('Jumeirah Village')
+		expect(row.dldArea).toBe('Al Barsha South Fourth')
+		// DLD's capitals read as words.
+		expect(toSaleRow({ transaction_id: 'sale-4', dld_area: 'DAMAC HILLS' }).dldArea).toBe(
+			'Damac Hills'
+		)
+		// An empty DLD value is visibly missing, not a blank cell.
+		expect(toSaleRow({ transaction_id: 'sale-3', master_project: '' }).masterProject).toBe('-')
 	})
 
 	it('maps a lease with its unit, annual rent and whole-contract amount', () => {
@@ -205,13 +231,35 @@ describe('DXBI transaction rows', () => {
 		expect(row).toMatchObject({
 			unit: 'G29',
 			building: '-',
-			bedrooms: '-',
+			// An office lease has no bedrooms to show: not applicable, not missing.
+			bedrooms: 'N/A',
+			// Without a profile location the row still names its community.
+			location: 'Al Mamzer',
 			annualRent: 220_000,
 			contractAmount: 440_000,
 			termMonths: 24,
 			contractType: 'Renewed'
 		})
-		expect(RENTAL_COLUMNS.map((column) => column.id)).toContain('unit')
+		expect(RENTAL_COLUMNS.map((column) => column.id)).toContain('location')
+	})
+
+	it('shows the Location column linked to Google Maps, with the Unit just before it', () => {
+		// Building, project, master project and area used to be separate columns, some of them
+		// often empty; the place is now one line that is always filled, with its map link. The
+		// unit keeps its own column just before it.
+		for (const columns of [SALES_COLUMNS, RENTAL_COLUMNS]) {
+			const ids = columns.map((column) => column.id)
+			for (const old of ['building', 'project', 'masterProject', 'dldArea']) {
+				expect(ids).not.toContain(old)
+			}
+			expect(ids.indexOf('unit')).toBe(ids.indexOf('location') - 1)
+			expect(columns.find((column) => column.id === 'unit')?.defaultVisible).toBe(true)
+			const location = columns.find((column) => column.id === 'location')
+			expect(location?.defaultVisible).toBe(true)
+			expect(
+				location?.href?.({ mapUrl: 'https://www.google.com/maps/search/?api=1&query=x' })
+			).toContain('google.com/maps')
+		}
 	})
 
 	it('keeps project-only names in the unified location column on both pages', () => {

@@ -25,6 +25,7 @@ export type ColumnDefinition = {
 	highlighted?: boolean
 	wrap?: boolean // Long names wrap to a second line instead of widening the table
 	defaultVisible?: boolean // If false, column is hidden by default but can be toggled on
+	href?: (row: any) => string | null // The cell links here (opens in a new tab)
 }
 
 // Numbers are formatted the same way in every browser. Sizes are DXBI's square feet shown in
@@ -44,11 +45,23 @@ function formatMonths(value: number | null | undefined): string {
 	return value == null ? '-' : monthsFormat.format(value)
 }
 
+function mapLink(row: { mapUrl?: string | null }): string | null {
+	return row.mapUrl ?? null
+}
+
 // DXBI sales (dxbi_sales_unit_events): one row per sale of one unit.
 export const SALES_COLUMNS: ColumnDefinition[] = [
 	{ id: 'date', label: 'Date', align: 'left', defaultVisible: true },
 	{ id: 'unit', label: 'Unit', align: 'left', defaultVisible: true },
-	{ id: 'location', label: 'Location', align: 'left', wrap: true, defaultVisible: true },
+	// Building, project, master project and DLD area in one line, linked to Google Maps.
+	{
+		id: 'location',
+		label: 'Location',
+		align: 'left',
+		wrap: true,
+		defaultVisible: true,
+		href: mapLink
+	},
 	{ id: 'propertyType', label: 'Property Type', align: 'left', defaultVisible: true },
 	{ id: 'bedrooms', label: 'Bedrooms', align: 'left', badge: true, defaultVisible: true },
 	{ id: 'size', label: 'Size (sq ft)', align: 'right', format: formatSqft, defaultVisible: true },
@@ -69,7 +82,15 @@ export const RENTAL_COLUMNS: ColumnDefinition[] = [
 	{ id: 'startDate', label: 'Start Date', align: 'left', defaultVisible: true },
 	{ id: 'endDate', label: 'End Date', align: 'left', defaultVisible: true },
 	{ id: 'unit', label: 'Unit', align: 'left', defaultVisible: true },
-	{ id: 'location', label: 'Location', align: 'left', wrap: true, defaultVisible: true },
+	// Building, project, master project and DLD area in one line, linked to Google Maps.
+	{
+		id: 'location',
+		label: 'Location',
+		align: 'left',
+		wrap: true,
+		defaultVisible: true,
+		href: mapLink
+	},
 	{ id: 'propertyType', label: 'Property Type', align: 'left', defaultVisible: true },
 	{ id: 'bedrooms', label: 'Bedrooms', align: 'left', badge: true, defaultVisible: true },
 	{ id: 'size', label: 'Size (sq ft)', align: 'right', format: formatSqft, defaultVisible: true },

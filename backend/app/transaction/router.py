@@ -39,7 +39,7 @@ def _file_response(stream, *, name: str, export_format: str) -> StreamingRespons
 
 
 @router.get("/sales", response_model=TransactionListResponse)
-@cached_endpoint(prefix="transactions:dxbi-sales:v3", expire=600)
+@cached_endpoint(prefix="transactions:dxbi-sales:v5", expire=600)
 async def get_sales_transactions(
     context: AuthContext = Depends(require_active_subscription),
     limit: int = Query(default=30, ge=1, le=1000, description="Page size"),
@@ -51,7 +51,7 @@ async def get_sales_transactions(
 
 
 @router.get("/rentals", response_model=RentalContractListResponse)
-@cached_endpoint(prefix="transactions:dxbi-rentals:v2", expire=600)
+@cached_endpoint(prefix="transactions:dxbi-rentals:v5", expire=600)
 async def get_rental_contracts(
     context: AuthContext = Depends(require_active_subscription),
     limit: int = Query(default=30, ge=1, le=1000, description="Page size"),

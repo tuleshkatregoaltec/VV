@@ -186,3 +186,16 @@ describe('shared query builders', () => {
 		expect(communitiesSpy).toHaveBeenCalled()
 	})
 })
+
+it('keeps summary windows in separate caches and forwards the canonical API field', async () => {
+	const spy = vi.spyOn(analytics, 'projectSummary').mockResolvedValue({} as never)
+	const params = { project: 'Window Tower', summary_days: 365 }
+	const year = analyticsQueries.projectSummary(params)
+	const month = analyticsQueries.projectSummary({ ...params, summary_days: 30 })
+	const allTime = analyticsQueries.projectSummary({ project: 'Window Tower' })
+	expect(year.queryKey).not.toEqual(month.queryKey)
+	expect(year.queryKey).not.toEqual(allTime.queryKey)
+	await year.queryFn()
+	expect(spy).toHaveBeenCalledWith(params)
+	spy.mockRestore()
+})

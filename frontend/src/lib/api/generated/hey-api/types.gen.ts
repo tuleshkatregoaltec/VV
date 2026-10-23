@@ -628,6 +628,42 @@ export type BuildingInfo = {
 };
 
 /**
+ * BuildingStock
+ *
+ * One building of a project, with its registered units.
+ */
+export type BuildingStock = {
+    /**
+     * Building Id
+     */
+    building_id: string;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Sales
+     */
+    sales?: number;
+    /**
+     * Leases
+     */
+    leases?: number;
+    /**
+     * Units
+     */
+    units?: number | null;
+    /**
+     * Units Source
+     */
+    units_source?: string | null;
+    /**
+     * Units At Least
+     */
+    units_at_least?: boolean;
+};
+
+/**
  * BuildingUnitType
  *
  * Bedroom/type breakdown for a specific building
@@ -7297,6 +7333,20 @@ export type PriceDistributionBucket = {
  * Full analytics response for a single project
  */
 export type ProjectAnalyticsResponse = {
+    /**
+     * Usage
+     *
+     * Usage the figures cover: Residential or Commercial (resolved from 'auto')
+     */
+    usage?: string;
+    /**
+     * Usage Counts
+     *
+     * The scope's sales and leases per usage
+     */
+    usage_counts?: {
+        [key: string]: UsageCount;
+    };
     project?: ProjectMeta | null;
     sales: ProjectSalesSummary;
     rentals: ProjectRentalSummary;
@@ -7324,6 +7374,18 @@ export type ProjectAnalyticsResponse = {
      * Configuration Analysis
      */
     configuration_analysis: Array<ProjectConfigurationRow>;
+    /**
+     * Buildings
+     *
+     * A project's buildings with their units
+     */
+    buildings?: Array<BuildingStock>;
+    /**
+     * Recent Periods End
+     *
+     * Last day of the recent 90-day and 12-month windows: the newest recorded sale
+     */
+    recent_periods_end?: string | null;
 };
 
 /**
@@ -7392,12 +7454,6 @@ export type ProjectConfigurationRow = {
      * Sales Momentum Pct
      */
     sales_momentum_pct?: number | null;
-    /**
-     * Absorption Rate Pct
-     *
-     * Sales in the last 12 months per registered unit; none when the registry holds under 100 units of the type or fewer units than were sold
-     */
-    absorption_rate_pct?: number | null;
     /**
      * Price P25
      */
@@ -7564,13 +7620,67 @@ export type ProjectForecastResponse = {
 /**
  * ProjectMeta
  *
- * Metadata from ch_projects + ch_developers
+ * A scope's metadata. ``field_sources`` names each filled field's source: "dxbi_buildings"
+ * (DXBInteract's building list), "dld_units" (DLD's unit register), "buildings" (its
+ * buildings' counts added up), "dld_projects" (DLD's project register), "dld_land_plots"
+ * (DLD's land register, villa plots),
+ * "unit_numbers" (our own count: the distinct unit numbers in the records and DLD's register),
+ * "units_traded" (no register count: the distinct units traded, ``units_at_least``) or
+ * "projects_rollup" (a master: its projects' counts added up).
  */
 export type ProjectMeta = {
     /**
      * Project Name
      */
     project_name: string;
+    /**
+     * Scope Level
+     */
+    scope_level?: 'project' | 'building' | 'master' | 'market' | null;
+    /**
+     * Master Name
+     *
+     * The scope's master project
+     */
+    master_name?: string | null;
+    /**
+     * Parent Project
+     *
+     * A building's project
+     */
+    parent_project?: string | null;
+    /**
+     * Building Id
+     */
+    building_id?: string | null;
+    /**
+     * Units Source
+     */
+    units_source?: string | null;
+    /**
+     * Units At Least
+     *
+     * No register count covers the units that traded: no_of_units is those units (at least)
+     */
+    units_at_least?: boolean;
+    /**
+     * Units Traded
+     *
+     * Distinct units with a recorded sale or lease
+     */
+    units_traded?: number | null;
+    /**
+     * No Of Projects
+     *
+     * A master's projects
+     */
+    no_of_projects?: number | null;
+    /**
+     * Projects With Units
+     *
+     * A master's projects with a register unit count
+     */
+    projects_with_units?: number | null;
     /**
      * Area Name
      */
@@ -7603,6 +7713,12 @@ export type ProjectMeta = {
      * No Of Buildings
      */
     no_of_buildings?: number | null;
+    /**
+     * Field Sources
+     */
+    field_sources?: {
+        [key: string]: string;
+    };
 };
 
 /**
@@ -8164,6 +8280,22 @@ export type ProjectSearchItem = {
      * Filter Type
      */
     filter_type: string;
+    /**
+     * Building
+     */
+    building?: string;
+    /**
+     * Building Id
+     */
+    building_id?: string;
+    /**
+     * Project
+     */
+    project?: string;
+    /**
+     * Master
+     */
+    master?: string;
 };
 
 /**
@@ -8530,6 +8662,30 @@ export type RentalContractResponse = {
      * Project Name
      */
     project_name?: string | null;
+    /**
+     * Master Project
+     *
+     * DLD master project (filled from the matched DLD record)
+     */
+    master_project?: string | null;
+    /**
+     * Dld Area
+     *
+     * DLD's official area name
+     */
+    dld_area?: string | null;
+    /**
+     * Location
+     *
+     * Unit, building, project, master project and area in one line
+     */
+    location?: string | null;
+    /**
+     * Map Url
+     *
+     * Google Maps link to the location
+     */
+    map_url?: string | null;
     /**
      * Location Name
      */
@@ -9467,6 +9623,30 @@ export type TransactionResponse = {
      */
     project_name?: string | null;
     /**
+     * Master Project
+     *
+     * DLD master project (filled from the matched DLD record)
+     */
+    master_project?: string | null;
+    /**
+     * Dld Area
+     *
+     * DLD's official area name
+     */
+    dld_area?: string | null;
+    /**
+     * Location
+     *
+     * Unit, building, project, master project and area in one line
+     */
+    location?: string | null;
+    /**
+     * Map Url
+     *
+     * Google Maps link to the location
+     */
+    map_url?: string | null;
+    /**
      * Location Name
      */
     location_name?: string | null;
@@ -9704,6 +9884,22 @@ export type UploadHealthResponse = {
      * Error
      */
     error?: string | null;
+};
+
+/**
+ * UsageCount
+ *
+ * A scope's records of one usage.
+ */
+export type UsageCount = {
+    /**
+     * Sales
+     */
+    sales?: number;
+    /**
+     * Leases
+     */
+    leases?: number;
 };
 
 /**
@@ -9974,7 +10170,7 @@ export type AnalyticsGetSalesAnalyticsData = {
         /**
          * Market Type
          *
-         * Market type (overrides property_usage/property_type). One of: residential_units, villas, commercial_units, bulk_building, land, mortgages, gifts
+         * Market type (overrides property_usage/property_type). One of: residential_units, villas, commercial_units, bulk_building, land
          */
         market_type?: string | null;
         /**
@@ -10146,7 +10342,7 @@ export type AnalyticsGetMarketTrendData = {
         /**
          * Market Type
          *
-         * Market type (overrides property_usage). One of: residential_units, villas, commercial_units, bulk_building, land, mortgages, gifts
+         * Market type (overrides property_usage). One of: residential_units, villas, commercial_units, bulk_building, land
          */
         market_type?: string | null;
         /**
@@ -10230,7 +10426,7 @@ export type AnalyticsGetSubProjectsEndpointData = {
          *
          * Filter type: master or virtual_master
          */
-        filter_type?: 'project' | 'master' | 'virtual_master';
+        filter_type?: 'project' | 'master' | 'virtual_master' | 'building';
     };
     url: '/api/v1/analytics/project/sub-projects';
 };
@@ -10270,11 +10466,29 @@ export type AnalyticsGetProjectSummaryEndpointData = {
          */
         project?: string | null;
         /**
+         * Building Id
+         *
+         * Building id (from the search): scopes to that building
+         */
+        building_id?: string | null;
+        /**
          * Filter Type
          *
          * Filter type: master, virtual_master, or project
          */
-        filter_type?: 'project' | 'master' | 'virtual_master';
+        filter_type?: 'project' | 'master' | 'virtual_master' | 'building';
+        /**
+         * Summary Days
+         *
+         * Window for headline sales, rental, yield and usage counts: last N calendar days including today in Dubai. Omit for all dates. Configuration history is unchanged.
+         */
+        summary_days?: number | null;
+        /**
+         * Usage
+         *
+         * Residential or Commercial records; auto shows Commercial for a scope with no residential records
+         */
+        usage?: 'auto' | 'Residential' | 'Commercial';
     };
     url: '/api/v1/analytics/project/summary';
 };
@@ -10314,17 +10528,29 @@ export type AnalyticsGetProjectTrendsEndpointData = {
          */
         project?: string | null;
         /**
+         * Building Id
+         *
+         * Building id (from the search): scopes to that building
+         */
+        building_id?: string | null;
+        /**
          * Filter Type
          *
          * Filter type: master, virtual_master, or project
          */
-        filter_type?: 'project' | 'master' | 'virtual_master';
+        filter_type?: 'project' | 'master' | 'virtual_master' | 'building';
         /**
          * Days
          *
          * Number of days to look back
          */
         days?: number;
+        /**
+         * Usage
+         *
+         * Residential or Commercial records; auto shows Commercial for a scope with no residential records
+         */
+        usage?: 'auto' | 'Residential' | 'Commercial';
     };
     url: '/api/v1/analytics/project/trends';
 };
@@ -10364,11 +10590,17 @@ export type AnalyticsGetProjectForecastEndpointData = {
          */
         project?: string | null;
         /**
+         * Building Id
+         *
+         * Building id (from the search): scopes to that building
+         */
+        building_id?: string | null;
+        /**
          * Filter Type
          *
          * Filter type: master, virtual_master, or project
          */
-        filter_type?: 'project' | 'master' | 'virtual_master';
+        filter_type?: 'project' | 'master' | 'virtual_master' | 'building';
         /**
          * Days
          *
@@ -10414,11 +10646,17 @@ export type AnalyticsGetProjectPipelineEndpointData = {
          */
         project?: string | null;
         /**
+         * Building Id
+         *
+         * Building id (from the search): scopes to that building
+         */
+        building_id?: string | null;
+        /**
          * Filter Type
          *
          * Filter type: master, virtual_master, or project
          */
-        filter_type?: 'project' | 'master' | 'virtual_master';
+        filter_type?: 'project' | 'master' | 'virtual_master' | 'building';
     };
     url: '/api/v1/analytics/project/pipeline';
 };
@@ -10458,17 +10696,29 @@ export type AnalyticsGetProjectPriceDistributionEndpointData = {
          */
         project?: string | null;
         /**
+         * Building Id
+         *
+         * Building id (from the search): scopes to that building
+         */
+        building_id?: string | null;
+        /**
          * Filter Type
          *
          * Filter type: master, virtual_master, or project
          */
-        filter_type?: 'project' | 'master' | 'virtual_master';
+        filter_type?: 'project' | 'master' | 'virtual_master' | 'building';
         /**
          * Reg Type
          *
          * Optional registration type filter (e.g. 'Off-Plan Properties')
          */
         reg_type?: string | null;
+        /**
+         * Usage
+         *
+         * Residential or Commercial records; auto shows Commercial for a scope with no residential records
+         */
+        usage?: 'auto' | 'Residential' | 'Commercial';
     };
     url: '/api/v1/analytics/project/price-distribution';
 };

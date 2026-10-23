@@ -85,10 +85,10 @@
 									"type": "null"
 								}
 							],
-							"description": "Market type (overrides property_usage/property_type). One of: residential_units, villas, commercial_units, bulk_building, land, mortgages, gifts",
+							"description": "Market type (overrides property_usage/property_type). One of: residential_units, villas, commercial_units, bulk_building, land",
 							"title": "Market Type"
 						},
-						"description": "Market type (overrides property_usage/property_type). One of: residential_units, villas, commercial_units, bulk_building, land, mortgages, gifts"
+						"description": "Market type (overrides property_usage/property_type). One of: residential_units, villas, commercial_units, bulk_building, land"
 					},
 					{
 						"name": "property_usage",
@@ -502,10 +502,10 @@
 									"type": "null"
 								}
 							],
-							"description": "Market type (overrides property_usage). One of: residential_units, villas, commercial_units, bulk_building, land, mortgages, gifts",
+							"description": "Market type (overrides property_usage). One of: residential_units, villas, commercial_units, bulk_building, land",
 							"title": "Market Type"
 						},
-						"description": "Market type (overrides property_usage). One of: residential_units, villas, commercial_units, bulk_building, land, mortgages, gifts"
+						"description": "Market type (overrides property_usage). One of: residential_units, villas, commercial_units, bulk_building, land"
 					},
 					{
 						"name": "property_usage",
@@ -555,7 +555,7 @@
 			"get": {
 				"tags": ["analytics", "analytics"],
 				"summary": "Search Projects Endpoint",
-				"description": "Search master project names for the selector dropdown.",
+				"description": "Projects, masters and buildings for the selector (a building is its own scope).",
 				"operationId": "analytics-search_projects_endpoint",
 				"parameters": [
 					{
@@ -633,7 +633,7 @@
 						"in": "query",
 						"required": false,
 						"schema": {
-							"enum": ["project", "master", "virtual_master"],
+							"enum": ["project", "master", "virtual_master", "building"],
 							"type": "string",
 							"description": "Filter type: master or virtual_master",
 							"default": "master",
@@ -710,17 +710,68 @@
 						"description": "Sub-project name (project_name_en)"
 					},
 					{
+						"name": "building_id",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "string"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "Building id (from the search): scopes to that building",
+							"title": "Building Id"
+						},
+						"description": "Building id (from the search): scopes to that building"
+					},
+					{
 						"name": "filter_type",
 						"in": "query",
 						"required": false,
 						"schema": {
-							"enum": ["project", "master", "virtual_master"],
+							"enum": ["project", "master", "virtual_master", "building"],
 							"type": "string",
 							"description": "Filter type: master, virtual_master, or project",
 							"default": "project",
 							"title": "Filter Type"
 						},
 						"description": "Filter type: master, virtual_master, or project"
+					},
+					{
+						"name": "summary_days",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "integer",
+									"maximum": 3650,
+									"minimum": 1
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "Window for headline sales, rental, yield and usage counts: last N calendar days including today in Dubai. Omit for all dates. Configuration history is unchanged.",
+							"title": "Summary Days"
+						},
+						"description": "Window for headline sales, rental, yield and usage counts: last N calendar days including today in Dubai. Omit for all dates. Configuration history is unchanged."
+					},
+					{
+						"name": "usage",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"enum": ["auto", "Residential", "Commercial"],
+							"type": "string",
+							"description": "Residential or Commercial records; auto shows Commercial for a scope with no residential records",
+							"default": "auto",
+							"title": "Usage"
+						},
+						"description": "Residential or Commercial records; auto shows Commercial for a scope with no residential records"
 					}
 				],
 				"responses": {
@@ -791,11 +842,29 @@
 						"description": "Sub-project name (project_name_en)"
 					},
 					{
+						"name": "building_id",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "string"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "Building id (from the search): scopes to that building",
+							"title": "Building Id"
+						},
+						"description": "Building id (from the search): scopes to that building"
+					},
+					{
 						"name": "filter_type",
 						"in": "query",
 						"required": false,
 						"schema": {
-							"enum": ["project", "master", "virtual_master"],
+							"enum": ["project", "master", "virtual_master", "building"],
 							"type": "string",
 							"description": "Filter type: master, virtual_master, or project",
 							"default": "project",
@@ -814,6 +883,19 @@
 							"title": "Days"
 						},
 						"description": "Number of days to look back"
+					},
+					{
+						"name": "usage",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"enum": ["auto", "Residential", "Commercial"],
+							"type": "string",
+							"description": "Residential or Commercial records; auto shows Commercial for a scope with no residential records",
+							"default": "auto",
+							"title": "Usage"
+						},
+						"description": "Residential or Commercial records; auto shows Commercial for a scope with no residential records"
 					}
 				],
 				"responses": {
@@ -883,11 +965,29 @@
 						"description": "Sub-project name (project_name_en)"
 					},
 					{
+						"name": "building_id",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "string"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "Building id (from the search): scopes to that building",
+							"title": "Building Id"
+						},
+						"description": "Building id (from the search): scopes to that building"
+					},
+					{
 						"name": "filter_type",
 						"in": "query",
 						"required": false,
 						"schema": {
-							"enum": ["project", "master", "virtual_master"],
+							"enum": ["project", "master", "virtual_master", "building"],
 							"type": "string",
 							"description": "Filter type: master, virtual_master, or project",
 							"default": "project",
@@ -975,11 +1075,29 @@
 						"description": "Sub-project name (project_name_en)"
 					},
 					{
+						"name": "building_id",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "string"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "Building id (from the search): scopes to that building",
+							"title": "Building Id"
+						},
+						"description": "Building id (from the search): scopes to that building"
+					},
+					{
 						"name": "filter_type",
 						"in": "query",
 						"required": false,
 						"schema": {
-							"enum": ["project", "master", "virtual_master"],
+							"enum": ["project", "master", "virtual_master", "building"],
 							"type": "string",
 							"description": "Filter type: master, virtual_master, or project",
 							"default": "project",
@@ -1055,11 +1173,29 @@
 						"description": "Sub-project name (project_name_en)"
 					},
 					{
+						"name": "building_id",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "string"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "Building id (from the search): scopes to that building",
+							"title": "Building Id"
+						},
+						"description": "Building id (from the search): scopes to that building"
+					},
+					{
 						"name": "filter_type",
 						"in": "query",
 						"required": false,
 						"schema": {
-							"enum": ["project", "master", "virtual_master"],
+							"enum": ["project", "master", "virtual_master", "building"],
 							"type": "string",
 							"description": "Filter type: master, virtual_master, or project",
 							"default": "project",
@@ -1084,6 +1220,19 @@
 							"title": "Reg Type"
 						},
 						"description": "Optional registration type filter (e.g. 'Off-Plan Properties')"
+					},
+					{
+						"name": "usage",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"enum": ["auto", "Residential", "Commercial"],
+							"type": "string",
+							"description": "Residential or Commercial records; auto shows Commercial for a scope with no residential records",
+							"default": "auto",
+							"title": "Usage"
+						},
+						"description": "Residential or Commercial records; auto shows Commercial for a scope with no residential records"
 					}
 				],
 				"responses": {
@@ -10138,6 +10287,59 @@
 				"required": ["property_id", "building_number", "building_name", "floors"],
 				"title": "BuildingInfo",
 				"description": "Building with property_id for drilldown"
+			},
+			"BuildingStock": {
+				"properties": {
+					"building_id": {
+						"type": "string",
+						"title": "Building Id"
+					},
+					"name": {
+						"type": "string",
+						"title": "Name"
+					},
+					"sales": {
+						"type": "integer",
+						"title": "Sales",
+						"default": 0
+					},
+					"leases": {
+						"type": "integer",
+						"title": "Leases",
+						"default": 0
+					},
+					"units": {
+						"anyOf": [
+							{
+								"type": "integer"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Units"
+					},
+					"units_source": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Units Source"
+					},
+					"units_at_least": {
+						"type": "boolean",
+						"title": "Units At Least",
+						"default": false
+					}
+				},
+				"type": "object",
+				"required": ["building_id", "name"],
+				"title": "BuildingStock",
+				"description": "One building of a project, with its registered units."
 			},
 			"BuildingUnitType": {
 				"properties": {
@@ -21564,6 +21766,20 @@
 			},
 			"ProjectAnalyticsResponse": {
 				"properties": {
+					"usage": {
+						"type": "string",
+						"title": "Usage",
+						"description": "Usage the figures cover: Residential or Commercial (resolved from 'auto')",
+						"default": "Residential"
+					},
+					"usage_counts": {
+						"additionalProperties": {
+							"$ref": "#/components/schemas/UsageCount"
+						},
+						"type": "object",
+						"title": "Usage Counts",
+						"description": "The scope's sales and leases per usage"
+					},
 					"project": {
 						"anyOf": [
 							{
@@ -21625,6 +21841,27 @@
 						},
 						"type": "array",
 						"title": "Configuration Analysis"
+					},
+					"buildings": {
+						"items": {
+							"$ref": "#/components/schemas/BuildingStock"
+						},
+						"type": "array",
+						"title": "Buildings",
+						"description": "A project's buildings with their units"
+					},
+					"recent_periods_end": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "date"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Recent Periods End",
+						"description": "Last day of the recent 90-day and 12-month windows: the newest recorded sale"
 					}
 				},
 				"type": "object",
@@ -21724,18 +21961,6 @@
 							}
 						],
 						"title": "Sales Momentum Pct"
-					},
-					"absorption_rate_pct": {
-						"anyOf": [
-							{
-								"type": "number"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Absorption Rate Pct",
-						"description": "Sales in the last 12 months per registered unit; none when the registry holds under 100 units of the type or fewer units than were sold"
 					},
 					"price_p25": {
 						"type": "number",
@@ -22099,6 +22324,106 @@
 						"type": "string",
 						"title": "Project Name"
 					},
+					"scope_level": {
+						"anyOf": [
+							{
+								"type": "string",
+								"enum": ["project", "building", "master", "market"]
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Scope Level"
+					},
+					"master_name": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Master Name",
+						"description": "The scope's master project"
+					},
+					"parent_project": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Parent Project",
+						"description": "A building's project"
+					},
+					"building_id": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Building Id"
+					},
+					"units_source": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Units Source"
+					},
+					"units_at_least": {
+						"type": "boolean",
+						"title": "Units At Least",
+						"description": "No register count covers the units that traded: no_of_units is those units (at least)",
+						"default": false
+					},
+					"units_traded": {
+						"anyOf": [
+							{
+								"type": "integer"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Units Traded",
+						"description": "Distinct units with a recorded sale or lease"
+					},
+					"no_of_projects": {
+						"anyOf": [
+							{
+								"type": "integer"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "No Of Projects",
+						"description": "A master's projects"
+					},
+					"projects_with_units": {
+						"anyOf": [
+							{
+								"type": "integer"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Projects With Units",
+						"description": "A master's projects with a register unit count"
+					},
 					"area_name": {
 						"anyOf": [
 							{
@@ -22183,12 +22508,19 @@
 							}
 						],
 						"title": "No Of Buildings"
+					},
+					"field_sources": {
+						"additionalProperties": {
+							"type": "string"
+						},
+						"type": "object",
+						"title": "Field Sources"
 					}
 				},
 				"type": "object",
 				"required": ["project_name"],
 				"title": "ProjectMeta",
-				"description": "Metadata from ch_projects + ch_developers"
+				"description": "A scope's metadata. ``field_sources`` names each filled field's source: \"dxbi_buildings\"\n(DXBInteract's building list), \"dld_units\" (DLD's unit register), \"buildings\" (its\nbuildings' counts added up), \"dld_projects\" (DLD's project register), \"dld_land_plots\"\n(DLD's land register, villa plots),\n\"unit_numbers\" (our own count: the distinct unit numbers in the records and DLD's register),\n\"units_traded\" (no register count: the distinct units traded, ``units_at_least``) or\n\"projects_rollup\" (a master: its projects' counts added up)."
 			},
 			"ProjectPipelinePoint": {
 				"properties": {
@@ -23091,6 +23423,26 @@
 					"filter_type": {
 						"type": "string",
 						"title": "Filter Type"
+					},
+					"building": {
+						"type": "string",
+						"title": "Building",
+						"default": ""
+					},
+					"building_id": {
+						"type": "string",
+						"title": "Building Id",
+						"default": ""
+					},
+					"project": {
+						"type": "string",
+						"title": "Project",
+						"default": ""
+					},
+					"master": {
+						"type": "string",
+						"title": "Master",
+						"default": ""
 					}
 				},
 				"type": "object",
@@ -23645,6 +23997,54 @@
 							}
 						],
 						"title": "Project Name"
+					},
+					"master_project": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Master Project",
+						"description": "DLD master project (filled from the matched DLD record)"
+					},
+					"dld_area": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Dld Area",
+						"description": "DLD's official area name"
+					},
+					"location": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Location",
+						"description": "Unit, building, project, master project and area in one line"
+					},
+					"map_url": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Map Url",
+						"description": "Google Maps link to the location"
 					},
 					"location_name": {
 						"anyOf": [
@@ -25329,6 +25729,54 @@
 						],
 						"title": "Project Name"
 					},
+					"master_project": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Master Project",
+						"description": "DLD master project (filled from the matched DLD record)"
+					},
+					"dld_area": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Dld Area",
+						"description": "DLD's official area name"
+					},
+					"location": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Location",
+						"description": "Unit, building, project, master project and area in one line"
+					},
+					"map_url": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Map Url",
+						"description": "Google Maps link to the location"
+					},
 					"location_name": {
 						"anyOf": [
 							{
@@ -25709,6 +26157,23 @@
 				"type": "object",
 				"required": ["status", "s3"],
 				"title": "UploadHealthResponse"
+			},
+			"UsageCount": {
+				"properties": {
+					"sales": {
+						"type": "integer",
+						"title": "Sales",
+						"default": 0
+					},
+					"leases": {
+						"type": "integer",
+						"title": "Leases",
+						"default": 0
+					}
+				},
+				"type": "object",
+				"title": "UsageCount",
+				"description": "A scope's records of one usage."
 			},
 			"UserDetailResponse": {
 				"properties": {

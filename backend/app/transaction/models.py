@@ -74,6 +74,14 @@ class TransactionResponse(BaseModel):
     unit_number: Optional[str] = None
     building_name: Optional[str] = None
     project_name: Optional[str] = None
+    master_project: Optional[str] = Field(
+        default=None, description="DLD master project (filled from the matched DLD record)"
+    )
+    dld_area: Optional[str] = Field(default=None, description="DLD's official area name")
+    location: Optional[str] = Field(
+        default=None, description="Unit, building, project, master project and area in one line"
+    )
+    map_url: Optional[str] = Field(default=None, description="Google Maps link to the location")
     location_name: Optional[str] = None
     property_type: Optional[str] = None
     bedrooms: Optional[str] = None
@@ -101,6 +109,14 @@ class RentalContractResponse(BaseModel):
     unit_number: Optional[str] = None
     building_name: Optional[str] = None
     project_name: Optional[str] = None
+    master_project: Optional[str] = Field(
+        default=None, description="DLD master project (filled from the matched DLD record)"
+    )
+    dld_area: Optional[str] = Field(default=None, description="DLD's official area name")
+    location: Optional[str] = Field(
+        default=None, description="Unit, building, project, master project and area in one line"
+    )
+    map_url: Optional[str] = Field(default=None, description="Google Maps link to the location")
     location_name: Optional[str] = None
     property_type: Optional[str] = None
     bedrooms: Optional[str] = None

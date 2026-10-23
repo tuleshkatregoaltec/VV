@@ -40,6 +40,7 @@ from holocron.sources.dld_open_data_orchestration import (
     DLD_OPEN_DATA_INCREMENTAL_DEFAULTS,
     DLD_OPEN_DATA_RENTS_FULL_DEFAULTS,
     DLD_OPEN_DATA_RENTS_INCREMENTAL_DEFAULTS,
+    DLD_OPEN_DATA_TRANSACTIONS_RESWEEP_DEFAULTS,
     resolve_open_data_config,
     write_open_data_checkpoint,
     write_open_data_watermark,
@@ -69,6 +70,7 @@ from holocron.sources.news_feeds.assets import (
 )
 from holocron.market.assets import (
     MARKET_ASSET_CHECKS,
+    dxbi_profiles_asset,
     market_rental_events_asset,
     market_sale_events_asset,
 )
@@ -638,7 +640,7 @@ def build_dxbi_evidence_assets() -> list[AssetsDefinition]:
 
 
 def build_market_assets() -> list[AssetsDefinition]:
-    return [market_sale_events_asset, market_rental_events_asset]
+    return [market_sale_events_asset, market_rental_events_asset, dxbi_profiles_asset]
 
 
 def build_market_asset_checks() -> list[AssetChecksDefinition]:
@@ -727,6 +729,14 @@ def _build_dld_open_data_jobs(
 def build_operational_jobs(sources: Mapping[str, SourceSpec]) -> list[AssetJobDefinition]:
     return [
         *_build_dld_open_data_jobs(sources, operation="daily_incremental"),
+        _build_source_asset_job(
+            source=sources["dld_od_transactions"],
+            name="dld_od_transactions_weekly_resweep",
+            raw_only=False,
+            config=_raw_asset_run_config(
+                sources["dld_od_transactions"], DLD_OPEN_DATA_TRANSACTIONS_RESWEEP_DEFAULTS
+            ),
+        ),
         _build_source_asset_job(
             source=sources["dxbi_transactions"],
             name="dxbi_transactions_daily_incremental",
@@ -916,7 +926,7 @@ def build_operational_jobs(sources: Mapping[str, SourceSpec]) -> list[AssetJobDe
         # Asset checks on the market tables run with every rebuild.
         define_asset_job(
             name="market_events_refresh",
-            selection=["market_sale_events", "market_rental_events"],
+            selection=["market_sale_events", "market_rental_events", "dxbi_profiles"],
         ),
         define_asset_job(
             name="geography_crosswalk_refresh",
@@ -942,6 +952,8 @@ def build_operational_schedules(
 ) -> list[ScheduleDefinition]:
     schedule_specs = {
         **_DLD_OPEN_DATA_SCHEDULE_SPECS,
+        # Before Sunday's 04:00 incremental: re-reads 90 days for late (weekend) registrations.
+        "dld_od_transactions_weekly_resweep": "0 3 * * 0",
         "dxbi_transactions_daily_incremental": "0 6 * * *",
         "reelly_supply_daily_catalog_delta": "0 2 * * *",
         "reelly_supply_daily_availability_delta": "30 2 * * *",

@@ -39,8 +39,7 @@ for (const kind of ['sales', 'rentals'] as const) {
             kind === 'sales'
                 ? [
                       'transaction_date',
-                      'unit_number',
-                      'combined_location',
+                      'location',
                       'property_type',
                       'bedrooms',
                       'size_sqft',
@@ -51,8 +50,7 @@ for (const kind of ['sales', 'rentals'] as const) {
                 : [
                       'lease_start',
                       'lease_end',
-                      'unit_number',
-                      'combined_location',
+                      'location',
                       'property_type',
                       'bedrooms',
                       'size_sqft',
@@ -68,12 +66,20 @@ for (const kind of ['sales', 'rentals'] as const) {
                 .nth(i)
                 .locator('td')
                 .allInnerTexts();
+            // One Location column joins unit, building, project, master and area (DXBI's
+            // community when the profile has none); bedrooms of a non-home are not applicable.
+            const homes = ['Apartment', 'Villa', 'Townhouse', 'Hotel Apartment', 'Penthouse', 'Duplex'];
             const expected = fields.map((key) =>
-                key === 'combined_location'
-                    ? [rows[i].building_name, rows[i].project_name, rows[i].location_name]
-                        .filter((value, index, all) => value?.trim() && all.findIndex(v => v?.trim().toLowerCase() === value.trim().toLowerCase()) === index)
-                        .map(value => value.trim()).join(' · ') || 'Location unavailable'
-                    : rows[i][key] == null
+                key === 'location'
+                    ? rows[i].location ||
+                      [rows[i].building_name, rows[i].project_name, rows[i].location_name]
+                          .filter((value, index, all) => value?.trim() && all.findIndex(v => v?.trim().toLowerCase() === value.trim().toLowerCase()) === index)
+                          .map(value => value.trim()).join(' · ') || 'Location unavailable'
+                    : key === 'bedrooms' && rows[i].bedrooms == null
+                      ? rows[i].property_type && !homes.includes(rows[i].property_type)
+                          ? 'N/A'
+                          : '-'
+                      : rows[i][key] == null
                     ? '-'
                     : typeof rows[i][key] === 'number'
                       ? new Intl.NumberFormat('en-US', {

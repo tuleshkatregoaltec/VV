@@ -117,6 +117,80 @@ def lease(key: str, **values) -> list:
     return [row[column] for column in RENTAL_COLUMNS]
 
 
+# The hierarchy columns as Holocron fills them: the record's own project, its master (DXBI's
+# community where DLD gives none), a building per DXBI building name in its community.
+_MASTER = "if(p.master_project != '', p.master_project, x.area_name)"
+_SCOPE = """multiIf(
+    p.project_source = '', if(x.project_name != '', x.project_name, x.building_name),
+    p.project_source = 'place_name', '', p.project_name)"""
+_KEY = "lowerUTF8(replaceRegexpAll({e}, '[^A-Za-z0-9]', ''))"
+_HIERARCHY = f"""
+    {_KEY.format(e=_SCOPE)}, {_SCOPE},
+    if({_SCOPE} = '', '', if(p.project_source = 'own_building'
+                             OR (p.project_source = '' AND x.project_name = ''),
+                             'Building', 'Project')),
+    {_KEY.format(e=_MASTER)}, {_MASTER},
+    if(x.building_name != '', concat({_KEY.format(e="x.building_name")}, '|',
+                                     {_KEY.format(e="x.area_name")}), ''),
+    x.building_name, 0"""
+_LISTED_FILLS = {
+    "dxbi_sales_listed": f"""
+        INSERT INTO dxbi_sales_listed
+        SELECT x.sale_key, x.transaction_date, x.unit_number, x.building_name, x.project_name,
+               x.area_name, x.property_type, x.bedrooms, x.market_status, x.size_sqft,
+               x.sale_amount_aed, if(x.price_per_sqft_aed > 0, x.price_per_sqft_aed, NULL),
+               p.area_name, p.master_project, p.project_name, p.project_source, p.bedrooms,
+               p.completion_status, p.size_sqft, {_HIERARCHY}, now64(3)
+        FROM (SELECT * FROM dxbi_sales_unit_events FINAL ORDER BY sale_key, loaded_at DESC
+              LIMIT 1 BY sale_key) AS x
+        LEFT JOIN dxbi_sale_profile AS p ON p.sale_key = x.sale_key""",
+    "dxbi_leases_listed": f"""
+        INSERT INTO dxbi_leases_listed
+        SELECT x.contract_key, x.lease_start, x.lease_end, x.unit_number, x.building_name,
+               x.project_name, x.area_name,
+               if(p.property_type_source = 'dld_pair', p.property_type, x.property_type),
+               x.bedrooms, x.size_sqft,
+               x.annual_rent_aed, x.contract_amount_aed, x.contract_term_months,
+               x.contract_state, p.area_name, p.master_project, p.project_name,
+               p.project_source, p.bedrooms, p.size_sqft, {_HIERARCHY}, now64(3)
+        FROM dxbi_rental_events AS x FINAL
+        LEFT JOIN dxbi_rental_profile AS p ON p.contract_key = x.contract_key""",
+}
+
+
+_RECORDS = """(
+    SELECT scope_key, scope_name, scope_kind, master_key, master_name, profile_area,
+           building_id, building_display, area_name, 1 AS is_sale FROM dxbi_sales_listed
+    UNION ALL
+    SELECT scope_key, scope_name, scope_kind, master_key, master_name, profile_area,
+           building_id, building_display, area_name, 0 FROM dxbi_leases_listed
+)"""
+_HIERARCHY_FILLS = {
+    "analytics_projects": f"""
+        INSERT INTO analytics_projects
+        SELECT scope_key, any(scope_name), any(scope_kind), any(master_key), any(master_name),
+               'records', any(profile_area), countIf(is_sale), countIf(NOT is_sale), [], now64(3)
+        FROM {_RECORDS} WHERE scope_key != '' GROUP BY scope_key""",
+    "analytics_project_keys": f"""
+        INSERT INTO analytics_project_keys
+        SELECT DISTINCT scope_key, scope_key, now64(3) FROM {_RECORDS} WHERE scope_key != ''""",
+    "analytics_master_keys": f"""
+        INSERT INTO analytics_master_keys
+        SELECT DISTINCT master_key, master_key, master_name, now64(3) FROM {_RECORDS}
+        WHERE master_key != ''""",
+    "analytics_buildings": f"""
+        INSERT INTO analytics_buildings
+        SELECT building_id, any(building_display), any(area_name), argMax(scope_key, n),
+               argMax(scope_name, n), argMax(master_key, n), argMax(master_name, n), 1,
+               sum(n), sum(sales), sum(n) - sum(sales), '', 0, 0, 0, [], now64(3)
+        FROM (SELECT building_id, building_display, area_name, scope_key, scope_name, master_key,
+                     master_name, count() AS n, countIf(is_sale) AS sales
+              FROM {_RECORDS} WHERE building_id != ''
+              GROUP BY ALL)
+        GROUP BY building_id""",
+}
+
+
 @pytest.fixture
 async def dxbi(warehouse, install_serving):
     await install_serving(
@@ -127,11 +201,22 @@ async def dxbi(warehouse, install_serving):
             "dxbi_places",
             "dxbi_location_members",
             "dxbi_location_lease_members",
+            "dxbi_sale_profile",
+            "dxbi_rental_profile",
+            "dxbi_sales_listed",
+            "dxbi_leases_listed",
+            "dxbi_heatmap_buildings_bronze",
+            "analytics_project_keys",
+            "analytics_master_keys",
+            "analytics_projects",
+            "analytics_building_keys",
+            "analytics_buildings",
+            "analytics_unit_stock",
         ),
         views=(),
     )
 
-    async def insert(*, sales=(), leases=()):
+    async def insert(*, sales=(), leases=(), sale_profiles=(), lease_profiles=()):
         if sales:
             await warehouse.insert(
                 "dxbi_sales_unit_events", list(sales), column_names=list(SALE_COLUMNS)
@@ -140,6 +225,23 @@ async def dxbi(warehouse, install_serving):
             await warehouse.insert(
                 "dxbi_rental_events", list(leases), column_names=list(RENTAL_COLUMNS)
             )
+        for table, rows in (
+            ("dxbi_sale_profile", sale_profiles),
+            ("dxbi_rental_profile", lease_profiles),
+        ):
+            # Each profile row names only the columns it sets; the rest take their defaults.
+            for row in rows:
+                await warehouse.insert(table, [list(row.values())], column_names=list(row))
+        # Holocron's listed records (holocron.market.dxbi_profile), each sale and lease once
+        # with its profile; the identity rules are Holocron's and tested there.
+        for table, statement in _LISTED_FILLS.items():
+            await warehouse.command(f"TRUNCATE TABLE {table}")
+            await warehouse.command(statement)
+        # Holocron's hierarchy (holocron.market.analytics_hierarchy) over the same records:
+        # each spelling its own project, each building name in its community one building.
+        for table, statement in _HIERARCHY_FILLS.items():
+            await warehouse.command(f"TRUNCATE TABLE {table}")
+            await warehouse.command(statement)
 
     return insert
 
@@ -187,6 +289,10 @@ async def test_each_dxbi_sale_appears_once_with_its_unit_in_square_feet(dxbi):
         "unit_number": "1904",
         "building_name": "Tower A",
         "project_name": None,
+        "master_project": None,
+        "dld_area": None,
+        "location": None,
+        "map_url": None,
         "location_name": "Downtown Dubai",
         "property_type": "Apartment",
         "bedrooms": "1 Bed",
@@ -585,6 +691,10 @@ async def test_numbered_units_hold_one_copy_of_a_lease_and_unnumbered_rows_all_c
         "unit_number": "1101",
         "building_name": "Iris Blue",
         "project_name": None,
+        "master_project": None,
+        "dld_area": None,
+        "location": None,
+        "map_url": None,
         "location_name": "Dubai Marina",
         "property_type": "Apartment",
         "bedrooms": "2 Beds",
@@ -636,6 +746,67 @@ async def test_exports_hold_the_page_rows_and_neutralise_formulas(dxbi):
     assert [(r["Unit"], r["Annual Rent (AED)"], r["Contract Amount (AED)"]) for r in rows] == [
         ("1101", "160000", "320000")
     ]
+
+
+async def test_the_dld_profile_fills_what_dxbi_left_empty_and_never_overrides_it(dxbi):
+    # The profile carries DLD's official area and master project and fills an empty project,
+    # bedroom count or status; DXBI's own values stay. A copy of DXBI's raw path in the profile
+    # (source 'dxbi') must not undo the location list's labelling.
+    await dxbi(
+        sales=[
+            sale("blank", project_name="", bedrooms="", market_status="", unit_number="1"),
+            sale("own", project_name="Burj Views", unit_number="2"),
+            sale("raw", project_name="", unit_number="3"),
+        ],
+        leases=[lease("lease-1")],
+        sale_profiles=[
+            {
+                "sale_key": "blank",
+                "project_name": "Burj Royale",
+                "project_source": "dld_pair",
+                "master_project": "Burj Khalifa",
+                "area_name": "Burj Khalifa",
+                "bedrooms": "2 Bed",
+                "completion_status": "Off-Plan",
+            },
+            {
+                "sale_key": "own",
+                "project_name": "Other",
+                "project_source": "dld_pair",
+                "master_project": "Burj Khalifa",
+                "area_name": "Burj Khalifa",
+                "bedrooms": "3 Bed",
+                "completion_status": "Off-Plan",
+            },
+            {"sale_key": "raw", "project_name": "Tower A", "project_source": "dxbi"},
+        ],
+        lease_profiles=[
+            {
+                "contract_key": "lease-1",
+                "building_name": "Sale Tower",
+                "building_source": "dxbi_sale",
+                "master_project": "Dubai Marina",
+                "area_name": "Marsa Dubai",
+            }
+        ],
+    )
+
+    page = await service.fetch_sales_transactions(SalesFilters(timeframe_days=7), 10, 0)
+    rows = {row.transaction_id: row for row in page.transactions}
+    blank = rows["blank"]
+    assert (blank.project_name, blank.bedrooms, blank.status) == (
+        "Burj Royale",
+        "2 Beds",
+        "Off-Plan",
+    )
+    assert (blank.master_project, blank.dld_area) == ("Burj Khalifa", "Burj Khalifa")
+    own = rows["own"]
+    assert (own.project_name, own.bedrooms, own.status) == ("Burj Views", "1 Bed", "Ready")
+    assert rows["raw"].project_name is None
+
+    leases = await service.fetch_rental_contracts(RentalFilters(timeframe_days=7), 10, 0)
+    lease_row = leases.contracts[0]
+    assert (lease_row.master_project, lease_row.dld_area) == ("Dubai Marina", "Marsa Dubai")
 
 
 async def test_same_named_towers_in_different_areas_keep_both_sales(dxbi):

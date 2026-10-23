@@ -1,46 +1,60 @@
-import asyncio
 from typing import Optional
-from weakref import WeakKeyDictionary
 
 from app.analytics.dxbi import RENTALS_SOURCE, SALES_SOURCE
 from app.analytics.models import TrendInterval
-from app.clickhouse.client import query as warehouse_query
+from app.clickhouse.client import query
 from app.market.location_search import location_keyword_clause
 from app.market.scope import MARKET_FILTERS as MARKET_FILTERS
-from app.market.scope import ProjectFilterType, ProjectScopeType, project_filter_clause
+from app.market.scope import ProjectFilterType, ProjectScopeType
+
+_KEY = "lowerUTF8(replaceRegexpAll({e}, '[^A-Za-z0-9]', ''))"
+_PARAM_KEY = _KEY.format(e="{project_name:String}")
+# A link may carry any spelling the hierarchy has seen ("MERANO TOWER", "Silicon Oasis"): it
+# resolves to the canonical project or master; an unseen spelling matches its own key.
+PROJECT_KEYS = f"""(
+    SELECT project_key FROM analytics_project_keys WHERE raw_key = {_PARAM_KEY}
+    UNION ALL
+    SELECT {_KEY.format(e="replaceRegexpOne({project_name:String}, '(?i)\\s*\\(all (buildings|phases)\\)\\s*$', '')")})"""
+MASTER_KEYS = f"""(
+    SELECT master_key FROM analytics_master_keys WHERE raw_key = {_PARAM_KEY}
+    UNION ALL SELECT {_PARAM_KEY})"""
+
+
+# The columns every scope filter reads.
+_SCOPE_COLUMNS = "project_name_en, master_project_en, master_key_en, scope_key, building_id"
+# The market endpoints' master filter (any spelling of the master), on the DXBI sources.
+MASTER_FILTER = "master_key_en IN " + MASTER_KEYS.replace(
+    "{project_name:String}", "{master_project:String}"
+)
 
 
 def _project_filter(filter_type: ProjectScopeType) -> str:
-    # DXBI names retain provider casing; typed/cached links must select the same scope.
-    return (
-        project_filter_clause(filter_type)
-        .replace(
-            "project_name_en = {project_name:String}",
-            "lowerUTF8(project_name_en) = lowerUTF8({project_name:String})",
-        )
-        .replace(
-            "master_project_en = {project_name:String}",
-            "lowerUTF8(master_project_en) = lowerUTF8({project_name:String})",
-        )
-        .replace(
-            "project_name_en LIKE {project_name:String}",
-            "lowerUTF8(project_name_en) LIKE lowerUTF8({project_name:String})",
-        )
-    )
+    """The scope's records: a project, a master, a building (its id) or the whole market."""
+    if filter_type == "market":
+        return "1 = 1"
+    if filter_type == "master":
+        return f"master_key_en IN {MASTER_KEYS}"
+    if filter_type == "virtual_master":
+        return "lowerUTF8(project_name_en) LIKE lowerUTF8({project_name:String})"
+    if filter_type == "building":
+        return "building_id = {project_name:String}"
+    return f"scope_key IN {PROJECT_KEYS}"
 
 
-# Compare can request two summaries plus charts concurrently. Bound the heavy
-# normalized-source scans per worker instead of multiplying warehouse memory use.
-_query_slots: WeakKeyDictionary = WeakKeyDictionary()
+# Recent windows (90 days, 12 months) end on the newest recorded sale, the same day for every
+# scope and segment. Ending them today counted days not loaded yet as days without sales: with
+# sales loaded to 9 Oct, studio momentum read -21.4% on 20 Oct, +0.6% over the loaded days.
+_RECENT_WINDOW_END = """addDays((
+    SELECT max(transaction_date) FROM dxbi_sales_listed
+    WHERE transaction_date <= toDate(now('Asia/Dubai')) AND sale_amount_aed > 0), 1)"""
 
 
-async def query(sql: str, parameters: dict | None = None):
-    loop = asyncio.get_running_loop()
-    slots = _query_slots.setdefault(loop, asyncio.Semaphore(2))
-    async with slots:
-        return await warehouse_query(
-            sql + " SETTINGS max_threads=2, max_execution_time=60", parameters
-        )
+def _summary_window(column: str, enabled: bool) -> str:
+    """Last N calendar days including today in Dubai; never include future records."""
+    if not enabled:
+        return "1"
+    today = "toDate(now('Asia/Dubai'))"
+    return f"{column} > {today} - {{summary_days:Int32}} AND {column} <= {today}"
 
 
 # Half-open bounds of a range filter: (low or None, high or None).
@@ -48,57 +62,155 @@ Bounds = tuple[Optional[float], Optional[float]]
 
 
 def search_projects(keyword_clause: str | None = None) -> str:
-    search_clause = keyword_clause or "lowerUTF8(name) LIKE {search_pattern:String}"
+    """Projects and masters whose names (with their area and master) match, then buildings.
+
+    Read from Holocron's hierarchy tables (one row per project, master and building), so a
+    keystroke scans thousands of names, not millions of records. A building is its own scope
+    (``filter_type`` "building", ``building_id``) and names its project and master. A project's
+    only building with the project's own name is the project, not listed twice. Each kind returns
+    up to the limit; the service keeps room for buildings.
+    """
+    search_clause = keyword_clause or "lowerUTF8(search_location) LIKE {search_pattern:String}"
+    order = """lowerUTF8(name) = replaceAll({search_pattern:String}, '%', '') DESC,
+                 startsWith(lowerUTF8(name), replaceAll({search_pattern:String}, '%', '')) DESC"""
     return f"""
-        SELECT name, filter_type,
-               if(uniqExact(kind) = 1, any(kind), 'Location') AS scope_kind
-        FROM (
-            SELECT scope.1 AS name, scope.2 AS filter_type, scope.3 AS kind,
-                   scope.4 AS search_location
+        SELECT * FROM (
+            SELECT name, filter_type, scope_kind, '' AS building, '' AS building_id,
+                   project, master
             FROM (
-                SELECT arrayJoin([
-                    (project_name_en, 'project', scope_kind,
-                     concat(project_name_en, ' ', area_name_en)),
-                    (master_project_en, 'master', 'Area', master_project_en)
-                ]) AS scope
-                FROM (
-                    SELECT project_name_en, master_project_en, area_name_en, scope_kind
-                    FROM {SALES_SOURCE}
-                    UNION ALL
-                    SELECT project_name_en, master_project_en, area_name_en, scope_kind
-                    FROM {RENTALS_SOURCE}
-                )
+                SELECT project_name AS name, 'project' AS filter_type, scope_kind,
+                       '' AS project, master_name AS master, sales + leases AS records,
+                       concat(project_name, ' ', area_name, ' ', master_name) AS search_location
+                FROM analytics_projects
+                UNION ALL
+                SELECT master_name, 'master', 'Master', '', '', sum(sales + leases), master_name
+                FROM analytics_projects WHERE master_name != '' GROUP BY master_name
             )
+            WHERE name != '' AND {search_clause}
+            ORDER BY {order}, records DESC, name
+            LIMIT {{limit:Int32}}
         )
-        WHERE name != '' AND {search_clause}
-        GROUP BY name, filter_type
-        ORDER BY lowerUTF8(name) = replaceAll({{search_pattern:String}}, '%', '') DESC,
-                 startsWith(lowerUTF8(name), replaceAll({{search_pattern:String}}, '%', '')) DESC,
-                 name, filter_type
-        LIMIT {{limit:Int32}}
+        UNION ALL
+        SELECT * FROM (
+            SELECT building_name AS name, 'building' AS filter_type, 'Building' AS scope_kind,
+                   building_name AS building, building_id, project_name AS project,
+                   master_name AS master
+            FROM (
+                SELECT b.*, concat(b.building_name, ' ', b.project_name, ' ', b.community)
+                           AS search_location,
+                       count() OVER (PARTITION BY b.project_key) AS project_buildings
+                FROM analytics_buildings AS b
+            )
+            WHERE records >= 3 AND project_name != ''
+              AND NOT (project_buildings = 1
+                       AND {_KEY.format(e="building_name")} = {_KEY.format(e="project_name")})
+              AND {search_clause}
+            ORDER BY {order.replace("lowerUTF8(name)", "lowerUTF8(building_name)")},
+                     records DESC, building_name
+            LIMIT {{limit:Int32}}
+        )
     """
 
 
 def search_sub_projects(filter_type: ProjectFilterType = "master") -> str:
+    """A master's projects (or a virtual master's), most sales first, counted over the records
+    the summaries read (so a project's count here is its page's)."""
     if filter_type == "virtual_master":
-        where = "project_name_en LIKE {master_project:String}"
+        where = "lowerUTF8(scope_name) LIKE lowerUTF8({master_project:String})"
     else:
-        where = """(master_project_en = {master_project:String}
-            OR (lower(project_name_en) LIKE concat(lower({master_project:String}), ' - %')
-                AND (master_project_en = '' OR master_project_en IS NULL)))"""
-    return f"""
-        SELECT project_name_en, countIf(is_sale) AS transaction_count
-        FROM (
-            SELECT project_name_en, master_project_en, 1 AS is_sale FROM {SALES_SOURCE}
-            UNION ALL
-            SELECT project_name_en, master_project_en, 0 AS is_sale FROM {RENTALS_SOURCE}
+        where = "master_key IN " + MASTER_KEYS.replace(
+            "{project_name:String}", "{master_project:String}"
         )
-        WHERE {where}
-          AND project_name_en IS NOT NULL
-          AND project_name_en <> ''
-        GROUP BY project_name_en
-        ORDER BY transaction_count DESC
+    return f"""
+        SELECT any(scope_name) AS project_name_en, countIf(is_sale) AS transaction_count
+        FROM (
+            SELECT scope_key, scope_name, 1 AS is_sale FROM dxbi_sales_listed WHERE {where}
+            UNION ALL
+            SELECT scope_key, scope_name, 0 FROM dxbi_leases_listed WHERE {where}
+        )
+        WHERE scope_key != ''
+        GROUP BY scope_key
+        ORDER BY transaction_count DESC, count() DESC, project_name_en
     """
+
+
+# A scope's place in the hierarchy and its registered units (analytics_unit_stock): a project,
+# a building, or a master's rollup over its projects.
+_STOCK = """
+    s.units AS units, s.units_source AS units_source, s.units_at_least AS units_at_least,
+    s.units_traded AS units_traded, s.buildings AS stock_buildings,
+    s.mix_rooms AS mix_rooms, s.mix_units AS mix_units, s.mix_median_sqft AS mix_median_sqft"""
+PROJECT_HIERARCHY = f"""
+    SELECT p.project_key AS project_key, p.project_name AS name, p.scope_kind AS scope_kind,
+           p.master_name AS master_name, p.area_name AS area_name, '' AS project_name,
+           '' AS building_id, {_STOCK}
+    FROM analytics_projects AS p
+    LEFT JOIN analytics_unit_stock AS s
+        ON s.scope_level = 'project' AND s.scope_id = p.project_key
+    WHERE p.project_key IN {PROJECT_KEYS}
+    ORDER BY p.sales + p.leases DESC
+    LIMIT 1
+"""
+BUILDING_HIERARCHY = f"""
+    SELECT b.project_key AS project_key, b.building_name AS name, 'Building' AS scope_kind,
+           b.master_name AS master_name, b.community AS area_name,
+           b.project_name AS project_name, b.building_id AS building_id, {_STOCK}
+    FROM analytics_buildings AS b
+    LEFT JOIN analytics_unit_stock AS s
+        ON s.scope_level = 'building' AND s.scope_id = b.building_id
+    WHERE b.building_id = {{project_name:String}}
+"""
+# A master: its projects' registered units added up (a count that is only the units traded is
+# not registered stock and is left out), and how many of its projects have a register count.
+MASTER_ROLLUP = f"""
+    SELECT argMax(p.master_name, p.sales + p.leases) AS name, count() AS projects,
+           countIf(s.units > 0 AND NOT s.units_at_least) AS projects_with_units,
+           sumIf(s.units, NOT s.units_at_least) AS units, sum(s.buildings) AS buildings,
+           sum(s.units_traded) AS units_traded
+    FROM analytics_projects AS p
+    LEFT JOIN analytics_unit_stock AS s
+        ON s.scope_level = 'project' AND s.scope_id = p.project_key
+    WHERE p.master_key IN {MASTER_KEYS}
+"""
+# A project's buildings; sales and leases counted over the records a building's page reads.
+PROJECT_BUILDINGS = f"""
+    WITH buildings AS (
+        SELECT building_id FROM analytics_buildings
+        WHERE project_key IN {PROJECT_KEYS}
+    )
+    SELECT b.building_id AS building_id, b.building_name AS name, c.sales AS sales,
+           c.leases AS leases, s.units AS units, s.units_source AS units_source,
+           s.units_at_least AS units_at_least
+    FROM analytics_buildings AS b
+    INNER JOIN (
+        SELECT building_id, countIf(is_sale) AS sales, countIf(NOT is_sale) AS leases
+        FROM (
+            SELECT building_id, 1 AS is_sale FROM dxbi_sales_listed
+            WHERE building_id IN (SELECT building_id FROM buildings)
+            UNION ALL
+            SELECT building_id, 0 FROM dxbi_leases_listed
+            WHERE building_id IN (SELECT building_id FROM buildings)
+        )
+        GROUP BY building_id
+    ) AS c ON c.building_id = b.building_id
+    LEFT JOIN analytics_unit_stock AS s
+        ON s.scope_level = 'building' AND s.scope_id = b.building_id
+    ORDER BY c.sales + c.leases DESC, b.building_name
+"""
+
+
+async def fetch_scope_hierarchy(parameters: dict, filter_type: ProjectScopeType) -> list[dict]:
+    if filter_type == "building":
+        return await query(BUILDING_HIERARCHY, parameters)
+    if filter_type == "project":
+        return await query(PROJECT_HIERARCHY, parameters)
+    if filter_type == "master":
+        return await query(MASTER_ROLLUP, parameters)
+    return []
+
+
+async def fetch_project_buildings(parameters: dict) -> list[dict]:
+    return await query(PROJECT_BUILDINGS, parameters)
 
 
 def project_sales_summary(
@@ -116,7 +228,7 @@ def project_sales_summary(
         WHERE {_project_filter(filter_type)}
           AND trans_group_en = 'Sales'
           AND property_type NOT IN ('Plot', 'Building', '')
-          AND property_usage_en = 'Residential'
+          AND property_usage_en = {{usage:String}}
           AND actual_worth > 0
           {reg_filter}
     """
@@ -137,7 +249,7 @@ def project_sales_by_rooms(
         WHERE {_project_filter(filter_type)}
           AND trans_group_en = 'Sales'
           AND property_type NOT IN ('Plot', 'Building', '')
-          AND property_usage_en = 'Residential'
+          AND property_usage_en = {{usage:String}}
           AND rooms_en != ''
           AND actual_worth > 0
           {reg_filter}
@@ -162,13 +274,13 @@ def project_configuration_sales(
             WHERE {_project_filter(filter_type)}
               AND trans_group_en = 'Sales'
               AND property_type NOT IN ('Plot', 'Building', '')
-              AND property_usage_en = 'Residential'
+              AND property_usage_en = {{usage:String}}
               AND rooms_en != ''
               AND actual_worth > 0
               {reg_filter}
         ),
         anchor AS (
-            SELECT addDays(toDate(now('UTC')), 1) AS latest_sale_date
+            SELECT {_RECENT_WINDOW_END} AS latest_sale_date
         )
         SELECT
             rooms_en,
@@ -216,6 +328,7 @@ def project_sales_by_property_type(filter_type: ProjectScopeType = "project") ->
         WHERE {_project_filter(filter_type)}
           AND trans_group_en = 'Sales'
           AND property_type != ''
+          AND property_usage_en = {{usage:String}}
           AND actual_worth > 0
         GROUP BY property_type_en
         ORDER BY count DESC
@@ -232,14 +345,16 @@ def project_sales_by_reg_type(filter_type: ProjectScopeType = "project") -> str:
         WHERE {_project_filter(filter_type)}
           AND trans_group_en = 'Sales'
           AND property_type NOT IN ('Plot', 'Building', '')
-          AND property_usage_en = 'Residential'
+          AND property_usage_en = {{usage:String}}
           AND reg_type_en IS NOT NULL
         GROUP BY reg_type_en
         ORDER BY count DESC
     """
 
 
-def project_rentals_summary(filter_type: ProjectScopeType = "project") -> str:
+def project_rentals_summary(
+    filter_type: ProjectScopeType = "project", windowed: bool = False
+) -> str:
     return f"""
         SELECT
             count() as contract_count,
@@ -248,8 +363,9 @@ def project_rentals_summary(filter_type: ProjectScopeType = "project") -> str:
             round(coalesce(medianExact(annual_amount / nullIf(actual_area * 10.7639, 0)), 0), 2) as median_rent_sqft
         FROM {RENTALS_SOURCE}
         WHERE {_project_filter(filter_type)}
-          AND property_usage_en = 'Residential'
+          AND property_usage_en = {{usage:String}}
           AND annual_amount > 0
+          AND ({_summary_window("contract_start_date", windowed)})
     """
 
 
@@ -270,7 +386,7 @@ def project_rentals_by_rooms(filter_type: ProjectScopeType = "project") -> str:
             round(medianExact(annual_amount / nullIf(actual_area * 10.7639, 0)), 2) AS median_rent_sqft
         FROM {RENTALS_SOURCE}
         WHERE {rent_filter}
-          AND property_usage_en = 'Residential'
+          AND property_usage_en = {{usage:String}}
           AND annual_amount > 0
           AND rooms_en != ''
         GROUP BY rooms_en
@@ -476,9 +592,9 @@ def project_meta(filter_type: ProjectScopeType = "project") -> str:
                if(uniqExactIf(area_name_en, area_name_en != '') = 1,
                   anyIf(area_name_en, area_name_en != ''), '') AS area_name_en
         FROM (
-            SELECT project_name_en, master_project_en, area_name_en FROM {SALES_SOURCE}
+            SELECT {_SCOPE_COLUMNS}, area_name_en FROM {SALES_SOURCE}
             UNION ALL
-            SELECT project_name_en, master_project_en, area_name_en FROM {RENTALS_SOURCE}
+            SELECT {_SCOPE_COLUMNS}, area_name_en FROM {RENTALS_SOURCE}
         ) WHERE {_project_filter(filter_type)}
     """
 
@@ -509,7 +625,7 @@ def project_price_distribution(
         WHERE {project_filter}
           AND trans_group_en = 'Sales'
           AND property_type NOT IN ('Plot', 'Building', '')
-          AND property_usage_en = 'Residential'
+          AND property_usage_en = {{usage:String}}
           AND rooms_en != ''
           AND actual_worth > 0
           {reg_filter}
@@ -535,7 +651,7 @@ def project_price_distribution(
         WHERE {project_filter}
           AND trans_group_en = 'Sales'
           AND property_type NOT IN ('Plot', 'Building', '')
-          AND property_usage_en = 'Residential'
+          AND property_usage_en = {{usage:String}}
           AND actual_worth > 0
           {reg_filter}
     """
@@ -564,7 +680,7 @@ def project_price_trends(
         WHERE {_project_filter(filter_type)}
           AND trans_group_en = 'Sales'
           AND property_type NOT IN ('Plot', 'Building', '')
-          AND property_usage_en = 'Residential'
+          AND property_usage_en = {{usage:String}}
           AND toDate(instance_date) BETWEEN {{start_date:Date}} AND {{end_date:Date}}
           AND actual_worth > 0
         GROUP BY period
@@ -647,6 +763,68 @@ async def fetch_project_meta(parameters: dict, filter_type):
     return await query(project_meta(filter_type), parameters)
 
 
+# DXBI's building list (the heatmap's building cards: developer, completion, unit count) for a
+# project DLD's projects register does not hold (older ones such as LAKE SHORE TOWER). A project
+# is the buildings DXBI lists under its name, the one building of that name, or the DXBI buildings
+# whose paired sales sit in it (>= 90% of >= 3: DLD's "SKY COURTS" is DXBI's Sky Courts Tower A-F).
+# A project card (display_as 'P') carries the project's totals and lists its building cards
+# (building_csv): it counts only when none of its buildings' cards is counted already.
+_NAME_KEY = "lowerUTF8(replaceRegexpAll({value}, '[^A-Za-z0-9]', ''))"
+_PAIRED_BUILDINGS = f"""(
+        SELECT building_key FROM (
+            SELECT {_NAME_KEY.format(value="building_name")} AS building_key,
+                   countIf(project_name = {{project_name:String}}) AS inside, count() AS sales
+            FROM dxbi_sale_profile
+            WHERE project_source = 'dld_pair' AND building_name != ''
+              AND {_NAME_KEY.format(value="building_name")} IN (
+                  SELECT {_NAME_KEY.format(value="building_name")} FROM dxbi_sale_profile
+                  WHERE project_name = {{project_name:String}} AND project_source = 'dld_pair')
+            GROUP BY building_key
+        )
+        WHERE inside >= 0.9 * sales AND sales >= 3
+    )"""
+PROJECT_META_FROM_DXBI = f"""
+    SELECT
+        topK(1)(area)[1] AS area_name_en,
+        topKIf(1)(dev, dev != '')[1] AS developer_name_en,
+        maxOrNull(completion) AS completion_date,
+        minOrNull(percent) AS percent_completed,
+        groupArrayIf(card_id, card != 'P') AS building_ids,
+        arrayFilter((u, kids) -> NOT hasAny(kids, building_ids),
+                    groupArrayIf(units, card = 'P'), groupArrayIf(kids, card = 'P')) AS project_units,
+        sumIf(units, card != 'P') + arraySum(project_units) AS no_of_units,
+        nullIf(length(building_ids) + arraySum(arrayMap(
+            (u, kids) -> if(hasAny(kids, building_ids), 0, length(kids)),
+            groupArrayIf(units, card = 'P'), groupArrayIf(kids, card = 'P'))), 0)
+            AS no_of_buildings
+    FROM (
+        SELECT JSONExtractString(payload_json, 'Building', 'project') AS project,
+               JSONExtractString(payload_json, 'Building', 'location') AS location,
+               JSONExtractString(payload_json, 'Building', 'area_name') AS area,
+               trimBoth(JSONExtractString(payload_json, 'Building', 'dev')) AS dev,
+               toDate(parseDateTimeBestEffortOrNull(
+                   JSONExtractString(payload_json, 'Building', 'completion_date'))) AS completion,
+               JSONExtract(payload_json, 'Building', 'completion_percent', 'Nullable(Float64)')
+                   AS percent,
+               JSONExtractUInt(payload_json, 'Building', 'unit_count') AS units,
+               JSONExtractString(payload_json, 'Building', 'display_as') AS card,
+               toUInt64OrZero(location_id) AS card_id,
+               JSONExtract(payload_json, 'Building', 'building_csv', 'Array(UInt64)') AS kids
+        FROM dxbi_heatmap_buildings_bronze
+        WHERE status = 200
+        LIMIT 1 BY location_id
+    )
+    WHERE {_NAME_KEY.format(value="project")} = {_NAME_KEY.format(value="{project_name:String}")}
+       OR {_NAME_KEY.format(value="location")} = {_NAME_KEY.format(value="{project_name:String}")}
+       OR {_NAME_KEY.format(value="location")} IN {_PAIRED_BUILDINGS}
+    HAVING count() > 0
+"""
+
+
+async def fetch_project_meta_from_dxbi(parameters: dict):
+    return await query(PROJECT_META_FROM_DXBI, parameters)
+
+
 async def fetch_pipeline_meta(parameters: dict, filter_type):
     meta_fn = {
         "master": pipeline_project_meta_by_master,
@@ -661,8 +839,43 @@ async def fetch_project_developers_by_scope(parameters: dict, filter_type="maste
     return []
 
 
+def project_usage_counts(filter_type: ProjectScopeType = "project", windowed: bool = False) -> str:
+    """The scope's sales and leases per usage, whatever usage the page shows."""
+    return f"""
+        SELECT property_usage_en AS usage,
+               countIf(is_sale AND ({_summary_window("record_date", windowed)})) AS sales,
+               countIf(NOT is_sale AND ({_summary_window("record_date", windowed)})) AS leases,
+               countIf(is_sale) AS all_sales, countIf(NOT is_sale) AS all_leases
+        FROM (
+            SELECT property_usage_en, 1 AS is_sale, instance_date AS record_date, {_SCOPE_COLUMNS}
+            FROM {SALES_SOURCE}
+            WHERE trans_group_en = 'Sales' AND property_type NOT IN ('Plot', 'Building', '')
+              AND actual_worth > 0
+            UNION ALL
+            SELECT property_usage_en, 0, contract_start_date AS record_date, {_SCOPE_COLUMNS}
+            FROM {RENTALS_SOURCE}
+            WHERE annual_amount > 0
+        )
+        WHERE {_project_filter(filter_type)} AND property_usage_en IN ('Residential', 'Commercial')
+        GROUP BY usage
+    """
+
+
+async def fetch_project_usage_counts(parameters: dict, filter_type: ProjectScopeType):
+    return await query(project_usage_counts(filter_type, "summary_days" in parameters), parameters)
+
+
 async def fetch_project_sales_bundle(parameters: dict, filter_type: ProjectScopeType):
-    """Summary, bedrooms and configuration segments from one normalized-source scan."""
+    """Window the headline metrics without truncating configuration comparison history."""
+    summary_columns = ""
+    if "summary_days" in parameters:
+        window = _summary_window("instance_date", True)
+        summary_columns = f""",
+               countIf({window}) AS window_count,
+               round(sumIf(actual_worth, {window}), 2) AS window_volume,
+               round(avgIf(actual_worth, {window}), 2) AS window_price,
+               round(medianExactIf(actual_worth, {window}), 2) AS window_median,
+               round(avgIf(meter_sale_price, {window}) / 10.7639, 2) AS window_price_sqft"""
     rows = await query(
         f"""
         SELECT segment, rooms_en, grouping(rooms_en) AS is_total,
@@ -684,9 +897,11 @@ async def fetch_project_sales_bundle(parameters: dict, filter_type: ProjectScope
                     instance_date >= addYears(latest_sale_date, -1) AND instance_date < latest_sale_date), 2) AS avg_price_sqft_last_12m,
                round(avgIf(meter_sale_price / 10.7639,
                     instance_date >= addYears(latest_sale_date, -2)
-                    AND instance_date < addYears(latest_sale_date, -1)), 2) AS avg_price_sqft_prev_12m
+                    AND instance_date < addYears(latest_sale_date, -1)), 2) AS avg_price_sqft_prev_12m,
+               addDays(max(latest_sale_date), -1) AS recent_period_end
+               {summary_columns}
         FROM (
-            SELECT *, addDays(toDate(now('UTC')), 1) AS latest_sale_date
+            SELECT *, {_RECENT_WINDOW_END} AS latest_sale_date
             FROM (
                 SELECT *, arrayJoin(['all', multiIf(reg_type_en = 'Existing Properties',
                         'secondary', reg_type_en = 'Off-Plan Properties', 'off_plan', 'unknown')])
@@ -694,7 +909,7 @@ async def fetch_project_sales_bundle(parameters: dict, filter_type: ProjectScope
                 FROM {SALES_SOURCE}
                 WHERE {_project_filter(filter_type)} AND trans_group_en = 'Sales'
                     AND property_type NOT IN ('Plot', 'Building', '')
-                    AND property_usage_en = 'Residential' AND actual_worth > 0
+                    AND property_usage_en = {{usage:String}} AND actual_worth > 0
             )
         )
         GROUP BY GROUPING SETS ((segment), (segment, rooms_en))
@@ -706,10 +921,11 @@ async def fetch_project_sales_bundle(parameters: dict, filter_type: ProjectScope
         return [
             dict(
                 row,
-                transaction_count=row["sale_count"],
-                avg_price=row["avg_sale_price"],
-                median_price=row["median_sale_price"],
-                avg_price_sqft=row["avg_sale_price_sqft"],
+                transaction_count=row.get("window_count", row["sale_count"]),
+                total_volume=row.get("window_volume", row["total_volume"]),
+                avg_price=row.get("window_price", row["avg_sale_price"]),
+                median_price=row.get("window_median", row["median_sale_price"]),
+                avg_price_sqft=row.get("window_price_sqft", row["avg_sale_price_sqft"]),
             )
             for row in rows
             if row["is_total"] and row["segment"] == segment
@@ -766,7 +982,9 @@ async def fetch_project_sales_by_reg_type(
 async def fetch_project_rentals_summary(
     parameters: dict, filter_type: ProjectScopeType = "project"
 ):
-    return await query(project_rentals_summary(filter_type), parameters)
+    return await query(
+        project_rentals_summary(filter_type, "summary_days" in parameters), parameters
+    )
 
 
 async def fetch_project_rentals_by_rooms(
@@ -933,7 +1151,7 @@ def sales_summary(
         where_clauses.append("property_usage_en = {property_usage:String}")
 
     if master_project is not None:
-        where_clauses.append("master_project_en = {master_project:String}")
+        where_clauses.append(MASTER_FILTER)
     if property_type is not None:
         where_clauses.append("property_type = {property_type:String}")
     if property_sub_type is not None:
@@ -975,9 +1193,13 @@ def price_trends(
     property_type: Optional[str] = None,
     area_name: Optional[str] = None,
     market: Optional[dict[str, str]] = None,
+    source: Optional[str] = None,
 ) -> str:
     """
     Get price trends over time (grouped by day, week, or month).
+
+    ``source`` is the Analytics DXBI records by default; chat charts pass the combined market
+    layer (``ch_transactions``) their other queries read.
 
     Args:
         interval: 'day', 'week', or 'month'
@@ -985,6 +1207,8 @@ def price_trends(
     Returns: period, transaction_count, avg_price, avg_price_sqft
     ``market`` is a MARKET_FILTERS entry (trusted, not user input).
     """
+    combined_layer = source is not None
+    source = source or SALES_SOURCE
     # SAFE: interval is controlled by application, not user input
     if interval not in ("day", "week", "month"):
         raise ValueError("interval must be 'day', 'week', or 'month'")
@@ -1003,7 +1227,10 @@ def price_trends(
         where_clauses.append("property_usage_en = {property_usage:String}")
 
     if master_project is not None:
-        where_clauses.append("master_project_en = {master_project:String}")
+        where_clauses.append(
+            # The combined layer (chat) has no master key: its master is matched by name.
+            "master_project_en = {master_project:String}" if combined_layer else MASTER_FILTER
+        )
     if property_type is not None:
         where_clauses.append("property_type = {property_type:String}")
     if area_name is not None:
@@ -1017,7 +1244,7 @@ def price_trends(
             count() as transaction_count,
             round(avg(actual_worth), 2) as avg_price,
             round(avg(meter_sale_price) / 10.7639, 2) as avg_price_sqft
-        FROM {SALES_SOURCE}
+        FROM {source}
         WHERE {where_clause}
         GROUP BY period
         ORDER BY period ASC
@@ -1046,7 +1273,7 @@ def rentals_summary(
     ]
 
     if master_project is not None:
-        where_clauses.append("master_project_en = {master_project:String}")
+        where_clauses.append(MASTER_FILTER)
     if property_type is not None:
         where_clauses.append("property_type = {property_type:String}")
     if area_name is not None:
@@ -1073,7 +1300,7 @@ def rentals_summary(
     """
 
 
-GET_MARKET_PULSE_SQL = f"""
+GET_MARKET_PULSE_SQL = """
     SELECT
         count(*) as transaction_count,
         round(medianExact(actual_worth), 0) as median_price,
@@ -1082,11 +1309,11 @@ GET_MARKET_PULSE_SQL = f"""
         round(medianExact(actual_worth / size_sqm) / 10.7639, 0) as median_price_per_sqft,
         min(instance_date) as period_start,
         max(instance_date) as period_end
-    FROM {SALES_SOURCE}
+    FROM ch_transactions
     WHERE
-        location_name = {{area:String}}
+        location_name = {area:String}
         AND trans_group_en = 'Sales'
-        AND instance_date >= today() - {{period_days:Int32}}
+        AND instance_date >= today() - {period_days:Int32}
         AND actual_worth > 0
         AND size_sqm > 0
     """
@@ -1096,52 +1323,53 @@ async def fetch_market_pulse(parameters: dict):
     return await query(GET_MARKET_PULSE_SQL, parameters)
 
 
-# Ranked by location in the uniform vocabulary (DXBI community names; the names market
-# pulse and the Transactions page filter on).
-RANK_AREAS_VOLUME_SQL = f"""
+# Chat's market tools (market pulse, area rankings) read the combined market layer, as the rest
+# of chat does; the Analytics page reads the DXBI records. Ranked by location in the uniform
+# vocabulary (DXBI community names; the names market pulse and the Transactions page filter on).
+RANK_AREAS_VOLUME_SQL = """
         SELECT
             location_name as area,
             count(*) as transaction_count,
             round(medianExact(actual_worth), 0) as median_price
-        FROM {SALES_SOURCE}
+        FROM ch_transactions
         WHERE
-            instance_date >= today() - {{period_days:Int32}}
+            instance_date >= today() - {period_days:Int32}
             AND trans_group_en = 'Sales'
             AND actual_worth > 0
             AND location_name != ''
         GROUP BY location_name
         ORDER BY transaction_count DESC
-        LIMIT {{limit:Int32}}
+        LIMIT {limit:Int32}
         """
 
 
-RANK_AREAS_PRICE_SQL = f"""
+RANK_AREAS_PRICE_SQL = """
         SELECT
             location_name as area,
             round(medianExact(actual_worth), 0) as median_price,
             count(*) as transaction_count
-        FROM {SALES_SOURCE}
+        FROM ch_transactions
         WHERE
-            instance_date >= today() - {{period_days:Int32}}
+            instance_date >= today() - {period_days:Int32}
             AND trans_group_en = 'Sales'
             AND actual_worth > 0
             AND location_name != ''
         GROUP BY location_name
         HAVING transaction_count >= 10
         ORDER BY median_price DESC
-        LIMIT {{limit:Int32}}
+        LIMIT {limit:Int32}
         """
 
 
-RANK_AREAS_GROWTH_SQL = f"""
+RANK_AREAS_GROWTH_SQL = """
         WITH
             current_period AS (
                 SELECT
                     location_name as area,
                     medianExact(actual_worth) as current_median
-                FROM {SALES_SOURCE}
+                FROM ch_transactions
                 WHERE
-                    instance_date >= today() - {{period_days:Int32}}
+                    instance_date >= today() - {period_days:Int32}
                     AND trans_group_en = 'Sales'
                     AND actual_worth > 0
                     AND location_name != ''
@@ -1152,10 +1380,10 @@ RANK_AREAS_GROWTH_SQL = f"""
                 SELECT
                     location_name as area,
                     medianExact(actual_worth) as previous_median
-                FROM {SALES_SOURCE}
+                FROM ch_transactions
                 WHERE
-                    instance_date >= today() - {{period_days:Int32}} * 2
-                    AND instance_date < today() - {{period_days:Int32}}
+                    instance_date >= today() - {period_days:Int32} * 2
+                    AND instance_date < today() - {period_days:Int32}
                     AND trans_group_en = 'Sales'
                     AND actual_worth > 0
                     AND location_name != ''
@@ -1170,7 +1398,7 @@ RANK_AREAS_GROWTH_SQL = f"""
         FROM current_period c
         INNER JOIN previous_period p ON c.area = p.area
         ORDER BY growth_percentage DESC
-        LIMIT {{limit:Int32}}
+        LIMIT {limit:Int32}
         """
 
 

@@ -114,9 +114,32 @@ class MarketTrendResponse(BaseModel):
 
 
 class ProjectMeta(BaseModel):
-    """Metadata from ch_projects + ch_developers"""
+    """A scope's metadata. ``field_sources`` names each filled field's source: "dxbi_buildings"
+    (DXBInteract's building list), "dld_units" (DLD's unit register), "buildings" (its
+    buildings' counts added up), "dld_projects" (DLD's project register), "dld_land_plots"
+    (DLD's land register, villa plots),
+    "unit_numbers" (our own count: the distinct unit numbers in the records and DLD's register),
+    "units_traded" (no register count: the distinct units traded, ``units_at_least``) or
+    "projects_rollup" (a master: its projects' counts added up)."""
 
     project_name: str
+    scope_level: Optional[Literal["project", "building", "master", "market"]] = None
+    master_name: Optional[str] = Field(default=None, description="The scope's master project")
+    parent_project: Optional[str] = Field(default=None, description="A building's project")
+    building_id: Optional[str] = None
+    units_source: Optional[str] = None
+    units_at_least: bool = Field(
+        default=False,
+        description="No register count covers the units that traded: no_of_units is those "
+        "units (at least)",
+    )
+    units_traded: Optional[int] = Field(
+        default=None, description="Distinct units with a recorded sale or lease"
+    )
+    no_of_projects: Optional[int] = Field(default=None, description="A master's projects")
+    projects_with_units: Optional[int] = Field(
+        default=None, description="A master's projects with a register unit count"
+    )
     area_name: Optional[str] = None
     developer_name: Optional[str] = None
     developer_names: list[str] = Field(default_factory=list)
@@ -125,6 +148,7 @@ class ProjectMeta(BaseModel):
     percent_completed: Optional[float] = None
     no_of_units: Optional[int] = None
     no_of_buildings: Optional[int] = None
+    field_sources: dict[str, str] = Field(default_factory=dict)
 
 
 class ProjectSalesSummary(BaseModel):
@@ -173,11 +197,6 @@ class ProjectConfigurationRow(BaseModel):
     gross_yield_pct: Optional[float] = None
     price_change_yoy_pct: Optional[float] = None
     sales_momentum_pct: Optional[float] = None
-    absorption_rate_pct: Optional[float] = Field(
-        default=None,
-        description="Sales in the last 12 months per registered unit; none when the registry "
-        "holds under 100 units of the type or fewer units than were sold",
-    )
     price_p25: float
     price_p50: float
     price_p75: float
@@ -206,9 +225,35 @@ class AnalyticsUnitComposition(BaseModel):
     )
 
 
+class BuildingStock(BaseModel):
+    """One building of a project, with its registered units."""
+
+    building_id: str
+    name: str
+    sales: int = 0
+    leases: int = 0
+    units: Optional[int] = None
+    units_source: Optional[str] = None
+    units_at_least: bool = False
+
+
+class UsageCount(BaseModel):
+    """A scope's records of one usage."""
+
+    sales: int = 0
+    leases: int = 0
+
+
 class ProjectAnalyticsResponse(BaseModel):
     """Full analytics response for a single project"""
 
+    usage: str = Field(
+        default="Residential",
+        description="Usage the figures cover: Residential or Commercial (resolved from 'auto')",
+    )
+    usage_counts: dict[str, UsageCount] = Field(
+        default_factory=dict, description="The scope's sales and leases per usage"
+    )
     project: Optional[ProjectMeta] = None
     sales: ProjectSalesSummary
     rentals: ProjectRentalSummary
@@ -218,6 +263,13 @@ class ProjectAnalyticsResponse(BaseModel):
     by_reg_type: list[RegTypeBreakdown]
     unit_composition: list[AnalyticsUnitComposition]
     configuration_analysis: list[ProjectConfigurationRow]
+    buildings: list[BuildingStock] = Field(
+        default_factory=list, description="A project's buildings with their units"
+    )
+    recent_periods_end: Optional[date] = Field(
+        default=None,
+        description="Last day of the recent 90-day and 12-month windows: the newest recorded sale",
+    )
 
 
 class ProjectTrendPoint(BaseModel):
@@ -293,7 +345,11 @@ class ProjectPriceDistributionResponse(BaseModel):
 class ProjectSearchItem(BaseModel):
     scope_kind: str = "Location"
     name: str
-    filter_type: str  # "master" | "virtual_master" | "project"
+    filter_type: str  # "master" | "virtual_master" | "project" | "building"
+    building: str = ""  # A building result: the building's name (``name`` is the same)
+    building_id: str = ""  # A building result: the id to select it by
+    project: str = ""  # A building result: its project
+    master: str = ""  # A project or building result: its master project
 
 
 class ProjectSearchResponse(BaseModel):
