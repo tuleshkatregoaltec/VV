@@ -1,9 +1,8 @@
 """DXBI sales and rental records for the Transactions pages.
 
-The Transactions pages show DXBInteract (DXBI) records only (decision 2026-10-06): every row and
-every value comes from Holocron's DXBI tables, ``dxbi_sales_unit_events`` and
-``dxbi_rental_events``. No DLD row and no DLD-filled value reaches them; the Analytics pages keep
-the combined market layer (``ch_transactions`` / ``ch_rent_contracts``).
+Transactions and Analytics use Holocron's DXBI tables and DXBI reference catalogues.
+DLD enrichment patches are not applied to these records; DLD remains available only
+through the separate upcoming-supply queries.
 
 Every record DXBI lists is shown, with its unit as DXBI shows it, so rows and totals match DXBI
 (decision 2026-10-09). DXBI lists a day's sales before their units and fills them in about a day
@@ -12,12 +11,13 @@ later; the morning re-scrape of the last three days (``dxbi-sales-morning``) rea
 Each request reads one de-duplicated, normalised DXBI source with its date window applied before
 de-duplication (``_sales_source`` / ``_rentals_source``), and one WHERE clause built from the
 filters (``_sales_where`` / ``_rentals_where``), so the list, its total, the filter options and
-the export always describe the same rows.
+the export use the same record definitions. Facets exclude their own selection to offer alternatives.
 """
 
 from typing import Optional
 
 from app.clickhouse.client import query
+from app.market.location_search import location_keyword_clause
 from app.transaction.models import RentalFilters, SalesFilters
 
 # DXBI names a property type but no usage; the page's Residential / Commercial switch groups the
@@ -115,14 +115,74 @@ _PRINTED_LOCATIONS = """(
 # project (P) or an area. A sale keys its path by its first and last parts, a lease by the whole
 # path. A record whose path is not in the list keeps the parsed names. A single-name place DXBI
 # lists as an area or community is the record's area, not its building.
-_SALE_PLACES = """(
-        SELECT building_key AS place_building_key, area_key AS place_area_key, flag AS place_flag,
-               building_label AS place_building, project_label AS place_project,
-               area_label AS place_area
-        FROM dxbi_places
-        ORDER BY building_key, area_key, match_rank, location_id
-        LIMIT 1 BY building_key, area_key
+# A repeated tower name is not an identity. Use the report's middle address segments
+# when present; otherwise all equally specific catalogue candidates must agree. Keep
+# DXBI's established narrower-place precedence (B/T before P before M/U/A).
+_PLACE_PROJECT_KEY = _SEARCH_KEY.format(
+    value="arrayStringConcat(arraySlice(splitByChar(',', path), 2, "
+    "greatest(toInt64(length(splitByChar(',', path))) - 2, 0)), ',')"
+)
+_SALE_PLACES = f"""(
+        SELECT building_key AS place_building_key, area_key AS place_area_key,
+               project_context AS place_project_key,
+               count() AS place_candidates,
+               uniqExact(flag) = 1 AS place_flag_consistent,
+               uniqExact({_SEARCH_KEY.format(value="building_label")}) = 1 AS place_building_consistent,
+               uniqExact({_SEARCH_KEY.format(value="project_label")}) = 1 AS place_project_consistent,
+               uniqExact({_SEARCH_KEY.format(value="area_label")}) = 1 AS place_area_consistent,
+               place_flag_consistent AND place_building_consistent AND place_project_consistent
+                   AND place_area_consistent AS place_consistent,
+               if(place_flag_consistent, any(flag), '') AS place_flag,
+               if(place_building_consistent, argMin(building_label, location_id), '') AS place_building,
+               if(place_project_consistent, argMin(project_label, location_id), '') AS place_project,
+               if(place_area_consistent, argMin(area_label, location_id), '') AS place_area,
+               arraySort(groupUniqArray(tuple(location_id, source_run_id, path, reference_source))) AS place_evidence
+        FROM (
+            SELECT *, min(match_rank) OVER
+                (PARTITION BY building_key, area_key, project_context) AS best_rank
+            FROM (
+                SELECT *, arrayJoin(arrayDistinct(['', {_PLACE_PROJECT_KEY}])) AS project_context
+                FROM (
+                    SELECT location_id, flag, path, building_key, area_key, match_rank,
+                           building_label, project_label, area_label, source_run_id,
+                           'dxbi_places' AS reference_source
+                    FROM dxbi_places
+                    UNION ALL
+                    -- Some area-only report paths exist only in the location catalogue.
+                    -- Exact provider name plus an empty area; never a building-name-only
+                    -- lookup across different areas. Existing typed places take precedence.
+                    SELECT location_id, flag, name AS path,
+                           {_SEARCH_KEY.format(value="name")} AS building_key, '' AS area_key,
+                           toUInt8(10) AS match_rank, '' AS building_label, '' AS project_label,
+                           name AS area_label, source_run_id, 'dxbi_locations' AS reference_source
+                    FROM dxbi_locations FINAL WHERE flag IN ('A', 'M', 'U')
+                )
+            )
+        )
+        WHERE match_rank = best_rank
+        GROUP BY building_key, area_key, project_context
     )"""
+_SALE_PLACE_COLUMNS = (
+    "place_flag",
+    "place_building",
+    "place_project",
+    "place_area",
+    "place_project_key",
+    "place_candidates",
+    "place_consistent",
+    "place_building_consistent",
+    "place_project_consistent",
+    "place_evidence",
+)
+_SALE_PLACE_SELECTION = ", ".join(
+    f"if(exact_place.place_candidates > 0, exact_place.{column}, fallback_place.{column}) AS {column}"
+    for column in _SALE_PLACE_COLUMNS
+)
+_SALE_PLACE_LABELS = """if(place_flag != '' AND place_building_consistent,
+                    place_building, building_name) AS building_name,
+                if(place_flag != '' AND place_project_consistent,
+                    place_project, project_name) AS project_name"""
+
 _LEASE_PLACES = """(
         SELECT path_key AS place_path_key, flag AS place_flag,
                building_label AS place_building, project_label AS place_project
@@ -146,7 +206,8 @@ def _sales_source(date_clause: str) -> str:
     conflicting details (an agent's name glued to the building, a missing bedroom count): the
     more complete listing wins (location, bedrooms and status present, then the shorter building
     name). A sale loaded both from a CSV export (no DXBI link) and from a scrape has two keys; one
-    real unit sold on the same day at the same price is one sale.
+    candidate CSV/scrape pair collapses only when source identities and property facts agree.
+    Different DXBI links or registration numbers remain separate even with equal terms.
 
     Size and price per sq ft are DXBI's own figures, as DXBInteract shows them (decision
     2026-10-07). For some villas DXBI divides the price by the built-up area rather than the size
@@ -177,28 +238,61 @@ def _sales_source(date_clause: str) -> str:
             multiIf(price_per_sqft_aed > 0, toInt64(round(price_per_sqft_aed)),
                     size_sqft > 0, toInt64(round(sale_amount_aed / size_sqft)), NULL)
                 AS price_per_sqft,
-            if(notEmpty(sale_locations), sale_locations, {_DXBI_LOCATIONS}) AS dxbi_locations
+            if(notEmpty(sale_locations), sale_locations, {_DXBI_LOCATIONS}) AS dxbi_locations,
+            multiIf(place_candidates = 0, 'unresolved', place_consistent,
+                    'dxbi_catalogue', 'ambiguous') AS location_resolution,
+            if(place_flag != '', if(place_project_key != '', 'project_context',
+                                    'building_area_consensus'), '') AS location_match_method,
+            place_candidates AS location_candidate_count,
+            place_evidence AS location_evidence,
+            multiIf(place_candidates = 0, 'unverified_parsed', place_consistent,
+                    'catalogue_agreement', 'partial_or_conflicting') AS location_confidence,
+            source_file AS dxbi_source_file,
+            loaded_at AS dxbi_loaded_at,
+            multiIf(building_name != '', 'present', property_type = 'Plot', 'not_applicable',
+                    place_flag IN ('P', 'M', 'U', 'A', 'C'), 'address_has_no_building',
+                    'unknown') AS building_resolution
         FROM (
+            SELECT located.*
+            FROM (
             SELECT * REPLACE (
-                {_PLACE_LABELS},
+                {_SALE_PLACE_LABELS},
                 if(area_name = '', place_area, area_name) AS area_name
             )
             FROM (
-                SELECT *, {same_sale} AS same_sale
+            SELECT deduped.*, {_SALE_PLACE_SELECTION}
+            FROM (
+                SELECT *, if(
+                    uniqExactIf(detail_url, detail_url != '') OVER (PARTITION BY sale_terms) != 1
+                    OR uniqExactIf(dld_transaction_number, dld_transaction_number != '')
+                        OVER (PARTITION BY sale_terms) > 1
+                    OR uniqExact(tuple(project_name, property_type, size_sqft, bedrooms,
+                                       market_status)) OVER (PARTITION BY sale_terms) > 1,
+                    sale_key, sale_terms) AS same_sale
                 FROM (
-                    SELECT * FROM dxbi_sales_unit_events FINAL
-                    WHERE {date_clause}
-                    ORDER BY sale_key, loaded_at DESC, area_name = '', bedrooms = '',
-                             market_status = '', length(building_name), building_key, bedrooms,
-                             size_key
-                    LIMIT 1 BY sale_key
+                    SELECT *, {same_sale} AS sale_terms
+                    FROM (
+                        SELECT * FROM dxbi_sales_unit_events FINAL
+                        WHERE {date_clause}
+                        ORDER BY sale_key, loaded_at DESC, area_name = '', bedrooms = '',
+                                 market_status = '', length(building_name), building_key, bedrooms,
+                                 size_key
+                        LIMIT 1 BY sale_key
+                    )
                 )
                 ORDER BY same_sale, detail_url = '', loaded_at DESC, sale_key
                 LIMIT 1 BY same_sale
             ) AS deduped
-            LEFT JOIN {_SALE_PLACES} AS place
-                ON place.place_building_key = deduped.building_key
-                AND place.place_area_key = deduped.area_key
+            LEFT JOIN {_SALE_PLACES} AS exact_place
+                ON exact_place.place_building_key = deduped.building_key
+                AND exact_place.place_area_key = deduped.area_key
+                AND exact_place.place_project_key = {_SEARCH_KEY.format(value="deduped.project_name")}
+            LEFT JOIN {_SALE_PLACES} AS fallback_place
+                ON fallback_place.place_building_key = deduped.building_key
+                AND fallback_place.place_area_key = deduped.area_key
+                AND fallback_place.place_project_key = ''
+            )
+            ) AS located
         ) AS sale
         LEFT JOIN (
             SELECT sale_key AS swept_sale_key, groupUniqArray(location_name) AS sale_locations
@@ -324,6 +418,14 @@ def _sales_where(filters: SalesFilters, params: dict) -> str:
     _equals(clauses, params, "bedrooms", "bedrooms", filters.bedrooms)
     _equals(clauses, params, "status", "status", filters.status)
     _location(clauses, params, filters.location)
+    if filters.location_search:
+        clauses.append(
+            location_keyword_clause(
+                "concat(building_name, ' ', project_name, ' ', location_name, ' ', arrayStringConcat(dxbi_locations, ' '))",
+                filters.location_search,
+                params,
+            )
+        )
     _equals(clauses, params, "building_name", "building", filters.building)
     _equals(clauses, params, "project_name", "project", filters.project)
     _band(clauses, params, "size_sqft", "size", filters.size_min, filters.size_max)
@@ -346,6 +448,14 @@ def _rentals_where(filters: RentalFilters, params: dict) -> str:
     _equals(clauses, params, "bedrooms", "bedrooms", filters.bedrooms)
     _equals(clauses, params, "contract_type", "contract_type", filters.contract_type)
     _location(clauses, params, filters.location)
+    if filters.location_search:
+        clauses.append(
+            location_keyword_clause(
+                "concat(building_name, ' ', project_name, ' ', location_name, ' ', arrayStringConcat(dxbi_locations, ' '))",
+                filters.location_search,
+                params,
+            )
+        )
     _equals(clauses, params, "building_name", "building", filters.building)
     _equals(clauses, params, "project_name", "project", filters.project)
     _band(clauses, params, "size_sqft", "size", filters.size_min, filters.size_max)
@@ -455,43 +565,63 @@ async def export_rental_rows(
     )
 
 
+def _facet_columns(filters, params: dict, where_builder, fields: dict[str, tuple[str, str]]) -> str:
+    """Each facet ignores its own selection, so a user can switch to another valid value.
+
+    Keep every other constraint, including dates and numeric bands. Conditional aggregates
+    share one source scan rather than querying the warehouse once per dropdown.
+    """
+    columns = []
+    for field, (column, alias) in fields.items():
+        cleared = {field: None}
+        if field in {"location", "building", "project"}:
+            # These labels all suggest alternatives for the single location search.
+            cleared["location_search"] = None
+        scope = where_builder(filters.model_copy(update=cleared), params)
+        if field == "location":
+            columns.append(f"groupUniqArrayArray(if({scope}, dxbi_locations, [])) AS {alias}")
+        else:
+            columns.append(f"groupUniqArrayIf({column}, ({scope}) AND {column} != '') AS {alias}")
+    return ", ".join(columns)
+
+
 async def fetch_sales_facets(filters: SalesFilters) -> dict:
-    """Filter options narrowed by the current filters, in one scan."""
+    """Available alternatives for each sales filter, respecting all other selections."""
     params: dict = {}
     source = _sales_source(_date_window("transaction_date", filters.timeframe_days, params))
-    rows = await query(
-        f"""
-        SELECT
-            groupUniqArrayIf(property_type, property_type != '') AS property_type_options,
-            groupUniqArrayIf(bedrooms, bedrooms != '') AS bedroom_options,
-            groupUniqArrayIf(status, status != '') AS status_options,
-            groupUniqArrayArray(dxbi_locations) AS location_options,
-            groupUniqArrayIf(building_name, building_name != '') AS building_options,
-            groupUniqArrayIf(project_name, project_name != '') AS project_options
-        FROM ({source})
-        WHERE {_sales_where(filters, params)}
-        """,
+    columns = _facet_columns(
+        filters,
         params,
+        _sales_where,
+        {
+            "property_type": ("property_type", "property_type_options"),
+            "bedrooms": ("bedrooms", "bedroom_options"),
+            "status": ("status", "status_options"),
+            "location": ("dxbi_locations", "location_options"),
+            "building": ("building_name", "building_options"),
+            "project": ("project_name", "project_options"),
+        },
     )
+    rows = await query(f"SELECT {columns} FROM ({source})", params)
     return rows[0] if rows else {}
 
 
 async def fetch_rental_facets(filters: RentalFilters) -> dict:
-    """Filter options narrowed by the current filters, in one scan."""
+    """Available alternatives for each rental filter, respecting all other selections."""
     params: dict = {}
     source = _rentals_source(_date_window("lease_start", filters.timeframe_days, params))
-    rows = await query(
-        f"""
-        SELECT
-            groupUniqArrayIf(property_type, property_type != '') AS property_type_options,
-            groupUniqArrayIf(bedrooms, bedrooms != '') AS bedroom_options,
-            groupUniqArrayIf(contract_type, contract_type != '') AS contract_type_options,
-            groupUniqArrayArray(dxbi_locations) AS location_options,
-            groupUniqArrayIf(building_name, building_name != '') AS building_options,
-            groupUniqArrayIf(project_name, project_name != '') AS project_options
-        FROM ({source})
-        WHERE {_rentals_where(filters, params)}
-        """,
+    columns = _facet_columns(
+        filters,
         params,
+        _rentals_where,
+        {
+            "property_type": ("property_type", "property_type_options"),
+            "bedrooms": ("bedrooms", "bedroom_options"),
+            "contract_type": ("contract_type", "contract_type_options"),
+            "location": ("dxbi_locations", "location_options"),
+            "building": ("building_name", "building_options"),
+            "project": ("project_name", "project_options"),
+        },
     )
+    rows = await query(f"SELECT {columns} FROM ({source})", params)
     return rows[0] if rows else {}

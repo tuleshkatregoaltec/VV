@@ -10,7 +10,7 @@ type Kind = 'sales' | 'rentals';
 type Query = Record<string, string | number>;
 type Listing = { total: number; rows: Record<string, unknown>[]; params: URLSearchParams };
 
-const PAGE_SIZE = 30;
+const PAGE_SIZE = 10;
 const ROW_LABEL = { sales: 'transactions', rentals: 'contracts' } as const;
 const TIMEFRAMES = [
     ['Last Week', 7],
@@ -31,9 +31,6 @@ const RENT = { '<50k': [, 50000], '50k-100k': [50000, 100000], '100k-200k': [100
 type Filter = { id: string; param: string; bands?: Record<string, (number | undefined)[]> };
 const FILTERS: Record<Kind, Filter[]> = {
     sales: [
-        { id: 'selectedLocation', param: 'location' },
-        { id: 'selectedBuilding', param: 'building' },
-        { id: 'selectedProject', param: 'project' },
         { id: 'selectedPropertyType', param: 'property_type' },
         { id: 'selectedBedrooms', param: 'bedrooms' },
         { id: 'selectedStatus', param: 'status' },
@@ -42,9 +39,6 @@ const FILTERS: Record<Kind, Filter[]> = {
         { id: 'pricePerSqFtRange', param: 'price_per_sqft', bands: PRICE_SQFT }
     ],
     rentals: [
-        { id: 'selectedLocation', param: 'location' },
-        { id: 'selectedBuilding', param: 'building' },
-        { id: 'selectedProject', param: 'project' },
         { id: 'selectedPropertyType', param: 'property_type' },
         { id: 'selectedBedrooms', param: 'bedrooms' },
         { id: 'selectedContractType', param: 'contract_type' },
@@ -176,8 +170,9 @@ for (const kind of ['sales', 'rentals'] as const) {
             const base = usageQuery('Residential', 365);
             const unfiltered = await listing(base);
             await expectScreenShows(page, kind, unfiltered);
+            await page.getByText('More filters', { exact: false }).first().click();
             for (const filter of FILTERS[kind]) {
-                const control = `${kind}-filters-desktop-${filter.id}-input`;
+                const control = `${kind}-filters-${filter.id}-input`;
                 const menu = await openMenu(page, control);
                 const offered = (await menu.getByRole('button').allInnerTexts())
                     .map((text) => text.trim())
@@ -199,8 +194,8 @@ for (const kind of ['sales', 'rentals'] as const) {
                     if (filter.param === 'project') {
                         for (const row of shown.rows) expect(String(row.project_name).trim()).toBe(value);
                     }
-                    // The options narrow to the current filters: reset before the next value.
-                    await page.getByRole('button', { name: 'Reset filters' }).first().click();
+                    // Clear this selection while preserving the research period.
+                    await choose(page, control, 'All');
                     await expectScreenShows(page, kind, unfiltered);
                 }
             }
@@ -227,13 +222,13 @@ for (const kind of ['sales', 'rentals'] as const) {
         test('column settings show and hide a column', async ({ page }) => {
             const listing = await openPage(page, kind, 'Residential', 'Last Month');
             await listing(usageQuery('Residential', 30));
-            // Project is shown by default beside Building (DXBI's location list names it).
-            const header = page.locator('thead').getByText('Project', { exact: true });
+            // The combined Location column is shown by default and can be toggled.
+            const header = page.locator('thead').getByText('Location', { exact: true });
             await expect(header).toBeVisible();
             await page.locator('#column-visibility-button').click();
-            await page.locator('#column-visibility-menu').getByText('Project', { exact: true }).click();
+            await page.locator('#column-visibility-menu').getByText('Location', { exact: true }).click();
             await expect(header).toHaveCount(0);
-            await page.locator('#column-visibility-menu').getByText('Project', { exact: true }).click();
+            await page.locator('#column-visibility-menu').getByText('Location', { exact: true }).click();
             await expect(header).toBeVisible();
         });
 

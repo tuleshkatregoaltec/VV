@@ -95,6 +95,10 @@ async def test_project_without_sales_or_leases_has_no_figures(monkeypatch):
     monkeypatch.setattr(queries, "fetch_project_rentals_summary", no_leases)
     monkeypatch.setattr(queries, "fetch_project_price_distribution", all_rooms_of_no_sales)
 
+    async def empty_bundle(*args, **kwargs):
+        return (await no_sales(), await no_sales(), [], [], [], [], [])
+
+    monkeypatch.setattr(queries, "fetch_project_sales_bundle", empty_bundle)
     summary = await service.get_project_summary(project_name="1wood", filter_type="project")
     distribution = await service.get_project_price_distribution(project_name="1wood")
 

@@ -28,28 +28,48 @@ async def test_project_stock_excludes_sibling_projects(warehouse, monkeypatch, m
     for name in dir(queries):
         if name.startswith("fetch_project_") and name != "fetch_project_units_composition":
             monkeypatch.setattr(queries, name, empty)
+
+    async def empty_bundle(*args, **kwargs):
+        return ([], [], [], [], [], [], [])
+
+    monkeypatch.setattr(queries, "fetch_project_sales_bundle", empty_bundle)
     summary = await service.get_project_summary("Tower A", "project", master_project)
-    assert len(summary.unit_composition) == 1
-    assert summary.unit_composition[0].count == 1
-    assert summary.unit_composition[0].avg_unit_size_sqft == pytest.approx(538.2, abs=0.01)
+    assert summary.unit_composition == []
     master = await query(project_units_composition("master"), {"project_name": "Master A"})
-    assert master[0]["unit_count"] == 2
+    assert master == []
 
 
-async def test_search_returns_market_names_masters_and_projects_without_sales(warehouse):
+async def test_search_excludes_dld_only_launches(warehouse, monkeypatch):
+    from app.analytics import queries
     from app.analytics.queries import search_projects
+
+    monkeypatch.setattr(queries, "SALES_SOURCE", "ch_transactions")
+    monkeypatch.setattr(queries, "RENTALS_SOURCE", "ch_rent_contracts")
 
     for table in ("ch_transactions", "ch_rent_contracts", "ch_projects", "ch_units"):
         await warehouse.command(
-            f"CREATE TABLE {table} (project_name_en String, master_project_en String) ENGINE = Memory"
+            f"CREATE TABLE {table} (project_name_en String, master_project_en String, area_name_en String DEFAULT '', scope_kind String DEFAULT 'Project') ENGINE = Memory"
         )
-    await warehouse.insert("ch_transactions", [["23 MARINA", "Dubai Marina"]])
-    await warehouse.insert("ch_rent_contracts", [["Rental Tower", "Dubai Marina"]])
-    await warehouse.insert("ch_projects", [["New Launch", "Dubai Marina"]])
+    await warehouse.insert(
+        "ch_transactions",
+        [["23 MARINA", "Dubai Marina"]],
+        column_names=["project_name_en", "master_project_en"],
+    )
+    await warehouse.insert(
+        "ch_rent_contracts",
+        [["Rental Tower", "Dubai Marina"]],
+        column_names=["project_name_en", "master_project_en"],
+    )
+    await warehouse.insert(
+        "ch_projects",
+        [["New Launch", "Dubai Marina"]],
+        column_names=["project_name_en", "master_project_en"],
+    )
     rows = await query(search_projects(), {"search_pattern": "%marina%", "limit": 50})
     assert {tuple(row.values()) for row in rows} == {
-        ("23 MARINA", "project"),
-        ("Dubai Marina", "master"),
+        ("23 MARINA", "project", "Project"),
+        ("Dubai Marina", "master", "Area"),
     }
     rows = await query(search_projects(), {"search_pattern": "%", "limit": 50})
-    assert {row["name"] for row in rows} >= {"Rental Tower", "New Launch"}
+    assert "Rental Tower" in {row["name"] for row in rows}
+    assert "New Launch" not in {row["name"] for row in rows}

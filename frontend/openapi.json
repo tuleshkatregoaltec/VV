@@ -564,11 +564,12 @@
 						"required": false,
 						"schema": {
 							"type": "string",
-							"description": "Master project name search term",
+							"maxLength": 200,
+							"description": "Building, project or area keywords",
 							"default": "",
 							"title": "Search"
 						},
-						"description": "Master project name search term"
+						"description": "Building, project or area keywords"
 					},
 					{
 						"name": "limit",
@@ -576,6 +577,8 @@
 						"required": false,
 						"schema": {
 							"type": "integer",
+							"maximum": 100,
+							"minimum": 1,
 							"description": "Max results to return",
 							"default": 50,
 							"title": "Limit"
@@ -3450,7 +3453,7 @@
 			"get": {
 				"tags": ["filters", "filters"],
 				"summary": "Get Sales Filter Options",
-				"description": "Options for the DXBI sales filters, narrowed by the filters already applied.",
+				"description": "Options for the DXBI sales filters, respecting the other filters already applied.",
 				"operationId": "filters-get_sales_filter_options",
 				"parameters": [
 					{
@@ -3542,6 +3545,25 @@
 							"title": "Location"
 						},
 						"description": "DXBI area or community: every record its DXBI area page counts"
+					},
+					{
+						"name": "location_search",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "string",
+									"maxLength": 200
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "Keywords across DXBI building, project and area",
+							"title": "Location Search"
+						},
+						"description": "Keywords across DXBI building, project and area"
 					},
 					{
 						"name": "building",
@@ -3735,7 +3757,7 @@
 			"get": {
 				"tags": ["filters", "filters"],
 				"summary": "Get Rental Filter Options",
-				"description": "Options for the DXBI rental filters, narrowed by the filters already applied.",
+				"description": "Options for the DXBI rental filters, respecting the other filters already applied.",
 				"operationId": "filters-get_rental_filter_options",
 				"parameters": [
 					{
@@ -3827,6 +3849,25 @@
 							"title": "Location"
 						},
 						"description": "DXBI area or community: every record its DXBI area page counts"
+					},
+					{
+						"name": "location_search",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "string",
+									"maxLength": 200
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "Keywords across DXBI building, project and area",
+							"title": "Location Search"
+						},
+						"description": "Keywords across DXBI building, project and area"
 					},
 					{
 						"name": "building",
@@ -6457,6 +6498,25 @@
 						"description": "DXBI area or community: every record its DXBI area page counts"
 					},
 					{
+						"name": "location_search",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "string",
+									"maxLength": 200
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "Keywords across DXBI building, project and area",
+							"title": "Location Search"
+						},
+						"description": "Keywords across DXBI building, project and area"
+					},
+					{
 						"name": "building",
 						"in": "query",
 						"required": false,
@@ -6769,6 +6829,25 @@
 						"description": "DXBI area or community: every record its DXBI area page counts"
 					},
 					{
+						"name": "location_search",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "string",
+									"maxLength": 200
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "Keywords across DXBI building, project and area",
+							"title": "Location Search"
+						},
+						"description": "Keywords across DXBI building, project and area"
+					},
+					{
 						"name": "building",
 						"in": "query",
 						"required": false,
@@ -7047,6 +7126,25 @@
 							"title": "Location"
 						},
 						"description": "DXBI area or community: every record its DXBI area page counts"
+					},
+					{
+						"name": "location_search",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "string",
+									"maxLength": 200
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "Keywords across DXBI building, project and area",
+							"title": "Location Search"
+						},
+						"description": "Keywords across DXBI building, project and area"
 					},
 					{
 						"name": "building",
@@ -7356,6 +7454,25 @@
 							"title": "Location"
 						},
 						"description": "DXBI area or community: every record its DXBI area page counts"
+					},
+					{
+						"name": "location_search",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "string",
+									"maxLength": 200
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "Keywords across DXBI building, project and area",
+							"title": "Location Search"
+						},
+						"description": "Keywords across DXBI building, project and area"
 					},
 					{
 						"name": "building",
@@ -21561,7 +21678,7 @@
 					"avg_unit_size_sqft": {
 						"type": "number",
 						"title": "Avg Unit Size Sqft",
-						"description": "Median registered unit size (sq ft); the name predates the median"
+						"description": "Median observed DXBI sale size (sq ft), across all recorded dates"
 					},
 					"rental_count": {
 						"type": "integer",
@@ -22962,6 +23079,11 @@
 			},
 			"ProjectSearchItem": {
 				"properties": {
+					"scope_kind": {
+						"type": "string",
+						"title": "Scope Kind",
+						"default": "Location"
+					},
 					"name": {
 						"type": "string",
 						"title": "Name"

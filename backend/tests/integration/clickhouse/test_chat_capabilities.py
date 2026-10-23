@@ -4,7 +4,9 @@ from app.analytics import charts, service
 from app.project.service import get_similar_projects
 
 
-async def test_chat_capabilities_execute_real_queries_with_existing_scope(warehouse):
+async def test_chat_capabilities_execute_real_queries_with_existing_scope(
+    warehouse, analytics_projection_tables
+):
     await warehouse.command("""
         CREATE TABLE ch_transactions (
             instance_date Date, area_name_en String, master_project_en String,

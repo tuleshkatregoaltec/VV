@@ -165,7 +165,7 @@ class ProjectConfigurationRow(BaseModel):
     median_sale_price: float
     avg_sale_price_sqft: float
     avg_unit_size_sqft: float = Field(
-        description="Median registered unit size (sq ft); the name predates the median"
+        description="Median observed DXBI sale size (sq ft), across all recorded dates"
     )
     rental_count: int
     median_annual_rent: float
@@ -291,6 +291,7 @@ class ProjectPriceDistributionResponse(BaseModel):
 
 
 class ProjectSearchItem(BaseModel):
+    scope_kind: str = "Location"
     name: str
     filter_type: str  # "master" | "virtual_master" | "project"
 

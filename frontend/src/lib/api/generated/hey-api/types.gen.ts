@@ -7365,7 +7365,7 @@ export type ProjectConfigurationRow = {
     /**
      * Avg Unit Size Sqft
      *
-     * Median registered unit size (sq ft); the name predates the median
+     * Median observed DXBI sale size (sq ft), across all recorded dates
      */
     avg_unit_size_sqft: number;
     /**
@@ -8152,6 +8152,10 @@ export type ProjectSalesSummary = {
  * ProjectSearchItem
  */
 export type ProjectSearchItem = {
+    /**
+     * Scope Kind
+     */
+    scope_kind?: string;
     /**
      * Name
      */
@@ -10180,7 +10184,7 @@ export type AnalyticsSearchProjectsEndpointData = {
         /**
          * Search
          *
-         * Master project name search term
+         * Building, project or area keywords
          */
         search?: string;
         /**
@@ -11904,6 +11908,12 @@ export type FiltersGetSalesFilterOptionsData = {
          */
         location?: string | null;
         /**
+         * Location Search
+         *
+         * Keywords across DXBI building, project and area
+         */
+        location_search?: string | null;
+        /**
          * Building
          *
          * DXBI building name
@@ -12013,6 +12023,12 @@ export type FiltersGetRentalFilterOptionsData = {
          * DXBI area or community: every record its DXBI area page counts
          */
         location?: string | null;
+        /**
+         * Location Search
+         *
+         * Keywords across DXBI building, project and area
+         */
+        location_search?: string | null;
         /**
          * Building
          *
@@ -13428,6 +13444,12 @@ export type TransactionsGetSalesTransactionsData = {
          */
         location?: string | null;
         /**
+         * Location Search
+         *
+         * Keywords across DXBI building, project and area
+         */
+        location_search?: string | null;
+        /**
          * Building
          *
          * DXBI building name
@@ -13550,6 +13572,12 @@ export type TransactionsGetRentalContractsData = {
          */
         location?: string | null;
         /**
+         * Location Search
+         *
+         * Keywords across DXBI building, project and area
+         */
+        location_search?: string | null;
+        /**
          * Building
          *
          * DXBI building name
@@ -13659,6 +13687,12 @@ export type TransactionsExportSalesTransactionsEndpointData = {
          * DXBI area or community: every record its DXBI area page counts
          */
         location?: string | null;
+        /**
+         * Location Search
+         *
+         * Keywords across DXBI building, project and area
+         */
+        location_search?: string | null;
         /**
          * Building
          *
@@ -13779,6 +13813,12 @@ export type TransactionsExportRentalContractsEndpointData = {
          * DXBI area or community: every record its DXBI area page counts
          */
         location?: string | null;
+        /**
+         * Location Search
+         *
+         * Keywords across DXBI building, project and area
+         */
+        location_search?: string | null;
         /**
          * Building
          *

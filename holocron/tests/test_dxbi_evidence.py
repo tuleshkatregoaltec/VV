@@ -150,7 +150,16 @@ def _reconciled(run_dir: Path, days: dict[str, str], *, status: str = "success")
     import json
 
     (run_dir / "reconciliation.json").write_text(
-        json.dumps({"status": status, "terminal_partition_status": {"cfg": days}})
+        json.dumps(
+            {
+                "status": status,
+                "terminal_partition_status": {"cfg": days},
+                "expected_partitions": len(days),
+                "completed_partitions": len(days),
+                "failed_partitions": 0,
+                "missing_partitions": 0,
+            }
+        )
     )
     return run_dir
 
@@ -219,3 +228,24 @@ def test_location_sweeps_are_discovered_and_accounted(
     )
     assert (result.rows_loaded, result.rows_skipped) == (420, 2)
     assert result.details["replaced"] == 400
+
+
+@pytest.mark.parametrize("report", ["sales", "rentals", "sales-sweep"])
+def test_missing_accounting_cannot_advance_success_ledger(report: str) -> None:
+    with pytest.raises(RuntimeError, match="accounting"):
+        evidence.parse_loader_output(report, "process exited normally")
+
+
+@pytest.mark.parametrize(
+    "field",
+    ["expected_partitions", "completed_partitions", "failed_partitions", "missing_partitions"],
+)
+def test_inconsistent_accounting_cannot_authorize_deletion(tmp_path: Path, field: str) -> None:
+    import json
+
+    run = _reconciled(_run(tmp_path, "sales", "run=bad"), {"2026-10-09": "complete"})
+    path = run / "reconciliation.json"
+    data = json.loads(path.read_text())
+    data[field] += 1
+    path.write_text(json.dumps(data))
+    assert evidence.scrape_window(evidence.EvidenceRun("sales", run.name, run)) is None

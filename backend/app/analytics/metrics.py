@@ -152,8 +152,6 @@ def build_configuration_rows(
 
         if stock_units <= 0 and sale_count <= 0 and int(rent_row.get("rental_count", 0) or 0) <= 0:
             continue
-        if sales_last_12m < _CONFIG_PRICE_MIN_SAMPLE_SIZE:
-            continue
 
         gross_yield_pct: Optional[float] = None
         if segment != "off_plan" and median_sale_price > 0 and median_annual_rent > 0:
@@ -174,7 +172,7 @@ def build_configuration_rows(
                 avg_sale_price=float(sale_row.get("avg_sale_price", 0) or 0),
                 median_sale_price=median_sale_price,
                 avg_sale_price_sqft=float(sale_row.get("avg_sale_price_sqft", 0) or 0),
-                avg_unit_size_sqft=float(unit_row.get("median_unit_size_sqft", 0) or 0),
+                avg_unit_size_sqft=float(sale_row.get("median_sale_size_sqft", 0) or 0),
                 rental_count=int(rent_row.get("rental_count", 0) or 0),
                 median_annual_rent=median_annual_rent,
                 median_rent_sqft=float(rent_row.get("median_rent_sqft", 0) or 0),

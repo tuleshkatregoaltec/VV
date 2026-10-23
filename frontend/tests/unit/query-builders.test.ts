@@ -39,7 +39,9 @@ describe('shared query builders', () => {
 
 		const projectSearchQuery = analyticsQueries.projectSearch('', 500)
 		expect(projectSearchQuery.queryKey).toEqual(analyticsKeys.projectSearch('', 500))
-		expect(projectSearchQuery.staleTime).toBe(Infinity)
+		// New DXBI ingestions must become searchable without reloading the app.
+		expect(projectSearchQuery.staleTime).toBe(5 * 60 * 1000)
+		expect(projectSearchQuery.queryKey).toContain('dxbi-v2')
 		await projectSearchQuery.queryFn()
 		expect(projectSearchSpy).toHaveBeenCalledWith('', 500)
 
