@@ -22,6 +22,7 @@ MATCH_TABLE = "dxbi_rental_sale_matches"
 CREATE_SALES_SQL = """
 CREATE TABLE IF NOT EXISTS dxbi_sales_unit_events (
     sale_key String,
+    dld_transaction_number String DEFAULT '',
     transaction_date Date,
     unit_number String,
     building_name String DEFAULT '',
@@ -272,6 +273,7 @@ GROUP BY sale_key
 HAVING uniqExact(loaded_at) > 1
 """
 SALES_ALTERS = [
+    "ALTER TABLE dxbi_sales_unit_events ADD COLUMN IF NOT EXISTS dld_transaction_number String DEFAULT ''",
     "ALTER TABLE dxbi_sales_unit_events ADD COLUMN IF NOT EXISTS address_normalization_version UInt8 DEFAULT 0 AFTER area_key",
     "ALTER TABLE dxbi_sales_unit_events ADD COLUMN IF NOT EXISTS market_status LowCardinality(String) DEFAULT '' AFTER property_type",
     "ALTER TABLE dxbi_sales_unit_events ADD COLUMN IF NOT EXISTS built_up_area_sqft Nullable(Float64) AFTER size_key",
@@ -296,6 +298,7 @@ MATCH_ALTERS = [
     "ALTER TABLE dxbi_rental_sale_matches ADD COLUMN IF NOT EXISTS latest_detail_url String DEFAULT '' AFTER latest_market_status",
 ]
 COLUMNS = [
+    "dld_transaction_number",
     "sale_key",
     "transaction_date",
     "unit_number",
@@ -395,6 +398,31 @@ def load_files(files: list[Path], *, client, batch_size: int) -> dict[str, int]:
         client.insert(SALES_TABLE, batch, column_names=COLUMNS)
         loaded += len(batch)
     return {"loaded": loaded, "skipped": skipped, "errors": errors, "without_unit": without_unit}
+
+
+def validate_replacement_files(files: list[Path], *, first: date, last: date) -> int:
+    """Reject lossy or wrong-window inputs before the first live insert.
+
+    This validates normalization, not source completeness; the caller still needs
+    an archived, reconciled scrape of the entire requested window.
+    """
+    if first > last:
+        raise ValueError("Replacement window is reversed")
+    accepted = 0
+    for path in files:
+        opener = gzip.open if path.name.endswith(".gz") else open
+        with opener(path, "rt", encoding="utf-8") as handle:
+            for line_number, line in enumerate(handle, 1):
+                event = normalize_sales_row(compact_payload(line), source_file=path.name)
+                if not event or not first <= event["transaction_date"] <= last:
+                    raise ValueError(
+                        f"Replacement input rejected at {path.name}:{line_number}: "
+                        "not normalizable or outside requested dates"
+                    )
+                accepted += 1
+    if not accepted:
+        raise ValueError("Replacement requires nonempty validated evidence")
+    return accepted
 
 
 def load_clock(client) -> str:
@@ -516,8 +544,13 @@ def main() -> None:
         if not files:
             raise SystemExit("No DXB sales JSONL files found")
         logger.info("Discovered %s sales files", len(files))
+        if args.replace_window:
+            first, last = args.replace_window
+            validate_replacement_files(files, first=first, last=last)
         load_started = load_clock(client)
         totals = load_files(files, client=client, batch_size=args.batch_size)
+        if args.replace_window and totals["skipped"]:
+            raise SystemExit("Replacement input changed or skipped rows; window deletion refused")
         if not totals["errors"]:
             if args.replace_window and not totals["loaded"]:
                 raise SystemExit("--replace-window with nothing loaded would empty the window")

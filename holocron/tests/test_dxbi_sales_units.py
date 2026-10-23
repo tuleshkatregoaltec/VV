@@ -305,3 +305,82 @@ def test_a_unit_number_with_a_space_is_read_whole() -> None:
     )
 
     assert payload["unit_number"] == "RETAIL 06"
+
+
+def test_explicit_registration_number_survives_raw_and_compact_reports():
+    columns = [{"id": "TRANSACTION_NUMBER", "text": " 11-123-2026 "}]
+    assert (
+        compact_payload(json.dumps({"columns": columns}))["dld_transaction_number"] == "11-123-2026"
+    )
+    assert (
+        compact_payload(json.dumps({"unit_number": "101", "columns": columns}))[
+            "dld_transaction_number"
+        ]
+        == "11-123-2026"
+    )
+    payload = {
+        "dld_transaction_number": "11-123-2026",
+        "location_text": "Tower, Area Ready Apartment",
+        "amount_text": "AED 1,000,000",
+        "specs_text": "861 sqft",
+        "date_text": "10, Sep 2026",
+        "detail_url": "https://dxbinteract.com/sold/t-opaque",
+    }
+    event = normalize_sales_row(payload)
+    assert event is not None
+    assert event["dld_transaction_number"] == "11-123-2026"
+    without = normalize_sales_row({**payload, "dld_transaction_number": ""})
+    assert without is not None
+    assert without["dld_transaction_number"] == ""
+    assert event["sale_key"] == without["sale_key"]  # Enrichment cannot change DXBI identity.
+
+
+def test_numbered_names_and_single_quoted_property_title_are_preserved() -> None:
+    """Catalogue numbered buildings must not lose their prefix when removing agent text."""
+    for name in (
+        "02 Residence By Ned Al Ghurair",
+        "03 Residence By Ned Al Ghurair",
+        "08 Life Residences",
+        "09 Life Residences",
+        "014 Tower",
+        "1 Lake Plaza",
+    ):
+        payload = compact_payload(
+            json.dumps(
+                {
+                    "unit_number": "001-A",
+                    "columns": [
+                        {
+                            "id": "PATH_NAME",
+                            "html": f"<span title='{name}, Business Bay' class='bold-title extra'></span>",
+                        }
+                    ],
+                    "location_text": f"Buyer's agent Person {name}, Business Bay Ready Apartment, No. 001-A",
+                    "amount_text": "AED 975,000 AED 2,092 /sqft",
+                    "specs_text": "466 sqft Studio",
+                    "date_text": "17, Apr 2026",
+                    "detail_url": "https://dxbinteract.com/sold/t-proof",
+                }
+            )
+        )
+        event = normalize_sales_row(payload)
+        assert event is not None
+        assert event["building_name"] == name
+        assert event["unit_number"] == "001-A"
+        assert event["detail_url"] == "https://dxbinteract.com/sold/t-proof"
+
+
+def test_hidden_final_unit_never_becomes_a_building_number() -> None:
+    payload = compact_payload(
+        json.dumps(
+            {
+                "columns": [
+                    {
+                        "id": "PATH_NAME",
+                        "text": "Building No. 12, Business Bay Ready Apartment, No. u-hidden",
+                    }
+                ]
+            }
+        )
+    )
+    assert payload["unit_number"] == ""

@@ -291,6 +291,7 @@ class ProjectPriceDistributionResponse(BaseModel):
 
 
 class ProjectSearchItem(BaseModel):
+    scope_kind: str = "Location"
     name: str
     filter_type: str  # "master" | "virtual_master" | "project"
 

@@ -7,8 +7,8 @@ import AnalyticsError from './AnalyticsError.svelte'
 
 let {
 	value = $bindable<ProjectSearchItem | null>(null),
-	placeholder = 'Search projects or master communities...',
-	label = 'Project scope',
+	placeholder = 'Search building, project or area...',
+	label = 'Location',
 	onSelect
 }: {
 	value?: ProjectSearchItem | null
@@ -154,7 +154,7 @@ function handleKeydown(e: KeyboardEvent) {
 						aria-selected={value?.name === project.name && value?.filter_type === project.filter_type}
 					>
 						<span>{project.name}</span>
-						<span class="ml-2 text-xs text-fg-4">{project.filter_type === 'project' ? 'Project' : 'Master'}</span>
+						<span class="ml-2 text-xs text-fg-4">{project.scope_kind ?? 'Location'}</span>
 					</button>
 				{/each}
 			{/if}

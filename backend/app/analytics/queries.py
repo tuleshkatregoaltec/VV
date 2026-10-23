@@ -5,6 +5,7 @@ from weakref import WeakKeyDictionary
 from app.analytics.dxbi import RENTALS_SOURCE, SALES_SOURCE
 from app.analytics.models import TrendInterval
 from app.clickhouse.client import query as warehouse_query
+from app.market.location_search import location_keyword_clause
 from app.market.scope import MARKET_FILTERS as MARKET_FILTERS
 from app.market.scope import ProjectFilterType, ProjectScopeType, project_filter_clause
 
@@ -46,19 +47,31 @@ async def query(sql: str, parameters: dict | None = None):
 Bounds = tuple[Optional[float], Optional[float]]
 
 
-def search_projects() -> str:
-    # Expand scopes after each source is scanned once, not through a reused CTE.
+def search_projects(keyword_clause: str | None = None) -> str:
+    search_clause = keyword_clause or "lowerUTF8(name) LIKE {search_pattern:String}"
     return f"""
-        SELECT DISTINCT scope.1 AS name, scope.2 AS filter_type
+        SELECT name, filter_type,
+               if(uniqExact(kind) = 1, any(kind), 'Location') AS scope_kind
         FROM (
-            SELECT arrayJoin([(project_name_en, 'project'), (master_project_en, 'master')]) AS scope
+            SELECT scope.1 AS name, scope.2 AS filter_type, scope.3 AS kind,
+                   scope.4 AS search_location
             FROM (
-                SELECT project_name_en, master_project_en FROM {SALES_SOURCE}
-                UNION ALL
-                SELECT project_name_en, master_project_en FROM {RENTALS_SOURCE}
+                SELECT arrayJoin([
+                    (project_name_en, 'project', scope_kind,
+                     concat(project_name_en, ' ', area_name_en)),
+                    (master_project_en, 'master', 'Area', master_project_en)
+                ]) AS scope
+                FROM (
+                    SELECT project_name_en, master_project_en, area_name_en, scope_kind
+                    FROM {SALES_SOURCE}
+                    UNION ALL
+                    SELECT project_name_en, master_project_en, area_name_en, scope_kind
+                    FROM {RENTALS_SOURCE}
+                )
             )
         )
-        WHERE name != '' AND lowerUTF8(name) LIKE {{search_pattern:String}}
+        WHERE name != '' AND {search_clause}
+        GROUP BY name, filter_type
         ORDER BY lowerUTF8(name) = replaceAll({{search_pattern:String}}, '%', '') DESC,
                  startsWith(lowerUTF8(name), replaceAll({{search_pattern:String}}, '%', '')) DESC,
                  name, filter_type
@@ -620,7 +633,10 @@ async def fetch_latest_sales_anchor_date_rows(parameters: dict):
 
 
 async def fetch_search_projects(parameters: dict):
-    return await query(search_projects(), parameters)
+    params = dict(parameters)
+    search = params.pop("search", "")
+    clause = location_keyword_clause("search_location", search, params)
+    return await query(search_projects(clause), params)
 
 
 async def fetch_search_sub_projects(parameters: dict, filter_type: ProjectFilterType = "master"):

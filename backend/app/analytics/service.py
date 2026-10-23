@@ -73,9 +73,18 @@ async def _latest_sales_anchor_date() -> date:
 async def get_project_search(search: str, limit: int = 50) -> ProjectSearchResponse:
     """Return matching projects for the dropdown selector."""
     pattern = f"%{search.lower()}%" if search.strip() else "%"
-    rows = await queries.fetch_search_projects({"search_pattern": pattern, "limit": limit})
+    rows = await queries.fetch_search_projects(
+        {"search_pattern": pattern, "search": search, "limit": limit}
+    )
     return ProjectSearchResponse(
-        projects=[ProjectSearchItem(name=r["name"], filter_type=r["filter_type"]) for r in rows]
+        projects=[
+            ProjectSearchItem(
+                name=r["name"],
+                filter_type=r["filter_type"],
+                scope_kind=r.get("scope_kind", "Location"),
+            )
+            for r in rows
+        ]
     )
 
 

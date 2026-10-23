@@ -17,6 +17,7 @@ the export use the same record definitions. Facets exclude their own selection t
 from typing import Optional
 
 from app.clickhouse.client import query
+from app.market.location_search import location_keyword_clause
 from app.transaction.models import RentalFilters, SalesFilters
 
 # DXBI names a property type but no usage; the page's Residential / Commercial switch groups the
@@ -417,6 +418,14 @@ def _sales_where(filters: SalesFilters, params: dict) -> str:
     _equals(clauses, params, "bedrooms", "bedrooms", filters.bedrooms)
     _equals(clauses, params, "status", "status", filters.status)
     _location(clauses, params, filters.location)
+    if filters.location_search:
+        clauses.append(
+            location_keyword_clause(
+                "concat(building_name, ' ', project_name, ' ', location_name, ' ', arrayStringConcat(dxbi_locations, ' '))",
+                filters.location_search,
+                params,
+            )
+        )
     _equals(clauses, params, "building_name", "building", filters.building)
     _equals(clauses, params, "project_name", "project", filters.project)
     _band(clauses, params, "size_sqft", "size", filters.size_min, filters.size_max)
@@ -439,6 +448,14 @@ def _rentals_where(filters: RentalFilters, params: dict) -> str:
     _equals(clauses, params, "bedrooms", "bedrooms", filters.bedrooms)
     _equals(clauses, params, "contract_type", "contract_type", filters.contract_type)
     _location(clauses, params, filters.location)
+    if filters.location_search:
+        clauses.append(
+            location_keyword_clause(
+                "concat(building_name, ' ', project_name, ' ', location_name, ' ', arrayStringConcat(dxbi_locations, ' '))",
+                filters.location_search,
+                params,
+            )
+        )
     _equals(clauses, params, "building_name", "building", filters.building)
     _equals(clauses, params, "project_name", "project", filters.project)
     _band(clauses, params, "size_sqft", "size", filters.size_min, filters.size_max)
@@ -556,7 +573,11 @@ def _facet_columns(filters, params: dict, where_builder, fields: dict[str, tuple
     """
     columns = []
     for field, (column, alias) in fields.items():
-        scope = where_builder(filters.model_copy(update={field: None}), params)
+        cleared = {field: None}
+        if field in {"location", "building", "project"}:
+            # These labels all suggest alternatives for the single location search.
+            cleared["location_search"] = None
+        scope = where_builder(filters.model_copy(update=cleared), params)
         if field == "location":
             columns.append(f"groupUniqArrayArray(if({scope}, dxbi_locations, [])) AS {alias}")
         else:

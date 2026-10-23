@@ -963,7 +963,7 @@ onMount(() => {
 			<div class="flex flex-wrap items-start justify-between gap-4">
 				<div class="min-w-0">
 					<p class="text-[11px] font-semibold uppercase tracking-[0.22em] text-fg-4">
-						{summary.project?.area_name ?? 'Project analytics'}
+						{summary.project?.area_name ?? `${selection.scope_kind ?? 'Location'} analytics`}
 					</p>
 					<h2 class="mt-1.5 truncate text-2xl font-semibold tracking-normal text-fg-1">
 						{subProject

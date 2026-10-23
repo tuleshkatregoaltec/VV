@@ -22,6 +22,7 @@ interface BaseTransactionFilters {
 	property_usage?: string
 	property_type?: string
 	bedrooms?: string
+	location_search?: string
 	location?: string
 	building?: string
 	project?: string
