@@ -249,3 +249,20 @@ def test_report_status_filter_moves_mortgages_out_of_their_stored_status():
     assert not matches_report_status(mortgage, "unit_linked_unverified")
     assert matches_report_status(sale, "unit_linked_unverified")
     assert not matches_report_status(sale, "mortgage")
+
+def test_source_identity_is_available_for_matching_but_never_persisted_in_evidence():
+    row = parse(
+        "NameEn,BuildingNameEn,UnitNumber,IdNumber,UaeIdNumber\nExample,Tower,101,AB1234567,784197003510696\n"
+    )[0]
+    assert set(row.owner_identity_tokens) == {"document", "emirates_id"}
+    assert all(len(token) == 64 for token in row.owner_identity_tokens.values())
+    assert "AB1234567" not in str(row.evidence)
+    assert "784197003510696" not in str(row.evidence)
+    assert "AB1234567" not in repr(row)
+    assert "owner_identity_tokens" not in row.evidence
+
+
+@pytest.mark.parametrize("placeholder", ["null", "unknown", "0", "000000", "111111"])
+def test_placeholder_identity_is_not_ownership_proof(placeholder):
+    row = parse(f"NameEn,BuildingNameEn,UnitNumber,IdNumber\nExample,Tower,101,{placeholder}\n")[0]
+    assert not row.owner_identity_tokens
